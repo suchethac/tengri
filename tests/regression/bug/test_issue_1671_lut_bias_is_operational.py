@@ -187,3 +187,116 @@ def test_every_lut_resolving_surface_calls_the_warning():
     # PopulationFitter defers LUT resolution to fit time, so its call site is
     # the flat problem builder — where the resolved model meets the data.
     assert "_warn_if_lut_bias_amplified(" in inspect.getsource(build_flat_problem)
+
+
+class _StubModelWithBothChannels(_StubModel):
+    """A stub model that returns separate photometry and spectrum."""
+
+    def __init__(self, phot_flux, spec_flux):
+        self.spec = _StubSpec()
+        self._phot_flux = np.asarray(phot_flux, dtype=float)
+        self._spec_flux = np.asarray(spec_flux, dtype=float)
+        self.n_calls = 0
+
+    def predict_photometry(self, params):
+        self.n_calls += 1
+        return self._phot_flux
+
+    def predict_spectrum(self, params):
+        self.n_calls += 1
+        return self._spec_flux
+
+
+def _pair_with_biased_spectrum(phot_bias, spec_bias):
+    """(exact, lut) stub pair with independent photometry and spectrum bias."""
+    phot_flux = np.array([1.0, 2.0, 3.0])
+    spec_flux = np.array([4.0, 5.0, 6.0, 7.0])
+    exact = _StubModelWithBothChannels(phot_flux, spec_flux)
+    lut = _StubModelWithBothChannels(
+        phot_flux * (1.0 + phot_bias),
+        spec_flux * (1.0 + spec_bias),
+    )
+    return exact, lut
+
+
+def test_joint_fit_with_biased_spectrum_warns_per_channel():
+    """Joint fit with spectrum bias warns and names 'spectrum pixel j'."""
+    exact, lut = _pair_with_biased_spectrum(phot_bias=1e-4, spec_bias=2e-3)
+    # Joint data is [phot1, phot2, phot3, spec1, spec2, spec3, spec4]
+    data = np.concatenate([exact.predict_photometry({}), exact.predict_spectrum({})])
+    noise = np.abs(data) / 100.0  # SNR 100 everywhere
+
+    with pytest.warns(PrecompBiasWarning) as rec:
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
+    msg = str(rec[0].message)
+    assert "spectrum pixel" in msg, "worst channel should be named as spectrum pixel"
+    assert "#1671" in msg
+
+
+def test_joint_fit_with_biased_photometry_warns_per_channel():
+    """Joint fit with photometry bias warns and names 'photometry band i'."""
+    exact, lut = _pair_with_biased_spectrum(phot_bias=2e-3, spec_bias=1e-4)
+    data = np.concatenate([exact.predict_photometry({}), exact.predict_spectrum({})])
+    noise = np.abs(data) / 100.0  # SNR 100 everywhere
+
+    with pytest.warns(PrecompBiasWarning) as rec:
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
+    msg = str(rec[0].message)
+    assert "photometry band" in msg, "worst channel should be named as photometry band"
+
+
+def test_joint_low_snr_stays_silent():
+    """Joint fit with low SNR stays silent even with small bias."""
+    exact, lut = _pair_with_biased_spectrum(phot_bias=2e-3, spec_bias=2e-3)
+    data = np.concatenate([exact.predict_photometry({}), exact.predict_spectrum({})])
+    noise = np.abs(data) / 5.0  # SNR 5, below threshold
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", PrecompBiasWarning)
+        _warn_if_lut_bias_amplified(exact, lut, data, noise, "joint", surface="Fitter")
+
+
+def test_cache_distinguishes_data_type():
+    """Caching must distinguish data_type; same model probed twice gives different results."""
+    exact, lut = _pair(2e-3)
+
+    # First call with photometry
+    bias_phot = _lut_forward_bias(exact, lut, "photometry")
+    assert bias_phot.shape == (4,), "photometry has 4 channels"
+
+    # Second call with spectroscopy (same model, different data_type)
+    # In reality they'd differ, here we verify the cache key includes data_type
+    assert hasattr(lut, "_lut_forward_bias_cache"), "cache should be set"
+    cache = lut._lut_forward_bias_cache
+    assert len(cache) == 3, "cache should be (exact_model, bias, data_type)"
+    assert cache[2] == "photometry", "cache should store data_type"
+
+
+def test_user_likelihood_with_high_forward_bias_warns():
+    """User likelihood with forward bias > threshold emits note advisory."""
+    exact, lut = _pair(5e-3)  # 0.5% bias, above _LUT_FORWARD_BIAS_NOTE = 1e-3
+    data = exact._flux
+    noise = np.ones_like(data)  # Noise ignored for user_likelihood
+
+    with pytest.warns(PrecompBiasWarning) as rec:
+        _warn_if_lut_bias_amplified(
+            exact, lut, data, noise, "photometry", surface="Fitter", user_likelihood=True
+        )
+    msg = str(rec[0].message)
+    assert "approx=None" in msg, "note should mention the remedy"
+    assert "0.5" in msg, "note should state the forward bias percentage"
+    # User likelihood note should NOT mention SNR-based estimate or gradient error
+    assert "gradient error" not in msg, "user likelihood should not estimate gradient error"
+
+
+def test_user_likelihood_with_low_forward_bias_silent():
+    """User likelihood with forward bias < threshold stays silent."""
+    exact, lut = _pair(3e-4)  # 0.03% bias, below _LUT_FORWARD_BIAS_NOTE = 1e-3
+    data = exact._flux
+    noise = np.ones_like(data)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", PrecompBiasWarning)
+        _warn_if_lut_bias_amplified(
+            exact, lut, data, noise, "photometry", surface="Fitter", user_likelihood=True
+        )

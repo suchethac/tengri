@@ -367,6 +367,12 @@
   "shards_f932": "GTC/OSIRIS.F932",
   "shards_f936": "GTC/OSIRIS.F936",
   "shards_f940": "GTC/OSIRIS.F940",
+  "skymapper_g": "SkyMapper/SkyMapper.g",
+  "skymapper_i": "SkyMapper/SkyMapper.i",
+  "skymapper_r": "SkyMapper/SkyMapper.r",
+  "skymapper_u": "SkyMapper/SkyMapper.u",
+  "skymapper_v": "SkyMapper/SkyMapper.v",
+  "skymapper_z": "SkyMapper/SkyMapper.z",
   "spt_150ghz": "SPT/SPT-SZ.150GHz",
   "spt_220ghz": "SPT/SPT-SZ.220GHz",
   "suprime_b": "Subaru/Suprime.B",
@@ -423,5 +429,7 @@
   "xmm_uvm2": "XMM/OM.UVM2",
   "xmm_uvw1": "XMM/OM.UVW1",
   "xmm_uvw2": "XMM/OM.UVW2",
-  "xmm_v": "XMM/OM.V"
+  "xmm_v": "XMM/OM.V",
+  "ctio_u": "CTIO/MosaicII.U",
+  "vimos_u": "Paranal/VIMOS.U"
 }

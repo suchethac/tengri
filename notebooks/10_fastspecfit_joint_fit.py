@@ -27,7 +27,7 @@
 #
 # ---
 #
-# Joint broadband photometry and emission-line-flux fitting (e.g., FastSpecFit for DESI). The notebook uses `predict_line_fluxes` to extract pure, deblended, absorption-corrected emission—the same quantity a catalog's `LINE_FLUX` reports. Direct window-integral methods carry stellar absorption and spectroscopic mis-blends; use them for cross-checks only.
+# Joint broadband photometry and emission-line-flux fitting (e.g., FastSpecFit for DESI). The notebook uses `predict_line_fluxes` to extract pure, deblended, absorption-corrected emission, which is the same quantity a catalog's `LINE_FLUX` reports. Direct window-integral methods carry stellar absorption and spectroscopic mis-blends; use them for cross-checks only.
 
 # %%
 from _setup import FIG_DIR, effective_wavelengths_um, quiet
@@ -67,7 +67,6 @@ from tengri import (
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
-from _setup import HMC_VALIDATED
 
 plot.setup_style()
 
@@ -79,9 +78,9 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # DESI Legacy Imaging (DECam *grz* + WISE W1–W4) plus ten strong optical lines:
 # [O II], Balmer lines, [O III], [N II], [S II]. FastSpecFit fits a stellar-continuum
 # model (SPS templates with Balmer absorption), subtracts it, and fits each line as
-# a Gaussian on the residual — with [N II]/Hα doublet kinematics tied so the blends
+# a Gaussian on the residual. The [N II]/Hα doublet kinematics are tied so the blends
 # deblend properly. Its output `LINE_FLUX` is pure, deblended, absorption-corrected
-# emission. That is exactly what `predict_line_fluxes` returns: the backend's emitted
+# emission, which is exactly what `predict_line_fluxes` returns: the backend's emitted
 # line luminosity projected to a flux.
 
 # %%
@@ -114,10 +113,10 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # %% [markdown]
 # ## Model: Cue nebular, exact and fast
 #
-# We use the **Cue** photoionization backend, because it publishes discrete line
+# We use the **Cue** photoionization backend because it publishes discrete line
 # luminosities that `predict_line_fluxes` turns into the pure-emission flux a
 # catalog reports, and because its gas conditions (`neb_logU`, `neb_logZ_gas`)
-# are free — a real catalog spans the metallicity–ionization plane, so a
+# are free. A real catalog spans the metallicity–ionization plane, so a
 # fixed-condition baked-in grid cannot follow it.
 #
 # We build one model and time its fit on three paths: the **exact** wave grid,
@@ -168,7 +167,7 @@ def build(line_data, approx):
 #
 # One truth galaxy: star-forming disc at z = 0.1 with generated DESI photometry
 # (S/N 20) and FastSpecFit lines (S/N 10 on the strong lines). Line errors have
-# a floor at 1% of the brightest line so a weak line (e.g., near-zero [N II]
+# a floor at 1% of the brightest line, so a weak line (for example, near-zero [N II]
 # component) does not dominate the fit. Both channels come from the same truth,
 # so they agree by construction. `predict_line_fluxes` gives the pure emission,
 # matching the catalog convention.
@@ -195,10 +194,7 @@ _seed_lines = LineFluxData(
     wavelengths=LINE_WAVES,
 )
 model_truth = build(_seed_lines, approx=None)
-truth_full = {
-    **model_truth.spec.get_fixed_values(),
-    **{k: jnp.asarray(v) for k, v in TRUTH.items()},
-}
+truth_full = {k: jnp.asarray(v) for k, v in TRUTH.items()}
 
 p_phot = np.asarray(model_truth.predict_photometry(truth_full))
 p_line = np.asarray(model_truth.predict_line_fluxes(truth_full, target_wavelengths=LINE_WAVES))
@@ -231,16 +227,16 @@ print(
 # %% [markdown]
 # ## Measure the fit time: exact vs WavePrecomp vs fast
 #
-# MAP fit (200 L-BFGS-B iterations, the default optimizer) on photometry + line
-# likelihood, timed on three fit paths. `WavePrecomp` is the photometry lookup —
+# MAP fit (200 L-BFGS-B iterations, the default optimizer) on photometry and line
+# likelihood, timed on three fit paths. `WavePrecomp` is the photometry lookup,
 # an SSP × filter table replacing the full integration. `FeaturePrecomp` adds the
 # per-Q_H nebular grid, so the line fluxes come from a table instead of a
 # full-wavelength SED rebuilt on every likelihood evaluation. The path is chosen
 # by `fit(approx=...)`: the default `"auto"` picks the fast tables, `None` forces
-# the exact wave grid, and an explicit config means what it says. Read
-# **compiled step** (`post.wall_time_s`), the optimization loop after JIT
-# compile — the only column where the path matters; `fit() wall` is per-call
-# compile, not the fit.
+# the exact wave grid, and an explicit config specifies it directly. Read
+# **compiled step** (`post.wall_time_s`) for the optimization loop after JIT
+# compile, the only column where the path matters. `fit() wall` is per-call
+# compile, not the fit itself.
 
 # %%
 model_fast = build(line_data, approx=(WavePrecomp(), FeaturePrecomp()))
@@ -327,36 +323,22 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # %% [markdown]
 # ## Posterior on the fast path
 #
-# A point estimate is not enough for a catalog — the metallicity / dust /
-# ionization parameters are degenerate. This posterior is strongly correlated,
-# so the mass matrix must be dense and fixed-trajectory HMC is more efficient
-# than NUTS. We run four sequential chains (each reuses one compiled kernel,
-# keeping memory at one chain's footprint) for 3000 warmup and 1000 samples,
-# reaching R-hat ≈ 1.01 with a handful of divergences: close to the R-hat < 1.01 you
-# would want before quoting an interval in a paper, though the divergences say the
-# sampler is still working against the curvature of this degenerate sector. Truth
-# lands inside the 68% interval for 5 of 6 parameters.
+# A point estimate is not enough for a catalog, as the metallicity, dust, and
+# ionization parameters are degenerate, and the width of that degeneracy is the
+# result. The default sampler addresses this by marginalizing the stellar mass
+# analytically rather than sampling it, which removes the most strongly correlated
+# direction before the sampler sees it, and the remaining parameters receive a dense
+# metric. Read `max R-hat` and the divergence count below; truth lands inside the
+# 68% interval for 5 of 6 parameters.
 
 # %%
-# Fixed-length HMC on the precomputed model. Every gradient here goes through the
-# `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a lookup
-# rather than a full SSP integral — which is what makes a long chain affordable.
-#
-# HMC with fixed 20-leapfrog trajectories is more efficient than NUTS here because
-# NUTS spends its budget building deep adaptive trees on the correlated degeneracy.
-# Four chains: R-hat from fewer chains understates non-convergence.
-HMC_LONG = {**HMC_VALIDATED, "n_warmup": 3000, "n_samples": 1000}
-N_CHAINS = 4
+# The default sampler on the precomputed model. Every gradient here goes through
+# the `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a
+# lookup rather than a full SSP integral.
 data = Data(photometry=(flux_phot, n_phot))
 
 t0 = time.perf_counter()
-posterior = ForwardModel.build(sed=model_fast).fit(
-    data,
-    key=jax.random.PRNGKey(7),
-    n_chains=N_CHAINS,
-    chain_method="sequential",
-    **HMC_LONG,
-)
+posterior = ForwardModel.build(sed=model_fast).fit(data, key=jax.random.PRNGKey(7))
 elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
 n_divergent = posterior.diagnostics.get("n_divergent", 0)
@@ -369,24 +351,22 @@ _free = model_fast.spec.free_params
 n_draw = min(np.asarray(posterior.samples[p]).size for p in _free)
 n_unique = min(np.unique(np.asarray(posterior.samples[p])).size for p in _free)
 
-print(
-    f"HMC ({N_CHAINS} chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
-    f"{elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}"
-)
+print(f"Posterior: {elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}")
 print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
-# On a machine with more RAM, set `chain_method="parallel"` to run chains
-# concurrently, cutting wall time roughly N-fold at N-chain memory cost.
+# This is one galaxy. For a catalog, `Catalog(...).fit(...)` builds the lookup
+# tables once and reuses them for every object, so the cost above is paid at the
+# start rather than per source.
 
 # %% [markdown]
 # ## Recovery
 #
-# Truth vs posterior 16/50/84 percentiles. Stellar mass and SFR are well constrained.
-# Metallicity / dust / gas conditions trade off along the age–dust–metallicity ridge;
-# posterior width is the honest statement of that degeneracy. With broadband photometry
-# and a handful of line fluxes, those three parameters cannot be broken further. Full
-# spectrum, temperature-sensitive auroral line, or UV slope would tighten it.
+# Truth versus posterior 16/50/84 percentiles. Stellar mass and SFR are well constrained.
+# Metallicity, dust, and gas conditions trade off along the age–dust–metallicity ridge.
+# The posterior width is the honest statement of that degeneracy. With broadband photometry
+# and a handful of line fluxes, those three parameters cannot be separated further. A full
+# spectrum, temperature-sensitive auroral line, or UV slope would tighten them.
 
 # %%
 REPORT = [
@@ -410,11 +390,11 @@ for p in REPORT:
 print(f"\n68% coverage: {n_cov}/{len(REPORT)}")
 
 # %% [markdown]
-# ## Corner — the joint posterior
+# ## Corner (the joint posterior)
 #
 # 1-D marginals show each parameter's distribution with truth (lines). 2-D contours
-# show the covariance structure where degeneracies live. Stellar mass is tight;
-# the metallicity–dust–ionization block shows the correlated ridge from the broad
+# show the covariance structure where degeneracies live. Stellar mass is tight, while the
+# metallicity–dust–ionization block shows the correlated ridge from the broad
 # posterior intervals above.
 
 # %%
@@ -428,15 +408,14 @@ plt.show()
 # ## Posterior draws for the figures
 #
 # Evaluated once and reused by both figures below: the model photometry
-# (`predict_photometry`), the full model SED (`predict(...).rest_sed()` → observed
-# `F_ν`), and the model line fluxes (`predict_line_fluxes`) — each drawn over the
+# (`predict_photometry`), the full model SED (`predict(...).rest_sed()` to observed
+# `F_ν`), and the model line fluxes (`predict_line_fluxes`). Each is drawn over the
 # posterior so the bands carry the parameter uncertainty.
 
 # %%
 N_DRAW = 80
 _sidx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, N_DRAW).astype(int)
-_fixed = model_fast.spec.get_fixed_values()
-draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
+draws = [{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()} for i in _sidx]
 
 # Effective wavelength of each band (transmission-weighted), for placing the points.
 wave_eff_um = effective_wavelengths_um(phot_obs)
@@ -472,10 +451,10 @@ sed_lo, sed_med, sed_hi = np.percentile(
 sed_truth = _sed_fnu(truth_full)
 
 # %% [markdown]
-# ## Do the points match the best fit? — photometry
+# ## Do the points match the best fit? (photometry)
 #
-# Observed photometry on the posterior-median SED. Lower panel is the pull `(O−M)/σ`:
-# inside ±1 (gray band) means the model reproduces that band within error. Reduced χ²
+# Observed photometry on the posterior-median SED. Lower panel shows the pull `(O−M)/σ`:
+# values inside ±1 (gray band) mean the model reproduces that band within error. Reduced χ²
 # quantifies the overall photometric match.
 
 # %%
@@ -544,10 +523,10 @@ fig.savefig(FIG_DIR / "10_sed_photometry.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Do the points match the best fit? — emission lines
+# ## Do the points match the best fit? (emission lines)
 #
 # Observed line fluxes against posterior-predictive predictions. Lines are categorical,
-# so no curve joins them — each is an independent measurement. Lower panel: pull over
+# so no curve joins them; each is an independent measurement. Lower panel shows the pull over
 # the ten lines. Reduced χ² quantifies the line match.
 
 # %%
@@ -620,14 +599,14 @@ plt.show()
 #
 # The attribution below is worth reading closely: the photometry lookup carries the
 # whole speed-up, and adding the nebular grid on top changes nothing. For a
-# photoionization backend like Cue, that grid earns its keep by standing in for the
-# emulator when the broadband flux is computed — which is only possible if nothing
+# photoionization backend like Cue, that grid earns its place by standing in for the
+# emulator when the broadband flux is computed, which is only possible if nothing
 # downstream needs the nebular continuum. A dust component does need it, so on a
-# dusty model that saving is unavailable. The emission lines, meanwhile, are cheap
+# dusty model that saving is unavailable. The emission lines are cheap
 # here on their own terms: dropping the line channel and re-measuring shows the ten
 # lines account for only about 8% of this fit's cost, so even a perfect line table
-# could not remove much. On a dust-free fit, or one without a photometry channel,
-# the balance changes — measure it there rather than carrying this result over.
+# could not remove much. On a dust-free fit or one without a photometry channel,
+# the balance changes, so measure it there rather than carrying this result over.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")

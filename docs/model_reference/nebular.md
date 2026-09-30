@@ -21,6 +21,12 @@ The `CloudyGrid` backend loads precomputed CLOUDY photoionization grids (Byler e
 
 The grid has dimensions $(n_{\rm met}, n_{\rm age}, n_{\log U})$ for both emission lines and nebular continuum, stored in $\log_{10}$ space for interpolation accuracy. Luminosities are in units of $L_\odot\, Q_{\rm H}^{-1}$ (lines) and $L_\odot\,{\rm Hz}^{-1}\, Q_{\rm H}^{-1}$ (continuum).
 
+#### Long-wavelength continuum extension
+
+The CLOUDY grids (Byler et al. 2017) and the Cue emulator's continuum tables both end at 1e8 Å (1 cm). Beyond this wavelength, the continuum is analytically extended as optically thin thermal free-free: $L_\nu \propto \nu^{-0.1}$, anchored at the last tabulated node (index constant `NEBULAR_FREEFREE_TAIL_ALPHA_NU = -0.1` in `tengri.components.nebular._constants`). This is an analytic extension, not an emulator or table prediction. Optically thin bremsstrahlung has this index; pcigale's tabulated nebular continuum, which runs to 1 m, measures $\nu^{-0.096}$ over 1 cm to 1 m, and bagpipes tabulates to 3.6 cm.
+
+A model with `Cue` nebular emission and no radio block declares wavelength nodes to 1 m: `native_wave_nebular("cue")` appends 40 logarithmically spaced nodes (20 per decade) from 1e8 to 1e10 Å (`NEBULAR_CONTINUUM_WAVE_MAX = 1e10` Å in `tengri.utils.wavelength`). With a radio block, the tail continues to the radio grid end (3e11 Å). The `CloudyGrid` backend declares no native wavelength grid; the free-free tail is carried by components that supply nodes (a dust emission template or the radio wing). This analytic extension via `interp_continuum_with_freefree_tail` is in `tengri.components.nebular._shared`.
+
 For a given CSP with mass weights $w_j$ at SSP ages $t_j$: $$\begin{aligned}
 L_{\rm line} = {} & (1 - f_{\rm esc}) \sum_{j} w_j \, Q_{\rm H}(Z, t_j) \nonumber \\
   & \times \ell_{\rm grid}(\log Z_{\rm gas}, \log t_j, \log U),

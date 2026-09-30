@@ -277,13 +277,13 @@ AI-assisted PRs. The bar is the same as for any other PR:
 
 Releases are cut by the maintainer (see GOVERNANCE.md). The steps live in one
 place, [`docs/dev/release-checklist.md`](docs/dev/release-checklist.md): the
-one-time PyPI trusted-publisher setup, the gates to clear before tagging, the
-files the version string is hand-copied into, and the fact that uploading
-is triggered by publishing a GitHub Release rather than by pushing the tag.
+one-time PyPI trusted-publisher setup, the gates to clear before tagging,
+and the fact that uploading is triggered by publishing a GitHub Release
+rather than by pushing the tag. The version has a single source: `pyproject.toml`;
+`CITATION.cff` is guarded by `tools/check_version_single_source.py` to ensure they stay in sync.
 
 They are deliberately not summarized here. This section used to carry its own
-four-step copy, and both of the places it disagreed with `publish.yml` —
-the version files and the trigger — were wrong.
+four-step copy, and the places it disagreed with other docs — triggering, version files — were wrong.
 
 ## Governance
 

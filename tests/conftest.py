@@ -389,6 +389,14 @@ def _is_excluded_tree(file_path: str) -> bool:
 # the compilation machinery clear this env var themselves.
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
+# Disable the ancestor-directory walk in data_dirs() for test hermeticity (#2329).
+# Nested worktrees can find data from the main checkout, causing tests to pass
+# locally (with data) but fail in CI (without data). The pin applied
+# unconditionally — not only when CI is set — ensures the suite always tests
+# against what CI will see. Matches the pattern of TENGRI_DISABLE_PRECOMP_CACHE
+# below.
+os.environ.setdefault("TENGRI_DATA_NO_ANCESTOR_WALK", "1")
+
 # TENGRI_DISABLE_SSP_AUTODOWNLOAD used to be set here, to stop a test that
 # named an absent grid from silently fetching it (#1528 reddened main that
 # way).  Do not put it back.  ``load_ssp_data`` no longer fetches unless asked

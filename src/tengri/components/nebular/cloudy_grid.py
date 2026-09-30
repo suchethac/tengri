@@ -116,10 +116,13 @@ from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_fact
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
+    apply_lya_escape,
     compute_qh,
     compute_qh_log10,
+    interp_continuum_with_freefree_tail,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
@@ -651,7 +654,7 @@ class CloudyGridBackend:
         )
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
-        self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
+        self._qh_log_age = ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr)  # log(age/yr), #2418
 
         # Precompute indices of young SSP age bins (only these produce
         # ionizing photons and contribute to nebular emission)
@@ -763,9 +766,12 @@ class CloudyGridBackend:
             k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
                      {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
-        Ly-alpha (1215.67 A) is treated separately: its luminosity is scaled
-        by (1-neb_fesc_lya)/(1-k*fesc) relative to other lines, reflecting
-        resonant scattering that suppresses Ly-alpha escape independently.
+        All emission lines are scaled by the Case B recombination cascading
+        factor k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust).
+        Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
+        its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
+        account for resonant scattering that suppresses Ly-alpha escape
+        independently of the general ionizing photon and dust budget.
 
         Parameters
         ----------
@@ -854,12 +860,9 @@ class CloudyGridBackend:
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Apply differential Ly-alpha escape fraction.
-        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/k_factor to apply the
-        # Ly-alpha-specific escape on top of the k-factor already applied.
-        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(k_factor, 1e-10)
-        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+        # Apply differential Ly-alpha escape fraction via the shared helper.
+        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
 
@@ -1070,8 +1073,9 @@ class CloudyGridBackend:
             template_data=template_data,
         )
 
-        # Interpolate continuum onto SSP wavelength grid
-        neb_sed = jnp.interp(ssp_wave, cont_wave, cont_lum, left=0.0, right=0.0)
+        # Interpolate continuum onto SSP wavelength grid; past the table's last node (1e8 Å)
+        # continue as optically thin free-free (#2346).
+        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wave, cont_lum)
 
         # Add emission lines
         neb_sed = neb_sed + render_nebular_lines(

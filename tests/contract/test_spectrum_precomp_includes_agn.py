@@ -59,7 +59,7 @@ def test_spectrum_precomp_publishes_nonzero_agn_spec_family(synthetic_ssp_wide):
     spectrum LUT.
     """
     m = _build(synthetic_ssp_wide, SpectrumPrecomp())
-    sf = {**m.spec.get_fixed_values()}
+    sf = {}
     derived = m.predict_state(sf).derived
     assert "agn_spec_lnu_precomp" in derived.field_names()
     fam = derived.get("agn_spec_lnu_precomp")
@@ -79,7 +79,7 @@ def test_spectrum_precomp_matches_exact_with_agn(synthetic_ssp_wide):
     matches the AGN's exact-path delta (caught vacuity guard: the family is
     non-zero per the test above).
     """
-    sf = {**_build(synthetic_ssp_wide, None).spec.get_fixed_values()}
+    sf = {}
     s_exact = np.asarray(_build(synthetic_ssp_wide, None).predict_spectrum(sf))
     s_lut = np.asarray(_build(synthetic_ssp_wide, SpectrumPrecomp()).predict_spectrum(sf))
     ratio = s_lut / np.where(s_exact == 0, np.nan, s_exact)

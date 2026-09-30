@@ -8,6 +8,10 @@ Photometry
 Broadband filter selection, cosmological dimming, color tracks and redshift evolution. Diagnostic planes: WISE/IRAC AGN wedges, red sequence/blue cloud. Photometric-redshift color degeneracies.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

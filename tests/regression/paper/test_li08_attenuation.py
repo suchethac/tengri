@@ -3,14 +3,13 @@
 
 The Li08 curve uses 4 dimensionless parameters (c1-c4) in an analytical
 form with Lorentzian-like terms for the UV/optical continuum, far-UV rise,
-and 2175 A UV bump.  Reference values are computed from the formula in
-Markov et al. (2025, arXiv:2504.12378, Eq. 1).
+and 2175 A UV bump. Reference values are computed from the formula in
+Li et al. (2008), Eq. 1; the default (c1, c2, c3, c4) = (14.4, 6.52, 2.04,
+0.0519) is that paper's Table 1 Milky Way (R_V=3.1) template (#2542).
 
 References
 ----------
 - Li, A., Liang, S. L., Kann, D. A., et al. 2008, ApJ, 685, 1046
-- Markov, V., et al. 2023, A&A, 679, A12
-- Markov, V., et al. 2025, A&A (arXiv:2504.12378)
 """
 
 import chex
@@ -32,12 +31,12 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 WAVS = jnp.array([912.0, 1216.0, 1500.0, 2175.0, 3000.0, 5500.0, 10000.0, 20000.0])
-# Default params: c1=6, c2=4, c3=2, c4=0.04
-DEFAULT_C1, DEFAULT_C2, DEFAULT_C3, DEFAULT_C4 = 6.0, 4.0, 2.0, 0.04
+# Default params: the Li et al. (2008) Table 1 Milky Way (R_V=3.1) template.
+DEFAULT_C1, DEFAULT_C2, DEFAULT_C3, DEFAULT_C4 = 14.4, 6.52, 2.04, 0.0519
 
 
 def _reference_li08(wave_aa, c1, c2, c3, c4):
-    """Pure-numpy reference implementation of Eq. 1 in Markov+2025."""
+    """Pure-numpy reference implementation of Li et al. (2008), Eq. 1."""
     lam = wave_aa / 1e4  # micron
     t1 = c1 / ((lam / 0.08) ** c2 + (0.08 / lam) ** c2 + c3)
     d0 = 6.88**c2 + 0.145**c2 + c3

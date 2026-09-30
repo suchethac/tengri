@@ -219,48 +219,47 @@ Apple's own `jax-metal` last released 0.1.1 on 2024-10-08 and pins `jax == jaxli
 the community [`jax-mps`](https://github.com/tillahoffmann/jax-mps) plugin, built on
 MLX. Full walkthrough with measured throughput: `notebooks/apple_mps.py`.
 
-**Use a separate environment.** `jax-mps` pins a JAX version tengri's main environment
-does not use, so build it apart from the working install
-(`notebooks/apple_mps.py:66-79`):
+**Use `jax-mps` 0.11.0 or later, in a separate environment.** 0.11.0 (2026-09-15)
+targets JAX 0.11 and Python >= 3.12, the same JAX tengri installs, so nothing has to
+be downgraded any more (0.10.10 needed jax 0.10.x). The environment is still kept apart
+because installing the plugin makes MPS the default JAX device for every process in it,
+and a default float64 tengri session there raises `MLX does not support float64` at
+the first array (measured). `[all]` brings `optax`, which the MAP backend needs:
 
 ```bash
 python3.12 -m venv ~/.venvs/tengri-mps
 source ~/.venvs/tengri-mps/bin/activate
-pip install "jax>=0.10,<0.11" "jaxlib>=0.10,<0.11" "jax-mps==0.10.10"
-pip install -e /path/to/tengri
+pip install "jax-mps>=0.11.0"
+pip install -e "/path/to/tengri[all]"
 ```
 
-| you have | you need |
-|---|---|
-| Python 3.12 | `jax-mps` 0.10.10 → **jax 0.10.x** |
-| jax 0.9.x | `jax-mps` 0.9.9 → **Python 3.13** (cp313-only wheel) |
-
-Three rules govern everything else on this backend:
+Two rules govern everything else on this backend:
 
 1. **MPS has no float64, at all.** Not "slower" -- absent. A float64 array does not
    downcast; it raises `MLX does not support float64 (F64)`.
 2. **Select float32 in the environment, before Python starts.** Setting it after
    `import tengri` is too late -- constants allocated during import are already on the
    device.
-3. **Turn MLX kernel fusion off.** With it on, a reversed array combined with a
-   broadcast scalar is silently wrong on MPS: `y[::-1] * 2.0` returns the right first
-   element and zeros after it, for `jnp.flip` / `lax.rev` / any negative step, float32
-   and int32, under `jax.jit` and eagerly
-   ([tillahoffmann/jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)).
-   tengri hits it in the SKIRTOR polar-dust luminosity, a trapezoid over a reversed
-   frequency grid, which comes out as `0.0`: the torus loses its far-infrared graybody
-   and its normalization redistributes the deficit, so photometry is off by
-   wavelength-dependent factors from x1.02 at 3 um to x0.10 at 100 um while every
-   other seam agrees with CPU. Fusion off costs nothing here -- the sweep is
-   dispatch-bound, and in the one sweep measured each way every seam ran faster
-   without it (10-40 s versus 13-64 s per seam). `JAX_MPS_NO_OPTIMIZE=1` does
-   **not** cure it.
-
    ```bash
    export JAX_ENABLE_X64=0
    export JAX_PLATFORMS=mps
-   export MLX_DISABLE_COMPILE=1
    ```
+
+**Why 0.11.0 is the floor (the former rule 3).** On `jax-mps` <= 0.10.10 a reversed
+array combined with a broadcast scalar is silently wrong with MLX kernel fusion on:
+`y[::-1] * 2.0` returns the right first element and zeros after it, for `jnp.flip` /
+`lax.rev` / any negative step, float32 and int32, under `jax.jit` and eagerly
+([tillahoffmann/jax-mps#232](https://github.com/tillahoffmann/jax-mps/issues/232)).
+tengri hit it in the SKIRTOR polar-dust luminosity, a trapezoid over a reversed
+frequency grid, which came out as `0.0`: photometry off by x1.02 at 3 um to x0.10 at
+100 um while every other seam agreed with CPU. The recipe then was
+`MLX_DISABLE_COMPILE=1` (`JAX_MPS_NO_OPTIMIZE=1` does **not** cure it); #2298 removed
+the reversed trapezoids from tengri's own model path. The fix is MLX 0.32.0
+(jax-mps#236), shipped in 0.10.11 together with #239, which accepts host arrays with
+negative strides at `device_put` (jax-mps#234; before it a flipped-axis view failed
+with a misleading "Failed to create Metal buffer. GPU memory may be exhausted"). Both
+reproducers are correct on 0.11.0 with fusion on (measured 2026-09-30), so the
+environment variable is no longer part of the recipe.
 
 ### Accuracy: the parity sweep
 
@@ -286,11 +285,11 @@ the loss value, that is the scientific quantity gated:
 # 1. Is the committed reference still the physics of this tree? (CPU, float64, ~5 min)
 JAX_ENABLE_X64=1 JAX_PLATFORMS=cpu \
     python bench/scripts/benchmark_float32_mps_parity.py \
-    --self-check bench/results/float32_parity_reference_f2b4b1843.json
-# 2. The device sweep, under the three rules
-JAX_ENABLE_X64=0 JAX_PLATFORMS=mps MLX_DISABLE_COMPILE=1 \
+    --self-check bench/results/float32_parity_reference_e05c13078.json
+# 2. The device sweep, under the two rules
+JAX_ENABLE_X64=0 JAX_PLATFORMS=mps \
     python bench/scripts/benchmark_float32_mps_parity.py \
-    --reference bench/results/float32_parity_reference_f2b4b1843.json
+    --reference bench/results/float32_parity_reference_e05c13078.json
 ```
 
 It refuses to run with `jax_enable_x64=True` (a one-line fix is printed instead of a
@@ -301,18 +300,19 @@ sweep prints a `REFERENCE MAY BE STALE` banner (with the number of `src/tengri` 
 since) above and below its table and points at step 1. A FAIL under that banner is a
 claim about the file until the self-check has measured it (#2300).
 
-Measured 2026-09-12 on an M4 Pro (jax 0.10.2, `jax-mps` 0.10.10) under the three rules
-above, on a tree based on `f6c36d9d3`, against the float64 CPU reference
+Measured 2026-09-12 on an M4 Pro (jax 0.10.2, `jax-mps` 0.10.10) with MLX fusion off
+(the 0.10.10 recipe), on a tree based on `f6c36d9d3`, against the float64 CPU reference
 `float32_parity_reference_18cf9fb9e.json`; the last column is the same float32 sweep on
 the Mac's CPU (`JAX_PLATFORMS=cpu`, 6 of 6 PASS), which separates what float32 costs
 from what the GPU backend adds. That reference predates #2260 (shock lines moved to the
 diffuse screen), which shifted the `panchromatic` seam's float64 answer by 3.3e-3 in
 Herschel-250 and its `tau_diff` gradient by 67%: on any later tree the `panchromatic`
 row reads FAIL on `fwd` against this file on every device, CPU-float64 included (#2300).
-The file is kept for this table; the current reference is
-`float32_parity_reference_f2b4b1843.json` (written at `f2b4b1843`, after #2291, the
-AGN validation round that moved the three torus seams' float64 photometry by 2.2e-2).
-Run the self-check against it before trusting any FAIL on a later tree.
+The file is kept for this table, as is `float32_parity_reference_f2b4b1843.json`
+(written at `f2b4b1843`, after #2291, the AGN validation round that moved the three
+torus seams' float64 photometry by 2.2e-2) for the second one. The current reference is
+`float32_parity_reference_e05c13078.json` (last table). Run the self-check against it
+before trusting any FAIL on a later tree.
 
 | seam | fwd | grad | param | status | CPU-f32 grad |
 |---|---|---|---|---|---|
@@ -352,6 +352,50 @@ beside a broadcast scalar on 0.10.10.
 | `+AGN` | 9.81e-06 | 3.38e-03 | 4.86e-05 | PASS | 1.39e-03 |
 | `+radio+xray` | 1.17e-05 | 4.10e-03 | 5.03e-05 | PASS | 1.44e-04 |
 | `panchromatic` | 9.46e-06 | 3.84e-03 | 5.62e-05 | PASS | 3.54e-04 |
+
+Re-measured 2026-09-30 on the same machine with the recipe above (jax 0.11.1,
+`jax-mps` 0.11.0, MLX fusion **on**, no `MLX_DISABLE_COMPILE`), against
+`float32_parity_reference_e05c13078.json`: six of six, fwd and grad identical to the
+digit to the 2026-09-12 table above, and the CPU-float32 control six of six. The new
+reference was needed for two reasons. Since #2296 a call-time value for a `Fixed`
+parameter raises, and the sweep used to pass a reference's whole recorded truth (pins
+included) back into the model, so on `e05c13078` the self-check reported all six seams
+unmeasurable; the sweep now passes the free parameters only and lets the model supply
+its pins (a moved pin still shows up as float64 drift in the self-check). With that
+fixed, `panchromatic` had drifted 4.6e-7 in float64 gradient since `f2b4b1843`, far
+below every float32 gate but above the self-check's 1e-9, so the file was regenerated
+rather than argued with.
+
+| seam | fwd | grad | param | status | CPU-f32 grad |
+|---|---|---|---|---|---|
+| `stellar_dust` | 1.08e-05 | 5.91e-03 | 1.28e-05 | PASS | 1.64e-04 |
+| `+dust IR` | 1.22e-05 | 2.10e-03 | 4.46e-05 | PASS | 5.76e-04 |
+| `+Cue` | 1.18e-05 | 2.56e-03 | 1.20e-05 | PASS | 3.11e-04 |
+| `+AGN` | 9.81e-06 | 3.38e-03 | 4.36e-06 | PASS | 1.39e-03 |
+| `+radio+xray` | 1.17e-05 | 4.10e-03 | 4.11e-06 | PASS | 1.44e-04 |
+| `panchromatic` | 9.46e-06 | 3.84e-03 | 5.62e-05 | PASS | 3.40e-04 |
+
+**Throughput on 0.11.0 (2026-09-30), and why the notebook's tables were not replaced.**
+The notebook's model, one shape per process, CPU and MPS interleaved per cell, two runs
+each, fusion on -- but at a 1-minute load average of 17-76 throughout (other sessions'
+test runs; the machine was not quiet at any point in three weeks). Ranges are the two
+runs, ms per galaxy (shape C: per galaxy per step):
+
+| shape | batch | CPU-f32 | MPS | notebook table (quiet, 0.10.10) |
+|---|---|---|---|---|
+| B gradient | 256 | 0.50-0.52 | 0.68-0.86 | 0.246 / 0.294 |
+| | 1024 | 0.48-0.50 | 0.14-0.20 | 0.244 / 0.124 |
+| | 4096 | 0.41 (one run; the other died silently) | 0.103-0.107 | ~0.30 / 0.094 |
+| C 50 grad steps | 256 | 0.345 (one run) | 0.37-0.52 | 0.190 / 0.285 |
+| | 1024 | 0.35-0.38 | 0.17-0.20 | -- |
+| | 4096 | not run (host OOM guard) | 0.097-0.105 | OOM / 0.101 |
+| A forward | 4096 | 0.19-0.20 | 0.068-0.085 | 0.133 / 0.055 |
+
+The MPS column at 4096 lands within 12% of the quiet table; the CPU column roughly
+doubled. That is load biasing the two arms in one direction (the CPU competes with the
+load for cores, the dispatch-bound GPU barely does), so these crossovers are shifted
+toward MPS and were not published. The notebook keeps its quiet-machine tables and
+states only the 4096 MPS agreement. Re-measure on a quiet machine before replacing them.
 
 ## TPU
 

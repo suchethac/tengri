@@ -69,9 +69,11 @@ class TestFitParamsOverride:
         r2 = forward.fit(data, noise, method="map", params={"redshift": 1.5}, n_steps=100)
 
         # Echoed redshift reflects the override (necessary, NOT sufficient — an
-        # output-only relabel also passes this).
-        assert abs(float(r1.params["redshift"]) - 0.1) < 1e-5
-        assert abs(float(r2.params["redshift"]) - 1.5) < 1e-5
+        # output-only relabel also passes this). redshift is Fixed and re-pinned
+        # via params=..., so it is reachable through fixed_values, not the
+        # free-only params (#2296).
+        assert abs(float(r1.fixed_values["redshift"]) - 0.1) < 1e-5
+        assert abs(float(r2.fixed_values["redshift"]) - 1.5) < 1e-5
 
         # The forward pass actually used the override: the free-param MAP diverges.
         # (Under the silent-relabel bug this max delta is exactly 0.)

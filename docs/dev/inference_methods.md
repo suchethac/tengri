@@ -1668,15 +1668,30 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 
 ### Guards
 
-`profile_mass` requires, checked at `Fitter` construction (lines 257–315 of
-`src/tengri/inference/mass_profile.py:_check_guards`):
+`profile_mass` requires, checked at `Fitter` construction
+(`src/tengri/inference/mass_profile.py:_check_guards`):
 
 - the parameter spec exposes `_distributions` (a plain `Parameters` instance, not a subclass
   or wrapper that lacks this interface);
-- float64 precision enabled (`jax_enable_x64=True`); the marginal's curvature in flux units
-  and the per-band cotangent scales of reverse-mode gradients fall outside float32's range
-  (measured 2026-09-11, `bench/reports/2026-09-11_profile_mass_20s.md` Finding 8: float64
-  gradient is finite where float32 returns NaN on the same fixture);
+- float64 **only for `laplace`** — the sole member of `HESSIAN_BACKEND_SET`, which is the
+  set this guard matches on. (Preconditioning also differentiates the objective twice, via
+  `negative_hessian_metric`, but `precondition=` is not part of the match; see #2378.) Profiling is
+  **available in float32 on every gradient-only sampler**: `mcmc_nuts`, `mcmc_hmc`,
+  `mcmc_mclmc`, `mcmc_barker`, `mcmc_mala`, `mcmc_smc` and the rest of
+  `PROFILE_MASS_BACKENDS`. Two things this bullet used to get wrong, both worth stating
+  because they pointed a float32 user away from a path that works:
+  - The NaN is **not** the marginal's. It is the SED model's photometry Hessian under
+    `jax.hessian` — a forward-over-reverse seam that **reproduces with
+    `profile_mass=False`** on the same fixture (measured 2026-09-11,
+    `bench/reports/2026-09-11_profile_mass_20s.md` Finding 8). The refusal names which
+    objective is being differentiated twice, not which fitting path asked for it.
+  - The quadratic itself is *built* for float32 rather than hindered by it. `_profile_stats`
+    whitens by the per-entry errors before squaring (`snr_pred = whiten(pred, noise)`), so
+    no erg/s-scale intermediate is ever formed: raw `sum f**2` on a photometry vector would
+    be ~1e-58 against float32's smallest normal of 1.2e-38, while the whitened sum is an
+    ordinary S/N-scale number. The same property is what lets a measured line block
+    (fluxes ~1e-16) concatenate onto photometry (~1e-29) without new numerical work — two
+    channels thirteen orders of magnitude apart arrive commensurate;
 - exactly one free parameter named `*_log_total_mass`;
 - at least two free parameters total (so profiling would not leave zero others to sample);
 - the mass parameter is not pinned via `params_override` (cannot be both profiled and pinned);
@@ -1719,6 +1734,47 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
   `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
   A refusal at this magnitude does not by itself imply any additive component.
 
+#### The probe answers three questions, not two (2026-09-17)
+
+`_linearity_max_deviation` returns `kind in {"proportional", "affine", "nonlinear"}`.
+The middle value is not a nicety: for an affine prediction
+`d = M f(theta) + g(theta)` with `g` independent of the mass, `chi2(M)` is **still
+exactly quadratic** -- the same algebra with `d -> d - g` -- so such a model is
+marginalizable as soon as the offset is known, whereas a nonlinear one never is. A
+two-way proportional-or-not check cannot separate them and labels affine as whichever
+end it happened to test for.
+
+The classification costs one further forward evaluation, taken **only on the refusal
+branch**: the proportionality probe already produced two masses, two points determine an
+affine model exactly, so `_classify_nonproportional` solves `f` and `g` from that pair
+and asks whether they predict a third mass to the same roundoff-scaled tolerance. The
+`"proportional"` fast path -- every SFH that renormalizes to the mass, and so eight of
+the nine shipped recipes -- therefore costs exactly what it did before this existed.
+
+Measured on 2026-09-17: the composable-AGN photometry fixture is **affine** (8.421e+00),
+and `dense_basis` is **nonlinear** (1.002e+00). That difference is the point. The AGN
+case is #2347's, and an affine verdict says the offset could in principle be removed;
+`dense_basis` puts the mass into the SFH *shape* (`_build_quantile_points` builds its GP
+knots from `sfr_inst*age/M`), and no offset subtraction can fix that.
+
+The refusal message is phrased from the measurement rather than from a guess. It used to
+assert that an order-1 deviation "indicates a mass-independent additive component such as
+an AGN continuum" **on every model**, which is wrong exactly where it matters: a
+`dense_basis` photometry fit carrying no AGN block at all refuses at order 1, and the
+message sent the reader looking for a contaminant that is not there. It now names the
+measured kind, and names an additive component only when the chain actually holds one
+(walked through `model.populations[0].sed` -- `ForwardModel` does not delegate
+`_build_component_chain`, so reading it off `fitter.model` finds nothing and would report
+"no additive component" for every model).
+
+**Only `dense_basis` leaks.** Audited on 2026-09-17 across every registered SFH carrying
+a `log_total_mass`: the 20 that build measure 9e-15 to 1.3e-14 -- the roundoff floor --
+because `mean_sfh._renormalize_to_mass` divides the dimensionless shape by its own
+integral before scaling, making proportionality structural rather than incidental. Four
+(`db`, `dbp`, `gaussian_burst`, `top_hat`) are refused as not yet validated against the
+DSPS forward path and could not be measured. So the amplitude assumption holds for every
+analytic SFH in the registry, and `dense_basis` is the single exception.
+
 #### What engaging on a measured line channel changes
 
 Two consequences of admitting the line-flux channel (#2360), both expected
@@ -1747,8 +1803,28 @@ is correct: the fixed-mass difference was dominated by the galaxies' amplitude
 mismatch, and what survives marginalization is the shape comparison. Line
 fluxes still carry real weight in the profiled objective (swapping Halpha moves
 it by ~9x here), they simply no longer determine the ordering on their own.
-Note `catalog_fitter` pins `profile_mass=False` for every vmapped engine
-(#2254), so the batched catalog path is unaffected either way.
+**Catalogs.** The sequential engine has always profiled: `_run_sequential` builds a real
+per-galaxy `Fitter` with no `profile_mass` argument, so `"auto"` applies, and it calls
+`.run()`, so `finalize_profile_mass` fires. The **vmapped** engines used to pin
+`profile_mass=False` (#2254), because their shared dummy fitter's `.run()` is never called
+and the mass would have stayed at its placeholder for every galaxy.
+
+The vmapped MCMC engine profiles too. The reinsertion is called per galaxy in the
+posterior-assembly loop via `mass_profile.reinsert_profiled_mass` (the shared body
+`finalize_profile_mass` defers to), with that galaxy's own
+channels passed explicitly -- necessary because the shared dummy
+fitter carries **galaxy 0's** data, and reinserting from it would hand every galaxy galaxy 0's
+mass. `_reinsert_mass_fn` already takes data/noise/presence as *traced* arguments and is
+cached on the model, so all `n_gal` calls reuse one compiled program. The call sits *before*
+`_attach_summaries`, since derived properties are computed from the samples and a placeholder
+mass would propagate into every one of them.
+
+Reading eligibility off a galaxy-0-shaped dummy is sound here for a reason worth stating:
+every guard that could differ between galaxies is either catalog-uniform (`data_type`, the
+model, the parameter spec, the linearity probe) or already forces the sequential engine --
+`line_censor` is restricted to `SEQUENTIAL` in the capability table, so censored data cannot
+reach the vmapped path at all. `_get_dummy_fitter` caches profiled and unprofiled fitters
+separately, since they sample `D-1` and `D` parameters and compile to different programs.
 
 Additionally, at `Fitter.run()` (lines 467–483 of
 `src/tengri/inference/mass_profile.py:resolve_profile_mass_for_method`):
@@ -1757,9 +1833,31 @@ Additionally, at `Fitter.run()` (lines 467–483 of
   from the `Fitter`'s loss and thus can see the profiled marginal): `map`, `laplace`,
   `mcmc`, `mcmc_nuts`, `mcmc_nuts_fast`, `mcmc_hmc`, `mcmc_dynamic_hmc`, `mcmc_ghmc`,
   `mcmc_chees`, `mcmc_mclmc`, `mcmc_adjusted_mclmc`, `mcmc_barker`, `mcmc_mala`,
-  `mcmc_hmc_lowrank`, `mcmc_smc`, `hmc_is`. Under `profile_mass=True`, an unsupported
+  `mcmc_hmc_lowrank`, `mcmc_smc`, `hmc_is`, `nss`, `mcmc_raytrace`, `mcmc_ess`,
+  `pathfinder`, `vi_fullrank`, `vi_meanfield`. Under `profile_mass=True`, an unsupported
   method raises `ValueError`; under `"auto"`, profiling is silently disabled with a
   logged reason.
+
+  **The last six were added on 2026-09-17** after auditing every registered backend against
+  that seam one at a time. Each had been absent, so profiling was disabled before it ran --
+  silently, because an omission from an allowlist is indistinguishable from a deliberate
+  exclusion. `nss` is the case worth remembering: `build_profiled_loglikelihood_fn` exists
+  *for* nested sampling and says so in its own docstring, but with `"nss"` missing from the
+  set that override was unreachable, so every NSS evidence run scored its live points at the
+  mass placeholder -- precisely the failure the docstring warns about. `vi_fullrank` and
+  `vi_meanfield` are the BlackJAX Gaussian VI backends (`backends/vi/gaussian.py`, which
+  calls `_get_flat_logdensity`) and are *not* covered by the NIFTy/native-VI exclusion below.
+  The set is now pinned by `tests/inference/test_profile_mass_backend_coverage.py` as a
+  **partition** -- registry == allowlist | excluded-with-reason -- so a newly registered
+  backend fails that test until someone classifies it. A membership list would have stayed
+  green through all six omissions.
+
+  Still excluded, and correctly: `vi`, `vi_nonlinear`, `vi_nonlinear_fast`, `vi_linear`,
+  `vi_linear_fast` (NIFTy geoVI/MGVI) and `native_vi_linear` / `native_vi_nonlinear`, all of
+  which build their objective from the model and its spec directly rather than from the
+  `Fitter`'s loss, and so under profiling would fit with the mass frozen at its placeholder
+  (measured 2026-09-12, ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS reference 11.96,
+  age 0.5 Gyr against 5.2).
 
 `profile_mass="auto"` (the default on `Fitter` and `ForwardModel.fit`) engages
 profiling only when every guard passes, falling back to ordinary sampling with one

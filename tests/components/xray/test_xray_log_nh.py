@@ -118,10 +118,19 @@ class TestXrayLogNh:
                 redshift=Fixed(0.05),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            # The param must actually reach the spec (guards the silent-no-op
-            # class: declared-but-unthreaded params).
-            assert "xray_log_nh" in params
-            assert float(params["xray_log_nh"]) == pytest.approx(log_nh)
+            # The param must actually reach the MERGED dict predict_rest_sed
+            # uses (guards the silent-no-op class: declared-but-unthreaded
+            # params) -- not merely that the spec remembers its own build-time
+            # value. xray_log_nh is Fixed here, so the free-only sample
+            # legitimately omits it (#2296); merge_fixed_params is the seam
+            # every predict surface uses to fill it back in, so check the
+            # value survives that seam rather than re-reading the
+            # declaration the model was just built from.
+            from tengri.parameters.resolve import merge_fixed_params
+
+            assert "xray_log_nh" in model.spec.fixed_params
+            merged = merge_fixed_params(model.spec, params)
+            assert float(merged["xray_log_nh"]) == pytest.approx(log_nh)
             state = model.predict_rest_sed(params)
             w = np.asarray(state.wavelength)
             sed = np.asarray(state.sed)

@@ -49,6 +49,7 @@ from tengri.inference.backends.mcmc import (
     run_raytrace as _ctx_run_raytrace,
     run_smc as _ctx_run_smc,
 )
+from tengri.inference.backends.mcmc._shared import _pmap_hint_applies
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
@@ -256,7 +257,7 @@ register_backend(
 
 
 def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
-    """``mcmc_nuts_fast``: the 20 s photometry recipe as a named method.
+    """``mcmc_nuts_fast``: NUTS photometry recipe as a named method.
 
     NUTS with the settings ``bench/reports/2026-09-11_profile_mass_20s.md``
     measured at 9.5-17.2 s per galaxy on eight logical CPU cores across twelve
@@ -268,7 +269,9 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
     the fitter's and ``run_nuts``'s own defaults, so this wrapper adds only
     the draw budget and one hint: without host devices the chains run under
     ``vmap`` and the sampling phase is ~4x longer, which is what
-    ``TENGRI_HOST_DEVICES=4`` (set before ``import tengri``) fixes.
+    ``TENGRI_HOST_DEVICES=4`` (set before ``import tengri``) fixes on GPU/TPU.
+    On CPU, vmap is faster than pmap (8% faster, issue #2361), so the hint
+    emits only on non-CPU platforms.
 
     Every setting is overridable through ``**kw``; ``defaults.toml``'s
     ``[inference.mcmc_nuts_fast]`` section carries the draw budget so
@@ -278,7 +281,11 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
 
     import jax
 
-    if int(kw.get("n_chains", 4)) > 1 and len(jax.devices()) < int(kw.get("n_chains", 4)):
+    if (
+        int(kw.get("n_chains", 4)) > 1
+        and len(jax.devices()) < int(kw.get("n_chains", 4))
+        and _pmap_hint_applies()
+    ):
         logging.getLogger(__name__).info(
             "mcmc_nuts_fast: %d JAX device(s) for %d chains, so the chains run under vmap; "
             "export TENGRI_HOST_DEVICES=%d before importing tengri to pmap them.",
@@ -297,8 +304,9 @@ register_backend(
     "mcmc_nuts_fast",
     tier="primary",
     short_doc=(
-        "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), "
-        "no burn-in, target 0.8; mass profiled, dense metric, pmapped chains by default"
+        "NUTS photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; "
+        "mass profiled, dense metric, "
+        "vmapped chains on one device; pmapped when the platform exposes at least n_chains devices"
     ),
     requires=("blackjax",),
     legacy_fitter=False,
@@ -394,6 +402,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
     # NOT accepts_precondition, though run_mclmc does take `precondition=` and
     # wires it to the same analytic-metric seam NUTS uses. The capability is
     # declared when it has been measured and the tier allows a fit:
@@ -487,6 +496,7 @@ register_backend(
     requires=("blackjax",),
     legacy_fitter=False,
     accepts_precondition=True,
+    self_whitening=True,
 )(_ctx_run_hmc_low_rank)
 
 register_backend(
@@ -498,6 +508,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    self_whitening=True,
 )(_ctx_run_adjusted_mclmc)
 
 register_backend(
@@ -555,10 +566,10 @@ register_backend(
 
 register_backend(
     "nss",
-    tier="experimental",
+    tier="primary",
     short_doc=(
-        "Nested sampling, slow (cold ~240s at D=6, timeout >600s at D=7); "
-        "use for evidence/model comparison, not point estimates"
+        "Vectorized nested sampling: returns Bayesian evidence (log Z) and posterior samples. "
+        "Efficient sampler suitable for model comparison and point estimate inference."
     ),
     legacy_fitter=False,
 )(_ctx_run_nss)

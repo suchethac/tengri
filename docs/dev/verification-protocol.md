@@ -91,10 +91,15 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | Absolute SED normalization | — | bagpipes, FSPS, CIGALE | `tests/crossval/test_full_sed_crossval.py` | PARTIAL (68/126) |
 | Synthesizer parity | — | flaresimulations/synthesizer | `tests/crossval/test_synthesizer_crossval.py` | PARTIAL (3/16) |
 
-> **DSPS scope.** DSPS supplies the cosmology (`flat_wcdm`), the metallicity
-> weights (`calc_lgmet_weights_from_lognormal_mdf`), `surviving_mstar`, and the
-> SSP grid format. The composite-stellar-population integral on the default path
-> is **tengri's own CIC kernel** (`_age_weights_cic` in
+> **DSPS scope.** DSPS supplies the metallicity weights
+> (`calc_lgmet_weights_from_lognormal_mdf`), `surviving_mstar`, and the SSP grid
+> format. The cosmology is **tengri's own** (`src/tengri/utils/cosmology.py`):
+> a Gauss-Legendre-quadrature E(z) with matter, CPL dark energy (w0, wa), and
+> radiation (photons + the Komatsu et al. 2011 massive-neutrino fitting
+> function), matching `astropy.cosmology.Planck18`'s D_L and age(z) to <1e-4
+> relative — not DSPS's radiation-free `flat_wcdm` (#2517). The
+> composite-stellar-population integral on the default path is **tengri's own
+> CIC kernel** (`_age_weights_cic` in
 > `src/tengri/components/stellar/component.py`); DSPS's histogram kernel is
 > reachable only via `sfh={'age_kernel': 'dsps'}`, which
 > `tengri.list_age_kernels()` marks `comparison` because it biases the optical

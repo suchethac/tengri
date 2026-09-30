@@ -45,7 +45,7 @@ class TestShockLineFluxes:
         Assertion 3: Precondition—shock Hα contribution > noise floor
         (non-vacuity: verifies shock emits and reaches the line catalog).
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -71,11 +71,11 @@ class TestShockLineFluxes:
                 "all_params": Fixed(DEFAULT),
             },
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},  # Discrete line backend
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},  # Start with max shock
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},  # Start with max shock
             redshift=Fixed(0.1),
         )
 
-        params = {}  # Use defaults (all Fixed in this model)
+        params = {"shock_frac": 1.0}  # Set shock_frac to 1.0 for the "with shock" case
 
         # Measure Hα flux with maximum shock
         halpha_wave = 6564.61  # Vacuum wavelength
@@ -176,7 +176,7 @@ class TestShockLineFluxes:
         but does not change the discrete line catalog, proving shock lines are
         excluded from the catalog predict_line_fluxes reads.
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -199,16 +199,18 @@ class TestShockLineFluxes:
             },
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             shock={
-                "frac": 1.0,
+                "frac": FREE,
                 "all_params": Fixed(DEFAULT),
-            },  # Shock is active (but frac can be varied)
+            },  # Shock is active (frac can be varied)
             redshift=Fixed(0.1),
         )
 
         halpha_wave = 6564.61
 
         # Measure Hα flux with high shock
-        flux_high_shock = model.predict_line_fluxes({}, target_wavelengths=[halpha_wave])[0]
+        flux_high_shock = model.predict_line_fluxes(
+            {"shock_frac": 1.0}, target_wavelengths=[halpha_wave]
+        )[0]
 
         # Measure Hα flux with low shock
         flux_low_shock = model.predict_line_fluxes(

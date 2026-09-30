@@ -1,0 +1,13 @@
+{
+  "band": "galex_nuv",
+  "rows": [
+    {
+      "arm": "bare",
+      "dust": false,
+      "nebular": false,
+      "z": 1.0,
+      "node": 0.3645671958106902,
+      "exact": 0.0
+    }
+  ]
+}

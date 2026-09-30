@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.dust._params import DEFAULT_DUST_ALPHA_DALE, DEFAULT_DUST_FRAC_AGN
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
@@ -57,7 +58,7 @@ class Dale2014IRSEDComponent(EmissionComponent):
     name: str = "dale2014"
 
     # Free parameters (user-facing names, prefix-stripped)
-    alpha_dale = Fixed(2.0)
+    alpha_dale = Fixed(DEFAULT_DUST_ALPHA_DALE)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("dale2014",)
 
@@ -139,8 +140,8 @@ class Dale2014CigaleIRSEDComponent(EmissionComponent):
     name: str = "dale2014_cigale"
 
     # Free parameters (user-facing names, prefix-stripped)
-    alpha_dale = Fixed(2.0)
-    frac_agn = Fixed(0.0)
+    alpha_dale = Fixed(DEFAULT_DUST_ALPHA_DALE)
+    frac_agn = Fixed(DEFAULT_DUST_FRAC_AGN)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("dale2014",)
 

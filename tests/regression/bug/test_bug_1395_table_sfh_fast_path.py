@@ -40,6 +40,7 @@ import pytest
 
 from tengri.components.stellar import component as C
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.regression_bug
 
@@ -141,9 +142,16 @@ def test_compute_joint_weights_raises_for_table_sfh(synthetic_ssp_wide, syntheti
     """
     model = _build({"type": "table"}, synthetic_ssp_wide, synthetic_tophat_obs)
     stellar = _stellar_of(model)
-    # sample() carries free and Fixed parameters, but not the runtime history
-    # arrays — so this is exactly the unservable case.
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    # ``compute_joint_weights`` is a direct component-level call, bypassing the
+    # model's own merge boundary (``predict_state`` / the forward pipeline,
+    # which merge ``{**fixed_values, **params}`` before any component runs) --
+    # so this test must do that merge itself. ``spec.sample()`` is free-only
+    # (#2296), so a bare ``dict(spec.sample(...))`` omits Fixed ``redshift``
+    # here, same as it always legally omits it on the standard path; this
+    # direct call needs it supplied explicitly via merge_fixed_params. Still
+    # missing: the runtime history arrays -- so this is exactly the
+    # unservable case.
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
     assert "sfh_sfr" not in params, "setup: the history must be absent for this case"
 
     with pytest.raises(ValueError, match="sfh_t_gyr"):
@@ -157,7 +165,10 @@ def test_parametric_control_returns_live_weights(synthetic_ssp_wide, synthetic_t
     """
     model = _build({"type": "dpl"}, synthetic_ssp_wide, synthetic_tophat_obs)
     stellar = _stellar_of(model)
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    # See the comment above: a direct component call needs the Fixed values
+    # (e.g. redshift) merged in itself; the standard forward pipeline does
+    # this merge for every ordinary predict_* caller.
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
 
     joint_weights, total_mass, _ages = stellar.compute_joint_weights(params)
 

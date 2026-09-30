@@ -62,7 +62,14 @@ def test_downloads_land_where_loaders_look(clean_env, monkeypatch, tmp_path):
 
 
 def test_default_download_dir_is_searched(clean_env, tmp_path, monkeypatch):
-    """With no environment set, downloads still land on the search path."""
+    """With no environment set, downloads still land on the search path.
+
+    This is a contract of the DEFAULT locator, so the suite-wide hermeticity
+    pin (#2329, set in tests/conftest.py) is lifted for this test: pinned mode
+    deliberately drops the home download dir along with the ancestor walk, and
+    tests/unit/test_data_locator_pin.py owns that side of the contract.
+    """
+    monkeypatch.delenv("TENGRI_DATA_NO_ANCESTOR_WALK", raising=False)
     monkeypatch.chdir(tmp_path)
     assert download_dir() in data_dirs(), (
         "the default download directory is not one the loaders search"

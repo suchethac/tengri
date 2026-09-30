@@ -62,9 +62,7 @@ def fitted(ssp_data_fsps, tmp_path_factory):
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
-    truth = dict(model.spec.get_fixed_values())
-    truth["sfh_delayed_log_total_mass"] = 10.0
-    truth["dust_tau_diff"] = 0.5
+    truth = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
     flux = np.asarray(model.predict_photometry(truth))
     post = Fitter(model, flux, 0.05 * flux, data_type="photometry").run("map")
     path = tmp_path_factory.mktemp("post") / "fit.h5"

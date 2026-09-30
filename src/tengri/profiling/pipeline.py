@@ -453,10 +453,7 @@ def profile_pipeline(
     _ = model.predict_photometry(params)
     _sync(model.predict_photometry(params))
 
-    has_fast_path = model.has_fixedz_photometry_precompute and (
-        getattr(getattr(model, "hybrid", None), "photometry", None) is not None
-        or getattr(getattr(model, "_compositional", None), "photometry", None) is not None
-    )
+    has_fast_path = model.has_fixedz_photometry_precompute
 
     if has_fast_path:
         report = _profile_fused_path(model, params, n=n)

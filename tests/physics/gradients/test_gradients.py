@@ -283,9 +283,10 @@ class TestGradientDirection:
     def test_higher_sfr_norm_increases_sfr(self):
         """d(total_SFR)/d(norm) > 0."""
         t = jnp.logspace(7, 10, 100)
+        age = 13.8e9  # yr (universe age)
 
         def total_sfr(norm):
-            return jnp.sum(double_powerlaw(t, 1.0, 1.0, 1e9, norm))
+            return jnp.sum(double_powerlaw(t, 1.0, 1.0, 1e9, norm, age=age))
 
         grad = assert_grad_matches_fd(total_sfr, 10.0)
         assert float(grad) > 0, "Higher norm should increase total SFR"
@@ -324,7 +325,8 @@ class TestGradientThroughPipeline:
             sqrt_power = compute_sqrt_power_drw(N_GRID, float(d), sigma_ps, 50e6)
             gp = gp_from_xi(xi, sqrt_power, N_GRID)
             k0_half = drw_variance(sigma_ps) / 2.0
-            sfr_mean = double_powerlaw(age_yr, 1.0, 1.0, 1e9, 10.0)
+            age_univ_yr = 13.8e9  # yr (universe age at z=0)
+            sfr_mean = double_powerlaw(age_yr, 1.0, 1.0, 1e9, 10.0, age=age_univ_yr)
             sfr = sfr_mean * jnp.exp(gp - k0_half)
             return jnp.sum(jnp.log(sfr + 1e-30))
 

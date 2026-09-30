@@ -61,6 +61,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
+from tengri.config.exceptions import ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -74,6 +75,7 @@ from tengri.parameters._builders import (
 from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
+    SCREENS,
     resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
@@ -444,6 +446,23 @@ class Parameters:
 
     def __init__(self, **kwargs):
         # ── Settings ──────────────────────────────────────────────
+        # Capture lgmet_scatter early (before _build_param_registry) for the
+        # registration seam fix (#2255). The kwarg must be handled here because
+        # it's not a valid parameter name, so it won't make it into the parameter
+        # registry and would otherwise be lost. Store as an instance variable
+        # for access in _init_metallicity_config.
+        self._lgmet_scatter_for_fix = kwargs.pop("lgmet_scatter", None)
+        _met_logzsol_scatter_kwarg = "met_logzsol_scatter" in kwargs
+        if self._lgmet_scatter_for_fix is not None and _met_logzsol_scatter_kwarg:
+            raise ValueError(
+                "Cannot specify both 'lgmet_scatter' and 'met_logzsol_scatter' in "
+                "the same Parameters() call. Use one or the other: "
+                "'lgmet_scatter' (the flat-form kwarg for the metallicity scatter "
+                "width, legacy) or 'met_logzsol_scatter' (the grammar-form name). "
+                "They are the same parameter; passing both is silent shadowing, which "
+                "is not allowed."
+            )
+
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 256))
@@ -457,6 +476,10 @@ class Parameters:
         # A structural setting, not a free parameter; forwarded to
         # ``build_components(age_kernel=...)``. See #964.
         self.age_kernel = kwargs.pop("age_kernel", None)
+        # Metallicity-history bin edges [log Gyr], or None to use the model default.
+        # A structural setting, not a free parameter; forwarded to
+        # ``build_components(met_bin_edges_log_yr=...)``. See #2433.
+        self.met_bin_edges_log_yr = kwargs.pop("met_bin_edges_log_yr", None)
         # GP-field parameterization: which coordinates the field latent is
         # sampled in. 1.0 = the shipped non-centered map; a < 1 moves amplitude
         # dependence out of it. A structural setting, not a free parameter, and
@@ -476,11 +499,12 @@ class Parameters:
         # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
         self.igm_model = kwargs.pop("igm_model", "inoue")
 
-        # Pop private grammar flag before any user-facing bookkeeping
+        # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
-        self._init_nebular_config(kwargs)
+        self._init_nebular_config(kwargs, defer_resource_paths=defer_resource_paths)
 
         # ── Dust ──────────────────────────────────────────────────
         self._init_dust_config(kwargs, validate_flat=not grammar_validated)
@@ -660,6 +684,17 @@ class Parameters:
             eline_mode=self.eline_mode,
             eline_broad=self.eline_broad,
         )
+
+        # ── met_logzsol_scatter registration seam (#2255) ──
+        # On the flat-form path, met_logzsol_scatter is auto-registered as Fixed
+        # from _build_param_registry. If the user passed lgmet_scatter and didn't
+        # also pass the grammar-form met_logzsol_scatter, update the registered
+        # default to use that kwarg value instead of the registry's hardcoded
+        # Fixed(0.1). This makes the flat-form lgmet_scatter kwarg LIVE in the
+        # stellar component's predictions (no longer silently ignored).
+        if self._lgmet_scatter_for_fix is not None and not _met_logzsol_scatter_kwarg:
+            self._defaults["met_logzsol_scatter"] = Fixed(float(self._lgmet_scatter_for_fix))
+
         # --- Cue optional params (ionspec / gas extras) ---
         _cue_ionspec = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
         _cue_gas_extra = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
@@ -842,7 +877,7 @@ class Parameters:
         # --- Validate physical bounds ---
         self._validate_bounds()
 
-    def _init_nebular_config(self, kwargs):
+    def _init_nebular_config(self, kwargs, *, defer_resource_paths=False):
         """Resolve nebular emission backend from kwargs."""
         # R49: presence, not value, of any of the three neb-group kwargs
         # means the caller explicitly stated a nebular disposition -- via
@@ -951,7 +986,11 @@ class Parameters:
             self.nebular_mode = "mappings_agn"
         elif nebular:
             self.nebular_mode = "cloudy"
-            if self.cloudy_grid_path is None:
+            if self.cloudy_grid_path is None and not defer_resource_paths:
+                # Skip grid resolution during enumeration-spec construction (pass 2 of
+                # parse_groups) to allow _check_dict_keys to validate keys before the
+                # grid-file existence check. The real construction (pass 2's final spec)
+                # is untouched and still raises if no grid is reachable (#2328).
                 default_grid = self._default_cloudy_grid()
                 if default_grid is None:
                     self._raise_missing_grid_path()
@@ -1067,6 +1106,33 @@ class Parameters:
         # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
 
+        # The dust_law_overrides dict is number-only, by design, on both
+        # surfaces (#2428): it is the static, build-time-baked route. A
+        # Distribution belongs on the declared per-screen parameter name
+        # instead (dust_slope_bc=Uniform(...), fully supported on this flat
+        # surface too, validated below), never inside this dict.
+        for screen, overrides in self.dust_law_overrides.items():
+            for law_kwarg, value in overrides.items():
+                if isinstance(value, Distribution):
+                    # The remedy must always print the canonical
+                    # dust_<stem>_<screen> spelling, whatever spelling the
+                    # caller used as this dict's own inner key -- this dict
+                    # is a raw user-supplied mapping with no key
+                    # normalization pass (unlike the grammar's
+                    # normalize_dust_group_keys), so a short-form key
+                    # (``"slope"``) is exactly as reachable as the
+                    # documented full form (``"dust_slope"``).
+                    stem_short = law_kwarg.removeprefix("dust_")
+                    canonical = f"dust_{stem_short}_{screen}"
+                    raise ParameterError(
+                        f"dust_law_overrides[{screen!r}][{law_kwarg!r}] is a per-screen "
+                        f"law-shape override and cannot take a prior ({value!r} given); "
+                        f"it must be a plain number, baked into the compiled model at "
+                        f"build time. The per-screen declared parameter spelling is "
+                        f"{canonical}=..., which DOES accept a prior/Fixed. "
+                        f"See #2428."
+                    )
+
         # Validate flat-form dust shape parameters against the resolved laws.
         # The grammar passes all shape parameters at their registry defaults and has
         # already validated per-screen keys via _reject_per_screen_keys_no_law_reads
@@ -1085,6 +1151,40 @@ class Parameters:
                     surface="flat",
                 )
 
+            # Per-screen DECLARED parameter names (dust_slope_bc, dust_Rv_neb,
+            # ..., #2428) get the SAME "does this screen's law read the
+            # stem" check the grammar enforces via
+            # _reject_per_screen_keys_no_law_reads -- and the grammar's own
+            # message, verbatim (surface="grammar" here is deliberate: the
+            # message text names the key/law, not which surface asked, so
+            # one wording serves both). Gated on ``two_component``: under
+            # ``single_component``/``wg00`` these names are not declared at
+            # all (ATTENUATION_TWO_COMPONENT_ONLY), so an unrecognized
+            # keyword already raises "Unknown parameter" before this code
+            # runs; duplicating that refusal here with a different message
+            # would just be a second, competing error for the same mistake.
+            # Only a name the caller actually gave a value to is checked --
+            # an untouched per-screen name resolves to its Fixed registry
+            # default and stays silently inert, exactly like the shared
+            # stems (explicit-only by design).
+            if self.dust_model == "two_component":
+                per_screen_requests = [
+                    (short_to_full(stem), screen)
+                    for stem in OVERRIDE_STEMS
+                    for screen in SCREENS
+                    if short_to_full(f"{stem}_{screen}") in kwargs
+                ]
+                if per_screen_requests:
+                    validate_shape_requests(
+                        per_screen_requests,
+                        {
+                            "bc": self.dust_law_bc,
+                            "diff": self.dust_law_diff,
+                            "neb": self.dust_law_neb,
+                        },
+                        surface="grammar",
+                    )
+
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
@@ -1095,6 +1195,10 @@ class Parameters:
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
         self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
+        # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
+        # emission (#2533). When True, emitted photons pass through the diffuse
+        # dust screen once (no iteration). Default False (off, bit-identical).
+        self.dust_ir_diffuse_screen = bool(kwargs.pop("dust_ir_diffuse_screen", False))
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
@@ -1175,7 +1279,16 @@ class Parameters:
 
         self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
         self.met_interp = kwargs.pop("met_interp", "smooth")
-        self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
+
+        # lgmet_scatter was captured and validated at __init__ start for the
+        # registration seam fix (#2255). Store it here for SEDModel to access
+        # as self.lgmet_scatter (used as fallback when params dict has no
+        # met_logzsol_scatter entry).
+        lgmet_scatter_value = (
+            self._lgmet_scatter_for_fix if self._lgmet_scatter_for_fix is not None else 0.1
+        )
+        self.lgmet_scatter = float(lgmet_scatter_value)
+
         # Redshift-table interpolation mode (used when a precomputed z-table
         # is enabled via ``approx=WavePrecomp(...)`` AND redshift is free).
         # "linear" → piecewise-linear (C^0, default).
@@ -1972,11 +2085,14 @@ class Parameters:
         return new_spec
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
-        """Draw one random sample from all parameter prior distributions.
+        """Draw one random sample from free parameter prior distributions.
 
-        Samples all free parameters from their priors, returns fixed parameters
-        at their fixed values, and (if stochastic) generates the latent field
-        ξ ~ N(0,I). Mirrors are resolved (target ← source value).
+        Samples free parameters from their priors and (if stochastic) generates
+        the latent field ξ ~ N(0,I). Fixed parameters are **not** included.
+        Mirrors are resolved (target ← source value).
+
+        A params dict carries free parameters only (#2296); fixed parameters
+        are read from :meth:`get_fixed_values` or :attr:`Posterior.fixed_values`.
 
         Parameters
         ----------
@@ -1986,11 +2102,10 @@ class Parameters:
         Returns
         -------
         dict[str, ndarray]
-            Parameter name → sampled value. Free parameters are sampled from
-            their prior distributions. Fixed parameters return their constant
-            value (as float or string). If stochastic, ``sfh_field_xi`` is an
-            array of shape ``(n_grid,)``. Dictionary is immutable-ready (no
-            direct mutation of values).
+            Free parameter name → sampled value. Sampled from their prior
+            distributions. If stochastic, ``sfh_field_xi`` is an array of
+            shape ``(n_grid,)``. Dictionary is immutable-ready (no direct
+            mutation of values).
 
         Notes
         -----
@@ -2004,16 +2119,16 @@ class Parameters:
         Examples
         --------
         >>> import jax.random
-        >>> from tengri import Parameters, Uniform
+        >>> from tengri import Parameters, Uniform, Fixed
         >>> spec = Parameters(
         ...     sfh_dpl_alpha=Uniform(0.5, 3.0),
         ...     sfh_dpl_beta=Uniform(0.5, 3.0),
-        ...     redshift=0.1,
+        ...     redshift=Fixed(0.1),
         ... )
         >>> key = jax.random.PRNGKey(42)
         >>> samples = spec.sample(key)
         >>> print(sorted(samples.keys()))
-        ['redshift', 'sfh_dpl_alpha', 'sfh_dpl_beta']
+        ['sfh_dpl_alpha', 'sfh_dpl_beta']
 
         Per-parameter substreams
         ------------------------
@@ -2033,7 +2148,8 @@ class Parameters:
         reproducible across processes.
         """
         params = {}
-        for name in sorted(self._distributions.keys()):
+        # Only sample free parameters; fixed parameters are omitted.
+        for name in sorted(self.free_params):
             subkey = jax.random.fold_in(key, _stable_param_seed(name))
             params[name] = self._distributions[name].sample(subkey)
 
@@ -2407,6 +2523,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "astrodust_f_cnm": content("astrodust model variant determines parameters"),
     "astrodust_spinning_dust": content("astrodust model variant determines parameters"),
     "bin_edges_gyr": content("bin edges for binned SFH model determine parameters"),
+    "met_bin_edges_log_yr": content("bin edges for binned metallicity model determine parameters"),
     "chem_evol": content("chemical evolution model determines parameters"),
     "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
@@ -2415,6 +2532,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
     "dust_approx": content("dust approximation type determines parameters"),
     "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
     "dust_law_diff": content("diffuse dust law determines parameters"),
@@ -2481,6 +2599,11 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     # Excluded: these are derived or runtime-only
     "_distributions": exclude(
         "prior bounds and values are runtime inputs of the Fitter engine (#1972)"
+    ),
+    "_lgmet_scatter_for_fix": exclude(
+        "construction-time stash of the lgmet_scatter kwarg (#2255); lgmet_scatter "
+        "(content) mirrors every behavioral state -- None and an explicit 0.1 both "
+        "yield lgmet_scatter=0.1 with the same registered met_logzsol_scatter default"
     ),
     "_param_registry": exclude(
         "registry is a pure function of parameter names (keyed) and installed registry"

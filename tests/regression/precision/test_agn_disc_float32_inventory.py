@@ -144,10 +144,9 @@ def _sed_agn(ssp, disc, dtype):
         },
         redshift=Fixed(0.1),
     )
-    p = {
-        k: jnp.asarray(v, dtype=dtype)
-        for k, v in {"sfh_delayed_log_total_mass": 10.0, "agn_log_lbol": 11.0}.items()
-    }
+    # agn_log_lbol is Fixed(11.0) above (#2069's flat-direction pin); restating
+    # it here is refused on presence regardless of value match (#2296).
+    p = {k: jnp.asarray(v, dtype=dtype) for k, v in {"sfh_delayed_log_total_mass": 10.0}.items()}
     return np.asarray(model.predict_state(p).derived["sed_agn"])
 
 

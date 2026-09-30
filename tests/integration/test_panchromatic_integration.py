@@ -107,6 +107,10 @@ class TestFullPanchromaticSED:
             dust_tau_diff=Fixed(0.5),
             dust_slope=Fixed(-0.7),
             dust_emission="modified_blackbody",
+            # Free, not Fixed (#2296): dusty_params below sweeps these at
+            # predict time -- a refused override of a Fixed key otherwise.
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             agn_torus_frac=Fixed(0.5),
@@ -179,6 +183,10 @@ class TestFullPanchromaticSED:
             )
             if dust_emission is not None:
                 kw["dust_emission"] = dust_emission
+                # Free, not Fixed (#2296): phot_with below sweeps these at
+                # predict time -- a refused override of a Fixed key otherwise.
+                kw["dust_T"] = (20.0, 80.0)
+                kw["dust_beta_ir"] = (1.0, 2.5)
             return Parameters(**kw)
 
         model_de = SEDModel(
@@ -295,6 +303,10 @@ class TestRadioXrayIntegration:
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),
             dust_emission="modified_blackbody",
+            # Free, not Fixed (#2296): base_params below sweeps these at
+            # predict time -- a refused override of a Fixed key otherwise.
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             radio=True,
             xray=True,
             redshift=0.01,  # nearby so fluxes are large
@@ -408,6 +420,10 @@ class TestRadioXrayIntegration:
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),
             dust_emission="modified_blackbody",
+            # Free, not Fixed (#2296): predicted below with base_params, whose
+            # dust_T/dust_beta_ir keys would otherwise be a refused override.
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             redshift=0.01,
         )
         m_stellar = SEDModel(
@@ -552,6 +568,10 @@ class TestRadioXrayIntegration:
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),
             dust_emission="modified_blackbody",
+            # Free, not Fixed (#2296): predicted below with base_params, whose
+            # dust_T/dust_beta_ir keys would otherwise be a refused override.
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             redshift=0.01,
         )
         m_stellar = SEDModel(spec_stellar, radio_xray_model.ssp_data, precompute=False)
@@ -592,6 +612,10 @@ class TestEnergyBalanceEndToEnd:
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
             dust_emission="modified_blackbody",
+            # Free, not Fixed (#2296): test_absorbed_equals_emitted sweeps
+            # these at predict time -- a refused override of a Fixed key otherwise.
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             redshift=0.001,  # nearly local
         )
         return SEDModel(spec, ssp, precompute=False)
@@ -777,9 +801,14 @@ class TestGradientFlowComplete:
             sfh_dpl_tau_gyr=Fixed(5.0),
             sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
-            dust_tau_bc=Fixed(1.0),
+            # Free, not Fixed (#2296): loss()/loss_T()/loss_tau() below sweep
+            # dust_T, dust_beta_ir and dust_tau_bc at predict time -- each a
+            # refused override of a Fixed key otherwise.
+            dust_tau_bc=(0.0, 4.0),
             dust_tau_diff=Fixed(0.5),
             dust_emission="modified_blackbody",
+            dust_T=(20.0, 80.0),
+            dust_beta_ir=(1.0, 2.5),
             agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             redshift=0.1,

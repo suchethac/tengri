@@ -138,7 +138,35 @@ def scheduled_tier_owed(event: str) -> bool:
     return event in ("schedule", "workflow_dispatch")
 
 
-def decide(results: dict[str, str], event: str, base_ref: str) -> list[str]:
+def labeled_job_owed(event: str, job: str, labels: str) -> bool:
+    """Whether a labeled job is owed on this pull request.
+
+    Parameters
+    ----------
+    event : str
+        The value of ``github.event_name``.
+    job : str
+        The job name (e.g., 'slow' or 'crossval').
+    labels : str
+        Comma-separated label names from ``github.event.pull_request.labels.*.name``.
+
+    Returns
+    -------
+    bool
+        True when the job is owed by virtue of its opt-in label being present
+        on a pull request.
+    """
+    if event != "pull_request":
+        return False
+    label_set = {label.strip() for label in labels.split(",")} if labels.strip() else set()
+    if job == "slow":
+        return "run-slow-tests" in label_set
+    if job == "crossval":
+        return "run-crossval" in label_set
+    return False
+
+
+def decide(results: dict[str, str], event: str, base_ref: str, labels: str = "") -> list[str]:
     """Apply the tier policy to one run's job results.
 
     Parameters
@@ -149,6 +177,9 @@ def decide(results: dict[str, str], event: str, base_ref: str) -> list[str]:
         The value of ``github.event_name``.
     base_ref : str
         The value of ``github.base_ref``; empty for non-pull-request events.
+    labels : str, optional
+        Comma-separated label names from ``github.event.pull_request.labels.*.name``;
+        empty for non-pull-request events. Default is empty string.
 
     Returns
     -------
@@ -205,6 +236,12 @@ def decide(results: dict[str, str], event: str, base_ref: str) -> list[str]:
                     f"and so owed the scheduled tier. A withheld scheduled job must never "
                     f"pass silently (tools/ci_ok.py: SCHEDULED_TIER)"
                 )
+            elif labeled_job_owed(event, job, labels):
+                problems.append(
+                    f"`{job}` was skipped, but this pull request is labeled to run it "
+                    f"and so owed the scheduled tier. A withheld scheduled job must never "
+                    f"pass silently (tools/ci_ok.py: SCHEDULED_TIER)"
+                )
         elif got in ("failure", "cancelled"):
             problems.append(
                 f"`{job}` is `{got}`, and this must never pass silently whatever the event "
@@ -248,8 +285,9 @@ def main() -> int:
     }
     event = os.environ.get("CI_OK_EVENT", "")
     base_ref = os.environ.get("CI_OK_BASE_REF", "")
+    labels = os.environ.get("CI_OK_LABELS", "")
 
-    problems = decide(results, event, base_ref)
+    problems = decide(results, event, base_ref, labels)
     width = max((len(j) for j in results), default=0)
     print("Job results this run:")
     for job in sorted(results):

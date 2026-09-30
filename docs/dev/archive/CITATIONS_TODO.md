@@ -42,7 +42,8 @@ None of the named items are outstanding. Minor follow-up:
   ADS-verification pass.
 - `DustConfig.law_bc="tea"` (Haskell+2024), `"narayanan_z"` (Narayanan+2018),
   `"hd23_mwrv31"` (Hensley & Draine 2023), `"prevot_smc"` (Prevot+1984),
-  `"lmc"` (unspecified LMC curve), `"conroy2010"` (Conroy+2010 mixed MW+PL):
+  `"lmc"` (unspecified LMC curve), `"conroy2010"` (Conroy+2010 CCM89 with a
+  scalable 2175 Å bump):
   each exists in tengri's dust module but has no citation mapped yet. Add on
   demand.
 

@@ -128,7 +128,10 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Add Murphy+2011 thermal free-free component. ``None`` (default) means
         "auto": resolves to ``True`` for every ``sfr_mode`` except
         ``"bell2003_split"``, where it resolves to ``False`` (see below).
-        Passing an explicit ``True``/``False`` pins it; explicit ``True``
+        The factory also resolves ``None`` to ``False`` when the declared
+        nebular backend carries a free-free continuum (``"cue"``,
+        ``"cloudy_grid"``; issue #2346) to avoid double-counting the thermal
+        term. Passing an explicit ``True``/``False`` pins it; explicit ``True``
         together with ``sfr_mode="bell2003_split"`` raises
         :class:`~tengri.config.exceptions.ConfigError` (see below).
     agn_radio_model : str
