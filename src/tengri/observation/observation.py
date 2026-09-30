@@ -185,60 +185,36 @@ def _split_stellar_and_instrument_only_sed(
       scales of thousands of Angstrom, far broader than any LSF, so
       which kernel they get is observationally inconsequential for them.
 
-      **Emission-line families still on the stellar kernel (not fixed
-      here, tracked as a follow-up):** the composable AGN runner's NLR
-      (:func:`~tengri.components.agn.nlr.compute_nlr_sed`,
-      ``components/agn/nlr.py:289``, Gaussian profile, width
-      ``agn_nlr_fwhm`` -- a plain keyword default of 500 km/s FWHM in
-      :func:`~tengri.components.agn.unified.unified_nlr_blr`, not yet a
-      declared free parameter), BLR
-      (:func:`~tengri.components.agn.blr.compute_blr_sed`,
-      ``components/agn/blr.py:417``, width ``agn_blr_fwhm``, default
-      5000 km/s FWHM, same not-yet-free status), and the FeII
-      pseudo-continuum riding the same BLR width
-      (``components/agn/blr.py:432``) -- all summed into
-      ``sed_agn_lines`` (and so into ``sed_agn``), which exists as a key
-      but is not separately re-attenuated, the same gap as ``sed_agn``
-      itself. QSOGen's empirical emission-line template
-      (``components/agn/qsogen.py``, Vanden Berk et al. 2001 composite,
-      applied as an EW multiplicative scaling on the continuum, no
-      velocity-width parameter at all) has no additive line array to
-      separate in the first place.
-
-      Size of the stellar-kernel contamination these line families
-      carry: quadrature widths share :math:`\sigma_{\rm inst}` on both
-      the correct (instrument-only) and current (stellar) treatment, so
-      it cancels; the current treatment's excess over the correct one is
-      exactly :math:`\sigma_v^2-\sigma_{\rm lib}^2` regardless of
-      :math:`\sigma_{\rm inst}`. At :math:`\sigma_v=200` km/s and the
+      **AGN emission lines on the stellar kernel.** Every AGN line
+      profile is summed into ``sed_agn`` before the dust screen and so
+      receives the stellar kernel: the composable runner's NLR
+      (:func:`~tengri.components.agn.nlr.compute_nlr_sed`, Gaussian
+      profiles at ``agn_nlr_fwhm``), BLR
+      (:func:`~tengri.components.agn.blr.compute_blr_sed`, at
+      ``agn_blr_fwhm``) and the FeII pseudo-continuum at the BLR width,
+      all collected in ``sed_agn_lines``; GRAHSP's own broad and narrow
+      Gaussians and FeII forest (``include_lines`` / ``include_feii``,
+      width ``agn_grahsp_linewidth_kms``), folded into ``sed_grahsp``;
+      and QSOGen's composite line template, which is an equivalent-width
+      scaling of the continuum with no additive line array to separate.
+      The excess over the correct instrument-only width is
+      :math:`\sigma_v^2-\sigma_{\rm lib}^2` in quadrature, independent
+      of :math:`\sigma_{\rm inst}`: at :math:`\sigma_v=200` km/s with the
       MILES curve's :math:`\sigma_{\rm lib}=64.67` km/s at 5000 Angstrom
-      (:math:`\sigma_v^2-\sigma_{\rm lib}^2=35818\ {\rm km^2/s^2}`): a
-      300 km/s narrow line reads :math:`\sqrt{300^2+35818}=354.7` km/s,
-      +18.2%; a 3000 km/s broad line reads
-      :math:`\sqrt{3000^2+35818}=3006.0` km/s, +0.2% -- negligible for
-      BLR-width lines, significant for NLR-width ones.
+      (35818 km^2/s^2), a 300 km/s narrow line reads
+      :math:`\sqrt{300^2+35818}=354.7` km/s (+18.2%) and a 3000 km/s
+      broad line :math:`\sqrt{3000^2+35818}=3006.0` km/s (+0.2%).
+      Separating these requires the AGN and dust components to publish
+      an attenuated line-only array, as the dust adapter does for
+      ``sed_nebular``.
 
-      What the AGN component would need to publish to close this: (1)
-      the dust adapter re-publishing an attenuated ``sed_agn_lines`` the
-      same way it already does for ``sed_nebular``, under whatever
-      ``agn_screen`` law is configured; (2) the composable runner
-      keeping ``sed_agn_lines`` as a true sum of only line profiles
-      (already true) so it can be subtracted cleanly from ``sed_agn``;
-      (3) a decision on whether QSOGen's template-only path can ever
-      expose a separable line array, or must stay a documented
-      exclusion; (4) once (1)-(2) hold, extending
-      :func:`_split_stellar_and_instrument_only_sed` to add the
-      attenuated ``sed_agn_lines`` to the instrument-only group.
-
-    This follows Prospector's convention (lines added analytically, after
-    the continuum's instrumental smoothing, with no stellar-library or
-    velocity-dispersion term; ``prospect.models.sedmodel.SpecModel``)
-    rather than BAGPIPES's (lines inside the smoothed continuum, sharing
-    the stellar veldisp; ``bagpipes.models.model_galaxy``). tengri already
-    matched neither exactly before this fix (it gave lines the stellar
-    :math:`\sigma_v` like BAGPIPES, but also subtracted
-    :math:`\sigma_{\rm lib}` from them like neither code does); this
-    split makes it match Prospector.
+    Emission lines carry the instrument kernel only, as in Prospector
+    (``prospect.models.sedmodel.SpecModel`` adds lines analytically at
+    ``eline_sigma`` after the continuum's instrumental smoothing, with no
+    stellar-library term; when ``eline_sigma`` is not set it falls back
+    to the stellar ``sigma_smooth``). BAGPIPES
+    (``bagpipes.models.model_galaxy``) instead smooths lines inside the
+    continuum with the stellar velocity dispersion.
 
     Parameters
     ----------
@@ -312,11 +288,11 @@ def project_spectrum_kernel_split(
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526 kernel split.
 
     The single seam every spectrum-prediction surface calls
-    (:meth:`Observation.predict`, :meth:`~tengri.SEDModel._predict_spectrum_on_grid`,
+    (:meth:`Observation.predict`, ``SEDModel._predict_spectrum_on_grid``,
     and so every path built on either of those -- the eager
     ``predict_spectrum``, the compiled ``predict_observables`` kernel), so the
     stellar/instrument-only split and the ``lsf_scale`` factor cannot drift
-    between them. :func:`~tengri.observation.observation._split_stellar_and_instrument_only_sed`
+    between them. ``_split_stellar_and_instrument_only_sed``
     gives the component/kernel assignment and its physical justification.
 
     Three cases:
@@ -352,7 +328,7 @@ def project_spectrum_kernel_split(
     ----------
     state : ForwardState
         Orchestrator output; reads ``state.derived["sed_nebular"]`` /
-        ``["sed_shock"]`` (see :func:`_split_stellar_and_instrument_only_sed`).
+        ``["sed_shock"]`` (see ``_split_stellar_and_instrument_only_sed``).
     sed_atten : ndarray, shape (n_wave,)
         Full rest-frame SED already carrying the IGM transmission (what a
         single-kernel projection would otherwise receive whole).
@@ -1142,7 +1118,7 @@ class Observation:
             quadrature combination in :func:`~tengri.observation.spectrum.apply_lsf`
             for both the stellar and instrument-only kernels of the #2519
             split below. ``1.0`` (the parameter's ``Fixed`` default,
-            declared as ``lsf_scale`` in :mod:`tengri.parameters._shared`)
+            declared as ``lsf_scale`` in ``tengri.parameters._shared``)
             reproduces the un-scaled kernel bit-for-bit. Not applied on the
             banded ``resolution_matrix`` path (see the Notes on that
             branch below).

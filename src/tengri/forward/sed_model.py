@@ -4897,7 +4897,7 @@ class SEDModel:
         Also reports how many of the flagged pixels sit in the library's
         approximate (FSPS-extrapolated, not directly measured) resolution
         range, when a resolution table for this library is registered
-        (:data:`~tengri.components.stellar.sps.dsps_wrapper._LIBRARY_RESOLUTION_DATA_FILES`).
+        (``_LIBRARY_RESOLUTION_DATA_FILES`` in ``dsps_wrapper``).
         """
         if self._lsf_resolution is None or z_for_check is None:
             return
