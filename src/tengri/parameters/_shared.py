@@ -86,8 +86,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "SED (#2527). Multiplies every predicted line flux of that channel "
         "immediately before the likelihood comparison; does not change "
         "predict_line_fluxes, line ratios, or any other derived property.",
-        lambda lo, hi: lo > 0,
-        "line_flux_scaling must be strictly positive",
+        # ``>= 0``, not ``> 0``: the declared ``free_prior`` is a LogNormal,
+        # whose ``.bounds`` reports its truncation lower edge as exactly 0.0
+        # (the distribution's own natural support is (0, inf), never
+        # literally 0, but the truncation FIELD is stored at 0.0) -- a
+        # ``lo > 0`` check would reject the declaration's own free prior.
+        # Mirrors the sibling positive-scale declarations that pair a
+        # zero-touching free_prior with a non-strict bound (e.g.
+        # ``sigma_v_kms`` above: ``lo >= 0``); still refuses any user prior
+        # that reaches negative values.
+        lambda lo, hi: lo >= 0,
+        "line_flux_scaling must be non-negative",
         free_prior=LogNormal(
             mu=0.0,
             sigma=0.05,
