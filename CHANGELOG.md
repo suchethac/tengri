@@ -449,19 +449,19 @@
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
 
-- The Lyman-continuum energy `neb_fdust` assigns to dust inside HII regions now
-  enters the dust IR budget (`L_absorbed`), as in CIGALE
+- The Lyman-continuum energy HII-region dust absorbs now enters the dust IR
+  budget (`L_absorbed`), as in CIGALE
   (`dust.luminosity = (lum_ly_young + lum_ly_old) * fdust`,
   `pcigale/sed_modules/nebular.py:191-193`), for the population the nebular
   component reprocesses: the whole stellar SED for `single_component`, `wg00`,
   and `two_component` with `lyc_absorb_all=True`, and only the young/birth-cloud
   population for `two_component` with `lyc_absorb_all=False` (the population its
-  own `neb_fesc`/`neb_fdust` screen actually applies to). Previously this energy
+  own `neb_fesc`/dust screen actually applies to). Previously this energy
   only suppressed nebular emission and vanished from the energy balance. The
   combine (`energy_balance.log10_add_fdust_credit`, a fused `log1p` form) is
-  bit-identical to the pre-credit value at `neb_fdust == 0` and has a FINITE,
+  bit-identical to the pre-credit value at `f_dust == 0` and has a FINITE,
   NONZERO gradient there too (`L_LyC / (L_absorbed * ln 10)`), since
-  `L_absorbed` is exactly linear in `neb_fdust`; a first version log-added an
+  `L_absorbed` is exactly linear in `f_dust`; a first version log-added an
   already `fdust`-multiplied credit term whose own double-where derivative was
   deliberately zero at the boundary, which zeroed the combined gradient as
   well. Also threads the `eb_include_lyc` (FSPS/Prospector-parity) toggle to
@@ -484,6 +484,51 @@
   `lut_l_absorbed_stellar_log10` combines them with the runtime `fesc` at
   evaluation time -- an exact, O(1) linear combine (no interpolation, no
   approximation), not a fallback.
+
+  **Exact Lyman edge (#2447)**: the exact (non-precomputed) forward path's
+  LyC mask stepped at whichever SSP grid node sits just below 912 A rather
+  than the physical edge itself (MIST/C3K brackets it at
+  911.5716/913.3967 A), biasing a band whose rest-frame coverage straddles
+  912 A by up to a few percent at `neb_fesc < 1`. `lyman_edge_transmission`
+  (`tengri.utils.wavelength`, moved out of `components/nebular/component.py`
+  as the one shared definition) replaces only the two bracketing nodes with
+  the trapezoid-exact split weights, used both by `NebularSEDComponent`'s
+  own SSP-grid masking and by the #2539 HII-dust LyC credit above (same
+  edge function at `f_esc=0`, so the credit and the mask can no longer
+  disagree). A residual remains once a real, finely-sampled filter (e.g.
+  GALEX NUV, 0.33 A rest spacing at z=2) subdivides the SSP straddling
+  interval further than the SSP grid's own two-node fix accounts for:
+  `observation.photometry._filter_integral_union` now redoes the
+  trapezoid-exact split directly on its own (finer) union grid using the
+  unmasked stellar SED (`lyc_unmasked_stellar_sed`, published alongside
+  `lyc_transmission`/`lyc_fesc`), closing the stellar-only residual to
+  round-off (down from 6.7e-4 MIST/C3K / 1.8e-2 MILES pre-seam, and −2.0651%
+  / +11.3813% pre-#2447 entirely). `two_component` rebuilds its own masked
+  stellar term from a per-age blend, which the photometry-side correction's
+  single-population assumption does not cover, so it withdraws
+  `lyc_unmasked_stellar_sed` when it runs (a measured 32% regression on a
+  real GALEX-NUV/two_component fixture without the withdrawal); the
+  correction then falls back cleanly to `NebularSEDComponent`'s own
+  SSP-grid-exact value, unchanged from before this seam.
+
+  **Breaking (#2436)**: `neb_fdust`, the absolute HII-region
+  dust-absorption fraction, is retired: declaring it independently of
+  `neb_fesc` let `neb_fesc + neb_fdust` exceed 1, an impossible >100% of the
+  ionizing-photon budget that only `lyc_dust_escape_factor`'s internal clamp
+  caught. `neb_fdust_frac` (default `Fixed(0.0)`, same `Uniform(0, 1)` prior
+  range) replaces it: the fraction of the NON-escaping budget
+  (`1 - neb_fesc`) HII-region dust absorbs, so the three per-photon shares
+  (escape, HII-region dust, photoionization) sum to exactly 1 for any
+  `(neb_fesc, neb_fdust_frac)` in `[0, 1]^2` -- the whole prior box is
+  physical, with no clamp needed downstream. The one absolute-share helper,
+  `lyc_shares(neb_fesc, neb_fdust_frac) -> (f_esc, f_dust, f_gas)`
+  (`components/nebular/_recombination_coeffs.py`), is now the single place
+  every consumer of the absolute `f_dust`/`f_gas` shares reads through:
+  `lyc_dust_escape_factor`'s callers in Cue, CloudyGrid and CB19, and the
+  #2539 HII-dust LyC credit above. Convert an old absolute value with
+  `neb_fdust_frac = neb_fdust / (1 - neb_fesc)`; writing the retired
+  `neb_fdust` anywhere in the `neb` group now raises naming the replacement
+  and the conversion formula.
 
 ### Fixed
 
