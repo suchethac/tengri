@@ -6841,6 +6841,14 @@ class SEDModel:
         filter-integrated nebular ``L_nu``); without it only the line channel is
         reconstructed and photometry stays on the exact path.
 
+        With a free redshift (``redshift=Uniform(...)``) or a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only
+        and band fluxes stay on the exact nebular path. The per-Q_H grid integrates
+        through observed bands at the build redshift; a runtime redshift shifts
+        which filter wavelengths the grid tabulates, introducing worst-case band
+        errors of 7.35e-2 if applied. Constrain redshift to a fixed value to
+        enable grid-served photometry.
+
         **JIT-compatible**: the resulting :meth:`predict_photometry` /
         :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid
         build is eager.
@@ -9535,6 +9543,22 @@ class SEDModel:
         """
         return self._energy_balance_lut(chain) is not None
 
+    def _redshift_is_a_build_constant(self) -> bool:
+        """Whether every evaluation of this model runs at the redshift it was built at.
+
+        False for a free ``redshift`` and for a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), where a precompute integrated
+        through observed bands at the build redshift describes another galaxy.
+
+        Returns
+        -------
+        bool
+        """
+        return (
+            "redshift" not in self.spec.free_params
+            and getattr(self, "_catalog_z_range", None) is None
+        )
+
     def nebular_grid_can_serve_photometry(self) -> bool:
         """Whether the per-Q_H nebular grid can serve this model's photometry.
 
@@ -9546,13 +9570,17 @@ class SEDModel:
         Returns
         -------
         bool
-            True when no continuum consumer remains after that exclusion.
+            True when no continuum consumer remains after that exclusion, and
+            the redshift is a build-time constant (neither free nor runtime).
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import (
             grid_baked_free_params,
         )
+
+        if not self._redshift_is_a_build_constant():
+            return False
 
         if grid_baked_free_params(self.spec):
             return False
@@ -9572,18 +9600,23 @@ class SEDModel:
         """``chain`` with the nebular grid attached and the dust flagged to read it.
 
         The dust component is flagged (``nebular_from_grid``) and its tau grids are set
-        BEFORE the continuum census, but only when no other component consumes the continuum,
-        so the census sees a dust component that does not read ``sed_nebular`` and
-        ``must_materialize_sed`` follows from it. Both happen here so the flag and the
-        census cannot drift between call sites.
+        BEFORE the continuum census, but only when the redshift is a build-time constant
+        and no other component consumes the continuum, so the census sees a dust component
+        that does not read ``sed_nebular`` and ``must_materialize_sed`` follows from it.
+        Both happen here so the flag and the census cannot drift between call sites.
+
+        The grid serves band fluxes only at the build redshift. With a free or runtime
+        redshift the nebular component materializes its continuum and the dust component
+        reads it.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
+        serves_bands = self._redshift_is_a_build_constant()
         chain = list(chain)
-        if table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+        if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
             eb_lut = self._energy_balance_lut(chain)
             for name_table, name_lut, grid_lut in (
                 ("eb_tau_a_grid", "tau_bc_grid", eb_lut.tau_bc_grid),
@@ -9623,7 +9656,9 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
+            dataclasses.replace(
+                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or not serves_bands
+            )
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain
