@@ -25,7 +25,7 @@ edge onward:
 
 Every grid cell not straddling the edge is ordinary piecewise-linear
 (trapezoid) as usual. This is the #537 Q_H "rectangle" correction
-(:func:`tengri.components.stellar.component._integrate_nion_log10`),
+(``tengri.components.stellar.component._integrate_nion_log10``),
 generalized to a shared primitive: a per-node boolean mask
 ``wave < edge_aa`` (:func:`ionizing_mask`) is *exact* for a step-model
 integral or interpolant once the bracket cell is treated this way — the
@@ -44,7 +44,7 @@ Provides
   the edge, a step in the bracket cell).
 - :func:`lyc_shares` — the #2436 additive ionizing-photon-budget split
   (escape / HII-dust / photoionization), moved here from
-  :mod:`tengri.components.nebular._recombination_coeffs`.
+  ``tengri.components.nebular._recombination_coeffs``.
 
 Notes
 -----
@@ -324,12 +324,12 @@ def lyc_shares(
     additive per-photon budget this module's own docstring derives (``f_esc``
     escapes, ``f_dust`` heats HII-region dust, ``1 - f_esc - f_dust``
     photoionizes -- see
-    :func:`tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor`'s
+    ``tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor``'s
     "Per-photon LyC budget" section). Declaring ``f_dust`` as its own
     independent ``Uniform(0, 1)`` parameter (the retired ``neb_fdust``) let a
     caller pick ``neb_fesc=0.7, neb_fdust=0.7``, an impossible 1.4 of the
     budget, with nothing to catch it before it reached
-    :func:`lyc_dust_escape_factor`'s own silent ``jnp.clip``.
+    ``lyc_dust_escape_factor``'s own silent ``jnp.clip``.
 
     ``neb_fdust_frac`` instead parametrizes the fraction of the
     NON-escaping budget (``1 - neb_fesc``) that HII-region dust absorbs, so
@@ -344,7 +344,7 @@ def lyc_shares(
     sum to exactly 1 for ANY ``(neb_fesc, neb_fdust_frac) \in [0, 1]^2`` --
     the whole prior box is physical, with no clamp needed downstream. This is
     the ONE place that splits the budget; every consumer that used to read
-    the retired absolute ``neb_fdust`` (:func:`lyc_dust_escape_factor`'s
+    the retired absolute ``neb_fdust`` (``lyc_dust_escape_factor``'s
     ``f_dust`` callers in ``cue.py``/``cloudy_grid.py``/``cloudy_cb19.py``,
     the #2539 HII-dust LyC credit in ``components/nebular/component.py``) now
     calls this function first and reads the absolute ``f_dust``/``f_gas`` it

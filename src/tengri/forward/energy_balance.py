@@ -352,7 +352,7 @@ def bolometric_absorbed_log10(
     Magnitude and sign are returned separately because that *is* what a
     signed quantity looks like in log space; callers that only need the
     energy (nearly all of them, the sign merely tracks whether the two SEDs
-    cancelled or reinforced -- see the module docstring's "Sign convention"
+    canceled or reinforced -- see the module docstring's "Sign convention"
     note) discard the sign, while callers combining two absorbed terms need
     it to reproduce ``|a + b|`` rather than ``|a| + |b|``.
 
