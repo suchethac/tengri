@@ -10,13 +10,16 @@
 
 ### Fixed
 
-- Composable precompute now checks node parity against the exact evaluator and
-  measures interior approximation error (#2288): a triweight LUT interpolant
-  over agn_grahsp_log_l5100 axis nodes (first, middle, last per axis) must
-  reproduce stored grid_phot values within machine precision, and interior
-  RMS error between consecutive grid points is measured and stored. The measured
-  error on a 21-node axis (the documented standard) is approximately 3.1e-3,
-  well below the hard limit of 0.5 that raises ValueError.
+- The composable AGN precompute LUT's accuracy is now measured and pinned
+  against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
+  kernel smoother, not an interpolant, so node parity is not a valid invariant
+  for this LUT; the honest numbers on the documented standard 21-node
+  `agn_grahsp_log_l5100` axis are ~0 relative error at the grid-center node,
+  8.7% at the edge node (one-sided kernel), and a 15.9% maximum at interior
+  midpoints (the kernel's Jensen bias plateau on a photometry that is
+  exponential in the axis coordinate — well under the 50% refusal rule). The
+  bound is pinned at test time with a corruption probe on the engaged
+  preintegrated grid; no check runs inside `precompute()` itself.
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
