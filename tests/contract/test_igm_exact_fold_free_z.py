@@ -14,8 +14,6 @@ whole-band LyC split. This test does not verify LyC handling.
 
 from __future__ import annotations
 
-import contextlib
-
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -259,28 +257,3 @@ def test_accuracy_between_nodes(ssp, observation, igm_model):
             f"(T={avg_transmission:.3f}); exceeds 1% with significant flux. "
             f"Review z-grid density."
         )
-
-
-@pytest.fixture(autouse=True)
-def lock_jax():
-    """Acquire JAX lock before each test, release after."""
-    import os
-    import time
-
-    lock_dir = "/Users/suchethacooray/.claude/jobs/be40c0bc/tmp/jax.lock"
-    max_retries = 30
-
-    for attempt in range(max_retries):
-        try:
-            os.mkdir(lock_dir)
-            break
-        except FileExistsError:
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(20)
-
-    try:
-        yield
-    finally:
-        with contextlib.suppress(OSError):
-            os.rmdir(lock_dir)
