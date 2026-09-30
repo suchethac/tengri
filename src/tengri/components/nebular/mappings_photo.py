@@ -65,6 +65,7 @@ from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
+    apply_lya_escape,
     compute_qh,
     render_nebular_lines,
     sanitize_qh_table,
@@ -650,10 +651,9 @@ class MappingsPhotoStellarBackend:
         all_contribs = jax.vmap(_contrib_one_age)(young_ages, young_weights)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Differential Ly-alpha escape (same pattern as CloudyGridBackend)
-        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
-        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+        # Apply differential Ly-alpha escape via the shared helper. This multiplies
+        # Lyα by (1 - neb_fesc_lya) after the general escape factor was already applied.
+        total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
 

@@ -1,34 +1,73 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Cosmology utilities backed by DSPS.
+"""Cosmology utilities: a flat FRW cosmology with its own E(z) (#2517).
 
-Thin wrappers around dsps.cosmology.flat_wcdm (Hearin+ JAX-based flat w0-wa-CDM).
-All functions accept either a CosmoParams object or convenience h0/om0 kwargs.
-All distances are returned in cm unless otherwise noted (e.g., _mpc suffix).
+Distances (comoving, luminosity, angular diameter) and ages/lookback times
+are computed from a single normalized Hubble parameter E(z) = H(z)/H0
+covering matter, CPL dark energy (w0, wa; Chevallier & Polarski 2001;
+Linder 2003), photons, and massive neutrinos (the Komatsu et al. 2011
+fitting function used by ``astropy.cosmology``) — not delegated to DSPS's
+radiation-free ``dsps.cosmology.flat_wcdm``. E(z) is integrated with fixed
+512-node Gauss-Legendre quadrature: a z-linear substitution for the
+comoving-distance integral, and an a=1/(1+z') substitution for the age
+integral (matches astropy's Planck18 to <1e-4 relative for D_L and age(z)
+at z <= 10). All functions accept either a :class:`CosmoParams` object or
+convenience h0/om0 kwargs. All distances are returned in cm unless
+otherwise noted (e.g., ``_mpc`` suffix).
 
-This module replaces the previous local quadrature implementation with DSPS,
-which uses higher-order numerical integration and is fully JIT-compatible.
-dsps and blackjax are imported inside functions (lazy imports) to defer the
-allocation of device buffers at import time, allowing a bare `import tengri`
-to succeed on float64-less backends (jax-mps); the first use of a dsps or
-blackjax path still fails loudly, which is the acceptable failure mode.
+Pure JAX throughout: JIT- and grad-safe with a traced redshift, Om0, or h
+(no linear erg/s-scale intermediate; the radiation guard against Tcmb0=0
+uses ``jnp.where`` on a safe argument, never a Python branch on a traced
+value). D_L and age(z), and their gradients w.r.t. z, Om0, and h, are
+float32-safe in value and gradient (tested:
+tests/regression/test_cosmology_radiation_2517.py): every h-dependent
+physical prefactor (the photon density, the Hubble distance, the Hubble
+time) is a plain Python float evaluated once at h=1, never a traced
+quantity at its natural cgs magnitude, so a traced division never needs a
+reciprocal or a square outside float32's range — see :func:`_photon_omega0`
+for the mechanism and the specific failure it replaces. No distance,
+time, or volume function in this module calls ``dsps.cosmology.flat_wcdm``
+any more; the only remaining
+``dsps.cosmology`` dependency is the Om0/w0/wa/h values of the lazily
+loaded :data:`PLANCK15`/``WMAP5`` named cosmologies, whose radiation
+fields come from ``astropy.cosmology`` instead (see :func:`__getattr__`).
+dsps and blackjax are imported inside functions (lazy imports) to defer
+the allocation of device buffers at import time, allowing a bare `import
+tengri` to succeed on float64-less backends (jax-mps); the first use of a
+dsps or blackjax path still fails loudly, which is the acceptable failure
+mode.
 """
 
 from __future__ import annotations
 
+import math
 from typing import NamedTuple
 
 import jax.numpy as jnp
 
 from tengri._completion import curated_dir
 from tengri._x64_hold import hold_x64_preference
-from tengri.utils.physics_constants import MPC_CM
+from tengri.utils.physics_constants import (
+    C_CGS,
+    C_KM_S,
+    G_GRAV,
+    JULIAN_YEAR_S,
+    K_BOLTZ_EV,
+    KOMATSU_NU_SHAPE_INDEX,
+    KOMATSU_NU_SHAPE_SCALE,
+    MPC_CM,
+    NEUTRINO_FERMI_DIRAC_CORRECTION,
+    NU_TO_CMB_TEMP_RATIO,
+    SIGMA_SB,
+)
 
 
 class CosmoParams(NamedTuple):
-    """Field-for-field mirror of dsps.cosmology.flat_wcdm.CosmoParams.
+    """Field-for-field mirror of dsps.cosmology.flat_wcdm.CosmoParams, extended
+    with the radiation fields needed for a radiation-inclusive E(z) (#2517).
 
-    A flat w0-wa CDM cosmology defined by four parameters.
-    dsps functions receive these fields positionally in this order.
+    A flat w0-wa CDM cosmology defined by four parameters plus three
+    optional radiation fields. dsps functions receive the first four
+    fields positionally in this order.
 
     Attributes
     ----------
@@ -40,25 +79,497 @@ class CosmoParams(NamedTuple):
         Dark energy equation of state parameter (1+w = (1+w0) * a^wa).
     h : float
         Hubble parameter h = H0 / (100 km/s/Mpc).
+    Tcmb0 : float, optional
+        CMB temperature at z=0 in Kelvin. Default: 0.0 K (radiation off).
+    Neff : float, optional
+        Effective number of relativistic species. Default: 3.04.
+    m_nu_eV : tuple[float, float, float], optional
+        Neutrino masses in eV (one per species). Default: (0, 0, 0) eV.
+
+    Notes
+    -----
+    The field defaults are radiation-free (``Tcmb0=0.0``), matching
+    ``astropy.cosmology.FLRW``'s own default and reproducing exactly the
+    Om0/w0/wa/h-only physics this NamedTuple had before #2517: a bare
+    ``CosmoParams(Om0=..., w0=..., wa=..., h=...)`` built without radiation
+    fields gets Ω_γ = Ω_ν = 0 identically, not the Planck18 defaults a
+    prior revision of this fix silently applied to every custom cosmology.
+    Named cosmologies (:data:`PLANCK18`, and the lazily-loaded
+    ``PLANCK15``/``WMAP5``) each state their own published Tcmb0/Neff/m_nu
+    explicitly at construction — see :func:`__getattr__` — rather than
+    relying on these defaults.
     """
 
     Om0: float
     w0: float
     wa: float
     h: float
+    Tcmb0: float = 0.0
+    Neff: float = 3.04
+    m_nu_eV: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 # Planck 2018 cosmology (tengri default).
 # Values from Planck Collaboration 2020, A&A 641, A6 (TT,TE,EE+lowE+lensing):
 #   H0 = 67.66 km/s/Mpc → h = 0.6766
 #   Om0 = 0.30966
-# These also match astropy.cosmology.Planck18: see #401 for the drift fix.
-PLANCK18 = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
+# Radiation fields match astropy.cosmology.Planck18 exactly (printed and
+# pinned in tests/regression/test_cosmology_radiation_2517.py):
+#   Tcmb0 = 2.7255 K, Neff = 3.046, m_nu = (0, 0, 0.06) eV.
+# These also match astropy.cosmology.Planck18's Om0/H0: see #401 for the
+# drift fix, #2517 for the radiation fields.
+PLANCK18 = CosmoParams(
+    Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046, m_nu_eV=(0.0, 0.0, 0.06)
+)
 DEFAULT_COSMO = PLANCK18
 
 # Backward-compat scalar defaults (for positional arg parsing).
 DEFAULT_H0 = 67.66  # km/s/Mpc: matches PLANCK18.h × 100
 DEFAULT_OM0 = 0.30966
+
+# ============================================================================
+# Fixed-node Gauss-Legendre quadrature for JAX-traceable integration
+# ============================================================================
+
+
+def _get_gl_nodes_weights_np(n: int = 512) -> tuple:
+    """Compute Gauss-Legendre quadrature nodes and weights as plain numpy.
+
+    Parameters
+    ----------
+    n : int
+        Number of quadrature nodes (default: 512).
+
+    Returns
+    -------
+    tuple of (nodes, weights)
+        nodes: ndarray, shape (n,), quadrature points in [-1, 1]
+        weights: ndarray, shape (n,), quadrature weights
+
+    Notes
+    -----
+    Plain ``np.ndarray`` (float64), never a JAX array: a module-scope
+    ``jnp.asarray(..., dtype=jnp.float64)`` is a *device* array materialized
+    by ``import tengri`` itself, which crashes on float64-less backends
+    (jax-mps) and is exactly the import-time allocation #2271/#1880 forbid.
+    Converted to a JAX array only at use time (:func:`_comoving_distance_mpc_jax`,
+    :func:`_age_gyr_jax`), without forcing a dtype, so it canonicalizes to
+    whichever precision the caller's ``jax_enable_x64`` state has at that
+    point rather than the state at import time.
+    """
+    from numpy.polynomial.legendre import leggauss
+
+    return leggauss(n)
+
+
+# Precompute Gauss-Legendre quadrature at module load time as plain numpy
+# host arrays (never a JAX device array — see _get_gl_nodes_weights_np).
+# 512 nodes for <1e-4 relative error at z ≤ 10.
+_GL_NODES_512_NP, _GL_WEIGHTS_512_NP = _get_gl_nodes_weights_np(512)
+
+
+# ============================================================================
+# Radiation / massive-neutrino density (astropy.cosmology.Planck18 physics)
+# ============================================================================
+
+
+def _radiation_fields(cosmo) -> tuple[float, float, tuple[float, float, float]]:
+    """Extract (Tcmb0 [K], Neff, m_nu_eV [eV]) from a cosmo-like object.
+
+    Falls back to :class:`CosmoParams`'s declared field defaults for
+    4-field objects that predate radiation support (e.g.
+    ``dsps.cosmology.flat_wcdm.CosmoParams``, an ``(Om0, w0, wa, h)``
+    tuple with no radiation attributes at all) — :func:`_resolve_cosmo`
+    accepts any object with ``Om0``/``w0``/``wa``/``h`` attributes, so
+    every reader of the radiation fields must tolerate their absence too.
+
+    Parameters
+    ----------
+    cosmo : CosmoParams or cosmo-like object
+        Cosmology parameter set.
+
+    Returns
+    -------
+    tuple of (Tcmb0, Neff, m_nu_eV)
+    """
+    defaults = CosmoParams._field_defaults
+    tcmb0 = getattr(cosmo, "Tcmb0", defaults["Tcmb0"])
+    neff = getattr(cosmo, "Neff", defaults["Neff"])
+    m_nu_eV = getattr(cosmo, "m_nu_eV", defaults["m_nu_eV"])
+    return tcmb0, neff, m_nu_eV
+
+
+def _nu_relative_density(z, neff: float, m_nu_eV: tuple[float, float, float], tcmb0: float):
+    r"""Neutrino energy density relative to the photon energy density.
+
+    Implements the Komatsu et al. (2011) fitting formula used by
+    ``astropy.cosmology`` [1]_:
+
+    .. math::
+
+        f_\nu(z) = 0.2271\, N_{\rm eff}/n_\nu \sum_i
+            \left[1 + \left(0.3173\, y_i(z)\right)^{1.83}\right]^{1/1.83}
+
+        y_i(z) = \frac{m_{\nu,i} c^2}{k_B T_{\nu 0} (1+z)}
+
+    where :math:`n_\nu` is the number of neutrino species (``len(m_nu_eV)``,
+    3 for tengri's fixed 3-species convention), the sum runs over all
+    species (a massless species has :math:`y_i \equiv 0`, contributing
+    exactly 1 to the sum — algebraically identical to astropy's separate
+    "massless" bucket), and :math:`T_{\nu 0} = 0.7138\, T_{\rm cmb0}`.
+
+    Parameters
+    ----------
+    z : float or array_like
+        Redshift (scalar or array; any shape).
+    neff : float
+        Effective number of relativistic neutrino species N_eff.
+    m_nu_eV : tuple of float
+        Neutrino rest masses [eV], one per species.
+    tcmb0 : float
+        CMB temperature at z=0 [K].
+
+    Returns
+    -------
+    float or ndarray
+        :math:`f_\nu(z)`, same shape as ``z``.
+
+    Notes
+    -----
+    JIT/grad-safe: pure JAX operations on a fixed-length (3-species) array,
+    no data-dependent branching or shapes. Safe for ``Tcmb0 = 0`` (radiation
+    off): the neutrino temperature is then also 0, so ``m_nu / (k_B T_nu)``
+    is guarded against 0/0 and returns ``y_i = 0`` (masses become
+    irrelevant, matching astropy's "Tcmb0=0 turns off photons and
+    neutrinos").
+
+    References
+    ----------
+    .. [1] Komatsu, E., et al. (2011), "Seven-Year Wilkinson Microwave
+           Anisotropy Probe (WMAP) Observations: Cosmological
+           Interpretation", ApJS, 192, 18, eq. 26,
+           https://doi.org/10.1088/0067-0049/192/2/18
+    """
+    z = jnp.asarray(z)
+    n_nu = len(m_nu_eV)
+    neff_per_nu = neff / n_nu
+    tnu0 = NU_TO_CMB_TEMP_RATIO * tcmb0
+    kt_nu0_ev = K_BOLTZ_EV * tnu0
+    kt_nu0_ev_safe = jnp.where(kt_nu0_ev > 0.0, kt_nu0_ev, 1.0)
+    m_nu = jnp.asarray(m_nu_eV)
+    nu_y = jnp.where(kt_nu0_ev > 0.0, m_nu / kt_nu0_ev_safe, 0.0)
+    curr_nu_y = nu_y / (1.0 + z)[..., None]
+    rel_mass_per = (1.0 + (KOMATSU_NU_SHAPE_SCALE * curr_nu_y) ** KOMATSU_NU_SHAPE_INDEX) ** (
+        1.0 / KOMATSU_NU_SHAPE_INDEX
+    )
+    rel_mass = jnp.sum(rel_mass_per, axis=-1)
+    return NEUTRINO_FERMI_DIRAC_CORRECTION * neff_per_nu * rel_mass
+
+
+# ============================================================================
+# h-normalized reference constants, computed once in plain Python float64
+# arithmetic (never traced) so that no traced h-dependent expression below
+# ever forms a physical prefactor at its natural cgs/SI magnitude -- H0 in
+# s^-1 (~2e-18), the critical density (~9e-30 g/cm^3), or the Hubble time
+# in seconds (~4e17 s) all have derivatives, w.r.t. h, of their reciprocal
+# or their square that overflow float32's ~3.4e38 ceiling even though the
+# forward VALUE is representable (reverse-mode autodiff of a/b needs b^2
+# as an intermediate). Every h-dependent physical scale below is instead
+# written as (this module-level float) * (a traced, order-unity function
+# of h), so the only traced quantities are h, h^2, or 1/h^2 -- all safely
+# within float32's range in both value and derivative.
+# ============================================================================
+
+_H0_PER_H_S: float = 100.0 * 1.0e5 / MPC_CM
+"""H0 at h=1, in s^-1 (100 km/s/Mpc in cgs): ~3.2408e-18 s^-1."""
+
+D_H100_MPC: float = C_KM_S / 100.0
+"""Hubble distance c/H0 at h=1, in Mpc: ~2997.92458 Mpc."""
+
+HUBBLE_TIME_GYR_H1: float = MPC_CM / (100.0 * 1.0e5 * JULIAN_YEAR_S * 1.0e9)
+"""Hubble time 1/H0 at h=1, in Gyr: ~9.7779 Gyr."""
+
+_RHO_CRIT_H2_REF_CGS: float = 3.0 * _H0_PER_H_S**2.0 / (8.0 * math.pi * G_GRAV)
+"""Critical density at z=0, divided by h^2 (h-independent), in g/cm^3."""
+
+_T_REF_K: float = 2.7255
+"""Reference CMB temperature [K] (Planck18's Tcmb0) for OMEGA_GAMMA_H2_REF."""
+
+OMEGA_GAMMA_H2_REF: float = (4.0 * SIGMA_SB / C_CGS**3.0) * _T_REF_K**4.0 / _RHO_CRIT_H2_REF_CGS
+"""Ω_γ h² at Tcmb0 = :data:`_T_REF_K`, a pure Tcmb0-dependent constant
+(Ω_γ ∝ h⁻², so Ω_γ h² carries no h-dependence at all): ~2.4727e-5, matching
+``astropy.cosmology.Planck18.Ogamma0 * Planck18.h**2`` to ~5e-5 relative
+(the limit of :data:`~tengri.utils.physics_constants.G_GRAV`'s 4-significant-
+figure rounding)."""
+
+
+def _photon_omega0(tcmb0: float, h: float) -> float:
+    r"""Photon density fraction Ω_γ at z=0 from the CMB temperature.
+
+    .. math::
+
+        \Omega_\gamma = \Omega_{\gamma,\rm ref} h_{\rm ref}^2
+            \left(\frac{T_{\rm cmb0}}{T_{\rm ref}}\right)^4 h^{-2}
+
+    an algebraic rearrangement of :math:`\Omega_\gamma = a_B T_{\rm
+    cmb0}^4 / \rho_{\rm crit,0}` (:math:`a_B = 4\sigma_{\rm SB}/c^3`,
+    :math:`\rho_{\rm crit,0} = 3 H_0^2/(8\pi G)`) that never forms
+    :math:`\rho_{\rm crit,0}` (~9e-30 g/cm³) as a traced intermediate.
+
+    Parameters
+    ----------
+    tcmb0 : float
+        CMB temperature at z=0 [K].
+    h : float
+        Hubble parameter h = H0 / (100 km/s/Mpc).
+
+    Returns
+    -------
+    float
+        Ω_γ (dimensionless).
+
+    Notes
+    -----
+    Float32-safe in value AND gradient (tested:
+    tests/regression/test_cosmology_radiation_2517.py). The naive form
+    computes :math:`\rho_{\rm crit,0} \sim 9\times10^{-30}` g/cm³ as a
+    traced quantity; reverse-mode autodiff of the division by it needs
+    :math:`1/\rho_{\rm crit,0}^2 \sim 10^{58}` as an intermediate, which
+    overflows float32 (max ~3.4e38) even though the forward value and the
+    true derivative are both O(1e-5). Rewritten here as
+    :data:`OMEGA_GAMMA_H2_REF` (a plain Python float, never traced) times
+    ``(tcmb0/T_ref)**4 / h**2`` — every traced quantity stays order-unity.
+    At ``tcmb0=0`` the result and its h-derivative are both exactly 0
+    (``0**4 = 0`` exactly; multiplying that finite zero by the finite
+    ``-2/h**3`` cotangent of ``1/h**2`` cannot produce NaN).
+    """
+    return OMEGA_GAMMA_H2_REF * (tcmb0 / _T_REF_K) ** 4.0 / h**2.0
+
+
+def _flat_density_params(cosmo) -> tuple[float, float]:
+    """(Ω_γ0, Ω_de0) at z=0 for a flat cosmology.
+
+    Ω_de0 is fixed by flatness: Ω_de0 = 1 - Ω_m0 - Ω_γ0 - Ω_ν0.
+
+    Parameters
+    ----------
+    cosmo : CosmoParams or cosmo-like object
+        Must expose ``Om0`` and ``h``; radiation fields are optional
+        (see :func:`_radiation_fields`).
+
+    Returns
+    -------
+    tuple of (ogamma0, ode0)
+    """
+    tcmb0, neff, m_nu_eV = _radiation_fields(cosmo)
+    ogamma0 = _photon_omega0(tcmb0, cosmo.h)
+    onu0 = ogamma0 * _nu_relative_density(0.0, neff, m_nu_eV, tcmb0)
+    ode0 = 1.0 - cosmo.Om0 - ogamma0 - onu0
+    return ogamma0, ode0
+
+
+def _rho_de_z(z, w0: float, wa: float):
+    r"""CPL dark-energy density relative to its z=0 value.
+
+    .. math::
+
+        \rho_{\rm de}(a)/\rho_{\rm de,0} = a^{-3(1+w_0+w_a)}
+            \exp\left[-3 w_a (1-a)\right], \qquad a = 1/(1+z)
+
+    Matches ``dsps.cosmology.flat_wcdm._rho_de_z`` exactly (Chevallier &
+    Polarski 2001; Linder 2003), restoring the w0/wa generality of the
+    DSPS-backed path this module replaces for the radiation-inclusive
+    distance/age integrals below. For ΛCDM (w0=-1, wa=0) this is
+    identically 1.
+
+    Parameters
+    ----------
+    z : float or array_like
+        Redshift.
+    w0 : float
+        Dark-energy equation-of-state parameter at z=0.
+    wa : float
+        Dark-energy equation-of-state evolution parameter.
+
+    Returns
+    -------
+    float or ndarray
+
+    Notes
+    -----
+    JIT/grad-safe: pure JAX arithmetic.
+    """
+    a = 1.0 / (1.0 + z)
+    return a ** (-3.0 * (1.0 + w0 + wa)) * jnp.exp(-3.0 * wa * (1.0 - a))
+
+
+def _e_of_z(z, cosmo, ogamma0: float, ode0: float):
+    r"""Normalized Hubble parameter E(z) = H(z)/H0, flat cosmology.
+
+    Implements astropy's ``FlatLambdaCDM.efunc`` formula, generalized to
+    CPL dark energy to match ``dsps.cosmology.flat_wcdm``:
+
+    .. math::
+
+        E(z) = \sqrt{\Omega_m(1+z)^3 + \Omega_\gamma(1+z)^4
+                    \left[1 + f_\nu(z)\right]
+                    + \Omega_{\rm de}\,\rho_{\rm de}(z)/\rho_{\rm de,0}}
+
+    Parameters
+    ----------
+    z : float or array_like
+        Redshift (scalar or array).
+    cosmo : CosmoParams or cosmo-like object
+        Exposes ``Om0``, ``w0``, ``wa``; radiation fields optional.
+    ogamma0 : float
+        Photon density fraction Ω_γ at z=0 (from :func:`_flat_density_params`).
+    ode0 : float
+        Dark energy density fraction Ω_de at z=0 (from
+        :func:`_flat_density_params`).
+
+    Returns
+    -------
+    float or ndarray
+        E(z) (dimensionless).
+
+    Notes
+    -----
+    Radiation includes photons and massive neutrinos, following astropy's
+    ``Planck18`` parameterization (Planck Collaboration 2020, A&A 641, A6).
+    JIT/grad-safe: pure JAX operations, no Python-level branching.
+    """
+    tcmb0, neff, m_nu_eV = _radiation_fields(cosmo)
+    zp1 = 1.0 + z
+    or_z = ogamma0 * (1.0 + _nu_relative_density(z, neff, m_nu_eV, tcmb0))
+    de_z = ode0 * _rho_de_z(z, cosmo.w0, cosmo.wa)
+    return jnp.sqrt(cosmo.Om0 * zp1**3.0 + or_z * zp1**4.0 + de_z)
+
+
+def _comoving_distance_mpc_jax(z: float, cosmo, ogamma0: float, ode0: float) -> float:
+    r"""Comoving distance via Gauss-Legendre quadrature in JAX.
+
+    Integrates:
+
+    .. math::
+
+        \chi(z) = \frac{c}{H_0} \int_0^z \frac{dz'}{E(z')}
+
+    using fixed 512-node Gauss-Legendre quadrature for <1e-4 relative error.
+
+    Transformation: u ∈ [-1, 1] → z' ∈ [0, z] via z' = z(1+u)/2.
+
+    Parameters
+    ----------
+    z : float
+        Redshift.
+    cosmo : CosmoParams or cosmo-like object
+        See :func:`_e_of_z`.
+    ogamma0 : float
+        Photon density fraction Ω_γ at z=0.
+    ode0 : float
+        Dark energy density fraction Ω_de at z=0.
+
+    Returns
+    -------
+    float
+        Comoving distance in Mpc.
+
+    Notes
+    -----
+    Float32-safe in value and gradient (tested:
+    tests/regression/test_cosmology_radiation_2517.py). The Hubble
+    distance c/H0 is formed as :data:`D_H100_MPC` (a plain Python float,
+    never traced) divided by the traced, order-unity ``cosmo.h`` — not by
+    forming ``100*cosmo.h`` and taking its reciprocal at the full c/H0
+    magnitude, which stays representable in forward value but whose
+    reverse-mode derivative is safe here regardless (the same
+    rho_crit0-style hazard documented in :func:`_photon_omega0` needs a
+    denominator small enough that its square underflows to 0 in float32;
+    ``100*h`` at ~68 is nowhere near that).
+    """
+    # Map Gauss-Legendre nodes from [-1, 1] to [0, z]. Converted to a JAX
+    # array here (not at module scope) so the dtype follows the caller's
+    # current jax_enable_x64 state rather than the state at import time.
+    gl_nodes = jnp.asarray(_GL_NODES_512_NP)
+    gl_weights = jnp.asarray(_GL_WEIGHTS_512_NP)
+    # z' = z * (1 + u) / 2, so dz'/du = z/2
+    z_prime = z * (1.0 + gl_nodes) / 2.0
+    e_z_prime = _e_of_z(z_prime, cosmo, ogamma0, ode0)
+    integrand = 1.0 / e_z_prime
+    # Gauss-Legendre quadrature: integral = sum(w_i * f(u_i)) * (dz/2)
+    integral = jnp.sum(gl_weights * integrand) * (z / 2.0)
+    c_over_h0_mpc = D_H100_MPC / cosmo.h
+    return integral * c_over_h0_mpc
+
+
+def _age_gyr_jax(z: float, cosmo, ogamma0: float, ode0: float) -> float:
+    r"""Age of universe at redshift z via Gauss-Legendre quadrature in JAX.
+
+    Integrates:
+
+    .. math::
+        t(z) = \frac{1}{H_0} \int_z^\infty \frac{dz'}{(1+z')E(z')}
+
+    using the substitution :math:`a = 1/(1+z')`, :math:`a \in [0, a_z]`
+    with :math:`a_z = 1/(1+z)`:
+
+    .. math::
+        t(z) = \frac{1}{H_0} \int_0^{a_z} \frac{da}{a\, E(z'(a))}
+
+    on fixed 512-node Gauss-Legendre quadrature. The naive z'-linear
+    substitution used through z_max=1000 concentrates nodes on the flat,
+    negligible tail instead of the rapidly-varying region near z'~z,
+    biasing age(z) low by a near-constant ~4e-4 Gyr across the whole z
+    range (~0.09% at z=10, above the 1e-4 relative target); the
+    a-substitution matches astropy to <1e-6 relative at every z tested.
+
+    Parameters
+    ----------
+    z : float
+        Redshift.
+    cosmo : CosmoParams or cosmo-like object
+        See :func:`_e_of_z`.
+    ogamma0 : float
+        Photon density fraction Ω_γ at z=0.
+    ode0 : float
+        Dark energy density fraction Ω_de at z=0.
+
+    Returns
+    -------
+    float
+        Age of universe in Gyr.
+
+    Notes
+    -----
+    The GL nodes never land exactly on the a=0 endpoint (open interval),
+    so the 1/a factor is always evaluated away from the a→0 limit where
+    the integrand itself vanishes (E(z') ~ a^{-3/2} there); no epsilon
+    guard is needed.
+
+    Float32-safe in value and gradient (tested:
+    tests/regression/test_cosmology_radiation_2517.py). The Hubble time
+    1/H0 is :data:`HUBBLE_TIME_GYR_H1` (a plain Python float, never
+    traced) divided by the traced, order-unity ``cosmo.h`` — forming it
+    the naive way, as ``MPC_CM / (100*h*1e5*JULIAN_YEAR_S*1e9)``, makes
+    the denominator a traced quantity of order 1e23 s (H0 in inverse
+    seconds, unnormalized by h); reverse-mode autodiff of that division
+    needs the denominator's square, ~1e46, which overflows float32's
+    ~3.4e38 ceiling even though the forward Hubble time itself (~10 Gyr)
+    is unremarkable. This is the mechanism behind the reported
+    ``d(age)/dh = inf`` in float32.
+    """
+    # Converted to a JAX array here (not at module scope), same rationale
+    # as _comoving_distance_mpc_jax above.
+    gl_nodes = jnp.asarray(_GL_NODES_512_NP)
+    gl_weights = jnp.asarray(_GL_WEIGHTS_512_NP)
+    a_z = 1.0 / (1.0 + z)
+    a_nodes = a_z * (1.0 + gl_nodes) / 2.0
+    z_prime = 1.0 / a_nodes - 1.0
+    integrand = 1.0 / (a_nodes * _e_of_z(z_prime, cosmo, ogamma0, ode0))
+    integral = jnp.sum(gl_weights * integrand) * (a_z / 2.0)
+    hubble_time_gyr = HUBBLE_TIME_GYR_H1 / cosmo.h
+    return integral * hubble_time_gyr
+
 
 __all__ = [
     "DEFAULT_COSMO",
@@ -90,7 +601,18 @@ def __getattr__(name: str):
     """Lazy load PLANCK15 and WMAP5 from dsps.cosmology on access (PEP 562).
 
     These are vendored here as CosmoParams objects when accessed, so a bare
-    import tengri does not pull in dsps.cosmology.
+    import tengri does not pull in dsps.cosmology. dsps's own
+    ``PLANCK15``/``WMAP5`` are 4-field ``(Om0, w0, wa, h)`` tuples with no
+    radiation information at all, so each one's Tcmb0/Neff/m_nu_eV are
+    stated explicitly here from ``astropy.cosmology`` (#2517) rather than
+    left to fall through to :class:`CosmoParams`'s radiation-free field
+    defaults, which would silently drop each cosmology's real photon and
+    neutrino content:
+
+    - ``PLANCK15``: Tcmb0=2.7255 K, Neff=3.046, m_nu=(0, 0, 0.06) eV
+      (``astropy.cosmology.Planck15`` — same radiation content as Planck18).
+    - ``WMAP5``: Tcmb0=2.725 K, Neff=3.04, m_nu=(0, 0, 0) eV (massless
+      neutrinos; ``astropy.cosmology.WMAP5``).
 
     Parameters
     ----------
@@ -101,7 +623,8 @@ def __getattr__(name: str):
     -------
     CosmoParams or other
         For PLANCK15 and WMAP5, returns a CosmoParams object with the
-        corresponding values from dsps.cosmology.
+        corresponding Om0/w0/wa/h from dsps.cosmology and the published
+        radiation fields from astropy.cosmology.
 
     Raises
     ------
@@ -112,12 +635,12 @@ def __getattr__(name: str):
         with hold_x64_preference():
             from dsps.cosmology import PLANCK15 as _dsps_planck15
 
-        return CosmoParams(*_dsps_planck15)
+        return CosmoParams(*_dsps_planck15, Tcmb0=2.7255, Neff=3.046, m_nu_eV=(0.0, 0.0, 0.06))
     if name == "WMAP5":
         with hold_x64_preference():
             from dsps.cosmology import WMAP5 as _dsps_wmap5
 
-        return CosmoParams(*_dsps_wmap5)
+        return CosmoParams(*_dsps_wmap5, Tcmb0=2.725, Neff=3.04, m_nu_eV=(0.0, 0.0, 0.0))
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -152,7 +675,10 @@ def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
     Returns
     -------
     CosmoParams
-        Flat w₀wₐCDM dataclass with ``Om0``, ``h``, ``w0``, ``wa``.
+        Flat w₀wₐCDM dataclass with ``Om0``, ``h``, ``w0``, ``wa``, and the
+        radiation fields ``Tcmb0``, ``Neff``, ``m_nu_eV`` carried over from
+        the astropy object (``Tcmb0=0`` turns off both photons and
+        neutrinos, matching astropy's own convention).
 
     Raises
     ------
@@ -196,7 +722,22 @@ def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
     h = float(astropy_cosmo.H0.value) / 100.0
     w0 = float(getattr(astropy_cosmo, "w0", -1.0))
     wa = float(getattr(astropy_cosmo, "wa", 0.0))
-    return CosmoParams(Om0=om0, w0=w0, wa=wa, h=h)
+
+    defaults = CosmoParams._field_defaults
+    tcmb0_attr = getattr(astropy_cosmo, "Tcmb0", None)
+    tcmb0 = float(tcmb0_attr.value) if tcmb0_attr is not None else defaults["Tcmb0"]
+    neff = float(getattr(astropy_cosmo, "Neff", defaults["Neff"]))
+    m_nu_attr = getattr(astropy_cosmo, "m_nu", None)
+    if m_nu_attr is None:
+        m_nu_eV: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    else:
+        import astropy.units as u
+
+        m_nu_vals = [float(v) for v in m_nu_attr.to_value(u.eV)]
+        m_nu_vals = [*m_nu_vals, 0.0, 0.0, 0.0][:3]
+        m_nu_eV = (m_nu_vals[0], m_nu_vals[1], m_nu_vals[2])
+
+    return CosmoParams(Om0=om0, w0=w0, wa=wa, h=h, Tcmb0=tcmb0, Neff=neff, m_nu_eV=m_nu_eV)
 
 
 def _resolve_cosmo(
@@ -295,12 +836,20 @@ def luminosity_distance(
     -------
     float
         Luminosity distance in cm. At z=0, returns 10 pc (3.086e19 cm).
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18, matched to <1e-4 relative for D_L and
+    age(z) at z ≤ 10 (#2517). Float32-safe in value and gradient w.r.t.
+    z, Om0, and h (tested: tests/regression/test_cosmology_radiation_2517.py).
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    dl_mpc = luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    # Luminosity distance: D_L = (1+z) * D_c
+    dl_mpc = (1.0 + z) * dc_mpc
     # At z=0, use 10 pc (1e-5 Mpc) for the optical absolute-magnitude convention
     dl_mpc = jnp.where(z <= 0.0, 1e-5, dl_mpc)
     return dl_mpc * MPC_CM
@@ -330,12 +879,23 @@ def luminosity_distance_mpc(
     -------
     float
         Luminosity distance in Mpc.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import luminosity_distance_to_z
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18, matched to <1e-4 relative for D_L and
+    age(z) at z ≤ 10 (#2517). Float32-safe in value and gradient w.r.t.
+    z, Om0, and h (tested: tests/regression/test_cosmology_radiation_2517.py).
+    Vanishes exactly at z=0 (a geometric distance, with no flux-convention
+    floor); :func:`distance_modulus`, the one caller that divides by it,
+    applies its own floor at the point of use.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    return luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    # Luminosity distance: D_L = (1+z) * D_c
+    return (1.0 + z) * dc_mpc
 
 
 def comoving_distance(
@@ -362,12 +922,16 @@ def comoving_distance(
     -------
     float
         Comoving distance in cm.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import comoving_distance_to_z
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18 (#2517). JIT/grad-safe.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    dc_mpc = comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
     return dc_mpc * MPC_CM
 
 
@@ -395,12 +959,16 @@ def comoving_distance_mpc(
     -------
     float
         Comoving distance in Mpc.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import comoving_distance_to_z
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18 (#2517). JIT/grad-safe.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    return comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    return _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
 
 
 def angular_diameter_distance(
@@ -427,13 +995,20 @@ def angular_diameter_distance(
     -------
     float
         Angular diameter distance in cm.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
+    Notes
+    -----
+    Flat-FRW distance-duality relation D_A = D_C / (1+z) (Hogg 1999,
+    astro-ph/9905116, eq. 18), routed through the same radiation-inclusive
+    :func:`comoving_distance` as :func:`luminosity_distance` (#2517) rather
+    than DSPS's radiation-free ``angular_diameter_distance_to_z`` — keeping
+    D_A = D_L / (1+z)^2 exact regardless of Tcmb0/Neff/m_nu_eV.
+    JIT/grad-safe: pure JAX operations.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
-    return da_mpc * MPC_CM
+    ogamma0, ode0 = _flat_density_params(c)
+    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    return (dc_mpc / (1.0 + z)) * MPC_CM
 
 
 def angular_diameter_distance_mpc(
@@ -460,12 +1035,17 @@ def angular_diameter_distance_mpc(
     -------
     float
         Angular diameter distance in Mpc.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
+    Notes
+    -----
+    See :func:`angular_diameter_distance` — routes through the
+    radiation-inclusive comoving distance rather than DSPS (#2517).
+    JIT/grad-safe: pure JAX operations.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    return angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    dc_mpc = _comoving_distance_mpc_jax(z, c, ogamma0, ode0)
+    return dc_mpc / (1.0 + z)
 
 
 def distance_modulus(
@@ -495,12 +1075,22 @@ def distance_modulus(
     -------
     float
         Distance modulus in magnitudes.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import distance_modulus_to_z
 
-    c = _cosmo_from_args(h0, om0, cosmo)
-    return distance_modulus_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    Notes
+    -----
+    Derived from :func:`luminosity_distance_mpc` (radiation-inclusive,
+    #2517) rather than DSPS's ``distance_modulus_to_z``. ``luminosity_distance_mpc``
+    itself vanishes at z=0; ``log10(d_L_pc)`` is undefined there, so this
+    function floors d_L at 10 pc (the optical absolute-magnitude convention,
+    matching :func:`luminosity_distance`'s cm-scale floor) at the point where
+    the logarithm is taken, guarded with ``jnp.where`` on a safe argument
+    rather than a floor baked into the distance itself.
+    JIT/grad-safe: pure JAX operations.
+    """
+    dl_mpc = luminosity_distance_mpc(z, h0, om0, cosmo=cosmo)
+    dl_mpc = jnp.where(z <= 0.0, 1e-5, dl_mpc)
+    dl_pc = dl_mpc * 1.0e6
+    return 5.0 * jnp.log10(dl_pc) - 5.0
 
 
 def lookback_time(
@@ -530,12 +1120,14 @@ def lookback_time(
     -------
     float
         Lookback time in Gyr.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import lookback_to_z
 
-    c = _cosmo_from_args(h0, om0, cosmo)
-    return lookback_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    Notes
+    -----
+    t_lookback(z) = age_at_z0() - age_at_z(z), both radiation-inclusive
+    (#2517) rather than DSPS's ``lookback_to_z``.
+    JIT/grad-safe: pure JAX operations.
+    """
+    return age_at_z0(h0, om0, cosmo=cosmo) - age_at_z(z, h0, om0, cosmo=cosmo)
 
 
 def age_at_z(
@@ -563,27 +1155,44 @@ def age_at_z(
     float or array
         Age of universe in Gyr. Returns scalar if input is scalar, array if
         input is array.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18, matched to <1e-4 relative for z ≤ 10
+    (#2517). Float32-safe in value and gradient w.r.t. z, Om0, and h
+    (tested: tests/regression/test_cosmology_radiation_2517.py).
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    # DSPS age_at_z always returns array (minimum shape (1,))
-    result = _dsps_age_at_z(z, c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    # Use vectorize to handle array inputs
+    z_arr = jnp.atleast_1d(z)
+    result = jnp.vectorize(lambda z_val: _age_gyr_jax(z_val, c, ogamma0, ode0))(z_arr)
     # Return scalar if input was scalar
     return result[0] if jnp.ndim(z) == 0 else result
 
 
 def age_at_z0_host(cosmo: CosmoParams = DEFAULT_COSMO) -> float:
-    """Age of universe at z=0 (present day) in Gyr, computed on host.
+    r"""Age of universe at z=0 (present day) in Gyr, computed on host.
 
-    Pure-numpy implementation of dsps.cosmology.flat_wcdm.age_at_z0,
-    designed to be called at module import time without triggering
-    DSPS's float64 device buffer allocation on float64-less backends
-    (jax-mps, MLX). Returns numerically identical results to DSPS.
+    Pure-numpy implementation of the same radiation-inclusive physics as
+    :func:`age_at_z0` (#2517: matter + CPL dark energy + photons + massive
+    neutrinos), designed to be called at module import time without
+    executing any JAX operation or triggering DSPS's float64 device
+    buffer allocation on float64-less backends (jax-mps, MLX).
 
-    Uses 512 log-spaced redshift nodes and trapezoidal integration,
-    exactly matching DSPS's integration strategy.
+    Uses the same 512-node Gauss-Legendre, :math:`a=1/(1+z')` quadrature as
+    :func:`_age_gyr_jax` (the node/weight tables are already plain numpy
+    host arrays, :data:`_GL_NODES_512_NP` / :data:`_GL_WEIGHTS_512_NP`, so
+    reusing them here costs nothing extra at import time), rather than
+    DSPS's own log-spaced trapezoidal scheme: DSPS's own quadrature is not
+    a target to match bit-for-bit here (#2517 already breaks that
+    equivalence to add the missing radiation physics), and the
+    log-spaced/trapezoidal scheme was measurably coarser (~8e-5 relative
+    against astropy vs this scheme's ~1e-7), enough to round to a
+    different 3rd decimal for the ``_AGE_UNIV_GYR`` age-of-universe cap
+    (``components/stellar/sfh/registry.py``).
 
     Parameters
     ----------
@@ -598,42 +1207,62 @@ def age_at_z0_host(cosmo: CosmoParams = DEFAULT_COSMO) -> float:
     Notes
     -----
     This function avoids all JAX and DSPS imports, making it safe
-    to call at module scope for deferred DSPS initialization.
+    to call at module scope for deferred DSPS initialization. It
+    duplicates (in plain numpy) the same E(z) formula as
+    :func:`_e_of_z`/:func:`_nu_relative_density`/:func:`_photon_omega0`
+    rather than calling them, precisely so that no ``jax.numpy`` op is
+    dispatched at import time.
     """
     import numpy as np
 
-    # DSPS constants: MPC in cm, YEAR in seconds
-    MPC = 3.08567758149e24
-    YEAR = 31556925.2
-
-    # 512 log-spaced redshift nodes: logspace(0, 3, 512) - 1.0 = [0, ..., 999]
-    z_nodes = np.logspace(0.0, 3.0, 512) - 1.0
-
     # Cosmological parameters
     Om0, w0, wa, h = cosmo.Om0, cosmo.w0, cosmo.wa, cosmo.h
+    tcmb0, neff, m_nu_eV = _radiation_fields(cosmo)
 
-    # Dark energy density at z=0 (matter-dominated assumption for flat LCDM)
-    Ode0 = 1.0 - Om0
+    # Photon density Ω_γ at z=0 (numpy port of _photon_omega0).
+    a_b_c2 = 4.0 * SIGMA_SB / C_CGS**3.0
+    h0_cgs = h * 100.0 * 1.0e5 / MPC_CM
+    rho_crit0 = 3.0 * h0_cgs**2.0 / (8.0 * np.pi * G_GRAV)
+    ogamma0 = a_b_c2 * tcmb0**4.0 / rho_crit0
 
-    # Compute E(z) = H(z) / H0 at each node
-    # E(z) = sqrt(Om0*(1+z)^3 + Ode0*rho_de_z(z))
-    # where rho_de_z(z) = a^(-3*(1+w0+wa)) * exp(-3*wa*(1-a)), a = 1/(1+z)
-    a_nodes = 1.0 / (1.0 + z_nodes)
-    rho_de_z = a_nodes ** (-3.0 * (1.0 + w0 + wa)) * np.exp(-3.0 * wa * (1.0 - a_nodes))
-    E_z = np.sqrt(Om0 * (1.0 + z_nodes) ** 3.0 + Ode0 * rho_de_z)
+    # Neutrino relative density f_nu(z) (numpy port of _nu_relative_density).
+    n_nu = len(m_nu_eV)
+    neff_per_nu = neff / n_nu
+    tnu0 = NU_TO_CMB_TEMP_RATIO * tcmb0
+    kt_nu0_ev = K_BOLTZ_EV * tnu0
+    kt_nu0_ev_safe = kt_nu0_ev if kt_nu0_ev > 0.0 else 1.0
+    m_nu = np.asarray(m_nu_eV)
+    nu_y = (m_nu / kt_nu0_ev_safe) if kt_nu0_ev > 0.0 else np.zeros_like(m_nu)
 
-    # Integrand: dt/dz = 1 / (H(z) * (1+z)) [in units where H0=1]
-    integrand = 1.0 / (E_z * (1.0 + z_nodes))
+    def _nu_relative_density_np(z):
+        curr_nu_y = nu_y / (1.0 + z)[..., None]
+        rel_mass_per = (1.0 + (KOMATSU_NU_SHAPE_SCALE * curr_nu_y) ** KOMATSU_NU_SHAPE_INDEX) ** (
+            1.0 / KOMATSU_NU_SHAPE_INDEX
+        )
+        return NEUTRINO_FERMI_DIRAC_CORRECTION * neff_per_nu * rel_mass_per.sum(-1)
 
-    # Trapezoidal rule integration: integral 1/(E(z)*(1+z)) dz
-    # Result is proportional to age / H0
-    integrated = np.trapezoid(integrand, z_nodes)
+    onu0 = ogamma0 * float(_nu_relative_density_np(np.array([0.0]))[0])
+    Ode0 = 1.0 - Om0 - ogamma0 - onu0
 
-    # Multiply by Hubble time (in Gyr) to get age in Gyr
-    # hubble_time = 1 / H0 = 1 / (100*h km/s/Mpc) in Gyr units
-    # The constant 1e-16 converts the MPC/YEAR ratio to Gyr:
-    # 1e-16 * MPC / YEAR / h = Hubble time in Gyr
-    hubble_time_gyr = 1e-16 * MPC / YEAR / h
+    def _e_of_z_np(z):
+        zp1 = 1.0 + z
+        or_z = ogamma0 * (1.0 + _nu_relative_density_np(z))
+        de_z = (
+            Ode0 * (1.0 / zp1) ** (-3.0 * (1.0 + w0 + wa)) * np.exp(-3.0 * wa * (1.0 - 1.0 / zp1))
+        )
+        return np.sqrt(Om0 * zp1**3.0 + or_z * zp1**4.0 + de_z)
+
+    # age(0) = (1/H0) * integral_0^1 da / (a * E(z'(a))), a = 1/(1+z')
+    a_nodes = (1.0 + _GL_NODES_512_NP) / 2.0
+    z_prime = 1.0 / a_nodes - 1.0
+    integrand = 1.0 / (a_nodes * _e_of_z_np(z_prime))
+    integrated = np.sum(_GL_WEIGHTS_512_NP * integrand) * 0.5
+
+    # Multiply by Hubble time (in Gyr) to get age in Gyr: the same
+    # HUBBLE_TIME_GYR_H1 / h form _age_gyr_jax uses, so the host and JAX
+    # age functions stay numerically consistent rather than each pinned
+    # to a separately-derived unit conversion.
+    hubble_time_gyr = HUBBLE_TIME_GYR_H1 / h
     age_gyr = integrated * hubble_time_gyr
 
     return float(age_gyr)
@@ -660,12 +1289,17 @@ def age_at_z0(
     -------
     float
         Age of universe in Gyr.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import age_at_z0 as _dsps_age_at_z0
 
+    Notes
+    -----
+    Pure JAX implementation using 512-node Gauss-Legendre quadrature.
+    Includes radiation (photons + massive neutrinos) per
+    astropy.cosmology.Planck18 (#2517). Float32-safe in value and gradient
+    w.r.t. h (tested: tests/regression/test_cosmology_radiation_2517.py).
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    return _dsps_age_at_z0(c.Om0, c.w0, c.wa, c.h)
+    ogamma0, ode0 = _flat_density_params(c)
+    return _age_gyr_jax(0.0, c, ogamma0, ode0)
 
 
 def comoving_volume_element(
@@ -675,7 +1309,7 @@ def comoving_volume_element(
     *,
     cosmo: CosmoParams | None = None,
 ) -> float:
-    """Differential comoving volume element at redshift z in Mpc³/sr.
+    r"""Differential comoving volume element at redshift z in Mpc³/sr.
 
     This is the comoving volume element per unit solid angle per unit
     redshift: dV_c / (dz dΩ).
@@ -695,15 +1329,24 @@ def comoving_volume_element(
     -------
     float or array
         Comoving volume element in Mpc³/sr. Returns scalar if input is scalar.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import differential_comoving_volume
 
+    Notes
+    -----
+    Flat-FRW comoving volume element, dV_c/dz/dΩ = D_H D_C(z)² / E(z)
+    (Hogg 1999, astro-ph/9905116, eq. 28-29 at Ω_k=0), evaluated with the
+    same radiation-inclusive D_C(z)/E(z) as :func:`luminosity_distance`
+    (#2517) rather than DSPS's ``differential_comoving_volume``.
+    JIT/grad-safe: pure JAX operations.
+    """
     c = _cosmo_from_args(h0, om0, cosmo)
-    # differential_comoving_volume requires array input; ensure z is array
+    ogamma0, ode0 = _flat_density_params(c)
     z_arr = jnp.atleast_1d(z)
-    result = differential_comoving_volume(z_arr, c.Om0, c.w0, c.wa, c.h)
-    # Return scalar if input was scalar
+    dc_mpc = jnp.vectorize(lambda z_val: _comoving_distance_mpc_jax(z_val, c, ogamma0, ode0))(
+        z_arr
+    )
+    ez = _e_of_z(z_arr, c, ogamma0, ode0)
+    d_h_mpc = D_H100_MPC / c.h
+    result = d_h_mpc * dc_mpc**2.0 / ez
     return result[0] if jnp.ndim(z) == 0 else result
 
 
@@ -734,12 +1377,14 @@ def arcsec_per_kpc(
     -------
     float
         Angular scale in arcsec/kpc.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
-    c = _cosmo_from_args(h0, om0, cosmo)
-    da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    Notes
+    -----
+    Derived from :func:`angular_diameter_distance_mpc` (radiation-inclusive,
+    #2517) rather than DSPS's ``angular_diameter_distance_to_z``.
+    JIT/grad-safe: pure JAX operations.
+    """
+    da_mpc = angular_diameter_distance_mpc(z, h0, om0, cosmo=cosmo)
     # 206265 arcsec/radian, 1000 kpc/Mpc
     return 206265.0 / (da_mpc * 1000.0)
 
@@ -770,12 +1415,14 @@ def kpc_per_arcsec(
     -------
     float
         Physical scale in kpc/arcsec.
-    """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import angular_diameter_distance_to_z
 
-    c = _cosmo_from_args(h0, om0, cosmo)
-    da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    Notes
+    -----
+    Derived from :func:`angular_diameter_distance_mpc` (radiation-inclusive,
+    #2517) rather than DSPS's ``angular_diameter_distance_to_z``.
+    JIT/grad-safe: pure JAX operations.
+    """
+    da_mpc = angular_diameter_distance_mpc(z, h0, om0, cosmo=cosmo)
     # Inverse of arcsec_per_kpc
     return (da_mpc * 1000.0) / 206265.0
 
@@ -816,15 +1463,16 @@ def z_at_cosmic_time(
     float or array
         Redshift corresponding to the given cosmic time. Returns z_max
         for t < age(z_max), and 0 for t >= age(0).
+
+    Notes
+    -----
+    The lookup table is built from tengri's own radiation-inclusive
+    :func:`age_at_z` (#2517) rather than DSPS's ``age_at_z``, so the
+    inversion stays consistent with the age(z) it is inverting.
     """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import age_at_z as _dsps_age_at_z
-
-    c = _cosmo_from_args(h0, om0, cosmo)
-
     # Build lookup table: z_grid → t_grid (decreasing in t)
     z_grid = jnp.linspace(0.0, z_max, n_grid)
-    t_grid = _dsps_age_at_z(z_grid, c.Om0, c.w0, c.wa, c.h)
+    t_grid = age_at_z(z_grid, h0, om0, cosmo=cosmo)
 
     # t_grid is decreasing (age decreases with z). Flip for interp.
     t_flip = t_grid[::-1]  # now increasing
@@ -867,16 +1515,17 @@ def z_at_lookback_time(
     float or array
         Redshift corresponding to the given lookback time. Returns 0
         for t_lookback=0, z_max for t_lookback >= lookback(z_max).
+
+    Notes
+    -----
+    The lookup table is built from tengri's own radiation-inclusive
+    :func:`age_at_z` / :func:`age_at_z0` (#2517) rather than DSPS's, so the
+    inversion stays consistent with :func:`lookback_time`.
     """
-    with hold_x64_preference():
-        from dsps.cosmology.flat_wcdm import age_at_z, age_at_z0
-
-    c = _cosmo_from_args(h0, om0, cosmo)
-
     # Build lookup table: z_grid → t_lookback_grid (increasing)
     z_grid = jnp.linspace(0.0, z_max, n_grid)
-    t0 = age_at_z0(c.Om0, c.w0, c.wa, c.h)
-    t_age = age_at_z(z_grid, c.Om0, c.w0, c.wa, c.h)
+    t0 = age_at_z0(h0, om0, cosmo=cosmo)
+    t_age = age_at_z(z_grid, h0, om0, cosmo=cosmo)
     t_lookback_grid = t0 - t_age  # increasing with z
 
     return jnp.interp(t_lookback_gyr, t_lookback_grid, z_grid)

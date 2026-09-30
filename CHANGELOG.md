@@ -30,6 +30,13 @@
   than a membership list, so a newly registered backend fails the test until
   someone classifies it; a membership list would have stayed green through all
   six omissions.
+- WG00 attenuation now reaches the emission-line catalog (``predict_line_fluxes``,
+  ``predict_line_ratios``, line properties, ``predict_emission_lines``); previously
+  lines passed through unattenuated under dust type wg00 while the continuum and
+  SED-measured lines were attenuated. ``_line_dust_component`` now selects the dust
+  component by capability (``hasattr(c, "attenuate_line_catalog")``) instead of name,
+  enabling wg00 to publish attenuated lines on the same surfaces as single_component
+  and two_component. The mismatch broke joint-fit consistency for dust parameters (#2541).
 - The `profile_mass` linearity guard reports which of **three** kinds it
   measured — `proportional`, `affine` or `nonlinear` — where it previously
   answered only proportional-or-not. The distinction is load-bearing:
@@ -63,6 +70,7 @@
   `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
   exist — no longer silently falls back to the spec's own declared value.
 - Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+- `profile_mass="auto"` no longer engages when a user-supplied likelihood owns the data (any data type; previously only the line-flux case was refused, so the mass was profiled against the Fitter's placeholder data and the user's likelihood silently replaced in the mass direction), nor when a spectral covariance is used (#2509); `PrecompBiasWarning` now covers joint photometry+spectroscopy fits per channel and states the LUT forward bias when a user likelihood owns the data (#2510).
 - **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
   in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
   `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
@@ -87,6 +95,8 @@
   working spec and merges the fixed values (#2502).
 
 - Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
+- CloudyGrid, CB19 and MAPPINGS nebular backends no longer divide the Lyα luminosity by the escape/dust factor; Lyα is suppressed by `neb_fesc`/`neb_fdust` like every other recombination line, through one shared helper from the P-11 fix in cue.py (#2531, #743).
+- `compute_qh`'s docstring now states its actual input unit (L☉/Hz per M☉, converted in log space for float32 safety), matching `compute_qh_log10`; a test pins the contract (#2532).
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had
   zero effect and zero gradient on the DESI spectroscopy path). `observation/banded.py`
@@ -159,6 +169,12 @@
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
   `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
   configured ladder when provided and names the key in the error message (#2433).
+- The shipped DL07 template grids carry the published axes of Draine & Li
+  (2007): the U_min axis is the 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0,
+  20.0, 25.0; the files had labelled the last four columns 10, 12, 15, 20, so
+  U_min above 8 selected the neighbouring template and 25 was unreachable) and
+  the q_PAH axis carries only the seven MW3.1 nodes (no SMC/LMC2 grain models).
+  Spectra are unchanged; `dust_umin`'s prior widens to 25.0 (#2535, #2441).
 - Two AGN-NLR fallback defaults read their own parameter declarations instead of
   literals: the `gas_logn` fallbacks in `components/nebular/agn_nebular.py` read
   `declared_default(AGN_PARAMS, "agn_nlr_logn")` and the `neb_logU` fallback in
@@ -182,6 +198,17 @@
   attributes the Madau+1995 residual to line-wavelength conventions at the
   Lyman-series edges (vacuum 1025.72 Å vs rounded 1026 Å; 14.6% at z=3,
   21.1% at z=5, single node). The parity matrix's M4 bagpipes arm is closed.
+- `PLANCK18` includes radiation and massive-neutrino densities; D_L and age(z) match
+  astropy's Planck18 to < 1e-4 (previously +0.09 % at z=1, +0.21 % at z=10 in D_L)
+  (#2517). Every named cosmology (`PLANCK18`, `PLANCK15`, `WMAP5`) states its own
+  published Tcmb0/Neff/m_nu explicitly (`WMAP5`: Tcmb0=2.725 K, Neff=3.04, massless
+  neutrinos), matching astropy's Planck18/Planck15/WMAP5 to rtol 1e-6; `CosmoParams`'
+  field defaults are radiation-free (Tcmb0=0.0), so a user-built `CosmoParams(Om0=...,
+  w0=..., wa=..., h=...)` is unaffected by this fix unless it passes `Tcmb0` explicitly.
+  D_L and age(z), and their gradients with respect to z, Om0, and h, are all finite in
+  float32. `luminosity_distance_mpc` is exactly 0 at z = 0 (`distance_modulus` keeps
+  the 10 pc convention at its own log10), and the age of the universe that the SFH
+  age defaults derive from follows the same cosmology: 13.787 Gyr, where it was 13.81.
 - Unknown-name errors recognize citation keys and name the registry entry they
   cite (#2429): when a user provides a citation key (e.g., `charlot_fall2000`)
   instead of a registry name (e.g., `power_law`), the error message now
@@ -293,6 +320,21 @@
   count/scale-floor classification — the filter integral of a loaded filter
   cannot vanish by construction.
 
+- `conroy2010` is CCM89 with a scalable 2175 Å bump (`dust_bump_strength`), as in
+  Conroy et al. (2010) and FSPS `dust_type=1`; it was a sigmoid Cardelli/power-law
+  blend that over-attenuated the NIR by up to 3.3× and had no bump control.
+  `dust_slope` is no longer a parameter of this law. The curve carries the FSPS
+  continuity term on the near-UV segment (3.3 ≤ x < 5.9 μm⁻¹), so it is continuous
+  at x = 3.3 μm⁻¹ for any bump strength, and at bump strength 1 it differs from
+  `cardelli` by that term (up to 2×10⁻⁴). In the far-UV it follows FSPS as well:
+  the CCM89 cubic is evaluated to x = 12 μm⁻¹ (833 Å) and held constant beyond,
+  while `cardelli` holds it constant from x = 10 μm⁻¹ (1000 Å), the limit of the
+  range Cardelli et al. (1989) fitted. The two agree at 1000 Å and differ by a
+  factor 1.83 at and below 833 Å for R_V = 3.1 (1.92 for R_V = 2, 1.57 for
+  R_V = 5) (#2522).
+- `reddy15` is continuous at 0.6 µm (red-branch offset −0.0362, as in FSPS
+  `dust_type=6`) and constant below 1500 Å (#2523).
+- The li08 (c1–c4), noll09 and salim_sbl18 (UV-bump center and width) and tea (scatter) attenuation-law parameters are now declared and reachable through the grammar, and two_component forwards every law parameter on all screens (bc/diff previously dropped them silently) (#2542). **Breaking**: `li08`'s default is now the Li et al. (2008) Milky-Way (R_V=3.1) curve (c1..c4 = 14.4, 6.52, 2.04, 0.0519); the previous default and docstring presets did not correspond to the paper.
 - Shock line ratios are normalized over the populated grid cells, so
   `Hb_4861A` is 1.0 again (#2435): `shock_line_ratios` is documented to return
   ratios relative to Hbeta, but `components/nebular/shock.py` zeroed the
