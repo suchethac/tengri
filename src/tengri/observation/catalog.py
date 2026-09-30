@@ -8,21 +8,25 @@ resolution against :data:`~tengri.observation.filters.FILTER_REGISTRY`.
 Conventions for flagging censored data
 ---------------------------------------
 
-- Missing data: flux = -9999 **and** error = -9999 → masked out entirely
+- Missing data: either flux or error at sentinel value (-9999), or error = 0 → masked
+  out with huge noise (1e30)
 - Upper limit (CIGALE convention): positive flux + negative error → ``UPPER_LIMIT``
-- Lower limit: negative flux + positive error → ``LOWER_LIMIT``
+  with noise = |error|
+- Detection: any other case → ``DETECTED``, preserving signed flux and using positive
+  error as noise (negative flux with positive error is a faint detection, not a limit)
 
 """
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
 from tengri.observation.filters import FILTER_REGISTRY
-from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
+from tengri.observation.noise import DETECTED, UPPER_LIMIT
 
 MISSING_VALUE = -9999.0
 
@@ -90,11 +94,12 @@ class Catalog:
         Redshifts [dimensionless].
     flux : array, shape (n_galaxies, n_filters)
         Flux values [mJy or specified flux_unit].
-        For upper-limit bands, holds the limit value.
+        For detected bands, includes negative values when data fall below zero
+        (faint source, not a limit). For upper-limit bands, holds the limit value.
     noise : array, shape (n_galaxies, n_filters)
         1-sigma uncertainties (always positive) [mJy or specified flux_unit].
     mask : array, shape (n_galaxies, n_filters)
-        Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
+        Per-band type: 0 = detected, 1 = upper limit
         [dimensionless].
     filter_names : tuple of str
         Tengri filter names corresponding to flux columns.
@@ -279,10 +284,12 @@ def read_catalog(
     -----
     **Censoring convention**:
 
-    - Missing (both flux and error = -9999) → masked out with large noise (1e30)
-    - Upper limit (flux > 0, error < 0) → mask = 1
-    - Lower limit (flux < 0, error > 0) → mask = -1
-    - Detected (flux > 0, error > 0) → mask = 0
+    - Missing data (either flux or error at -9999, or error = 0) → masked out with
+      large noise (1e30), with a UserWarning naming the row and column (except for
+      the fully-sentinel pair -9999/-9999)
+    - Upper limit (flux > 0, error < 0, CIGALE convention) → mask = 1
+    - Detected (all other cases) → mask = 0, with signed flux preserved (negative
+      flux with positive error represents a faint detection, not a limit)
 
     Filter columns must have corresponding ``_err`` columns. Columns without
     an ``_err`` counterpart are silently skipped.
@@ -341,23 +348,33 @@ def read_catalog(
             f_val = float(row[flux_col])
             e_val = float(row[err_col])
 
-            is_missing = abs(f_val - missing_value) < 1.0 and abs(e_val - missing_value) < 1.0
+            # Check if either value is at the sentinel
+            flux_at_sentinel = abs(f_val - missing_value) < 1.0
+            err_at_sentinel = abs(e_val - missing_value) < 1.0
+            both_at_sentinel = flux_at_sentinel and err_at_sentinel
 
-            if is_missing:
+            # Branch (a): Missing data detection
+            if flux_at_sentinel or err_at_sentinel or e_val == 0 or (e_val < 0 and f_val <= 0):
                 flux[i, j] = 0.0
                 noise[i, j] = 1e30
                 mask[i, j] = DETECTED
+                # Warn for non-(−9999, −9999) cases
+                if not both_at_sentinel:
+                    warnings.warn(
+                        f"Missing data at row {rows[i].get('id', i)}, column {_name}: "
+                        f"flux={f_val}, error={e_val}",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+            # Branch (b): Upper limit (CIGALE convention: positive flux + negative error)
             elif e_val < 0 and f_val > 0:
                 flux[i, j] = f_val
                 noise[i, j] = abs(e_val)
                 mask[i, j] = UPPER_LIMIT
-            elif f_val < 0 and e_val > 0:
-                flux[i, j] = abs(f_val)
-                noise[i, j] = e_val
-                mask[i, j] = LOWER_LIMIT
+            # Branch (c): Detected (positive error)
             else:
-                flux[i, j] = f_val
-                noise[i, j] = abs(e_val) if e_val != 0 else 1e30
+                flux[i, j] = f_val  # Keep signed flux for detections
+                noise[i, j] = abs(e_val)
                 mask[i, j] = DETECTED
 
     return Catalog(

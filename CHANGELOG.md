@@ -12,6 +12,11 @@
 
 ### Fixed
 
+- `read_catalog`: a negative flux with a positive error is a detection with its
+  signed value (a faint source below zero), not a lower limit; a flux or error at
+  the −9999 sentinel, or an error of zero, masks the band with a `UserWarning`
+  naming the row and column; positive flux with negative error stays the
+  upper-limit convention (#2586).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
