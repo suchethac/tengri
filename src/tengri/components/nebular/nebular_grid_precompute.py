@@ -816,7 +816,7 @@ def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
 
     where :math:`Q_H` is the ionizing photon rate [photon/s] and :math:`k` the
     escape factor of
-    :func:`~tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor`
+    ``lyc_dust_escape_factor``
     [dimensionless].
 
     Parameters

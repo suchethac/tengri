@@ -515,6 +515,9 @@ def test_the_gradient_is_finite(views):
             assert np.all(np.isfinite(leaf)), (
                 f"{case_name} {pname}: gradient contains non-finite values"
             )
+        assert any(bool(np.any(np.asarray(leaf) != 0.0)) for leaf in leaves), (
+            f"{case_name} {pname}: gradient is identically zero, the fit surface would be flat"
+        )
 
     print(f"{case_name}: gradients finite at young_dusty, old_dusty, young_thin")
 

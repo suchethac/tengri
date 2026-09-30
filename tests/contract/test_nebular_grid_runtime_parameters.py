@@ -276,10 +276,16 @@ def test_total_photon_loss_gives_no_nebular_emission(ssp):
     assert all(
         bool(jnp.all(jnp.isfinite(leaf))) for leaf in jax.tree_util.tree_leaves(grad_at_one)
     )
+    assert any(bool(jnp.any(leaf != 0.0)) for leaf in jax.tree_util.tree_leaves(grad_at_one)), (
+        "gradient non-zero at neb_fesc = 1: escaping fraction moves photometry"
+    )
 
     grad_at_half = grad_fast({**p, "neb_fesc": 0.5})
     assert all(
         bool(jnp.all(jnp.isfinite(leaf))) for leaf in jax.tree_util.tree_leaves(grad_at_half)
+    )
+    assert any(bool(jnp.any(leaf != 0.0)) for leaf in jax.tree_util.tree_leaves(grad_at_half)), (
+        "gradient non-zero at neb_fesc = 0.5: escaping fraction moves photometry"
     )
 
 
@@ -302,6 +308,8 @@ def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp):
     g_fesc_fast = g_fast.get("neb_fesc", 0.0)
     g_fesc_exact = g_exact.get("neb_fesc", 0.0)
 
+    assert np.isfinite(float(g_fesc_fast)), "grid gradient wrt neb_fesc not finite"
+    assert np.isfinite(float(g_fesc_exact)), "exact gradient wrt neb_fesc not finite"
     assert float(g_fesc_fast) != 0.0
     assert float(g_fesc_exact) != 0.0
     np.testing.assert_allclose(g_fesc_fast, g_fesc_exact, rtol=_RTOL_GRAD)
