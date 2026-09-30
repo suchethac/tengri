@@ -4,14 +4,16 @@
 ``project_spectrum_kernel_split`` in ``src/tengri/observation/observation.py``
 is the single function that decides which SED components get the stellar
 kernel and which get the instrument-only kernel, and how ``lsf_scale``
-enters. Three surfaces call it (directly, or through
+enters. Four surfaces call it (directly, or through
 ``Observation.predict``): the eager orchestrator path
 (``SEDModel._spectrum_via_state``), the arbitrary-grid projector
 (``SEDModel._predict_spectrum_on_grid``, reached by
-``predict_spectrum(params, wave_obs=...)``), and the compiled
+``predict_spectrum(params, wave_obs=...)``), the compiled
 ``predict_observables`` kernel (reached by ``predict_spectrum(params)`` when
-a spectroscopy channel is configured). A model whose free parameters are
-identical across all three, evaluated on the same pixel grid, must predict
+a spectroscopy channel is configured), and the cached-``ForwardState``
+accessor (``Prediction.spectrum()``, reached by
+``model.predict(params).spectrum()``). A model whose free parameters are
+identical across all four, evaluated on the same pixel grid, must predict
 the same spectrum from any of them.
 """
 
@@ -79,12 +81,17 @@ def _params(model, sigma_v, lsf_scale):
     return p
 
 
-def _three_paths(model, params, wave_obs):
-    """The eager, arbitrary-grid, and compiled-kernel surfaces, on one grid."""
+def _four_paths(model, params, wave_obs):
+    """The eager, arbitrary-grid, compiled-kernel, and Prediction accessor
+    surfaces, on one grid.
+    """
     flux_eager = model._spectrum_via_state(params, wave_obs=wave_obs)
     flux_grid = model.predict_spectrum(params, wave_obs=wave_obs)
     flux_jit = model.predict_spectrum(params)  # configured grid IS wave_obs
-    return flux_eager, flux_grid, flux_jit
+    pred = model.predict(params)
+    flux_pred = pred.spectrum()  # configured grid IS wave_obs
+    flux_pred_grid = pred.spectrum(wave_obs=wave_obs)
+    return flux_eager, flux_grid, flux_jit, flux_pred, flux_pred_grid
 
 
 @pytest.mark.parametrize("neb_type", ["cue", "none"])
@@ -100,14 +107,16 @@ def test_gaussian_lsf_paths_agree_to_1e10(sigma_v, lsf_scale, neb_type):
     model = _build_model(ssp, neb, wave_obs, resolution=3000.0)
     p = _params(model, sigma_v, lsf_scale)
 
-    flux_eager, flux_grid, flux_jit = _three_paths(model, p, wave_obs)
+    flux_eager, flux_grid, flux_jit, flux_pred, flux_pred_grid = _four_paths(model, p, wave_obs)
     chex.assert_trees_all_close(flux_eager, flux_grid, rtol=1e-10, atol=0.0)
     chex.assert_trees_all_close(flux_eager, flux_jit, rtol=1e-10, atol=0.0)
+    chex.assert_trees_all_close(flux_eager, flux_pred, rtol=1e-10, atol=0.0)
+    chex.assert_trees_all_close(flux_eager, flux_pred_grid, rtol=1e-10, atol=0.0)
 
 
 @pytest.mark.parametrize("sigma_v", [0.0, 300.0])
 def test_banded_path_agrees_across_surfaces(sigma_v):
-    """Banded resolution-matrix path: same #2519 split, same three-way agreement.
+    """Banded resolution-matrix path: same #2519 split, same four-way agreement.
 
     The stellar piece is broadened by sigma_v before ``R @ model`` (the
     matrix carries no galaxy-kinematics term of its own, #2506); the
@@ -121,9 +130,11 @@ def test_banded_path_agrees_across_surfaces(sigma_v):
     model = _build_model(ssp, neb, wave_obs, resolution=None, resolution_matrix=bm)
     p = _params(model, sigma_v, 1.0)
 
-    flux_eager, flux_grid, flux_jit = _three_paths(model, p, wave_obs)
+    flux_eager, flux_grid, flux_jit, flux_pred, flux_pred_grid = _four_paths(model, p, wave_obs)
     chex.assert_trees_all_close(flux_eager, flux_grid, rtol=1e-10, atol=0.0)
     chex.assert_trees_all_close(flux_eager, flux_jit, rtol=1e-10, atol=0.0)
+    chex.assert_trees_all_close(flux_eager, flux_pred, rtol=1e-10, atol=0.0)
+    chex.assert_trees_all_close(flux_eager, flux_pred_grid, rtol=1e-10, atol=0.0)
 
 
 def test_lsf_scale_excluded_from_banded_path():

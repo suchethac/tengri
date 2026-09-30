@@ -5244,6 +5244,37 @@ class SEDModel:
             return float(dist.bounds[0])
         return 1.0
 
+    def _observation_predict_kwargs(self, params):
+        """LSF/kinematics kwargs for ``Observation.predict``'s spectroscopy path.
+
+        Single source of truth for the six ``lsf_*``/``sigma_v_kms`` keyword
+        arguments, so every caller that projects a spectrum through
+        ``Observation.predict`` (:meth:`_spectrum_via_state` and
+        :meth:`~tengri.forward.prediction.Prediction.spectrum`) resolves them
+        identically instead of each caller re-deriving its own subset.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict — the shape :meth:`_get_sigma_v_kms` and
+            :meth:`_get_lsf_scale` expect (checked via ``"key" in params``
+            before falling back to the spec's fixed value).
+
+        Returns
+        -------
+        dict
+            ``sigma_v_kms``, ``lsf_resolution``, ``lsf_sigma_lib_kms``,
+            ``lsf_sigma_lib_curve``, ``lsf_n_bins``, ``lsf_scale``.
+        """
+        return {
+            "sigma_v_kms": self._get_sigma_v_kms(params),
+            "lsf_resolution": self._lsf_resolution,
+            "lsf_sigma_lib_kms": self._sigma_lib_kms,
+            "lsf_sigma_lib_curve": self._sigma_lib_curve_for(self.ssp_data),
+            "lsf_n_bins": self._lsf_n_bins,
+            "lsf_scale": self._get_lsf_scale(params),
+        }
+
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
     def _compute_sfr(self, p):
@@ -8684,12 +8715,7 @@ class SEDModel:
             state,
             full,
             wave_obs=wave_obs,
-            sigma_v_kms=self._get_sigma_v_kms(params),
-            lsf_resolution=self._lsf_resolution,
-            lsf_sigma_lib_kms=self._sigma_lib_kms,
-            lsf_sigma_lib_curve=self._sigma_lib_curve_for(self.ssp_data),
-            lsf_n_bins=self._lsf_n_bins,
-            lsf_scale=self._get_lsf_scale(params),
+            **self._observation_predict_kwargs(params),
         )["spec_fnu"]
 
     def predict_photometry_components(self, params):
