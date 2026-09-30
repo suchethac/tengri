@@ -260,7 +260,7 @@ def test_feature_precomp_serves_dusty_photometry_within_the_parity_bound(
     )
     print(
         f"  {composition}: worst relative shift {worst_rel:.4e} "
-        f"(3.18e-5 / 3.18e-5 / 1.48e-4 per {_BANDS})"
+        f"(per-band rel={[f'{x:.2e}' for x in rel.tolist()]} on {_BANDS})"
     )
 
     # Energy-budget terms must be bit-identical (the full-state path resets the dust flag)
