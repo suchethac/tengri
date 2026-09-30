@@ -25,11 +25,11 @@ import jax.numpy as jnp
 import pytest
 from jax import grad
 
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._recombination_coeffs import (
     ALPHA_1,
     ALPHA_B,
     lyc_dust_escape_factor,
-    lyc_shares,
 )
 
 pytestmark = pytest.mark.contract

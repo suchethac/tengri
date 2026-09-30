@@ -111,8 +111,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
-from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor, lyc_shares
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,

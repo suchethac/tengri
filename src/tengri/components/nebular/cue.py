@@ -112,8 +112,9 @@ import numpy as np
 from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
-from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor, lyc_shares
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
     interp_continuum_with_freefree_tail,

@@ -167,8 +167,9 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
-from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor, lyc_shares
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _qh_bilinear,
     apply_lya_escape,

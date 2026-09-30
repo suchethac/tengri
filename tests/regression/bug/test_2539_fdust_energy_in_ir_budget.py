@@ -94,7 +94,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.dust.two_component import _young_indicator
-from tengri.components.nebular._recombination_coeffs import lyc_shares
+from tengri.components.lyc import lyc_shares
 from tengri.forward.energy_balance import log10_add_fdust_credit, log10_fdust_lyc_credit
 from tengri.utils.physics_constants import C_AA
 

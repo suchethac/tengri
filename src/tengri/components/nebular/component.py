@@ -26,8 +26,8 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
-from tengri.components.nebular._recombination_coeffs import lyc_shares
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
