@@ -1541,16 +1541,18 @@ class DustSEDComponent(TemplateThreading):
             # This is EXACT, not the K-point convergent form the stellar continuum
             # uses (#1122): ``sed_neb_attenuated`` is the reddened continuum on the
             # full grid, so its band integral is the answer ``predict()`` computes.
-            # Affordable for the same reason it is needed: a dusty model already
-            # materializes the nebular continuum (``DustSEDComponent`` declares
-            # ``sed_nebular`` an input, which is what disarms the fast nebular grid,
-            # #1281/#1748), so the dense array is already live in the compiled graph
-            # and no dead-code elimination is given up. Where it is NOT materialized
-            # there is no dust consumer, hence no screen, hence nothing to correct.
-            # Guarded on the bucket this term REPLACES, not on the continuum it reads.
-            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular``: as
-            # zeros: so keying off the continuum does not discriminate, and the
-            # projection READS the dense grid: on a dust-only model it resurrects the
+            # Affordable for the same reason it is needed: a dusty model that cannot
+            # take the nebular from the grid already materializes the nebular
+            # continuum (``DustSEDComponent`` declares ``sed_nebular`` an input, which
+            # sets ``must_materialize_sed`` per #1281/#1748), so the dense array is
+            # already live in the compiled graph and no dead-code elimination is given
+            # up. Where it is NOT materialized there is no dust consumer, hence no
+            # screen, hence nothing to correct. A dust component that CAN take the
+            # nebular from the grid does not declare it as an input. Guarded on the
+            # bucket this term REPLACES, not on the continuum it reads. A
+            # ``neb={'type': 'none'}`` model still publishes ``sed_nebular``: as zeros:
+            # so keying off the continuum does not discriminate, and the projection
+            # READS the dense grid: on a dust-only model it resurrects the
             # full-resolution chain XLA had eliminated, measured at 197,365 ->
             # 1,285,037 gradient FLOPs (6.5x). That elimination is the entire point of
             # the LUT (#1109), and spending it to integrate zeros is the worst

@@ -557,10 +557,11 @@ class NebularSEDComponent(TemplateThreading):
         Returns
         -------
         ForwardState
-            New state with ``derived["sed_nebular"]`` and
-            ``derived["sed_shock"]`` always populated (zeros for the
-            non-active branch), and (for non-BakedIn backends)
-            ``sed_intrinsic`` updated to include the active emission.
+            New state with ``derived["sed_nebular"]`` and ``derived["sed_shock"]``
+            populated (zeros for the non-active branch), except when the grid
+            serves nebular emission with dust channels, where ``derived["sed_shock"]``
+            is absent. ``sed_intrinsic`` is updated to include the active emission
+            for non-BakedIn backends.
         """
         # NOTE: do not publish ``self.config.backend`` (a Python string)
         # to ``state.derived``: strings are not JAX leaves and break

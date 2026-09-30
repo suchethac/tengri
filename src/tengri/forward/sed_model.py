@@ -170,9 +170,11 @@ def _nebular_continuum_consumers(chain):
     **The single expression that decides whether the fast nebular grid may serve
     photometry.** Serving photometry from the per-Q_H grid requires zeroing
     ``sed_nebular``, so it is available only when nothing downstream reads the
-    continuum. A dust component that cannot take the nebular from the grid
-    disarms the shortcut; one that can is excluded by the caller before this
-    census reaches ``must_materialize_sed``.
+    continuum. A dust component that takes the nebular from the grid does not
+    count as a continuum consumer and is excluded before this; one that cannot
+    (no stellar energy-balance LUT: a free attenuation-curve shape, WG00, a free
+    redshift with a redshift-reading law) sets ``must_materialize_sed`` and the
+    grid serves line fluxes only.
 
     Extracted so that the code which *acts* on it
     (:meth:`SEDModel.enable_fast_nebular`) and the code which *advises about it*
@@ -2256,22 +2258,16 @@ def feature_lut_serves_line_channel(model) -> bool:
 
     Notes
     -----
-    A Cue-like backend returns **False**. Its ``FeaturePrecomp`` builds the per-Q_H
-    grid, whose only consumer is the photometry shortcut; the line fluxes still go
-    through ``predict_line_fluxes``, which rebuilds the state either way. Callers
-    that want to know whether a Cue model gains anything must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. Measured on a
-    dusty Cue model with 4 bands and 3 line fluxes: appending ``FeaturePrecomp``
-    leaves the objective's gradient at 58,497,272 FLOPs either way -- and the two
-    lowerings are *byte-identical*, the same SHA-256 over 4,206,172 characters of
-    StableHLO and again over the optimized HLO, so this is not FLOP-count
-    coincidence but the same program. It is not free: the attachment costs a 7.2 s
-    ``enable_fast_nebular`` build, and :meth:`SEDModel.compile_signature` differs on
-    ``_approx_config_feature`` and ``_nebular_grid_table`` where the graph does not,
-    forcing an in-process re-trace. The on-disk JAX cache keys on the HLO, so it
-    dedupes rather than storing a second entry. Measured 1.565 s -> 4.276 s of
-    ``fit()`` wall clock on a 60-step MAP fit, for an identical 0.019 s compiled
-    step.
+    A Cue-like backend returns **False** because its line-flux service comes through
+    a different route: the per-Q_H grid with dust channels, which does not set the
+    ``_fast_line_measurement`` flag that this predicate screens for. For a dusty Cue
+    model with a dust component that takes the nebular from the grid (has a stellar
+    energy-balance LUT), the grid serves line fluxes from the dust-channel table,
+    providing significant performance benefit. For dust that cannot (no stellar
+    energy-balance LUT), the line fluxes go through ``predict_line_fluxes``, which
+    rebuilds the state either way. Callers that want to know whether a Cue model
+    gains any leverage at all must ask :func:`~tengri.inference.fitter.fast_nebular_can_engage`
+    instead.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -6670,11 +6666,13 @@ class SEDModel:
                 # Which is why it went unnoticed on the default ``approx='auto'``
                 # path for every dusty fit with a discrete-catalog backend.
                 #
-                # Only a dusty chain reaches here with a grid: dust sets
-                # ``must_materialize_sed``, which disarms ``use_grid`` and so leaves
-                # the nebular component publishing the attenuated catalog (#1281).
-                # A dust-free model publishes none, takes the fallback screen above,
-                # and was never affected.
+                # Only a dusty chain reaches here with a grid: dust that cannot take
+                # the nebular from the grid (no stellar energy-balance LUT: a free
+                # attenuation-curve shape, WG00, a free redshift with a redshift-reading
+                # law) sets ``must_materialize_sed``, preventing the grid from serving
+                # photometry and leaving the nebular component to publish the attenuated
+                # catalog (#1281). A dust-free model publishes none, takes the fallback
+                # screen above, and was never affected.
                 # The attenuated catalog is published in log10 (#1859). Powering it
                 # back to ~1e40 erg/s here was the overflow: it is ``inf`` in
                 # float32 before the distance division ever runs. Carry the log.
@@ -6849,6 +6847,26 @@ class SEDModel:
         which filter wavelengths the grid tabulates, introducing worst-case band
         errors of 7.35e-2 if applied. Constrain redshift to a fixed value to
         enable grid-served photometry.
+
+        **Known limitations.**
+
+        * When a dust component takes the nebular emission from the grid (has a
+          stellar energy-balance LUT), its dust-channel fields are published:
+          observed and rest-frame sub-band nebular photometry, flux-weighted
+          wavelength, and dust-absorbed nebular luminosity per unit Q_H. Only
+          models where all dust components either take the nebular from the grid
+          or are absent are supported; free attenuation-curve shape, WG00, or a
+          free redshift with a redshift-reading law are not.
+        * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
+          (computed per-galaxy from parameters), not at table build (which uses
+          zero for both); every other free nebular parameter held at the build
+          value (``neb_fesc_lya``, ``ionspec_*``, ``gas_*``, ``neb_eline_sigma_kms``,
+          ``neb_log_nH``, ``neb_co``, ``neb_dno``, ``neb_hbfrac``) is refused by
+          enumeration of the namespace.
+        * The grid holds the ionizing spectrum shape at the reference star
+          formation history. For a population with no recent star formation and
+          zero birth-cloud optical depth the worst-case u-band errors are 3.9e-3
+          (configuration I) and 1.1e-2 (configuration II) over 32 prior draws.
 
         **JIT-compatible**: the resulting :meth:`predict_photometry` /
         :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid

@@ -543,12 +543,12 @@ def fast_nebular_can_engage(model) -> bool:
 
     * **Photometry**: served from a per-Q_H grid, which requires zeroing
       ``sed_nebular``. That is only permitted when nothing downstream reads the
-      continuum. A dust component reads it, unless it takes the nebular from the
-      grid instead, which it can whenever the stellar energy-balance LUT exists.
-      A dust component whose LUT is absent (shape-free attenuation, WG00, a free
-      redshift with a redshift-reading law) disarms the shortcut. That is what
-      this predicate reports, and why #1748 stopped attaching the config for a
-      photometry-only fit on such a model.
+      continuum. A dust component that takes the nebular from the grid does not
+      count as a continuum consumer and is excluded before this; one that cannot
+      (no stellar energy-balance LUT: a free attenuation-curve shape, WG00, a free
+      redshift with a redshift-reading law) sets ``must_materialize_sed`` and the
+      grid serves line fluxes only. That is what this predicate reports, and why
+      #1748 stopped attaching the config for a photometry-only fit on such a model.
     * **A line channel**: served by supplying the line fluxes from the table, so
       ``loss_functions`` need not set ``needs_state=True`` and rebuild the
       full-grid SED through ``predict_state`` on every likelihood evaluation.
@@ -1062,22 +1062,26 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
             #
-            # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
-            # that reads ``sed_nebular`` (anything with dust) disarms the grid's
-            # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
-            # while still changing ``compile_signature()``. Batch surfaces pay that
-            # per resolved clone, so skipping it here is the larger of the two wins.
-            # The "dominant lever" numbers above were measured on the pre-gate tree
-            # and hold only for a model with no ``sed_nebular`` consumer.
+            # #1748: and only when the fast path can ENGAGE. Since #1281 a dust
+            # component that cannot take the nebular from the grid (no stellar
+            # energy-balance LUT: a free attenuation-curve shape, WG00, a free
+            # redshift with a redshift-reading law) sets ``must_materialize_sed`` and
+            # disarms the grid's photometry shortcut. A dust component that CAN take
+            # the nebular from the grid does not count as a continuum consumer and is
+            # excluded before this check. The top-up is bit-identical in compiled
+            # FLOPs while still changing ``compile_signature()``. Batch surfaces pay
+            # that per resolved clone, so skipping it here is the larger of the two
+            # wins. The "dominant lever" numbers above were measured on a model with
+            # no dust at all.
             #
-            # ...unless a LINE channel is present, which is the other thing the LUT
-            # serves and which dust does not disarm. #1775 drew that distinction on
-            # the single-galaxy resolver and left this one gated, so the two
-            # surfaces disagreed on exactly one cell of the channel matrix, a
-            # dusty catalog fit that carries line fluxes kept refusing the LUT that
-            # the same model got as a single-galaxy fit. ``data_type`` names the
-            # primary data array here, not the channel set, so "photometry" does
-            # not mean "no lines" (#1770). (#2377)
+            # ...unless a LINE channel is present, which the LUT serves even when
+            # dust with a stellar energy-balance LUT takes the nebular from the grid.
+            # #1775 drew that distinction on the single-galaxy resolver and left this
+            # one gated, so the two surfaces disagreed on exactly one cell of the
+            # channel matrix, a dusty catalog fit that carries line fluxes kept
+            # refusing the LUT that the same model got as a single-galaxy fit.
+            # ``data_type`` names the primary data array here, not the channel set,
+            # so "photometry" does not mean "no lines" (#1770). (#2377)
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
@@ -1960,11 +1964,14 @@ class Fitter:
         #
         # No ``fast_nebular_can_engage`` gate here, deliberately (#1770). That
         # predicate answers whether the grid may serve PHOTOMETRY without
-        # materializing ``sed_nebular``, which dust disarms (#1748/#1281). This
-        # branch serves a LINE channel, where the LUT's value is that the line
-        # fluxes come from the table instead of ``needs_state=True`` forcing a
-        # full-grid ``predict_state`` per likelihood, dust does not touch that.
-        # Gating it here cost a measured 4.77x on every dusty line-flux fit.
+        # materializing ``sed_nebular``: a dust component that cannot take the
+        # nebular from the grid (no stellar energy-balance LUT) sets
+        # ``must_materialize_sed`` (#1748/#1281). This branch serves a LINE channel,
+        # where the LUT's value is that the line fluxes come from the table instead
+        # of ``needs_state=True`` forcing a full-grid ``predict_state`` per
+        # likelihood. A dust component that CAN take the nebular from the grid does
+        # not touch that line service. Gating it on photometry-engagement cost a
+        # measured 4.77x on every dusty line-flux fit.
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
@@ -2128,9 +2135,10 @@ class Fitter:
                 and not self._fits_lines(model)
                 and not _has_line_adjacent_channel(model)
                 # #1748: and only when the grid can actually serve photometry. A
-                # chain that reads ``sed_nebular`` (anything with dust) disarms
-                # the shortcut since #1281, making this append bit-identical in
-                # compiled FLOPs while still changing ``compile_signature()``.
+                # dust component that cannot take the nebular from the grid (no
+                # stellar energy-balance LUT) sets ``must_materialize_sed`` and
+                # disarms the shortcut since #1281, making this append bit-identical
+                # in compiled FLOPs while still changing ``compile_signature()``.
                 # This branch appends the config directly rather than through
                 # ``_add_feature_precomp``, so it needs the predicate of its own;
                 # guarding only the helper left this path attaching it anyway.

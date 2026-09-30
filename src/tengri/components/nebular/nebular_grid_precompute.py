@@ -30,7 +30,15 @@ log10-luminosity space, so the reconstruction is exact at grid nodes,
 JIT/gradient-safe, and free of the smoothing bias a kernel smoother introduces on
 the steeply logU-varying lines. The ionizing-spectrum shape is
 **not** a grid axis: it is carried by the ``met_logzsol`` axis (SFH-independent
-to ~0.2 %; #1018). See issue #950.
+to ~0.2 %; #1018).
+
+When a dust component takes the nebular emission from the grid (has a stellar
+energy-balance LUT), the grid includes dust-channel fields: observed and
+rest-frame sub-band nebular photometry, flux-weighted wavelength per sub-band,
+and dust-absorbed nebular luminosity per unit Q_H on the optical-depth grid
+(signed to preserve the dust screen's direction of integration).
+
+See issue #950.
 """
 
 from __future__ import annotations
@@ -62,10 +70,11 @@ from tengri.utils.scale import apply_log10_scale, pow10
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
-#: conditions. ``neb_fesc`` stays fixed (it rescales the escaping continuum, not
-#: a smooth interpolation axis) and the ionizing-spectrum params are SSP-derived.
-#: ``neb_logU`` also joins the axes whenever DIG mixing could be active, even
-#: when it is itself Fixed (#2222): see ``_dig_may_be_active``.
+#: conditions. ``neb_fesc`` and ``neb_fdust`` are applied at reconstruction
+#: (table built at zero for both, every channel scaled by ``lyc_dust_escape_factor``),
+#: and the ionizing-spectrum params are SSP-derived. ``neb_logU`` also joins the
+#: axes whenever DIG mixing could be active, even when it is itself Fixed (#2222):
+#: see ``_dig_may_be_active``.
 _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 
 #: Nebular parameters applied at reconstruction as one scalar on every channel
@@ -233,6 +242,13 @@ _DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
 @dataclasses.dataclass(frozen=True)
 class NebularGridTable:
     """Adaptive-axis grid of per-Q_H line luminosities for variable ionization.
+
+    A dust component that takes the nebular emission from the grid populates these
+    dust-channel fields: ``log_phot_subband_per_qh``, ``phot_subband_waves_rest``,
+    ``log_restband_subband_per_qh``, ``restband_subband_waves_rest``,
+    ``eb_absorbed_per_qh`` (signed), ``eb_tau_a_grid``, and ``eb_tau_b_grid``. The
+    energy-balance channel is signed to preserve the dust screen's direction of
+    integration.
 
     Attributes
     ----------
