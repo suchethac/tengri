@@ -332,39 +332,109 @@ def _build_selection(category: str, block_type: str) -> dict[str, str]:
     return selection
 
 
-def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
-    """Assert the loud empty-scope signal and skip, when the scope IS empty.
+def _priorless_agn_names() -> frozenset[str]:
+    """``agn_*`` names whose DECLARATION gives ``FREE`` nothing to resolve to.
 
-    Every surface that builds an ``all_params: FREE`` wildcard over a
-    (category, type) whose declared set is empty has to go through
-    :func:`_expect_empty_scope`, not merely leave the no-op unasserted, and
-    after PR #2207 building such a wildcard raises instead of warning.
-    Routing every surface through the one helper keeps that flip a
-    single-line change here.
+    Derived from :data:`tengri.components.agn._params.PARAMS`, never listed by
+    hand: a parameter declared without a ``free_prior`` whose registry default
+    is a ``Fixed`` scalar stays pinned under ``all_params: FREE`` by design
+    (``ParamDeclaration.free_prior``: ``None`` means "no defensible range
+    declared"; ``FREE`` then refuses rather than invent one). Such a name is an
+    intended exception to "every owned-and-live parameter is freed by the
+    wildcard". Today that is ``agn_grahsp_a_bc`` among others (the GRAHSP
+    paper's abstract, arXiv:2405.19297, carries no ABC range).
+    """
+    from tengri.components.agn._params import PARAMS
 
-    Which pairs are empty is **measured, not listed** -- the emptiness of a
+    return frozenset(d.name for d in PARAMS if d.free_prior is None and d.prior.is_fixed)
+
+
+def freeable_scope(category: str, block_type: str) -> frozenset[str]:
+    """The names ``category``'s wildcard can actually FREE for ``block_type``.
+
+    The declared scope minus :func:`_priorless_agn_names`, under the selection
+    :func:`_build` produces.
+    """
+    declared = _agn_subblock_declared_params(
+        category, block_type, selection=_build_selection(category, block_type)
+    )
+    return frozenset(declared or ()) - _priorless_agn_names()
+
+
+def assert_wildcard_refuses_if_nothing_freeable(build_fn, *, category: str, block_type: str) -> bool:
+    """Assert the loud no-op signal when the wildcard can free nothing.
+
+    Two cases, both ending in ``ParameterError`` since #2187 / PR #2207:
+
+    * the declared scope is EMPTY -- "covers no parameters";
+    * the declared scope is non-empty but holds ONLY parameters whose
+      declaration has no ``free_prior`` (:func:`_priorless_agn_names`) --
+      "freed 0 of N parameters", and the message must NAME every one of them.
+
+    Which pairs qualify is **measured, not listed** -- the emptiness of a
     scope moves with the ownership partition and with the companion rules
     (R33/R36), and the selection this file pins decides some of them, so a
     written list goes stale silently and reads as a contract the code never
     checks. Measured today, for the record only: ``torus/qsogen``,
-    ``nlr/grahsp``, ``blr/grahsp``, ``blr/qsogen``. (``atten/qsogen_smc``,
-    listed here through round 2, has owned a parameter since R34 gave it
-    ``agn_ebv``.)
+    ``nlr/grahsp``, ``blr/qsogen`` (empty) and ``blr/grahsp`` (only the
+    prior-less ``agn_grahsp_a_bc``).
 
-    Returns ``True`` after asserting and skipping is not possible (it raises
-    ``Skipped``); ``False`` when the scope is non-empty and the caller should
-    build normally.
+    Returns ``True`` after asserting the refusal, ``False`` when the wildcard
+    can free something and the caller should build normally.
     """
-    if _agn_subblock_declared_params(
+    if freeable_scope(category, block_type):
+        return False
+    declared = _agn_subblock_declared_params(
         category, block_type, selection=_build_selection(category, block_type)
+    )
+    if declared:
+        _expect_only_priorless_scope(
+            build_fn, category=category, block_type=block_type, names=declared
+        )
+    else:
+        _expect_empty_scope(build_fn, category=category, block_type=block_type)
+    return True
+
+
+def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
+    """:func:`assert_wildcard_refuses_if_nothing_freeable`, then skip.
+
+    Every surface that builds an ``all_params: FREE`` wildcard over such a
+    (category, type) has to go through one of the two, not merely leave the
+    no-op unasserted. Returns ``False`` (no skip) when something is freeable.
+    """
+    if not assert_wildcard_refuses_if_nothing_freeable(
+        build_fn, category=category, block_type=block_type
     ):
         return False
-    _expect_empty_scope(build_fn, category=category, block_type=block_type)
     pytest.skip(
-        f"{category}/{block_type}: declared scope is empty; the loud no-op "
-        f"signal is the whole contract here, so there is nothing to measure."
+        f"{category}/{block_type}: the wildcard can free nothing; the loud "
+        f"ParameterError is the whole contract here, so there is nothing to measure."
     )
     return True  # pragma: no cover - pytest.skip raises
+
+
+def _expect_only_priorless_scope(build_fn, *, category: str, block_type: str, names) -> None:
+    """Assert the #2187 refusal for a wildcard covering ONLY prior-less names."""
+    import re
+
+    from tengri.config.exceptions import ParameterError
+
+    priorless = _priorless_agn_names()
+    assert set(names) <= priorless, (
+        f"{category}/{block_type}: expected an all-prior-less scope, got {sorted(set(names) - priorless)} too"
+    )
+    try:
+        with pytest.raises(
+            ParameterError, match=rf"freed 0 of {len(names)} parameters in group 'agn\.{category}'"
+        ) as info:
+            build_fn()
+    except (TengriIOError, FileNotFoundError) as exc:
+        _maybe_skip_grid_gated(category, block_type, exc)
+    for name in names:
+        assert re.search(rf"\b{re.escape(name)}\b", str(info.value)), (
+            f"{category}/{block_type}: ParameterError does not name {name!r}: {info.value}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -378,22 +448,24 @@ def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_t
     # agn_fe2_strength, so the feii sub-block's wildcard legitimately claims it
     # here (R33: the companion is conditioned on the selected BLR block, which
     # is why the selection has to be passed rather than assumed).
-    expected = _agn_subblock_declared_params(
+    declared = _agn_subblock_declared_params(
         category, block_type, selection=_build_selection(category, block_type)
     )
-    assert expected is not None, (
+    assert declared is not None, (
         f"{category}/{block_type}: _agn_subblock_declared_params returned None "
         f"(type not found in AGN_BLOCKS -- should not happen for a grammar-"
         f"validated type)."
     )
-
-    if not expected:
-        _expect_empty_scope(
-            lambda: _build(ssp, obs, category, block_type, all_params=FREE),
-            category=category,
-            block_type=block_type,
-        )
+    # A declared name whose declaration has no free_prior stays pinned by
+    # design (intended exception); when EVERY declared name is such (or none is
+    # declared) the wildcard refuses loudly and there is nothing to measure.
+    if assert_wildcard_refuses_if_nothing_freeable(
+        lambda: _build(ssp, obs, category, block_type, all_params=FREE),
+        category=category,
+        block_type=block_type,
+    ):
         return
+    expected = freeable_scope(category, block_type)
 
     try:
         model = _build(ssp, obs, category, block_type, all_params=FREE)
@@ -491,9 +563,10 @@ def test_describe_agn_block_params_match_wildcard_scope(ssp, obs, category, bloc
         f"{category}/{block_type}: describe_agn_block params {sorted(described)} "
         f"!= the isolation-scoped declared set {sorted(isolated)}"
     )
-    assert free_agn == build_scoped, (
+    assert free_agn == build_scoped - _priorless_agn_names(), (
         f"{category}/{block_type}: wildcard froze {sorted(free_agn)}, "
-        f"selection-scoped declared set {sorted(build_scoped)}"
+        f"selection-scoped declared set {sorted(build_scoped)} (minus prior-less "
+        f"{sorted(_priorless_agn_names())})"
     )
 
 
@@ -563,3 +636,23 @@ def test_q2_wired_against_siblings(ssp, obs, category, block_type):
         f"to EVERY other {category} type at each type's own prior-median "
         f"parameters -- wired as a no-op."
     )
+
+
+def test_block_specific_priorless_param_is_scoped_to_the_block_that_reads_it():
+    """A sub-block's wildcard covers only what THAT block reads.
+
+    ``agn_grahsp_a_bc`` is owned by ``agn.blr`` (issue #985) but only
+    ``blr:grahsp`` reads it: no other BLR type's own wildcard may cover it, and
+    the grahsp block's covers exactly it (its line-strength pair is shared,
+    owned by ``agn``). Its declaration has no ``free_prior``, so it is in the
+    derived prior-less set -- which is why ``blr:grahsp``'s wildcard refuses
+    (:func:`skip_if_empty_scope`) instead of freeing it.
+    """
+    name = "agn_grahsp_a_bc"
+    assert name in _priorless_agn_names()
+    for block_type in _registered_types("blr"):
+        declared = _agn_subblock_declared_params("blr", block_type)
+        if block_type == "grahsp":
+            assert declared == frozenset({name})
+        else:
+            assert name not in declared, f"blr:{block_type} wildcard leaks {name}"
