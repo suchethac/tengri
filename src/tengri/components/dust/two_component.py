@@ -492,11 +492,12 @@ class DustSEDComponent(TemplateThreading):
             DerivedKey(
                 "lyc_fdust",
                 "",
-                "Raw neb_fdust value (#2539 item 2); read (instead of the "
-                "unreachable params['neb_fdust']) when lyc_absorb_all=False to "
-                "compute the young-weighted HII-region dust credit locally. "
-                "Absent/0.0 for BakedIn or when neb_fdust is at its Fixed(0.0) "
-                "default.",
+                "Absolute HII-region dust-absorption share (#2539 item 2), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436); read "
+                "(instead of the unreachable params['neb_fdust_frac']) when "
+                "lyc_absorb_all=False to compute the young-weighted HII-region "
+                "dust credit locally. Absent/0.0 for BakedIn or when "
+                "neb_fdust_frac is at its Fixed(0.0) default.",
             ),
             DerivedKey(
                 "line_waves",
@@ -1263,7 +1264,8 @@ class DustSEDComponent(TemplateThreading):
             )
 
         # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
-        # neb_fdust assigns a fraction of LyC photons to dust heating; the
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating; the
         # credited luminosity must be the LyC of the SAME stellar population
         # the nebular escape/dust k-factor was actually applied to (item 2),
         # not gated on eb_include_lyc (which concerns only the screen's own
@@ -1278,8 +1280,9 @@ class DustSEDComponent(TemplateThreading):
         # lyc_absorb_all=False (default, bagpipes parity) routes only the
         # YOUNG/birth-cloud population's LyC through the gas: the per-age
         # ``lyc_factor = 1 - y_age*(1 - lyc_t)`` in §2a leaves old-star LyC
-        # untouched by neb_fesc/neb_fdust (old stars sit outside their birth
-        # clouds, so no HII-region gas reprocesses their ionizing photons).
+        # untouched by neb_fesc/the f_dust share (old stars sit outside their
+        # birth clouds, so no HII-region gas reprocesses their ionizing
+        # photons).
         # Crediting the WHOLE-population key here would also credit dust for
         # old-star LyC that never reached any gas to be dust-absorbed in the
         # first place -- energy invented from nothing. Recompute the credit
@@ -1289,7 +1292,7 @@ class DustSEDComponent(TemplateThreading):
         #
         # Both branches combine via log10_add_fdust_credit (#2539 item 3), a
         # smooth log1p form that is bit-identical to log_L_absorbed at
-        # neb_fdust == 0 but -- unlike log10_add-ing the already
+        # f_dust == 0 but -- unlike log10_add-ing the already
         # fdust-multiplied log_L_lyc_dust -- has a nonzero gradient there too
         # (L_absorbed is linear in fdust).
         from tengri.forward.energy_balance import (
@@ -1298,14 +1301,16 @@ class DustSEDComponent(TemplateThreading):
             log10_add_fdust_credit,
         )
 
-        # NOT params.get("neb_fdust", ...): this component's parameter_prefix
-        # is "dust_", so slice_params_for_component (ADR-0006) never hands it
-        # a "neb_"-prefixed key -- that read would always, silently see the
-        # 0.0 default (measured: the young-weighted credit below was a
-        # permanent no-op through that path). NebularSEDComponent publishes
-        # the raw value as ``lyc_fdust`` for exactly this cross-component
-        # reason (#2539 item 2, same pattern as ``lyc_transmission`` above).
-        neb_fdust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+        # NOT params.get("neb_fdust_frac", ...): this component's
+        # parameter_prefix is "dust_", so slice_params_for_component
+        # (ADR-0006) never hands it a "neb_"-prefixed key -- that read would
+        # always, silently see the 0.0 default (measured: the young-weighted
+        # credit below was a permanent no-op through that path).
+        # NebularSEDComponent publishes the absolute share (#2436:
+        # lyc_shares(neb_fesc, neb_fdust_frac)[1]) as ``lyc_fdust`` for
+        # exactly this cross-component reason (#2539 item 2, same pattern as
+        # ``lyc_transmission`` above).
+        f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
 
         if self.config.lyc_absorb_all:
             _log_l_lyc_credited = state.derived.get("log_L_lyc")
@@ -1324,7 +1329,7 @@ class DustSEDComponent(TemplateThreading):
             )
 
         if _log_l_lyc_credited is not None:
-            log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, neb_fdust)
+            log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, f_dust)
 
         from tengri.forward.energy_balance import warn_if_corrupt
 

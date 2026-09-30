@@ -112,7 +112,7 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
-from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor, lyc_shares
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -751,7 +751,7 @@ class CloudyGridBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -767,7 +767,9 @@ class CloudyGridBackend:
                      {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
         All emission lines are scaled by the Case B recombination cascading
-        factor k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust).
+        factor k_factor = lyc_dust_escape_factor(f_esc, f_dust), with the
+        absolute (f_esc, f_dust) shares derived from (neb_fesc,
+        neb_fdust_frac) via lyc_shares (#2436).
         Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
         its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
         account for resonant scattering that suppresses Ly-alpha escape
@@ -789,10 +791,11 @@ class CloudyGridBackend:
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
         neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
-            Lyman-continuum dust-absorption fraction in HII regions
-            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
-            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]].
+            Default 0.0 (#2436). Both ``neb_fesc`` and the absolute f_dust
+            share it implies reduce the ionizing photon budget via the CIGALE
             k-factor.
 
         Returns
@@ -807,7 +810,7 @@ class CloudyGridBackend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
-        neb_fdust.
+        neb_fdust_frac.
 
         **k-factor**: follows CIGALE nebular.py (Ferland 1980) with ionizing
         photon loss due to both escape and dust absorption treated symmetrically.
@@ -841,8 +844,10 @@ class CloudyGridBackend:
             edges_u=getattr(self, "_edges_u_line", None),
         )
 
-        # Compute k-factor once (shared by all age bins)
-        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        # Compute k-factor once (shared by all age bins). #2436: the absolute
+        # f_dust share is derived from neb_fdust_frac via lyc_shares.
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k_factor = lyc_dust_escape_factor(neb_fesc, _f_dust)
 
         def _line_contrib_one_age(log_age_i, weight_i):
             """Compute weighted line luminosity contribution for one SSP age bin."""
@@ -874,7 +879,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -902,10 +907,11 @@ class CloudyGridBackend:
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar.
         neb_fesc : float
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
-            Lyman-continuum dust-absorption fraction in HII regions
-            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
-            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]].
+            Default 0.0 (#2436). Both ``neb_fesc`` and the absolute f_dust
+            share it implies reduce the ionizing photon budget via the CIGALE
             k-factor.
         **_kwargs
             Additional keyword arguments (unused).
@@ -932,7 +938,7 @@ class CloudyGridBackend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
-        neb_fdust.
+        neb_fdust_frac.
 
         """
         if neb_logZ_gas is None:
@@ -955,8 +961,10 @@ class CloudyGridBackend:
             edges_u=getattr(self, "_edges_u_cont", None),
         )
 
-        # Compute k-factor once (shared by all age bins)
-        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        # Compute k-factor once (shared by all age bins). #2436: the absolute
+        # f_dust share is derived from neb_fdust_frac via lyc_shares.
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k_factor = lyc_dust_escape_factor(neb_fesc, _f_dust)
 
         def _cont_contrib_one_age(log_age_i, weight_i):
             """Compute weighted nebular continuum contribution for one SSP age bin."""
@@ -983,7 +991,7 @@ class CloudyGridBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -1018,9 +1026,10 @@ class CloudyGridBackend:
             Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
         neb_fesc_lya : float
             Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
-        neb_fdust : float
-            Lyman-continuum dust-absorption fraction in HII regions
-            [dimensionless, in [0, 1]]. Default 0.0.
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]].
+            Default 0.0 (#2436).
         line_sigma_aa : float
             Gaussian line width (σ) [Angstrom]. 0 = delta function
             (add to nearest pixel).
@@ -1045,7 +1054,7 @@ class CloudyGridBackend:
         **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes, differentiable through neb_logU, neb_fesc, and
-        neb_fdust.
+        neb_fdust_frac.
 
         """
         # Get line luminosities
@@ -1057,7 +1066,7 @@ class CloudyGridBackend:
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
-            neb_fdust=neb_fdust,
+            neb_fdust_frac=neb_fdust_frac,
             template_data=template_data,
         )
 
@@ -1069,7 +1078,7 @@ class CloudyGridBackend:
             neb_logU=neb_logU,
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
-            neb_fdust=neb_fdust,
+            neb_fdust_frac=neb_fdust_frac,
             template_data=template_data,
         )
 

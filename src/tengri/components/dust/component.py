@@ -277,10 +277,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
             DerivedKey(
                 "lyc_fdust",
                 "",
-                "Raw neb_fdust value (#2539 item 2/3), the cross-prefix analog of "
-                "lyc_transmission; combined with log_L_lyc above via the smooth "
-                "log10_add_fdust_credit. Absent/0.0 for BakedIn or at the "
-                "Fixed(0.0) default.",
+                "Absolute HII-region dust-absorption share (#2539 item 2/3), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436), the "
+                "cross-prefix analog of lyc_transmission; combined with "
+                "log_L_lyc above via the smooth log10_add_fdust_credit. "
+                "Absent/0.0 for BakedIn or at the neb_fdust_frac Fixed(0.0) "
+                "default.",
             ),
         )
 
@@ -559,24 +561,26 @@ class DustAttenuationSEDComponent(TemplateThreading):
             )
 
         # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
-        # neb_fdust assigns a fraction of LyC photons to dust heating;
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating;
         # NebularSEDComponent publishes the RAW (pre-fdust) LyC luminosity as
-        # log_L_lyc and the raw fraction as lyc_fdust (#2539 item 3), combined
-        # here with the smooth (log1p) log10_add_fdust_credit rather than
-        # log10_add-ing an already fdust-multiplied term: L_absorbed is linear
-        # in fdust, so the combined gradient must be nonzero at fdust == 0
-        # too (log10_add_fdust_credit's docstring). This energy enters the
-        # dust IR budget unconditionally (not gated on eb_include_lyc, which
-        # concerns the screen's own LyC absorption, not HII-region dust).
-        # Placed AFTER the fast/slow branches converge to a single
-        # log_l_absorbed (one post-sum edit covers both paths, including a
-        # LUT-served nebular term landing in the same closing log10_add).
+        # log_L_lyc and that absolute share as lyc_fdust (#2539 item 3),
+        # combined here with the smooth (log1p) log10_add_fdust_credit rather
+        # than log10_add-ing an already fdust-multiplied term: L_absorbed is
+        # linear in fdust, so the combined gradient must be nonzero at
+        # fdust == 0 too (log10_add_fdust_credit's docstring). This energy
+        # enters the dust IR budget unconditionally (not gated on
+        # eb_include_lyc, which concerns the screen's own LyC absorption, not
+        # HII-region dust). Placed AFTER the fast/slow branches converge to a
+        # single log_l_absorbed (one post-sum edit covers both paths,
+        # including a LUT-served nebular term landing in the same closing
+        # log10_add).
         _log_l_lyc = state.derived.get("log_L_lyc")
         if _log_l_lyc is not None:
             from tengri.forward.energy_balance import log10_add_fdust_credit
 
-            _neb_fdust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
-            log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _neb_fdust)
+            _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+            log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:

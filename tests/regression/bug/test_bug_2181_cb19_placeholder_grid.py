@@ -6,8 +6,8 @@ r"""The CB_19 placeholder grid is refused, and a real grid moves the fit (#2181)
 reported ``neb_logU``, ``neb_logZ_gas``, ``neb_log_nH``, ``neb_co`` and
 ``neb_dno`` as free parameters. Interpolating a constant slab returns the same
 value at every query point, so each of those five moved the photometry by
-**exactly 0.0** while ``neb_fesc`` and ``neb_fdust``, which enter through the
-Lyman-continuum k-factor rather than the grid lookup, moved it normally. A fit
+**exactly 0.0** while ``neb_fesc`` and ``neb_fdust_frac``, which enter through
+the Lyman-continuum k-factor rather than the grid lookup, moved it normally. A fit
 therefore explored five directions in which the likelihood was flat and
 returned the prior back as a posterior, with nothing in the output saying so.
 

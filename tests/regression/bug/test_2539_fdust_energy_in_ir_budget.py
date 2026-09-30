@@ -1,16 +1,29 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test: neb_fdust LyC energy credited to the dust IR budget (#2539).
+"""Regression test: HII-region-dust LyC energy credited to the dust IR budget (#2539).
 
-``neb_fdust`` (CIGALE semantics: fraction of Lyman-continuum photons absorbed
-by dust inside HII regions) used to only rescale the nebular *emission*
-amplitude (via ``lyc_dust_escape_factor``, the ``k`` factor) -- the energy it
-diverts to dust never entered the dust IR budget (``L_absorbed`` /
-``log_L_absorbed``). ``NebularSEDComponent`` now publishes
-``log_L_lyc_dust = log10(neb_fdust) + log_L_lyc`` and every dust attenuator
+The absolute HII-region dust-absorption share ``f_dust`` (CIGALE semantics:
+fraction of Lyman-continuum photons absorbed by dust inside HII regions)
+used to only rescale the nebular *emission* amplitude (via
+``lyc_dust_escape_factor``, the ``k`` factor) -- the energy it diverts to
+dust never entered the dust IR budget (``L_absorbed`` / ``log_L_absorbed``).
+``NebularSEDComponent`` now publishes
+``log_L_lyc_dust = log10(f_dust) + log_L_lyc`` and every dust attenuator
 (``single_component``, ``two_component``, ``wg00``) adds it into
 ``log_L_absorbed``, matching CIGALE's own
 ``dust.luminosity = (lum_ly_young + lum_ly_old) * fdust``
 (``pcigale/sed_modules/nebular.py:191-193``).
+
+**#2436 reparametrization**: the absolute ``neb_fdust`` (an independent
+``Uniform(0, 1)`` that let ``neb_fesc + neb_fdust`` exceed 1) is retired in
+favor of ``neb_fdust_frac``, the fraction of the NON-escaping
+budget (``1 - neb_fesc``) HII-region dust absorbs: ``f_dust =
+neb_fdust_frac * (1 - neb_fesc)`` via ``lyc_shares``
+(``components/nebular/_recombination_coeffs.py``). Tests below that vary
+``neb_fesc`` and ``neb_fdust_frac`` simultaneously (the closure tests) derive
+the absolute ``f_dust``/``f_gas`` shares through ``lyc_shares`` before
+computing expected values; tests that trade one all the way to 0 against the
+other (the fesc-for-fdust identity swap, see below) are unaffected, since
+``neb_fdust_frac`` and the absolute share coincide whenever ``neb_fesc == 0``.
 
 Design notes (read before editing this file)
 ----------------------------------------------
@@ -42,9 +55,10 @@ file from ``lnu_age`` via ``tengri.components.dust.two_component._young_indicato
 
 **No double counting (#2539 item 2)**: ``NebularSEDComponent`` masks
 ``sed_intrinsic``'s LyC region to ``neb_fesc`` fraction UNCONDITIONALLY
-(independent of ``neb_fdust``); the credited ``fdust`` fraction, and the
-``(1 - fesc - fdust)`` fraction that ionizes gas, never reach
-``sed_intrinsic`` at all, so a dust screen (even with ``eb_include_lyc=True``)
+(independent of ``neb_fdust_frac``); the credited absolute ``f_dust``
+fraction, and the ``f_gas`` fraction that ionizes gas (``lyc_shares``,
+#2436), never reach ``sed_intrinsic`` at all, so a dust screen (even with
+``eb_include_lyc=True``)
 can only ever re-absorb the ``fesc`` remainder, never energy already credited
 to HII-region dust. This is verified two ways here: directly (the LyC content
 of ``sed_intrinsic`` equals ``fesc`` times the raw stellar LyC, to machine
@@ -80,6 +94,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.dust.two_component import _young_indicator
+from tengri.components.nebular._recombination_coeffs import lyc_shares
 from tengri.forward.energy_balance import log10_add_fdust_credit, log10_fdust_lyc_credit
 from tengri.utils.physics_constants import C_AA
 
@@ -136,7 +151,7 @@ def _build(
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
-        neb["neb_fdust"] = FREE if free_fdust else Fixed(fdust)
+        neb["neb_fdust_frac"] = FREE if free_fdust else Fixed(fdust)
     dust: dict = {"type": dust_type, "all_params": Fixed(DEFAULT)}
     if dust_type == "two_component":
         dust.update(
@@ -191,7 +206,7 @@ def _build_nodust(ssp, *, fesc=0.0, fdust=0.0, neb_type: str = "cue") -> SEDMode
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
-        neb["neb_fdust"] = Fixed(fdust)
+        neb["neb_fdust_frac"] = Fixed(fdust)
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
@@ -327,12 +342,14 @@ class TestLycConservationClosure:
       dust screen itself further removes;
     - **screen-absorbed**: the above screen removal, credited to
       ``log_L_absorbed`` only when ``eb_include_lyc=True``;
-    - **gas-ionizing**: the credited population's ``1 - fesc - fdust``
-      share, which photoionizes hydrogen (by construction of the
-      fesc/fdust/k-factor split -- not independently re-measurable in
-      erg/s post-recombination, see the module docstring);
-    - **HII-dust credit**: the credited population's ``fdust`` share,
-      which heats dust and enters ``log_L_absorbed`` (#2539 item 1).
+    - **gas-ionizing**: the credited population's ``f_gas`` share
+      (``lyc_shares(neb_fesc, neb_fdust_frac)[2]``, #2436), which
+      photoionizes hydrogen (by construction of the fesc/fdust/k-factor
+      split -- not independently re-measurable in erg/s post-recombination,
+      see the module docstring);
+    - **HII-dust credit**: the credited population's absolute ``f_dust``
+      share (``lyc_shares(...)[1]``), which heats dust and enters
+      ``log_L_absorbed`` (#2539 item 1).
 
     Three of the four terms are measured from ACTUAL model outputs (an
     ``log_L_absorbed`` difference for the credit and for the screen
@@ -345,13 +362,23 @@ class TestLycConservationClosure:
 
     @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
     def test_closure(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
-        fesc, fdust = 0.3, 0.3
+        # #2436: neb_fdust_frac is the fraction of the NON-escaping budget, so
+        # the absolute f_dust/f_gas shares this closure needs are derived
+        # through lyc_shares, not read off (1 - fesc - fdust_frac) directly
+        # (which is only correct when fesc == 0 or fdust_frac == 0).
+        fesc, fdust_frac = 0.3, 0.3
+        f_esc, f_dust, f_gas = (float(x) for x in lyc_shares(fesc, fdust_frac))
+        assert np.isclose(f_esc + f_dust + f_gas, 1.0)
 
         # Pre-screen twin: see _pre_screen_state for why the twin type is
         # dust_type-aware (tau=0 real dust for single/two_component,
         # no-dust for wg00).
         s0, wave = _pre_screen_state(
-            synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=fesc,
+            fdust=fdust_frac,
+            lyc_absorb_all=lyc_absorb_all,
         )
 
         lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
@@ -363,24 +390,31 @@ class TestLycConservationClosure:
         assert L_lyc_credited > 0.0, "setup: credited population has zero LyC"
 
         # -- escaped (pre-screen): formula vs. the actual sed_intrinsic --
+        # Unaffected by #2436: NebularSEDComponent's sed_intrinsic masking
+        # uses neb_fesc alone (lyc_shares' f_esc == neb_fesc exactly).
         escaped_measured = _l_lyc(wave, np.asarray(s0.sed_intrinsic))
-        escaped_expected = fesc * L_lyc_credited + L_lyc_uncredited
+        escaped_expected = f_esc * L_lyc_credited + L_lyc_uncredited
         np.testing.assert_allclose(escaped_measured, escaped_expected, rtol=1e-6)
 
         # -- gas-ionizing: by construction (see class docstring) --
-        gas_ionizing = (1.0 - fesc - fdust) * L_lyc_credited
+        gas_ionizing = f_gas * L_lyc_credited
 
         # -- HII-dust credit: an ACTUAL log_L_absorbed difference, isolated
-        # by trading fesc for fdust at fixed total (holds k, hence the
-        # nebular-continuum absorption term, exactly fixed; see module
-        # docstring) --
+        # by trading escape for HII-region dust at fixed TOTAL (f_esc +
+        # f_dust) -- holds k, hence the nebular-continuum absorption term,
+        # exactly fixed; see module docstring. m_escape_only's neb_fesc is
+        # the ABSOLUTE (f_esc + f_dust), not (fesc + fdust_frac).
         m_default = _build(
-            synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=fesc,
+            fdust=fdust_frac,
+            lyc_absorb_all=lyc_absorb_all,
         )
         m_escape_only = _build(
             synthetic_ssp_wide,
             dust_type,
-            fesc=fesc + fdust,
+            fesc=f_esc + f_dust,
             fdust=0.0,
             lyc_absorb_all=lyc_absorb_all,
         )
@@ -390,7 +424,7 @@ class TestLycConservationClosure:
             10.0 ** np.asarray(m_escape_only.predict_state({}).derived["log_L_absorbed"])
         )
         hii_dust_credit = L_absorbed_default - L_absorbed_escape_only
-        np.testing.assert_allclose(hii_dust_credit, fdust * L_lyc_credited, rtol=1e-6)
+        np.testing.assert_allclose(hii_dust_credit, f_dust * L_lyc_credited, rtol=1e-6)
 
         # -- screen-absorbed: an ACTUAL log_L_absorbed difference across the
         # eb_include_lyc toggle, cross-checked against a direct SED integral
@@ -404,7 +438,7 @@ class TestLycConservationClosure:
             synthetic_ssp_wide,
             dust_type,
             fesc=fesc,
-            fdust=fdust,
+            fdust=fdust_frac,
             lyc_absorb_all=lyc_absorb_all,
             eb_include_lyc=True,
         )
@@ -486,7 +520,7 @@ class TestWG00EbIncludeLyc:
 
 
 class TestDefaultsBitIdentical:
-    """neb_fdust unset (Fixed(0.0), the declared default) must leave
+    """neb_fdust_frac unset (Fixed(0.0), the declared default) must leave
     log_L_absorbed identical to a model with the #2539 credit path disabled,
     and every output finite. The cheapest faithful means of comparing against
     origin/main behavior without checking out a second copy of the repo:
@@ -537,8 +571,9 @@ class TestDefaultsBitIdentical:
 def _fd_grad(f, x: float, h: float = 1e-6) -> float:
     """Central finite difference, one-sided when ``x - h`` would go negative.
 
-    ``neb_fdust`` is bounded at 0, so the finite-difference estimate near
-    that boundary (fdust=0, 1e-8) must not sample a negative fdust.
+    ``f_dust``/``neb_fdust_frac`` is bounded at 0, so the finite-difference
+    estimate near that boundary (fdust=0, 1e-8) must not sample a negative
+    value.
     """
     if x - h < 0.0:
         return (f(x + h) - f(x)) / h
@@ -548,7 +583,7 @@ def _fd_grad(f, x: float, h: float = 1e-6) -> float:
 class TestGradientSafety:
     """Item 3: ``log10_add_fdust_credit`` (the fused combine that replaced the
     double-where ``log10_fdust_lyc_credit`` + ``log10_add`` pairing) is exact
-    at neb_fdust == 0 AND has a FINITE, NONZERO gradient everywhere --
+    at f_dust == 0 AND has a FINITE, NONZERO gradient everywhere --
     including at fdust == 0, where L_absorbed's TRUE derivative w.r.t. fdust
     is L_LyC (a finite nonzero constant: L_absorbed is exactly LINEAR in
     fdust). ``log10_fdust_lyc_credit`` alone still (correctly, for that
@@ -588,13 +623,19 @@ class TestGradientSafety:
 
     def test_end_to_end_gradient_finite_through_single_component(self, synthetic_ssp_wide):
         """Finite, NONZERO gradient through the full forward pass, matching a
-        finite-difference estimate -- not just the helper (item 3)."""
+        finite-difference estimate -- not just the helper (item 3).
+
+        neb_fesc is held FIXED at 0.1 here, so the absolute f_dust =
+        neb_fdust_frac * 0.9 (lyc_shares, #2436) is itself linear in
+        neb_fdust_frac -- the gradient-wrt-frac property below follows
+        directly from log10_add_fdust_credit's gradient-wrt-f_dust property.
+        """
         m = _build(synthetic_ssp_wide, "single_component", fesc=0.1, free_fdust=True)
         base_params = dict(m.spec.sample(jax.random.PRNGKey(0)))
 
         def loss(fdust):
             p = dict(base_params)
-            p["neb_fdust"] = fdust
+            p["neb_fdust_frac"] = fdust
             state = m.predict_state(p)
             return jnp.asarray(state.derived["log_L_absorbed"])
 
@@ -627,7 +668,7 @@ def _build_two_component_lut(
     neb: dict = {"type": neb_type, "all_params": Fixed(DEFAULT)}
     if neb_type != "none":
         neb["neb_fesc"] = Fixed(fesc)
-        neb["neb_fdust"] = Fixed(fdust)
+        neb["neb_fdust_frac"] = Fixed(fdust)
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
@@ -864,11 +905,18 @@ class TestLutFescExact:
         real tau=0 exact build regardless of approx, unrelated to LUT
         engagement -- see ``_pre_screen_state``).
         """
-        fesc, fdust = 0.3, 0.3
+        # #2436: derive the absolute f_dust/f_gas shares through lyc_shares
+        # (see TestLycConservationClosure.test_closure's comment).
+        fesc, fdust_frac = 0.3, 0.3
+        f_esc, f_dust, f_gas = (float(x) for x in lyc_shares(fesc, fdust_frac))
         dust_type, lyc_absorb_all, young_only = "two_component", True, False
 
         s0, wave = _pre_screen_state(
-            synthetic_ssp_wide, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=fesc,
+            fdust=fdust_frac,
+            lyc_absorb_all=lyc_absorb_all,
         )
         lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
         lnu_credited = _credited_lnu(s0, young_only=young_only)
@@ -879,22 +927,22 @@ class TestLutFescExact:
         assert L_lyc_credited > 0.0, "setup: credited population has zero LyC"
 
         escaped_measured = _l_lyc(wave, np.asarray(s0.sed_intrinsic))
-        escaped_expected = fesc * L_lyc_credited + L_lyc_uncredited
+        escaped_expected = f_esc * L_lyc_credited + L_lyc_uncredited
         np.testing.assert_allclose(escaped_measured, escaped_expected, rtol=1e-6)
 
-        gas_ionizing = (1.0 - fesc - fdust) * L_lyc_credited
+        gas_ionizing = f_gas * L_lyc_credited
 
         m_default = _build_two_component_lut(
             synthetic_ssp_wide,
             WavePrecomp(),
             fesc=fesc,
-            fdust=fdust,
+            fdust=fdust_frac,
             lyc_absorb_all=lyc_absorb_all,
         )
         m_escape_only = _build_two_component_lut(
             synthetic_ssp_wide,
             WavePrecomp(),
-            fesc=fesc + fdust,
+            fesc=f_esc + f_dust,
             fdust=0.0,
             lyc_absorb_all=lyc_absorb_all,
         )
@@ -904,13 +952,13 @@ class TestLutFescExact:
             10.0 ** np.asarray(m_escape_only.predict_state({}).derived["log_L_absorbed"])
         )
         hii_dust_credit = L_absorbed_default - L_absorbed_escape_only
-        np.testing.assert_allclose(hii_dust_credit, fdust * L_lyc_credited, rtol=1e-6)
+        np.testing.assert_allclose(hii_dust_credit, f_dust * L_lyc_credited, rtol=1e-6)
 
         m_full = _build_two_component_lut(
             synthetic_ssp_wide,
             WavePrecomp(),
             fesc=fesc,
-            fdust=fdust,
+            fdust=fdust_frac,
             lyc_absorb_all=lyc_absorb_all,
             eb_include_lyc=True,
         )

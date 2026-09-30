@@ -270,18 +270,19 @@ class DerivedState:
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
     #: log10(L_LyC_dust / (erg/s)) [dex]: the Lyman-continuum energy absorbed
-    #: by dust inside HII regions (neb_fdust), not credited to nebular
-    #: emission but to dust heating. Added to ``log_L_absorbed`` by dust
-    #: components (#2539). Published only when neb_fdust > 0.
+    #: by dust inside HII regions (the absolute f_dust share,
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]``, #2436), not credited to
+    #: nebular emission but to dust heating. Added to ``log_L_absorbed`` by
+    #: dust components (#2539). Published only when f_dust > 0.
     log_L_lyc_dust: jnp.ndarray | None = None
     #: log10(L_LyC / (erg/s)) [dex]: the RAW (pre-fesc, pre-fdust)
     #: Lyman-continuum luminosity of the whole stellar population (#2539 item
     #: 3). Published alongside ``lyc_fdust`` so a dust component can credit
-    #: ``neb_fdust * L_LyC`` into ``log_L_absorbed`` via the smooth
+    #: ``f_dust * L_LyC`` into ``log_L_absorbed`` via the smooth
     #: (``log1p``-based) combine in ``energy_balance.log10_add_fdust_credit``
     #: instead of ``log10_add``ing the already-``fdust``-multiplied
     #: ``log_L_lyc_dust`` (whose own gradient is deliberately clamped to zero
-    #: at ``neb_fdust == 0``, which would zero the combined gradient too even
+    #: at ``f_dust == 0``, which would zero the combined gradient too even
     #: though ``L_absorbed`` is linear in ``fdust``). Published only when a
     #: stellar SED is present.
     log_L_lyc: jnp.ndarray | None = None
@@ -422,13 +423,15 @@ class DerivedState:
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
-    #: Raw ``neb_fdust`` value (#2539 item 2), the ``lyc_transmission``
-    #: analog for the dust-absorption fraction: a dust component's
-    #: ``parameter_prefix`` ("dust_") means ``slice_params_for_component``
-    #: (ADR-0006) never hands it a "neb_"-prefixed key, so
-    #: ``two_component`` reads this cross-component value instead of
-    #: ``params["neb_fdust"]`` (which would silently see only the 0.0
-    #: default) to compute its own young-weighted HII-region dust credit.
+    #: Absolute HII-region dust-absorption share (#2539 item 2),
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]`` (#2436), the
+    #: ``lyc_transmission`` analog for the dust-absorption fraction: a dust
+    #: component's ``parameter_prefix`` ("dust_") means
+    #: ``slice_params_for_component`` (ADR-0006) never hands it a
+    #: "neb_"-prefixed key, so ``two_component`` reads this cross-component
+    #: value instead of ``params["neb_fdust_frac"]`` (which would silently
+    #: see only the 0.0 default) to compute its own young-weighted HII-region
+    #: dust credit.
     lyc_fdust: jnp.ndarray | None = None
     #: Raw ``neb_fesc`` value (#2539 item 1), the ``lyc_fdust`` analog for
     #: the escape fraction: published so ``two_component``'s WavePrecomp

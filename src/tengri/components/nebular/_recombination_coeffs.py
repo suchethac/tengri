@@ -30,6 +30,7 @@ __all__ = [
     "ALPHA_1",
     "ALPHA_B",
     "lyc_dust_escape_factor",
+    "lyc_shares",
 ]
 
 # Hydrogen recombination coefficients [m^3/s] at T_e = 10^4 K (Ferland 1980),
@@ -169,3 +170,77 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     denominator = 1.0 + alpha_ratio * f_total
 
     return numerator / denominator
+
+
+def lyc_shares(
+    neb_fesc: jnp.ndarray | float, neb_fdust_frac: jnp.ndarray | float
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    r"""Split the ionizing-photon budget into its three additive shares (#2436).
+
+    Owner ruling (#2436): ``neb_fesc + f_dust <= 1`` is a precondition of the
+    additive per-photon budget this module's own docstring derives (``f_esc``
+    escapes, ``f_dust`` heats HII-region dust, ``1 - f_esc - f_dust``
+    photoionizes -- see :func:`lyc_dust_escape_factor`'s "Per-photon LyC
+    budget" section). Declaring ``f_dust`` as its own independent
+    ``Uniform(0, 1)`` parameter (the retired ``neb_fdust``) let a caller pick
+    ``neb_fesc=0.7, neb_fdust=0.7``, an impossible 1.4 of the budget, with
+    nothing to catch it before it reached :func:`lyc_dust_escape_factor`'s own
+    silent ``jnp.clip``.
+
+    ``neb_fdust_frac`` instead parametrizes the fraction of the
+    NON-escaping budget (``1 - neb_fesc``) that HII-region dust absorbs, so
+    the three shares
+
+    .. math::
+
+        f_\mathrm{esc} &= \mathtt{neb\_fesc} \\
+        f_\mathrm{dust} &= \mathtt{neb\_fdust\_frac} \, (1 - \mathtt{neb\_fesc}) \\
+        f_\mathrm{gas} &= (1 - \mathtt{neb\_fdust\_frac})(1 - \mathtt{neb\_fesc})
+
+    sum to exactly 1 for ANY ``(neb_fesc, neb_fdust_frac) \in [0, 1]^2`` --
+    the whole prior box is physical, with no clamp needed downstream. This is
+    the ONE place that splits the budget; every consumer that used to read
+    the retired absolute ``neb_fdust`` (:func:`lyc_dust_escape_factor`'s
+    ``f_dust`` callers in ``cue.py``/``cloudy_grid.py``/``cloudy_cb19.py``,
+    the #2539 HII-dust LyC credit in ``components/nebular/component.py``) now
+    calls this function first and reads the absolute ``f_dust``/``f_gas`` it
+    returns.
+
+    Parameters
+    ----------
+    neb_fesc : array_like or float
+        Ionizing photon escape fraction [dimensionless, in [0, 1]].
+    neb_fdust_frac : array_like or float
+        Fraction of the NON-escaping ionizing budget absorbed by dust inside
+        the HII region [dimensionless, in [0, 1]].
+
+    Returns
+    -------
+    f_esc, f_dust, f_gas : tuple of ndarray
+        The three additive shares of the ionizing-photon budget
+        (escape, HII-region dust absorption, photoionization), summing to 1
+        to round-off for any input in ``[0, 1]^2``.
+
+    Notes
+    -----
+    **JIT/grad-safe**: pure ``jnp`` arithmetic, no branching; the gradient
+    wrt either input is finite and nonzero everywhere on the open box.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> f_esc, f_dust, f_gas = lyc_shares(0.0, 0.0)
+    >>> float(f_esc), float(f_dust), float(f_gas)
+    (0.0, 0.0, 1.0)
+    >>> f_esc, f_dust, f_gas = lyc_shares(0.3, 0.5)
+    >>> round(float(f_dust), 4), round(float(f_gas), 4)
+    (0.35, 0.35)
+    >>> float(f_esc + f_dust + f_gas)
+    1.0
+    """
+    f_esc = jnp.asarray(neb_fesc)
+    frac = jnp.asarray(neb_fdust_frac)
+    non_escaping = 1.0 - f_esc
+    f_dust = frac * non_escaping
+    f_gas = (1.0 - frac) * non_escaping
+    return f_esc, f_dust, f_gas

@@ -1050,7 +1050,7 @@ class TestHbFracWiring:
             "neb_logZ_gas": 0.0,
             "neb_fesc": 0.0,
             "neb_fesc_lya": 0.0,
-            "neb_fdust": 0.0,
+            "neb_fdust_frac": 0.0,
             "neb_log_nH": 2.0,
             "neb_co": -0.36,
             "neb_dno": 0.0,
