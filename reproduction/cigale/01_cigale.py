@@ -151,6 +151,13 @@ NEB_FIDUCIAL_TENGRI = {
     "neb_logU": Fixed(-2.0),
     "neb_logZ_gas": Fixed(MET_LOGZSOL),
     "neb_fesc": Fixed(0.0),
+    # #2436: neb_fdust retired for neb_fdust_frac = f_dust / (1 - f_esc).
+    # CIGALE's f_esc=0.0, f_dust=0.0 below converts to 0.0 / (1 - 0.0) = 0.0,
+    # bit-identical to the neb_fdust_frac default -- explicit here (like
+    # neb_fesc above) so the tengri/CIGALE pairing stays self-documenting if
+    # either default ever changes. Purely a doc/config change: both sides
+    # were already 0.0, so no notebook re-render is needed.
+    "neb_fdust_frac": Fixed(0.0),
     "all_params": Fixed(DEFAULT),
 }
 NEB_FIDUCIAL_CIGALE = (

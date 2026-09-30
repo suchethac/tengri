@@ -269,6 +269,23 @@ class DerivedState:
     #: reading ``log_L_ir`` as a stand-in, which is only correct when
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
+    #: log10(L_LyC_dust / (erg/s)) [dex]: the Lyman-continuum energy absorbed
+    #: by dust inside HII regions (the absolute f_dust share,
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]``, #2436), not credited to
+    #: nebular emission but to dust heating. Added to ``log_L_absorbed`` by
+    #: dust components (#2539). Published only when f_dust > 0.
+    log_L_lyc_dust: jnp.ndarray | None = None
+    #: log10(L_LyC / (erg/s)) [dex]: the RAW (pre-fesc, pre-fdust)
+    #: Lyman-continuum luminosity of the whole stellar population (#2539 item
+    #: 3). Published alongside ``lyc_fdust`` so a dust component can credit
+    #: ``f_dust * L_LyC`` into ``log_L_absorbed`` via the smooth
+    #: (``log1p``-based) combine in ``energy_balance.log10_add_fdust_credit``
+    #: instead of ``log10_add``ing the already-``fdust``-multiplied
+    #: ``log_L_lyc_dust`` (whose own gradient is deliberately clamped to zero
+    #: at ``f_dust == 0``, which would zero the combined gradient too even
+    #: though ``L_absorbed`` is linear in ``fdust``). Published only when a
+    #: stellar SED is present.
+    log_L_lyc: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
     #: state.wave grid, evaluated by the dust attenuator. Published by all
@@ -406,6 +423,32 @@ class DerivedState:
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
+    #: Absolute HII-region dust-absorption share (#2539 item 2),
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]`` (#2436), the
+    #: ``lyc_transmission`` analog for the dust-absorption fraction: a dust
+    #: component's ``parameter_prefix`` ("dust_") means
+    #: ``slice_params_for_component`` (ADR-0006) never hands it a
+    #: "neb_"-prefixed key, so ``two_component`` reads this cross-component
+    #: value instead of ``params["neb_fdust_frac"]`` (which would silently
+    #: see only the 0.0 default) to compute its own young-weighted HII-region
+    #: dust credit.
+    lyc_fdust: jnp.ndarray | None = None
+    #: Raw ``neb_fesc`` value (#2539 item 1), the ``lyc_fdust`` analog for
+    #: the escape fraction: published so ``two_component``'s WavePrecomp
+    #: energy-balance LUT branch can pass the runtime fesc into
+    #: ``lut_l_absorbed_stellar_log10``'s exact affine (A_0 + fesc*A_1)
+    #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
+    #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
+    lyc_fesc: jnp.ndarray | None = None
+    #: Stellar SED on ``state.wave`` BEFORE ``lyc_transmission`` is applied
+    #: (#2447 exact-photometry seam): ``lyc_transmission`` is only exact under
+    #: trapezoid quadrature for a SINGLE panel straddling 912 A, which no
+    #: longer holds once a photometric filter table's own nodes subdivide
+    #: that panel (real, finely-sampled filters like GALEX NUV). Published so
+    #: ``observation.photometry._filter_integral_union`` can redo the
+    #: trapezoid-exact split directly on its own (finer) union grid instead
+    #: of re-interpolating the already node-blended masked SED.
+    lyc_unmasked_stellar_sed: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).
