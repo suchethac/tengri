@@ -2,12 +2,86 @@
 
 ### Added
 
+- The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
+
+- `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
+
 - `lsf_scale`: a free multiplicative scale on the instrument LSF resolution
   (default `Fixed(1.0)`, prior `Uniform(0.8, 1.2)`), applied to both the
   stellar-continuum and emission-line spectroscopy kernels (#2526).
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 
 ### Fixed
+
+- `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
+  since formation (T = age − t_lookback) and take a required keyword-only `age`;
+  both previously treated lookback time as cosmic time and returned mirror-imaged
+  histories (#2524).
+- `profile_mass` now reaches six backends it had been silently skipping:
+  `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
+  `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
+  `resolve_profile_mass_for_method` disabled profiling before they ran. The
+  clearest case is `nss`: `build_profiled_loglikelihood_fn` was written for
+  nested sampling and says so in its docstring, but the omission made it
+  unreachable, so every NSS evidence run scored its live points at the mass
+  placeholder instead of the marginal likelihood — exactly what that docstring
+  warns about. Each of the six was audited to its call site into the Fitter's
+  loss; the set goes 16 to 22 of 29 registered backends, the remaining 7 being
+  the NIFTy and native-VI backends that build their objective from the model
+  and spec directly. `tests/inference/test_profile_mass_backend_coverage.py`
+  now pins a *partition* (registry == allowlist | excluded-with-reason) rather
+  than a membership list, so a newly registered backend fails the test until
+  someone classifies it; a membership list would have stayed green through all
+  six omissions.
+- WG00 attenuation now reaches the emission-line catalog (``predict_line_fluxes``,
+  ``predict_line_ratios``, line properties, ``predict_emission_lines``); previously
+  lines passed through unattenuated under dust type wg00 while the continuum and
+  SED-measured lines were attenuated. ``_line_dust_component`` now selects the dust
+  component by capability (``hasattr(c, "attenuate_line_catalog")``) instead of name,
+  enabling wg00 to publish attenuated lines on the same surfaces as single_component
+  and two_component. The mismatch broke joint-fit consistency for dust parameters (#2541).
+- The `profile_mass` linearity guard reports which of **three** kinds it
+  measured — `proportional`, `affine` or `nonlinear` — where it previously
+  answered only proportional-or-not. The distinction is load-bearing:
+  `chi2(M)` stays exactly quadratic for an affine prediction
+  `M f(theta) + g(theta)`, so such a model is marginalizable once the offset is
+  known, while a nonlinear one never is. The extra mass evaluation that
+  separates the two is taken only on the refusal branch, so the proportional
+  fast path (every SFH that renormalizes to the mass, hence eight of the nine
+  shipped recipes) is unchanged.
+- The linearity refusal no longer misdiagnoses. It asserted that an order-1
+  deviation "indicates a mass-independent additive component such as an AGN
+  continuum" on every model; measured on a `dense_basis` photometry fit with no
+  AGN block, the deviation is order 1 and the cause is a mass-dependent SFH
+  *shape* (`_build_quantile_points` builds its GP knots from
+  `sfr_inst*age/M`, making `log_total_mass` a shape parameter rather than an
+  amplitude). #2374 improved the wording without covering that case. The
+  message now names the measured kind and names an additive component only
+  when the model carries one. An audit of every registered SFH found
+  `dense_basis` is the only one that leaks the mass into its shape: the other
+  20 measurable ones sit at 9e-15 to 1.3e-14, the roundoff floor, via
+  `mean_sfh._renormalize_to_mass`. The linearity probe now evaluates at the
+  fit's own fixed values (including a `params_override` redshift) and lets
+  model-evaluation errors propagate instead of logging them as invalid thetas.
+  The same fix now covers the whole guard chain rather than just that one
+  evaluation loop: the affine-vs-nonlinear retest's own third-mass evaluation
+  (`_classify_nonproportional`) and the `profile_mass="auto"` guard-check
+  dispatch (`configure_profile_mass`) no longer fold a model-evaluation error
+  into a silent `"nonlinear"` classification or `"auto-disabled"` reason
+  either, and the probe's fixed-values resolution takes the raw
+  `params_override` argument directly, so a call reached during
+  `Fitter.__init__` — before `self._fixed_values`/`self._params_override`
+  exist — no longer silently falls back to the spec's own declared value.
+- Student-t noise Hamiltonian now includes the dof-dependent normalisation, so a free `noise_dof` is sampled under a correctly normalised density (#2525).
+- `profile_mass="auto"` no longer engages when a user-supplied likelihood owns the data (any data type; previously only the line-flux case was refused, so the mass was profiled against the Fitter's placeholder data and the user's likelihood silently replaced in the mass direction), nor when a spectral covariance is used (#2509); `PrecompBiasWarning` now covers joint photometry+spectroscopy fits per channel and states the LUT forward bias when a user likelihood owns the data (#2510).
+- **Breaking**: `delayed_bq`, `periodic` and `buat08` now evaluate CIGALE's formulas
+  in time since formation (T = age − t_lookback), as `sfhdelayed`/`sfh2exp` and #549's
+  `dpl`/`lognormal` do; previously they read CIGALE's forward time as lookback, giving
+  the time-reversed history (a "recent" delayed_bq burst formed at the oldest end with
+  SFR(now) = 0; periodic bursts rose slowly and cut off at their onset; buat08 SFR → 0
+  today). `periodic` no longer stops after 100 bursts (#2515). `buat08` gains
+  `sfh_buat08_age_gyr` (default: age of the universe). Every fit using these three SFHs
+  changes meaning; re-fit before comparing (#2514, #2515).
 
 - `dirichlet` joins the bin-edge count rule that `continuity`-backed ladders
   already obey: six declared `z_frac_*` require exactly eight `bin_edges_gyr`,
@@ -24,6 +98,8 @@
   working spec and merges the fixed values (#2502).
 
 - Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
+- CloudyGrid, CB19 and MAPPINGS nebular backends no longer divide the Lyα luminosity by the escape/dust factor; Lyα is suppressed by `neb_fesc`/`neb_fdust` like every other recombination line, through one shared helper from the P-11 fix in cue.py (#2531, #743).
+- `compute_qh`'s docstring now states its actual input unit (L☉/Hz per M☉, converted in log space for float32 safety), matching `compute_qh_log10`; a test pins the contract (#2532).
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
   (previously silently skipped there, so intrinsic galaxy velocity dispersion had
   zero effect and zero gradient on the DESI spectroscopy path). `observation/banded.py`
@@ -49,15 +125,25 @@
   take it through a new `fixed_values=` argument, so lines, dust, and photometry
   read one redshift.
 
-- The default Gaussian LSF path now subtracts the loaded SSP library's own
-  per-wavelength resolution instead of a flat scalar, and stops applying
-  that subtraction and the galaxy's velocity dispersion to nebular/shock
-  emission lines, which keep only the instrument LSF, matching Prospector's
-  convention (#2518, #2519). `SSPData` gains `ssp_resolution_kms` from
-  FSPS's own per-node tables (MILES σ_v ≈ 92→43 km/s; C3K σ_v ≈ 42.4 km/s;
-  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s), and warns
-  instead of silently clamping wherever the instrument is sharper than the
-  library.
+- Spectral indices (`predict_spectral_indices`, both the FeaturePrecomp
+  window-LUT path and the exact path) now read the evaluation's fixed values,
+  including a runtime redshift, like the line methods did in #2499. The redshift
+  affects age-sensitive indices via the cosmic age truncation of the SFH: it
+  reaches the same `age_at_z` cutoff in `compute_joint_weights` (window-LUT
+  path) and in the orchestrator's stellar `apply()` (exact path), so an
+  evaluation-time override changes which lookback ages are truncated on both
+  paths alike. Two sibling gaps in the SAME class of call, found while
+  covering this: `_feature_fast_indices`'s one-off exact measurement for a
+  slope index (e.g. `uv_slope_beta`, not a single-window functional) dropped
+  the evaluation's fixed values even though the window-LUT slots in the same
+  call honored them, so a slope index in `index_defs` could silently disagree
+  with a break/EW index measured alongside it; and `measure_line_fluxes`'s
+  exact (`state=None`) branch rescaled the luminosity distance to the
+  overridden redshift but measured the rest-frame SED itself at the model's
+  own build-time redshift. Both now thread the same `fixed_values` (#2510).
+- Madau (1995) IGM transmission (`igm_transmission_madau`) now includes the
+  metal-line blanketing term (eq. 15), 0.0017·(λ_obs/λ_α)^1.68 blueward of
+  Lyα(1+z); this adds up to ~1% attenuation in the Lyα–Lyβ forest at z = 2–4 (#2516).
 
 - `skirtor_sed()` and the deprecated alias `skirtor_analytic()` now accept
   `wavelength` as a keyword argument. Previously, calling with all keyword arguments
@@ -85,6 +171,12 @@
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
   `StellarSEDComponentConfig`. The #2204 cosmic-age reachability check now judges the
   configured ladder when provided and names the key in the error message (#2433).
+- The shipped DL07 template grids carry the published axes of Draine & Li
+  (2007): the U_min axis is the 22-node ladder (0.1, 0.15, …, 8.0, 12.0, 15.0,
+  20.0, 25.0; the files had labelled the last four columns 10, 12, 15, 20, so
+  U_min above 8 selected the neighbouring template and 25 was unreachable) and
+  the q_PAH axis carries only the seven MW3.1 nodes (no SMC/LMC2 grain models).
+  Spectra are unchanged; `dust_umin`'s prior widens to 25.0 (#2535, #2441).
 - Two AGN-NLR fallback defaults read their own parameter declarations instead of
   literals: the `gas_logn` fallbacks in `components/nebular/agn_nebular.py` read
   `declared_default(AGN_PARAMS, "agn_nlr_logn")` and the `neb_logU` fallback in
@@ -281,6 +373,16 @@
   dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
   has been removed. (#2191)
 
+- The default Gaussian LSF path now subtracts the loaded SSP library's own
+  per-wavelength resolution instead of a flat scalar, and stops applying
+  that subtraction and the galaxy's velocity dispersion to nebular/shock
+  emission lines, which keep only the instrument LSF, matching Prospector's
+  convention (#2518, #2519). `SSPData` gains `ssp_resolution_kms` from
+  FSPS's own per-node tables (MILES σ_v ≈ 92→43 km/s; C3K σ_v ≈ 42.4 km/s;
+  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s), and warns
+  instead of silently clamping wherever the instrument is sharper than the
+  library. Every path that predicts a spectrum from the model applies the same
+  kernel rule through one function.
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
