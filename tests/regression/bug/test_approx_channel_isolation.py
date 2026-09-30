@@ -24,6 +24,21 @@ Two properties are pinned, and they fail for different reasons:
   defect, and the bound is derived from the gap between the Cue and neb=none
   models on the same grid.
 
+Grid-served dust photometry: on this branch, dust components with an
+energy-balance LUT (two-component or single-screen attenuation with a fixed
+curve shape and dust emission) take the nebular emission from the per-Q_H grid
+instead of the full SED: sub-band nebular photometry screened at the sub-band
+wavelengths and the absorbed nebular energy bracketed on the LUT's tau grid.
+When a dust component engages the grid, its photometry moves by the sub-band
+quadrature error, measured 3.1764e-05 (cue, cue_agn) and 1.4794e-04 (cue_shock)
+at the prior center on these four bands. ``FeaturePrecomp`` serves photometry
+from the grid subject to this bound, ``_RTOL_GRID_SERVED``. The energy budget
+read through ``predict_properties`` (``l_dust_absorbed``, ``l_tir``) takes the
+full-state path, where ``materialized()`` resets the dust flag, so it stays
+bit-identical; a dust component that cannot take the nebular from the grid
+(no energy-balance LUT: free attenuation-curve shape parameter) still leaves
+photometry bit-identical.
+
 Deliberately a *physics* test on a real model. The test shipped with #1596
 (``test_issue_1596_photometry_feature_default.py``) stubs the model out and
 asks only which config the auto policy resolves — a policy question that stays
@@ -80,6 +95,22 @@ _AGN = {
     "fracAGN": 0.1,
 }
 
+#: herschel_250 is load-bearing: the nebular light reaches 250 um only by being
+#: absorbed and re-emitted, so it is the band the energy-balance term drives.
+_BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]
+
+_EB_KEYS = ("l_dust_absorbed", "l_tir")
+
+#: Sub-band quadrature of the grid-served nebular photometry under a dust screen,
+#: measured 3.18e-5 (cue, cue_agn) and 1.48e-4 (cue_shock) at the prior center on
+#: these four bands; the parity contract bounds it at 2.5e-3 over eight bands.
+_RTOL_GRID_SERVED = 3e-4
+
+#: Dust attenuation configuration with freed shape parameter (f_obscuration)
+#: that disarms the energy-balance LUT, so the grid cannot serve this model's
+#: photometry.
+_DUST_FREE_SHAPE = {**_DUST, "f_obscuration": Uniform(0.0, 0.5)}
+
 #: Enumerated by *composition*, not by picking a representative: the defect was
 #: identical (0.1104) across all four, which is what proved it was Cue itself
 #: rather than an interaction with shock or AGN.
@@ -101,13 +132,12 @@ _MODELS = {
         neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         agn=_AGN,
     ),
+    "cue_free_shape": dict(
+        dust_attenuation=_DUST_FREE_SHAPE,
+        dust_emission=_DUST_EMISSION,
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+    ),
 }
-
-#: herschel_250 is load-bearing: the nebular light reaches 250 um only by being
-#: absorbed and re-emitted, so it is the band the energy-balance term drives.
-_BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]
-
-_EB_KEYS = ("l_dust_absorbed", "l_tir")
 
 
 @pytest.fixture(scope="module")
@@ -135,24 +165,37 @@ def _photometry_and_eb(ssp, obs, groups, approx):
     phot = np.asarray(model.predict_photometry(params), dtype=np.float64)
     props = model.predict_properties(params, names=_EB_KEYS)
     eb = {k: float(np.asarray(props[k])) for k in _EB_KEYS}
-    return phot, eb
+    return phot, eb, model
 
 
-@pytest.mark.parametrize("composition", sorted(_MODELS))
-def test_feature_precomp_does_not_move_the_photometry_channel(ssp_data_fsps, obs, composition):
+@pytest.mark.parametrize("composition", ["cue_free_shape"])
+def test_feature_precomp_leaves_photometry_bit_identical_where_the_grid_cannot_serve(
+    ssp_data_fsps, obs, composition
+):
     """Adding the line-channel LUT must leave photometry bit-identical.
+
+    When a dust component has no energy-balance LUT (freed attenuation shape
+    parameter), the grid cannot serve it. The photometry channel stays
+    bit-identical even under FeaturePrecomp.
 
     Bit-exact on purpose. ``FeaturePrecomp`` tabulates emission lines; whatever
     it does to the line channel, the photometry channel and the absorbed-energy
     budget are not its business, so there is no residual to allow. Stating it as
     equality also means the guard cannot be satisfied by widening a tolerance.
     """
+    from tengri.inference.fitter import fast_nebular_can_engage
+
     groups = _MODELS[composition]
     with jax.enable_x64(True):
-        base_phot, base_eb = _photometry_and_eb(ssp_data_fsps, obs, groups, (WavePrecomp(),))
-        feat_phot, feat_eb = _photometry_and_eb(
+        base_phot, base_eb, _base_model = _photometry_and_eb(
+            ssp_data_fsps, obs, groups, (WavePrecomp(),)
+        )
+        feat_phot, feat_eb, feat_model = _photometry_and_eb(
             ssp_data_fsps, obs, groups, (WavePrecomp(), FeaturePrecomp())
         )
+
+    # Verify the grid cannot engage when the shape parameter is free
+    assert fast_nebular_can_engage(feat_model) is False
 
     # ``array_equal``, not ``rel.max() == 0.0``: a band whose flux is exactly
     # zero makes ``rel`` nan, and ``nan == 0.0`` is False — the guard would
@@ -165,14 +208,67 @@ def test_feature_precomp_does_not_move_the_photometry_channel(ssp_data_fsps, obs
         f"FeaturePrecomp moved the photometry channel by {np.nanmax(rel):.4e} on the "
         f"{composition} model (bands={_BANDS}, per-band rel={rel.tolist()}). A "
         "line-channel precompute must not touch photometry: serving photometry "
-        "from the per-Q_H grid zeroes sed_nebular, and the dust energy balance "
-        "reads it to size the absorbed budget."
+        "from the per-Q_H grid is disarmed when the dust has a freed shape parameter."
     )
     for key in _EB_KEYS:
         assert feat_eb[key] == base_eb[key], (
             f"FeaturePrecomp moved {key} on the {composition} model: "
             f"{feat_eb[key]!r} vs {base_eb[key]!r}. The absorbed-energy budget "
             "must not depend on which precompute serves the line channel."
+        )
+
+
+@pytest.mark.parametrize("composition", ["cue", "cue_shock", "cue_agn"])
+def test_feature_precomp_serves_dusty_photometry_within_the_parity_bound(
+    ssp_data_fsps, obs, composition
+):
+    """FeaturePrecomp serves photometry from the grid for models with fixed dust shapes.
+
+    When a dust component has an energy-balance LUT (fixed attenuation shape),
+    the grid serves both its photometry and its energy-balance channels. The
+    photometry moves by the sub-band quadrature error, measured at the prior
+    center and bounded at ``_RTOL_GRID_SERVED``.
+    """
+    from tengri.inference.fitter import fast_nebular_can_engage
+
+    groups = _MODELS[composition]
+    with jax.enable_x64(True):
+        base_phot, base_eb, _base_model = _photometry_and_eb(
+            ssp_data_fsps, obs, groups, (WavePrecomp(),)
+        )
+        feat_phot, feat_eb, feat_model = _photometry_and_eb(
+            ssp_data_fsps, obs, groups, (WavePrecomp(), FeaturePrecomp())
+        )
+
+    # Verify the grid can engage when the dust has a fixed shape
+    assert fast_nebular_can_engage(feat_model) is True, (
+        f"the grid was denied {composition}, which has a fixed dust shape and energy-balance LUT"
+    )
+
+    # Verify photometry is finite
+    assert np.all(np.isfinite(feat_phot))
+
+    # Compute and check the relative error
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.abs(feat_phot - base_phot) / np.abs(base_phot)
+
+    worst_rel = float(np.nanmax(rel))
+    assert worst_rel <= _RTOL_GRID_SERVED, (
+        f"FeaturePrecomp moved {composition} photometry by {worst_rel:.4e}, "
+        f"exceeding _RTOL_GRID_SERVED={_RTOL_GRID_SERVED:.2e} (per-band rel={rel.tolist()}). "
+        f"A shift above the bound is a dropped term, not quadrature."
+    )
+    print(
+        f"  {composition}: worst relative shift {worst_rel:.4e} "
+        f"(3.18e-5 / 3.18e-5 / 1.48e-4 per {_BANDS})"
+    )
+
+    # Energy-budget terms must be bit-identical (the full-state path resets the dust flag)
+    for key in _EB_KEYS:
+        assert feat_eb[key] == base_eb[key], (
+            f"FeaturePrecomp moved {key} on the {composition} model: "
+            f"{feat_eb[key]!r} vs {base_eb[key]!r}. The energy budget takes the "
+            "full-state path, where the dust flag is reset."
         )
 
 
@@ -189,9 +285,11 @@ def test_feature_precomp_keeps_the_nebular_term_in_the_energy_balance(ssp_data_f
     cue = _MODELS["cue"]
     no_neb = dict(dust_attenuation=_DUST, neb={"type": "none"})
     with jax.enable_x64(True):
-        _, eb_exact = _photometry_and_eb(ssp_data_fsps, obs, cue, None)
-        _, eb_noneb = _photometry_and_eb(ssp_data_fsps, obs, no_neb, None)
-        _, eb_feat = _photometry_and_eb(ssp_data_fsps, obs, cue, (WavePrecomp(), FeaturePrecomp()))
+        _, eb_exact, _ = _photometry_and_eb(ssp_data_fsps, obs, cue, None)
+        _, eb_noneb, _ = _photometry_and_eb(ssp_data_fsps, obs, no_neb, None)
+        _, eb_feat, _ = _photometry_and_eb(
+            ssp_data_fsps, obs, cue, (WavePrecomp(), FeaturePrecomp())
+        )
 
     for key in _EB_KEYS:
         contribution = eb_exact[key] - eb_noneb[key]
@@ -282,7 +380,7 @@ def test_the_feature_error_was_never_interpolation(ssp_data_fsps, obs):
     """
     cue = _MODELS["cue"]
     with jax.enable_x64(True):
-        base, _ = _photometry_and_eb(ssp_data_fsps, obs, cue, (WavePrecomp(),))
+        base, _, _ = _photometry_and_eb(ssp_data_fsps, obs, cue, (WavePrecomp(),))
         by_n = {
             n: _photometry_and_eb(
                 ssp_data_fsps, obs, cue, (WavePrecomp(), FeaturePrecomp(n_grid=n))
@@ -290,11 +388,18 @@ def test_the_feature_error_was_never_interpolation(ssp_data_fsps, obs):
             for n in (4, 32)
         }
 
+    # Verify n_grid did not move photometry (grid has nothing to interpolate with fixed axes)
+    assert np.array_equal(by_n[4], by_n[32]), (
+        "n_grid moved photometry between 4 and 32 with no free ionization axes: "
+        "the grid has nothing to interpolate, so the difference is a dropped term"
+    )
+
+    # Each should be within the grid-served bound relative to base
     for n, phot in by_n.items():
         with np.errstate(divide="ignore", invalid="ignore"):
             rel = np.abs(phot - base) / np.abs(base)
-        assert np.array_equal(phot, base), (
-            f"n_grid={n} moved photometry by {np.nanmax(rel):.4e}. With no free "
-            "ionization axes the grid has nothing to interpolate, so any shift "
-            "here is a dropped term, not resolution."
+        worst_rel = float(np.nanmax(rel))
+        assert worst_rel <= _RTOL_GRID_SERVED, (
+            f"n_grid={n} moved photometry by {worst_rel:.4e}, exceeding the bound "
+            f"(per-band rel={rel.tolist()}). A shift above the bound is a dropped term."
         )
