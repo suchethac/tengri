@@ -591,6 +591,7 @@ def build_components(
                 geometry=wg00_geometry,
                 structure=wg00_structure,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                eb_include_lyc=dust_eb_include_lyc,
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
