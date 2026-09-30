@@ -132,7 +132,13 @@ def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
 #: UV -> submm, wide enough to catch disc/BBB, torus/dust IR reprocessing,
 #: and (for the Q1 grad check only -- Q2 uses the more sensitive sed_agn)
 #: NLR/BLR/FeII near-UV-optical features.
-_CENTERS = (1500.0, 2500.0, 5000.0, 9000.0, 2.0e4, 1.0e5, 5.0e5, 2.0e6)
+#: 2.5e5 A (25 um observed, rest 12.5 um at the z=1 of ``_build``) sits inside
+#: the compact support of the Mor & Netzer 2012 silicate template (rest
+#: 7.9-17.9 um, i.e. 15.7-35.8 um observed). The Gaussian silicate has tails
+#: everywhere, but the MN12 template is exactly zero outside that window, so
+#: without a band in it ``agn_grahsp_si`` on ``torus:grahsp_mn12`` reads as dead
+#: on photometry although its sed_agn gradient is live.
+_CENTERS = (1500.0, 2500.0, 5000.0, 9000.0, 2.0e4, 1.0e5, 2.5e5, 5.0e5, 2.0e6)
 
 
 def _make_ssp() -> SSPData:
