@@ -74,8 +74,9 @@ Relation to Synthesizer grids
 The Synthesizer (Lovell et al. 2025; Roper et al. 2026) AGN grids (CLOUDY c23.01, 215 lines,
 6 axes: BH mass, Eddington ratio, cos(inclination), metallicity, log U, n_H)
 are structurally the closest published counterpart to the grids on which Cue
-was trained.  Key similarities: c17+ CLOUDY physics, broad line coverage, and
-physical BH-mass + Eddington-ratio parameterization.  Key difference: Cue
+was trained.  Key similarities: Cloudy 22.00 physics (Li et al. 2025), broad
+line coverage, and physical BH-mass + Eddington-ratio parameterization.  Key
+difference: Cue
 replaces the physical-BH axes with the 7 ionizing-spectrum shape parameters
 (``ionspec_index1..4``, ``ionspec_logLratio1..3``), which makes it agnostic
 to the specific accretion-disc model.
@@ -1236,6 +1237,10 @@ class CueBackend:
         from SSP.  Explicit overrides take precedence over derived values.
         Low-level (ssp_weights=None): fills from defaults.
 
+        Unit conventions: `neb_logZ_gas` is ABSOLUTE log10(Z) while Cue's
+        `gas_logz` is RELATIVE log10(Z/Zsun). Low-level path converts with
+        `gas_logz = neb_logZ_gas - LOG10_ZSUN` (or 0.0 if neb_logZ_gas is None).
+
         Returns a flat dict with all 12 Cue params + gas_logqion.
         """
         if ssp_weights is not None:
@@ -1293,10 +1298,11 @@ class CueBackend:
                 return derived[name]
             return default
 
+        _default_gas_logz = neb_logZ_gas - _LOG10_ZSUN if neb_logZ_gas is not None else 0.0
         return dict(
             gas_logu=_pick("gas_logu", gas_logu, neb_logU),
             gas_logn=gas_logn,
-            gas_logz=_pick("gas_logz", gas_logz, 0.0),
+            gas_logz=_pick("gas_logz", gas_logz, _default_gas_logz),
             gas_logno=gas_logno,
             gas_logco=gas_logco,
             gas_logqion=_pick("gas_logqion", gas_logqion, self.default_gas_logqion),

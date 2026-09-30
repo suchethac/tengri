@@ -478,6 +478,19 @@
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
 
+- Nebular backends' parameter reach. `neb_logU` (Cloudy, CB19 and both
+  MAPPINGS backends) and `neb_logZ_gas` (Cloudy) are now narrowed to the
+  vendored grid's axis at build time and warn when a value cannot be
+  narrowed away from it, instead of silently clipping onto a dead edge node
+  with an exactly-zero gradient (#2460). `CueBackend`'s low-level path
+  (`ssp_weights=None`) now threads `neb_logZ_gas` into `gas_logz` instead of
+  silently forcing solar metallicity (#2437). `neb={'type': 'cloudy'}` with
+  no explicit `grid` now prefers the packaged grid whose isochrone matches
+  the SSP, warning when it falls back to a mismatched sole grid and
+  refusing to guess among several mismatched ones; the resolved path is
+  logged at INFO (#2426). Cue's reproduction docs and `cue.py` now cite
+  Cloudy 22.00 (Li et al. 2025) instead of "c17+" (#2555).
+
 ### Fixed
 
 - SKIRTOR grid caches are keyed on the process float dtype, so a float32

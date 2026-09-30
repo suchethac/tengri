@@ -81,6 +81,142 @@ def _dust_emission_support(name: str) -> GridSupportFn:
     return _accessor
 
 
+def _cloudy_grid_support() -> dict[str, tuple[float, float]]:
+    """Read the default Cloudy grid's log U and log met axes (#2460).
+
+    Resolves the grid the same way the backend itself does --
+    :meth:`~tengri.parameters.parameters.Parameters._default_cloudy_grid`,
+    which honors ``$TENGRI_DATA_DIR`` -- rather than a hardcoded path, so a
+    worktree without a repo-level ``data/`` still finds the grid a real build
+    would use. This accessor has no SSP context (composition-time, before any
+    per-build isochrone match runs -- see #2426), so it reads the isochrone
+    that resolves when nothing else is known (``cloudy_grid_mist.h5`` if
+    present). ``neb_logU`` is exact for every shipped isochrone variant: the
+    log U axis (``[-4, -1]``, 7 nodes) is identical across
+    ``cloudy_grid_{mist,prsc,pdva,bpss}.h5``, verified by direct inspection.
+    ``neb_logZ_gas`` is NOT: ``cloudy_grid_bpss.h5``'s ``log_met`` axis spans
+    ``[-1.3, 0.3]`` where the others span ``[-1.98, 0.2]``, so the registered
+    bound is exact only when the build resolves to the same isochrone this
+    accessor found. That is the same imprecision already tolerated for
+    ``agn_log_ledd`` (see ``groups.py``'s ``_narrow_free_priors_to_grid``): a
+    narrowing that undershoots or overshoots by a modeling-relevant amount is
+    a decision for the per-build warning to report, not a reason to withhold
+    the registration for the common (matching) case.
+
+    Unit of ``log_met``: the file attrs mislabel it "absolute metallicity",
+    but the values themselves (11 nodes spanning roughly -2.0 to 0.2, the
+    classic FSPS/Byler et al. 2017 metallicity grid) cannot be absolute
+    log10(Z) -- that would put Z up to 10**0.2 ~ 1.6, past unity. They are
+    log10(Z/Zsun), confirmed by ``components/nebular/cloudy_grid.py``'s own
+    loader, which adds ``_LOG10_ZSUN`` to this same raw axis to form its
+    internal *absolute* ``line_log_met``/``cont_log_met``. The declared
+    ``neb_logZ_gas`` prior is likewise log10(Z/Zsun) (``_params.py``), so the
+    raw file axis is registered as-is, with no offset.
+    """
+    import h5py
+
+    from tengri.parameters.parameters import Parameters
+
+    grid_path = Parameters._default_cloudy_grid()
+    if grid_path is None:
+        raise FileNotFoundError("No Cloudy grid found (see $TENGRI_DATA_DIR)")
+
+    with h5py.File(grid_path, "r") as f:
+        if "continuum/axes" not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing continuum/axes")
+
+        log_U = f["continuum/axes/log_U"][:]
+        log_met = f["continuum/axes/log_met"][:]
+
+        return {
+            "neb_logU": (float(log_U.min()), float(log_U.max())),
+            "neb_logZ_gas": (float(log_met.min()), float(log_met.max())),
+        }
+
+
+def _cb19_grid_support() -> dict[str, tuple[float, float]]:
+    """Read CB_19's default template grid's log U axis (#2460).
+
+    ``CB19Backend`` clips ``neb_logU`` onto its grid axis exactly like
+    ``CloudyGridBackend`` (``cloudy_cb19.py``'s ``_val_to_frac_index``:
+    ``jnp.clip(val, grid[0], grid[-1])``), so it shares the #1586 mechanism
+    and belongs in this registry. Only ``neb_logU`` is registered: the grid's
+    metallicity axis is ``log_OH_total`` (12 + log10(O/H)), not
+    log10(Z/Zsun), and converting between the two abundance scales exactly
+    is out of scope here -- ``neb_logZ_gas`` keeps its declared support on
+    this backend.
+    """
+    import h5py
+
+    from tengri._data_setup import package_or_env_data_path
+
+    grid_path = package_or_env_data_path("cb19_templates.h5")
+    if not grid_path.exists():
+        raise FileNotFoundError(f"CB_19 grid not found: {grid_path}")
+
+    with h5py.File(grid_path, "r") as f:
+        if "axes/log_U" not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing axes/log_U")
+        log_U = f["axes/log_U"][:]
+
+    return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
+
+
+def _mappings_stellar_grid_support() -> dict[str, tuple[float, float]]:
+    """Read MAPPINGS V stellar backend's default grid's log U axis (#2460).
+
+    ``MappingsPhotoStellarBackend`` interpolates ``neb_logU`` via
+    ``_interp_index_weight`` (``mappings_photo.py``), which clips to the
+    grid axis the same way ``CloudyGridBackend`` does. Reads the ``sb99``/
+    ``cpr`` subgroup axis, the backend's own constructor defaults
+    (``model="sb99"``, ``density="cpr"``); a build using ``model="bpass"``
+    or ``density="cdn"`` is narrowed to this axis too, since every shipped
+    MAPPINGS V variant shares the same ``logU_axis`` (Flury et al. 2024's
+    grid spans one ionization-parameter range regardless of stellar model
+    or density structure).
+    """
+    import h5py
+
+    from tengri._data_setup import package_or_env_data_path
+
+    grid_path = package_or_env_data_path("flury2024_grids.h5")
+    if not grid_path.exists():
+        raise FileNotFoundError(f"MAPPINGS V grid not found: {grid_path}")
+
+    with h5py.File(grid_path, "r") as f:
+        group_key = "sb99/cpr/logU_axis"
+        if group_key not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing {group_key}")
+        log_U = f[group_key][:]
+
+    return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
+
+
+def _mappings_agn_grid_support() -> dict[str, tuple[float, float]]:
+    """Read MAPPINGS V AGN backend's default grid's log U axis (#2460).
+
+    Same mechanism and grid file as :func:`_mappings_stellar_grid_support`,
+    under the ``agn_oxaf/<density>`` subgroup instead of ``<model>/<density>``
+    (``MappingsPhotoAGNBackend`` has no stellar-model axis). Reads the
+    backend's own default ``density="cpr"``.
+    """
+    import h5py
+
+    from tengri._data_setup import package_or_env_data_path
+
+    grid_path = package_or_env_data_path("flury2024_grids.h5")
+    if not grid_path.exists():
+        raise FileNotFoundError(f"MAPPINGS V grid not found: {grid_path}")
+
+    with h5py.File(grid_path, "r") as f:
+        group_key = "agn_oxaf/cpr/logU_axis"
+        if group_key not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing {group_key}")
+        log_U = f[group_key][:]
+
+    return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
+
+
 #: ``(selector, component name)`` -> accessor for that component's grid support.
 #:
 #: ``selector`` is the dotted path used by the build grammar (``"agn.disc"``,
@@ -91,6 +227,10 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     ("agn.disc", "slone_netzer"): _slone_netzer_support,
     ("agn.disc", "kd18_agnfitter"): _kd18_agnfitter_support,
     ("agn.disc", "kd18_agnfitter_warmindex"): _kd18_agnfitter_warmindex_support,
+    ("neb", "cloudy"): _cloudy_grid_support,
+    ("neb", "cb19"): _cb19_grid_support,
+    ("neb", "mappings"): _mappings_stellar_grid_support,
+    ("neb", "mappings_agn"): _mappings_agn_grid_support,
     **{
         ("dust.emission", _name): _dust_emission_support(_name)
         # Every selectable spelling, aliases included: the menu exposes
@@ -114,6 +254,28 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
         )
     },
 }
+# Nebular components registered (#2460): ("neb", "cloudy"), ("neb", "cb19"),
+# ("neb", "mappings"), ("neb", "mappings_agn") -- all four clip neb_logU onto
+# a grid axis (confirmed by reading each interpolator: CloudyGridBackend's
+# triweight/linear lookup, CB19Backend's _val_to_frac_index, MAPPINGS'
+# _interp_index_weight), so all four share the #1586 zero-gradient-outside
+# mechanism this registry exists to narrow. Only "cloudy" also registers
+# neb_logZ_gas: CB19's metallicity axis is log_OH_total and MAPPINGS' is
+# ζ_O, neither log10(Z/Zsun), so narrowing them from the shared declaration
+# would need a unit conversion this fix does not establish.
+#
+# Cue ("cue") is deliberately excluded: it is a Speculator neural-network
+# emulator (cue.py), not a grid. Its inputs are normalized and extrapolated
+# smoothly outside the training footprint -- there is no jnp.clip onto an
+# edge node, so a draw beyond the training range does NOT zero the gradient
+# the way grid interpolation does; the failure mode there (if any) is
+# silently-untrustworthy physics, not dead inference signal, which is a
+# different problem this registry is not built to report. cue.py documents
+# no single trained (lo, hi) for gas_logu to register even if the mechanism
+# matched.
+#
+# The grid support accessor returns empty dict {} if the grid file
+# is not found, so model construction does not fail when grids are unavailable.
 # dh02_ce01 is deliberately absent: its only grid axis is L_TIR, derived from
 # L_absorbed by energy balance rather than set by the user, so no prior can
 # overhang it. See _DUST_EMISSION_GRID_AXES for the same reasoning on bosa.

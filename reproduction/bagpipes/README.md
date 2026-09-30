@@ -110,7 +110,7 @@ convention difference worth flagging for users moving between codes.
 | 4 | Dust attenuation curves | Calzetti, Cardelli, CF00, Salim — visual match. |
 | 5 | Attenuation applied | Matched at single-Av. |
 | 6 | DL07 dust IR + energy balance | Exact (`L_IR_emitted − L_absorbed = 0` to floating point). |
-| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. Most of the gap is Cloudy v17 (Cue training set) vs Cloudy v25 (current BAGPIPES) plus bare-stellar vs SFH-integrated ionizing-luminosity paths. |
+| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. The gap arises from differences in Cloudy versions and ionizing-spectrum treatment. |
 | 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviors are correct; they bracket different conventions of "intrinsic line width". |
 | 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
 | 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |

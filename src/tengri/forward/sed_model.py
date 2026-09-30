@@ -11063,7 +11063,7 @@ class SEDModel:
             if _obs_eline is not None and _obs_eline != "off":
                 groups["eline_mode"] = _obs_eline
 
-        spec = parse_groups(**groups)
+        spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_fracagn_requires_dust(spec)
         _validate_torus_frac_fracagn_conflict(spec)

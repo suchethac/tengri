@@ -53,6 +53,7 @@ Shorthand DPL equivalent::
 from __future__ import annotations
 
 import copy
+import logging
 import types
 import zlib
 
@@ -89,6 +90,52 @@ from tengri.parameters.priors import (
 from tengri.parameters.sentinels import WILDCARD_ALIAS
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
+
+#: A resolved Cloudy grid path is logged here at INFO (#2426) so which
+#: isochrone a fit actually ran against appears in a fit log even when no
+#: warning fired (the matching case).
+logger = logging.getLogger(__name__)
+
+#: Isochrone tags a shipped ``cloudy_grid_<tag>[_wd].h5`` may carry, matching
+#: ``scripts/convert_fsps_cloudy_grid.py``'s ``--isoc`` choices. Read off
+#: ``SSPData.source`` (the ``<code>_<isochrone>_<library>_<imf>`` filename
+#: token convention) to prefer the grid whose ionizing physics was computed
+#: for the same isochrone as the stellar templates (#2426).
+_CLOUDY_ISOCHRONE_TAGS = ("mist", "prsc", "pdva", "bpss")
+
+
+def _neb_isochrone_tag_from_ssp(ssp_data) -> str | None:
+    """Isochrone tag (``"mist"``/``"prsc"``/``"pdva"``/``"bpss"``) an SSP names.
+
+    Parameters
+    ----------
+    ssp_data : SSPData or None
+        The SSP the model is being built against; ``None`` (no SSP, or an
+        SSP with an empty/unrecognized ``source``) yields ``None``.
+
+    Returns
+    -------
+    str or None
+        One of :data:`_CLOUDY_ISOCHRONE_TAGS`, or ``None`` when
+        ``ssp_data.source`` names none of them.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+
+    Matches whole ``_``-delimited tokens, not a substring: ``source`` is
+    read verbatim from a filename stem, and a naive substring test on e.g. a
+    library named ``geomist`` would wrongly claim the MIST isochrone tag.
+    """
+    source = getattr(ssp_data, "source", None)
+    if not source:
+        return None
+    tokens = str(source).lower().split("_")
+    for tag in _CLOUDY_ISOCHRONE_TAGS:
+        if tag in tokens:
+            return tag
+    return None
+
 
 # CUE_FULL_CATALOG_DEFAULT (#2239) is declared in tengri.config.settings (a
 # leaf module: stdlib imports only) and re-exported here, so existing
@@ -899,6 +946,12 @@ class Parameters:
         nebular = kwargs.pop("nebular", False)
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
+        # Isochrone tag read off the build's SSP (#2426), threaded in by
+        # ``parse_groups`` (never set on a directly-constructed ``Parameters``,
+        # which has no SSP to read: auto-resolution then falls back to the
+        # pre-#2426 unconditional default). Consumed only by
+        # ``_default_cloudy_grid`` below; not itself a nebular setting.
+        self._ssp_isochrone_tag = kwargs.pop("ssp_isochrone_tag", None)
         # #2220: explicit cb19 grid, mirroring nebular_mappings_grid_path /
         # nebular_mappings_agn_grid_path below. None resolves the packaged
         # default at CB19Backend construction time.
@@ -991,16 +1044,30 @@ class Parameters:
                 # parse_groups) to allow _check_dict_keys to validate keys before the
                 # grid-file existence check. The real construction (pass 2's final spec)
                 # is untouched and still raises if no grid is reachable (#2328).
-                default_grid = self._default_cloudy_grid()
+                default_grid = self._default_cloudy_grid(self._ssp_isochrone_tag)
                 if default_grid is None:
                     self._raise_missing_grid_path()
                 self.cloudy_grid_path = default_grid
+            if self.cloudy_grid_path is not None:
+                # #2426: always logged, matching or not, explicit or auto --
+                # the resolved isochrone is exactly the fact a fit log needs
+                # and an exception message does not carry on the success path.
+                logger.info("Nebular CLOUDY grid resolved to %s", self.cloudy_grid_path)
         elif nebular_ssp:
             self.nebular_mode = "ssp"
         else:
             self.nebular_mode = "off"
 
         self.nebular = self.nebular_mode != "off"
+        # Structural selection string for the ("neb", <name>) GRID_SUPPORT key
+        # (#2460), mirroring ``dust_emission``'s plain-string attribute:
+        # ``_selected_component`` in ``parameters/groups.py`` derives the
+        # structural attribute mechanically from the selector name
+        # (``"neb"`` -> ``self.neb``) rather than through a second
+        # hand-maintained table, so this is the one line that makes the
+        # "neb" selector visible to it. "off"/"ssp" resolve to no
+        # GRID_SUPPORT entry and are harmless.
+        self.neb = self.nebular_mode
 
         if self.neb_ionization in ("agn", "ssp+agn"):
             raise NotImplementedError(
@@ -1296,19 +1363,96 @@ class Parameters:
         self.z_interp = kwargs.pop("z_interp", "linear")
 
     @staticmethod
-    def _default_cloudy_grid():
-        """Auto-resolve the default CLOUDY grid, mirroring the Cue-weights default.
+    def _default_cloudy_grid(isochrone_tag: str | None = None) -> str | None:
+        """Auto-resolve the default CLOUDY grid (#2426).
 
-        Prefers ``data/cloudy_grid_mist.h5`` at the repo root; the grid
-        matching the default MIST/FSPS SSP family. Returns None when absent
-        (wheel installs, grid not generated) so the caller can raise the
-        listing error instead.
+        Parameters
+        ----------
+        isochrone_tag : str or None
+            The building SSP's isochrone tag (:func:`_neb_isochrone_tag_from_ssp`),
+            or ``None`` when unavailable -- a directly-constructed ``Parameters``
+            (the flat-kwarg escape hatch) has no SSP to read at all, so this
+            call carries no signal either way.
+
+        Returns
+        -------
+        str or None
+            The resolved grid path, or ``None`` when no ``cloudy_grid_*.h5``
+            is reachable (wheel installs, grid not generated) so the caller
+            raises the listing error instead.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- composition-time only.
+
+        Resolution order:
+
+        1. ``isochrone_tag`` given and a ``cloudy_grid_<tag>.h5`` exists:
+           use it. The common, silent-success case.
+        2. ``isochrone_tag`` given, no match, and it is the ONLY grid
+           present: use it anyway (nothing else to try), warning that the
+           isochrones differ
+           (:class:`~tengri.config.exceptions.CloudyGridIsochroneMismatchWarning`).
+        3. ``isochrone_tag`` given, no match, and SEVERAL grids are present:
+           refuse -- silently picking among several wrong candidates is the
+           #2426 defect, not a fallback worth having.
+        4. ``isochrone_tag`` is ``None``: preserve the pre-#2426 default
+           (prefer ``cloudy_grid_mist.h5``, else the first grid found) --
+           there is no SSP signal to reason a mismatch from, so this path
+           does not newly refuse.
+
+        ``_wd`` (dust-depletion) variants are excluded from every auto-selected
+        candidate list: ``scripts/convert_fsps_cloudy_grid.py --dust WD`` is an
+        explicit opt-in to a different nebular dust-grain physics, orthogonal to
+        isochrone choice, and never the unspoken default. Pass an explicit
+        ``grid=`` for one.
         """
-        from tengri._data_setup import find_data
+        from tengri._data_setup import data_dirs
 
-        # Honors $TENGRI_DATA_DIR as well as the repo root (#1431).
-        candidate = find_data("cloudy_grid_mist.h5")
-        return str(candidate) if candidate is not None else None
+        searched = data_dirs()
+        seen: set[str] = set()
+        grids = [
+            g
+            for d in searched
+            for g in sorted(d.glob("cloudy_grid_*.h5"))
+            if not (g.name in seen or seen.add(g.name)) and not g.stem.endswith("_wd")
+        ]
+        if not grids:
+            return None
+
+        if isochrone_tag is not None:
+            matches = [g for g in grids if g.stem == f"cloudy_grid_{isochrone_tag}"]
+            if matches:
+                return str(matches[0])
+            if len(grids) == 1:
+                import warnings
+
+                from tengri.config.exceptions import CloudyGridIsochroneMismatchWarning
+
+                found_tag = grids[0].stem.removeprefix("cloudy_grid_")
+                warnings.warn(
+                    f"No cloudy_grid_{isochrone_tag}.h5 matches the SSP's isochrone "
+                    f"({isochrone_tag!r}); falling back to the only grid present, "
+                    f"{grids[0]} (isochrone {found_tag!r}). Generate a matching grid "
+                    f"with scripts/convert_fsps_cloudy_grid.py --isoc {isochrone_tag}, "
+                    f"or pass neb={{'type': 'cloudy', 'grid': ...}} explicitly.",
+                    CloudyGridIsochroneMismatchWarning,
+                    stacklevel=4,
+                )
+                return str(grids[0])
+            names = ", ".join(str(g) for g in grids)
+            raise ValueError(
+                f"No CLOUDY grid matches the SSP's isochrone ({isochrone_tag!r}), and "
+                f"{len(grids)} grids are present, so which one to use is ambiguous: "
+                f"{names}. Pass neb={{'type': 'cloudy', 'grid': 'data/cloudy_grid_"
+                f"{isochrone_tag}.h5'}} after generating it with "
+                f"scripts/convert_fsps_cloudy_grid.py --isoc {isochrone_tag}, or name "
+                f"one of the grids above explicitly."
+            )
+
+        # No SSP isochrone signal at all: the pre-#2426 default.
+        preferred = [g for g in grids if g.stem == "cloudy_grid_mist"]
+        return str(preferred[0] if preferred else grids[0])
 
     @staticmethod
     def _raise_missing_grid_path():
@@ -1399,6 +1543,12 @@ class Parameters:
             # happens here: an earlier draft stripped a "_tabulated" suffix
             # and thereby missed "draine_li2007" entirely.
             selected.append(("dust.emission", dust_em))
+        # ("neb", <mode>) (#2460): "off"/"ssp"/"cue" have no GRID_SUPPORT
+        # entry and check_grid_support silently skips them, so this need not
+        # filter by mode itself.
+        neb = getattr(self, "neb", None)
+        if isinstance(neb, str):
+            selected.append(("neb", neb))
         return selected
 
     def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
