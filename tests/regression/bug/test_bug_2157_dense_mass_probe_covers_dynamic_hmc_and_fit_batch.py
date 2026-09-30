@@ -155,6 +155,44 @@ class TestDenseProbeWiringDynamicHMC:
         assert call_log == [], f"diagonal mass must skip the probe, got {call_log}"
 
 
+class TestDenseProbeWiringFitBatchGHMC:
+    """GHMC is excluded from the batch probe even under a dense mass.
+
+    ``_stabilize_dense_mass_step`` drives an HMC/NUTS-shaped kernel; the GHMC
+    kernel takes an extra positional (delta), so probing it raises TypeError
+    mid-fit. The contract is a deliberate skip: the fit completes and the
+    probe never fires.
+    """
+
+    def test_probe_skipped_for_ghmc_dense(self, monkeypatch):
+        from tengri.inference.backends.mcmc import _shared
+        from tengri.inference.fitter import Fitter
+
+        model = _build_small_model()
+        flux, noise = _mock_flux_noise(model)
+
+        call_log = []
+        monkeypatch.setattr(_shared, "_stabilize_dense_mass_step", _make_recorder(call_log))
+
+        fitter = Fitter(model, data=jnp.asarray(flux), noise=jnp.asarray(noise))
+        batch = [
+            {"flux_obs": jnp.asarray(flux), "noise": jnp.asarray(noise)},
+            {"flux_obs": jnp.asarray(flux) * 1.1, "noise": jnp.asarray(noise)},
+        ]
+        posteriors = fitter.fit_batch(
+            batch,
+            method="mcmc_ghmc",
+            key=jax.random.PRNGKey(1),
+            verbose=False,
+            dense_mass_matrix=True,
+            **_FIT_KW,
+        )
+        assert len(posteriors) == 2
+        assert call_log == [], (
+            f"GHMC must not be probed (kernel signature mismatch), got {call_log}"
+        )
+
+
 class TestDenseProbeWiringFitBatch:
     """The probe runs in fit_batch's shared vmap adaptation iff the mass is dense."""
 

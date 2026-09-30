@@ -4785,8 +4785,13 @@ class Fitter:
         )
         step_size, inv_mass_matrix = _run_adapt(adapt_key, init_flats[0], first_data_args)
 
-        # Post-adaptation step size stability probe for dense mass matrix (#2157)
-        if use_dense:
+        # Post-adaptation step size stability probe for dense mass matrix (#2157).
+        # GHMC is excluded: _stabilize_dense_mass_step drives an HMC/NUTS-shaped
+        # kernel, and the GHMC kernel takes an extra positional (delta) the
+        # probe does not pass — calling it would TypeError. The single-galaxy
+        # GHMC path carries no probe either; its persistent-momentum step
+        # dynamics are not the #1999 divergence mode the probe exists for.
+        if use_dense and method != "mcmc_ghmc":
             import blackjax
 
             initial_state = blackjax.nuts.init(
@@ -4798,12 +4803,9 @@ class Fitter:
             elif method == "mcmc_hmc":
                 kernel = _get_hmc_kernel()
                 max_doublings = n_leapfrog_steps
-            elif method == "mcmc_dynamic_hmc":
+            else:  # mcmc_dynamic_hmc
                 kernel = _get_hmc_kernel()
                 max_doublings = 10  # match _DHMC_WARMUP_LEAPFROG_STEPS
-            else:  # mcmc_ghmc
-                kernel = _get_ghmc_kernel()
-                max_doublings = max_num_doublings
 
             step_size, backoff_count = _stabilize_dense_mass_step(
                 kernel,
