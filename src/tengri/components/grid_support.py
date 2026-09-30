@@ -85,7 +85,7 @@ def _cloudy_grid_support() -> dict[str, tuple[float, float]]:
     """Read the default Cloudy grid's log U and log met axes (#2460).
 
     Resolves the grid the same way the backend itself does --
-    :meth:`~tengri.parameters.parameters.Parameters._default_cloudy_grid`,
+    ``Parameters._default_cloudy_grid`` in ``tengri.parameters.parameters``,
     which honors ``$TENGRI_DATA_DIR`` -- rather than a hardcoded path, so a
     worktree without a repo-level ``data/`` still finds the grid a real build
     would use. This accessor has no SSP context (composition-time, before any
