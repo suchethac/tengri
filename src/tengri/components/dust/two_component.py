@@ -972,9 +972,9 @@ class DustSEDComponent(TemplateThreading):
         # not the uniform all-ages mask. For ``lyc_absorb_all=True`` the two
         # already agree (both apply ``_lyc_t`` uniformly across every age), so
         # this is a no-op there. With ``eb_include_lyc=False`` (default) the
-        # below-912 region is masked out of that integral regardless of what
-        # this array holds there (``_eb_cutoff=912.0``, see §3), so switching
-        # to this quantity is bit-identical at the default.
+        # ionizing region is masked out of that integral regardless of what
+        # this array holds there (``_eb_cutoff=LYMAN_LIMIT_AA``, see §3), so
+        # switching to this quantity is bit-identical at the default.
         _lyc_t = state.derived.get("lyc_transmission")
         sed_intrinsic_stellar_eb = sed_intrinsic_stellar
         if _lyc_t is not None:
