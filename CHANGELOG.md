@@ -10,6 +10,8 @@
   (default `Fixed(1.0)`, prior `Uniform(0.8, 1.2)`), applied to both the
   stellar-continuum and emission-line spectroscopy kernels (#2526).
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
+- `predict_line_fluxes` and `measure_line_fluxes` now apply the model's configured IGM transmission, profile-averaged over the line's Gaussian width in observed wavelength, matching the same `igm_absorption` dispatch the spectrum/photometry channels already use. Previously the line-flux surfaces read a rest-frame catalog and divided by `4 pi d_L^2` directly, so a line at a redshift where the Lyman forest bites (e.g. Ly-alpha at z >~ 2) came out brighter than the same galaxy's own spectrum. `igm={'type': 'none'}` (or an absent IGM component) leaves line fluxes unchanged; every registered mean-IGM model is supported (#2520).
+- A declared `line_flux_scaling` nuisance parameter (default `Fixed(1.0)`, free via `spec.merge_observation_params(line_flux_scaling=LogNormal(mu=0.0, sigma=0.05))`) multiplies every predicted flux of the `Observation.line_fluxes` channel before the likelihood comparison, absorbing an aperture / absolute-flux-calibration mismatch between that channel and the rest of a joint fit. Fixed at 1.0 by default, so an existing fit is unaffected unless a user opts in; `profile_mass=True` refuses when it is free alongside a profiled line-flux channel, since the two amplitudes are otherwise degenerate (#2527).
 
 ### Fixed
 
@@ -419,6 +421,23 @@
   Parameters construction is untouched — a valid group without an on-disk grid
   still raises the same grid message.
 
+- `measure_line_fluxes` now refuses (`ValueError`, naming the grid and the
+  remedy) when the configured nebular backend contributes no line flux of its
+  own (`neb={'type': 'ssp'}` or the default) and the SSP grid's metadata says
+  it carries no nebular emission (`nebular='bare'`); it warns instead when the
+  grid's status is merely unstamped (`'unknown'`), since that cannot be
+  resolved either way. Previously it silently measured stellar
+  continuum/absorption in that configuration and returned a value
+  indistinguishable from `neb={'type': 'none'}`, with no indication the
+  nebular emission it is meant to measure was absent (#2540).
+- `predict_line_fluxes` no longer raises `ValueError: attempt to get argmin of
+  an empty sequence` when the attached per-Q_H nebular grid tabulates no lines
+  (a photometry-only fit's `approx="auto"` grid, or `FeaturePrecomp()` with no
+  line targets): it now falls through to the exact catalog path instead,
+  matching the model's own `predict_line_fluxes(approx=None)` answer. A grid
+  that tabulates some but not the requested line still refuses with the
+  existing "no match within tolerance_aa" message (#2561).
+
 - Self-whitening backends (MCLMC and low-rank HMC) now refuse to compose with
   the analytic metric when `precondition=` is supplied (#2196). Two whitenings
   multiply to produce catastrophic degradation (measured as 472 divergences on a
@@ -490,6 +509,12 @@
   R_V,Cal / R_V,mod ≈ 0.673), and A(2175) / A_V at (δ = 0.3, B = 3) from 2.317
   to 2.079, matching an independent BAGPIPES evaluation (2.082) to < 0.5%
   precision versus ~10% prior miss.
+
+- Student-t and Gaussian noise energies now share one convention: both return
+  the negative log-density up to a parameter-independent constant, with the
+  Student-t branch tending to the Gaussian branch as dof → ∞. A fit at fixed
+  dof is unchanged; comparing evidence across noise families no longer carries
+  an offset of n·½·log(2π) (#2560).
 
 ### Fixed
 

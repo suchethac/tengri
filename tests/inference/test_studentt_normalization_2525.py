@@ -2,8 +2,11 @@
 """#2525: Student-t noise Hamiltonian missing dof-dependent normalization.
 
 Tests that variable_noise_hamiltonian correctly includes the
-lgamma((dof+1)/2) - lgamma(dof/2) - 0.5*log(dof*pi) normalization term
+lgamma((dof+1)/2) - lgamma(dof/2) - 0.5*log(dof/2) normalization term
 for Student-t likelihoods when dof varies (free parameter case).
+The Student-t energy is offset from the normalized scipy convention by
+n*0.5*log(2*pi) (where n is the number of data points), making the
+Student-t limit match the Gaussian as dof -> inf.
 """
 
 import jax
@@ -58,7 +61,11 @@ class TestStudentTNormalization:
         log_sigma_eff = jnp.log(sigma_eff)
 
         # Sum over all 50 points
-        total_log_prob = jnp.sum(log_prob_t - log_sigma_eff)
+        # The variable_noise_hamiltonian uses a modified Student-t convention:
+        # H = -sum(t.logpdf - log(sigma_eff) - 0.5*log(2*pi))
+        # This offset by n*0.5*log(2*pi) ensures the Student-t limit matches Gaussian.
+        n_data = len(data)
+        total_log_prob = jnp.sum(log_prob_t - log_sigma_eff) + n_data * 0.5 * jnp.log(2.0 * jnp.pi)
         H_proper = -total_log_prob
 
         # Assert with tight tolerance
@@ -72,7 +79,10 @@ class TestStudentTNormalization:
 
     @pytest.mark.parametrize("dof", [4.0])
     def test_single_datum_density_integrates_to_one(self, dof):
-        """Test that exp(-H) for one datum integrates to 1 over a fine grid."""
+        """Test that the full Student-t density integrates to 1.
+
+        After adding back the omitted parameter-independent constant.
+        """
         from tengri.observation.noise import variable_noise_hamiltonian
 
         # Single residual at 0
@@ -81,9 +91,9 @@ class TestStudentTNormalization:
         predicted = jnp.array([0.0])
         f_cal = 0.0
 
-        # Integrate exp(-H) over y in mu +/- 200*sigma
-        # For one datum, H(y) = (dof+1)/2 * log(1 + y^2/dof) + log(sigma)
-        # exp(-H) = sigma / (1 + y^2/dof)^((dof+1)/2)
+        # The variable_noise_hamiltonian returns energy up to a constant.
+        # The full log-density is: -H - 0.5*log(2*pi) (for one datum)
+        # So exp(-H - 0.5*log(2*pi)) should integrate to 1.
 
         sigma = 1.0  # noise_obs value
         center = 0.0
@@ -98,8 +108,9 @@ class TestStudentTNormalization:
             ]
         )
 
-        # Probability density (unnormalized)
-        densities = jnp.exp(-energies)
+        # Full probability density with the omitted constant added back
+        # density = exp(-(energy + 0.5*log(2*pi)))
+        densities = jnp.exp(-(energies + 0.5 * jnp.log(2.0 * jnp.pi)))
 
         # Integrate via trapezoidal rule
         dy = (2.0 * margin) / (len(y_vals) - 1)
@@ -132,11 +143,14 @@ class TestStudentTNormalization:
             # Hamiltonian (energy, negative log-prob)
             H = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=dof)
 
-            # Proper via logpdf
+            # Proper via logpdf with the offset constant
             sigma_eff = jnp.ones_like(r_scaled)  # since noise_obs=1, predicted=0, f_cal=0
             scaled_res = data / sigma_eff
             log_prob_t = jax.scipy.stats.t.logpdf(scaled_res, dof)
-            H_proper = -jnp.sum(log_prob_t - jnp.log(sigma_eff))
+            n_data = len(data)
+            # H = -sum(t.logpdf - log(sigma_eff) - 0.5*log(2*pi))
+            const_term = n_data * 0.5 * jnp.log(2.0 * jnp.pi)
+            H_proper = -(jnp.sum(log_prob_t - jnp.log(sigma_eff)) + const_term)
 
             difference = H_proper - H
             npt.assert_allclose(

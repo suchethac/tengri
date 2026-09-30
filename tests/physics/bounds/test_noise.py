@@ -309,7 +309,7 @@ class TestStudentTEnergy:
         result = variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof=dof)
 
         # Manual: E = (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
-        #          - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(νπ)]
+        #          - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
         sigma_eff = jnp.sqrt(noise_obs**2 + (f_cal * jnp.abs(predicted)) ** 2)
         r = (data - predicted) / sigma_eff
         expected = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof))
@@ -318,7 +318,7 @@ class TestStudentTEnergy:
         norm_term = (
             jax.scipy.special.gammaln((dof + 1.0) / 2.0)
             - jax.scipy.special.gammaln(dof / 2.0)
-            - 0.5 * jnp.log(dof * jnp.pi)
+            - 0.5 * jnp.log(dof / 2.0)
         )
         expected -= n_data * norm_term
         npt.assert_allclose(float(result), float(expected), rtol=1e-10)
