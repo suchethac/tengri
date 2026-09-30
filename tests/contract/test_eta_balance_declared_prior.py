@@ -197,7 +197,7 @@ def test_eta_scaling_survives_precomp_and_matches_exact(synthetic_ssp_wide):
     ssp = synthetic_ssp_wide
     m_exact = _build(ssp, None)
     m_lut = _build(ssp, WavePrecomp())
-    base = {**m_exact.spec.get_fixed_values(), **m_exact.spec.sample(jax.random.PRNGKey(0))}
+    base = m_exact.spec.sample(jax.random.PRNGKey(0))
 
     photometry = {}
     for label, m in (("exact", m_exact), ("lut", m_lut)):

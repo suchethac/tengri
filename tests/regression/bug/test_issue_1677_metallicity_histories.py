@@ -464,7 +464,6 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
     from tengri.parameters.priors import Fixed
 
     t, sfr, _, params = histories
-    fwd = _build(synthetic_ssp_wide, synthetic_tophat_obs, met_mode="table", neb="cloudy")
     fwd_free = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
@@ -479,8 +478,15 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
         neb={"type": "cloudy", "logZ_gas": Fixed(_ENRICHED_ENDPOINT)},
     )
 
+    # "met_gas= supplied" needs neb_logZ_gas FREE on the model, same as every
+    # other per-galaxy-varying column (#2296): met_gas= writes it into
+    # from_histories' per-galaxy columns, and a Fixed neb_logZ_gas would
+    # refuse that presence at construction (see
+    # test_met_gas_needs_a_free_gas_phase_metallicity below for the
+    # Fixed-build case, refused loudly rather than failing later inside
+    # predict()).
     cases = (
-        ("met_gas= supplied", fwd, {"met_gas": np.full(_N, 0.1), "params": params}),
+        ("met_gas= supplied", fwd_free, {"met_gas": np.full(_N, 0.1), "params": params}),
         (
             "neb_logZ_gas as a column",
             fwd_free,
@@ -492,9 +498,42 @@ def test_the_gas_warning_is_silent_once_the_choice_is_made(
         with warnings.catch_warnings():
             warnings.simplefilter("error", GasStellarMetallicityWarning)
             try:
-                Catalog.from_histories(model, t_gyr=t, sfr=sfr, met=enriched_history, **kwargs)
+                cat = Catalog.from_histories(
+                    model, t_gyr=t, sfr=sfr, met=enriched_history, **kwargs
+                )
             except GasStellarMetallicityWarning as exc:  # pragma: no cover
                 pytest.fail(f"{label} still warned: {exc}")
+            # The whole point of from_histories validating its columns is that
+            # a table it accepts must not then be refused by predict() (#2296);
+            # a Fixed-key conflict caught only here (not at construction) is
+            # the bug this test guards.
+            flux = cat.predict()
+            assert np.all(np.isfinite(flux)), f"{label}: predict() returned non-finite flux"
+
+
+@requires_cloudy
+def test_met_gas_needs_a_free_gas_phase_metallicity(
+    synthetic_ssp_wide, synthetic_tophat_obs, histories
+):
+    """met_gas= on a model with neb_logZ_gas Fixed is refused at construction, not late.
+
+    met_gas= writes a per-galaxy neb_logZ_gas column; if the model's
+    neb_logZ_gas is Fixed (the default disposition), that column is refused
+    by #2296's presence check the same way any other Fixed-key override is
+    -- but from_histories used to accept the table anyway and fail only
+    inside the first predict() call, which is exactly the fail-late trap
+    from_histories exists to prevent (see this file's module docstring, the
+    met={'type': 'table'} case). Refuse here, at construction, naming the
+    remedy: rebuild with the gas-phase metallicity FREE.
+    """
+    from tengri import Catalog
+    from tengri.config.exceptions import ParameterError
+
+    t, sfr, _, params = histories
+    fwd = _build(synthetic_ssp_wide, synthetic_tophat_obs, met_mode="table", neb="cloudy")
+
+    with pytest.raises(ParameterError, match="neb_logZ_gas"):
+        Catalog.from_histories(fwd, t_gyr=t, sfr=sfr, met_gas=np.full(_N, 0.1), params=params)
 
 
 # ── the precompute paths serve a tabulated metallicity ───────────────

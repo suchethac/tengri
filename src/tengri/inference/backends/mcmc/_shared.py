@@ -1114,17 +1114,26 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs."""
+        """Advance NUTS one step: position, divergence flag, tree depth, leapfrogs, energy."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (
             s.position,
             info.is_divergent,
             info.num_trajectory_expansions,
             info.num_integration_steps,
+            # The Hamiltonian at the accepted state. Carried because the energy
+            # trace is what E-BFMI is computed from, and E-BFMI is the standard
+            # diagnostic for the failure this sampler actually hits on
+            # heavy-tailed priors: a chain that cannot traverse the energy
+            # distribution. A divergence count says something went wrong;
+            # E-BFMI says the geometry is why. One float per draw.
+            info.energy,
         )
 
-    _, (positions, divergent, expansions, n_leapfrog) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, expansions, n_leapfrog
+    _, (positions, divergent, expansions, n_leapfrog, energy) = jax.lax.scan(
+        _step, state, chain_keys
+    )
+    return positions, divergent, expansions, n_leapfrog, energy
 
 
 # ---------------------------------------------------------------------------
@@ -3403,8 +3412,20 @@ def _parallel_chains(
     per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
     per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
     out = jax.pmap(chain_scan_fn, devices=devices)(states, per_chain_keys)
+    # Gather the draws to the host before they leave. pmap's outputs are
+    # sharded one chain per device, and every jitted consumer downstream --
+    # the whitening restore, the physical transform, and above all the
+    # profile-mass reinsertion's chunked lax.map -- would otherwise be
+    # compiled for those sharded inputs as an SPMD program across the host
+    # devices. Measured on a paper-1 III cell (4 chains, 4 host devices,
+    # 1200 draws): the reinsertion executed from sharded inputs held a
+    # 24 GB plateau for 4.5 min; the identical program on host-resident
+    # inputs peaks 1 GB above baseline in ~2 min. The draws are
+    # (n_chains, n_iter, D) floats -- kilobytes -- so the gather is free.
+    out = jax.device_get(out)
 
     def _trim_and_flatten(arr):
+        arr = jnp.asarray(arr)
         if n_burnin > 0:
             arr = arr[:, n_burnin:]
         if arr.ndim >= 3:

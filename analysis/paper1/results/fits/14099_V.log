@@ -1,0 +1,41 @@
+2026-09-22 20:29:30,829 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 1.951e-30 erg/s/cm2/Hz
+2026-09-22 20:29:50,077 - __main__ - INFO - Galaxy 14099 (z=1.093): 15 detected bands
+2026-09-22 20:29:50,078 - __main__ - INFO - Config V: 6 free parameters
+2026-09-22 20:29:50,078 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+E0922 20:30:09.269216 2495627 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.152 = f64[6016]{0} sort(%constant.7336), dimensions={0}, is_stable=true, to_apply=%region_65.235.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1588}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E0922 20:30:09.595534 2495529 slow_operation_alarm.cc:140] The operation took 1.326660503s
+Constant folding an instruction is taking > 1s:
+
+  %sort.152 = f64[6016]{0} sort(%constant.7336), dimensions={0}, is_stable=true, to_apply=%region_65.235.clone, metadata={op_name="jit(_impl)/jit(lnu_filter_integral)/jit(sort)/sort" stack_frame_id=1588}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-22 20:38:20,325 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-22 20:53:23,391 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (903.1s). Step size: 0.0973. Divergent in the final warmup window: 0%
+2026-09-22 21:10:17,779 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1917.0s. Divergences: 4/1200 (0.3%). Tree depth: mean 5.6, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-22 21:10:18,175 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-22 21:10:18,176 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-22 21:13:34,283 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=4, rhat_max=1.0131, ess_min=117
+2026-09-22 21:14:15,540 - __main__ - INFO - Saved results to analysis/paper1/results/fits/14099_V.npz
+2026-09-22 21:14:15,542 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/14099_V.json
+2026-09-22 21:14:15,547 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=4) before retuning
+2026-09-22 21:14:15,553 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
+2026-09-22 21:14:19,199 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 5 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-09-22 21:29:22,763 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (903.6s). Step size: 0.0481. Divergent in the final warmup window: 0%
+2026-09-22 21:49:54,423 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 2135.1s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.9, at cap on 0% of iterations (max_num_doublings=10)
+2026-09-22 21:49:54,434 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
+2026-09-22 21:49:54,434 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-09-22 21:52:12,504 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0011, ess_min=138
+2026-09-22 21:53:03,966 - __main__ - INFO - Saved results to analysis/paper1/results/fits/14099_V.npz
+2026-09-22 21:53:03,975 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/14099_V.json
+2026-09-22 21:53:03,986 - __main__ - INFO - ✓ Fit complete for galaxy 14099 config V
+  MAP initialization (1000 steps)...
+  MAP init done (loss=17.01)
+  MAP initialization: reusing cached MAP point

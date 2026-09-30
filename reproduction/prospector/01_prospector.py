@@ -19,10 +19,10 @@
 # Prospector (Johnson, Leja, Conroy & Speagle 2021) is the most widely used
 # Bayesian SED-fitting framework in extragalactic astronomy. Its forward
 # model is FSPS (Conroy, Gunn & White 2009), called through `python-fsps`.
-# This study configures tengri's public API to approximate Prospector's model choices; tengri's implementation is its own, not derived from Prospector's code, and residual differences are quantified below.
+# This study configures tengri's public API to approximate Prospector's model choices. Tengri's implementation is its own, not derived from Prospector's code. Residual differences are quantified below.
 #
 # The left panel of each figure is FSPS evaluated live through `python-fsps`,
-# the engine Prospector uses; the right panel is tengri. Both read the same
+# the engine Prospector uses. The right panel is tengri. Both read the same
 # SSP templates: tengri loads FSPS MIST + MILES Chabrier from the public
 # catalog, so a §1 residual below floating-point precision is interpolation
 # alone. The fiducial galaxy is a τ-delayed SFH (τ = 1 Gyr, age 5 Gyr) at
@@ -35,7 +35,7 @@
 # exception: FSPS uses Byler+2017 Cloudy grids while tengri uses Cue (Li et
 # al. 2025), a neural emulator trained on a different Cloudy version, and §8
 # quantifies the Hα ratio difference. Prospector has no X-ray or radio
-# component; the CIGALE notebook covers that stack.
+# component. The CIGALE notebook covers that stack.
 
 # %% [markdown]
 # ## Setup
@@ -148,8 +148,8 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # %% [markdown]
 # ## Common SSP grid
 #
-# The FSPS MIST + MILES Chabrier grid — the same templates the local FSPS
-# installation uses — fetched once from the public catalog and cached under
+# The FSPS MIST + MILES Chabrier grid (the same templates the local FSPS
+# installation uses), fetched once from the public catalog and cached under
 # `_drivers/data/`.
 
 # %%
@@ -168,11 +168,11 @@ print(
 #
 # FSPS MIST + MILES at solar metallicity, from 1 Myr to 10 Gyr, with the
 # relative residual `|tengri − FSPS| / FSPS` below. Both read identical
-# numerics; the residual floor is the float32 round-trip — gray line marks
+# numerics. The residual floor is the float32 round-trip: gray line marks
 # 1e-6.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
+# **Verification Status:** CROSSVAL (2 tests, thin): CSP integral, CIC age kernel (default)
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -238,7 +238,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # ## §2 Star formation history — delayed-τ
 #
 # FSPS `sfh=4` uses the delayed-exponential `SFR(t) ∝ t · exp(−t/τ)`, peaking
-# at `t = τ`. tengri's `sfh.delayed` implements the same closed form. Both
+# at `t = τ`. Tengri's `sfh.delayed` implements the same closed form. Both
 # normalize to the same formed mass: FSPS via `mass`, tengri via `log_total_mass`.
 #
 # The right panel evaluates `state.derived["sfr_history"]` from a built
@@ -246,7 +246,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # printed `∫SFR dt` confirms the area integrates to 1 M⊙ (tengri `log_total_mass = 0`).
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33): Parametric SFH family physics
 
 # %%
 t_p, sfr_p = P.sfh_curve(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL)
@@ -303,14 +303,14 @@ ax_ratio.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
 # ## §2 cont'd — FSPS sfh = 1, 4, constant; τ × age
 #
 # FSPS `sfh=1` is the declining-τ model, `SFR(T) ∝ exp(-T/τ)`, peaking at
-# formation and declining to the present; tengri's `declining_exp {tau_gyr,
+# formation and declining to the present. Tengri's `declining_exp {tau_gyr,
 # age_gyr}` is the same shape, proportional to FSPS's `sfr_avg` closed form
 # to floating-point precision at every τ. `sfh=1` with `const=1.0` is a
 # constant SFR over `[0, age]`, matched by tengri's `const`. The `sfh=4` grid
 # extends the delayed-τ case above: `τ ∈ {0.3, 3} × age ∈ {1, 10} Gyr` with
 # `delayed`.
 #
-# FSPS `sfh=5` (Simha) adds a linear tail after truncation; tengri has no
+# FSPS `sfh=5` (Simha) adds a linear tail after truncation. Tengri has no
 # matching parametric SFH, so it is left out rather than forced through an
 # approximate substitute.
 
@@ -425,7 +425,7 @@ V.print_window_table(_p1_rows, ref_name="FSPS", title="§2 cont'd — SFR(t) ove
 # ## §2′ Non-parametric star formation histories
 #
 # Prospector's non-parametric SFR in lookback bins (amplitudes free, lowered
-# through `prospect.models.transforms` to FSPS `sfh=3`). tengri implements the
+# through `prospect.models.transforms` to FSPS `sfh=3`). Tengri implements the
 # same families as analytic step functions convolved with SSPs. Each panel uses
 # the shared seven-bin grid `[0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7] Gyr`. Both
 # codes order log-SFR ratios youngest-first with the same sign, so the same
@@ -547,7 +547,7 @@ def _tighten_sed_axis(ax, *wave_lnu_pairs):
 #
 # The workhorse non-parametric SFH: a Student-t prior on the log-SFR ratios
 # between adjacent bins enforces a smooth, continuous history while still
-# admitting bursts. Here a gently rising history. Prospector's
+# admitting bursts. This panel shows a gently rising history. Prospector's
 # `logsfr_ratios_to_masses` and tengri's `continuity` consume the identical
 # ratio array.
 
@@ -593,7 +593,7 @@ save_fig("prospector_02a_sfh_continuity.png")
 # Continuity with *flexible* bin edges: the inner bin widths are themselves
 # derived from the log-SFR ratios under a constant-mass-per-flex-bin
 # constraint, with the youngest and oldest bins anchored. Prospector's
-# `logsfr_ratios_to_masses_flex` derives the bins; tengri's `continuity_flex`
+# `logsfr_ratios_to_masses_flex` derives the bins. Tengri's `continuity_flex`
 # reproduces the same Leja+2019 construction. Anchors
 # `[0.0316, 5.012, 13.7] Gyr`, three flex bins.
 
@@ -647,11 +647,11 @@ save_fig("prospector_02b_sfh_continuity_flex.png")
 # ### §2c Dirichlet (Leja+2017)
 #
 # The Dirichlet SFH places a symmetric prior on the fraction of star formation
-# in each bin. We lead with **Prospector's** parametrization — the one users
-# know — latent z-fractions → SFR fractions → bin masses
-# (`zfrac_to_masses`). tengri implements the same Leja+2017 family and
+# in each bin. We lead with **Prospector's** parametrization (the one users
+# know): latent z-fractions → SFR fractions → bin masses
+# (`zfrac_to_masses`). Tengri implements the same Leja+2017 family and
 # stick-breaks the same SFR fractions, weighting them by bin width into masses
-# exactly as Prospector does; the two differ only in where they sample the
+# exactly as Prospector does. The two differ only in where they sample the
 # chain. Prospector's `z_fraction_i` is the Beta(N-1-i, 1) variate itself,
 # while tengri's `z_i` is a uniform latent that it maps through the
 # Beta(1, N-1-i) quantile. The substitution `v = 1 - z_fraction` carries one to
@@ -714,11 +714,11 @@ save_fig("prospector_02c_sfh_dirichlet.png")
 # A post-starburst (PSB) galaxy is the regime that motivated Prospector's
 # dedicated PSB template (Suess+2022, `logsfr_ratios_to_masses_psb`): a young
 # bin `[0, t_last]`, equal-mass flex bins to `t_flex`, and fixed old bins.
-# tengri implements the same family as `psb_suess2022` and forward-models it
+# Tengri implements the same family as `psb_suess2022` and forward-models it
 # through DSPS.
 #
 # The cleanest *matched-parameter* head-to-head against FSPS uses the shared
-# **continuity** basis — a sharp negative youngest log-SFR ratio is a recent
+# **continuity** basis: a sharp negative youngest log-SFR ratio is a recent
 # shutdown, and both codes forward-model the continuity SFH exactly. Overlaid
 # on it is tengri's dedicated `psb_suess2022` template at matched
 # `t_last`/`t_flex`, the parametric PSB shape the family encodes directly.
@@ -788,11 +788,11 @@ save_fig("prospector_02d_sfh_psb.png")
 # %% [markdown]
 # ### §2e Beyond Prospector — the stochastic IFT field SFH
 #
-# All four families above bin the SFH and free the bin amplitudes. tengri also
+# All four families above bin the SFH and free the bin amplitudes. Tengri also
 # offers a *continuous* stochastic SFH: a smooth backbone (here a delayed
 # double-power-law) modulated by a Gaussian-process field whose power spectrum
 # encodes the burstiness timescale (Information-Field-Theory correlated field).
-# This has no Prospector counterpart — it is not a binned model — and it is the
+# This has no Prospector counterpart (it is not a binned model), and it is the
 # prior tengri Paper I uses to capture short-timescale fluctuations. Three
 # independent draws at fixed PSD hyperparameters illustrate the family.
 
@@ -995,19 +995,19 @@ save_fig("prospector_03b_met_logzsol.png")
 # %% [markdown]
 # ## §4 Dust attenuation curves
 #
-# The three Prospector/FSPS standards — Calzetti+2000 (`dust_type=2`),
+# The three Prospector/FSPS standards, Calzetti+2000 (`dust_type=2`),
 # Charlot & Fall 2000 (power-law, `dust_type=0`), and Kriek & Conroy 2013
-# (`dust_type=4`) — compared against tengri's `calzetti`, `power_law`, and
+# (`dust_type=4`), compared against tengri's `calzetti`, `power_law`, and
 # `kriek_conroy`. Both evaluate analytic laws directly, normalized to
 # `A(λ)/A_V` at 5500 Å.
 #
 # Kriek & Conroy is compared against FSPS `dust_type=4` (what Prospector uses),
 # not sedpy's `conroy`. FSPS and sedpy implement KC13 differently: FSPS ties the
 # 2175 Å bump amplitude to slope via KC13 Eq 3, while sedpy uses a fixed
-# `f_bump = 0.6`. tengri's `kriek_conroy` matches the FSPS construction.
+# `f_bump = 0.6`. Tengri's `kriek_conroy` matches the FSPS construction.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
 from tengri.dust import list_laws
@@ -1191,14 +1191,14 @@ V.print_window_table(_p2_rows_nir, ref_name="FSPS", title="§4b — A(λ)/A_V, 3
 #
 # Fiducial galaxy with and without dust. Prospector applies Calzetti as a
 # single screen at A_V = 1 (FSPS `dust_type=2`, `dust2 = A_V/1.086`,
-# `dust1 = 0`). tengri matches by putting the full A_V on the diffuse
-# component and zeroing the birth-cloud term. tengri's `τ_bc` attenuates only
-# stars younger than ~10 Myr; an even split would under-attenuate the old
+# `dust1 = 0`). Tengri matches by putting the full A_V on the diffuse
+# component and zeroing the birth-cloud term. Tengri's `τ_bc` attenuates only
+# stars younger than ~10 Myr. An even split would under-attenuate the old
 # population that dominates the 5 Gyr fiducial, leaving the optical ~1.5× too
 # bright.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
 TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
@@ -1260,7 +1260,7 @@ fig.tight_layout()
 # Single-screen Calzetti at `A_V ∈ {0.3, 1, 3}` (`dust_type=2`, `dust1=0`), then
 # a birth-cloud split at fixed diffuse depth: `dust_type=0`, `dust2=0.3`
 # (`dust_index=-0.7`), with `dust1 ∈ {0.3, 1.0}` (`dust1_index=-1.0`) reddening
-# only the youngest stars. tengri matches with two power-law screens,
+# only the youngest stars. Tengri matches with two power-law screens,
 # `law_diff="power_law", slope_diff=-0.7, tau_diff=dust2/1.086` fixed, and
 # `law_bc="power_law", slope_bc=-1.0, tau_bc=dust1/1.086` swept.
 
@@ -1365,26 +1365,26 @@ save_fig("prospector_05b_dust_av_bc.png")
 # ## §6 Dust IR re-emission and energy balance
 #
 # Prospector re-emits absorbed stellar UV/optical through Draine & Li (2007)
-# templates via `add_dust_emission=True`; tengri uses its own DL07 grid with
+# templates via `add_dust_emission=True`. Tengri uses its own DL07 grid with
 # energy balance enforced to floating point.
 #
 # At matched parameters, both DL07 SEDs agree in shape (both peak ~130 μm;
 # 30–100 μm track to ~6%). The PDR luminosity weighting is critical: `γ` is
 # dust-mass fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07
-# Eq. 33); with that weight the warm component lands where FSPS places it.
+# Eq. 33). With that weight, the warm component lands where FSPS places it.
 #
 # Two conventions differ. FSPS ships DL07 with the 3.3 μm PAH feature halved
-# (stated in `dust/dustem` headers); tengri carries the original, and the grids
+# (stated in `dust/dustem` headers). Tengri carries the original, and the grids
 # agree to within 1.2% everywhere else. Bands on rest-frame 3–3.6 μm
 # (WISE W1 at low z) inherit that choice. And FIR amplitude differs by construction:
 # FSPS re-emits all absorbed luminosity (measured `L_IR/L_abs = 0.9996`),
-# including LyC; tengri's canonical balance excludes λ < 912 Å (those photons
+# including LyC. Tengri's canonical balance excludes λ < 912 Å (those photons
 # re-emerge as nebular, the CIGALE convention). At this fiducial, LyC
 # carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
-# Both ratios are printed; opt-in `dust={'eb_include_lyc': True}` closes the gap.
+# Both ratios are printed. Opt-in `dust={'eb_include_lyc': True}` closes the gap.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
+# **Verification Status:** CROSSVAL: Dust IR emission physics (MBB, Casey12, CMB)
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
@@ -1603,11 +1603,11 @@ save_fig("prospector_06b_dust_ir_grid.png")
 # ## §7 Panchromatic SED
 #
 # Full SED from rest-UV to far-IR: stellar + nebular + dust attenuation + DL07 IR.
-# Percent-level disagreements from §3–§6 (and §8's nebular gap) stack here; the
+# Percent-level disagreements from §3–§6 (and §8's nebular gap) stack here. The
 # headline is overall shape, not bit-for-bit agreement at individual wavelengths.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Photometry projection
+# **Verification Status:** CROSSVAL: Photometry projection
 
 # %%
 w_p_full, L_p_full = P.csp_lnu(
@@ -1683,13 +1683,13 @@ save_fig("prospector_07_panchromatic.png")
 # %% [markdown]
 # ## §8 Nebular emission
 #
-# FSPS uses Byler+2017 Cloudy grids parametrized by `(gas_logu, gas_logz)`;
-# tengri uses Cue (Li et al. 2025), a neural emulator on a different Cloudy
+# FSPS uses Byler+2017 Cloudy grids parametrized by `(gas_logu, gas_logz)`.
+# Tengri uses Cue (Li et al. 2025), a neural emulator on a different Cloudy
 # version. The panel reports integrated, continuum-subtracted line luminosity
 # (width- and grid-independent).
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+# **Verification Status:** CROSSVAL: Cloudy grid / Cue vs FSPS baked-in
 
 # %%
 NEB_AGE = 0.01  # Gyr — a young constant-SFR population, where lines dominate
@@ -1764,9 +1764,9 @@ fig.tight_layout()
 # ### §8b gas_logU × gas_logZ
 #
 # The 10 Myr constant-SFR nebular-only spectrum (as above) over
-# `logU ∈ {-3, -2, -1} × gas_logZ ∈ {-0.5, 0, 0.3}`, nine points. tengri builds
-# once with `neb_logU` and `neb_logZ_gas` free and evaluates each point;
-# ratios are continuum-subtracted line luminosities normalized to Hβ, so a
+# `logU ∈ {-3, -2, -1} × gas_logZ ∈ {-0.5, 0, 0.3}`, nine points. Tengri builds
+# once with `neb_logU` and `neb_logZ_gas` free and evaluates each point.
+# Ratios are continuum-subtracted line luminosities normalized to Hβ, so a
 # Cue-vs-Byler+2017 normalization offset cancels and only the ionization/
 # metallicity pattern remains.
 
@@ -1853,11 +1853,11 @@ save_fig("prospector_08b_neb_logu_logz.png")
 # Prospector's AGN component is the FSPS dust torus (Nenkova et al. 2008, CLUMPY
 # models), switched on via `fagn > 0` and shaped by `agn_tau`. It reprocesses
 # fraction `fagn` of stellar bolometric luminosity into mid-IR torus emission
-# (no separate accretion-disc continuum). tengri's `agn.torus = "nenkova"` is
+# (no separate accretion-disc continuum). Tengri's `agn.torus = "nenkova"` is
 # the matching block.
 #
 # FSPS' torus luminosity is read from the difference (AGN on − off), and the
-# same bolometric luminosity is fed into tengri. tengri's `nenkova` block
+# same bolometric luminosity is fed into tengri. Tengri's `nenkova` block
 # interpolates the same FSPS CLUMPY template library
 # (`Nenkova08_y010_torusg_n10_q2.0`) with a differentiable triweight kernel in
 # `agn_tau` (a fitted parameter, not frozen). At matched bolometric luminosity
@@ -1865,7 +1865,7 @@ save_fig("prospector_08b_neb_logu_logz.png")
 # coincide.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
+# **Verification Status:** CROSSVAL: Nenkova+08 (CLUMPY) torus
 
 # %%
 FAGN = 0.5
@@ -1962,7 +1962,7 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 # offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30-80, and falls
 # to 0.95× at 150. An optically thin clumpy torus distributes its emission over
 # fewer, hotter sightlines, and the two codes integrate that geometry
-# differently; the disagreement is in the shape, not in the energy budget.
+# differently. The disagreement is in the shape, not in the energy budget.
 
 # %%
 _m_agn_grid = SEDModel.build(
@@ -2041,13 +2041,13 @@ save_fig("prospector_09b_agn_tau.png")
 # ## §12 IGM transmission — Madau (1995)
 #
 # FSPS applies Madau (1995) for Lyman-line and Lyman-continuum absorption via
-# `add_igm_absorption=True`. tengri ships the same Madau form alongside Inoue+2014
+# `add_igm_absorption=True`. Tengri ships the same Madau form alongside Inoue+2014
 # as default. At the same redshift the residual is the difference between the two
 # Madau coefficient implementations. (IGM numbering follows the CIGALE master
 # sequence; §10 X-ray and §11 radio are absent from Prospector.)
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
+# **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
 # %%
 from tengri.igm import igm_transmission_madau
@@ -2119,13 +2119,14 @@ V.print_window_table(_p12_rows, ref_name="FSPS", title="§12b — T(λ), 850-121
 # %% [markdown]
 # ## tengri in Prospector-mode — full-SED head-to-head
 #
-# Full forward model: tengri configured to emulate Prospector end to end
-# (FSPS MIST+MILES SSP, τ-delayed SFH, Calzetti dust, DL07 IR, and nebular)
-# overlaid on FSPS at matched parameters (§7 configuration), with the
-# fractional residual `tengri / FSPS − 1` and a ±25% band below. Optical
-# agreement is reported as a normalization ratio and robust 16–84% spread
-# (tracking the stellar continuum). Emission lines and sub-912 Å are sparse
-# points the percentile rejects; the spread is a continuum metric.
+# The full forward model runs at once. Tengri, configured to emulate
+# Prospector end to end (FSPS MIST+MILES SSP, τ-delayed SFH, Calzetti dust,
+# DL07 IR, and nebular), is overlaid on FSPS at matched parameters
+# (§7 configuration), with the fractional residual `tengri / FSPS − 1` and a
+# ±25% band below. Optical agreement is reported as a normalization ratio and
+# robust 16–84% spread (tracking the stellar continuum). Emission lines and
+# sub-912 Å are sparse points the percentile rejects. The spread is a
+# continuum metric.
 
 # %%
 import chex
@@ -2213,7 +2214,7 @@ plt.show()
 # ## Summary
 #
 # The sweep sections above extend each single-point comparison across the
-# parameter combinations FSPS exposes; the worst tengri/FSPS ratio in each
+# parameter combinations FSPS exposes. The worst tengri/FSPS ratio in each
 # block sets the residual floor for that physics.
 #
 # | Block | § | Cases | Worst tengri/FSPS | Where |
@@ -2237,11 +2238,11 @@ plt.show()
 # **Prospector-mode checklist.** Two *default conventions* differ between
 # the codes and must be set explicitly for a faithful match:
 #
-# 1. **Far-IR amplitude** — tengri's canonical energy balance excludes the
-#    Lyman continuum from dust heating, FSPS re-emits all of it;
-#    at this fiducial the difference is ~11 % in every FIR band. Opt into
+# 1. **Far-IR amplitude**: tengri's canonical energy balance excludes the
+#    Lyman continuum from dust heating, while FSPS re-emits all of it.
+#    At this fiducial the difference is ~11 % in every FIR band. Opt into
 #    the FSPS convention with `dust={'eb_include_lyc': True}` (§6).
-# 2. **IGM** — `SEDModel.build` defaults the IGM **on** (Inoue+2014);
+# 2. **IGM**: `SEDModel.build` defaults the IGM **on** (Inoue+2014).
 #    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
 #    moves a GALEX FUV band by ~18 % (rest-frame Lyman continuum). Match
 #    with `igm={'type': 'none'}` (or set FSPS's flag and use `'madau'`).
@@ -2250,26 +2251,26 @@ plt.show()
 # inherent to the backends, not a switchable convention.
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
+# **Verification Status:** PARTIAL (68/126): Absolute SED normalization
 #
 
 # %% [markdown]
 # ## References
 #
-# * Johnson, Leja, Conroy & Speagle 2021, ApJS 254, 22 — Prospector
-# * Leja et al. 2017, ApJ 837, 170 — Dirichlet non-parametric SFH
-# * Leja et al. 2019, ApJ 876, 3 — continuity & continuity-flex SFH priors
-# * Suess et al. 2022, ApJ 935, 146 — post-starburst non-parametric SFH
-# * Conroy, Gunn & White 2009, ApJ 699, 486 — FSPS
-# * Conroy & Gunn 2010, ApJ 712, 833 — FSPS calibration
-# * Choi et al. 2016, ApJ 823, 102 — MIST isochrones
-# * Sánchez-Blázquez et al. 2006, MNRAS 371, 703 — MILES library
-# * Chabrier 2003, PASP 115, 763 — IMF
-# * Calzetti et al. 2000, ApJ 533, 682 — starburst attenuation
-# * Charlot & Fall 2000, ApJ 539, 718 — two-component dust
-# * Kriek & Conroy 2013, ApJL 775, L16 — modified attenuation
-# * Draine & Li 2007, ApJ 657, 810 — dust IR emission
-# * Byler et al. 2017, ApJ 840, 44 — nebular grid
-# * Nenkova et al. 2008, ApJ 685, 160 — clumpy torus
-# * Madau 1995, ApJ 441, 18 — IGM absorption
-# * Li et al. 2025 — Cue nebular emulator
+# * Johnson, Leja, Conroy & Speagle 2021, ApJS 254, 22: Prospector
+# * Leja et al. 2017, ApJ 837, 170: Dirichlet non-parametric SFH
+# * Leja et al. 2019, ApJ 876, 3: continuity & continuity-flex SFH priors
+# * Suess et al. 2022, ApJ 935, 146: post-starburst non-parametric SFH
+# * Conroy, Gunn & White 2009, ApJ 699, 486: FSPS
+# * Conroy & Gunn 2010, ApJ 712, 833: FSPS calibration
+# * Choi et al. 2016, ApJ 823, 102: MIST isochrones
+# * Sánchez-Blázquez et al. 2006, MNRAS 371, 703: MILES library
+# * Chabrier 2003, PASP 115, 763: IMF
+# * Calzetti et al. 2000, ApJ 533, 682: starburst attenuation
+# * Charlot & Fall 2000, ApJ 539, 718: two-component dust
+# * Kriek & Conroy 2013, ApJL 775, L16: modified attenuation
+# * Draine & Li 2007, ApJ 657, 810: dust IR emission
+# * Byler et al. 2017, ApJ 840, 44: nebular grid
+# * Nenkova et al. 2008, ApJ 685, 160: clumpy torus
+# * Madau 1995, ApJ 441, 18: IGM absorption
+# * Li et al. 2025: Cue nebular emulator

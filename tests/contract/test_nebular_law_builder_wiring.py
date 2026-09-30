@@ -45,18 +45,35 @@ def test_law_neb_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
     assert getattr(base.spec, "dust_law_neb", None) is None
 
 
+def _value(v):
+    """Unwrap a to_groups() per-screen entry to its plain number.
+
+    #2428: an explicitly-set per-screen shape parameter round-trips through
+    ``to_groups()`` as the ``Distribution`` the spec actually holds (e.g.
+    ``Fixed(-1.3)`` for a plain-number spelling), not the bare float --
+    matching ``test_dust_per_component_law.py``'s own ``_value()`` helper for
+    the same contract.
+    """
+    return float(v.bounds[0]) if hasattr(v, "bounds") else float(v)
+
+
 def test_law_neb_round_trips_through_to_groups(synthetic_ssp_wide, synthetic_tophat_obs):
-    # ``conroy2010`` rather than ``smc``: the nebular law has to READ the
+    # ``power_law`` rather than ``smc``: the nebular law has to READ the
     # ``*_neb`` override paired with it, and smc reads nothing beyond
     # wavelength, so ``slope_neb`` there is a value the curve discards (#2185).
-    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="conroy2010", slope_neb=-1.3)
+    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="power_law", slope_neb=-1.3)
     groups = m.spec.to_groups()
-    assert groups["dust_attenuation"]["law_neb"] == "conroy2010"
-    assert groups["dust_attenuation"]["slope_neb"] == pytest.approx(-1.3)
+    assert groups["dust_attenuation"]["law_neb"] == "power_law"
+    assert _value(groups["dust_attenuation"]["slope_neb"]) == pytest.approx(-1.3)
     # Re-build from the round-tripped groups: the nebular law survives.
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
-    assert m2.spec.dust_law_neb == "conroy2010"
-    assert m2.spec.dust_law_overrides.get("neb", {}).get("dust_slope") == pytest.approx(-1.3)
+    assert m2.spec.dust_law_neb == "power_law"
+    # A nested-dict-grammar-built spec's per-screen override lands on the
+    # declared parameter (``dust_slope_neb``), not ``dust_law_overrides`` --
+    # that static dict is populated only from the flat surface's own
+    # plain-number branch (#2428; see ``_emit_declared_structural`` in
+    # ``parameters/groups.py``).
+    assert m2.spec.get_fixed_values().get("dust_slope_neb") == pytest.approx(-1.3)
 
 
 def test_law_neb_changes_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs):

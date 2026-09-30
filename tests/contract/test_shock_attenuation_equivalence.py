@@ -57,7 +57,7 @@ class TestShockAttenuationEquivalence:
         Precondition: shock contribution > noise floor (non-vacuity check—
         verifies shock is resolved and contributes measurably to photometry).
         """
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.data import download_ssp
 
@@ -86,7 +86,7 @@ class TestShockAttenuationEquivalence:
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
         )
 
@@ -112,12 +112,12 @@ class TestShockAttenuationEquivalence:
                 "tau_diff": 1.0,
             },
             neb={"type": "none"},
-            shock={"frac": 1.0, "all_params": Fixed(DEFAULT)},
+            shock={"frac": FREE, "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.5),
             approx=WavePrecomp(),  # Enables WavePrecomp for photometry
         )
 
-        params = {}  # Use defaults (all Fixed in this model)
+        params = {"shock_frac": 1.0}  # Set shock_frac to 1.0 for the "with shock" case
 
         # Compute deltas: with shock minus without shock
         # Exact path

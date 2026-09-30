@@ -98,6 +98,7 @@ import contextlib
 import copy
 import logging
 import math
+import os
 import re
 import warnings
 from dataclasses import dataclass
@@ -142,6 +143,19 @@ _QUAD_NODES = 48
 #: draw, off the hot loop, so extra nodes are nearly free compared to
 #: the marginal's integral in every log-posterior evaluation.
 _REINSERT_QUAD_NODES = 384
+
+#: Ceiling on the draws per reinsertion chunk, whatever XLA's memory analysis
+#: says. ``temp_size_in_bytes`` of the per-chunk program under-reports the
+#: realized peak by an order of magnitude on the paper-1 CANDELS models:
+#: measured on configuration V (D=5 profiled, 1200 draws, 384 quadrature
+#: nodes) the analysis derived 756 draws per chunk and the run allocated
+#: 1.5 GB buffers past an 18 GB cap, while the same fit at 64 draws per chunk
+#: peaked 1.0 GB above baseline (83 s; 128 per chunk: 1.4 GB, 78 s; 64 on 4
+#: host devices: 1.0 GB, 63 s). At 756 the reinsertion spike reached 23-29 GB
+#: inside a NUTS fit and the shared box's 40 GB watchdog killed four cells at
+#: the finish line. The cost of the ceiling is a few seconds on models the
+#: analysis prices correctly.
+_REINSERT_CHUNK_MAX = 64
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
@@ -196,7 +210,10 @@ def _mass_prior_bounds(dist: Distribution) -> tuple[float, float]:
 
 
 def _linearity_max_deviation(
-    fitter: Fitter, mass_name: str, mass_prior_bounds: tuple[float, float]
+    fitter: Fitter,
+    mass_name: str,
+    mass_prior_bounds: tuple[float, float],
+    params_override: dict | None = None,
 ) -> tuple[float, float]:
     """``(max|ratio(theta, +1 dex mass) - 10|, tolerance)`` worst over 9 thetas.
 
@@ -255,6 +272,19 @@ def _linearity_max_deviation(
         The name of the mass parameter.
     mass_prior_bounds : tuple[float, float]
         The (lo, hi) log10-mass bounds from the prior's support.
+    params_override : dict or None, optional
+        The fitter's raw ``params_override`` constructor argument. Threaded
+        through explicitly because this probe runs from
+        :func:`configure_profile_mass` -- called from ``Fitter.__init__``
+        *before* ``self._fixed_values`` and ``self._params_override`` are
+        set (fitter.py assigns them at ~1574/~1630, ``configure_profile_mass``
+        runs at ~1570) -- so neither fitter attribute exists yet at
+        construction time, and reading ``getattr(fitter, "_params_override",
+        None)`` there would silently evaluate the fit at the spec's *own*
+        fixed values (e.g. the model's declared ``Fixed`` redshift) instead
+        of the value this fit actually runs at. Ignored when
+        ``fitter._fixed_values`` already exists (a post-construction direct
+        call), since that dict is already the fully resolved one.
 
     Returns
     -------
@@ -262,6 +292,14 @@ def _linearity_max_deviation(
         The maximum deviation observed across all nine thetas.
     tol : float
         The tolerance for the deviation.
+    kind : {"proportional", "affine", "nonlinear"}
+        Which of the three the prediction is in the mass. ``"proportional"``
+        whenever ``max_dev < tol``; otherwise a third mass is evaluated at the
+        worst theta and :func:`_classify_nonproportional` separates an exactly
+        affine prediction (``M f(theta) + g(theta)``, still exactly
+        marginalizable once ``g`` is known) from a genuinely nonlinear one.
+        The three are not interchangeable, and a two-way check cannot tell the
+        middle one from whichever end it tested for.
 
     Raises
     ------
@@ -307,6 +345,28 @@ def _linearity_max_deviation(
     tol_ref = None
     n_valid = 0
     first_error = None
+    #: ``(phys, pred_a, pred_b, valid)`` of the theta that set ``max_dev_overall``.
+    #: Kept so the affine retest below can reuse it instead of re-probing all
+    #: nine: the classification only matters at the worst theta, which is the
+    #: one that decides the refusal.
+    worst = None
+
+    # Fixed parameters always included, resolved once (invariant across the
+    # nine thetas below). Use the Fitter's own resolved fixed values (already
+    # merged with params_override) when available -- a post-construction
+    # direct call, where that merge has already happened (fitter.py ~1630).
+    # During actual Fitter construction, this probe runs from
+    # configure_profile_mass BEFORE fitter._fixed_values exists (see the
+    # params_override parameter's docstring above), so the only correct
+    # source of the runtime override at that point is the explicit
+    # params_override argument, not a fitter attribute.
+    fixed_vals = getattr(fitter, "_fixed_values", None)
+    if fixed_vals is None:
+        fixed_vals = dict(spec.get_fixed_values())
+        if params_override:
+            fixed_vals = {**fixed_vals, **params_override}
+    else:
+        fixed_vals = dict(fixed_vals)
 
     # Evaluate at prior median (xi = 0) plus 8 draws from the prior.
     for i in range(9):
@@ -329,31 +389,30 @@ def _linearity_max_deviation(
                     phys[name] = sample[name]
             # spec.sample() already includes sfh_field_xi for stochastic specs.
 
-        # Fixed parameters always included.
-        for name, val in spec.get_fixed_values().items():
+        for name, val in fixed_vals.items():
             if name != mass_name:
                 phys[name] = jnp.asarray(val)
 
         # Evaluate the two masses and compute the deviation at this theta.
-        try:
-            pred_a = _predict_full_vector(
-                fitter.model,
-                fitter.data_type,
-                {**phys, mass_name: jnp.asarray(ell_a)},
-                use_components=use_components,
-                line_flux_block=probe_block,
-            )
-            pred_b = _predict_full_vector(
-                fitter.model,
-                fitter.data_type,
-                {**phys, mass_name: jnp.asarray(ell_b)},
-                use_components=use_components,
-                line_flux_block=probe_block,
-            )
-        except Exception as exc:
-            if first_error is None:
-                first_error = exc
-            continue
+        # Model-evaluation errors (KeyError, ValueError, etc.) indicate
+        # configuration or setup issues, not legitimate prior draws, so they
+        # propagate rather than being silently logged. The numeric-invalidity
+        # path below (NaN, Inf, zeros) is the legitimate case of a valid draw
+        # that produces a prediction the linearity test cannot evaluate.
+        pred_a = _predict_full_vector(
+            fitter.model,
+            fitter.data_type,
+            {**phys, mass_name: jnp.asarray(ell_a)},
+            use_components=use_components,
+            line_flux_block=probe_block,
+        )
+        pred_b = _predict_full_vector(
+            fitter.model,
+            fitter.data_type,
+            {**phys, mass_name: jnp.asarray(ell_b)},
+            use_components=use_components,
+            line_flux_block=probe_block,
+        )
 
         # Restrict comparison to valid bands (finite and strictly positive).
         valid = jnp.isfinite(pred_a) & (pred_a > 0.0)
@@ -368,6 +427,8 @@ def _linearity_max_deviation(
         # Compute the deviation at this theta.
         ratio = jnp.where(valid, pred_b / pred_a, 10.0)
         dev = float(jnp.max(jnp.abs(ratio - 10.0)))
+        if dev > max_dev_overall or worst is None:
+            worst = (phys, pred_a, pred_b, valid)
         max_dev_overall = max(max_dev_overall, dev)
         n_valid += 1
 
@@ -392,7 +453,148 @@ def _linearity_max_deviation(
         )
 
     tol = tol_ref
-    return max_dev_overall, tol
+
+    # Proportional is the common case (every SFH that renormalizes to the mass,
+    # so dpl/dexp/tsnorm/delayed and hence eight of nine shipped recipes). It
+    # needs no further evaluation, which is why the third probe point below is
+    # taken only on the refusal branch: the fast path costs exactly what it did
+    # before this classification existed.
+    if max_dev_overall < tol:
+        return max_dev_overall, tol, "proportional"
+
+    kind = _classify_nonproportional(
+        fitter,
+        mass_name,
+        worst,
+        ell_a=ell_a,
+        ell_b=ell_b,
+        use_components=use_components,
+        line_flux_block=probe_block,
+    )
+    return max_dev_overall, tol, kind
+
+
+def _classify_nonproportional(
+    fitter: Fitter,
+    mass_name: str,
+    worst,
+    *,
+    ell_a: float,
+    ell_b: float,
+    use_components: bool,
+    line_flux_block,
+) -> str:
+    """``"affine"`` or ``"nonlinear"`` for a prediction that failed proportionality.
+
+    The distinction is load-bearing, not cosmetic: ``chi2(M)`` stays *exactly*
+    quadratic for an affine prediction ``d = M f(theta) + g(theta)`` -- the same
+    algebra with ``d -> d - g`` -- so an affine model is marginalizable once the
+    offset is known, while a nonlinear one never is. A two-way
+    proportional-or-not check cannot tell them apart and labels affine as
+    whichever side it happened to test for.
+
+    Two evaluations already exist from the proportionality probe, and two points
+    determine an affine model exactly. So the test is a *third* mass: solve
+    ``f``, ``g`` from the pair and ask whether they predict the third point. One
+    extra forward evaluation, on the refusal branch only.
+
+    Returns ``"nonlinear"`` when the third evaluation produces no valid band
+    -- the conservative answer, since every caller treats ``"nonlinear"`` as
+    "refuse". A model-evaluation error (KeyError, ValueError, a shape
+    mismatch, ...) propagates instead of being folded into that same
+    "nonlinear" answer: those indicate a configuration bug in the model or
+    the probe's own vector assembly, not a legitimate third theta the guard
+    should conservatively refuse, and reporting them as a plain refusal would
+    hide the actual defect behind an unrelated-looking linearity message.
+    """
+    if worst is None:
+        return "nonlinear"
+    phys, pred_a, pred_b, valid = worst
+
+    ell_c = ell_b + 1.0
+    pred_c = _predict_full_vector(
+        fitter.model,
+        fitter.data_type,
+        {**phys, mass_name: jnp.asarray(ell_c)},
+        use_components=use_components,
+        line_flux_block=line_flux_block,
+    )
+
+    m_a, m_b, m_c = 10.0**ell_a, 10.0**ell_b, 10.0**ell_c
+    # f and g from the two points already in hand: pred = M f + g.
+    f = (pred_b - pred_a) / (m_b - m_a)
+    g = pred_a - m_a * f
+    predicted_c = m_c * f + g
+
+    both_valid = valid & jnp.isfinite(pred_c) & (jnp.abs(pred_c) > 0.0)
+    if not bool(jnp.any(both_valid)):
+        return "nonlinear"
+    rel = jnp.where(both_valid, jnp.abs(predicted_c / pred_c - 1.0), 0.0)
+    worst_rel = float(jnp.max(rel))
+
+    # The same roundoff-scaled floor the proportionality test uses: an exactly
+    # affine model reproduces the third point to arithmetic precision, and a
+    # merely-locally-linear one misses it by orders of magnitude (measured on
+    # dense_basis, whose two-point affine fit extrapolates 1.5e-1 to 1.3e+1
+    # relative).
+    affine_tol = max(_LINEARITY_TOL, 1e4 * float(jnp.finfo(pred_a.dtype).eps))
+    return "affine" if worst_rel < affine_tol else "nonlinear"
+
+
+def _additive_component_names(model) -> tuple[str, ...]:
+    """Names of chain components that ADD to the SED, for the refusal message.
+
+    Only used to phrase a diagnosis, never to decide one, so it degrades to
+    ``()`` rather than raising if the chain cannot be read.
+    """
+    # ``fitter.model`` is a ForwardModel, and ``_build_component_chain`` is NOT
+    # in its ``_DELEGATED_TO_INNER_SED`` list, so it has to be reached through
+    # the populations. Checked rather than assumed: a plain
+    # ``getattr(model, "_build_component_chain", None)`` returns None here and
+    # would silently report "no additive component" for every model.
+    seds = []
+    if hasattr(model, "_build_component_chain") or hasattr(model, "_cached_component_chain"):
+        seds.append(model)
+    for population in getattr(model, "populations", ()) or ():
+        sed = getattr(population, "sed", None)
+        if sed is not None:
+            seds.append(sed)
+
+    found: list[str] = []
+    for sed in seds:
+        chain = getattr(sed, "_cached_component_chain", None)
+        if chain is None:
+            builder = getattr(sed, "_build_component_chain", None)
+            if builder is None:
+                continue
+            try:
+                chain = builder()
+            except Exception:
+                continue
+        for component in chain or ():
+            name = str(getattr(component, "name", ""))
+            if name in _ADDITIVE_COMPONENT_NAMES:
+                found.append(name)
+    return tuple(found)
+
+
+#: Chain components that contribute ADDITIVELY to the SED and are not
+#: themselves scaled by the stellar mass, so their presence is what makes a
+#: mass-independent offset physically plausible. Used only to phrase the
+#: refusal message: naming "an AGN continuum" on a model with no AGN sends the
+#: reader hunting for a contaminant they do not have.
+_ADDITIVE_COMPONENT_NAMES = frozenset({"agn", "radio", "xray", "shock"})
+
+#: How :func:`_linearity_refusal_reason` spells each of those in prose. "an AGN
+#: continuum" is the established wording (#2359) and several tests read it, so
+#: it is kept verbatim -- the fix there was never to stop saying it, only to
+#: stop saying it about models that have no AGN.
+_ADDITIVE_COMPONENT_PHRASES = {
+    "agn": "an AGN continuum",
+    "radio": "a radio component",
+    "xray": "an X-ray component",
+    "shock": "a shock component",
+}
 
 
 def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | None, dict]:
@@ -442,6 +644,29 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
             f"data_type={fitter.data_type!r} (profile_mass requires one of "
             f"{sorted(_SUPPORTED_DATA_TYPES)})"
         ), {}
+    # User-supplied likelihood check applies to all data types: the profiled
+    # quadratic can only absorb a plain Gaussian chi-square, so what must be
+    # checked is the likelihood that owns the data, regardless of data type.
+    if getattr(fitter, "_likelihood_is_user_supplied", False):
+        return (
+            "a user-supplied likelihood owns the data, so the profiled Gaussian quadratic "
+            "(which scores the Fitter's own data/noise arrays) would silently replace it in the "
+            "mass direction"
+        ), {}
+    # Spectral covariance check: if the fit will use a MultivariateGaussianLikelihood
+    # for the spectroscopy channel, the profiled diagonal Gaussian cannot absorb it.
+    # This guard only applies to spectroscopy/joint data types, since photometry fits
+    # do not use the spectral covariance (MultivariateGaussianLikelihood is only
+    # instantiated in build_base_likelihood for spectroscopy/joint data_type).
+    if fitter.data_type in ("spectroscopy", "joint"):
+        obs = getattr(fitter.model, "observation", None)
+        if obs is not None:
+            spec_cfg = getattr(obs, "spectroscopy", None)
+            if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
+                return (
+                    "a spectral covariance makes the likelihood a full multivariate Gaussian, "
+                    "which the diagonal profiled quadratic cannot absorb"
+                ), {}
     # Guard #8, as three cases rather than one. ``Fitter._fits_lines`` is the OR
     # of three unrelated situations and only the third is a plain data channel
     # with a mass-proportional prediction, so refusing them together refused a
@@ -478,12 +703,6 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
                 "which covers the photometry/spectroscopy vector only, never "
                 "LineFluxData's own mask"
             ), {}
-        if getattr(fitter, "_likelihood_is_user_supplied", False):
-            return (
-                "a user-supplied likelihood owns the data, so the profiled quadratic cannot "
-                "verify that the measured emission-line block is scored as a plain Gaussian "
-                "chi-square over (line_flux_obs, line_flux_err)"
-            ), {}
     if _has_line_adjacent_channel(fitter.model):
         return "a line-ratio or spectral-index channel is configured", {}
     if fitter._calibration_marginalize:
@@ -496,23 +715,14 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         return "censored data (upper/lower limits) is present", {}
 
     try:
-        max_dev, tol = _linearity_max_deviation(fitter, mass_name, bounds)
+        max_dev, tol, kind = _linearity_max_deviation(
+            fitter, mass_name, bounds, params_override=params_override
+        )
     except ValueError as exc:
         return str(exc), {}
 
-    if not (max_dev < tol):
-        return (
-            f"the {fitter.data_type} prediction is not linear in '{mass_name}' "
-            f"(worst-of-9-thetas: max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}). "
-            "The worst is the prior median plus eight prior draws. A deviation of order 1 "
-            "indicates a mass-independent additive component such as an AGN continuum. At "
-            "magnitudes within a few orders of the tolerance, conditioning in the mass "
-            "direction is often the cause, typically from the coarse age kernel (set "
-            'age_kernel="dsps", which integrates on the SSP lookback grid rather than a '
-            'refined one; the default "cic" is 16x-refined). With that kernel, mass-linearity '
-            "costs up to roughly 1e-3 at the sharpest SFH shapes, so a refusal at this "
-            "magnitude alone does not imply a mass-independent additive component."
-        ), {}
+    if kind != "proportional":
+        return _linearity_refusal_reason(fitter, mass_name, max_dev, tol, kind), {}
 
     return None, {
         "mass_name": mass_name,
@@ -520,7 +730,75 @@ def _check_guards(fitter: Fitter, params_override: dict | None) -> tuple[str | N
         "bounds": bounds,
         "max_dev": max_dev,
         "tol": tol,
+        "kind": kind,
     }
+
+
+def _linearity_refusal_reason(
+    fitter: Fitter, mass_name: str, max_dev: float, tol: float, kind: str
+) -> str:
+    """Phrase the linearity refusal around what was actually measured.
+
+    Until 2026-09-17 this said a deviation of order 1 "indicates a
+    mass-independent additive component such as an AGN continuum", on every
+    model. Measured on a ``dense_basis`` photometry fit with no AGN block at
+    all, the deviation is 8.3 and the cause is a mass-dependent SFH *shape*:
+    ``_build_quantile_points`` builds the GP knots from ``sfr_inst*age/M``, so
+    ``log_total_mass`` acts as a shape parameter rather than an amplitude. The
+    message sent the reader hunting for a contaminant they do not have.
+
+    Two things fixed here: the diagnosis names which of the three kinds was
+    measured (they are not interchangeable -- an affine prediction is exactly
+    marginalizable once its offset is known, a nonlinear one never is), and an
+    additive component is named only when the model actually has one.
+    """
+    additive = _additive_component_names(fitter.model)
+    # The phrase "mass-linearity" is load-bearing, not decoration: callers and
+    # tests match on "linear"/"linearity" to recognize this refusal, and the
+    # word "affine" does not contain either.
+    head = (
+        f"the {fitter.data_type} prediction fails the mass-linearity guard: it is {kind} "
+        f"in '{mass_name}', not proportional (worst-of-9-thetas: "
+        f"max|ratio(+1 dex) - 10| = {max_dev:.3e}, need < {tol:.0e}; the thetas are the "
+        "prior median plus eight prior draws)"
+    )
+
+    named = ", ".join(_ADDITIVE_COMPONENT_PHRASES[n] for n in sorted(set(additive)))
+
+    if kind == "affine":
+        why = (
+            ". Affine means the prediction is 'M * f(theta) + g(theta)' with a "
+            "mass-independent offset g"
+        )
+        why += (
+            f" -- consistent with the additive component(s) this model carries: {named}."
+            if additive
+            else ", though this model carries no additive non-stellar component, so the "
+            "offset most likely comes from the SFH itself."
+        )
+    elif additive:
+        why = (
+            ". A nonlinear (not merely additive) dependence, so it is not the plain "
+            f"additive contribution of {named} alone: some term changes SHAPE with the "
+            "mass."
+        )
+    else:
+        why = (
+            ". This model carries no additive non-stellar component (no AGN, radio, X-ray or "
+            "shock block), so the mass is most likely entering the SFH SHAPE rather than "
+            "acting as an amplitude -- dense_basis does exactly this, building its GP knots "
+            "from sfr_inst*age/M, and is refused here for that reason and not for any "
+            "contaminant."
+        )
+
+    tail = (
+        " At magnitudes within a few orders of the tolerance the cause is usually "
+        "conditioning in the mass direction instead, typically the coarse age kernel (set "
+        'age_kernel="dsps", which integrates on the SSP lookback grid rather than a refined '
+        'one; the default "cic" is 16x-refined), which costs up to roughly 1e-3 at the '
+        "sharpest SFH shapes."
+    )
+    return head + why + tail
 
 
 def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_override) -> None:
@@ -555,6 +833,13 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
     ValueError
         If ``profile_mass`` is not one of ``True``, ``False``, ``"auto"``, or
         if ``profile_mass=True`` and any guard fails.
+    Exception
+        Under ``profile_mass="auto"``, any error other than a guard's own
+        documented refusal (see :func:`_check_guards`) propagates rather
+        than being reinterpreted as "auto-disabled": it means the model
+        itself could not be evaluated (or the guard machinery has a bug),
+        which is a configuration error the caller needs to see, not a
+        legitimate reason to silently skip profiling.
     """
     if profile_mass not in (True, False, "auto"):
         raise ValueError(f"profile_mass must be True, False, or 'auto'; got {profile_mass!r}")
@@ -578,10 +863,17 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
             raise ValueError(f"profile_mass=True but {reason}.")
         engage, resolved_reason = True, "profile_mass=True"
     else:  # "auto"
-        try:
-            reason, ctx = _check_guards(fitter, params_override)
-        except Exception as exc:
-            reason, ctx = f"guard check raised {exc!r}", {}
+        # Every guard _check_guards owns that can legitimately fail on a
+        # valid model already returns a string reason instead of raising
+        # (the mass-prior-bounds check and the linearity probe's own
+        # ValueError are both caught inline, inside _check_guards). An
+        # exception escaping past that point -- a KeyError/ValueError/etc.
+        # from evaluating the model itself, or a bug in the guard machinery
+        # -- is a configuration error, not a legitimate "auto" input, so it
+        # propagates rather than being folded into a silent "auto-disabled"
+        # decision that would hide the real defect behind an unrelated
+        # linearity-sounding reason string.
+        reason, ctx = _check_guards(fitter, params_override)
         engage = reason is None
         if engage:
             max_dev = ctx.get("max_dev")
@@ -633,8 +925,20 @@ def configure_profile_mass(fitter: Fitter, profile_mass: bool | str, params_over
 #: measured on 2026-09-12 (ctl-dpl seed 7, geoVI: mass 10.24 against the NUTS
 #: reference 11.96, age 0.5 Gyr against 5.2). Anything not listed here runs
 #: unprofiled; add a backend only after checking it reads the Fitter's loss.
+#:
+#: This set is pinned against the live backend registry by
+#: ``tests/inference/test_profile_mass_backend_coverage.py``: every registered
+#: backend must be listed here or named in that test's excluded set with a
+#: reason. An omission is otherwise indistinguishable from a deliberate
+#: exclusion. ``nss`` is the clearest case: ``backends/evidence._get_nss_fns``
+#: scores live points with ``Fitter._get_or_build_loglikelihood_fn()``, and
+#: :func:`build_profiled_loglikelihood_fn` exists for exactly that caller --
+#: but the name was missing here, so ``resolve_profile_mass_for_method``
+#: refused ``profile_mass=True`` and silently disabled ``"auto"`` before the
+#: profiled likelihood could ever be reached (a rule keyed to a label).
 PROFILE_MASS_BACKENDS = frozenset(
     {
+        "nss",
         "map",
         "laplace",
         "mcmc",
@@ -651,6 +955,45 @@ PROFILE_MASS_BACKENDS = frozenset(
         "mcmc_hmc_lowrank",
         "mcmc_smc",
         "hmc_is",
+        # Added 2026-09-17 after auditing every registered backend against the
+        # seam above, one at a time. Each was previously absent, so
+        # ``resolve_profile_mass_for_method`` disabled profiling before the
+        # backend ran -- silently, because the omission reads as a deliberate
+        # exclusion rather than a gap.
+        #
+        #   nss           -- ``backends/evidence.py:93`` calls
+        #                    ``fitter._get_or_build_loglikelihood_fn()``, which
+        #                    IS the profiled builder under profiling. The
+        #                    override :func:`build_profiled_loglikelihood_fn`
+        #                    was written for this backend and says so in its
+        #                    docstring, but the omission here meant it was
+        #                    unreachable: every NSS evidence run scored its live
+        #                    points at the mass placeholder.
+        #   mcmc_raytrace -- ``backends/mcmc/raytrace.py:906`` calls
+        #                    ``_get_flat_logdensity``.
+        #   mcmc_ess      -- ``backends/mcmc/elliptical_slice.py:185`` calls
+        #                    ``_build_loglikelihood_unbounded_fn``; the profiled
+        #                    dispatch lives in that raw builder
+        #                    (``fitter.py:2954``), not only in the
+        #                    ``_get_or_build_`` wrapper, so ESS sees it. ESS
+        #                    supplies its own N(0, I) prior over the sampled
+        #                    coordinates, which is correct at D-1: the mass's
+        #                    own prior is already inside the profiled marginal.
+        #   pathfinder    -- registered to ``map_dispatch.run_pathfinder``
+        #                    (NOT ``backends/pathfinder.py``), which calls
+        #                    ``_get_flat_logdensity`` at ``map_dispatch.py:1166``.
+        #   vi_fullrank /
+        #   vi_meanfield  -- both route to ``backends/vi/gaussian.py``
+        #                    (``_run_fullrank_vi`` / ``_run_meanfield_vi`` in
+        #                    ``_registration.py``), which calls
+        #                    ``_get_flat_logdensity`` at ``vi/gaussian.py:285``.
+        #                    These are the BlackJAX Gaussian VI backends and are
+        #                    NOT what the NIFTy/native exclusion above refers to.
+        "mcmc_raytrace",
+        "mcmc_ess",
+        "pathfinder",
+        "vi_fullrank",
+        "vi_meanfield",
     }
 )
 
@@ -1553,12 +1896,13 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
         derived_chunk_size = max(1, int(target_bytes / per_chunk_overhead))
 
         logger.info(
-            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB)",
+            "reinsertion chunk size derived: %d draws (%.2f MB/draw, target=%.1f GB), ceiling %d",
             derived_chunk_size,
             scratch_bytes / reference_chunk_size / 1e6,
             target_bytes / 1e9,
+            _REINSERT_CHUNK_MAX,
         )
-        return derived_chunk_size
+        return min(derived_chunk_size, _REINSERT_CHUNK_MAX)
     except Exception as exc:
         # Fallback: use a conservative fixed size if XLA analysis fails
         # (e.g., on some hardware or JAX versions where memory_analysis is unavailable)
@@ -1568,7 +1912,7 @@ def _compute_reinsertion_chunk_size(fitter: Fitter) -> int:
             exc,
             exc_info=True,
         )
-        return reference_chunk_size
+        return min(reference_chunk_size, _REINSERT_CHUNK_MAX)
 
 
 def _reinsert_mass_fn(fitter: Fitter):
@@ -1673,6 +2017,135 @@ def _reinsert_mass_fn(fitter: Fitter):
     return fn
 
 
+#: Environment variable naming a lock file. When set, the reinsertion's
+#: execution is serialized across processes with an advisory ``flock`` on that
+#: file. The reinsertion is the one step of a profiled fit whose transient
+#: memory is many times the sampler's resident footprint (measured 10 GB
+#: on a paper-1 III cell against a 3-4 GB baseline), so N concurrent fits on
+#: one box that all finish near each other stack N such transients; a shared
+#: 40 GB watchdog killed a cell exactly there. Unset (the default) nothing
+#: is locked and nothing changes.
+REINSERT_LOCK_ENV = "TENGRI_REINSERT_LOCK"
+
+
+@contextlib.contextmanager
+def _reinsertion_lock():
+    """Hold the cross-process reinsertion lock named by ``REINSERT_LOCK_ENV``, if set."""
+    path = os.environ.get(REINSERT_LOCK_ENV)
+    if not path:
+        yield
+        return
+    import fcntl
+
+    with open(path, "a") as fh:
+        logger.info("profile_mass reinsertion: waiting for lock %s", path)
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        logger.info("profile_mass reinsertion: lock acquired")
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def reinsert_profiled_mass(
+    fitter: Fitter,
+    posterior: Posterior,
+    *,
+    data,
+    noise,
+    presence,
+    line_obs,
+    line_err,
+    key,
+) -> Posterior:
+    """Draw (or set) the profiled mass and merge it into ``posterior``.
+
+    Shared body for :func:`finalize_profile_mass` (single-galaxy: passes
+    ``fitter.data``/``fitter.noise``, the Fitter's own observation) and the
+    ``Fitter._fit_batch_vmap_map`` / ``_fit_batch_vmap_mcmc`` batch paths
+    (one call per galaxy, with *that* galaxy's own ``data``/``noise`` --
+    ``fitter.data`` is whichever galaxy the batch ``Fitter`` happens to have
+    been constructed with, not the one being finalized here, so the caller
+    must supply the right observation explicitly rather than let this
+    function default to ``fitter.data``/``fitter.noise``).
+
+    Precondition: ``fitter._profile_mass`` is truthy (checked by both
+    callers before invoking this; calling it when profiling did not engage
+    would read ``fitter._profile_mass_name`` as ``None``).
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter whose working spec pinned the mass (for ``mass_name``,
+        ``model``, ``_fixed_values``, ``data_type``, ``use_components``).
+    posterior : Posterior
+        The backend's result for ONE galaxy, not yet returned to the caller.
+    data, noise : array_like
+        That galaxy's own observation -- the channel(s) the objective that
+        produced ``posterior`` was actually scored against.
+    presence : array_like or None
+        That galaxy's presence mask, or ``None``.
+    line_obs, line_err : array_like or None
+        That galaxy's measured line fluxes/errors, or ``None`` if this fit
+        has no line-flux channel.
+    key : jax.Array
+        PRNG key for the mass draw (samples case only; unused for a point
+        estimate, since :func:`_profile_stats` is deterministic given the
+        other channels).
+
+    Returns
+    -------
+    Posterior
+        ``posterior``, mutated in place and returned for convenience.
+    """
+    mass_name = fitter._profile_mass_name
+    model = fitter.model
+    fixed_values = fitter._fixed_values
+    data_type = fitter.data_type
+    use_components = bool(getattr(fitter, "use_components", False))
+
+    if posterior.samples is not None:
+        samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
+        n_draws = next(iter(samples_no_mass.values())).shape[0]
+        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
+        draw_keys = jax.random.split(mass_key, n_draws)
+        with _reinsertion_lock():
+            ell_samples = _reinsert_mass_fn(fitter)(
+                samples_no_mass,
+                draw_keys,
+                data,
+                noise,
+                presence,
+                line_obs,
+                line_err,
+            )
+            # Execute inside the lock: dispatch is asynchronous, and without
+            # this the work (and its memory) would run whenever the caller
+            # first reads the draws, outside the critical section.
+            ell_samples = jax.block_until_ready(ell_samples)
+
+        posterior.samples = {**posterior.samples, mass_name: ell_samples}
+        posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
+    else:
+        phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
+        # Same channel set as the objective and the draw path: a point estimate
+        # taken against a different set of channels would disagree with the
+        # samples beside it in the same Posterior.
+        _, a_star, _, ell_ref = _profile_stats(
+            model,
+            mass_name,
+            phys,
+            data,
+            noise,
+            presence=presence,
+            data_type=data_type,
+            use_components=use_components,
+            line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
+        )
+        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
+    return posterior
+
+
 def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Posterior:
     """Record the resolved ``profile_mass`` choice, and reinsert the mass if engaged.
 
@@ -1685,6 +2158,13 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     marginalized mass and merges it into ``posterior.samples``/``params`` so
     they carry the mass parameter exactly as they would without profiling
     (``posterior.properties`` and other derived quantities work unchanged).
+    Delegates the actual draw/set + merge to :func:`reinsert_profiled_mass`,
+    using this Fitter's own ``data``/``noise``/``presence``/line channel --
+    the single-galaxy case, where "this fitter's observation" and "the
+    observation the profiled objective was scored against" are the same
+    thing. The batch vmap paths (``Fitter._fit_batch_vmap_map`` /
+    ``_fit_batch_vmap_mcmc``) call :func:`reinsert_profiled_mass` directly,
+    once per galaxy, with that galaxy's own observation instead.
 
     Parameters
     ----------
@@ -1710,9 +2190,6 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     if not fitter._profile_mass:
         return posterior
 
-    mass_name = fitter._profile_mass_name
-    model = fitter.model
-    data, noise = fitter.data, fitter.noise
     presence = None if fitter.presence is None else jnp.asarray(fitter.presence)
     # The measured line channel, sourced the same way: straight off the fitter
     # rather than out of ``_data_args``. Both the draw path and the point
@@ -1722,43 +2199,14 @@ def finalize_profile_mass(fitter: Fitter, posterior: Posterior, *, key) -> Poste
     _line_cfg = fitter._resolved_line_fluxes()
     line_obs = None if _line_cfg is None else jnp.asarray(_line_cfg.fluxes)
     line_err = None if _line_cfg is None else jnp.asarray(_line_cfg.errors)
-    fixed_values = fitter._fixed_values
-    data_type = fitter.data_type
-    use_components = bool(getattr(fitter, "use_components", False))
 
-    if posterior.samples is not None:
-        samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
-        n_draws = next(iter(samples_no_mass.values())).shape[0]
-        mass_key = jax.random.fold_in(key, abs(hash("tengri.profile_mass")) % (2**31))
-        draw_keys = jax.random.split(mass_key, n_draws)
-        ell_samples = _reinsert_mass_fn(fitter)(
-            samples_no_mass,
-            draw_keys,
-            data,
-            noise,
-            presence,
-            line_obs,
-            line_err,
-        )
-
-        posterior.samples = {**posterior.samples, mass_name: ell_samples}
-        posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
-    else:
-        phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
-        # Same channel set as the objective and the draw path: a point estimate
-        # taken against a different set of channels would disagree with the
-        # samples beside it in the same Posterior.
-        _, a_star, _, ell_ref = _profile_stats(
-            model,
-            mass_name,
-            phys,
-            data,
-            noise,
-            presence=presence,
-            data_type=data_type,
-            use_components=use_components,
-            line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
-        )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
-
-    return posterior
+    return reinsert_profiled_mass(
+        fitter,
+        posterior,
+        data=fitter.data,
+        noise=fitter.noise,
+        presence=presence,
+        line_obs=line_obs,
+        line_err=line_err,
+        key=key,
+    )

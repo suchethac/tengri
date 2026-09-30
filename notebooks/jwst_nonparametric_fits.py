@@ -18,18 +18,17 @@
 #
 # > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
-# A Prospector-style setup: the `continuity` star-formation history
-# (piecewise-constant SFR in age bins, Student-t priors on the log ratios of
-# adjacent bins, following Leja et al. 2019) fit to JWST NIRCam photometry at
-# $z = 1.5$, first for one galaxy and then for a small catalog. The physics is
-# standard; the point of this page is operational. Two settings decide whether
-# the fit is worth anything: bin edges that follow the redshift, and a
-# trajectory long enough to cross a correlated ratio posterior.
+# We fit a Prospector-style continuity star-formation history (piecewise-constant SFR
+# in age bins with Student-t priors on log ratios of adjacent bins, following Leja et al. 2019)
+# to JWST NIRCam photometry at $z = 1.5$, first for one galaxy and then for a small catalog. The physics
+# is standard; this page focuses on the operational aspects. Two settings decide whether the fit
+# is worthwhile: bin edges that follow the redshift, and a sampling trajectory long enough to cross
+# the correlated ratio posterior.
 #
 # The filter set is 7 broad bands (F090W to F444W) plus 12 medium bands (F140M
 # to F480M). At $z = 1.5$ the medium bands sample the rest-frame optical
-# continuum whose shape the ratio bins respond to, and F162M lands on
-# H$\alpha$, so the fit uses a wNE stellar library with nebular emission baked
+# continuum whose shape the ratio bins respond to. Since F162M coincides with
+# H$\alpha$, the fit uses a wNE stellar library with nebular emission baked
 # into the templates.
 
 # %%
@@ -86,17 +85,16 @@ from tengri.cosmology import age_at_z
 # photometry through a precomputed SSP-by-filter table, which is what makes the
 # samplers below affordable.
 #
-# The bin edges are tied to the redshift, and that is not cosmetic. The
-# `continuity` default is a fixed ladder out to 13.7 Gyr whatever the redshift,
-# while the composite-population kernel drops star formation older than the
-# universe at the fit redshift. At $z = 1.5$ the two oldest bins then sit
-# outside cosmic time: they take no likelihood and sample their Student-t prior,
-# and the mass normalization counts them anyway. On this model, a flat
-# history declared at $\log M = 10.3$ forms 9.80 on the default ladder, half a
-# dex short. Log-spacing the edges out to the age of the universe, as Prospector
-# does, returns 10.30. A `SFHBeforeBigBangWarning` still fires even so, because
-# the piecewise SFH holds its oldest bin's rate past the last edge, and
-# the shared notebook setup silences it. The normalization is not affected.
+# The bin edges are tied to the redshift, which is essential. The
+# `continuity` default is a fixed ladder out to 13.7 Gyr regardless of redshift,
+# while the composite-population kernel excludes star formation older than the
+# universe at the fit redshift. At $z = 1.5$ the two oldest bins sit outside cosmic
+# time, so they take no likelihood and sample their Student-t prior, though the mass
+# normalization counts them. On this model, a flat history declared at $\log M = 10.3$
+# forms 9.80 on the default ladder (half a dex short). Log-spacing the edges to the
+# age of the universe (as Prospector does) returns 10.30. A `SFHBeforeBigBangWarning`
+# still fires because the piecewise SFH holds its oldest bin's rate past the last edge;
+# the shared notebook setup silences it. The normalization is unaffected.
 
 # %%
 Z_GAL = 1.5
@@ -168,21 +166,20 @@ build_wall = time.perf_counter() - t0
 
 MASS_KEY = next(k for k in model.spec.free_params if k.endswith("log_total_mass"))
 RATIO_KEYS = [p for p in model.spec.free_params if "ratio" in p]
-FIXED_VALUES = dict(model.spec.get_fixed_values())
 print(f"build + WavePrecomp table: {build_wall:.1f} s")
 print(f"free parameters ({model.spec.n_free}): {', '.join(model.spec.free_params)}")
 
 # %% [markdown]
 # ## Mock galaxy
 #
-# Truth: log total mass $= 10.3$, constant SFR across the bins (all ratios zero),
-# slightly subsolar metallicity, moderate diffuse dust. Fluxes are perturbed at
-# S/N 20 per band. A positive ratio means the SFR rises towards the present.
+# The truth has log total mass $= 10.3$, constant SFR across the bins (all ratios
+# zero), slightly subsolar metallicity, and moderate diffuse dust. Fluxes are perturbed
+# at signal-to-noise ratio (S/N) 20 per band. A positive ratio means the SFR rises toward the present.
 
 # %%
 rng = np.random.default_rng(4)
 
-truth = dict(FIXED_VALUES)
+truth = {}
 truth[MASS_KEY] = 10.3
 truth["met_logzsol"] = -0.3
 truth["dust_tau_diff"] = 0.3
@@ -234,8 +231,8 @@ plt.show()
 # ## Individual mode
 #
 # A MAP fit gives the point estimate. The default fit then runs four NUTS
-# chains, each 150 warmup plus 300 draws, with the stellar mass integrated out
-# analytically, a diagonal metric and a target acceptance of 0.9: on these
+# chains (150 warmup and 300 draws each), with the stellar mass integrated out
+# analytically, a diagonal metric, and a target acceptance of 0.9. On these
 # correlated bin ratios the dense metric returns far fewer effective samples.
 #
 # The parameter `tau_bc` is pinned at 0 here because the NIRCam photometry
@@ -252,7 +249,14 @@ map_logm = float(map_post.params[MASS_KEY])
 print(f"MAP: {map_wall:.1f} s, log total mass = {map_logm:.2f} (truth {truth[MASS_KEY]:.2f})")
 
 t0 = time.perf_counter()
-posterior = forward.fit(flux_obs, noise, key=jax.random.PRNGKey(2), verbose=False, dense_mass_matrix=False, target_accept_rate=0.9)
+posterior = forward.fit(
+    flux_obs,
+    noise,
+    key=jax.random.PRNGKey(2),
+    verbose=False,
+    dense_mass_matrix=False,
+    target_accept_rate=0.9,
+)
 nuts_wall = time.perf_counter() - t0
 
 ess = posterior.effective_sample_size()
@@ -268,20 +272,18 @@ print(
 # %% [markdown]
 # ## Catalog mode
 #
-# Eight galaxies at the same redshift, spread over a dex in mass, with their own
-# dust, metallicity and SFH shape: two rising, two declining, two constant, and
-# two with a burst in the youngest bin. `Catalog.fit` runs one vectorized
-# program over all of them, and `forward_chunk_size` is left at its `"auto"`
-# default, which sizes the batch from a memory budget; forcing `K = N` on a
-# model this heavy can exceed available RAM.
+# We fit eight galaxies at the same redshift, spread over a dex in mass, with their
+# own dust, metallicity, and SFH shape (two rising, two declining, two constant, and
+# two with a burst in the youngest bin). `Catalog.fit` runs one vectorized program over
+# all of them. The `forward_chunk_size` is left at its `"auto"` default, which sizes
+# the batch from a memory budget; forcing `K = N` on a model this heavy can exceed available RAM.
 #
-# The catalog runs fixed-length HMC instead of NUTS. A per-step adaptive
-# trajectory length does not vectorize across galaxies; batched NUTS compiles
-# for many minutes on this model without producing a sample, while fixed-length
-# HMC compiles in seconds. The 150 leapfrog steps cross the correlated ratio
-# posterior. Read the per-galaxy effective sample sizes before trusting any
-# single object; use the catalog to rank and flag, then refit what matters with
-# the dense-metric posterior above.
+# The catalog runs fixed-length HMC instead of NUTS because a per-step adaptive
+# trajectory length does not vectorize across galaxies. Batched NUTS compiles for
+# many minutes on this model without producing a sample, while fixed-length HMC compiles
+# in seconds. The 150 leapfrog steps cross the correlated ratio posterior. Read the
+# per-galaxy effective sample sizes before trusting any single object. Use the catalog to
+# rank and flag, then refit what matters with the dense-metric posterior above.
 
 # %%
 N_GAL = 8
@@ -348,11 +350,11 @@ print(f"divergences: {catalog_post.diagnostics.get('n_divergent_total', 'n/a')}"
 # %% [markdown]
 # ## What the catalog fits look like
 #
-# Three of the eight, one per SFH shape: the photometry with the posterior model
-# over it, the recovered history against the input, and the mass posterior. The
-# histories are drawn from the posterior, so the width of the band is the
-# constraint the bands actually place on each age bin, and they stop at the age
-# of the universe because that is where the kernel stops counting.
+# We show three of the eight (one per SFH shape): the photometry with the posterior
+# model, the recovered history against the input, and the mass posterior. The histories
+# are drawn from the posterior, so the width of the band is the constraint the bands
+# actually place on each age bin. They end at the age of the universe because that is
+# where the composite-population kernel stops counting.
 
 # %%
 N_DRAWS = 40
@@ -365,7 +367,7 @@ def draw_products(post, key):
     draws = post.resample(key, n=N_DRAWS)
     fluxes, sfrs, lbt = [], [], None
     for i in range(N_DRAWS):
-        p = {**FIXED_VALUES, **{k: float(v[i]) for k, v in draws.items()}}
+        p = {k: float(v[i]) for k, v in draws.items()}
         fluxes.append(np.asarray(model.predict_photometry(p)))
         s = model.predict_state(p)
         sfrs.append(np.asarray(s.derived["sfr_history"]))
@@ -483,16 +485,16 @@ print(f"{'HMC posterior, single galaxy':<44}{nuts_wall:>8.1f} s")
 print(f"{'catalog HMC, per galaxy':<44}{cat_wall / N_GAL:>8.1f} s")
 
 # %% [markdown]
-# Rules of thumb from this configuration on a laptop CPU with a warm compile
-# cache. MAP takes a second or two. The single-galaxy posterior (printed above
-# as wall time) runs four NUTS chains and returns the full posterior; the
-# catalog runs HMC on each galaxy and takes the printed seconds per galaxy.
+# These are rules of thumb from this configuration on a laptop CPU with a warm compile
+# cache. MAP takes a second or two. The single-galaxy posterior (printed above as wall time)
+# runs four NUTS chains and returns the full posterior; the catalog runs HMC on each galaxy
+# in the printed seconds per galaxy.
 #
-# A fit far outside those ranges usually means a wrong setting. Check three
+# A fit far outside those ranges usually indicates a wrong setting. Check three
 # things, in order: that the bin edges reach the age of the universe at the fit
 # redshift and no further, that the model was built with `WavePrecomp`, and that
-# the catalog trajectory is long enough. Then check what the sampler did rather
-# than how long it took: a nonparametric fit that returns in seconds has almost
-# certainly not moved, and one that returns a low divergence count alongside a
-# min ESS in the single digits has not either. The "Choosing an inference method"
-# page has the sampler decision table.
+# the catalog trajectory is long enough. Also check what the sampler did, not just
+# how long it took. A nonparametric fit that returns in seconds has almost certainly
+# not moved, and one that returns a low divergence count alongside a minimum ESS in
+# the single digits has not moved either. The "Choosing an inference method" page has
+# the sampler decision table.

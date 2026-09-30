@@ -57,7 +57,7 @@ def _model(ssp, obs, csp):
 @pytest.fixture(scope="module")
 def _params(synthetic_ssp_wide, synthetic_tophat_obs):
     m = _model(synthetic_ssp_wide, synthetic_tophat_obs, "trapz")
-    return {**m.spec.get_fixed_values(), **m.spec.sample(jax.random.PRNGKey(0))}
+    return m.spec.sample(jax.random.PRNGKey(0))
 
 
 @pytest.mark.parametrize("csp", sorted(_VALID_CSP_INTEGRATION))

@@ -104,7 +104,6 @@ def _mock(model):
     """A valid full parameter set: a prior draw with a few values pinned."""
     drawn = model.spec.sample(jax.random.PRNGKey(0))
     params = {
-        **model.spec.get_fixed_values(),
         **drawn,
         **{k: jnp.array(v) for k, v in OVERRIDES.items() if k in drawn},
     }
@@ -124,7 +123,11 @@ def _capable_backends() -> list[str]:
     import tengri  # noqa: F401  (registers the backends)
     from tengri.inference._backend_registry import all_backends
 
-    return sorted(e.name for e in all_backends() if e.accepts_precondition)
+    # Self-whitening backends refuse precondition= (#2196), so they are not
+    # capable of the round trip this file measures.
+    return sorted(
+        e.name for e in all_backends() if e.accepts_precondition and not e.self_whitening
+    )
 
 
 #: Budget kwargs per backend family. The default is the Hamiltonian one every

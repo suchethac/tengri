@@ -75,9 +75,11 @@ def _model(ssp):
 
 def _mock(model):
     """A valid full parameter set: a prior draw with a few values pinned."""
+    # Free-only (#2296): model.mock self-merges the spec's Fixed values
+    # (met_logzsol, redshift) internally, so spreading get_fixed_values()
+    # here would present them back as a refused override.
     drawn = model.spec.sample(jax.random.PRNGKey(0))
     params = {
-        **model.spec.get_fixed_values(),
         **drawn,
         **{k: jnp.array(v) for k, v in OVERRIDES.items() if k in drawn},
     }

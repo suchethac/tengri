@@ -150,8 +150,12 @@ class TestParamsOverrideUnreadableKey:
             result = forward.fit(
                 data, noise, method="map", params={"noise_frac_cal": 0.25}, n_steps=10
             )
-            # If we get here, the override was accepted.
-            assert "noise_frac_cal" in result.params
+            # If we get here, the override was accepted. ``params={...}`` routes
+            # to Fitter(params_override=...) -- a re-pin, so the key is Fixed
+            # for this fit and reachable via Posterior.fixed_values, not the
+            # free-only Posterior.params (#2296).
+            assert "noise_frac_cal" in result.fixed_values
+            assert float(result.fixed_values["noise_frac_cal"]) == pytest.approx(0.25)
         except ValueError as e:
             if "does not read" in str(e):
                 msg = f"Unexpected rejection when noise_frac_cal is declared: {e}"

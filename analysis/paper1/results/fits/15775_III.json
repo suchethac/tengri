@@ -1,0 +1,156 @@
+{
+  "gal_id": 15775,
+  "config": "III",
+  "z": 1.097,
+  "n_free": 6,
+  "n_bands": 15,
+  "filter_names": [
+    "ctio_u",
+    "vimos_u",
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f105w",
+    "hst_f125w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80"
+  ],
+  "n_warmup": 150,
+  "n_samples": 300,
+  "n_chains": 4,
+  "dense_mass_matrix": false,
+  "profile_mass": true,
+  "target_accept_rate": 0.85,
+  "max_tree_depth": null,
+  "divergences": 0,
+  "ebfmi_per_chain": [
+    0.8910459384451208,
+    1.0731237996550949,
+    1.135645800412364,
+    0.9758652543802621
+  ],
+  "ebfmi_min": 0.8910459384451208,
+  "step_size": 0.10738317540552526,
+  "warmup_divergence_frac": 0.0,
+  "tree_depth_mean": 5.385833333333333,
+  "frac_max_depth": 0.0,
+  "rhat_max": 1.0020771029304336,
+  "rhat_dict": {
+    "dust_tau_bc": 1.0004506833051148,
+    "dust_tau_diff": 0.9996845594482664,
+    "met_logzsol": 0.9997452441594766,
+    "sfh_delayed_age_gyr": 1.0020771029304336,
+    "sfh_delayed_log_total_mass": 1.0004075758253808,
+    "sfh_delayed_tau_gyr": 1.0014571647232962
+  },
+  "ess_min": 214.36474082959163,
+  "ess_dict": {
+    "dust_tau_bc": 380.7358505031494,
+    "dust_tau_diff": 455.5797089476933,
+    "met_logzsol": 448.0818910381793,
+    "sfh_delayed_age_gyr": 214.36474082959163,
+    "sfh_delayed_log_total_mass": 565.5557601813462,
+    "sfh_delayed_tau_gyr": 217.2589294527158
+  },
+  "wall_time_s": 3006.0283427889226,
+  "load_at_start": {
+    "load_avg_1m": 35.15966796875,
+    "n_concurrent_fits": 6,
+    "n_cpus": 24
+  },
+  "load_at_end": {
+    "load_avg_1m": 47.02783203125,
+    "n_concurrent_fits": 6,
+    "n_cpus": 24
+  },
+  "systematic_floor_frac": 0.05,
+  "systematic_floor_mean_erg": 3.842233642730746e-30,
+  "adoption_pass": true,
+  "retune_attempt": 1,
+  "best_attempt": 1,
+  "attempts": [
+    {
+      "gal_id": 15775,
+      "config": "III",
+      "z": 1.097,
+      "n_free": 6,
+      "n_bands": 15,
+      "filter_names": [
+        "ctio_u",
+        "vimos_u",
+        "hst_f435w",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f105w",
+        "hst_f125w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
+        "irac_58",
+        "irac_80"
+      ],
+      "n_warmup": 150,
+      "n_samples": 300,
+      "n_chains": 4,
+      "dense_mass_matrix": false,
+      "profile_mass": true,
+      "target_accept_rate": 0.85,
+      "max_tree_depth": null,
+      "divergences": 0,
+      "ebfmi_per_chain": [
+        0.8910459384451208,
+        1.0731237996550949,
+        1.135645800412364,
+        0.9758652543802621
+      ],
+      "ebfmi_min": 0.8910459384451208,
+      "step_size": 0.10738317540552526,
+      "warmup_divergence_frac": 0.0,
+      "tree_depth_mean": 5.385833333333333,
+      "frac_max_depth": 0.0,
+      "rhat_max": 1.0020771029304336,
+      "rhat_dict": {
+        "dust_tau_bc": 1.0004506833051148,
+        "dust_tau_diff": 0.9996845594482664,
+        "met_logzsol": 0.9997452441594766,
+        "sfh_delayed_age_gyr": 1.0020771029304336,
+        "sfh_delayed_log_total_mass": 1.0004075758253808,
+        "sfh_delayed_tau_gyr": 1.0014571647232962
+      },
+      "ess_min": 214.36474082959163,
+      "ess_dict": {
+        "dust_tau_bc": 380.7358505031494,
+        "dust_tau_diff": 455.5797089476933,
+        "met_logzsol": 448.0818910381793,
+        "sfh_delayed_age_gyr": 214.36474082959163,
+        "sfh_delayed_log_total_mass": 565.5557601813462,
+        "sfh_delayed_tau_gyr": 217.2589294527158
+      },
+      "wall_time_s": 3006.0283427889226,
+      "load_at_start": {
+        "load_avg_1m": 35.15966796875,
+        "n_concurrent_fits": 6,
+        "n_cpus": 24
+      },
+      "load_at_end": {
+        "load_avg_1m": 47.02783203125,
+        "n_concurrent_fits": 6,
+        "n_cpus": 24
+      },
+      "systematic_floor_frac": 0.05,
+      "systematic_floor_mean_erg": 3.842233642730746e-30,
+      "adoption_pass": true,
+      "retune_attempt": 1
+    }
+  ],
+  "retune_history": []
+}

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: BSD-3-Clause
 """
 Regression tests for issue #2361: mcmc_nuts_fast's short_doc and CPU hint.
 

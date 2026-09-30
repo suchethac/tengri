@@ -279,9 +279,11 @@ class TestFittedMode:
             spec=model_spec,
             wave_obs=wave,
             _spectral_resolution=2000.0,
-            _spectroscopy_config=spec_cfg,
             predict_spectrum=lambda params, w=None, **kwargs: continuum,
-            observation=None,
+            observation=types.SimpleNamespace(
+                spectroscopy=spec_cfg,
+                photometry=None,
+            ),
         )
 
     # ── Config-level tests (no SSP, no Fitter) ────────────────────
@@ -462,9 +464,11 @@ class TestFittedMode:
             spec=model_spec,
             wave_obs=wave,
             _spectral_resolution=2000.0,
-            _spectroscopy_config=cfg,
             predict_spectrum=lambda params, w=None, **kwargs: continuum,
-            observation=None,
+            observation=types.SimpleNamespace(
+                spectroscopy=cfg,
+                photometry=None,
+            ),
         )
 
         fitter = Fitter(model, true_spectrum, noise, data_type="spectroscopy")

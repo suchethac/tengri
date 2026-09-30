@@ -28,7 +28,7 @@ and old metal-poor stars do not average.
 
 Reference: Conroy+2013.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-183
+.. GENERATED FROM PYTHON SOURCE LINES 12-185
 
 
 
@@ -120,6 +120,7 @@ Reference: Conroy+2013.
             "type": "two_component",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.4,
+            "tau_diff": tengri.FREE,
         },
         redshift=tengri.Fixed(Z_OBS),
     )
@@ -145,6 +146,7 @@ Reference: Conroy+2013.
             "type": "two_component",
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "tau_bc": 0.4,
+            "tau_diff": tengri.FREE,
         },
         redshift=tengri.Fixed(Z_OBS),
     )
@@ -235,7 +237,7 @@ Reference: Conroy+2013.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.882 seconds)
+   **Total running time of the script:** (0 minutes 4.828 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:

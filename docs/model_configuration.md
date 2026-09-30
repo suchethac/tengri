@@ -4,26 +4,26 @@
      Structure is strict: section headings "### Domain: `key`", marker "**Structural keys:**",
      and bullets "- `'key'` —". Changes to markdown format require updating the guard's parser. -->
 
-This is the definitive guide to the nested-dict grammar for building a `SEDModel`. It covers universal grammar semantics, per-domain configuration, round-trip serialization, and common patterns.
+This is the definitive guide to the nested-dict grammar for building a `SEDModel`. The guide covers universal grammar semantics, per-domain configuration, round-trip serialization, and common patterns.
 
 ## I. Universal grammar semantics
 
-The nested-dict grammar for model configuration (when using SEDModel.build) accepts one dict per physics group, each declaring what physics variant to use, which parameters are free, and per-parameter overrides.
+The nested-dict grammar used by `SEDModel.build` accepts one dict per physics group, each declaring what physics variant to use, which parameters are free, and per-parameter overrides.
 
 ### Three kinds of keys
 
 Every group dict contains three kinds of keys:
 
-**1. Structural keys** — select the model variant or configure the group's behavior. The key `'type'` is universal; some groups have additional structural keys (e.g., `'law'` for dust, `'norm'` for AGN). Structural keys are non-parameter settings.
+**1. Structural keys**: select the model variant or configure the group's behavior. The key `'type'` is universal; some groups have additional structural keys (e.g., `'law'` for dust, `'norm'` for AGN). Structural keys are non-parameter settings.
 
 ```python
 # 'type' selects the SFH model, 'age_kernel' configures integration
 sfh={'type': 'dpl', 'age_kernel': 'cic'}
 ```
 
-**2. The wildcard keys `'all_params'` and `'other_params'`** — exact synonyms that set the free/fixed status for every parameter in the group not explicitly overridden. Each accepts `FREE` (defer to the registry's default prior) or `Fixed(DEFAULT)` (pin at the registry default value) — never a concrete `Fixed(v)` (one literal value cannot apply across every parameter in the group) and never an arbitrary `Distribution`. Giving both spellings in the same dict raises. The retired `'*'` synonym still raises `ValueError` naming both accepted spellings.
+**2. The wildcard keys `'all_params'` and `'other_params'`**: exact synonyms that set the free/fixed status for every parameter in the group not explicitly overridden. Each accepts `FREE` (defer to the registry's default prior) or `Fixed(DEFAULT)` (pin at the registry default value). Never a concrete `Fixed(v)`, since one literal value cannot apply across every parameter in the group, and never an arbitrary `Distribution`. Giving both spellings in the same dict raises. The retired `'*'` synonym raises `ValueError` naming both accepted spellings.
 
-Pick the spelling that reads best for the shape of the dict: `'all_params'` when the wildcard is the group's only directive, `'other_params'` written **last**, after explicit per-parameter entries, where it reads as "the others." `to_groups()` and the builder factories always emit by this convention:
+Pick the spelling that reads best for the shape of the dict. Use `'all_params'` when the wildcard is the group's only directive. Use `'other_params'` written **last**, after explicit per-parameter entries, where it reads as "the others." The `to_groups()` method and the builder factories always emit following this convention:
 
 ```python
 # Sole directive: 'all_params' reads best
@@ -34,7 +34,7 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc': 0.5, 'ot
 # NOT (legal, but not the taught style): {..., 'all_params': Fixed(DEFAULT), 'tau_bc': 0.5}
 ```
 
-**3. Parameter keys** — bare parameter names or full prefixed names that override the wildcard or default. Short names are auto-prefixed by the group context.
+**3. Parameter keys**: bare parameter names or full prefixed names that override the wildcard or default. Short names are auto-prefixed by the group context.
 
 ```python
 # All three mean the same: set tau_bc to 0.5
@@ -45,14 +45,14 @@ dust_attenuation={'type': 'two_component', 'tau_bc': 0.5}       # short name (pr
 
 ### Free vs fixed: one-minute table
 
-Every parameter in a group dict is either **free** (sampled during inference) or **fixed** (pinned at a single value). And each is either using the **registry default** or a **value/prior you provide**:
+Every parameter is either **free** (sampled during inference) or **fixed** (pinned at a single value), and either uses the **registry default** or a **value/prior you provide**:
 
 |            | registry default | your choice |
 |------------|------------------|-------------|
-| **free**   | `FREE` — sampled with the registry's default prior | any `Distribution`, e.g. `Uniform(1, 3)` |
-| **fixed**  | `Fixed(DEFAULT)` — pinned at the registry's default value | `Fixed(0.3)` — pinned at your value |
+| **free**   | `FREE` (sampled with the registry's default prior) | any `Distribution`, e.g. `Uniform(1, 3)` |
+| **fixed**  | `Fixed(DEFAULT)` (pinned at the registry's default value) | `Fixed(0.3)` (pinned at your value) |
 
-**`FREE`** means "free to vary, using the registry's default prior." **`Fixed(DEFAULT)`** means "pinned at the registry's default value." The `'all_params'` wildcard applies one disposition to all parameters in the group; after explicit per-parameter entries, spell the remainder `'other_params'`:
+**`FREE`** means "free to vary using the registry's default prior." **`Fixed(DEFAULT)`** means "pinned at the registry's default value." The `'all_params'` wildcard applies one disposition to all parameters in the group. After explicit per-parameter entries, spell the remainder `'other_params'`:
 
 ```python
 sfh={'type': 'dpl', 'all_params': FREE}                               # everything free
@@ -109,7 +109,7 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 ### Wildcard rules and no-op detection
 
-`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, when a wildcard cannot actually free anything, `'all_params': FREE` **raises `ParameterError`** instead of silently building a model with that physics pinned (#2187). Two shapes, both raise:
+`'all_params': FREE` on a group whose parameters default to `Fixed(DEFAULT)` is valid and cascades. However, when a wildcard cannot actually free anything, `'all_params': FREE` **raises `ParameterError`** instead of silently building a model with that physics pinned (#2187). Two shapes both raise:
 
 **The group declares no parameters at all** under the selected configuration (e.g. `radio` with every sub-model disabled):
 
@@ -143,13 +143,11 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table', 'all
 #  Pass explicit priors instead, e.g. met={'alpha_fe': Uniform(lo, hi)}."
 
 # The remedy depends on the parameter -- it is not always "add a prior".
-# met_alpha_fe here is the declared-but-not-yet-shipped alpha-enhancement
-# axis (see the release-scope note in the project's CLAUDE.md): its
-# liveness has never been measured (no sweep has ever freed it end to
-# end), so the honest fix for THIS parameter is to drop the wildcard
-# rather than free it -- blessing an explicit prior on an axis nobody has
-# confirmed does anything is exactly the silent-inert-parameter disease
-# this guard exists to catch.
+# met_alpha_fe is declared but not yet part of the released model, and no sweep
+# has freed it end to end, so its effect on the SED is unconfirmed. For this
+# parameter, drop the wildcard rather than free it: an explicit prior on an axis
+# nobody has confirmed does anything is the inert-parameter failure this guard
+# exists to catch.
 model = SEDModel.build(ssp_data=ssp, observation=obs, met={'type': 'table'})
 
 # CORRECT (general case): an explicit prior on a parameter you genuinely
@@ -161,9 +159,9 @@ model = SEDModel.build(
 )
 ```
 
-(A partial free — some parameters in the group have a declared range and some do not — warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned; see the docstring of `_check_wildcard_freed_something` for the full four-outcome table.)
+A partial free (where some parameters have a declared range and some do not) warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned. See the docstring of `_check_wildcard_freed_something` for the full four-outcome table.
 
-The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard: naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example — the declared-but-not-yet-shipped alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
+The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard. Naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example: the declared but not yet released alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
 
 ```python
 model = SEDModel.build(
@@ -182,7 +180,7 @@ model = SEDModel.build(
 )
 ```
 
-`redshift` is the worked example of the opposite outcome — a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` genuinely frees it over that range rather than raising:
+`redshift` is the worked example of the opposite outcome: a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` frees it over that range rather than raising:
 
 ```python
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=FREE)
@@ -216,11 +214,11 @@ Generated per-domain parameter references are shown above. For per-type paramete
 ### Star-formation history: `sfh`
 
 **Structural keys:**
-- `'type'` — SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'age_kernel'` — Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
-- `'bin_edges_gyr'` — Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
-- `'field_centering'` — Field draw centering ('none' or 'mean'). Only for `type='field'`.
+- `'type'`: SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'age_kernel'`: Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
+- `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
+- `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
 
 **Minimal example:**
 ```python
@@ -228,21 +226,23 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 ```
 
 **Gotchas:**
-- `'age_kernel': 'dsps'` is **not** a performance knob — it's 13% slower. Use `'cic'` (default) unless you need DSPS cross-code parity.
-- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`.
+- `'age_kernel': 'dsps'` is **not** a performance knob. It is 13% slower than the default. Use `'cic'` unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
+- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`. When you set `type='field'` without an explicit `age_kernel`, an advisory warns you that the field path forces 'dsps'.
 - Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
 
 
 ### Metallicity: `met`
 
 **Structural keys:**
-- `'type'` — Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'type'`: Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'met_bin_edges_log_yr'`: Lookback-time bin edges [log₁₀ yr] for metallicity-history modes (`'bins'` or `'bins_continuity'`). Default spans 1 Myr to 13.8 Gyr. Accepts an array of strictly increasing edge values (at least 2 edges). Mirroring `sfh={'bin_edges_gyr': [...]}` for non-parametric star formation histories.
 
 **Minimal example:**
 ```python
 met={'type': 'table'}  # all_params defaults to Fixed(DEFAULT)
 met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ramp
+met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0, 8.0, 9.5]}  # custom ladder
 ```
 
 **Gotchas:**
@@ -254,28 +254,47 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 ### Dust attenuation: `dust_attenuation`
 
 **Structural keys:**
-- `'type'` — Architecture: `'single_component'` (one dust screen) or `'two_component'` (birth-cloud + diffuse). Default varies by law.
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'law'` — Attenuation law: `'calzetti'`, `'ccm89'`, `'mw_rv31'`, `'kext00'`, etc. Menu: `tengri.list_dust_laws()`.
+- `'type'`: Architecture: `'single_component'` (one dust screen) or `'two_component'` (birth-cloud + diffuse). Default varies by law.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'law'`: Attenuation law: `'calzetti'`, `'ccm89'`, `'mw_rv31'`, `'kext00'`, etc. Menu: `tengri.list_dust_laws()`.
   - On `'single_component'`: one law for the entire dust.
   - On `'two_component'`: `'law'` applies to both screens. Override per-screen with `'law_bc'` and `'law_diff'`.
   - On `'wg00'` (Willis & Graves 2000 screen): use structural keys like `'dust_curve'`, `'geometry'`, `'structure'` instead of a law name.
-- `'law_bc'` — Birth-cloud attenuation law (two-component only). Required with `'law_diff'` when not using shared `'law'`.
-- `'law_diff'` — Diffuse dust attenuation law (two-component only). Required with `'law_bc'` when not using shared `'law'`.
-- `'law_neb'` — Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`).
-- `'nebular_screen'` — Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse), `'diffuse'` (the old-star screen) or `'none'` (`'off'` is a synonym). Two-component only; `'single_component'` accepts only `'none'`.
-- `'shock_screen'` — Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
-- `'agn_screen'` — Screen choice for AGN continuum attenuation: `'birth_cloud'`, `'diffuse'`, or `'none'` (default). Two-component only. Incompatible with `agn_norm='cigale_joint'` (both read the dust budget); use `agn_norm='independent'` or `'conserving'` instead.
-- `'dust_curve'` — WG00 dust curve selector (only for `type='wg00'`).
-- `'geometry'` — WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
-- `'structure'` — WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).
-- `'slope_bc'`, `'slope_diff'`, `'slope_neb'` — Per-screen law-parameter overrides (two-component only). Accepted only when *that screen's* law reads a slope.
-- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'` — Per-screen bump-strength overrides (two-component only). Accepted only when that screen's law reads a bump strength.
-- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'` — Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
-- `'delta_bc'`, `'delta_diff'`, `'delta_neb'` — Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
-- `'lyman_cutoff'` — Zero attenuation below 912 Å (Lyman limit). Two-component only.
-- `'lyc_absorb_all'` — Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
-- `'eb_include_lyc'` — Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
+- `'law_bc'`: Birth-cloud attenuation law (two-component only). Required with `'law_diff'` when not using shared `'law'`.
+- `'law_diff'`: Diffuse dust attenuation law (two-component only). Required with `'law_bc'` when not using shared `'law'`.
+- `'law_neb'`: Nebular dust law (the curve for the nebular channel; which screen that channel passes through is `'nebular_screen'`).
+- `'nebular_screen'`: Which dust screen the nebular continuum, the line catalog and the fast-nebular fallback pass through: `'birth_cloud'` (default: the young-star screen, birth cloud + diffuse), `'diffuse'` (the old-star screen) or `'none'` (`'off'` is a synonym). Two-component only; `'single_component'` accepts only `'none'`.
+- `'shock_screen'`: Which screen the shock SED passes through; same values; default `'diffuse'` (AGN-outflow shocks sit outside the birth clouds).
+- `'agn_screen'`: Screen choice for AGN continuum attenuation: `'birth_cloud'`, `'diffuse'`, or `'none'` (default). Two-component only. Incompatible with `agn_norm='cigale_joint'` (both read the dust budget); use `agn_norm='independent'` or `'conserving'` instead.
+- `'dust_curve'`: WG00 dust curve selector (only for `type='wg00'`).
+- `'geometry'`: WG00 geometry ('slab', 'sphere', etc.) (only for `type='wg00'`).
+- `'structure'`: WG00 structure ('clumpy', 'homogeneous', etc.) (only for `type='wg00'`).
+- `'slope_bc'`, `'slope_diff'`, `'slope_neb'`: Per-screen law-parameter overrides (two-component only). Accepted only when *that screen's* law reads a slope.
+- `'bump_strength_bc'`, `'bump_strength_diff'`, `'bump_strength_neb'`: Per-screen bump-strength overrides (two-component only). Accepted only when that screen's law reads a bump strength.
+- `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'`: Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
+- `'delta_bc'`, `'delta_diff'`, `'delta_neb'`: Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
+- `'lyman_cutoff'`: Zero attenuation below 912 Å (Lyman limit). Two-component only.
+- `'lyc_absorb_all'`: Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
+- `'eb_include_lyc'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
+  (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
+
+Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
+`'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
+**either** a plain number (as before) **or** `Fixed(...)`/a prior
+distribution (#2428). A plain number is a build-time config override, baked
+into the compiled model exactly as it always was. `Fixed(...)`/`Uniform(...)`/
+etc. instead declares a real, free-able parameter named
+`dust_<stem>_<screen>` (e.g. `dust_slope_bc`, `dust_Rv_neb`). It appears in
+`spec.free_params` when given a prior, and a `Fixed(v)` per-screen
+declaration predicts bit-identically to the plain number `v`. These names are
+explicit-only: an `all_params: FREE` wildcard never frees them (name one
+explicitly to fit it), and the flat `Parameters(dust_law_overrides={...})`
+surface still accepts only plain numbers in that dict. Passing a prior there
+raises `ParameterError` naming the `dust_<stem>_<screen>` spelling as the
+remedy. Naming only one half of a `_bc`/`_diff` pair (e.g. `slope_bc` without
+`slope_diff`) raises. Give both explicitly, or use a group-level wildcard
+(`'all_params': FREE`/`Fixed(DEFAULT)`) to free or pin them together, following
+the same rule the plain-number spelling of these keys already enforces.
 
 **Minimal example:**
 ```python
@@ -296,20 +315,21 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - Dust attenuation and dust emission are **two separate peer groups**, not nested. The retired `dust={'attenuation': {...}, 'emission': {...}}` form raises.
 - Each emission source passes through the screen its selector names (`'nebular_screen'`, `'shock_screen'`, `'agn_screen'`); the absorbed nebular and shock power joins the dust energy balance under those screens.
 - Two-component law-pairing rule: if you name one of `'law_bc'`/`'law_diff'`, you must name both (or use a shared `'law'` for both).
-- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'` — the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
-- **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not — and a lone `'slope_bc'` is then complete, because there is no partner to give.
+- Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`: the per-screen spellings raise there, because a single screen has no second screen to name and the value would never reach a curve.
+- **A shape key must be one the selected law reads.** Each law declares exactly the parameters it uses, so `'slope'` under `'noll09'` raises and names `'delta'`, the parameter that law does read; `'Rv'` under `'calzetti'` raises, because that curve is fitted at R_V = 4.05; `'slope'` under `'vw07_bc'` / `'vw07_diff'` raises, because those are the Charlot & Fall birth-cloud and diffuse slopes, not knobs (use `'power_law'` for a free slope). The same rule applies per screen: with `'law_bc': 'power_law', 'law_diff': 'noll09'`, `'slope_bc'` is accepted and `'slope_diff'` is not. A lone `'slope_bc'` is then complete, because there is no partner to give.
 - The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen. `'law_neb'` defaults to `'law_bc'`, and a `'*_neb'` override is checked against whichever of the two is in force.
 
 
 ### Dust emission: `dust_emission`
 
 **Structural keys:**
-- `'type'` — Emission model: `'dale2014'`, `'draine2016'`, etc. Menu: `tengri.list_dust_emission_models()`.
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'spinning_dust'` — Include small spinning dust grains (default: auto from type).
-- `'f_cnm'` — Cold neutral medium fraction (parametrization-dependent).
-- `'eta_balance'` — Energy-balance coupling: `Fixed(1.0)` (default, strict balance `L_IR = eta * L_absorbed`). `FREE` selects the declared default free prior, `Gaussian(1.0, 0.2)` truncated at 0; pass an explicit `Uniform(...)` (or any other prior) to override it. The `all_params` wildcard reaches it on **every** emission engine — it scales the budget every template normalizes to, so it is live regardless of the selected engine (#2286).
-- `'log_L_ir'` — Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright; leaving it undeclared keeps energy balance. Because it makes `eta_balance` inert, declaring both (with `eta_balance` free or fixed ≠ 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard; an explicit `FREE` on it is refused (declare a real prior instead).
+- `'type'`: Emission model: `'dale2014'`, `'draine2016'`, etc. Menu: `tengri.list_dust_emission_models()`.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'spinning_dust'`: Include small spinning dust grains (default: auto from type).
+- `'f_cnm'`: Cold neutral medium fraction (parametrization-dependent).
+- `'eta_balance'`: Energy-balance coupling: `Fixed(1.0)` (default, strict balance where `L_IR = eta * L_absorbed`). `FREE` selects the default free prior, `Gaussian(1.0, 0.2)` truncated at 0. Pass an explicit `Uniform(...)` or any other prior to override it. The `all_params` wildcard reaches it on **every** emission engine, since it scales the budget every template normalizes to, so it remains live regardless of the selected engine (#2286).
+- `'log_L_ir'`: Total dust IR budget override, `log10(L_IR/L_sun)`. Declaring it (with `Fixed(...)` or any prior) **replaces** the energy-balance budget outright. Leaving it undeclared keeps energy balance. Because it renders `eta_balance` inert, declaring both (with `eta_balance` free or fixed not equal to 1) raises at build. Radio's FIRRC amplitudes follow this budget, so it is not a dust-only knob. Never reached by the `all_params` wildcard. An explicit `FREE` on it is refused; declare a real prior instead.
+- `'diffuse_screen'`: Opt-in single-pass attenuation of the re-emitted IR dust emission by the diffuse dust screen's transmission `T(λ)` (the `dust_diff_transmission` derived key, published by every `dust_attenuation` type). The escaping SED is `sed_dust_ir * T`: the IR energy absorbed on the way out is REMOVED, not re-emitted or iterated back into the budget (unlike FSPS, which iterates the IR to convergence; CIGALE never attenuates its re-emitted IR at all — this is a deliberate single pass). `log_L_ir_emergent` reports the escaping (post-screen) IR luminosity; `L_ir`/`L_absorbed` (and radio's FIRRC amplitudes, which read `L_ir`) keep the pre-screen absorbed budget unchanged. For single-screen attenuators (`dust_attenuation={'type': 'single_component', ...}`) and for `type='wg00'`, "diffuse" means the *single* screen — there is no separate birth-cloud/diffuse split to choose between. Default false (off, bit-identical to a build without this key). Requires an active, non-`'none'` `dust_attenuation` and a real `dust_emission` type; raises a clear `ValueError` at parse time otherwise.
 
 **Minimal example:**
 ```python
@@ -319,18 +339,19 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 **Gotchas:**
 - Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. `FREE` resolves to `Gaussian(1.0, 0.2)` truncated at 0. Setting it free or to a constant ≠ 1 decouples IR and absorption.
 - Missing dust_emission (or `{'type': 'none'}`) is valid and common for UV-only work.
+- `'diffuse_screen'` under `dust_attenuation={'type': 'wg00', ...}`: the vendored WG00 attenuation tables (`data/wg00_attenuation_grid.h5`) are tabulated only 1000–30001 Å (0.1–3 μm). Past that domain `T = 1` by construction, so under `wg00` the switch has **no effect in the far-IR** where dust re-emission actually peaks — this is a limitation of the vendored table's wavelength coverage, not a defect in the diffuse-screen feature itself.
 
 
 ### Nebular emission: `neb`
 
 **Structural keys:**
-- `'type'` — Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'full_catalog'` — `cue` only: bool, default `True` (#2239), publishes the full ~138-line Cue-trained catalog; `False` narrows to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
-- `'grid'` — Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
-- `'model'` — MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
-- `'density'` — MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
-- `'ionizing_source_warning'` — MAPPINGS V ionizing-source warning control (`'mappings'`/`'mappings_agn'`): `'raise'`, `'warn'`, or `'suppress'`.
+- `'type'`: Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'full_catalog'`: `cue` only: bool, default `True` (#2239). Publishes the full ~138-line Cue-trained catalog. Set to `False` to narrow to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
+- `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
+- `'model'`: MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
+- `'density'`: MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
+- `'ionizing_source_warning'`: MAPPINGS V ionizing-source warning control (`'mappings'`/`'mappings_agn'`): `'raise'`, `'warn'`, or `'suppress'`.
 
 **Minimal example:**
 ```python
@@ -347,11 +368,11 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 ### Shock emission: `shock`
 
 **Structural keys:**
-- `'type'` — Shock backend: `'mappings'` (MAPPINGS V, default) or `'none'` (off).
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'norm'` — Normalization: `'frac'` (scales the galaxy Hα), `'lhalpha'` (absolute Hα luminosity, decoupled from SFR), or `'component'` (explicit component label).
-- `'abundance'` — Abundance mode: `'solar'`, `'lmc'`, etc.
-- `'component'` — Component label for compartmentalization (advanced).
+- `'type'`: Shock backend: `'mappings'` (MAPPINGS V, default) or `'none'` (off).
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'norm'`: Normalization: `'frac'` (scales the galaxy Hα), `'lhalpha'` (absolute Hα luminosity, decoupled from SFR), or `'component'` (explicit component label).
+- `'abundance'`: Abundance mode: `'solar'`, `'lmc'`, etc.
+- `'component'`: Component label for compartmentalization (advanced).
 
 **Minimal example:**
 ```python
@@ -360,7 +381,7 @@ shock={'type': 'mappings', 'norm': 'lhalpha', 'lhalpha': 10**42}  # erg/s
 ```
 
 **Gotchas:**
-- `'all_params': FREE` on `shock` **raises** if no free-parameter models are configured — use explicit priors instead.
+- `'all_params': FREE` on `shock` **raises** if no free-parameter models are configured. Use explicit priors instead.
 - Shock and nebular emission compose (both can be on). The shock norms apply independently.
 - Default `shock_abundance = 'solar'`. No abundance parameter by default.
 
@@ -368,10 +389,10 @@ shock={'type': 'mappings', 'norm': 'lhalpha', 'lhalpha': 10**42}  # erg/s
 ### IGM absorption: `igm`
 
 **Structural keys:**
-- `'type'` — IGM model: `'inoue'` (Inoue+2014, default), `'madau'` (Madau+1995), `'meiksin06'` (Meiksin 2006), `'none'` (off).
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'patchy'` — Picket-fence vs smooth IGM: bool, model-dependent default.
-- `'dla'` — Damped Lyman alpha: omit for no DLA, or provide `{'type': ...}` for DLA models (e.g., `{'type': 'dla_lookback'}` to evolve DLA properties with redshift).
+- `'type'`: IGM model: `'inoue'` (Inoue+2014, default), `'madau'` (Madau+1995), `'meiksin06'` (Meiksin 2006), `'none'` (off).
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'patchy'`: Picket-fence vs smooth IGM: bool, model-dependent default.
+- `'dla'`: Damped Lyman alpha: omit for no DLA, or provide `{'type': ...}` for DLA models (e.g., `{'type': 'dla_lookback'}` to evolve DLA properties with redshift).
 
 **Minimal example:**
 ```python
@@ -389,10 +410,10 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 ### Radio emission: `radio`
 
 **Structural keys:**
-- `'type'` — Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'sf'` — Star-formation radio sub-block: `{'type': ...}` to customize.
-- `'agn'` — AGN radio sub-block: `{'type': ...}` to customize.
+- `'type'`: Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize.
+- `'agn'`: AGN radio sub-block: `{'type': ...}` to customize.
 
 **Minimal example:**
 ```python
@@ -409,8 +430,8 @@ radio={'type': 'sf_agn', 'sf': {'type': 'condon'}, 'agn': {'type': 'nandra'}}
 ### X-ray emission: `xray`
 
 **Structural keys:**
-- `'type'` — X-ray model: `'yang22'` (Yang+2022), `'lehmer'` (Lehmer+2022), `'none'` (off).
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'type'`: X-ray model: `'yang22'` (Yang+2022), `'lehmer'` (Lehmer+2022), `'none'` (off).
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 
 **Minimal example:**
 ```python
@@ -427,16 +448,16 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 ### AGN: `agn`
 
 **Structural keys:**
-- `'type'` — AGN mode: `'composable'` (six independent emitters), `'legacy'` (single monolithic AGN), or `'none'` (off).
-- `'all_params'` — Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'norm'` — Across-component normalization: `'cigale_joint'` (default, CIGALE-style energy conservation across disc/torus/polar) or `'independent'` (each component on its own scale).
-- `'disc'` — AGN accretion disk sub-block (with `'type'`, `'all_params'`, parameters).
-- `'torus'` — Infrared-obscured torus sub-block (with `'type'`, `'all_params'`, parameters).
-- `'nlr'` — Narrow-line region sub-block (with `'type'`, `'all_params'`, parameters).
-- `'blr'` — Broad-line region sub-block (with `'type'`, `'all_params'`, parameters).
-- `'feii'` — Iron emission sub-block (with `'type'`, `'all_params'`, parameters).
-- `'atten'` — AGN-specific attenuation sub-block (with `'type'`, `'all_params'`, parameters, and `'law'` for dust law selection).
-- `'lines'` — Deprecated: expands to `'nlr'` + `'blr'`.
+- `'type'`: AGN mode: `'composable'` (six independent emitters), `'legacy'` (single monolithic AGN), or `'none'` (off).
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+- `'norm'`: Across-component normalization: `'cigale_joint'` (default, CIGALE-style energy conservation across disc/torus/polar) or `'independent'` (each component on its own scale).
+- `'disc'`: AGN accretion disk sub-block (with `'type'`, `'all_params'`, parameters).
+- `'torus'`: Infrared-obscured torus sub-block (with `'type'`, `'all_params'`, parameters).
+- `'nlr'`: Narrow-line region sub-block (with `'type'`, `'all_params'`, parameters).
+- `'blr'`: Broad-line region sub-block (with `'type'`, `'all_params'`, parameters).
+- `'feii'`: Iron emission sub-block (with `'type'`, `'all_params'`, parameters).
+- `'atten'`: AGN-specific attenuation sub-block (with `'type'`, `'all_params'`, parameters, and `'law'` for dust law selection).
+- `'lines'`: Deprecated: expands to `'nlr'` + `'blr'`.
 
 **Minimal example:**
 ```python
@@ -462,9 +483,9 @@ agn={'type': 'skirtor_stalevski', 'all_params': Fixed(DEFAULT)}
 ### Foreground extinction: `foreground`
 
 **Structural keys:**
-- `'ebmv_mw'` — Milky Way E(B-V) reddening (mag). Typically 0.01–0.2.
-- `'law'` — Dust law: `'mw_rv31'` (Fitzpatrick 1999, default), `'ccm89'` (CCM89), etc.
-- `'rv'` — Dust RV parameter override (law-dependent).
+- `'ebmv_mw'`: Milky Way E(B-V) reddening (mag). Typically 0.01–0.2.
+- `'law'`: Dust law: `'mw_rv31'` (Fitzpatrick 1999, default), `'ccm89'` (CCM89), etc.
+- `'rv'`: Dust RV parameter override (law-dependent).
 
 **Minimal example:**
 ```python
@@ -481,8 +502,8 @@ foreground={'ebmv_mw': 0.05, 'law': 'mw_rv31'}
 **Structural keys:** None (redshift is a scalar or Distribution, not a dict).
 
 The redshift can be specified as:
-- `Fixed(z)` — Known redshift (e.g., `Fixed(0.05)`).
-- `Uniform(z_min, z_max)` — Photo-z prior (e.g., `Uniform(0.0, 2.0)`).
+- `Fixed(z)`: Known redshift (e.g., `Fixed(0.05)`).
+- `Uniform(z_min, z_max)`: Photo-z prior (e.g., `Uniform(0.0, 2.0)`).
 - Any `Distribution` (e.g., `Normal(...)`).
 - A bare scalar: `redshift=0.05` auto-converts to `Fixed(0.05)`.
 
@@ -545,7 +566,7 @@ with open("config.yaml", "w") as f:
 
 ### Round-trip semantics
 
-`to_groups()` never expands a wildcard into individual per-parameter priors. A mixed group (explicit overrides plus a wildcard) round-trips with the overrides first and the wildcard collapsed to `'other_params'` last — the same convention the grammar teaches for hand-written dicts:
+`to_groups()` never expands a wildcard into individual per-parameter priors. A mixed group (explicit overrides plus a wildcard) round-trips with the overrides first and the wildcard collapsed to `'other_params'` last. This follows the same convention the grammar teaches for hand-written dicts:
 
 ```python
 # Input
@@ -707,6 +728,6 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, igm={
 ## See also
 
 
-- [Model grammar philosophy](model_grammar_design.md) — design decisions behind the grammar
-- [Per-component parameter reference](components.md) — every free/default parameter by component
-- [Configuration philosophy](model_grammar_design.md) — why the grammar is structured this way
+- [Model grammar philosophy](model_grammar_design.md): design decisions behind the grammar
+- [Per-component parameter reference](components.md): every free/default parameter by component
+- [Configuration philosophy](model_grammar_design.md): why the grammar is structured this way

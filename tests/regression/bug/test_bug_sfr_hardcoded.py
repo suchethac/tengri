@@ -17,11 +17,12 @@ class TestSFRNotHardcoded:
         """SFR used for X-ray scaling should depend on the SFH, not be 1.0."""
         from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
-        # double_powerlaw(t_lookback, alpha, beta, tau, norm)
+        # double_powerlaw(t_lookback, alpha, beta, tau, norm, age)
         # norm scales SFR amplitude, so SFR[-1] should scale with norm
         t_lookback = jnp.logspace(6, 10, 100)
-        sfr_high = double_powerlaw(t_lookback, alpha=0.5, beta=2.0, tau=1e9, norm=100.0)
-        sfr_low = double_powerlaw(t_lookback, alpha=0.5, beta=2.0, tau=1e9, norm=0.1)
+        age = 13.8e9  # yr (universe age)
+        sfr_high = double_powerlaw(t_lookback, alpha=0.5, beta=2.0, tau=1e9, norm=100.0, age=age)
+        sfr_low = double_powerlaw(t_lookback, alpha=0.5, beta=2.0, tau=1e9, norm=0.1, age=age)
         # sfr[-1] is the instantaneous SFR; high-norm galaxy must exceed low-norm
         assert sfr_high[-1] > sfr_low[-1]
         # Neither should be 1.0 Msun/yr by accident (hardcoded fallback bug)

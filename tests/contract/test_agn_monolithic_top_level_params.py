@@ -90,7 +90,8 @@ def _predict(agn: dict | None):
             redshift=Fixed(1.0),
             **kwargs,
         )
-    return np.asarray(model.predict_photometry(dict(model.spec.get_fixed_values())))
+    params = {k: 1.0 for k in model.spec.free_params}
+    return np.asarray(model.predict_photometry(params))
 
 
 def test_the_monolithic_registry_is_not_empty():

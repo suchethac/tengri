@@ -17,30 +17,30 @@
 # # Reproducing AGNfitter-rX's physics with tengri
 #
 # AGNfitter-rX (Martínez-Ramírez et al. 2024, A&A 688, A46) models the
-# radio-to-X-ray SEDs of active galaxies. Where CIGALE and Prospector are
-# galaxy-centric, AGNfitter-rX is built to characterize the AGN itself — its
-# accretion disk, hot dusty torus, relativistic jet / core radio, and hot
-# corona, alongside the host (stellar populations, cold dust, star-formation
-# radio). Radio and X-ray data, largely unaffected by dust, are orthogonal
-# tracers that break the infrared–ultraviolet degeneracies that limited the
-# original submm-to-UV AGNfitter.
+# radio-to-X-ray SEDs of active galaxies. CIGALE and Prospector are
+# galaxy-centric; AGNfitter-rX characterizes the AGN itself: its accretion
+# disk, hot dusty torus, relativistic jet/core radio, and hot corona, alongside
+# the host (stellar populations, cold dust, star-formation radio). Radio and
+# X-ray data, largely unaffected by dust, are orthogonal tracers that break
+# the infrared–ultraviolet degeneracies that limited the original submm-to-UV
+# AGNfitter.
 #
-# This notebook configures tengri's public API — exclusively `SEDModel.build`'s
-# dict grammar, `model.predict(params)`, and the documented `tengri.agn` /
-# `tengri.xray` / `tengri.radio` / `tengri.dust` namespaces — to approximate
+# This notebook configures tengri's public API, exclusively `SEDModel.build`'s
+# dict grammar, `model.predict(params)`, and the documented `tengri.agn`,
+# `tengri.xray`, `tengri.radio`, and `tengri.dust` namespaces, to approximate
 # AGNfitter-rX's model choices. tengri implements the same physics
-# independently; residual differences are quantified in place, next to the
-# figure or printed number that shows them.
+# independently; residual differences are quantified in place, next to the figure or
+# printed number that shows them.
 #
-# The headline comparisons are the two model *face-offs* that drive the
-# paper's conclusions: **§9a** — accretion-disk libraries R06, SN12, KD18,
+# The headline comparisons are two model face-offs that drive the paper's
+# conclusions. **§9a** compares accretion-disk libraries R06, SN12, KD18, and
 # THB21 (plus tengri's KD18 grid-tabulated and warm-index variants). THB21
 # wins (Bayes factor ≈10⁵·¹ over R06) because it alone carries the broad and
 # narrow emission lines producing the ≈0.7 μm Hα + [N II] peak the theory
-# discs miss. **§9c** — torus libraries S04, NK08, SKIRTOR, CAT3D-Wind, and
-# five further averaged reductions of the same families. CAT3D-Wind wins
-# (maximum likelihood 25/36 sources) because its polar-wind dust addresses
-# the 1.5–5 μm near-IR excess pure equatorial tori cannot.
+# discs miss. **§9c** compares torus libraries S04, NK08, SKIRTOR, CAT3D-Wind,
+# and five further averaged reductions of the same families. CAT3D-Wind wins
+# (maximum likelihood 25/36 sources) because its polar-wind dust addresses the
+# 1.5–5 μm near-IR excess that pure equatorial tori cannot.
 
 # %% [markdown]
 # ## Setup
@@ -149,19 +149,19 @@ def resolved_params(m) -> None:
 #
 # Both codes build on Bruzual & Charlot (2003) stellar populations with a
 # Chabrier (2003) initial mass function. AGNfitter-rX ships its own edition
-# — `models/GALAXY/BC03_840seds.pickle`, a 1221-wavelength grid tabulated
-# directly over `(tau, age)` — repackaged here as
-# `data/agnfitter_galaxy_reference.h5` and read through the driver's
-# `galaxy_template`/`galaxy_sfr` accessors (never the pickle itself at
-# runtime). tengri reads its own `bc03_pdva_stelib_chabrier` grid — the same
-# BC03 + Chabrier physics, a different (STELIB, 6900-point) spectral library
+# (`models/GALAXY/BC03_840seds.pickle`), a 1221-wavelength grid tabulated
+# directly over `(tau, age)` and repackaged here as
+# `data/agnfitter_galaxy_reference.h5`. We read it through the driver's
+# `galaxy_template` and `galaxy_sfr` accessors (never the pickle itself at
+# runtime). tengri reads its own `bc03_pdva_stelib_chabrier` grid: the same
+# BC03 + Chabrier physics, but a different (STELIB, 6900-point) spectral library
 # edition, downloaded on demand rather than required to pre-exist.
 #
 # The two codes' cosmologies also differ slightly: AGNfitter-rX uses
 # `H0=67.4, Ωm=0.315`; tengri's default is `H0=67.66, Ωm=0.30966` (Planck18).
-# Both are Planck-era values; the luminosity-distance-squared factor that
+# Both are Planck-era values, so the luminosity-distance-squared factor that
 # enters any flux normalization agrees to within 0.5% at `z=1` (printed
-# below), so the panels compare SED shape, not an artifact of cosmology.
+# below). The panels thus compare SED shape, not an artifact of cosmology.
 # Both host galaxies are stellar-only (`neb={'type': 'none'}`) to match
 # AGNfitter-rX's GALAXY component, which carries no nebular-emission term.
 
@@ -212,18 +212,18 @@ NO_DUST = {
 # ## tengri AGN helpers
 #
 # Every AGN face-off below builds one composable `agn={...}` block and reads
-# the SED straight off `model.predict(params).sed.components[...]` — the
-# public per-sub-block keys (`sed_agn_disc`, `sed_agn_torus`, `sed_agn`
-# for disc+lines+torus combined). Every build states `'norm': 'independent'`
-# explicitly (disc on `agn_log_lbol`, torus on its own scale — the
+# the SED from `model.predict(params).sed.components[...]`, the public
+# per-sub-block keys (`sed_agn_disc`, `sed_agn_torus`, `sed_agn` for
+# disc+lines+torus combined). Every build states `'norm': 'independent'`
+# explicitly: disc scales on `agn_log_lbol`, torus on its own (the
 # AGNfitter-style bookkeeping; the default `'cigale_joint'` ties disc/torus
-# to one CIGALE `agn_power` reference and would move the torus amplitude by
-# ~4 dex here) and `atten={'type': 'none'}` explicitly (AGNfitter-rX's disc
-# templates carry no polar-dust screen — tengri's `polar_dust` atten type is
-# opt-in only, so leaving it unstated already means "off", but rule 5 asks
-# for every disposition written down). There is no monolithic
-# `agn={'type': <model>}` helper: that surface cannot express `atten` or the
-# per-sub-block decomposition this notebook depends on throughout.
+# to one CIGALE `agn_power` reference and would shift torus amplitude by ~4 dex
+# here) and `atten={'type': 'none'}` explicitly (AGNfitter-rX disc templates
+# carry no polar-dust screen; tengri's `polar_dust` atten type is opt-in only,
+# so leaving it unstated already means "off", but rule 5 asks for
+# every disposition written down). There is no monolithic `agn={'type': <model>}`
+# helper: that surface cannot express `atten` or the per-sub-block decomposition
+# this notebook depends on throughout.
 
 
 # %%
@@ -316,15 +316,15 @@ def tengri_qsogen_full(*, log_lbol=11.0, torus=None):
 # %% [markdown]
 # ## §1 Stellar populations
 #
-# tengri's library at representative ages (0.1 and 5 Gyr), and the fiducial
+# tengri's library at representative ages (0.1 and 5 Gyr) and the fiducial
 # declining-exponential CSP (`SFH_FIDUCIAL`, tau=1 Gyr, age=4.8939 Gyr)
-# against AGNfitter-rX's own tabulated BC03 template at the same node,
-# read through the public `galaxy_template` driver accessor. Both sides
-# normalized to 1 at 5500 Å (shape only — the two BC03 editions' absolute
+# are compared against AGNfitter-rX's own tabulated BC03 template at the same node,
+# read through the public `galaxy_template` driver accessor. Both sides are
+# normalized to 1 at 5500 Å (shape only; the two BC03 editions' absolute
 # mass-formed normalization conventions are not established to be equal;
 # see `reproduction/agnfitter/_drivers/agnfitter_driver.py::galaxy_template`).
 #
-# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
+# **Verification Status:** CROSSVAL (2 tests, thin); CSP integral; CIC age kernel (default)
 
 # %%
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12, 4.6))
@@ -386,19 +386,19 @@ print(
 #
 # AGNfitter-rX's GALAXY component tabulates a declining-exponential
 # (`SFR(T) ∝ exp(-T/τ)`), so SFR falls monotonically from formation to the
-# present — the classic tau-model, not a delayed-tau history that rises
+# present: the classic tau-model, not a delayed-tau history that rises
 # then falls. tengri's `declining_exp` SFH type implements the same
-# functional form (`tengri.components.stellar.sfh.mean_sfh.declining_exponential`;
+# functional form (`tengri.components.stellar.sfh.mean_sfh.declining_exponential`);
 # the notebook writes the same closed form directly and cross-checks mass
 # closure through the public `pred.sfh.stellar_mass` property, since the
 # full SFR(t) array is an internal pipeline quantity with no public
-# accessor). The AGNfitter-rX pickle's own tabulated SFR(age) at the
-# fiducial tau is overlaid, read through `galaxy_sfr`. §1's 0.024 dex
-# residual is the age grid's nearest-node snap, the two BC03 editions'
+# accessor. The AGNfitter-rX pickle's own tabulated SFR(age) at the
+# fiducial tau is overlaid, read through `galaxy_sfr`. Section 1's 0.024 dex
+# residual stems from the age grid's nearest-node snap, the two BC03 editions'
 # differing resolution (1221 vs 6900 points), and the shared 5500 Å
-# normalization anchor — not a form mismatch.
+# normalization anchor, not a form mismatch.
 #
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33); Parametric SFH family physics
 
 # %%
 m2 = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, neb={"type": "none"}, redshift=Fixed(0.0))
@@ -442,13 +442,13 @@ print(
 # %% [markdown]
 # ## §3 Integrated stellar SED
 #
-# The fiducial host's stellar continuum — the same quantity AGNfitter-rX's
+# The fiducial host's stellar continuum is the same quantity AGNfitter-rX's
 # GA (host stellar) component contributes, reddened by SMC/Calzetti law at
-# fit time (§5). Compact by design: the underlying SSPs are independently
-# published models (§1 already quantifies the residual), and the focus is on
-# the AGN components in the panels that follow.
+# fit time (Section 5). This panel is compact by design: the underlying SSPs are
+# independently published models (Section 1 already quantifies the residual),
+# and the focus is on the AGN components in the panels that follow.
 #
-# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
+# **Verification Status:** PARTIAL (68/126); Absolute SED normalization
 
 # %%
 pred3 = m_csp.predict({})
@@ -471,20 +471,20 @@ print(f"§3  pred.sfh.stellar_mass_surviving / stellar_mass = {float(pred3.sfh.s
 # AGNfitter-rX reddens the accretion disk (not the host) with an analytic
 # Prevot et al. (1984) SMC fit, `k_raw(λ) = 1.39 λ_μm^−1.2 − 0.38`, applied
 # as `A_λ = k_raw(λ)·E(B−V)` with no reddening blueward of 200 eV
-# (`MODEL_AGNfitter.BBBred_Prevot`). That routine *declares* `R_V = 2.72` —
-# Prevot+1984's measured SMC value — but its inner function ignores that
-# argument and returns the bare `k_raw`, so AGNfitter-rX's *effective*
+# (`MODEL_AGNfitter.BBBred_Prevot`). That routine declares `R_V = 2.72`
+# (Prevot+1984's measured SMC value), but its inner function ignores that
+# argument and returns the bare `k_raw`. Thus, AGNfitter-rX's effective
 # total-to-selective ratio is `k_raw(0.55 μm) ≈ 2.468`, not the 2.72 it
 # declares.
 #
 # tengri's disc obscuration (`agn_ebv_disc`, the `EBVbbb` analog, built here
 # through the public `SEDModel.build` grammar via `tengri_disc`) applies the
 # `R_V` AGNfitter-rX intended: `k(λ) = k_raw(λ)/k_raw(V)` (so `k(V)=1`)
-# times `R_V=2.72`. The two differ by the uniform factor `2.72/2.468 ≈
+# times `R_V=2.72`. The two codes differ by the uniform factor `2.72/2.468 ≈
 # 1.102` in `A_λ` at matched `E(B−V)`: identical shape, `E(B−V)_tengri ≈
 # E(B−V)_AGNFITTER/1.102`.
 #
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL; Attenuation law library
 
 # %%
 _K_RAW_V = 1.39 * 0.55 ** (-1.2) - 0.38  # Prevot raw fit at V band, AGNFITTER-RX's own formula
@@ -549,16 +549,16 @@ print(
 # ### §4b qsogen's *own* reddening law — a different curve and convention
 #
 # qsogen (which builds the THB21 disc) reddens with a different, empirically
-# derived **quasar** extinction curve (Temple, Hewett & Banerji 2021, from
-# SDSS DR7 quasars — not the SMC), reached through the composable `atten`
-# sub-block: `agn={'atten': {'type': 'qsogen', ...}}`. Because this curve is
-# not yet exported from a documented `tengri.agn`/`tengri.dust` function
-# (only the AGNfitter-rX-style Prevot fit is in this notebook's public
-# surface list), it is recovered here the same way §4's own curve is —
-# purely from the ratio of two public `SEDModel.build` predictions at
-# `E(B−V)` and 0 — rather than imported directly.
+# derived quasar extinction curve (Temple, Hewett & Banerji 2021, from
+# SDSS DR7 quasars, not the SMC), reached through the composable `atten`
+# sub-block: `agn={'atten': {'type': 'qsogen', ...}}`. This curve is not yet
+# exported from a documented `tengri.agn` or `tengri.dust` function (only the
+# AGNfitter-rX-style Prevot fit is in this notebook's public surface list), so
+# it is recovered here the same way Section 4's own curve is: purely from the
+# ratio of two public `SEDModel.build` predictions at `E(B−V)` and 0, rather
+# than imported directly.
 #
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL; Attenuation law library
 
 # %%
 def tengri_disc_atten(disc_type, atten_type, ebv, **atten_params):
@@ -627,21 +627,21 @@ print(
 # ## §5 Galaxy attenuation: Calzetti curve parity
 #
 # AGNfitter-rX's GALAXY (host stellar) component is reddened at fit time by
-# an SMC or Calzetti law applied to the whole galaxy continuum — a distinct
-# knob from §4's disc-only `EBVbbb`. tengri's `dust_attenuation={'law':
+# an SMC or Calzetti law applied to the whole galaxy continuum, a distinct
+# knob from Section 4's disc-only `EBVbbb`. tengri's `dust_attenuation={'law':
 # 'calzetti', ...}` implements the same Calzetti et al. (2000) analytic
 # curve (`k'(λ) = 2.659(-2.156+1.509x-0.198x²+0.011x³)+R_V` for
 # `λ<0.63 μm`, `2.659(-1.857+1.040x)+R_V` above, `R_V=4.05`), applied here to
 # the fiducial host at `E(B−V)_gal = 0.3` (`τ_V = R_V·E(B−V)/1.086`) through
 # the public build. tengri's implementation extrapolates the polynomial
 # blueward of the curve's calibrated range (0.12–2.2 μm) rather than
-# clipping it; the panel shows both the calibrated range (where the two
-# curves are identical by construction) and the extrapolated FUV, with the
-# alternative common convention (flat continuation of the 0.12 μm value)
-# for comparison. `Charlot & Fall (2000)`'s two-screen (birth-cloud +
+# clipping it. The panel shows both the calibrated range (where the two
+# curves are identical by construction) and the extrapolated FUV, compared
+# against the alternative common convention (flat continuation of the 0.12 μm
+# value). Note that `Charlot & Fall (2000)`'s two-screen (birth-cloud plus
 # diffuse) attenuation has no AGNfitter-rX analog.
 #
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL; Attenuation law library
 
 # %%
 _EBV_GAL = 0.3
@@ -715,21 +715,21 @@ print(
 # ## §6 Cold dust infrared emission
 #
 # AGNfitter-rX ships two libraries: S17 (Schreiber et al. 2018,
-# dust-continuum + PAH via T_dust and f_PAH) and legacy DH02_CE01 (Dale &
-# Helou 2002 + Chary & Elbaz 2001, indexed by IR luminosity). Each panel
+# dust-continuum plus PAH via T_dust and f_PAH) and legacy DH02_CE01 (Dale &
+# Helou 2002 plus Chary & Elbaz 2001, indexed by IR luminosity). Each panel
 # builds a minimal tengri model (`SEDModel.build(..., dust_emission={'type':
 # ..., ...})`) whose absorbed luminosity comes from the build's own
 # dust-attenuated stellar continuum, and reads `sed_dust_ir` off the
 # prediction.
 #
-# **`schreiber2018`**/**`schreiber2016`** take `dust_T`, `dust_f_pah` (five
-# nodes, T_dust 20-55 K, f_PAH 0-0.05). **`dale2014`** takes
-# `dust_alpha_dale`. **`dh02_ce01`** is indexed by the model's own realized
+# `schreiber2018` and `schreiber2016` take `dust_T` and `dust_f_pah` (five
+# nodes, T_dust 20–55 K, f_PAH 0–0.05). `dale2014` takes
+# `dust_alpha_dale`. `dh02_ce01` is indexed by the model's own realized
 # IR luminosity (`pred.properties['l_tir']`), so its node is read off; three
 # `dust_tau_v` screens read log L_IR ≈ 10.1, 10.9, 11.0 (capped near 11 for
 # this SFH).
 #
-# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
+# **Verification Status:** CROSSVAL; Dust IR emission physics (MBB, Casey12, CMB)
 
 # %%
 def _dust_emission_build(dtype, tau_v, **params):
@@ -865,15 +865,15 @@ for tau_v_try in [0.1, 2.0, 40.0]:
 # ## §7 Host composite: GA + SB, physical normalization
 #
 # One `SEDModel.build` with both the fiducial host SFH and the S17 cold-dust
-# emission gives the host's stellar-plus-dust SED at *physical*
-# normalization (`sed_attenuated + sed_dust_ir`, energy-balanced by the
-# build's own `dust_eta_balance`), analogous to AGNfitter-rX's `ymodel`
-# summing GA and SB (`PARAMETERSPACE_AGNfitter.py:237`). The AGNfitter-RX
-# side sums its own driver templates (GA at the matched CSP node, SB scaled
-# to match tengri's realized L_TIR) for comparison; the two sides use
-# different normalization conventions (tengri: physical, mass- and
-# energy-conserving; AGNfitter-RX: per-component pickle units resolved only
-# by its own fitter), so this is a shape/peak comparison, not absolute flux.
+# emission gives the host's stellar-plus-dust SED at physical normalization
+# (`sed_attenuated + sed_dust_ir`, energy-balanced by the build's own
+# `dust_eta_balance`). This is analogous to AGNfitter-rX's `ymodel` summing
+# GA and SB (`PARAMETERSPACE_AGNfitter.py:237`). The AGNfitter-RX side sums
+# its own driver templates (GA at the matched CSP node, SB scaled to match
+# tengri's realized L_TIR) for comparison. The two sides use different
+# normalization conventions (tengri: physical, mass- and energy-conserving;
+# AGNfitter-rX: per-component pickle units resolved only by its own fitter),
+# so this is a shape/peak comparison, not absolute flux.
 
 # %%
 m7 = SEDModel.build(
@@ -952,23 +952,23 @@ print(
 # The decisive feature is the 0.7 μm bump (Hα + [N II]): present only in the
 # semi-empirical THB21, absent from theory discs R06/SN12/KD18.
 #
-# * **THB21** — `qsogen` with its `blr`/`feii` blocks (`tengri_qsogen_full`);
+# * **THB21**: `qsogen` with its `blr` and `feii` blocks (`tengri_qsogen_full`);
 #   the continuum alone misses the line forest entirely.
-# * **SN12** (Slone & Netzer 2012) — `slone_netzer`, node-exact bilinear
+# * **SN12** (Slone & Netzer 2012): `slone_netzer`, node-exact bilinear
 #   interpolation of the 108-template grid.
-# * **KD18** (Kubota & Done 2018) — tengri's `kd18_agnfitter` block is
+# * **KD18** (Kubota & Done 2018): tengri's `kd18_agnfitter` block is
 #   **grid-tabulated** directly on AGNfitter-rX's own `(log M_BH, log
 #   λ_Edd)` axes (`agn_log_mbh`, `agn_log_ledd`), a node-exact match rather
 #   than a physical re-derivation. tengri's KD18-family discs (`kd18_agnfitter`,
 #   `kd18_agnfitter_warmindex`) intrinsically carry a hot corona, so any
-#   AGN-corona X-ray variant is refused when paired with them — the
-#   `ConfigError` text is shown as a Caveat below. `kd18_agnfitter_warmindex`
+#   AGN-corona X-ray variant is refused when paired with them (the
+#   `ConfigError` text is shown as a Caveat below). `kd18_agnfitter_warmindex`
 #   adds a free warm-Comptonization index `agn_gamma_warm`; the two variants
 #   diverge by up to ~27% at fixed `(M_BH, λ_Edd)` for a warm index far from
 #   `kd18_agnfitter`'s baked-in default (measured below, not from memory).
-# * **R06** (Richards et al. 2006) — the same template on both sides;
-#   AGNfitter-RX stores it as `νL_ν`, tengri's `richards2006` returns `L_ν`
-#   directly, so the panel divides AGNfitter-RX's array by `ν` before
+# * **R06** (Richards et al. 2006): the same template on both sides;
+#   AGNfitter-RX stores it as `νL_ν`, and tengri's `richards2006` returns `L_ν`
+#   directly. The panel divides AGNfitter-RX's array by `ν` before
 #   overlaying.
 
 # %%
@@ -1092,14 +1092,14 @@ print(f"    {len(_disc_rows)} disc blocks registered")
 # %% [markdown]
 # ### §9a″ SN12 and KD18 node grids
 #
-# SN12 four nodes off `disk_axes('SN12')` — index pairs (0,0), (4,6), (8,11),
-# (2,9), spanning log M_BH 7.4-9.8 and the full `edd_index` range 0-11 —
+# SN12 four nodes off `disk_axes('SN12')`: index pairs (0,0), (4,6), (8,11),
+# (2,9), spanning log M_BH 7.4–9.8 and the full `edd_index` range 0–11,
 # via `tengri_disc('slone_netzer', agn_log_mbh=..., agn_log_ledd=...)` against
 # `disk_template('SN12', log_mbh=..., edd_index=...)`. KD18 four nodes at
-# (log M_BH, log λ_Edd) = (6, −1.5), (6, 0), (7.43, −0.96), (8, −1.5) via
+# (log M_BH, log λ_Edd) = (6, −1.5), (6, 0), (7.43, −0.96), (8, −1.5), via
 # `tengri_disc('kd18_agnfitter', agn_log_mbh=..., agn_log_ledd=...)` against
-# `disk_template('KD18', log_mbh=..., log_edd=...)`. Both anchored at 2500 Å,
-# compared over 1200 Å-1 µm. Worst node: max|tengri/AGNfitter-rX − 1| = 0.008
+# `disk_template('KD18', log_mbh=..., log_edd=...)`. Both anchored at 2500 Å
+# and compared over 1200 Å–1 µm. Worst node: max|tengri/AGNfitter-rX − 1| = 0.008
 # (KD18, log M_BH=6, log λ_Edd=−1.5).
 
 # %%
@@ -1146,8 +1146,8 @@ V.print_window_table(_win_9a2, ref_name="AGNfitter-rX", title="§9a″ SN12 and 
 #
 # The disk color excess `E(B−V)_BBB` sweeps the UV continuum via the Prevot
 # SMC law on both sides. tengri's dashed curves sit **below** AGNfitter-RX's
-# solid ones at matched `E(B−V)` — the §4 convention, 1.102× more extinction
-# under the more physical `R_V`.
+# solid ones at matched `E(B−V)`. This reflects Section 4's convention, which uses
+# 1.102× more extinction under the more physical `R_V` value.
 
 # %%
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
@@ -1184,14 +1184,14 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # Four headline AGNfitter-rX torus libraries at matched grid nodes,
 # peak-normalized, plus a parity table across five further averaged
 # reductions of the same NK08/SKIRTOR/CAT3D families, read through
-# `torus_template`/`torus_axes`. **S04** — `silva04` at log
-# N_H=23. **NK08** — `nenkova_agnfitter` (the inclination-averaged
-# `NK0_mean_1p` CLUMPY reduction) at incl 30°. **SKIRTOR** — `skirtor`
-# (full X-CIGALE grid) at oa 40°, incl 30°, τ 7 (AGNfitter-rX's own
-# `SKIRTOR_mean_3p` reduction is `skirtor_agnfitter`; see §9c′). **CAT3D-Wind**
-# — `cat3d_wind` at incl 0°, a=−2, f_wd=1.75.
+# `torus_template` and `torus_axes`. **S04**: `silva04` at log N_H=23.
+# **NK08**: `nenkova_agnfitter` (the inclination-averaged `NK0_mean_1p` CLUMPY
+# reduction) at inclination 30°. **SKIRTOR**: `skirtor` (full X-CIGALE grid)
+# at opening angle 40°, inclination 30°, τ 7 (AGNfitter-rX's own
+# `SKIRTOR_mean_3p` reduction is `skirtor_agnfitter`; see §9c′). **CAT3D-Wind**:
+# `cat3d_wind` at inclination 0°, a=−2, f_wd=1.75.
 #
-# **Verification Status:** CROSSVAL — SKIRTOR torus (mean 3-param)
+# **Verification Status:** CROSSVAL; SKIRTOR torus (mean 3-param)
 
 # %%
 torus_pairs = [
@@ -1229,11 +1229,11 @@ save_fig("agnfitter_09c_torus_library.png")
 # %% [markdown]
 # ### §9c′ Five further torus reductions
 #
-# `nenkova_agnfitter_2p`/`_3p` (NK08 with the opening-angle, then also
-# optical-depth, axes retained), `skirtor_agnfitter_1p`/`_2p` (SKIRTOR
+# `nenkova_agnfitter_2p` and `_3p` (NK08 with the opening-angle, then also
+# optical-depth, axes retained), `skirtor_agnfitter_1p` and `_2p` (SKIRTOR
 # averaged over fewer axes than the headline `skirtor_agnfitter` 3p
 # reduction), and `cat3d_wind_lowfwd` (CAT3D's complementary low-wind-fraction
-# sub-library) — each built once against the driver's matching
+# sub-library). Each is built once against the driver's matching
 # `torus_axes(reduction)` node, peak-normalized.
 
 # %%
@@ -1283,13 +1283,13 @@ save_fig("agnfitter_09c1_reductions.png")
 # ### §9c″ S04 log N_H and NK08 inclination
 #
 # S04 at fractions {0, .25, .5, .75, .99} of `torus_axes('S04')`'s 60-point
-# log N_H axis (21.5-24.45); NK08 at fractions {0, .25, .5, .75, 1} of its
-# 9-point inclination axis (10°-90°). Built via `tengri_torus('silva04',
+# log N_H axis (21.5–24.45); NK08 at fractions {0, .25, .5, .75, 1} of its
+# 9-point inclination axis (10°–90°). Built via `tengri_torus('silva04',
 # log_nh_silva=...)` and `tengri_torus('nenkova_agnfitter', cos_inc=...)`,
 # each against `torus_template` at the same node, peak-normalized over
-# 1-100 µm. The figure plots four nodes per library (the middle fraction
+# 1–100 µm. The figure plots four nodes per library (the middle fraction
 # dropped to stay within the panel budget); the table below covers all ten.
-# Worst node: max|tengri/AGNfitter-rX − 1| = 0.39 (NK08, incl 50°) — NK08's
+# Worst node: max|tengri/AGNfitter-rX − 1| = 0.39 (NK08, incl 50°); NK08's
 # inclination-averaged reduction diverges most from the single-inclination
 # node it is compared against.
 
@@ -1410,12 +1410,12 @@ print(
 # %% [markdown]
 # ### §9c⁗ CAT3D-Wind wind-fraction sweep
 #
-# The polar wind is what CAT3D-Wind is *for* — it fills the 1.5–5 μm
-# near-IR excess equatorial tori miss. This sweeps the wind mass fraction
+# The polar wind is what CAT3D-Wind is for: it fills the 1.5–5 μm
+# near-IR excess that equatorial tori miss. This sweeps the wind mass fraction
 # `f_wd` across AGNfitter-RX's library domain at fixed (incl 0°, a=−2), and
 # against the low-`f_wd` sub-library (`cat3d_wind_lowfwd`) that spans the
 # complementary domain, plus four `(incl, a, f_wd)` index triples off
-# `torus_axes('CAT3D')` — (0,0,5), (3,1,5), (3,2,4), (6,3,2) — that vary
+# `torus_axes('CAT3D')`: (0,0,5), (3,1,5), (3,2,4), (6,3,2), that vary
 # inclination and the radial power-law index alongside the wind fraction.
 # Worst node overall: max|tengri/AGNfitter-rX − 1| = 0.36
 # (`cat3d_wind_lowfwd`); the four new nodes hold to 0.74%.
@@ -1585,7 +1585,7 @@ save_fig("agnfitter_09d_best_combo.png")
 # {1.6, 2.0} at Δα_ox=0. The 0.5-100 keV ratio is flat across the grid:
 # max|ratio−1| = 0.094, independent of Δα_ox and Γ.
 #
-# **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
+# **Verification Status:** PARTIAL (3/16); Radio + X-ray + AGN
 
 # %%
 from tengri.xray import alpha_ox_from_l2500
@@ -1751,7 +1751,7 @@ print(
 # α=−0.75, exponential cutoff at 10¹³ Hz) or double power law (DPL, Eq.
 # 9–10). Tengri ships both — `radio_agn` (SPL) and `radio_agn_dpl`.
 #
-# **Verification Status:** PARTIAL (3/25) — Radio / X-ray / IGM / PSD physics
+# **Verification Status:** PARTIAL (3/25); Radio / X-ray / IGM / PSD physics
 
 # %%
 from tengri.radio import radio_agn, radio_agn_dpl

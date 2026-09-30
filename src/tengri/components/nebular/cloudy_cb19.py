@@ -171,10 +171,12 @@ from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _qh_bilinear,
+    apply_lya_escape,
     compute_qh,
     compute_qh_log10,
     render_nebular_lines,
     sanitize_qh_table,
+    ssp_log_age_yr_axis,
 )
 from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
@@ -1039,7 +1041,7 @@ class CB19Backend:
         # Store as JAX arrays so they can be indexed with traced integers
         # inside jax.vmap (numpy arrays fail when indexed with traced values).
         self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
-        self._qh_log_age = jnp.array(ssp_data.ssp_lg_age_gyr + 9.0)  # log10(age/yr)
+        self._qh_log_age = ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr)  # log10(age/yr), #2418
 
         ssp_log_ages = np.array(self._qh_log_age)
         young_mask = ssp_log_ages <= self._max_neb_log_age
@@ -1252,12 +1254,9 @@ class CB19Backend:
         )  # (n_young, n_lines)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Apply differential Ly-alpha escape (resonant scattering).
-        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/k_factor to apply the
-        # Ly-alpha-specific escape on top of the k-factor already applied.
-        lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(k_factor, 1e-10)
-        total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
+        # Apply differential Ly-alpha escape via the shared helper.
+        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
 

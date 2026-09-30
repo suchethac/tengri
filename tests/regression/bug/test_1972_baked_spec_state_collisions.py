@@ -125,7 +125,7 @@ def test_mirror_map_keys_the_engine_cache(ssp, obs):
     Before the fix both specs got ``{'dust_tau_bc': 'dust_tau_diff'}``, so the
     second silently tied ``dust_tau_bc`` to the wrong parameter.
     """
-    common = dict(dust_tau_diff=Uniform(0.0, 0.6), dust_slope=Uniform(0.0, 0.6))
+    common = dict(dust_tau_diff=Uniform(0.0, 0.6), dust_slope=Uniform(-1.2, -0.9))
     fa = _spec_fitter(ssp, obs, **common, dust_tau_bc="dust_tau_diff")
     fb = _spec_fitter(ssp, obs, **common, dust_tau_bc="dust_slope")
 

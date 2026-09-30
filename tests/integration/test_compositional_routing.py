@@ -133,7 +133,6 @@ class TestChemEvolRouting:
 
     @pytest.fixture(scope="class")
     def chemevol_spec(self):
-        # chem_evol params all have Fixed defaults — no Uniform needed
         return Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
@@ -142,6 +141,7 @@ class TestChemEvolRouting:
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
             sfh_tsnorm_trunc=Uniform(1.0, 10.0),
             chem_evol=True,
+            chem_yield=Uniform(0.01, 0.06),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             dust_slope=-0.7,

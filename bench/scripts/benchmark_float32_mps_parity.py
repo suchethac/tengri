@@ -320,6 +320,16 @@ def _rel(a, b):
     return float(np.max(np.abs(a - b) / np.maximum(np.abs(b), 1e-300)))
 
 
+def _free_truth(truth, free_names):
+    """The free entries of a recorded truth; the model supplies its own pins.
+
+    A reference records the full ``spec.sample`` draw, pinned parameters included. A
+    call-time value for a ``Fixed`` parameter raises (#2296), and a pin that moved since
+    the reference shows up in ``--self-check`` as float64 drift, not here.
+    """
+    return {k: truth[k] for k in free_names}
+
+
 def _map_loss(ForwardModel, model, obs, flux, noise, truth, free_names, dtype, n_steps):
     """A *converged* MAP fit's final loss and optimum, starting from the shared truth.
 
@@ -360,7 +370,7 @@ def _map_loss(ForwardModel, model, obs, flux, noise, truth, free_names, dtype, n
     # same PRNGKey (see the module note above on why that is not the same thing).
     cur_init = Posterior(
         samples=None,
-        params={k: jnp.asarray(v, dtype=dtype) for k, v in truth.items()},
+        params={k: jnp.asarray(v, dtype=dtype) for k, v in _free_truth(truth, free_names).items()},
         method="truth",
         wall_time_s=0.0,
         diagnostics={},
@@ -461,7 +471,9 @@ def _run_seam(
         free_names = sorted(model.spec.free_params)
         sampled = model.spec.sample(jax.random.PRNGKey(_TRUTH_SEED))
         truth = {k: float(v) for k, v in sampled.items()}
-        mock = model.mock(truth, snr=_SNR, key=jax.random.PRNGKey(_NOISE_SEED))
+        mock = model.mock(
+            _free_truth(truth, free_names), snr=_SNR, key=jax.random.PRNGKey(_NOISE_SEED)
+        )
         mock_flux = np.asarray(mock.flux_obs, dtype=np.float64)
         mock_noise = np.asarray(mock.noise, dtype=np.float64)
     else:
@@ -475,15 +487,13 @@ def _run_seam(
     map_loss_here = map_params_here = map_converged_here = map_n_iter_here = None
     try:
         if do_grad:
-            fixed_extra = {k: v for k, v in truth.items() if k not in free_names}
             flux_arr = jnp.asarray(mock_flux, dtype=dtype)
             noise_arr = jnp.asarray(mock_noise, dtype=dtype)
-            fixed_j = {k: jnp.asarray(v, dtype=dtype) for k, v in fixed_extra.items()}
 
             def chi2(values):
                 # ``has_aux`` returns the forward pass alongside the gradient so the
                 # parity check needs only one compiled program per seam, not two.
-                params = {**fixed_j, **dict(zip(free_names, values))}
+                params = dict(zip(free_names, values))
                 pred = model.predict_photometry(params)
                 resid = (pred - flux_arr) / noise_arr
                 return jnp.sum(resid**2), pred

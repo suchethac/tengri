@@ -33,7 +33,10 @@ from check_param_ranges import (
     ALLOWLIST,
     _agn_prior_sites,
     _agn_scoped_dicts,
+    _declared_range,
     _dust_prior_sites,
+    _support,
+    _violates,
 )
 
 pytestmark = pytest.mark.contract
@@ -200,6 +203,52 @@ class TestDustPerScreenKeysAreNotFlagged:
         resolved = {param for param, _call in _dust_prior_sites(ast.parse(src))}
         # The static float -1.0 is not a Call node, so it won't be yielded
         assert "dust_slope" not in resolved
+
+
+class TestDustPerScreenKeyWithPriorIsRangeChecked:
+    """A per-screen key given a prior is now a live parameter (#2428).
+
+    ``slope_bc``/``Rv_diff``/etc. carrying ``Uniform(...)``/``Fixed(...)``
+    declare ``dust_<stem>_<screen>``, a real registered parameter with the
+    same declared support as the shared stem (``dust_slope``: ``[-1.5,
+    -0.3]``). This is the positive case beside
+    ``test_per_screen_static_float_not_flagged`` above, which stays the
+    scalar negative case: a plain number never reaches here at all, a prior
+    now does and must be resolved and range-checked like any other declared
+    dust parameter.
+    """
+
+    def test_per_screen_prior_is_resolved(self):
+        """slope_bc with a Uniform(...) resolves to dust_slope_bc."""
+        src = "build(dust_attenuation={'type': 'two_component', 'slope_bc': Uniform(-1.5, -0.3)})"
+        resolved = {param for param, _call in _dust_prior_sites(ast.parse(src))}
+        assert "dust_slope_bc" in resolved
+
+    def test_per_screen_prior_inside_shared_stem_range_not_violated(self):
+        """slope_bc's Uniform(-1.2, -0.9) overlaps dust_slope's [-1.5, -0.3]."""
+        src = "build(dust_attenuation={'type': 'two_component', 'slope_bc': Uniform(-1.2, -0.9)})"
+        (param, call) = next(iter(_dust_prior_sites(ast.parse(src))))
+        assert param == "dust_slope_bc"
+        support = _support(param)
+        declared = _declared_range(call)
+        assert support is not None and declared is not None
+        assert not _violates(declared, support)
+
+    def test_per_screen_prior_outside_shared_stem_range_is_violated(self):
+        """slope_bc's Uniform(0.0, 0.6) shares no point with [-1.5, -0.3].
+
+        Mirrors the units-error class ``check_param_ranges.py`` exists to
+        catch: a per-screen prior disjoint from ``dust_slope_bc``'s own
+        declared support (the same range as the shared ``dust_slope`` stem)
+        is exactly as much a units error as one on the shared spelling.
+        """
+        src = "build(dust_attenuation={'type': 'two_component', 'slope_bc': Uniform(0.0, 0.6)})"
+        (param, call) = next(iter(_dust_prior_sites(ast.parse(src))))
+        assert param == "dust_slope_bc"
+        support = _support(param)
+        declared = _declared_range(call)
+        assert support is not None and declared is not None
+        assert _violates(declared, support)
 
 
 class TestDustViolationDetection:

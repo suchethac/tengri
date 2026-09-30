@@ -16,21 +16,18 @@
 # %% [markdown]
 # # Reproducing ProSpect's physics with tengri
 #
-# ProSpect (Robotham et al. 2020) is an SED generation and fitting code from
-# the GAMA survey, written in R. Every left-hand panel calls its own functions
-# through `rpy2` (thin wrappers in `_drivers/prospect_driver.py`); the
-# right-hand panel is tengri.
-# This study configures tengri's public API to approximate ProSpect's model choices; tengri's implementation is its own, not derived from ProSpect's code, and residual differences are documented below.
+# ProSpect (Robotham et al. 2020) is an SED generation and fitting code from the GAMA survey, written in R.
+# Every left-hand panel calls its own functions through `rpy2` (thin wrappers in `_drivers/prospect_driver.py`);
+# the right-hand panel is tengri. This study configures tengri's public API to approximate ProSpect's model choices.
+# Tengri's implementation is its own, not derived from ProSpect's code; residual differences are documented below.
 #
-# The closed-form blocks — the SFH shapes, the mass-mapped metallicity
-# history, the attenuation curves, the IGM — match ProSpect to a fraction
-# of a percent. Every model on this page carries nebular emission — ProSpect
-# through `SFHfunc(emission = TRUE)`, whose `emissionLines` (lines only; ProSpect has no nebular continuum) takes its ionization
-# parameter from `Z2q(Z)` (Orsi 2014; q = 1.4 × 10⁷ cm s⁻¹ at Z = 0.02,
-# logU = −3.32), and tengri through Cue at that same logU and Z_gas; §8 also
-# compares the line ratios at logU = −2. Residuals in every section include the
-# Levesque-2010-versus-Cloudy difference quantified in §8. ProSpect has no X-ray
-# component; it does have a radio continuum, which §11 includes.
+# The closed-form blocks (the SFH shapes, the mass-mapped metallicity history, the attenuation curves, the IGM)
+# match ProSpect to a fraction of a percent. Every model on this page carries nebular emission: ProSpect through
+# `SFHfunc(emission = TRUE)`, whose `emissionLines` (lines only; ProSpect has no nebular continuum) takes its
+# ionization parameter from `Z2q(Z)` (Orsi 2014; q = 1.4 × 10⁷ cm s⁻¹ at Z = 0.02, logU = −3.32), and tengri
+# through Cue at that same logU and Z_gas. Section 8 also compares the line ratios at logU = −2. Residuals in
+# every section include the Levesque-2010-versus-Cloudy difference quantified in section 8. ProSpect has no
+# X-ray component but includes a radio continuum, which section 11 covers.
 
 # %% [markdown]
 # ## Setup
@@ -180,20 +177,18 @@ I_ZSUN = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - np.log10(Z_SOLAR))))
 # %% [markdown]
 # ## §1 Single stellar populations
 #
-# Both codes carry a Bruzual & Charlot (2003) library at a Chabrier IMF and
-# Padova 1994 isochrones. ProSpect's `BC03lr` is the low-resolution variant
-# (1221 wavelengths); tengri's grid samples the same models on a finer
-# wavelength grid. SSPs from 1 Myr to 10 Gyr at solar metallicity, with the
-# relative residual `|tengri − ProSpect| / ProSpect` below.
+# Both codes carry a Bruzual & Charlot (2003) library at a Chabrier IMF and Padova 1994 isochrones.
+# ProSpect's `BC03lr` is the low-resolution variant (1221 wavelengths); tengri samples the same models on a
+# finer wavelength grid. SSPs from 1 Myr to 10 Gyr at solar metallicity are compared below with the relative
+# residual `|tengri − ProSpect| / ProSpect`.
 #
-# The two are independent distributions of one underlying library, so the
-# residual is a resolution and interpolation effect, a percent-level floor
-# rather than a physics difference. Residual spikes sit at spectral features
-# and reflect ProSpect's coarse wavelength grid (1221 λ vs 6900 λ); they
-# vanish when both spectra are regridded to the same wavelength mesh.
+# The two are independent distributions of one underlying library, so the residual reflects resolution and
+# interpolation effects (a percent-level floor rather than a physics difference). Residual spikes sit at spectral
+# features and reflect ProSpect's coarse wavelength grid (1221 wavelengths vs 6900); they vanish when both spectra
+# are regridded to the same wavelength mesh.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
+# **Verification Status:** CROSSVAL (2 tests, thin): CSP integral, CIC age kernel (default)
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -250,16 +245,14 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # %% [markdown]
 # ## §2 Star formation history
 #
-# ProSpect offers the skew-normal `massfunc_snorm` and delayed-exponential
-# `massfunc_dtau`; tengri carries both forms. tengri's curve is pipeline
-# output from `state.derived["sfr_history"]`, on the log-spaced lookback grid
-# used by the convolution. `mSFR = 10` forms ≈10^10.9 M⊙, and tengri's
-# `log_total_mass` is set to match, so the SFR amplitudes are directly
-# comparable. Peaks and widths agree; the two `snorm` implementations
-# parametrize the skew slightly differently.
+# ProSpect offers the skew-normal `massfunc_snorm` and delayed-exponential `massfunc_dtau`; tengri carries both
+# forms. Tengri's curve is pipeline output from `state.derived["sfr_history"]`, on the log-spaced lookback grid
+# used by the convolution. With `mSFR = 10` forming approximately 10^10.9 M⊙, tengri's `log_total_mass` is set to match,
+# so the SFR amplitudes are directly comparable. Peaks and widths agree; the two `snorm` implementations parametrize
+# the skew slightly differently.
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33): Parametric SFH family physics
 
 # %%
 t_p_sn, sfr_p_sn = P.sfh_curve(sfh="snorm", **SNORM_FIDUCIAL)
@@ -302,19 +295,14 @@ print(
 # %% [markdown]
 # ## §2 cont'd — dtau, snorm_burst, snorm_trunc
 #
-# Three more ProSpect SFH families against their tengri counterparts, each
-# swept over one shape parameter: delayed-tau timescale τ, a recent burst
-# amplitude on the skew-normal, and a truncation sharpness. Each tengri model
-# is built once with the swept parameter free and evaluated per case; the
-# formed mass is matched to ProSpect's own integral so the curves sit at the
-# same amplitude. `dtau` maps to tengri's `delayed` (`tau_gyr`/`age_gyr`),
-# `snorm_burst` adds `burst_sfr`/`burst_age_gyr` to the fiducial skew-normal,
-# and `snorm_trunc` maps to `tsnorm`'s `trunc`. ProSpect's `massfunc_dtau`
-# continues past `mpeak` with a second timescale `magemax − mpeak`; the
-# comparison is the recent branch, which is tengri's `delayed`.
-# The τ-delayed families use
-# different truncation conventions past the peak and diverge on the oldest
-# tail; the windows below stay clear of ProSpect's own numerical zero.
+# Three more ProSpect SFH families against their tengri counterparts, each swept over one shape parameter:
+# delayed-tau timescale τ, a recent burst amplitude on the skew-normal, and a truncation sharpness. Each tengri model
+# is built once with the swept parameter free and evaluated per case; the formed mass is matched to ProSpect's own integral
+# so the curves sit at the same amplitude. The `dtau` option maps to tengri's `delayed` (`tau_gyr`/`age_gyr`),
+# `snorm_burst` adds `burst_sfr`/`burst_age_gyr` to the fiducial skew-normal, and `snorm_trunc` maps to `tsnorm`'s
+# `trunc`. ProSpect's `massfunc_dtau` continues past `mpeak` with a second timescale `magemax − mpeak`; the comparison
+# is the recent branch, which is tengri's `delayed`. The τ-delayed families use different truncation conventions past
+# the peak and diverge on the oldest tail; the windows below stay clear of ProSpect's own numerical zero.
 
 # %%
 DTAU_MPEAK = 10.0
@@ -492,20 +480,16 @@ V.print_window_table(
 # %% [markdown]
 # ## §2b Metallicity history — chemical evolution
 #
-# ProSpect ties gas-phase metallicity to cumulative stellar mass formed
-# (Bellstedt et al. 2020), breaking the age–metallicity degeneracy: old
-# stars become metal-poor and young stars metal-rich. `Zfunc_massmap_lin`
-# maps Z linearly; `Zfunc_massmap_box` uses Lynden-Bell closed-box enrichment
-# with a fixed yield.
+# ProSpect ties gas-phase metallicity to cumulative stellar mass formed (Bellstedt et al. 2020), breaking the
+# age–metallicity degeneracy: old stars become metal-poor and young stars metal-rich. The `Zfunc_massmap_lin` option
+# maps Z linearly; `Zfunc_massmap_box` uses Lynden-Bell closed-box enrichment with a fixed yield.
 #
-# tengri implements both, reading each history from
-# `state.derived["log_metallicity_history"]` at matched `Zstart`/`Zfinal`,
-# with ProSpect's `yield` parameter exposed as `met_yield`. Against
-# cumulative mass fraction `massmap_lin` is a straight line by construction;
-# the half-mass-point ratio confirms the linear case agrees.
+# Tengri implements both, reading each history from `state.derived["log_metallicity_history"]` at matched
+# `Zstart`/`Zfinal`, with ProSpect's `yield` parameter exposed as `met_yield`. The `massmap_lin` curve is a straight
+# line by construction against cumulative mass fraction; the half-mass-point ratio confirms the linear case agrees.
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+# **Verification Status:** PARTIAL (11/33): Parametric SFH family physics
 
 # %%
 Z_START, Z_FINAL = 1e-4, Z_SOLAR
@@ -635,15 +619,14 @@ print(
 # %% [markdown]
 # ## §3 Integrated stellar SED
 #
-# The fiducial skew-normal SFH convolved with the BC03 library at solar
-# metallicity, nebular emission enabled on both sides, no dust, both scaled to 10^10 M⊙ formed.
-# Band-integrated ratios compare the continuum; pointwise ratios would measure emission-line widths,
-# which differ between Cue and ProSpect's photoionization grid. The u band (1.326×) and NUV carry
-# the nebular continuum — the Balmer jump and two-photon emission — which Cue includes and
+# The fiducial skew-normal SFH convolved with the BC03 library at solar metallicity, nebular emission enabled
+# on both sides, no dust, both scaled to 10^10 M⊙ formed. Band-integrated ratios compare the continuum; pointwise
+# ratios would measure emission-line widths, which differ between Cue and ProSpect's photoionization grid. The u band
+# (1.326×) and NUV carry the nebular continuum (the Balmer jump and two-photon emission), which Cue includes but
 # ProSpect's `emissionLines` does not.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Photometry projection
+# **Verification Status:** CROSSVAL: Photometry projection
 
 # %%
 sed_stel = P.prospect_sed(
@@ -710,14 +693,12 @@ V.print_filter_table(_rows3, ref_name="ProSpect", title="§3 stellar SED, UV-to-
 # %% [markdown]
 # ## §4 Dust attenuation curves
 #
-# ProSpect uses Charlot & Fall (2000): a birth-cloud term on young stars
-# and a diffuse screen on all stars, each a power law with slope −0.7.
-# tengri's `power_law` law is the same functional form. Both are normalized
-# to `A(λ)/A_V` at 5500 Å; the screen also carries an optional 2175 Å bump,
-# against tengri's `noll09` law.
+# ProSpect uses Charlot & Fall (2000): a birth-cloud term on young stars and a diffuse screen on all stars,
+# each a power law with slope −0.7. Tengri's `power_law` law has the same functional form. Both are normalized to
+# `A(λ)/A_V` at 5500 Å; the screen also carries an optional 2175 Å bump, which maps to tengri's `noll09` law.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
 from tengri.dust import list_laws
@@ -783,13 +764,12 @@ print(f"§4 A(1500)/A_V: ProSpect CF = {_a_p:.3f}, tengri power_law = {_a_t:.3f}
 # %% [markdown]
 # ## §5 Attenuation applied
 #
-# The fiducial galaxy with and without dust. ProSpect applies birth-cloud
-# (`τ_birth = 1`) and diffuse screen (`τ_screen = 0.3`) at slope −0.7.
-# tengri's `two_component` dust maps directly with `τ_bc` and `τ_diff` using
+# The fiducial galaxy with and without dust. ProSpect applies birth-cloud dust (`τ_birth = 1`) and diffuse screen
+# dust (`τ_screen = 0.3`) at slope −0.7. Tengri's `two_component` dust maps directly with `τ_bc` and `τ_diff` using
 # the `power_law` law.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Attenuation law library
+# **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
 sed_atten = P.prospect_sed(
@@ -834,14 +814,11 @@ _assert_comparable(L_p5, L_t_atten, name="§5 dust applied")
 # %% [markdown]
 # ## §5 cont'd — pow, bump, τ_screen
 #
-# Two curve sweeps and an applied-SED sweep. The Charlot & Fall screen power
-# law's slope `pow` and the noll09 bump strength `Eb` are compared as
-# `A(λ)/A_V` over 1216-3000 Å — the slope sweep is an exact match (same
-# functional form on both sides); the bump sweep differs at the ~10-40% level
-# since the two bump normalizations are not identical. The applied sweep then
-# varies both optical depths (`τ_screen`, `τ_birth`) together and reads the
-# result off the UV-to-NIR bandpasses: all six combinations differ, and the
-# birth-cloud depth dominates the residual over the screen depth.
+# Two curve sweeps and an applied-SED sweep. The two curve sweeps compare the Charlot & Fall screen power law's slope (`pow`) and the
+# noll09 bump strength (`Eb`) as `A(λ)/A_V` over 1216-3000 Å. The slope sweep is an exact match (same functional form
+# on both sides); the bump sweep differs at the ~10–40% level since the two bump normalizations are not identical. The
+# applied sweep varies both optical depths (`τ_screen`, `τ_birth`) together and reads the result off the UV-to-NIR
+# bandpasses: all six combinations differ, with birth-cloud depth dominating the residual over screen depth.
 
 # %%
 from tengri.dust import list_laws
@@ -953,13 +930,12 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dust_applied:
 # %% [markdown]
 # ## §6 Dust IR re-emission and energy balance
 #
-# ProSpect re-emits absorbed starlight with Dale et al. (2014) templates;
-# tengri uses the same Dale 2014 grid and enforces energy balance to floating
-# point. At matched hardness (`alpha = 3.0`) both codes produce identical
+# ProSpect re-emits absorbed starlight with Dale et al. (2014) templates; tengri uses the same Dale 2014 grid and
+# enforces energy balance to floating point. At matched hardness (`alpha = 3.0`), both codes produce identical
 # dust IR SEDs.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
+# **Verification Status:** CROSSVAL: Dust IR emission physics (MBB, Casey12, CMB)
 
 # %%
 sed_ir = P.prospect_sed(
@@ -1023,14 +999,11 @@ print(f"§6 dust IR nu*Lnu peak: ProSpect {_peak_p6 / 1e4:.0f} um, tengri {_peak
 # %% [markdown]
 # ## §6 cont'd — Dale α sweep
 #
-# The Dale et al. (2014) radiation-field hardness α set to 1, 2, 3, and 4,
-# all other parameters at the §6 fiducial. Larger α weights the dust-mass
-# distribution toward lower radiation intensities, so the peak wavelength
-# moves redward (colder dust) as α grows. tengri's `dust_alpha_dale` is
-# declared free once and evaluated at each α; the IR bandpass table below
-# reads a systematic ~20% tengri/ProSpect offset across the pure-dust bands
-# that is flat in α — a template-normalization residual, not the shape
-# mismatch a sweep is built to catch.
+# The Dale et al. (2014) radiation-field hardness α is set to 1, 2, 3, and 4, with all other parameters at the
+# §6 fiducial. Larger α weights the dust-mass distribution toward lower radiation intensities, so the peak wavelength
+# moves redward (colder dust) as α grows. Tengri's `dust_alpha_dale` is declared free once and evaluated at each α; the
+# IR bandpass table below reads a systematic ~20% tengri/ProSpect offset across the pure-dust bands that is flat in α,
+# a template-normalization residual rather than the shape mismatch a sweep is built to catch.
 
 # %%
 m_ir_sweep = SEDModel.build(
@@ -1108,12 +1081,11 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in cases_dale:
 # %% [markdown]
 # ## §7 Panchromatic SED
 #
-# Stellar + Charlot & Fall attenuation + Dale 2014 IR from the rest-UV to
-# the far-IR. The percent-level disagreements of the earlier sections stack
-# here.
+# Stellar emission plus Charlot & Fall attenuation plus Dale 2014 IR from the rest-UV to the far-IR.
+# The percent-level disagreements of the earlier sections stack here.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Photometry projection
+# **Verification Status:** CROSSVAL: Photometry projection
 
 # %%
 fig, ax, ax_r, ratio = V.overlay_ratio_fig(
@@ -1134,12 +1106,11 @@ save_fig("prospect_r_07_panchromatic.png")
 # %% [markdown]
 # ## §12 IGM transmission — Inoue et al. (2014)
 #
-# Both codes use Inoue et al. (2014) for Lyman-series absorption. The
-# residual is measured over the Lyman-α forest window. (§8–§11 cover
-# nebular, AGN, and radio.)
+# Both codes use Inoue et al. (2014) for Lyman-series absorption. The residual is measured over the Lyman-α forest
+# window. (Sections 8–11 cover nebular, AGN, and radio.)
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
+# **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
 # %%
 from tengri.igm import igm_transmission as tengri_igm
@@ -1177,10 +1148,8 @@ print(
 # %% [markdown]
 # ## §12 cont'd — z sweep
 #
-# The same Inoue et al. (2014) transmission at z = 2, 3, 5, 7, read over
-# 850-1216 Å rest-frame (Ångström, matching the units above — up to and
-# including the Lyα line itself). Both codes agree to within a few percent at
-# every redshift, the same floor as the single-z=4 case above.
+# The same Inoue et al. (2014) transmission at z = 2, 3, 5, 7 is read over 850–1216 Å rest-frame (Ångström, matching the units above, up to and including the Lyα line itself). Both codes agree to within a few percent at every redshift,
+# the same floor as the single z=4 case above.
 
 # %%
 cases_igm_z = []
@@ -1216,21 +1185,18 @@ V.print_window_table(
 # %% [markdown]
 # ## §8 Nebular emission
 #
-# ProSpect uses `emissionLines`, tying Hα to the SFR and distributing other
-# lines via Levesque et al. (2010). tengri uses Cue (Li et al. 2025), a neural
-# emulator on Cloudy 17 that predicts lines from the ionizing spectrum. Cue
-# needs a bare-stellar SSP (FSPS MIST + MILES here).
+# ProSpect uses `emissionLines`, tying Hα to the SFR and distributing other lines via Levesque et al. (2010).
+# Tengri uses Cue (Li et al. 2025), a neural emulator on Cloudy 17 that predicts lines from the ionizing spectrum.
+# Cue needs a bare-stellar SSP (FSPS MIST + MILES here).
 #
-# **Matched ionization parameter.** ProSpect's `emissionLines` derives the
-# ionization parameter from metallicity via `Z2q` (Orsi 2014), giving at solar
-# Z a soft `q ≈ 1.4e7` cm/s that suppresses metal lines: [O III]/Hα ≈ 0.014
-# (~50× below Cloudy). We pass ProSpect the matching `q = U·c ≈ 3e8` cm/s for
-# Cue's `logU = -2`. ProSpect then returns [O III]/Hα ≈ 0.21; the residual
-# versus Cue's 0.72 is a genuine Levesque-2010 vs Cloudy-17 difference, not
-# an ionization mismatch. Balmer lines are q-insensitive.
+# **Matched ionization parameter.** ProSpect's `emissionLines` derives the ionization parameter from metallicity via `Z2q` (Orsi 2014). At solar Z,
+# this gives a soft `q ≈ 1.4e7` cm/s that suppresses metal lines: [O III]/Hα ≈ 0.014 (roughly 50 times below Cloudy).
+# ProSpect receives the matching `q = U·c ≈ 3e8` cm/s for Cue's `logU = -2` and then returns [O III]/Hα ≈ 0.21; the
+# residual versus Cue's 0.72 is a genuine Levesque-2010 versus Cloudy-17 difference, not an ionization mismatch.
+# Balmer lines remain q-insensitive.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+# **Verification Status:** CROSSVAL: Cloudy grid / Cue vs FSPS baked-in
 
 # %%
 NEB_AGE_GYR = 0.01
@@ -1318,12 +1284,10 @@ if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
 # %% [markdown]
 # ## §8 cont'd — q × Z_gas
 #
-# The ionization parameter `logU` (−3, −2, −1.5) crossed with gas-phase
-# metallicity `Z_gas` (0.004, 0.02 = solar) — six cases, tengri's `neb_logU`
-# and `neb_logZ_gas` both declared free on one Cue build, ProSpect's matching
-# `q = U·c` and `Z` passed to `emissionLines`. [O III]/Hβ is the diagnostic
-# most sensitive to both axes; Hα/Hβ (pure recombination) is essentially flat
-# across the grid on both sides, as expected.
+# The ionization parameter `logU` (−3, −2, −1.5) is crossed with gas-phase metallicity `Z_gas` (0.004, 0.02 = solar)
+# in six cases. Tengri's `neb_logU` and `neb_logZ_gas` are both declared free on one Cue build; ProSpect's matching
+# `q = U·c` and `Z` are passed to `emissionLines`. The [O III]/Hβ ratio is the diagnostic most sensitive to both axes;
+# Hα/Hβ (pure recombination) is essentially flat across the grid on both sides, as expected.
 
 # %%
 m_neb2 = SEDModel.build(
@@ -1409,33 +1373,26 @@ save_fig("prospect_r_08cont_nebular_params.png")
 # %% [markdown]
 # ## §9 AGN torus
 #
-# ProSpect models AGN with Fritz et al. (2006) and SKIRTOR (Stalevski et al.
-# 2012, 2016). We compare ProSpect's `SKIRTOR_interp` against tengri's SKIRTOR
-# at matched bolometric luminosity, pinned to ProSpect's defaults (inclination
-# 30°, opening angle 40°, optical depth 1, p=q=1) with the full bolometric
-# routed to the template (`agn_frac_agn=1`). The two agree to ~2%.
+# ProSpect models AGN with Fritz et al. (2006) and SKIRTOR (Stalevski et al. 2012, 2016). ProSpect's
+# `SKIRTOR_interp` is compared against tengri's SKIRTOR at matched bolometric luminosity, pinned to ProSpect's
+# defaults (inclination 30°, opening angle 40°, optical depth 1, p=q=1) with the full bolometric routed to the
+# template (`agn_frac_agn=1`), and the two agree to approximately 2%.
 #
-# The panels show `νL_ν`, where the thermal bump is a true maximum. (In `L_ν`
-# a torus rises into the far-IR simply because `L_ν = νL_ν · λ/c`, easy to
-# misread.) Both the torus (peak 9.3 μm with 10 μm silicate) and the disc
-# shortward of ~1 μm track ProSpect: the disc reads ~0.9× ProSpect at 2000 Å.
-# This uses the **`skirtor_stalevski`** model — the published Stalevski (2016)
-# radiative-transfer SED, no analytic-disc substitution, reading the
-# full-coverage SKIRTOR grid on the full `ta,p,q,oa,R,i` axes (fixing v3's two
-# shortcuts: R fixed at 20; total reconstructed as disk+dust). Three SKIRTOR
-# models are swappable (`tengri.list_agn_models()`): `skirtor_stalevski` (raw,
-# ~0.9×), composable `disc.skirtor`+`torus.skirtor` (CIGALE's analytic disc +
-# `norm=1/∫dust`), and deprecated monolithic `agn={'type':'skirtor'}`
-# (power-law disc, ~0.28×). The residual to 1.0× is a parameter-convention
-# mismatch (ProSpect's `ct`/`rm` vs SKIRTOR's `oa`/`R`) — not the disc/total
-# treatment. tengri deprecates `skirtor_stalevski` as a public model name
-# (it has no composable disc+torus recipe equivalent), and this section
-# selects it anyway on purpose: it is the one tengri model that reads
-# ProSpect's own raw SKIRTOR total-SED template rather than a composable
-# reinterpretation of it, which is the deliberate comparison target here.
+# The panels show `νL_ν`, where the thermal bump is a true maximum. (In `L_ν`, a torus rises into the far-IR simply
+# because `L_ν = νL_ν · λ/c`, which is easy to misread.) Both the torus (peak 9.3 μm with 10 μm silicate) and the disc
+# shortward of approximately 1 μm track ProSpect: the disc reads approximately 0.9 times ProSpect at 2000 Å. This uses
+# the **`skirtor_stalevski`** model, the published Stalevski (2016) radiative-transfer SED with no analytic-disc
+# substitution, reading the full-coverage SKIRTOR grid on the full `ta,p,q,oa,R,i` axes (fixing v3's two shortcuts:
+# R fixed at 20, total reconstructed as disk+dust). Three SKIRTOR models are swappable (`tengri.list_agn_models()`):
+# `skirtor_stalevski` (raw, ~0.9×), composable `disc.skirtor`+`torus.skirtor` (CIGALE's analytic disc plus
+# `norm=1/∫dust`), and deprecated monolithic `agn={'type':'skirtor'}` (power-law disc, ~0.28×). The residual to 1.0×
+# is a parameter-convention mismatch (ProSpect's `ct`/`rm` versus SKIRTOR's `oa`/`R`), not the disc/total treatment.
+# Tengri deprecates `skirtor_stalevski` as a public model name (it has no composable disc+torus recipe equivalent), and
+# this section selects it anyway on purpose: it is the one tengri model that reads ProSpect's own raw SKIRTOR total-SED
+# template rather than a composable reinterpretation of it, which is the deliberate comparison target here.
 
 # %% [markdown]
-# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
+# **Verification Status:** CROSSVAL: Nenkova+08 (CLUMPY) torus
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -1518,18 +1475,14 @@ nuLnu_t = L_t9 * U.C_ANGSTROM_PER_S / w_t9
 # %% [markdown]
 # ## §9 cont'd — SKIRTOR nodes and Fritz
 #
-# Six SKIRTOR nodes sweeping opening angle `ct`, inclination `an`, and optical
-# depth `ta` against ProSpect's `SKIRTOR_interp`, plus three Fritz et al.
-# (2006) nodes against `Fritz_interp` — a torus tengri has an exact
-# composable equivalent for (`torus={"type": "fritz"}`), matching ProSpect's
-# `AGNct`/`AGNrm`/`AGNan`/`AGNta`/`AGNal`/`AGNbe` one-to-one (`AGNal`→`gamma`,
-# `AGNbe`→`beta`). Both curves are peak-normalized over 1-100 µm so the
-# comparison is shape, not normalization. SKIRTOR tracks ProSpect near its
-# default inclination and diverges at the grazing an=0° node, where the raw
-# template's edge-on disc term is small on both sides. Fritz sits at a stable
-# ~0.3× — the composable torus block pairs with tengri's own disc rather than
-# ProSpect's combined template, as with the deprecated monolithic
-# SKIRTOR/power-law-disc pairing above.
+# Six SKIRTOR nodes sweep opening angle `ct`, inclination `an`, and optical depth `ta` against ProSpect's
+# `SKIRTOR_interp`, plus three Fritz et al. (2006) nodes against `Fritz_interp`. Tengri has an exact composable
+# equivalent for the latter (`torus={"type": "fritz"}`), matching ProSpect's `AGNct`/`AGNrm`/`AGNan`/`AGNta`/`AGNal`/
+# `AGNbe` one-to-one (`AGNal`→`gamma`, `AGNbe`→`beta`). Both curves are peak-normalized over 1–100 µm, so the
+# comparison is shape, not normalization. SKIRTOR tracks ProSpect near its default inclination and diverges at the
+# grazing an=0° node, where the raw template's edge-on disc term is small on both sides. Fritz sits at a stable ~0.3×:
+# the composable torus block pairs with tengri's own disc rather than ProSpect's combined template, as with the
+# deprecated monolithic SKIRTOR/power-law-disc pairing above.
 
 # %%
 m_skirtor_sweep = SEDModel.build(
@@ -1705,16 +1658,14 @@ V.print_window_table(
 # %% [markdown]
 # ## §11 Radio continuum
 #
-# ProSpect models radio continuum tied to the SFR via `addradio_SF` (free-free
-# + synchrotron). tengri's `bell2003_split` radio block matches that pair: the
-# Bell (2003) total SFR-radio luminosity L(1.4 GHz) split into a non-thermal
-# synchrotron component (S_ν ∝ ν^−0.75, Baan & Klockner 2006) and a thermal
-# free-free component (S_ν ∝ ν^−0.10, Dale & Helou 2002; Condon 1992). The
-# comparison is slope and normalization at matched SFR. (ProSpect has no
-# X-ray component.)
+# ProSpect models radio continuum tied to the SFR via `addradio_SF` (free-free plus synchrotron). Tengri's
+# `bell2003_split` radio block matches that pair: the Bell (2003) total SFR-radio luminosity L(1.4 GHz) split into
+# a non-thermal synchrotron component (S_ν ∝ ν^−0.75, Baan & Klockner 2006) and a thermal free-free component
+# (S_ν ∝ ν^−0.10, Dale & Helou 2002; Condon 1992). The comparison is slope and normalization at matched SFR.
+# (ProSpect has no X-ray component.)
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
+# **Verification Status:** PARTIAL (3/16): Radio + X-ray + AGN
 
 # %%
 sed_radio = P.prospect_sed(
@@ -1796,15 +1747,11 @@ if np.any(_rad) and L_p11[_rad].max() > 0:
 # %% [markdown]
 # ## §11 cont'd — q_IR × α_SF
 #
-# The FIR-radio correlation normalization `q_IR` (2.3, 2.64, 2.9 — Bell 2003's
-# own value is 2.64) crossed with the synchrotron spectral index `α_SF` (0.7,
-# 0.8). `q_IR` is a tengri-only knob — ProSpect's `addradio_SF` calibrates its
-# own fixed FIR-radio ratio internally and exposes no equivalent — so only
-# `α_SF` (ProSpect's `sy_power_SF`) moves both sides; ProSpect's default
-# `waveout` grid also has an edge artifact right at 1.4 GHz, worked around
-# here with a finer, wider grid passed through `extra`. tengri sits near unity
-# at `q_IR = 2.64` and moves away on either side, exactly as the normalization
-# knob should.
+# The FIR-radio correlation normalization `q_IR` (2.3, 2.64, 2.9; Bell 2003's own value is 2.64) is crossed with
+# the synchrotron spectral index `α_SF` (0.7, 0.8). The `q_IR` parameter is tengri-only: ProSpect's `addradio_SF`
+# calibrates its own fixed FIR-radio ratio internally and exposes no equivalent. Thus only `α_SF` (ProSpect's
+# `sy_power_SF`) moves both sides. ProSpect's default `waveout` grid also has an edge artifact right at 1.4 GHz, worked around here with a finer, wider grid passed through `extra`. Tengri sits near unity at `q_IR = 2.64` and moves
+# away on either side, exactly as the normalization knob should.
 
 # %%
 import rpy2.robjects as _ro
@@ -1865,9 +1812,8 @@ for _q_ir in (2.3, 2.64, 2.9):
 # %% [markdown]
 # ## tengri in ProSpect-mode — full-SED head-to-head
 #
-# tengri configured to emulate ProSpect end to end — shared BC03, fiducial
-# skew-normal SFH, Charlot & Fall attenuation, Dale 2014 IR — overlaid on
-# ProSpect's output, with the fractional residual and a ±25 % band below.
+# Tengri is configured to emulate ProSpect end to end (shared BC03, fiducial skew-normal SFH, Charlot & Fall
+# attenuation, Dale 2014 IR) and overlaid on ProSpect's output with the fractional residual and a ±25% band below.
 
 # %%
 import chex
@@ -1933,15 +1879,12 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# Component by component at matched parameters, ProSpect and tengri agree
-# wherever they evaluate the same mathematics: the BC03 library (§1), the
-# skew-normal SFH (§2), the integrated stellar SED (§3, within ~1 % once
-# absolute metallicity is matched), Charlot & Fall attenuation (§4), Dale
-# 2014 dust IR (§6), and Inoue 2014 IGM (§12, bit-identical away from
-# Lyman-α). Radio continuum (§11) and AGN torus (§9, SKIRTOR vs SKIRTOR) line
-# up in slope and peak. The sweeps below extend each of these to a small grid
-# of parameters rather than one point, and the worst-case ratio in each grid
-# is what the single-point sections could not show.
+# Component by component at matched parameters, ProSpect and tengri agree wherever they evaluate the same mathematics:
+# the BC03 library (§1), the skew-normal SFH (§2), the integrated stellar SED (§3, within approximately 1% once
+# absolute metallicity is matched), Charlot & Fall attenuation (§4), Dale 2014 dust IR (§6), and Inoue 2014 IGM (§12,
+# bit-identical away from Lyman-α). Radio continuum (§11) and AGN torus (§9, SKIRTOR versus SKIRTOR) line up in slope
+# and peak. The sweeps below extend each of these to a small grid of parameters rather than one point, and the worst-case
+# ratio in each grid is what the single-point sections could not show.
 #
 # | Block | § | Cases | Worst tengri/ProSpect | Where |
 # |---|---|---|---|---|
@@ -1956,34 +1899,32 @@ plt.show()
 # | Radio | §11 cont'd | 6 (q_IR×α_SF) | 0.57–1.94× (band ratios) | VLA/ALMA bands |
 # | IGM | §12 cont'd | 4 (z) | ~1.00× median | T(λ), 850-1216 Å |
 #
-# ProSpect's defining feature — metallicity history tied to cumulative stellar
-# mass formed (§2b) — is reproduced by tengri's `massmap_lin` mode: the two
-# agree to a couple of percent at half-mass. The one genuine difference is
-# nebular emission (§8), a deliberate disagreement between two photoionization
-# grids. ProSpect's EMILES library has no tengri equivalent; Fritz (2006)
-# does (`torus={"type": "fritz"}`), and §9 cont'd compares it directly — the
-# composable torus block pairs with tengri's own disc rather than ProSpect's
-# combined disc+torus template, holding at ~0.3× across the swept nodes.
+# ProSpect's defining feature is metallicity history tied to cumulative stellar mass formed (§2b), which is
+# reproduced by tengri's `massmap_lin` mode: the two agree to a couple of percent at half-mass. The one genuine
+# difference is nebular emission (§8), a deliberate disagreement between two photoionization grids. ProSpect's EMILES
+# library has no tengri equivalent; Fritz (2006) does (`torus={"type": "fritz"}`), and section 9 continued compares it
+# directly. The composable torus block pairs with tengri's own disc rather than ProSpect's combined disc+torus template,
+# holding at approximately 0.3 times across the swept nodes.
 
 # %% [markdown]
-# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
+# **Verification Status:** PARTIAL (68/126): Absolute SED normalization
 #
 
 # %% [markdown]
 # ## References
 #
-# * Robotham et al. 2020, MNRAS 495, 905 — ProSpect
-# * Bellstedt et al. 2020, MNRAS 498, 5581 — GAMA metallicity-history method
-# * Bruzual & Charlot 2003, MNRAS 344, 1000 — BC03 stellar library
-# * Chabrier 2003, PASP 115, 763 — IMF
-# * Charlot & Fall 2000, ApJ 539, 718 — two-component dust attenuation
-# * Dale et al. 2014, ApJ 784, 83 — infrared dust emission templates
-# * Stalevski et al. 2012, MNRAS 420, 2756; 2016, MNRAS 458, 2288 — SKIRTOR
-# * Fritz et al. 2006, MNRAS 366, 767 — AGN torus library
-# * Levesque et al. 2010, ApJ 712, 1019 — nebular photoionization grid
-# * Condon 1992, ARA&A 30, 575 — radio continuum from star formation
-# * Bell 2003, ApJ 586, 794 — SFR-radio (FIRRC) normalization
-# * Dale & Helou 2002, ApJ 576, 159 — infrared-radio correlation calibration (thermal free-free slope)
-# * Baan & Klockner 2006, A&A 449, 559 — non-thermal (synchrotron) spectral index
-# * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
-# * Li et al. 2025 — Cue nebular emulator
+# * Robotham et al. 2020, MNRAS 495, 905: ProSpect
+# * Bellstedt et al. 2020, MNRAS 498, 5581: GAMA metallicity-history method
+# * Bruzual & Charlot 2003, MNRAS 344, 1000: BC03 stellar library
+# * Chabrier 2003, PASP 115, 763: IMF
+# * Charlot & Fall 2000, ApJ 539, 718: two-component dust attenuation
+# * Dale et al. 2014, ApJ 784, 83: infrared dust emission templates
+# * Stalevski et al. 2012, MNRAS 420, 2756; 2016, MNRAS 458, 2288: SKIRTOR
+# * Fritz et al. 2006, MNRAS 366, 767: AGN torus library
+# * Levesque et al. 2010, ApJ 712, 1019: nebular photoionization grid
+# * Condon 1992, ARA&A 30, 575: radio continuum from star formation
+# * Bell 2003, ApJ 586, 794: SFR-radio (FIRRC) normalization
+# * Dale & Helou 2002, ApJ 576, 159: infrared-radio correlation calibration (thermal free-free slope)
+# * Baan & Klockner 2006, A&A 449, 559: non-thermal (synchrotron) spectral index
+# * Inoue et al. 2014, MNRAS 442, 1805: IGM absorption
+# * Li et al. 2025: Cue nebular emulator

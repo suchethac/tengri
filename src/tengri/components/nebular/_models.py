@@ -51,6 +51,52 @@ class NebularRegistryEntry:
 
 NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 
+#: Nebular backends that carry their own thermal free-free continuum (issue #2346).
+#: These backends publish ``sed_nebular`` with a free-free component, so the radio
+#: block's Murphy+2011 ``radio_freefree`` term should not run in addition
+#: (would double-count the thermal emission). Keyed on the factory's ``nebular_backend``
+#: vocabulary: ``"baked_in"``, ``"cb19"``, ``"cloudy_grid"``, ``"mappings"``,
+#: ``"cue"``, ``"shock"``, or ``None``.
+#:
+#: - ``"cue"``: Li et al. (2025) neural emulator, carries a Q_H-normalized
+#:   continuum with free-free.
+#: - ``"cloudy_grid"``: tabulated Cloudy grid (Byler+2017 axis), carries
+#:   free-free.
+#: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``):
+#:   do NOT carry free-free. ``"cb19"`` publishes zeros (no continuum at all).
+NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset({"cue", "cloudy_grid"})
+
+
+def nebular_backend_carries_freefree(name: str | None) -> bool:
+    """Check if a declared nebular backend carries a free-free continuum.
+
+    Used by :func:`tengri.forward.component_factory.build_components` to
+    auto-resolve ``radio.include_freefree=None`` to ``False`` when the declared
+    nebular backend publishes its own thermal free-free (issue #2346): one
+    thermal term on the whole SED grid, not separate radio + nebular terms.
+
+    Parameters
+    ----------
+    name : str or None
+        Nebular backend name from the factory's vocabulary:
+        ``"baked_in"`` (default), ``"cb19"``, ``"cloudy_grid"``, ``"mappings"``,
+        ``"cue"``, ``"shock"``, or ``None`` to omit nebular.
+
+    Returns
+    -------
+    bool
+        ``True`` if the backend carries a free-free continuum (Cue, CloudyGrid).
+        ``False`` otherwise, including ``None``.
+
+    Notes
+    -----
+    The rule is keyed on the *declared* backend name, never on the published
+    ``sed_nebular`` array or an approximation flag: the fast nebular grid path
+    publishes ``sed_nebular`` as all zeros for the same physical model, and
+    structural decisions must never be gated on approximation toggles.
+    """
+    return name in NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM
+
 
 def register_nebular_model(
     name: str,

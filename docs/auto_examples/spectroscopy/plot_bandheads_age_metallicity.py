@@ -209,6 +209,11 @@ for j, age in enumerate(ages_multimet):
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             },
+            # ``met_logzsol`` is overridden below (#2296: a params-dict key
+            # the spec declared Fixed is refused), so it must be free; no
+            # ``met=`` group was declared before, defaulting the whole group
+            # to ``Fixed(DEFAULT)``. Bounds cover met_dex.
+            met={"logzsol": tengri.Uniform(-2.0, 0.5)},
             redshift=Fixed(REDSHIFT),
             observation=obs,
         )

@@ -505,27 +505,36 @@ _AGN_MBH_DUST = {
 #: which this branch changed on purpose (rtol=1e-8; see
 #: :func:`test_agn_black_hole_mass_float64_is_unchanged_by_the_2210_regrouping`
 #: for the tolerance derivation and #2225).
+#: ``rest_sed_last`` (the far-IR end of the grid) was re-taken on the #1512 fix, which
+#: carries the composable disc's inclination ratio past the 1e7 Å template edge instead
+#: of zeroing it; the other keys were unchanged to 3e-11.
+#: ``photometry`` (redshift=0.1) was re-taken for #2517, which adds the photon and
+#: massive-neutrino density terms to ``E(z)``: the luminosity distance at z=0.1 shifts
+#: by a few parts in 1e4, and photometry carries the ``(1+z)/(4 pi d_L^2)`` dimming
+#: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
+#: (max relative difference ~3e-11, noise floor). See
+#: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.5215528515600546e32,
         "rest_sed_0": 2.1618471431580417e23,
         "rest_sed_mid": 3.05875473371805e28,
-        "rest_sed_last": 8.774849241417516e21,
-        "photometry": (1.0983673139689911e-27, 1.5708275749214437e-27, 1.7644186709543538e-27),
+        "rest_sed_last": 8.775513568033312e21,
+        "photometry": (1.0986166566917497e-27, 1.5711841718626467e-27, 1.764819215426025e-27),
     },
     8.0: {
         "rest_sed_sum": 1.558679481783208e32,
         "rest_sed_0": 2.621597865262484e24,
         "rest_sed_mid": 3.1456552202309087e28,
-        "rest_sed_last": 8.774849241417516e21,
-        "photometry": (1.1316992005358205e-27, 1.572334550170324e-27, 1.764867493766874e-27),
+        "rest_sed_last": 8.823791474594601e21,
+        "photometry": (1.1319561100052943e-27, 1.5726914892133822e-27, 1.7652681401268386e-27),
     },
     10.0: {
         "rest_sed_sum": 1.5745233941627343e32,
         "rest_sed_0": 2.0084485779608986e24,
         "rest_sed_mid": 3.175461013264611e28,
-        "rest_sed_last": 8.774849241417516e21,
-        "photometry": (1.1418353695587365e-27, 1.5787785513540968e-27, 1.7665561969074594e-27),
+        "rest_sed_last": 9.02096624152618e21,
+        "photometry": (1.1420945800812812e-27, 1.5791369532676527e-27, 1.766957226624605e-27),
     },
 }
 
@@ -548,7 +557,14 @@ def _agn_black_hole_mass_model(ssp):
         agn={
             "type": "composable",
             "all_params": Fixed(DEFAULT),
-            "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+            # agn_log_mbh declared FREE (#2296): every call site below sweeps
+            # it explicitly at predict time across the documented Uniform(6, 10)
+            # black-hole-mass range this file's docstrings already describe.
+            "disc": {
+                "type": "kubota_done",
+                "all_params": Fixed(DEFAULT),
+                "log_mbh": Uniform(6.0, 10.0),
+            },
             "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
             "norm": "cigale_joint",
             "log_lbol": Fixed(11.0),
@@ -589,7 +605,8 @@ model = SEDModel.build(
     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT),
                       "tau_diff": 0.3, "tau_bc": 0.0},
     agn={"type": "composable", "all_params": Fixed(DEFAULT),
-         "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT)},
+         "disc": {"type": "kubota_done", "all_params": Fixed(DEFAULT),
+                  "log_mbh": Uniform(6.0, 10.0)},
          "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
          "norm": "cigale_joint", "log_lbol": Fixed(11.0), "fracAGN": 0.1},
     redshift=Fixed(0.1),

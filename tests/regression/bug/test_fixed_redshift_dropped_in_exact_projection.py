@@ -38,12 +38,18 @@ from tengri import DEFAULT, Fixed, SEDModel, Uniform
 pytestmark = pytest.mark.regression_bug
 
 
-@pytest.fixture
-def model_fixed_z(synthetic_ssp_wide, synthetic_tophat_obs):
-    """A model with the redshift FIXED — so params legitimately omit it."""
+def _build_at(ssp, obs, z):
+    """Same recipe as ``model_fixed_z``, at an arbitrary Fixed redshift.
+
+    #2296 refuses naming an already-Fixed key explicitly, at any value --
+    including the pinned one itself -- so the sanctioned way to compare
+    physics at two redshifts is two models, not one model plus a params-dict
+    override. Factored out so the tests below that need a second redshift
+    (previously reached via an override) build one instead.
+    """
     return SEDModel.build(
-        ssp_data=synthetic_ssp_wide,
-        observation=synthetic_tophat_obs,
+        ssp_data=ssp,
+        observation=obs,
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "type": "two_component",
@@ -51,8 +57,14 @@ def model_fixed_z(synthetic_ssp_wide, synthetic_tophat_obs):
             "all_params": Fixed(DEFAULT),
         },
         neb={"type": "none"},
-        redshift=Fixed(0.5),
+        redshift=Fixed(z),
     )
+
+
+@pytest.fixture
+def model_fixed_z(synthetic_ssp_wide, synthetic_tophat_obs):
+    """A model with the redshift FIXED — so params legitimately omit it."""
+    return _build_at(synthetic_ssp_wide, synthetic_tophat_obs, 0.5)
 
 
 def test_prediction_photometry_honors_a_fixed_redshift(model_fixed_z):
@@ -72,20 +84,29 @@ def test_prediction_photometry_honors_a_fixed_redshift(model_fixed_z):
     np.testing.assert_allclose(exploration / fitting, 1.0, rtol=1e-10)
 
 
-def test_fixed_redshift_flux_is_not_the_10pc_answer(model_fixed_z):
+def test_fixed_redshift_flux_is_not_the_10pc_answer(
+    model_fixed_z, synthetic_ssp_wide, synthetic_tophat_obs
+):
     """The specific failure: falling back to z=0 gives the 10 pc (absolute-mag) flux.
 
     Pin the magnitude of the error so a regression cannot hide inside a loose
     tolerance — the bug moved the answer by ~16 orders of magnitude, not by a few
-    percent.
+    percent. Before #2296 the wrong (z=0) arm was reached by overriding
+    ``redshift`` on ``model_fixed_z`` directly; naming an already-Fixed key is
+    now refused outright regardless of value, so the wrong-answer arm instead
+    comes from a SECOND model built at ``Fixed(0.0)`` (the sanctioned
+    two-model comparison), and the override path itself is separately checked
+    to raise rather than silently answer at the wrong distance.
     """
+    from tengri.config.exceptions import ParameterError
+
+    model_zero_z = _build_at(synthetic_ssp_wide, synthetic_tophat_obs, 0.0)
+
     params = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}
     got = np.asarray(model_fixed_z.predict(params).photometry())
 
     # What the bug produced: the same SED integrated at d_L(z=0) = 10 pc.
-    at_10pc = np.asarray(
-        model_fixed_z.predict({**params, "redshift": jnp.asarray(0.0)}).photometry()
-    )
+    at_10pc = np.asarray(model_zero_z.predict(params).photometry())
 
     # VACUITY GUARD: the two must be wildly different, else this proves nothing.
     ratio = at_10pc / got
@@ -98,13 +119,26 @@ def test_fixed_redshift_flux_is_not_the_10pc_answer(model_fixed_z):
     expected = np.asarray(model_fixed_z.predict_photometry(params))
     np.testing.assert_allclose(got / expected, 1.0, rtol=1e-10)
 
+    # The 10-pc answer is no longer reachable at all through model_fixed_z's
+    # own params dict: naming redshift explicitly raises, any value.
+    with pytest.raises(ParameterError, match="redshift"):
+        model_fixed_z.predict({**params, "redshift": jnp.asarray(0.0)})
 
-def test_explicit_params_still_win_over_the_fixed_value(model_fixed_z):
-    """Resolving fixed values must never clobber a value the user passed."""
+
+def test_explicit_redshift_is_refused_not_merged(model_fixed_z):
+    """Resolving fixed values must never silently accept a value the user
+    passed for an already-Fixed parameter.
+
+    Inverted by #2296 from this test's original claim ("explicit params
+    still win over the fixed value"): a Fixed key named explicitly is now
+    refused outright, unconditionally -- including at the pinned value
+    itself, since the rule is on key presence, not value comparison.
+    """
+    from tengri.config.exceptions import ParameterError
+
     params = {"sfh_dpl_log_total_mass": jnp.asarray(10.0), "redshift": jnp.asarray(0.0)}
-    pred = model_fixed_z.predict(params)
-
-    assert float(pred._params["redshift"]) == 0.0
+    with pytest.raises(ParameterError, match="redshift"):
+        model_fixed_z.predict(params)
 
 
 def test_measure_from_prediction_inherits_the_fixed_redshift(model_fixed_z):
@@ -122,7 +156,9 @@ def test_measure_from_prediction_inherits_the_fixed_redshift(model_fixed_z):
     )
 
 
-def test_measure_line_fluxes_honors_a_fixed_redshift(model_fixed_z):
+def test_measure_line_fluxes_honors_a_fixed_redshift(
+    model_fixed_z, synthetic_ssp_wide, synthetic_tophat_obs
+):
     """The same bug, at a boundary the original fix missed (#1127).
 
     ``measure_line_fluxes`` is public, takes a raw user params dict, and does not
@@ -133,22 +169,31 @@ def test_measure_line_fluxes_honors_a_fixed_redshift(model_fixed_z):
 
     This is the line flux you compare against an observed Halpha, so a wrong
     answer here is a wrong scientific answer, not a wrong plot.
-    """
-    omitted = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}  # legal: z is Fixed
-    explicit = {**omitted, "redshift": jnp.asarray(0.5)}
 
+    Before #2296 the "explicit" arm named ``redshift`` at the pinned value
+    itself, to prove ``omitted`` used that same real value rather than
+    silently defaulting. Naming a Fixed key is now refused regardless of
+    whether the value matches the pin, so the comparison instead uses a
+    SECOND model built at ``Fixed(0.0)`` -- if the omitted-Fixed path used
+    the real pinned redshift, its line fluxes differ from the z=0 model's by
+    orders of magnitude, exactly the signal the original bug erased.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    model_zero_z = _build_at(synthetic_ssp_wide, synthetic_tophat_obs, 0.0)
+
+    omitted = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}  # legal: z is Fixed
     got = np.asarray(model_fixed_z.measure_line_fluxes(omitted))
-    expected = np.asarray(model_fixed_z.measure_line_fluxes(explicit))
+    at_zero = np.asarray(model_zero_z.measure_line_fluxes(omitted))
 
     # Vacuity guard: under the bug both arms are the *same* number, so an
     # equivalence assertion alone would pass on a model where z barely matters.
     # Pin that the redshift genuinely moves this quantity by orders of magnitude.
-    at_zero = np.asarray(
-        model_fixed_z.measure_line_fluxes({**omitted, "redshift": jnp.asarray(0.0)})
-    )
-    assert np.nanmax(np.abs(at_zero / expected)) > 1e3, (
+    assert np.nanmax(np.abs(at_zero / got)) > 1e3, (
         "z=0 and z=0.5 give comparable line fluxes here, so this test cannot "
         "detect the dropped-redshift bug — pick a redshift further from 0"
     )
 
-    np.testing.assert_allclose(got, expected, rtol=1e-10)
+    # And the override path itself is refused outright now, any value.
+    with pytest.raises(ParameterError, match="redshift"):
+        model_fixed_z.measure_line_fluxes({**omitted, "redshift": jnp.asarray(0.5)})

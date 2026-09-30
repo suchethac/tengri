@@ -225,9 +225,9 @@ def profile_memory(model) -> MemoryReport:
 
     # --- Nebular (CUE weights) ---
     neb = getattr(model, "_nebular_backend", None)
-    if neb is not None and hasattr(neb, "_weights"):
+    if neb is not None and hasattr(neb, "weights"):
         cue_total = 0.0
-        w = neb._weights
+        w = neb.weights
         for field_name in w._fields:
             val = getattr(w, field_name)
             if hasattr(val, "nbytes"):
