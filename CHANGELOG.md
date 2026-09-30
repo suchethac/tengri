@@ -2,6 +2,8 @@
 
 ### Added
 
+- GRAHSP composable blocks for the Mor & Netzer (2012) torus (`torus:grahsp_mn12`) and Véron-Cetty (2004) FeII template (`feii:grahsp_veroncetty`) are now registered. Both are fully featured variants of the GRAHSP model, previously reachable only through the component API; `torus:grahsp_mn12` reads the temperature and cutoff parameters (`agn_grahsp_tor_temp`, `agn_grahsp_tor_cutoff_um`), which are now re-owned from `"agn"` to `"agn.torus"`. Guard G2 (`test_grahsp_variants_are_composable_blocks.py`) ensures every GRAHSP variant branch maps to a registered block (#985).
+
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
