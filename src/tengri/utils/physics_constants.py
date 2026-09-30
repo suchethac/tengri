@@ -456,3 +456,21 @@ Derivation: 1 Julian year = 365.25 days (IAU definition)
 Matches astropy.units.yr / Gyr, used for the Hubble-time unit conversion
 in cosmological age integrals.
 """
+
+LYMAN_LIMIT_AA: float = 911.76
+"""Hydrogen Lyman (photoionization) limit, the HI ground-state ionization
+edge [Å].
+
+Derivation: :math:`\\lambda = hc / E_\\mathrm{Ryd}`, with the hydrogen
+ionization energy :math:`E_\\mathrm{Ryd} = 13.598434599702\\,\\mathrm{eV}`
+(CODATA 2018 Rydberg energy for infinite nuclear mass) and
+:math:`hc = 12398.41984\\,\\mathrm{eV\\,\\AA}`:
+:math:`\\lambda = 12398.41984 / 13.598434599702 = 911.7633\\,\\mathrm{\\AA}`,
+rounded here to 911.76 Å (the SSP-grid-scale precision every consumer needs).
+
+The canonical Lyman-edge constant for the whole codebase, re-exported as
+``tengri.components.lyc.LYMAN_LIMIT_AA`` (:mod:`tengri.components.lyc` is the
+single module for the step-at-the-edge model of the ionizing continuum and
+its Q_H integral; see that module's docstring). Every consumer of the
+Lyman limit imports from one of these two names, never a local literal.
+"""
