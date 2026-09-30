@@ -4,8 +4,9 @@
 Implements the ``ActivateLines`` Balmer continuum (BC) from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The BC is a black-body-shaped
 continuum at the Balmer edge (364.6 nm) with optical-depth truncation,
-convolved with a Gaussian line-width profile for velocities >250 nm
-(~3 sigma away from the edge up to 30,000 km/s).
+smoothed by a Gaussian line-width profile above 250 nm (the edge is smeared by
+the broad-line kinematics; the smoothing conserves the emitted energy, so the
+smeared tail redward of the edge is kept).
 
 The BC is added only for AGN type 1 (broad-line AGN) with a positive
 strength parameter :math:`A_{\\rm BC}`.
@@ -17,6 +18,8 @@ References
 """
 
 from __future__ import annotations
+
+import math
 
 import jax.numpy as jnp
 from jax import Array
@@ -30,6 +33,7 @@ _H_C_PER_K_B_NM_K = 1.439e7  # h*c/k_B in nm*K (Planck constant)
 _BALMER_EDGE_NM = 364.6  # Balmer edge in nm
 _BC_TEMPERATURE_K = 15000.0  # Black-body temperature in K
 _BC_TAU = 1.0  # Optical depth (dimensionless)
+_FWHM_PER_SIGMA = 2.0 * math.sqrt(2.0 * math.log(2.0))  # FWHM = 2 sqrt(2 ln 2) sigma
 _BC_CONVOLUTION_THRESHOLD_NM = 250.0  # Below this, use non-convolved truncation
 
 
@@ -44,8 +48,10 @@ def balmer_continuum(
     The BC spectrum is a black-body continuum (5100 Å reference) truncated at
     the Balmer edge (364.6 nm) by a Rydberg-series opacity. For wavelengths
     above 250 nm, the truncation edge is broadened by Gaussian convolution
-    with a velocity width of ``linewidth_kms`` km/s, accounting for the
-    broad-line region kinematics.
+    with a velocity FWHM of ``linewidth_kms`` km/s (Gaussian standard deviation
+    ``linewidth_kms / (2 sqrt(2 ln 2))``), accounting for the broad-line region
+    kinematics. The smoothing moves flux across the edge: the smeared tail
+    redward of 364.6 nm is kept.
 
     Parameters
     ----------
@@ -59,14 +65,15 @@ def balmer_continuum(
         5100 Å. Typical values: 0.0–1.0. No physical bounds; set to 0.0
         to disable the BC.
     linewidth_kms : float
-        Broad-line region velocity width [km/s]. Typical: 1000–10000 km/s.
+        Broad-line region velocity FWHM [km/s]. Typical: 1000–10000 km/s.
 
     Returns
     -------
     sed : ndarray, shape (n_wave,)
         Balmer continuum luminosity density [erg/s/nm] on the input
-        ``wave_nm`` grid. Exactly zero above the Balmer edge (364.6 nm)
-        and nonzero blueward of it, extending to ultraviolet wavelengths.
+        ``wave_nm`` grid. Nonzero blueward of the Balmer edge (364.6 nm) and
+        a smeared tail redward of it that decays as a Gaussian of the
+        line width; negligible a few line widths above the edge.
 
     Notes
     -----
@@ -94,6 +101,11 @@ def balmer_continuum(
     the truncation is convolved with a Gaussian of velocity width
     :math:`v_{\rm line}`, using the analytic result for a linear approximation
     to the truncation shape.
+
+    Upstream GRAHSP's ``activatelines`` uses the FWHM as the Gaussian standard
+    deviation (making the smoothing 2.355 times too wide) and discards the
+    smeared tail above the edge (losing up to 4 % of the smoothed energy at
+    10000 km/s); tengri deliberately does not reproduce either.
 
     JIT/grad/vmap compatible: yes (all operations are pure JAX).
 
@@ -126,15 +138,15 @@ def balmer_continuum(
     # The convolution uses an analytic closed form (linear approximation
     # to truncation, then integrate with Gaussian).
     # Constants from upstream: alpha=1.8, beta=-0.8 (linear approx coefficients).
-    sigma_dimensionless = (linewidth_kms * 1000.0) / _C_MS  # km/s -> m/s -> dimensionless
+    # linewidth_kms is a FWHM; the Gaussian standard deviation in x = lambda / lambda_edge.
+    sigma_dimensionless = (linewidth_kms * 1000.0) / _C_MS / _FWHM_PER_SIGMA
     z = (x - 1.0) / (jnp.sqrt(2.0) * sigma_dimensionless)
 
     # Gaussian CDF term.
-    term_b = 0.5 * (1.0 - jsp_special.erf(z))
+    term_b = 0.5 * jsp_special.erfc(z)
 
     # Convolution integral: x * Gaussian(x) integrated.
-    term_a1 = 0.5 * x
-    term_a2 = -0.5 * x * jsp_special.erf(z)
+    term_a12 = 0.5 * x * jsp_special.erfc(z)
     term_a3 = -sigma_dimensionless / jnp.sqrt(2.0 * jnp.pi) * jnp.exp(-(z**2))
 
     # Linear approximation coefficients.
@@ -143,7 +155,7 @@ def balmer_continuum(
 
     # Convolved truncation: (alpha, beta) weighted sum of terms.
     # Factor (1 - exp(-1)) from the integral normalization.
-    convolved = (beta * term_b + alpha * (term_a1 + term_a2 + term_a3)) * (1.0 - jnp.exp(-1.0))
+    convolved = (beta * term_b + alpha * (term_a12 + term_a3)) * (1.0 - jnp.exp(-1.0))
 
     # Select convolved or non-convolved based on wavelength.
     truncation_applied = jnp.where(wave_safe > _BC_CONVOLUTION_THRESHOLD_NM, convolved, truncation)
@@ -156,7 +168,6 @@ def balmer_continuum(
     l_bc = l_agn * a_bc
     result = l_bc * bc_shape
 
-    # Zero out above the Balmer edge (unphysical).
-    result = jnp.where(wave_nm <= _BALMER_EDGE_NM, result, 0.0)
-
+    # Above 250 nm the smoothed shape carries the redward tail; below it the sharp
+    # truncation applies (zero above the edge is not imposed: that would drop the tail).
     return result

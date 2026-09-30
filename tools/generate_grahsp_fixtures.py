@@ -491,54 +491,47 @@ def make_lines_fixture():
 
 
 def balmer_upstream(wave_nm, lum5100A, ABC, linewidth_kms):
-    """Reproduce activatelines.ActivateLines BC shape for a single param set.
+    """activatelines.ActivateLines BC shape for a single param set, physically corrected.
 
-    Implements Balmer continuum from Grandi (1982) with Gaussian convolution
-    as per upstream ``activatelines.py`` lines 137-175.
+    Grandi (1982) continuum with the Balmer edge smoothed by a Gaussian
+    (upstream ``activatelines.py`` lines 137-175). Upstream uses the line FWHM as the
+    Gaussian standard deviation and drops the smeared tail above the edge; here the
+    standard deviation is ``FWHM / (2 sqrt(2 ln 2))`` and the tail is kept, so the
+    smoothing conserves the emitted energy.
     """
-    from scipy.special import erf
+    from scipy.special import erfc
 
-    # Balmer edge and physical constants
     BE_wave = 364.6
     BC_tau = 1.0
     BC_T = 15000.0
     h_c_per_k_B = 1.439e7  # nm * K
 
-    # Only evaluate on wavelengths <= Balmer edge
-    wave_edge = wave_nm[wave_nm <= BE_wave]
-
-    # Black body at each wavelength
-    black_body = wave_edge ** (-5) / np.expm1(h_c_per_k_B / (BC_T * wave_edge))
+    black_body = wave_nm ** (-5) / np.expm1(h_c_per_k_B / (BC_T * wave_nm))
     black_body0 = BE_wave ** (-5) / np.expm1(h_c_per_k_B / (BC_T * BE_wave))
 
-    # Optical depth truncation
-    x = wave_edge / BE_wave
+    x = wave_nm / BE_wave
     truncation = -np.expm1(-BC_tau * x**3)
     truncation0 = -np.expm1(-BC_tau)
 
-    # Gaussian convolution (upstream eqs. lines 159-170)
     alpha = 1.8
     beta = -0.8
-    sigma = (linewidth_kms * 1000.0) / cst.c  # km/s / (m/s) = dimensionless
-    z = (x - 1.0) * 2.0 ** (-0.5) / sigma  # Correct upstream formula
+    sigma = (linewidth_kms * 1000.0) / cst.c / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    z = (x - 1.0) * 2.0 ** (-0.5) / sigma
 
-    term_b = 0.5 * (1.0 - erf(z))
-    term_a1 = 0.5 * x
-    term_a2 = -0.5 * x * erf(z)
+    term_b = 0.5 * erfc(z)
+    term_a12 = 0.5 * x * erfc(z)
     term_a3 = -sigma * (2.0 * np.pi) ** (-0.5) * np.exp(-(z**2))
 
-    convolved = (beta * term_b + alpha * (term_a1 + term_a2 + term_a3)) * (1.0 - np.exp(-1.0))
+    convolved = (beta * term_b + alpha * (term_a12 + term_a3)) * (1.0 - np.exp(-1.0))
 
     # Use convolved above 250 nm, raw truncation below
-    truncation_convolved = np.where(wave_edge > 250.0, convolved, truncation)
+    truncation_convolved = np.where(wave_nm > 250.0, convolved, truncation)
 
-    # Normalised BC shape
     BC_shape = (black_body / black_body0) * (truncation_convolved / truncation0)
 
-    # Scale by luminosity
     l_agn = lum5100A / 510.0
     l_bc = l_agn * ABC
-    return l_bc * BC_shape, wave_edge
+    return l_bc * BC_shape, wave_nm
 
 
 def make_balmer_fixture():
@@ -568,11 +561,7 @@ def make_balmer_fixture():
         bc_spectra.append(bc_shape)
         params_list.append((p["lum5100A"], p["ABC"], p["linewidth_kms"]))
 
-    # Pad spectra to full wave grid (upstream only evaluates up to 364.6 nm)
-    # Fill beyond Balmer edge with zeros
-    bc_spectra_padded = np.zeros((len(cases), len(wave_nm)))
-    for i, spec in enumerate(bc_spectra):
-        bc_spectra_padded[i, : len(spec)] = spec
+    bc_spectra_padded = np.asarray(bc_spectra)
 
     np.savez(
         FIXTURE_DIR / "balmer.npz",
