@@ -35,7 +35,12 @@ from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
-from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+from tengri.components.agn.grahsp.torus import (
+    si_feature,
+    torus_dust_continuum,
+    torus_mn12_continuum,
+    torus_mn12_si,
+)
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG
 from tengri.utils.scale import apply_log10_scale, representable_floor
 
@@ -333,6 +338,50 @@ def grahsp_feii_block(
     return feii * 0.1
 
 
+@register_agn_block(
+    "feii",
+    "grahsp_veroncetty",
+    citation="Veron-Cetty, Joly & Veron 2004, A&A 417, 515; Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Veron-Cetty & Joly 2004 FeII template",
+)
+def grahsp_veroncetty_feii_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_grahsp_a_lines: float = 1.0,
+    agn_grahsp_a_feii: float = 5.0,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""GRAHSP Veron-Cetty 2004 FeII template as a feii-stage block.
+
+    Parameters
+    ----------
+    templates : GRAHSPTemplates, optional
+        Same template-hoist contract as :func:`grahsp_lines_block`.
+    """
+    wave_aa = jnp.asarray(wavelength)
+    wave_nm = wave_aa * 0.1
+    if templates is None:
+        templates = load_grahsp_templates()
+    if templates.feii_vc04_wave_nm is None:
+        raise ValueError(
+            "GRAHSP template bundle lacks feii_vc04; regenerate with "
+            "tools/build_grahsp_hdf5.py"
+        )
+    feii = feii_forest(
+        wave_nm=wave_nm,
+        template_wave_nm=templates.feii_vc04_wave_nm,
+        template_lumin=templates.feii_vc04_lumin,
+        l5100=l5100_disc,
+        a_lines=agn_grahsp_a_lines,
+        a_feii=agn_grahsp_a_feii,
+    )
+    return feii * 0.1
+
+
 # ──────────────────────────────────────────────────────────────────────
 # GRAHSP torus block: cool + hot log-Gaussian + Si feature
 # ──────────────────────────────────────────────────────────────────────
@@ -382,6 +431,76 @@ def grahsp_torus_block(
         l5100=l5100_disc,
         fcov=agn_grahsp_fcov,
         si=agn_grahsp_si,
+    )
+    si = jnp.maximum(si, -cont)
+    return (cont + si) * 0.1
+
+
+@register_agn_block(
+    "torus",
+    "grahsp_mn12",
+    citation="Mor & Netzer 2012, MNRAS 420, 526; Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Mor & Netzer 2012 torus templates",
+)
+def grahsp_mn12_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_grahsp_fcov: float = 0.4,
+    agn_grahsp_si: float = 0.0,
+    agn_grahsp_tor_temp: float = 0.0,
+    agn_grahsp_tor_cutoff_um: float = 1.2,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""GRAHSP Mor & Netzer 2012 torus templates as a torus-stage block.
+
+    Combines :func:`torus_mn12_continuum` with :func:`torus_mn12_si`; the Si
+    contribution is clipped so the total dust :math:`L_\lambda` stays
+    non-negative (mirroring upstream behavior).
+
+    Note: MN12 normalisation differs from the Gaussian torus. The MN12 torus
+    uses :math:`l_{\rm torus} = 2.5 \times l5100 \times f_{\rm cov} / 12`,
+    which differs from the Gaussian torus convention (see upstream
+    grahsp/torus.py for details).
+
+    Parameters
+    ----------
+    templates : GRAHSPTemplates, optional
+        Pre-loaded template bundle threaded in via the runner's
+        ``template_state``. When ``None`` (default), the block falls back to
+        the lru_cache-backed :func:`load_grahsp_templates` for backwards
+        compatibility: keeps the block usable as a standalone callable.
+    """
+    wave_aa = jnp.asarray(wavelength)
+    wave_nm = wave_aa * 0.1
+    if templates is None:
+        templates = load_grahsp_templates()
+    if templates.torus_mn12_wave_nm is None:
+        raise ValueError(
+            "GRAHSP template bundle lacks torus_mn12; regenerate with "
+            "tools/build_grahsp_hdf5.py"
+        )
+    cont = torus_mn12_continuum(
+        wave_nm=wave_nm,
+        l5100=l5100_disc,
+        fcov=agn_grahsp_fcov,
+        tor_temp=agn_grahsp_tor_temp,
+        tor_cutoff_um=agn_grahsp_tor_cutoff_um,
+        mn12_wave_nm=templates.torus_mn12_wave_nm,
+        mn12_avg=templates.torus_mn12_avg,
+        mn12_lo=templates.torus_mn12_lo,
+        mn12_hi=templates.torus_mn12_hi,
+    )
+    si = torus_mn12_si(
+        wave_nm=wave_nm,
+        l5100=l5100_disc,
+        fcov=agn_grahsp_fcov,
+        si=agn_grahsp_si,
+        si_wave_nm=templates.torus_mn12_si_wave_nm,
+        si_lumin=templates.torus_mn12_si_lumin,
     )
     si = jnp.maximum(si, -cont)
     return (cont + si) * 0.1

@@ -76,10 +76,13 @@ from tengri.config.exceptions import AdvisoryWarning
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
-#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED;
-#: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
-#: are handled by their own wavelength-dependent screen above.
-_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
+#: (``qsogen``, ``grahsp``, ``grahsp_mn12``), which already encode an
+#: inclination-averaged SED; masking them would be double-counting. The
+#: dusty-screen tori (skirtor/fritz) are handled by their own
+#: wavelength-dependent screen above.
+_SELF_CONTAINED_TORI: frozenset[str] = frozenset(
+    {"none", "qsogen", "grahsp", "grahsp_mn12"}
+)
 
 __all__ = [
     "BLOCK_SELECTOR_KEYS",
@@ -149,8 +152,8 @@ _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
     # the one that does not move at all.
     "nlr": frozenset({"grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
-    "feii": frozenset({"grahsp", "boroson_green"}),
-    "torus": frozenset({"grahsp"}),
+    "feii": frozenset({"grahsp", "grahsp_veroncetty", "boroson_green"}),
+    "torus": frozenset({"grahsp", "grahsp_mn12"}),
 }
 
 # Disc impls covered by the multicolor / Kubota-Done set are added to the
@@ -843,7 +846,7 @@ agn_torus_block, agn_attenuation_block : str
     # ``torus="none"``, whose disc and lines are still real ledger emission.
     # E_disc guards a zero/near-zero disc (e.g. agn_disc_block="none") so the
     # ratio never blows up.
-    if _agn_norm == "conserving" and agn_torus_block not in ("grahsp", "qsogen"):
+    if _agn_norm == "conserving" and agn_torus_block not in ("grahsp", "grahsp_mn12", "qsogen"):
         _e_lines = jnp.trapezoid(L_lambda_lines_aniso + L_lambda_lines_iso + L_lambda_feii, wave)
         _e_disc = jnp.maximum(jnp.trapezoid(_disc_intrinsic, wave), 1e-30)
         L_lambda_disc = L_lambda_disc - (_e_lines / _e_disc) * _disc_intrinsic
