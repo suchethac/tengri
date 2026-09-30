@@ -713,7 +713,7 @@ def relagn_disc_block(
 @register_agn_block(
     "disc",
     "richards2006",
-    citation="Richards et al. 2006, ApJ, 166, 470",
+    citation="Richards et al. 2006, ApJS, 166, 470",
     status="production",
     short_doc="Richards et al. 2006 mean SDSS quasar composite SED",
 )
@@ -756,7 +756,7 @@ def richards2006_disc_block(
 
     References
     ----------
-    .. [1] Richards, G. T., et al. 2006, ApJ, 166, 470. Supermassive Black
+    .. [1] Richards, G. T., et al. 2006, ApJS, 166, 470. Supermassive Black
        Holes in SDSS Quasars and the Role of Quasar Triggering. Published
        2006 May 10. https://doi.org/10.1086/506525
     """

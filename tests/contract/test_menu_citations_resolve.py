@@ -35,8 +35,8 @@ def _parse_bib_entries() -> dict[tuple[str, str], str]:
 
         # Extract author field (first author surname)
         if "author" in line.lower():
-            # Match author = {{AuthorSurname}, ...
-            author_match = re.search(r"author\s*=\s*\{\{([A-Z][A-Za-z'\-]+)", line, re.IGNORECASE)
+            # Match author = {{AuthorSurname}, ... (including Unicode letters)
+            author_match = re.search(r"author\s*=\s*\{\{(\w[\w'\-]*)", line, re.IGNORECASE)
             if author_match:
                 current_author = author_match.group(1)
 
@@ -90,7 +90,7 @@ def test_agn_menu_citations_resolve_to_bib():
             citation = getattr(model_entry, "citation", None)
 
         if name and citation:
-            menu_citations[f"list_{name}"] = citation
+            menu_citations[name] = citation
 
     # Parse the bibliography
     bib_entries = _parse_bib_entries()
@@ -98,7 +98,7 @@ def test_agn_menu_citations_resolve_to_bib():
     # Strings with no year — allow-list for known special cases
     # (composable is not a real paper)
     allowed_no_year = {
-        "list_composable",  # recipe, not a paper
+        "composable",  # recipe, not a paper
     }
     no_year_citations: list[tuple[str, str]] = []  # (name, citation)
 

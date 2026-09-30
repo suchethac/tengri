@@ -73,7 +73,7 @@ from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 @register_agn_block(
     "torus",
     "cat3d_wind",
-    citation="Hönig & Kishimoto 2017, ApJ, 838, L20",
+    citation="Hönig & Kishimoto 2017, ApJL, 838, L20",
     status="production",
     short_doc="Hönig & Kishimoto 2017 CAT3D-wind torus",
     template_loader=load_cat3d_wind_default_grid,
@@ -115,7 +115,7 @@ def cat3d_wind_torus_block(
 @register_agn_block(
     "torus",
     "cat3d_wind_lowfwd",
-    citation="Hönig & Kishimoto 2017, ApJ, 838, L20",
+    citation="Hönig & Kishimoto 2017, ApJL, 838, L20",
     status="production",
     short_doc="Hönig & Kishimoto 2017 CAT3D-wind torus, low-wind-fraction reduction",
     template_loader=load_cat3d_wind_lowfwd_default_grid,

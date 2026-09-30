@@ -174,7 +174,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/342486",  # attenuation.py +1
         "10.1086/423885",  # polar_dust.py
         "10.1086/506270",  # blr.py
-        "10.1086/506525",  # disc.py +1
         "10.1086/509629",  # radio_precompute.py
         "10.1086/510378",  # drude_profiles.py +4
         "10.1086/519990",  # xray.py
