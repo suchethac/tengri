@@ -66,7 +66,7 @@ def balmer_continuum(
     sed : ndarray, shape (n_wave,)
         Balmer continuum luminosity density [erg/s/nm] on the input
         ``wave_nm`` grid. Exactly zero above the Balmer edge (364.6 nm)
-        and at wavelengths below ~100 nm (unphysical for this component).
+        and nonzero blueward of it, extending to ultraviolet wavelengths.
 
     Notes
     -----
