@@ -1459,8 +1459,9 @@ def _student_t_quantile(
     and free at construction time) gets the guess itself to ~3e-5, so a
     *single* Newton iteration :math:`z \leftarrow z - (F_t(z)-p)/f_t(z)`
     already reaches ~5.6e-10 absolute (worst case df=3 at the p
-    corresponding to xi=4.5) -- within a factor of ~3 of the two-Newton
-    floor, at roughly half the ``betainc``/``_student_t_pdf`` call count.
+    corresponding to xi=4.5, where 1/f_t(z) is ~7e7 and amplifies the
+    float64 rounding of the CDF residual; a second step would reach
+    ~1.9e-10 at twice the ``betainc``/``_student_t_pdf`` call count).
 
     Parameters
     ----------

@@ -46,10 +46,11 @@ _DF_VALUES = [3, 5, 10, 30, 100]
 _XI_VALUES = [-4.5, -2.8, -1.5, -1e-7, 0.0, 1e-7, 1.5, 2.8, 4.5]
 
 # Measured absolute-error floor against scipy at the grid above (worst case
-# df=3, xi=+-4.5): jax.scipy.special.betainc itself disagrees with a
-# mpmath(dps=50) reference by ~4e-10 at that specific incomplete-beta
-# argument (a=0.5, b=1.5, x~0.9994) -- independent of this module's Newton
-# refinement (a third Newton iteration does not change the residual). These
+# df=3, xi=+-4.5): 5.6e-10 in theta and 3.5e-9 in the Jacobian. It is the
+# residual of the single Newton step in the extreme tail, where 1/f_t(z) is
+# ~7e7 and amplifies ordinary float64 rounding of the CDF residual; the
+# incomplete beta itself agrees with an mpmath(dps=50) reference there, and a
+# second step would halve the residual at twice the forward cost. These
 # tolerances carry a ~2x margin over the measured floor, not a carve-out.
 _THETA_ATOL = 1e-9
 _GRAD_ATOL = 5e-9
