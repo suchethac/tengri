@@ -23,10 +23,12 @@ sits at the ONE point both SSP age kernels' total_mass converges to, so
 kernel used by every GP-field build, and any explicit ``age_kernel='dsps'``
 choice, must conserve formed mass exactly the same way the default
 cloud-in-cell ("cic") kernel does. A composite (list) ``sfh_model`` sums
-multiple additive members under one flat ``log_total_mass`` key that cannot
-be disentangled by family here, so it is deliberately NOT covered by this
-sweep or by ``_mass_conserving_total``; ``test_composite_sfh_mass_is_not_yet_conserved``
-pins its present (truncated) behavior instead.
+multiple additive members' shapes into one array before
+``_mass_conserving_total`` ever sees it, so the correction can only restore
+the AGGREGATE mass (the sum of every member's ``sfh_*_log_total_mass``), not
+each member's own share individually; this per-family sweep therefore covers
+only single-family builds. ``test_composite_sfh_mass_conserved_in_aggregate``
+covers the composite case, pinning aggregate-exact conservation instead.
 
 References
 ----------

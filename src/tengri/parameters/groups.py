@@ -1843,10 +1843,11 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
       omission is raised later, after this function returns.
 
     Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
-    cap retains roughly 6.5% of the 13.81 Gyr declared range (0.9 / 13.81),
-    and declining to narrow on that basis would reintroduce exactly the
-    zero-flux draws this pass exists to prevent. For a cosmological ceiling
-    the narrowing IS the physics, not a tidy-up of an incidentally dead tail.
+    cap retains only a small fraction of today's cosmic age
+    (:func:`~tengri.utils.cosmology.age_at_z0_host`), and declining to narrow
+    on that basis would reintroduce exactly the zero-flux draws this pass
+    exists to prevent. For a cosmological ceiling the narrowing IS the
+    physics, not a tidy-up of an incidentally dead tail.
 
     A catalog fit with a per-galaxy redshift cannot be narrowed here: the
     build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
@@ -2033,10 +2034,14 @@ def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
     shape toward ages the ladder happens to offer a bin for. This builds the
     default ladder from the source redshift instead, via
     :func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`
-    (the Prospector-beta scheme, Wang et al. 2024): the two youngest edges
-    stay fixed (30 Myr, 100 Myr) and the remainder are log-spaced up to the
-    oldest edge, which is set to ``age_at_z`` of the source redshift -- so no
-    default bin can lie beyond cosmic time.
+    (the Prospector-beta scheme, Wang et al. 2024): for a source redshift
+    ``<= 3`` the two youngest edges stay fixed (30 Myr, 100 Myr) and the
+    remaining interior edges are log-spaced up to 90% of the universe age;
+    for ``> 3`` the universe is too young to hold a 100 Myr bin and still
+    resolve the rest of cosmic time, so none of the youngest edges are
+    fixed and every interior edge is log-spaced from 1 Myr instead. Either
+    way the oldest edge is set to ``age_at_z`` of the source redshift -- so
+    no default bin can lie beyond cosmic time.
 
     An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
     same convention the z-capped onset/age/peak-time *parameters* follow

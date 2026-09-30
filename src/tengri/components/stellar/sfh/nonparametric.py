@@ -568,9 +568,14 @@ def make_agebins_from_zred(
     """Redshift-dependent SFH bin edges (Prospector-β scheme, Wang+2024).
 
     Constructs bin edges capped at the age of the universe at ``zred`` so
-    that no bin extends into the future. For low redshifts the youngest two
-    bins are fixed at 30 Myr and 100 Myr; interior bins are log-spaced to
-    90% of the universe age; the oldest bin spans 90–100% of the universe age.
+    that no bin extends into the future. For ``zred <= 3`` the youngest two
+    edges are fixed at 30 Myr and 100 Myr, the remaining interior edges are
+    log-spaced from 100 Myr to 90% of the universe age, and the oldest bin
+    spans 90-100% of the universe age. For ``zred > 3`` the universe is too
+    young to hold a 100 Myr bin and still resolve the rest of cosmic time, so
+    none of the youngest edges are fixed: every interior edge is log-spaced
+    from 1 Myr to 90% of the universe age instead, with the oldest bin again
+    spanning 90-100%.
 
     This is a **setup-time utility**: call it when building a
     :class:`~tengri.Parameters` object, not inside the forward

@@ -31,7 +31,12 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
+from tengri.components.stellar.sfh.nonparametric import (
+    DEFAULT_BIN_EDGES_GYR,
+    DEFAULT_N_BINS,
+    make_agebins_from_zred,
+)
+from tengri.config.exceptions import NonparametricBinEdgesAtRedshiftCeilingWarning
 from tengri.parameters.groups import _default_nonparametric_bin_edges_from_z
 from tengri.utils.cosmology import age_at_z
 
@@ -104,8 +109,9 @@ def test_z_zero_edges_do_not_reproduce_the_previous_fixed_defaults(family):
     ``DEFAULT_BIN_EDGES_GYR`` is a fixed, hand-chosen ladder (``[0, 0.03, 0.1,
     0.3, 1.0, 3.0, 6.0, 13.7]`` Gyr); ``make_agebins_from_zred``'s
     Prospector-beta scheme keeps only the two youngest edges (30 Myr, 100
-    Myr) and then log-spaces the remainder up to ``age_at_z(0)`` = 13.81 Gyr
-    (Planck 2018) rather than tengri's own historical 13.7 Gyr anchor, so
+    Myr) and then log-spaces the remainder up to ``age_at_z(0)`` (Planck
+    2018 cosmology, :func:`~tengri.utils.cosmology.age_at_z0_host`) rather
+    than tengri's own historical 13.7 Gyr anchor, so
     the two schemes diverge from the third edge onward. This is a deliberate
     convention adoption (Prospector-beta's own edge layout), not a
     regression target: the assertion pins the actual, measured
@@ -157,3 +163,29 @@ def test_free_redshift_builds_the_ladder_at_the_prior_upper_bound(ssp_data_fsps)
     # own (older) age of the universe.
     state = model.predict_state({"redshift": 0.5})
     assert np.isfinite(float(state.derived["log_mstar_formed"]))
+
+
+def test_fixed_redshift_emits_no_ceiling_warning(recwarn):
+    """A Fixed redshift builds one ladder at one age: nothing to warn about."""
+    resolved = {"mean_sfh_type": "dirichlet", "redshift": Fixed(2.0)}
+    _default_nonparametric_bin_edges_from_z(resolved)
+    ceiling_warnings = [
+        w
+        for w in recwarn.list
+        if issubclass(w.category, NonparametricBinEdgesAtRedshiftCeilingWarning)
+    ]
+    assert len(ceiling_warnings) == 0
+
+
+def test_free_redshift_emits_exactly_one_ceiling_warning_at_the_prior_ceiling(recwarn):
+    """Uniform(2, 6) warns exactly once, and the edges equal the z=6 ladder."""
+    resolved = {"mean_sfh_type": "dirichlet", "redshift": Uniform(2.0, 6.0)}
+    _default_nonparametric_bin_edges_from_z(resolved)
+    ceiling_warnings = [
+        w
+        for w in recwarn.list
+        if issubclass(w.category, NonparametricBinEdgesAtRedshiftCeilingWarning)
+    ]
+    assert len(ceiling_warnings) == 1
+    expected_edges = make_agebins_from_zred(zred=6.0, n_bins=DEFAULT_N_BINS)
+    np.testing.assert_allclose(np.asarray(resolved["bin_edges_gyr"]), expected_edges)

@@ -949,12 +949,12 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
     the star-formation *shape* is already correctly bounded to ``[0, age(z)]``.
     What those functions measure as ``total_mass`` is the trapezoid integral of
     that shape restricted to the surviving support, computed AFTER
-    :func:`~tengri.components.stellar.sfh.mean_sfh._renormalize_to_mass`
+    ``mean_sfh._renormalize_to_mass``
     already rescaled the full (unbounded) shape to ``10**log_total_mass`` --
     so it is strictly less than the declared mass whenever any of the shape
     fell outside ``[0, age(z)]`` (#683's clamp truncating it away, silently).
 
-    Because :func:`~tengri.components.stellar.sfh.mean_sfh._renormalize_to_mass`
+    Because ``mean_sfh._renormalize_to_mass``
     applies one *uniform* rescale to the whole shape, masking commutes with
     it: pinning the returned scale to the declared ``10**log_total_mass`` here
     is the exact closed-form equivalent of masking the shape to
@@ -1001,8 +1001,8 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
     both resolved at trace time, never on a traced value).
 
     **Composite mass is conserved in AGGREGATE, not per member.** Every
-    additive member's own :func:`~tengri.components.stellar.sfh.mean_sfh
-    ._renormalize_to_mass` call scales its shape to ITS OWN declared mass
+    additive member's own ``mean_sfh._renormalize_to_mass`` call scales its
+    shape to ITS OWN declared mass
     over the FULL (untruncated) domain; the composed callable then sums the
     members into one SFR array before the CIC/DSPS kernel integrates and
     z-caps it as a single unit, so only the pooled measured mass -- not each

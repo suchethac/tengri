@@ -815,9 +815,9 @@ _register(
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
-                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
-                # actual age of the universe today), so it cannot double as this
-                # free_prior's default without violating its own bounds.
+                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (round(age_at_z0_host(),
+                # 3), the actual age of the universe today), so it cannot double
+                # as this free_prior's default without violating its own bounds.
                 # _AGE_UNIV_GYR is used instead, following the same
                 # "default = ceiling" convention already used on
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr

@@ -468,8 +468,8 @@ class NonparametricBinEdgesAtRedshiftCeilingWarning(AdvisoryWarning):
     unavailable to the fit, not merely unpopulated.
 
     Warns rather than raises: every draw still gets a valid, mass-conserving
-    model (:func:`~tengri.components.stellar.sfh.nonparametric
-    ._piecewise_constant_sfr`); the cost is missing sensitivity at the old
+    model (``nonparametric._piecewise_constant_sfr``); the cost is missing
+    sensitivity at the old
     end for draws away from the prior's upper redshift, not an ill-posed
     forward pass. Pass an explicit ``bin_edges_gyr`` (e.g. built per-galaxy
     from a fixed or point-estimate redshift) to avoid the tradeoff entirely.

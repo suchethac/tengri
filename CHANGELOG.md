@@ -333,8 +333,10 @@
   at 0-13.7 Gyr; a free redshift warns too
   (`NonparametricBinEdgesAtRedshiftCeilingWarning`). Moving-boundary
   staircases (#2476) are fixed for `delayed_bq`, `periodic`'s burst onset,
-  and `psb_suess2022`/`psb_flex`'s bin edges; `periodic`'s rectangular type
-  and `tsnorm`'s SSP-grid aliasing remain measured staircases
+  and `psb_suess2022`/`psb_flex`'s bin edges; `periodic`'s rectangular type,
+  `tsnorm`'s SSP-grid aliasing, and `psb_suess2022`/`psb_flex`'s `tlast_gyr`
+  on the `dsps` age kernel (an exactly flat direction: both the finite
+  difference and the analytic gradient are zero) remain measured staircases
   (#2521, #2457, #2476).
 - Composable AGN torus no longer collapses at the 1 mm node (#1512): the
   composable disc+skirtor path with cigale_joint normalization computes an

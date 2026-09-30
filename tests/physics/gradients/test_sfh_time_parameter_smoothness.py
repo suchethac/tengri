@@ -83,17 +83,54 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
     # since it is not reachable through the public builder at all.
 )
 
-#: Known, documented residual gaps: the mechanism is not a quadrature defect
-#: fixable by the boundary partial-cell weight, or (periodic) only partially
-#: so. See the module docstring of ``mean_sfh.periodic`` and
-#: ``mean_sfh.truncated_skewnormal`` / issue #299 for the mechanism each one
-#: is failing by.
+#: Known, documented residual gaps, at (family, param, kernel) granularity --
+#: a family can be smooth in one parameter or kernel and not another, so a
+#: whole-family skip would hide passing cases. Each entry's mechanism:
+#:
+#: * ``tsnorm_burst.burst_age_gyr`` (both kernels): the burst width aliases
+#:   against the SSP age grid's own resolution, the same mechanism issue
+#:   #299's ``SFHBurstAliasingWarning`` describes -- not a moving-boundary
+#:   quadrature defect, so no partial-cell weight fixes it.
+#: * ``periodic.age_gyr`` (both kernels): differentiable everywhere --
+#:   confirmed by a finite-difference/autodiff comparison at the exact
+#:   worst point a coarse sweep finds, converging cleanly from
+#:   ``|FD/AD - 1| = 0.83`` at ``h = 1e-3`` Gyr to ``4.9e-6`` at ``h = 1e-6``
+#:   -- but the transition width at young lookback times is set by the local
+#:   age-grid spacing there (order 1e5-1e6 yr), far narrower than the
+#:   default burst period (``delta_bursts_gyr = 0.1`` Gyr), so a coarse
+#:   sweep or a sampler step comparable to the burst period reads it as a
+#:   step. See the module docstring of ``mean_sfh.periodic`` for the
+#:   burst-cycle blend this affects.
+#: * ``periodic.delta_bursts_gyr`` (cic only; the dsps kernel measures
+#:   below threshold): the same transition-width mechanism as
+#:   ``age_gyr`` above, seen on one kernel because the two kernels sample
+#:   the transition at different points.
+#: * ``psb_suess2022.tflex_gyr`` / ``psb_suess2022.tlast_gyr`` /
+#:   ``psb_flex.tflex_gyr`` / ``psb_flex.tlast_gyr`` on the ``dsps`` kernel:
+#:   an exactly flat direction, not a staircase -- confirmed by a direct
+#:   gradient check (both the analytic gradient and a finite difference at
+#:   ``h = 1e-6`` are 0 at every point checked). The ``dsps`` histogram
+#:   kernel quantizes the flex-region edge onto its own coarse age-bin
+#:   grid, and the swept window stays inside one bin throughout, so summed
+#:   photometry never moves. ``step_excess`` reports ``inf`` here (a zero
+#:   median step divided into a single float-roundoff-sized step), which
+#:   reads as a divide-by-zero warning, not as the large-but-finite ratio a
+#:   real staircase gives.
+#: * ``psb_suess2022.tlast_gyr`` (cic) and ``psb_flex.tflex_gyr`` (cic):
+#:   ``_piecewise_constant_sfr_smooth``'s partial-cell weight resolves some
+#:   but not every CIC cell at that edge for these two params.
 _KNOWN_GAPS = {
-    "periodic",
-    "tsnorm",
-    "tsnorm_burst",
-    "psb_suess2022",
-    "psb_flex",
+    ("tsnorm_burst", "burst_age_gyr", "cic"),
+    ("tsnorm_burst", "burst_age_gyr", "dsps"),
+    ("periodic", "age_gyr", "cic"),
+    ("periodic", "age_gyr", "dsps"),
+    ("periodic", "delta_bursts_gyr", "cic"),
+    ("psb_suess2022", "tflex_gyr", "dsps"),
+    ("psb_suess2022", "tlast_gyr", "cic"),
+    ("psb_suess2022", "tlast_gyr", "dsps"),
+    ("psb_flex", "tflex_gyr", "cic"),
+    ("psb_flex", "tflex_gyr", "dsps"),
+    ("psb_flex", "tlast_gyr", "dsps"),
 }
 
 
@@ -146,20 +183,12 @@ def test_no_staircase_in_the_swept_time_parameter(
 ):
     """``step_excess`` of summed photometry stays below 4 across a fine sweep.
 
-    Families in :data:`_KNOWN_GAPS` are measured and reported but not held to
-    the threshold: ``tsnorm``/``tsnorm_burst`` alias against the SSP age
-    grid's own resolution rather than a moving-boundary quadrature defect
-    (issue #299's ``SFHBurstAliasingWarning`` describes the same mechanism);
-    ``periodic``'s burst-train onset and the rectangular type's own closing
-    edge are partial-cell weighted, but an older overlapping burst's closing
-    edge is not; ``psb_suess2022``/``psb_flex`` get the same partial-cell
-    treatment at their ``tlast_gyr``/``tflex_gyr`` bin edges
-    (``_piecewise_constant_sfr_smooth``), which resolves some cells but not
-    the DSPS kernel's own coarser age-grid aliasing at that edge (the same
-    mechanism as ``tsnorm``) or every CIC cell for ``tflex_gyr``.
+    (family, param, kernel) triples in :data:`_KNOWN_GAPS` are measured and
+    reported but not held to the threshold -- see that constant's docstring
+    for each entry's mechanism.
     """
     excess = _sweep_excess(ssp_data_fsps, observation, family, param, window, extra, kernel)
-    if family in _KNOWN_GAPS:
+    if (family, param, kernel) in _KNOWN_GAPS:
         pytest.skip(f"{family}.{param} kernel={kernel}: known gap, excess={excess:.3g}")
     assert excess < STAIRCASE, (
         f"{family}.{param} kernel={kernel}: step_excess={excess:.3g} >= {STAIRCASE} "
