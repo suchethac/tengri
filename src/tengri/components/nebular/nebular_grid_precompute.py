@@ -885,6 +885,17 @@ def precompute_nebular_grid(
     # per-Q_H value is always the undiluted HII term.
     ref_params["neb_dig_frac"] = 0.0
     log10_ref_divisor = _log10_four_pi_dl2(ref_z)  # observed flux -> luminosity
+    # Cancel the IGM transmission (#2520) the same way the line above cancels
+    # the distance: each per-node probe below calls the model's own
+    # ``predict_line_fluxes``, which applies the profile-averaged IGM
+    # factor at ``ref_z``. Left uncanceled, that factor would be
+    # baked into the cached per-Q_H grid AND reapplied at read time by the
+    # SAME reconstruction call, squaring the transmission (T instead of T^2
+    # at every query). Dividing it back out here, per line, keeps the grid
+    # IGM-free -- exactly the "distance-free" contract it already has for
+    # ``log10_ref_divisor`` -- so IGM enters exactly once, at read time.
+    igm_t_ref = model._line_igm_transmission(ref_params, wavelengths, ref_z)
+    log10_ref_divisor = log10_ref_divisor - jnp.log10(igm_t_ref)
 
     axes, axis_kinds = [], []
     for name in axis_names:
@@ -946,9 +957,16 @@ def precompute_nebular_grid(
         # divisor, so take it as a log offset instead and it never materializes
         # (#1859). ``log10(1e-30) == -30`` reproduces the old clamp.
         neg_log_qh = -jnp.maximum(_log_nion_of_state(state), -30.0)
-        # intrinsic (redden=False) observed flux -> luminosity per Q_H
+        # intrinsic (redden=False) observed flux -> luminosity per Q_H.
+        # ``params_are_resolved=True`` is this method's own "already
+        # resolved, trust me" escape hatch (predict_state's ``fixed_values={}``
+        # above serves the same role for that call).
         flux = model.predict_line_fluxes(
-            p, target_wavelengths=wavelengths, redden=False, state=state
+            p,
+            target_wavelengths=wavelengths,
+            redden=False,
+            state=state,
+            params_are_resolved=True,
         )
         # The un-divided luminosity is ~1e40 against a float32 max of 3.4e38, so
         # recovering it from the flux and *then* dividing by Q_H was ``inf * 0``.

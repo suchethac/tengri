@@ -117,6 +117,27 @@ from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
 
+#: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
+#: (#2520): a line is not a delta function in observed wavelength, so the
+#: IGM transmission is profile-averaged over +/- N sigma_gas rather than
+#: evaluated at the line center alone. Ly-alpha itself sits exactly at a
+#: near-discontinuity of the mean-IGM curve (photons redward of the Ly-alpha
+#: *rest* wavelength never cross the resonance at any lower redshift, so
+#: T jumps from the forest value to ~1 right at the line): measured
+#: (independent numpy quadrature, Lya, sigma_gas=100 km/s, inoue14) against a
+#: 50001-point reference, a coarse 9-point stencil under-resolves that step
+#: and converges to 0.785 vs the resolved 0.834 at z=3. The point count was
+#: 201 until a 2026-09-30 review measured it against z=6 too, where the step
+#: is sharper (the trough is deeper and the line sits further into it): 201
+#: points gives 0.499219 vs the reference 0.505134, a 1.17% relative error --
+#: nearly 6x the 0.2% bound that same count meets at z=3 (0.833 vs 0.835,
+#: 0.24%). Swept 201/401/1001/2001 against the reference at z=6: 401 -> 0.58%,
+#: 1001 -> 0.23%, 2001 -> 0.11%, the first of the four under 0.2%. Set to the
+#: smallest of those, at negligible extra cost (one extra ``igm_absorption``
+#: call over a small array, not a per-iteration cost driver): 2001 points.
+_IGM_LINE_PROFILE_N_POINTS = 2001
+_IGM_LINE_PROFILE_N_SIGMA = 3.0
+
 #: Properties whose value is read off the rest-frame SED, which the fast-nebular
 #: grid path used to delete the nebular contribution from (#950 zeroes
 #: ``nebular_sed``; that deleted Cue forward IS the speedup).
@@ -6351,6 +6372,95 @@ class SEDModel:
         )
         return pow10(log_atten)
 
+    def _line_igm_component(self):
+        """The chain's IGM component (``name`` "igm"), or ``None`` (#2520).
+
+        Mirrors :meth:`_line_dust_component`. ``None`` when the model was
+        built with ``igm={'type': 'none'}`` and no DLA: the component-factory
+        gate (``use_igm or use_dla``) never adds an ``IGMSEDComponent`` to
+        the chain in that case, so the absence itself is the correct "T=1"
+        signal -- no separate ``igm_model == "none"`` check is needed here.
+        """
+        chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
+        for component in chain:
+            if getattr(component, "name", None) == "igm":
+                return component
+        return None
+
+    def _line_igm_transmission(self, params, line_wave_rest, z):
+        r"""Profile-averaged IGM transmission at each line (#2520).
+
+        An integrated line flux is subject to the same intergalactic
+        absorption as the spectrum channel (``state.sed_observed``, via
+        :class:`IGMSEDComponent.apply`): at a redshift where the Lyman forest
+        bites (Ly-alpha at :math:`z \gtrsim 2`) the observed line is fainter
+        than its rest-frame luminosity and distance alone imply. Dispatches
+        through
+        :func:`~tengri.components.igm.component.igm_absorption_for_component`,
+        the seam the continuum path uses, so every registered IGM model
+        (and ``igm={'type': 'none'}``) is treated identically.
+
+        The line is not a delta function in observed wavelength -- it has a
+        Gaussian profile set by the nebular line width -- so this averages
+        :math:`T(\lambda_{\rm obs})` over a :math:`\pm 3\sigma_{\rm gas}`
+        stencil (:data:`_IGM_LINE_PROFILE_N_POINTS` points, trapezoid; see
+        that constant's module comment for the convergence measurement
+        behind the point count) rather than evaluating :math:`T` at the line
+        center alone, which would be a discontinuous function of redshift
+        right at a forest edge.
+
+        Parameters
+        ----------
+        params : dict
+            Evaluation parameters (Fixed values merged in, e.g. via
+            :meth:`_evaluation_params`). Reads ``neb_eline_sigma_kms`` (the
+            gas velocity dispersion, default 100 km/s, matching the nebular
+            component's own fallback) plus any ``igm_*`` / ``dla_*`` free
+            parameters the IGM component's config declares live.
+        line_wave_rest : ndarray, shape (n_line,)
+            Rest-frame vacuum line center(s) [Angstrom].
+        z : scalar
+            Source redshift.
+
+        Returns
+        -------
+        ndarray, shape (n_line,)
+            Transmission averaged over the line profile, dimensionless
+            (0-1). Exactly 1.0 for every line when no IGM component is in
+            the chain.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, pure ``jnp`` ops. The IGM model name is a
+        static structural flag (``component.config.igm_model``), never a
+        traced value; only ``sigma_kms`` / ``z`` / the absorber knobs flow
+        as (possibly traced) runtime values.
+        """
+        line_wave_rest = jnp.asarray(line_wave_rest)
+        component = self._line_igm_component()
+        if component is None:
+            return jnp.ones_like(line_wave_rest)
+
+        from tengri.components.igm.component import igm_absorption_for_component
+        from tengri.utils.physics_constants import C_KM_S
+
+        z = jnp.asarray(z)
+        sigma_kms = jnp.asarray(params.get("neb_eline_sigma_kms", 100.0))
+        line_wave_obs = line_wave_rest * (1.0 + z)
+        sigma_obs_aa = sigma_kms / C_KM_S * line_wave_obs
+
+        n_points = _IGM_LINE_PROFILE_N_POINTS
+        n_sigma = _IGM_LINE_PROFILE_N_SIGMA
+        offsets = jnp.linspace(-n_sigma, n_sigma, n_points)
+        stencil_wave_obs = line_wave_obs[:, None] + offsets[None, :] * sigma_obs_aa[:, None]
+        flat_T = igm_absorption_for_component(component, params, stencil_wave_obs.reshape(-1), z)
+        T_grid = flat_T.reshape(stencil_wave_obs.shape)
+
+        profile = jnp.exp(-0.5 * offsets**2)
+        norm = jnp.trapezoid(profile, offsets)
+        weighted = jnp.trapezoid(T_grid * profile[None, :], offsets, axis=1)
+        return weighted / norm
+
     def predict_line_fluxes(
         self,
         params,
@@ -6360,6 +6470,7 @@ class SEDModel:
         redden=True,
         state=None,
         fixed_values=None,
+        params_are_resolved=False,
     ):
         """Predict observed emission line fluxes (dust-reddened by default).
 
@@ -6411,6 +6522,16 @@ class SEDModel:
             / :meth:`_get_dl_cm` and to any internal ``predict_state`` call.
             When supplied, these win over the spec's own declared Fixed
             values during resolution.
+        params_are_resolved : bool, default False
+            Internal escape hatch for a build-time probe whose ``params`` is
+            already a complete dict (free values plus a deliberately
+            overridden Fixed key), not the free-only dict a user supplies.
+            When True, ``params`` is used as the merged parameter dict
+            directly and the ``Fixed``-key refusal (#2296) is skipped
+            entirely, rather than attempted and discarded. Not for
+            user-facing calls: a caller with an ordinary free-only
+            ``params`` should leave this False so a genuine Fixed-key
+            override is still refused.
 
         Returns
         -------
@@ -6492,13 +6613,30 @@ class SEDModel:
         log_all_lums = None
         all_lums = None
         grid = getattr(self, "_nebular_grid_table", None)
-        # Lazily merged the FIRST time either branch below actually needs it
-        # (#2296): a build-time probe (precompute_nebular_grid's per-node
-        # forward) calls this with grid=None, state=given, redden=False --
-        # neither branch nor the redden step touches params, so it must not
-        # be refused for carrying a deliberately-overridden Fixed key.
-        full_params = None
-        if grid is not None:
+        # A grid tabulates only the wavelengths its own ``enable_fast_nebular``
+        # call named (#2561): a grid attached for a photometry-only fit (the
+        # ``approx="auto"`` LUT policy, or ``FeaturePrecomp()`` with no line
+        # targets) tabulates none, so ``grid.wavelengths`` is empty and the
+        # target match below has nothing to match against -- ``jnp.argmin``
+        # raises "attempt to get argmin of an empty sequence" rather than the
+        # ordinary "line not in the catalog" refusal a few lines down (which
+        # needs at least one candidate to measure a distance to). Treating an
+        # empty grid as no grid falls through to the exact catalog path
+        # (``predict_state`` + the backend's full discrete catalog), the same
+        # way ``predict_photometry`` serves a channel the LUT does not carry
+        # from the exact model instead. A NON-empty grid missing only SOME of
+        # the requested targets is unaffected: matching against a shorter but
+        # non-empty candidate list already reaches the ``tolerance_aa`` guard
+        # below, which is the existing, correct refusal for that case.
+        grid_has_lines = grid is not None and grid.wavelengths.shape[0] > 0
+        # Lazily merged the FIRST time either branch below actually needs it.
+        # ``params_are_resolved=True`` (a build-time probe's own ``params`` is
+        # already the merged dict, including a deliberately overridden Fixed
+        # key) short-circuits every merge site below to ``params`` itself,
+        # rather than attempting the refusing merge and discarding the
+        # ``ParameterError`` it raises (#2296).
+        full_params = params if params_are_resolved else None
+        if grid_has_lines:
             # FAST path (#950): reconstruct intrinsic line luminosities from the
             # per-Q_H grid, no Cue forward. Q_H is the stellar-published ``nion``
             # (from the passed state when available, else the SED-free
@@ -6525,7 +6663,10 @@ class SEDModel:
             # additionally lets an evaluation-time ``fixed_values`` (e.g. a
             # Fitter's runtime redshift under ``catalog_z_range``) win over the
             # spec's own Fixed value, exactly as ``_get_dl_cm`` below does.
-            full_params = self._evaluation_params(params, fixed_values)
+            # ``params_are_resolved`` already set ``full_params`` above; skip
+            # re-merging (and re-refusing) in that case.
+            if full_params is None:
+                full_params = self._evaluation_params(params, fixed_values)
             from tengri.components.nebular.dig import mix_dig_grid_reconstruction
             from tengri.components.nebular.nebular_grid_precompute import (
                 _dig_may_be_active,
@@ -6708,9 +6849,11 @@ class SEDModel:
                     )
             selected_lums = None if all_lums is None else all_lums[indices]
             selected_log_lums = None if log_all_lums is None else log_all_lums[indices]
+            selected_waves = all_waves[indices]
         else:
             selected_lums = all_lums
             selected_log_lums = log_all_lums
+            selected_waves = all_waves
 
         dl_cm = self._get_dl_cm(params, fixed_values=fixed_values)
         # ``line_lums`` are published in erg/s (DerivedKey contract in
@@ -6718,6 +6861,37 @@ class SEDModel:
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
         log10_scale = -log10_four_pi_dl2(dl_cm)
+        # IGM transmission (#2520): the same factor the spectrum channel
+        # applies to ``state.sed_observed`` (IGMSEDComponent.apply).
+        # Profile-averaged over the line width and folded in as a log10
+        # addend -- safe alongside the
+        # ~-55 dex distance term above, and identical on the fast per-Q_H
+        # grid branch and the exact branch since both funnel through
+        # ``selected_waves`` / ``log10_scale`` here.
+        # ``params_are_resolved`` already set ``full_params`` above; only the
+        # ordinary free-only path reaches ``_evaluation_params`` here, so a
+        # genuine Fixed-key override in ``params`` still raises (#2296)
+        # instead of being silently discarded.
+        if full_params is None:
+            full_params = self._evaluation_params(params, fixed_values)
+        z_line = self._get_redshift(params, fixed_values=fixed_values)
+        igm_T = self._line_igm_transmission(full_params, selected_waves, z_line)
+        # ``log10_magnitude``, not a bare ``jnp.log10``: a line
+        # blueward of the Lyman limit at high z (or deep in a Gunn-Peterson
+        # trough) profile-averages to an ``igm_T`` that underflows to exactly
+        # 0.0. ``jnp.log10(0.0)`` is a correct ``-inf`` forward (which powers
+        # back through ``pow10`` to the physically-correct 0 flux), but its
+        # reverse-mode derivative is ``1/(0*ln10) = inf``, and multiplying that
+        # by any upstream zero derivative (``d(igm_T)/dz`` itself vanishes the
+        # same way) gives ``inf * 0 = NaN`` -- measured under ``jax.jit`` at
+        # z >~ 12 for a line inside the trough. ``log10_magnitude`` computes
+        # the log of a *safe* (never-literally-zero) stand-in and only
+        # substitutes ``-inf`` in the forward value, so the gradient of the
+        # ``log10`` step itself stays finite (0) everywhere; no floor is
+        # applied to ``igm_T``, so a genuine zero is still a genuine zero.
+        from tengri.utils.scale import log10_magnitude
+
+        log10_scale = log10_scale + log10_magnitude(igm_T)
         if selected_log_lums is not None:
             # ONE exponentiation, with the ~-55 dex distance already inside it. The
             # ~1e40 numerator and the ~1e57 denominator both exist only as exponents
@@ -7370,10 +7544,21 @@ class SEDModel:
         what the galaxy *emits* (the backend's nebular line luminosity → flux),
         ``measure_*`` applies the operator a spectroscopic pipeline applies to
         *data*, estimate a local continuum from side-bands, subtract it, integrate
-        the emission, to the model's own rest-frame SED. It therefore works for
-        **any** nebular backend (Cue additive, baked-in wNE, …), yields a quantity
-        directly comparable to a catalog's continuum-subtracted line flux, and
-        carries the stellar Balmer absorption under the line self-consistently.
+        the emission, to the model's own rest-frame SED. It works for an additive
+        photoionized backend (Cue, CloudyGrid) and for a baked-in wNE SSP grid
+        (nebular emission already in the flux tables, ``neb={'type': 'ssp'}``);
+        for either it yields a quantity directly comparable to a catalog's
+        continuum-subtracted line flux and carries the stellar Balmer absorption
+        under the line self-consistently. With an explicit ``neb={'type':
+        'none'}`` it measures the stellar continuum/absorption at the line's
+        rest wavelength, which is a legitimate use (e.g. isolating non-nebular
+        physics from a nebular-emission channel) but carries no nebular
+        emission whatsoever -- unlike a bare-stellar grid paired with
+        ``neb={'type': 'ssp'}`` (or the omitted-``neb=`` default, which makes
+        the same baked-in assumption), which never reaches this method at
+        all: ``BakedInBackend.__init__`` already raises at model-construction
+        time rather than silently returning that same continuum-only number
+        under a nebular-emission-line method's name (#2540).
 
         Parameters
         ----------
@@ -7416,6 +7601,21 @@ class SEDModel:
         jnp.ndarray, shape (n_line,)
             Observed emission-line fluxes [erg/s/cm^2], in ``line_defs`` order.
 
+        Warns
+        -----
+        :class:`~tengri.components.nebular.baked_in.BakedInNebularGridWarning`
+            If the configured nebular backend contributes no nebular flux of
+            its own (BakedIn, i.e. ``neb={'type': 'ssp'}`` or the model's
+            default) and the SSP grid's ``nebular`` metadata is not
+            ``'included'`` (#2540): the measured flux is stellar
+            continuum/absorption only, indistinguishable from
+            ``neb={'type': 'none'}``. A ``'bare'``-stamped grid in this mode
+            cannot reach this method at all -- ``BakedInBackend.__init__``
+            already raises ``BakedInNebularBareError`` (a ``ValueError``) at
+            model-construction time. Never warns for an explicit
+            ``neb={'type': 'none'}`` (see Notes): nothing about that mode
+            asserts the grid carries baked-in emission in the first place.
+
         Notes
         -----
         **JIT-compatible / differentiable**: yes.
@@ -7445,6 +7645,78 @@ class SEDModel:
         # LineFluxData returned FIVE fluxes, for different lines, in a different
         # order. Nothing raised -- the shape is only wrong downstream (#1500).
         line_defs = resolve_line_defs(line_defs, getattr(self, "observation", None))
+        # A backend that publishes no discrete line catalog of its own (BakedIn,
+        # selected explicitly via ``neb={'type': 'ssp'}`` or the model's default)
+        # contributes zero ADDITIONAL nebular flux and relies entirely on the SSP
+        # grid's own flux tables already carrying the emission (a wNE grid).
+        # ``ssp_data.nebular`` records what is known about that: ``'unknown'``
+        # (the unstamped default -- most shipped grids) cannot be resolved
+        # either way by any heuristic (#2362: a retained-LyC wNE grid is
+        # indistinguishable from bare by ionizing-photon rate alone), so this
+        # warns rather than refuses. ``'bare'`` never reaches here in this
+        # mode: ``BakedInBackend.__init__`` (``baked_in.py``) already raises
+        # ``BakedInNebularBareError`` at model-construction time for a bare
+        # grid whenever ``ssp_data`` was threaded to it, which it always is
+        # for ``neb={'type': 'ssp'}`` and the omitted-``neb=`` default (#2540
+        # review: a ``ssp_status == 'bare'`` branch here was measured
+        # unreachable and removed rather than kept untested).
+        #
+        # ``neb={'type': 'none'}`` is the ONE mode this check must never see
+        # (#2540 review): it also constructs a ``BakedInBackend`` (the class
+        # check below cannot tell it apart from ``'ssp'``/default by
+        # ``hasattr`` alone), but nothing about ``'none'`` asserts the grid
+        # carries baked-in emission -- measuring the stellar
+        # continuum/absorption with no nebular backend at all is this
+        # method's documented, exercised fallback (see the class Notes), not
+        # a mismeasurement of an emission the user never claimed was there.
+        # ``spec.nebular_mode == 'off' and spec._nebular_explicit`` is the
+        # exact condition ``_init_nebular`` (``sed_model.py`` ~4136) already
+        # uses to decide whether to thread ``ssp_data`` to ``BakedInBackend``
+        # at all -- mirrored here rather than re-derived, since it is the
+        # authoritative "did the user explicitly say no nebular emission"
+        # signal. An omitted ``neb=`` is ALSO ``nebular_mode == 'off'`` but
+        # with ``_nebular_explicit`` False, so it still reaches the same
+        # warn-on-unstamped behavior as ``'ssp'`` -- the default backend
+        # makes the same baked-in assumption ``neb={'type': 'ssp'}`` states
+        # explicitly, just without silencing the construction-time advisory.
+        neb_is_explicit_none = self.spec.nebular_mode == "off" and self.spec._nebular_explicit
+        backend = self._nebular_backend
+        if (
+            not neb_is_explicit_none
+            and backend is not None
+            and not hasattr(backend, "predict_nebular_line_luminosities")
+        ):
+            ssp_status = getattr(self.ssp_data, "nebular", "unknown")
+            if ssp_status != "included":
+                grid_name = getattr(self.ssp_data, "source", "") or "<unnamed SSP grid>"
+                remedy = (
+                    f"contributes zero nebular flux of its own -- it relies "
+                    f"entirely on the SSP grid {grid_name!r} already carrying "
+                    f"the emission in its flux tables, and that grid's nebular "
+                    f"metadata is {ssp_status!r}, not 'included'. The measured "
+                    f"flux would be stellar continuum/absorption only, "
+                    f"indistinguishable from neb={{'type': 'none'}}.\n"
+                    f"Fix (one of): "
+                    f"\n"
+                    f"  1. Download or build with an SSP grid known to include "
+                    f"nebular emission (a wNE grid), e.g. "
+                    f"tengri.download_ssp('ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0'). "
+                    f"\n"
+                    f"  2. Add a separate nebular backend: "
+                    f"neb={{'type': 'cue'}} or neb={{'type': 'cloudy_grid'}}. "
+                    f"\n"
+                    f"  3. If the grid genuinely does carry baked-in emission, "
+                    f"stamp its metadata with tools/stamp_ssp_nebular_attrs.py "
+                    f"so this check (and BakedInBackend's own advisory) can see it."
+                )
+                from tengri.components.nebular.baked_in import BakedInNebularGridWarning
+
+                warnings.warn(
+                    f"measure_line_fluxes: the configured nebular backend "
+                    f"({type(backend).__name__}) {remedy}",
+                    BakedInNebularGridWarning,
+                    stacklevel=2,
+                )
         # Resolve the redshift through the spec, not out of the dict. A Fixed
         # redshift is legitimately absent from ``params``, and reading it back with
         # a 0.0 default put the galaxy at 10 pc, 1e17 too bright, silently
@@ -7456,6 +7728,34 @@ class SEDModel:
         # at the 10-pc z=0 convention) against a float32 ceiling of 3.4e38, so the
         # linear form is ``inf`` at every distance and the flux ``nan`` (#1859).
         log10_4pi_dl2 = log10_four_pi_dl2(dl_cm)
+
+        # ``full_params`` (Fixed values merged in) is needed either way now: the
+        # ``approx`` branch already required it for ``compute_joint_weights`` /
+        # ``compute_transmission``, and the IGM step below (#2520) reads
+        # ``neb_eline_sigma_kms`` from it on both branches. Computed once here
+        # rather than twice inside ``approx``. Every caller of this method
+        # (population mock generation, ``CatalogFitter``, the joint-likelihood
+        # feature channel) hands it the same free-only ``params`` a user
+        # would, so a genuine Fixed-key override is refused (#2296) rather
+        # than silently accepted -- unlike ``predict_line_fluxes``, no caller
+        # here needs an "already resolved" escape hatch.
+        full_params = self._evaluation_params(params, fixed_values)
+
+        # IGM transmission (#2520): this method measures line fluxes off the
+        # model's REST-frame SED (``_predict_rest_sed`` / the window LUT),
+        # which never carries IGM absorption -- only ``state.sed_observed``
+        # does (``IGMSEDComponent.apply``), so the measured flux must carry
+        # the transmission the spectrum channel sees at that redshift.
+        # Profile-averaged per line (same seam as
+        # ``predict_line_fluxes``) and applied as a post-multiply: both
+        # branches below already return an ordinary small flux (the 4 pi d_L^2
+        # division happens *inside* ``measure_line_flux_jax`` /
+        # ``measure_line_fluxes_from_window_lut``), so multiplying the
+        # dimensionless [0, 1] transmission onto that output is exact and
+        # introduces no float32 hazard, while guaranteeing the exact and LUT
+        # paths see the identical factor.
+        line_wave_rest = jnp.asarray([float(ld.wavelength) for ld in line_defs])
+        igm_T = self._line_igm_transmission(full_params, line_wave_rest, z)
 
         if approx:
             from tengri.components.dust.two_component import DustSEDComponent
@@ -7469,7 +7769,6 @@ class SEDModel:
             # then lets ``fixed_values`` (a Fitter's evaluation-time
             # redshift override under ``catalog_z_range``) win, exactly as
             # ``z`` was just resolved above via ``_get_redshift``.
-            full_params = self._evaluation_params(params, fixed_values)
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
             joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
@@ -7481,9 +7780,10 @@ class SEDModel:
                 transmission = dust.compute_transmission(
                     full_params, pc.window_centers, ssp_ages_yr
                 )
-            return measure_line_fluxes_from_window_lut(
+            fluxes = measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
+            return fluxes * igm_T
 
         if state is None:
             # Thread the evaluation-time ``fixed_values`` used to resolve ``z``
@@ -7497,12 +7797,13 @@ class SEDModel:
             rest = self._predict_rest_sed(params, fixed_values=fixed_values)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
-        return jnp.stack(
+        fluxes = jnp.stack(
             [
                 measure_line_flux_jax(rest.wavelength, rest.sed, ld, log10_4pi_dl2)
                 for ld in line_defs
             ]
         )
+        return fluxes * igm_T
 
     def predict_hbeta(self, params: dict) -> float:
         """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.

@@ -49,7 +49,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 
-__all__ = ["IGMSEDComponent", "IGMSEDComponentConfig"]
+__all__ = ["IGMSEDComponent", "IGMSEDComponentConfig", "igm_absorption_for_component"]
 
 #: Floor on the number of redshift nodes for the IGM transmission tables.
 #:
@@ -600,20 +600,7 @@ class IGMSEDComponent(TemplateThreading):
         # Single flat dispatch honoring the configured mean-IGM model and DLA
         # (was hardcoded to Inoue with no DLA, so the observed-frame
         # photometry/spectroscopy projection silently ignored both: #932).
-        dla_z = params.get("dla_z", DEFAULT_DLA_Z)
-        T = igm_absorption(
-            wave_obs,
-            z,
-            igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
-            igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
-            igm_patchy=self.config.igm_patchy,
-            igm_model=self.config.igm_model,
-            use_dla=self.config.use_dla,
-            dla_z=dla_z,
-            dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
-            dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
-            dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
-        )
+        T = igm_absorption_for_component(self, params, wave_obs, z)
 
         # The LUT photometry path consumes ``igm_phot_factor`` (n_filters,) rather
         # than band-averaging ``T`` (n_wave,) at runtime. Publishing the precomputed
@@ -627,11 +614,11 @@ class IGMSEDComponent(TemplateThreading):
             derived = derived.with_(igm_phot_factor=band_factor)
         if spec_factor is not None:
             derived = derived.with_(igm_spec_factor=spec_factor)
-        derived = self._fold_transmission_into_subbands(derived, params, z, dla_z)
+        derived = self._fold_transmission_into_subbands(derived, params, z)
 
         return state.with_(sed_observed=state.sed_observed * T, derived=derived)
 
-    def _fold_transmission_into_subbands(self, derived, params, z, dla_z):
+    def _fold_transmission_into_subbands(self, derived, params, z):
         r"""Fold :math:`T` at the photometry sub-band nodes at runtime (#1149).
 
         The WavePrecomp photometry path integrates the stellar continuum as a
@@ -672,20 +659,64 @@ class IGMSEDComponent(TemplateThreading):
         if sub_per_age is None or node_waves is None:
             return derived  # exact path publishes no sub-band tensors
 
-        t_nodes = igm_absorption(
-            node_waves.reshape(-1) * (1.0 + z),
-            z,
-            igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
-            igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
-            igm_patchy=self.config.igm_patchy,
-            igm_model=self.config.igm_model,
-            use_dla=self.config.use_dla,
-            dla_z=dla_z,
-            dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
-            dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
-            dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
+        t_nodes = igm_absorption_for_component(
+            self, params, node_waves.reshape(-1) * (1.0 + z), z
         ).reshape(node_waves.shape)
         return derived.with_(stellar_phot_lnu_per_age_subband_igm_precomp=sub_per_age * t_nodes)
+
+
+def igm_absorption_for_component(
+    component: IGMSEDComponent,
+    params: Mapping[str, jnp.ndarray],
+    wave_obs: jnp.ndarray,
+    z: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Evaluate :func:`igm_absorption` with one ``IGMSEDComponent``'s knobs.
+
+    Factors the exact parameter list :meth:`IGMSEDComponent.apply` builds
+    (mean-IGM model + patchy/DLA modifiers) so a consumer outside the
+    continuum path -- :meth:`SEDModel.predict_line_fluxes` /
+    :meth:`SEDModel.measure_line_fluxes` profile-averaging the transmission
+    across an emission line (#2520) -- dispatches through the identical seam
+    rather than re-deriving a parallel copy that could drift from it.
+
+    Parameters
+    ----------
+    component : IGMSEDComponent
+        The model's IGM component (its ``config`` supplies the static
+        ``igm_model`` / ``igm_patchy`` / ``use_dla`` structural choice).
+    params : mapping
+        Evaluation parameters; reads the same ``igm_*`` / ``dla_*`` keys
+        :meth:`IGMSEDComponent.apply` reads, with the same defaults.
+    wave_obs : ndarray, shape (...,)
+        Observed-frame wavelength(s) [Angstrom].
+    z : ndarray, shape ()
+        Source redshift.
+
+    Returns
+    -------
+    ndarray, shape (...,)
+        Transmission fraction [dimensionless, 0-1], matching ``wave_obs``'s
+        shape.
+
+    Notes
+    -----
+    **JIT-compatible**: yes -- identical contract to :func:`igm_absorption`.
+    """
+    dla_z = params.get("dla_z", DEFAULT_DLA_Z)
+    return igm_absorption(
+        wave_obs,
+        z,
+        igm_x_HI=params.get("igm_x_HI", DEFAULT_IGM_X_HI),
+        igm_bubble_mpc=params.get("igm_bubble_mpc", DEFAULT_IGM_BUBBLE_MPC),
+        igm_patchy=component.config.igm_patchy,
+        igm_model=component.config.igm_model,
+        use_dla=component.config.use_dla,
+        dla_z=dla_z,
+        dla_log_n_hi=params.get("dla_log_n_hi", DEFAULT_DLA_LOG_N_HI),
+        dla_temp=params.get("dla_temp", DEFAULT_DLA_TEMP),
+        dla_b_turb=params.get("dla_b_turb", DEFAULT_DLA_B_TURB),
+    )
 
 
 # Register in the unified component dispatch table so build_components resolves
