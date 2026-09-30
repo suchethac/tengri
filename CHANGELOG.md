@@ -10,7 +10,7 @@
 
 ### Fixed
 
-- `PLANCK18` includes radiation and massive-neutrino densities; D_L and age(z) match astropy's Planck18 to < 1e-4 (previously +0.09 % at z=1, +0.21 % at z=10 in D_L) (#2517). Every named cosmology (`PLANCK18`, `PLANCK15`, `WMAP5`) states its own published Tcmb0/Neff/m_nu explicitly (`WMAP5`: Tcmb0=2.725 K, Neff=3.04, massless neutrinos), matching astropy's Planck18/Planck15/WMAP5 to rtol 1e-6; `CosmoParams`' field defaults are radiation-free (Tcmb0=0.0), so a user-built `CosmoParams(Om0=..., w0=..., wa=..., h=...)` is unaffected by this fix unless it passes `Tcmb0` explicitly.
+- `PLANCK18` includes radiation and massive-neutrino densities; D_L and age(z) match astropy's Planck18 to < 1e-4 (previously +0.09 % at z=1, +0.21 % at z=10 in D_L) (#2517). Every named cosmology (`PLANCK18`, `PLANCK15`, `WMAP5`) states its own published Tcmb0/Neff/m_nu explicitly (`WMAP5`: Tcmb0=2.725 K, Neff=3.04, massless neutrinos), matching astropy's Planck18/Planck15/WMAP5 to rtol 1e-6; `CosmoParams`' field defaults are radiation-free (Tcmb0=0.0), so a user-built `CosmoParams(Om0=..., w0=..., wa=..., h=...)` is unaffected by this fix unless it passes `Tcmb0` explicitly. D_L and age(z), and their gradients with respect to z, Om0, and h, are all finite in float32.
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so

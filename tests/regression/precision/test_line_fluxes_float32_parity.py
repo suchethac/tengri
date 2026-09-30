@@ -74,15 +74,20 @@ _DUST_FREE = {
     "tau_bc": 0.0,
 }
 
-#: ``predict_line_fluxes`` on the Cue model, float64, origin/main @ 18cf9fb9e (see
-#: module docstring). 12 significant digits.
+#: ``predict_line_fluxes`` on the Cue model, float64. Re-taken on this branch for
+#: #2517, which adds the photon and massive-neutrino density terms to ``E(z)``: the
+#: luminosity distance at z=0.1 (``_base``'s fixed redshift) shifts by a few parts in
+#: 1e4, and both operators pinned here return observed-frame fluxes carrying the
+#: ``(1+z)/(4 pi d_L^2)`` dimming factor (max relative movement 2.27e-4, matching the
+#: luminosity-distance shift). 17 significant digits.
 _CUE_F64_REF = np.array(
-    [4.81137256894e-16, 5.88262869721e-16, 1.69818364890e-15, 5.31329869121e-16]
+    [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15, 5.3145048745591e-16]
 )
 
-#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64, same capture.
+#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64, same capture
+#: and #2517 re-take as ``_CUE_F64_REF``.
 _WNE_F64_REF = np.array(
-    [2.76902836687e-16, 4.08501587720e-16, 1.34668648728e-15, 3.21861572920e-18]
+    [2.769656969949378e-16, 4.085943225429073e-16, 1.3469922014700263e-15, 3.219346394066372e-18]
 )
 
 #: Relative sigma for the synthetic chi-square target the gradient checks use: not a
