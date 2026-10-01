@@ -19,6 +19,7 @@ the vmapped per-node forward.
 from __future__ import annotations
 
 import itertools
+import math
 from collections.abc import Mapping, Sequence
 
 import jax
@@ -303,11 +304,18 @@ def _chunked_subbands(sed_all, neg_log_qh, wave_rest, filters, redshift, n_subba
     return np.concatenate(phis, axis=0), np.concatenate(lams, axis=0)
 
 
-def _check_conservation(parts: np.ndarray, whole, label: str) -> float:
-    """Raise unless the sub-band sum matches the whole band; return the worst residual."""
+def _check_conservation(parts: np.ndarray, whole, label: str, n_nodes: int) -> float:
+    """Raise unless the sub-band sum matches the whole band; return the worst residual.
+
+    A trapezoid over ``n_nodes`` samples in the precision of ``whole`` accumulates
+    about ``eps * sqrt(n_nodes)`` relative error; the bound allows eight times that,
+    which is 1e-8 in float64 (the floor) and about 1e-4 in float32 on the SSP
+    wavelength grid, while a genuine divergence of the two quadratures is 1e-3 or
+    worse.
+    """
     whole_np = np.asarray(whole, dtype=np.float64)
     eps = float(np.finfo(np.asarray(whole).dtype).eps)
-    tol = max(1e-8, 8.0 * eps)
+    tol = max(1e-8, 8.0 * eps * math.sqrt(n_nodes))
     floor = _CONSERVATION_FLOOR * max(float(np.max(np.abs(whole_np))), 1e-300)
     rel = np.abs(parts.sum(axis=-1) - whole_np) / np.maximum(np.abs(whole_np), floor)
     worst = float(np.max(rel))
@@ -388,10 +396,11 @@ def _build_dust_channels(
     if filters is not None:
         k = int(n_subbands)
         ref_z = float(ref_params.get("redshift", 0.0))
+        n_wave_nodes = int(np.asarray(wave_rest).size)
         phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k)
-        _check_conservation(phi, phot_all, "observed-band")
+        _check_conservation(phi, phot_all, "observed-band", n_nodes=n_wave_nodes)
         phi_r, lam_r = _chunked_subbands(sed, nlq, wave_rest, filters, 0.0, k)
-        _check_conservation(phi_r, rest_all, "rest-band")
+        _check_conservation(phi_r, rest_all, "rest-band", n_nodes=n_wave_nodes)
         out.update(
             log_phot_subband_per_qh=_log_channel(phi, grid_shape),
             phot_subband_waves_rest=jnp.asarray(lam.reshape(*grid_shape, *lam.shape[1:])),

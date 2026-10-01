@@ -24,6 +24,7 @@ import pytest
 
 from tengri import (
     DEFAULT,
+    FeaturePrecomp,
     Fixed,
     Observation,
     Photometry,
@@ -313,3 +314,43 @@ def test_attaching_a_table_with_the_other_lyc_choice_is_refused(built):
     chain_default = m_default._build_component_chain()
     with pytest.raises(RuntimeError, match="eb_include_lyc"):
         m_default._chain_with_nebular_grid(chain_default, table_with_lyc_true)
+
+
+def test_the_channels_build_in_float32():
+    """Float32 build exercised by the regression seam; conservation bound is dtype-scaled."""
+    _require()
+    with jax.enable_x64(False):
+        ssp = load_ssp_data(_BARE)
+        m = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(photometry=Photometry.from_names(_BANDS)),
+            approx=(WavePrecomp(), FeaturePrecomp(n_grid=4)),
+            redshift=Fixed(Z),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+            dust_attenuation=_TWO,
+            dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0)},
+        )
+        chain = m._build_component_chain()
+        eb = m._energy_balance_lut(chain)
+        dust_comp = next(c for c in chain if c.name in ("dust", "dust_attenuation"))
+        table = precompute_nebular_grid(
+            m,
+            jnp.asarray([]),
+            n_grid=5,
+            dust_component=dust_comp,
+            eb_tau_grids=(eb.tau_bc_grid, eb.tau_diff_grid),
+            n_subbands=_K,
+        )
+        assert table is not None
+        assert table.serves_dust
+        log_phot = np.asarray(table.log_phot_subband_per_qh)
+        assert np.all(np.isfinite(log_phot))
+        eb_absorbed = np.asarray(table.eb_absorbed_per_qh)
+        assert np.all(np.isfinite(eb_absorbed))
+        p = dict(m.spec.get_fixed_values())
+        p.update(m.spec.sample(jax.random.PRNGKey(0)))
+        p["neb_dig_frac"] = 0.0
+        node = {k: p[k] for k in table.axis_names}
+        phot = reconstruct_nebular_phot(jnp.asarray(_LOG_NION), node, table)
+        assert np.all(np.isfinite(np.asarray(phot)))
