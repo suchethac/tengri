@@ -2449,8 +2449,10 @@ def gordon03_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Precomputed from ``dust_extinction.averages.G03_SMCBar`` at module import
     time by evaluating the model on a fine grid spanning exactly 1000–33333 Å
-    (0.1 µm⁻¹ ≤ x ≤ 10 µm⁻¹). Values outside this range are held constant at
-    the boundary values.
+    (0.3 µm⁻¹ ≤ x ≤ 10 µm⁻¹). Between x ≈ 3.3 and 3.5 µm⁻¹, the dust_extinction
+    model blends the Table 4 nodes with the FM90 form (the law is +3.5 % above pure
+    FM90 at x = 3.3). Redward of 33333 Å the curve holds its end value 0.0624;
+    blueward of 1000 Å it holds 9.6346.
 
     For x ≥ 3.3 µm⁻¹ (λ ≤ 3030 Å), the model implements the Fitzpatrick & Massa
     (1990) form with SMC-bar FM90 parameters: c1 = −4.959, c2 = 2.264,
@@ -2466,7 +2468,7 @@ def gordon03_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
        Large Magellanic Cloud, and Milky Way Ultraviolet to Near-Infrared
        Extinction Curves," ApJ, 594, 279 (2003). arXiv:astro-ph/0305257.
        https://doi.org/10.1086/376774
-    .. [2] M. S. Fitzpatrick and D. Massa, "An analysis of the shapes of
+    .. [2] E. L. Fitzpatrick and D. Massa, "An analysis of the shapes of
        ultraviolet extinction curves. III - an atlas of ultraviolet extinction
        curves," ApJS, 72, 163 (1990). https://doi.org/10.1086/191413
     """

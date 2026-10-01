@@ -157,7 +157,7 @@ class TestGordon03SMCBar:
 
         # Compare FM90 formula to gordon03_smcbar
         assert_allclose(
-            k_gordon, axav_fm90, rtol=5e-3, err_msg="FM90 formula mismatch at UV wavenumbers"
+            k_gordon, axav_fm90, rtol=1e-5, err_msg="FM90 formula mismatch at UV wavenumbers"
         )
 
     def test_reachable_on_both_screens(self):
@@ -201,4 +201,61 @@ class TestGordon03SMCBar:
         # Gordon03 should have stronger UV attenuation than Pei92
         assert ratio > 1.25, (
             f"gordon03_smcbar should exceed Pei92 SMC by >25% at 1000 Å, got {ratio:.2f}x"
+        )
+
+    def test_hold_outside_range(self):
+        """Wavelengths outside [1000, 33333 Å] hold boundary values.
+
+        k(500 Å) should equal k(1000 Å) and k(50000 Å) should equal k(33333 Å).
+        """
+        pytest.importorskip("dust_extinction")
+        from tengri.components.dust.attenuation import gordon03_smcbar
+
+        # Get boundary values
+        wave_boundaries = jnp.array([500.0, 1000.0, 33333.0, 50000.0])
+        k_boundaries = gordon03_smcbar(wave_boundaries)
+
+        # Check that k(500 Å) == k(1000 Å)
+        assert_allclose(
+            k_boundaries[0], k_boundaries[1], rtol=1e-10, err_msg="k(500 Å) should hold k(1000 Å)"
+        )
+
+        # Check that k(50000 Å) == k(33333 Å)
+        assert_allclose(
+            k_boundaries[3],
+            k_boundaries[2],
+            rtol=1e-4,
+            err_msg="k(50000 Å) should hold k(33333 Å)",
+        )
+
+    def test_table4_published_values(self):
+        """k(λ)/k(5500) at four Table 4 nodes matches published values.
+
+        Gordon et al. (2003) Table 4 SMC-bar average provides A/A_V values
+        at specific wavenumbers. This test pins these to published values
+        to detect accidental shifts in the model or precompute.
+
+        From Gordon et al. (2003) Table 4:
+        x [µm⁻¹] = 0.455, 1.235, 2.273, 3.375
+        A/A_V     = 0.110, 0.567, 1.374, 2.000
+        """
+        pytest.importorskip("dust_extinction")
+        from tengri.components.dust.attenuation import gordon03_smcbar
+
+        # Table 4 nodes: x [µm⁻¹] and published A/A_V
+        x_um_published = np.array([0.455, 1.235, 2.273, 3.375])
+        axav_published = np.array([0.110, 0.567, 1.374, 2.000])
+
+        # Convert x [µm⁻¹] to wavelength [Å]
+        wave_aa = 1e4 / x_um_published
+
+        # Evaluate gordon03_smcbar
+        k_gordon = np.asarray(gordon03_smcbar(jnp.asarray(wave_aa)))
+
+        # dust_extinction obsdata tolerance: rtol 6e-2
+        assert_allclose(
+            k_gordon,
+            axav_published,
+            rtol=6e-2,
+            err_msg="Published Table 4 values mismatch [Gordon et al. 2003]",
         )
