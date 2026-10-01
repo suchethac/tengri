@@ -108,6 +108,8 @@ def test_cloudy_missing_grid_error_names_the_grammar_key(monkeypatch):
     from tengri.parameters.groups import parse_groups
     from tengri.parameters.parameters import Parameters
 
-    monkeypatch.setattr(Parameters, "_default_cloudy_grid", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        Parameters, "_default_cloudy_grid", staticmethod(lambda isochrone_tag=None: None)
+    )
     with pytest.raises(ValueError, match=r"neb=\{'type': 'cloudy', 'grid'"):
         parse_groups(neb={"type": "cloudy", "all_params": Fixed(DEFAULT)}, redshift=Fixed(0.1))
