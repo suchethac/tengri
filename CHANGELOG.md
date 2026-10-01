@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- The `FeaturePrecomp` nebular grid's photometry followed a build-time reference redshift (a prior draw for a free redshift, the placeholder for a `catalog_z_range` fit) instead of the evaluation redshift, so a dust-free Cue model's band fluxes were off by 8-22 % (20-22 % for `Uniform(0.05, 2)`, 12-15 % for `FREE`, 8-18 % for a catalog fit), and `Fitter`'s `approx="auto"` attaches that grid to every photometry-only fit of such a model. The grid now splits the nebular SED into continuum plus line catalog (both linear in Q_H), places the lines in each band at the evaluation redshift as delta lines, and tabulates the continuum over ln(1+z); a model whose redshift is a build-time constant keeps exact rendered line responses. The reference redshift is now a deterministic convention (the `Fixed` value, else the prior's or `catalog_z_range`'s lower bound). The grid also publishes the split as `nebular_phot_lnu_lines_precomp`, `nebular_phot_lnu_cont_precomp` and `nebular_line_phot_waves_rest`.
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged

@@ -3085,6 +3085,15 @@ class SEDModel:
         spectrum, and it gets the window LUT instead (plus the flag that lets the
         likelihood reach it).
 
+        The Cue grid's band photometry follows the **evaluation** redshift, so it
+        serves a free redshift, a ``catalog_z_range`` fit's per-galaxy redshift, and
+        a ``Fixed`` one alike: lines are placed in each band at ``(1 + z) lambda_0``
+        and the continuum is tabulated over ``ln(1 + z)``
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`).
+        The redshift the grid is built at is a deterministic convention
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.reference_redshift`),
+        never a prior draw.
+
         Parameters
         ----------
         cfg : FeaturePrecomp
@@ -9587,6 +9596,21 @@ class SEDModel:
                     result["nebular"] = template
                     break
             break
+
+        # ── Fast-nebular grid: the continuum z-table ──
+        # ``n_z x n_filter`` floats per grid node (tens of MB for a three-axis
+        # grid): threaded as an argument like the stellar z-table (#1413), never
+        # baked into the graph as a constant.
+        for component in cached:
+            grid = getattr(component, "grid_table", None)
+            if isinstance(component, NebularSEDComponent) and grid is not None:
+                if grid.serves_split_bands:
+                    result["nebular_grid"] = {
+                        "log_cont_ztable_per_qh": grid.log_cont_ztable_per_qh,
+                        "cont_keep": grid.cont_keep,
+                        "cont_lnz": grid.cont_lnz,
+                    }
+                break
 
         # Dust IR emission components (Astrodust, PAHspec, Dale, …) self-load their
         # HDF5 grids in ``EmissionComponent.load``/``predict``, no adapter-state

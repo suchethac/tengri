@@ -167,16 +167,20 @@ def precompute_line_per_qh(
         )
 
     wavelengths = jnp.asarray(wavelengths)
+    caller_z = None
     if ref_params is None:
         ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     else:
         ref_params = dict(ref_params)
+        caller_z = ref_params.get("redshift")
 
-    # A Fixed redshift is legitimately absent from the sampled params
-    # (#2296's free-only ``spec.sample()``); the accessor returns the Fixed
-    # value and never a silent 0.0 (10 pc) default (NAMING_CONTRACT §4b.6 --
-    # the same spelling ``_snap_to_nebular_catalog`` uses).
-    ref_z = model._get_redshift(ref_params)
+    # The reference redshift is a deterministic convention (the Fixed value, else
+    # the prior's or ``catalog_z_range``'s lower bound), not a prior draw: the
+    # table is per-Q_H and independent of it. A caller-supplied one is honored.
+    from tengri.components.nebular.nebular_grid_precompute import reference_redshift
+
+    ref_z = caller_z if caller_z is not None else reference_redshift(model)
+    ref_params["redshift"] = ref_z
 
     # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
