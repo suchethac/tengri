@@ -1484,7 +1484,10 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
-    _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _approx = kwargs.get("approx")
+    _catalog_z_range = getattr(_approx, "catalog_z_range", None)
+    _catalog_z_lo = float(_catalog_z_range[0]) if _catalog_z_range is not None else None
+    _narrow_free_priors_to_z(resolved_kwargs, provenance, catalog_z_lo=_catalog_z_lo)
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
     _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
@@ -1789,7 +1792,9 @@ def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
+def _narrow_free_priors_to_z(
+    resolved: dict, provenance: dict[str, str], catalog_z_lo: float | None = None
+) -> None:
     """Cap SF-onset lookback priors at the age of the universe at the source z.
 
     :func:`_z_capped_onset_params`'s marked parameters each declare a static
@@ -1863,21 +1868,38 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
     from tengri.parameters.priors import Uniform
     from tengri.utils.cosmology import age_at_z
 
-    redshift_dist = resolved.get("redshift")
-    if redshift_dist is None:
-        # No redshift to narrow against yet -- either not given at all
-        # (introspection's `_allow_empty_wildcard`, whose caller has no
-        # target redshift) or not yet resolved. Either way, raising here
-        # would preempt the more specific "redshift is required" error this
-        # function's caller raises afterwards; leaving the static declaration
-        # untouched is exactly the earlier, correct-but-wide behavior.
-        return
-    try:
-        z_floor = redshift_dist.bounds[0]
-    except (AttributeError, NotImplementedError):
-        return
-    if z_floor is None:
-        return
+    if catalog_z_lo is not None:
+        # approx=WavePrecomp(catalog_z_range=(zlo, zhi)) means this build's
+        # own `redshift` is only a placeholder -- a runtime z override (the
+        # Catalog / Fitter `params_override`/`fixed_values` path) replaces
+        # it per galaxy, and the age-of-universe cutoff that mass
+        # conservation applies genuinely tracks that runtime value (#2521).
+        # But this static PRIOR CEILING is still fixed once, at build time,
+        # so it must use catalog_z_range's own lower bound (the oldest
+        # universe the range admits, the same "most permissive single cap"
+        # this function already uses for one galaxy's z_floor) rather than
+        # the placeholder redshift -- otherwise two builds of the same
+        # catalog_z_range model at different placeholder redshifts would
+        # declare different prior widths for the identical parameter, and a
+        # value standardized against one would not unstandardize to the
+        # same physical age against the other.
+        z_floor = catalog_z_lo
+    else:
+        redshift_dist = resolved.get("redshift")
+        if redshift_dist is None:
+            # No redshift to narrow against yet -- either not given at all
+            # (introspection's `_allow_empty_wildcard`, whose caller has no
+            # target redshift) or not yet resolved. Either way, raising here
+            # would preempt the more specific "redshift is required" error this
+            # function's caller raises afterwards; leaving the static declaration
+            # untouched is exactly the earlier, correct-but-wide behavior.
+            return
+        try:
+            z_floor = redshift_dist.bounds[0]
+        except (AttributeError, NotImplementedError):
+            return
+        if z_floor is None:
+            return
     cap = float(age_at_z(float(z_floor)))
 
     for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):

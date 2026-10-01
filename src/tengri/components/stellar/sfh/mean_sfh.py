@@ -1525,6 +1525,7 @@ def psb_wild2020(
     alpha: float,
     beta: float,
     fburst: float,
+    age_universe_yr: float,
 ) -> jnp.ndarray:
     """Post-starburst SFH (Wild+2020).
 
@@ -1554,6 +1555,12 @@ def psb_wild2020(
         DPL rising slope [dimensionless] (pre-peak in cosmic time).
     fburst : float
         Fraction of total stellar mass in burst [dimensionless], range [0, 1].
+    age_universe_yr : float
+        Age of the universe at the model's own redshift [yr]
+        (``age_at_z(z)``); the cosmic-time origin the burst double power law
+        is measured from (Wild et al. 2020 Eq. 5). Not a free parameter:
+        the orchestrator injects it from the evaluation redshift, the same
+        way it injects ``dense_basis``'s ``age_universe_yr``.
 
     Returns
     -------
@@ -1567,23 +1574,32 @@ def psb_wild2020(
     # --- Old component: declining exponential between burstage and age ---
     # Clamped, then windowed by cell-averaged weights: the hard mask left ``age``
     # with exactly zero autodiff gradient (#1374), and the discarded branch
-    # evaluated exp(+large) for t_lookback > age.
+    # evaluated exp(+large) for t_lookback > age. ``age`` (a free, z-capped
+    # onset parameter) is the right anchor here: it is the OLD component's own
+    # formation lookback, independent of the burst's cosmic-time origin below.
     t_cosmic_old = jnp.maximum(age - t_lookback, 0.0)
     sfr_exp = jnp.exp(-t_cosmic_old / tau) * window_weight(t_lookback, burstage, age)
 
-    # --- Burst component: DPL in cosmic time, peaks at (age - burstage) ---
-    # Anchored to the family's own ``age`` [yr] (galaxy age / lookback of
-    # formation), not the hardcoded ``AGEMAX_YR`` (14 Gyr) module constant:
-    # the burst episode is part of THIS galaxy's history, so its cosmic-time
-    # coordinate must track the galaxy's own age (and hence its redshift)
-    # like every other component here does, rather than sit at a fixed
-    # lookback regardless of ``age`` (#2521, sweep_S3_report.md finding
-    # F-new-4).
-    t_cosmic = age - t_lookback
-    tau_burst = age - burstage
+    # --- Burst component: DPL in cosmic time, peaks at (age_universe - burstage) ---
+    # Anchored to the age of the universe AT THE MODEL'S REDSHIFT
+    # (``age_universe_yr``, Wild et al. 2020 Eq. 5 and BAGPIPES
+    # star_formation_history.py:326-348), not the family's own free ``age``
+    # parameter and not the hardcoded ``AGEMAX_YR`` (14 Gyr) module constant:
+    # the burst is a RECENT (observation-anchored) episode, so its cosmic-time
+    # coordinate tracks "now" (the galaxy's own redshift), not the OLD
+    # component's independently free formation epoch. No lookback window on
+    # the burst, unlike the old component above: Wild et al. 2020 Eq. 5 and
+    # BAGPIPES let the DPL fill its whole bounded support [0, age_universe]
+    # rather than cutting it off at ``burstage`` -- measured, BAGPIPES puts
+    # 0.884 of the burst mass at lookback > burstage for alpha=10/beta=3 (only
+    # negligible at Wild's own fiducial beta=250). The age-of-universe
+    # truncation elsewhere in the pipeline (``_age_weights_cic`` /
+    # ``_mass_conserving_total``, #2521) already zeroes and renormalizes
+    # anything beyond ``age_universe_yr``, so no window is needed here either.
+    t_cosmic = age_universe_yr - t_lookback
+    tau_burst = age_universe_yr - burstage
     log_ratio = jnp.log(jnp.maximum(t_cosmic, 1.0) / jnp.maximum(tau_burst, 1.0))
     sfr_burst = jnp.exp(-jnp.logaddexp(alpha * log_ratio, -beta * log_ratio))
-    sfr_burst = sfr_burst * window_weight(t_lookback, -jnp.inf, burstage)
 
     # --- Mass-normalize each component (per-component unit mass) ---
     # jnp.gradient gives symmetric finite-difference widths; correct for
@@ -1722,13 +1738,9 @@ def delayed_bq(
     sfr_at_bq = (T_bq / tau_main_yr) * jnp.exp(-T_bq / tau_main_yr) / tau_main_yr
     sfr_post_bq = r_sfr * sfr_at_bq
 
-    # Cell-averaged blend between the burst/quench level (t_lb <= age_bq_yr)
-    # and the delayed-tau shape (t_lb > age_bq_yr): a hard `where` here left
-    # ``age_bq_yr`` with the same moving-boundary staircase `window_weight`
-    # exists to remove (#1374), since ``sfr_post_bq`` and ``sfr_delayed``
-    # generally differ at the switch (r_sfr != 1).
-    w_bq = window_weight(t_lookback, -jnp.inf, age_bq_yr)
-    raw = w_bq * sfr_post_bq + (1.0 - w_bq) * sfr_delayed
+    # Select: in the burst/quench window (T_bq <= T, i.e., t_lb <= age_bq_yr) use
+    # burst/quench level, otherwise use delayed-tau shape.
+    raw = jnp.where(T_bq <= T, sfr_post_bq, sfr_delayed)
 
     # Cell-averaged window so ``age_main_yr`` has a gradient (#1374).
     shape = raw * window_weight(t_lookback, 0.0, age_main_yr)
@@ -1837,83 +1849,52 @@ def periodic(
     T = age_yr - t_lookback
     T_safe = jnp.maximum(T, 0.0)
 
-    # Local grid scale: the same boundary-cell weighting `lognormal` uses at
-    # its single T = 0 edge, applied here at every burst-cycle boundary
-    # instead of just the outermost one. The scale is the spacing of the
-    # grid the SFH is sampled on, not a hand-chosen taper length.
-    spacing = jnp.gradient(t_lookback)
+    # Burst index: k = floor(T / delta), which is the index of the latest burst
+    # with onset at cosmic time k * delta <= T.
+    n = jnp.floor(T_safe / delta)
 
-    def _cycle_value(n: jnp.ndarray, u: jnp.ndarray) -> jnp.ndarray:
-        """SFR shape for burst-cycle index ``n`` at phase ``u`` in [0, delta)."""
-        # Geometric series terms.
-        # r = exp(-delta / tau): decay per burst interval
-        # r**(n+1), r**n: decay to the (n+1)-th and n-th burst
-        one_minus_r = -jnp.expm1(-delta / tau)  # 1 - r, stable near zero
-        r_np1 = jnp.exp(-(n + 1.0) * delta / tau)  # r**(n+1)
-        r_n = jnp.exp(-n * delta / tau)  # r**n
+    # Time since the latest burst onset: u = T - n * delta, in [0, delta).
+    u = T_safe - n * delta
 
-        # Geometric sum: sum_{j=0}^{n} r**j = (1 - r**(n+1)) / (1 - r)
-        S0 = (1.0 - r_np1) / one_minus_r
+    # Geometric series terms.
+    # r = exp(-delta / tau): decay per burst interval
+    # r**(n+1), r**n: decay to the (n+1)-th and n-th burst
+    one_minus_r = -jnp.expm1(-delta / tau)  # 1 - r, stable near zero
+    r_np1 = jnp.exp(-(n + 1.0) * delta / tau)  # r**(n+1)
+    r_n = jnp.exp(-n * delta / tau)  # r**n
 
-        # Weighted sum for delayed type: sum_{j=0}^{n} j * r**j
-        # = r * (1 - (n+1)*r**n + n*r**(n+1)) / (1 - r)**2
-        r = 1.0 - one_minus_r
-        S1 = r * (1.0 - (n + 1.0) * r_n + n * r_np1) / (one_minus_r**2)
+    # Geometric sum: sum_{j=0}^{n} r**j = (1 - r**(n+1)) / (1 - r)
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
+    S0 = (1.0 - r_np1) / one_minus_r
 
-        # Rectangular: the most recent burst (j=0) is ON while u <= tau, cell-
-        # averaged over the local grid spacing at that one edge exactly as
-        # `constant`'s top-hat is (a smoothstep, not the hard `u <= tau`
-        # test); OLDER overlapping bursts (j=1, 2, ... -- only possible when
-        # tau exceeds delta) are still counted by the exact closed form,
-        # unsmoothed at their own closing edges. The rectangular type is not
-        # the registered default and the declared prior for tau and delta
-        # overlaps only partially, so this covers the common non-overlapping
-        # case exactly and leaves the rarer overlapping one with the
-        # pre-existing hard edges.
-        gate = jnp.clip((tau - u) / spacing, 0.0, 1.0)
-        rect_current = gate * gate * (3.0 - 2.0 * gate)
-        older_overlap = jnp.clip(jnp.floor((tau - u) / delta), 0.0, n)
-        rect_shape = rect_current + older_overlap
+    # Weighted sum for delayed type: sum_{j=0}^{n} j * r**j
+    # = r * (1 - (n+1)*r**n + n*r**(n+1)) / (1 - r)**2
+    # 1 - r = -expm1(-delta/tau) > 0 for delta, tau > 0: no clamp needed
+    r = 1.0 - one_minus_r
+    S1 = r * (1.0 - (n + 1.0) * r_n + n * r_np1) / (one_minus_r**2)
 
-        exp_shape = jnp.exp(-u / tau) * S0
-        delayed_shape = jnp.exp(-u / tau) / (tau**2) * (u * S0 + delta * S1)
-        return (
-            jnp.where(burst_type == 0, exp_shape, 0.0)
-            + jnp.where(burst_type == 1, delayed_shape, 0.0)
-            + jnp.where(burst_type == 2, rect_shape, 0.0)
-        )
+    # Rectangular: count bursts j with u + j*delta <= tau, i.e., j <= (tau - u) / delta.
+    # Use floor-then-clamp to get integer count: min(floor((tau - u)/delta) + 1, n + 1).
+    # The +1 accounts for the current burst (j=0); clamping at n+1 is the max.
+    rect_count = jnp.clip(jnp.floor((tau - u) / delta) + 1.0, 0.0, n + 1.0)
 
-    # Bursts occur at T = n * delta for integer n = 0, 1, 2, ...; T_safe
-    # falls in cycle n_floor at phase u_post = T_safe - n_floor * delta. A
-    # bare `floor` here makes every grid node's burst-cycle index switch
-    # discretely the moment the moving boundary (age_yr, delta_bursts_yr, or
-    # tau_bursts_yr) sweeps a node across a cycle edge -- the same mechanism
-    # `window_weight` corrects for one boundary, repeated at every multiple
-    # of delta. The correction blends the post-boundary cycle (n_floor,
-    # freshly fired) with the pre-boundary continuation (n_floor - 1, still
-    # decaying as though the newest burst had not yet fired) across one grid
-    # cell at each crossing.
-    n_floor = jnp.floor(T_safe / delta)
-    u_post = T_safe - n_floor * delta
-    u_pre = u_post + delta  # continuation of cycle (n_floor - 1) past its own period
+    # Exponential (type 0): exp(-u/tau) * S0
+    exp_shape = jnp.exp(-u / tau) * S0
 
-    val_post = _cycle_value(n_floor, u_post)
-    # n = -1 (no bursts have fired yet) analytically zeroes every term above
-    # through the geometric-series identities, but evaluating exp(-n*delta/tau)
-    # at n = -1 can overflow for the smallest declared tau; clamp the traced
-    # index used inside `_cycle_value` and zero the whole cycle afterward for
-    # n_floor == 0, where there is no earlier cycle to blend toward -- the
-    # formation boundary itself (T = 0) is smoothed by the `window_weight`
-    # call below instead.
-    val_pre_raw = _cycle_value(jnp.maximum(n_floor - 1.0, 0.0), u_pre)
-    val_pre = jnp.where(n_floor > 0.0, val_pre_raw, 0.0)
+    # Delayed (type 1): exp(-u/tau) / tau**2 * (u * S0 + delta * S1)
+    delayed_shape = jnp.exp(-u / tau) / (tau**2) * (u * S0 + delta * S1)
 
-    w = jnp.where(n_floor > 0.0, jnp.clip(u_post / spacing, 0.0, 1.0), 1.0)
-    w_smooth = w * w * (3.0 - 2.0 * w)
-    raw = w_smooth * val_post + (1.0 - w_smooth) * val_pre
+    # Rectangular (type 2): rect_count
+    rect_shape = rect_count
 
-    # Cell-averaged window so ``age_yr`` (the overall formation boundary,
-    # T = 0) has a gradient (#1374).
+    # Select the shape based on burst_type.
+    raw = (
+        jnp.where(burst_type == 0, exp_shape, 0.0)
+        + jnp.where(burst_type == 1, delayed_shape, 0.0)
+        + jnp.where(burst_type == 2, rect_shape, 0.0)
+    )
+
+    # Cell-averaged window so ``age_yr`` has a gradient (#1374).
     shape = raw * window_weight(t_lookback, 0.0, age_yr)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 

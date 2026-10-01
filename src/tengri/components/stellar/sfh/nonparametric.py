@@ -1100,10 +1100,7 @@ def continuity_flex(
     )
 
     n_bins_total = n_flex_bins + 2  # young + flex bins + old
-    # Partial-cell lookup: `tlast_gyr` and `tflex_gyr` move two of these
-    # edges, so the hard lookup would make the integrated photometry a
-    # staircase in either one as a grid node crosses the moving edge (#2476).
-    return _piecewise_constant_sfr_smooth(age_yr, all_edges_yr, sfr_bins, n_bins_total)
+    return _piecewise_constant_sfr(age_yr, all_edges_yr, sfr_bins, n_bins_total)
 
 
 def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarray:

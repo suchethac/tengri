@@ -254,6 +254,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.5,
+            age_universe_yr=10e9,
         )
         self._check_normalization(
             psb_wild2020,
@@ -265,6 +266,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.3,
+            age_universe_yr=12e9,
         )
         self._check_normalization(
             psb_wild2020,
@@ -276,6 +278,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.1,
+            age_universe_yr=9e9,
         )
 
     def test_constant_normalization(self):

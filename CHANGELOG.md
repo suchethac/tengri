@@ -366,20 +366,45 @@
 - Every SFH family's star-formation support is bounded to `[0, age(z)]`,
   forming the requested mass on both age kernels and for additive
   composites (pooled total; a uniform rescale, so per-member truncation is
-  still approximate). `exp`/`dexp` get a genuine `[0, start]` window;
-  `psb_wild2020`'s burst anchors to its own `age`. A free `redshift`'s
+  still approximate). `exp`/`dexp` get a genuine `[0, start]` window
+  (`start` now reads as the lookback time of formation, not of an
+  unbounded-into-the-past peak). **Breaking**: `sfh_exp_start_gyr`/
+  `sfh_dexp_start_gyr` default to `Fixed(5.0)` (floor `0.5`), not
+  `Fixed(0.0)` (floor `0.0`) -- under the corrected `[0, start]` window a
+  zero onset is a zero-width window with no stars at all (ill-posed;
+  #1031's own fixture divided a vanishing mass by a vanishing width, 0/0).
+  `psb_wild2020`'s burst is anchored to the cosmic age at z (`age_at_z(z)`,
+  following Wild et al. 2020 Eq. 5), not its own `age` parameter (the OLD
+  component's independent formation epoch) and not a hardcoded module
+  constant; the burst carries no lookback window on its support, filling
+  the whole bounded range rather than being cut off at `burstage`. A free
+  `redshift`'s
   upper end can still admit an onset draw before the Big Bang; `SEDModel
   .build` now warns (`FreeRedshiftOnsetCeilingWarning`) instead of
   truncating unremarked. `continuity`/`dirichlet`'s default bin ladder is
   built from the source redshift (Prospector-beta scheme) instead of fixed
   at 0-13.7 Gyr; a free redshift warns too
   (`NonparametricBinEdgesAtRedshiftCeilingWarning`). Moving-boundary
-  staircases (#2476) are fixed for `delayed_bq`, `periodic`'s burst onset,
-  and `psb_suess2022`/`psb_flex`'s bin edges; `periodic`'s rectangular type,
-  `tsnorm`'s SSP-grid aliasing, and `psb_suess2022`/`psb_flex`'s `tlast_gyr`
-  on the `dsps` age kernel (an exactly flat direction: both the finite
-  difference and the analytic gradient are zero) remain measured staircases
-  (#2521, #2457, #2476).
+  staircases (#2476) are fixed for `psb_suess2022`/`psb_flex`'s bin edges;
+  `delayed_bq`'s burst/quench switch, `periodic`'s burst onset, spacing and
+  width, `periodic`'s rectangular type, `tsnorm`'s SSP-grid aliasing, and
+  `psb_suess2022`/`psb_flex`'s `tlast_gyr` on the `dsps` age kernel (an
+  exactly flat direction: both the finite difference and the analytic
+  gradient are zero) remain measured staircases on at least one age kernel
+  (#2521, #2457, #2476) -- a partial-cell quadrature narrow enough to pass
+  every existing CIGALE parity test for these two families was not found
+  this round, so their moving-boundary integration stays the CIGALE-matching
+  hard edge.
+- A catalog fit's per-galaxy `redshift_col` can free a z-capped onset
+  parameter (e.g. `sfh_dpl_age_gyr`) whose ceiling was narrowed to the age
+  of the universe at the model's single placeholder redshift, not the
+  catalog's actual per-galaxy range. `Catalog` now re-narrows that ceiling
+  to the age of the universe at the catalog's lowest redshift -- the
+  widest single ceiling valid for every galaxy in it, since the
+  mass-conserving truncation (#2521) still forms each galaxy's declared
+  mass inside its own `[0, age(z_i)]` at fit time regardless of the prior's
+  width -- and warns (`FreeRedshiftOnsetCeilingWarning`) naming the
+  catalog's z range instead of refusing the fit outright.
 - Composable AGN torus no longer collapses at the 1 mm node (#1512): the
   composable disc+skirtor path with cigale_joint normalization computes an
   inclination-attenuation ratio `disk(i)/disk(0)` by resampling the SKIRTOR

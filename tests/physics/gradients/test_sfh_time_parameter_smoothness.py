@@ -119,12 +119,27 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
 #: * ``psb_suess2022.tlast_gyr`` (cic) and ``psb_flex.tflex_gyr`` (cic):
 #:   ``_piecewise_constant_sfr_smooth``'s partial-cell weight resolves some
 #:   but not every CIC cell at that edge for these two params.
+#: * ``delayed_bq.age_bq_gyr`` (dsps only; cic measures below threshold): the
+#:   burst/quench switch at ``t_lb = age_bq_yr`` is a hard ``where`` in T =
+#:   age_main - t_lb, so the histogram kernel's coarse age bins step across
+#:   it; the cic kernel's dense integrand samples the same hard edge finely
+#:   enough to stay under the threshold over this window.
+#: * ``periodic.delta_bursts_gyr`` (dsps) and ``periodic.tau_bursts_gyr``
+#:   (both kernels): every burst is a hard rectangular/triangular/exponential
+#:   pulse in lookback time (see the module docstring of ``mean_sfh.periodic``
+#:   for the pulse shapes); sweeping the spacing or width between bursts
+#:   moves each pulse's edges across the age grid one bin at a time, the same
+#:   moving-hard-boundary mechanism as ``age_gyr`` above.
 _KNOWN_GAPS = {
     ("tsnorm_burst", "burst_age_gyr", "cic"),
     ("tsnorm_burst", "burst_age_gyr", "dsps"),
+    ("delayed_bq", "age_bq_gyr", "dsps"),
     ("periodic", "age_gyr", "cic"),
     ("periodic", "age_gyr", "dsps"),
     ("periodic", "delta_bursts_gyr", "cic"),
+    ("periodic", "delta_bursts_gyr", "dsps"),
+    ("periodic", "tau_bursts_gyr", "cic"),
+    ("periodic", "tau_bursts_gyr", "dsps"),
     ("psb_suess2022", "tflex_gyr", "dsps"),
     ("psb_suess2022", "tlast_gyr", "cic"),
     ("psb_suess2022", "tlast_gyr", "dsps"),

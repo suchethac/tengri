@@ -2459,6 +2459,15 @@ class StellarSEDComponent:
         if isinstance(sfh_model, str) and sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        # ``psb_wild2020`` (registry alias ``psb``) anchors its burst double
+        # power law at the age of the universe AT THIS MODEL'S REDSHIFT, not a
+        # static cosmology default: Wild et al. 2020 Eq. 5 and BAGPIPES
+        # star_formation_history.py:326-348 both measure the burst's cosmic
+        # time from "now" (the observation epoch), which is per-galaxy, so it
+        # is injected from the already-computed ``t_obs_gyr`` rather than a
+        # registry setting.
+        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -3602,6 +3611,15 @@ class StellarSEDComponent:
 
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
+        # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
+        # block below so psb_wild2020's age_universe_yr injection (mirroring
+        # apply()'s own ordering) can read it; also feeds the runtime
+        # tabulated SFH and the age-of-universe truncation further down.
+        z = jnp.asarray(
+            require_redshift(params, "components.stellar.component.compute_joint_weights")
+        )
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
         # SFH kwargs: identical registry translation to apply (§2)
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
@@ -3617,12 +3635,11 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        if self.config.sfh_model in ("psb", "psb_wild2020"):
+            # Mirrors apply()'s injection (§2) so the two routes cannot
+            # diverge (#982); t_obs_gyr was hoisted above for this.
+            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
-
-        z = jnp.asarray(
-            require_redshift(params, "components.stellar.component.compute_joint_weights")
-        )
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
         # knots the exact forward builds, from the single shared helper, so the
