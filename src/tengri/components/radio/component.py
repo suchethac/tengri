@@ -48,6 +48,7 @@ parameter snooped from another component's namespace.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -142,6 +143,15 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         bit-identically. Physical-aging kernels ``"JP"``, ``"KP"``,
         ``"tribble"`` are reserved names rejected at construction with a
         :class:`ValueError`; the physics lands in a follow-up PR.
+    freefree_wave_min : float or None
+        Rest wavelength [Angstrom] below which the thermal free-free term is
+        zero; the term is on at and above it. ``None`` (default) leaves the term on its own lower
+        limit (1 mm). The factory sets it to the SSP grid edge when the SSP
+        is flagged nebular-included (``ssp_data.nebular == "included"``: its
+        flux already holds the nebular continuum) and ``include_freefree``
+        was left unset, so the SSP serves the thermal continuum up to its
+        edge and this term serves it beyond (#2574). Requires the term to
+        be on.
 
     Notes
     -----
@@ -162,6 +172,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     sfr_mode: str = "bell2003"
     include_freefree: bool | None = None
     agn_radio_model: str = "powerlaw"
+    freefree_wave_min: float | None = None
 
     def __post_init__(self) -> None:
         if self.agn_radio_model not in AGN_RADIO_MODELS:
@@ -207,6 +218,28 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             object.__setattr__(self, "include_freefree", False)
         elif self.include_freefree is None:
             object.__setattr__(self, "include_freefree", True)
+        # Validate freefree_wave_min
+        if self.freefree_wave_min is not None:
+            if isinstance(self.freefree_wave_min, bool) or not isinstance(
+                self.freefree_wave_min, (int, float)
+            ):
+                raise TypeError(
+                    "freefree_wave_min must be a real number [Angstrom] or None, "
+                    f"got {type(self.freefree_wave_min).__name__}"
+                )
+            if not (math.isfinite(self.freefree_wave_min) and self.freefree_wave_min > 0.0):
+                raise ValueError(
+                    "freefree_wave_min must be finite and positive [Angstrom], "
+                    f"got {self.freefree_wave_min!r}"
+                )
+            if not self.include_freefree:
+                from tengri.config.exceptions import ConfigError
+
+                raise ConfigError(
+                    "radio: freefree_wave_min is a lower wavelength for the thermal "
+                    "free-free term, but that term is off (include_freefree=False). "
+                    "Leave freefree_wave_min unset."
+                )
 
 
 @dataclass(frozen=True)
@@ -351,6 +384,22 @@ class RadioSEDComponent(TemplateThreading):
             inputs["log_L_agn_bol"] = jnp.asarray(log_L_agn_bol)
         return inputs
 
+    def _window_freefree(
+        self, terms: dict[str, jnp.ndarray], wave: jnp.ndarray
+    ) -> dict[str, jnp.ndarray]:
+        r"""Zero the thermal term below ``config.freefree_wave_min`` [Angstrom] (#2574).
+
+        The term is kept at the limit itself: the grid node at the SSP edge must
+        carry it so that the term is complete across the first grid cell above
+        the edge, where the SSP has no flux. The limit is a static config value,
+        so this adds no traced branch; key order is preserved because the
+        band-response path indexes terms by position.
+        """
+        wave_min = self.config.freefree_wave_min
+        if wave_min is None:
+            return terms
+        return {**terms, "ff": jnp.where(wave >= wave_min, terms["ff"], 0.0)}
+
     def emission_terms(
         self,
         params: Mapping[str, jnp.ndarray],
@@ -405,6 +454,9 @@ class RadioSEDComponent(TemplateThreading):
         *total* is not: three power laws of different index do not share a shape. That
         is why the terms are exposed separately, the band integral factorizes per term
         and not on the sum (#1109).
+
+        The ``"ff"`` term is zero below ``config.freefree_wave_min`` when that is set
+        (#2574).
         """
         model = self.config.agn_radio_model
         z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
@@ -454,17 +506,47 @@ class RadioSEDComponent(TemplateThreading):
                 if self.config.include_freefree
                 else jnp.zeros_like(wave)
             )
-            return {"sf": sf, "ff": ff, "agn": jnp.zeros_like(wave)}
+            return self._window_freefree({"sf": sf, "ff": ff, "agn": jnp.zeros_like(wave)}, wave)
 
         if model == "powerlaw":
-            return radio_total_terms(
+            return self._window_freefree(
+                radio_total_terms(
+                    wave,
+                    L_ir=L_ir,
+                    L_agn_bol=L_agn_bol,
+                    q_ir=jnp.asarray(params["radio_q_ir"]),
+                    alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+                    radio_loudness=jnp.asarray(params["radio_loudness"]),
+                    alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
+                    sfr_mode=self.config.sfr_mode,
+                    log_mstar=log_mstar,
+                    redshift=z,
+                    q0=firrc_q0,
+                    mass_slope=firrc_mass_slope,
+                    z_slope=firrc_z_slope,
+                    include_freefree=self.config.include_freefree,
+                    T_e=jnp.asarray(params["radio_T_e"]),
+                    alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                    l_bband=L_4400_intrinsic,
+                    log_L_ir=_log_L_ir,
+                    log_L_agn_bol=_log_L_agn,
+                ),
+                wave,
+            )
+
+        # model == "dpl"
+        return self._window_freefree(
+            radio_total_dpl_terms(
                 wave,
                 L_ir=L_ir,
                 L_agn_bol=L_agn_bol,
                 q_ir=jnp.asarray(params["radio_q_ir"]),
                 alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
                 radio_loudness=jnp.asarray(params["radio_loudness"]),
-                alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
+                alpha1=jnp.asarray(params["radio_alpha_thin"]),
+                alpha2=jnp.asarray(params["radio_alpha_thick"]),
+                log_nu_t=jnp.asarray(params["radio_log_nu_t"]),
+                log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                 sfr_mode=self.config.sfr_mode,
                 log_mstar=log_mstar,
                 redshift=z,
@@ -477,32 +559,8 @@ class RadioSEDComponent(TemplateThreading):
                 l_bband=L_4400_intrinsic,
                 log_L_ir=_log_L_ir,
                 log_L_agn_bol=_log_L_agn,
-            )
-
-        # model == "dpl"
-        return radio_total_dpl_terms(
+            ),
             wave,
-            L_ir=L_ir,
-            L_agn_bol=L_agn_bol,
-            q_ir=jnp.asarray(params["radio_q_ir"]),
-            alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
-            radio_loudness=jnp.asarray(params["radio_loudness"]),
-            alpha1=jnp.asarray(params["radio_alpha_thin"]),
-            alpha2=jnp.asarray(params["radio_alpha_thick"]),
-            log_nu_t=jnp.asarray(params["radio_log_nu_t"]),
-            log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
-            sfr_mode=self.config.sfr_mode,
-            log_mstar=log_mstar,
-            redshift=z,
-            q0=firrc_q0,
-            mass_slope=firrc_mass_slope,
-            z_slope=firrc_z_slope,
-            include_freefree=self.config.include_freefree,
-            T_e=jnp.asarray(params["radio_T_e"]),
-            alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-            l_bband=L_4400_intrinsic,
-            log_L_ir=_log_L_ir,
-            log_L_agn_bol=_log_L_agn,
         )
 
     def precompute(

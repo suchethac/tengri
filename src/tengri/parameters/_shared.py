@@ -16,7 +16,7 @@ share the same in-memory list.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Fixed, LogNormal, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
@@ -76,6 +76,53 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "sigma_v_kms must be in [0, 2000]",
         free_prior=Uniform(0.0, 2000.0, "Stellar velocity dispersion", units="km/s", default=0.0),
         units="km/s",
+    ),
+    ParamDeclaration(
+        "lsf_scale",
+        Fixed(1.0),
+        "Multiplicative scale on the instrument LSF sigma_inst(lambda), "
+        "applied before quadrature combination with sigma_v and "
+        "sigma_lib in the spectroscopy projection",
+        lambda lo, hi: lo > 0 and hi > 0,
+        "lsf_scale bounds must be strictly positive",
+        # Uniform(0.8, 1.2): a +/-20% instrument-resolution calibration
+        # systematic. Real spectrographs report their LSF from an arc-lamp
+        # or sky-line solution good to a few percent to ~10% in typical
+        # pipelines; 20% is a deliberately generous envelope so the prior
+        # does not itself constrain the fit, while staying bounded and
+        # strictly positive (sigma_inst = c / (2.3548 * R / lsf_scale)
+        # diverges as lsf_scale -> 0).
+        free_prior=Uniform(0.8, 1.2, "Instrument LSF scale", units="", default=1.0),
+        units="",
+    ),
+    ParamDeclaration(
+        "line_flux_scaling",
+        Fixed(1.0),
+        "Multiplicative calibration nuisance on the integrated line-flux data "
+        "channel (Observation.line_fluxes), absorbing an aperture / absolute-"
+        "flux-calibration mismatch between that channel and the rest of the "
+        "SED (#2527). Multiplies every predicted line flux of that channel "
+        "immediately before the likelihood comparison; does not change "
+        "predict_line_fluxes, line ratios, or any other derived property.",
+        # ``>= 0``, not ``> 0``: the declared ``free_prior`` is a LogNormal,
+        # whose ``.bounds`` reports its truncation lower edge as exactly 0.0
+        # (the distribution's own natural support is (0, inf), never
+        # literally 0, but the truncation FIELD is stored at 0.0) -- a
+        # ``lo > 0`` check would reject the declaration's own free prior.
+        # Mirrors the sibling positive-scale declarations that pair a
+        # zero-touching free_prior with a non-strict bound (e.g.
+        # ``sigma_v_kms`` above: ``lo >= 0``); still refuses any user prior
+        # that reaches negative values.
+        lambda lo, hi: lo >= 0,
+        "line_flux_scaling must be non-negative",
+        free_prior=LogNormal(
+            mu=0.0,
+            sigma=0.05,
+            description="Line-flux channel calibration scale",
+            units="",
+            default=1.0,
+        ),
+        units="",
     ),
 )
 

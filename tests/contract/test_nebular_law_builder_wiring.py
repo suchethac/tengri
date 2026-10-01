@@ -58,16 +58,16 @@ def _value(v):
 
 
 def test_law_neb_round_trips_through_to_groups(synthetic_ssp_wide, synthetic_tophat_obs):
-    # ``conroy2010`` rather than ``smc``: the nebular law has to READ the
+    # ``power_law`` rather than ``smc``: the nebular law has to READ the
     # ``*_neb`` override paired with it, and smc reads nothing beyond
     # wavelength, so ``slope_neb`` there is a value the curve discards (#2185).
-    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="conroy2010", slope_neb=-1.3)
+    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="power_law", slope_neb=-1.3)
     groups = m.spec.to_groups()
-    assert groups["dust_attenuation"]["law_neb"] == "conroy2010"
+    assert groups["dust_attenuation"]["law_neb"] == "power_law"
     assert _value(groups["dust_attenuation"]["slope_neb"]) == pytest.approx(-1.3)
     # Re-build from the round-tripped groups: the nebular law survives.
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
-    assert m2.spec.dust_law_neb == "conroy2010"
+    assert m2.spec.dust_law_neb == "power_law"
     # A nested-dict-grammar-built spec's per-screen override lands on the
     # declared parameter (``dust_slope_neb``), not ``dust_law_overrides`` --
     # that static dict is populated only from the flat surface's own

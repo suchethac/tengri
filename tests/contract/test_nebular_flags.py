@@ -32,14 +32,18 @@ class TestNebularFlagConflicts:
         the real grids. Pin the contract instead — when discovery finds
         nothing, the error names the knob the user has to set.
         """
-        monkeypatch.setattr(Parameters, "_default_cloudy_grid", lambda self: None)
+        monkeypatch.setattr(
+            Parameters, "_default_cloudy_grid", staticmethod(lambda isochrone_tag=None: None)
+        )
         with pytest.raises(ValueError, match="cloudy_grid_path"):
             Parameters(nebular=True)
 
     def test_nebular_cloudy_uses_discovered_default(self, monkeypatch):
         """When a grid IS discoverable, ``nebular=True`` adopts it (#1015)."""
         monkeypatch.setattr(
-            Parameters, "_default_cloudy_grid", lambda self: "/discovered/cloudy_grid.h5"
+            Parameters,
+            "_default_cloudy_grid",
+            staticmethod(lambda isochrone_tag=None: "/discovered/cloudy_grid.h5"),
         )
         spec = Parameters(nebular=True)
         assert spec.nebular_mode == "cloudy"

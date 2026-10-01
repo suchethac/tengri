@@ -1410,7 +1410,7 @@ stem — has been resolved to one rule: law keyword = `dust_` + grammar stem.
 | ------------------------------------ | ----------------------------------- | ------------------------------------------ |
 | `power_law(wave, n_slope=-0.7)`     | `power_law(wave, dust_slope=-0.7)` | `n_slope=` still works: deprecated alias, warns, forwards |
 | `(("n_slope", -1.0),)` overrides     | `(("dust_slope", -1.0),)` overrides | Dicts use `dust_slope` only               |
-| `conroy2010(wave, n_slope=-0.7, dust_Rv=3.1)` | `conroy2010(wave, dust_slope=-0.7, dust_Rv=3.1)` | `n_slope=` still works: deprecated alias, warns, forwards |
+| `conroy2010(wave, dust_Rv=3.1)`     | `conroy2010(wave, dust_Rv=3.1, dust_bump_strength=1.0)` | conroy2010 now uses `dust_bump_strength` (2175 Å bump amplitude) instead of `dust_slope` |
 
 The registry callables, `law_kwarg_names()`, and per-screen override dicts
 (`dust_law_overrides`, `bc_law_overrides`, `neb_law_overrides`) use `dust_slope`

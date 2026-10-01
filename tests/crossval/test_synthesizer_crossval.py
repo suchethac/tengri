@@ -171,8 +171,9 @@ class TestSFHParametricVsSynthesizer:
         ages = max_age_yr - t_cosmic
 
         sfr_synth = np.array([sfh_synth._sfr(float(a)) for a in ages])
-        # tengri delayed_tau(t, tau, norm): norm * t * exp(-t/tau)
-        sfr_tengri = np.array(delayed_tau(jnp.array(t_cosmic), tau=tau_yr, norm=1.0))
+        # tengri delayed_tau(t_lookback, tau, norm, age): norm * T * exp(-T/tau)
+        # where T = age - t_lookback. Pass lookback times (ages) and max_age.
+        sfr_tengri = np.array(delayed_tau(jnp.array(ages), tau=tau_yr, norm=1.0, age=max_age_yr))
 
         mask = sfr_synth > 1e-30
         diffs = _rel_diff(sfr_tengri[mask], sfr_synth[mask])

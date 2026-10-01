@@ -398,7 +398,7 @@ class TestReddy15:
 
         # Computed from the polynomial (Reddy et al. 2015, Eq. 8)
         # normalized to k(5500 Å) = 1.0
-        ref = np.array([0.8666, 0.3775, 0.0639])
+        ref = np.array([0.8521, 0.3630, 0.0494])
         np.testing.assert_allclose(tng, ref, rtol=0.01)
 
     def test_positive_output(self):

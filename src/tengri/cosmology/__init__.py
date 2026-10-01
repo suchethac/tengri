@@ -12,7 +12,8 @@ Examples
 >>> cosmo.luminosity_distance_mpc(0.5)
 DeviceArray(2867.4..., dtype=float64)
 >>> cosmo.PLANCK18
-CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
+CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046,
+            m_nu_eV=(0.0, 0.0, 0.06))
 """
 
 from __future__ import annotations

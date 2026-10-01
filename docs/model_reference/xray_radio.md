@@ -109,7 +109,7 @@ The free-free spectral index $\alpha_{\rm ff} \approx -0.1$ is nearly flat (defa
 
 #### Controlling free-free inclusion
 
-The free-free component's default depends on the declared nebular backend: it is **off** when the nebular backend carries a free-free continuum (`cue` or `cloudy_grid`), and **on** for all other backends (`none`, baked-in `ssp`, and `cb19` which publishes no continuum). This automatic rule prevents double-counting of thermal free-free between 1 mm and the end of the grid: the Cue and CloudyGrid backends analytically extend their continuum grids beyond 1 cm as optically thin free-free with slope $\nu^{-0.1}$, and an explicit `radio.sf.freefree: True` would add a second thermal term via Murphy et al. (2011). The predicate is keyed on the declared nebular backend name (`nebular_backend_carries_freefree` in `tengri.components.nebular._models`), not on the published continuum array.
+The free-free component's default depends on where the model already carries thermal emission. It is **off** when the nebular backend carries a free-free continuum (`cue` or `cloudy_grid`): those backends extend their continuum beyond 1 cm as optically thin free-free with slope $\nu^{-0.1}$, so a second term via Murphy et al. (2011) would double-count it. It is **on from the SSP grid edge upward only** when the SSP includes nebular emission (a wNE grid, whatever `neb` type is declared on it): the SSP flux already carries the thermal continuum up to its last wavelength (1 cm for `ssp_prsc_miles_chabrier_wNE`), so the radio term starts there and the model has one thermal term at every wavelength. It is **on over its whole range** (from 1 mm) otherwise, for example a bare-stellar SSP with `none` or `cb19` (which publishes no continuum). The first rule is keyed on the declared nebular backend name (`nebular_backend_carries_freefree` in `tengri.components.nebular._models`), the second on the SSP's nebular stamp (`ssp_data.nebular == "included"`, set by the `nebular_included` file attribute or the `wNE` filename). An SSP file with neither keeps the term over its whole range; stamp it with `tools/stamp_ssp_nebular_attrs.py --included` if it includes nebular emission.
 
 To override the default, pass `freefree: True` or `freefree: False` explicitly in the `radio.sf` sub-dict:
 
@@ -122,7 +122,7 @@ radio={
 
 Omitting the `freefree` key applies the auto rule above. Exception: `bell2003_split` forces `freefree: False` (since that mode pre-allocates 10% of its total Bell 2003 radio luminosity to a thermal component). Explicitly passing `freefree: True` with `bell2003_split` raises an error to prevent unintended double-counting of thermal emission.
 
-**Known limitation**: the baked-in (`ssp`) nebular continuum lives inside the SSP flux, ends at the SSP grid edge, and is not extended. With a radio block, the auto rule keeps `freefree: True` for baked-in models, so that combination still overlaps between 1 mm and the SSP edge.
+Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
 
 ### AGN Radio Jets
 
