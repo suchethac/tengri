@@ -215,6 +215,80 @@ def _xrb_mass_scale(ssp, dtype):
 
     Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
     in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
+    ceiling before it is multiplied by anything -- and ``log_l_x_xrb`` is the
+    companion the X-ray component publishes as a ``log10`` throughout (the
+    Lehmer+2016 relations are carried as log10 coefficients). Sweeping the
+    linear form would measure a documented impossibility; sweeping the
+    companion measures whether the seam's actual float32 path holds across the
+    whole declared mass prior, which is the claim ``_HANDLED`` records.
+    """
+    name, lo, hi = _declared_range(r"^sfh_delayed_log_total_mass$")
+    with jax.enable_x64(dtype is jnp.float64):
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        sed = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE))),
+            approx=SpectrumPrecomp(n_z=16, z_min=0.05, z_max=1.0),
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(lo, hi),
+                "tau_gyr": 1.0,
+                "age_gyr": 5.0,
+            },
+            redshift=Fixed(0.1),
+            dust_attenuation=_DUST,
+        )
+        base = _reference_point(sed)
+
+        def objective(x):
+            return jnp.sum(sed.predict_spectrum({**base, name: x}))
+
+        return name, _evaluate(objective, lo, hi, dtype)
+
+
+def _agn_bolometric(ssp, dtype):
+    """``L_sun * 10**agn_log_lbol`` -- #1439's seam, across the whole prior.
+
+    At the top of the declared prior the product is ~3.8e47, five orders past
+    float32's 3.4e38. #1439 was first read as an unreachable cancellation; it
+    was a grouping bug, and it is reachable everywhere above ``log_lbol ~ 4.9``.
+    """
+    name, lo, hi = _declared_range(r"^agn_log_lbol$")
+    with jax.enable_x64(dtype is jnp.float64):
+        sed = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(
+                photometry=Photometry.from_names(["sdss_r", "wise_w1", "wise_w4"])
+            ),
+            approx=None,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "tau_gyr": 1.0, "age_gyr": 5.0},
+            redshift=Fixed(0.1),
+            dust_attenuation=_DUST,
+            agn={
+                "type": "composable",
+                "all_params": Fixed(DEFAULT),
+                "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
+                "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+                "norm": "cigale_joint",
+                "log_lbol": Uniform(lo, hi),
+                "fracAGN": 0.1,
+            },
+        )
+        base = _reference_point(sed)
+
+        def objective(x):
+            return jnp.sum(sed.predict_photometry({**base, name: x}))
+
+        return name, _evaluate(objective, lo, hi, dtype)
+
+
+def _xrb_mass_scale(ssp, dtype):
+    """The XRB mass term (#722), read through its float32 path, across the prior.
+
+    Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
+    in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
     ceiling before it is multiplied by anything, so the sum overflows even at
     zero SFR -- and ``utils.sed_quantities.compute_log_l_x_xrb`` is the
     documented companion that carries both coefficients in log space. Sweeping

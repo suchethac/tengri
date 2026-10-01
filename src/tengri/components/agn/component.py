@@ -19,6 +19,10 @@ Cross-component publications
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
+- ``state.derived["log_L_12um"]``, ``["log_L_6um"]`` (dex re erg/s):
+  :math:`\\log_{10}\\nu L_\\nu` at 12 and 6 µm of the AGN's own emission (disc +
+  torus + polar dust for the composable model, the whole SED for a monolithic
+  one). The ``lopez24`` X-ray corona is anchored to ``log_L_12um``.
 - ``state.derived["sed_agn"]``: the AGN SED contribution
   (erg/s/Hz, shape n_wave) for diagnostics.
 - ``state.derived["sed_agn_disc"]``, ``["sed_agn_torus"]``,
@@ -49,6 +53,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.components.template_threading import TemplateThreading
@@ -240,6 +245,18 @@ class AGNSEDComponent(TemplateThreading):
                 "L_4400_intrinsic",
                 "erg/s/Hz",
                 "AGN intrinsic disc L_nu at 4400 A (un-reddened); drives radio loudness",
+            ),
+            DerivedKey(
+                "log_L_12um",
+                "dex",
+                "log10 nu L_nu at 12 um [dex re erg/s] of disc + torus + polar dust "
+                "(the whole SED for monolithic models); drives the lopez24 alpha_IRX corona",
+            ),
+            DerivedKey(
+                "log_L_6um",
+                "dex",
+                "log10 nu L_nu at 6 um [dex re erg/s] of disc + torus + polar dust "
+                "(the whole SED for monolithic models)",
             ),
             DerivedKey(
                 "agn_cos_inc",
@@ -596,6 +613,20 @@ class AGNSEDComponent(TemplateThreading):
             L_2500_unit = jnp.asarray(0.0)
             L_4400_unit = jnp.asarray(0.0)
             agn_components_unit = None
+        # nu L_nu at 12 and 6 um of the AGN's own emission (disc + torus + polar
+        # dust; the whole SED for a monolithic model, which has no sub-blocks),
+        # measured on the reference-scale spectrum with the true scale added in
+        # log space: the linear nu L_nu ~ 1e45 erg/s is past float32's ceiling.
+        _log_scale = (agn_log_lbol - _AGN_LBOL_REF) if _use_ref else 0.0
+        _mir_unit = (
+            agn_components_unit["disc"]
+            + agn_components_unit["torus"]
+            + agn_components_unit["polar"]
+            if agn_components_unit is not None
+            else L_agn_unit
+        )
+        log_L_12um = log10_nu_lnu_at(wave, _mir_unit, 1.2e5, _log_scale)
+        log_L_6um = log10_nu_lnu_at(wave, _mir_unit, 6.0e4, _log_scale)
         if _use_ref:
             _offset = agn_log_lbol - _AGN_LBOL_REF
             L_agn = apply_log10_scale(L_agn_unit, _offset)
@@ -621,6 +652,8 @@ class AGNSEDComponent(TemplateThreading):
             sed_agn=L_agn,
             L_2500_intrinsic=L_2500_intrinsic,
             L_4400_intrinsic=L_4400_intrinsic,
+            log_L_12um=log_L_12um,
+            log_L_6um=log_L_6um,
             # X-CIGALE tilts the corona with the AGN viewing angle
             # (yang20.py: cosi = cos(agn.i) for SKIRTOR, sin(psy) for
             # Fritz); publish cos(i) so the X-ray block shares this

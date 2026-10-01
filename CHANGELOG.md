@@ -33,19 +33,23 @@
   photon index default is 1.56 (Fabbiano 2006), matching Yang+2020 Sect. 2.2.2
   and pcigale, instead of 1.6 (#2583).
 
-- The X-ray blocks scale XRB emission (`xray_xrb_terms` and `xray_hotgas`) with
-  the 100 Myr-averaged SFR when available, not the instantaneous SFR. The Yang
-  et al. 2020/2022 relations (Lehmer et al. 2016) are calibrated on timescales
-  ∼10 Myr; using `sfr_100myr` removes a systematic bias in bursty models. The
-  published properties `log_l_x_xrb` and `log_l_x_agn` are now computed from the
-  emitted X-ray terms themselves (float32-safe via log10 band norms) instead of
-  independent relations, so they match the spectrum (#2582).
+- The X-ray block's HMXB and hot-gas terms scale with the SFR averaged over the last
+  100 Myr (`sfr_100myr`), the quantity the Lehmer et al. 2016 relations are calibrated on
+  (Yang et al. 2022, Sect. 3.3); the instantaneous SFR stands in only for an SFH that
+  publishes no 100 Myr average. The registered properties `log_l_x_xrb` and `log_l_x_agn`
+  are the 2-10 keV luminosities of the emitted HMXB + LMXB terms and of the emitted AGN
+  corona (absorber, scattered fraction and anisotropy included), published by the X-ray
+  component as `log_L_x_xrb_2_10` / `log_L_x_agn_2_10` in log10 space, so they equal the
+  band integral of `sed_xray`'s terms in float64 and float32. `log_l_x_agn` is `-inf`
+  without an AGN. `compute_log_l_x_xrb` and `compute_log_l_x_agn` are removed (#2582).
 
-- The X-ray corona is anchored to the AGN's own 12 µm νL_ν via `log_L_12um`
-  when available (composable AGN discs, toruses, and polar dust; standalone
-  SKIRTOR). The 0.07×L_bol fallback is removed for `lopez24`, and the 12 µm
-  amplitude is carried in log10 space to prevent float32 overflow. The anchored
-  amplitude is refined by `alpha_irx`, matching López et al. 2024 Table 2 (#2581).
+- The `lopez24` corona is anchored to the 12 um nu L_nu of the AGN model itself. The
+  AGN component publishes `log_L_12um` and `log_L_6um` (dex re erg/s; disc + torus + polar
+  dust of the composable model, the whole SED of a monolithic one), and
+  `L(2-10 keV) = nu L_nu(12 um) / 10^alpha_IRX` is formed in log10 space, so the X-ray
+  wing is finite in pure float32. A model with no AGN has a zero corona, and the 0.07 L_bol
+  bolometric-correction anchor is removed. `xray_agn_corona_lopez24` and
+  `xray_total_lopez24*` take `log_l_12um_erg` (dex) in place of `l_12um_erg_hz` (#2581).
 
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a

@@ -357,6 +357,12 @@ class DerivedState:
     # Intrinsic (un-reddened) disc monochromatic L_nu at 4400 A [erg/s/Hz];
     # drives radio loudness normalization (B-band). Published by composable AGN.
     L_4400_intrinsic: jnp.ndarray | None = None
+    # log10 nu L_nu at 12 and 6 um [dex re erg/s] of the AGN's own emission
+    # (disc + torus + polar dust). The lopez24 X-ray corona is anchored to the
+    # 12 um value; carried in log space because nu L_nu ~ 1e45 erg/s overflows
+    # float32.
+    log_L_12um: jnp.ndarray | None = None
+    log_L_6um: jnp.ndarray | None = None
     # AGN cos(i) [dimensionless]. The X-ray corona tilts its Yang+2022
     # anisotropy to the same sightline as the disc/torus, exactly as
     # X-CIGALE forwards cos i from the AGN module into yang20 (#980).
@@ -501,6 +507,12 @@ class DerivedState:
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None
     sed_xray: jnp.ndarray | None = None
+    # log10 2-10 keV luminosities [dex re erg/s] of the emitted HMXB + LMXB terms
+    # and of the emitted AGN corona (-inf without an AGN): the band integrals of
+    # the terms in ``sed_xray``, read by the ``log_l_x_xrb`` / ``log_l_x_agn``
+    # properties.
+    log_L_x_xrb_2_10: jnp.ndarray | None = None
+    log_L_x_agn_2_10: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one

@@ -10,15 +10,21 @@ Cross-component reads
 ---------------------
 X-ray depends on quantities owned by other components:
 
-- ``sfr`` (M_⊙/yr): produced by the stellar component as the
-  current-time SFR. Read from ``state.derived["sfr"]`` with a
-  fallback to 1.0.
+- ``sfr_100myr`` (M_⊙/yr): the SFR averaged over the last 100 Myr, produced
+  by the stellar component. The HMXB and hot-gas relations (Lehmer et al.
+  2016) are calibrated on it (Yang et al. 2022, Sect. 3.3). Read from
+  ``state.derived["sfr_100myr"]``; only when the SFH publishes no 100 Myr
+  average does the instantaneous ``state.derived["sfr"]`` stand in, and
+  failing that 1.0.
 - ``log_mstar`` (log10 M_⊙): produced by the stellar component.
   Read from ``state.derived["log_mstar"]`` with a fallback to 10.0
   (i.e. 10¹⁰ M_⊙). X-ray's ``xray_total`` consumes the linear stellar
   mass in M_⊙, so the adapter exponentiates: ``M_* = 10**log_mstar``.
 - ``L_agn_bol`` (erg/s): produced by the AGN component. Read from
   ``state.derived["L_agn_bol"]`` with a fallback to 0.0 (no AGN).
+- ``log_L_12um`` (dex re erg/s): νL_ν at 12 µm of the AGN disc, torus and polar
+  dust, produced by the AGN component; anchors the ``lopez24`` corona. Absent
+  means no AGN, and the corona is exactly zero.
 - ``log_metallicity_history`` (dex, absolute log10(Z)): produced by the
   stellar component. Its present-day bin drives the Lehmer+2016 HMXB
   metallicity term; falls back to :data:`~tengri.utils.physics_constants.Z_SUN`
@@ -47,6 +53,8 @@ from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
     metallicity_from_history,
+    xray_total_log_band_luminosities,
+    xray_total_lopez24_log_band_luminosities,
     xray_total_lopez24_terms,
     xray_total_terms,
 )
@@ -58,7 +66,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import log10_add, representable_denominator
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -142,6 +150,18 @@ class XRaySEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "X-ray luminosity contribution on pipeline wave grid",
             ),
+            DerivedKey(
+                "log_L_x_xrb_2_10",
+                "dex",
+                "log10 of the 2-10 keV luminosity of the emitted HMXB + LMXB terms "
+                "[dex re erg/s]; read by the log_l_x_xrb property",
+            ),
+            DerivedKey(
+                "log_L_x_agn_2_10",
+                "dex",
+                "log10 of the 2-10 keV luminosity of the emitted AGN corona "
+                "[dex re erg/s]; -inf without an AGN; read by the log_l_x_agn property",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -154,7 +174,18 @@ class XRaySEDComponent(TemplateThreading):
         to instantiate stellar + AGN. Phase B of #21: see ADR-0004.
         """
         return (
-            DerivedKey("sfr", "Msun/yr", "Read from stellar if present; falls back to 1.0"),
+            DerivedKey(
+                "sfr_100myr",
+                "Msun/yr",
+                "SFR averaged over the last 100 Myr (stellar); scales the HMXB and "
+                "hot-gas terms (Lehmer+2016; Yang+2022 Sect. 3.3)",
+            ),
+            DerivedKey(
+                "sfr",
+                "Msun/yr",
+                "Instantaneous SFR; stands in for sfr_100myr only when the SFH "
+                "publishes no 100 Myr average. Falls back to 1.0",
+            ),
             DerivedKey(
                 "log_mstar",
                 "dex",
@@ -176,9 +207,10 @@ class XRaySEDComponent(TemplateThreading):
                 "Fallback when L_2500_intrinsic unavailable (e.g. SKIRTOR monolithic path)",
             ),
             DerivedKey(
-                "L_12um",
-                "erg/s/Hz",
-                "AGN 12 µm luminosity; drives the lopez24 alpha_IRX corona",
+                "log_L_12um",
+                "dex",
+                "log10 nu L_nu(12 um) [dex re erg/s] of the AGN disc + torus + polar "
+                "dust; drives the lopez24 alpha_IRX corona. Absent: no AGN, no corona",
             ),
             DerivedKey(
                 "agn_cos_inc",
@@ -240,7 +272,9 @@ class XRaySEDComponent(TemplateThreading):
         -------
         ForwardState
             New state with ``sed_intrinsic`` updated and
-            ``derived["sed_xray"]`` published for downstream readers.
+            ``derived["sed_xray"]`` published for downstream readers, plus
+            ``derived["log_L_x_xrb_2_10"]`` and ``derived["log_L_x_agn_2_10"]``,
+            the 2-10 keV luminosities of the emitted XRB and corona terms.
         """
         wave = state.wave
         inputs = self.emitter_inputs(state.derived)
@@ -250,7 +284,12 @@ class XRaySEDComponent(TemplateThreading):
             return t["hmxb"] + t["lmxb"] + t["hotgas"] + t["agn"]
 
         L_xray = _emit(wave)
-        derived_overrides = {"sed_xray": L_xray}
+        band_logs = self.log_band_luminosities(params, **inputs)
+        derived_overrides = {
+            "sed_xray": L_xray,
+            "log_L_x_xrb_2_10": log10_add(band_logs["hmxb"], band_logs["lmxb"]),
+            "log_L_x_agn_2_10": band_logs["agn"],
+        }
 
         # Precompute LUT families (#624): X-ray is additive and unattenuated.
         # Spectroscopy: a pixel is a point-sample, so evaluating at the pixel
@@ -331,7 +370,7 @@ class XRaySEDComponent(TemplateThreading):
             "metallicity_z": 0.0150,
             "l_2500": 1.0e29,
             "cos_inc": 0.9,
-            "l_12um": 1.0e28,
+            "log_l_12um": 43.0,
         },
         {
             "sfr": 50.0,
@@ -345,7 +384,7 @@ class XRaySEDComponent(TemplateThreading):
             "metallicity_z": 0.0040,
             "l_2500": 7.0e31,
             "cos_inc": 0.3,
-            "l_12um": 5.0e30,
+            "log_l_12um": 45.5,
         },
     )
 
@@ -364,9 +403,15 @@ class XRaySEDComponent(TemplateThreading):
         dict
             ``sfr`` [Msun/yr], ``stellar_mass`` [Msun], ``stellar_age_gyr`` [Gyr],
             ``metallicity_z`` [mass fraction], ``l_2500`` [erg/s/Hz],
-            ``cos_inc`` [dimensionless], ``l_12um`` [erg/s/Hz].
+            ``cos_inc`` [dimensionless], ``log_l_12um`` [dex re erg/s].
         """
-        sfr = jnp.asarray(derived.get("sfr", 1.0))
+        # Lehmer+2016 calibrate the HMXB and hot-gas relations on the SFR
+        # averaged over the last 100 Myr, and X-CIGALE >= 2022 reads
+        # ``sfh.sfr100Myrs`` for them (Yang+2022, Sect. 3.3): HMXB emission
+        # varies on ~10 Myr timescales, so the instantaneous SFR is not the
+        # calibrated quantity. The instantaneous value stands in only for an SFH
+        # that publishes no 100 Myr average.
+        sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 1.0)))
         # Contract: stellar publishes log_mstar (log10 M_⊙). xray_total
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(derived.get("log_mstar", 10.0))
@@ -429,15 +474,15 @@ class XRaySEDComponent(TemplateThreading):
         # ``agn_cos_inc`` was a silent no-op for the X-ray block (#980).
         # No published AGN inclination → stay at the anchor (factor 1).
         cos_inc = jnp.asarray(derived.get("agn_cos_inc", COS_INC_REF_30DEG))
-        # Lopez+2024 (lopez24) ties the corona to the AGN 12 µm luminosity
-        # instead of L_2500. Prefer the AGN-published ``L_12um`` [erg/s/Hz]; fall
-        # back to a bolometric correction from L_agn_bol when the composable AGN
-        # does not publish a monochromatic 12 µm luminosity: νLν(12µm) = f_12·L_bol
-        # (Gandhi+2009 f_12 ≈ 0.07), so Lν(12µm) = f_12·L_bol / ν_12µm.
-        _nu_12um = 2.998e18 / 1.2e5  # 12 µm = 120000 Å
-        _l_12um_pub = jnp.asarray(derived.get("L_12um", 0.0))
-        _l_12um_bc = 0.07 * L_agn_bol / _nu_12um
-        l_12um = jnp.where(_l_12um_pub > 0.0, _l_12um_pub, _l_12um_bc)
+        # Lopez+2024 (lopez24) ties the corona to the nuclear 12 µm luminosity of
+        # the AGN components, L(2-10 keV) = νLν(12 µm) / 10^α_IRX. The AGN
+        # publishes it in log space (νLν ~ 1e45 erg/s is past the float32
+        # ceiling); absent means there is no AGN in the model, and -inf is the
+        # exact-zero sentinel the corona emitter reads.
+        _log_l_12um_pub = derived.get("log_L_12um")
+        log_l_12um = (
+            jnp.asarray(-jnp.inf) if _log_l_12um_pub is None else jnp.asarray(_log_l_12um_pub)
+        )
 
         return {
             "sfr": sfr,
@@ -446,7 +491,7 @@ class XRaySEDComponent(TemplateThreading):
             "metallicity_z": metallicity_z,
             "l_2500": l_2500,
             "cos_inc": cos_inc,
-            "l_12um": l_12um,
+            "log_l_12um": log_l_12um,
         }
 
     def emission_terms(
@@ -460,7 +505,7 @@ class XRaySEDComponent(TemplateThreading):
         metallicity_z: jnp.ndarray,
         l_2500: jnp.ndarray,
         cos_inc: jnp.ndarray,
-        l_12um: jnp.ndarray,
+        log_l_12um: jnp.ndarray,
     ) -> dict[str, jnp.ndarray]:
         r"""The additive terms of the X-ray SED, unsummed.
 
@@ -475,7 +520,8 @@ class XRaySEDComponent(TemplateThreading):
         wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
         sfr : array_like, scalar
-            Star-formation rate [Msun/yr]: sets the HMXB and hot-gas amplitudes.
+            SFR averaged over the last 100 Myr [Msun/yr] (Lehmer et al. 2016;
+            Yang et al. 2022, Sect. 3.3): sets the HMXB and hot-gas amplitudes.
         stellar_mass : array_like, scalar
             Stellar mass [Msun]: sets the LMXB amplitude.
         stellar_age_gyr : array_like, scalar
@@ -489,9 +535,9 @@ class XRaySEDComponent(TemplateThreading):
         cos_inc : array_like, scalar
             Cosine of the AGN inclination [dimensionless]; a Yang+2022 anisotropy
             factor, hence a pure *amplitude* term, not a spectral shape.
-        l_12um : array_like, scalar
-            AGN L_nu at 12 micron [erg/s/Hz]; drives the corona through alpha_IRX
-            (``lopez24``).
+        log_l_12um : array_like, scalar
+            ``log10`` of the AGN nu L_nu at 12 micron [dex re erg/s]; drives the
+            corona through alpha_IRX (``lopez24``). ``-inf``: no AGN.
 
         Returns
         -------
@@ -521,7 +567,7 @@ class XRaySEDComponent(TemplateThreading):
                 stellar_mass=stellar_mass,
                 stellar_age_gyr=stellar_age_gyr,
                 metallicity_z=metallicity_z,
-                l_12um_erg_hz=l_12um,
+                log_l_12um_erg=log_l_12um,
                 alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
@@ -556,6 +602,73 @@ class XRaySEDComponent(TemplateThreading):
             # so both were free parameters that nothing read.
             log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
             log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
+        )
+
+    def log_band_luminosities(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        *,
+        sfr: jnp.ndarray,
+        stellar_mass: jnp.ndarray,
+        stellar_age_gyr: jnp.ndarray,
+        metallicity_z: jnp.ndarray,
+        l_2500: jnp.ndarray,
+        cos_inc: jnp.ndarray,
+        log_l_12um: jnp.ndarray,
+    ) -> dict[str, jnp.ndarray]:
+        r"""``log10`` band luminosities of the terms :meth:`emission_terms` emits.
+
+        The registered X-ray properties are projections of the emitted terms, not
+        independent relations: this takes the same inputs and parameters as
+        :meth:`emission_terms` and returns what each emitted term integrates to,
+        so the property and the SED cannot describe different galaxies.
+
+        Parameters
+        ----------
+        params : mapping
+            Full (un-sliced) parameter dict; reads the ``xray_*`` keys.
+        sfr, stellar_mass, stellar_age_gyr, metallicity_z, l_2500, cos_inc, log_l_12um
+            As in :meth:`emission_terms`.
+
+        Returns
+        -------
+        dict of ndarray, scalar
+            ``{"hmxb", "lmxb", "agn"}`` over 2-10 keV and ``"hotgas"`` over
+            0.5-2 keV [dex re erg/s]; ``-inf`` for a term that is exactly zero.
+
+        Notes
+        -----
+        **JIT/grad/vmap-safe** and float32-safe: every quantity is a ``log10``.
+        """
+        offsets = {
+            "log_L_hmxb_offset": jnp.asarray(params["xray_det_hmxb"]),
+            "log_L_lmxb_offset": jnp.asarray(params["xray_det_lmxb"]),
+        }
+        if self.config.model == "lopez24":
+            return xray_total_lopez24_log_band_luminosities(
+                sfr=sfr,
+                stellar_mass=stellar_mass,
+                stellar_age_gyr=stellar_age_gyr,
+                metallicity_z=metallicity_z,
+                log_l_12um_erg=log_l_12um,
+                alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
+                gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
+                E_cut=jnp.asarray(params["xray_E_cut"]),
+                log_nh=jnp.asarray(params["xray_log_nh"]),
+                **offsets,
+            )
+        return xray_total_log_band_luminosities(
+            sfr=sfr,
+            stellar_mass=stellar_mass,
+            stellar_age_gyr=stellar_age_gyr,
+            metallicity_z=metallicity_z,
+            l_2500_30deg=l_2500,
+            gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
+            E_cut=jnp.asarray(params["xray_E_cut"]),
+            delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+            cos_inc=cos_inc,
+            log_nh=jnp.asarray(params["xray_log_nh"]),
+            **offsets,
         )
 
 
@@ -606,37 +719,26 @@ def _l_x_total_fn(state, params):
 
 
 def _log_l_x_xrb_fn(state, params):
-    """log10 X-ray luminosity from X-ray binaries [dex re erg/s]."""
-    from tengri.utils.sed_quantities import compute_log_l_x_xrb
+    """log10 2-10 keV luminosity of the emitted HMXB + LMXB terms [dex re erg/s].
 
-    derived = state.derived
-    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
-    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    return compute_log_l_x_xrb(sfr, log_mstar)
+    Read from the X-ray component's own publication (``log_L_x_xrb_2_10``), the
+    band integral of the terms :meth:`XRaySEDComponent.emission_terms` puts in
+    the SED: the SFR timescale, metallicity, stellar age and XRB offsets are
+    whatever the emitted spectrum used.
+    """
+    return jnp.asarray(state.derived["log_L_x_xrb_2_10"])
 
 
 def _log_l_x_agn_fn(state, params):
-    """log10 X-ray luminosity from AGN [dex re erg/s]; -inf when the AGN is off.
+    """log10 2-10 keV luminosity of the emitted AGN corona [dex re erg/s]; -inf without an AGN.
 
-    Reads the AGN component's ``log_L_agn_bol`` companion rather than taking a
-    log of the linear ``L_agn_bol`` (~1e46 erg/s, ``inf`` in float32): the old
-    ``log10(inf)`` round trip was itself the defect, silently returning
-    ``nan`` in float32 with no test pinning either the input or the output
-    (#1206 §B).
+    Read from the X-ray component's own publication (``log_L_x_agn_2_10``), the
+    band integral of the corona term in the SED: absorber, scattered fraction,
+    anisotropy and the model's own anchor (L_2500 for ``yang20``, 12 um for
+    ``lopez24``) are whatever the emitted spectrum used. The ``-inf`` sentinel
+    is "no corona": it powers back to exactly 0.0 in the linear sibling.
     """
-    from tengri.utils.sed_quantities import compute_log_l_x_agn
-
-    derived = state.derived
-    log_L_agn_bol = derived.get("log_L_agn_bol")
-    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity.
-    # Returning 0.0 here would claim 1 erg/s. The linear sibling returns 0.0 for
-    # the same state, correctly. ``log_L_agn_bol`` is present in ``derived``
-    # exactly when the AGN component ran (and is then always finite, since it
-    # is a `pow10` of a bounded free parameter), which mirrors the linear
-    # helper's ``derived.get("L_agn_bol", 0.0)`` default for an XRB-only model.
-    if log_L_agn_bol is None:
-        return -jnp.inf
-    return compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
+    return jnp.asarray(state.derived["log_L_x_agn_2_10"])
 
 
 def _log_l_x_total_fn(state, params):

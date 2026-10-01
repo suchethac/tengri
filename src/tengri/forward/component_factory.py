@@ -287,11 +287,10 @@ class XRayQuantities(NamedTuple):
     Fields (**breaking, no alias, #1206 §B**: Lsun, not erg/s -- an AGN X-ray
     luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
-    - ``l_x_xrb`` (Lsun), X-ray-binary luminosity (Lehmer 2010, 2016)
-      computed from ``sfh_quantities.sfr_100myr`` and
-      ``sfh_quantities.stellar_mass``.
-    - ``l_x_agn`` (Lsun), AGN X-ray luminosity from the published
-      ``log_L_agn_bol`` via :func:`compute_log_l_x_agn`.
+    - ``l_x_xrb`` (Lsun), 2-10 keV luminosity of the emitted HMXB + LMXB terms
+      (Lehmer 2016; SFR averaged over the last 100 Myr).
+    - ``l_x_agn`` (Lsun), 2-10 keV luminosity of the emitted AGN corona; zero
+      without an AGN.
     - ``l_x_total`` (Lsun), sum of the two.
 
     """
@@ -1205,49 +1204,33 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
 def state_to_xray_quantities(state: Any) -> XRayQuantities:
     """Convert :class:`ForwardState` → :class:`XRayQuantities`.
 
-    Uses the SFH-derived SFR and stellar mass to compute the XRB
-    luminosity (Lehmer+10/16) and the published ``log_L_agn_bol`` to
-    compute the AGN corona luminosity (Duras+20), staying in the log
-    domain throughout and converting to Lsun with one ``pow10`` -- the same
-    float32-safe route the ``xray`` property group uses (#1206 §B), so the
-    two stay bit-equal.
+    Reads the 2-10 keV luminosities the X-ray component publishes for the terms
+    it emits (``log_L_x_xrb_2_10`` for HMXB + LMXB, ``log_L_x_agn_2_10`` for the
+    corona), staying in the log domain throughout and converting to Lsun with
+    one ``pow10`` -- the same float32-safe route the ``xray`` property group
+    uses (#1206 §B), so the two stay bit-equal and both describe the emitted
+    spectrum.
 
     Returns
     -------
     XRayQuantities
         ``l_x_xrb``, ``l_x_agn``, ``l_x_total`` [Lsun].
     """
-    from tengri.utils.scale import pow10
-    from tengri.utils.sed_quantities import (
-        LOG10_L_SUN,
-        compute_log_l_x_agn,
-        compute_log_l_x_xrb,
-    )
+    from tengri.utils.scale import LN10, pow10
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
     derived = state.derived
-    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
-    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    log_l_x_xrb = compute_log_l_x_xrb(sfr, log_mstar)
-
-    log_L_agn_bol = derived.get("log_L_agn_bol")
-    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity,
-    # matching the linear helper's ``derived.get("L_agn_bol", 0.0)`` default
-    # for an XRB-only model (#1206 §B, same semantics as `_log_l_x_agn_fn`).
-    if log_L_agn_bol is None:
-        log_l_x_agn = -jnp.inf
-    else:
-        log_l_x_agn = compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
+    log_l_x_xrb = jnp.asarray(derived["log_L_x_xrb_2_10"])
+    log_l_x_agn = jnp.asarray(derived["log_L_x_agn_2_10"])
 
     from jax.scipy.special import logsumexp
 
-    from tengri.utils.scale import LN10
-
-    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, jnp.asarray(log_l_x_agn)))
+    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, log_l_x_agn))
     log_l_x_total = logsumexp(LN10 * stacked, axis=0) / LN10
 
     return XRayQuantities(
         l_x_xrb=pow10(log_l_x_xrb - LOG10_L_SUN),
-        l_x_agn=pow10(jnp.asarray(log_l_x_agn) - LOG10_L_SUN),
+        l_x_agn=pow10(log_l_x_agn - LOG10_L_SUN),
         l_x_total=pow10(log_l_x_total - LOG10_L_SUN),
     )
 

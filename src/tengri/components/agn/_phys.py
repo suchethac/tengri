@@ -21,6 +21,7 @@ from tengri.utils.physics_constants import (
     K_BOLTZ,
     L_SUN,
 )
+from tengri.utils.scale import representable_floor
 
 __all__ = [
     "ANGSTROM_CM",
@@ -32,6 +33,7 @@ __all__ = [
     "compute_l_12um_from_lbol",
     "gaussian_line_profile",
     "lines_to_sed",
+    "log10_nu_lnu_at",
     "planck_lnu",
     "ring_area",
     "wavelength_to_nu",
@@ -294,6 +296,51 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
 
 
 # ── Line list → SED convolution ───────────────────────────────────
+
+
+def log10_nu_lnu_at(
+    wave: jnp.ndarray,
+    lnu: jnp.ndarray,
+    wavelength_aa: float,
+    log10_scale: float | jnp.ndarray = 0.0,
+) -> jnp.ndarray:
+    r"""``log10`` of :math:`\nu L_\nu` at one wavelength, by log-log interpolation.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid, ascending [Angstrom].
+    lnu : array_like, shape (n_wave,)
+        Spectral luminosity density sampled on ``wave`` [erg/s/Hz], possibly
+        carried at a reference scale (see ``log10_scale``).
+    wavelength_aa : float
+        Wavelength at which to evaluate :math:`\nu L_\nu` [Angstrom].
+    log10_scale : float, optional
+        ``log10`` of the factor by which the true spectrum exceeds ``lnu`` [dex].
+        Added in log space so a float32 spectrum evaluated at a low reference
+        luminosity never forms the true ~1e45 erg/s linear value. Default 0.
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`\log_{10}[\nu L_\nu(\lambda)/(\mathrm{erg\,s^{-1}})]` [dex];
+        ``-inf`` where the spectrum is zero at that wavelength.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe.** The interpolation is linear in
+    :math:`(\log\lambda, \log L_\nu)`, exact for a power law, and the
+    wavelength is clamped to the grid ends by ``jnp.interp``.
+    """
+    wave = jnp.asarray(wave)
+    lnu = jnp.asarray(lnu)
+    floor = representable_floor(1e-30)
+    log_lnu = jnp.interp(
+        jnp.log10(wavelength_aa), jnp.log10(wave), jnp.log10(jnp.maximum(lnu, floor))
+    )
+    log_nu = jnp.log10(C_LIGHT / (wavelength_aa * ANGSTROM_CM))
+    nonzero = log_lnu > jnp.log10(floor) + 1.0
+    return jnp.where(nonzero, log_lnu + log_nu + log10_scale, -jnp.inf)
 
 
 def compute_l_12um_from_lbol(
