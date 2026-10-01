@@ -3034,7 +3034,7 @@ class StellarSEDComponent:
             # (IR-focused configs) -> Q_H is identically zero. Skips the slice
             # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
-            log_L_lyc_age = jnp.full((ssp_flux_at_age.shape[0],), -jnp.inf)
+            log_L_lyc_age = jnp.full((age_weights.shape[0],), -jnp.inf)
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
             # Fallback (full grid) per-age ionizing luminosity: integrate over
