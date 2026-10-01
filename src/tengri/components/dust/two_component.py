@@ -1323,7 +1323,6 @@ class DustSEDComponent(TemplateThreading):
                 )
                 # Compute log10(y_age) safely: y_age == 0 -> -inf (dropped by
                 # log10_age_sum_lyc), gradient finite everywhere via jnp.where.
-                from tengri.utils.scale import log10_magnitude
                 log_y_age = log10_magnitude(y_age_lyc)
                 # Sum: log10(sum(y_age * 10^log_L_lyc_age))
                 #    = log10(sum(10^(log_y_age + log_L_lyc_age)))
