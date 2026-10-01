@@ -2,6 +2,16 @@
 
 ### Fixed
 
+- `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
+  gate (#2513). It was the one `resolve_dense_mass_gate` caller without
+  `spec=`, and with `spec=None` the auto-policy's dense_basis exception
+  cannot fire: a dense_basis spec at `n_dim <= 12` was actively granted the
+  dense mass matrix the policy exists to refuse (the 22.78 GB adaptation
+  spike of #319), on the one seam whose single shared adaptation serves
+  every galaxy in the batch. The regression test drives the real gate
+  through `fit_batch` with a dense_basis and a DPL arm, so the diagonal
+  verdict is pinned as spec-driven.
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 ### Added
 
