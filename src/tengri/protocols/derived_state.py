@@ -109,6 +109,13 @@ class DerivedState:
     age_weights: jnp.ndarray | None = None
     nion: jnp.ndarray | None = None
     log_nion: jnp.ndarray | None = None
+    #: Per-age ionizing luminosity [erg/s], shape (n_age,). Computed from
+    #: the ionizing-wavelength slice (λ < LYMAN_LIMIT_AA × 2) via the same
+    #: Q_H pathway. Published for nebular and dust components to compute
+    #: LyC credits without materializing the full stellar SED (FeaturePrecomp
+    #: guards G1/G2). Combined via ``log10_age_sum_lyc`` to yield whole-
+    #: population ``log_L_lyc`` and per-age variants.
+    log_L_lyc_age: jnp.ndarray | None = None
 
     # Stellar: SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None

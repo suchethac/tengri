@@ -1225,18 +1225,16 @@ class NebularSEDComponent(TemplateThreading):
         # credit from its own per-age cube (see DustSEDComponent.apply), using
         # the ``lyc_fdust`` derived key published above (#2539 item 2) since
         # its own "dust_"-prefixed params slice never carries neb_fdust_frac.
-        _stellar_sed = state.sed_intrinsic
-        if _stellar_sed is not None:
-            # LyC-ONLY luminosity: the raw (fesc-independent) whole-population
-            # credit, ``L_LyC = edge_trapezoid(L_nu, wave, side="ionizing")``
-            # (one Lyman edge, module docstring of ``tengri.components.lyc``):
-            # the ionizing side of the SAME step model the dust-EB mask uses
-            # for its complementary "nonionizing" side, so the credit and the
-            # exclusion can never drift onto different bracket-cell
-            # conventions (that undefined ``lyc_mask`` name was a merge
-            # conflict between #2539 and #2447, never exercised together
-            # before that PR).
-            log_L_lyc, _ = bolometric_lyc_log10(_stellar_sed, state.wave)
+        # LyC-ONLY luminosity: the raw (fesc-independent) whole-population
+        # credit, ``L_LyC = ∫ L_ν dν`` over the ionizing side (one Lyman edge,
+        # module docstring of ``tengri.components.lyc``). Computed from the
+        # per-age ionizing luminosities published by stellar (log_L_lyc_age,
+        # shape n_age) to avoid materializing the full stellar SED (which is
+        # dead code on the FeaturePrecomp path, #2539, G1/G2).
+        log_L_lyc_age = state.derived.get("log_L_lyc_age")
+        if log_L_lyc_age is not None:
+            from tengri.components.lyc import log10_age_sum_lyc
+            log_L_lyc = log10_age_sum_lyc(log_L_lyc_age)
             # Gradient-safe double-where log-add (#2539 item 3): value is
             # bit-identical to -inf at neb_fdust == 0 (neb_fdust_frac == 0,
             # the default, or neb_fesc == 1), gradient finite everywhere (see
@@ -1248,7 +1246,10 @@ class NebularSEDComponent(TemplateThreading):
             # log10_add_fdust_credit combine instead of log10_add-ing the
             # already fdust-multiplied log_L_lyc_dust above (see that
             # function's docstring for why the pre-multiplied form has a
-            # gradient defect at neb_fdust == 0).
+            # gradient defect at neb_fdust == 0). The ionizing side of the SAME
+            # step model the dust-EB mask uses for its complementary "nonionizing"
+            # side, so the credit and the exclusion can never drift onto different
+            # bracket-cell conventions.
             derived_overrides["log_L_lyc"] = log_L_lyc
 
         return state.with_(

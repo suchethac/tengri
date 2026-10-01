@@ -1312,18 +1312,31 @@ class DustSEDComponent(TemplateThreading):
         if self.config.lyc_absorb_all:
             _log_l_lyc_credited = state.derived.get("log_L_lyc")
         else:
-            # Young/birth-cloud-only credit (#2539): raw (unmasked) per-age
-            # cube, weighted by the young indicator, THEN reduced through
-            # ``bolometric_lyc_log10``'s ``side="ionizing"`` edge_trapezoid --
-            # not a manual node-level ``wave < edge`` pre-mask followed by a
-            # plain trapezoid, which ramps across the bracket cell instead of
-            # holding it at the step model's rectangle (one Lyman edge,
-            # module docstring of ``tengri.components.lyc``).
-            y_age_lyc = _young_indicator(
-                ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-            )
-            young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age, axis=0)
-            _log_l_lyc_credited, _ = bolometric_lyc_log10(young_lnu, wave)
+            # Young/birth-cloud-only credit (#2539): per-age ionizing luminosities
+            # from stellar, weighted by the young indicator, summed in log space
+            # to avoid materializing the full SED (which is dead code on the
+            # FeaturePrecomp path, G1/G2).
+            log_L_lyc_age = state.derived.get("log_L_lyc_age")
+            if log_L_lyc_age is not None:
+                y_age_lyc = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                )
+                # Compute log10(y_age) safely: y_age == 0 -> -inf (dropped by
+                # log10_age_sum_lyc), gradient finite everywhere via jnp.where.
+                from tengri.utils.scale import log10_magnitude
+                log_y_age = log10_magnitude(y_age_lyc)
+                # Sum: log10(sum(y_age * 10^log_L_lyc_age))
+                #    = log10(sum(10^(log_y_age + log_L_lyc_age)))
+                log_L_lyc_age_weighted = log_L_lyc_age + log_y_age
+                from tengri.components.lyc import log10_age_sum_lyc
+                _log_l_lyc_credited = log10_age_sum_lyc(log_L_lyc_age_weighted)
+            else:
+                # Fallback (full SED path): old computation.
+                y_age_lyc = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                )
+                young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age, axis=0)
+                _log_l_lyc_credited, _ = bolometric_lyc_log10(young_lnu, wave)
 
         if _log_l_lyc_credited is not None:
             log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, f_dust)

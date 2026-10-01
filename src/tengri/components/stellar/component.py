@@ -3012,13 +3012,36 @@ class StellarSEDComponent:
             log_nion = _integrate_nion_log10(
                 _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
             )
+            # Per-age ionizing luminosity (LyC credit, #2539): compute from the
+            # ionizing SLICE only (not the full grid), so the nebular/dust
+            # components can use log10_age_sum_lyc to combine them without
+            # dragging the full stellar SED into the FeaturePrecomp graph (G1/G2).
+            # Shape: (n_age,). Marginalize over metallicity; contract
+            # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met, n_age)
+            # over the met axis only.
+            _lnu_age_ion = jnp.einsum(
+                "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
+            )  # shape (n_age, n_ion)
+            # Scale by total_mass before integration (same normalization as Q_H).
+            _lnu_age_ion_scaled = _lnu_age_ion * mass_scale_erg
+            # Apply _integrate_nion_log10 to each age. The function expects 1D input,
+            # so vmap over the age axis.
+            from jax import vmap
+            _integrate_nion_single = lambda sed: _integrate_nion_log10(sed, wave[:_n_ion])
+            log_L_lyc_age = vmap(_integrate_nion_single)(_lnu_age_ion_scaled)
         elif _n_ion is not None:
             # n_ion_bins == 0 (static): no grid bins below the Lyman limit
             # (IR-focused configs) -> Q_H is identically zero. Skips the slice
             # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
+            log_L_lyc_age = jnp.full((ssp_flux_at_age.shape[0],), -jnp.inf)
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
+            # Fallback (full grid) per-age ionizing luminosity: integrate over
+            # the full wavelength range. vmap over age axis.
+            from jax import vmap
+            _integrate_nion_single = lambda sed: _integrate_nion_log10(sed, wave)
+            log_L_lyc_age = vmap(_integrate_nion_single)(lnu_age)
         nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
@@ -3063,6 +3086,10 @@ class StellarSEDComponent:
             # taken from the overflowed linear value.
             log_L_age=log_L_age,
             lnu_age=lnu_age,
+            # Per-age ionizing luminosity [erg/s], shape (n_age,). Used by
+            # nebular and dust components to compute LyC credits without
+            # dragging the full stellar SED (G1/G2 FeaturePrecomp guards).
+            log_L_lyc_age=log_L_lyc_age,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead

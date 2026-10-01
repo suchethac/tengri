@@ -76,6 +76,7 @@ __all__ = [
     "edge_interp",
     "edge_trapezoid",
     "ionizing_mask",
+    "log10_age_sum_lyc",
     "lyc_shares",
 ]
 
@@ -452,3 +453,71 @@ def lyc_shares(
     f_dust = frac * non_escaping
     f_gas = (1.0 - frac) * non_escaping
     return f_esc, f_dust, f_gas
+
+
+def log10_age_sum_lyc(log_L_lyc_age, weights=None):
+    r"""log10 of the age-summed Lyman-continuum luminosity.
+
+    Combines per-age ionizing luminosities in log-space via a weighted sum:
+
+    .. math::
+
+        L_{\rm LyC,total} = \sum_{\rm age} w_{\rm age} \times 10^{\log L_{\rm LyC,age}}
+
+    returning :math:`\log_{10} L_{\rm LyC,total}` safely without overflow/underflow.
+
+    Parameters
+    ----------
+    log_L_lyc_age : array_like, shape (n_age,)
+        Per-age Lyman-continuum luminosity in log10 [erg/s]. Ordinarily from
+        :func:`edge_trapezoid` on a per-age ionizing SED slice, matching the
+        denominator of :meth:`integral method's single-sourced Q_H pathway
+        (#1206, #537).
+    weights : array_like, shape (n_age,), optional
+        Per-age weights (typically mass fractions or escape-fraction indicators).
+        Default (None): uniform weights (implicit ``1.0`` per age); the sum is
+        equivalent to log10(sum(10^log_L_lyc_age)).
+
+    Returns
+    -------
+    ndarray, shape ()
+        log10 of the weighted sum [erg/s]. Returns ``-inf`` if all inputs are
+        ``-inf`` (no ionizing luminosity), following the sentinel contract of
+        :func:`edge_trapezoid` and :func:`bolometric_lyc_log10`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, linear in the linear-scale
+    luminosities (10^log_L_lyc_age).
+
+    Used by :class:`tengri.components.nebular.NebularSEDComponent` to sum over
+    all ages (#2539) and by :class:`tengri.components.dust.DustSEDComponent`
+    (two_component path) to sum over young ages only (lyc_absorb_all=False, #2539
+    item 2).
+    """
+    log_L_lyc_age = jnp.asarray(log_L_lyc_age)
+
+    if weights is None:
+        # Uniform weights: equivalent to log10(sum(10^vals))
+        # Use scipy.special.logsumexp-like approach: numerically stable
+        # max trick: log(sum(exp(x))) = max(x) + log(sum(exp(x - max(x))))
+        max_log = jnp.max(log_L_lyc_age)
+        # All -inf case: max is -inf, and sum(exp(-inf)) is 0, log(0) = -inf
+        sum_exp = jnp.sum(jnp.where(jnp.isfinite(log_L_lyc_age),
+                                    jnp.exp(log_L_lyc_age - max_log),
+                                    0.0))
+        result = jnp.where(jnp.isfinite(max_log),
+                          max_log + jnp.log10(sum_exp),
+                          -jnp.inf)
+    else:
+        # Weighted sum: log10(sum(w * 10^log_L_lyc_age))
+        weights = jnp.asarray(weights)
+        max_log = jnp.max(log_L_lyc_age)
+        sum_weighted = jnp.sum(jnp.where(jnp.isfinite(log_L_lyc_age),
+                                         weights * jnp.exp(log_L_lyc_age - max_log),
+                                         0.0))
+        result = jnp.where(jnp.isfinite(max_log),
+                          max_log + jnp.log10(sum_weighted),
+                          -jnp.inf)
+
+    return result
