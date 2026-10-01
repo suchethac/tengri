@@ -984,7 +984,7 @@ def exponential(
     ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
     between ``start`` and the present: the mirror image of this docstring's
     own "declining exponential from start" and of the verified-correct
-    :func:`declining_exponential` (#2521, sweep_S3_report.md finding F-new-1).
+    :func:`declining_exponential` (#2521).
 
     Examples
     --------
@@ -1045,8 +1045,8 @@ def delayed_exponential(
 
     Before this, the window was ``[start, inf)`` -- mass sat at lookback
     ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
-    between ``start`` and the present (#2521, sweep_S3_report.md finding
-    F-new-1; shares the mechanism :func:`exponential` had).
+    between ``start`` and the present (#2521; shares the mechanism
+    :func:`exponential` had).
 
     Examples
     --------
@@ -1548,7 +1548,10 @@ def psb_wild2020(
     tau : float
         e-folding timescale of old exponential component [yr].
     burstage : float
-        Lookback time of burst onset [yr]. Burst active for 0 < t < burstage.
+        Lookback time of the burst [yr]: the burst double power law turns
+        over at cosmic time ``age_universe_yr - burstage`` (Wild et al. 2020
+        Eq. 5). The burst carries no lookback window; it fills the bounded
+        support ``[0, age_universe_yr]``.
     alpha : float
         DPL falling slope [dimensionless] (post-peak in cosmic time).
     beta : float

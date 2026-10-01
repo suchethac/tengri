@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``exp``/``dexp`` form stars in ``[0, age(z)]``, not ``[start, infinity)`` (#2521, F-new-1).
+"""``exp``/``dexp`` form stars in ``[0, age(z)]``, not ``[start, infinity)`` (#2521).
 
 ``exponential`` and ``delayed_exponential`` windowed their shape to
 ``[start, inf)`` -- mass sits at lookback ``>= start``, unbounded toward the
@@ -10,8 +10,7 @@ exponential *from* start") and their verified-correct sibling
 its mass to ``[0, age]``. Even the smallest legal ``start`` (well inside
 ``age(z)``) puts virtually all mass past ``start``, which the #683 runtime
 clamp then discards -- ``exp``/``dexp`` were the only two "z-capped" families
-that still lost mass at onset multiplier 0.5 (sweep_S3_report.md Sec. 3,
-F-new-1).
+that still lost mass at onset multiplier 0.5.
 
 The fix reinterprets ``start`` as the formation lookback time (the
 description already reads "when did SF start?") and gives both functions the
@@ -48,7 +47,7 @@ def _l1(p, q):
 
 
 def _old_buggy_exponential(t_lookback, log_total_mass, tau, start):
-    """The pre-fix ``exponential`` formula: window ``[start, inf)`` (F-new-1)."""
+    """The pre-fix ``exponential`` formula: window ``[start, inf)``."""
     from tengri.components.stellar.sfh.mean_sfh import _renormalize_to_mass, window_weight
 
     dt = jnp.maximum(t_lookback - start, 0.0)
@@ -57,7 +56,7 @@ def _old_buggy_exponential(t_lookback, log_total_mass, tau, start):
 
 
 def _old_buggy_delayed_exponential(t_lookback, log_total_mass, tau, start):
-    """The pre-fix ``delayed_exponential`` formula: window ``[start, inf)`` (F-new-1)."""
+    """The pre-fix ``delayed_exponential`` formula: window ``[start, inf)``."""
     from tengri.components.stellar.sfh.mean_sfh import _renormalize_to_mass, window_weight
 
     dt = jnp.maximum(t_lookback - start, 0.0)

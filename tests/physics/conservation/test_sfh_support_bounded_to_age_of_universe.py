@@ -10,9 +10,8 @@ clamp removed was simply lost: formed mass fell below ``10**log_total_mass``
 with no warning past the eager-only ``SFHBeforeBigBangWarning`` threshold.
 
 This test enumerates every onset/age/peak-time-bearing family in
-``SFH_REGISTRY`` (the same 21 families ``sweep_S3_report.md`` Sec. 4
-identifies) x z in {0.5, 2.5, 6.0} x onset at {0.5, 1.2, 2.0} x age(z): 189
-cells. Before the fix, 149/189 fail (measured in the sweep); the physical fix
+``SFH_REGISTRY`` (21 families) x z in {0.5, 2.5, 6.0} x onset at {0.5, 1.2, 2.0} x age(z): 189
+cells. Before the fix, 149/189 cells failed; the physical fix
 makes formed mass equal the declared ``10**log_total_mass`` BY CONSTRUCTION
 at every cell, and the SSP-age-bin mass distribution is exactly zero for any
 bin older than ``age_at_z(z)``.
@@ -56,7 +55,7 @@ def _log_total_mass_public_name(family: str) -> str:
     raise AssertionError(f"family {family!r} has no log_total_mass parameter")
 
 
-# Family -> its public onset/age/peak-time parameter name (sweep_S3_report.md Sec. 4).
+# Family -> its public onset/age/peak-time parameter name.
 ONSET_PARAMS_BY_FAMILY = {
     "const": "sfh_const_start_gyr",
     "dexp": "sfh_dexp_start_gyr",

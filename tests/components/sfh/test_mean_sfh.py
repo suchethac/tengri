@@ -441,8 +441,8 @@ class TestExponentialSFH:
 
     ``start`` is the lookback time of SF onset (galaxy formation): the shape
     is confined to ``[0, start]``, maximal AT formation (``t = start``) and
-    declining toward the present (#2521, sweep_S3_report.md finding F-new-1
-    -- the window used to be ``[start, inf)``, the mirror image of this).
+    declining toward the present (#2521 -- the window used to be
+    ``[start, inf)``, the mirror image of this).
     """
 
     def test_peaks_at_start(self):
@@ -474,8 +474,8 @@ class TestDelayedExponentialSFH:
     ``start`` is the lookback time of SF onset (galaxy formation): the shape
     is confined to ``[0, start]``, rising from zero at formation, peaking at
     cosmic time ``tau`` after formation (lookback ``start - tau``), declining
-    toward the present (#2521, sweep_S3_report.md finding F-new-1 -- the
-    window used to be ``[start, inf)``, the mirror image of this).
+    toward the present (#2521 -- the window used to be ``[start, inf)``,
+    the mirror image of this).
     """
 
     def test_peaks_at_start_minus_tau(self):

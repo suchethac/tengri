@@ -17,8 +17,8 @@ tengri provides a registry of parametric mean SFH models $\bar{\dot{M}}_{\star}(
 | `norm` | 3 | --- | $\dot{M}^{\rm pk} \exp[{-(t{-}t_p)^2/2w^2}]$ | Symmetric ($\gamma = 0$) |
 | `lnorm` | 3 | --- | $\dot{M}^{\rm pk} \exp[{-(\log t{-}\log t_p)^2/2\sigma_{\log}^2}]$ | Gaussian in $\log t$ |
 | `dpl` | 4 | Carnall et al. (2018) | $\dot{M}^{\rm pk} / [(t/\tau)^\alpha + (t/\tau)^{-\beta}]$ | Rising/declining slopes |
-| `dexp` | 3 | --- | $\dot{M}^{\rm pk} (\Delta t/\tau)\,e^{-\Delta t/\tau + 1}$ | Peaks at $t_{\rm start} + \tau$ |
-| `exp` | 3 | --- | $\dot{M}^{\rm pk} \exp[{-(t{-}t_{\rm start})/\tau}]$ | Declining exponential |
+| `dexp` | 3 | --- | $\dot{M}^{\rm pk} (\Delta t/\tau)\,e^{-\Delta t/\tau + 1}$, $\Delta t = t_{\rm start} - t$ | Forms in $[0, t_{\rm start}]$; peaks at lookback $t_{\rm start} - \tau$ |
+| `exp` | 3 | --- | $\dot{M}^{\rm pk} \exp[{-(t_{\rm start}{-}t)/\tau}]$ | Declining exponential in $[0, t_{\rm start}]$; $t_{\rm start}$ is the onset lookback |
 | `const` | 3 | --- | $10^{\log{\rm SFR}}$ for $t_{\rm start} \le t \le t_{\rm end}$ | Top-hat |
 | `table` | 0 | --- | Interpolated from input array | Simulation-derived SFHs |
 |  |  |  |  |  |
@@ -57,7 +57,7 @@ $$ (eq-triweight-burst)
 
 ## Nonparametric SFH Models
 
-Two nonparametric SFH models are available for compatibility with existing codes and for comparison tests. Both describe the SFH as piecewise-constant in $N = 7$ lookback-time bins (default edges: 0, 30, 100, 300 Myr, 1, 3, 6, 13.7 Gyr, logarithmically spaced), but differ in how the free parameters are defined and what priors they imply.
+Two nonparametric SFH models are available for compatibility with existing codes and for comparison tests. Both describe the SFH as piecewise-constant in $N = 7$ lookback-time bins (default edges built from the source redshift as described below; at $z = 0$: 0, 30, 100 Myr, then 0.33, 1.11, 3.72, 12.41 and 13.79 Gyr), but differ in how the free parameters are defined and what priors they imply.
 
 **The default bin ladder is built from the source redshift.** When no explicit `bin_edges_gyr` is given, `continuity`, `dirichlet`, `bursty_continuity`, and `prospector_beta` all build their ladder with `tengri.make_agebins_from_zred` (the Prospector-beta scheme, Wang et al. 2024): for a build redshift $z \le 3$ the two youngest edges stay fixed at 30 and 100 Myr, and the remaining interior edges are log-spaced up to 90% of $t_{\rm age}(z)$. For $z > 3$ the universe is too young to hold a 100 Myr bin and still resolve the rest of cosmic time, so none of the youngest edges are fixed: the edges are log-spaced against a grid anchored at 13.47 Myr up to 90% of $t_{\rm age}(z)$ (Prospector-beta's own $a_{\rm min} = 7.1295$ in log10 yr), which the youngest edge itself skips past, matching that scheme's own construction exactly. Either way the oldest edge is $t_{\rm age}(z)$ at the build's own redshift, so no default bin can lie beyond cosmic time. For a fixed redshift the ladder is built once, exactly at that value. For a free `redshift` the edges cannot be re-built per posterior draw (`make_agebins_from_zred` is a NumPy, non-traceable function), so they are built once, at $t_{\rm age}$ of the redshift prior's upper bound -- the youngest universe the prior admits -- and a build-time advisory (`NonparametricBinEdgesAtRedshiftCeilingWarning`) names the cosmic time a lower-redshift draw then cannot reach. Pass an explicit `sfh={'bin_edges_gyr': ...}` to use a different ladder; an explicit ladder is never modified.
 

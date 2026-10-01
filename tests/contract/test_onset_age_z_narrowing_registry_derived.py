@@ -8,7 +8,7 @@ other family's onset/age/peak-time parameter -- the exact same physical role,
 a star-formation onset/age/peak lookback time -- kept a static ceiling of
 today's cosmic age (13.81 Gyr) even when the build's redshift prior floor
 made that ceiling unphysical (#2521). 21 such parameters exist across the SFH
-registry (``sweep_S3_report.md`` Sec. 4); this test asserts every one of them
+registry; this test asserts every one of them
 is now marked in the registry itself (``ParamDef.z_capped_onset``) and that
 the marking is what actually drives the narrowing -- not a second hand list
 that could drift from the first.
@@ -25,7 +25,7 @@ from tengri.utils.cosmology import age_at_z
 
 pytestmark = pytest.mark.contract
 
-# The definitive list (sweep_S3_report.md Sec. 4): every onset/age/peak-time
+# The definitive list: every onset/age/peak-time
 # scalar parameter across the SFH registry, family -> public param name.
 _ONSET_PARAMS_BY_FAMILY = {
     "const": "sfh_const_start_gyr",
@@ -53,7 +53,7 @@ _ONSET_PARAMS_BY_FAMILY = {
 
 
 def test_exactly_21_onset_params_named():
-    """Sanity check on the fixture itself: matches sweep_S3_report.md Sec. 4."""
+    """Sanity check on the fixture itself: one entry per onset-bearing family."""
     assert len(_ONSET_PARAMS_BY_FAMILY) == 21
 
 
