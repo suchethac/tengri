@@ -1316,7 +1316,7 @@ def _student_t_pdf(z: jnp.ndarray, df: float) -> jnp.ndarray:
     **JIT/grad/vmap-safe**: yes; a smooth composition of ``jnp`` primitives
     with no singularity in z. ``log1p`` keeps the exponent evaluation
     well-conditioned instead of forming ``(1 + z**2/df)`` and raising it to
-    a large negative power directly, which matters at the extreme |z| the
+    a large negative power directly, which matters at the extreme ``|z|`` the
     table's tan-spaced grid reaches (up to ~1e5).
     """
     log_norm = math.lgamma((df + 1.0) / 2.0) - math.lgamma(df / 2.0) - 0.5 * math.log(df * math.pi)
@@ -1419,7 +1419,7 @@ def _hermite_quantile_guess(
     -------
     ndarray
         Hermite-interpolated quantile guess, accurate to ~3e-5 absolute
-        across df in {3,...,100} and the whole |xi| <= 4.5 range (measured),
+        across df in {3,...,100} and the whole ``|xi| <= 4.5`` range (measured),
         against ~2.5e-2 for the plain piecewise-linear guess it replaces --
         enough that a single Newton step below reaches
         :func:`_student_t_cdf`'s own accuracy floor.
@@ -1556,7 +1556,7 @@ class StudentT(Distribution):
     interpolation-operator pattern) as the seed for two Newton iterations
     on the exact CDF (:func:`_student_t_quantile`), reaching that CDF's own
     accuracy floor (measured <=1.9e-10 absolute against scipy ``stdtrit``
-    for |ξ| <= 4.5). The gradient is supplied analytically via
+    for ``|ξ| <= 4.5``). The gradient is supplied analytically via
     ``jax.custom_jvp`` (dz/dp = 1/f_t(z), the inverse-function-theorem
     derivative) rather than by differentiating the Newton loop or the
     incomplete beta function through which the CDF is computed: the Jacobian
