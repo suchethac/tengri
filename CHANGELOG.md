@@ -1,11 +1,17 @@
 ## [Unreleased]
 
+### Fixed
+
+- Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 ### Added
 
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
 
+- `lsf_scale`: a free multiplicative scale on the instrument LSF resolution
+  (default `Fixed(1.0)`, prior `Uniform(0.8, 1.2)`), applied to both the
+  stellar-continuum and emission-line spectroscopy kernels (#2526).
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 - `predict_line_fluxes` and `measure_line_fluxes` now apply the model's configured IGM transmission, profile-averaged over the line's Gaussian width in observed wavelength, matching the same `igm_absorption` dispatch the spectrum/photometry channels already use. Previously the line-flux surfaces read a rest-frame catalog and divided by `4 pi d_L^2` directly, so a line at a redshift where the Lyman forest bites (e.g. Ly-alpha at z >~ 2) came out brighter than the same galaxy's own spectrum. `igm={'type': 'none'}` (or an absent IGM component) leaves line fluxes unchanged; every registered mean-IGM model is supported (#2520).
 - A declared `line_flux_scaling` nuisance parameter (default `Fixed(1.0)`, free via `spec.merge_observation_params(line_flux_scaling=LogNormal(mu=0.0, sigma=0.05))`) multiplies every predicted flux of the `Observation.line_fluxes` channel before the likelihood comparison, absorbing an aperture / absolute-flux-calibration mismatch between that channel and the rest of a joint fit. Fixed at 1.0 by default, so an existing fit is unaffected unless a user opts in; `profile_mass=True` refuses when it is free alongside a profiled line-flux channel, since the two amplitudes are otherwise degenerate (#2527).
@@ -17,6 +23,20 @@
   adaptation, so those paths refuse a step above the metric's stability limit
   like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
   item in #2157 (Refs #2157).
+- A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
+  thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular
+  continuum up to the SSP grid edge (1 cm for `ssp_prsc_miles_chabrier_wNE`), and the radio
+  block's Murphy+2011 term ran on top of it from 1 mm, so the total SED was 1.30x at 100 GHz and
+  1.57-1.60x at 30-50 GHz of the one-term SED, and a 3 mm band read 1.26x on both the exact and
+  the `WavePrecomp` path. With `freefree` unset and `ssp_data.nebular == "included"`, the factory
+  now sets `RadioSEDComponentConfig.freefree_wave_min` to the SSP edge: the radio thermal term is
+  zero below it and unchanged from it upward. The rule reads the SSP's nebular stamp, not the
+  declared `neb` type, so `neb={'type': 'none'}` on such a grid is covered too. `freefree: True`
+  keeps the term over its whole range, `freefree: False` removes it, and models on a bare-stellar
+  or unstamped SSP are unchanged. The SSP's Cloudy continuum and the Murphy+2011 calibration
+  differ by 22-28%, so the thermal component steps by that much at the SSP edge. Validation
+  against pcigale, whose radio module is synchrotron only and whose nebular module owns the
+  thermal continuum, set the rule.
 
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
@@ -28,6 +48,7 @@
   exponential in the axis coordinate — well under the 50% refusal rule). The
   bound is pinned at test time with a corruption probe on the engaged
   preintegrated grid; no check runs inside `precompute()` itself.
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
@@ -414,6 +435,16 @@
   dead probe read of `_spectroscopy_config` in `Fitter._init_emission_lines`
   has been removed. (#2191)
 
+- The default Gaussian LSF path now subtracts the loaded SSP library's own
+  per-wavelength resolution instead of a flat scalar, and stops applying
+  that subtraction and the galaxy's velocity dispersion to nebular/shock
+  emission lines, which keep only the instrument LSF, matching Prospector's
+  convention (#2518, #2519). `SSPData` gains `ssp_resolution_kms` from
+  FSPS's own per-node tables (MILES σ_v ≈ 92→43 km/s; C3K σ_v ≈ 42.4 km/s;
+  `SSP_LIBRARY_RESOLUTIONS["c3k"]` corrected 15.0 → 42.4 km/s), and warns
+  instead of silently clamping wherever the instrument is sharper than the
+  library. Every path that predicts a spectrum from the model applies the same
+  kernel rule through one function.
 - Unknown key validation now precedes grid-file resolution for CLOUDY nebular
   configuration (#2328): when `neb={'type': 'cloudy'}` with no 'grid' key is
   supplied and no CLOUDY grid is on disk, a typo in the group was silently
@@ -487,6 +518,11 @@
   owned by `tests/unit/test_data_locator_pin.py`. Outside pytest nothing changes
   unless the env var is set (see `tests/TESTING.md`).
 
+- LUT-bias advisory probes z-table midpoints on a free-redshift fit (#2105):
+  the advisory probed one redshift and so could not see the LUT's z-interpolation
+  error; it now probes the inter-node midpoints nearest the prior median (or the
+  prior bounds when no node lies inside) and names the peak redshift and
+  `approx=None`, the exact path on every surface since #2385. (#2105)
 - Bare `import tengri` now succeeds on float64-less backends (jax-mps, MLX) by
   deferring DSPS module imports until first use (#2276, #2271): DSPS modules
   allocate float64 device buffers at module import time, causing a hard failure
@@ -518,6 +554,21 @@
   Student-t branch tending to the Gaussian branch as dof → ∞. A fit at fixed
   dof is unchanged; comparing evidence across noise families no longer carries
   an offset of n·½·log(2π) (#2560).
+
+- Nebular backends' parameter reach. `neb_logU` (Cloudy, CB19 and both
+  MAPPINGS backends) and `neb_logZ_gas` (Cloudy) are now narrowed to the
+  vendored grid's axis at build time and warn when a value cannot be
+  narrowed away from it, instead of silently clipping onto a dead edge node
+  with an exactly-zero gradient (#2460). `CueBackend`'s low-level path
+  (`ssp_weights=None`) now threads `neb_logZ_gas` into `gas_logz` instead of
+  silently forcing solar metallicity (#2437). `neb={'type': 'cloudy'}` with
+  no explicit `grid` now prefers the packaged grid whose isochrone matches
+  the SSP, warning when it falls back to a mismatched sole grid and
+  refusing to guess among several mismatched ones; the resolved path is
+  logged at INFO (#2426). Cue's reproduction markdown, READMEs, validation scripts and
+  `cue.py` cite Cloudy 22.00 (Li et al. 2025) instead of "c17+"; three
+  code-cell labels and the rendered `docs/reproduction` copies refresh with the
+  next executing re-render (part of #2555).
 
 ### Fixed
 
@@ -567,6 +618,22 @@
   function behavior is unchanged; `tbabs_transmission` remains available as a
   deprecated alias. The soft-band difference between wabs and tbabs (10–30%
   below ~1 keV) is now documented in the docstring. (#901)
+
+### Fixed
+
+- `Posterior.to_param_spec()` now reads the posterior's own SFH type instead of
+  defaulting to `dpl`, and preserves all structural settings (dust law, nebular
+  backend, etc.) from the model. Previously, posteriors fit with non-`dpl` SFH
+  types like `delayed` would raise "Unknown parameter" errors because the method
+  only copied `stochastic` and `n_grid`, losing the component type information.
+  The fix reconstructs the full nested-dict groups from the model spec, then
+  injects the posterior's empirical parameter distributions. (#2180)
+
+- `Posterior.validate()` now dispatches on the MCMC method's valid arguments
+  instead of always passing `n_steps` (a MAP-only parameter) to `mcmc_nuts` and
+  `mcmc_raytrace`, which do not accept it. After a MAP fit, `validate()` now
+  raises a helpful error explaining that validation requires a posterior with
+  samples, rather than failing with a cryptic `TypeError` about `mcmc_nuts`. (#2180)
 
 ### Added
 
