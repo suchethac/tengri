@@ -94,8 +94,9 @@ class TestLibraryResolutions:
         assert SSP_LIBRARY_RESOLUTIONS["miles"] == pytest.approx(70.0)
 
     def test_c3k_resolution(self):
-        """C3K library sigma is frozen at 15 km/s."""
-        assert SSP_LIBRARY_RESOLUTIONS["c3k"] == pytest.approx(15.0)
+        """C3K (c3k_a, R=3000 core) library sigma is frozen at 42.4 km/s."""
+        assert SSP_LIBRARY_RESOLUTIONS["c3k"] == pytest.approx(42.4)
+        assert SSP_LIBRARY_RESOLUTIONS["c3k_a"] == pytest.approx(42.4)
 
 
 # ── Resolution to sigma conversion ────────────────────────────────
