@@ -121,7 +121,7 @@ def test_meiksin06_table2_at_1730_observed(z, expected):
 
 # ── Cell 1d: Gradient ────────────────────────────────────────────────────
 def test_meiksin06_grad_wrt_z():
-    """Test that jax.grad of transmission w.r.t. z is finite at (1730 Å, z=3)."""
+    """Test that jax.grad of transmission w.r.t. z is finite and non-zero at (1730 Å, z=3)."""
 
     def T_fn(z_val):
         return igm_transmission_meiksin06(jnp.asarray([1730.0]), z_val)[0]
@@ -129,6 +129,7 @@ def test_meiksin06_grad_wrt_z():
     z_test = 3.0
     grad_T = jax.grad(T_fn)(z_test)
     assert jnp.isfinite(grad_T), f"Gradient is {grad_T}"
+    assert grad_T != 0.0, "dT/dz must be non-zero where the Lyman-alpha term is active"
 
 
 # ── Cell 1b: the series-only mechanism, independent of the paper table ────
