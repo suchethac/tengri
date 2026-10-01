@@ -79,7 +79,7 @@ def test_grid_present_unchanged(monkeypatch):
     monkeypatch.setattr(
         Parameters,
         "_default_cloudy_grid",
-        staticmethod(lambda: "data/cloudy_grid_mist.h5"),
+        staticmethod(lambda isochrone_tag=None: "data/cloudy_grid_mist.h5"),
     )
 
     with pytest.raises(

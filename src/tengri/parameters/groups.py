@@ -1043,6 +1043,12 @@ def parse_groups(**kwargs) -> Parameters:
         Reserved for introspection callers (:func:`~tengri.recipe_parameters`)
         that read ``all_params`` and do not care whether a parameter is free.
         Never set this when building a model to fit.
+    ssp_data : SSPData, optional
+        The SSP the model is built against. When ``neb={'type': 'cloudy'}``
+        names no explicit ``grid``, its ``source`` isochrone tag
+        (``"mist"``/``"prsc"``/``"pdva"``/``"bpss"``) is preferred when
+        auto-resolving the packaged ``cloudy_grid_<tag>.h5`` (#2426). Passed
+        automatically by :meth:`~tengri.forward.sed_model.SEDModel.build`.
 
     Returns
     -------
@@ -1077,6 +1083,14 @@ def parse_groups(**kwargs) -> Parameters:
     # Private introspection escape hatch: popped before group parsing so it is
     # never mistaken for a group name.
     allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
+    # The SSP a CLOUDY nebular grid auto-selects against (#2426), popped for
+    # the same reason: SEDModel.build passes it through so the resolved grid
+    # matches the SSP's isochrone, but it names no group and must never reach
+    # _check_dict_keys as an unrecognized one. None (the default) is every
+    # introspection caller and any direct parse_groups() call outside
+    # SEDModel.build -- auto-resolution then falls back to its pre-#2426
+    # behavior (see Parameters._default_cloudy_grid).
+    ssp_data = kwargs.pop("ssp_data", None)
 
     # Redshift is required, and the question asked here is whether the caller
     # PASSED it -- not what its value is. A value-based sentinel cannot answer
@@ -1200,6 +1214,14 @@ def parse_groups(**kwargs) -> Parameters:
     # Resolve each parameter's final distribution
     resolved_kwargs = dict(structural_kwargs)
     provenance: dict[str, str] = {}
+
+    # #2426: read once here (not inside ``structural_kwargs``/pass 2's
+    # enumeration spec, which defers grid resolution entirely) and carried
+    # only on the final ``Parameters(**resolved_kwargs, ...)`` call below,
+    # where auto-resolution actually runs.
+    from tengri.parameters.parameters import _neb_isochrone_tag_from_ssp
+
+    resolved_kwargs["ssp_isochrone_tag"] = _neb_isochrone_tag_from_ssp(ssp_data)
 
     # Which parameters each group's ``all_params: FREE`` may free, scoped to the
     # structural variant that group selected. Computed once, consulted once in
@@ -6013,6 +6035,44 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
+#: declaration and the short form the sub-block grammar would have resolved it
+#: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
+#: surviving name ``agn_ebv``. The retired spelling is intercepted before the
+#: generic key resolver reaches it, in every group.
+_RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset(
+    {"agn_attenuation_ebv", "attenuation_ebv"}  # flat + short dict spelling
+)
+
+
+def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_attenuation_ebv`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.atten'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, the consolidation rationale, and the one
+        parameter name that survives (both flat and dict-grammar spellings).
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_ebv' (#2325): "
+        f"the E(B-V) attenuation-stage reddening was duplicated under two names "
+        f"(declared under the old 'agn_attenuation_ebv' spelling and read by "
+        f"'smc_prevot' and 'qsogen' blocks), while a third block 'qsogen_smc' "
+        f"read 'agn_ebv'. Consolidated to the single surviving name 'agn_ebv' "
+        f"(QSOgen SMC reddening):\n"
+        f"  agn={{'type': 'composable', 'atten': {{'law': 'prevot_smc', "
+        f"'ebv': Uniform(0.0, 1.0)}}}}"
+    )
+
+
 def _check_dict_keys(
     group: str,
     user_dict: dict,
@@ -6062,6 +6122,12 @@ def _check_dict_keys(
         # silently inert dimension.
         if key in _ALPHA_ION_KEYS:
             raise _alpha_ion_retired_error(group, str(key))
+
+        # R52 (#2325): the retired agn_attenuation_ebv is intercepted in every
+        # group before the generic resolver reaches it. The E(B-V) parameter
+        # was consolidated to the single surviving name agn_ebv.
+        if key in _RETIRED_AGN_ATTEN_EBV:
+            raise _agn_atten_ebv_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
@@ -6695,15 +6761,11 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    f"  agn={{'atten': {{'law': {law_name!r}, "
-                    f"'attenuation_ebv': Uniform(...)}}}}\n"
+                    f"  agn={{'atten': {{'law': {law_name!r}, 'ebv': Uniform(...)}}}}\n"
                     f"{law_name!r} is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice. 'attenuation_ebv' is the short spelling of "
-                    "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
-                    "the unrelated, pre-existing agn_ebv parameter (the separate "
-                    "qsogen_smc attenuation block's own reddening knob), whose short "
-                    "spelling is 'ebv'."
+                    "not a new choice. 'ebv' (the short spelling of agn_ebv) is the "
+                    "E(B-V) parameter for the attenuation stage."
                 )
 
             if law_key is not None:

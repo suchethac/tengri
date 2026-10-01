@@ -2652,11 +2652,19 @@ class Prediction:
             return self._model.predict_spectrum(self._free_params, wave_obs=wave_obs)
 
         # Exact: project the cached ForwardState through the shared spectrum
-        # projector. ``Observation.predict`` is the canonical exact path, it calls
-        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086),
-        # and it never falls through to the LUT.
+        # projector. ``Observation.predict`` is the canonical exact path, it
+        # routes through ``project_spectrum_kernel_split`` and applies the flux
+        # calibration (#1086), and it never falls through to the LUT. The LSF
+        # and kinematics kwargs come from ``_observation_predict_kwargs`` — the
+        # same helper :meth:`SEDModel._spectrum_via_state` uses — so this
+        # accessor agrees with ``model.predict_spectrum`` to numerical
+        # precision instead of silently falling back to
+        # ``Observation.predict``'s defaults (no LSF, no sigma_v_kms).
         out = self._model.observation.predict(
-            self._ensure_state(), self._params, wave_obs=wave_obs
+            self._ensure_state(),
+            self._params,
+            wave_obs=wave_obs,
+            **self._model._observation_predict_kwargs(self._free_params),
         )
         return out["spec_fnu"]
 

@@ -50,6 +50,7 @@ from tengri.observation.spectrum import (
     blend_emission_lines,
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
+    resolve_sigma_lib_kms,
     velocity_broaden,
 )
 
@@ -66,5 +67,6 @@ __all__ = [
     "measure_index_jax",
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",
+    "resolve_sigma_lib_kms",
     "velocity_broaden",
 ]

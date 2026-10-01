@@ -16,11 +16,11 @@ class TestAgNAttenLawKey:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 0.5)}},
+            agn={"atten": {"law": "prevot_smc", "ebv": Uniform(0.0, 0.5)}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
-        assert "agn_attenuation_ebv" in model.spec.free_params
+        assert "agn_ebv" in model.spec.free_params
 
     def test_atten_law_key_invalid_dust_law_raises(self, synthetic_ssp_wide, simple_observation):
         """Test that invalid law name raises with suggestion."""
@@ -50,7 +50,7 @@ class TestAgNAttenLawKey:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"type": "qsogen", "attenuation_ebv": 0.1}},
+            agn={"atten": {"type": "qsogen", "ebv": 0.1}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "qsogen"
@@ -109,13 +109,13 @@ class TestAgNAttenLawKey:
             agn={
                 "atten": {
                     "law": "prevot_smc",
-                    "attenuation_ebv": FREE,
+                    "ebv": FREE,
                 }
             },
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
-        assert "agn_attenuation_ebv" in model.spec.free_params
+        assert "agn_ebv" in model.spec.free_params
 
     def test_atten_params_fixed_with_law_key(self, synthetic_ssp_wide, simple_observation):
         """Test that Fixed params work with law key."""
@@ -125,21 +125,21 @@ class TestAgNAttenLawKey:
             agn={
                 "atten": {
                     "law": "prevot_smc",
-                    "attenuation_ebv": Fixed(0.2),
+                    "ebv": Fixed(0.2),
                 }
             },
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
         # Fixed params should not be in free_params
-        assert "agn_attenuation_ebv" not in model.spec.free_params
+        assert "agn_ebv" not in model.spec.free_params
 
     def test_roundtrip_emits_law_key_for_smc_prevot(self, synthetic_ssp_wide, simple_observation):
         """Test that roundtrip emits law key for smc_prevot."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
-            agn={"atten": {"law": "prevot_smc", "attenuation_ebv": 0.1}},
+            agn={"atten": {"law": "prevot_smc", "ebv": 0.1}},
             redshift=Fixed(0.1),
         )
         groups = model.spec.to_groups()
@@ -169,7 +169,7 @@ class TestAgNAttenLawKey:
         """Test that roundtrip preserves parameters through grammar."""
         original_groups = {
             "redshift": Fixed(0.1),
-            "agn": {"atten": {"law": "prevot_smc", "attenuation_ebv": 0.15}},
+            "agn": {"atten": {"law": "prevot_smc", "ebv": 0.15}},
         }
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
