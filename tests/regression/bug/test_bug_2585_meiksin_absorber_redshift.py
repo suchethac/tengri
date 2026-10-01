@@ -136,3 +136,128 @@ def test_meiksin06_grad_wrt_z():
     z_test = 3.0
     grad_T = jax.grad(T_fn)(z_test)
     assert jnp.isfinite(grad_T), f"Gradient is {grad_T}"
+
+
+# ── Cell 1b: the series-only mechanism, independent of the paper table ────
+_SERIES_RATIOS = {
+    3.0: (1.171, 1.081, 1.036, 1.011),
+    5.0: (2.617, 1.601, 1.220, 1.065),
+    6.0: (8.182, 2.920, 1.616, 1.165),
+}
+_REST_LAMBDAS = (800.0, 900.0, 950.0, 1000.0)
+
+
+def transmission_source_redshift(lobs, z):
+    """Transmission with the n >= 3 series evaluated at the source redshift."""
+    return np.exp(-(tau_lines_old(lobs, z) + tau_ligm(lobs, z) + tau_lls(lobs, z)))
+
+
+@pytest.mark.parametrize(
+    "z,rest_aa,expected",
+    [
+        (z, lam, ratio)
+        for z, ratios in _SERIES_RATIOS.items()
+        for lam, ratio in zip(_REST_LAMBDAS, ratios)
+    ],
+)
+def test_meiksin06_series_ratio_to_source_redshift_reading(z, rest_aa, expected):
+    """Absorber-redshift over source-redshift transmission matches the series-only ratio.
+
+    Both sides carry the same LLS and LIGM terms, so the ratio isolates the n >= 3
+    Lyman-series optical depths (Meiksin 2006, Table 1, evaluated at z_n).
+    """
+    lobs = rest_aa * (1.0 + z)
+    t_fixed = float(igm_transmission_meiksin06(jnp.asarray([lobs]), z)[0])
+    ratio = t_fixed / transmission_source_redshift(lobs, z)
+    assert ratio == pytest.approx(expected, rel=1e-2), (
+        f"z={z}, rest {rest_aa} A: T_fixed/T_source = {ratio:.4f}, expected {expected}"
+    )
+
+
+# ── Cell 2: the public path, SEDModel.build + photometry ───────────────────
+_BAND_REST_AA = (850.0, 1000.0)
+_PUBLIC_RTOL = 2e-2
+_F32_VS_F64_RTOL = 1e-4
+
+
+def _band_photometry_ratio(ssp_data, z, fold, *, x64):
+    """Photometry(meiksin06) / photometry(none) in a rest 850-1000 A top-hat band.
+
+    Returns the ratio, the filter edges and the observed-frame wavelength grid and
+    intrinsic L_nu of the no-IGM model (the inputs the independent reference needs).
+    """
+    from tengri import DEFAULT, Fixed, SEDModel, WavePrecomp
+    from tengri.observation import Observation, Photometry
+    from tengri.observation.photometry import FilterCurve
+
+    lo, hi = (1.0 + z) * _BAND_REST_AA[0], (1.0 + z) * _BAND_REST_AA[1]
+    with jax.enable_x64(x64):
+        curve = FilterCurve(
+            wave=jnp.linspace(lo, hi, 200), trans=jnp.ones(200), name=f"lyman_{z:g}"
+        )
+        observation = Observation(photometry=Photometry(filters=(curve,)))
+        phot = {}
+        intrinsic = None
+        for igm in ("meiksin06", "none"):
+            model = SEDModel.build(
+                ssp_data=ssp_data,
+                observation=observation,
+                sfh={
+                    "type": "delayed",
+                    "tau_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(1.0),
+                    "log_total_mass": Fixed(10.0),
+                    "all_params": Fixed(DEFAULT),
+                },
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.0),
+                    "tau_diff": Fixed(0.0),
+                    "all_params": Fixed(DEFAULT),
+                },
+                neb={"type": "none"},
+                igm={"type": igm},
+                redshift=Fixed(z),
+                approx=WavePrecomp(band_integration="quadrature", n_subbands=16, igm_fold=fold),
+            )
+            phot[igm] = float(np.asarray(model.predict_photometry({}))[0])
+            if igm == "none":
+                pred = model.predict({})
+                intrinsic = (np.asarray(pred.wave_obs), np.asarray(pred.obs_sed()))
+    return phot["meiksin06"] / phot["none"], (lo, hi), intrinsic
+
+
+def _reference_band_ratio(z, edges, intrinsic):
+    """Photon-counting band average of T_meiksin06 weighted by the intrinsic L_nu."""
+    wave_obs, l_nu = intrinsic
+    lo, hi = edges
+    fine = np.linspace(lo, hi, 20001)
+    weight = np.interp(fine, wave_obs, l_nu) / fine
+    trans = np.asarray(igm_transmission_meiksin06(jnp.asarray(fine), z))
+    return np.trapezoid(trans * weight, fine) / np.trapezoid(weight, fine)
+
+
+@pytest.mark.parametrize("x64", [True, False], ids=["float64", "float32"])
+@pytest.mark.parametrize("fold", ["node", "exact"])
+@pytest.mark.parametrize("z", [3.0, 5.0, 6.0])
+def test_meiksin06_public_photometry_matches_band_averaged_transmission(
+    ssp_data_fsps, z, fold, x64
+):
+    """SEDModel photometry in a Lyman-series band carries the absorber-redshift transmission.
+
+    The fixed-redshift model with ``igm={"type": "meiksin06"}`` over the same model with
+    ``igm={"type": "none"}`` must equal the transmission-weighted band average computed
+    here from :func:`igm_transmission_meiksin06` on a fine grid; float32 must agree with
+    float64 to 1e-4 in the ratio.
+    """
+    ratio64, edges, intrinsic = _band_photometry_ratio(ssp_data_fsps, z, fold, x64=True)
+    expected = _reference_band_ratio(z, edges, intrinsic)
+    assert ratio64 == pytest.approx(expected, rel=_PUBLIC_RTOL), (
+        f"z={z}, fold={fold}: model ratio {ratio64:.5f}, band-averaged T {expected:.5f}"
+    )
+    if not x64:
+        ratio32, _, _ = _band_photometry_ratio(ssp_data_fsps, z, fold, x64=False)
+        assert ratio32 == pytest.approx(ratio64, rel=_F32_VS_F64_RTOL), (
+            f"z={z}, fold={fold}: float32 {ratio32:.6f} vs float64 {ratio64:.6f}"
+        )
