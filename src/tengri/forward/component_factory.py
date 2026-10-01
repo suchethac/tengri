@@ -531,7 +531,11 @@ def build_components(
         ``False`` when the declared nebular backend carries a free-free continuum
         (``"cue"``, ``"cloudy_grid"``; issue #2346), otherwise the
         :class:`RadioSEDComponentConfig` default rule (``True``; ``False`` for
-        ``sfr_mode="bell2003_split"``). Explicit ``True``/``False`` always wins.
+        ``sfr_mode="bell2003_split"``). With ``None`` and an SSP flagged
+        nebular-included (``ssp_data.nebular == "included"``) the term is kept but
+        applies only from the SSP grid edge upward
+        (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
+        always wins.
 
     Returns
     -------
@@ -755,10 +759,26 @@ def build_components(
         # Resolve include_freefree=None to False if the declared nebular backend
         # carries a free-free continuum (Cue, CloudyGrid). One thermal term on
         # the whole grid; the nebular continuum owns it when it carries free-free
-        # (issue #2346).
+        # (issue #2346). On a nebular-included SSP the term starts at the SSP edge
+        # (#2574).
         include_freefree = radio_include_freefree
-        if include_freefree is None and nebular_backend_carries_freefree(nebular_backend):
-            include_freefree = False
+        freefree_wave_min = None
+        if include_freefree is None:
+            if nebular_backend_carries_freefree(nebular_backend):
+                include_freefree = False
+            elif (
+                getattr(ssp_data, "nebular", "unknown") == "included"
+                and radio_sfr_mode != "bell2003_split"
+            ):
+                # A nebular-included SSP holds the nebular continuum inside its
+                # flux up to the SSP grid edge, so the radio thermal term starts
+                # at the edge: one thermal term below it, and the radio term
+                # alone beyond, where the SSP has no flux (#2574).
+                # The ``nebular`` stamp is the declaration Cue and CloudyGrid
+                # read (#1014); the declared backend name cannot tell, because
+                # ``neb={'type': 'none'}`` also builds a baked-in backend. An
+                # unstamped grid keeps the term over its whole range.
+                freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
         components.append(
             _resolve_registry_component(
@@ -768,6 +788,7 @@ def build_components(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
                     include_freefree=include_freefree,
+                    freefree_wave_min=freefree_wave_min,
                 ),
             )
         )
