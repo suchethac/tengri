@@ -88,7 +88,9 @@ class TestCoronaAnchorAtReferenceEnergy:
         alpha_ox = -1.4
         l_2kev = l_2500 * 10.0 ** (alpha_ox / 0.3838)
         expected = l_2kev * (1.0 + 0.01)
-        assert lnu2 == pytest.approx(expected, rel=1e-6)
+        # The legacy function converts lambda -> E with 1.6022e-9 erg/keV, which
+        # differs from HC by 1.4e-5, hence rel=1e-4 (as in the active-path cell).
+        assert lnu2 == pytest.approx(expected, rel=1e-4)
 
 
 class TestLMXBPhotonIndexDefault:
