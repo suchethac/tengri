@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Meiksin (2006) IGM mean transmission.
 
-Implements the Meiksin (2006) IGM model as CIGALE evaluates it
-(``pcigale.sed_modules.redshifting.igm_transmission``) in pure JAX so
-it is JIT-compilable and differentiable. The CIGALE function is the
-authoritative reference; this implements it exactly, with the
-wavelength convention converted from nm (CIGALE) to Angstrom (tengri).
+Implements the Meiksin (2006) IGM model in pure JAX so it is
+JIT-compilable and differentiable. Per Table 1 of the paper, each Lyman-series
+line's optical depth is evaluated at the absorber redshift ``z_n`` (the
+redshift of the gas absorbing photons at that line's wavelength), not at the
+source redshift.
 
 Unlike Inoue+2014, Meiksin's diffuse Lyman-α-forest continuum
 suppression rises from ~0 just blueward of Lyα to ~0.25 by the optical
 at z = 3; a *non-binary* continuum that Inoue's grid model misses.
-Issue #440 §12.
+Issue #440 §12. Note that CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series
+terms at the source redshift rather than the absorber redshift.
 
 References
 ----------
@@ -94,9 +95,11 @@ def igm_transmission_meiksin06(
 
     **Physics summary**:
 
-    1. Lyman series (lines ``n = 2 .. 30``) above the Lyman limit.
-       Series strengths from Meiksin Table 1; high-n tail
-       (``n >= 10``) follows ``720 / (n * (n^2 - 1))``.
+    1. Lyman series (lines ``n = 2 .. 30``): each line's opacity is evaluated
+       at its absorber redshift ``z_n = λ_obs / λ_n - 1`` per Meiksin (2006)
+       Table 1. The mean optical depths ``τ_α`` and line-strength ratios ``τ_n / τ_α``
+       both depend on the absorber redshift. Series strengths from Meiksin Table 1;
+       high-n tail (``n >= 10``) follows ``720 / (n * (n^2 - 1))``.
     2. Lyman-alpha-forest continuum (``tau_l_igm``): smooth ramp
        blueward of the Lyman limit, peaking at ``z_l = 0``.
     3. Lyman-Limit Systems (``tau_l_lls``): higher-order suppression
@@ -129,24 +132,25 @@ def igm_transmission_meiksin06(
     # z_n[k, :] = wavelength / lambda_n[k] - 1
     z_n = wavelength_nm[None, :] / lambda_n[:, None] - 1.0  # (29, n_wave)
 
-    # Mean Lyman-alpha optical depth (n=2).
-    tau_a = jnp.where(
-        z <= 4.0,
-        0.00211 * (1.0 + z) ** 3.7,
-        0.00058 * (1.0 + z) ** 4.5,
-    )
-    tau_n2 = jnp.where(
-        z <= 4.0,
-        0.00211 * (1.0 + z_n[0]) ** 3.7,
-        0.00058 * (1.0 + z_n[0]) ** 4.5,
-    )
+    # Mean Lyman-alpha optical depth evaluated at each line's absorber redshift z_n.
+    # Per Meiksin 2006 Table 1, the ratios tau_n/tau_alpha are functions of the
+    # absorber redshift, so every term must be evaluated at z_n.
+    tau_alpha_n = jnp.where(
+        z_n <= 4.0,
+        0.00211 * (1.0 + z_n) ** 3.7,
+        0.00058 * (1.0 + z_n) ** 4.5,
+    )  # (29, n_wave)
+
+    # n = 2 term.
+    tau_n2 = tau_alpha_n[0]
 
     # n = 3..9 with two sub-regimes split at z_n = 3.
     tau_low = []
     for n in range(3, 10):
         zn = z_n[n - 2]
-        a = tau_a * _FACT[n] * (0.25 * (1.0 + zn)) ** (1.0 / 3.0)
-        b = tau_a * _FACT[n] * (0.25 * (1.0 + zn)) ** (1.0 / 6.0)
+        tau_alpha_zn = tau_alpha_n[n - 2]
+        a = tau_alpha_zn * _FACT[n] * (0.25 * (1.0 + zn)) ** (1.0 / 3.0)
+        b = tau_alpha_zn * _FACT[n] * (0.25 * (1.0 + zn)) ** (1.0 / 6.0)
         if n <= 5:
             tau_low.append(jnp.where(zn < 3.0, a, b))
         else:
