@@ -8,8 +8,9 @@ resolution against :data:`~tengri.observation.filters.FILTER_REGISTRY`.
 Conventions for flagging censored data
 ---------------------------------------
 
-- Missing data: flux or error below −9990 (sentinel ± 9), or error = 0 → masked
-  out with huge noise (1e30)
+- Missing data: flux or error satisfying |value - sentinel| < 9 OR on the sentinel's
+  own side (e.g., value < −9999 for default −9999), or error = 0 → masked out with
+  huge noise (1e30); fully-sentinel pairs are silent
 - Upper limit (CIGALE convention): ANY negative error → ``UPPER_LIMIT`` with signed
   flux as the limit value and noise = |error|
 - Detection: any other case → ``DETECTED``, preserving signed flux and using positive
@@ -290,9 +291,10 @@ def read_catalog(
     -----
     **Censoring convention**:
 
-    - Missing data (either flux or error at -9999, or error = 0) → masked out with
-      large noise (1e30), with one UserWarning per column summarizing masked rows
-      (except for the fully-sentinel pair -9999/-9999)
+    - Missing data: flux or error at sentinel if |value - sentinel| < 9, OR on the
+      sentinel's own side (e.g., < -9999 for default -9999), or error = 0 → masked
+      with large noise (1e30) and one UserWarning per column per call. Fully-sentinel
+      pairs (both within margin) are silent.
     - Upper limit (ANY negative error, CIGALE convention) → mask = 1, with signed
       flux preserved as the limit value and noise = |error|
     - Detected (positive or zero error) → mask = 0, with signed flux preserved
@@ -358,9 +360,16 @@ def read_catalog(
             f_val = float(row[flux_col])
             e_val = float(row[err_col])
 
-            # Check if either value is at the sentinel (missing_value ± SENTINEL_MARGIN)
-            flux_at_sentinel = f_val < missing_value + SENTINEL_MARGIN
-            err_at_sentinel = e_val < missing_value + SENTINEL_MARGIN
+            # Sentinel detection: abs(value - missing_value) < SENTINEL_MARGIN OR
+            # more extreme on the sentinel's own side (missing_value<0 and val<missing_value)
+            flux_at_sentinel = (abs(f_val - missing_value) < SENTINEL_MARGIN) or (
+                (missing_value < 0 and f_val < missing_value)
+                or (missing_value > 0 and f_val > missing_value)
+            )
+            err_at_sentinel = (abs(e_val - missing_value) < SENTINEL_MARGIN) or (
+                (missing_value < 0 and e_val < missing_value)
+                or (missing_value > 0 and e_val > missing_value)
+            )
             both_at_sentinel = flux_at_sentinel and err_at_sentinel
 
             # Branch (a): Missing data detection

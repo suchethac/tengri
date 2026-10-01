@@ -489,6 +489,32 @@ class TestCustomColumns:
         assert cat.flux[0, 0] == 0.0
         assert cat.noise[0, 0] == 1e30
 
+    def test_positive_sentinel_9999(self, tmp_path):
+        """Test positive sentinel 9999.0: normal detection stays detected."""
+        path = tmp_path / "pos_sentinel.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,0.05,0.01\n")
+        cat = read_catalog(path, missing_value=9999.0)
+        assert cat.mask[0, 0] == DETECTED
+        npt.assert_allclose(cat.flux[0, 0], 0.05)
+
+    def test_positive_sentinel_9999_masked(self, tmp_path):
+        """Test positive sentinel 9999.0: sentinel flux gets masked."""
+        path = tmp_path / "pos_sent_masked.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,9999.0,0.01\n")
+        with pytest.warns(UserWarning, match="sdss_r"):
+            cat = read_catalog(path, missing_value=9999.0)
+        assert cat.mask[0, 0] == DETECTED
+        assert cat.noise[0, 0] == 1e30
+
+    def test_negative_sentinel_with_neg_flux(self, tmp_path):
+        """Test: negative flux with positive error is detection, even with positive sentinel."""
+        path = tmp_path / "neg_flux_pos_sent.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,-9999,0.01\n")
+        cat = read_catalog(path, missing_value=9999.0)
+        # -9999 is NOT within sentinel margin [9990, 10008] and NOT > 9999, so it's a detection
+        assert cat.mask[0, 0] == DETECTED
+        npt.assert_allclose(cat.flux[0, 0], -9999.0)
+
 
 # ── Error handling ────────────────────────────────────────────────
 
