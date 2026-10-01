@@ -18,7 +18,7 @@
 
 ### Fixed
 
-- UV slope β (Calzetti et al. 1994) and window-mean diagnostics measured wrong quantities: `uv_slope_beta` fitted per-window slopes and averaged them (giving β = −7.8 instead of −2.3), and `dn4000`/`equivalent_width`/spectral-index windows used pixel means instead of wavelength-weighted means (∫F dλ / ∫dλ), biasing results on non-uniform grids by 1.3% on dense lines. Corrected `uv_slope_beta` to implement Calzetti+1994 Eq. 3 exactly: ONE pooled least-squares fit over the union of all ten Table-2 windows; fixed window 6 from (1611–1711) to (1677–1740) Å per the table. Implemented wavelength-weighted window means (trapezoid integration) in `_window_mean_flux` and `dn4000`, used by all three Dn4000 implementations and Lick spectral indices. Three implementations (exact, Lick-style, and `compute_dn4000`) now agree to 1e-6 on any grid. (#2588)
+- `analysis.diagnostics.spectral.uv_slope_beta` is one least-squares fit of log F_λ against log λ over the union of the ten Calzetti et al. (1994) Table 2 windows (window 6 = 1677–1740 Å), and every spectral-index window mean (`_window_mean_flux`, `dn4000`, `equivalent_width`) is the wavelength integral ∫F dλ / ∫dλ, so Dn4000, Lick indices and equivalent widths are grid-independent and the three Dn4000 implementations agree (#2588).
 
 - A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
   thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular
