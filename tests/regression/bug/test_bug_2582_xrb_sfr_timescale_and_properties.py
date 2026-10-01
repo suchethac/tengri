@@ -106,9 +106,7 @@ def _band(wave, lnu, e1, e2, n=20001):
     energy = np.linspace(e1, e2, n)
     lam = HC / energy
     o = np.argsort(wave)
-    interp = np.exp(
-        np.interp(np.log(lam), np.log(wave[o]), np.log(np.maximum(lnu[o], 1e-300)))
-    )
+    interp = np.exp(np.interp(np.log(lam), np.log(wave[o]), np.log(np.maximum(lnu[o], 1e-300))))
     nu = C_AA / lam
     oo = np.argsort(nu)
     return np.trapezoid(interp[oo], nu[oo])
