@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for Lyman-continuum dust-absorption fraction (neb_fdust).
+"""Contract tests for the Lyman-continuum budget split (neb_fdust_frac, #2436).
 
-Tests the lyc_dust_escape_factor function and its integration with the
-Cue nebular backend to verify the CIGALE-matched implementation.
+Tests the lyc_dust_escape_factor and lyc_shares functions and their
+integration with the Cue/CloudyGrid/CB19 nebular backends to verify the
+CIGALE-matched implementation and the #2436 additive-shares reparametrization
+(neb_fdust retired in favor of neb_fdust_frac, the fraction of the
+NON-escaping budget HII-region dust absorbs).
 
 References
 ----------
@@ -22,6 +25,7 @@ import jax.numpy as jnp
 import pytest
 from jax import grad
 
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._recombination_coeffs import (
     ALPHA_1,
     ALPHA_B,
@@ -130,7 +134,7 @@ class TestLycDustEscapeFactor:
 
 
 class TestNebularFdustIntegration:
-    """Integration tests for neb_fdust parameter in nebular models."""
+    """Integration tests for the neb_fdust_frac parameter in nebular models."""
 
     def test_constants_match_cigale(self):
         """Verify recombination constants against CIGALE values."""
@@ -146,7 +150,7 @@ class TestNebularFdustIntegration:
 
     @pytest.mark.contract
     def test_cloudy_grid_fdust_reduces_lines(self):
-        """Verify that neb_fdust > 0 reduces CloudyGrid line luminosity.
+        """Verify that neb_fdust_frac > 0 reduces CloudyGrid line luminosity.
 
         The k-factor scales nebular lines. With fdust > 0, the k-factor is
         smaller than with fdust = 0, so luminosities should decrease.
@@ -186,7 +190,7 @@ class TestNebularFdustIntegration:
             neb_logZ_gas=None,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
-            neb_fdust=0.0,
+            neb_fdust_frac=0.0,
         )
 
         # Predict with fdust = 0.1
@@ -198,7 +202,7 @@ class TestNebularFdustIntegration:
             neb_logZ_gas=None,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
-            neb_fdust=0.1,
+            neb_fdust_frac=0.1,
         )
 
         # Check wavelengths are identical
@@ -213,7 +217,7 @@ class TestNebularFdustIntegration:
 
     @pytest.mark.contract
     def test_cb19_fdust_reduces_lines(self):
-        """Verify that neb_fdust > 0 reduces CB19 line luminosity."""
+        """Verify that neb_fdust_frac > 0 reduces CB19 line luminosity."""
         pytest.importorskip("h5py")
         from pathlib import Path
 
@@ -249,7 +253,7 @@ class TestNebularFdustIntegration:
             neb_logZ_gas=None,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
-            neb_fdust=0.0,
+            neb_fdust_frac=0.0,
         )
 
         # Predict with fdust = 0.1
@@ -261,7 +265,7 @@ class TestNebularFdustIntegration:
             neb_logZ_gas=None,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
-            neb_fdust=0.1,
+            neb_fdust_frac=0.1,
         )
 
         # Check wavelengths are identical
@@ -272,3 +276,88 @@ class TestNebularFdustIntegration:
             f"Expected fdust=0.1 to reduce CB19 lines, but got "
             f"min(lums_0)={jnp.min(lums_0)}, min(lums_dust)={jnp.min(lums_dust)}"
         )
+
+
+class TestLycShares:
+    """Tests for the #2436 additive-shares split (lyc_shares)."""
+
+    def test_zero_zero_is_all_gas(self):
+        """neb_fesc=0, neb_fdust_frac=0 -> all photons photoionize."""
+        f_esc, f_dust, f_gas = lyc_shares(0.0, 0.0)
+        assert jnp.allclose(f_esc, 0.0)
+        assert jnp.allclose(f_dust, 0.0)
+        assert jnp.allclose(f_gas, 1.0)
+
+    def test_shares_nonnegative_and_sum_to_one_over_prior_box(self):
+        """The three shares are nonnegative and sum to 1 over [0, 1]^2.
+
+        Owner ruling (#2436): f_esc + f_dust <= 1 is a precondition of the
+        additive per-photon budget, so the whole (neb_fesc, neb_fdust_frac)
+        prior box must be physical -- unlike the retired absolute neb_fdust,
+        which let neb_fesc + neb_fdust exceed 1.
+        """
+        fesc_grid = jnp.linspace(0.0, 1.0, 21)
+        frac_grid = jnp.linspace(0.0, 1.0, 21)
+        fesc_mesh, frac_mesh = jnp.meshgrid(fesc_grid, frac_grid)
+        f_esc, f_dust, f_gas = lyc_shares(fesc_mesh, frac_mesh)
+
+        assert jnp.all(f_esc >= -1e-12), f"f_esc has negative entries: min={f_esc.min()}"
+        assert jnp.all(f_dust >= -1e-12), f"f_dust has negative entries: min={f_dust.min()}"
+        assert jnp.all(f_gas >= -1e-12), f"f_gas has negative entries: min={f_gas.min()}"
+
+        total = f_esc + f_dust + f_gas
+        assert jnp.allclose(total, 1.0, atol=1e-10), (
+            f"shares do not sum to 1 everywhere on the prior box: "
+            f"min={total.min()}, max={total.max()}"
+        )
+
+    def test_dust_share_scales_nonescaping_budget(self):
+        """f_dust = neb_fdust_frac * (1 - neb_fesc), not an independent absolute."""
+        f_esc, f_dust, f_gas = lyc_shares(0.3, 0.5)
+        assert jnp.allclose(f_esc, 0.3)
+        assert jnp.allclose(f_dust, 0.5 * 0.7)
+        assert jnp.allclose(f_gas, 0.5 * 0.7)
+
+    def test_gradient_wrt_fdust_frac_finite_and_nonzero(self):
+        """d(f_dust)/d(neb_fdust_frac) is finite and nonzero on the open box."""
+        grad_fn = grad(lambda frac: lyc_shares(0.3, frac)[1])
+        g = grad_fn(0.4)
+        assert jnp.isfinite(g)
+        assert g != 0.0, "gradient wrt neb_fdust_frac collapsed to zero"
+
+    def test_gradient_wrt_fesc_finite_and_nonzero(self):
+        """d(f_dust)/d(neb_fesc) is finite and nonzero on the open box."""
+        grad_fn = grad(lambda fesc: lyc_shares(fesc, 0.4)[1])
+        g = grad_fn(0.3)
+        assert jnp.isfinite(g)
+        assert g != 0.0, "gradient wrt neb_fesc collapsed to zero"
+
+
+class TestNebFdustRetired:
+    """The retired absolute neb_fdust must raise a rename-hint error (#2436)."""
+
+    @staticmethod
+    def _parse(**groups):
+        from tengri.parameters import DEFAULT, Fixed, parse_groups
+
+        return parse_groups(
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.5),
+            **groups,
+        )
+
+    def test_neb_fdust_in_neb_dict_raises_with_new_name(self):
+        """neb={'neb_fdust': ...} raises naming neb_fdust_frac."""
+        from tengri.parameters import DEFAULT, Fixed
+
+        with pytest.raises(ValueError, match=r"neb_fdust.*neb_fdust_frac.*2436"):
+            self._parse(neb={"type": "cue", "neb_fdust": Fixed(0.2), "all_params": Fixed(DEFAULT)})
+
+    def test_neb_fdust_frac_survives(self):
+        """The surviving neb_fdust_frac name works for model construction."""
+        from tengri.parameters import DEFAULT, Fixed
+
+        groups = self._parse(
+            neb={"type": "cue", "neb_fdust_frac": Fixed(0.2), "all_params": Fixed(DEFAULT)},
+        )
+        assert groups is not None

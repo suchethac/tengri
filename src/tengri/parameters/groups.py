@@ -3943,6 +3943,19 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 if val not in allowed:
                     raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
                 result[result_key] = val
+        # Include the LyC in the dust energy-balance integral (FSPS/Prospector
+        # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
+        # wg00's absorbed-luminosity integral calls the SAME
+        # bolometric_absorbed_log10 with the SAME 912 Å switch point as
+        # single_component/two_component (#2539 item 1), so this key threads
+        # here too instead of being refused the way 'lyman_cutoff' is above.
+        # This early ``return`` meant this key, though never explicitly
+        # rejected, was silently never read for dust_type='wg00' before this
+        # line existed -- the actual defect: not (only) component_factory.py
+        # forgetting to forward it, but this function never producing
+        # 'dust_eb_include_lyc' for wg00 in the first place.
+        if "eb_include_lyc" in dust_atten_dict:
+            result["dust_eb_include_lyc"] = bool(dust_atten_dict["eb_include_lyc"])
         return
 
     # Extract and validate dust laws. Attenuation laws are now EXPLICIT and required.
@@ -5965,7 +5978,7 @@ def _monolithic_agn_top_level_names(model: str) -> set[str]:
 #: resolved it under. Neither is a declared parameter any more -- the axis has
 #: one name, ``agn_nlr_xi_d``, owned by the ``nlr`` block that reads it. Without
 #: an interception the generic key resolver answers ``neb_xid`` in the ``neb``
-#: group with "Did you mean: neb_fdust?", a real parameter of an unrelated
+#: group with "Did you mean: neb_fdust_frac?", a real parameter of an unrelated
 #: quantity, so following the suggestion silently fits something else.
 _NEB_XID_KEYS: frozenset[str] = frozenset({"neb_xid", "xid"})
 
@@ -6048,10 +6061,27 @@ _RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset(
 def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
     """The one message the retired ``agn_attenuation_ebv`` gets, wherever written.
 
+#: The retired absolute Lyman-continuum dust-absorption fraction (owner
+#: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
+#: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
+#: ionizing-photon budget that only ``lyc_dust_escape_factor``'s internal
+#: clamp caught, silently. The axis has one name now, ``neb_fdust_frac`` --
+#: the fraction of the NON-escaping budget (``1 - neb_fesc``) HII-region dust
+#: absorbs -- read through the single ``lyc_shares`` helper
+#: (``components/nebular/_recombination_coeffs.py``) everywhere the absolute
+#: share is needed.
+_NEB_FDUST_KEYS: frozenset[str] = frozenset({"neb_fdust"})
+
+
+def _neb_fdust_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``neb_fdust`` gets, wherever it was written.
+
     Parameters
     ----------
     group : str
         The group the key was found in (``'agn'``, ``'agn.atten'``, ...).
+
+        The group the key was found in (normally ``'neb'``).
     key : str
         The spelling the caller wrote.
 
@@ -6070,6 +6100,20 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
         f"(QSOgen SMC reddening):\n"
         f"  agn={{'type': 'composable', 'atten': {{'law': 'prevot_smc', "
         f"'ebv': Uniform(0.0, 1.0)}}}}"
+
+        Naming the replacement, the conversion formula, and why the old name
+        never worked.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'neb_fdust_frac' (#2436): "
+        f"the absolute ionizing-photon dust-absorption fraction let "
+        f"neb_fesc + neb_fdust exceed 1, an impossible >100% of the budget. "
+        f"'neb_fdust_frac' instead sets the fraction of the NON-escaping budget "
+        f"(1 - neb_fesc) that HII-region dust absorbs, so the shares always sum "
+        f"to 1. Convert an old absolute value with "
+        f"neb_fdust_frac = neb_fdust / (1 - neb_fesc):\n"
+        f"  neb={{'type': 'cue', 'neb_fesc': Fixed(0.3), "
+        f"'neb_fdust_frac': Fixed(0.2857)}}  # was neb_fesc=0.3, neb_fdust=0.2"
     )
 
 
@@ -6128,6 +6172,12 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+
+        # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
+        # before the generic resolver reaches it -- it was always written
+        # under the 'neb' group, so no cross-group form is needed here.
+        if key in _NEB_FDUST_KEYS:
+            raise _neb_fdust_retired_error(group, str(key))
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
