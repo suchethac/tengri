@@ -244,9 +244,11 @@ _ALL_ATTEN_TYPES = _registered_types("atten")
 #: R22 (task13 fix-round-1): the ONE polar-dust mechanism's own names.
 _POLAR_NAMES = frozenset({"agn_polar_ebv", "agn_polar_oa", "agn_polar_T", "agn_polar_beta"})
 
-#: F3: agn_ebv is read only by the atten types whose own
-#: signature names it (smc_prevot_block, qsogen_quasar_ext_block).
-_ATTENUATION_EBV_TYPES = frozenset({"qsogen", "smc_prevot"})
+#: F3: agn_ebv is read only by the atten types whose own signature names it.
+#: Since the one-name consolidation (#2325) that is three blocks: smc_prevot
+#: and qsogen (which read the retired agn_attenuation_ebv spelling before)
+#: plus qsogen_smc (which read agn_ebv all along).
+_ATTENUATION_EBV_TYPES = frozenset({"qsogen", "smc_prevot", "qsogen_smc"})
 
 
 def _build_torus_atten(ssp_data, observation, torus_type: str, atten_type: str, *, mute=True):
