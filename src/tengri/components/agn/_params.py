@@ -139,16 +139,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
-    # E(B-V) of the attenuation-stage block (``agn.atten`` sub-block, e.g.
-    # ``smc_prevot``). Same Prevot curve and R_V as agn_ebv_disc but applied
-    # at the attenuation stage of the composable runner.
-    ParamDeclaration(
-        "agn_attenuation_ebv",
-        Uniform(0.0, 1.0, default=0.0),
-        "E(B-V) of the AGN attenuation-stage block (smc_prevot)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-    ),
     ParamDeclaration(
         "agn_log_mdot",
         # log10(Mdot / Mdot_Edd): RELAGN grid extent -1.5 to 0.3.

@@ -20,6 +20,11 @@
 
 - `analysis.diagnostics.spectral.uv_slope_beta` is one least-squares fit of log F_λ against log λ over the union of the ten Calzetti et al. (1994) Table 2 windows (window 6 = 1677–1740 Å), and every spectral-index window mean (`_window_mean_flux`, `dn4000`, `equivalent_width`) is the wavelength integral ∫F dλ / ∫dλ, so Dn4000, Lick indices and equivalent widths are grid-independent and the three Dn4000 implementations agree (#2588).
 
+- The dense-mass step-size stability probe (#1999) now also runs after
+  adaptation in the dynamic-HMC backend and in `fit_batch`'s shared window
+  adaptation, so those paths refuse a step above the metric's stability limit
+  like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
+  item in #2157 (Refs #2157).
 - A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
   thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular
   continuum up to the SSP grid edge (1 cm for `ssp_prsc_miles_chabrier_wNE`), and the radio
@@ -131,6 +136,23 @@
   working spec and merges the fixed values (#2502).
 
 - Lazy DSPS imports (deferred to function-local scope via #2276) now hold the x64 preference where the caller left it. DSPS modules run `jax.config.update("jax_enable_x64", True)` at import time, and lazy imports that execute after the user has set `JAX_ENABLE_X64=0` would silently flip x64 back on mid-run, inflating float32 dtypes to float64. Every lazy DSPS import now runs under `hold_x64_preference()`, a shared context manager that snapshots the current `jax.config.jax_enable_x64` flag at entry and restores it on exit, preserving the caller's preference regardless of whether it was set via environment variable or `jax.config.update()` call. All 10 function-local DSPS imports across `utils/cosmology.py`, `components/stellar/component.py`, `components/stellar/sps/dsps_wrapper.py`, and `observation/filters/custom.py` are wrapped (#2504).
+- `StudentT` priors with df ≥ 3 realize their quantile pushforward exactly,
+  with an **analytic gradient** rather than one obtained by differentiating
+  the incomplete beta function: `dz/dp = 1/f_t(z)` and `dF_t/dz = f_t(z)` are
+  supplied directly via `jax.custom_jvp`, so the sampler's Jacobian
+  `dθ/dξ = σ·φ(ξ)/f_t(z)` is exact everywhere, including exactly at ξ = 0 (the
+  declared prior midpoint). A first attempt at this fix autodiffed through
+  `jax.scipy.special.betainc` instead and made things worse: it zeroed the
+  Jacobian at ξ = 0 (a 5× error, not the interpolant's kinks) and returned NaN
+  gradients for ξ in the open neighborhood around 0. The CDF is reparameterized
+  as `F_t(z) = ½ + ½·sign(z)·I_y(½, df/2)`, `y = z²/(df+z²)`, removing a
+  near-z=0 cancellation the naive `x = df/(df+z²)` form has; the quantile's
+  Newton seed is a monotone cubic Hermite guess with exact knot slopes
+  `1/f_t(z_k)`, needing one refinement step instead of four. θ and the round
+  trip agree with the exact quantile to the measured accuracy floor of
+  `jax.scipy.special.betainc` itself (~1e-9, worst case at |ξ| = 4.5); `df ∈
+  {1, 2}` keep their closed forms and are bit-identical to their prior
+  behavior in both directions (#2576).
 - CloudyGrid, CB19 and MAPPINGS nebular backends no longer divide the Lyα luminosity by the escape/dust factor; Lyα is suppressed by `neb_fesc`/`neb_fdust` like every other recombination line, through one shared helper from the P-11 fix in cue.py (#2531, #743).
 - `compute_qh`'s docstring now states its actual input unit (L☉/Hz per M☉, converted in log space for float32 safety), matching `compute_qh_log10`; a test pins the contract (#2532).
 - `sigma_v_kms` is now applied on the resolution-matrix branch of `project_spectrum`
@@ -584,6 +606,11 @@
   unchanged; both spellings cannot be passed together (raises if shadowing is
   detected).
 
+### Changed
+
+- `agn_attenuation_ebv` is retired; every AGN attenuation block (`smc_prevot`,
+  `qsogen`) reads `agn_ebv`, the precompute-axis name; the retired spelling —
+  flat or under `agn={'atten': {...}}` — is refused with a rename hint (#2325).
 ### Fixed
 
 - Release version now has a single source: `pyproject.toml`. `src/tengri/__init__.py`
