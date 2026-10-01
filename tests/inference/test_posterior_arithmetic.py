@@ -72,22 +72,23 @@ class TestResample:
 
 
 class TestToParamSpec:
-    """Test conversion of posterior to parameter specification."""
+    """A model-less posterior refuses to guess its structure (#2180).
 
-    def test_map_to_param_spec(self, map_posterior):
-        spec = map_posterior.to_param_spec()
-        from tengri.parameters.priors import Fixed
+    These fixtures carry no ``_model``. The old behavior fell back to a
+    dpl-defaulted spec — the exact silent-structure bug #2180 fixes — so the
+    contract now is an informative refusal pointing at
+    ``Posterior.load(path, model=model)``. Conversion with a real model
+    (Fixed for MAP, Gaussian for samples) is covered in
+    ``tests/regression/bug/test_bug_2180_posterior_reads_self.py``.
+    """
 
-        d = spec.get_distribution("sfh_dpl_alpha")
-        assert isinstance(d, Fixed)
+    def test_map_to_param_spec_requires_model(self, map_posterior):
+        with pytest.raises(ValueError, match="no model reference"):
+            map_posterior.to_param_spec()
 
-    def test_sampling_to_param_spec(self, sampling_posterior):
-        spec = sampling_posterior.to_param_spec()
-        from tengri.parameters.priors import Gaussian
-
-        d = spec.get_distribution("sfh_dpl_alpha")
-        assert isinstance(d, Gaussian)
-        assert d.mu == pytest.approx(1.2, abs=0.1)
+    def test_sampling_to_param_spec_requires_model(self, sampling_posterior):
+        with pytest.raises(ValueError, match="no model reference"):
+            sampling_posterior.to_param_spec()
 
 
 class TestRepr:

@@ -482,6 +482,21 @@ class NonparametricBinEdgesAtRedshiftCeilingWarning(AdvisoryWarning):
     """
 
 
+class CloudyGridIsochroneMismatchWarning(AdvisoryWarning):
+    """The auto-resolved CLOUDY grid's isochrone does not match the SSP's.
+
+    ``neb={'type': 'cloudy'}`` with no explicit ``grid=`` picks a packaged
+    ``cloudy_grid_<isochrone>.h5`` to match the SSP's isochrone (read from
+    ``SSPData.source``, #2426). This fires when exactly one grid is present
+    and it does not match: the ionizing continuum was computed for a
+    different isochrone than the one the stellar templates use, which is
+    not an error (there is nothing else to fall back to) but is worth a
+    fit log entry. Pass ``neb={'type': 'cloudy', 'grid': ...}`` to name a
+    grid explicitly and silence this, or generate the matching one with
+    ``scripts/convert_fsps_cloudy_grid.py``.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 

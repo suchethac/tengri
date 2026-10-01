@@ -201,7 +201,13 @@ def precompute_line_per_qh(
         # luminosity per ionizing photon: a property of the gas, independent of
         # the reference SFH *and* the reference dust. Dust reddening (which now
         # defaults on in predict_line_fluxes) is applied downstream, not baked in.
-        flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
+        # ``p`` is already the fully-merged dict (``reference_history_params``
+        # plus the per-node ``met_logzsol`` override above); declare it
+        # resolved rather than let the Fixed-key refusal (#2296) fire and
+        # catch it.
+        flux = model.predict_line_fluxes(
+            p, target_wavelengths=wavelengths, redden=False, params_are_resolved=True
+        )
         # Q_H is ~1e53 photons/s, so the LINEAR ``nion`` is ``inf`` in float32 and
         # a division by it silently flushes to 0 rather than raising (#1206). Take
         # the reciprocal as a log offset instead: ``jnp.maximum(..., -30.0)``

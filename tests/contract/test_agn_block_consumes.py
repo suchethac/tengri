@@ -84,16 +84,16 @@ def test_skirtor_torus_consumes_radius_ratio():
     assert "agn_radius_ratio" in AGN_BLOCK_CONSUMES[("torus", "skirtor")]
 
 
-def test_qsogen_and_smc_prevot_atten_consume_attenuation_ebv():
+def test_qsogen_and_smc_prevot_atten_consume_ebv():
     """Task 16 (item 3): ('attenuation', 'qsogen') was missing entirely from
     AGN_BLOCK_CONSUMES (the top-level wildcard silently fell back to the
     full superset whenever Temple+2021's own quasar extinction curve was
     selected); ('attenuation', 'smc_prevot') was present but wrongly empty
-    (smc_prevot_block's signature reads agn_attenuation_ebv, same as
-    qsogen's). Both attenuation blocks delegate to the same E(B-V) knob.
+    (smc_prevot_block's signature reads agn_ebv, same as qsogen's).
+    Both attenuation blocks delegate to the same E(B-V) knob (R52, #2325).
     """
-    assert AGN_BLOCK_CONSUMES[("attenuation", "qsogen")] == frozenset({"agn_attenuation_ebv"})
-    assert AGN_BLOCK_CONSUMES[("attenuation", "smc_prevot")] == frozenset({"agn_attenuation_ebv"})
+    assert AGN_BLOCK_CONSUMES[("attenuation", "qsogen")] == frozenset({"agn_ebv"})
+    assert AGN_BLOCK_CONSUMES[("attenuation", "smc_prevot")] == frozenset({"agn_ebv"})
 
 
 def test_slone_netzer_disc_registered():
