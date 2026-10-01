@@ -138,7 +138,7 @@ class DerivedState:
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
-    # Stellar: Lyman continuum photometry (rest λ < 912 Å) LUT per filter,
+    # Stellar: Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA) LUT per filter,
     # and its per-age twin (R3d). Published only when ``approx=WavePrecomp()``
     # is set AND ``lyc_gate=True`` was resolved at build time (a photoionized
     # nebular component whose ``neb_fesc`` is not pinned at exactly ``1.0``;
@@ -160,7 +160,7 @@ class DerivedState:
     # build-time constants, so the dust screen is EVALUATED at K points per band
     # rather than Taylor-extrapolated from one (which diverges in the rest-UV).
     # ``n_subbands`` is ``n_subbands + 1`` wide, not ``n_subbands``, when this
-    # model's ``lyc_gate`` was also True: a physical edge at 912 Å(1+z) is then
+    # model's ``lyc_gate`` was also True: a physical edge at LYMAN_LIMIT_AA(1+z) is then
     # forced into the partition (#2439, #2427, R1;
     # :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk lies
     # wholly on one side of the Lyman limit and the per-chunk mask below is
@@ -171,7 +171,7 @@ class DerivedState:
     # Per-chunk Lyman-continuum multiplicative factor at the sub-band
     # quadrature nodes above, shape ``(n_age, n_filter, n_subbands)``,
     # dimensionless (#2439, #2427, R1/R2). Published by NebularSEDComponent,
-    # flat across age (``where(node < 912, fesc, 1)``, matching this
+    # flat across age (``where(node < LYMAN_LIMIT_AA, fesc, 1)``, matching this
     # component's own ``sed_intrinsic`` mask); overwritten by
     # ``DustSEDComponent`` (two_component), when it runs, with its own
     # birth-cloud-graded ``1 - y(a)(1-fesc)`` (same key -- the component that
@@ -269,6 +269,23 @@ class DerivedState:
     #: reading ``log_L_ir`` as a stand-in, which is only correct when
     #: eta == 1 and no override is declared.
     log_L_absorbed: jnp.ndarray | None = None
+    #: log10(L_LyC_dust / (erg/s)) [dex]: the Lyman-continuum energy absorbed
+    #: by dust inside HII regions (the absolute f_dust share,
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]``, #2436), not credited to
+    #: nebular emission but to dust heating. Added to ``log_L_absorbed`` by
+    #: dust components (#2539). Published only when f_dust > 0.
+    log_L_lyc_dust: jnp.ndarray | None = None
+    #: log10(L_LyC / (erg/s)) [dex]: the RAW (pre-fesc, pre-fdust)
+    #: Lyman-continuum luminosity of the whole stellar population (#2539 item
+    #: 3). Published alongside ``lyc_fdust`` so a dust component can credit
+    #: ``f_dust * L_LyC`` into ``log_L_absorbed`` via the smooth
+    #: (``log1p``-based) combine in ``energy_balance.log10_add_fdust_credit``
+    #: instead of ``log10_add``ing the already-``fdust``-multiplied
+    #: ``log_L_lyc_dust`` (whose own gradient is deliberately clamped to zero
+    #: at ``f_dust == 0``, which would zero the combined gradient too even
+    #: though ``L_absorbed`` is linear in ``fdust``). Published only when a
+    #: stellar SED is present.
+    log_L_lyc: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     #: Full-grid diffuse dust transmission (dimensionless): T(λ) on the full
     #: state.wave grid, evaluated by the dust attenuator. Published by all
@@ -402,10 +419,27 @@ class DerivedState:
     #: nothing read. A typed field is greppable and checkable; an untyped extra
     #: would reproduce the failure mode.
     log_line_lums_attenuated: jnp.ndarray | None = None
-    # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
+    # Stellar Lyman-continuum survival fraction where(λ<LYMAN_LIMIT_AA, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
+    #: Absolute HII-region dust-absorption share (#2539 item 2),
+    #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]`` (#2436), the
+    #: ``lyc_transmission`` analog for the dust-absorption fraction: a dust
+    #: component's ``parameter_prefix`` ("dust_") means
+    #: ``slice_params_for_component`` (ADR-0006) never hands it a
+    #: "neb_"-prefixed key, so ``two_component`` reads this cross-component
+    #: value instead of ``params["neb_fdust_frac"]`` (which would silently
+    #: see only the 0.0 default) to compute its own young-weighted HII-region
+    #: dust credit.
+    lyc_fdust: jnp.ndarray | None = None
+    #: Raw ``neb_fesc`` value (#2539 item 1), the ``lyc_fdust`` analog for
+    #: the escape fraction: published so ``two_component``'s WavePrecomp
+    #: energy-balance LUT branch can pass the runtime fesc into
+    #: ``lut_l_absorbed_stellar_log10``'s exact affine (A_0 + fesc*A_1)
+    #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
+    #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
+    lyc_fesc: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).
