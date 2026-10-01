@@ -121,7 +121,8 @@ def igm_transmission_meiksin06(
        https://doi.org/10.1111/j.1365-2966.2005.09756.x
     """
     wave_obs = jnp.asarray(wave_obs, dtype=jnp.float64)
-    # Work in nm internally to mirror the CIGALE source line-for-line.
+    # Each Lyman line is evaluated at its absorber redshift (Meiksin 2006 Table 1); CIGALE 2025.1
+    # differs for n >= 3. Work in nm internally.
     wavelength_nm = wave_obs / 10.0
     lambda_limit = _LAMBDA_LIMIT_AA / 10.0  # 91.2 nm
 
@@ -158,6 +159,9 @@ def igm_transmission_meiksin06(
     tau_3_9 = jnp.stack(tau_low, axis=0)  # (7, n_wave)
 
     # n = 10..30: tau_n = tau_n[9] * 720 / (n * (n^2 - 1))
+    # Meiksin 2006 Eq. 4 gives tau_n/tau_9 with no redshift argument; the tail is scaled from
+    # tau_9 evaluated at z_9. Evaluating at z_n instead changes T by <= 9e-4 (z = 3), 6e-3 (z = 5),
+    # 1.3e-2 (z = 6) over rest 700-911 A.
     tau_9 = tau_3_9[-1]
     n_high = jnp.arange(10, _N_TRANS_MAX, dtype=jnp.float64)
     high_factors = 720.0 / (n_high * (n_high * n_high - 1.0))  # (21,)
