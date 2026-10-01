@@ -760,7 +760,7 @@ def _central_params(spec):
     return params
 
 
-def _lut_forward_bias(exact_model, lut_model, data_type):
+def _lut_forward_bias(exact_model, lut_model, data_type, *, redshift=None):
     """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
 
     One exact and one LUT forward at the central parameters. Cached on the
@@ -779,6 +779,10 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     lut_model : SEDModel or ForwardModel
         The resolved clone.
     data_type : {"photometry", "spectroscopy", "joint"}
+    redshift : float or None, optional
+        Evaluate at this redshift instead of the central value (#2105).
+        Bypasses the cache both ways: a z-overridden bias is never stored
+        or served.
 
     Returns
     -------
@@ -787,9 +791,16 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         For "joint", array is concatenated as [bias_phot, bias_spec].
     """
     cache = getattr(lut_model, "_lut_forward_bias_cache", None)
-    if cache is not None and cache[0] is exact_model and cache[2] == data_type:
+    if (
+        redshift is None
+        and cache is not None
+        and cache[0] is exact_model
+        and cache[2] == data_type
+    ):
         return cache[1]
     params = _central_params(exact_model.spec)
+    if redshift is not None:
+        params["redshift"] = redshift
     if data_type == "photometry":
         m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
@@ -808,8 +819,9 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         return np.array([])  # Unknown data_type, return empty
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
-    with contextlib.suppress(Exception):
-        lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
+    if redshift is None:
+        with contextlib.suppress(Exception):
+            lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
     return bias
 
 
@@ -826,6 +838,13 @@ def _warn_if_lut_bias_amplified(
     ``max_i(bias_i x SNR_i)`` from one exact-vs-LUT forward on THIS model
     and this fit's data, and warns with the number and the remedy above
     :data:`_LUT_BIAS_GRAD_WARN`.
+
+    For free-redshift fits, the bias is evaluated at up to three redshifts —
+    the prior median plus the nearest z-table inter-node midpoint on each
+    side (#2105) — since the z-interpolation error is invisible to a
+    single-point probe; with no midpoint inside the prior, the prior's own
+    bounds are probed instead. The worst point's bias feeds the estimate
+    and the message names its redshift.
 
     When a user supplies their own likelihood (``user_likelihood=True``),
     the Fitter's data/noise are placeholders and SNR-based estimates are
@@ -856,7 +875,59 @@ def _warn_if_lut_bias_amplified(
     if data_type not in ("photometry", "spectroscopy", "joint"):
         return
     try:
-        bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        spec = exact_model.spec
+        z_peak = None
+        z_prior_bounds = None
+        if "redshift" in spec.free_params:
+            z_prior_bounds = spec.get_distribution("redshift").bounds
+
+        if z_prior_bounds is not None:
+            # Free redshift: probe up to three z values — the prior median
+            # plus the nearest z-table inter-node midpoint on each side
+            # (two-nearest-by-distance can both fall on one side of the
+            # median, hiding the interpolation error the probe exists for).
+            z_min, z_max = float(z_prior_bounds[0]), float(z_prior_bounds[1])
+            z_median = float(_central_params(spec).get("redshift", (z_min + z_max) / 2.0))
+
+            ztable = getattr(lut_model, "_ztable_data_for_jit", lambda: None)()
+            z_grid = np.asarray(ztable.z_grid, dtype=float) if ztable is not None else None
+            if z_grid is not None and z_grid.size > 1:
+                midpoints = (z_grid[:-1] + z_grid[1:]) / 2.0
+                midpoints_in_prior = midpoints[(midpoints >= z_min) & (midpoints <= z_max)]
+            else:
+                midpoints_in_prior = np.array([])
+
+            if midpoints_in_prior.size == 0:
+                # No inter-node midpoint inside the prior: no table, a
+                # single-node table, OR a real table whose nodes all lie
+                # outside a narrow prior. Span the prior itself rather than
+                # probing the median only.
+                eval_z_values = [z_median, z_min, z_max]
+            else:
+                below = midpoints_in_prior[midpoints_in_prior < z_median]
+                above = midpoints_in_prior[midpoints_in_prior >= z_median]
+                eval_z_values = [z_median]
+                if below.size:
+                    eval_z_values.append(float(below.max()))
+                if above.size:
+                    eval_z_values.append(float(above.min()))
+            # Dedupe (a bound can equal the median) and cap at 3 forwards.
+            deduped: list[float] = []
+            for z_val in eval_z_values:
+                if all(abs(z_val - seen) > 1e-12 for seen in deduped):
+                    deduped.append(float(z_val))
+            eval_z_values = deduped[:3]
+
+            biases_at_z = [
+                _lut_forward_bias(exact_model, lut_model, data_type, redshift=z_val)
+                for z_val in eval_z_values
+            ]
+            max_biases = [float(np.nanmax(b)) if b.size else -np.inf for b in biases_at_z]
+            worst_idx = int(np.nanargmax(max_biases))
+            z_peak = float(eval_z_values[worst_idx])
+            bias = biases_at_z[worst_idx]
+        else:
+            bias = _lut_forward_bias(exact_model, lut_model, data_type)
         if bias.size == 0:
             return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
@@ -920,11 +991,16 @@ def _warn_if_lut_bias_amplified(
             channel_str = _format_channel_name(channel, data_type)
             from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 
+            z_clause = (
+                f", peaking at z={z_peak:.3f} (redshift is free; the LUT interpolates in z)"
+                if z_peak is not None
+                else ""
+            )
             warn_measured(
                 f"{surface}: the precompute LUT's forward bias, amplified by this "
                 f"fit's SNR, gives an estimated relative posterior-gradient error "
                 f"of {est:.0%} (worst {channel_str}: forward bias "
-                f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+                f"{bias_at:.2%} at SNR {snr_at:.0f}{z_clause}). The bias is constant in SNR "
                 f"(invisible to any forward check) but enters the gradient "
                 f"multiplied by SNR, moves the mode, and better data makes it "
                 f"worse (#1671; spectroscopy sibling measured in #1688). For "

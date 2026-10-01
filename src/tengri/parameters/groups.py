@@ -1043,6 +1043,12 @@ def parse_groups(**kwargs) -> Parameters:
         Reserved for introspection callers (:func:`~tengri.recipe_parameters`)
         that read ``all_params`` and do not care whether a parameter is free.
         Never set this when building a model to fit.
+    ssp_data : SSPData, optional
+        The SSP the model is built against. When ``neb={'type': 'cloudy'}``
+        names no explicit ``grid``, its ``source`` isochrone tag
+        (``"mist"``/``"prsc"``/``"pdva"``/``"bpss"``) is preferred when
+        auto-resolving the packaged ``cloudy_grid_<tag>.h5`` (#2426). Passed
+        automatically by :meth:`~tengri.forward.sed_model.SEDModel.build`.
 
     Returns
     -------
@@ -1077,6 +1083,14 @@ def parse_groups(**kwargs) -> Parameters:
     # Private introspection escape hatch: popped before group parsing so it is
     # never mistaken for a group name.
     allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
+    # The SSP a CLOUDY nebular grid auto-selects against (#2426), popped for
+    # the same reason: SEDModel.build passes it through so the resolved grid
+    # matches the SSP's isochrone, but it names no group and must never reach
+    # _check_dict_keys as an unrecognized one. None (the default) is every
+    # introspection caller and any direct parse_groups() call outside
+    # SEDModel.build -- auto-resolution then falls back to its pre-#2426
+    # behavior (see Parameters._default_cloudy_grid).
+    ssp_data = kwargs.pop("ssp_data", None)
 
     # Redshift is required, and the question asked here is whether the caller
     # PASSED it -- not what its value is. A value-based sentinel cannot answer
@@ -1200,6 +1214,14 @@ def parse_groups(**kwargs) -> Parameters:
     # Resolve each parameter's final distribution
     resolved_kwargs = dict(structural_kwargs)
     provenance: dict[str, str] = {}
+
+    # #2426: read once here (not inside ``structural_kwargs``/pass 2's
+    # enumeration spec, which defers grid resolution entirely) and carried
+    # only on the final ``Parameters(**resolved_kwargs, ...)`` call below,
+    # where auto-resolution actually runs.
+    from tengri.parameters.parameters import _neb_isochrone_tag_from_ssp
+
+    resolved_kwargs["ssp_isochrone_tag"] = _neb_isochrone_tag_from_ssp(ssp_data)
 
     # Which parameters each group's ``all_params: FREE`` may free, scoped to the
     # structural variant that group selected. Computed once, consulted once in
