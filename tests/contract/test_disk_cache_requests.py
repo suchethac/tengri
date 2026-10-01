@@ -205,11 +205,16 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_4():
-    """_ZTABLE_CACHE_VERSION is 4 (bumped 3->4 for #2439/#2427's lyc_gate)."""
+def test_ztable_version_is_5():
+    """_ZTABLE_CACHE_VERSION is 5 (bumped 4->5 for L3's one-Lyman-edge fix:
+
+    the LyC table and (when lyc_gate) the sub-band tensors moved off the
+    bare 912 Å literal onto LYMAN_LIMIT_AA and onto a step-model-exact
+    split, neither of which ZTableRequest's own fields would catch).
+    """
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 4
+    assert _ZTABLE_CACHE_VERSION == 5
 
 
 def test_subband_version_is_3():

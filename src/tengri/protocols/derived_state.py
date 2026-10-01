@@ -138,7 +138,7 @@ class DerivedState:
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
-    # Stellar: Lyman continuum photometry (rest λ < 912 Å) LUT per filter,
+    # Stellar: Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA) LUT per filter,
     # and its per-age twin (R3d). Published only when ``approx=WavePrecomp()``
     # is set AND ``lyc_gate=True`` was resolved at build time (a photoionized
     # nebular component whose ``neb_fesc`` is not pinned at exactly ``1.0``;
@@ -160,7 +160,7 @@ class DerivedState:
     # build-time constants, so the dust screen is EVALUATED at K points per band
     # rather than Taylor-extrapolated from one (which diverges in the rest-UV).
     # ``n_subbands`` is ``n_subbands + 1`` wide, not ``n_subbands``, when this
-    # model's ``lyc_gate`` was also True: a physical edge at 912 Å(1+z) is then
+    # model's ``lyc_gate`` was also True: a physical edge at LYMAN_LIMIT_AA(1+z) is then
     # forced into the partition (#2439, #2427, R1;
     # :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk lies
     # wholly on one side of the Lyman limit and the per-chunk mask below is
@@ -171,7 +171,7 @@ class DerivedState:
     # Per-chunk Lyman-continuum multiplicative factor at the sub-band
     # quadrature nodes above, shape ``(n_age, n_filter, n_subbands)``,
     # dimensionless (#2439, #2427, R1/R2). Published by NebularSEDComponent,
-    # flat across age (``where(node < 912, fesc, 1)``, matching this
+    # flat across age (``where(node < LYMAN_LIMIT_AA, fesc, 1)``, matching this
     # component's own ``sed_intrinsic`` mask); overwritten by
     # ``DustSEDComponent`` (two_component), when it runs, with its own
     # birth-cloud-graded ``1 - y(a)(1-fesc)`` (same key -- the component that
@@ -419,7 +419,7 @@ class DerivedState:
     #: nothing read. A typed field is greppable and checkable; an untyped extra
     #: would reproduce the failure mode.
     log_line_lums_attenuated: jnp.ndarray | None = None
-    # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
+    # Stellar Lyman-continuum survival fraction where(λ<LYMAN_LIMIT_AA, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
@@ -440,15 +440,6 @@ class DerivedState:
     #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
     #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
     lyc_fesc: jnp.ndarray | None = None
-    #: Stellar SED on ``state.wave`` BEFORE ``lyc_transmission`` is applied
-    #: (#2447 exact-photometry seam): ``lyc_transmission`` is only exact under
-    #: trapezoid quadrature for a SINGLE panel straddling 912 A, which no
-    #: longer holds once a photometric filter table's own nodes subdivide
-    #: that panel (real, finely-sampled filters like GALEX NUV). Published so
-    #: ``observation.photometry._filter_integral_union`` can redo the
-    #: trapezoid-exact split directly on its own (finer) union grid instead
-    #: of re-interpolating the already node-blended masked SED.
-    lyc_unmasked_stellar_sed: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).

@@ -1432,27 +1432,6 @@ class DustSEDComponent(TemplateThreading):
             # the true observed total. Unattenuated when dust is off / zero-τ.
             sed_nebular=sed_neb_attenuated,
         )
-        if _lyc_t is not None:
-            # §2a rebuilt the masked stellar term from the per-age ``lnu_age``
-            # cube rather than reusing ``NebularSEDComponent``'s whole-
-            # population ``sed_intrinsic``, and (``lyc_absorb_all=False``,
-            # the default) applies an AGE-DEPENDENT blend of ``lyc_t``, on
-            # top of an age-dependent (birth-cloud vs. diffuse) dust screen
-            # even when the LyC blend itself is uniform. Either way, the
-            # single whole-population identity ``masked_stellar =
-            # unmasked_stellar_sed * lyc_transmission`` no longer holds for
-            # what ends up in ``state.sed_intrinsic`` here, which is exactly
-            # what ``observation.photometry._filter_integral_union``'s
-            # exact-edge correction (#2447) assumes when it redoes the split
-            # on a finer (filter-subdivided) grid -- verified by a 32%
-            # regression on a real GALEX-NUV/two_component fixture when this
-            # withdrawal was missing. Withdrawing the hint is a structural
-            # no-op (the correction falls back cleanly, see
-            # ``project_photometry``), not a defect: ``NebularSEDComponent``'s
-            # own SSP-grid single-panel-exact ``lyc_transmission`` is still
-            # the best available treatment for a per-age-blended dust screen,
-            # same as before this PR.
-            derived_overrides["lyc_unmasked_stellar_sed"] = None
         # Discrete emission-line catalog, reddened in 2c with the same screen
         # as the nebular continuum above (#1867). Absent when no photoionized
         # backend published a catalog; consumers then fall back to the

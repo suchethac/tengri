@@ -1177,16 +1177,16 @@ class NebularSEDComponent(TemplateThreading):
         # ``lyc_absorb_all=True``) -- same key, so whichever component runs
         # last for a given model wins, by construction, and there is exactly
         # one factor per model. When R1 forced a chunk boundary at the
-        # physical edge (912(1+z)), ``sub_waves < 912`` categorizes every
-        # chunk exactly (no chunk can straddle); when it did not (this
-        # model's mask is not live, or a filter genuinely does not straddle),
-        # the categorization is the pre-#2439 approximation, but the factor
-        # is then applied to nothing that differs from before (case #2439
-        # instances aside, sub-band accuracy is unrelated to this).
+        # physical edge (LYMAN_LIMIT_AA(1+z)), ``ionizing_mask(sub_waves)``
+        # categorizes every chunk exactly (no chunk can straddle); when it
+        # did not (this model's mask is not live, or a filter genuinely does
+        # not straddle), the categorization is the pre-#2439 approximation,
+        # but the factor is then applied to nothing that differs from before
+        # (case #2439 instances aside, sub-band accuracy is unrelated to this).
         sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
         if sub_waves is not None:
             derived_overrides["stellar_subband_lyc_factor_precomp"] = jnp.where(
-                sub_waves < 912.0, neb_fesc, jnp.ones_like(sub_waves)
+                ionizing_mask(sub_waves), neb_fesc, jnp.ones_like(sub_waves)
             )
 
         # ── SpectrumPrecomp: identical defect, exact per-pixel fix (#2439,
@@ -1198,7 +1198,7 @@ class NebularSEDComponent(TemplateThreading):
         # StellarSEDComponent before this component runs.
         stellar_spec = state.derived.get("stellar_spec_lnu_precomp")
         if stellar_spec is not None and spec_eff is not None:
-            spec_lyc_mask = jnp.where(spec_eff < 912.0, neb_fesc, jnp.ones_like(spec_eff))
+            spec_lyc_mask = jnp.where(ionizing_mask(spec_eff), neb_fesc, jnp.ones_like(spec_eff))
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
 
         # ── Lyman-continuum dust absorption energy (#2539) ────────────────────
@@ -1227,14 +1227,6 @@ class NebularSEDComponent(TemplateThreading):
         # its own "dust_"-prefixed params slice never carries neb_fdust_frac.
         _stellar_sed = state.sed_intrinsic
         if _stellar_sed is not None:
-            # Published unmasked (pre-fesc) so a consumer needing the exact
-            # edge on a FINER quadrature grid than this component's own
-            # ``state.wave`` (the photometric union grid, #2447) can redo the
-            # edge-aware split there instead of re-deriving fesc from this
-            # component's own ``lyc_transmission`` -- see
-            # ``observation.photometry._filter_integral_union``.
-            derived_overrides["lyc_unmasked_stellar_sed"] = _stellar_sed
-
             # LyC-ONLY luminosity: the raw (fesc-independent) whole-population
             # credit, ``L_LyC = edge_trapezoid(L_nu, wave, side="ionizing")``
             # (one Lyman edge, module docstring of ``tengri.components.lyc``):

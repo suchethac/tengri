@@ -42,6 +42,9 @@ Provides
   or frequency quadrature variable.
 - :func:`edge_interp` — step-model-exact interpolation (linear away from
   the edge, a step in the bracket cell).
+- :func:`edge_bracket_values` — the bracket cell's two step values
+  (``y_a``, ``y_b``), for callers building their OWN exact quadrature on a
+  grid finer than ``wave`` (e.g. a photometric filter's own nodes).
 - :func:`lyc_shares` — the #2436 additive ionizing-photon-budget split
   (escape / HII-dust / photoionization), moved here from
   ``tengri.components.nebular._recombination_coeffs``.
@@ -62,12 +65,14 @@ arguments; pass them via ``functools.partial`` or list them in
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 
 __all__ = [
     "LYMAN_LIMIT_AA",
+    "edge_bracket_values",
     "edge_interp",
     "edge_trapezoid",
     "ionizing_mask",
@@ -313,6 +318,65 @@ def edge_interp(
     in_bracket = has_bracket & (x_new >= wave_a) & (x_new <= wave_b)
     step_value = jnp.where(x_new < edge_aa, y_a, y_b)
     return jnp.where(in_bracket, step_value, linear)
+
+
+def edge_bracket_values(
+    wave: jnp.ndarray,
+    y: jnp.ndarray,
+    edge_aa: float = LYMAN_LIMIT_AA,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""The two step-model endpoint values of the bracket cell at ``edge_aa``.
+
+    Returns ``(y_a, y_b)``: the value :func:`edge_interp` would give for a
+    query point infinitesimally below ``edge_aa`` and one exactly at
+    ``edge_aa``, respectively. Delegating to :func:`edge_interp` (via
+    :func:`jnp.nextafter` for the "infinitesimally below" query) rather than
+    re-deriving the bracket search keeps this consistent, by construction,
+    with every degenerate case :func:`edge_interp` already handles (``0``
+    when ``edge_aa`` is outside ``wave``'s domain on the queried side, the
+    ordinary linear value when there is no bracket cell at all).
+
+    Used to build an exact quadrature across the edge on a grid FINER than
+    ``wave`` (e.g. a photometric filter's own nodes subdividing ``wave``'s
+    bracket cell, #2447): inserting ``edge_aa`` into that finer grid as a
+    zero-width node pair tagged with ``(y_a, y_b)`` lets an ORDINARY
+    (non-edge-aware) trapezoid integrate the step exactly, because a
+    smooth, independently-varying multiplicative factor (a filter's
+    transmission x bandpass weight) evaluated at the edge is then correctly
+    paired with each side's own constant value, rather than averaged across
+    the whole bracket width as :func:`edge_trapezoid` applied to an
+    already-multiplied integrand would do.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Wavelength grid, ascending. [Angstrom]
+    y : array_like, shape (n_wave,)
+        Sampled function values at ``wave``.
+    edge_aa : float, optional
+        Lyman edge [Angstrom]. Default :data:`LYMAN_LIMIT_AA` (911.76 Å).
+
+    Returns
+    -------
+    y_a, y_b : ndarray
+        The ionizing-side and non-ionizing-side step values (scalars, or
+        matching ``y``'s leading shape if ``y`` carries one).
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, linear in ``y``.
+    """
+    edge_aa = jnp.asarray(edge_aa)
+    # ``nextafter`` has no differentiation rule; the exact offset is a
+    # non-differentiable implementation detail anyway (``y_a`` is piecewise
+    # constant in ``edge_aa``, like every other discrete bracket-index
+    # lookup in this module), so the query point it builds is detached from
+    # the gradient tape while ``edge_aa`` itself (used for the comparisons
+    # inside :func:`edge_interp`) is not.
+    just_below = jnp.nextafter(jax.lax.stop_gradient(edge_aa), -jnp.inf)
+    y_a = edge_interp(just_below, wave, y, edge_aa=edge_aa)
+    y_b = edge_interp(edge_aa, wave, y, edge_aa=edge_aa)
+    return y_a, y_b
 
 
 def lyc_shares(

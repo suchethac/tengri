@@ -17,7 +17,7 @@ import jax.numpy as jnp
 # kernel here and the build-time preintegration (utils.grid_interp) share one
 # definition without a circular import. Re-exported here for back-compat.
 from tengri._cache_keys import KeyPolicy, content, derive_key
-from tengri.components.lyc import LYMAN_LIMIT_AA
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_bracket_values, edge_interp
 from tengri.parameters.resolve import require_redshift
 from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
@@ -115,7 +115,7 @@ def _filter_integral_union(
     filter_wave: jnp.ndarray,
     filter_trans: jnp.ndarray,
     convention: FilterConvention,
-    lyc_correction: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray] | None = None,
+    lyman_edge_obs_aa: jnp.ndarray | float | None = None,
 ) -> jnp.ndarray:
     r"""Filter-weighted mean of ``L_nu`` on the union quadrature grid (#960).
 
@@ -146,131 +146,60 @@ def _filter_integral_union(
 
     Parameters
     ----------
-    lyc_correction : tuple, optional
-        ``(unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc,
-        lyman_edge_obs_aa)``, all on/matching the ``wave_obs`` grid except
-        the last two, which are scalars (#2447 residual on finely-sampled
-        filters). When given, redoes the Lyman-continuum step exactly on
-        THIS union grid instead of trusting ``L_nu``'s own SSP-grid-resolved
-        ``lyc_transmission`` (:func:`tengri.utils.wavelength.lyman_edge_transmission`),
-        which is only single-panel exact and is biased whenever a filter
-        table's own nodes subdivide the SSP interval straddling 912 Å
-        (measured up to ~11% on MILES/GALEX NUV). See
-        :func:`_lyc_photometry_correction` for the derivation; ``None``
-        reproduces the exact pre-existing behavior (e.g. no nebular
-        component ran, so there is no LyC step to correct).
+    lyman_edge_obs_aa : float, optional
+        Observed-frame Lyman limit, ``LYMAN_LIMIT_AA * (1+z)`` (#2447, one
+        Lyman edge). When given, ``L_nu`` is resampled onto ``grid`` with
+        :func:`tengri.components.lyc.edge_interp` (a step in the bracket
+        cell straddling the edge, ordinary linear interpolation elsewhere),
+        and the edge itself is additionally inserted into the quadrature
+        grid as a zero-width node pair
+        (:func:`tengri.components.lyc.edge_bracket_values`) so the ordinary
+        ``jnp.trapezoid`` numerator integrates the step exactly even though
+        the transmission x bandpass weight varies continuously across the
+        bracket cell (that continuous variation is why a single
+        ``edge_trapezoid`` call on the already-multiplied integrand would
+        only be approximate here, unlike the pure-SED case). Exact
+        regardless of how many extra filter nodes subdivide the straddling
+        SSP panel, because ``L_nu`` already carries the physical masking
+        (and any dust/IGM multiplicative factor) PER NODE -- there is no
+        separate correction term to compute, unlike the retired
+        ``_lyc_photometry_correction`` this replaces. ``None`` (default)
+        reproduces ordinary (non-edge-aware) quadrature, correct whenever no
+        live Lyman-continuum mask ran (e.g. ``neb={'type': 'none'}``) and
+        ``L_nu`` is smooth across the edge.
     """
     grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
-    L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
-    if lyc_correction is not None:
-        L_on_grid = L_on_grid + _lyc_photometry_correction(grid, wave_obs, lyc_correction)
-    trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
-    weight = trans_on_grid * _filter_weight(grid, convention)
-    num = jnp.trapezoid(L_on_grid * weight, grid)
-    den = jnp.trapezoid(weight, grid)
+    if lyman_edge_obs_aa is None:
+        L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
+        trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
+        weight = trans_on_grid * _filter_weight(grid, convention)
+        num = jnp.trapezoid(L_on_grid * weight, grid)
+        den = jnp.trapezoid(weight, grid)
+        return num / jnp.maximum(den, representable_denominator(1e-30))
+
+    # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
+    # varies continuously across the bracket cell, so treating the whole
+    # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
+    # call on ``L_on_grid * weight`` would do -- silently averages that
+    # variation across the FULL bracket width instead of evaluating it AT
+    # the edge. The exact fix inserts the edge itself as a zero-width node
+    # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
+    # transmission/weight evaluation at the edge between the two copies) so
+    # an ORDINARY trapezoid integrates the step exactly, regardless of how
+    # many filter nodes subdivide the straddling panel.
+    y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+    edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
+    all_x = jnp.concatenate([grid, edge_pair])
+    L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+    all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
+    order = jnp.argsort(all_x, stable=True)
+    grid_e = all_x[order]
+    L_on_grid = all_y[order]
+    trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
+    weight = trans_on_grid * _filter_weight(grid_e, convention)
+    num = jnp.trapezoid(L_on_grid * weight, grid_e)
+    den = jnp.trapezoid(weight, grid_e)
     return num / jnp.maximum(den, representable_denominator(1e-30))
-
-
-def _lyc_photometry_correction(
-    grid: jnp.ndarray,
-    wave_obs: jnp.ndarray,
-    lyc_correction: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray],
-) -> jnp.ndarray:
-    r"""Exact-vs-naive delta for the Lyman-continuum step on ``grid`` (#2447).
-
-    ``NebularSEDComponent`` (``components/nebular/component.py``) makes its
-    OWN masking exact to round-off for a SINGLE trapezoid panel straddling
-    912 Å, using :func:`~tengri.utils.wavelength.lyman_edge_transmission` on
-    its native ``state.wave`` (SSP) grid. That single-panel guarantee breaks
-    once :func:`_filter_integral_union`'s UNION with the filter table inserts
-    extra nodes strictly inside the SSP interval bracketing 912 Å -- real,
-    finely-sampled filters (GALEX NUV at 0.33 Å rest spacing at z=2) do this
-    against both MIST/C3K (h=1.83 Å) and, worse, MILES (h=10 Å): the already
-    node-blended masked values are then linearly re-interpolated across a
-    span the blend was never designed to represent, leaving a residual up to
-    ~11% (MILES) instead of round-off.
-
-    This closes that gap WITHOUT touching ``state.wave`` (a much larger,
-    whole-model change; see ``tests/regression/bug/test_bug_2447_lyc_mask_edge.py``'s
-    module docstring): it redoes ``lyman_edge_transmission`` directly on
-    THIS (finer) union grid, using the UNMASKED stellar SED, and returns the
-    DELTA against what naively re-interpolating the SSP-grid masked values
-    onto this same grid already contributes -- so the two exactly cancel
-    (this function returns identically 0) whenever no extra nodes actually
-    fall inside the straddling panel (the common case: most filter tables
-    are coarser than the SSP grid there), and only correct the tiny span
-    around 912 Å otherwise.
-
-    Only the LyC-masked STELLAR term needs this: the (additive) nebular
-    continuum contribution and any (multiplicative) dust/IGM factor applied
-    upstream of this integral are smooth across 912 Å and are already
-    represented correctly by ordinary interpolation of ``L_nu`` -- this
-    function's delta construction (below) folds them out algebraically
-    rather than needing them named separately.
-
-    Parameters
-    ----------
-    grid : array, shape (n_grid,)
-        Sorted union of ``wave_obs`` and the filter's own nodes (observed
-        frame), the SAME grid :func:`_filter_integral_union` integrates on.
-    wave_obs : array, shape (n_wave,)
-        The SED's own (observed-frame) wavelength grid, i.e. ``state.wave *
-        (1+z)``.
-    lyc_correction : tuple
-        ``(unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc,
-        lyman_edge_obs_aa)`` -- see :func:`_filter_integral_union`.
-
-    Returns
-    -------
-    ndarray, shape (n_grid,)
-        Additive correction to the naive ``interp(grid, wave_obs, L_nu)``
-        array, zero away from the straddling panel.
-
-    Notes
-    -----
-    **Derivation.** Let :math:`S` be the unmasked stellar SED, :math:`T_{\rm
-    ssp}` the SSP-grid-exact transmission (``lyc_transmission``), so the
-    masked stellar term on the SSP grid is :math:`S \, T_{\rm ssp}`, and
-    ``L_nu`` (whatever entered this integral: masked stellar, plus any
-    additive nebular emission, times any smooth upstream dust/IGM factor) is
-    a LINEAR function of that term wherever the SSP-grid representation is
-    used unmodified. Interpolation onto ``grid`` is itself linear, so
-
-    .. math::
-
-        \mathrm{interp}(L_\nu) = \mathrm{interp}(L_\nu - S\,T_{\rm ssp})
-                                + \mathrm{interp}(S\,T_{\rm ssp})
-
-    The first term (everything except the masked stellar piece) is smooth
-    across 912 Å and needs no correction. This function replaces the SECOND
-    term with the union-grid-exact equivalent, :math:`\mathrm{interp}(S)
-    \times T_{\rm grid}` where :math:`T_{\rm grid} =`
-    ``lyman_edge_transmission(grid, fesc, edge_obs)`` is evaluated directly
-    on ``grid`` (exact for whichever pair of ``grid`` nodes actually
-    straddles the edge, not necessarily the original SSP pair), and returns
-    the delta:
-
-    .. math::
-
-        \Delta = \mathrm{interp}(S) \times T_{\rm grid}
-                - \mathrm{interp}(S\,T_{\rm ssp})
-
-    Away from the straddling panel, :math:`T_{\rm ssp}` is the UNBLENDED
-    ``fesc`` or ``1`` (a grid-independent constant across the relevant
-    interpolation stencil), so :math:`\mathrm{interp}(S\,T_{\rm ssp}) =
-    T_{\rm ssp}\,\mathrm{interp}(S)` there (a constant factors out of linear
-    interpolation) and :math:`T_{\rm grid}` reduces to the SAME constant
-    (the extra nodes are, by hypothesis, all on one side of the edge), so
-    :math:`\Delta \equiv 0` exactly, to round-off.
-    """
-    from tengri.utils.wavelength import lyman_edge_transmission
-
-    unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc, lyman_edge_obs_aa = lyc_correction
-    masked_stellar_ssp = unmasked_stellar_sed * lyc_transmission_ssp
-    naive_stellar_on_grid = jnp.interp(grid, wave_obs, masked_stellar_ssp, left=0.0, right=0.0)
-    stellar_on_grid = jnp.interp(grid, wave_obs, unmasked_stellar_sed, left=0.0, right=0.0)
-    exact_transmission_on_grid = lyman_edge_transmission(grid, neb_fesc, lyman_edge_obs_aa)
-    return stellar_on_grid * exact_transmission_on_grid - naive_stellar_on_grid
 
 
 def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
@@ -286,7 +215,7 @@ def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
     return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
 
 
-@functools.partial(jax.jit, static_argnames=("convention",))
+@functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
 def lnu_filter_integral(
     L_nu_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -294,7 +223,7 @@ def lnu_filter_integral(
     filter_trans: jnp.ndarray,
     redshift: float,
     convention: FilterConvention = FilterConvention.BESSELL,
-    lyc_correction: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray] | None = None,
+    has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
 
@@ -348,13 +277,17 @@ def lnu_filter_integral(
     (25–70 Å spacing) under-sample MILES-resolution spectra; the pre-#960
     point-sampling quadrature biased SDSS-like bands by up to 3 %.
 
-    lyc_correction : tuple, optional
-        ``(unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc)`` on
-        ``wave_rest`` (rest frame; ``neb_fesc`` a scalar), redoing the
-        Lyman-continuum step exactly on this call's own union grid instead
-        of trusting ``L_nu_rest``'s SSP-grid-resolved masking (#2447). See
-        :func:`_filter_integral_union`. ``None`` (default) reproduces the
-        exact pre-existing behavior.
+    has_lyc_edge : bool, optional
+        Whether ``L_nu_rest`` carries a live per-node Lyman-continuum mask
+        (``state.derived["lyc_transmission"]`` published, #2447/one Lyman
+        edge), i.e. some photoionized nebular backend ran. When True, the
+        observed-frame edge ``LYMAN_LIMIT_AA * (1+z)`` is threaded into
+        :func:`_filter_integral_union`'s step-model quadrature; ``L_nu_rest``
+        itself needs no decomposition (no unmasked SED, no separate
+        transmission array) because the masking (and any dust/IGM factor)
+        is already baked in per node. Static (affects which quadrature
+        branch is traced). Default False (ordinary quadrature, exact when
+        no live mask means ``L_nu_rest`` is smooth across the edge).
 
     See Also
     --------
@@ -363,23 +296,9 @@ def lnu_filter_integral(
     FilterConvention : The supported bandpass weights.
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    lyc_correction_obs = None
-    if lyc_correction is not None:
-        unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc = lyc_correction
-        lyc_correction_obs = (
-            unmasked_stellar_sed,
-            lyc_transmission_ssp,
-            neb_fesc,
-            # LYMAN_LIMIT_AA (911.76 A), not the retired bare 912.0 literal
-            # (#2447-era; L2, one Lyman edge): must match the edge
-            # ``lyc_transmission_ssp`` was itself built with
-            # (``tengri.components.nebular.component``), or this correction's
-            # own "away from the straddling panel, Delta == 0" derivation
-            # (see :func:`_lyc_photometry_correction`) breaks.
-            LYMAN_LIMIT_AA * (1.0 + redshift),
-        )
+    lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     return _filter_integral_union(
-        L_nu_rest, wave_obs, filter_wave, filter_trans, convention, lyc_correction_obs
+        L_nu_rest, wave_obs, filter_wave, filter_trans, convention, lyman_edge_obs_aa
     )
 
 
@@ -651,7 +570,7 @@ def _compute_flux_density_padded(
     redshift,
     dl_cm,
     convention: FilterConvention = FilterConvention.BESSELL,
-    lyc_correction: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray] | None = None,
+    has_lyc_edge: bool = False,
 ):
     """Compute flux density for a single padded filter.
 
@@ -684,26 +603,16 @@ def _compute_flux_density_padded(
     (#960) stays valid; their transmission is zero, so they contribute
     nothing. Private helper for compute_flux_density_batch.
 
-    lyc_correction : tuple, optional
-        ``(unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc)`` on
-        ``wave_rest`` (#2447); see :func:`lnu_filter_integral`.
+    has_lyc_edge : bool, optional
+        Whether ``sed_rest`` carries a live per-node Lyman-continuum mask
+        (#2447/one Lyman edge); see :func:`lnu_filter_integral`. Static.
 
     """
     wave_obs = wave_rest * (1.0 + redshift)
     fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
-    lyc_correction_obs = None
-    if lyc_correction is not None:
-        unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc = lyc_correction
-        lyc_correction_obs = (
-            unmasked_stellar_sed,
-            lyc_transmission_ssp,
-            neb_fesc,
-            # LYMAN_LIMIT_AA, not the retired bare 912.0 literal -- see the
-            # matching comment in :func:`lnu_filter_integral`.
-            LYMAN_LIMIT_AA * (1.0 + redshift),
-        )
+    lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     mean_lnu = _filter_integral_union(
-        sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyc_correction_obs
+        sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyman_edge_obs_aa
     )
     # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
     # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is
@@ -714,7 +623,7 @@ def _compute_flux_density_padded(
     return lnu_to_fnu(mean_lnu, dl_cm, redshift)
 
 
-@functools.partial(jax.jit, static_argnames=("convention",))
+@functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
 def compute_flux_density_batch(
     sed_rest,
     wave_rest,
@@ -723,7 +632,7 @@ def compute_flux_density_batch(
     redshift,
     dl_cm,
     convention: FilterConvention = FilterConvention.BESSELL,
-    lyc_correction: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray] | None = None,
+    has_lyc_edge: bool = False,
 ):
     """Compute flux densities through all filters at once via vmap.
 
@@ -749,20 +658,21 @@ def compute_flux_density_batch(
     ndarray, shape (n_filters,)
         Observed flux density per filter [erg/s/cm²/Hz].
 
-    lyc_correction : tuple, optional
-        ``(unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc)`` on
-        ``wave_rest`` (#2447); see :func:`lnu_filter_integral`. Shared
-        (unmapped) across every filter in the vmap.
+    has_lyc_edge : bool, optional
+        Whether ``sed_rest`` carries a live per-node Lyman-continuum mask
+        (#2447/one Lyman edge); see :func:`lnu_filter_integral`. Static;
+        shared (unmapped) across every filter in the vmap.
 
     Notes
     -----
-    JIT-compatible: yes, vmapped over filters; ``convention`` is static.
+    JIT-compatible: yes, vmapped over filters; ``convention`` and
+    ``has_lyc_edge`` are static.
     Gradient-safe: yes.
 
     """
     return jax.vmap(
         functools.partial(
-            _compute_flux_density_padded, convention=convention, lyc_correction=lyc_correction
+            _compute_flux_density_padded, convention=convention, has_lyc_edge=has_lyc_edge
         ),
         in_axes=(None, None, 0, 0, None, None),
     )(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm)
@@ -850,24 +760,14 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
         sed_rest = sed_rest * igm_trans
 
     # Exact Lyman-continuum edge on THIS projection's own (finer) union grid
-    # (#2447): ``NebularSEDComponent`` only guarantees round-off exactness
-    # for a single trapezoid panel on its OWN (SSP) wave grid, which breaks
-    # once a real, finely-sampled filter's own nodes subdivide that panel.
-    # All three keys are published together by the same component
-    # (nebular/component.py), so any one present implies the others are too;
-    # absent (no nebular component ran, e.g. ``neb={'type': 'none'}``) is a
-    # structural no-op, matching every other ``state.derived.get`` guard here.
-    lyc_correction = None
-    if state.derived is not None:
-        unmasked_stellar_sed = state.derived.get("lyc_unmasked_stellar_sed", None)
-        lyc_transmission_ssp = state.derived.get("lyc_transmission", None)
-        neb_fesc = state.derived.get("lyc_fesc", None)
-        if (
-            unmasked_stellar_sed is not None
-            and lyc_transmission_ssp is not None
-            and neb_fesc is not None
-        ):
-            lyc_correction = (unmasked_stellar_sed, lyc_transmission_ssp, neb_fesc)
+    # (#2447, one Lyman edge): ``sed_rest`` already carries the physical
+    # masking (and any dust/IGM multiplicative factor) PER NODE, whatever
+    # component produced it -- there is nothing to reconstruct, only the
+    # edge POSITION is needed. ``lyc_transmission`` is published whenever a
+    # photoionized nebular backend ran (component.py); absent (e.g.
+    # ``neb={'type': 'none'}``) is a structural no-op: ``sed_rest`` is then
+    # smooth across the edge and ordinary quadrature is exact.
+    has_lyc_edge = state.derived is not None and state.derived.get("lyc_transmission") is not None
 
     n_real = photometry.n_filters
     fluxes = compute_flux_density_batch(
@@ -878,7 +778,7 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
         z,
         dl_cm,
         convention=photometry.convention,
-        lyc_correction=lyc_correction,
+        has_lyc_edge=has_lyc_edge,
     )
     return fluxes[:n_real]
 
