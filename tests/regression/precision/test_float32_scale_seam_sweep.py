@@ -289,9 +289,9 @@ def _xrb_mass_scale(ssp, dtype):
 
     Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
     in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
-    ceiling before it is multiplied by anything, so the sum overflows even at
-    zero SFR -- and ``utils.sed_quantities.compute_log_l_x_xrb`` is the
-    documented companion that carries both coefficients in log space. Sweeping
+    ceiling before it is multiplied by anything -- and ``log_l_x_xrb`` is the
+    companion the X-ray component publishes as a log10 throughout (the
+    Lehmer+2016 relations are carried as log10 coefficients). Sweeping
     the linear form would measure a documented impossibility; sweeping the
     companion measures whether the seam's actual float32 path holds across the
     whole declared mass prior, which is the claim ``_HANDLED`` records.
