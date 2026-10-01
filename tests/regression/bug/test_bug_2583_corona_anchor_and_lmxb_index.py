@@ -2,9 +2,9 @@
 """Regression tests for #2583 — corona anchor offset and LMXB Γ default.
 
 Bug 1: The cutoff powerlaw shape spec=(E/E_ref)^(-gamma+1) * exp(-E/E_cut) is
-normalised at the wrong anchor point. The shape equals 1 at E_ref=2 keV BEFORE
+normalized at the wrong anchor point. The shape equals 1 at E_ref=2 keV BEFORE
 the cutoff factor, but Yang+2020 Eq. 2 defines L_ν(2 keV) as the monochromatic
-luminosity AFTER the exponential cutoff. The spec must be normalised to 1 after
+luminosity AFTER the exponential cutoff. The spec must be normalized to 1 after
 applying the cutoff: spec = (E/E_ref)^(-gamma+1) * exp(-(E-E_ref)/E_cut).
 
 Bug 2: The LMXB photon index defaults to 1.6, but Yang et al. 2020 Sect. 2.2.2
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.regression_bug
 
 
 class TestCoronaAnchorAtReferenceEnergy:
-    """The shape is normalised to unity at E_ref after the cutoff."""
+    """The shape is normalized to unity at E_ref after the cutoff."""
 
     def test_anchor_at_2kev_with_scatter_term(self):
         """L_ν(2 keV)/anchor must equal 1.01 (scatter) at log_nh=0."""
