@@ -27,6 +27,26 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
+- The X-ray corona anchor point is now normalised correctly: the cutoff power-law
+  shape `(E/E_ref)^(1-Γ) × exp(−(E−E_ref)/E_cut)` equals 1 at E_ref = 2 keV
+  *after* the exponential cutoff (Yang et al. 2020 Eq. 2), not before. The LMXB
+  photon index default is 1.56 (Fabbiano 2006), matching Yang+2020 Sect. 2.2.2
+  and pcigale, instead of 1.6 (#2583).
+
+- The X-ray blocks scale XRB emission (`xray_xrb_terms` and `xray_hotgas`) with
+  the 100 Myr-averaged SFR when available, not the instantaneous SFR. The Yang
+  et al. 2020/2022 relations (Lehmer et al. 2016) are calibrated on timescales
+  ∼10 Myr; using `sfr_100myr` removes a systematic bias in bursty models. The
+  published properties `log_l_x_xrb` and `log_l_x_agn` are now computed from the
+  emitted X-ray terms themselves (float32-safe via log10 band norms) instead of
+  independent relations, so they match the spectrum (#2582).
+
+- The X-ray corona is anchored to the AGN's own 12 µm νL_ν via `log_L_12um`
+  when available (composable AGN discs, toruses, and polar dust; standalone
+  SKIRTOR). The 0.07×L_bol fallback is removed for `lopez24`, and the 12 µm
+  amplitude is carried in log10 space to prevent float32 overflow. The anchored
+  amplitude is refined by `alpha_irx`, matching López et al. 2024 Table 2 (#2581).
+
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
