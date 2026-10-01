@@ -191,8 +191,11 @@ def _nebular_continuum_consumers(chain):
     **The single expression that decides whether the fast nebular grid may serve
     photometry.** Serving photometry from the per-Q_H grid requires zeroing
     ``sed_nebular``, so it is available only when nothing downstream reads the
-    continuum. A non-empty result sets ``must_materialize_sed`` and disarms the
-    shortcut.
+    continuum. A dust component that takes the nebular from the grid does not
+    count as a continuum consumer and is excluded before this; one that cannot
+    (no stellar energy-balance LUT: a free attenuation-curve shape, WG00, a free
+    redshift with a redshift-reading law) sets ``must_materialize_sed`` and the
+    grid serves line fluxes only.
 
     Extracted so that the code which *acts* on it
     (:meth:`SEDModel.enable_fast_nebular`) and the code which *advises about it*
@@ -2276,22 +2279,12 @@ def feature_lut_serves_line_channel(model) -> bool:
 
     Notes
     -----
-    A Cue-like backend returns **False**. Its ``FeaturePrecomp`` builds the per-Q_H
-    grid, whose only consumer is the photometry shortcut; the line fluxes still go
-    through ``predict_line_fluxes``, which rebuilds the state either way. Callers
-    that want to know whether a Cue model gains anything must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. Measured on a
-    dusty Cue model with 4 bands and 3 line fluxes: appending ``FeaturePrecomp``
-    leaves the objective's gradient at 58,497,272 FLOPs either way -- and the two
-    lowerings are *byte-identical*, the same SHA-256 over 4,206,172 characters of
-    StableHLO and again over the optimized HLO, so this is not FLOP-count
-    coincidence but the same program. It is not free: the attachment costs a 7.2 s
-    ``enable_fast_nebular`` build, and :meth:`SEDModel.compile_signature` differs on
-    ``_approx_config_feature`` and ``_nebular_grid_table`` where the graph does not,
-    forcing an in-process re-trace. The on-disk JAX cache keys on the HLO, so it
-    dedupes rather than storing a second entry. Measured 1.565 s -> 4.276 s of
-    ``fit()`` wall clock on a 60-step MAP fit, for an identical 0.019 s compiled
-    step.
+    A Cue-like backend returns **False** because its line-flux service comes through
+    a different route: the per-Q_H grid, which serves line fluxes whether or not the
+    dust component takes the continuum from it (#1770), and which does not set the
+    ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
+    know whether a Cue model's photometry gains leverage must ask
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -6941,6 +6934,7 @@ class SEDModel:
                 _dig_may_be_active,
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
+                reconstruction_amplitude_log10,
             )
 
             # Q_H is ~1e53 photons/s and the table value ~1e-13, so the linear
@@ -6952,6 +6946,7 @@ class SEDModel:
             else:
                 log_nion = self._compute_log_nion(params, fixed_values=fixed_values)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
+            log_nion = reconstruction_amplitude_log10(log_nion, full_params)
             all_waves = jnp.asarray(grid.wavelengths)
             # Both lookups (HII and DIG) go through the log10 form: the
             # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
@@ -7069,11 +7064,13 @@ class SEDModel:
                 # Which is why it went unnoticed on the default ``approx='auto'``
                 # path for every dusty fit with a discrete-catalog backend.
                 #
-                # Only a dusty chain reaches here with a grid: dust sets
-                # ``must_materialize_sed``, which disarms ``use_grid`` and so leaves
-                # the nebular component publishing the attenuated catalog (#1281).
-                # A dust-free model publishes none, takes the fallback screen above,
-                # and was never affected.
+                # Only a dusty chain reaches here with a grid: dust that cannot take
+                # the nebular from the grid (no stellar energy-balance LUT: a free
+                # attenuation-curve shape, WG00, a free redshift with a redshift-reading
+                # law) sets ``must_materialize_sed``, preventing the grid from serving
+                # photometry and leaving the nebular component to publish the attenuated
+                # catalog (#1281). A dust-free model publishes none, takes the fallback
+                # screen above, and was never affected.
                 # The attenuated catalog is published in log10 (#1859). Powering it
                 # back to ~1e40 erg/s here was the overflow: it is ``inf`` in
                 # float32 before the distance division ever runs. Carry the log.
@@ -7274,13 +7271,43 @@ class SEDModel:
         filter-integrated nebular ``L_nu``); without it only the line channel is
         reconstructed and photometry stays on the exact path.
 
+        With a free redshift (``redshift=Uniform(...)``) or a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only
+        and band fluxes stay on the exact nebular path. The per-Q_H grid integrates
+        through observed bands at the build redshift; a runtime redshift shifts
+        which filter wavelengths the grid tabulates, introducing worst-case band
+        errors of 7.35e-2 if applied. Constrain redshift to a fixed value to
+        enable grid-served photometry.
+
+        **Known limitations.**
+
+        * When a dust component takes the nebular emission from the grid (has a
+          stellar energy-balance LUT), its dust-channel fields are published:
+          observed and rest-frame sub-band nebular photometry, flux-weighted
+          wavelength, and dust-absorbed nebular luminosity per unit Q_H. Dust
+          components without a stellar energy-balance LUT (free attenuation-curve
+          shape, WG00, or a free redshift with a redshift-reading law) cannot take
+          the nebular from the grid; the grid serves line fluxes only while photometry
+          takes the exact nebular path.
+        * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
+          (computed per-galaxy from parameters), not at table build (which uses
+          zero for both); every other free nebular parameter held at the build
+          value (``neb_fesc_lya``, ``ionspec_*``, ``gas_*``, ``neb_eline_sigma_kms``,
+          ``neb_log_nH``, ``neb_co``, ``neb_dno``, ``neb_hbfrac``) is refused by
+          enumeration of the namespace.
+        * The grid holds the ionizing spectrum shape at the reference star
+          formation history. For a population with no recent star formation and
+          zero birth-cloud optical depth the u bands were off by 3.3e-2 on one
+          prior draw of configuration I; over 32 prior draws as drawn the worst
+          band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4
+          (I) and 1.3e-3 (II).
+
         **JIT-compatible**: the resulting :meth:`predict_photometry` /
         :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid
         build is eager.
         """
-        import dataclasses
-
-        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
 
         if self._nebular_backend is None or not hasattr(
@@ -7307,7 +7334,22 @@ class SEDModel:
         # at two different points on the dust attenuation curve. See
         # ``_snap_to_nebular_catalog``.
         target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
-        table = precompute_nebular_grid(self, target_wavelengths, n_grid=n_grid, ranges=ranges)
+        chain0 = self._build_component_chain()
+        dust = next(
+            (c for c in chain0 if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
+            None,
+        )
+        eb_lut = self._energy_balance_lut(chain0)
+        with_dust = dust is not None and eb_lut is not None
+        table = precompute_nebular_grid(
+            self,
+            target_wavelengths,
+            n_grid=n_grid,
+            ranges=ranges,
+            dust_component=dust if with_dust else None,
+            eb_tau_grids=(eb_lut.tau_bc_grid, eb_lut.tau_diff_grid) if with_dust else None,
+            n_subbands=self._approx.get("n_subbands"),
+        )
         self._nebular_grid_table = table
         # Rebuild the chain from scratch (exact, no grid) and swap in the
         # grid-carrying nebular component so ``apply`` takes the fast branch.
@@ -7327,13 +7369,9 @@ class SEDModel:
         # input is invisible to it, ``state_to_sed_components`` does exactly
         # that, so ``sed_components()`` on a dust-free Cue model still reports
         # a zero nebular continuum (#1673).
-        sed_consumers = _nebular_continuum_consumers(chain)
-        self._cached_component_chain = [
-            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
-            if isinstance(c, NebularSEDComponent)
-            else c
-            for c in chain
-        ]
+        # Dust that takes the nebular from the grid is flagged inside the helper
+        # before the census, so it does not count as a consumer.
+        self._cached_component_chain = self._chain_with_nebular_grid(chain, table)
         # _nebular_grid_table is structural (#2163): a fast-nebular model is a
         # different compiled graph. Invalidate the memoized signature so the
         # next compile_signature() call sees it.
@@ -10086,6 +10124,148 @@ class SEDModel:
                 if state is not None:
                     return state.ssp_phot_ztable
         return None
+
+    def _dust_can_take_nebular_from_grid(self, chain) -> bool:
+        """Whether the chain's dust can read the nebular from the per-Q_H grid.
+
+        Holds exactly when the stellar energy-balance LUT exists for ``chain``:
+        two-component or single-screen dust, ``WavePrecomp`` on, shape-fixed
+        attenuation, and IR emission or an ``L_ir`` consumer. The grid's
+        absorbed-energy channel is tabulated on that LUT's optical-depth grids,
+        so the two exist together.
+        """
+        return self._energy_balance_lut(chain) is not None
+
+    def _redshift_is_a_build_constant(self) -> bool:
+        """Whether every evaluation of this model runs at the redshift it was built at.
+
+        False for a free ``redshift`` and for a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), where a precompute integrated
+        through observed bands at the build redshift describes another galaxy.
+
+        Returns
+        -------
+        bool
+        """
+        return (
+            "redshift" not in self.spec.free_params
+            and getattr(self, "_catalog_z_range", None) is None
+        )
+
+    def nebular_grid_can_serve_photometry(self) -> bool:
+        """Whether the per-Q_H nebular grid can serve this model's photometry.
+
+        Serving photometry from the grid zeroes ``sed_nebular``, so it requires
+        that no component read the continuum. A dust component reads it, unless
+        it can take the nebular from the grid instead
+        (:meth:`_dust_can_take_nebular_from_grid`); then it does not count.
+
+        Returns
+        -------
+        bool
+            True when no continuum consumer remains after that exclusion, and
+            the redshift is a build-time constant (neither free nor runtime).
+        """
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import (
+            grid_baked_free_params,
+        )
+
+        if not self._redshift_is_a_build_constant():
+            return False
+
+        if grid_baked_free_params(self.spec):
+            return False
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._build_component_chain()
+        eligible = self._dust_can_take_nebular_from_grid(chain)
+        remaining = [
+            c
+            for c in _nebular_continuum_consumers(chain)
+            if not (eligible and isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent)))
+        ]
+        return not remaining
+
+    def _chain_with_nebular_grid(self, chain, table):
+        """``chain`` with the nebular grid attached and the dust flagged to read it.
+
+        The dust component is flagged (``nebular_from_grid``) and its tau grids are set
+        BEFORE the continuum census, but only when the redshift is a build-time constant
+        and no other component consumes the continuum, so the census sees a dust component
+        that does not read ``sed_nebular`` and ``must_materialize_sed`` follows from it.
+        Both happen here so the flag and the census cannot drift between call sites.
+
+        The grid serves band fluxes only at the build redshift. With a free or runtime
+        redshift the nebular component materializes its continuum and the dust component
+        reads it.
+        """
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
+
+        dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
+        serves_bands = self._redshift_is_a_build_constant()
+        chain = list(chain)
+        if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+            eb_lut = self._energy_balance_lut(chain)
+            dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
+            for name_table, name_lut, grid_lut in (
+                ("eb_tau_a_grid", "tau_bc_grid", eb_lut.tau_bc_grid),
+                ("eb_tau_b_grid", "tau_diff_grid", eb_lut.tau_diff_grid),
+            ):
+                grid_tab = getattr(table, name_table)
+                if grid_tab is None or not jnp.array_equal(grid_tab, grid_lut):
+                    raise RuntimeError(
+                        f"Nebular grid {name_table} does not match the stellar "
+                        f"energy-balance LUT {name_lut}: shapes "
+                        f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
+                        f"{jnp.shape(grid_lut)}."
+                    )
+            if bool(table.eb_include_lyc) != (_lyc_cutoff_for(dust_c) is None):
+                table_lyc = bool(table.eb_include_lyc)
+                dust_lyc = _lyc_cutoff_for(dust_c) is None
+                raise RuntimeError(
+                    f"nebular grid table was built with eb_include_lyc={table_lyc} "
+                    f"but the dust component has eb_include_lyc={dust_lyc}; "
+                    f"rebuild the table with enable_fast_nebular()"
+                )
+            # Build flagged chain with both fields set
+            flagged = [
+                dataclasses.replace(
+                    c,
+                    nebular_from_grid=True,
+                    nebular_eb_tau_grids=(
+                        tuple(float(x) for x in np.asarray(table.eb_tau_a_grid)),
+                        tuple(float(x) for x in np.asarray(table.eb_tau_b_grid)),
+                    ),
+                )
+                if isinstance(c, dust_types)
+                else c
+                for c in chain
+            ]
+            # Check if any other component consumes the continuum
+            sed_consumers = _nebular_continuum_consumers(flagged)
+            # If another component consumes continuum, nebular will materialize it
+            # and not publish grid keys, so use unflagged chain instead
+            if sed_consumers:
+                chain = list(chain)
+                sed_consumers = _nebular_continuum_consumers(chain)
+            else:
+                chain = flagged
+        else:
+            sed_consumers = _nebular_continuum_consumers(chain)
+        return [
+            dataclasses.replace(
+                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or not serves_bands
+            )
+            if isinstance(c, NebularSEDComponent)
+            else c
+            for c in chain
+        ]
 
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
