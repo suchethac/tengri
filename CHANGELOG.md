@@ -3066,6 +3066,13 @@
   -1.154901959985743`, by 9.8e-5 — five orders of magnitude above the guard's
   1e-9 tolerance. Transcribed exactly now; the guard covers 29 cases (#2214).
 
+- The spectroscopy projector multiplied the IGM transmission into the rest-frame
+  SED before convolving with the galaxy's own velocity dispersion, so `sigma_v_kms`
+  smeared the IGM's sharp Lyman-limit/Lyman-alpha-forest edge — a line-of-sight
+  feature imprinted after the light leaves the galaxy, which the galaxy's own
+  kinematics cannot broaden. `sigma_v_kms` now acts on the stellar piece before
+  the IGM transmission, on every spectrum-prediction path (#2589).
+
 - `agn={'type': 'off'}` raised `agn['type']='off' is not an AGN model` —
   both dust groups already accept `'off'` as a synonym of `'none'`
   (`dust_attenuation`, `dust_emission`), but `agn`'s own validator took
