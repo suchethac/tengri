@@ -1399,6 +1399,8 @@ class DustSEDComponent(TemplateThreading):
                         z_neb,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_nebular_attenuated_precomp"] = sed_neb_attenuated
             # Shock photometry attenuation (#1434): publish the attenuated form so both
             # exact and precomp paths read the same value, not two independent
             # multiplications that can drift. Dust attenuates shock the same way as
@@ -1428,6 +1430,8 @@ class DustSEDComponent(TemplateThreading):
                         z_shock,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_shock_attenuated_precomp"] = sed_shock_attenuated
             # AGN photometry attenuated by dust (PR-D2): parallel to shock.
             # sed_agn_unatt and sed_agn_attenuated are computed in §2e above.
             # Gate on agn_screen != "none" and presence of intrinsic AGN.
@@ -1453,6 +1457,8 @@ class DustSEDComponent(TemplateThreading):
                         z_agn,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_agn_attenuated_precomp"] = sed_agn_attenuated
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
             # division by A) so the two-component Taylor projection (#617) is
             # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
@@ -1483,6 +1489,15 @@ class DustSEDComponent(TemplateThreading):
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+                # The same screens where the IGM-surviving light sits (exact fold).
+                igm_waves = state.derived.get("stellar_subband_waves_rest_igm_precomp")
+                if igm_waves is not None:
+                    derived_overrides["dust_bc_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_bc * law_bc_fn(igm_waves, **bc_kw)
+                    )
+                    derived_overrides["dust_diff_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_diff * law_diff_fn(igm_waves, **diff_kw)
+                    )
 
                 # Lyman-continuum sub-band factor (#2439, #2427, R2):
                 # overwrites NebularSEDComponent's flat publish (SAME key,

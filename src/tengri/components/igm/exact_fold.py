@@ -29,9 +29,30 @@ Build-time only: numpy, eager float64.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
 
-__all__ = ["subband_ratio", "subband_ratio_table"]
+__all__ = ["SubbandFold", "subband_fold", "subband_fold_table"]
+
+
+class SubbandFold(NamedTuple):
+    """The exact fold of one sub-band tensor.
+
+    Attributes
+    ----------
+    ratio : ndarray, shape (..., n_filters, n_chunks)
+        With-IGM over bare sub-band integral [dimensionless].
+    nodes_rest : ndarray, same shape
+        Flux-weighted centroid of each chunk WITH the IGM inside [Angstrom], rest
+        frame: where the light that survives the IGM sits, which is where a dust
+        screen multiplying it must be evaluated. NaN for bands the IGM cannot
+        reach (their node is the bare one) and the bare node wherever the IGM
+        removes a chunk entirely.
+    """
+
+    ratio: np.ndarray
+    nodes_rest: np.ndarray
 
 
 def _transmission(igm_model, wave_rest, z):
@@ -64,10 +85,10 @@ def _absorbed_filters(transmission, wave_rest, z, filter_waves):
     return [i for i, fw in enumerate(filter_waves) if float(np.min(fw)) < bound_obs]
 
 
-def subband_ratio(
+def subband_fold(
     ssp_data, filters, z, *, igm_model, n_subbands, lyc_gate, convention
-) -> np.ndarray:
-    """Exact-to-bare ratio of the sub-band integrals at one redshift.
+) -> SubbandFold:
+    """Exact-to-bare ratio of the sub-band integrals, and the with-IGM nodes, at one z.
 
     Parameters
     ----------
@@ -89,10 +110,11 @@ def subband_ratio(
 
     Returns
     -------
-    ndarray, shape (n_met, n_age, n_filters, n_chunks)
-        ``n_chunks = K + 1`` under ``lyc_gate``, else ``K``. Zero where the bare
-        integral is zero (no flux either way); exactly one for filters the IGM
-        cannot reach.
+    SubbandFold
+        Arrays of shape ``(n_met, n_age, n_filters, n_chunks)``, ``n_chunks =
+        K + 1`` under ``lyc_gate`` else ``K``. The ratio is zero where the bare
+        integral is zero (no flux either way) and exactly one for filters the
+        IGM cannot reach.
     """
     from tengri.utils.grid_interp import preintegrate_grid
 
@@ -102,41 +124,45 @@ def subband_ratio(
     filter_trans = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
     n_chunks = n_subbands + 1 if lyc_gate else n_subbands
 
-    ratio = np.ones((*templates.shape[:-1], len(filters), n_chunks), dtype=np.float64)
+    shape = (*templates.shape[:-1], len(filters), n_chunks)
+    ratio = np.ones(shape, dtype=np.float64)
+    nodes = np.full(shape, np.nan, dtype=np.float64)
     transmission = _transmission(igm_model, wave_rest, z)
     reached = _absorbed_filters(transmission, wave_rest, z, filter_waves)
     if not reached:
-        return ratio
+        return SubbandFold(ratio, nodes)
 
     def _quadrature(templates_in):
         # dl_cm is a constant factor of both integrals and cancels in the ratio.
-        return np.asarray(
-            preintegrate_grid(
-                templates=templates_in,
-                wave_rest=wave_rest,
-                filter_waves=[filter_waves[i] for i in reached],
-                filter_trans=[filter_trans[i] for i in reached],
-                redshift=z,
-                dl_cm=1.0,
-                axes=(np.asarray(ssp_data.ssp_lgmet), np.asarray(ssp_data.ssp_lg_age_gyr)),
-                taylor=False,
-                n_subbands=n_subbands,
-                convention=convention,
-                lyc_gate=lyc_gate,
-            ).subband_phot,
-            dtype=np.float64,
+        grid = preintegrate_grid(
+            templates=templates_in,
+            wave_rest=wave_rest,
+            filter_waves=[filter_waves[i] for i in reached],
+            filter_trans=[filter_trans[i] for i in reached],
+            redshift=z,
+            dl_cm=1.0,
+            axes=(np.asarray(ssp_data.ssp_lgmet), np.asarray(ssp_data.ssp_lg_age_gyr)),
+            taylor=False,
+            n_subbands=n_subbands,
+            convention=convention,
+            lyc_gate=lyc_gate,
+        )
+        return (
+            np.asarray(grid.subband_phot, dtype=np.float64),
+            np.asarray(grid.subband_waves_rest, dtype=np.float64),
         )
 
-    bare = _quadrature(templates)
-    folded = _quadrature(templates * transmission)
+    bare, bare_nodes = _quadrature(templates)
+    folded, folded_nodes = _quadrature(templates * transmission)
     ratio[..., reached, :] = np.where(bare != 0.0, folded / np.where(bare != 0.0, bare, 1.0), 0.0)
-    return ratio
+    nodes[..., reached, :] = np.where(folded != 0.0, folded_nodes, bare_nodes)
+    return SubbandFold(ratio, nodes)
 
 
-def subband_ratio_table(
+def subband_fold_table(
     ssp_data, filters, z_grid, *, igm_model, n_subbands, lyc_gate, convention
-) -> np.ndarray:
-    """:func:`subband_ratio` on every node of a z grid, content-cached.
+) -> SubbandFold:
+    """:func:`subband_fold` on every node of a z grid, content-cached.
 
     The table is a build-time constant of (SSP grid, filters, z grid, partition,
     IGM law), so it is persisted beside the photometry z-table under
@@ -146,13 +172,14 @@ def subband_ratio_table(
     Parameters
     ----------
     ssp_data, filters, igm_model, n_subbands, lyc_gate, convention
-        As :func:`subband_ratio`.
+        As :func:`subband_fold`.
     z_grid : array_like, shape (n_z,)
         Redshift nodes of the z-table the ratio multiplies.
 
     Returns
     -------
-    ndarray, shape (n_z, n_met, n_age, n_filters, n_chunks)
+    SubbandFold
+        Arrays of shape ``(n_z, n_met, n_age, n_filters, n_chunks)``.
     """
     from tengri.components.igm import _subband_cache
 
@@ -172,22 +199,22 @@ def subband_ratio_table(
         if cached is not None:
             _subband_cache.memo_put(key, cached)
     if cached is not None:
-        return np.asarray(cached)
+        return SubbandFold(*np.asarray(cached))
 
-    table = np.stack(
-        [
-            subband_ratio(
-                ssp_data,
-                filters,
-                float(z),
-                igm_model=igm_model,
-                n_subbands=n_subbands,
-                lyc_gate=lyc_gate,
-                convention=convention,
-            )
-            for z in z_grid
-        ]
-    )
+    folds = [
+        subband_fold(
+            ssp_data,
+            filters,
+            float(z),
+            igm_model=igm_model,
+            n_subbands=n_subbands,
+            lyc_gate=lyc_gate,
+            convention=convention,
+        )
+        for z in z_grid
+    ]
+    # One array on disk: (2, n_z, ...) = (ratio, nodes).
+    table = np.stack([np.stack([f.ratio for f in folds]), np.stack([f.nodes_rest for f in folds])])
     _subband_cache.memo_put(key, table)
     _subband_cache.store(key, table, prefix=_subband_cache.EXACT_FOLD_PREFIX)
-    return table
+    return SubbandFold(*table)

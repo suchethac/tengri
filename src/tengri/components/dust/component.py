@@ -633,6 +633,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
             if sub_waves is not None:
                 k_sub = curve(sub_waves)
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
+                # The same screen where the IGM-surviving light sits (exact fold).
+                igm_waves = state.derived.get("stellar_subband_waves_rest_igm_precomp")
+                if igm_waves is not None:
+                    derived_overrides["dust_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_v * curve(igm_waves)
+                    )
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
             # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a

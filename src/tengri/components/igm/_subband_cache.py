@@ -66,7 +66,8 @@ _CACHE_VERSION = 3
 #: Version of the exact-fold ratio table (:class:`ExactFoldRequest`), separate
 #: from :data:`_CACHE_VERSION` because the two tables change for different
 #: reasons. Bump when :mod:`tengri.components.igm.exact_fold` changes what it stores.
-_EXACT_FOLD_CACHE_VERSION = 1
+_EXACT_FOLD_CACHE_VERSION = 2
+#: 1 -> 2: the entry stores (ratio, with-IGM nodes) stacked, not the ratio alone.
 
 #: File prefix of the exact-fold ratio tables; the node tables use the default.
 EXACT_FOLD_PREFIX = "igm_exact_fold"
@@ -122,7 +123,7 @@ class SubbandBandRequest(SubbandRequest):
 
 @dataclasses.dataclass(frozen=True)
 class ExactFoldRequest:
-    """Every input of the exact-fold ratio table (:func:`exact_fold.subband_ratio_table`).
+    """Every input of the exact-fold ratio table (``exact_fold.subband_fold_table``).
 
     ``n_subbands``, ``lyc_gate`` and ``convention`` fix the sub-band partition
     the ratio is taken over; a table built under one partition multiplies a

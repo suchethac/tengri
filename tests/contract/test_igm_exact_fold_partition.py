@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The exact IGM fold's ratio is taken over the partition of the tensor it multiplies.
 
-:func:`tengri.components.igm.exact_fold.subband_ratio` returns a ratio that the
+:func:`tengri.components.igm.exact_fold.subband_fold` returns a ratio that the
 build multiplies into a sub-band tensor built elsewhere. Sub-bands are chunks of
 equal *weighted* filter mass, and a model with a live nebular Lyman-continuum
 mask adds a forced chunk edge at 912 Å (``lyc_gate``, K -> K + 1 chunks). A
@@ -75,7 +75,7 @@ def _quadrature(ssp, filters, z, templates, *, lyc_gate, n_subbands=K):
 
 
 def _ratio(ssp, filters, z, *, lyc_gate, n_subbands=K):
-    return exact_fold.subband_ratio(
+    return exact_fold.subband_fold(
         ssp,
         filters,
         z,
@@ -83,7 +83,7 @@ def _ratio(ssp, filters, z, *, lyc_gate, n_subbands=K):
         n_subbands=n_subbands,
         lyc_gate=lyc_gate,
         convention=FilterConvention.BESSELL,
-    )
+    ).ratio
 
 
 def _table_and_target(ssp, filters, z, *, lyc_gate):
@@ -162,7 +162,7 @@ def cache_on(tmp_path, monkeypatch):
 
 
 def _table(ssp, filters, z_grid, *, lyc_gate):
-    return exact_fold.subband_ratio_table(
+    return exact_fold.subband_fold_table(
         ssp,
         filters,
         z_grid,
@@ -182,8 +182,10 @@ def test_a_second_build_reads_the_ratio_table_from_disk(ssp, filters, cache_on, 
         raise AssertionError("recomputed a table that was on disk")
 
     _subband_cache.clear_memo()
-    monkeypatch.setattr(exact_fold, "subband_ratio", _must_not_run)
-    np.testing.assert_array_equal(_table(ssp, filters, z_grid, lyc_gate=True), first)
+    monkeypatch.setattr(exact_fold, "subband_fold", _must_not_run)
+    again = _table(ssp, filters, z_grid, lyc_gate=True)
+    np.testing.assert_array_equal(again.ratio, first.ratio)
+    np.testing.assert_array_equal(again.nodes_rest, first.nodes_rest)
 
     # A different partition is a different table, even with the same inputs otherwise.
     with pytest.raises(AssertionError, match="recomputed"):

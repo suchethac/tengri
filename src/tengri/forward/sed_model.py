@@ -1923,9 +1923,16 @@ def _fold_igm_exact_into_subbands(
         if subband.shape[-1] <= 0:
             return stellar_state
         z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
-        ratio = exact_fold.subband_ratio(ssp_data, filters, z, **_partition(subband))
+        fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
+        bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
         return _replace(
-            stellar_state, ssp_phot_lut=lut._replace(ssp_subband_phot_igm=subband * ratio)
+            stellar_state,
+            ssp_phot_lut=lut._replace(
+                ssp_subband_phot_igm=subband * fold.ratio,
+                ssp_subband_waves_rest_igm=np.where(
+                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
+                ),
+            ),
         )
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
@@ -1933,12 +1940,18 @@ def _fold_igm_exact_into_subbands(
         table = np.asarray(ztable.ssp_subband_phot_table)
         if table.shape[-1] <= 0:
             return stellar_state
-        ratio = exact_fold.subband_ratio_table(
+        fold = exact_fold.subband_fold_table(
             ssp_data, filters, np.asarray(ztable.z_grid), **_partition(table)
         )
+        bare_nodes = np.asarray(ztable.subband_waves_rest_table)
         return _replace(
             stellar_state,
-            ssp_phot_ztable=ztable._replace(ssp_subband_phot_igm_table=table * ratio),
+            ssp_phot_ztable=ztable._replace(
+                ssp_subband_phot_igm_table=table * fold.ratio,
+                subband_waves_rest_igm_table=np.where(
+                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
+                ),
+            ),
         )
 
     return stellar_state

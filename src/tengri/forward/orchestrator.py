@@ -231,6 +231,12 @@ _CANONICAL_UNITS: dict[str, str] = {
     "filter_eff_waves": "Angstrom",
     # Dust attenuation per filter. A(λ_eff) and A'(λ_eff).
     "dust_attenuation_precomp": "",
+    # Exact IGM fold: the sub-band node of the IGM-folded stellar tensor, and the
+    # dust screens evaluated there.
+    "stellar_subband_waves_rest_igm_precomp": "Angstrom",
+    "dust_bc_attenuation_subband_igm_precomp": "",
+    "dust_diff_attenuation_subband_igm_precomp": "",
+    "dust_attenuation_subband_igm_precomp": "",
     "dust_attenuation_slope_precomp": "1/Angstrom",
     # Two-component dust. BC + diffuse layer precompute.
     "dust_bc_attenuation_precomp": "",
@@ -293,6 +299,11 @@ _CANONICAL_UNITS: dict[str, str] = {
     "shock_phot_lnu_precomp": "erg/s/Hz",
     # AGN filter LUT (WavePrecomp), attenuated by dust when agn_screen != 'none'.
     "agn_phot_lnu_attenuated_precomp": "erg/s/Hz",
+    # The dense rest-grid SEDs the three attenuated band keys are integrated
+    # from; the IGM weights its transmission by them (never summed).
+    "sed_nebular_attenuated_precomp": "erg/s/Hz",
+    "sed_shock_attenuated_precomp": "erg/s/Hz",
+    "sed_agn_attenuated_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
@@ -305,6 +316,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
     "igm_transmission": "",
+    "igm_rest_transmission_precomp": "",
+    "igm_reach_filters_precomp": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
     # Spatial, 2D surface-brightness profile + the (x, y) kpc grid

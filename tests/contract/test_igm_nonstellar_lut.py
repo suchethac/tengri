@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""The IGM on non-stellar LUT photometry, against the wavelength-grid integrator.
+
+Under ``WavePrecomp`` the stellar continuum carries the IGM inside its sub-band
+quadrature; nebular, shock and AGN band fluxes used to take the filter-averaged
+transmission ``<T>_b``, unweighted by their own spectrum. A Cue model's Ly-alpha
+line sits on the break at high redshift, so that was the dominant LUT error there.
+Measured, bare FSPS grid, dpl SFH, Cue at its defaults, inoue, fixed z, exact
+stellar fold, vs ``approx=None``:
+
+========  ======  ==========  ===========
+z         band    ``<T>_b``   own ``T``
+========  ======  ==========  ===========
+7.0       sdss_z  +14.6 %     0.0000 %
+7.3       sdss_z  +5.6 %      0.0000 %
+7.3       F115W   +10.3 %     0.0000 %
+========  ======  ==========  ===========
+
+With a two-component screen (tau_bc 0.7, tau_diff 0.3) the stellar term also
+needs its dust screen evaluated where the IGM-surviving light sits: at the bare
+sub-band node sdss_z read 8.7 % off, at the IGM-weighted node 0.11 % (worst band
+0.69 %, F090W). A composable AGN beside Cue reads <= 0.28 %, against 48 % under
+the node fold.
+
+(``sdss_i`` keeps the -0.1 to -0.8 % Lyman-limit mask-edge residual of #2447,
+which is not an IGM term; F090W keeps the stellar -0.35 % that a bare-stellar
+model shows too.) ``spectral_igm_correction`` is patched to zero for the
+anti-vacuity arm: the ``<T>_b``-only answer these tests would otherwise accept.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import tengri
+from tengri import DEFAULT, SEDModel, WavePrecomp
+from tengri.observation import _igm_weighting
+from tengri.parameters import Fixed
+
+pytestmark = pytest.mark.contract
+
+BANDS = ["sdss_z", "JWST_NIRCam_F090W", "JWST_NIRCam_F115W"]
+PROBE_Z = 7.3
+#: Measured worst 0.35 % (F090W, the stellar term a bare model shares).
+_TOL = 0.01
+#: Measured 10.3 % (F115W) with the correction zeroed.
+_WITHOUT_FLOOR = 0.05
+
+
+@pytest.fixture(scope="module")
+def ssp(ssp_data_fsps):
+    return ssp_data_fsps
+
+
+def _model(ssp, bands, z, approx, **groups):
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=tengri.Observation(photometry=tengri.Photometry.from_names(bands)),
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+        igm={"type": "inoue", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(z),
+        approx=approx,
+        **groups,
+    )
+
+
+def _worst(lut, ref):
+    return float(np.max(np.abs(np.asarray(lut, float) / np.asarray(ref, float) - 1.0)))
+
+
+def _zeroed(*args, **kwargs):
+    return 0.0 * args[-1]  # the band factor's shape and dtype
+
+
+@pytest.fixture
+def without_correction(monkeypatch):
+    """Zero the correction, in a kernel of its own.
+
+    Models with one compile signature share a compiled kernel process-wide, so
+    the patched build would otherwise reuse the unpatched one, and a patched
+    kernel left behind would serve every later test of that signature.
+    """
+    from tengri.inference._model_cache import clear_structural_kernel_cache
+
+    clear_structural_kernel_cache()
+    monkeypatch.setattr(_igm_weighting, "spectral_igm_correction", _zeroed)
+    yield
+    clear_structural_kernel_cache()
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [
+        pytest.param({}, id="dust-free"),
+        pytest.param(
+            {
+                "dust_attenuation": {
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "tau_bc": Fixed(0.7),
+                    "tau_diff": Fixed(0.3),
+                    "other_params": Fixed(DEFAULT),
+                }
+            },
+            id="two-component",
+        ),
+        pytest.param(
+            {
+                "agn": {
+                    "type": "composable",
+                    "disc": {"type": "multicolor"},
+                    "all_params": Fixed(DEFAULT),
+                }
+            },
+            id="agn",
+        ),
+    ],
+)
+def test_nebular_flux_near_lyman_alpha_takes_its_own_transmission(ssp, groups):
+    reference = _model(ssp, BANDS, PROBE_Z, None, **groups).predict_photometry({})
+    lut = _model(ssp, BANDS, PROBE_Z, WavePrecomp(igm_fold="exact"), **groups)
+    worst = _worst(lut.predict_photometry({}), reference)
+    assert worst < _TOL, f"LUT off the integrator by {worst:.3%}"
+
+
+@pytest.mark.parametrize("groups", [pytest.param({}, id="dust-free")])
+def test_the_band_averaged_transmission_alone_is_wrong_here(ssp, without_correction, groups):
+    """Anti-vacuity: the probe must be one the old ``<T>_b`` answer fails."""
+    reference = _model(ssp, BANDS, PROBE_Z, None, **groups).predict_photometry({})
+    without = _model(ssp, BANDS, PROBE_Z, WavePrecomp(igm_fold="exact"), **groups)
+    worst = _worst(without.predict_photometry({}), reference)
+    assert worst > _WITHOUT_FLOOR, (
+        f"<T>_b alone is off by only {worst:.3%}: the probe no longer puts "
+        "nebular emission on the Lyman-alpha break"
+    )
+
+
+def test_a_band_the_igm_cannot_reach_publishes_nothing(ssp):
+    """Low redshift, optical bands: no table, no correction, no runtime cost."""
+    model = _model(ssp, ["sdss_r", "sdss_i"], 0.1, WavePrecomp(igm_fold="exact"))
+    state = model.predict_state({})
+    assert state.derived.get("igm_rest_transmission_precomp") is None
