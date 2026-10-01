@@ -224,11 +224,17 @@ def test_subband_version_is_3():
     assert _CACHE_VERSION == 3
 
 
-def test_ionspec_version_is_1():
-    """_IONSPEC_CACHE_VERSION is 1."""
+def test_ionspec_version_is_2():
+    """_IONSPEC_CACHE_VERSION is 2.
+
+    Bumped from 1 by the LyC brief: ``gas_logqion`` now integrates via the
+    shared :func:`tengri.components.lyc.edge_trapezoid` step model instead of
+    a hard ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction
+    for the first time.
+    """
     from tengri.components.nebular.ionizing_spectrum import _IONSPEC_CACHE_VERSION
 
-    assert _IONSPEC_CACHE_VERSION == 1
+    assert _IONSPEC_CACHE_VERSION == 2
 
 
 def test_ztable_request_has_cosmology_field():
