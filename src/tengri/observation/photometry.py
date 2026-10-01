@@ -17,6 +17,7 @@ import jax.numpy as jnp
 # kernel here and the build-time preintegration (utils.grid_interp) share one
 # definition without a circular import. Re-exported here for back-compat.
 from tengri._cache_keys import KeyPolicy, content, derive_key
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_bracket_values, edge_interp
 from tengri.parameters.resolve import require_redshift
 from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
@@ -114,6 +115,7 @@ def _filter_integral_union(
     filter_wave: jnp.ndarray,
     filter_trans: jnp.ndarray,
     convention: FilterConvention,
+    lyman_edge_obs_aa: jnp.ndarray | float | None = None,
 ) -> jnp.ndarray:
     r"""Filter-weighted mean of ``L_nu`` on the union quadrature grid (#960).
 
@@ -141,13 +143,62 @@ def _filter_integral_union(
     ``(1+z)``, so z is the one parameter that reaches the denominator at all.
     ``representable_floor`` does not catch this, ``1e-30`` is above float32's
     ``tiny`` and passes through untouched. float64 is bit-identical.
+
+    Parameters
+    ----------
+    lyman_edge_obs_aa : float, optional
+        Observed-frame Lyman limit, ``LYMAN_LIMIT_AA * (1+z)`` (#2447, one
+        Lyman edge). When given, ``L_nu`` is resampled onto ``grid`` with
+        :func:`tengri.components.lyc.edge_interp` (a step in the bracket
+        cell straddling the edge, ordinary linear interpolation elsewhere),
+        and the edge itself is additionally inserted into the quadrature
+        grid as a zero-width node pair
+        (:func:`tengri.components.lyc.edge_bracket_values`) so the ordinary
+        ``jnp.trapezoid`` numerator integrates the step exactly even though
+        the transmission x bandpass weight varies continuously across the
+        bracket cell (that continuous variation is why a single
+        ``edge_trapezoid`` call on the already-multiplied integrand would
+        only be approximate here, unlike the pure-SED case). Exact
+        regardless of how many extra filter nodes subdivide the straddling
+        SSP panel, because ``L_nu`` already carries the physical masking
+        (and any dust/IGM multiplicative factor) PER NODE -- there is no
+        separate correction term to compute, unlike the retired
+        ``_lyc_photometry_correction`` this replaces. ``None`` (default)
+        reproduces ordinary (non-edge-aware) quadrature, correct whenever no
+        live Lyman-continuum mask ran (e.g. ``neb={'type': 'none'}``) and
+        ``L_nu`` is smooth across the edge.
     """
     grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
-    L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
-    trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
-    weight = trans_on_grid * _filter_weight(grid, convention)
-    num = jnp.trapezoid(L_on_grid * weight, grid)
-    den = jnp.trapezoid(weight, grid)
+    if lyman_edge_obs_aa is None:
+        L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
+        trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
+        weight = trans_on_grid * _filter_weight(grid, convention)
+        num = jnp.trapezoid(L_on_grid * weight, grid)
+        den = jnp.trapezoid(weight, grid)
+        return num / jnp.maximum(den, representable_denominator(1e-30))
+
+    # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
+    # varies continuously across the bracket cell, so treating the whole
+    # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
+    # call on ``L_on_grid * weight`` would do -- silently averages that
+    # variation across the FULL bracket width instead of evaluating it AT
+    # the edge. The exact fix inserts the edge itself as a zero-width node
+    # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
+    # transmission/weight evaluation at the edge between the two copies) so
+    # an ORDINARY trapezoid integrates the step exactly, regardless of how
+    # many filter nodes subdivide the straddling panel.
+    y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+    edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
+    all_x = jnp.concatenate([grid, edge_pair])
+    L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+    all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
+    order = jnp.argsort(all_x, stable=True)
+    grid_e = all_x[order]
+    L_on_grid = all_y[order]
+    trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
+    weight = trans_on_grid * _filter_weight(grid_e, convention)
+    num = jnp.trapezoid(L_on_grid * weight, grid_e)
+    den = jnp.trapezoid(weight, grid_e)
     return num / jnp.maximum(den, representable_denominator(1e-30))
 
 
@@ -164,7 +215,7 @@ def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
     return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
 
 
-@functools.partial(jax.jit, static_argnames=("convention",))
+@functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
 def lnu_filter_integral(
     L_nu_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -172,6 +223,7 @@ def lnu_filter_integral(
     filter_trans: jnp.ndarray,
     redshift: float,
     convention: FilterConvention = FilterConvention.BESSELL,
+    has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
 
@@ -225,6 +277,18 @@ def lnu_filter_integral(
     (25–70 Å spacing) under-sample MILES-resolution spectra; the pre-#960
     point-sampling quadrature biased SDSS-like bands by up to 3 %.
 
+    has_lyc_edge : bool, optional
+        Whether ``L_nu_rest`` carries a live per-node Lyman-continuum mask
+        (``state.derived["lyc_transmission"]`` published, #2447/one Lyman
+        edge), i.e. some photoionized nebular backend ran. When True, the
+        observed-frame edge ``LYMAN_LIMIT_AA * (1+z)`` is threaded into
+        :func:`_filter_integral_union`'s step-model quadrature; ``L_nu_rest``
+        itself needs no decomposition (no unmasked SED, no separate
+        transmission array) because the masking (and any dust/IGM factor)
+        is already baked in per node. Static (affects which quadrature
+        branch is traced). Default False (ordinary quadrature, exact when
+        no live mask means ``L_nu_rest`` is smooth across the edge).
+
     See Also
     --------
     compute_flux_density : The full L→F conversion (composes this with
@@ -232,7 +296,10 @@ def lnu_filter_integral(
     FilterConvention : The supported bandpass weights.
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    return _filter_integral_union(L_nu_rest, wave_obs, filter_wave, filter_trans, convention)
+    lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
+    return _filter_integral_union(
+        L_nu_rest, wave_obs, filter_wave, filter_trans, convention, lyman_edge_obs_aa
+    )
 
 
 def lnu_filter_integral_batch(
@@ -503,6 +570,7 @@ def _compute_flux_density_padded(
     redshift,
     dl_cm,
     convention: FilterConvention = FilterConvention.BESSELL,
+    has_lyc_edge: bool = False,
 ):
     """Compute flux density for a single padded filter.
 
@@ -535,10 +603,17 @@ def _compute_flux_density_padded(
     (#960) stays valid; their transmission is zero, so they contribute
     nothing. Private helper for compute_flux_density_batch.
 
+    has_lyc_edge : bool, optional
+        Whether ``sed_rest`` carries a live per-node Lyman-continuum mask
+        (#2447/one Lyman edge); see :func:`lnu_filter_integral`. Static.
+
     """
     wave_obs = wave_rest * (1.0 + redshift)
     fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
-    mean_lnu = _filter_integral_union(sed_rest, wave_obs, fw_safe, filter_trans_padded, convention)
+    lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
+    mean_lnu = _filter_integral_union(
+        sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyman_edge_obs_aa
+    )
     # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
     # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is
     # ~1e-58 and underflows float32 to zero on its own (peak 1.0 absorbs none
@@ -548,7 +623,7 @@ def _compute_flux_density_padded(
     return lnu_to_fnu(mean_lnu, dl_cm, redshift)
 
 
-@functools.partial(jax.jit, static_argnames=("convention",))
+@functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
 def compute_flux_density_batch(
     sed_rest,
     wave_rest,
@@ -557,6 +632,7 @@ def compute_flux_density_batch(
     redshift,
     dl_cm,
     convention: FilterConvention = FilterConvention.BESSELL,
+    has_lyc_edge: bool = False,
 ):
     """Compute flux densities through all filters at once via vmap.
 
@@ -582,14 +658,22 @@ def compute_flux_density_batch(
     ndarray, shape (n_filters,)
         Observed flux density per filter [erg/s/cm²/Hz].
 
+    has_lyc_edge : bool, optional
+        Whether ``sed_rest`` carries a live per-node Lyman-continuum mask
+        (#2447/one Lyman edge); see :func:`lnu_filter_integral`. Static;
+        shared (unmapped) across every filter in the vmap.
+
     Notes
     -----
-    JIT-compatible: yes, vmapped over filters; ``convention`` is static.
+    JIT-compatible: yes, vmapped over filters; ``convention`` and
+    ``has_lyc_edge`` are static.
     Gradient-safe: yes.
 
     """
     return jax.vmap(
-        functools.partial(_compute_flux_density_padded, convention=convention),
+        functools.partial(
+            _compute_flux_density_padded, convention=convention, has_lyc_edge=has_lyc_edge
+        ),
         in_axes=(None, None, 0, 0, None, None),
     )(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm)
 
@@ -675,6 +759,16 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
     if igm_trans is not None:
         sed_rest = sed_rest * igm_trans
 
+    # Exact Lyman-continuum edge on THIS projection's own (finer) union grid
+    # (#2447, one Lyman edge): ``sed_rest`` already carries the physical
+    # masking (and any dust/IGM multiplicative factor) PER NODE, whatever
+    # component produced it -- there is nothing to reconstruct, only the
+    # edge POSITION is needed. ``lyc_transmission`` is published whenever a
+    # photoionized nebular backend ran (component.py); absent (e.g.
+    # ``neb={'type': 'none'}``) is a structural no-op: ``sed_rest`` is then
+    # smooth across the edge and ordinary quadrature is exact.
+    has_lyc_edge = state.derived is not None and state.derived.get("lyc_transmission") is not None
+
     n_real = photometry.n_filters
     fluxes = compute_flux_density_batch(
         sed_rest,
@@ -684,6 +778,7 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
         z,
         dl_cm,
         convention=photometry.convention,
+        has_lyc_edge=has_lyc_edge,
     )
     return fluxes[:n_real]
 
