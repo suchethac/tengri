@@ -12,6 +12,17 @@
 
 ### Fixed
 
+- The dust-IR band response, the radio and X-ray term responses, and the
+  energy-balance LUT of a redshift-reading attenuation law (`narayanan_z`)
+  followed a build-time redshift, so under `WavePrecomp(catalog_z_range=...)`,
+  where each galaxy evaluates at its own runtime redshift while the spec carries a
+  placeholder, catalog fits got 50-300% WISE W3/W4 errors (measured 0.50-0.98 in
+  W4 and 0.51-2.98 in W3 at z = 0.5-1.5 for `catalog_z_range=(0.05, 2)`). They
+  are now tabulated over the model's redshift range, uniform in ln(1+z), and read
+  at the evaluation redshift, so every catalog engine inherits them, and a
+  free-redshift model uses the fast path instead of falling back to the exact
+  per-call integral.
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged

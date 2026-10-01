@@ -494,6 +494,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 jnp.asarray(log_mass_scale),
                 jnp.asarray(0.0),  # tau_bc = 0.0 (degenerate)
                 jnp.asarray(params["dust_tau_v"]),  # tau_diff = tau_v
+                redshift=params.get("redshift")
+                if getattr(eb_lut, "ln1pz", None) is not None
+                else None,
             )
 
             # The nebular continuum is absorbed by the SAME screen, so its

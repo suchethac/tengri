@@ -51,6 +51,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._apply import birth_cloud_age_weight, two_component_curves
 from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.utils.physics_constants import C_AA
@@ -58,6 +59,7 @@ from tengri.utils.physics_constants import C_AA
 __all__ = [
     "EnergyBalanceLUT",
     "build_energy_balance_lut",
+    "build_energy_balance_lut_over_z",
     "lut_l_absorbed_stellar",
     "lut_l_absorbed_stellar_log10",
 ]
@@ -84,6 +86,119 @@ class EnergyBalanceLUT(NamedTuple):
     G: jnp.ndarray
     tau_bc_grid: jnp.ndarray
     tau_diff_grid: jnp.ndarray
+    #: ``ln(1+z)`` axis of ``G`` for an attenuation law that reads the model
+    #: redshift, else ``None``. When set, ``G`` carries a leading redshift axis,
+    #: shape ``(n_z, n_met, n_age, n_tau_bc, n_tau_diff)``, and the contraction
+    #: needs the evaluation redshift. ``B`` is intrinsic, so it has no z axis.
+    ln1pz: jnp.ndarray | None = None
+
+
+def build_energy_balance_lut_over_z(
+    ssp_flux: jnp.ndarray,
+    ssp_wave: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    *,
+    ln1pz: jnp.ndarray,
+    params_at_z,
+    law_bc: str,
+    law_diff: str,
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
+    t_birth_yr: float = 1e7,
+    transition_width_dex: float = 0.3,
+    lyman_cutoff_aa: float = 0.0,
+    eb_include_lyc: bool = False,
+    tau_bc_grid: jnp.ndarray,
+    tau_diff_grid: jnp.ndarray,
+) -> EnergyBalanceLUT:
+    r"""Energy-balance LUT for a law whose curve moves with the evaluation redshift.
+
+    Same ``B`` and ``G`` as :func:`build_energy_balance_lut`, with ``G`` built on
+    every ``ln(1+z)`` node so the absorbed luminosity follows the curve at the
+    redshift the model is *evaluated* at (a free redshift, or a per-galaxy
+    runtime redshift under ``WavePrecomp(catalog_z_range=...)``), not the one the
+    spec happened to carry when the table was built.
+
+    Parameters
+    ----------
+    ssp_flux, ssp_wave, ssp_ages_yr, law_bc, law_diff, f_obscuration,
+    t_birth_yr, transition_width_dex, lyman_cutoff_aa, eb_include_lyc,
+    tau_bc_grid, tau_diff_grid
+        As :func:`build_energy_balance_lut`.
+    ln1pz : ndarray, shape (n_z,)
+        Ascending redshift nodes, :math:`\ln(1+z)`. [dimensionless]
+    params_at_z : callable
+        ``params_at_z(z) -> (bc_params, diff_params)`` of jit-safe scalars: the
+        resolved law parameters at redshift ``z``.
+
+    Returns
+    -------
+    EnergyBalanceLUT
+        With ``ln1pz`` set and ``G`` of shape ``(n_z, n_met, n_age, n_bc, n_diff)``.
+
+    Notes
+    -----
+    **JIT-compatible**: no, build time.
+
+    The transmission factorizes, :math:`T = f + (1 - f)\, e^{-w_a \tau_{\rm bc}
+    k_{\rm bc}(\lambda)}\, e^{-\tau_{\rm diff} k_{\rm diff}(\lambda)}`, so on
+    each node
+
+    .. math::
+
+        G_{ma}(\tau_{\rm bc}, \tau_{\rm diff}) = f\, B_{ma} + (1 - f)
+        \sum_\lambda q_\lambda\, S_{ma\lambda}\,
+        e^{-w_a \tau_{\rm bc} k_{\rm bc, \lambda}}\,
+        e^{-\tau_{\rm diff} k_{\rm diff, \lambda}}
+
+    with :math:`q_\lambda` the trapezoid weights of :math:`\int d\nu`. That is one
+    small matrix product per age instead of one full
+    ``(n_met, n_age, n_wave)`` pass per optical-depth node, which is what keeps a
+    table over tens of redshifts affordable. It agrees with
+    :func:`build_energy_balance_lut` at a node to floating-point round-off.
+    """
+    nu = C_AA / ssp_wave
+    mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else (ssp_wave >= 912.0)
+    sspm = ssp_flux * mask[None, None, :]
+    B = jnp.trapezoid(sspm, nu, axis=-1)
+    # Trapezoid weights q with sum(q * y) == trapezoid(y, nu).
+    dnu = jnp.diff(nu)
+    q = 0.5 * (jnp.concatenate([dnu, jnp.zeros(1)]) + jnp.concatenate([jnp.zeros(1), dnu]))
+    weighted = jnp.transpose(sspm * q[None, None, :], (1, 0, 2))  # (n_age, n_met, n_wave)
+    age_weight = birth_cloud_age_weight(ssp_ages_yr, t_birth_yr, transition_width_dex)
+    tau_bc = jnp.asarray(tau_bc_grid)
+    tau_diff = jnp.asarray(tau_diff_grid)
+    f_obs = jnp.asarray(f_obscuration)
+
+    @jax.jit
+    def g_at(z):
+        bc_params, diff_params = params_at_z(z)
+        k_bc, k_diff = two_component_curves(
+            ssp_wave,
+            law_bc,
+            law_diff,
+            {k: jnp.asarray(v) for k, v in bc_params.items()},
+            {k: jnp.asarray(v) for k, v in diff_params.items()},
+            lyman_cutoff_aa,
+        )
+        diffuse = jnp.exp(-k_diff[:, None] * tau_diff[None, :])  # (n_wave, n_diff)
+
+        def one_age(args):
+            s_a, w_a = args  # (n_met, n_wave), ()
+            birth = jnp.exp(-(w_a * k_bc)[:, None] * tau_bc[None, :])  # (n_wave, n_bc)
+            return jnp.einsum("ml,lb,ld->mbd", s_a, birth, diffuse)
+
+        g_age = jax.lax.map(one_age, (weighted, age_weight))  # (n_age, n_met, n_bc, n_diff)
+        g_age = jnp.transpose(g_age, (1, 0, 2, 3))
+        return f_obs * B[:, :, None, None] + (1.0 - f_obs) * g_age
+
+    G = jnp.stack([g_at(z) for z in jnp.expm1(ln1pz)])
+    return EnergyBalanceLUT(
+        B=B,
+        G=G,
+        tau_bc_grid=tau_bc,
+        tau_diff_grid=tau_diff,
+        ln1pz=jnp.asarray(ln1pz),
+    )
 
 
 def build_energy_balance_lut(
@@ -227,6 +342,7 @@ def _lut_contract(
     joint_weights: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Per-unit-mass signed absorbed luminosity, :math:`\sum_{m,a} w(B - G)`.
 
@@ -245,12 +361,32 @@ def _lut_contract(
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
     n_met, n_age = lut.B.shape
-    g_sub = jax.lax.dynamic_slice(
-        lut.G,
-        (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
-        (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
-    )
-    g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
+    zero = jnp.zeros((), jnp.int32)
+    if lut.ln1pz is None:
+        g_sub = jax.lax.dynamic_slice(
+            lut.G,
+            (zero, zero, i0, j0),
+            (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+        )
+        g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
+    else:
+        # The curve moves with redshift: G carries a leading ln(1+z) axis and the
+        # contraction reads it at the EVALUATION redshift, linear in ln(1+z).
+        if redshift is None:
+            raise ValueError(
+                "this energy-balance LUT is tabulated over redshift (its attenuation "
+                "law reads the model redshift), so the contraction needs the "
+                "evaluation redshift; none was passed."
+            )
+        from tengri.components._z_response import z_bracket
+
+        k0, w_z = z_bracket(lut.ln1pz, redshift)  # (), (2,)
+        g_sub = jax.lax.dynamic_slice(
+            lut.G,
+            (k0, zero, zero, i0, j0),
+            (w_z.shape[0], n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+        )
+        g_interp = jnp.einsum("zmaij,z,i,j->ma", g_sub, w_z, w_bc, w_diff)
     return jnp.sum(joint_weights * (lut.B - g_interp))
 
 
@@ -260,6 +396,7 @@ def lut_l_absorbed_stellar_log10(
     log10_mass_scale: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    redshift: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 magnitude and sign of the stellar absorbed luminosity.
 
@@ -278,6 +415,9 @@ def lut_l_absorbed_stellar_log10(
         ``log10(total_mass x L_sun)`` [dex].
     tau_bc, tau_diff : ndarray, shape ()
         Runtime optical depths.
+    redshift : ndarray, shape (), optional
+        Evaluation redshift. Required when ``lut`` is tabulated over redshift
+        (``lut.ln1pz`` is set); ignored otherwise. [dimensionless]
 
     Returns
     -------
@@ -307,7 +447,11 @@ def lut_l_absorbed_stellar_log10(
     """
     from tengri.utils.scale import _not_computable, log10_magnitude
 
-    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    contracted = (
+        _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+        if redshift is None
+        else _lut_contract(lut, joint_weights, tau_bc, tau_diff, redshift)
+    )
     log_relative = log10_magnitude(contracted)
     corrupt = _not_computable(log_relative)
     log_mag = jnp.where(corrupt, jnp.inf, log_relative + log10_mass_scale)
@@ -320,6 +464,7 @@ def lut_l_absorbed_stellar(
     mass_scale: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Signed stellar bolometric absorbed luminosity from the LUT.
 
@@ -338,6 +483,8 @@ def lut_l_absorbed_stellar(
         ``total_mass × L_sun`` scaling applied to the SSP luminosities.
     tau_bc, tau_diff : float
         Runtime optical depths.
+    redshift : float, optional
+        Evaluation redshift, required when the LUT is tabulated over redshift.
 
     Returns
     -------
@@ -349,4 +496,8 @@ def lut_l_absorbed_stellar(
     ``mass_scale`` is ~1e43, so this product overflows float32. Use
     :func:`lut_l_absorbed_stellar_log10` on a pure-float32 path (#1206).
     """
-    return mass_scale * _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    return mass_scale * (
+        _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+        if redshift is None
+        else _lut_contract(lut, joint_weights, tau_bc, tau_diff, redshift)
+    )

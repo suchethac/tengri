@@ -1586,6 +1586,12 @@ def narayanan_z(
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 
+#: Redshifts where ``narayanan_z``'s curve changes slope (the table nodes). A
+#: build-time table over redshift puts a node on each, so the interpolant between
+#: nodes sees only the smooth part. See :func:`law_redshift_breakpoints`.
+narayanan_z.redshift_breakpoints = tuple(float(z) for z in _NARAYANAN_Z_NODES)
+
+
 @register_dust_law(
     "conroy2010",
     citation="Conroy et al. 2010 (ApJ 708, 58)",

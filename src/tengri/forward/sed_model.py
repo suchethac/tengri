@@ -9819,18 +9819,22 @@ class SEDModel:
         Returns ``None`` unless the model uses ``approx=WavePrecomp()`` with a
         two-component :class:`DustSEDComponent` that re-emits IR, the SSP needs
         no per-call alpha interpolation, and nothing the attenuation *curve*
-        depends on is free: every free ``dust_*`` parameter is an optical depth
-        / eta scaling or an emission-shape knob, and ``redshift`` is fixed
-        whenever a law in play reads it. Only then is the absorbed luminosity a
-        smooth function of ``(tau_bc, tau_diff)`` alone.
+        depends on is free among the ``dust_*`` parameters: every free ``dust_*``
+        parameter is an optical depth / eta scaling or an emission-shape knob.
+        Only then is the absorbed luminosity a smooth function of
+        ``(tau_bc, tau_diff)`` at a given redshift.
 
-        The curve baked in here is resolved from the *fixed* values, ``redshift``
-        among them (#2199): ``narayanan_z`` reads the model redshift, so a LUT
-        built without it would put ``L_ir`` on the z = 0 curve while
-        :meth:`DustSEDComponent.apply` used the z-scaled one. Measured before
-        that was fixed, two-component + dale2014 under ``WavePrecomp``: the IR
-        band agreed at z = 0 and drifted 1.1e-2 at z = 2 and 1.74e-1 at z = 6,
-        against an exact path that agreed at every z.
+        A law that reads the model redshift (``narayanan_z``) moves its curve with
+        it, and the redshift a model is *evaluated* at need not be the spec value:
+        it is a free parameter, or a per-galaxy runtime value under
+        ``catalog_z_range`` while the spec carries a placeholder. Such a law gets
+        ``G`` tabulated over ``ln(1+z)`` (:func:`build_energy_balance_lut_over_z`)
+        and the contraction reads it at the evaluation redshift (#2199). A law that
+        reads no redshift, or a single ``Fixed`` redshift, keeps the one-curve LUT.
+
+        The z axis is thinned to keep ``G`` under ``_EB_LUT_MAX_ELEMENTS``: ``G`` is
+        already ``n_met x n_age x n_tau_bc x n_tau_diff`` per redshift, and the
+        curve is smooth in ``z`` (piecewise linear in ``narayanan_z``).
         """
         cached = getattr(self, "_energy_balance_lut_cache", "unset")
         if cached != "unset":
@@ -9840,8 +9844,8 @@ class SEDModel:
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
+            build_energy_balance_lut_over_z,
         )
-        from tengri.components.dust.laws._registry import law_kwarg_names
         from tengri.components.dust.two_component import DustSEDComponent
 
         lut = None
@@ -9858,19 +9862,6 @@ class SEDModel:
             and p not in self._EB_ATTEN_FREE_OK
             and p not in self._EB_EMISSION_PARAMS
         }
-        # A free ``redshift`` is a free curve-shape parameter for any law that
-        # reads it, and this LUT bakes one curve at build time. It is not spelled
-        # ``dust_*``, so the set comprehension above cannot see it; give it the
-        # same disposition a free ``dust_delta`` gets, which is no LUT and the
-        # exact energy-balance integral instead (#2199).
-        if "redshift" in free and dust is not None:
-            is_single_component = isinstance(dust, DustAttenuationSEDComponent)
-            if is_single_component:
-                laws_in_play = (dust.config.law,)
-            else:
-                laws_in_play = (dust.config.law_bc, dust.config.law_diff, dust.config.law_neb)
-            if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
-                unsafe_free.add("redshift")
         # Detect dust emission: check if dust emission is configured.
         # After the component migration, dust_emission_model is set from the spec
         # and is the source of truth for whether dust emission is active.
@@ -9914,15 +9905,19 @@ class SEDModel:
                 # Resolve law parameters for single-component (both bc and diff
                 # use the same law and parameters).
                 law = dust.config.law
-                dust_params, _ = resolve_bc_diff_law_params(
-                    fixed,
-                    bc_overrides=None,
-                    diff_overrides=None,
-                    live_shape_params=dust.config.live_shape_params,
-                    bc_law=law,
-                    diff_law=law,
-                    redshift=fixed.get("redshift"),
-                )
+
+                def _single_params(z):
+                    return resolve_bc_diff_law_params(
+                        fixed,
+                        bc_overrides=None,
+                        diff_overrides=None,
+                        live_shape_params=dust.config.live_shape_params,
+                        bc_law=law,
+                        diff_law=law,
+                        redshift=z,
+                    )[0]
+
+                dust_params = _single_params(fixed.get("redshift"))
                 # Single-component dust uses simple exponential attenuation: no
                 # Lyman-continuum masking is applied in the exact path either.
                 # Match the runtime exact path, which masks the Lyman continuum
@@ -9934,33 +9929,55 @@ class SEDModel:
 
                 ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
-                lut = build_energy_balance_lut(
-                    jnp.asarray(self.ssp_data.ssp_flux),
-                    jnp.asarray(self.ssp_data.ssp_wave),
-                    jnp.asarray(ssp_ages_yr),
-                    law_bc=law,
-                    law_diff=law,
-                    f_obscuration=0.0,
-                    t_birth_yr=1e7,
-                    transition_width_dex=0.3,
-                    bc_params={k: float(v) for k, v in dust_params.items()},
-                    diff_params={k: float(v) for k, v in dust_params.items()},
-                    lyman_cutoff_aa=lyman_cutoff_aa,
-                    eb_include_lyc=eb_include_lyc,
-                    tau_bc_grid=jnp.asarray([0.0]),
-                    tau_diff_grid=tau_v_grid,
-                )
+                z_nodes = self._energy_balance_z_nodes((law,), 1, tau_v_grid.shape[0])
+                if z_nodes is None:
+                    lut = build_energy_balance_lut(
+                        jnp.asarray(self.ssp_data.ssp_flux),
+                        jnp.asarray(self.ssp_data.ssp_wave),
+                        jnp.asarray(ssp_ages_yr),
+                        law_bc=law,
+                        law_diff=law,
+                        f_obscuration=0.0,
+                        t_birth_yr=1e7,
+                        transition_width_dex=0.3,
+                        bc_params={k: float(v) for k, v in dust_params.items()},
+                        diff_params={k: float(v) for k, v in dust_params.items()},
+                        lyman_cutoff_aa=lyman_cutoff_aa,
+                        eb_include_lyc=eb_include_lyc,
+                        tau_bc_grid=jnp.asarray([0.0]),
+                        tau_diff_grid=tau_v_grid,
+                    )
+                else:
+                    lut = build_energy_balance_lut_over_z(
+                        jnp.asarray(self.ssp_data.ssp_flux),
+                        jnp.asarray(self.ssp_data.ssp_wave),
+                        jnp.asarray(ssp_ages_yr),
+                        ln1pz=z_nodes,
+                        params_at_z=lambda z: (_single_params(z), _single_params(z)),
+                        law_bc=law,
+                        law_diff=law,
+                        f_obscuration=0.0,
+                        t_birth_yr=1e7,
+                        transition_width_dex=0.3,
+                        lyman_cutoff_aa=lyman_cutoff_aa,
+                        eb_include_lyc=eb_include_lyc,
+                        tau_bc_grid=jnp.asarray([0.0]),
+                        tau_diff_grid=tau_v_grid,
+                    )
             else:
                 # Two-component dust: existing logic
-                bc_params, diff_params = resolve_bc_diff_law_params(
-                    fixed,
-                    dict(dust.config.bc_law_overrides),
-                    dict(dust.config.diff_law_overrides),
-                    dust.config.live_shape_params,
-                    bc_law=dust.config.law_bc,
-                    diff_law=dust.config.law_diff,
-                    redshift=fixed.get("redshift"),
-                )
+                def _two_params(z):
+                    return resolve_bc_diff_law_params(
+                        fixed,
+                        dict(dust.config.bc_law_overrides),
+                        dict(dust.config.diff_law_overrides),
+                        dust.config.live_shape_params,
+                        bc_law=dust.config.law_bc,
+                        diff_law=dust.config.law_diff,
+                        redshift=z,
+                    )
+
+                bc_params, diff_params = _two_params(fixed.get("redshift"))
                 law_bc = dust.config.law_bc
                 law_diff = dust.config.law_diff
                 t_birth_yr = dust.config.t_birth_yr
@@ -9976,8 +9993,28 @@ class SEDModel:
 
                 tau_bc_grid = _grid("dust_tau_bc")
                 tau_diff_grid = _grid("dust_tau_diff")
+                z_nodes = self._energy_balance_z_nodes(
+                    (law_bc, law_diff), tau_bc_grid.shape[0], tau_diff_grid.shape[0]
+                )
 
-            if not is_single_component:
+            if not is_single_component and z_nodes is not None:
+                lut = build_energy_balance_lut_over_z(
+                    jnp.asarray(self.ssp_data.ssp_flux),
+                    jnp.asarray(self.ssp_data.ssp_wave),
+                    jnp.asarray((10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9),
+                    ln1pz=z_nodes,
+                    params_at_z=_two_params,
+                    law_bc=law_bc,
+                    law_diff=law_diff,
+                    f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                    t_birth_yr=t_birth_yr,
+                    transition_width_dex=transition_width_dex,
+                    lyman_cutoff_aa=getattr(dust.config, "lyman_cutoff_aa", 0.0),
+                    eb_include_lyc=eb_include_lyc,
+                    tau_bc_grid=tau_bc_grid,
+                    tau_diff_grid=tau_diff_grid,
+                )
+            elif not is_single_component:
                 # Two-component: use the standard LUT builder
                 ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -10005,6 +10042,83 @@ class SEDModel:
         self._energy_balance_lut_cache = lut
         return lut
 
+    #: Cap on the elements of an energy-balance ``G`` tabulated over redshift.
+    #: ``G`` is already ``n_met x n_age x n_tau_bc x n_tau_diff`` per redshift, so
+    #: the z axis is thinned to fit (2.5e7 float64 elements is 200 MB, threaded as a
+    #: runtime JIT argument, never a closure constant).
+    _EB_LUT_MAX_ELEMENTS = 25_000_000
+
+    def _energy_balance_z_nodes(self, laws, n_tau_bc, n_tau_diff):
+        """``ln(1+z)`` axis for an energy-balance LUT, or ``None`` for one curve.
+
+        ``None`` unless a law in play reads the model redshift (``narayanan_z``)
+        *and* the model can be evaluated at a redshift other than the spec value:
+        a free redshift, or a per-galaxy runtime redshift under
+        ``catalog_z_range``. The axis is the model's response range, thinned so
+        ``G`` stays under :attr:`_EB_LUT_MAX_ELEMENTS`, with a node added on every
+        redshift breakpoint the law declares inside the range (a table-interpolated
+        law has kinks there; linear interpolation across one is a first-order
+        error).
+        """
+        from tengri.components.dust.laws._registry import (
+            law_kwarg_names,
+            law_redshift_breakpoints,
+        )
+
+        if not any(law and "redshift" in law_kwarg_names(law) for law in laws):
+            return None
+        nodes = self._response_z_nodes(self._rest_wavelength.dtype)
+        if nodes is None:
+            return None
+        ssp = self.ssp_data
+        per_z = int(ssp.ssp_flux.shape[0]) * int(ssp.ssp_flux.shape[1]) * n_tau_bc * n_tau_diff
+        breaks = sorted(
+            {
+                float(z)
+                for law in laws
+                if law
+                for z in law_redshift_breakpoints(law)
+                if float(jnp.expm1(nodes[0])) < z < float(jnp.expm1(nodes[-1]))
+            }
+        )
+        budget = self._EB_LUT_MAX_ELEMENTS // max(per_z, 1)
+        n_keep = int(max(2, min(nodes.shape[0], budget - len(breaks))))
+        if n_keep < nodes.shape[0]:
+            nodes = jnp.linspace(nodes[0], nodes[-1], n_keep)
+        if breaks:
+            nodes = jnp.sort(jnp.concatenate([nodes, jnp.log1p(jnp.asarray(breaks, nodes.dtype))]))
+        return nodes
+
+    def _response_z_nodes(self, dtype=None):
+        """``ln(1+z)`` axis the evaluation-redshift response tables are built on.
+
+        Returns ``None`` for a model whose redshift is one ``Fixed`` value (the
+        caller builds a one-node table at that value). Otherwise the axis spans
+        the redshift range the model is evaluated over, the same range the
+        stellar z-table covers: ``catalog_z_range`` for a catalog model, the
+        redshift prior (padded 1 %) for a free redshift, each overridable by
+        ``WavePrecomp(z_min=, z_max=)``. Nodes are uniform in ``ln(1+z)`` and
+        number ``WavePrecomp.n_z``.
+        """
+        from tengri.components._z_response import ln1pz_nodes
+
+        dist = self.spec.get_distribution("redshift")
+        if dist.is_fixed and self._catalog_z_range is None:
+            return None
+        cfg = self._approx_config_wave or WavePrecomp()
+        bounds = getattr(dist, "bounds", None)
+        if self._catalog_z_range is not None:
+            z_lo, z_hi = self._catalog_z_range
+            pad = 0.0
+        elif bounds is None or len(bounds) < 2:
+            z_lo, z_hi, pad = 0.001, 3.0, 0.0
+        else:
+            z_lo, z_hi = float(bounds[0]), float(bounds[1])
+            pad = 0.01 * (z_hi - z_lo)
+        z_min = cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)
+        z_max = cfg.z_max if cfg.z_max is not None else z_hi + pad
+        return ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
 
@@ -10012,11 +10126,19 @@ class SEDModel:
         luminosity and scale by ``dust.luminosity`` (emission = ``L_dust ×
         template``); the band fluxes are therefore ``L_ir × R`` with ``R`` the
         template's per-filter integral. When the emission *shape* (``dust_T``,
-        ``dust_beta_ir``, ``dust_epsilon_mbb``) and ``redshift`` are fixed, ``R``
-        is a build-time constant, returned here (shape ``(n_filter,)``) so
+        ``dust_beta_ir``, ``dust_epsilon_mbb``) is fixed, ``R`` depends only on
+        the redshift the model is evaluated at (the filters sit at
+        ``lambda / (1 + z)`` in the rest frame). It is tabulated over the model's
+        redshift range, uniform in ``ln(1+z)``, and returned as
+        ``{"ln1pz": (n_z,), "values": (n_z, n_filter)}`` so
         :meth:`DustSEDComponent.apply` replaces the per-call dense filter
-        integral (#622) with the exact ``L_ir × R``. Returns ``None`` otherwise
-        (free shape/z → keep the per-call integral, or ``fast_dust_emission``).
+        integral (#622) with ``L_ir × R(z)``, ``R`` interpolated at the
+        evaluation redshift. A single ``Fixed`` redshift gives a one-node table.
+
+        A free redshift, and a ``catalog_z_range`` redshift that is a
+        per-galaxy runtime value while the spec carries a placeholder, both use
+        this path. Returns ``None`` when the emission shape is free (keep the
+        per-call integral, or ``fast_dust_emission``).
         """
         cached = getattr(self, "_dust_band_response_cache", "unset")
         if cached != "unset":
@@ -10032,14 +10154,15 @@ class SEDModel:
         fw_pad = getattr(st, "phot_fw_padded", None)
         ft_pad = getattr(st, "phot_ft_padded", None)
 
-        # ALLOWLIST, not a denylist. R is a build-time constant only if the emission
+        # ALLOWLIST, not a denylist. R is a function of z alone only if the emission
         # *shape* is fixed. Gating on "no free param from a known shape-param set"
         # fails DANGEROUS when a param is missing from that set (dust_log_ssfr was);
         # gating on "no free dust_* param outside the known attenuation knobs" fails
         # SAFE, an unrecognized free parameter simply disables the optimization.
+        # ``redshift`` is deliberately NOT in this gate: R is tabulated over it.
         free = set(self.spec.free_params)
         free_dust = {p for p in free if p.startswith("dust_")}
-        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK) or ("redshift" in free)
+        shape_free = bool(free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK)
 
         if (
             emitter is not None
@@ -10050,21 +10173,28 @@ class SEDModel:
             and hasattr(emitter, "predict")
             and hasattr(emitter, "slice_params")
         ):
+            from tengri.components._z_response import build_z_table, single_node
             from tengri.observation.photometry import lnu_filter_integral_batch
 
-            fixed = dict(self.spec.get_fixed_values())
+            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
             wave = self._rest_wavelength
-            # Direct lookup, not .get(..., 0.0): ``shape_free`` above already
-            # required ``"redshift" not in free``, and redshift is always in
-            # exactly one of free/fixed (it defaults to Fixed when omitted), so
-            # a fixed value is guaranteed here. A 0.0 fallback would be
-            # unreachable, and if the gate above is ever weakened, it would
-            # silently build R at z=0 instead of failing (#1432).
-            z = jnp.asarray(fixed["redshift"])
-            # Slice with the component's OWN rule, the same one apply() uses. A
-            # precompute that slices differently silently builds R from default
-            # template parameters and returns confidently wrong IR photometry.
-            p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
+            nodes = self._response_z_nodes(wave.dtype)
+            single = nodes is None
+            if single:
+                # One Fixed redshift: a single node, at the spec value (no other
+                # redshift can reach this model).
+                nodes = single_node(fixed["redshift"], wave.dtype)
+            zeros = jnp.zeros_like(wave)
+
+            def _template_at(z, luminosity):
+                # Slice with the component's OWN rule, the same one apply() uses. A
+                # precompute that slices differently silently builds R from default
+                # template parameters and returns confidently wrong IR photometry.
+                # The redshift rides in ``p`` because a template may read it
+                # (the CMB temperature floor); it is the NODE redshift here.
+                p = emitter.slice_params({**fixed, "redshift": z})
+                sed, _ = emitter.predict(p, zeros, wave, L_ir=luminosity)
+                return sed
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
             # emitter is linear (degree-1 homogeneous) in its luminosity:
@@ -10078,9 +10208,13 @@ class SEDModel:
             # shapes (L-T relations) are common in IR SED models, so verify the
             # property rather than maintaining a list of which models have it:
             # probe at two luminosities and require the SED to scale.
-            lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
-            hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=_L_IR_PROBE)
-            if not bool(jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)):
+            def _homogeneous_at(z):
+                lo = _template_at(z, 1.0)
+                hi = _template_at(z, _L_IR_PROBE)
+                return jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
+
+            z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
+            if not bool(_homogeneous_at(z_first)):
                 # Record WHY, or the refusal is invisible. Every gate a caller
                 # can re-check from outside is satisfied here, so
                 # precompute_engagement_report reported "unknown reason (gate
@@ -10107,7 +10241,23 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
-            response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
+            def _node(z):
+                unit = _template_at(z, 1.0)
+                return {
+                    "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
+                    "ok": _homogeneous_at(z),
+                }
+
+            built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
+            if not bool(jnp.all(built["values"]["ok"])):
+                self._dust_band_response_decline = (
+                    "dust emission template is not homogeneous in L_ir at every "
+                    "redshift of the model's range, so a per-filter response "
+                    "cannot represent it"
+                )
+                self._dust_band_response_cache = None
+                return None
+            response = {"ln1pz": built["ln1pz"], "values": built["values"]["R"]}
 
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
@@ -10160,17 +10310,25 @@ class SEDModel:
         Returns
         -------
         dict or None
-            ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``
-            [erg/s/Hz per unit amplitude, Å, erg/s/Hz], or ``None`` when the fast path
-            is refused, in which case the caller keeps the exact per-call dense filter
-            integral. Term order is the emitter's ``emission_terms`` dict order.
+            ``{"ln1pz": (n_z,), "R": (n_z, n_terms, n_filters), "S_ref": (n_z, n_terms),
+            "lam_ref": (n_terms,)}`` [dimensionless, erg/s/Hz per unit amplitude,
+            erg/s/Hz, Å], tabulated over the model's redshift range (one node for a
+            single ``Fixed`` redshift), or ``None`` when the fast path is refused, in
+            which case the caller keeps the exact per-call dense filter integral.
+            Term order is the emitter's ``emission_terms`` dict order. The consumer
+            reads it at the evaluation redshift via
+            :func:`tengri.components._term_response.term_band_response`.
 
         Notes
         -----
-        **Gate.** The response is a constant only while every one of the emitter's own
-        parameters and ``redshift`` are fixed: a free *shape* parameter (a photon index,
-        a spectral index, a turnover frequency) would move :math:`S_k` under the LUT, and
-        a free redshift would move :math:`R_f`. Gating on *all* the emitter's parameters
+        **Gate.** The response is a function of the evaluation redshift alone only while
+        every one of the emitter's own parameters is fixed: a free *shape* parameter (a
+        photon index, a spectral index, a turnover frequency) would move :math:`S_k` under
+        the LUT. A free redshift, or a per-galaxy runtime redshift under
+        ``catalog_z_range``, moves :math:`R_f` and any redshift-dependent :math:`S_k`,
+        so both are tabulated over the model's redshift range (uniform in
+        :math:`\ln(1+z)`) and read at the evaluation redshift. Gating on *all* the emitter's
+        parameters
         rather than on a known set of shape parameters fails **safe**, an unrecognized
         free parameter simply disables the optimization. Denylisting known shape knobs
         would fail *dangerous* the day a new one is added and forgotten (#1107 shipped
@@ -10208,7 +10366,9 @@ class SEDModel:
 
         free = set(self.spec.free_params)
         prefix = f"{name}_"
-        gate_ok = not any(p.startswith(prefix) for p in free) and "redshift" not in free
+        # ``redshift`` is deliberately not part of this gate: the response is
+        # tabulated over it. Only the emitter's own shape parameters gate.
+        gate_ok = not any(p.startswith(prefix) for p in free)
 
         if (
             comp is not None
@@ -10219,53 +10379,79 @@ class SEDModel:
             and hasattr(comp, "emission_terms")
             and hasattr(comp, "EMITTER_PROBE_INPUTS")
         ):
-            from tengri.observation.photometry import lnu_filter_integral_batch
-
-            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
-            wave = self._rest_wavelength
-            # Direct lookup, not .get(..., 0.0): ``gate_ok`` above already
-            # required ``"redshift" not in free``, and redshift is always in
-            # exactly one of free/fixed, so a fixed value is guaranteed. See the
-            # matching note on the band-response path (#1432).
-            z = jnp.asarray(fixed["redshift"])
-
-            probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
-            terms_a = comp.emission_terms(fixed, wave, **probe_a)
-            terms_b = comp.emission_terms(fixed, wave, **probe_b)
-
-            rows, lam_ref, s_ref = [], [], []
-            for key, s_a in terms_a.items():
-                s_b = terms_b[key]
-                peak = int(jnp.argmax(jnp.abs(s_a)))
-                s_at_ref = s_a[peak]
-
-                if not bool(jnp.abs(s_at_ref) > 0.0):
-                    # Structurally off under the all-fixed gate (see Notes). A zero
-                    # response contributes nothing; S_ref = 1 keeps A = term/1 = 0
-                    # finite instead of 0/0.
-                    rows.append(jnp.zeros(fw_pad.shape[0], dtype=wave.dtype))
-                    lam_ref.append(wave[peak])
-                    s_ref.append(jnp.asarray(1.0, dtype=wave.dtype))
-                    continue
-
-                # RANK-1 CHECK: the second draw must be proportional to the first.
-                scale = s_b[peak] / s_at_ref
-                if not bool(jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)):
-                    setattr(self, cache_attr, None)
-                    return None
-
-                rows.append(lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z))
-                lam_ref.append(wave[peak])
-                s_ref.append(s_at_ref)
-
-            response = {
-                "R": jnp.stack(rows),
-                "lam_ref": jnp.stack(lam_ref),
-                "S_ref": jnp.stack(s_ref),
-            }
+            response = self._build_term_response_table(comp, fw_pad, ft_pad)
 
         setattr(self, cache_attr, response)
         return response
+
+    def _build_term_response_table(self, comp, fw_pad, ft_pad):
+        """Tabulate an additive emitter's per-term response over redshift.
+
+        Each node evaluates the emitter's terms with ``redshift`` set to the
+        node value, so a term whose amplitude or shape reads the redshift (the
+        radio FIRRC evolution, the CMB suppression) is tabulated as it is
+        evaluated. ``lam_ref`` is one wavelength per term (the peak of the
+        model-range midpoint node), ``S_ref(z)`` the shape at that wavelength on
+        every node, so ``A_k = term_k(lam_ref) / S_ref_k(z)`` stays the amplitude
+        at every redshift.
+
+        Returns ``None`` (dense path) when a term is not rank-1 at any node, or is
+        zero at some nodes only (its reference amplitude would be 0/0 there).
+        """
+        from tengri.components._z_response import build_z_table, single_node
+        from tengri.observation.photometry import lnu_filter_integral_batch
+
+        fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
+        wave = self._rest_wavelength
+        nodes = self._response_z_nodes(wave.dtype)
+        single = nodes is None
+        if single:
+            nodes = single_node(fixed["redshift"], wave.dtype)
+        z_mid = fixed["redshift"] if single else jnp.expm1(nodes[nodes.shape[0] // 2])
+
+        probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+
+        def _terms(z, probe):
+            return comp.emission_terms({**fixed, "redshift": z}, wave, **probe)
+
+        # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
+        # the same wavelength's shape on every node.
+        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probe_a).items()}
+        keys = tuple(peaks)
+
+        def _node(z):
+            terms_a = _terms(z, probe_a)
+            terms_b = _terms(z, probe_b)
+            rows, s_ref, ok = [], [], []
+            for key in keys:
+                s_a, s_b, peak = terms_a[key], terms_b[key], peaks[key]
+                ref = s_a[peak]
+                live = jnp.abs(ref) > 0.0
+                # A term identically zero here is zero for a STRUCTURAL reason (a
+                # Python-level switch, or a fixed zero parameter): every probe
+                # input is nonzero by construction. It must be zero everywhere
+                # on the grid, or its reference amplitude is 0/0 at some nodes.
+                zero_ok = live | (jnp.max(jnp.abs(s_a)) == 0.0)
+                # RANK-1 CHECK: the second draw must be proportional to the first.
+                scale = s_b[peak] / jnp.where(live, ref, 1.0)
+                rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
+                row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z)
+                rows.append(jnp.where(live, row, jnp.zeros_like(row)))
+                # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
+                s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
+                ok.append(zero_ok & rank1_ok)
+            return {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
+
+        built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
+        values = built["values"]
+        if not bool(jnp.all(values["ok"])):
+            return None
+        return {
+            "ln1pz": built["ln1pz"],
+            "R": values["R"],
+            "S_ref": values["S_ref"],
+            "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
+        }
 
     #: Provenance tags that mean a caller asked for this parameter's value.
     #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent:
