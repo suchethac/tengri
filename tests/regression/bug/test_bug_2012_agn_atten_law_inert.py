@@ -59,7 +59,7 @@ def _build(ssp, obs, law: str, ebv: float = 0.4):
                 "type": "composable",
                 "all_params": Fixed(DEFAULT),
                 "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
-                "atten": {"law": law, "attenuation_ebv": ebv},
+                "atten": {"law": law, "ebv": ebv},
             },
             redshift=Fixed(1.0),
         )
