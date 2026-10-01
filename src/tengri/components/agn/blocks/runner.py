@@ -42,7 +42,7 @@ attenuation)::
         agn_attenuation_block="smc_prevot",
         agn_grahsp_log_l5100=...,
         agn_T_hot=...,  # belongs to two_temperature torus block
-        agn_attenuation_ebv=...,
+        agn_ebv=...,
     )
 """
 
