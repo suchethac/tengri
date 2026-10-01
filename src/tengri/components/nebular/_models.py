@@ -62,8 +62,11 @@ NEBULAR_MODELS: dict[str, NebularRegistryEntry] = {}
 #:   continuum with free-free.
 #: - ``"cloudy_grid"``: tabulated Cloudy grid (Byler+2017 axis), carries
 #:   free-free.
-#: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``):
-#:   do NOT carry free-free. ``"cb19"`` publishes zeros (no continuum at all).
+#: - All others (``"baked_in"``, ``"cb19"``, ``"mappings"``, ``"shock"``, ``None``)
+#:   publish no free-free in ``sed_nebular``; ``"cb19"`` publishes zeros (no
+#:   continuum at all). A nebular-included SSP carries its free-free inside the
+#:   SSP flux whatever backend is declared; the radio factory reads that from
+#:   the SSP's ``nebular`` stamp, not from this set (#2574).
 NEBULAR_BACKENDS_WITH_FREEFREE_CONTINUUM: frozenset[str] = frozenset({"cue", "cloudy_grid"})
 
 

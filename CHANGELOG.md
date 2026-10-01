@@ -13,6 +13,31 @@
 ### Fixed
 
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
+- A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
+  thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular
+  continuum up to the SSP grid edge (1 cm for `ssp_prsc_miles_chabrier_wNE`), and the radio
+  block's Murphy+2011 term ran on top of it from 1 mm, so the total SED was 1.30x at 100 GHz and
+  1.57-1.60x at 30-50 GHz of the one-term SED, and a 3 mm band read 1.26x on both the exact and
+  the `WavePrecomp` path. With `freefree` unset and `ssp_data.nebular == "included"`, the factory
+  now sets `RadioSEDComponentConfig.freefree_wave_min` to the SSP edge: the radio thermal term is
+  zero below it and unchanged from it upward. The rule reads the SSP's nebular stamp, not the
+  declared `neb` type, so `neb={'type': 'none'}` on such a grid is covered too. `freefree: True`
+  keeps the term over its whole range, `freefree: False` removes it, and models on a bare-stellar
+  or unstamped SSP are unchanged. The SSP's Cloudy continuum and the Murphy+2011 calibration
+  differ by 22-28%, so the thermal component steps by that much at the SSP edge. Validation
+  against pcigale, whose radio module is synchrotron only and whose nebular module owns the
+  thermal continuum, set the rule.
+
+- The composable AGN precompute LUT's accuracy is now measured and pinned
+  against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
+  kernel smoother, not an interpolant, so node parity is not a valid invariant
+  for this LUT; the honest numbers on the documented standard 21-node
+  `agn_grahsp_log_l5100` axis are ~0 relative error at the grid-center node,
+  8.7% at the edge node (one-sided kernel), and a 15.9% maximum at interior
+  midpoints (the kernel's Jensen bias plateau on a photometry that is
+  exponential in the axis coordinate — well under the 50% refusal rule). The
+  bound is pinned at test time with a corruption probe on the engaged
+  preintegrated grid; no check runs inside `precompute()` itself.
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
