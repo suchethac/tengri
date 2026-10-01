@@ -2,18 +2,22 @@
 """Photometric catalog reader with automatic filter matching and mask generation.
 
 Reads CSV/ASCII catalogs into arrays ready for :class:`~tengri.inference.fitter.Fitter`,
-handling non-detections (upper/lower limits), unit conversion, and filter name
+handling non-detections (upper limits), unit conversion, and filter name
 resolution against :data:`~tengri.observation.filters.FILTER_REGISTRY`.
 
 Conventions for flagging censored data
 ---------------------------------------
 
-- Missing data: either flux or error at sentinel value (-9999), or error = 0 → masked
+- Missing data: flux or error below −9990 (sentinel ± 9), or error = 0 → masked
   out with huge noise (1e30)
-- Upper limit (CIGALE convention): positive flux + negative error → ``UPPER_LIMIT``
-  with noise = |error|
+- Upper limit (CIGALE convention): ANY negative error → ``UPPER_LIMIT`` with signed
+  flux as the limit value and noise = |error|
 - Detection: any other case → ``DETECTED``, preserving signed flux and using positive
   error as noise (negative flux with positive error is a faint detection, not a limit)
+
+**Note:** The explicit ``-1`` lower-limit censor flags belong to :func:`catalog_ingest`,
+not :func:`read_catalog`. This function reads survey data and marks upper limits based
+on the CIGALE convention (negative error).
 
 """
 
@@ -29,6 +33,8 @@ from tengri.observation.filters import FILTER_REGISTRY
 from tengri.observation.noise import DETECTED, UPPER_LIMIT
 
 MISSING_VALUE = -9999.0
+#: Sentinel threshold: values below missing_value + SENTINEL_MARGIN are flagged as sentinel.
+SENTINEL_MARGIN = 9.0
 
 CIGALE_TO_TENGRI: dict[str, str] = {
     "GALEX_FUV": "galex_fuv",
@@ -165,7 +171,7 @@ class Catalog:
     def select_detected(self, idx: int) -> tuple[np.ndarray, np.ndarray, tuple[str, ...]]:
         """Return only detected bands for a galaxy.
 
-        Filters out upper and lower limits, returning only bands with
+        Filters out upper limits, returning only bands with
         ``mask == 0`` (DETECTED).
 
         Parameters
@@ -270,7 +276,7 @@ def read_catalog(
     Catalog
         Parsed catalog with ``flux`` array, shape ``(n_galaxies, n_filters)``
         [flux_unit]; ``noise`` array [flux_unit]; ``mask`` array with values
-        ``0`` (detected), ``1`` (upper limit), ``-1`` (lower limit); and
+        ``0`` (detected), ``1`` (upper limit); and
         ``filter_names`` tuple.
 
     Raises
@@ -285,11 +291,12 @@ def read_catalog(
     **Censoring convention**:
 
     - Missing data (either flux or error at -9999, or error = 0) → masked out with
-      large noise (1e30), with a UserWarning naming the row and column (except for
-      the fully-sentinel pair -9999/-9999)
-    - Upper limit (flux > 0, error < 0, CIGALE convention) → mask = 1
-    - Detected (all other cases) → mask = 0, with signed flux preserved (negative
-      flux with positive error represents a faint detection, not a limit)
+      large noise (1e30), with one UserWarning per column summarizing masked rows
+      (except for the fully-sentinel pair -9999/-9999)
+    - Upper limit (ANY negative error, CIGALE convention) → mask = 1, with signed
+      flux preserved as the limit value and noise = |error|
+    - Detected (positive or zero error) → mask = 0, with signed flux preserved
+      (negative flux with positive error represents a faint detection, not a limit)
 
     Filter columns must have corresponding ``_err`` columns. Columns without
     an ``_err`` counterpart are silently skipped.
@@ -344,38 +351,48 @@ def read_catalog(
     mask = np.zeros((n_gal, n_filt), dtype=int)
 
     for j, (flux_col, err_col, _name) in enumerate(filter_cols):
+        # Collect rows with missing data for per-column warning aggregation
+        masked_row_ids: list[int | str] = []
+
         for i, row in enumerate(rows):
             f_val = float(row[flux_col])
             e_val = float(row[err_col])
 
-            # Check if either value is at the sentinel
-            flux_at_sentinel = abs(f_val - missing_value) < 1.0
-            err_at_sentinel = abs(e_val - missing_value) < 1.0
+            # Check if either value is at the sentinel (missing_value ± SENTINEL_MARGIN)
+            flux_at_sentinel = f_val < missing_value + SENTINEL_MARGIN
+            err_at_sentinel = e_val < missing_value + SENTINEL_MARGIN
             both_at_sentinel = flux_at_sentinel and err_at_sentinel
 
             # Branch (a): Missing data detection
-            if flux_at_sentinel or err_at_sentinel or e_val == 0 or (e_val < 0 and f_val <= 0):
+            if flux_at_sentinel or err_at_sentinel or e_val == 0:
                 flux[i, j] = 0.0
                 noise[i, j] = 1e30
                 mask[i, j] = DETECTED
-                # Warn for non-(−9999, −9999) cases
+                # Track masked rows (exclude fully-sentinel pair)
                 if not both_at_sentinel:
-                    warnings.warn(
-                        f"Missing data at row {rows[i].get('id', i)}, column {_name}: "
-                        f"flux={f_val}, error={e_val}",
-                        UserWarning,
-                        stacklevel=3,
-                    )
-            # Branch (b): Upper limit (CIGALE convention: positive flux + negative error)
-            elif e_val < 0 and f_val > 0:
-                flux[i, j] = f_val
+                    masked_row_ids.append(rows[i].get("id", i))
+            # Branch (b): Upper limit (CIGALE convention: ANY negative error)
+            elif e_val < 0:
+                flux[i, j] = f_val  # Signed flux as the limit value
                 noise[i, j] = abs(e_val)
                 mask[i, j] = UPPER_LIMIT
-            # Branch (c): Detected (positive error)
+            # Branch (c): Detected (positive or zero error)
             else:
                 flux[i, j] = f_val  # Keep signed flux for detections
                 noise[i, j] = abs(e_val)
                 mask[i, j] = DETECTED
+
+        # Emit one warning per column summarizing all masked rows
+        if masked_row_ids:
+            first_rows_str = ", ".join(str(rid) for rid in masked_row_ids[:5])
+            if len(masked_row_ids) > 5:
+                first_rows_str += ", ..."
+            warnings.warn(
+                f"column {_name}: {len(masked_row_ids)} of {n_gal} rows masked as "
+                f"missing (sentinel or error==0); first rows: {first_rows_str}",
+                UserWarning,
+                stacklevel=2,
+            )
 
     return Catalog(
         ids=ids,

@@ -192,18 +192,20 @@ class TestMaskConventions:
         [
             (-0.004, 0.010, -0.004, 0.010, DETECTED),  # detection, below zero
             (0.05, 0.01, 0.05, 0.01, DETECTED),  # detection, positive
-            (0.05, -0.01, 0.05, 0.01, UPPER_LIMIT),  # CIGALE upper limit
+            (0.05, -0.01, 0.05, 0.01, UPPER_LIMIT),  # CIGALE: any negative error
+            (0.0, -0.01, 0.0, 0.01, UPPER_LIMIT),  # CIGALE: zero flux + negative error
             (-9999, 0.010, 0.0, 1e30, DETECTED),  # missing flux, valid error
             (0.05, -9999, 0.0, 1e30, DETECTED),  # valid flux, missing error
             (-9999, -9999, 0.0, 1e30, DETECTED),  # both missing (silent)
             (0.05, 0.0, 0.0, 1e30, DETECTED),  # zero error (missing band)
-            (-0.004, 0.0, 0.0, 1e30, DETECTED),  # negative flux + zero error (missing)
         ],
     )
     def test_flux_error_combinations(
         self, tmp_path, flux_val, err_val, expected_flux, expected_noise, expected_mask
     ):
         """Test all combinations of flux/error against literature and CIGALE convention."""
+        import warnings as warn_module
+
         path = tmp_path / "combinations.csv"
         path.write_text(f"id,redshift,sdss_r,sdss_r_err\ngal1,0.5,{flux_val},{err_val}\n")
         # Missing data cases should emit warnings (except fully-sentinel -9999/-9999)
@@ -216,7 +218,10 @@ class TestMaskConventions:
             with pytest.warns(UserWarning, match=r"sdss_r"):
                 cat = read_catalog(path)
         else:
-            cat = read_catalog(path)
+            # Ensure no warnings are emitted for non-missing cases
+            with warn_module.catch_warnings():
+                warn_module.simplefilter("error")
+                cat = read_catalog(path)
         npt.assert_allclose(cat.flux[0, 0], expected_flux)
         npt.assert_allclose(cat.noise[0, 0], expected_noise)
         assert cat.mask[0, 0] == expected_mask
@@ -252,6 +257,28 @@ class TestMaskConventions:
         expected_r_squared = 0.5 * ((-0.004 / 0.010) ** 2)
         expected_nll = expected_r_squared + np.log(0.010)
         npt.assert_allclose(nll, expected_nll, rtol=1e-5)
+
+    def test_per_column_warning_aggregation(self, tmp_path):
+        """Verify ONE warning per column with first N row IDs for multiple missing rows."""
+        path = tmp_path / "multi_missing.csv"
+        path.write_text(
+            "id,redshift,sdss_r,sdss_r_err\n"
+            "row1,0.5,0.30,0.0\n"  # row1: zero error (missing)
+            "row2,0.6,-9999,0.02\n"  # row2: sentinel flux (missing)
+            "row3,0.7,0.40,0.04\n"  # row3: valid detection
+        )
+        with pytest.warns(UserWarning) as record:
+            cat = read_catalog(path)
+        # Should have exactly one warning (for sdss_r column)
+        assert len(record) == 1
+        warning_msg = str(record[0].message)
+        # Check that the warning includes the column name and row IDs
+        assert "sdss_r" in warning_msg
+        assert "2 of 3 rows masked" in warning_msg
+        assert "row1" in warning_msg
+        assert "row2" in warning_msg
+        # row3 should not be in the first rows (it's not missing)
+        assert "row3" not in warning_msg
 
 
 # ── Catalog methods ───────────────────────────────────────────────
