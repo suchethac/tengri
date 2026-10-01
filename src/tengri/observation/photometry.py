@@ -175,30 +175,30 @@ def _filter_integral_union(
         weight = trans_on_grid * _filter_weight(grid, convention)
         num = jnp.trapezoid(L_on_grid * weight, grid)
         den = jnp.trapezoid(weight, grid)
-        return num / jnp.maximum(den, representable_denominator(1e-30))
+    else:
+        # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
+        # varies continuously across the bracket cell, so treating the whole
+        # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
+        # call on ``L_on_grid * weight`` would do -- silently averages that
+        # variation across the FULL bracket width instead of evaluating it AT
+        # the edge. The exact fix inserts the edge itself as a zero-width node
+        # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
+        # transmission/weight evaluation at the edge between the two copies) so
+        # an ORDINARY trapezoid integrates the step exactly, regardless of how
+        # many filter nodes subdivide the straddling panel.
+        y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+        edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
+        all_x = jnp.concatenate([grid, edge_pair])
+        L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
+        all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
+        order = jnp.argsort(all_x, stable=True)
+        grid_e = all_x[order]
+        L_on_grid = all_y[order]
+        trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
+        weight = trans_on_grid * _filter_weight(grid_e, convention)
+        num = jnp.trapezoid(L_on_grid * weight, grid_e)
+        den = jnp.trapezoid(weight, grid_e)
 
-    # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
-    # varies continuously across the bracket cell, so treating the whole
-    # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
-    # call on ``L_on_grid * weight`` would do -- silently averages that
-    # variation across the FULL bracket width instead of evaluating it AT
-    # the edge. The exact fix inserts the edge itself as a zero-width node
-    # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
-    # transmission/weight evaluation at the edge between the two copies) so
-    # an ORDINARY trapezoid integrates the step exactly, regardless of how
-    # many filter nodes subdivide the straddling panel.
-    y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
-    edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
-    all_x = jnp.concatenate([grid, edge_pair])
-    L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
-    all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
-    order = jnp.argsort(all_x, stable=True)
-    grid_e = all_x[order]
-    L_on_grid = all_y[order]
-    trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
-    weight = trans_on_grid * _filter_weight(grid_e, convention)
-    num = jnp.trapezoid(L_on_grid * weight, grid_e)
-    den = jnp.trapezoid(weight, grid_e)
     return num / jnp.maximum(den, representable_denominator(1e-30))
 
 
