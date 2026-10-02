@@ -126,6 +126,7 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "cat3d_wind": (("cat3d_wind_torus_grid.h5", "cat3d_wind/wavelength", 1.0),),
     "cat3d_wind_lowfwd": (("cat3d_wind_lowfwd_torus_grid.h5", "cat3d_wind_lowfwd/wavelength", 1.0),),
     "fritz": (("fritz2006_torus_grid.h5", "fritz2006/wavelength_aa", 1.0),),
+    "nenkova": (("nenkova08_torus_grid.h5", "nenkova/wavelength", 1.0),),
     "nenkova_agnfitter": (("nenkova_agnfitter_torus_grid.h5", "nenkova_agnfitter/wavelength", 1.0),),
     "nenkova_agnfitter_2p": (("nenkova_agnfitter_2p_torus_grid.h5", "nenkova_agnfitter_2p/wavelength", 1.0),),
     "nenkova_agnfitter_3p": (("nenkova_agnfitter_3p_torus_grid.h5", "nenkova_agnfitter_3p/wavelength", 1.0),),
@@ -148,7 +149,6 @@ _ANALYTIC_TORUS = frozenset(
     {
         "grahsp",       # GRAHSP log-Gaussian + Si feature (analytic dust continua)
         "qsogen",       # QSOgen single-T hot-dust blackbody (analytic)
-        "nenkova",      # Nenkova CLUMPY (analytic radiative-transfer)
         "simple",       # Single-temperature graybody torus
         "two_temperature",  # Hot + warm graybody torus
     }
