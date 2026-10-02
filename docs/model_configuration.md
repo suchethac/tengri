@@ -274,8 +274,8 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'`: Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
 - `'delta_bc'`, `'delta_diff'`, `'delta_neb'`: Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
 - `'lyman_cutoff'`: Zero attenuation below 912 Å (Lyman limit). Two-component only.
-- `'lyc_absorb_all'`: Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
-- `'eb_include_lyc'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
+- `'lyc_reprocessed_by'`: Which stellar population's ionizing photons are absorbed by `neb_fesc`: `'young'` (default, birth-cloud only) or `'all'` (FSPS/CIGALE style). Two-component only.
+- `'lyc_in_energy_balance'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
 
 Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
