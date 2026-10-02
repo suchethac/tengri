@@ -61,14 +61,14 @@ _POINT = {
 # node 0.00044122 keV at a = 0.48916 (d sum(log10 L)/da drops 13.22 -> 13.06 across it, while
 # AD = FD = 12.9466 for h <= 1e-3 with the template interpolated in float64). At 0.5 no ring
 # crosses a template node anywhere in a +- 0.006.
-# The nthcomp kernel quantises kTe to float32 (relative 6e-8) on the forward pass, so a
+# The nthcomp kernel quantizes kTe to float32 (relative 6e-8) on the forward pass, so a
 # central difference in ``agn_kt_warm`` (likewise ``agn_gamma_warm``) is noise below
 # h ~ 1e-3 (measured at 0.1166:
 # FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
 # step is far below that.
 _STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3, "agn_a_spin": 3e-3}
 # ``agn_kt_warm`` and ``agn_a_spin`` are held to 1e-3, not 1e-4: through 50 warm rings the
-# float32-quantised, piecewise-linear template makes the central difference itself scatter by
+# float32-quantized, piecewise-linear template makes the central difference itself scatter by
 # ~5e-4 of its value across steps. agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033, -5.035
 # against AD -5.0323. agn_a_spin at the Page-Thorne point, h = 1e-5..3e-3: 4.96, 5.07, 5.02,
 # 4.82, 4.92, 4.91 against AD 4.915, so it is stepped at 3e-3 on the plateau. The kernel-level
@@ -76,7 +76,10 @@ _STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3, "agn_a_spin": 3e-3}
 _TOL = {"agn_kt_warm": 1e-3, "agn_a_spin": 1e-3}
 _DISC_BLOCKS = sorted(name for name in AGN_BLOCKS["disc"] if name != "none")
 
-pytestmark = pytest.mark.skipif(not _SSP.is_file(), reason=f"BC03 SSP not found at {_SSP}")
+pytestmark = [
+    pytest.mark.gradient,
+    pytest.mark.skipif(not _SSP.is_file(), reason=f"BC03 SSP not found at {_SSP}"),
+]
 
 
 @pytest.fixture(scope="module")
@@ -163,14 +166,14 @@ def test_disc_block_gradient_matches_central_fd(ssp, disc_type, overrides):
 def test_kubota_done_full_agn_gradient_matches_central_fd(kw):
     """``kubota_done_full_agn`` shares the K&D disc path, so it shares the defect.
 
-    Monolithic (not a registered disc block, so outside the parametrised contract
+    Monolithic (not a registered disc block, so outside the parametrized contract
     above). Objective: ``sum(log10 L_lambda)`` over ``lambda < 4000 A``, at the issue's
     point. Measured before the fix: ``d/d(agn_log_lbol)`` 236.3 vs FD 244.2 (3%) and
     ``d/d(agn_log_mbh)`` **+4.39 vs FD -11.31: the wrong sign**.
 
     ``agn_log_lbol`` is held to the contract's 1e-4. ``agn_log_mbh`` is held to 1e-2
     only: its derivative is a cancellation of large per-wavelength terms, and the
-    float32-quantised template makes the central difference itself scatter by ~0.4%
+    float32-quantized template makes the central difference itself scatter by ~0.4%
     across steps 1e-4..1e-2 (-11.36, -11.31, -11.29), while the AD value is exact.
     The pre-fix error is 139%, so 1e-2 still fails the defect.
     """
@@ -204,7 +207,7 @@ def test_nthcomp_kernel_tangents_are_the_exact_cell_slopes():
     ``exp`` of a function linear in each operand within a cell, and evaluated at
     template ``nu`` nodes the resample onto ``nu`` is exact. So ``d log(shape)/dx`` is
     a constant across the cell and a *wide* central difference (0.4 of a cell, well
-    above the kernel's float32 quantisation noise) measures it exactly; the AD
+    above the kernel's float32 quantization noise) measures it exactly; the AD
     tangent must equal ``shape * that``.
     """
     import numpy as np

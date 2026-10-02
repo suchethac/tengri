@@ -27,6 +27,8 @@ from tengri.components.agn.disc import (
     powerlaw_disc,
 )
 
+pytestmark = pytest.mark.conservation
+
 _LSUN = 3.828e33
 _C_AA = 2.99792458e18
 #: Wavelengths [A] at which the two grids are compared (all inside both grids).

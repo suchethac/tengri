@@ -72,7 +72,7 @@ def isco_radius(a_spin):
     square root is clamped to a small positive value (1e-20). The BPT72 formula has a
     gradient singularity at a=0 where (3-z1)->0, which makes
     sqrt((3-z1)*(3+z1+2*z2)) undefined in AD. The physical limit is correct (r_isco=6 for
-    a=0), but the gradient path must be stabilised for JAX autodiff to work.
+    a=0), but the gradient path must be stabilized for JAX autodiff to work.
     """
     a = jnp.clip(a_spin, 0.0, A_MAX)
     z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
@@ -129,7 +129,7 @@ def nt_rt(x, a_spin):
 
 
 def nt_h(log_x, a_spin):
-    """Normalised hot-flow dissipation ``h(x) = int_1^x x'^-2 Rt(x') dx'``.
+    """Normalized hot-flow dissipation ``h(x) = int_1^x x'^-2 Rt(x') dx'``.
 
     K&D 2018 Eq. 2, ``L_diss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR``, equals
     ``L_0 * h(x_hot)`` with ``L_0 = 4 pi R_isco^2 sigma T_in^4`` and

@@ -284,7 +284,7 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float, a_spin: flo
 
     with ``L_0 = 4 pi R_isco^2 sigma T_in^4``, ``x = R / R_isco`` and
     ``sigma T_NT^4 = sigma T_in^4 x^-3 Rt(x; a)``, where ``Rt`` is the Page & Thorne
-    (1974, ApJ 191, 499) factor of :mod:`tengri.components.agn._nt_emissivity` (zero at the
+    (1974, ApJ 191, 499) factor of ``tengri.components.agn._nt_emissivity`` (zero at the
     ISCO, -> 1 far out)::
 
         h(x) = int_1^x x'^-2 Rt(x'; a) dx'
@@ -342,7 +342,7 @@ def _r_hot_bisect(
     precision.
 
     ``l_hot_target`` is clipped to :math:`0.99\,L_0 h(10^4)` (see
-    :func:`tengri.components.agn._nt_emissivity.nt_h_ceiling`).
+    ``nt_h_ceiling`` in ``tengri.components.agn._nt_emissivity``).
 
     Differentiable: see :func:`_solve_log_x_hot` (implicit-function JVP, #2572).
     """
@@ -726,9 +726,9 @@ def multicolor_disc(
     The temperature profile is the Shakura-Sunyaev thin disc with a zero-torque inner
     boundary at the ISCO (a Newtonian-flux form with the Bardeen ISCO radius), *not* the
     relativistic Page & Thorne (1974) emissivity: that is used by the Kubota & Done family
-    (:func:`kubota_done_disc`, see :mod:`tengri.components.agn._nt_emissivity`), whose
+    (:func:`kubota_done_disc`, see ``tengri.components.agn._nt_emissivity``), whose
     reference model defines it. Its total dissipation is ``1.46 eta Mdot c^2`` at a=0
-    (1.0 for Page-Thorne), so ``L_bol`` here is a normalisation, not an energy balance:
+    (1.0 for Page-Thorne), so ``L_bol`` here is a normalization, not an energy balance:
 
     .. math::
 
@@ -1222,7 +1222,7 @@ def _hot_flow_luminosity(
     l0: float,
     a_spin: float = 0.0,
     float32: bool = False,
-    agn_log_mbh: float = 0.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
 ) -> float:
     """Hot-flow dissipation ``L_hot = f_hard L_Edd``, limited by what the disc can supply (#2572).
 
@@ -1243,7 +1243,7 @@ def _hot_flow_luminosity(
     supply ``f_hard L_Edd`` -- the paper's grid is ``mdot = 0.03 - 1`` -- ``L_diss,hot(R_hot)
     = L_hot = f_hard L_Edd`` exactly.
 
-    Both ``R_hot`` (the zone radii) and the corona normalisation (the SED) use THIS
+    Both ``R_hot`` (the zone radii) and the corona normalization (the SED) use THIS
     value. ``l0`` is ``4 pi R_isco^2 sigma T_in^4`` (:func:`_nt_l0`).
 
     Returns erg/s, or L_sun on the float32 path (#1206: ~1e44 erg/s overflows).
@@ -1823,7 +1823,7 @@ def kubota_done_disc(
     **Key self-consistent physics**:
 
     All three zones share the relativistic Page & Thorne (1974) thin-disc temperature
-    profile (as K&D 2018 and QSOSED/RELQSO; :mod:`tengri.components.agn._nt_emissivity`):
+    profile (as K&D 2018 and QSOSED/RELQSO; ``tengri.components.agn._nt_emissivity``):
 
     .. math::
 

@@ -24,6 +24,8 @@ from tengri.components.agn import (
     disc as D,
 )
 
+pytestmark = pytest.mark.gradient
+
 
 def _disc_scalars(log_mbh, log_lbol, a_spin=0.0):
     """``(r_g, r_isco_rg, r_isco_cm, t_in, log10_l_edd)`` as ``kubota_done_disc`` forms them."""

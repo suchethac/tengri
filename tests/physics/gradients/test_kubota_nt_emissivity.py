@@ -23,6 +23,8 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.agn import _nt_emissivity as N
 
+pytestmark = pytest.mark.regression_paper
+
 _SPINS = [0.0, 0.5, 0.9, 0.998]
 
 
