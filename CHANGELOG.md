@@ -16,6 +16,8 @@
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
 
+- The Asada et al. (2025) CGM Lyα damping-wing cross-section is σ(ν) = [3λ_α²A/(8π)]·A(ν/ν_α)⁴/[4π²(ν−ν_α)² + A²(ν/ν_α)⁶/4] (Miralda-Escudé 1998); the prefactor 3λ_α²A/(8π) = πe²f/(m_e c) already contains the oscillator strength, which the code multiplied in a second time (0.0046 against 0.01105 cm² Hz). Transmission at z = 8, rest 1220 / 1230 / 1240 Å: 0.0007 / 0.523 / 0.802 (was 0.050 / 0.764 / 0.912) (#2629).
+
 ### Added
 
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
