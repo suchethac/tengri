@@ -2,6 +2,15 @@
 
 ### Fixed
 
+- `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
+  gate (#2513). It was the one `resolve_dense_mass_gate` caller without
+  `spec=`, and with `spec=None` the auto-policy's dense_basis exception
+  cannot fire: a dense_basis spec at `n_dim <= 12` was actively granted the
+  dense mass matrix the policy exists to refuse (the 22.78 GB adaptation
+  spike of #319), on the one seam whose single shared adaptation serves
+  every galaxy in the batch. The regression test drives the real gate
+  through `fit_batch` with a dense_basis and a DPL arm, so the diagonal
+  verdict is pinned as spec-driven.
 - `compute_effective_wavelength` returns the pivot wavelength √(∫Tλdλ/∫T/λ dλ) its name and docstring promise; the filter-convention text attributes the photon-counting mean to BAGPIPES as well as DSPS/FSPS/Prospector/Synthesizer and the energy mean to CIGALE's energy-type filters; the facade SED plot derives band wavelengths from the filter curves (#2610).
 
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
@@ -55,6 +64,12 @@
   adaptation, so those paths refuse a step above the metric's stability limit
   like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
   item in #2157 (Refs #2157).
+
+- `neb_logU` is documented as Cue's inner-face ionization parameter at R = 10^19 cm, not the
+  Synthesizer ionization parameter, which is three times the Strömgren-radius U_S of Gutkin et al.
+  (2016, eq. 7), with the mapping between the two at n_H = 100 cm⁻³; the FSPS CLOUDY grid converter
+  describes its metallicity axis as log10(Z / Z_sun) as tabulated by FSPS, not "absolute
+  metallicity" (#2632, #2633).
 
 - The emission-line catalog's [O I] 6300 entry is the vacuum wavelength (6302.05 Å, the 6300.304 Å
   air value converted with the IAU standard relation), and the hard-coded line-wavelength tables

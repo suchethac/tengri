@@ -4861,9 +4861,17 @@ class Fitter:
 
         # One adaptation is shared across the whole batch here, so a mass
         # matrix silently downgraded on this seam is downgraded for every
-        # galaxy at once.
+        # galaxy at once. Forward the spec: without it the auto-policy's
+        # dense_basis exception cannot fire, and a dense_basis spec at
+        # n_dim <= 12 would be GRANTED the dense mass the policy exists to
+        # refuse (the 22.78 GB shape of #319) — on this seam, for every
+        # galaxy in the batch at once.
         use_dense = resolve_dense_mass_gate(
-            dense_mass_matrix, n_dim, method="fit_batch", verbose=verbose
+            dense_mass_matrix,
+            n_dim,
+            method="fit_batch",
+            verbose=verbose,
+            spec=getattr(self, "spec", None),
         )
 
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a
