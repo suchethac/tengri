@@ -38,6 +38,9 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
+- Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
+  at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
+  of Lyβ follows the paper's Table 2 (#2585).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
