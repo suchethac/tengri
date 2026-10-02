@@ -33,9 +33,6 @@ References
 - Wang et al. 2024, ApJ; modified Balmer break
 - Bell 2003, ApJ, 586, 794: FIR-radio correlation
 - Murphy et al. 2011, ApJ, 737, 67: radio-SFR calibration
-- Lehmer et al. 2010, ApJ, 724, 559: XRB scaling relations
-- Lehmer et al. 2016, ApJ, 825, 7: updated XRB scaling
-- Duras et al. 2020, A&A, 636, A73: AGN bolometric corrections
 - Condon 1992, ARA&A, 30, 575: thermal radio emission
 
 """
@@ -1334,67 +1331,6 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     return jnp.log10(jnp.maximum(l_tir_w, _FLOOR()) / 3.75e12) - jnp.log10(
         jnp.maximum(l_radio_w, _FLOOR())
     )
-
-
-# ── X-ray quantities (empirical scaling relations) ────────────────
-
-
-def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
-    """X-ray luminosity from X-ray binaries (0.5–8 keV).
-
-    Combines high-mass XRBs (proportional to SFR) and low-mass XRBs
-    (proportional to stellar mass) following Lehmer et al. (2010, 2016):
-
-    .. math::
-
-        L_{X,{\\rm XRB}} = 2.6 \\times 10^{39} \\times {\\rm SFR}
-                          + 9.05 \\times 10^{28} \\times M_\\star
-
-    Parameters
-    ----------
-    sfr : float
-        Star formation rate in Msun/yr.
-    stellar_mass : float
-        Stellar mass in Msun.
-
-    Returns
-    -------
-    float
-        L_X in erg/s.
-    """
-    l_hmxb = 2.6e39 * sfr
-    l_lmxb = 9.05e28 * stellar_mass
-    return l_hmxb + l_lmxb
-
-
-def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
-    """AGN X-ray luminosity (2–10 keV) from bolometric luminosity.
-
-    Uses the Duras et al. (2020) bolometric correction:
-
-    .. math::
-
-        k_{\\rm bol} = a \\left[1 + \\left(
-            \\frac{\\log L_{\\rm bol} / L_\\odot}{b}
-        \\right)^c \\right]
-
-    with a=15.33, b=11.48, c=16.20 for the 2–10 keV band.
-
-    Parameters
-    ----------
-    l_bol_agn_erg : float
-        AGN bolometric luminosity in erg/s.
-
-    Returns
-    -------
-    float
-        AGN 2–10 keV luminosity in erg/s.
-    """
-    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, _FLOOR()) / L_SUN)
-    # Duras+2020 Eq. 6, Table 2 (2-10 keV)
-    a, b, c = 15.33, 11.48, 16.20
-    k_bol = a * (1.0 + (log_l_sol / b) ** c)
-    return l_bol_agn_erg / jnp.maximum(k_bol, 1.0)
 
 
 # ── Ionizing photon budget ────────────────────────────────────────

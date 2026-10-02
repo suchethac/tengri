@@ -588,10 +588,11 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     return jnp.power(10.0, arr[0])
 
 
-_LOG_L_HOTGAS_PER_SFR = 38.919
+_LOG_L_HOTGAS_PER_SFR = float(np.log10(8.3e38))
 """log10 of the hot-gas 0.5-2 keV luminosity per unit SFR [dex re erg/s/(Msun/yr)].
 
-``L_0.5-2keV = 8.3e31 W * SFR`` (X-CIGALE yang20.py:204), i.e. 8.3e38 erg/s.
+``L_0.5-2keV = 8.3e31 W * SFR`` (X-CIGALE yang20.py:204; the Mineo et al. 2012
+hot-gas normalization), i.e. 8.3e38 erg/s, log10 = 38.919078.
 Kept as a log10 constant: ``8.3e38`` is past the float32 ceiling.
 """
 
@@ -629,7 +630,7 @@ def xray_xrb_terms(
     r"""Predict unsummed X-ray SED terms from accretion-powered binaries.
 
     Computes HMXB and LMXB X-ray emission as separate terms with different
-    photon indices (Γ_HMXB = 2.0, Γ_LMXB = 1.6). Unlike :func:`xray_xrb`,
+    photon indices (Γ_HMXB = 2.0, Γ_LMXB = 1.56). Unlike :func:`xray_xrb`,
     returns the unsummed contributions so each can be precomputed independently
     at build time through broadband filters.
 
@@ -673,7 +674,7 @@ def xray_xrb_terms(
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Why separate terms**: Each binary population carries a distinct photon
-    index (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is **not** a single
+    index (Γ_HMXB = 2.0, Γ_LMXB = 1.56), so their sum is **not** a single
     amplitude-times-fixed-shape product. Each term separately *is* rank-1 in
     wavelength. Precomputation at build time can therefore integrate each
     through the filters independently, then sum at evaluation time. The
@@ -1294,7 +1295,7 @@ def xray_agn_corona_from_disc(
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / 1.6022e-9  # convert to keV
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
     E_ref = 2.0  # keV
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-(E_keV - E_ref) / E_cut)
 
@@ -1507,7 +1508,7 @@ def _xray_agn_corona_bolometric(
         Spectral luminosity density [erg/s/Hz].
     """
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / (1.6022e-9)
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
 
     # Monochromatic luminosity density at 2500 A in erg/s/Hz.
     # L_bol = BC_2500 * nu_2500 * L_nu(2500) => L_nu = L_bol / (BC * nu)
@@ -1635,7 +1636,7 @@ def xray_total_terms(
     **JIT-compatible**: yes, pure JAX function.
 
     **Why separate terms**: HMXB and LMXB carry distinct photon indices
-    (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is not a single
+    (Γ_HMXB = 2.0, Γ_LMXB = 1.56), so their sum is not a single
     amplitude-times-fixed-shape product. Hot gas and AGN have different
     dependencies on physical parameters and spectral shapes. By returning
     unsummed terms, precompute mechanisms can integrate each through filters
@@ -1980,7 +1981,7 @@ def xray_agn_corona_lopez24(
        https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / 1.6022e-9
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
 
     # L_X(2-10 keV) = νL_ν(12μm) / 10^α_IRX (Asmus+2015 / Lopez+2024, matching
     # CIGALE lopez24.py:200: α_IRX = log10(νL_ν(12μm) / L_X(2-10 keV)), so the

@@ -70,14 +70,16 @@
   corona (absorber, scattered fraction and anisotropy included), published by the X-ray
   component as `log_L_x_xrb_2_10` / `log_L_x_agn_2_10` in log10 space, so they equal the
   band integral of `sed_xray`'s terms in float64 and float32. `log_l_x_agn` is `-inf`
-  without an AGN. `compute_log_l_x_xrb` and `compute_log_l_x_agn` are removed (#2582).
+  without an AGN. `compute_log_l_x_xrb`, `compute_log_l_x_agn`, `compute_l_x_xrb` and
+  `compute_l_x_agn` (the 2.6e39·SFR and Duras relations, none re-exported at a public
+  `__init__`) are removed (#2582).
 
 - The `lopez24` corona is anchored to the 12 um nu L_nu of the AGN model itself. The
   AGN component publishes `log_L_12um` and `log_L_6um` (dex re erg/s; disc + torus + polar
   dust of the composable model, the whole SED of a monolithic one), and
   `L(2-10 keV) = nu L_nu(12 um) / 10^alpha_IRX` is formed in log10 space, so the X-ray
   wing is finite in pure float32. A model with no AGN has a zero corona, and the 0.07 L_bol
-  bolometric-correction anchor is removed. `xray_agn_corona_lopez24` and
+  bolometric-correction anchor is removed together with `compute_l_12um_from_lbol`. `xray_agn_corona_lopez24` and
   `xray_total_lopez24*` take `log_l_12um_erg` (dex) in place of `l_12um_erg_hz` (#2581).
 
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated

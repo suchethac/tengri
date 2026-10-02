@@ -12,14 +12,17 @@ definition), evaluated here by an independent log-log quadrature of the emitted
 spectrum.
 """
 
+import importlib.util
+import re
 from pathlib import Path
 
 import jax
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent, XRaySEDComponentConfig
+from tengri.parameters.registry import registry
 
 pytestmark = pytest.mark.regression_bug
 
@@ -193,9 +196,113 @@ def _properties(ssp, dtype64, xray_type, sfh, agn):
 
 @pytest.mark.parametrize("xray_type", ["yang20", "lopez24"])
 def test_properties_are_finite_and_float64_accurate_in_float32(ssp, xray_type):
-    """Both properties are finite in pure float32 and within 1e-3 dex of float64."""
+    """Both properties are finite in pure float32 and within 1e-4 dex of float64."""
     ref = _properties(ssp, True, xray_type, _BURST, _AGN)
     f32 = _properties(ssp, False, xray_type, _BURST, _AGN)
     for name in ("log_l_x_xrb", "log_l_x_agn"):
         assert np.isfinite(f32[name]), f"{name} is not finite in float32: {f32[name]}"
-        assert f32[name] == pytest.approx(ref[name], abs=1e-3), name
+        assert f32[name] == pytest.approx(ref[name], abs=1e-4), name
+
+
+def test_xray_quantities_without_an_xray_component_name_the_missing_component(ssp):
+    """A model with no X-ray block refuses with a message naming it, not a bare KeyError."""
+    from tengri.config.exceptions import ConfigError
+
+    model = SEDModel.build(
+        ssp_data=ssp,
+        sfh={**_SFHS["const"], "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+    )
+    with pytest.warns(DeprecationWarning), pytest.raises(ConfigError, match="X-ray component"):
+        model.predict_xray_quantities({})
+
+
+def _declared_range(pattern):
+    """``(name, lo, hi)`` of the widest declared prior matching *pattern*, from the registry."""
+    root = Path(__file__).resolve().parents[3]
+    spec = importlib.util.spec_from_file_location(
+        "check_float32_scale_seams", root / "tools" / "check_float32_scale_seams.py"
+    )
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    best = None
+    for name, record in registry().items():
+        bounds = tool._prior_bounds(record) if re.match(pattern, name) else None
+        if bounds is not None and (best is None or bounds[1] - bounds[0] > best[2] - best[1]):
+            best = (name, *bounds)
+    assert best is not None, pattern
+    return best
+
+
+def _lehmer2016_log_xrb(sfr_100myr, z, stellar_mass, age_gyr):
+    """log10(L_HMXB + L_LMXB) [erg/s], 2-10 keV, from the Lehmer et al. (2016) coefficients."""
+    log_hmxb = 40.28 - 62.12 * z + 569.44 * z**2 - 1833.80 * z**3 + 1968.33 * z**4
+    t = np.log10(age_gyr)
+    log_lmxb = 40.276 - 1.503 * t - 0.423 * t**2 + 0.425 * t**3 + 0.136 * t**4
+    return np.log10(10.0**log_hmxb * sfr_100myr + 10.0**log_lmxb * stellar_mass / 1e10)
+
+
+_PRIOR_MASS_POINTS = 9
+_MASS_SWEEP_RESIDUALS = []
+
+
+def _mass_sweep_model(ssp, xray_type, x64):
+    with jax.enable_x64(x64):
+        name, lo, hi = _declared_range(r"^sfh_delayed_log_total_mass$")
+        agn = {**_AGN, "agn_log_lbol": Fixed(11.0)}
+        model = SEDModel.build(
+            ssp_data=ssp,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(lo, hi),
+                "tau_gyr": 1.0,
+                "age_gyr": 5.0,
+            },
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            xray={"type": xray_type, "all_params": Fixed(DEFAULT)},
+            agn=agn,
+            redshift=Fixed(0.0),
+        )
+    return model, name, np.linspace(lo, hi, _PRIOR_MASS_POINTS)
+
+
+@pytest.mark.parametrize("xray_type", ["yang20", "simple"])
+def test_log_properties_across_the_declared_mass_prior_in_float32(ssp, xray_type):
+    """log_l_x_xrb / log_l_x_agn: finite, float32 within 1e-4 dex of float64, nine prior points.
+
+    log_l_x_xrb in float64 equals the Lehmer et al. (2016) sum evaluated here from
+    the coefficients, with SFR_100Myr, Z, M* and age read off the forward state.
+    """
+    names = ("log_l_x_xrb", "log_l_x_agn")
+    model64, name, grid = _mass_sweep_model(ssp, xray_type, True)
+    model32, _, _ = _mass_sweep_model(ssp, xray_type, False)
+    comp = XRaySEDComponent(config=XRaySEDComponentConfig(model="yang20"))
+    for x in grid:
+        with jax.enable_x64(True):
+            p = {name: float(x)}
+            ref = {k: float(v) for k, v in model64.predict_properties(p, names=names).items()}
+            inp = comp.emitter_inputs(model64.predict_state(p).derived)
+            expected = _lehmer2016_log_xrb(
+                float(inp["sfr"]),
+                float(inp["metallicity_z"]),
+                float(inp["stellar_mass"]),
+                float(inp["stellar_age_gyr"]),
+            )
+        with jax.enable_x64(False):
+            out = model32.predict_properties({name: np.float32(x)}, names=names)
+            assert all(np.asarray(v).dtype == np.float32 for v in out.values())
+            f32 = {k: float(v) for k, v in out.items()}
+        for k in names:
+            assert np.isfinite(f32[k]), (k, x, f32[k])
+            _MASS_SWEEP_RESIDUALS.append((xray_type, float(x), k, f32[k] - ref[k]))
+            assert f32[k] == pytest.approx(ref[k], abs=1e-4), (k, x)
+        assert ref["log_l_x_xrb"] == pytest.approx(expected, abs=1e-4), x

@@ -53,7 +53,7 @@ def test_log_l_x_agn_float64_is_the_emitted_corona_band_luminosity(ssp_bare):
 
     Integrates the ``agn`` term of ``XRaySEDComponent.emission_terms`` (the
     terms ``sed_xray`` is built from) by log-log quadrature on a 20001-point keV
-    grid, and checks the property against it to 2e-3 dex.
+    grid, and checks the property against it to 1e-4 dex.
     """
     from tengri.components.xray.component import XRaySEDComponent
 
@@ -78,7 +78,7 @@ def test_log_l_x_agn_float64_is_the_emitted_corona_band_luminosity(ssp_bare):
 
     got = float(m64.predict_properties(p, names=("log_l_x_agn",))["log_l_x_agn"])
     assert np.isfinite(got), f"log_l_x_agn is non-finite in float64: {got}"
-    assert_allclose(got, expected, atol=2e-3)
+    assert_allclose(got, expected, atol=1e-4)
 
 
 def test_log_l_x_agn_and_total_pure_float32_finite_and_tracks_float64(ssp_bare):

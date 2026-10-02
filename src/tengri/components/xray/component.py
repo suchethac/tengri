@@ -308,7 +308,7 @@ class XRaySEDComponent(TemplateThreading):
                 # Exact fast path. X-ray is a sum of rank-1 terms; HMXB, LMXB, hot
                 # gas, corona: each a scalar amplitude times a spectral shape fixed
                 # by the (fixed) shape parameters. Their *sum* is not rank-1: HMXB
-                # (Gamma=2.0) and LMXB (Gamma=1.6) carry different photon indices, so
+                # (Gamma=2.0) and LMXB (Gamma=1.56) carry different photon indices, so
                 # the mix shifts with SFR and stellar mass. Integrating each term
                 # separately at build time is therefore exact where integrating the
                 # total would not be. See SEDModel._additive_term_band_response.
@@ -554,7 +554,7 @@ class XRaySEDComponent(TemplateThreading):
         depends on ``log10(l_2500)``, so the corona amplitude is a power law in it. That
         is irrelevant: it is still a scalar, and a scalar is all the factorization needs.
 
-        The *total* is not rank-1: HMXB (Gamma=2.0) and LMXB (Gamma=1.6) carry different
+        The *total* is not rank-1: HMXB (Gamma=2.0) and LMXB (Gamma=1.56) carry different
         photon indices, so the HMXB/LMXB mix (and hence the summed spectral shape)
         shifts with SFR and stellar mass. That is why the terms are exposed separately.
         """

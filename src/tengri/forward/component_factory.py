@@ -1220,6 +1220,13 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
     from tengri.utils.sed_quantities import LOG10_L_SUN
 
     derived = state.derived
+    if "log_L_x_xrb_2_10" not in derived:
+        from tengri.config.exceptions import ConfigError
+
+        raise ConfigError(
+            "X-ray quantities need the X-ray component, which this model does not "
+            "carry: build it with `xray={'type': 'yang20'}` (or 'lopez24')."
+        )
     log_l_x_xrb = jnp.asarray(derived["log_L_x_xrb_2_10"])
     log_l_x_agn = jnp.asarray(derived["log_L_x_agn_2_10"])
 

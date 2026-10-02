@@ -90,6 +90,32 @@ class TestCoronaAnchorAtReferenceEnergy:
         expected = 1.01 * 10.0 ** (log_l12 - alpha_irx)
         assert band / expected == pytest.approx(1.0, abs=1e-6)
 
+    @pytest.mark.parametrize("gamma", [1.4, 1.8, 2.4])
+    @pytest.mark.parametrize("e_cut", [50.0, 100.0, 300.0, 500.0, 1000.0])
+    def test_lopez24_physical_band_integral_matches_to_discretization(self, e_cut, gamma):
+        """The physical 2-10 keV integral (20001-point grid) agrees to 1e-4.
+
+        The residual against the exact integral is the 200-point trapezoid of the
+        shared band norm: 4.5e-6 (Gamma = 1.4) to 4e-5 (Gamma = 2.4).
+        """
+        log_l12, alpha_irx = 44.0, 0.3
+        energy = np.linspace(2.0, 10.0, 20001)
+        lam = _C_AA * _H_PLANCK / (energy * _KEV_TO_ERG)
+        lnu = np.asarray(
+            xray_agn_corona_lopez24(
+                jnp.asarray(lam),
+                log_l12,
+                alpha_irx=alpha_irx,
+                gamma=gamma,
+                E_cut=e_cut,
+                log_nh=0.0,
+                apply_anisotropy=False,
+            )
+        )
+        band = np.trapezoid(lnu, energy * _KEV_TO_HZ)
+        expected = 1.01 * 10.0 ** (log_l12 - alpha_irx)
+        assert band / expected == pytest.approx(1.0, abs=1e-4)
+
     def test_deprecated_bolometric_corona_anchor_at_2kev(self):
         """The deprecated _xray_agn_corona_bolometric has the same anchor shape."""
         l_agn_bol = 1e45  # erg/s
