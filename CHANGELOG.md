@@ -2,6 +2,10 @@
 
 ### Fixed
 
+- Line-flux limits are now scored with censored likelihoods. Detection:
+  ln L = -½r² - ln σ - ½ ln 2π; upper: ln Φ((F - m)/σ); lower: ln Φ((m - F)/σ).
+  The log_likelihood method now honours is_lower_limit, loss_functions.py routes
+  limit masks to censored_neg_log_likelihood, and no clamps are applied (#2665, #2666).
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception

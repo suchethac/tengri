@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import jax
 import jax.numpy as jnp
-import jax.scipy.special as jsp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
@@ -203,7 +203,7 @@ class LineFluxData:
         return len(self.names)
 
     def chi2(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
-        """Chi-squared statistic for detected lines (excludes upper limits).
+        """Chi-squared statistic for detected lines (excludes all limits).
 
         Parameters
         ----------
@@ -213,7 +213,7 @@ class LineFluxData:
         Returns
         -------
         ndarray, shape ()
-            Sum of ((obs - model) / error)^2 over detected lines
+            Sum of ((obs - model) / error)^2 over detected lines only
             [dimensionless].
 
         Notes
@@ -222,25 +222,34 @@ class LineFluxData:
 
         **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
 
-        Upper limit lines (where ``is_upper_limit`` is True) are excluded
-        from the sum.
+        Upper limit and lower limit lines are both excluded from the sum.
+        Only lines marked as detections contribute.
 
         """
         residual = (self.fluxes - model_fluxes) / self.errors
         chi2_per_line = residual**2
+        # Mask out both upper and lower limits
+        detected = jnp.ones(len(self.names), dtype=bool)
         if self.is_upper_limit is not None:
-            detected = ~self.is_upper_limit
-            chi2_per_line = jnp.where(detected, chi2_per_line, 0.0)
+            detected = detected & ~jnp.asarray(self.is_upper_limit)
+        if self.is_lower_limit is not None:
+            detected = detected & ~jnp.asarray(self.is_lower_limit)
+        chi2_per_line = jnp.where(detected, chi2_per_line, 0.0)
         return jnp.sum(chi2_per_line)
 
     def log_likelihood(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
-        """Log-likelihood: Gaussian for detections, survival function for upper limits.
+        """Log-likelihood: Gaussian for detections, censored for limits.
 
         For detected lines:
             ln L = -0.5 * ((obs - model) / error)^2 - ln(error) - 0.5*ln(2π)
 
-        For upper limits (non-detections reported as N-sigma limits):
-            ln L = ln(0.5 * erfc((model - obs_limit) / (error * sqrt(2))))
+        For upper limits:
+            ln L = ln Φ((f_upper - model) / error)
+
+        For lower limits:
+            ln L = ln Φ((model - f_lower) / error)
+
+        where Φ is the standard normal CDF.
 
         Parameters
         ----------
@@ -258,21 +267,35 @@ class LineFluxData:
 
         **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
 
-        Handles both detections and upper limits (marked via ``is_upper_limit``).
-        Upper limit lines use the complementary error function (erfc) to
-        compute the probability that the true flux exceeds the model prediction.
-
+        Handles detections, upper limits, and lower limits via the limit_mask
+        (trinary: 0=detected, 1=upper, -1=lower). All limits evaluated with
+        jax.scipy.stats.norm.logcdf (no clamps).
         """
+        # Get the limit mask: 0=detection, 1=upper, -1=lower
+        mask = self.limit_mask
+
+        # Compute detection likelihood for all lines
         residual = (self.fluxes - model_fluxes) / self.errors
-        ll_gaussian = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
+        ll_detected = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
 
-        if self.is_upper_limit is None:
-            return jnp.sum(ll_gaussian)
+        # If no limits, return detection likelihood sum
+        if mask is None:
+            return jnp.sum(ll_detected)
 
-        x_ul = (model_fluxes - self.fluxes) / (self.errors * jnp.sqrt(2.0))
-        ll_upper = jnp.log(jnp.maximum(0.5 * jsp.erfc(x_ul), 1e-30))
+        # Upper limit: ln L = ln Φ((f_upper - model) / error)
+        z_upper = (self.fluxes - model_fluxes) / self.errors
+        ll_upper = jax.scipy.stats.norm.logcdf(z_upper)
 
-        ll_per_line = jnp.where(self.is_upper_limit, ll_upper, ll_gaussian)
+        # Lower limit: ln L = ln Φ((model - f_lower) / error)
+        z_lower = (model_fluxes - self.fluxes) / self.errors
+        ll_lower = jax.scipy.stats.norm.logcdf(z_lower)
+
+        # Select per line based on mask
+        ll_per_line = jnp.where(
+            mask == 1.0,
+            ll_upper,
+            jnp.where(mask == -1.0, ll_lower, ll_detected),
+        )
         return jnp.sum(ll_per_line)
 
     @classmethod
