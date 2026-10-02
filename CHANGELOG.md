@@ -35,7 +35,14 @@
   per column lists the masked rows; a negative flux with a positive error is a detection
   with its signed value; the `-1` lower-limit flag is the ingest path's (`catalog_ingest`),
   never this reader's (#2586).
-- `analysis.diagnostics.spectral.uv_slope_beta` is one least-squares fit of log F_λ against log λ over the union of the ten Calzetti et al. (1994) Table 2 windows (window 6 = 1677–1740 Å), and every spectral-index window mean (`_window_mean_flux`, `dn4000`, `equivalent_width`) is the wavelength integral ∫F dλ / ∫dλ, so Dn4000, Lick indices and equivalent widths are grid-independent and the three Dn4000 implementations agree (#2588).
+- `analysis.diagnostics.spectral.uv_slope_beta` is one least-squares fit of log F_λ against
+  log λ over the pixels inside the ten Calzetti et al. (1994) Table 2 windows (window 6 =
+  1677–1740 Å) with hard window bounds per Eq. 3 and a centered abscissa, so it is stable in
+  float32. The window means in `_window_mean_flux`, `dn4000`, `equivalent_width` and the
+  spectral-index and line-flux window LUT (`soft_window_ssp_integral`) are wavelength
+  integrals, ∫F dλ / ∫dλ, trapezoid-weighted and edge-inclusive, so they do not depend on
+  how the wavelength grid is sampled; the `equivalent_width` pseudo-continuum is the
+  integrated mean over both sidebands (Vollmann & Eversberg 2006) (#2588).
 
 - The dense-mass step-size stability probe (#1999) now also runs after
   adaptation in the dynamic-HMC backend and in `fit_batch`'s shared window

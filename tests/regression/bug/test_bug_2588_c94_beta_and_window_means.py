@@ -1,22 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression tests for #2588: Calzetti-94 β pooled fit and Δλ-weighted window means.
+"""Regression tests for #2588: C94 pooled hard-window β and Δλ-weighted window means.
 
-Two rest-frame diagnostics measure different quantities from what they cite:
-1. UV slope β: Should use ONE pooled fit over all ten Calzetti+1994 windows,
-   not per-window slopes averaged (fixes window 6 = 1677–1740, not 1611–1711).
-2. Window means: Should use Δλ-weighted means (⟨F⟩ = ∫F dλ / ∫dλ), not pixel-weighted.
+- β is ONE least-squares fit of log F_λ against log λ over the pixels inside the
+  ten Calzetti et al. (1994) Table 2 windows (Eq. 3); the window bounds are hard.
+- Window means are wavelength integrals, ⟨F⟩ = ∫F dλ / ∫dλ, on any grid:
+  Dn4000 (Balogh et al. 1999), the equivalent width pseudo-continuum
+  (Vollmann & Eversberg 2006) and the index / line-flux window LUT.
 
-Tests cover:
-- β of analytic power laws through C94 windows (exact to 1e-6)
-- Three SED rows from the issue against a numpy C94 fit (atol 0.02)
-- Window table constant exposure
-- Dn4000 grid-independence on uniform and clustered grids
-- Equivalent width of Gaussian emission line grid-independence
-- float32 vs float64 agreement
+Expected values are analytic (power laws, a Gaussian trough on a linear
+continuum, F_ν ∝ λ²) or from a numpy fit of the published definition.
 """
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -25,9 +22,16 @@ from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.analysis.diagnostics.spectral import (
     CALZETTI94_WINDOWS_AA,
     dn4000,
+    equivalent_width,
     uv_slope_beta,
 )
-from tengri.observation.spectral_indices import STANDARD_INDICES, measure_index_jax
+from tengri.observation.spectral_indices import (
+    STANDARD_INDICES,
+    _window_mean_flux,
+    measure_index_jax,
+    precompute_index_windows,
+    soft_window_ssp_integral,
+)
 from tengri.utils.sed_quantities import compute_dn4000
 
 pytestmark = pytest.mark.regression_bug
@@ -36,7 +40,6 @@ pytestmark = pytest.mark.regression_bug
 
 C_AA = 2.99792458e18  # speed of light in Angstrom/s
 
-# Import CALZETTI94_WINDOWS_AA from spectral.py for use in tests
 C94_WINDOWS = list(CALZETTI94_WINDOWS_AA)
 
 
@@ -95,14 +98,14 @@ def test_uv_slope_beta_against_c94_fit():
     """β of the three SED rows from issue #2588.
 
     Compares `uv_slope_beta` against a numpy C94 Eq. 3 fit written in the test
-    over the ten Table-2 windows. Expects agreement to atol=0.02.
+    over the ten Table-2 windows. Expects agreement to atol=5e-3.
     """
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
     test_cases = [
-        (0.0, 0.0, -2.307),  # tau_V, E_bump, expected C94 β
-        (0.5, 3.0, -1.842),
-        (3.0, 1.0, +1.103),
+        (0.0, 0.0, -2.3066),  # tau_V, E_bump, expected C94 β
+        (0.5, 3.0, -1.8419),
+        (3.0, 1.0, +1.1030),
     ]
 
     for tau_v, bump, beta_expected in test_cases:
@@ -137,12 +140,17 @@ def test_uv_slope_beta_against_c94_fit():
         # Compute reference C94 fit
         beta_ref = beta_c94_reference(w, lnu)
 
+        # The hard-window fit IS the numpy reference (Eq. 3 over the same pixels)
+        assert np.abs(beta_measured - beta_ref) < 1e-3, (
+            f"tau_V={tau_v} E_b={bump}: {beta_measured:.5f} vs numpy fit {beta_ref:.5f}"
+        )
+
         # Both should match the expected value
-        assert np.abs(beta_measured - beta_expected) < 0.02, (
+        assert np.abs(beta_measured - beta_expected) < 5e-3, (
             f"tau_V={tau_v} E_b={bump}: diagnostics {beta_measured:.3f} "
             f"vs expected {beta_expected:.3f} (δ={beta_measured - beta_expected:.3f})"
         )
-        assert np.abs(beta_ref - beta_expected) < 0.02, (
+        assert np.abs(beta_ref - beta_expected) < 5e-3, (
             f"tau_V={tau_v} E_b={bump}: reference {beta_ref:.3f} "
             f"vs expected {beta_expected:.3f} (δ={beta_ref - beta_expected:.3f})"
         )
@@ -290,25 +298,164 @@ def test_dn4000_agreement_three_implementations():
         )
 
 
-@pytest.mark.parametrize("dtype_backend", [np.float64, np.float32])
-def test_dn4000_float32_vs_float64(dtype_backend):
-    """Dn4000 agrees to 1e-4 between float32 and float64 implementations."""
+def _clustered_dn4000_grid():
     uniform = np.arange(3000.0, 5000.0, 1.0)
     cluster = np.arange(3860.0, 3880.0, 0.05)
     wave = np.unique(np.concatenate([uniform, cluster]))
-    lnu = (wave / 4000.0) ** 2 * 1e30
+    return wave, (wave / 4000.0) ** 2 * 1e30
 
-    # Compute in float64
-    lnu_f64 = jnp.asarray(lnu, dtype=jnp.float64)
-    wave_f64 = jnp.asarray(wave, dtype=jnp.float64)
-    dn4000_f64 = float(dn4000(wave_f64, lnu_f64))
 
-    # Compute in float32
-    lnu_f32 = jnp.asarray(lnu, dtype=jnp.float32)
-    wave_f32 = jnp.asarray(wave, dtype=jnp.float32)
-    dn4000_f32 = float(dn4000(wave_f32, lnu_f32))
+@pytest.mark.parametrize("dtype_backend", [np.float64, np.float32])
+def test_dn4000_float32_vs_float64(dtype_backend):
+    """Dn4000 in either dtype agrees with the float64 value to 1e-4."""
+    wave, lnu = _clustered_dn4000_grid()
+    reference = float(dn4000(jnp.asarray(wave, jnp.float64), jnp.asarray(lnu, jnp.float64)))
+    if dtype_backend is np.float32:
+        with jax.enable_x64(False):
+            w32 = jnp.asarray(wave, dtype=jnp.float32)
+            l32 = jnp.asarray(lnu, dtype=jnp.float32)
+            assert w32.dtype == jnp.float32
+            value = float(dn4000(w32, l32))
+    else:
+        value = reference
+    assert abs(value - reference) < 1e-4, f"{dtype_backend.__name__}: {value} vs {reference}"
+    assert abs(value - 1.07840) < 1e-4
 
-    # Should agree to 1e-4
-    assert np.abs(dn4000_f64 - dn4000_f32) < 1e-4, (
-        f"float64: {dn4000_f64:.6f}, float32: {dn4000_f32:.6f}, δ={dn4000_f64 - dn4000_f32:.6f}"
+
+def test_uv_slope_beta_float32_vs_float64():
+    """β in float32 agrees with float64 to 1e-3 (pooled fit, centered abscissa)."""
+    wave = np.arange(1250.0, 2600.0, 1.0)
+    lnu = wave ** (-1.7 + 2.0) * (1.0 + 0.1 * np.sin(wave / 37.0))
+    b64 = float(uv_slope_beta(jnp.asarray(wave), jnp.asarray(lnu)))
+    with jax.enable_x64(False):
+        w32 = jnp.asarray(wave, dtype=jnp.float32)
+        l32 = jnp.asarray(lnu / lnu.max(), dtype=jnp.float32)
+        assert w32.dtype == jnp.float32
+        b32 = float(uv_slope_beta(w32, l32))
+    assert abs(b32 - b64) < 1e-3, f"β32={b32}, β64={b64}"
+
+
+def test_uv_slope_beta_hard_windows_ignore_pixels_outside():
+    """A narrow trough 3 Å outside window 6 leaves β exactly unchanged (Eq. 3 bounds)."""
+    wave = np.arange(1250.0, 2600.0, 0.5)
+    lnu = np.ones_like(wave)
+    trough = 1.0 - 0.8 * np.exp(-0.5 * ((wave - 1674.0) / 0.6) ** 2)
+    b = float(uv_slope_beta(jnp.asarray(wave), jnp.asarray(lnu * trough)))
+    assert abs(b + 2.0) < 1e-6, f"β={b}"
+
+
+# ── Equivalent width: wavelength-integrated pseudo-continuum ──────
+
+EW_CENTER, EW_HALF, EW_SIDE = 5000.0, 20.0, 50.0
+EW_AMP, EW_SIGMA, EW_SLOPE = 0.5, 3.0, 0.5
+
+
+def _ew_analytic() -> float:
+    """∫ (F/F_c − 1) dλ over the line window for a linear continuum + Gaussian trough.
+
+    The sidebands are symmetric, so F_c equals the continuum at the line center and
+    the odd (slope) terms integrate to zero: EW = −A σ √(2π) erf(h / (σ √2)).
+    """
+    from math import erf, pi, sqrt
+
+    return -EW_AMP * EW_SIGMA * sqrt(2 * pi) * erf(EW_HALF / (EW_SIGMA * sqrt(2)))
+
+
+def _ew_grid(cluster_in: str) -> np.ndarray:
+    wave = np.arange(4800.0, 5200.0, 1.0)
+    if cluster_in == "blue":
+        wave = np.concatenate([wave, np.arange(4940.0, 4950.0, 0.02)])
+    elif cluster_in == "red":
+        wave = np.concatenate([wave, np.arange(5040.0, 5050.0, 0.02)])
+    return np.unique(wave)
+
+
+@pytest.mark.parametrize("cluster_in", ["none", "blue", "red"])
+def test_equivalent_width_grid_independent(cluster_in):
+    """EW of a Gaussian trough on a sloped F_λ continuum equals its analytic value."""
+    wave = _ew_grid(cluster_in)
+    x = wave - EW_CENTER
+    flam = (1.0 + EW_SLOPE * x / 100.0) * (1.0 - EW_AMP * np.exp(-0.5 * (x / EW_SIGMA) ** 2))
+    lnu = flam * wave**2 / C_AA
+    ew = float(equivalent_width(jnp.asarray(wave), jnp.asarray(lnu), EW_CENTER, EW_HALF, EW_SIDE))
+    assert abs(ew - _ew_analytic()) < 1e-3, f"EW={ew:.5f} vs {_ew_analytic():.5f}"
+
+
+# ── Index / line window LUT: Δλ-weighted integral and norm ────────
+
+
+def _nonuniform_ssp(n_met=2, n_age=3):
+    wave = np.unique(
+        np.concatenate(
+            [
+                np.arange(3600.0, 6000.0, 5.0),
+                np.arange(3860.0, 3900.0, 0.5),
+                np.arange(5160.0, 5190.0, 0.25),
+            ]
+        )
     )
+    rng = np.random.default_rng(7)
+    base = 1.0 + 0.3 * np.sin(wave / 41.0)
+    amp = rng.uniform(0.5, 2.0, size=(n_met, n_age, 1))
+    return wave, amp * base[None, None, :] * (
+        1.0 + 1e-3 * rng.normal(size=(n_met, n_age, wave.size))
+    )
+
+
+_WINDOWS = [(3850.0, 3950.0), (4000.0, 4100.0), (5160.0, 5192.0), (4847.0, 4876.0)]
+
+
+@pytest.mark.parametrize("lo,hi", _WINDOWS)
+def test_soft_window_integral_matches_exact_window_mean(lo, hi):
+    """LUT mean (integral / norm) equals `_window_mean_flux` on a non-uniform grid."""
+    wave, flux = _nonuniform_ssp()
+    integral, norm = soft_window_ssp_integral(jnp.asarray(wave), jnp.asarray(flux), lo, hi)
+    for i in range(flux.shape[0]):
+        for j in range(flux.shape[1]):
+            exact = float(_window_mean_flux(jnp.asarray(wave), jnp.asarray(flux[i, j]), lo, hi))
+            lut = float(integral[i, j] / norm)
+            assert abs(lut / exact - 1.0) < 1e-6, f"[{lo},{hi}] ({i},{j}): {lut} vs {exact}"
+
+
+@pytest.mark.parametrize("name", ["Dn4000", "D4000", "HdA", "Hbeta", "Mgb", "Fe5270"])
+def test_precompute_index_windows_matches_exact_means(name):
+    """Every window slot of `precompute_index_windows` reproduces the exact window mean."""
+    wave, flux = _nonuniform_ssp()
+    idx = STANDARD_INDICES[name]
+    pre = precompute_index_windows(jnp.asarray(wave), jnp.asarray(flux), [idx])
+    windows = list(idx.continuum) + ([idx.feature] if idx.index_type == "EW" else [])
+    centers = np.asarray(pre.window_centers)
+    for lo, hi in windows:
+        k = int(np.argmin(np.abs(centers - 0.5 * (lo + hi))))
+        lut = float(pre.window_integrals[0, 0, k] / pre.window_norms[k])
+        exact = float(_window_mean_flux(jnp.asarray(wave), jnp.asarray(flux[0, 0]), lo, hi))
+        assert abs(lut / exact - 1.0) < 1e-6, f"{name} [{lo},{hi}]: {lut} vs {exact}"
+
+
+@pytest.mark.parametrize("lo,hi", [(3850.0, 3950.0), (4000.0, 4100.0), (4847.0, 4876.0)])
+def test_soft_window_integral_matches_exact_on_miles_grid(lo, hi):
+    """On the native MILES SSP grid the LUT and exact window means agree to 1e-8."""
+    ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    wave = jnp.asarray(ssp.ssp_wave)
+    flux = jnp.asarray(ssp.ssp_flux[:2, :3])
+    integral, norm = soft_window_ssp_integral(wave, flux, lo, hi)
+    for i in range(2):
+        for j in range(3):
+            exact = float(_window_mean_flux(wave, flux[i, j], lo, hi))
+            assert abs(float(integral[i, j] / norm) / exact - 1.0) < 1e-8
+
+
+def test_dn4000_native_ssp_grid_edge_inclusive():
+    """F_ν ∝ λ² sampled on the native SSP grid gives the analytic Dn4000 = 1.07840 to 1e-5.
+
+    ⟨λ²⟩ over [a, b] is (b³ − a³) / (3 (b − a)); the ratio of the red (4000–4100 Å)
+    to blue (3850–3950 Å) means is 1.07840.
+    """
+    ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    wave = np.asarray(ssp.ssp_wave)
+    lnu = (wave / 4000.0) ** 2 * 1e30
+    red = (4100.0**3 - 4000.0**3) / (3 * 100.0)
+    blue = (3950.0**3 - 3850.0**3) / (3 * 100.0)
+    assert abs(red / blue - 1.07840) < 1e-5
+    d = float(dn4000(jnp.asarray(wave), jnp.asarray(lnu)))
+    assert abs(d - red / blue) < 1e-5, f"{d:.6f} vs {red / blue:.6f}"
