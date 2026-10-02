@@ -138,8 +138,8 @@ def skirtor_disk_spectrum(
         Wavelength grid in nanometer (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
-        Higher delta → steeper mid-IR falloff. This parameter shifts the
-        slope coefficient at 100-5000 A from -1.5 by :math:`-\\delta`.
+        Higher delta → shallower mid-IR falloff. This parameter shifts the
+        slope coefficient between 100 and 5000 nm from -1.5 by :math:`+\\delta`.
 
     Returns
     -------
@@ -183,7 +183,8 @@ def schartmann2005_disk_spectrum(
         Wavelength grid in nanometer (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
-        Higher delta → steeper mid-IR falloff.
+        Higher delta → shallower mid-IR falloff. This parameter shifts the
+        slope coefficient between 125 and 1e4 nm from -1.5 by :math:`+\\delta`.
 
     Returns
     -------
@@ -199,8 +200,9 @@ def schartmann2005_disk_spectrum(
 
     References
     ----------
-    .. [1] M. Schartmann et al., "Three-dimensional radiative transfer models
-       of clumpy tori in Seyfert galaxies," A&A, 437, 861 (2005).
+    .. [1] M. Schartmann et al., "Towards a physical model of dust tori in
+       active galactic nuclei. Radiative transfer calculations for a hydrostatic torus
+       model," A&A, 437, 861 (2005).
        https://doi.org/10.1051/0004-6361:20042363
     .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
        Emission," A&A, 622, A103 (2019). arXiv:1811.03094.

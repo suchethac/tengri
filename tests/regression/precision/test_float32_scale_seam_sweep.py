@@ -514,11 +514,13 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
-#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg, tied
-#: SKIRTOR disc carrying disk(i)/disk(0) once, no explicit eta) at mbh 6 / 8 / 10, produced by
-#: :data:`_F64_REFERENCE_CHILD`. ``rest_sed_0``, the first bin, is the tied disc alone; its
-#: level scales as ``1 / eta(30 deg) = 1.26795`` against a disc tied with eta applied a second
-#: time (measured ratio 1.268112, the remaining 1.00013 being the host's share of that bin).
+#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
+#: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
+#: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
+#: ``test_tied_disc_reference_of_the_seam_sweep`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
+#: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
+#: disc is multiplied by ``eta(30 deg) T``.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.522087146372271e32,

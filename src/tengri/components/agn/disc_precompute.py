@@ -49,7 +49,6 @@ from tengri.components.agn.disc import (
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
 )
-from tengri.components.agn.disc_cigale import piecewise_powerlaw_disk as _piecewise_pl
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -257,22 +256,22 @@ def _build_grid_cigale(
     PreintegratedGrid
         Preintegrated photometry with shape (1, n_filters) for scalar access.
     """
-    # CIGALE disc default parameters: limits and power-law indices
-    # From disc_cigale.py skirtor_disk_spectrum:
-    # delta ≈ 0 → limits=[100, 400, 1500, 5000, 20000], coefs=[-0.5, -0.3, 1.5, 1.0]
+    # Fixed broken power law of this template (breakpoints and slopes are the template's own,
+    # not those of a ``disk_type`` of ``disc_cigale``): segment k is
+    # ``wave**coefs[k]`` between ``limits[k]`` and ``limits[k+1]``, continuous at the
+    # breakpoints, the first and last segments extended over the whole grid, and the
+    # trapezoid area on ``wave_rest`` set to 1.
     limits = np.array([100.0, 400.0, 1500.0, 5000.0, 20000.0], dtype=np.float64)
     coefs = np.array([-0.5, -0.3, 1.5, 1.0], dtype=np.float64)
 
     wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
 
-    # Call piecewise_powerlaw_disk once to get unit-normalized spectrum
-    spec = np.asarray(
-        _piecewise_pl(
-            jnp.asarray(wave_rest),
-            limits=jnp.asarray(limits),
-            coefs=jnp.asarray(coefs),
-        )
-    )
+    segment = np.clip(np.searchsorted(limits, wave_rest, side="right") - 1, 0, coefs.size - 1)
+    norms = np.ones(coefs.size)
+    for k in range(1, coefs.size):
+        norms[k] = norms[k - 1] * limits[k] ** (coefs[k - 1] - coefs[k])
+    spec = wave_rest ** coefs[segment] * norms[segment]
+    spec = spec / np.trapezoid(spec, wave_rest)
 
     # Wrap in shape (1, n_wave) for compatibility with precompute_template_photometry
     templates = np.array([spec], dtype=np.float64)

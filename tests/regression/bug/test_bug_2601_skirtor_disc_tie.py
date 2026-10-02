@@ -8,10 +8,9 @@ With ``agn_ir_frac > 0`` the SKIRTOR disc is tied to the torus power as in CIGAL
 :math:`\eta(i) = \cos i\,(1 + 2\cos i)/3` and, for sightlines through the torus
 (:math:`i > 90^\circ - {\rm oa}`), the torus extinction. Every expected value below
 is computed in the test from the shipped SKIRTOR library (``spectra/disk_emission``,
-``spectra/dust_emission``) and from CIGALE's formulas
-(``skirtor2016.py`` ``disk()`` and ``schartmann2005_disk()`` at lines 112-139,
-``disk *= trapz(AGN1.disk) ; SKIRTOR.disk = disk x SKIRTOR.disk/AGN1.disk`` at
-lines 332-336, ``norm = 1/trapz(dust)`` at line 498), never read from tengri.
+``spectra/dust_emission``), from the published piecewise power-law discs written out below
+and from CIGALE's tie (analytic shape x int(disk_0) x disk_i/disk_0, divided by int(dust_i)),
+never read from tengri.
 
 The tengri template is a 136-node re-gridding of the CIGALE database (948 nodes) and
 the torus block evaluates it through the triweight smoother. The absolute disc level
@@ -85,53 +84,69 @@ _POLAR = dict(
 
 
 # ----------------------------------------------------------------------------------
-# CIGALE's disc formulas, written out (skirtor2016.py:112-139)
+# the published piecewise power-law discs, written out
 # ----------------------------------------------------------------------------------
-def _cigale_disk(wl, limits, coefs):
-    """Continuous broken power law on [limits[0], limits[-1]) [nm], unit trapezoid area on ``wl``.
-
-    Segment k is ``c_k wl**coefs[k]`` between ``limits[k]`` and ``limits[k+1]``, with ``c_k``
-    fixed by continuity at the breakpoints; zero elsewhere.
-    """
-    spectrum = np.zeros_like(wl)
-    amp = 1.0
-    for k, coef in enumerate(coefs):
-        if k > 0:
-            amp *= limits[k] ** (coefs[k - 1] - coef)
-        inside = (wl >= limits[k]) & (wl < limits[k + 1])
-        spectrum[inside] = amp * wl[inside] ** coef
-    return spectrum / np.trapezoid(spectrum, x=wl)
-
-
-def _cigale_disc(disk_type, wl, delta):
-    """The three published piecewise power-law discs at ``wl`` [nm], slopes and breaks written out.
+def _discs(disk_type, delta):
+    """Components ``(weight, breaks [nm], slopes)`` of the three published discs.
 
     ``disk_type`` 0: SKIRTOR disc (Stalevski et al. 2012, 2016), breaks 8, 10, 100, 5000, 1e6 nm,
-    slopes 0.2, -1, -1.5 + delta, -4. ``disk_type`` 1: Schartmann et al. (2005) disc, breaks 8,
-    50, 125, 1e4, 1e6 nm, slopes 1, -0.2, -1.5 + delta, -4. ``disk_type`` 2: ADAF / thin-disc
-    blend (Lopez et al. 2024), ``(1 - delta)`` ADAF plus ``delta`` thin disc.
+    slopes 0.2, -1, -1.5 + delta, -4. ``disk_type`` 1: Schartmann et al. (2005) disc, breaks
+    8, 50, 125, 1e4, 1e6 nm, slopes 1, -0.2, -1.5 + delta, -4. ``disk_type`` 2: ADAF / thin-disc
+    blend (Lopez et al. 2024), weights ``1 - delta`` and ``delta``.
     """
     if disk_type == 0:
-        return _cigale_disk(
-            wl,
-            np.array([8.0, 10.0, 100.0, 5000.0, 1e6]),
-            np.array([0.2, -1.0, -1.5 + delta, -4.0]),
-        )
+        return [(1.0, [8.0, 10.0, 100.0, 5000.0, 1e6], [0.2, -1.0, -1.5 + delta, -4.0])]
     if disk_type == 1:
-        return _cigale_disk(
-            wl, np.array([8.0, 50.0, 125.0, 1e4, 1e6]), np.array([1.0, -0.2, -1.5 + delta, -4.0])
-        )
-    adaf = _cigale_disk(
-        wl,
-        np.array([8.0, 75.0, 300.0, 1100.0, 2700.0, 20000.0, 100000.0, 1e6]),
-        np.array([0.5, 0.15, 0.45, -0.05, -0.55, -1.5, -4.0]),
+        return [(1.0, [8.0, 50.0, 125.0, 1e4, 1e6], [1.0, -0.2, -1.5 + delta, -4.0])]
+    return [
+        (
+            1.0 - delta,
+            [8.0, 75.0, 300.0, 1100.0, 2700.0, 20000.0, 100000.0, 1e6],
+            [0.5, 0.15, 0.45, -0.05, -0.55, -1.5, -4.0],
+        ),
+        (
+            delta,
+            [8.0, 50.0, 2000.0 - delta * 1875, 5000.0 - delta * 2000, 1e4, 1e6],
+            [9 - 8 * delta, 4.2 - 4.4 * delta, 0.7 - 2.2 * delta, -6.5 + 5 * delta, -4.0],
+        ),
+    ]
+
+
+def _density(wl, breaks, slopes):
+    """Continuous broken power law on [breaks[0], breaks[-1]), up to a constant.
+
+    ``ln f = int slope d ln(wl)``: the log-amplitude at the start of segment k is the
+    cumulative sum of ``slope_j ln(b_{j+1}/b_j)`` over the segments below it.
+    """
+    wl = np.asarray(wl, dtype=float)
+    b = np.log(np.asarray(breaks, dtype=float))
+    s = np.asarray(slopes, dtype=float)
+    start = np.concatenate([[0.0], np.cumsum(s * np.diff(b))[:-1]])
+    k = np.clip(np.searchsorted(np.exp(b), wl, side="right") - 1, 0, s.size - 1)
+    inside = (wl >= breaks[0]) & (wl < breaks[-1])
+    safe = np.where(inside, wl, np.exp(b[0]))
+    return np.where(inside, np.exp(start[k] + s[k] * (np.log(safe) - b[k])), 0.0)
+
+
+def _fine_area(breaks, slopes):
+    """Area of ``_density`` by trapezoid quadrature on a 1e6-node log grid (error below 1e-9)."""
+    grid = np.logspace(np.log10(breaks[0]), np.log10(breaks[-1]), 1_000_000)
+    return float(np.trapezoid(_density(grid, breaks, slopes), grid))
+
+
+def _disc_exact(disk_type, delta, wl):
+    """Unit-area published disc at ``wl`` [nm], normalized by its resolved area."""
+    return sum(
+        w * _density(wl, br, sl) / _fine_area(br, sl) for w, br, sl in _discs(disk_type, delta)
     )
-    thin = _cigale_disk(
-        wl,
-        np.array([8.0, 50.0, 2000.0 - delta * 1875, 5000.0 - delta * 2000, 1e4, 1e6]),
-        np.array([9 - 8 * delta, 4.2 - 4.4 * delta, 0.7 - 2.2 * delta, -6.5 + 5 * delta, -4.0]),
+
+
+def _grid_normalized_disc(disk_type, wl, delta):
+    """The published disc normalized by its trapezoid area on ``wl`` (CIGALE's convention)."""
+    return sum(
+        w * _density(wl, br, sl) / np.trapezoid(_density(wl, br, sl), wl)
+        for w, br, sl in _discs(disk_type, delta)
     )
-    return adaf * (1 - delta) + thin * delta
 
 
 _TENGRI_DISC = {
@@ -175,7 +190,7 @@ def library():
 
 
 def _tie_ratio(wl, disk_0, disk_i, dust_i, shape):
-    """``int(shape x int(disk_0) x disk_i/disk_0) / int(dust_i)``, skirtor2016.py:332-336, :498."""
+    """``int(shape x int(disk_0) x disk_i/disk_0) / int(dust_i)`` (CIGALE tie)."""
     live = disk_0 > 0.0  # CIGALE ``nan_to_num``: zero where the face-on disc is zero
     ratio = np.divide(disk_i, disk_0, out=np.zeros_like(disk_i), where=live)
     return np.trapezoid(shape * np.trapezoid(disk_0, wl) * ratio, wl) / np.trapezoid(dust_i, wl)
@@ -185,7 +200,7 @@ def _tie_ratio(wl, disk_0, disk_i, dust_i, shape):
 def library_ratio(library):
     """``R(i)`` from the shipped library: the template-only disc per unit ``agn_power``."""
     wl = library["wl_nm"]
-    shape = _cigale_disc(1, wl, 0.0)
+    shape = _grid_normalized_disc(1, wl, 0.0)
     d0 = library["nodes"][0][0]
     return {
         i: _tie_ratio(wl, d0, library["nodes"][i][0], library["nodes"][i][1], shape)
@@ -221,7 +236,7 @@ def cigale():
 
     with SimpleDatabase("skirtor2016") as db:
         e0 = db.get(**_PARAMS, i=0)
-        shape = _cigale_disc(1, e0.wl, 0.0)
+        shape = _grid_normalized_disc(1, e0.wl, 0.0)
         formula = {}
         for i in _INCLINATIONS:
             e = db.get(**_PARAMS, i=i)
@@ -424,11 +439,14 @@ def test_untied_disc_is_screened(i_deg):
 @pytest.mark.parametrize("i_deg", _INCLINATIONS)
 @pytest.mark.parametrize("ebv", [0.0, 0.03, 0.3])
 def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
-    """The polar switch does not move the tie.
+    """The polar switch does not move the tie (tengri's own bookkeeping, not CIGALE parity).
 
     ``torus + polar`` carries exactly the polar-off ``agn_power`` (the ``R_faceon``
     bookkeeping closes), E(B-V) = 0 leaves the disc untouched at every inclination, and for
-    i > 90 - oa (no line-of-sight reddening) the disc is unchanged to 1e-3 at any E(B-V).
+    i > 90 - oa (no line-of-sight reddening) the disc equals its polar-off value to 1e-3 at
+    any E(B-V). CIGALE instead divides the disc by (1 + polar share) through its joint
+    normalization 1/int(dust + polar), so with polar dust on its disc is lower than tengri's
+    by that factor; the difference is tracked in #2602 and is not pinned here.
     """
     _, off = _run(i_deg)
     _, on = _run(i_deg, **_POLAR, agn_polar_ebv=ebv)
@@ -487,18 +505,6 @@ _DISC_CASES = [(0, -0.5), (0, 0.0), (0, 0.5), (1, -0.5), (1, 0.0), (1, 0.5), (2,
 _MODEL_GRID_NM = np.logspace(1, 8, 2380) / 10.0  # 10 A - 1e8 A, the model's panchromatic axis
 
 
-def _exact_cigale_disc(disk_type, delta, wl_eval):
-    """CIGALE's piecewise disc with its area resolved: ``disk()`` on a 4e5-node log grid.
-
-    The trapezoid error on that grid is below 1e-6, so the level is the grid-independent
-    one CIGALE's formula defines; evaluated at ``wl_eval`` by log-log interpolation.
-    """
-    fine = np.logspace(0.0, 7.0, 400_001)
-    s = _cigale_disc(disk_type, fine, delta)
-    live = s > 0.0
-    return np.exp(np.interp(np.log(wl_eval), np.log(fine[live]), np.log(s[live])))
-
-
 @pytest.mark.parametrize(("disk_type", "delta"), _DISC_CASES)
 def test_disc_level_at_250nm_matches_cigale(disk_type, delta, cigale):
     """Unit-area level within 2e-3 of CIGALE's formula, on CIGALE's grid and on the model grid.
@@ -510,7 +516,7 @@ def test_disc_level_at_250nm_matches_cigale(disk_type, delta, cigale):
     for grid in (cigale["wl_nm"], _MODEL_GRID_NM):
         k = int(np.argmin(np.abs(grid - 250.0)))
         got = float(np.asarray(tf(jnp.asarray(grid), delta=delta))[k])
-        assert got / _exact_cigale_disc(disk_type, delta, grid[k]) == pytest.approx(1.0, abs=2e-3)
+        assert got / _disc_exact(disk_type, delta, grid[k]) == pytest.approx(1.0, abs=2e-3)
 
 
 @pytest.mark.parametrize(("disk_type", "delta"), _DISC_CASES[:6])
@@ -566,18 +572,145 @@ def test_disc_float32_matches_float64(disk_type, delta):
     np.testing.assert_allclose(f32[live], f64[live], rtol=1e-4)
 
 
-def test_cigale_formula_in_test_is_pcigale():
-    """The written-out piecewise discs equal CIGALE's output at the three disc types."""
+@pytest.mark.parametrize(("disk_type", "delta"), _DISC_CASES)
+def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
+    """CIGALE's disc output equals the test's disc normalized on CIGALE's own axis.
+
+    Measured agreement: 8e-15 relative at every live node (the area on the 948-node axis is
+    divided out on both sides); asserted at 1e-12, above the rounding floor.
+    """
     ps = pytest.importorskip("pcigale.sed_modules.skirtor2016")
-    wl = np.logspace(0, 7, 900)
+    from pcigale.data import SimpleDatabase
+
+    with SimpleDatabase("skirtor2016") as db:
+        wl = db.get(**_PARAMS, i=0).wl
+    fn = (ps.skirtor_disk, ps.schartmann2005_disk, ps.adaf_disk)[disk_type]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        for disk_type, fn in (
-            (0, ps.skirtor_disk),
-            (1, ps.schartmann2005_disk),
-            (2, ps.adaf_disk),
-        ):
-            for delta in (0.0, 0.5):
-                np.testing.assert_allclose(
-                    _cigale_disc(disk_type, wl, delta), fn(wl, delta=delta), rtol=1e-12
-                )
+        theirs = fn(wl, delta=delta)
+    mine = _grid_normalized_disc(disk_type, wl, delta)
+    live = theirs > 0.0
+    assert np.array_equal(live, mine > 0.0)
+    np.testing.assert_allclose(mine[live], theirs[live], rtol=1e-12)
+
+
+# ----------------------------------------------------------------------------------
+# 7. the kubota_done reference of the float32 seam sweep
+# ----------------------------------------------------------------------------------
+#: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
+#: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
+#: ``(sum, first bin, middle bin, last bin)``.
+_DISC_TIMES_ETA_T_REFERENCE = {
+    6.0: (1.5215528515600546e32, 2.1618471431580417e23, 3.05875473371805e28, 8.775513568033312e21),
+    8.0: (1.558679481783208e32, 2.621597865262484e24, 3.1456552202309087e28, 8.823791474594601e21),
+    10.0: (
+        1.5745233941627343e32,
+        2.0084485779608986e24,
+        3.175461013264611e28,
+        9.02096624152618e21,
+    ),
+}
+
+
+@pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])
+def test_tied_disc_reference_of_the_seam_sweep(agn_log_mbh):
+    """``total - disc (1 - eta T)`` of the tied model equals the SED with the disc times ``eta T``.
+
+    The tied disc is ``agn_power x disk(i)/disk(0)``-shaped with no explicit eta and no
+    screen; multiplying it by ``eta(30 deg) T(lambda)`` (``T`` from its documented formula)
+    changes only the disc term of the SED. The ``kubota_done`` disc has no piecewise
+    normalization, so nothing else moves (the identity closes to 1e-15 in a fresh process;
+    asserted at 1e-7 here).
+    """
+    ssp_file = DATA_DIR / "fsps_prsc_miles_chabrier.h5"
+    if not ssp_file.is_file():
+        pytest.skip(f"SSP grid not found at {ssp_file}")
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+    model = SEDModel.build(
+        ssp_data=load_ssp_data(str(ssp_file)),
+        observation=Observation(photometry=Photometry.from_names(["sdss_r"])),
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+            "tau_gyr": 1.0,
+            "age_gyr": 5.0,
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": 0.3,
+            "tau_bc": 0.0,
+        },
+        agn={
+            "type": "composable",
+            "all_params": Fixed(DEFAULT),
+            "disc": {
+                "type": "kubota_done",
+                "all_params": Fixed(DEFAULT),
+                "log_mbh": Uniform(6.0, 10.0),
+            },
+            "torus": {"type": "skirtor", "all_params": Fixed(DEFAULT)},
+            "norm": "cigale_joint",
+            "log_lbol": Fixed(11.0),
+            "fracAGN": 0.1,
+        },
+        redshift=Fixed(0.1),
+    )
+    params = {
+        "sfh_delayed_log_total_mass": jnp.asarray(10.0),
+        "agn_log_mbh": jnp.asarray(agn_log_mbh),
+    }
+    state = model.predict_state(params)
+    wave = np.asarray(state.wave)
+    total = np.asarray(model.predict(params).rest_sed())
+    disc = np.asarray(state.derived["sed_agn_disc"])
+    cos30 = np.cos(np.radians(30.0))
+    eta = cos30 * (1 + 2 * cos30) / 3
+    expected = total - disc * (1.0 - eta * _screen(wave, 30))
+    got = (expected.sum(), expected[0], expected[len(expected) // 2], expected[-1])
+    np.testing.assert_allclose(got, _DISC_TIMES_ETA_T_REFERENCE[agn_log_mbh], rtol=1e-7)
+
+
+# ----------------------------------------------------------------------------------
+# 8. the intrinsic-luminosity anchors follow the disc normalization
+# ----------------------------------------------------------------------------------
+_ANCHOR_CASES = [
+    ("skirtor", 0, 0.0),
+    ("schartmann2005", 1, 0.0),
+    ("schartmann2005", 1, 0.5),
+    ("adaf_lopez2024", 2, 0.0),
+    ("adaf_lopez2024", 2, 0.5),
+]
+
+
+@pytest.mark.parametrize(("block", "disk_type", "delta"), _ANCHOR_CASES)
+def test_intrinsic_anchors_equal_the_unit_area_disc(block, disk_type, delta):
+    """``L_2500_intrinsic`` and ``L_4400_intrinsic`` are the unit-area published disc x L_bol.
+
+    ``L_nu = lambda^2 L_lambda / c`` of ``L_bol x s(lambda)`` at 2500 and 4400 A, with ``s``
+    the resolved-area disc of the test (per nm, divided by 10 per A). The anchors come from
+    the disc block at cos i = cos 30 deg and follow neither the tie nor the screen. The 8 nm
+    cut raises the ``skirtor`` anchors by 14 % (4.154e29 to 4.736e29 at L_bol = 1e12 L_sun)
+    through the area it removes below 10 nm; the other discs move by 0.2 % or less.
+    """
+    _, l2500, l4400 = compose_l_nu(
+        _WAVE,
+        _LOG_LBOL,
+        agn_disc_block=block,
+        agn_nlr_block="none",
+        agn_blr_block="none",
+        agn_feii_block="none",
+        agn_torus_block="none",
+        agn_attenuation_block="none",
+        agn_cigale_disk_delta=delta,
+        return_l2500=True,
+    )
+    l_bol = 10.0**_LOG_LBOL * L_SUN
+    for got, lam_aa in ((l2500, 2500.0), (l4400, 4400.0)):
+        l_lambda = l_bol * _disc_exact(disk_type, delta, lam_aa / 10.0) / 10.0
+        expected = l_lambda * lam_aa**2 / C_AA
+        assert float(got) == pytest.approx(expected, rel=3e-3)
