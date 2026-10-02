@@ -3026,6 +3026,8 @@ class StellarSEDComponent:
         # ``predict_sfh_quantities`` returned NaN here and was right to.
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
+            # Surviving mass is the joint-weight contraction with each (age, Z) node
+            # at its own remaining-mass fraction.
             mstar_surv = jnp.sum(joint_weights * ssp.ssp_mass_remaining) * total_mass
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar

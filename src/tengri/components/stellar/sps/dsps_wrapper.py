@@ -2655,9 +2655,13 @@ def predict_surviving_mass(
     **Gradient-safe**: yes, differentiable w.r.t. any SFH parameter
     through ``sfr``.
 
-    The result is also published as ``state.derived["log_mstar"]`` after
-    every full forward pass through ``SEDModel.predict_*``. This helper
-    is the cheap standalone path for the prior layer:
+    This helper evaluates the mass-remaining table at ONE supplied metallicity
+    (``log_z_zsun``). The forward model's published ``log_mstar_surviving``
+    is a joint-weight contraction over all (age, Z) nodes in the history,
+    equal to this helper's result only for a delta-Z (single-metallicity)
+    history at a grid node. For multi-metallicity histories (two_step, bins, etc.),
+    use the forward model's published value. This helper is the cheap standalone
+    path for the prior layer:
 
     .. code-block:: python
 

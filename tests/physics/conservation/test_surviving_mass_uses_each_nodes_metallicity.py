@@ -7,12 +7,17 @@ metallicity for the whole population. The defect causes 2–4% errors on
 Z-dependent grids (BAGPIPES and FSPS both use exact per-node evaluation).
 """
 
+from pathlib import Path
+
+import h5py
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri import DEFAULT, Fixed, SEDModel, SSPData
+from tengri import DEFAULT, Fixed, SEDModel, SSPData, load_ssp_data
+from tengri.components.stellar.component import StellarSEDComponent
+from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.conservation
 
@@ -70,6 +75,8 @@ class TestSurvivingMassUsesEachNodesMetallicity:
                 "two_step_reversed",
                 {"logzsol_old": 0.2, "logzsol_young": -0.5, "step_age_gyr": 1.0},
             ),
+            "bins",
+            "bins_continuity",
         ],
     )
     def test_surviving_mass_equals_joint_weight_contraction(
@@ -94,7 +101,10 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         # Parse met_mode
         if isinstance(met_mode, str):
             if met_mode == "delta_z":
-                met_spec = {"type": "delta", "logzsol": Fixed(0.0)}
+                met_spec = {"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)}
+            elif met_mode in ("bins", "bins_continuity"):
+                # Use DEFAULT six-bin ladder
+                met_spec = {"type": met_mode, "all_params": Fixed(DEFAULT)}
             else:
                 raise ValueError(f"Unknown mode: {met_mode}")
         else:
@@ -105,11 +115,12 @@ class TestSurvivingMassUsesEachNodesMetallicity:
                     "logzsol_old": Fixed(params["logzsol_old"]),
                     "logzsol_young": Fixed(params["logzsol_young"]),
                     "step_age_gyr": Fixed(params["step_age_gyr"]),
+                    "all_params": Fixed(DEFAULT),
                 }
             else:
                 raise ValueError(f"Unknown mode: {mode_name}")
 
-        # Build model with delayed-tau SFH
+        # Build model with delayed-tau SFH, all parameters fixed to defaults
         model = SEDModel.build(
             ssp_data=ssp,
             observation=None,
@@ -186,6 +197,7 @@ class TestSurvivingMassUsesEachNodesMetallicity:
                     "logzsol_old": Fixed(logzsol_old),
                     "logzsol_young": Fixed(logzsol_young),
                     "step_age_gyr": Fixed(1.0),
+                    "all_params": Fixed(DEFAULT),
                 },
                 redshift=Fixed(0.0),
             )
@@ -197,34 +209,105 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         # Reversed: old rich, young poor
         surv_rich_old = run_two_step(logzsol_old=0.2, logzsol_young=-0.5)
 
+        # The synthetic table must have Z-dependence by construction
+        table_range = ssp.ssp_mass_remaining.ptp(axis=0)  # variation per age
+        table_z_spread = float(table_range.max())
+        assert table_z_spread > 0.0, "Synthetic table must be Z-dependent for this test"
+
         # They should be different (assuming the mass table varies with Z)
         assert surv_poor_old != surv_rich_old, (
             "Two reversed two_step histories should give different surviving masses "
             "when the ssp_mass_remaining table depends on Z"
         )
 
-        # Determine which is larger: the history with higher-Z old stars should
-        # have higher surviving mass (since the table shows m_rem increases with Z)
-        table_range = ssp.ssp_mass_remaining.ptp(axis=0)  # variation per age
-        table_has_z_dependence = float(table_range.mean()) > 1e-6
-        if table_has_z_dependence:
-            # At older ages (higher indices), the table is lower (0.55 range).
-            # Higher Z → higher m_rem, so rich-old should have more survivors.
-            assert surv_rich_old > surv_poor_old, (
-                f"With higher-Z old stars, surviving mass {surv_rich_old:.3e} "
-                f"should exceed lower-Z case {surv_poor_old:.3e}, "
-                f"matching the table's Z-dependence"
-            )
+        # At older ages (higher indices), the table is lower (0.55 range).
+        # Higher Z → higher m_rem, so rich-old should have more survivors.
+        assert surv_rich_old > surv_poor_old, (
+            f"With higher-Z old stars, surviving mass {surv_rich_old:.3e} "
+            f"should exceed lower-Z case {surv_poor_old:.3e}, "
+            f"matching the table's Z-dependence"
+        )
+
+    def test_surviving_mass_on_tracked_grid_fsps(self):
+        """Surviving mass on tracked Z-dependent grid equals joint-weight contraction.
+
+        Use the shipped fsps_prsc_miles_chabrier.h5 grid which has a Z-dependent
+        mass_remaining table. This validates the fix on real data, not just
+        a synthetic table.
+        """
+        grid_path = Path("data/fsps_prsc_miles_chabrier.h5")
+        if not grid_path.is_file():
+            pytest.skip("Tracked SSP grid not found")
+
+        ssp = load_ssp_data(str(grid_path))
+
+        # Build model with two_step SFH, all parameters fixed to defaults
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=None,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(3.0),
+                "age_gyr": Fixed(12.0),
+                "log_total_mass": Fixed(10.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            met={
+                "type": "two_step",
+                "logzsol_old": Fixed(-0.5),
+                "logzsol_young": Fixed(0.2),
+                "step_age_gyr": Fixed(1.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            redshift=Fixed(0.0),
+        )
+
+        # Predict
+        params = {}
+        state = model.predict_state(params)
+
+        # Extract derived quantities
+        log_mstar_formed = state.derived["log_mstar_formed"]
+        log_mstar_surviving = state.derived["log_mstar_surviving"]
+        joint_weights = state.derived["joint_weights"]
+
+        # Normalize joint weights to sum to 1
+        jw_norm = joint_weights / jnp.sum(joint_weights)
+
+        # Load the grid's mass_remaining table directly
+        with h5py.File(str(grid_path), "r") as f:
+            table = np.asarray(f["ssp_mass_remaining"])
+
+        # Compute exact surviving mass: Σ_age Σ_Z w(age, Z) · m_rem(age, Z)
+        exact_surv_frac = float(jnp.sum(jw_norm * table))
+
+        # Published surviving mass
+        published_surv = 10.0 ** float(log_mstar_surviving)
+        formed = 10.0 ** float(log_mstar_formed)
+
+        # The test: published surviving mass should equal exact contraction
+        expected_surviving = formed * exact_surv_frac
+        assert_allclose(
+            published_surv,
+            expected_surviving,
+            rtol=1e-6,
+            err_msg=(
+                f"Surviving mass {published_surv:.6e} != "
+                f"exact joint-weight sum {expected_surviving:.6e} "
+                f"(ratio {published_surv / expected_surviving - 1:+.4%})"
+            ),
+        )
 
     def test_fast_path_matches_exact_surviving_mass(self, ssp_with_z_dependent_mass_remaining):
-        """Surviving mass via compute_joint_weights equals exact forward path.
+        """Surviving mass via compute_joint_weights fast path matches exact forward path.
 
         The StellarSEDComponent has two paths to compute joint_weights:
         - Exact: build (n_met, n_age) grid in the forward pass
         - Fast: compute_joint_weights helper (used by SED-free paths)
 
-        Both must give bit-identical surviving mass. This test uses the
-        exact forward path and verifies it matches the fast-path contract.
+        Both must give the same surviving mass when applied to the same
+        metallicity history. This test calls the fast path's compute_joint_weights
+        directly and verifies it reproduces the forward model's published surviving mass.
         """
         ssp = ssp_with_z_dependent_mass_remaining
 
@@ -238,29 +321,38 @@ class TestSurvivingMassUsesEachNodesMetallicity:
                 "log_total_mass": Fixed(10.0),
                 "all_params": Fixed(DEFAULT),
             },
-            met={"type": "delta", "logzsol": Fixed(0.0)},
+            met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.0),
         )
 
-        # Predict with exact forward path
-        state = model.predict_state({})
+        # Get the stellar component
+        chain = model._build_component_chain()
+        stellar = next(c for c in chain if isinstance(c, StellarSEDComponent))
+
+        # Empty params dict since all are Fixed
+        params = {}
+
+        # Call fast path: compute_joint_weights requires fully merged params
+        full_params = merge_fixed_params(model.spec, params)
+        jw_fast, total_mass_fast, _ages = stellar.compute_joint_weights(full_params)
+
+        # Compute surviving mass from fast-path weights and table
+        jw_norm = jw_fast / jnp.sum(jw_fast)
+        surv_frac_fast = float(jnp.sum(jw_norm * ssp.ssp_mass_remaining))
+        formed_mass_fast = 10.0 ** float(np.log10(total_mass_fast))
+
+        log_surv_fast = np.log10(formed_mass_fast * surv_frac_fast)
+
+        # Compare to exact forward path
+        state = model.predict_state(params)
         log_surv_exact = state.derived["log_mstar_surviving"]
-        joint_weights_exact = state.derived["joint_weights"]
 
-        # Compute surviving mass independently from joint_weights and table
-        jw_norm = joint_weights_exact / jnp.sum(joint_weights_exact)
-        surv_frac = float(jnp.sum(jw_norm * ssp.ssp_mass_remaining))
-        log_formed = state.derived["log_mstar_formed"]
-        formed_mass = 10.0 ** float(log_formed)
-
-        # Compare to published log value
-        expected_log_surv = np.log10(formed_mass * surv_frac)
         assert_allclose(
+            log_surv_fast,
             float(log_surv_exact),
-            expected_log_surv,
             rtol=1e-6,
             err_msg=(
-                f"Published log_mstar_surviving {float(log_surv_exact):.6f} "
-                f"!= expected {expected_log_surv:.6f} (computed from joint_weights)"
+                f"Fast-path log_mstar_surviving {log_surv_fast:.6f} "
+                f"!= exact forward {float(log_surv_exact):.6f}"
             ),
         )
