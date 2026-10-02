@@ -28,7 +28,7 @@ from tengri.components.igm._params import (
     DEFAULT_IGM_BUBBLE_MPC,
     DEFAULT_IGM_X_HI,
 )
-from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
+from tengri.components.igm.dla import _A_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import C_CGS
@@ -403,21 +403,26 @@ def _cgm_damping_wing_tau(
 
         \log_{10} N_{\rm HI}(z) = \frac{3.592}{1 + e^{-1.841(z - 6)}} + 18.001
 
-    and the Lyα cross-section (Totani et al. 2006, Eq. 4) is
+    and the Lyα damping-wing cross-section (Miralda-Escudé 1998, Eq. 1) is
 
     .. math::
 
-        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 f_{12} \Lambda}{8\pi}
+        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 \Lambda}{8\pi}
             \frac{\Lambda (\nu/\nu_\alpha)^4}
                  {4\pi^2 (\nu - \nu_\alpha)^2 + \Lambda^2 (\nu/\nu_\alpha)^6/4}
 
-    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient) and
-    :math:`f_{12} = 0.4162` (Morton 2003). Constants come from
-    :mod:`tengri.components.igm.dla`. The previous implementation used a flat
-    Lorentzian with a numerical constant that was ~10⁹ too small.
+    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient, in s⁻¹).
+    The prefactor equals the oscillator-strength sum rule :math:`\pi e^2 f_{12} / (m_e c)`.
+    Constants come from :mod:`tengri.components.igm.dla`. The previous implementation
+    used a flat Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution;
-    Totani et al. (2006), PASJ 58, 485; Lyα cross-section.
+    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution; [1]_
+    Miralda-Escudé (1998), ApJ 501, 15, Lyα cross-section; [2]_
+    Totani et al. (2006), PASJ 58, 485, damping-wing profile. [3]_
+
+    .. [1] Asada, S., et al. 2025, ApJL 983, L2, doi:10.3847/2041-8213/ad9be2.
+    .. [2] Miralda-Escudé, J. 1998, ApJ 501, 15, doi:10.1086/305814.
+    .. [3] Totani, T., et al. 2006, PASJ 58, 485, doi:10.1093/pasj/58.3.485.
     """
     # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
@@ -443,7 +448,7 @@ def _cgm_damping_wing_tau(
     # Totani+06 Eq. 4. The (ν/ν_α)^4 factor is what curves the cross-section
     # away from a flat Lorentzian in the far wing.
     lam_cm = _WL_LYA * 1e-8
-    prefactor = 3.0 * lam_cm**2 * _F_LYA * _A_LYA / (8.0 * jnp.pi)
+    prefactor = 3.0 * lam_cm**2 * _A_LYA / (8.0 * jnp.pi)
     numerator = _A_LYA * nu_ratio**4
     denominator = 4.0 * jnp.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4.0
     sigma_dw = prefactor * numerator / denominator
