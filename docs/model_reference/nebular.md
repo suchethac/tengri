@@ -65,7 +65,7 @@ For a single power law $f_\nu \propto \nu^{\alpha_{\rm pl}}$ (as used for AGN; {
 
 Five additional parameters describe the photoionized gas:
 
-- $\log U \in [-4, -1]$: inner-face ionization parameter at R = 10^19 cm (Cue's convention; not the volume-averaged $\langle U \rangle$ of Gutkin et al. 2016 that Synthesizer uses).
+- $\log U \in [-4, -1]$: ionization parameter at the illuminated face of the cloud.
 
 - $\log n_{\rm H} \in [1, 4]$: hydrogen number density ($\mathrm{cm}^{-3}$).
 

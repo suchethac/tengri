@@ -87,7 +87,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Inner-face ionization parameter at R = 10^19 cm [log10(U)]",
         lambda lo, hi: lo >= -5 and hi <= 0,
         "must be in [-5, 0]",
-        free_prior=Uniform(-5.0, 0.0, "Ionization parameter log10(U)", default=-3.0),
+        free_prior=Uniform(
+            -5.0, 0.0, "Inner-face ionization parameter at R = 10^19 cm [log10(U)]", default=-3.0
+        ),
     ),
     ParamDeclaration(
         "neb_logZ_gas",

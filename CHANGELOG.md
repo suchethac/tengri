@@ -16,10 +16,11 @@
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
 
-- `neb_logU` is documented as Cue's inner-face ionization parameter at R = 10^19 cm
-  (not the Strömgren radius, and not the volume-averaged ⟨U⟩ of Gutkin et al. 2016),
-  with the mapping between the two at n_H = 100 cm⁻³; the FSPS CLOUDY grid converter
-  describes its metallicity axis as log10(Z / Z_sun) (#2632, #2633).
+- `neb_logU` is documented as Cue's inner-face ionization parameter at R = 10^19 cm, not the
+  Synthesizer ionization parameter, which is three times the Strömgren-radius U_S of Gutkin et al.
+  (2016, eq. 7), with the mapping between the two at n_H = 100 cm⁻³; the FSPS CLOUDY grid converter
+  describes its metallicity axis as log10(Z / Z_sun) as tabulated by FSPS, not "absolute
+  metallicity" (#2632, #2633).
 
 ### Added
 

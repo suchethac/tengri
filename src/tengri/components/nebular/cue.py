@@ -685,11 +685,15 @@ def _logq_from_logu(
     **JIT-compatible**: yes, simple arithmetic.
 
     `neb_logU` is the ionization parameter U = Q_H / (4π R² n_H c) evaluated
-    at the inner face R = 10^19 cm. This is NOT the volume-averaged ionization
-    parameter ⟨U⟩ = (3 Q n α_B² / 4π c³)^(1/3) used by Synthesizer
-    (Gutkin et al. 2016 eq. 1). The two differ by a Q- and n-dependent factor.
-    At n_H = 100 cm⁻³: log ⟨U⟩ = −2 corresponds to neb_logU = −2.35, and
-    neb_logU = −2 corresponds to log ⟨U⟩ = −1.88 (the offset increases with Q).
+    at the inner face R = 10^19 cm, Cue's default
+    (``cue.utils.logQ(logU, R=1e19, lognH=2)``). It is NOT the ionization
+    parameter of Synthesizer, U = (α_B^(2/3) / c) (3 Q n_H / 4π)^(1/3)
+    (Synthesizer's ``calculate_U_from_Q``), which is three times the
+    Strömgren-radius U_S of Gutkin et al. (2016, eq. 7), the quantity their
+    footnote 3 identifies with the volume-averaged ⟨U⟩. The two differ by a
+    Q- and n_H-dependent factor. At n_H = 100 cm⁻³: Synthesizer's
+    log U = −2 corresponds to neb_logU = −2.35, and neb_logU = −2 corresponds
+    to Synthesizer's log U = −1.88 (the offset increases with Q).
 
     """
     return gas_logu + device_table(_LOG_4PI) + 2.0 * log_R + gas_logn + device_table(_LOG_C)

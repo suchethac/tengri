@@ -206,7 +206,8 @@ def convert(
         lines_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         lines_axes.create_dataset("log_met", data=lines_grid["logZ"])
         lines_axes["log_met"].attrs["description"] = (
-            "log10(Z / Z_sun), Z_sun = 0.0142 (Byler et al. 2017 axis)"
+            "log10(Z / Z_sun) as tabulated by FSPS (Byler et al. 2017); "
+            "tengri's loader adds LOG10_ZSUN"
         )
         lines_axes.create_dataset("log_U", data=lines_grid["logU"])
         lines_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
@@ -239,7 +240,8 @@ def convert(
         cont_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         cont_axes.create_dataset("log_met", data=cont_grid["logZ"])
         cont_axes["log_met"].attrs["description"] = (
-            "log10(Z / Z_sun), Z_sun = 0.0142 (Byler et al. 2017 axis)"
+            "log10(Z / Z_sun) as tabulated by FSPS (Byler et al. 2017); "
+            "tengri's loader adds LOG10_ZSUN"
         )
         cont_axes.create_dataset("log_U", data=cont_grid["logU"])
         cont_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
