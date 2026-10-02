@@ -46,9 +46,7 @@ class TestLineFluxLikelihood:
             model = jnp.array([1.0, 1.3])  # line 2: model 3 sigma above obs
 
             # Detection: both lines are detections
-            lfd_det = LineFluxData(
-                names=names, fluxes=obs, errors=err, wavelengths=w
-            )
+            lfd_det = LineFluxData(names=names, fluxes=obs, errors=err, wavelengths=w)
             log_l_det = float(lfd_det.log_likelihood(model))
 
             # Upper limit: line 2 flagged as upper limit
@@ -74,13 +72,9 @@ class TestLineFluxLikelihood:
             # Compute expected values using closed-form physics from brief
             # Physics: ln L = −½((F−m)/σ)² − ln σ − ½ ln 2π
             # Line 1 (detection): F=1.0, m=1.0, σ=0.1 → r=0
-            line1_det = float(
-                -0.5 * (0.0**2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi)
-            )
+            line1_det = float(-0.5 * (0.0**2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi))
             # Line 2 (detection): F=1.0, m=1.3, σ=0.1 → r=-3
-            line2_det = float(
-                -0.5 * ((-3.0)**2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi)
-            )
+            line2_det = float(-0.5 * ((-3.0) ** 2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi))
             exp_det = line1_det + line2_det
 
             # Upper limit: ln L = ln Φ((F-m)/σ)
@@ -131,8 +125,7 @@ class TestLineFluxLikelihood:
 
             # Satisfied lower limit should have higher likelihood
             assert log_l_satisfied > log_l_violated, (
-                f"Lower limit: satisfied {log_l_satisfied} should exceed "
-                f"violated {log_l_violated}"
+                f"Lower limit: satisfied {log_l_satisfied} should exceed violated {log_l_violated}"
             )
 
             # Gradient at m=F+3σ: grad = +φ(z)/Φ(z)/σ
@@ -140,13 +133,10 @@ class TestLineFluxLikelihood:
             grad_f = jax.grad(lambda m: lfd.log_likelihood(jnp.array([1.0, m])))
             grad_m_satisfied = float(grad_f(1.3))
             exact_grad_sat = float(
-                jnp.exp(
-                    stats.norm.logpdf(z_sat) - stats.norm.logcdf(z_sat)
-                ) / 0.1
+                jnp.exp(stats.norm.logpdf(z_sat) - stats.norm.logcdf(z_sat)) / 0.1
             )
             assert np.isclose(grad_m_satisfied, exact_grad_sat, rtol=1e-8), (
-                f"Gradient at z=+3: got {grad_m_satisfied}, "
-                f"expected {exact_grad_sat}"
+                f"Gradient at z=+3: got {grad_m_satisfied}, expected {exact_grad_sat}"
             )
 
     def test_upper_limit_strongly_violated_no_clamp(self):
@@ -171,36 +161,30 @@ class TestLineFluxLikelihood:
 
             base = float(stats.norm.logpdf(0.0, scale=0.1))
 
+            def likelihood_fn(x):
+                return lfd.log_likelihood(jnp.array([1.0, x])) - base
+
             for z in (-15.0, -30.0, -100.0):
                 # Model flux giving (U - m)/sigma = z
                 m = 1.0 - 0.1 * z
-                f = lambda x: lfd.log_likelihood(jnp.array([1.0, x])) - base
 
-                log_l = float(f(m))
+                log_l = float(likelihood_fn(m))
                 exp_log_l = float(jax.scipy.special.log_ndtr(z))
 
                 # Check value relative error
                 rel_err = abs(log_l - exp_log_l) / abs(exp_log_l)
                 assert rel_err < 1e-10, (
-                    f"At z={z}: value {log_l} vs expected {exp_log_l}, "
-                    f"rel_err {rel_err}"
+                    f"At z={z}: value {log_l} vs expected {exp_log_l}, rel_err {rel_err}"
                 )
 
                 # Check gradient is nonzero and correct
-                grad_m = float(jax.grad(f)(m))
-                exact_grad = -float(
-                    jnp.exp(
-                        stats.norm.logpdf(z) - stats.norm.logcdf(z)
-                    ) / 0.1
-                )
+                grad_m = float(jax.grad(likelihood_fn)(m))
+                exact_grad = -float(jnp.exp(stats.norm.logpdf(z) - stats.norm.logcdf(z)) / 0.1)
 
-                assert grad_m != 0.0, (
-                    f"At z={z}: gradient {grad_m} should be nonzero"
-                )
+                assert grad_m != 0.0, f"At z={z}: gradient {grad_m} should be nonzero"
                 rel_grad_err = abs(grad_m - exact_grad) / abs(exact_grad)
                 assert rel_grad_err < 1e-8, (
-                    f"At z={z}: gradient {grad_m} vs expected {exact_grad}, "
-                    f"rel_err {rel_grad_err}"
+                    f"At z={z}: gradient {grad_m} vs expected {exact_grad}, rel_err {rel_grad_err}"
                 )
 
     def test_chi2_detection_only(self):
@@ -213,9 +197,7 @@ class TestLineFluxLikelihood:
             model = jnp.array([1.0, 1.3, 0.8])  # line 2: +3σ, line 3: -2σ
 
             # All detections
-            lfd_det = LineFluxData(
-                names=names, fluxes=obs, errors=err, wavelengths=w
-            )
+            lfd_det = LineFluxData(names=names, fluxes=obs, errors=err, wavelengths=w)
             chi2_det = float(lfd_det.chi2(model))
 
             # With line 2 as upper limit and line 3 as lower limit
@@ -250,14 +232,11 @@ class TestJointSpectroscopyPath:
         - Energies differ (upper vs lower).
         - With no limits, energy unchanged from inlined χ² formula.
         """
-        import jax
-
-        jax.config.update("jax_enable_x64", True)
-
+        import tengri
         from tengri import (
             DEFAULT,
-            Fixed,
             Fitter,
+            Fixed,
             Observation,
             Photometry,
             SEDModel,
@@ -266,17 +245,13 @@ class TestJointSpectroscopyPath:
         from tengri.observation.photometry import FilterCurve
         from tengri.observation.spectroscopy import Spectroscopy
 
-        import tengri
-
         ssp = tengri.load_ssp()
 
         # Build minimal photometry and spectroscopy
         curves = []
         for i, c in enumerate([4000.0, 5500.0, 7000.0, 9000.0]):
             wv = np.linspace(c - 500, c + 500, 32)
-            curves.append(
-                FilterCurve(wave=wv, trans=np.ones_like(wv), name=f"b{i}")
-            )
+            curves.append(FilterCurve(wave=wv, trans=np.ones_like(wv), name=f"b{i}"))
         phot = Photometry(filters=tuple(curves))
         spec = Spectroscopy(wave_obs=np.linspace(4000.0, 9000.0, 40))
 
@@ -286,9 +261,7 @@ class TestJointSpectroscopyPath:
         def build_model(lfd=None):
             return SEDModel.build(
                 ssp_data=ssp,
-                observation=Observation(
-                    photometry=phot, spectroscopy=spec, line_fluxes=lfd
-                ),
+                observation=Observation(photometry=phot, spectroscopy=spec, line_fluxes=lfd),
                 sfh={
                     "type": "dpl",
                     "all_params": Fixed(DEFAULT),
@@ -318,9 +291,7 @@ class TestJointSpectroscopyPath:
             kw = (
                 {"is_upper_limit": jnp.array([False, True])}
                 if kind == "upper"
-                else {
-                    "is_lower_limit": jnp.array([False, True])
-                }
+                else {"is_lower_limit": jnp.array([False, True])}
                 if kind == "lower"
                 else {}
             )
@@ -336,12 +307,10 @@ class TestJointSpectroscopyPath:
             loss_fn = f._get_or_build_loss_fn()
             da = f._build_data_args(m)
             u = f._initialize_unbounded(jax.random.PRNGKey(0))
-            key = [k for k in u if "log_total_mass" in k][0]
+            key = next(k for k in u if "log_total_mass" in k)
             u = {
                 **u,
-                key: f.spec.get_distribution(key).standardize(
-                    jnp.asarray(float(log_tm))
-                ),
+                key: f.spec.get_distribution(key).standardize(jnp.asarray(float(log_tm))),
             }
             return float(loss_fn(u, da)), "line_flux_limit_mask" in da
 
@@ -350,7 +319,7 @@ class TestJointSpectroscopyPath:
             log_tm_base = 11.8
             energies_at_scale = {}
             for kind in ("detection", "lower", "upper"):
-                e, has_mask = energy_joint_path(kind, scale, log_tm_base)
+                e, _ = energy_joint_path(kind, scale, log_tm_base)
                 energies_at_scale[kind] = e
 
             # Energies should differ between kinds
@@ -383,16 +352,14 @@ class TestFloat32Precision:
             )
 
             base_f64 = float(
-                lfd_f64.log_likelihood(jnp.array([1.0, 1.0])) -
-                stats.norm.logpdf(0.0, scale=0.1)
+                lfd_f64.log_likelihood(jnp.array([1.0, 1.0])) - stats.norm.logpdf(0.0, scale=0.1)
             )
 
             # z = ±3
             for z in (-3.0, 3.0):
                 m = 1.0 - 0.1 * z
                 log_l_f64 = float(
-                    lfd_f64.log_likelihood(jnp.array([1.0, m])) -
-                    stats.norm.logpdf(0.0, scale=0.1)
+                    lfd_f64.log_likelihood(jnp.array([1.0, m])) - stats.norm.logpdf(0.0, scale=0.1)
                 )
                 exp_f64 = float(jax.scipy.special.log_ndtr(z))
                 assert np.isclose(log_l_f64, exp_f64, rtol=1e-10)
@@ -410,32 +377,27 @@ class TestFloat32Precision:
             for z in (-3.0, 3.0):
                 m = 1.0 - 0.1 * z
                 log_l_f32 = float(
-                    lfd_f32.log_likelihood(
-                        jnp.array([1.0, m], dtype=jnp.float32)
-                    ) - stats.norm.logpdf(0.0, scale=0.1)
+                    lfd_f32.log_likelihood(jnp.array([1.0, m], dtype=jnp.float32))
+                    - stats.norm.logpdf(0.0, scale=0.1)
                 )
                 exp_f64 = float(jax.scipy.special.log_ndtr(z))
                 rel_err = abs(log_l_f32 - exp_f64) / abs(exp_f64)
                 assert rel_err < 1e-5, (
-                    f"Float32 at z={z}: {log_l_f32} vs {exp_f64}, "
-                    f"rel_err {rel_err}"
+                    f"Float32 at z={z}: {log_l_f32} vs {exp_f64}, rel_err {rel_err}"
                 )
 
             # z = -30: should be finite with nonzero gradient
             m_extreme = 1.0 - 0.1 * (-30.0)
             log_l_extreme = float(
-                lfd_f32.log_likelihood(
-                    jnp.array([1.0, m_extreme], dtype=jnp.float32)
-                ) - stats.norm.logpdf(0.0, scale=0.1)
+                lfd_f32.log_likelihood(jnp.array([1.0, m_extreme], dtype=jnp.float32))
+                - stats.norm.logpdf(0.0, scale=0.1)
             )
             assert np.isfinite(log_l_extreme), (
                 f"Float32 at z=-30: log_likelihood should be finite, got {log_l_extreme}"
             )
 
             grad_f = jax.grad(
-                lambda m: lfd_f32.log_likelihood(
-                    jnp.array([1.0, m], dtype=jnp.float32)
-                )
+                lambda m: lfd_f32.log_likelihood(jnp.array([1.0, m], dtype=jnp.float32))
             )
             grad_extreme = float(grad_f(jnp.float32(m_extreme)))
             assert grad_extreme != 0.0, (

@@ -27,7 +27,6 @@ import dataclasses
 
 import jax
 import jax.numpy as jnp
-import jax.scipy.special as jsp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
@@ -271,33 +270,17 @@ class LineFluxData:
         Handles detections, upper limits, and lower limits via the limit_mask
         (trinary: 0=detected, 1=upper, -1=lower). All limits evaluated with
         jax.scipy.stats.norm.logcdf (no clamps).
-
-        References
-        ----------
-        .. [1] Boquien M., Burgarella D., Roehlly Y., et al., 2019,
-               "CIGALE: Code Investigating GALaxy Emission",
-               A&A 622, A103, https://doi.org/10.1051/0004-6361/201834156
         """
         # Get the limit mask: 0=detection, 1=upper, -1=lower
         mask = self.limit_mask
 
-        if mask is None:
-            # All detections: use Gaussian likelihood
-            residual = (self.fluxes - model_fluxes) / self.errors
-            ll_gaussian = (
-                -0.5 * residual**2
-                - jnp.log(self.errors)
-                - 0.5 * jnp.log(2.0 * jnp.pi)
-            )
-            return jnp.sum(ll_gaussian)
-
-        # Mixed detections and limits: use three branches
+        # Compute detection likelihood for all lines
         residual = (self.fluxes - model_fluxes) / self.errors
-        ll_detected = (
-            -0.5 * residual**2
-            - jnp.log(self.errors)
-            - 0.5 * jnp.log(2.0 * jnp.pi)
-        )
+        ll_detected = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
+
+        # If no limits, return detection likelihood sum
+        if mask is None:
+            return jnp.sum(ll_detected)
 
         # Upper limit: ln L = ln Φ((f_upper - model) / error)
         z_upper = (self.fluxes - model_fluxes) / self.errors

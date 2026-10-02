@@ -19,7 +19,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.inference.likelihoods.gaussian import standardized_residual
-from tengri.observation.noise import censored_neg_log_likelihood
 
 __all__ = [
     "build_loglikelihood_fn",
