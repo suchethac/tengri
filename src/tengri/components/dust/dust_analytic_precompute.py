@@ -162,7 +162,7 @@ def _build_grid_modified_blackbody(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # filter integration in observed frame per dust_emission_precompute
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
@@ -248,7 +248,7 @@ def _build_grid_casey2012(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid, alpha_mir_grid, lambda_0_um_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # filter integration in observed frame per dust_emission_precompute
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
@@ -324,7 +324,7 @@ def _build_grid_graybody(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid, lambda_0_um_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # filter integration in observed frame per dust_emission_precompute
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
