@@ -747,13 +747,16 @@ class TestDelayedTauSFH:
 
     def test_dexp_sed_is_finite_and_positive(self, ssp_data):
         """Delayed tau SED must be finite and non-negative in the optical."""
+        # dexp start_gyr is the lookback time of SF onset (galaxy formation).
+        # Window is [0, start_gyr] bounded by the age of the universe.
+        # start_gyr = 5.0 Gyr gives SF from t=0 to t=5 Gyr observation age.
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
                 "sfh_dexp_log_total_mass": 1.0,  # 10 Msun/yr peak
                 "sfh_dexp_tau_gyr": 1.0,
-                "sfh_dexp_start_gyr": 0.0,
+                "sfh_dexp_start_gyr": 5.0,
             },
         )
         optical = (wave > 1000.0) & (wave < 30000.0)
@@ -765,6 +768,11 @@ class TestDelayedTauSFH:
 
         Direct comparison is approximate (different SFH shapes), but both are
         continuous SF histories and should agree within factor 2 at V-band per Msun.
+
+        Reference: fsps_stellar_starforming is a 3 Gyr constant SFH (generated in
+        scripts/generate_external_sed_reference.py line 92, age_gyr=3.0).
+        In tengri, dexp window is [0, start_gyr]; matching the 3 Gyr span requires
+        start_gyr = 3.0 Gyr (SF onset at lookback 3 Gyr, extending to present).
         """
         key = "fsps_stellar_starforming"
         if key not in ref:
@@ -785,7 +793,7 @@ class TestDelayedTauSFH:
             {
                 "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 0.0,
+                "sfh_dexp_start_gyr": 3.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -800,22 +808,38 @@ class TestDelayedTauSFH:
             "DPL peaks differ from FSPS const SFH; factor > 3× → normalization error."
         )
 
-    def test_dexp_bluer_than_dexp_old(self, ssp_data):
-        """Short-tau dexp (peaked recently) should be bluer than long-tau (peaked longer ago).
+    def test_dexp_short_tau_is_redder_at_common_onset(self, ssp_data):
+        """Short-tau dexp model should be redder (lower UV/V) than long-tau at common onset.
 
-        With start=0, dexp τ=0.3 peaks at 0.3 Gyr lookback (young stars → bluer);
-        τ=3.0 peaks at 3 Gyr lookback (older stellar pop → redder). If this fails,
-        the SFH time axis convention (lookback vs cosmic) is inverted.
+        start_gyr is the lookback time of SF onset; the window is [0, start_gyr].
+        dexp SFR ∝ (Δt/τ)·exp(−Δt/τ + 1) where Δt = start_gyr − t_lookback is cosmic
+        time since formation. Peak SFR at cosmic time T = τ, equivalently lookback
+        start_gyr − τ.
+
+        With common onset start_gyr = 5.0 Gyr:
+        - τ = 0.3 Gyr: peak at lookback 5.0 − 0.3 = 4.7 Gyr (very old, red stars)
+        - τ = 3.0 Gyr: peak at lookback 5.0 − 3.0 = 2.0 Gyr (younger, blue stars)
+        Short-tau model has older average stellar age → REDDER (lower UV/V ratio).
+        This test verifies time direction is not inverted.
         """
+        start_gyr_common = 5.0
         _wave_short, sed_short = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
-            {"sfh_dexp_log_total_mass": 1.0, "sfh_dexp_tau_gyr": 0.3, "sfh_dexp_start_gyr": 0.0},
+            {
+                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_tau_gyr": 0.3,
+                "sfh_dexp_start_gyr": start_gyr_common,
+            },
         )
         _wave_long, sed_long = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
-            {"sfh_dexp_log_total_mass": 1.0, "sfh_dexp_tau_gyr": 3.0, "sfh_dexp_start_gyr": 0.0},
+            {
+                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_tau_gyr": 3.0,
+                "sfh_dexp_start_gyr": start_gyr_common,
+            },
         )
         w = np.asarray(ssp_data.ssp_wave)
         short_color = _band_avg(w, sed_short / (sed_short.max() or 1), 2800.0, 150.0) / _band_avg(
@@ -825,11 +849,12 @@ class TestDelayedTauSFH:
             w, sed_long / (sed_long.max() or 1), 5500.0
         )
 
-        assert short_color > long_color, (
-            f"Short-tau dexp (τ=0.3 Gyr) not bluer than long-tau (τ=3 Gyr): "
+        assert short_color < long_color, (
+            f"Short-tau dexp (τ=0.3 Gyr, start={start_gyr_common}) should be REDDER "
+            f"than long-tau (τ=3.0 Gyr, start={start_gyr_common}): "
             f"short UV/V = {short_color:.3f}, long UV/V = {long_color:.3f}. "
-            "Recent SF peak → younger stars → higher UV/V. "
-            "Failure → lookback-time axis inversion in dexp SFH."
+            f"Peak at lookback start−tau: 0.3→4.7Gyr (old), 3.0→2.0Gyr (young). "
+            "Inversion here → lookback-time axis is inverted."
         )
 
 
@@ -1017,11 +1042,12 @@ class TestExpSFH:
     def test_tengri_expsfh_vs_fsps(self, ssp_data, ref, ref_wave):
         """tengri exponential SFH V-band agrees within 35% of FSPS reference.
 
-        Uses dexp SFH (delayed tau); tau=1 Gyr, 5 Gyr observation age.
-        M_formed is exactly ``10**sfh_dexp_log_total_mass`` — the SFH is
-        normalized to a total mass, so the analytic delayed-tau integral this
-        used to compute is unnecessary, and pairing it with
-        ``log_total_mass=1.0`` divided a 10 Msun SED by 2.7e10 (#1728).
+        Reference: fsps_expsfh_tau1gyr was generated with age_gyr=5.0 (generated in
+        scripts/generate_external_sed_reference.py line 152, EXPSFH_CASES).
+        FSPS sfh=1 with sf_start=0 forms stars from t=0 to tage=5.0 Gyr.
+        In tengri, dexp window is [0, start_gyr]; matching FSPS requires
+        start_gyr = 5.0 Gyr (SF onset at lookback 5 Gyr). M_formed is exactly
+        10**sfh_dexp_log_total_mass (normalized to total mass, not rate).
         """
         key = "fsps_expsfh_tau1gyr"
         if key not in ref:
@@ -1037,7 +1063,7 @@ class TestExpSFH:
             {
                 "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 0.0,
+                "sfh_dexp_start_gyr": 5.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -3156,6 +3182,11 @@ class TestSynthesizerSEDs:
         Both implement an exponentially declining SFH with tau=1 Gyr; the
         resulting mass-weighted age should be similar (~1–2 Gyr).
         Wide factor-5 tolerance (0.20–5.0) for SSP-library differences.
+
+        Reference: synth_expsfh_tau1gyr was generated with max_age=5.0 Gyr (generated in
+        scripts/generate_external_sed_reference.py line 152, EXPSFH_CASES).
+        In tengri, dexp window is [0, start_gyr]; matching Synthesizer's max_age
+        requires start_gyr = 5.0 Gyr (SF onset at lookback 5 Gyr).
         """
         key = "synth_expsfh_tau1gyr"
         if key not in ref:
@@ -3170,7 +3201,7 @@ class TestSynthesizerSEDs:
             {
                 "sfh_dexp_log_total_mass": np.log10(m_formed),
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 0.0,
+                "sfh_dexp_start_gyr": 5.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -3457,9 +3488,10 @@ class TestLognormSFH:
         """tengri dexp V-band per Msun matches FSPS lognorm_early within 5×.
 
         FSPS sfh=5: log-normal SFH, tmax=2 Gyr, tage=10 Gyr → peak at 8 Gyr lookback.
-        tengri dexp: start=7 Gyr, tau=1 Gyr → also peaks at 8 Gyr lookback. logzsol=0.
-        V-band (5500 Å) probes the mass-to-light ratio; both old stellar populations
-        should agree within 5× given SSP library differences (MIST vs BC03).
+        tengri dexp: The peak is at lookback = start − tau. For peak at 8 Gyr
+        lookback with τ=1 Gyr, start = 8 + 1 = 9 Gyr. logzsol=0.
+        V-band (5500 Å) probes mass-to-light ratio; both old populations should
+        agree within 5× given SSP library differences (MIST vs BC03).
         """
         key = "fsps_lognorm_lognorm_early"
         if key not in ref:
@@ -3467,14 +3499,14 @@ class TestLognormSFH:
 
         tau_gyr = 1.0
         peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e  # integral of dexp from 0 to ∞
+        m_formed = 10.0 ** (np.log10(peak_sfr) + 10.0)  # dexp normalized to exact mass
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
                 "sfh_dexp_log_total_mass": np.log10(m_formed),
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 7.0,
+                "sfh_dexp_start_gyr": 9.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -3492,8 +3524,9 @@ class TestLognormSFH:
         """tengri dexp NUV (2800 Å) per Msun matches FSPS lognorm_early within 10×.
 
         NUV traces recent star formation. Old populations (peak 8 Gyr ago) should
-        agree within 10× despite SFH shape differences. Wider tolerance (0.10–10.0)
-        reflects SSP library differences (MIST vs BC03) and UV sensitivity to turn-off.
+        agree within 10× despite SFH shape differences. The dexp peak is at lookback
+        = start − τ, so start = 8 + 1 = 9 Gyr. Tolerance (0.10–10.0) reflects SSP
+        library differences (MIST vs BC03) and UV sensitivity to stellar turn-off.
         """
         key = "fsps_lognorm_lognorm_early"
         if key not in ref:
@@ -3501,14 +3534,14 @@ class TestLognormSFH:
 
         tau_gyr = 1.0
         peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e
+        m_formed = 10.0 ** (np.log10(peak_sfr) + 10.0)
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
                 "sfh_dexp_log_total_mass": np.log10(m_formed),
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 7.0,
+                "sfh_dexp_start_gyr": 9.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -3526,7 +3559,8 @@ class TestLognormSFH:
         """tengri dexp V-band per Msun matches bagpipes lognorm_early within 5×.
 
         bagpipes uses lognorm with tmax=8 Gyr, fwhm=2 Gyr, logzsol=0 (peak 8 Gyr ago).
-        tengri dexp start=7, tau=1 → same peak timing. Tolerance 0.20–5.00 accounts
+        tengri dexp: peak at lookback = start − τ, so for peak at
+        8 Gyr lookback with τ=1 Gyr, start = 9 Gyr. Tolerance 0.20–5.00 accounts
         for BC03 vs DSPS/MIST library differences.
         """
         key = "bagpipes_lognorm_lognorm_early"
@@ -3535,14 +3569,14 @@ class TestLognormSFH:
 
         tau_gyr = 1.0
         peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e
+        m_formed = 10.0 ** (np.log10(peak_sfr) + 10.0)
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
                 "sfh_dexp_log_total_mass": np.log10(m_formed),
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 7.0,
+                "sfh_dexp_start_gyr": 9.0,
             },
         )
         sed_per_msun = sed / m_formed
@@ -3560,9 +3594,10 @@ class TestLognormSFH:
         """tengri dexp and FSPS lognorm V-band per Msun agree within 5× for matched ages.
 
         Both SFH types peaked ~8 Gyr ago (FSPS: tmax=2 Gyr, tage=10 Gyr;
-        tengri: start=7, tau=1 Gyr → peak at 8 Gyr lookback). This establishes
-        that tengri's dexp normalization is consistent with FSPS's sfh=5 log-normal
-        normalization for matched intermediate-to-old stellar populations.
+        tengri: peak at lookback = start − τ, so for peak at 8 Gyr
+        with τ=1 Gyr, start = 9 Gyr). This establishes that tengri's dexp
+        normalization is consistent with FSPS's sfh=5 log-normal normalization
+        for matched intermediate-to-old stellar populations.
         """
         key = "fsps_lognorm_lognorm_early"
         if key not in ref:
@@ -3570,14 +3605,14 @@ class TestLognormSFH:
 
         tau_gyr = 1.0
         peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e
+        m_formed = 10.0 ** (np.log10(peak_sfr) + 10.0)
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
                 "sfh_dexp_log_total_mass": np.log10(m_formed),
                 "sfh_dexp_tau_gyr": tau_gyr,
-                "sfh_dexp_start_gyr": 7.0,
+                "sfh_dexp_start_gyr": 9.0,
             },
         )
         sed_per_msun = sed / m_formed

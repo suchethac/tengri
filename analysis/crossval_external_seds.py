@@ -172,9 +172,10 @@ def _tengri_dexp(
     from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
+    log_total_mass = np.log10(peak_sfr) + 10.0
     spec = Parameters(
         mean_sfh_type="dexp",
-        sfh_dexp_log_total_mass=Fixed(np.log10(peak_sfr) + 10.0),
+        sfh_dexp_log_total_mass=Fixed(log_total_mass),
         sfh_dexp_tau_gyr=Fixed(tau_gyr),
         sfh_dexp_start_gyr=Fixed(start_gyr),
         met_logzsol=Fixed(logzsol),
@@ -188,7 +189,8 @@ def _tengri_dexp(
     result = model.predict_rest_sed(params)
     wave = np.asarray(result.wavelength)
     sed = np.asarray(result.sed)
-    m_formed = peak_sfr * tau_gyr * 1.0e9 * np.e  # analytic integral of t*exp(-t/tau)
+    # dexp is normalized to exactly 10**log_total_mass
+    m_formed = 10.0**log_total_mass
     return wave, sed / m_formed
 
 
@@ -273,20 +275,22 @@ def _build_all_tengri_seds(ssp_data, ref_wave: np.ndarray) -> dict[str, np.ndarr
     # FSPS/bagpipes use a declining tau model (SFR highest at galaxy formation,
     # declining to present in cosmic time). This corresponds to SFR INCREASING
     # with lookback time in DSPS convention — the opposite of tengri's 'exp' SFH.
-    # tengri's 'dexp' (delayed tau) peaks at start+tau in lookback time, representing
-    # a recently star-forming galaxy, not a galaxy formed long ago.
-    # Comparing them would show SFH-shape mismatch, not code errors.
-    # See CROSSVAL-02 in docs/known_bugs.md.
+    # tengri's 'dexp' (delayed tau) peaks at lookback start−tau, representing
+    # SF that peaks at a specific cosmic time. Comparing to declining-tau would
+    # show SFH-shape mismatch, not code errors. See CROSSVAL-02 in docs/known_bugs.md.
     # (no lines added — tengri_{expsfh_*} keys intentionally absent)
 
     # ── Log-normal cases (dexp approximation: matched peak lookback time) ──
-    # FSPS lognorm_early: peak at 2 Gyr from BB, tage=10 Gyr → peak 8 Gyr ago
-    # tengri dexp: start=7 Gyr + tau=1 Gyr → peak also 8 Gyr lookback
-    _add("lognorm_lognorm_early", *_tengri_dexp(ssp_data, tau_gyr=1.0, start_gyr=7.0))
-    # FSPS lognorm_recent: peak at 1 Gyr from BB, tage=5 Gyr → peak 4 Gyr ago
-    _add("lognorm_lognorm_recent", *_tengri_dexp(ssp_data, tau_gyr=0.5, start_gyr=3.0))
-    # FSPS lognorm_broad: peak at 3.5 Gyr from BB, tage=8 Gyr → peak 4.5 Gyr ago
-    _add("lognorm_lognorm_broad", *_tengri_dexp(ssp_data, tau_gyr=2.0, start_gyr=4.0))
+    # dexp peaks at lookback = start − tau.
+    # FSPS lognorm_early: peak at 2 Gyr from BB, tage=10 → peak 8 Gyr lookback
+    # tengri dexp τ=1: start = peak + tau = 8 + 1 = 9 Gyr → peak 8 Gyr lookback
+    _add("lognorm_lognorm_early", *_tengri_dexp(ssp_data, tau_gyr=1.0, start_gyr=9.0))
+    # FSPS lognorm_recent: peak at 1 Gyr from BB, tage=5 → peak 4 Gyr lookback
+    # tengri dexp τ=0.5: start = peak + tau = 4 + 0.5 = 4.5 Gyr → peak 4 Gyr lookback
+    _add("lognorm_lognorm_recent", *_tengri_dexp(ssp_data, tau_gyr=0.5, start_gyr=4.5))
+    # FSPS lognorm_broad: peak at 3.5 Gyr from BB, tage=8 → peak 4.5 Gyr lookback
+    # tengri dexp τ=2: start = peak + tau = 4.5 + 2 = 6.5 Gyr → peak 4.5 Gyr lookback
+    _add("lognorm_lognorm_broad", *_tengri_dexp(ssp_data, tau_gyr=2.0, start_gyr=6.5))
 
     # ── DPL cases ──────────────────────────────────────────────────────────
     _add(

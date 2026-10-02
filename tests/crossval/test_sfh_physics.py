@@ -106,19 +106,22 @@ class TestExponentialSFHPhysics:
     def test_declines_from_peak(self):
         """SFR peaks at `start` lookback time and declines away from it.
 
-        With start=0, peak is at present and SFR declines into the past.
+        The window is [0, start]. Peak is at t_lookback = start where
+        dt = start - t_lookback = 0 (exp(0) = 1 is maximal). Set start=10 Gyr
+        so peak is at lookback 10 Gyr (old), and SFR declines toward present.
         We verify the exponential decay behavior.
         """
         from tengri.components.stellar.sfh import exponential
 
-        sfr = exponential(T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=0.0)
-        # SFR should be highest at small lookback (near present) and decay
-        young = T_LOOKBACK < 1e9
-        old = T_LOOKBACK > 5e9
-        if jnp.sum(old) > 0 and jnp.sum(young) > 0:
-            mean_young = float(jnp.mean(sfr[young]))
-            mean_old = float(jnp.mean(sfr[old]))
-            assert mean_young > mean_old, "Exponential SFH should peak at start"
+        start_gyr = 10.0
+        sfr = exponential(T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=start_gyr * 1e9)
+        # SFR peaks at start (lookback 10 Gyr), declining toward present (lookback 0)
+        near_peak = (start_gyr * 0.8 * 1e9 < T_LOOKBACK) & (start_gyr * 1.1 * 1e9 > T_LOOKBACK)
+        far_from_peak = T_LOOKBACK < 1e9  # near present, far from peak
+        if jnp.sum(far_from_peak) > 0 and jnp.sum(near_peak) > 0:
+            mean_peak = float(jnp.mean(sfr[near_peak]))
+            mean_present = float(jnp.mean(sfr[far_from_peak]))
+            assert mean_peak > mean_present, "Exponential SFH should peak at start lookback time"
 
 
 # ── 3. DELAYED EXPONENTIAL — peaks at start + tau ─────────────────
@@ -128,15 +131,24 @@ class TestDelayedExponentialPhysics:
     """Delayed exponential: SFR(t) ∝ (t_lookback - start) * exp(-(t_lookback-start)/tau)."""
 
     def test_peaks_after_start(self):
-        """SFR should NOT peak at start — peak is displaced by tau."""
+        """SFR should NOT peak at start — peak is displaced by tau.
+
+        The peak is at lookback = start − tau. Set start=5 Gyr, tau=3 Gyr
+        so peak is at lookback 2 Gyr. SFR rises from formation, peaks at tau Gyr
+        after formation, then declines.
+        """
         from tengri.components.stellar.sfh import delayed_exponential
 
-        # start=0 means SF begins at lookback=0 (present day). Peak at ~tau.
+        start_gyr = 5.0
         tau = 3e9
-        sfr = delayed_exponential(T_LOOKBACK, log_total_mass=1.0, start=0.0, tau=tau)
+        sfr = delayed_exponential(T_LOOKBACK, log_total_mass=1.0, start=start_gyr * 1e9, tau=tau)
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
-        # Peak should be near tau in lookback time
-        assert 0.5e9 < peak_lbt < 10e9, f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr"
+        expected_peak_lbt = (start_gyr - 3.0) * 1e9  # start - tau
+        # Peak should be near start - tau in lookback time
+        # Tolerance ±1 Gyr to account for grid resolution
+        assert abs(peak_lbt / 1e9 - (start_gyr - 3.0)) < 1.0, (
+            f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr, expect {start_gyr - 3.0:.1f} Gyr"
+        )
         # SFR should be non-negative and finite
         assert_non_negative(sfr, name="sfr")
         chex.assert_tree_all_finite(sfr)
