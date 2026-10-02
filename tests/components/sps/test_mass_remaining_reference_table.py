@@ -179,6 +179,10 @@ _NEGATIVE = [
     pytest.param("fsps_prsc_miles_chabrier.h5", {}, None, True, id="isochrone_prsc"),
     pytest.param(_MIST_CHAB, {}, lambda a, z: (a + 0.01, z), True, id="age_shift"),
     pytest.param(_MIST_CHAB, {}, lambda a, z: (a, _shift_one(z, 5, 0.01)), True, id="met_shift"),
+    pytest.param(_MIST_CHAB, {}, lambda a, z: (a + 1e-4, z), True, id="age_shift_1e-4"),
+    pytest.param(
+        _MIST_CHAB, {}, lambda a, z: (a, _shift_one(z, 5, 1e-4)), True, id="met_shift_1e-4"
+    ),
     pytest.param(_MIST_CHAB, {}, lambda a, z: (np.delete(a, 40), z), False, id="age_node_removed"),
     pytest.param(_MIST_CHAB, {}, lambda a, z: (np.r_[-np.inf, a[1:]], z), True, id="age0_anchor"),
 ]
@@ -248,3 +252,34 @@ def test_file_own_table_preferred(tmp_path, reference):
     with h5py.File(path, "a") as f:
         f["ssp_mass_remaining"] = np.full((len(lgmet), len(age)), 0.5)
     assert np.allclose(np.asarray(_load(path).ssp_mass_remaining), 0.5)
+
+
+def test_alpha_axis_grid_does_not_get_the_2d_table(tmp_path, reference):
+    """A grid with an [alpha/Fe] axis never takes the (n_met, n_age) table.
+
+    The loader gives such a grid the metallicity-independent DSPS sigmoid,
+    shape (n_met, n_age), identical across metallicity.
+    """
+    age, lgmet, table = reference
+    n_alpha, n_wave = 3, 50
+    path = tmp_path / _MIST_CHAB
+    with h5py.File(path, "w") as f:
+        f["ssp_wave"] = np.linspace(1000.0, 20000.0, n_wave)
+        f["ssp_flux"] = np.full((len(lgmet), n_alpha, len(age), n_wave), 1e-4)
+        f["ssp_lg_age_gyr"] = age
+        f["ssp_lgmet"] = lgmet
+        f["ssp_alpha_fe"] = np.array([0.0, 0.2, 0.4])
+        f.attrs["imf"] = _CHAB_ATTR
+    mr = np.asarray(_load(path).ssp_mass_remaining)
+    assert mr.shape == table.shape
+    _assert_sigmoid(mr)
+    assert not np.allclose(mr, table)
+
+
+def test_reference_arrays_are_read_only():
+    """The cached reference arrays cannot be written through (all three)."""
+    from tengri.components.stellar.sps.dsps_wrapper import _load_mass_remaining_reference
+
+    for arr in _load_mass_remaining_reference(("mist", "chabrier")):
+        with pytest.raises(ValueError, match="read-only"):
+            arr[(0,) * arr.ndim] = 0.0

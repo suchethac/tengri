@@ -675,7 +675,13 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
             mass_remaining = _load_float(f["ssp_mass_remaining"], dtype=dtype)
         else:
             # Try the reference table first (FSPS MIST + Chabrier)
-            mass_remaining = _reference_mass_remaining(fp.stem, imf, ssp_lg_age_gyr, ssp_lgmet)
+            mass_remaining = _reference_mass_remaining(
+                fp.stem,
+                imf,
+                ssp_lg_age_gyr,
+                ssp_lgmet,
+                has_alpha_axis="ssp_alpha_fe" in f,
+            )
             if mass_remaining is not None:
                 # Convert reference table to JAX array with proper dtype handling
                 mass_remaining = jnp.asarray(
@@ -977,7 +983,10 @@ def _load_mass_remaining_reference(
     z_absolute = data[1]
     table = np.array(data[2:])
 
-    return log_age_yr, np.log10(z_absolute), table
+    lgmet_absolute = np.log10(z_absolute)
+    for arr in (log_age_yr, lgmet_absolute, table):
+        arr.flags.writeable = False
+    return log_age_yr, lgmet_absolute, table
 
 
 def _reference_mass_remaining(
@@ -985,6 +994,7 @@ def _reference_mass_remaining(
     imf: str,
     ssp_lg_age_gyr: np.ndarray,
     ssp_lgmet: np.ndarray,
+    has_alpha_axis: bool = False,
 ) -> np.ndarray | None:
     """Return the table-supplied mass-remaining data when all conditions match.
 
@@ -994,7 +1004,8 @@ def _reference_mass_remaining(
     :data:`_MASS_REMAINING_DATA_FILES`, the IMF matches, and the age and
     metallicity grids match the table's nodes exactly (``rtol=0``, ``atol=1e-6``
     in log-space). Age-0 anchors (``-inf`` log age) or any mismatch returns
-    ``None``, falling back to the DSPS sigmoid.
+    ``None``, falling back to the DSPS sigmoid. A grid with an [alpha/Fe] axis
+    also returns ``None``: the table is (n_met, n_age), not (n_met, n_alpha, n_age).
 
     Parameters
     ----------
@@ -1006,6 +1017,8 @@ def _reference_mass_remaining(
         Log10 SSP ages [Gyr].
     ssp_lgmet : ndarray, shape (n_met,)
         Log10 absolute SSP metallicity [Z, dimensionless].
+    has_alpha_axis : bool, optional
+        Whether the grid carries an [alpha/Fe] axis (``ssp_alpha_fe``).
 
     Returns
     -------
@@ -1013,7 +1026,7 @@ def _reference_mass_remaining(
         Surviving-mass fraction table, or ``None`` if any condition fails.
     """
     first_token = filename_stem.split("_")[0].lower()
-    if first_token not in ("fsps", "ssp"):
+    if first_token not in ("fsps", "ssp") or has_alpha_axis:
         return None
 
     isochrones = {iso for iso, _ in _MASS_REMAINING_DATA_FILES}
