@@ -2465,8 +2465,17 @@ class StellarSEDComponent:
         # star_formation_history.py:326-348 both measure the burst's cosmic
         # time from "now" (the observation epoch), which is per-galaxy, so it
         # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting.
-        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+        # registry setting. ``psb_suess2022``/``psb_flex`` (both
+        # ``psb_continuity_flex``, #2645) share the same injection: their
+        # fixed old bins are bounded to ``[tflex_gyr, age_universe_yr]`` the
+        # same way the burst is bounded to ``[0, age_universe_yr]``, so
+        # neither family's default fixed section extends past the Big Bang.
+        if isinstance(sfh_model, str) and sfh_model in (
+            "psb",
+            "psb_wild2020",
+            "psb_suess2022",
+            "psb_flex",
+        ):
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -3635,9 +3644,10 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020"):
+        if self.config.sfh_model in ("psb", "psb_wild2020", "psb_suess2022", "psb_flex"):
             # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this.
+            # diverge (#982); t_obs_gyr was hoisted above for this. The
+            # psb_suess2022/psb_flex share here is #2645.
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
