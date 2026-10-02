@@ -253,6 +253,7 @@ def band_average(
     ft: np.ndarray,
     *,
     weight: str = "photon",
+    integrate: str = "filter",
 ) -> float:
     """Bandpass-averaged :math:`L_\\nu` [erg/s/Hz], or NaN if uncovered.
 
@@ -268,11 +269,24 @@ def band_average(
         Bandpass weight :math:`w(\\lambda)`: ``"photon"`` uses
         :math:`1/\\lambda` (default; tengri, DSPS, FSPS, prospector, bagpipes),
         ``"energy"`` uses :math:`1/\\lambda^2` (CIGALE, energy-type filters).
+    integrate : {"filter", "sed"}, optional
+        Quadrature nodes. ``"filter"`` (default) samples the spectrum at the
+        filter's own nodes, ``np.interp(fw, wave, L_nu)``. ``"sed"`` integrates on
+        the spectrum's own nodes inside the filter's extent, with the filter
+        interpolated onto them; the filter's nodes are added to the grid, so
+        where the spectrum is the coarser of the two the filter shape is still
+        resolved. ``"sed"`` is exact for a spectrum sampled finer than the
+        filter and is the one to use when the spectrum carries emission lines.
 
     Returns
     -------
     float
         The band average, or ``nan`` when the SED does not span the filter.
+
+    Raises
+    ------
+    ValueError
+        If ``weight`` or ``integrate`` is not one of the listed values.
 
     Notes
     -----
@@ -290,6 +304,11 @@ def band_average(
     stellar-only comparison does not reach here". Requiring positive flux
     everywhere the transmission is significant catches both, including the
     partial case of a band straddling the edge.
+
+    With ``integrate="filter"`` a spectrum feature narrower than the filter's
+    node spacing (an emission line against a 25 Angstrom grid) is sampled at
+    whichever filter nodes fall near it, so the band value depends on where the
+    nodes sit.
     """
     if weight == "photon":
         w_exp = -1.0
@@ -297,22 +316,36 @@ def band_average(
         w_exp = -2.0
     else:
         raise ValueError(f"weight must be 'photon' or 'energy', got {weight!r}")
+    if integrate not in ("filter", "sed"):
+        raise ValueError(f"integrate must be 'filter' or 'sed', got {integrate!r}")
 
     wave = np.asarray(wave, float)
     L_nu = np.asarray(L_nu, float)
+    fw = np.asarray(fw, float)
+    ft = np.asarray(ft, float)
     live = ft > 1e-3
     lo, hi = fw[live].min(), fw[live].max()
     if wave.min() > lo or wave.max() < hi:
         return float("nan")
 
-    L_on_f = np.interp(fw, wave, L_nu)
-    if not np.all(L_on_f[live] > 0):
+    if integrate == "filter":
+        x = fw
+        t = ft
+        L_x = np.interp(x, wave, L_nu)
+        live_x = live
+    else:
+        inside = wave[(wave > fw[0]) & (wave < fw[-1])]
+        x = np.union1d(inside, fw)
+        t = np.interp(x, fw, ft)
+        L_x = np.interp(x, wave, L_nu)
+        live_x = t > 1e-3
+    if not np.all(L_x[live_x] > 0):
         return float("nan")
-    wgt = ft * fw**w_exp
-    denom = np.trapezoid(wgt, fw)
+    wgt = t * x**w_exp
+    denom = np.trapezoid(wgt, x)
     if not np.isfinite(denom) or denom <= 0:
         return float("nan")
-    return float(np.trapezoid(L_on_f * wgt, fw) / denom)
+    return float(np.trapezoid(L_x * wgt, x) / denom)
 
 
 def _filter_rows_inner(
@@ -323,6 +356,7 @@ def _filter_rows_inner(
     *,
     filters: tuple[tuple[str, str], ...],
     weight: str,
+    integrate: str = "filter",
 ) -> list[tuple[str, float, float, float, float]]:
     """Shared logic for filter_rows and filter_rows_native.
 
@@ -340,6 +374,8 @@ def _filter_rows_inner(
         ``(file stem, label)`` pairs.
     weight : {"photon", "energy"}
         Bandpass weight to pass to :func:`band_average`.
+    integrate : {"filter", "sed"}
+        Quadrature nodes, passed to :func:`band_average`.
 
     Returns
     -------
@@ -349,8 +385,8 @@ def _filter_rows_inner(
     rows = []
     for stem, label in filters:
         fw, ft = load_filter(stem)
-        a = band_average(w_t, L_t, fw, ft, weight=weight)
-        b = band_average(w_ref, L_ref, fw, ft, weight=weight)
+        a = band_average(w_t, L_t, fw, ft, weight=weight, integrate=integrate)
+        b = band_average(w_ref, L_ref, fw, ft, weight=weight, integrate=integrate)
         ratio = a / b if (np.isfinite(a) and np.isfinite(b) and b > 0) else float("nan")
         rows.append((label, pivot_wavelength(fw, ft) / 1e4, a, b, ratio))
     return rows
@@ -363,6 +399,7 @@ def filter_rows(
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
     weight: str = "photon",
+    integrate: str = "filter",
 ) -> list[tuple[str, float, float, float, float]]:
     """Band-average both SEDs through each filter and form the ratio.
 
@@ -383,6 +420,8 @@ def filter_rows(
         ``(file stem, label)`` pairs. Defaults to :data:`BROAD_FILTERS`.
     weight : {"photon", "energy"}, optional
         Passed to :func:`band_average`.
+    integrate : {"filter", "sed"}, optional
+        Passed to :func:`band_average`; default ``"filter"``.
 
     Returns
     -------
@@ -391,7 +430,9 @@ def filter_rows(
         order given. Uncovered bands carry ``nan`` and are kept in the list so
         the caller can show the gap.
     """
-    return _filter_rows_inner(w_ref, L_t, w_ref, L_ref, filters=filters, weight=weight)
+    return _filter_rows_inner(
+        w_ref, L_t, w_ref, L_ref, filters=filters, weight=weight, integrate=integrate
+    )
 
 
 def filter_rows_native(
@@ -402,6 +443,7 @@ def filter_rows_native(
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
     weight: str = "photon",
+    integrate: str = "filter",
 ) -> list[tuple[str, float, float, float, float]]:
     """Band-average each SED on its own grid and form the ratio.
 
@@ -426,6 +468,10 @@ def filter_rows_native(
         Bandpass weight; defaults to ``"photon"`` (tengri, DSPS, FSPS,
         prospector). Both sides are integrated with the same weight and filter
         curves.
+    integrate : {"filter", "sed"}, optional
+        Passed to :func:`band_average`; default ``"filter"``. ``"sed"`` integrates
+        each side on its own nodes, which removes the dependence of an
+        emission-line band value on the filter's node positions.
 
     Returns
     -------
@@ -442,7 +488,9 @@ def filter_rows_native(
     band-averaging aliases narrow lines and distorts the band values; this
     function avoids that by computing band averages on each side's native grid.
     """
-    return _filter_rows_inner(w_t, L_t, w_ref, L_ref, filters=filters, weight=weight)
+    return _filter_rows_inner(
+        w_t, L_t, w_ref, L_ref, filters=filters, weight=weight, integrate=integrate
+    )
 
 
 def print_filter_table(
@@ -452,6 +500,7 @@ def print_filter_table(
     title: str,
     tol: float = 0.05,
     compact: bool = False,
+    show_worst_band: bool = False,
 ) -> None:
     """Print the band-by-band ratio table.
 
@@ -469,6 +518,9 @@ def print_filter_table(
         Print one summary line instead of the full table -- for the
         deliberately-wrong control configurations, where the point is that
         they are wrong and by how much, not which band. Default False.
+    show_worst_band : bool, optional
+        In compact mode, append the label of the band with the largest
+        ``|ratio - 1|``. Default False.
     """
     if compact:
         finite = [r[4] for r in rows if np.isfinite(r[4])]
@@ -477,9 +529,12 @@ def print_filter_table(
             return
         worst = max(finite, key=lambda x: abs(x - 1.0))
         n_bad = sum(1 for x in finite if abs(x - 1.0) > tol)
+        where = ""
+        if show_worst_band:
+            where = f" ({next(r[0] for r in rows if r[4] == worst)})"
         print(
             f"  {title:<52} median {np.median(finite):.3f}x  "
-            f"worst {worst:.3f}x  {n_bad}/{len(finite)} outside {tol:.0%}"
+            f"worst {worst:.3f}x{where}  {n_bad}/{len(finite)} outside {tol:.0%}"
         )
         return
 
@@ -508,8 +563,20 @@ def convention_sensitivity(
     L_ref: np.ndarray,
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
+    integrate: str = "filter",
 ) -> float:
     """Largest band-ratio shift between the photon and energy conventions.
+
+    Parameters
+    ----------
+    w_ref : array_like, shape (n_wave,)
+        Shared rest-frame wavelength grid [Angstrom].
+    L_t, L_ref : array_like, shape (n_wave,)
+        tengri and reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    filters : tuple of (str, str), optional
+        ``(file stem, label)`` pairs.
+    integrate : {"filter", "sed"}, optional
+        Passed to :func:`band_average`; default ``"filter"``.
 
     Returns
     -------
@@ -525,8 +592,18 @@ def convention_sensitivity(
     :math:`10^{-3}` says the ratios below are safe to read without knowing
     which convention the reference code used internally.
     """
-    a = {r[0]: r[4] for r in filter_rows(w_ref, L_t, L_ref, filters=filters, weight="photon")}
-    b = {r[0]: r[4] for r in filter_rows(w_ref, L_t, L_ref, filters=filters, weight="energy")}
+    a = {
+        r[0]: r[4]
+        for r in filter_rows(
+            w_ref, L_t, L_ref, filters=filters, weight="photon", integrate=integrate
+        )
+    }
+    b = {
+        r[0]: r[4]
+        for r in filter_rows(
+            w_ref, L_t, L_ref, filters=filters, weight="energy", integrate=integrate
+        )
+    }
     d = [abs(a[k] - b[k]) for k in a if np.isfinite(a[k]) and np.isfinite(b[k])]
     return float(max(d)) if d else float("nan")
 
@@ -1063,8 +1140,13 @@ def _marker_subsample(x, n=26, window=None):
     return np.unique(idx[np.clip(picks, 0, idx.size - 1)])
 
 
-def _code_style_handles(ref_label):
+def _code_style_handles(ref_label, ref_style="markers"):
     """Two proxy artists naming which mark belongs to which code."""
+    if ref_style == "line":
+        return [
+            Line2D([], [], color="0.30", linestyle="-", linewidth=3.2, alpha=0.45, label=ref_label),
+            Line2D([], [], color="0.30", linestyle="-", linewidth=1.4, label="tengri"),
+        ]
     return [
         Line2D(
             [],
@@ -1130,6 +1212,9 @@ def sweep_fig(
     cmap: str | None = None,
     values: list[float] | None = None,
     param_label: str | None = None,
+    ref_style: str = "markers",
+    fixed_ratio_ylim: bool = False,
+    annotate_median: bool = False,
 ) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
     """Overlay multiple SED comparisons with a ratio panel, one figure.
 
@@ -1201,6 +1286,16 @@ def sweep_fig(
         instead of a per-case legend; the colourbar becomes the legend for
         the continuous encoding. Default: ``None``.
 
+    ref_style : {"markers", "line"}, optional
+        ``"markers"`` (default) draws the reference as a sparse open-circle overlay;
+        ``"line"`` draws it as a wide translucent solid line under tengri's line.
+    fixed_ratio_ylim : bool, optional
+        If True the ratio panel uses ``ratio_ylim`` exactly instead of widening to hold
+        the signal-region spread. Default False.
+    annotate_median : bool, optional
+        If True each case's median tengri/reference ratio over the plotted window
+        is printed in the ratio panel. Default False.
+
     Returns
     -------
     fig : plt.Figure
@@ -1226,6 +1321,7 @@ def sweep_fig(
     ratios: dict[str, np.ndarray] = {}
     _plotted: list[tuple[np.ndarray, np.ndarray]] = []
     _r_sig: list[np.ndarray] = []
+    _medians: list[tuple] = []
 
     # Determine colours
     n_cases = len(cases)
@@ -1305,18 +1401,21 @@ def sweep_fig(
         # read as a single line wherever they agree, which is most of the axis and
         # is exactly where the reader needs to see that they agree.
         _xr, _yr = x_ref[pos_ref], L_ref[pos_ref]
-        _mk = _marker_subsample(_xr, window=xlim)
-        ax.plot(
-            _xr[_mk],
-            _yr[_mk],
-            color=color,
-            linestyle="none",
-            marker="o",
-            markerfacecolor="none",
-            markeredgewidth=1.3,
-            markersize=5.6,
-            zorder=3,
-        )
+        if ref_style == "line":
+            ax.plot(_xr, _yr, color=color, linestyle="-", linewidth=3.2, alpha=0.45, zorder=1)
+        else:
+            _mk = _marker_subsample(_xr, window=xlim)
+            ax.plot(
+                _xr[_mk],
+                _yr[_mk],
+                color=color,
+                linestyle="none",
+                marker="o",
+                markerfacecolor="none",
+                markeredgewidth=1.3,
+                markersize=5.6,
+                zorder=3,
+            )
         ax.plot(
             x_ref[pos_t],
             L_t_on_ref[pos_t],
@@ -1335,6 +1434,12 @@ def sweep_fig(
         # its own peak the quotient is division by noise, and those spikes bury
         # the few-percent structure the panel exists to show.
         _r_plot = np.where(overlap_positive & _sig, ratio, np.nan)
+        if annotate_median:
+            _in = np.isfinite(_r_plot)
+            if xlim is not None:
+                _in &= (x_ref >= xlim[0]) & (x_ref <= xlim[1])
+            if _in.any():
+                _medians.append((color, label, float(np.median(_r_plot[_in]))))
         ax_r.plot(
             x_ref,
             _r_plot,
@@ -1397,7 +1502,7 @@ def sweep_fig(
             ax.add_artist(_case_leg)
 
     fig.legend(
-        handles=_code_style_handles(ref_label),
+        handles=_code_style_handles(ref_label, ref_style),
         fontsize=8,
         loc="upper right",
         bbox_to_anchor=(0.995, 0.998),
@@ -1412,7 +1517,7 @@ def sweep_fig(
     ax_r.axhline(1.0, color="0.5", linewidth=0.8)
     ax_r.set_xscale("log")
     _fin = [a for a in _r_sig if a.size]
-    if _fin:
+    if _fin and not fixed_ratio_ylim:
         # ratio_ylim is a floor on the window, not a crop: a case sitting at 0.45
         # was drawn against the bottom edge and read as "0.5 or less". Widen to
         # hold the signal-region spread, bounded so one spike cannot flatten the
@@ -1427,6 +1532,17 @@ def sweep_fig(
     ax_r.set_xlabel(xlabel)
     ax_r.set_ylabel("tengri / ref", fontsize=9)
     ax_r.grid(True, alpha=0.3)
+    for _k, (_c, _l, _m) in enumerate(_medians):
+        ax_r.text(
+            1.01,
+            0.98 - 0.2 * _k,
+            f"{_l}: median {_m:.4f}",
+            transform=ax_r.transAxes,
+            color=_c,
+            fontsize=7,
+            va="top",
+            ha="left",
+        )
 
     return fig, (ax, ax_r), ratios
 
@@ -1673,6 +1789,8 @@ def overlay_ratio_fig(
     band: tuple[float, float] = (0.9, 1.1),
     dyn_range: float = 1e-5,
     figsize: tuple[float, float] = (9.0, 6.5),
+    ref_style: str = "markers",
+    annotate_median: bool = False,
 ) -> tuple[plt.Figure, plt.Axes, plt.Axes, np.ndarray]:
     r"""Overlay two SEDs on ONE shared axis with a ratio panel.
 
@@ -1713,6 +1831,13 @@ def overlay_ratio_fig(
         Top-panel y floor as a fraction of the peak. Default: 1e-5.
     figsize : tuple of float, optional
         Figure size (width, height). Default: (9.0, 6.5).
+
+    ref_style : {"markers", "line"}, optional
+        ``"markers"`` (default) draws the reference as a sparse open-circle overlay;
+        ``"line"`` draws it as a wide translucent solid line under tengri's line.
+    annotate_median : bool, optional
+        If True the median tengri/reference ratio over ``xlim`` is printed in the
+        ratio panel. Default False.
 
     Returns
     -------
@@ -1779,19 +1904,24 @@ def overlay_ratio_fig(
     # Two same-width curves read as one wherever they agree, which is most of the
     # axis and is where the reader needs to see that they agree.
     _xr, _yr = x[pos_ref], L_ref[pos_ref]
-    _mk = _marker_subsample(_xr, n=34, window=xlim)
-    ax.plot(
-        _xr[_mk],
-        _yr[_mk],
-        color="C0",
-        linestyle="none",
-        marker="o",
-        markerfacecolor="none",
-        markeredgewidth=1.4,
-        markersize=6.0,
-        zorder=3,
-        label=ref_label,
-    )
+    if ref_style == "line":
+        ax.plot(
+            _xr, _yr, color="C0", linestyle="-", linewidth=3.2, alpha=0.5, zorder=1, label=ref_label
+        )
+    else:
+        _mk = _marker_subsample(_xr, n=34, window=xlim)
+        ax.plot(
+            _xr[_mk],
+            _yr[_mk],
+            color="C0",
+            linestyle="none",
+            marker="o",
+            markerfacecolor="none",
+            markeredgewidth=1.4,
+            markersize=6.0,
+            zorder=3,
+            label=ref_label,
+        )
     ax.plot(
         x[pos_t],
         L_t_on_ref[pos_t],
@@ -1836,5 +1966,18 @@ def overlay_ratio_fig(
     ax_r.set_xlabel(xlabel)
     ax_r.set_ylabel(f"tengri / {ref_label}", fontsize=9)
     ax_r.grid(True, alpha=0.3)
+    if annotate_median:
+        _in = pos_ref & pos_t
+        if xlim is not None:
+            _in &= (x >= xlim[0]) & (x <= xlim[1])
+        if _in.any():
+            ax_r.text(
+                0.01,
+                0.94,
+                f"median {float(np.median(ratio[_in])):.4f}",
+                transform=ax_r.transAxes,
+                fontsize=8,
+                va="top",
+            )
 
     return fig, ax, ax_r, ratio

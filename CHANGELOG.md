@@ -2,6 +2,13 @@
 
 ### Fixed
 
+- The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:
+  BAGPIPES is built on a converged wavelength grid (median λ/Δλ asserted),
+  band integrals run on each SED's own nodes through `band_average(...,
+  integrate="sed")` (the default `"filter"` is unchanged), the SSP file
+  carries BAGPIPES's L☉, tengri's metallicity scatter is set to a single
+  node, the continuity SFH takes explicit bin edges, and each code's own
+  photometry is compared at z = 0 and 0.5.
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception
