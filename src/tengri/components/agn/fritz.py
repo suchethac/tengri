@@ -124,11 +124,10 @@ def _interpolate_and_normalize(
 
     The shipped grid is the Fritz et al. (2006) [1]_ torus library as CIGALE's
     ``model.dust`` and ``model.disk`` arrays [2]_: luminosity per unit
-    wavelength :math:`L_\lambda` [W/nm], each with unit integral over
-    wavelength. The shipped file's ``dust_unit`` and ``disk_unit`` attributes
-    read ``erg/s/Hz``; the arrays are per unit wavelength, not per unit
-    frequency. The template is put on the requested wavelength grid and
-    converted with
+    wavelength :math:`L_\lambda` [W/nm]. ``dust`` is normalized to unit
+    :math:`\int L_\lambda \, d\lambda`; ``disk`` is in the same units,
+    relative to that dust, and its integral differs from node to node. The
+    template is put on the requested wavelength grid and converted with
 
     .. math::
 
@@ -142,8 +141,8 @@ def _interpolate_and_normalize(
     Parameters
     ----------
     grid_jax : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
-        Template grid, :math:`L_\lambda` [W/nm per unit integral over
-        wavelength]; only its shape matters, it is renormalized on use.
+        Template grid, :math:`L_\lambda` [W/nm]; only its shape matters, it is
+        renormalized on use.
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -167,7 +166,13 @@ def _interpolate_and_normalize(
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
 
     The normalization integral is taken over the requested grid, so a grid
-    that truncates the template still carries ``l_scale`` in total.
+    that truncates the template still carries ``l_scale`` in total: a grid
+    ending at 30 micron holds as little as 15 % of a template's power, and
+    all of ``l_scale`` is then placed inside the grid.
+
+    Each call renormalizes its template to ``l_scale``, so
+    :func:`fritz_components` carries the shape of the disc and of the dust but
+    not the library's disc-to-dust ratio.
 
     References
     ----------

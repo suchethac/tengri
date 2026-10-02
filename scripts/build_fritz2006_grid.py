@@ -33,7 +33,7 @@ The CIGALE ``fritz2006`` module exposes a ``SimpleDatabase`` API::
 
 Each model has:
 - ``.wl`` — wavelength array [nm]
-- ``.disk`` — accretion disk SED (direct + scattered) [W/nm, unit integral over wavelength]
+- ``.disk`` — accretion disk SED (direct + scattered) [W/nm, relative to ``.dust``]
 - ``.dust`` — torus thermal dust emission [W/nm, unit integral over wavelength]
 - ``.norm`` — overall normalization factor
 
@@ -50,7 +50,7 @@ The output file is organized as::
       psy_axis           (10,)       — psy values [0.001, 10.1, ..., 89.99]
       wavelength_aa      (178,)      — common wavelength grid [Angstrom]
       dust               (5,8,5,4,3,10,178)  — torus dust emission [W/nm, unit integral]
-      disk               (5,8,5,4,3,10,178)  — accretion disk SED [W/nm, unit integral]
+      disk               (5,8,5,4,3,10,178)  — accretion disk SED [W/nm, relative to dust]
 
 dtype: float64 (matching CIGALE precision)
 compression: gzip level 4 (balance speed vs. file size)
@@ -261,8 +261,8 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
             "luminosity per unit wavelength)"
         )
         g.attrs["disk_unit"] = (
-            "W/nm per unit integral over wavelength (pcigale model.disk, "
-            "luminosity per unit wavelength)"
+            "W/nm, luminosity per unit wavelength, in the units of the "
+            "unit-integral dust (pcigale model.disk)"
         )
         g.attrs["wavelength_unit"] = "Angstrom"
         g.attrs["opening_angle_unit"] = "degrees (half-opening angle, direct grid parameter)"

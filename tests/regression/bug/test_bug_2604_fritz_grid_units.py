@@ -2,9 +2,9 @@
 r"""The Fritz et al. (2006) torus template is a luminosity per unit wavelength.
 
 The shipped ``data/fritz2006_torus_grid.h5`` holds CIGALE's ``model.dust`` and
-``model.disk`` arrays [1]_: :math:`L_\lambda` [W/nm], each normalized to unit
-integral over wavelength, although the file's ``*_unit`` attributes read
-``erg/s/Hz``. The loader converts them with
+``model.disk`` arrays [1]_: :math:`L_\lambda` [W/nm]. ``dust`` is normalized to
+unit integral over wavelength; ``disk`` is in the same units relative to that
+dust. The loader converts them with
 
 .. math::
 
@@ -24,10 +24,12 @@ Four groups of cells:
   goes through the loader's normalization function on a grid whose nodes all
   carry that one template, so no parameter-space interpolation enters, and is
   compared with an independent numpy ``raw * lambda^2 / c``.
-* ``*_pcigale``: shape against CIGALE's own library read directly. The
-  residual is the six-dimensional triweight smoothing of the template across
-  neighboring nodes, which sets the bounds (12 % per band holding at least
-  10 % of the torus power, 10 % in the median power wavelength).
+* ``*_pcigale``: shape against CIGALE's own library read directly, at four
+  nodes. The bounds (12 % per band holding at least 10 % of the torus power,
+  10 % in the median power wavelength) are measured values at those four nodes
+  and are not a bound on the lookup residual of the six-dimensional triweight
+  kernel, which reaches 28 % per band and 18 % in the median elsewhere on the
+  grid (``test_lookup_residual_*``).
 * ``*_pinned``: the same checks against five band fractions per node written
   down from CIGALE, so they run without it.
 * ``test_model_*`` and the power, dtype and gradient cells: the public
@@ -268,8 +270,9 @@ def _assert_shape(tengri_l_lam, fractions, median_um, label):
 def test_shape_matches_pcigale_pinned(node, literal):
     """The public torus shape against the band fractions of CIGALE's library.
 
-    The bound is the measured residual of the template interpolation in
-    parameter space: the triweight kernel mixes neighboring tables at a node.
+    The bounds are the values measured at these four nodes, where the triweight
+    kernel mixes neighboring tables; they are not a bound on the lookup
+    residual (see ``test_lookup_residual_*``).
     Without the ``lambda^2 / c`` factor the 1-3 micron band is 2.2-3.5 times too
     high and the 8-20 micron band 8-16 times too low, far outside it.
     """
@@ -394,6 +397,88 @@ def test_model_torus_power_unchanged(node, _torus_states):
     wave_aa, lnu = _torus_states[node]
     power = _power_nu(lnu, wave_aa)
     assert power == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-5)
+
+
+# -- e. the lookup residual ---------------------------------------------------
+
+#: On-node points where the triweight lookup departs most from the library's
+#: node table: (r_ratio, tau, beta, gamma, half-angle, psy), the recorded
+#: largest departure of a band holding >= 10 % of the power, and the recorded
+#: departure of the median power wavelength (both relative).
+_LOOKUP_POINTS = (
+    ((60.0, 1.0, -0.75, 4.0, 40.0, 50.1), 0.276, 0.183),
+    ((60.0, 0.1, -0.5, 4.0, 40.0, 50.1), 0.273, -0.043),
+)
+_LOOKUP_IDS = ("beta-0.75", "tau0.1")
+
+
+def _lookup_expected_lnu(point, wave_aa):
+    """lambda^2 / c times the triweight-weighted sum of the raw tables, unit power."""
+    from tengri.utils.interpolation import compute_grid_weights
+
+    names = ("r_ratio", "tau", "beta", "gamma", "opening_angle", "psy")
+    with h5py.File(_GRID, "r") as f:
+        g = f["fritz2006"]
+        axes = [np.asarray(g[f"{n}_axis"][:]) for n in names]
+        template = np.asarray(g["dust"][:], dtype=float)
+        wave_grid = np.asarray(g["wavelength_aa"][:])
+    for ax, v in zip(axes, point, strict=True):
+        template = np.tensordot(
+            np.asarray(
+                compute_grid_weights(
+                    v,
+                    jnp.asarray(ax),
+                    scatter=0.5 * (ax[1] - ax[0]),
+                    edges=edges_for_grid(jnp.asarray(ax)),
+                    index_space_interp=True,
+                )
+            ),
+            template,
+            axes=([0], [0]),
+        )
+    return _expected_lnu(template, wave_grid, wave_aa)
+
+
+@pytest.mark.parametrize(("point", "band_dev", "median_dev"), _LOOKUP_POINTS, ids=_LOOKUP_IDS)
+def test_lookup_residual_is_the_triweight_weighting(point, band_dev, median_dev):
+    """The public path is the triweight-weighted raw tables; the recorded departure
+    from the library's own node table is the lookup residual.
+
+    The first assertion is the definition of the lookup (1e-6). The second and
+    third record how far that lookup sits from the library table at the node
+    itself (largest band holding >= 10 % of the power, and the median power
+    wavelength, each +-2 percentage points). They are the residual tracked in
+    #2606 and are removed when that issue closes.
+    """
+    _require_grid()
+    r, tau, beta, gamma, half, psy = point
+    wave_aa = _WAVE_NM * 10.0
+    lnu = np.asarray(
+        FR.fritz_sed(
+            jnp.asarray(wave_aa),
+            agn_log_lbol=0.0,
+            agn_torus_frac=1.0,
+            agn_fritz_r_ratio=r,
+            agn_fritz_tau=tau,
+            agn_fritz_beta=beta,
+            agn_fritz_gamma=gamma,
+            agn_fritz_oa=half,
+            agn_fritz_psy=psy,
+        )
+    )
+    want = _lookup_expected_lnu(point, wave_aa) * L_SUN
+    np.testing.assert_allclose(lnu, want, rtol=1e-6, atol=1e-9 * np.max(want))
+
+    node = (r, tau, beta, gamma, 180.0 - 2.0 * half, psy)
+    raw, wave_grid, _ = _raw_template(node, "dust")
+    library = _resample(_WAVE_NM, wave_grid / 10.0, raw)
+    public = lnu * C_AA / wave_aa**2
+    f_lib, f_pub = _band_fractions(library, _WAVE_NM), _band_fractions(public, _WAVE_NM)
+    sig = f_lib >= _SIGNIFICANT_BAND
+    got_band = float(np.max(np.abs(f_pub[sig] / f_lib[sig] - 1.0)))
+    got_median = _median_power_um(public, _WAVE_NM) / _median_power_um(library, _WAVE_NM) - 1.0
+    assert got_band == pytest.approx(band_dev, abs=0.02)
+    assert got_median == pytest.approx(median_dev, abs=0.02)
 
 
 # -- d. power ---------------------------------------------------------------
