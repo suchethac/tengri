@@ -70,17 +70,39 @@ class TestSFHNormalizationContract:
         )
 
     def test_exponential_normalization(self):
-        """exponential(log_total_mass) must conserve mass."""
-        self._check_normalization(exponential, T_LOOKBACK, log_total_mass=1.0, tau=2e9)
-        self._check_normalization(exponential, T_LOOKBACK, log_total_mass=0.5, tau=5e9)
-        self._check_normalization(exponential, T_LOOKBACK, log_total_mass=2.5, tau=1e9)
+        """exponential(log_total_mass) must conserve mass.
+
+        ``start`` is the lookback time of SF onset (galaxy formation): the
+        window is ``[0, start]`` (#2521), so ``start`` is pinned at the
+        grid's own maximum age for full coverage.
+        """
+        start = T_LOOKBACK[-1]
+        self._check_normalization(
+            exponential, T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=start
+        )
+        self._check_normalization(
+            exponential, T_LOOKBACK, log_total_mass=0.5, tau=5e9, start=start
+        )
+        self._check_normalization(
+            exponential, T_LOOKBACK, log_total_mass=2.5, tau=1e9, start=start
+        )
 
     def test_delayed_exponential_normalization(self):
-        """delayed_exponential(log_total_mass) must conserve mass."""
-        self._check_normalization(delayed_exponential, T_LOOKBACK, log_total_mass=1.0, tau=3e9)
-        self._check_normalization(delayed_exponential, T_LOOKBACK, log_total_mass=0.5, tau=5e9)
+        """delayed_exponential(log_total_mass) must conserve mass.
+
+        ``start`` is the lookback time of SF onset (galaxy formation): the
+        window is ``[0, start]`` (#2521), so ``start`` is pinned at the
+        grid's own maximum age for full coverage.
+        """
+        start = T_LOOKBACK[-1]
         self._check_normalization(
-            delayed_exponential, T_LOOKBACK, log_total_mass=2.0, tau=2e9, start=1e9
+            delayed_exponential, T_LOOKBACK, log_total_mass=1.0, tau=3e9, start=start
+        )
+        self._check_normalization(
+            delayed_exponential, T_LOOKBACK, log_total_mass=0.5, tau=5e9, start=start
+        )
+        self._check_normalization(
+            delayed_exponential, T_LOOKBACK, log_total_mass=2.0, tau=2e9, start=start
         )
 
     def test_dpl_normalization(self):
@@ -232,6 +254,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.5,
+            age_universe_yr=10e9,
         )
         self._check_normalization(
             psb_wild2020,
@@ -243,6 +266,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.3,
+            age_universe_yr=12e9,
         )
         self._check_normalization(
             psb_wild2020,
@@ -254,6 +278,7 @@ class TestSFHNormalizationContract:
             alpha=2.0,
             beta=1.0,
             fburst=0.1,
+            age_universe_yr=9e9,
         )
 
     def test_constant_normalization(self):
