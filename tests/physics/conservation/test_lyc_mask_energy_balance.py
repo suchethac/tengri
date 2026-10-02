@@ -245,8 +245,21 @@ class TestGoldenValues:
     # parents: two_component 5.849679302923598e59 -> 5.932047709369588e59
     # (+1.408%), single_screen 7.338318188268545e59 -> 7.4319301202253715e59
     # (+1.276%), wg00 6.924486363284743e59 -> 7.022833393235165e59 (+1.420%).
+    # Re-pinned (exact young/old split): two_component's default birth-cloud
+    # dispersal moved from a logistic of width 0.3 dex evaluated AT each SSP
+    # node age to the hard step at 10 Myr applied to the exact share of every
+    # node's formed mass younger than 10 Myr (the node straddling 10 Myr holds
+    # 26 % young mass, not 0 or 1). L_absorbed 5.932047709369588e59 ->
+    # 5.93036676326139e59 (-0.0283 %). Proof the new value is the step answer
+    # (``test_two_component_golden_is_the_dense_step_reference``): the same
+    # fixture integrated against an independent dense-parcel SFH reference
+    # (3e6 uniform-in-lookback parcels, same cloud-in-cell split, S = 1[t < 10 Myr])
+    # gives 5.930366796495171e59, new/ref - 1 = 5.6e-9; evaluating the hard step
+    # at the SSP node ages instead (the grid-dependent answer) gives
+    # 5.930341625031011e59, 4.2e-6 low. single_screen and wg00 have no age split
+    # and did not move.
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.932047709369588e59,
+        "two_component": 5.93036676326139e59,
         "single_screen": 7.4319301202253715e59,
         "wg00": 7.022833393235165e59,
     }
@@ -274,6 +287,55 @@ class TestGoldenValues:
         np.testing.assert_allclose(l_absorbed, self.GOLDEN_L_ABSORBED[key], rtol=1e-7)
         # Default eta_balance = 1 → strict conservation.
         np.testing.assert_allclose(l_ir, l_absorbed, rtol=1e-12)
+
+    def test_two_component_golden_is_the_dense_step_reference(self, synthetic_ssp_wide):
+        """The re-pinned golden is the hard-step answer, against a dense reference.
+
+        Independent of the age kernel: the SFH is read back as published
+        (``sfr_history`` on the lookback grid), densified to 3e6 uniform
+        lookback parcels, split between the bracketing SSP nodes with the
+        same log-age weights, and each parcel is young iff t < 10 Myr. The
+        absorbed energy then follows from the closed-form population mixture.
+        """
+        from tengri.components.dust.laws._registry import resolve_dust_law
+        from tengri.components.lyc import LYMAN_LIMIT_AA
+        from tengri.forward.energy_balance import bolometric_absorbed_log10
+
+        model = _build(synthetic_ssp_wide, dict(TWO_COMPONENT))
+        state = model.predict_state(_params(model))
+        ages = np.asarray(state.derived["ssp_ages_yr"])
+        wave = np.asarray(state.wave)
+        lnu_age = np.asarray(state.derived["lnu_age"])
+        lbt = np.asarray(state.derived["sfh_grid_lbt_yr"])
+        sfr = np.asarray(state.derived["sfr_history"])
+
+        t = np.linspace(0.0, lbt.max(), 3_000_001)[1:]
+        sfr_dense = np.interp(np.log10(t), np.log10(lbt), sfr)
+        lg_nodes, lg_t = np.log10(ages), np.log10(t)
+        lo = np.clip(np.searchsorted(lg_nodes, lg_t) - 1, 0, ages.size - 2)
+        up_share = np.clip((lg_t - lg_nodes[lo]) / (lg_nodes[lo + 1] - lg_nodes[lo]), 0.0, 1.0)
+        young_parcel = (t < 1.0e7).astype(float)
+        total = np.zeros(ages.size)
+        young = np.zeros(ages.size)
+        for weight, node in ((1.0 - up_share, lo), (up_share, lo + 1)):
+            np.add.at(total, node, sfr_dense * weight)
+            np.add.at(young, node, sfr_dense * young_parcel * weight)
+        y_ref = np.where(total > 0.0, young / np.maximum(total, 1e-300), 0.0)
+
+        k = np.asarray(resolve_dust_law("calzetti")(jnp.asarray(wave)))
+        t_young = np.exp(-(0.5 + 0.3) * k)
+        t_old = np.exp(-0.3 * k)
+        transmission = y_ref[:, None] * t_young[None, :] + (1.0 - y_ref[:, None]) * t_old[None, :]
+        log_ref, _ = bolometric_absorbed_log10(
+            jnp.asarray(lnu_age.sum(0)),
+            jnp.asarray((lnu_age * transmission).sum(0)),
+            jnp.asarray(C_AA / wave),
+            wave=jnp.asarray(wave),
+            lyman_cutoff_aa=LYMAN_LIMIT_AA,
+        )
+        np.testing.assert_allclose(
+            float(state.derived["L_absorbed"]), 10.0 ** float(log_ref), rtol=1e-7
+        )
 
     def test_lut_tracks_exact_on_lyc_bright_fixture(self, synthetic_ssp_wide):
         """WavePrecomp energy-balance LUT tracks the exact path on this fixture.

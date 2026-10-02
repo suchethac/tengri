@@ -47,8 +47,8 @@ import jax.numpy as jnp
 
 from tengri.components.dust._age_mixture import (
     interval_fractions,
-    ionizing_interval_weights,
     mix_intervals,
+    nebular_interval_weights,
 )
 from tengri.components.dust._params import (
     DEFAULT_DUST_ETA_BALANCE,
@@ -1150,7 +1150,9 @@ class DustSEDComponent(TemplateThreading):
         # Where the ionizing photons come from: the nebular continuum and lines
         # are lit by stars of every age, so the birth-cloud screen weighs in by
         # each interval's share of the ionizing luminosity, not by mass.
-        neb_weights = ionizing_interval_weights(fractions, state.derived["log_L_lyc_age"])
+        neb_weights = nebular_interval_weights(
+            state.derived, fractions, from_grid=self.nebular_from_grid
+        )
         # Resolve per-component (birth-cloud vs diffuse) law parameters once:
         # reused below for the nebular-continuum screen. The screen itself is
         # single-sourced with the FeaturePrecomp fast path via

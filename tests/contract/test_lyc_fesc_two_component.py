@@ -25,6 +25,7 @@ import pytest
 
 from tengri.components.dust.two_component import DustSEDComponent, DustSEDComponentConfig
 from tengri.protocols.component import ForwardState
+from tests._age_boundary import hand_age_derived
 from tests._bounds import assert_non_negative
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -50,7 +51,12 @@ def _state(fesc: float, *, young: float, old: float, publish_lyc: bool = True) -
     full = jnp.sum(lnu_age, axis=0)
     lyc_mask = _WAVE < 912.0
     sed_intrinsic = jnp.where(lyc_mask, full * fesc, full)
-    derived = {"lnu_age": lnu_age, "ssp_ages_yr": _AGES, "sed_nebular": jnp.zeros_like(_WAVE)}
+    derived = {
+        "lnu_age": lnu_age,
+        "ssp_ages_yr": _AGES,
+        **hand_age_derived(_AGES),
+        "sed_nebular": jnp.zeros_like(_WAVE),
+    }
     if publish_lyc:
         derived["lyc_transmission"] = jnp.where(lyc_mask, fesc, jnp.ones_like(_WAVE))
     return ForwardState(wave=_WAVE, sed_intrinsic=sed_intrinsic, derived=derived)

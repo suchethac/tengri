@@ -51,7 +51,9 @@ actually ran over). ``two_component`` with ``lyc_reprocessed_by='young'`` (defau
 only routes the YOUNG/birth-cloud population's LyC through the gas
 (``two_component.py``'s ``lyc_factor = 1 - y_age*(1-lyc_t)``), so its credit
 uses the SAME ``y_age``-weighted population, computed independently in this
-file from ``lnu_age`` via ``tengri.components.dust.two_component._young_indicator``.
+file from ``lnu_age`` and the stellar component's published
+``age_boundary_younger_fraction`` (the exact per-node mass fraction younger than
+the birth-cloud lifetime).
 
 **No double counting (#2539 item 2)**: ``NebularSEDComponent`` masks
 ``sed_intrinsic``'s LyC region to ``neb_fesc`` fraction UNCONDITIONALLY
@@ -93,7 +95,6 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, WavePrecomp
-from tengri.components.dust.two_component import _young_indicator
 from tengri.components.lyc import LYMAN_LIMIT_AA, lyc_shares
 from tengri.forward.energy_balance import log10_add_fdust_credit, log10_fdust_lyc_credit
 from tengri.utils.physics_constants import C_AA
@@ -103,8 +104,6 @@ pytestmark = pytest.mark.regression_bug
 # One Lyman edge (tengri.components.lyc): 911.76 A, not the retired bare
 # 912.0 literal this constant used to hold.
 LYC_CUTOFF_AA = LYMAN_LIMIT_AA
-T_BIRTH_YR = 1e7
-TRANSITION_WIDTH_DEX = 0.3  # two_component's declared defaults
 
 
 def _l_lyc(wave, lnu) -> float:
@@ -143,10 +142,7 @@ def _credited_lnu(state, *, young_only: bool) -> np.ndarray:
     """The raw (pre-fesc) per-wavelength L_nu of the credited population."""
     lnu_age = np.asarray(state.derived["lnu_age"])
     if young_only:
-        ssp_ages_yr = np.asarray(state.derived["ssp_ages_yr"])
-        y_age = np.asarray(
-            _young_indicator(jnp.asarray(ssp_ages_yr), T_BIRTH_YR, TRANSITION_WIDTH_DEX)
-        )
+        y_age = np.asarray(state.derived["age_boundary_younger_fraction"])[0]
         return np.sum(y_age[:, None] * lnu_age, axis=0)
     return np.sum(lnu_age, axis=0)
 
@@ -815,7 +811,9 @@ class TestLutFescExact:
         ssp = synthetic_ssp_wide
         ssp_ages_yr = (10.0 ** np.asarray(ssp.ssp_lg_age_gyr)) * 1e9
         tau_bc = tau_diff = 0.5
-        t_birth_yr, transition_width_dex = 1e7, 0.3
+        # Per-node young mass fractions, deliberately fractional across the grid
+        # (a smooth ramp through 10 Myr): the LUT mixes populations at runtime.
+        y_age = jnp.clip(0.5 - (jnp.log10(jnp.asarray(ssp_ages_yr)) - 7.0) / 1.5, 0.0, 1.0)
 
         from tengri.components.dust.attenuation import two_component_dust
         from tengri.components.dust.energy_balance_precompute import (
@@ -826,12 +824,9 @@ class TestLutFescExact:
         lut = build_energy_balance_lut(
             jnp.asarray(ssp.ssp_flux),
             jnp.asarray(ssp.ssp_wave),
-            jnp.asarray(ssp_ages_yr),
             law_bc="calzetti",
             law_diff="calzetti",
             f_obscuration=0.0,
-            t_birth_yr=t_birth_yr,
-            transition_width_dex=transition_width_dex,
             lyman_cutoff_aa=0.0,
             lyc_in_energy_balance=True,
             tau_bc_grid=jnp.asarray([tau_bc]),
@@ -847,32 +842,38 @@ class TestLutFescExact:
         joint_weights /= joint_weights.sum()
         log_mass_scale = 43.0  # representative dex offset
 
-        transmission = two_component_dust(
-            wavelength=jnp.asarray(ssp.ssp_wave),
-            age_grid=jnp.asarray(ssp_ages_yr),
-            tau_v1=jnp.asarray(tau_bc),
-            tau_v2=jnp.asarray(tau_diff),
-            law_bc="calzetti",
-            law_diff="calzetti",
-            f_obscuration=jnp.asarray(0.0),
-            t_birth=t_birth_yr,
-            transition_width=transition_width_dex,
-            bc_params={},
-            diff_params={},
-            lyman_cutoff_aa=0.0,
-        )  # (n_age, n_wave)
+        # The two stellar populations' own transmissions (every node wholly young,
+        # then wholly old), mixed by hand below with each node's young fraction.
+        def _population(young: float):
+            return two_component_dust(
+                wavelength=jnp.asarray(ssp.ssp_wave),
+                younger_fraction=jnp.full((n_age,), young),
+                tau_v1=jnp.asarray(tau_bc),
+                tau_v2=jnp.asarray(tau_diff),
+                law_bc="calzetti",
+                law_diff="calzetti",
+                f_obscuration=jnp.asarray(0.0),
+                bc_params={},
+                diff_params={},
+                lyman_cutoff_aa=0.0,
+            )[0]  # (n_wave,)
+
+        t_young, t_old = _population(1.0), _population(0.0)
         lnu_age = jnp.einsum("ma,maw->aw", jnp.asarray(joint_weights), jnp.asarray(ssp.ssp_flux))
-        lnu_age_attenuated = lnu_age * transmission
-        y_age = _young_indicator(jnp.asarray(ssp_ages_yr), t_birth_yr, transition_width_dex)
         nu = C_AA / jnp.asarray(ssp.ssp_wave)
 
         lyc_t = jnp.where(jnp.asarray(ssp.ssp_wave) < LYC_CUTOFF_AA, fesc, 1.0)
-        if lyc_reprocessed_by == "all":
-            lyc_factor = jnp.broadcast_to(lyc_t[None, :], lnu_age.shape)
-        else:
-            lyc_factor = 1.0 - y_age[:, None] * (1.0 - lyc_t[None, :])
-        sed_intrinsic = jnp.sum(lnu_age * lyc_factor, axis=0)
-        sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
+        # The gas around the birth clouds reprocesses the young population's LyC
+        # ('all': every population's); each node mixes its populations by y.
+        gate_young = lyc_t
+        gate_old = lyc_t if lyc_reprocessed_by == "all" else jnp.ones_like(lyc_t)
+        y = y_age[:, None]
+        intrinsic_factor = y * gate_young[None, :] + (1.0 - y) * gate_old[None, :]
+        observed_factor = (
+            y * (t_young * gate_young)[None, :] + (1.0 - y) * (t_old * gate_old)[None, :]
+        )
+        sed_intrinsic = jnp.sum(lnu_age * intrinsic_factor, axis=0)
+        sed_attenuated = jnp.sum(lnu_age * observed_factor, axis=0)
         from tengri.forward.energy_balance import bolometric_absorbed_log10
 
         log_exact, _ = bolometric_absorbed_log10(
@@ -891,6 +892,7 @@ class TestLutFescExact:
             jnp.asarray(tau_bc),
             jnp.asarray(tau_diff),
             fesc=jnp.asarray(fesc),
+            younger_fraction=y_age,
         )
         assert np.isfinite(float(log_lut))
         # Sign convention (L2, one-Lyman-edge): B/G are now reduced through

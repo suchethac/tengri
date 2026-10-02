@@ -178,9 +178,9 @@ class TestEscapeGeometryTransmissionIdentities:
     T_diff = jnp.array([0.8, 0.8, 0.8, 0.8])
 
     @pytest.mark.parametrize("geometry", ["birth_cloud_holes", "clear"])
-    def test_fesc_zero_matches_screened_power_blend(self, geometry):
+    def test_fesc_zero_matches_screened_population_mixture(self, geometry):
         T = escape_geometry_transmission(self.y_age, self.T_bc, self.T_diff, 0.0, geometry)
-        expected = jnp.power(self.T_bc, self.y_age) * self.T_diff
+        expected = self.y_age * self.T_bc * self.T_diff + (1.0 - self.y_age) * self.T_diff
         np.testing.assert_allclose(np.asarray(T), np.asarray(expected), rtol=1e-10)
 
     def test_fesc_one_birth_cloud_holes_equals_diffuse_for_any_age(self):
@@ -236,7 +236,8 @@ class TestEscapeGeometryTransmissionIdentities:
         g = float(jax.grad(f)(0.3))
         assert np.isfinite(g), "a corrupt (NaN/inf) fesc gradient breaks any gradient-based fit"
         assert g != 0.0, (
-            "T_hole != T_bc**y*T_diff for a nonzero y_age slice (birth_cloud_holes with "
+            "T_hole != the screened young transmission for a nonzero y_age slice "
+            "(birth_cloud_holes with "
             "T_bc != T_diff), so d(sum T)/d(fesc) is genuinely nonzero here -- a zero "
             "would mean the hole term silently dropped out, the #2100 failure shape"
         )
@@ -426,7 +427,6 @@ class TestWavePrecompParity:
             build_energy_balance_lut,
             lut_l_absorbed_stellar_log10,
         )
-        from tengri.components.dust.two_component import _young_indicator
         from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
 
         ssp = synthetic_ssp_wide
@@ -444,22 +444,27 @@ class TestWavePrecompParity:
         lut = build_energy_balance_lut(
             ssp_flux,
             ssp_wave,
-            ssp_ages_yr,
             law_bc="calzetti",
             law_diff="calzetti",
-            t_birth_yr=1e7,
-            transition_width_dex=0.3,
             lyc_in_energy_balance=False,
             tau_bc_grid=tau_bc_grid,
             tau_diff_grid=tau_diff_grid,
             lyc_escape_geometry=geometry,
         )
+        # A node holding 60% of its mass in the young population: the LUT mixes
+        # the young and old families with it at runtime.
+        y_age = jnp.full(ssp_ages_yr.shape, 0.6)
         log_mag_lut, sign_lut = lut_l_absorbed_stellar_log10(
-            lut, joint_weights, jnp.asarray(0.0), tau_bc_q, tau_diff_q, fesc=fesc_q
+            lut,
+            joint_weights,
+            jnp.asarray(0.0),
+            tau_bc_q,
+            tau_diff_q,
+            fesc=fesc_q,
+            younger_fraction=y_age,
         )
         lut_val = float(10 ** float(log_mag_lut)) * float(sign_lut)
 
-        y_age = _young_indicator(ssp_ages_yr, 1e7, 0.3)
         k_bc = resolve_dust_law("calzetti")(ssp_wave)
         k_diff = resolve_dust_law("calzetti")(ssp_wave)
         t_bc_raw = jnp.exp(-tau_bc_q * k_bc)

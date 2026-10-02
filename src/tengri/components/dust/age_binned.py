@@ -31,9 +31,9 @@ from tengri.components.dust._age_mixture import (
     interval_fractions,
     interval_optical_depth,
     interval_transmission,
-    ionizing_interval_weights,
     lyc_interval_transmissions,
     mix_intervals,
+    nebular_interval_weights,
     weighted_interval_transmission,
     window_boundaries,
 )
@@ -709,7 +709,7 @@ class AgeBinnedDustComponent(TemplateThreading):
         # the interval mixture weighted by each interval's share of the ionizing
         # luminosity, not by mass. ONE dispatch for the nebular transmission: a
         # dedicated nebular screen replaces ``_nebular_transmission`` alone.
-        neb_weights = ionizing_interval_weights(fractions, state.derived["log_L_lyc_age"])
+        neb_weights = nebular_interval_weights(state.derived, fractions)
         transmission_neb = self._nebular_transmission(params, wave, neb_weights)
         _sed_neb = state.derived.get("sed_nebular")
         sed_neb = jnp.zeros_like(wave) if _sed_neb is None else jnp.asarray(_sed_neb)

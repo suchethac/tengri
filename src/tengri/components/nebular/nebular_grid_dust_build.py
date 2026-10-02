@@ -160,6 +160,8 @@ def _nebular_screen_for(
     """
     method = getattr(dust, "nebular_screen_transmission", None)
     if method is not None:
+        if neb_weights is None:
+            return method(params, wave)  # a single screen has no age intervals to weigh
         return method(params, wave, jnp.asarray(neb_weights))
 
     from tengri.components.dust.component import DustAttenuationSEDComponent

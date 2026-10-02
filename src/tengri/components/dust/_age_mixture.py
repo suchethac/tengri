@@ -53,6 +53,7 @@ __all__ = [
     "ionizing_interval_weights",
     "lyc_interval_transmissions",
     "mix_intervals",
+    "nebular_interval_weights",
     "weighted_interval_transmission",
     "window_boundaries",
 ]
@@ -215,6 +216,40 @@ def weighted_interval_transmission(weights: jnp.ndarray, per_interval: jnp.ndarr
     return jnp.tensordot(weights, per_interval, axes=(0, 0))
 
 
+def nebular_interval_weights(derived, fractions: jnp.ndarray, *, from_grid: bool = False):
+    """Interval weights of the nebular screen (youngest-interval limit with no nebular source).
+
+    The ionizing-luminosity weights need the per-age LyC quadrature, which a
+    model with no photoionized nebular source never uses: it publishes neither
+    ``lyc_transmission`` nor a line catalog.  The decision is static (the keys
+    are present in ``derived`` or they are not), so such a model pays nothing
+    for the weights.
+
+    Parameters
+    ----------
+    derived : mapping
+        ``state.derived``.
+    fractions : ndarray, shape (n_interval, n_age)
+        :func:`interval_fractions` output.
+    from_grid : bool, optional
+        The nebular continuum comes from the per-Q_H grid (a nebular source).
+
+    Returns
+    -------
+    ndarray, shape (n_interval,)
+        :func:`ionizing_interval_weights` when a nebular source exists, else
+        all weight on the youngest interval.
+    """
+    has_source = (
+        from_grid
+        or derived.get("lyc_transmission") is not None
+        or derived.get("line_waves") is not None
+    )
+    if has_source:
+        return ionizing_interval_weights(fractions, derived["log_L_lyc_age"])
+    return jnp.zeros(fractions.shape[0], fractions.dtype).at[0].set(1.0)
+
+
 def ionizing_interval_weights(fractions: jnp.ndarray, log_L_lyc_age: jnp.ndarray) -> jnp.ndarray:
     r"""Share of the ionizing luminosity produced in each age interval.
 
@@ -248,7 +283,7 @@ def ionizing_interval_weights(fractions: jnp.ndarray, log_L_lyc_age: jnp.ndarray
     peak = jnp.max(jnp.where(finite, log_l, -jnp.inf))
     has_light = jnp.isfinite(peak)
     safe_peak = jnp.where(has_light, peak, 0.0)
-    w = jnp.where(finite, jnp.exp(jnp.where(finite, log_l - safe_peak, 0.0)), 0.0)
+    w = jnp.where(finite, 10.0 ** jnp.where(finite, log_l - safe_peak, 0.0), 0.0)
     total = jnp.sum(w)
     safe_total = jnp.where(total > 0.0, total, 1.0)
     q = jnp.einsum("ja,a->j", fractions, w) / safe_total
