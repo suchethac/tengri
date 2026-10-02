@@ -1459,25 +1459,18 @@ def beloborodov_gamma_hot(
     Returns
     -------
     float
-        Hard X-ray photon index Gamma_hot.
+        Hard X-ray photon index, clipped to [1.4, 3.0].
 
     Notes
     -----
     **JIT-compatible**: yes, uses only ``jnp`` primitives.
 
-    **Gradient-safe**: yes, fully differentiable (see #2572). Hard clips on
-    the input ratio (to [1e-3, 1e3]) and output gamma (to [1.4, 3.0]) are
-    replaced with soft tanh-based clipping that preserves gradient flow while
-    avoiding numerical issues in the extreme regimes. The soft clamping is
-    imperceptible in the physical AGN regime where both ratio and gamma are
-    near their natural values; it only smoothly transitions (over ~1 dex) in
-    the unphysical tails.
-
     This implementation follows Kubota & Done (2018, MNRAS 480 1247, Eq. 6),
     which rewrites the Beloborodov (1999) Compton-amplification result as a
     power law in the luminosity ratio. The exponent -0.1 encodes the
     energy-balance relation between the dissipated power in the corona and
-    the seed photon luminosity intercepted from the disc.
+    the seed photon luminosity intercepted from the disc. Output is clipped
+    to [1.4, 3.0] to match the physical range of typical AGN.
 
     References
     ----------
@@ -1489,22 +1482,11 @@ def beloborodov_gamma_hot(
        MNRAS, 480, 1247 (2018). arXiv:1804.00171.
        https://doi.org/10.1093/mnras/sty1890
     """
-    # Soft clipping on the ratio using tanh to allow gradient flow (#2572)
-    # tanh(x) smoothly transitions from -1 to +1 over a few e-foldings.
-    # We scale/shift to clamp ratio to [1e-3, 1e3] in the physical regime.
-    ratio_bare = l_diss_hot / jnp.maximum(l_seed, _representable_denominator(1e-30))
-    log_ratio = jnp.log10(jnp.maximum(ratio_bare, 1e-100))
-    # Smooth transition: tanh slopes away from center at log10(ratio) = 0
-    # (i.e., ratio = 1). Width of transition ~1 dex (steepness ~1/ln(10)).
-    log_ratio_clamped = jnp.tanh(log_ratio / 1.5) * 1.5
-    ratio = 10.0**log_ratio_clamped
-
+    ratio = jnp.clip(
+        l_diss_hot / jnp.maximum(l_seed, _representable_denominator(1e-30)), 1e-3, 1e3
+    )
     gamma = (7.0 / 3.0) * ratio ** (-0.1)  # K&D 2018 Eq. 6
-
-    # Soft clipping on gamma to [1.4, 3.0] (physical range of AGN).
-    log_gamma = jnp.log10(jnp.maximum(gamma, 1.0))
-    log_gamma_clamped = 2.2 + 0.24 * jnp.tanh((log_gamma - 2.2) / 0.24)
-    return 10.0**log_gamma_clamped
+    return jnp.clip(gamma, 1.4, 3.0)
 
 
 def compute_l2500(

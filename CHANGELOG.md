@@ -148,6 +148,14 @@
   or disc block that neither declares support nor is explicitly grid-less
   (#2564).
 
+- The nthcomp template kernel behind the `kubota_done` and `kubota_done_full` discs
+  now differentiates exactly in `agn_gamma_warm`, `agn_kt_warm` and the seed
+  temperature. Its `custom_jvp` had dropped the seed-temperature tangent and taken
+  cell-spanning finite differences for the other two, so `jax.grad` disagreed with
+  finite differences (`agn_log_mbh` -1190.6 vs -293.9, `agn_log_lbol` 6% off, at
+  `log L_bol` 11.5, `log M_BH` 8.5). Forward SEDs are bit-identical; a class-wide
+  gradient contract now covers every registered disc block (#2572).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
