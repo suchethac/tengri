@@ -270,13 +270,101 @@ spec_config = SpectroscopyConfig(
 
 Two parameters control the line-spread function convolution:
 
-- `sigma_lib_kms` (default: 70.0) -- the velocity dispersion of the SSP
-  library in km/s. This is subtracted in quadrature so the model only adds
-  the *difference* between library and instrument resolution. Set to 70.0 for
-  MILES, 0.0 if your SSP library has negligible broadening.
+- `sigma_lib_kms` (default: 70.0) -- the flat velocity dispersion of the SSP
+  library in km/s, subtracted in quadrature so the model only adds the
+  *difference* between library and instrument resolution. This is the
+  fallback value only: when the loaded SSP grid documents its own
+  per-wavelength resolution (`SSPData.ssp_resolution_kms`, populated by
+  `load_ssp_data` from FSPS's own per-node tables for MILES and C3K grids),
+  every prediction path uses that curve instead, interpolated into the
+  observed frame. MILES's true resolution (FWHM = 2.54 A, Beifiori et al.
+  2011, A&A 531, A109; Falcon-Barroso et al. 2011, A&A 532, A95, measured
+  2.51 +/- 0.07 A) varies from about 92 km/s at 3530 A to 43 km/s at
+  7490 A, so 70.0 is a mid-range approximation used only when no curve is
+  available.
 - `lsf_n_bins` (default: 16) -- number of piecewise-constant bins for
   approximating wavelength-dependent LSF convolution. More bins = more
   accurate but slower compilation.
+
+### Which kernel each SED component gets
+
+The stellar continuum and the nebular/shock emission lines are convolved
+with different kernels (#2519), because only the stellar continuum was
+drawn from the SSP template library and shares the galaxy's stellar
+velocity dispersion:
+
+- **Stellar continuum** (dust-attenuated, plus AGN/dust-IR/radio/X-ray,
+  which are bundled with it): the full kernel,
+  `sigma_eff = sqrt(sigma_v_kms^2 + sigma_inst(lambda)^2 - sigma_lib(lambda)^2)`.
+- **Nebular and shock emission lines** (continuum and lines together):
+  the instrument kernel only, `sigma_eff = sigma_inst(lambda)`. Lines are
+  painted at their own intrinsic width (`neb_eline_sigma_kms`) when the
+  rest-frame SED is built; they were never broadened by the SSP library
+  and do not share `sigma_v_kms`. This matches Prospector's convention
+  (Johnson et al. 2021, ApJS, 254, 22): lines added with their own
+  width, after the continuum's instrumental smoothing.
+
+`sigma_v_kms` (default: `Fixed(0.0)`, free prior `Uniform(0, 2000)` km/s)
+is the galaxy's stellar velocity dispersion; it reaches the stellar kernel
+only.
+
+### Order of operations: kinematics, IGM, and the instrument (#2589)
+
+When an IGM component is configured (`igm={'type': 'inoue14'}` or similar),
+the stellar piece's kernel is applied in two physically ordered stages
+instead of one combined convolution:
+
+1. **Stellar kinematics** (`sigma_v_kms`, intrinsic to the source): applied
+   to the stellar piece alone, on the rest-frame model grid, before the
+   IGM transmission multiplies the light. A galaxy's own velocity
+   dispersion cannot broaden a line-of-sight absorption feature imprinted
+   after the light has left the galaxy.
+2. **IGM transmission**: multiplies the already-kinematically-broadened
+   stellar piece and the nebular/shock piece alike (observed-frame, on the
+   model grid).
+3. **Instrument stage**: the stellar piece gets
+   `sqrt(sigma_inst(lambda)^2 * lsf_scale^2 - sigma_lib(lambda)^2)` (no
+   `sigma_v_kms` term -- already applied in stage 1); nebular/shock get
+   `sigma_inst(lambda) * lsf_scale` as before.
+
+The library deconvolution therefore lands on the instrument stage alone,
+which is where the galaxy's own kinematics and the SSP library's
+resolution genuinely compete (`sigma_v_kms < sigma_lib(lambda)` is common:
+galaxy LOSVDs of 100-400 km/s against SSP libraries resolved to 15-90
+km/s). The IGM's sharp Lyman-limit / Lyman-alpha-forest edge consequently
+carries the library-deconvolved instrument width rather than the
+undeconvolved one -- an approximation bounded by the ratio
+`sigma_lib(lambda) / sigma_inst(lambda)`, strictly smaller than the
+`sigma_v_kms`-sized error the pre-#2589 single combined kernel produced
+whenever `sigma_v_kms >~ sigma_lib(lambda)`. With no IGM component
+configured, this split is a no-op: the single combined kernel of the
+previous section is used unchanged.
+
+**Cross-code comparison.** Prospector applies the mean-IGM transmission
+inside the FSPS call, before `smoothspec` convolves with the stellar
+velocity dispersion (`SpecModel.predict_init`, Johnson et al. 2021, ApJS,
+254, 22, arXiv:2012.01426); BAGPIPES applies its IGM transmission before
+the velocity-dispersion convolution in
+`model_galaxy._calculate_full_spectrum` (Carnall et al. 2018, MNRAS, 480,
+4379, arXiv:1712.04452). tengri applies stellar kinematics first instead:
+the Lyman-limit and Lyman-alpha-forest edges (Inoue et al. 2014, MNRAS,
+442, 1805, arXiv:1402.0677; Madau 1995, ApJ, 441, 18) are imprinted on the
+galaxy's already-kinematically-broadened light along the line of sight,
+external to the galaxy, and are only smeared afterward by the instrument
+-- the order used throughout the Lyman-break galaxy spectroscopy
+literature (e.g. Steidel et al. 1996, ApJ, 462, L17; Steidel et al. 2003,
+ApJ, 592, 728, arXiv:astro-ph/0305378).
+
+### Free instrument-resolution scale
+
+`lsf_scale` (default: `Fixed(1.0)`, free prior `Uniform(0.8, 1.2)`,
+declared in `tengri.parameters._shared`) is a multiplicative scale on
+`sigma_inst(lambda)`, applied identically to both kernels above before
+their quadrature combination. It models a calibration uncertainty on the
+instrument's own reported resolution -- a +/-20% envelope, generous
+enough to cover typical arc-lamp/sky-line LSF calibration residuals
+without itself constraining a fit. At `lsf_scale=1` every prediction is
+identical to leaving it unset.
 
 ---
 

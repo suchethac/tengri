@@ -20,6 +20,7 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_warmup_only,
     _resolve_chain_parallel,
     _set_cached_adaptation,
+    _stabilize_dense_mass_step,
     _vmap_chains,
     adaptation_method_key,
     final_window_divergence_frac,
@@ -224,6 +225,35 @@ def run_dynamic_hmc(
             target_accept_rate,
         )
         jax.block_until_ready(step_size)
+
+        # Post-adaptation step size stability probe for dense mass matrix (#2157)
+        dense_mass_backoffs = 0
+        if use_dense:
+            import blackjax
+
+            initial_state = blackjax.hmc.init(
+                init_flat, lambda p: log_posterior_flat_2arg(p, data_args)
+            )
+            from tengri.inference.backends.mcmc.hmc import _get_hmc_kernel
+
+            kernel = _get_hmc_kernel()
+            step_size, backoff_count = _stabilize_dense_mass_step(
+                kernel,
+                initial_state,
+                log_posterior_flat_2arg,
+                data_args,
+                float(step_size),
+                inv_mass_matrix,
+                _DHMC_WARMUP_LEAPFROG_STEPS,
+                sampler_name="Dynamic HMC",
+            )
+            step_size = jnp.asarray(step_size)
+            dense_mass_backoffs = int(backoff_count)
+            if verbose and backoff_count > 0:
+                logger.info(
+                    f"  Dense-mass probe: step size backoff applied ({backoff_count} halving(s))"
+                )
+
         # Refuse before caching and before the sampling scan compiles (#2088).
         warmup_divergence_frac = final_window_divergence_frac(warmup_divergent, n_warmup)
         refuse_dead_warmup(
@@ -238,6 +268,8 @@ def run_dynamic_hmc(
             if warmup_divergence_frac is None
             else {"warmup_divergence_frac": warmup_divergence_frac}
         )
+        if dense_mass_backoffs > 0:
+            warmup_record["dense_mass_backoffs"] = dense_mass_backoffs
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:

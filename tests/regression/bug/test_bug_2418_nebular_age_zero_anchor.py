@@ -233,9 +233,11 @@ def test_gradient_through_the_floored_axis_is_finite_and_nonzero(
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     assert "neb_logU" in params
-    # The declared prior Uniform(-5, 0) is wider than the grid's log U axis (-4 to -1); the
-    # seed-0 draw (-0.29) sits above it, where the lookup clips and the gradient is 0.
-    params["neb_logU"] = jnp.asarray(-2.5)
+    # The declared prior Uniform(-5, 0) is narrowed to the grid's log U axis
+    # (-4 to -1) at build time (#2460's GRID_SUPPORT registration), so the
+    # seed-0 draw already lands inside it.
+    draw = float(params["neb_logU"])
+    assert -4.0 <= draw <= -1.0, f"seed-0 draw {draw} is outside the grid axis"
 
     # Find the 5000 A node
     wave_rest = np.asarray(model._rest_wavelength)

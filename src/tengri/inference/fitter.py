@@ -487,6 +487,66 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+# Redshift-override clones, memoized per (source model, override z).
+#
+# ``params_override={"redshift": z}`` on a model without ``catalog_z_range`` is
+# evaluated on a model rebuilt at ``z`` (see ``_model_at_override_redshift``).
+# Same rationale as ``_APPROX_CLONE_CACHE``: the compile caches key on model
+# identity, so the same (source, z) must return the same object or every fit at
+# that z recompiles. Distinct z values get distinct models, hence distinct
+# programs; a program compiled against another z's tables can never be reused.
+_REDSHIFT_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _model_at_override_redshift(model, params_override):
+    """The model to evaluate under a ``params_override`` redshift.
+
+    On a model without ``catalog_z_range`` the redshift is a compile constant,
+    and so is every table built from it at construction (fixed-z stellar LUT,
+    IGM band factors, nebular grid reference, dust-IR band response,
+    energy-balance LUT, radio/X-ray term responses, ``_dl_cm_fixed``,
+    ``_z_fixed``, line-catalog snapping). Merging the override into the loss's
+    fixed values alone leaves all of them at the model's own redshift. The
+    override is therefore made exactly equivalent to building the model at that
+    redshift: the model is rebuilt there once per (source, z) and reused.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The fit model (after ``approx`` resolution). Never mutated.
+    params_override : dict or None
+        The fit's per-fit overrides.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        ``model`` itself when there is nothing to rebuild (no redshift
+        override, a ``catalog_z_range`` model whose redshift is a runtime
+        input, a free redshift which the Fitter refuses, an override equal to
+        the model's own redshift, or a model type without the rebuild seam);
+        otherwise the model built at the override redshift.
+    """
+    if not params_override or "redshift" not in params_override:
+        return model
+    if _model_catalog_z_range(model) is not None:
+        return model
+    rebuild = getattr(model, "with_fixed_redshift", None)
+    spec = getattr(model, "spec", None)
+    if not callable(rebuild) or spec is None or not spec.is_fixed("redshift"):
+        return model
+    z = float(params_override["redshift"])
+    try:
+        bucket = _REDSHIFT_CLONE_CACHE.setdefault(model, {})
+    except TypeError:
+        return rebuild(z)
+    key = round(z, 12)
+    clone = bucket.get(key)
+    if clone is None:
+        clone = rebuild(z)
+        bucket[key] = clone
+    return clone
+
+
 def _component_chains(model) -> tuple:
     """Every component chain ``model`` owns, or ``()`` if none can be inspected.
 
@@ -760,7 +820,7 @@ def _central_params(spec):
     return params
 
 
-def _lut_forward_bias(exact_model, lut_model, data_type):
+def _lut_forward_bias(exact_model, lut_model, data_type, *, redshift=None):
     """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
 
     One exact and one LUT forward at the central parameters. Cached on the
@@ -779,6 +839,10 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
     lut_model : SEDModel or ForwardModel
         The resolved clone.
     data_type : {"photometry", "spectroscopy", "joint"}
+    redshift : float or None, optional
+        Evaluate at this redshift instead of the central value (#2105).
+        Bypasses the cache both ways: a z-overridden bias is never stored
+        or served.
 
     Returns
     -------
@@ -787,9 +851,16 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         For "joint", array is concatenated as [bias_phot, bias_spec].
     """
     cache = getattr(lut_model, "_lut_forward_bias_cache", None)
-    if cache is not None and cache[0] is exact_model and cache[2] == data_type:
+    if (
+        redshift is None
+        and cache is not None
+        and cache[0] is exact_model
+        and cache[2] == data_type
+    ):
         return cache[1]
     params = _central_params(exact_model.spec)
+    if redshift is not None:
+        params["redshift"] = redshift
     if data_type == "photometry":
         m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
         m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
@@ -808,8 +879,9 @@ def _lut_forward_bias(exact_model, lut_model, data_type):
         return np.array([])  # Unknown data_type, return empty
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
-    with contextlib.suppress(Exception):
-        lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
+    if redshift is None:
+        with contextlib.suppress(Exception):
+            lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
     return bias
 
 
@@ -826,6 +898,13 @@ def _warn_if_lut_bias_amplified(
     ``max_i(bias_i x SNR_i)`` from one exact-vs-LUT forward on THIS model
     and this fit's data, and warns with the number and the remedy above
     :data:`_LUT_BIAS_GRAD_WARN`.
+
+    For free-redshift fits, the bias is evaluated at up to three redshifts —
+    the prior median plus the nearest z-table inter-node midpoint on each
+    side (#2105) — since the z-interpolation error is invisible to a
+    single-point probe; with no midpoint inside the prior, the prior's own
+    bounds are probed instead. The worst point's bias feeds the estimate
+    and the message names its redshift.
 
     When a user supplies their own likelihood (``user_likelihood=True``),
     the Fitter's data/noise are placeholders and SNR-based estimates are
@@ -856,7 +935,59 @@ def _warn_if_lut_bias_amplified(
     if data_type not in ("photometry", "spectroscopy", "joint"):
         return
     try:
-        bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        spec = exact_model.spec
+        z_peak = None
+        z_prior_bounds = None
+        if "redshift" in spec.free_params:
+            z_prior_bounds = spec.get_distribution("redshift").bounds
+
+        if z_prior_bounds is not None:
+            # Free redshift: probe up to three z values — the prior median
+            # plus the nearest z-table inter-node midpoint on each side
+            # (two-nearest-by-distance can both fall on one side of the
+            # median, hiding the interpolation error the probe exists for).
+            z_min, z_max = float(z_prior_bounds[0]), float(z_prior_bounds[1])
+            z_median = float(_central_params(spec).get("redshift", (z_min + z_max) / 2.0))
+
+            ztable = getattr(lut_model, "_ztable_data_for_jit", lambda: None)()
+            z_grid = np.asarray(ztable.z_grid, dtype=float) if ztable is not None else None
+            if z_grid is not None and z_grid.size > 1:
+                midpoints = (z_grid[:-1] + z_grid[1:]) / 2.0
+                midpoints_in_prior = midpoints[(midpoints >= z_min) & (midpoints <= z_max)]
+            else:
+                midpoints_in_prior = np.array([])
+
+            if midpoints_in_prior.size == 0:
+                # No inter-node midpoint inside the prior: no table, a
+                # single-node table, OR a real table whose nodes all lie
+                # outside a narrow prior. Span the prior itself rather than
+                # probing the median only.
+                eval_z_values = [z_median, z_min, z_max]
+            else:
+                below = midpoints_in_prior[midpoints_in_prior < z_median]
+                above = midpoints_in_prior[midpoints_in_prior >= z_median]
+                eval_z_values = [z_median]
+                if below.size:
+                    eval_z_values.append(float(below.max()))
+                if above.size:
+                    eval_z_values.append(float(above.min()))
+            # Dedupe (a bound can equal the median) and cap at 3 forwards.
+            deduped: list[float] = []
+            for z_val in eval_z_values:
+                if all(abs(z_val - seen) > 1e-12 for seen in deduped):
+                    deduped.append(float(z_val))
+            eval_z_values = deduped[:3]
+
+            biases_at_z = [
+                _lut_forward_bias(exact_model, lut_model, data_type, redshift=z_val)
+                for z_val in eval_z_values
+            ]
+            max_biases = [float(np.nanmax(b)) if b.size else -np.inf for b in biases_at_z]
+            worst_idx = int(np.nanargmax(max_biases))
+            z_peak = float(eval_z_values[worst_idx])
+            bias = biases_at_z[worst_idx]
+        else:
+            bias = _lut_forward_bias(exact_model, lut_model, data_type)
         if bias.size == 0:
             return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
@@ -920,11 +1051,16 @@ def _warn_if_lut_bias_amplified(
             channel_str = _format_channel_name(channel, data_type)
             from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 
+            z_clause = (
+                f", peaking at z={z_peak:.3f} (redshift is free; the LUT interpolates in z)"
+                if z_peak is not None
+                else ""
+            )
             warn_measured(
                 f"{surface}: the precompute LUT's forward bias, amplified by this "
                 f"fit's SNR, gives an estimated relative posterior-gradient error "
                 f"of {est:.0%} (worst {channel_str}: forward bias "
-                f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+                f"{bias_at:.2%} at SNR {snr_at:.0f}{z_clause}). The bias is constant in SNR "
                 f"(invisible to any forward check) but enters the gradient "
                 f"multiplied by SNR, moves the mode, and better data makes it "
                 f"worse (#1671; spectroscopy sibling measured in #1688). For "
@@ -1626,6 +1762,15 @@ class Fitter:
         # run() so that merely constructing a fitter stays cheap: the probe
         # costs one exact forward, and only an executed fit should pay it.
         self._pre_approx_model = model if self.model is not model else None
+        # A redshift override on a fixed-z model evaluates a model BUILT at that
+        # redshift (not the caller's), so every redshift-dependent build-time
+        # table is at the override z. ``fitter.model`` (and the returned
+        # posterior's model) is this rebuilt model; ``model`` is untouched.
+        self.model = _model_at_override_redshift(self.model, params_override)
+        if self._pre_approx_model is not None:
+            self._pre_approx_model = _model_at_override_redshift(
+                self._pre_approx_model, params_override
+            )
         self._lut_bias_checked = False
         self.spec = self.model.spec
 
@@ -1722,8 +1867,14 @@ class Fitter:
         # loss because the ``data_args`` injection always overrides it.
         # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
         # a shared loss closure can never silently run at another fit's baked z.
-        # Overrides on models without a ztable keep #1331's bake, there the
-        # redshift genuinely is a compile constant.
+        # Overrides on models without a ztable are a compile constant, and so
+        # is every table built from that constant at model construction. They
+        # are handled by rebuilding the model at the override redshift
+        # (``_model_at_override_redshift``, applied to ``self.model`` above), so
+        # the bake into ``_fixed_values`` here agrees with every table the
+        # compiled program reads; the override stays in the engine cache key
+        # and the rebuilt model is a distinct object per z, so a program
+        # compiled against another z's tables is never reused.
         self._runtime_redshift = None
         if (
             self._params_override is not None
@@ -1733,7 +1884,7 @@ class Fitter:
             self._runtime_redshift = float(self._params_override["redshift"])
 
         # ── Data arguments ─────────────────────────────────────────
-        self._data_args = self._build_data_args(model)
+        self._data_args = self._build_data_args(self.model)
 
         # ── Auto-build Protocol likelihood (option β default) ──────
         # When the user didn't pass a custom likelihood AND none of the
@@ -4655,6 +4806,7 @@ class Fitter:
             _get_ghmc_kernel,
             _get_hmc_kernel,
             _get_nuts_kernel,
+            _stabilize_dense_mass_step,
         )
 
         _check_blackjax_floor()
@@ -4709,9 +4861,17 @@ class Fitter:
 
         # One adaptation is shared across the whole batch here, so a mass
         # matrix silently downgraded on this seam is downgraded for every
-        # galaxy at once.
+        # galaxy at once. Forward the spec: without it the auto-policy's
+        # dense_basis exception cannot fire, and a dense_basis spec at
+        # n_dim <= 12 would be GRANTED the dense mass the policy exists to
+        # refuse (the 22.78 GB shape of #319) — on this seam, for every
+        # galaxy in the batch at once.
         use_dense = resolve_dense_mass_gate(
-            dense_mass_matrix, n_dim, method="fit_batch", verbose=verbose
+            dense_mass_matrix,
+            n_dim,
+            method="fit_batch",
+            verbose=verbose,
+            spec=getattr(self, "spec", None),
         )
 
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a
@@ -4783,6 +4943,44 @@ class Fitter:
             lambda: jax.jit(_run_window_adaptation),
         )
         step_size, inv_mass_matrix = _run_adapt(adapt_key, init_flats[0], first_data_args)
+
+        # Post-adaptation step size stability probe for dense mass matrix (#2157).
+        # GHMC is excluded: _stabilize_dense_mass_step drives an HMC/NUTS-shaped
+        # kernel, and the GHMC kernel takes an extra positional (delta) the
+        # probe does not pass — calling it would TypeError. The single-galaxy
+        # GHMC path carries no probe either; its persistent-momentum step
+        # dynamics are not the #1999 divergence mode the probe exists for.
+        if use_dense and method != "mcmc_ghmc":
+            import blackjax
+
+            initial_state = blackjax.nuts.init(
+                init_flats[0], lambda p: logdensity_flat_2arg(p, first_data_args)
+            )
+            if method == "mcmc_nuts":
+                kernel = _get_nuts_kernel()
+                max_doublings = max_num_doublings
+            elif method == "mcmc_hmc":
+                kernel = _get_hmc_kernel()
+                max_doublings = n_leapfrog_steps
+            else:  # mcmc_dynamic_hmc
+                kernel = _get_hmc_kernel()
+                max_doublings = 10  # match _DHMC_WARMUP_LEAPFROG_STEPS
+
+            step_size, backoff_count = _stabilize_dense_mass_step(
+                kernel,
+                initial_state,
+                logdensity_flat_2arg,
+                first_data_args,
+                float(step_size),
+                inv_mass_matrix,
+                max_doublings,
+                sampler_name=method.upper().replace("_", "-"),
+            )
+            step_size = jnp.asarray(step_size)
+            if verbose and backoff_count > 0:
+                logger.info(
+                    f"  Dense-mass probe: step size backoff applied ({backoff_count} halving(s))"
+                )
 
         if verbose:
             logger.info(

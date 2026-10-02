@@ -214,6 +214,43 @@ def _relative_diff(a, b):
     return float(np.max(np.abs(a - b) / np.abs(b)))
 
 
+def _share_free_priors(reference_spec, built_model):
+    """Rebuild ``built_model`` so its free-parameter priors ARE ``reference_spec``'s.
+
+    A "plain model built directly at the override redshift" is the wrong
+    comparison for a Fitter runtime-redshift test whenever a z-capped onset
+    parameter is free: ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
+    narrows that parameter's free-prior ceiling against the model's OWN build
+    redshift, so a catalog model (built at the catalog's placeholder/lowest z)
+    and a plain model built directly at the override z carry two DIFFERENT
+    ceilings for the same parameter -- the identical standardized point then
+    unstandardizes to two different physical values, and the two losses have
+    no reason to agree even though the override mechanism itself is correct
+    (#1316 Sec. 9.4 promises that one compiled program, re-evaluated at a
+    different runtime redshift, matches a plain build at THAT redshift -- not
+    that two independently-narrowed priors happen to coincide).
+
+    This keeps ``built_model``'s own machinery (ztable/precompute, baked at
+    its own build redshift) untouched and swaps in ``reference_spec``'s own
+    Distribution objects for every one of ``built_model``'s free parameters
+    (redshift is Fixed in every build this helper serves, so it is never a
+    free name and is never touched -- each side keeps evaluating at its own
+    built z). Only the PHYSICS of the evaluation redshift then differs
+    between the two sides, which is the actual claim under test.
+    """
+    import copy as _copy
+
+    new_distributions = dict(built_model.spec._distributions)
+    for name in built_model.spec.free_params:
+        if name in reference_spec._distributions:
+            new_distributions[name] = reference_spec.get_distribution(name)
+    new_spec = _copy.copy(built_model.spec)
+    object.__setattr__(new_spec, "_distributions", new_distributions)
+    patched = _copy.copy(built_model)
+    patched.spec = new_spec
+    return patched
+
+
 def _full_fixed_values(model, **overrides):
     """A COMPLETE fixed-values dict (every spec Fixed value) with overrides.
 
@@ -357,6 +394,18 @@ def test_fitter_runtime_redshift_matches_plain_model_loss():
     grid is a genuine (if small, ~0.1-1%) reconstruction approximation, and its
     reference SFH depends on the model's OWN build redshift, so two
     differently-built grids would not agree to RTOL even with a correct fix.
+
+    The "plain" models share ``catalog_model``'s own free-parameter priors
+    (``_share_free_priors``): ``sfh_dpl_age_gyr`` is a z-capped onset
+    parameter, narrowed at build time against each model's OWN redshift, so
+    ``plain_08``/``plain_03`` built directly at 0.8/0.3 would otherwise carry
+    a DIFFERENT ceiling than ``catalog_model`` (built at the catalog's
+    placeholder z, with a WIDE catalog_z_range-derived cap) -- the same
+    standardized point would then unstandardize to a different physical
+    age_gyr on each side, and the losses would have no reason to agree
+    regardless of whether the runtime-override mechanism itself is correct.
+    Sharing the prior objects isolates the comparison to the PHYSICS of the
+    evaluation redshift, which is what #1316 Sec. 9.4 actually promises.
     """
     ssp = synthetic_ssp_wide()
     obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
@@ -367,6 +416,9 @@ def test_fitter_runtime_redshift_matches_plain_model_loss():
     plain_03 = _build_model(ssp, obs, 0.3, WavePrecomp())
 
     phot, phot_err = _mock_photometry(plain_08, PARAMS)
+
+    plain_08 = _share_free_priors(catalog_model.spec, plain_08)
+    plain_03 = _share_free_priors(catalog_model.spec, plain_03)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -462,6 +514,16 @@ def test_non_catalog_params_override_redshift_matches_direct_build():
     loss_d = float(ctx_d.neg_log_posterior_fn(p_u, ctx_d.data_args))
     np.testing.assert_allclose(loss_o, loss_d, rtol=RTOL)
 
+    # Photometry, not just the loss: this test's loss is line-dominated, and lines
+    # do not read the build-time photometry tables (fixed-z stellar LUT, IGM band
+    # factors, ...), so the loss equality above was vacuous for them. The override
+    # must evaluate a model built at the override redshift, so its predicted
+    # photometry must equal a direct build's, and differ from the z=0.1 model's.
+    phot_o = np.asarray(f_override.model.predict_photometry(PARAMS))
+    phot_d = np.asarray(plain_08.predict_photometry(PARAMS))
+    np.testing.assert_allclose(phot_o, phot_d, rtol=RTOL)
+    assert _relative_diff(np.asarray(plain_01.predict_photometry(PARAMS)), phot_d) > VACUITY_FLOOR
+
 
 # ── Mutation-targeted guards ─────────────────────────────────────────────
 
@@ -553,26 +615,45 @@ def test_compute_log_nion_respects_fixed_values_redshift_override():
         (WavePrecomp(catalog_z_range=(0.01, 1.5), n_z=50), FeaturePrecomp(n_grid=4)),
     )
 
-    # age_gyr=10.0 (unlike the shared PARAMS' 0.5) is close enough to
-    # age_at_z(0.8) (~6.7 Gyr) that `compute_joint_weights`'s age-of-universe
-    # SSP-bin mask (components/stellar/component.py's `_cic_parcels`) actually
-    # clips differently at z=0.1 (age_at_z ~ 12.4 Gyr, no clip) vs z=0.8 --
-    # measured 0.26 dex (~86% linear) apart, comfortably above VACUITY_FLOOR.
-    # The shared PARAMS' age_gyr=0.5 measures bit-identical Q_H at both
-    # redshifts (all its star formation sits at lookback << either age_at_z),
-    # which is why it is not used for this check.
-    params = {**PARAMS, "sfh_dpl_age_gyr": 10.0}
+    # log_nion is dominated by the youngest SSP age bin's weight, and #2521's
+    # mass-conserving truncation pins the TOTAL mass to 10**log_total_mass
+    # regardless of z: masking the SFH to [0, age(z)] and renormalizing
+    # within that support preserves each surviving bin's weight RELATIVE to
+    # every other survivor (a uniform rescale), so log_nion is far less
+    # sensitive to where the old tail gets cut than it was pre-truncation --
+    # the age-of-universe SFH cutoff still measurably moves it, but only
+    # through how much of the declining age-weight distribution's UNCUT mass
+    # sat beyond the cut, not through the removed mass itself (already
+    # absorbed by the pinned total). A steep, front-loaded DPL (beta >> alpha,
+    # short tau, age_gyr near the age of the universe) concentrates unrenormalized
+    # mass at the OLDEST lookback times, so an aggressive age(z) cut removes
+    # the largest fraction of it, and a high override redshift maximizes that
+    # cut -- measured 0.107 dex apart between z=0.1 (age_at_z ~ 12.4 Gyr, no
+    # clip) and z=15 (age_at_z ~ 0.27 Gyr), comfortably above VACUITY_FLOOR
+    # once expressed as this test's relative difference of two ~73-dex
+    # log_nion values (0.107 / 73 ~ 1.5e-3). The shared PARAMS' age_gyr=0.5
+    # measures bit-identical Q_H at both redshifts (all its star formation
+    # sits at lookback << either age_at_z), which is why it is not used for
+    # this check.
+    params = {
+        **PARAMS,
+        "sfh_dpl_age_gyr": 13.7,
+        "sfh_dpl_tau_gyr": 0.5,
+        "sfh_dpl_alpha": 1.0,
+        "sfh_dpl_beta": 30.0,
+    }
 
-    fixed_at_08 = _full_fixed_values(model, redshift=0.8)
-    log_nion_helper = np.asarray(model._compute_log_nion(params, fixed_values=fixed_at_08))
+    fixed_at_15 = _full_fixed_values(model, redshift=15.0)
+    log_nion_helper = np.asarray(model._compute_log_nion(params, fixed_values=fixed_at_15))
     with warnings.catch_warnings():
-        # SFHBeforeBigBangWarning: age_gyr=10.0 deliberately exceeds age_at_z(0.8)
-        # (see comment above) so the orchestrator's own age-of-universe guard
-        # (distinct from, and downstream of, the `_compute_log_nion` fix under
-        # test) fires here; not the subject of this test.
+        # SFHBeforeBigBangWarning: this SFH deliberately forms most of its
+        # mass before the Big Bang at the override redshift (see comment
+        # above) so the orchestrator's own age-of-universe guard (distinct
+        # from, and downstream of, the `_compute_log_nion` fix under test)
+        # fires here; not the subject of this test.
         warnings.simplefilter("ignore")
-        state_08 = model.predict_state(params, fixed_values=fixed_at_08)
-    log_nion_from_state = np.asarray(state_08.derived["log_nion"])
+        state_15 = model.predict_state(params, fixed_values=fixed_at_15)
+    log_nion_from_state = np.asarray(state_15.derived["log_nion"])
     if log_nion_from_state.ndim:
         log_nion_from_state = np.asarray(np.log10(np.sum(10.0**log_nion_from_state)))
     np.testing.assert_allclose(log_nion_helper, log_nion_from_state, rtol=RTOL)
@@ -817,6 +898,16 @@ def test_fitter_spectral_indices_with_runtime_redshift_matches_plain_model_loss(
     Bare-stellar (no nebular), same reason as the sibling ``approx=False``
     index test: ``synthetic_ssp_with_break()`` (needed for a genuinely
     age-sensitive D4000) fails Cue's ionizing-photon sanity check.
+
+    ``plain_20``/``plain_01`` share ``catalog_model``'s own free-parameter
+    priors (``_share_free_priors``) for the same reason the line-flux sibling
+    test does: ``sfh_dpl_age_gyr``'s free-prior ceiling is narrowed at build
+    time against each model's OWN redshift, so built directly at 2.0/0.1 it
+    would carry a different cap than ``catalog_model`` (built at the
+    catalog's placeholder z, with the catalog_z_range-derived cap) -- without
+    sharing, the SAME standardized ``p_u`` below unstandardizes to a
+    different physical age_gyr on each side and the comparison is not
+    between the same thing.
     """
     ssp = synthetic_ssp_with_break()
     index_defs = _index_defs()
@@ -829,6 +920,9 @@ def test_fitter_spectral_indices_with_runtime_redshift_matches_plain_model_loss(
     plain_01 = _build_bare_stellar_model(ssp, obs, 0.1, WavePrecomp())
 
     phot, _ = _mock_photometry(plain_20, _OLD_AGE_PARAMS)
+
+    plain_20 = _share_free_priors(catalog_model.spec, plain_20)
+    plain_01 = _share_free_priors(catalog_model.spec, plain_01)
     # Enormous noise: silences the photometry channel's own z-sensitivity so
     # the compiled loss is dominated by the index chi-squared term.
     phot_err = 1e8 * (0.05 * np.abs(phot) + 1e-31)

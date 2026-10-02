@@ -29,8 +29,9 @@ different and must not be mapped onto each other via a split. The CIGALE and
 Prospector validators reach the same conclusion independently (issue #747).
 
 Nebular is OFF on both sides: BAGPIPES uses Cloudy v25 grids and tengri uses
-the Cue emulator trained on Cloudy v17, which are different models by design
-(01_bagpipes.py §9 quantifies the Halpha ratio).
+the Cue emulator trained on Cloudy 22.00 (Li et al. 2025, ApJ 986, 9,
+arXiv:2405.04598), which are different models by design (01_bagpipes.py §9
+quantifies the Halpha ratio).
 """
 
 import os

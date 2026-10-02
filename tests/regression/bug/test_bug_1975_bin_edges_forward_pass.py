@@ -120,9 +120,22 @@ class TestBinEdgesReachForwardPass:
         )
 
     def test_default_still_uses_default_ladder(self, synthetic_ssp_wide):
-        """Not passing edges must keep the documented default behavior."""
+        """Not passing edges must keep the documented default behavior.
+
+        Since #2521, the default ladder is no longer a fixed constant: it is
+        built from the model's own (Fixed) redshift via
+        ``make_agebins_from_zred`` (the Prospector-beta scheme), so the
+        expectation here is derived from that same function rather than a
+        literal array.
+        """
+        from tengri.components.stellar.sfh.nonparametric import (
+            DEFAULT_N_BINS,
+            make_agebins_from_zred,
+        )
+
         model = _build(synthetic_ssp_wide, {"type": "continuity", "all_params": FREE})
-        assert model.spec.bin_edges_gyr is None
+        expected_edges = make_agebins_from_zred(zred=_Z, n_bins=DEFAULT_N_BINS)
+        np.testing.assert_allclose(np.asarray(model.spec.bin_edges_gyr), expected_edges)
         assert np.all(np.isfinite(np.asarray(model.predict_photometry(_params(model)))))
 
 
