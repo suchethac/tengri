@@ -1152,7 +1152,7 @@ def noll09(
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
     This is the ``N09`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    Uses Leitherer (2002) for λ < 1800 Å (0.18 µm) and Calzetti (2000) above.
     The modification order is: **(base + bump) × power_law**.
 
     This differs from ``kriek_conroy`` which does NOT use L02 and applies

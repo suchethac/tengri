@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- The emission-line catalog's [O I] 6300 entry is the vacuum wavelength (6302.05 Å, the 6300.304 Å air value converted with the IAU standard relation), and the hard-coded line-wavelength tables (Richardson NLR template, shock fallback lines, `KEY_LINES`, `DESI_LINES`, plotting `SPECTRAL_FEATURES`) take the catalog's vacuum values for every line it lists; `noll09`'s docstring states the Leitherer/Calzetti switch at 1800 Å, as the code does (#2617).
 - The dense-mass step-size stability probe (#1999) now also runs after
   adaptation in the dynamic-HMC backend and in `fit_batch`'s shared window
   adaptation, so those paths refuse a step above the metric's stability limit
