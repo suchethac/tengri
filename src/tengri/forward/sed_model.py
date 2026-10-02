@@ -7340,7 +7340,9 @@ class SEDModel:
             None,
         )
         eb_lut = self._energy_balance_lut(chain0)
-        with_dust = dust is not None and eb_lut is not None and self._redshift_is_a_build_constant()
+        with_dust = (
+            dust is not None and eb_lut is not None and self._redshift_is_a_build_constant()
+        )
         table = precompute_nebular_grid(
             self,
             target_wavelengths,
