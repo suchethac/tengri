@@ -176,7 +176,7 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | Spectroscopy forward model | — | none | `tests/crossval/test_spectrum_crossval.py` | CROSSVAL |
 | Spectral indices | — | none | `tests/crossval/test_spectral_indices_crossval.py` | CROSSVAL |
 | Ray-tracing ensemble sampler | — | none | `tests/crossval/test_raytrace_crossval.py` | CROSSVAL |
-| Photometric filter convention | — | CIGALE, bagpipes | `tests/crossval/test_filter_convention_parity.py` | PARTIAL (3/47) |
+| Photometric filter convention | — | CIGALE (energy-type filters) | `tests/crossval/test_filter_convention_parity.py` | PARTIAL (3/47) |
 | Derived physical quantities | published scaling relations | none | `tests/crossval/test_derived_physics_crossval.py`, `tests/crossval/test_quantities_crossval.py` | PARTIAL (2/12, 4/14) |
 | NIFTy geoVI inference | Arras et al. 2022 | NIFTy-PPL/NIFTy | `tests/crossval/test_geovi_crossval.py` | PARTIAL (6/8) — NIFTy API drift |
 

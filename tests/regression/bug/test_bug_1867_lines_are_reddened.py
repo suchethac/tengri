@@ -298,7 +298,7 @@ def test_the_decrement_matches_the_curve_computed_by_hand(model, sweep):
 
     The curve is evaluated at the **catalog's own** line wavelengths, not at the
     nominal constants above. Cue's grid does not sit exactly on them, and
-    ``KEY_LINES`` itself carries Hβ at 4862.76 against the 4862.71 used for
+    ``KEY_LINES`` itself carries Hβ at 4862.68 against the 4862.71 used for
     target matching here. Evaluating 0.05 Å away moved this assertion by 1.3e-5
     — small, and comfortably outside the 1e-6 tolerance a control this direct
     deserves. Reading the wavelengths back keeps the control first-principles

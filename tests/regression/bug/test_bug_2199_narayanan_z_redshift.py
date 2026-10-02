@@ -85,45 +85,46 @@ def _filter_fixture_warnings() -> None:
 #: that law's own signature declares it, so every other law must be untouched
 #: to the last bit; these literals are what says so.
 #:
-#: Re-taken for #2517, which adds photon and massive-neutrino density terms to
-#: ``E(z)``. Two independent cosmology-derived quantities feed this fixture's
-#: photometry at its fixed z=0.5, and both moved: the luminosity distance
-#: (9.013776e27 -> 9.009021e27 cm, -0.0528%, entering as D_L^-2 dimming) and
-#: ``_AGE_UNIV_GYR`` (13.810 -> 13.787 Gyr, the ``sfh_dpl_age_gyr`` default
-#: this fixture's ``Fixed(DEFAULT)`` resolves to, which reweights the age axis
-#: of the synthetic SSP grid). Both quantities independently match
-#: astropy.cosmology.Planck18 to rtol < 1e-4
-#: (tests/regression/test_cosmology_radiation_2517.py); the measured shift
-#: here is their combined, deterministic propagation through this model, not
-#: a new approximation. rtol is unchanged at 1e-12.
+#: Re-taken for #2521's mass-conserving truncation. This fixture's DPL forms
+#: mass out to ``sfh_dpl_age_gyr``'s default (~13.79 Gyr, the age of the
+#: universe at z=0), which at the fixture's fixed z=0.5 (age(0.5) ~ 8.59 Gyr)
+#: puts most of the oldest ~38% of that span before the Big Bang at that
+#: redshift -- already flagged by ``SFHBeforeBigBangWarning`` before #2521,
+#: but previously left in the model unrenormalized. #2521 truncates the
+#: declared mass to ``[0, age(z)]`` and renormalizes within that support, so
+#: every one of the four (screen, law) tuples below scales by the same
+#: factor (measured 2.3058, uniform across all five bands to 4 significant
+#: figures on this fixture's wavelength-separable synthetic SSP, i.e. a
+#: shape-preserving mass renormalization, not a new approximation). rtol is
+#: unchanged at 1e-12.
 _UNTOUCHED_LAW_PHOTOMETRY: dict[tuple[str, str], tuple[float, ...]] = {
     ("single_component", "calzetti"): (
-        8.92350905884793e-14,
-        8.413454907338874e-14,
-        6.213493557431676e-14,
-        3.468238067239084e-14,
-        2.2400547310367933e-14,
+        2.0575538240416306e-13,
+        1.9399471893663044e-13,
+        1.4326872248843876e-13,
+        7.996951032238666e-14,
+        5.165045664785074e-14,
     ),
     ("single_component", "kriek_conroy"): (
-        8.937370747043838e-14,
-        8.390732444511566e-14,
-        6.043685820768025e-14,
-        3.4411921282963596e-14,
-        2.2382298673383897e-14,
+        2.0607500072210218e-13,
+        1.934707917464008e-13,
+        1.3935335068100254e-13,
+        7.934589381984924e-14,
+        5.160837953159269e-14,
     ),
     ("two_component", "calzetti"): (
-        8.923509058847929e-14,
-        8.413454907338874e-14,
-        6.213493557431676e-14,
-        3.468238067239084e-14,
-        2.2400547310367933e-14,
+        2.0575538240416306e-13,
+        1.9399471893663044e-13,
+        1.4326872248843876e-13,
+        7.996951032238668e-14,
+        5.165045664785074e-14,
     ),
     ("two_component", "kriek_conroy"): (
-        8.937370747043837e-14,
-        8.390732444511566e-14,
-        6.043685820768025e-14,
-        3.4411921282963596e-14,
-        2.2382298673383897e-14,
+        2.0607500072210218e-13,
+        1.934707917464008e-13,
+        1.3935335068100254e-13,
+        7.934589381984924e-14,
+        5.160837953159269e-14,
     ),
 }
 

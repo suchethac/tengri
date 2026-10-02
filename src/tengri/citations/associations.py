@@ -299,10 +299,10 @@ SHOCK_CITATIONS: dict[str, list[str]] = {
 PHOTOMETRY_CONVENTION_CITATIONS: dict[str, list[str]] = {
     # Always relevant when broadband photometry is computed.
     "core": ["ab_system", "kcorrection", "fukugita1996", "bessell2012"],
-    # w = 1/lambda: photon-counting; matches FSPS / DSPS / sedpy.
-    "bessell": ["fsps", "dsps", "kcorrection", "fukugita1996"],
-    # w = 1/lambda^2: energy / flat-in-frequency; matches CIGALE / bagpipes.
-    "energy": ["cigale", "bagpipes"],
+    # w = 1/lambda: photon-counting; matches FSPS / DSPS / sedpy / BAGPIPES.
+    "bessell": ["fsps", "dsps", "kcorrection", "fukugita1996", "bagpipes"],
+    # w = 1/lambda^2: energy / flat-in-frequency; matches CIGALE (energy-type filters).
+    "energy": ["cigale"],
 }
 
 

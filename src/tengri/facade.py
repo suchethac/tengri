@@ -532,7 +532,16 @@ class Galaxy:
 
         # SED fit
         if self.observation.photometry is not None:
-            wave_eff = np.array([f.lambda_eff for f in self.observation.photometry.filters])
+            # Compute effective wavelengths from filter wave/trans
+            # (FilterCurve doesn't carry metadata, so compute on the fly)
+            from tengri.observation.filters import compute_effective_wavelength
+
+            wave_eff = np.array(
+                [
+                    compute_effective_wavelength(np.asarray(f.wave), np.asarray(f.trans))
+                    for f in self.observation.photometry.filters
+                ]
+            )
             ax_sed.errorbar(
                 wave_eff,
                 np.array(self._flux_obs),

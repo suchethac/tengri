@@ -5581,6 +5581,63 @@ class SEDModel:
             approx=approx,
         )
 
+    def with_fixed_redshift(self, redshift):
+        """Return a copy of this model built at a different Fixed redshift.
+
+        Every build-time table that captures the redshift (the fixed-z stellar
+        photometry LUT, IGM band factors, the nebular grid reference, the
+        dust-IR band response, the energy-balance LUT, the radio/X-ray term
+        responses, the precomputed luminosity distance, the line-catalog
+        snapping) is rebuilt by construction, so the clone is exactly the model
+        a user would have built with ``redshift=Fixed(redshift)``.
+
+        Parameters
+        ----------
+        redshift : float
+            The new constant redshift.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing ``ssp_data``, ``observation`` and build
+            settings, on the same ``approx`` policy. ``self`` when the
+            redshift already equals this model's.
+
+        Raises
+        ------
+        tengri.config.exceptions.ParameterError
+            If redshift is free in this model's spec.
+        NotImplementedError
+            If this model carries a ``catalog_z_range``: its tables are
+            z-tabulated and the redshift is a runtime input, so no rebuild is
+            needed (or meaningful).
+
+        Notes
+        -----
+        Costs one model construction, the same as :meth:`with_approx` (the
+        precompute LUT is re-run; the ``tengri_precomp`` cache persists it per
+        z-grid). **JIT-compatible**: build-time only.
+        """
+        if self._catalog_z_range is not None:
+            raise NotImplementedError(
+                "with_fixed_redshift is for fixed-z models; a catalog_z_range model "
+                "takes the redshift as a runtime input."
+            )
+        new_spec = self.spec.with_fixed_value("redshift", float(redshift))
+        if new_spec is self.spec:
+            return self
+        return SEDModel(
+            new_spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=self.approx_configs or None,
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
@@ -6524,7 +6581,6 @@ class SEDModel:
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         wave_rest = state.wave
         igm_trans = state.derived.get("igm_transmission", None)
-        sed_atten = state.sed_intrinsic if igm_trans is None else state.sed_intrinsic * igm_trans
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6556,7 +6612,7 @@ class SEDModel:
 
         return project_spectrum_kernel_split(
             state,
-            sed_atten,
+            state.sed_intrinsic,
             igm_trans,
             wave_rest,
             wave_obs,
@@ -8649,22 +8705,10 @@ class SEDModel:
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
-        # Surviving mass
-        if self.ssp_data.ssp_mass_remaining is not None:
-            from tengri.components.stellar.sps.dsps_wrapper import (
-                compute_surviving_mass,
-                interpolate_mass_remaining,
-            )
-
-            log_z = p.get("log_z_abs", 0.0)
-            mr_at_met = interpolate_mass_remaining(
-                self.ssp_data.ssp_mass_remaining,
-                self.ssp_data.ssp_lgmet,
-                log_z,
-            )
-            mass_surviving = compute_surviving_mass(weights, mr_at_met)
-        else:
-            mass_surviving = jnp.array(jnp.nan)
+        # Surviving mass from the stellar component's exact joint-weight contraction
+        # (uses each node's own metallicity, not a single Z). Route through the
+        # published value to avoid duplicating the computation (#2613).
+        mass_surviving = 10.0 ** jnp.asarray(state_orch.derived["log_mstar_surviving"])
 
         # SFR averages, time-weighted mean over a lookback-time window.
         # <SFR>_T = sum(SFR_i * dt_i) / sum(dt_i)  for all age_i <= T.

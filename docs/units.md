@@ -161,12 +161,12 @@ equivalently the AB zero point enters as `AB₀ = 1.13492×10⁻¹³ L_⊙/Hz`
 
 | Convention | `w(λ)` | Detector model | Matches |
 |---|---|---|---|
-| **`bessell`** (default) | `1/λ` | photon-counting | DSPS, FSPS, sedpy, Prospector |
-| **`energy`** | `1/λ²` | energy / flat-in-frequency | CIGALE, BAGPIPES |
+| **`bessell`** (default) | `1/λ` | photon-counting | DSPS, FSPS, sedpy, Prospector, Synthesizer, BAGPIPES |
+| **`energy`** | `1/λ²` | energy / flat-in-frequency | CIGALE (energy-type filters) |
 
 - **`bessell`** is the photon-counting AB convention (the physically correct mean for photon-counting detectors, including every optical/NIR CCD, and how the AB system is realized by surveys). Formula: `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`. This is the default and matches tengri's own SSP engine (DSPS).
 - **`energy`** is the flat-in-frequency mean, `∫ F_ν T dν ÷ ∫ T dν =
-  ∫ F_ν T dλ/λ² ÷ ∫ T dλ/λ²`. Use it to reproduce CIGALE/BAGPIPES.
+  ∫ F_ν T dλ/λ² ÷ ∫ T dλ/λ²`. Use it to reproduce CIGALE for its energy-type bands (2MASS, WISE, SPIRE); CIGALE's photon-type filters (e.g. SDSS, JWST) follow `bessell`.
 
 The two agree exactly for a flat-`F_ν` source (the AB reference) and diverge by 5–40 mmag (band- and SED-slope-dependent) for real SEDs. Pick the convention the observed catalog's fluxes were synthesized with: optical/NIR broadband uses `bessell`, while CIGALE-reduced products use `energy`.
 
@@ -179,8 +179,8 @@ import tengri
 tengri.list_filter_conventions()
 # name     short_doc
 # ───────  ─────────────────────────────────────────────────────────────────────────
-# bessell  Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).
-# energy   Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/BAGPIPES).
+# bessell  Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy/Prospector/Synthesizer/BAGPIPES).
+# energy   Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE, energy-type filters).
 # [2 results — filter_convention]
 ```
 
