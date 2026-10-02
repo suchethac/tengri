@@ -2,6 +2,11 @@
 
 ### Fixed
 
+- The THEMIS U^−α component for α ≠ 2 is tabulated per q_hAC grain composition, not 
+  qhac-averaged (Jones et al. 2017; Draine & Li 2007 Eq. 23). Band powers match the 
+  per-composition database within 0.2% at all α values (were 35–43% off at α=1 for 24–70 µm); 
+  PDR weight within 0.2% (were ±28% off); α=2 bit-identical to previous behavior. (#2598)
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
