@@ -413,6 +413,21 @@ def _cgm_damping_wing_tau(
 
     with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient, in s⁻¹).
     The prefactor equals the oscillator-strength sum rule :math:`\pi e^2 f_{12} / (m_e c)`.
+    Asada et al. (2025) and Totani et al. (2006) print the prefactor as
+    :math:`3\lambda_\alpha^2 f_{12} \Lambda_{\rm cl}/(8\pi)` with the classical damping
+    constant; the two forms are identical:
+
+    .. math::
+
+        \Lambda_{\rm cl} = \frac{8\pi^2 e^2}{3 m_e c \lambda_\alpha^2}
+            = 1.5045\times10^{9}\ {\rm s^{-1}}, \qquad
+        A_{21} = 3\,\frac{g_l}{g_u}\, f_{12} \Lambda_{\rm cl} = f_{12} \Lambda_{\rm cl}
+            = 6.26\times10^{8}\ {\rm s^{-1}}
+
+    (:math:`g_l/g_u = 1/3` for Lyα; :math:`e` electron charge [esu], :math:`m_e` electron mass
+    [g], :math:`c` speed of light [cm/s], :math:`\lambda_\alpha` rest wavelength [cm]), so
+    :math:`3\lambda_\alpha^2 f_{12} \Lambda_{\rm cl}/(8\pi) = 3\lambda_\alpha^2 A_{21}/(8\pi)`
+    and no separate :math:`f_{12}` appears when :math:`\Lambda = A_{21}`.
     Constants come from :mod:`tengri.components.igm.dla`.
 
     **Upstream**: Asada et al. (2025) [1]_ for column-density evolution;
@@ -444,7 +459,6 @@ def _cgm_damping_wing_tau(
     lya_obs = _WL_LYA * (1.0 + z_source)
     wave_rest = wave_obs / (1.0 + z_source)
     nu_rest = C_CGS / (wave_rest * 1e-8)
-    delta_nu = nu_rest - _NU_LYA
     nu_ratio = nu_rest / _NU_LYA  # = ν / ν_α
 
     # Miralda-Escudé (1998) Eq. 1 form: the prefactor 3 λ_α² A/(8π) already
@@ -452,9 +466,13 @@ def _cgm_damping_wing_tau(
     # The (ν/ν_α)^4 factor curves the cross-section away from a flat Lorentzian.
     lam_cm = _WL_LYA * 1e-8
     prefactor = 3.0 * lam_cm**2 * _A_LYA / (8.0 * jnp.pi)
-    numerator = _A_LYA * nu_ratio**4
-    denominator = 4.0 * jnp.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4.0
-    sigma_dw = prefactor * numerator / denominator
+    # Same expression in the scaled offset x = (ν − ν_α)/ν_α, a = A/ν_α: no term near
+    # 1e27 is squared (4π²Δν² ~ 1e27 would overflow float32 in the backward pass).
+    x_off = nu_ratio - 1.0
+    a_ratio = _A_LYA / _NU_LYA
+    numerator = a_ratio * nu_ratio**4
+    denominator = 4.0 * jnp.pi**2 * x_off**2 + a_ratio**2 * nu_ratio**6 / 4.0
+    sigma_dw = prefactor / _NU_LYA * numerator / denominator
 
     # Damping wing is redward of Lyα-at-source and only matters at z > 5
     # (below this the CGM is essentially ionized).
@@ -499,7 +517,7 @@ def igm_transmission(
         Redshift width of the sigmoid transition. [dimensionless] Default: 0.5.
     cgm_log_nhi : float, optional
         log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. Canonical Asada+2025 value (21.0)
-        produces τ ≈ 0.15 (15% absorption) redward of Lyα at z=7; log_nhi ≤ 19 is invisible. [dimensionless]
+        produces τ ≈ 0.10 at z=7 and rest 1230 Å (about 3500 km/s redward of Lyα) and τ ≈ 1.1 at 1220 Å; log_nhi ≤ 19 is invisible. [dimensionless]
         Default: 21.0.
 
     Returns
