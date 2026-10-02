@@ -25,9 +25,46 @@ template measured directly from FSPS:
 measured at FSPS's own MIST metallicity and age nodes (``scripts/
 generate_agb_dust_shell_ratios.py``) and resampled onto the loaded SSP
 grid's (Z, age, lambda) axes: linearly in log10(Z) and log10(age), and (for
-the wavelength axis) linearly in log10(lambda). ``R = 1`` wherever the
-shell does not act (lambda below the stored window, or outside the TP-AGB
-age window) and is exactly 1 at w=1 by construction.
+the wavelength axis) linearly in log10(lambda). ``R = 1`` exactly outside the
+stored wavelength window and at w=1.
+
+**Provenance and scope.** The ratio was computed with FSPS 0.4.7 (libfsps
+v3.2-61-g82a8735) using MIST isochrones, the MILES spectral library and a
+Chabrier IMF, and is reused unchanged for the ``c3k_a`` grids and for the
+Kroupa and Salpeter IMFs. The IMF dependence was measured only at Z_sun, for
+ages 0.3, 1 and 3 Gyr and w = 0 and 3: at most 4e-3 (Kroupa) and 1.9e-2
+(Salpeter) in R. The spectral-library dependence cannot be measured with this
+FSPS build (MILES only) and is a stated limitation.
+
+**The weight ladder.** R(w) is neither linear nor smooth in w, so the file
+stores 13 planes (w = 0, 1/1024, 1/128, 1/8, 7/32, 5/16, 7/16, 9/16, 13/16,
+5/4, 13/8, 2, 3; w = 1 is the exact identity) and interpolates linearly
+between them. Error of that interpolation against direct FSPS at the midpoint
+of every interval (max over 2-30 um, Z_sun, 0.3/1/3 Gyr):
+``[0, 1/1024]`` 3.6 %, ``[1/1024, 1/128]`` 0.06 %, ``[1/128, 1/8]`` 1.6 %,
+``[1/8, 7/32]`` 1.1 %, ``[7/32, 5/16]`` 0.7 %, ``[5/16, 7/16]`` 0.7 %,
+``[7/16, 9/16]`` 0.7 %, ``[9/16, 13/16]`` 1.0 %, ``[13/16, 1]`` 0.6 %,
+``[1, 5/4]`` 0.5 %, ``[5/4, 13/8]`` 0.8 %, ``[13/8, 2]`` 0.4 %,
+``[2, 3]`` 1.1 %. The first interval is limited by a near-discontinuity of R at
+w = 0 (FSPS switches the shell model off there): the midpoint error of
+``[0, h]`` falls only slowly with ``h`` (6.2 % at 1/256, 5.4 % at 1/512,
+3.6 % at 1/1024), so no plane spacing resolves it and it affects 0.03 % of
+the prior range. The
+interpolant has a kink at every stored weight, so the gradient with respect to
+``agb_dust_weight`` is the slope of the bracketing segment and is
+discontinuous across a node (at w = 1, where R peaks, it changes sign at
+10 um).
+
+**Window and extremes.** R is stored exactly as FSPS gives it, with a flux
+guard (R = 1 where the w=1 spectrum is below 1e-6 of its own peak) and no
+clamping: R spans 0.055 (far infrared at w = 0) to 236 (old, metal-poor
+populations at 1200-1500 A, where the w=1 flux is ~1e-6 of the peak). The
+stored window is 284 A to 3.4e7 A, where ``|R - 1| > 1e-4`` anywhere; its
+lower edge is set by a few 45-100 Myr populations at low metallicity at the
+threshold (ionizing-wavelength flux), not by shell absorption, which acts
+above ~1 micron. Nebular Q_H tables built from the cube are unaffected to
+below 1e-4 dex up to 10 Myr, and the constant-SFH integrated rate changes by
+less than 1e-5.
 
 The correction multiplies the SSP flux cube *before* the metallicity
 interpolation and the SFH age-weight sum (``StellarSEDComponent.apply``'s
@@ -41,10 +78,13 @@ precompute LUT).
   ``FeaturePrecomp``) stay bit-exact with no extra runtime cost.
 - ``weight`` **free**: baking is impossible (the weight is only known per
   sample), so the ratio is instead applied live inside
-  ``StellarSEDComponent.apply`` from a resampled template threaded onto the
-  component at construction time. The precompute LUTs cannot represent a
-  parameter-dependent SSP cube, so they refuse at build time, naming the
-  exact path; ``approx="auto"`` resolves to the exact path for such a model.
+  ``StellarSEDComponent.apply`` (and the SED-free ionizing rate) from a
+  resampled template threaded onto the component at construction time. Every
+  table built once from the SSP cube refuses at build time, naming the exact
+  path: ``WavePrecomp``, ``SpectrumPrecomp``, the ``FeaturePrecomp`` SSP window
+  table and ``approx=True`` index / line-flux measurement. The ``FeaturePrecomp``
+  Cue grid reads the live ionizing rate and stays valid. ``approx="auto"``
+  resolves to the exact path, for single fits and for batch fits.
 
 Only supported on FSPS MIST grids: FSPS's ``add_agb_dust_model`` Fortran
 routine refuses non-MIST isochrones, so the shipped ratio template (measured
@@ -245,51 +285,40 @@ class AGBDustShellTemplate(NamedTuple):
     wave_angstrom : ndarray, shape (n_wave_window,)
         Rest-frame wavelength nodes [Angstrom] of the stored window (where
         the shell measurably departs from unity); ``R = 1`` outside it.
-    layout : str
-        ``"shell_fraction"`` (R(w) is linear in w to within the generation
-        script's tolerance; one plane ``S = R(2) - 1`` stored, and
-        ``R(w) = 1 + (w-1)*S`` reconstructed exactly) or ``"ratio_planes"``
-        (several sampled weights stored, interpolated linearly in w).
-    shell_fraction : ndarray, shape (n_met, n_age, n_wave_window) or None
-        Present only when ``layout == "shell_fraction"``.
-    weights : ndarray, shape (n_w,) or None
-        Present only when ``layout == "ratio_planes"``: the stored weight
-        nodes (excludes w=1, which the loader reconstructs as an exact
-        identity plane).
-    ratio_planes : ndarray, shape (n_w, n_met, n_age, n_wave_window) or None
-        Present only when ``layout == "ratio_planes"``.
+    weights : ndarray, shape (n_w,)
+        Ascending weight nodes of the stored planes, including ``w = 1``
+        (reconstructed by the loader as an exact identity plane).
+    ratio_planes : ndarray, shape (n_w, n_met, n_age, n_wave_window)
+        ``R`` at every weight node [dimensionless]; interpolated linearly in
+        ``w`` between nodes.
     """
 
     log_z: np.ndarray
     log_age_yr: np.ndarray
     wave_angstrom: np.ndarray
-    layout: str
-    shell_fraction: np.ndarray | None = None
-    weights: np.ndarray | None = None
-    ratio_planes: np.ndarray | None = None
+    weights: np.ndarray
+    ratio_planes: np.ndarray
 
 
 class ResampledAGBDustShell(NamedTuple):
     """AGB dust-shell template resampled onto one SSP grid's own axes.
 
-    A plain ``NamedTuple`` (JAX's native pytree support for NamedTuples,
-    no explicit registration needed) so this can be threaded through
-    ``StellarSEDComponent.agb_dust_ratio`` as a JIT-traced leaf set. The
-    layout is NOT stored as a string field (a Python ``str`` leaf under
-    ``jax.jit`` tracing is invalid): :func:`agb_dust_ratio` dispatches on
-    ``shell_fraction is None`` instead, exactly one of ``shell_fraction``
-    or ``(weights, ratio_planes)`` is populated.
+    A plain ``NamedTuple`` (JAX's native pytree support, no explicit
+    registration needed) so this can be threaded through
+    ``StellarSEDComponent.agb_dust_ratio`` as a JIT-traced leaf set.
 
-    Shapes match the SSP grid this was resampled to:
-    ``(n_met_ssp, n_age_ssp, n_wave_ssp)`` (or with a leading ``n_w`` axis
-    for the ``ratio_planes`` layout). Values are 1 outside the measured
-    window / TP-AGB age range, so multiplying the SSP cube by
-    :func:`agb_dust_ratio` of this object is a no-op there.
+    Attributes
+    ----------
+    weights : ndarray, shape (n_w,)
+        Static ascending weight nodes (including ``w = 1``).
+    ratio_planes : ndarray, shape (n_w, n_met_ssp, n_age_ssp, n_wave_ssp)
+        ``R`` at every weight node on the SSP grid's axes [dimensionless];
+        exactly 1 outside the measured window and at ``w = 1``, so multiplying
+        the SSP cube by :func:`agb_dust_ratio` is a no-op there.
     """
 
-    shell_fraction: jnp.ndarray | None = None
-    weights: np.ndarray | None = None
-    ratio_planes: jnp.ndarray | None = None
+    weights: np.ndarray
+    ratio_planes: jnp.ndarray
 
 
 def load_agb_dust_shell_template() -> AGBDustShellTemplate:
@@ -318,23 +347,12 @@ def load_agb_dust_shell_template() -> AGBDustShellTemplate:
         log_z = np.asarray(f["log_z"][:], dtype=np.float64)
         log_age_yr = np.asarray(f["log_age_yr"][:], dtype=np.float64)
         wave_angstrom = np.asarray(f["wave_angstrom"][:], dtype=np.float64)
-        layout = f.attrs.get("layout", "ratio_planes")
-        if layout == "shell_fraction":
-            shell_fraction = np.asarray(f["shell_fraction"][:], dtype=np.float32)
-            return AGBDustShellTemplate(
-                log_z=log_z,
-                log_age_yr=log_age_yr,
-                wave_angstrom=wave_angstrom,
-                layout="shell_fraction",
-                shell_fraction=shell_fraction,
-            )
         weights_stored = np.asarray(f["weights"][:], dtype=np.float64)
         ratio_stored = np.asarray(f["ratio"][:], dtype=np.float32)
 
-    # Reconstruct the w=1 identity plane: the file stores only the
-    # non-trivial weights, so R(w=1) is exact by construction rather than
-    # measured, and the interpolation grid below always has a node exactly
-    # at w=1.
+    # The file stores only the non-trivial weights: R(w=1) is the exact
+    # identity by construction, so the interpolation grid always has a node
+    # exactly at w=1.
     insert_at = int(np.searchsorted(weights_stored, 1.0))
     weights_full = np.insert(weights_stored, insert_at, 1.0)
     ones_plane = np.ones((1, *ratio_stored.shape[1:]), dtype=np.float32)
@@ -344,18 +362,19 @@ def load_agb_dust_shell_template() -> AGBDustShellTemplate:
         log_z=log_z,
         log_age_yr=log_age_yr,
         wave_angstrom=wave_angstrom,
-        layout="ratio_planes",
         weights=weights_full,
         ratio_planes=ratio_full,
     )
 
 
 def _interp_1d_clamped(
-    x_new: np.ndarray, x_ref: np.ndarray, y_ref: np.ndarray, axis: int
+    x_new: np.ndarray,
+    x_ref: np.ndarray,
+    y_ref: np.ndarray,
+    axis: int,
+    outside: float | None = None,
 ) -> np.ndarray:
-    """Linear interpolation along one axis, clamped to the edge value
-    outside the reference range (``R = 1`` convention: the caller passes
-    arrays already padded so edges hold the identity value).
+    """Linear interpolation along one axis, held constant outside the range.
 
     Parameters
     ----------
@@ -367,6 +386,8 @@ def _interp_1d_clamped(
         Reference values; interpolated along ``axis``.
     axis : int
         Axis of ``y_ref`` corresponding to ``x_ref``.
+    outside : float, optional
+        Value outside ``[x_ref[0], x_ref[-1]]``. Default: the edge value.
 
     Returns
     -------
@@ -377,7 +398,9 @@ def _interp_1d_clamped(
     flat = y_ref.reshape(-1, y_ref.shape[-1])
     out = np.empty((flat.shape[0], x_new.shape[0]), dtype=np.float32)
     for i in range(flat.shape[0]):
-        out[i] = np.interp(x_new, x_ref, flat[i], left=flat[i, 0], right=flat[i, -1])
+        left = flat[i, 0] if outside is None else outside
+        right = flat[i, -1] if outside is None else outside
+        out[i] = np.interp(x_new, x_ref, flat[i], left=left, right=right)
     out = out.reshape((*y_ref.shape[:-1], x_new.shape[0]))
     return np.moveaxis(out, -1, axis)
 
@@ -390,11 +413,11 @@ def resample_agb_dust_shell(
 ) -> ResampledAGBDustShell:
     """Resample the ratio template onto one SSP grid's own (Z, age, wave) axes.
 
-    Linear interpolation in log10(Z), log10(age/yr), and log10(wavelength);
-    clamped at each axis's edges (the template already stores 1 at the
-    wavelength-window edges and the 1e-4 flux-guard rule means the
-    metallicity/age axes are effectively flat near their own edges, so edge
-    clamping does not introduce discontinuities).
+    Linear interpolation in log10(Z), log10(age/yr), and log10(wavelength).
+    The metallicity and age axes hold the edge value beyond the template's
+    range; the wavelength axis is exactly 1 outside the stored window (the
+    window is, by construction, where ``|R - 1|`` exceeds the generation
+    threshold anywhere, so ``R = 1`` to within that threshold outside it).
 
     Parameters
     ----------
@@ -411,12 +434,9 @@ def resample_agb_dust_shell(
     Returns
     -------
     ResampledAGBDustShell
-        Arrays with shape ``(n_met_ssp, n_age_ssp, n_wave_ssp)`` (plus a
-        leading weights axis for ``layout == "ratio_planes"``), ready for
-        :func:`agb_dust_ratio`. Values are 1 (``shell_fraction`` 0) outside
-        the template's measured wavelength window, since
-        ``np.searchsorted``-based padding below extends the window edges
-        with the identity value rather than extrapolating the ratio.
+        Planes with shape ``(n_w, n_met_ssp, n_age_ssp, n_wave_ssp)``, ready
+        for :func:`agb_dust_ratio`; exactly 1 outside the template's measured
+        wavelength window.
 
     Notes
     -----
@@ -432,15 +452,11 @@ def resample_agb_dust_shell(
     log_wave_ssp = np.log10(ssp_wave)
 
     def _resample_cube(cube: np.ndarray) -> np.ndarray:
-        # cube: (n_met_t, n_age_t, n_wave_t) -> (n_met_ssp, n_age_ssp, n_wave_ssp)
-        out = _interp_1d_clamped(log_wave_ssp, log_wave_template, cube, axis=2)
+        # (n_met_t, n_age_t, n_wave_t) -> (n_met_ssp, n_age_ssp, n_wave_ssp)
+        out = _interp_1d_clamped(log_wave_ssp, log_wave_template, cube, axis=2, outside=1.0)
         out = _interp_1d_clamped(ssp_log_age_yr, template.log_age_yr, out, axis=1)
         out = _interp_1d_clamped(ssp_log_z, template.log_z, out, axis=0)
         return out.astype(np.float32)
-
-    if template.layout == "shell_fraction":
-        resampled = _resample_cube(template.shell_fraction)
-        return ResampledAGBDustShell(shell_fraction=jnp.asarray(resampled))
 
     n_w = template.ratio_planes.shape[0]
     resampled_planes = np.stack(
@@ -495,17 +511,16 @@ def agb_dust_ratio(resampled: ResampledAGBDustShell, weight: jnp.ndarray) -> jnp
 
     .. math::
 
-        R(w) = 1 + (w - 1) S \\quad \\text{(shell\\_fraction layout)}
-
-        R(w) = \\mathrm{lerp}_w(\\{R(w_i)\\}) \\quad \\text{(ratio\\_planes layout)}
+        R(w) = R(w_i) + \\frac{w - w_i}{w_{i+1} - w_i}\\,[R(w_{i+1}) - R(w_i)],
+        \\qquad w_i \\le w \\le w_{i+1}
 
     Parameters
     ----------
     resampled : ResampledAGBDustShell
         From :func:`resample_agb_dust_shell`.
     weight : scalar array
-        The ``agb_dust_weight`` value (traced under JIT/grad for a free
-        parameter; a Python float for the Fixed/build-time path).
+        The ``agb_dust_weight`` value [dimensionless] (traced under JIT/grad
+        for a free parameter; a Python float for the Fixed/build-time path).
 
     Returns
     -------
@@ -514,14 +529,16 @@ def agb_dust_ratio(resampled: ResampledAGBDustShell, weight: jnp.ndarray) -> jnp
 
     Notes
     -----
-    **JIT-compatible**: yes; differentiable in ``weight`` (exact linear
-    gradient for ``shell_fraction``; the bracketing-plane slope for
-    ``ratio_planes``).
+    Linear interpolation between the stored weight nodes (see the module
+    docstring for its measured error against direct FSPS output). The
+    interpolant has a kink at every stored node, so ``jax.grad`` in ``weight``
+    is the slope of the bracketing segment and is discontinuous across a
+    node, and R(w) itself has a step at ``w = 0`` that the first segment
+    cannot resolve.
+
+    **JIT-compatible**: yes; differentiable in ``weight`` between nodes.
     """
-    w = jnp.asarray(weight)
-    if resampled.shell_fraction is not None:
-        return 1.0 + (w - 1.0) * resampled.shell_fraction
-    return _lerp_along_weight_axis(w, resampled.weights, resampled.ratio_planes)
+    return _lerp_along_weight_axis(jnp.asarray(weight), resampled.weights, resampled.ratio_planes)
 
 
 def bake_agb_dust_shell(ssp_data: SSPData, weight: float) -> SSPData:

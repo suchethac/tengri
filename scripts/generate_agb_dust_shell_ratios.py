@@ -5,9 +5,9 @@
 FSPS bakes the Villaume, Conroy & Johnson (2015) circumstellar dust-shell
 reprocessing of TP-AGB stars into every MIST SSP spectrum at its default
 weight (``agb_dust=1.0``, which scales tau(1 micron) of each DUSTY shell
-template). This script measures how the emergent SSP spectrum changes as a
-function of that weight, at FSPS's own metallicity and age nodes, and
-packages the result as a resampling template consumed at runtime by
+template). This script measures how the emergent SSP spectrum changes with
+that weight, at FSPS's own metallicity and age nodes, and packages the result
+as a resampling template consumed at runtime by
 ``tengri.components.stellar.agb_dust_shell``.
 
 Physics
@@ -16,24 +16,40 @@ For each (Z, age) SSP and each weight w, the ratio
 
     R(w; Z, age, lambda) = f(agb_dust=w) / f(agb_dust=1)
 
-is formed with a flux guard: wherever the w=1 reference is negligible
-(no flux to reprocess), R is defined as 1 (no correction) rather than by
-dividing two near-zero floats. The wavelength window is the set of nodes
-where any stored weight deviates from 1 by more than 1e-4; outside it the
-loader assumes R=1 exactly.
+is formed with a flux guard: wherever the w=1 reference is below
+``FLUX_GUARD_EPS`` of that spectrum's own peak (no flux to reprocess), R is
+defined as 1 rather than the quotient of two near-zero floats. The ratio is
+stored exactly as FSPS gives it (no clamping). The wavelength window is the
+set of FSPS nodes where any stored weight deviates from 1 by more than
+``WINDOW_THRESHOLD`` at any (Z, age); outside it the loader assumes R = 1.
 
-This script also measures whether R(w) is linear in w (expected: FSPS scales
-only the shell optical depth linearly with ``agb_dust``, but the emergent
-flux ratio need not be linear once the shell is optically thick). When the
-residual of the linear model is negligible, only the per-(Z, age, lambda)
-shell fraction S = R(2) - 1 is stored and the loader reconstructs
-R(w) = 1 + (w-1)*S exactly; otherwise every sampled weight plane is stored
-and the loader interpolates linearly in w.
+R(w) is neither linear in w nor smooth at w = 0 (FSPS switches the shell
+model off there, so R(0) differs from the w -> 0+ limit by up to a few
+percent). The template therefore stores a ladder of weight planes
+(``WEIGHTS``) and the loader interpolates linearly in w between them. The
+ladder was chosen by measuring the interpolation error against direct FSPS
+output at weights between the planes; this script repeats that measurement at
+the midpoint of every interval (:func:`_interpolation_check`) and records it.
+
+Storage
+-------
+``R`` is stored as float16 (relative error at most ``2**-11`` = 0.05 %,
+recorded in the attrs). Values within that of unity collapse to exactly 1, so
+the plane compresses well, which keeps the full native FSPS wavelength window
+under the 10 MB data-file cap without wavelength decimation.
+
+Provenance
+----------
+Computed with the FSPS build named in the output attrs (MIST isochrones,
+MILES spectral library, Chabrier IMF). The ratio is reused for the c3k_a
+tengri grids and for the Kroupa and Salpeter IMFs; the IMF dependence is
+measured at Z_sun for three ages and two weights, the spectral-library
+dependence cannot be measured with this FSPS build.
 
 Output
 ------
 ``data/agb_dust_shell_ratios_mist.h5``, consumed by
-:mod:`tengri.components.stellar.agb_dust_shell`.
+:mod:`tengri.components.stellar.agb_dust_shell`. Needs ``SPS_HOME``.
 """
 
 from __future__ import annotations
@@ -54,46 +70,53 @@ if not SPS_HOME:
 
 import fsps
 
-# Weights sampled: 1.0 is the shipped-grid reference; the rest bracket the
-# legal runtime range [0, 3] (Uniform(0, 3) prior) plus the midpoints needed
-# to measure linearity.
-WEIGHTS = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 3.0], dtype=np.float64)
+from tengri.utils.physics_constants import LOG10_ZSUN
 
-# Flux guard: a (Z, age) wavelength bin counts as "has flux to reprocess"
-# only if the w=1 reference exceeds this fraction of that spectrum's own
-# peak; R is defined as 1 (no correction) elsewhere. 1e-6 is far above
-# float64 roundoff (~1e-16), so the floor is set by photometric relevance,
-# not precision: a first measurement at 1e-10 (chosen only to clear the
-# float-precision bar) left deep, narrow dust-absorption troughs in the
-# reference spectrum -- real, not noise, but six-plus decades below each
-# (Z, age) spectrum's own peak -- in the window, where f(w=1) sits just
-# above the floor and the ratio to a comparatively unsuppressed f(w) spikes
-# by up to 1e6 in isolated bins. A trough at <1e-6 of a population's peak
-# carries a photometrically and spectroscopically undetectable share of its
-# light, so treating it as "no flux to reprocess" changes no measurable
-# prediction while removing the ratio's instability there; the broadband
-# effect this template exists to capture (median ~1.05, max ~2.4 over
-# 2-10 um at solar/1 Gyr) sits nowhere near either floor.
+#: Weight ladder. w = 1 is the reference (stored implicitly as the exact
+#: identity plane). The spacing is dense near w = 0, where R(w) rises
+#: steeply, and was set so the linear-in-w interpolation error against direct
+#: FSPS stays at or below ``INTERP_TOL`` between planes (see
+#: :func:`_interpolation_check`).
+WEIGHTS = np.array(
+    [
+        *(0.0, 1 / 1024, 1 / 128, 1 / 8, 7 / 32, 5 / 16, 7 / 16, 9 / 16, 13 / 16),
+        *(1.0, 5 / 4, 13 / 8, 2.0, 3.0),
+    ],
+    dtype=np.float64,
+)
+
+#: A (Z, age, lambda) bin counts as "has flux to reprocess" only when the
+#: w = 1 reference exceeds this fraction of that spectrum's own peak. Bins
+#: below it hold the troughs of the reference spectrum, where the quotient of
+#: two near-zero fluxes is dominated by the trough depth and is not a
+#: measurement of the shell.
 FLUX_GUARD_EPS = 1e-6
 
-# Wavelength window threshold: a node is kept only if some stored weight's
-# ratio departs from unity by more than this, at some (Z, age).
+#: Wavelength-window threshold on |R - 1| (max over weights, Z, age).
 WINDOW_THRESHOLD = 1e-4
 
-# Linearity acceptance threshold on the single-plane (shell-fraction) model.
-LINEARITY_RESIDUAL_TOL = 1e-6
+#: Largest accepted interpolation error between planes (relative, over
+#: 2-30 um, at Z_sun for ``CHECK_AGES_GYR``). The first interval [0, w_1] is
+#: reported but excluded: R is discontinuous at w = 0 (shell model on/off).
+INTERP_TOL = 0.02
+CHECK_AGES_GYR = (0.3, 1.0, 3.0)
+CHECK_BAND_ANGSTROM = (2.0e4, 3.0e5)
+
+#: IMF sensitivity variants: FSPS imf_type 2 = Kroupa (2001), 0 = Salpeter (1955).
+IMF_VARIANTS = {"kroupa": 2, "salpeter": 0}
+IMF_WEIGHTS = (0.0, 3.0)
+
+SIZE_CAP_MB = 10.0
+RATIO_DTYPE = np.float16
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHIPPED_GRID_PATH = os.path.join(REPO_ROOT, "data", "fsps_mist_c3k_a_chabrier.h5")
 OUTPUT_PATH = os.path.join(REPO_ROOT, "data", "agb_dust_shell_ratios_mist.h5")
 
-# Scratch cache of the raw FSPS spectra (never in the repository): the FSPS
-# calls are the ~13-minute cost; everything downstream (flux guard, window,
-# linearity, wavelength decimation) is cheap numpy reused from this cache so
-# the guard/decimation thresholds can be iterated without repaying FSPS.
-RAW_SPECTRA_CACHE = os.environ.get(
-    "AGB_DUST_RAW_CACHE",
-    os.path.join(tempfile.gettempdir(), "agb_dust_raw_spectra.npz"),
+#: Scratch cache of the raw FSPS spectra, one file per weight (the FSPS calls
+#: are the slow step; everything downstream is cheap numpy).
+RAW_CACHE_DIR = os.environ.get(
+    "AGB_DUST_RAW_CACHE_DIR", os.path.join(tempfile.gettempdir(), "agb_dust_raw")
 )
 
 
@@ -107,435 +130,333 @@ def _git_describe(path: str) -> str:
             check=False,
         )
         return out.stdout.strip() or "unknown"
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
+
+
+def _make_sp(imf_type: int = 1) -> fsps.StellarPopulation:
+    return fsps.StellarPopulation(zcontinuous=0, sfh=0, imf_type=imf_type, add_agb_dust_model=True)
+
+
+def _spec_cache_path(w: float) -> str:
+    return os.path.join(RAW_CACHE_DIR, f"spec_w{w:.10f}.npy")
+
+
+def _raw_cube(sp, w: float, age_gyr: np.ndarray, n_met: int) -> np.ndarray:
+    """FSPS L_nu at every (Z node, age node) for weight ``w``, cached on disk.
+
+    Returns
+    -------
+    ndarray, shape (n_met, n_age, n_wave), float32
+    """
+    path = _spec_cache_path(w)
+    if os.path.exists(path):
+        return np.load(path)
+    sp.params["agb_dust"] = float(w)
+    cube = None
+    for z_idx in range(n_met):
+        sp.params["zmet"] = z_idx + 1  # FSPS zmet is 1-indexed
+        for a_idx, age in enumerate(age_gyr):
+            wave, spec = sp.get_spectrum(tage=float(age), peraa=False)
+            if cube is None:
+                cube = np.empty((n_met, age_gyr.shape[0], wave.shape[0]), dtype=np.float32)
+                np.save(os.path.join(RAW_CACHE_DIR, "wave.npy"), np.asarray(wave, np.float64))
+            cube[z_idx, a_idx] = spec
+    np.save(path, cube)
+    return cube
+
+
+def _guarded_ratio(spec: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """R = spec / ref where ref exceeds the flux guard, 1 elsewhere."""
+    peak = np.max(ref, axis=-1, keepdims=True)
+    has_flux = ref > FLUX_GUARD_EPS * peak
+    ratio = np.ones_like(ref)
+    np.divide(spec, ref, out=ratio, where=has_flux)
+    return ratio
+
+
+def _report_extremes(ratio, cubes, ref, wave, log_z, age_gyr, weights) -> dict:
+    """Print the most extreme bins and return summary values for the attrs."""
+    n_hi = int(np.count_nonzero(ratio > 10.0))
+    n_lo = int(np.count_nonzero(ratio < 0.1))
+    print(
+        f"R range [{ratio.min():.4f}, {ratio.max():.4f}]; "
+        f"{n_lo} bins < 0.1, {n_hi} bins > 10 (of {ratio.size})"
+    )
+    flat_abs_log = np.abs(np.log(ratio)).ravel()
+    top = np.argpartition(flat_abs_log, -5)[-5:]
+    for flat in top[np.argsort(flat_abs_log[top])[::-1]]:
+        wi, zi, ai, li = np.unravel_index(flat, ratio.shape)
+        peak = ref[zi, ai].max()
+        print(
+            f"  extreme: w={weights[wi]:.4g} logZ={log_z[zi]:.3f} age={age_gyr[ai]:.3g} Gyr "
+            f"lambda={wave[li]:.1f} A  R={ratio[wi, zi, ai, li]:.4g}  "
+            f"f(w)={cubes[wi][zi, ai, li]:.3e}  f(w=1)={ref[zi, ai, li]:.3e}  "
+            f"f(w=1)/peak={ref[zi, ai, li] / peak:.2e}"
+        )
+    return {
+        "ratio_min": float(ratio.min()),
+        "ratio_max": float(ratio.max()),
+        "n_below_0p1": n_lo,
+        "n_above_10": n_hi,
+    }
+
+
+def _window(ratio_non_ref, wave, age_gyr, log_z, weights_non_ref) -> tuple[np.ndarray, dict]:
+    """Wavelength window and the facts the attrs record about its edges."""
+    dev = np.abs(ratio_non_ref - 1.0)
+    window_mask = np.max(dev, axis=(0, 1, 2)) > WINDOW_THRESHOLD
+    if not window_mask.any():
+        raise RuntimeError("No wavelength node exceeds the window threshold.")
+    idx = np.where(window_mask)[0]
+    info = {"window_lo": float(wave[idx[0]]), "window_hi": float(wave[idx[-1]])}
+    below = (wave < 912.0) & window_mask
+    cells = dev[..., below] > WINDOW_THRESHOLD  # (w, Z, age, lambda<912)
+    n_cells = int(np.count_nonzero(np.any(cells, axis=-1)))
+    info["n_cells_below_912"] = n_cells
+    info["max_dev_below_912"] = float(dev[..., below].max()) if below.any() else 0.0
+    if n_cells:
+        ages = np.where(np.any(cells, axis=(0, 1, 3)))[0]
+        zs = np.where(np.any(cells, axis=(0, 2, 3)))[0]
+        info["below_912_age_gyr_min"] = float(age_gyr[ages].min())
+        info["below_912_logz_max"] = float(log_z[zs].max())
+    print(
+        f"Window ({WINDOW_THRESHOLD:.0e}): {window_mask.sum()}/{wave.shape[0]} nodes, "
+        f"{info['window_lo']:.1f}-{info['window_hi']:.1f} A; below 912 A: {n_cells} "
+        f"(w,Z,age) cells, max |R-1| = {info['max_dev_below_912']:.2e}"
+    )
+    return window_mask, info
+
+
+def _pins(ratio, weights, wave, log_z, age_gyr) -> dict:
+    """Pinned numbers at the node nearest Z_sun and 1 Gyr (Chabrier)."""
+    z_idx = int(np.argmin(np.abs(log_z - LOG10_ZSUN)))
+    a_idx = int(np.argmin(np.abs(age_gyr - 1.0)))
+    band = (wave >= 2.0e4) & (wave <= 1.0e5)
+    inv_r0 = 1.0 / ratio[int(np.argmin(np.abs(weights - 0.0))), z_idx, a_idx, band]
+    i10 = int(np.argmin(np.abs(wave - 1.0e5)))
+    r3 = float(ratio[int(np.argmin(np.abs(weights - 3.0))), z_idx, a_idx, i10])
+    print(
+        f"Pins (logZ={log_z[z_idx]:.4f}, {age_gyr[a_idx]:.4f} Gyr): "
+        f"median(1/R(0)) 2-10 um = {np.median(inv_r0):.4f}, max = {np.max(inv_r0):.4f}, "
+        f"R(3) at 10 um = {r3:.4f}"
+    )
+    return {
+        "pin_median_inv_r0_2_10um": float(np.median(inv_r0)),
+        "pin_max_inv_r0_2_10um": float(np.max(inv_r0)),
+        "pin_r3_at_10um": r3,
+    }
+
+
+def _check_nodes(log_z, age_gyr) -> tuple[int, list[int]]:
+    z_idx = int(np.argmin(np.abs(log_z - LOG10_ZSUN)))
+    a_idx = [int(np.argmin(np.abs(age_gyr - a))) for a in CHECK_AGES_GYR]
+    return z_idx, a_idx
+
+
+def _direct_ratio(sp, w, z_idx, a_idx, age_gyr, ref_spec) -> np.ndarray:
+    """Direct FSPS ratio at weight ``w``: shape (n_check_ages, n_wave)."""
+    sp.params["agb_dust"] = float(w)
+    sp.params["zmet"] = z_idx + 1
+    spec = np.stack(
+        [sp.get_spectrum(tage=float(age_gyr[a]), peraa=False)[1] for a in a_idx]
+    ).astype(np.float32)
+    return _guarded_ratio(spec, ref_spec)
+
+
+def _interpolation_check(sp, ratio_planes, weights, wave, log_z, age_gyr, ref) -> dict:
+    """Error of linear-in-w interpolation against direct FSPS at every midpoint.
+
+    Parameters
+    ----------
+    ratio_planes : ndarray, shape (n_w, n_met, n_age, n_wave)
+        Stored planes (after float16 quantization), including w = 1.
+    weights : ndarray, shape (n_w,)
+        Plane weights, ascending.
+
+    Returns
+    -------
+    dict
+        ``midpoints`` (n_int,), ``max_rel_err`` (n_int,) over CHECK_BAND at
+        Z_sun for CHECK_AGES_GYR, and the worst error excluding the first
+        interval.
+    """
+    z_idx, a_idx = _check_nodes(log_z, age_gyr)
+    band = (wave >= CHECK_BAND_ANGSTROM[0]) & (wave <= CHECK_BAND_ANGSTROM[1])
+    ref_spec = ref[z_idx, a_idx]
+    mids, errs = [], []
+    for lo, hi in zip(range(len(weights) - 1), range(1, len(weights)), strict=True):
+        w_mid = 0.5 * (weights[lo] + weights[hi])
+        interp = 0.5 * (ratio_planes[lo][z_idx][a_idx] + ratio_planes[hi][z_idx][a_idx])
+        direct = _direct_ratio(sp, w_mid, z_idx, a_idx, age_gyr, ref_spec)
+        err = float(np.max(np.abs(interp[:, band] / direct[:, band] - 1.0)))
+        mids.append(w_mid)
+        errs.append(err)
+        print(
+            f"  interval [{weights[lo]:.6g}, {weights[hi]:.6g}] midpoint {w_mid:.6g}: "
+            f"max |R_interp/R_direct - 1| = {err:.4f}"
+        )
+    worst = max(errs[1:])
+    if worst > INTERP_TOL:
+        raise RuntimeError(f"interpolation error {worst:.4f} exceeds INTERP_TOL={INTERP_TOL}")
+    return {"midpoints": np.array(mids), "max_rel_err": np.array(errs), "worst_excl_first": worst}
+
+
+def _imf_sensitivity(ratio, weights, wave, log_z, age_gyr, window_mask) -> float:
+    """Max |R_IMF - R_Chabrier| over the window, Z_sun, three ages, two weights."""
+    z_idx, a_idx = _check_nodes(log_z, age_gyr)
+    worst = 0.0
+    for name, imf in IMF_VARIANTS.items():
+        sp = _make_sp(imf)
+        for w in (1.0, *IMF_WEIGHTS):
+            sp.params["agb_dust"] = float(w)
+            sp.params["zmet"] = z_idx + 1
+            cube_w = {
+                a: sp.get_spectrum(tage=float(age_gyr[a]), peraa=False)[1].astype(np.float32)
+                for a in a_idx
+            }
+            if w == 1.0:
+                ref_k = cube_w
+                continue
+            for a in a_idx:
+                r_k = _guarded_ratio(cube_w[a], ref_k[a])
+                r_c = ratio[int(np.argmin(np.abs(weights - w))), z_idx, a]
+                worst = max(worst, float(np.max(np.abs(r_k[window_mask] - r_c[window_mask]))))
+        print(f"  IMF {name}: running max |dR| (window) = {worst:.3e}")
+    return worst
+
+
+def _write(path, planes, weights, wave_win, log_z, age_gyr, attrs) -> None:
+    stored = planes.astype(RATIO_DTYPE)
+    with h5py.File(path, "w") as f:
+        f.create_dataset("log_z", data=log_z.astype(np.float32))
+        f.create_dataset("log_age_yr", data=(np.log10(age_gyr) + 9.0).astype(np.float32))
+        f.create_dataset("wave_angstrom", data=wave_win.astype(np.float64))
+        f.create_dataset("weights", data=weights.astype(np.float64))
+        f.create_dataset(
+            "ratio", data=stored, compression="gzip", compression_opts=9, shuffle=True
+        )
+        for key, value in attrs.items():
+            f.attrs[key] = value
 
 
 def main() -> None:
     t_start = time.time()
+    os.makedirs(RAW_CACHE_DIR, exist_ok=True)
 
     with h5py.File(SHIPPED_GRID_PATH, "r") as f:
-        ssp_lgmet_shipped = np.asarray(f["ssp_lgmet"][:], dtype=np.float64)
-        ssp_lg_age_gyr_shipped = np.asarray(f["ssp_lg_age_gyr"][:], dtype=np.float64)
-    age_gyr_grid = 10.0**ssp_lg_age_gyr_shipped
-    n_age = age_gyr_grid.shape[0]
+        lgmet_shipped = np.asarray(f["ssp_lgmet"][:], dtype=np.float64)
+        age_gyr = 10.0 ** np.asarray(f["ssp_lg_age_gyr"][:], dtype=np.float64)
 
-    print(f"Shipped grid nodes: {len(ssp_lgmet_shipped)} Z, {n_age} age")
+    sp = _make_sp()
+    log_z = np.log10(np.asarray(sp.zlegend, dtype=np.float64))
+    n_met = log_z.shape[0]
+    if n_met != lgmet_shipped.shape[0] or np.max(np.abs(log_z - lgmet_shipped)) > 1e-3:
+        raise RuntimeError("FSPS metallicity nodes do not match the shipped grid's.")
+    libraries = ", ".join(x.decode() if isinstance(x, bytes) else str(x) for x in sp.libraries)
+    print(f"FSPS {fsps.__version__}; libraries: {libraries}; {n_met} Z x {age_gyr.shape[0]} ages")
 
-    print("Initializing FSPS stellar population (zcontinuous=0, sfh=0, Chabrier)...")
-    sp = fsps.StellarPopulation(
-        zcontinuous=0,
-        sfh=0,
-        imf_type=1,  # Chabrier (2003)
-        add_agb_dust_model=True,
-    )
-    zlegend = np.asarray(sp.zlegend, dtype=np.float64)
-    log_z_abs = np.log10(zlegend)
-    n_met = len(zlegend)
-    print(f"FSPS native MIST metallicity grid: {n_met} nodes")
-    print(f"  log10(Z) range: {log_z_abs.min():.4f} to {log_z_abs.max():.4f}")
+    cubes = []
+    for w in WEIGHTS:
+        t0 = time.time()
+        cubes.append(_raw_cube(sp, float(w), age_gyr, n_met))
+        print(f"w={w:.6g}: {time.time() - t0:.1f} s")
+    wave = np.load(os.path.join(RAW_CACHE_DIR, "wave.npy")).astype(np.float64)
 
-    if n_met != len(ssp_lgmet_shipped):
-        raise RuntimeError(
-            f"FSPS native metallicity node count ({n_met}) does not match the "
-            f"shipped grid ({len(ssp_lgmet_shipped)}); cannot assume alignment."
-        )
-    met_match = np.max(np.abs(log_z_abs - ssp_lgmet_shipped))
-    print(f"  Max |log10(Z)_fsps - ssp_lgmet_shipped| = {met_match:.3e}")
+    w1 = int(np.argmin(np.abs(WEIGHTS - 1.0)))
+    ref = cubes[w1]
+    ratio = np.stack([_guarded_ratio(c, ref) for c in cubes])
+    assert float(np.max(np.abs(ratio[w1] - 1.0))) == 0.0, "w=1 plane must be exactly 1"
+    extremes = _report_extremes(ratio, cubes, ref, wave, log_z, age_gyr, WEIGHTS)
 
-    n_w = len(WEIGHTS)
+    keep = np.arange(len(WEIGHTS)) != w1
+    window_mask, win_info = _window(ratio[keep], wave, age_gyr, log_z, WEIGHTS[keep])
 
-    if os.path.exists(RAW_SPECTRA_CACHE):
-        print(
-            f"\nLoading cached raw FSPS spectra from {RAW_SPECTRA_CACHE} (skipping FSPS calls)..."
-        )
-        with np.load(RAW_SPECTRA_CACHE) as cache:
-            cached_weights = cache["weights"]
-            if not np.array_equal(cached_weights, WEIGHTS):
-                raise RuntimeError(
-                    f"Cache weights {cached_weights} != current WEIGHTS {WEIGHTS}; delete the "
-                    f"cache ({RAW_SPECTRA_CACHE}) to regenerate."
-                )
-            wave_full = cache["wave_full"].astype(np.float64)
-            spec_full = [cache[f"spec_{i}"] for i in range(n_w)]
-        n_wave = wave_full.shape[0]
-        print(f"Loaded {n_w} weight planes, n_wave={n_wave}")
-    else:
-        n_wave = None
-        wave_full = None
+    pins = _pins(ratio, WEIGHTS, wave, log_z, age_gyr)
 
-        # spec_full[w_idx] has shape (n_met, n_age, n_wave); built incrementally
-        # in float32 to bound memory (~57 MB per weight plane on the full
-        # 11149-node native grid).
-        spec_full = []
+    planes = ratio[keep][..., window_mask].astype(RATIO_DTYPE).astype(np.float32)
+    quant_err = float(np.max(np.abs(planes / ratio[keep][..., window_mask] - 1.0)))
+    print(f"R float16 quantization: max relative error of R = {quant_err:.3e}")
 
-        for w_idx, w in enumerate(WEIGHTS):
-            t_w0 = time.time()
-            spec_this_w = None
-            for z_idx in range(n_met):
-                for a_idx in range(n_age):
-                    sp.params["zmet"] = z_idx + 1  # FSPS zmet is 1-indexed
-                    sp.params["agb_dust"] = float(w)
-                    wave, spec = sp.get_spectrum(tage=float(age_gyr_grid[a_idx]), peraa=False)
-                    if wave_full is None:
-                        wave_full = np.asarray(wave, dtype=np.float64)
-                        n_wave = wave_full.shape[0]
-                    if spec_this_w is None:
-                        spec_this_w = np.empty((n_met, n_age, n_wave), dtype=np.float32)
-                    spec_this_w[z_idx, a_idx, :] = spec.astype(np.float32)
-            spec_full.append(spec_this_w)
-            print(
-                f"Weight w={w:.2f} ({w_idx + 1}/{n_w}): "
-                f"{time.time() - t_w0:.1f} s, "
-                f"flux range [{spec_this_w.min():.3e}, {spec_this_w.max():.3e}]"
-            )
-
-        os.makedirs(os.path.dirname(RAW_SPECTRA_CACHE), exist_ok=True)
-        cache_kwargs = {f"spec_{i}": spec_full[i] for i in range(n_w)}
-        np.savez(
-            RAW_SPECTRA_CACHE,
-            weights=WEIGHTS,
-            wave_full=wave_full.astype(np.float32),
-            **cache_kwargs,
-        )
-        print(f"Cached raw spectra to {RAW_SPECTRA_CACHE}")
-
-    w1_idx = int(np.argmin(np.abs(WEIGHTS - 1.0)))
-    f_ref = spec_full[w1_idx]  # (n_met, n_age, n_wave) float32
-
-    # Per-(Z, age) peak flux, broadcast over wavelength -- the guard
-    # threshold scales with each spectrum's own brightness rather than a
-    # single global floor (SSPs at very different ages/metallicities span
-    # many decades of normalization).
-    f_ref_peak = np.max(f_ref, axis=2, keepdims=True)  # (n_met, n_age, 1)
-    has_flux = f_ref > (FLUX_GUARD_EPS * f_ref_peak)
-
-    print(
-        f"\nFlux guard: {np.count_nonzero(has_flux)}/{has_flux.size} bins have usable flux "
-        f"(eps={FLUX_GUARD_EPS:.1e})"
-    )
-
-    ratio_full = np.ones((n_w, n_met, n_age, n_wave), dtype=np.float32)
-    for w_idx in range(n_w):
-        np.divide(
-            spec_full[w_idx],
-            f_ref,
-            out=ratio_full[w_idx],
-            where=has_flux,
-        )
-        ratio_full[w_idx][~has_flux] = 1.0
-
-    # Ratio clamp: even past the flux guard, a handful of bins sit in a deep,
-    # narrow DUSTY absorption trough where f_ref is just above the guard
-    # floor while f(w) at the same bin is not -- a real effect, but a
-    # single-pixel-wide one carrying a negligible share of that (Z, age)
-    # spectrum's flux (it is in a trough by definition), and the resulting
-    # ratio spikes to O(1e2-1e6), which no smooth storage grid can represent
-    # and which swamps compression for no science gain. Clamp to one dex
-    # either side of unity: generous relative to every measured broadband
-    # pin (max 1/R(w=0)) over 2-10 um is ~2.4, R(w=3) at 10 um is ~0.85), so
-    # it never touches the physics this template exists to carry, only the
-    # single-bin trough artifacts. w=1 is unaffected (clip(1, ...) == 1), so
-    # the w=1-plane-is-exact-identity assertion below is unchanged.
-    RATIO_CLAMP_LO, RATIO_CLAMP_HI = 0.1, 10.0
-    out_of_range = (ratio_full < RATIO_CLAMP_LO) | (ratio_full > RATIO_CLAMP_HI)
-    n_clamped = int(np.count_nonzero(out_of_range))
-    print(
-        f"Ratio clamp [{RATIO_CLAMP_LO}, {RATIO_CLAMP_HI}]: {n_clamped}/{ratio_full.size} "
-        f"bins clamped ({100.0 * n_clamped / ratio_full.size:.4f}%)"
-    )
-    np.clip(ratio_full, RATIO_CLAMP_LO, RATIO_CLAMP_HI, out=ratio_full)
-
-    max_w1_dev = float(np.max(np.abs(ratio_full[w1_idx] - 1.0)))
-    print(f"w=1 plane max |R - 1| before assertion: {max_w1_dev:.3e}")
-    assert max_w1_dev == 0.0, (
-        f"w=1 plane must be exactly 1 by construction (flux-guarded self-ratio); "
-        f"got max deviation {max_w1_dev:.6e}"
-    )
-
-    # Wavelength window: keep nodes where ANY stored weight (excluding the
-    # trivial w=1 plane, which is now provably all-ones) departs from unity
-    # by more than the threshold at some (Z, age).
-    non_ref = np.delete(ratio_full, w1_idx, axis=0)  # (n_w-1, n_met, n_age, n_wave)
-    max_dev_per_wave = np.max(np.abs(non_ref - 1.0), axis=(0, 1, 2))  # (n_wave,)
-    window_mask = max_dev_per_wave > WINDOW_THRESHOLD
-    n_window = int(np.count_nonzero(window_mask))
-    if n_window == 0:
-        raise RuntimeError("No wavelength node exceeds the window threshold; check the run.")
+    print("Interpolation check against direct FSPS at every interval midpoint:")
+    stored = np.insert(planes, int(np.searchsorted(WEIGHTS[keep], 1.0)), 1.0, axis=0)
     window_idx = np.where(window_mask)[0]
-    wave_lo = float(wave_full[window_idx[0]])
-    wave_hi = float(wave_full[window_idx[-1]])
-    print(
-        f"\nWavelength window (|R-1| > {WINDOW_THRESHOLD:.0e}): "
-        f"{n_window}/{n_wave} nodes, {wave_lo:.1f}-{wave_hi:.1f} Angstrom"
-    )
+    wave_win = wave[window_idx]
+    # Evaluate on the full wavelength axis: R = 1 outside the window.
+    full = np.ones((stored.shape[0], *ratio.shape[1:]), dtype=np.float32)
+    full[..., window_idx] = stored
+    interp = _interpolation_check(sp, full, WEIGHTS, wave, log_z, age_gyr, ref)
+    print(f"  worst interval excluding the first: {interp['worst_excl_first']:.4f}")
 
-    # TP-AGB age window report (not used to trim the age axis): which ages
-    # show any departure from unity anywhere in the wavelength window, for
-    # any non-reference weight.
-    dev_in_window = np.abs(non_ref[:, :, :, window_mask] - 1.0)  # (n_w-1, n_met, n_age, n_win)
-    max_dev_per_age = np.max(dev_in_window, axis=(0, 1, 3))  # (n_age,)
-    age_active_mask = max_dev_per_age > WINDOW_THRESHOLD
-    if np.any(age_active_mask):
-        active_ages_gyr = age_gyr_grid[age_active_mask]
-        print(
-            f"TP-AGB age window (|R-1| > {WINDOW_THRESHOLD:.0e} somewhere in the "
-            f"wavelength window): {active_ages_gyr.min():.4f}-{active_ages_gyr.max():.4f} Gyr "
-            f"({np.count_nonzero(age_active_mask)}/{n_age} nodes)"
-        )
-        max_dev_outside = (
-            float(np.max(dev_in_window[:, :, ~age_active_mask, :]))
-            if np.any(~age_active_mask)
-            else 0.0
-        )
-        print(f"  Max |R-1| outside that age window: {max_dev_outside:.3e}")
-    else:
-        raise RuntimeError("No age node shows any AGB-dust-shell effect; check the run.")
+    print("IMF sensitivity (Z_sun; ages 0.3, 1, 3 Gyr; w = 0, 3):")
+    imf_diff = _imf_sensitivity(ratio, WEIGHTS, wave, log_z, age_gyr, window_mask)
 
-    # Linearity test: S = R(2) - 1; R_lin(w) = 1 + (w-1)*S. Measure the
-    # residual at every OTHER sampled weight (0, 0.5, 1.5, 3), within the
-    # wavelength window, over all (Z, age).
-    w2_idx = int(np.argmin(np.abs(WEIGHTS - 2.0)))
-    shell_fraction = (ratio_full[w2_idx] - 1.0).astype(np.float32)  # (n_met, n_age, n_wave)
-    shell_fraction_window = shell_fraction[:, :, window_mask]
-
-    test_w_idxs = [i for i in range(n_w) if i not in (w1_idx, w2_idx)]
-    max_residual = 0.0
-    for idx in test_w_idxs:
-        w = WEIGHTS[idx]
-        r_actual = ratio_full[idx][:, :, window_mask]
-        r_linear = 1.0 + (w - 1.0) * shell_fraction_window
-        residual = float(np.max(np.abs(r_actual - r_linear)))
-        print(f"Linearity residual at w={w:.2f}: max |R - R_linear| = {residual:.3e}")
-        max_residual = max(max_residual, residual)
-
-    is_linear = max_residual <= LINEARITY_RESIDUAL_TOL
-    _layout_label = (
-        "LINEAR (storing shell_fraction only)" if is_linear else "NONLINEAR (storing all planes)"
-    )
-    print(
-        f"\nOverall linearity residual: {max_residual:.3e} "
-        f"(tol {LINEARITY_RESIDUAL_TOL:.0e}) -> {_layout_label}"
-    )
-
-    # Pinned numbers for the test suite, measured on THIS run.
-    z_sun_idx = int(
-        np.argmin(np.abs(log_z_abs - 0.0))
-    )  # absolute log10(Z); solar is log10(Z)=0? no.
-    # Solar metallicity in absolute log10(Z): tengri's LOG10_ZSUN = -1.848
-    # (Asplund 2009). Find the native node nearest that value.
-    LOG10_ZSUN = -1.848
-    z_sun_idx = int(np.argmin(np.abs(log_z_abs - LOG10_ZSUN)))
-    age_1gyr_idx = int(np.argmin(np.abs(age_gyr_grid - 1.0)))
-    wave_2um_10um_mask = (wave_full >= 2.0e4) & (wave_full <= 1.0e5)
-    r0_in_range = ratio_full[0, z_sun_idx, age_1gyr_idx, wave_2um_10um_mask]
-    inv_r0 = 1.0 / r0_in_range
-    wave_10um_idx = int(np.argmin(np.abs(wave_full - 1.0e5)))
-    r3_at_10um = float(
-        ratio_full[int(np.argmin(np.abs(WEIGHTS - 3.0))), z_sun_idx, age_1gyr_idx, wave_10um_idx]
-    )
-    print(
-        f"\nPin check: Z node nearest solar: log10(Z)={log_z_abs[z_sun_idx]:.4f} "
-        f"(LOG10_ZSUN={LOG10_ZSUN}), age node nearest 1 Gyr: {age_gyr_grid[age_1gyr_idx]:.4f} Gyr"
-    )
-    print(f"  median(1/R(w=0)) over 2-10 um = {np.median(inv_r0):.4f}")
-    print(f"  max(1/R(w=0)) over 2-10 um    = {np.max(inv_r0):.4f}")
-    print(f"  R(w=3) at ~10 um              = {r3_at_10um:.4f}")
-
-    # IMF sensitivity check: one Kroupa run at the solar/1-Gyr node, w=0 and
-    # w=1, compared against the Chabrier ratio already measured.
-    print("\nIMF sensitivity check (Kroupa vs Chabrier) at the solar/1-Gyr node...")
-    sp_kroupa = fsps.StellarPopulation(
-        zcontinuous=0,
-        sfh=0,
-        imf_type=2,
-        add_agb_dust_model=True,  # Kroupa (2001)
-    )
-    sp_kroupa.params["zmet"] = z_sun_idx + 1
-    sp_kroupa.params["agb_dust"] = 0.0
-    _, spec_kroupa_w0 = sp_kroupa.get_spectrum(tage=float(age_gyr_grid[age_1gyr_idx]), peraa=False)
-    sp_kroupa.params["agb_dust"] = 1.0
-    _, spec_kroupa_w1 = sp_kroupa.get_spectrum(tage=float(age_gyr_grid[age_1gyr_idx]), peraa=False)
-    ratio_kroupa = np.ones(n_wave, dtype=np.float64)
-    ref_peak_k = np.max(spec_kroupa_w1)
-    mask_k = spec_kroupa_w1 > FLUX_GUARD_EPS * ref_peak_k
-    ratio_kroupa[mask_k] = spec_kroupa_w0[mask_k] / spec_kroupa_w1[mask_k]
-    ratio_chabrier_w0 = ratio_full[0, z_sun_idx, age_1gyr_idx, :]
-    imf_max_diff = float(
-        np.max(np.abs(ratio_kroupa[window_mask] - ratio_chabrier_w0[window_mask]))
-    )
-    print(f"  Max |R_Kroupa(w=0) - R_Chabrier(w=0)| in window = {imf_max_diff:.3e}")
-
-    log_age_yr = (ssp_lg_age_gyr_shipped + 9.0).astype(np.float32)
-
-    # Wavelength decimation to meet the 10 MB cap: the native window (every
-    # FSPS node where |R-1| > the window threshold) is large (R is smeared
-    # over a wide window by the small subset of (Z, age) nodes where TP-AGB
-    # stars dominate), but R is smooth in log(wavelength) within it (common
-    # narrow spectral lines cancel in the w/w=1 ratio). Keep every Nth native
-    # node, picking the SMALLEST N (finest grid) whose log-linear
-    # reconstruction of the dropped nodes reproduces the native values to
-    # within the same WINDOW_THRESHOLD tolerance -- no information is lost
-    # beyond what the window rule itself already calls negligible. Decimated
-    # nodes are literal FSPS values (a subsample, not a synthetic refit); only
-    # the dropped ones are ever reconstructed, and only by the loader's own
-    # np.interp, which this search already validates.
-    wave_window_full = wave_full[window_mask].astype(np.float64)
-    log_wave_window_full = np.log10(wave_window_full)
-    planes_idx = [i for i in range(n_w) if i != w1_idx]
-    ratio_window_full = ratio_full[planes_idx][
-        :, :, :, window_mask
-    ]  # (n_w-1, n_met, n_age, n_win)
-    n_win_full = wave_window_full.shape[0]
-
-    def _decimation_residual(stride: int) -> tuple[np.ndarray, float]:
-        idx = np.arange(0, n_win_full, stride)
-        if idx[-1] != n_win_full - 1:
-            idx = np.append(idx, n_win_full - 1)
-        log_wave_dec = log_wave_window_full[idx]
-        max_resid = 0.0
-        for pi in range(ratio_window_full.shape[0]):
-            plane_full = ratio_window_full[pi]  # (n_met, n_age, n_win_full)
-            flat_full = plane_full.reshape(-1, n_win_full)
-            flat_dec = flat_full[:, idx]
-            for row in range(flat_full.shape[0]):
-                recon = np.interp(log_wave_window_full, log_wave_dec, flat_dec[row])
-                max_resid = max(max_resid, float(np.max(np.abs(recon - flat_full[row]))))
-        return idx, max_resid
-
-    # A handful of single-pixel DUSTY-trough spikes (clamped above, but still
-    # sharp single-bin features) make a RECONSTRUCTION-residual-gated search
-    # pathological: no stride up to 40 brings the worst-bin residual near
-    # WINDOW_THRESHOLD, because interpolating across a clamped spike always
-    # costs close to the full clamp range at that one bin, independent of
-    # how fine the grid is. Decimation is therefore chosen directly against
-    # the SIZE CAP instead: the finest (smallest-stride, most information
-    # preserved) grid whose actual compressed file size clears
-    # SIZE_CAP_MB with SIZE_SAFETY_MARGIN_MB of headroom for the other
-    # datasets/attrs, measured by writing a real scratch file at each
-    # candidate stride (fast: the expensive step is the FSPS calls above,
-    # already cached). The reconstruction residual is still printed for
-    # every candidate, for the record.
-    SIZE_CAP_MB = 10.0
-    SIZE_SAFETY_MARGIN_MB = 1.0
-    _scratch_probe_path = RAW_SPECTRA_CACHE + ".size_probe.h5"
-
-    def _probe_size_mb(ratio_data: np.ndarray) -> float:
-        with h5py.File(_scratch_probe_path, "w") as pf:
-            pf.create_dataset(
-                "ratio", data=ratio_data, compression="gzip", compression_opts=9, shuffle=True
-            )
-        size_mb = os.path.getsize(_scratch_probe_path) / 1e6
-        os.remove(_scratch_probe_path)
-        return size_mb
-
-    chosen_idx = None
-    chosen_stride = None
-    for stride in (1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 25, 30, 40):
-        idx, resid = _decimation_residual(stride)
-        ratio_candidate = ratio_window_full[:, :, :, idx].astype(np.float32)
-        probe_mb = _probe_size_mb(ratio_candidate)
-        print(
-            f"Wavelength decimation stride={stride}: {idx.shape[0]} nodes, "
-            f"reconstruction residual max|R-R_interp|={resid:.3e}, "
-            f"probe file size={probe_mb:.2f} MB"
-        )
-        if probe_mb <= SIZE_CAP_MB - SIZE_SAFETY_MARGIN_MB:
-            chosen_idx = idx
-            chosen_stride = stride
-            break
-    if chosen_idx is None:
-        chosen_idx = idx  # coarsest tried; file may still exceed the cap
-        chosen_stride = stride
-        print(f"WARNING: no stride up to {stride} cleared the size budget; using it anyway.")
-
-    wave_window = wave_window_full[chosen_idx].astype(np.float32)
-    ratio_to_store = ratio_window_full[:, :, :, chosen_idx]
-    print(
-        f"Decimated wavelength grid: {wave_window.shape[0]}/{n_win_full} nodes kept "
-        f"(stride={chosen_stride})"
-    )
-
-    wall_time_s = time.time() - t_start
-    print(f"\nTotal wall time: {wall_time_s:.1f} s ({wall_time_s / 60.0:.1f} min)")
-
-    print(f"\nWriting {OUTPUT_PATH}...")
-    with h5py.File(OUTPUT_PATH, "w") as f:
-        f.create_dataset("log_z", data=log_z_abs.astype(np.float32))
-        f.create_dataset("log_age_yr", data=log_age_yr)
-        f.create_dataset("wave_angstrom", data=wave_window)
-
-        if is_linear:
-            shell_fraction_dec = (ratio_to_store[planes_idx.index(w2_idx)] - 1.0).astype(
-                np.float32
-            )
-            f.create_dataset(
-                "shell_fraction",
-                data=shell_fraction_dec,
-                compression="gzip",
-                compression_opts=9,
-                shuffle=True,
-            )
-        else:
-            f.create_dataset("weights", data=WEIGHTS[planes_idx].astype(np.float32))
-            f.create_dataset(
-                "ratio",
-                data=ratio_to_store.astype(np.float32),
-                compression="gzip",
-                compression_opts=9,
-                shuffle=True,
-            )
-
-        f.attrs["layout"] = "shell_fraction" if is_linear else "ratio_planes"
-        f.attrs["fsps_python_version"] = str(fsps.__version__)
-        f.attrs["libfsps_git_describe"] = _git_describe(SPS_HOME)
-        f.attrs["libraries"] = (
-            "mist isochrones, c3k_a (+miles-equivalent native grid) spectral library"
-        )
-        f.attrs["isochrone"] = "mist"
-        f.attrs["imf_type"] = "1 (Chabrier 2003)"
-        f.attrs["zcontinuous"] = "0 (native FSPS metallicity nodes)"
-        f.attrs["command"] = " ".join(sys.argv)
-        f.attrs["generation_date"] = datetime.now(UTC).isoformat()
-        f.attrs["flux_guard_eps"] = FLUX_GUARD_EPS
-        f.attrs["flux_guard_rule"] = (
+    wall = time.time() - t_start
+    attrs = {
+        "layout": "ratio_planes",
+        "fsps_python_version": str(fsps.__version__),
+        "libfsps_git_describe": _git_describe(SPS_HOME),
+        "libraries": f"{libraries} (isochrones, spectral library, dust emission)",
+        "isochrone": "mist",
+        "imf_type": "1 (Chabrier 2003)",
+        "zcontinuous": "0 (native FSPS metallicity nodes)",
+        "reuse_note": (
+            "Computed with MIST + MILES + Chabrier. Reused unchanged for the c3k_a "
+            "tengri grids and for the Kroupa and Salpeter IMFs. The spectral-library "
+            "dependence cannot be measured with this FSPS build (MILES only)."
+        ),
+        "command": " ".join(sys.argv),
+        "generation_date": datetime.now(UTC).isoformat(),
+        "flux_guard_eps": FLUX_GUARD_EPS,
+        "flux_guard_rule": (
             "R = f(w)/f(w=1) where f(w=1) > eps * max_lambda(f(w=1)) per (Z, age) spectrum; "
-            "R = 1 elsewhere (no flux to reprocess)."
-        )
-        f.attrs["window_rule"] = (
+            "R = 1 elsewhere. No clamping: R is stored as FSPS gives it."
+        ),
+        "window_rule": (
             f"wavelength kept where max over (w != 1, Z, age) of |R - 1| > {WINDOW_THRESHOLD:.0e}"
-        )
-        f.attrs["ratio_clamp_lo"] = RATIO_CLAMP_LO
-        f.attrs["ratio_clamp_hi"] = RATIO_CLAMP_HI
-        f.attrs["ratio_clamp_rule"] = (
-            "ratio clamped to [lo, hi] after the flux guard: isolated single-bin DUSTY "
-            "absorption-trough spikes (negligible flux, see flux_guard_rule) carry no "
-            "science signal but defeat storage; every measured broadband pin sits well "
-            "inside [lo, hi]."
-        )
-        f.attrs["wavelength_decimation_stride"] = chosen_stride
-        f.attrs["wavelength_decimation_rule"] = (
-            "every Nth native-window node, N (the smallest tried) whose compressed file "
-            f"size clears the {SIZE_CAP_MB:.0f} MB cap with {SIZE_SAFETY_MARGIN_MB:.0f} MB "
-            "margin; the dropped nodes are reconstructed by the loader's log-linear "
-            "np.interp, same as the ratio_clamp bins"
-        )
-        f.attrs["linearity_residual"] = max_residual
-        f.attrs["linearity_tol"] = LINEARITY_RESIDUAL_TOL
-        f.attrs["log_z_convention"] = (
-            "absolute log10(Z), matching ssp_lgmet in the shipped SSP grids"
-        )
-        f.attrs["imf_sensitivity_max_diff"] = imf_max_diff
-        f.attrs["wall_time_s"] = wall_time_s
-        f.attrs["pin_median_inv_r0_2_10um"] = float(np.median(inv_r0))
-        f.attrs["pin_max_inv_r0_2_10um"] = float(np.max(inv_r0))
-        f.attrs["pin_r3_at_10um"] = r3_at_10um
+        ),
+        "window_lo_angstrom": win_info["window_lo"],
+        "window_hi_angstrom": win_info["window_hi"],
+        "window_cells_below_912A": win_info["n_cells_below_912"],
+        "window_max_dev_below_912A": win_info["max_dev_below_912"],
+        "window_edge_note": (
+            "The lower edge is set by a few old, low-metallicity (w, Z, age) cells at the "
+            f"{WINDOW_THRESHOLD:.0e} threshold (ionizing-wavelength flux of those populations), "
+            "not by shell absorption, which acts at lambda > ~1 micron."
+        ),
+        "ratio_min": extremes["ratio_min"],
+        "ratio_max": extremes["ratio_max"],
+        "ratio_bins_below_0p1": extremes["n_below_0p1"],
+        "ratio_bins_above_10": extremes["n_above_10"],
+        "ratio_dtype": "float16",
+        "quantization_max_rel_err": quant_err,
+        "interp_midpoints": interp["midpoints"],
+        "interp_max_rel_err": interp["max_rel_err"],
+        "interp_worst_excl_first": interp["worst_excl_first"],
+        "interp_note": (
+            "Linear-in-w interpolation vs direct FSPS at the midpoint of every interval, "
+            f"max over 2-30 um at Z_sun, ages {CHECK_AGES_GYR} Gyr. The first interval is "
+            "bounded below by the step in R at w = 0 (shell model on/off)."
+        ),
+        "imf_sensitivity_max_diff": imf_diff,
+        "imf_sensitivity_scope": (
+            "max |R_IMF - R_Chabrier| over the window, Kroupa and Salpeter, Z_sun only, "
+            "ages 0.3/1/3 Gyr, w = 0 and 3."
+        ),
+        "log_z_convention": "absolute log10(Z), matching ssp_lgmet in the shipped SSP grids",
+        "wall_time_s": wall,
+        **pins,
+    }
+    for key in ("below_912_age_gyr_min", "below_912_logz_max"):
+        if key in win_info:
+            attrs[f"window_{key}"] = win_info[key]
 
+    print(f"\nWriting {OUTPUT_PATH}")
+    _write(OUTPUT_PATH, planes, WEIGHTS[keep], wave_win, log_z, age_gyr, attrs)
     size_mb = os.path.getsize(OUTPUT_PATH) / 1e6
-    _layout_written = "shell_fraction" if is_linear else "ratio_planes"
-    print(f"Wrote {OUTPUT_PATH}: {size_mb:.2f} MB, layout={_layout_written}")
-    if size_mb > 10.0:
-        print(f"WARNING: file size {size_mb:.2f} MB exceeds the 10 MB cap.")
+    print(f"Wrote {OUTPUT_PATH}: {size_mb:.2f} MB; total wall time {wall / 60.0:.1f} min")
+    if size_mb > SIZE_CAP_MB:
+        raise RuntimeError(f"file size {size_mb:.2f} MB exceeds the {SIZE_CAP_MB:.0f} MB cap")
 
 
 if __name__ == "__main__":

@@ -380,10 +380,10 @@ _EXCUSED: dict[str, str] = {
         "here builds a synthetic (5000/lambda)^2 SSP, not a real FSPS grid. "
         "Liveness is measured instead on a real fsps_mist_* grid: "
         "tests/physics/gradients/test_agb_dust_shell_gradient.py pins a "
-        "nonzero jax.grad of the SED wrt agb_dust_weight for a 1 Gyr "
-        "population (matching a central finite difference to 1%), and "
-        "tests/components/stellar/test_agb_dust_shell.py measures R(w) "
-        "monotonic and varying by up to a factor of ~2.4 across the prior."
+        "nonzero jax.grad of predict_photometry wrt agb_dust_weight, matching a "
+        "central finite difference to 1% at weights between the stored nodes, "
+        "and tests/components/stellar/test_agb_dust_shell.py shows the baked "
+        "and live weights agree and change the SED."
     ),
     "dust_emission": (
         "owned by tests/contract/test_dust_emission_wildcard.py, the guard "

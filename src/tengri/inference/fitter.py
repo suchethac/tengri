@@ -1078,6 +1078,22 @@ def _warn_if_lut_bias_amplified(
         return
 
 
+def _has_free_agb_dust_weight(model) -> bool:
+    """Whether ``model`` frees ``agb_dust_weight`` (#2534).
+
+    A free weight makes the SSP cube parameter-dependent, which no precompute
+    table can represent, so ``approx="auto"`` must resolve to the exact path
+    for such a model rather than build a table that would raise. Checked
+    structurally on ``model.spec``, so it costs nothing on every other fit.
+    """
+    spec = getattr(model, "spec", None)
+    return (
+        spec is not None
+        and bool(getattr(spec, "agb_dust", False))
+        and "agb_dust_weight" in getattr(spec, "free_params", ())
+    )
+
+
 def _resolve_batch_fit_approx(model, approx, data_type):
     """Route a batch-fit model through the fit-time precompute policy.
 
@@ -1153,6 +1169,8 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             )
         from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
 
+        if _has_free_agb_dust_weight(model):
+            return model
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             has_wave = state is not None and state.wave_precomp
@@ -2082,18 +2100,9 @@ class Fitter:
             WavePrecomp,
         )
 
-        # AGB dust-shell (#2534): a free agb_dust_weight makes the SSP cube
-        # parameter-dependent, which no precompute LUT can represent (see the
-        # refusal in StellarSEDComponent.precompute); "auto" must resolve to
-        # the exact path for such a model rather than building one that would
-        # raise at construction. Checked structurally (model.spec), not by
-        # attempting the build, so this stays cheap on every other fit.
-        spec = getattr(model, "spec", None)
-        if (
-            spec is not None
-            and getattr(spec, "agb_dust", False)
-            and "agb_dust_weight" in getattr(spec, "free_params", ())
-        ):
+        # AGB dust-shell (#2534): "auto" resolves to the exact path for a
+        # model with a free agb_dust_weight (see _has_free_agb_dust_weight).
+        if _has_free_agb_dust_weight(model):
             return None
 
         if self.data_type in ("spectroscopy", "joint"):

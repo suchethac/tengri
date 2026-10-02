@@ -2592,30 +2592,12 @@ class StellarSEDComponent:
 
         # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
         # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
-        # ``SEDModel.__init__``, so ``self.agb_dust_ratio`` stays None
-        # there). Multiplying here -- before the metallicity interpolation
-        # and the SFH age-weight sum below -- makes the correction exact per
-        # SSP and differentiable in ``agb_dust_weight`` for the one path that
-        # can see a traced weight at all (the exact, non-precompute path;
-        # ``precompute`` refuses a free weight for every LUT, see below).
-        if self.agb_dust_ratio is not None:
-            from tengri.components.stellar.agb_dust_shell import (
-                PARAMS as _AGB_DUST_PARAMS,
-                agb_dust_ratio as _agb_dust_ratio_fn,
-            )
-            from tengri.protocols.component import declared_default
-
-            # Fallback only: this branch is reached only for a FREE
-            # agb_dust_weight, which the generic prefix-routing in
-            # SEDComponent dispatch always supplies in ``params`` -- the
-            # default here is defensive, not a reachable code path, so it
-            # reads the declaration rather than repeating the number (#2241).
-            _agb_w = jnp.asarray(
-                params.get(
-                    "agb_dust_weight", declared_default(_AGB_DUST_PARAMS, "agb_dust_weight")
-                )
-            )
-            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_ratio_fn(self.agb_dust_ratio, _agb_w)
+        # ``SEDModel.__init__``). Multiplying here, before the metallicity
+        # interpolation and the SFH age-weight sum, makes the correction
+        # exact per SSP and differentiable in ``agb_dust_weight``.
+        _agb_dust_cube = self._agb_dust_cube_ratio(params)
+        if _agb_dust_cube is not None:
+            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
@@ -3840,6 +3822,40 @@ class StellarSEDComponent:
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         return joint_weights, total_mass, ssp_ages_yr
 
+    def _agb_dust_cube_ratio(self, params):
+        """Live AGB dust-shell ratio cube for a free ``agb_dust_weight`` (#2534).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict; carries ``agb_dust_weight`` when it is free.
+
+        Returns
+        -------
+        ndarray, shape (n_met, n_age, n_wave) or None
+            ``R(w)`` on the SSP grid [dimensionless], or ``None`` when the
+            weight is not free (a Fixed weight is baked into the SSP cube).
+
+        Notes
+        -----
+        **JIT-compatible**: yes; differentiable in ``agb_dust_weight`` between
+        stored weight nodes.
+        """
+        if self.agb_dust_ratio is None:
+            return None
+        from tengri.components.stellar.agb_dust_shell import (
+            PARAMS as _AGB_DUST_PARAMS,
+            agb_dust_ratio as _agb_dust_ratio_fn,
+        )
+        from tengri.protocols.component import declared_default
+
+        # The generic prefix routing always supplies a free weight in
+        # ``params``; the declared default is the defensive fallback (#2241).
+        weight = jnp.asarray(
+            params.get("agb_dust_weight", declared_default(_AGB_DUST_PARAMS, "agb_dust_weight"))
+        )
+        return _agb_dust_ratio_fn(self.agb_dust_ratio, weight)
+
     def compute_log_nion(self, params, ssp_data=None):
         r"""SED-free log-domain ionizing photon rate; no full-wavelength SED.
 
@@ -3895,7 +3911,11 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
+        ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
+        agb_dust_cube = self._agb_dust_cube_ratio(params)
+        if agb_dust_cube is not None:
+            ssp_flux_ion = ssp_flux_ion * agb_dust_cube[:, :, :n_ion]
+        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )

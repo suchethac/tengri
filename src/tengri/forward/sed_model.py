@@ -2990,21 +2990,10 @@ class SEDModel:
         # catch ever runs, is the only way this spec actually gets the
         # documented behavior: a clear error naming the exact path, not a
         # model that "builds" and then always fails on first use.
-        if (
-            getattr(self.spec, "agb_dust", False)
-            and "agb_dust_weight" in self.spec.free_params
-            and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
+        if self._has_free_agb_dust_weight() and (
+            self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp")
         ):
-            raise ValueError(
-                "A free agb_dust_weight (agb_dust={'type': 'fsps_shell', "
-                "'weight': Uniform(...)}) cannot be represented in a precompute "
-                "LUT (WavePrecomp / SpectrumPrecomp): the SSP cube it corrects "
-                "is parameter-dependent, but every LUT is built once, before "
-                "any parameter value is known. Use the exact path (approx=None, "
-                "the default) instead -- approx='auto' already resolves to it "
-                "for this model. Fix agb_dust_weight (e.g. agb_dust={'weight': "
-                "Fixed(1.0)}) to use a precompute LUT."
-            )
+            raise self._free_agb_dust_lut_error("WavePrecomp / SpectrumPrecomp")
 
         # Eagerly build + cache the component chain when SpectrumPrecomp is
         # active. The fixed-z spectrum LUT (precompute_spectroscopy) runs
@@ -3182,6 +3171,8 @@ class SEDModel:
         # Baked-in / wNE: the lines are inside the SSP templates, so they are
         # measured off the spectrum through the window LUT. Build it eagerly (the
         # SSP grid is concrete at construction) and tell the likelihood to use it.
+        if self._has_free_agb_dust_weight():
+            raise self._free_agb_dust_lut_error("FeaturePrecomp SSP window")
         self._feature_precomp_lines = lines
         self._line_window_precomp(tuple(default_line_defs(np.asarray(lines))))
         self._fast_line_measurement = True
@@ -7733,6 +7724,35 @@ class SEDModel:
             self._cached_component_chain = chain
         return chain
 
+    def _has_free_agb_dust_weight(self) -> bool:
+        """Whether ``agb_dust_weight`` is a free parameter of this model (#2534)."""
+        return bool(getattr(self.spec, "agb_dust", False)) and (
+            "agb_dust_weight" in self.spec.free_params
+        )
+
+    @staticmethod
+    def _free_agb_dust_lut_error(table: str) -> ValueError:
+        """The refusal for a precompute table built from the SSP cube (#2534).
+
+        Parameters
+        ----------
+        table : str
+            Name of the table that cannot be built, e.g. ``"WavePrecomp"``.
+
+        Returns
+        -------
+        ValueError
+            Naming the exact path and the Fixed-weight alternative.
+        """
+        return ValueError(
+            f"A free agb_dust_weight (agb_dust={{'type': 'fsps_shell', 'weight': "
+            f"Uniform(...)}}) cannot be represented in a {table} table: the SSP cube it "
+            "corrects is parameter-dependent, but the table is built once, before any "
+            "parameter value is known. Use the exact path instead (approx=None, the "
+            "default; approx='auto' already resolves to it for this model), or fix the "
+            "weight (agb_dust={'weight': Fixed(1.0)}) to use a precompute table."
+        )
+
     def _index_window_precomp(self, index_defs):
         """Build (and memoize) the SSP window-integral LUT for ``index_defs``.
 
@@ -7838,6 +7858,8 @@ class SEDModel:
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
             raise ValueError(f"{caller}(approx=True) requires a stellar component.")
+        if self._has_free_agb_dust_weight():
+            raise self._free_agb_dust_lut_error(f"{caller}(approx=True) SSP window")
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
