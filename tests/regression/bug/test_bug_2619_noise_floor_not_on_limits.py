@@ -2,9 +2,10 @@
 """Regression tests for #2619 -- the calibration floor entered upper/lower limits.
 
 The calibration floor ``noise_frac_cal * |model|`` inflates the error of a
-measurement. Boquien et al. (2019, Sect. 4.3) and CIGALE add it in quadrature
-to detections only; a limit keeps its own ``sigma_obs`` and is scored with the
-Gaussian CDF at that sigma. ``censored_neg_log_likelihood`` computed
+measurement. The CIGALE implementation (``pcigale`` ``_add_model_error``) adds it
+in quadrature to detections only; a limit keeps its own ``sigma_obs`` and is
+scored with the Gaussian CDF at that sigma (Boquien et al. 2019, Eq. 15).
+``censored_neg_log_likelihood`` computed
 ``sigma_eff = hypot(sigma_obs, f * |m|)`` once and used it in the limit branches
 as well, so a free ``noise_frac_cal`` could absorb a limit violated at 3 sigma.
 
@@ -24,6 +25,8 @@ f  public path: ``SEDModel`` + ``Fitter(data_mask=...)`` log likelihood; the
    f-dependence is the detection ``ln sigma_eff`` terms only, float32 agrees
    with float64, ``jax.grad`` w.r.t. ``noise_frac_cal`` is the analytic value
 g  detections and both kinds of limit in one call
+h  limit gradient is the Mills-ratio value, independent of f; float32 at z = -30, -300
+i  a zero sigma on a limit band is refused by the Fitter before the likelihood
 
 https://github.com/suchethac/tengri/issues/2619
 """
@@ -344,3 +347,72 @@ def test_public_path_gradient_wrt_noise_frac_cal(ssp, observation):
     assert np.isfinite(g) and g != 0.0
     expected = np.sum(f * pred[:2] ** 2 / (sg[:2] ** 2 + f**2 * pred[:2] ** 2))
     np.testing.assert_allclose(g, expected, rtol=1e-8)
+
+
+# --- limit gradient and strongly violated limits -------------------------------
+
+
+def _upper_limit_energy(m, u, sg, f):
+    return censored_neg_log_likelihood(
+        jnp.atleast_1d(u),
+        jnp.atleast_1d(sg),
+        jnp.atleast_1d(m),
+        jnp.array([UPPER_LIMIT]),
+        f_cal=f,
+    )
+
+
+@pytest.mark.parametrize("f", _FCAL)
+def test_upper_limit_gradient_is_the_mills_ratio_and_independent_of_f(f):
+    """dE/dm = phi(z) / (sigma Phi(z)) at z = -3, sigma = 0.1 (32.8310), for every f."""
+    m, sg = 1.0, 0.1
+    u = m - 3.0 * sg
+    g = float(jax.grad(_upper_limit_energy)(jnp.asarray(m), u, sg, f))
+    z = (u - m) / sg
+    expected = stats.norm.pdf(z) / (sg * stats.norm.cdf(z))
+    np.testing.assert_allclose(expected, 32.8310, rtol=1e-5)
+    np.testing.assert_allclose(g, expected, rtol=1e-8)
+
+
+@pytest.mark.parametrize("z", [-30.0, -300.0])
+def test_strongly_violated_limit_is_finite_in_float32(z):
+    """Energy and gradient stay finite in pure float32; the energy matches float64 to 1e-4."""
+    m, sg, f = 1.0, 0.1, 0.1
+    u = m + z * sg
+    e64, g64 = jax.value_and_grad(_upper_limit_energy)(jnp.asarray(m), u, sg, f)
+    with jax.enable_x64(False):
+        e32, g32 = jax.value_and_grad(_upper_limit_energy)(
+            jnp.asarray(m, dtype=jnp.float32),
+            jnp.asarray(u, dtype=jnp.float32),
+            jnp.asarray(sg, dtype=jnp.float32),
+            jnp.asarray(f, dtype=jnp.float32),
+        )
+    assert e32.dtype == jnp.float32 and g32.dtype == jnp.float32
+    assert np.isfinite(float(e32)) and float(e32) > 0.0, "float32 energy collapsed"
+    assert np.isfinite(float(g32)) and float(g32) != 0.0, "float32 gradient collapsed"
+    np.testing.assert_allclose(float(e64), -stats.norm.logcdf(z), rtol=1e-10)
+    np.testing.assert_allclose(float(e32), float(e64), rtol=1e-4)
+    assert float(g32) > 0.0 and float(g64) > 0.0
+
+
+def test_zero_sigma_on_a_limit_band_is_refused_by_the_fitter(ssp, observation):
+    """The Fitter's boundary check covers limit bands: sigma = 0 raises, naming the band."""
+    model = SEDModel(
+        parse_groups(
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        ),
+        ssp,
+        observation=observation,
+    )
+    data = jnp.array([1.0e-28, 1.0e-28, 7.0e-29])
+    noise = jnp.array([1.0e-29, 1.0e-29, 0.0])  # band 2 is the limit
+    mask = jnp.array([DETECTED, DETECTED, UPPER_LIMIT])
+    with pytest.raises(ValueError, match=r"Non-positive noise at index/indices \[2\]"):
+        Fitter(model, data=data, noise=noise, data_mask=mask)

@@ -19,7 +19,7 @@
   agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
-- Upper and lower limits are scored with the Gaussian CDF at their own σ_obs; the calibration floor `noise_frac_cal · |model|` enters detections only (Boquien et al. 2019, Sect. 4.3; CIGALE). With the floor in the limit term a free `noise_frac_cal` absorbed a limit violated at 3σ (f̂ = 0.45 / 0.13 / 0.03 at S/N 3 / 10 / 50); it stays at 0 (#2619).
+- Upper and lower limits are scored with the Gaussian CDF at their own σ_obs (Boquien et al. 2019, Eq. 15); the calibration floor `noise_frac_cal · |model|` enters detections only, as in the CIGALE implementation (#2619).
 
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
 

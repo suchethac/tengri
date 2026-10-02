@@ -376,9 +376,18 @@ def censored_neg_log_likelihood(
     - **Upper limit** (mask=1): ``ln L = ln Phi((f_upper - m) / sigma_obs)``.
     - **Lower limit** (mask=-1): ``ln L = ln Phi((m - f_lower) / sigma_obs)``.
 
-    where ``Phi`` is the standard normal CDF. The calibration floor enters
-    detections only; a limit is scored at its own ``sigma_obs`` (Boquien et
-    al. 2019 [1]_, Sect. 4.3; CIGALE).
+    where ``Phi`` is the standard normal CDF. A limit is scored with the
+    Gaussian CDF at its own ``sigma_obs`` (Boquien et al. 2019 [1]_, Eq. 15,
+    which follows Sawicki 2012). The calibration floor enters detections
+    only, as in the CIGALE implementation (``pcigale`` ``_add_model_error``
+    floors only bands with a non-negative error; limits carry negative
+    errors); the paper itself states no such rule.
+
+    **Precondition**: ``noise_obs > 0`` for every band, limits included. A
+    zero ``sigma_obs`` on a limit band gives an infinite energy and a NaN
+    gradient. The fit entry points reject non-positive uncertainties for all
+    bands before the likelihood is built (``Data.validate_against``,
+    ``Fitter``); this function does not re-check.
 
     **Floor convention**: the floor scales with the MODEL flux,
     ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``, so ``sigma_eff`` depends
