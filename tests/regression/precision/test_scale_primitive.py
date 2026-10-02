@@ -7,7 +7,7 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.regression_bug
 
-from tengri.utils.scale import apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_add, log10_add_signed
 
 
 def test_f64_matches_naive_product():
@@ -112,6 +112,47 @@ def test_log10_add_gradient_is_finite():
     # exact cancellation takes the where-dummy branch
     # grad-assert: finite-only — exact cancellation; a zero gradient is the answer
     assert np.isfinite(float(jax.grad(lambda x: log10_add(x, x, sign_b=-1.0))(43.0)))
+
+
+# --- log10_add_signed: signed base-10 logaddexp returning magnitude and sign -------
+
+
+@pytest.mark.parametrize(
+    ("log_a", "sign_a", "log_b", "sign_b", "want_lin"),
+    [
+        (2.0, 1.0, 1.0, 1.0, 110.0),
+        (2.0, -1.0, 1.0, -1.0, -110.0),
+        (2.0, -1.0, 1.0, 1.0, -90.0),
+        (1.0, 1.0, 2.0, -1.0, -90.0),
+        (2.0, -1.0, -np.inf, 0.0, -100.0),
+        (-np.inf, 0.0, 3.0, 1.0, 1000.0),
+    ],
+)
+def test_log10_add_signed_returns_magnitude_and_sign(log_a, sign_a, log_b, sign_b, want_lin):
+    log_out, sign_out = log10_add_signed(
+        jnp.asarray(log_a), jnp.asarray(log_b), sign_a=sign_a, sign_b=sign_b
+    )
+    np.testing.assert_allclose(float(log_out), np.log10(abs(want_lin)), rtol=1e-12)
+    assert float(sign_out) == np.sign(want_lin)
+
+
+def test_log10_add_signed_of_two_empty_terms_is_empty():
+    log_out, sign_out = log10_add_signed(
+        jnp.asarray(-np.inf), jnp.asarray(-np.inf), sign_a=0.0, sign_b=0.0
+    )
+    assert float(log_out) == -np.inf and float(sign_out) == 0.0
+
+
+def test_log10_add_signed_keeps_a_corrupt_term_visible():
+    log_out, _ = log10_add_signed(jnp.asarray(np.nan), jnp.asarray(1.0), sign_a=1.0, sign_b=1.0)
+    assert float(log_out) == np.inf
+
+
+def test_log10_add_signed_magnitude_is_log10_add():
+    a, b = jnp.asarray(44.5), jnp.asarray(43.6)
+    for sa, sb in ((1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0)):
+        got, _ = log10_add_signed(a, b, sign_a=sa, sign_b=sb)
+        assert float(got) == float(log10_add(a, b, sign_a=sa, sign_b=sb))
 
 
 def test_apply_log10_scale_of_zeros_is_zero_not_nan():
