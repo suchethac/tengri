@@ -25,6 +25,7 @@ def _reset_module_state(monkeypatch):
     monkeypatch.setattr(jax_cache, "_ENABLED_DIR", None)
     monkeypatch.delenv("TENGRI_DISABLE_JAX_CACHE", raising=False)
     monkeypatch.delenv("TENGRI_JAX_CACHE_DIR", raising=False)
+    monkeypatch.delenv("TENGRI_JAX_CACHE_MAX_GB", raising=False)
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
 
 

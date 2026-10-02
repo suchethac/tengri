@@ -34,8 +34,9 @@ code's attenuation model, not a house convention. See issue #747 for the
 CIGALE case where the split was applied wrongly.
 
 Nebular is OFF on both sides: ProSpect ties Halpha to the SFR and distributes
-other lines via Levesque et al. (2010), while tengri uses the Cue emulator on
-Cloudy 17 — different models by design (01_prospect_r.py §8).
+other lines via Levesque et al. (2010), while tengri uses the Cue emulator
+trained on Cloudy 22.00 (Li et al. 2025, ApJ 986, 9, arXiv:2405.04598) —
+different models by design (01_prospect_r.py §8).
 
 NOT VALIDATED — radio, and why this file does not report it
 -----------------------------------------------------------

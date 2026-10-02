@@ -164,6 +164,7 @@ tengri = ["defaults.toml", "observation/data/filters_registry.json"]
 "tengri.data.agn_ext" = ["*.dat", "PROVENANCE.md"]
 "tengri.data.agn_fe2" = ["*.txt", "PROVENANCE.md"]
 "tengri.data.filters_7dt" = ["*.dat", "PROVENANCE.md"]
+"tengri.data.ssp_library_resolution" = ["*.dat", "PROVENANCE.md"]
 
 [tool.ruff]
 target-version = "py311"

@@ -373,12 +373,17 @@ def test_wildcard_free_now_frees_declared_params(group, spec, prefix):
 
 
 def test_free_uses_the_declared_range_not_the_fixed_default():
+    # sfh_dpl_alpha (not neb_logU): it has no GRID_SUPPORT entry (#2460 narrows
+    # neb_logU on a cue backend to Cue's trained footprint, so pinning its
+    # un-narrowed declared range here would couple this test to backend
+    # selection). DPL is a closed-form SFH shape with no template grid, so its
+    # declared range is what FREE resolves to on every backend, now and later.
     freed = tengri.parse_groups(
-        sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE}, redshift=Fixed(0.1)
+        sfh={"type": "dpl", "all_params": FREE}, neb={"type": "cue"}, redshift=Fixed(0.1)
     )
-    logu = freed.get_distribution("neb_logU")
-    assert not logu.is_fixed
-    assert logu.bounds == (-5.0, 0.0)  # the range neb_logU's bound_check enforces
+    alpha = freed.get_distribution("sfh_dpl_alpha")
+    assert not alpha.is_fixed
+    assert alpha.bounds == (0.1, 5.0)  # the declared range, not the Fixed default (1.5)
 
 
 def test_free_prior_never_contradicts_its_own_bound_check():
