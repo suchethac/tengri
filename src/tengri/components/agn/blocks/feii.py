@@ -18,8 +18,6 @@ __all__ = [
     "boroson_green_feii_block",
 ]
 
-from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
-
 DEFAULT_F_BOL_5100: float = 9.0
 
 
@@ -107,15 +105,9 @@ def boroson_green_feii_block(
     # This ensures FeII scales consistently with BLR emission lines.
     l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
 
-    # FeII L_nu per unit H-beta luminosity, scaled by fe2_strength.
+    # FeII L_lambda [1/Angstrom] per unit H-beta luminosity, scaled by
+    # fe2_strength (the template's F_lambda shape is the L_lambda shape).
     fe2_spectrum = _fe2_pseudo_continuum(wave_aa, agn_blr_fwhm_kms, agn_fe2_strength)
 
-    # Scale FeII template to absolute luminosity by multiplying by l_hbeta.
-    # _fe2_pseudo_continuum returns L_nu [Hz^-1] per unit H-beta.
-    l_nu_fe2 = l_hbeta * fe2_spectrum
-
-    # Convert L_nu to L_lambda: L_lambda = L_nu * c / lambda^2.
-    # Clip negative values (from ringing in broadened template) to zero.
-    l_lambda = jnp.maximum(l_nu_fe2 * _C_AA_PER_S / wave_aa**2, 0.0)
-
-    return l_lambda
+    # Scale to absolute luminosity: L_lambda [erg/s/A] = L(H-beta) * spectrum.
+    return l_hbeta * fe2_spectrum

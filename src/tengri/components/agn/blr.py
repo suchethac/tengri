@@ -39,7 +39,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
-from tengri.utils.grid_interp import resample_template
 from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants ────────────────────────────────────────────
@@ -117,13 +116,22 @@ def _load_fe2_templates():
     which curates UV Fe II from Vestergaard & Wilkes 2001 and Tsuzuki+2006,
     and optical Fe II from Boroson & Green 1992.
 
-    File format: log10(wavelength), flux [erg/s/cm²/Å] (per PyQSOFit convention).
+    File format: log10(wavelength), **F_lambda** [erg/s/cm²/Å] (per PyQSOFit
+    convention). Only the *shape* of each template is used downstream; the
+    absolute scale is set by the R_Fe / L(H-beta) normalisation in
+    :func:`_fe2_pseudo_continuum`.
+
+    Negative template nodes (numerical ringing in the published tabulations,
+    240 in the optical file) are clipped to zero here, **before** any
+    resampling or broadening, as PyQSOFit does: a flux density of an emission
+    template cannot be negative, and leaving them in lets them cancel real
+    flux under the broadening kernel.
 
     Returns
     -------
     tuple of (uv_wave, uv_flux, opt_wave, opt_flux)
         All as np.ndarray, dtype float64. Wavelengths in Angstrom (linear scale).
-        Flux in erg/s/cm²/Å (normalized by PyQSOFit internally).
+        Flux is F_lambda [erg/s/cm²/Å], clipped to >= 0.
     """
     data_dir = Path(__file__).parent.parent.parent / "data" / "agn_fe2"
 
@@ -139,13 +147,13 @@ def _load_fe2_templates():
     # Load UV template (log10 wavelength, flux)
     uv_data = np.genfromtxt(str(uv_file), comments="#", dtype=np.float64)
     uv_log_wave = uv_data[:, 0]
-    uv_flux = uv_data[:, 1]
+    uv_flux = np.maximum(uv_data[:, 1], 0.0)
     uv_wave = 10.0**uv_log_wave  # Convert to linear wavelength
 
     # Load optical template (log10 wavelength, flux)
     opt_data = np.genfromtxt(str(opt_file), comments="#", dtype=np.float64)
     opt_log_wave = opt_data[:, 0]
-    opt_flux = opt_data[:, 1]
+    opt_flux = np.maximum(opt_data[:, 1], 0.0)
     opt_wave = 10.0**opt_log_wave  # Convert to linear wavelength
 
     return uv_wave, uv_flux, opt_wave, opt_flux
@@ -162,6 +170,29 @@ except FileNotFoundError:
     _FE2_UV_FLUX = None
     _FE2_OPT_WAVE = None
     _FE2_OPT_FLUX = None
+
+
+# R_Fe measurement window [Angstrom] (Boroson & Green 1992).
+_FE2_RFE_WINDOW = (4434.0, 4684.0)
+
+
+def _window_integral(wavelength: jnp.ndarray, values: jnp.ndarray, lo: float, hi: float):
+    """Integral of the piecewise-linear ``values(wavelength)`` over ``[lo, hi]``.
+
+    The window edges are honoured exactly (each grid interval is clipped to the
+    window and the integrand linearly interpolated to the clipped ends), so the
+    result does not depend on whether ``lo``/``hi`` happen to fall on grid
+    points. ``wavelength`` must be ascending [Angstrom]; the result has the
+    units of ``values`` times Angstrom.
+    """
+    w0, w1 = wavelength[:-1], wavelength[1:]
+    v0, v1 = values[:-1], values[1:]
+    a = jnp.clip(w0, lo, hi)
+    b = jnp.clip(w1, lo, hi)
+    slope = (v1 - v0) / jnp.maximum(w1 - w0, 1e-30)
+    fa = v0 + slope * (a - w0)
+    fb = v0 + slope * (b - w0)
+    return jnp.sum(0.5 * (fa + fb) * (b - a))
 
 
 def _fe2_pseudo_continuum(
@@ -181,9 +212,22 @@ def _fe2_pseudo_continuum(
     input wavelength grid, then broadened by convolving with a Gaussian
     kernel corresponding to the BLR velocity width (FWHM in km/s).
 
-    The output is normalized so that ``fe2_strength`` equals the standard
-    R_Fe = F(Fe II 4434-4684) / F(H-beta) ratio. In practice this function
-    returns L_nu per unit H-beta luminosity, scaled by ``fe2_strength``.
+    **Unit convention.** The PyQSOFit template columns are F_lambda
+    [erg/s/cm²/Å]; their *shape* is treated as the shape of L_lambda. The
+    output is L_lambda per unit H-beta luminosity [Å⁻¹], normalised so that
+
+    .. math::
+
+        \\int_{4434\\,\\AA}^{4684\\,\\AA} \\hat L_\\lambda\\, d\\lambda
+        = R_{\\rm Fe},
+
+    i.e. ``fe2_strength`` is the standard R_Fe = F(Fe II 4434-4684) /
+    F(H-beta) (Boroson & Green 1992) when multiplied by L(H-beta).
+    Callers that need L_nu [erg/s/Hz] convert with
+    ``L_nu = L_lambda * lambda**2 / c`` (``compute_blr_sed`` does); the
+    composable FeII block returns L_lambda directly. Template nodes are
+    clipped at zero (see :func:`_load_fe2_templates`) and resampled linearly
+    in wavelength.
 
     Parameters
     ----------
@@ -199,9 +243,9 @@ def _fe2_pseudo_continuum(
     Returns
     -------
     array, shape (n_wave,)
-        Fe II L_nu template [Hz^-1] per unit H-beta luminosity,
-        scaled by fe2_strength. Multiply by L(H-beta) to get
-        absolute luminosity.
+        Fe II L_lambda template [Å^-1] per unit H-beta luminosity,
+        scaled by fe2_strength. Multiply by L(H-beta) [erg/s] to get
+        L_lambda [erg/s/Å].
 
     References
     ----------
@@ -225,9 +269,12 @@ def _fe2_pseudo_continuum(
     opt_flux = jnp.asarray(device_table(_FE2_OPT_FLUX), dtype=jnp.float64)
 
     # Interpolate UV and optical templates onto the common wavelength grid
-    # Use linear interpolation; extrapolate with zeros outside the range
-    uv_interp = resample_template(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
-    opt_interp = resample_template(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
+    # Linear interpolation in wavelength of the (non-negative) F_lambda nodes,
+    # zero outside the tabulated range. Linear (not log-log) resampling keeps
+    # the template integral: log-log power-law chords between nodes of a
+    # sign-changing, non-power-law template err by up to ~1 dex.
+    uv_interp = jnp.interp(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
+    opt_interp = jnp.interp(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
 
     # Combine: use UV where available (1200–3500 A), else optical
     # In the overlap region (2200–3500 A), UV dominates by design (Tsuzuki+06)
@@ -267,16 +314,13 @@ def _fe2_pseudo_continuum(
 
     fe2_broadened = _convolve_with_gaussian(fe2_combined, sigma_wave)
 
-    # Normalize: compute the integral of the optical 4434-4684 A bump
-    # This is the standard R_Fe measurement window (Boroson & Green 1992).
-    mask_opt = (wavelength >= 4434.0) & (wavelength <= 4684.0)
-    nu_opt = _C_AA / jnp.maximum(wavelength, 1.0)
-    sort_nu = jnp.argsort(nu_opt)
-    opt_window_flux = jnp.abs(jnp.trapezoid((fe2_broadened * mask_opt)[sort_nu], nu_opt[sort_nu]))
+    # Normalise: energy in the R_Fe window (4434-4684 A, Boroson & Green 1992)
+    # is integral(L_lambda d lambda) = fe2_strength per unit L(H-beta).
+    opt_window_flux = _window_integral(
+        wavelength, fe2_broadened, _FE2_RFE_WINDOW[0], _FE2_RFE_WINDOW[1]
+    )
     opt_window_flux = jnp.maximum(opt_window_flux, 1e-30)
 
-    # Scale so that integral in 4434-4684 window equals fe2_strength
-    # (relative to unit H-beta luminosity applied later by caller)
     return fe2_strength * fe2_broadened / opt_window_flux
 
 
@@ -428,8 +472,9 @@ def compute_blr_sed(
     # Fe II pseudo-continuum (scaled relative to H-beta luminosity)
     l_hbeta = _blr_l_hbeta(l_disc_bol_erg, covering_fraction, line_efficiency)
 
-    # _fe2_pseudo_continuum returns per-Hz template per unit H-beta luminosity
+    # _fe2_pseudo_continuum returns L_lambda [1/Angstrom] per unit H-beta
+    # luminosity; this function returns L_nu, so L_nu = L_lambda * lambda^2 / c.
     fe2_spectrum = _fe2_pseudo_continuum(wavelength, fwhm_kms, agn_fe2_strength)
-    l_nu_blr = l_nu_blr + l_hbeta * fe2_spectrum
+    l_nu_blr = l_nu_blr + l_hbeta * fe2_spectrum * wavelength**2 / _C_AA
 
     return l_nu_blr
