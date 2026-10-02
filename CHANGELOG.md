@@ -788,6 +788,27 @@
   `neb_fdust` anywhere in the `neb` group now raises naming the replacement
   and the conversion formula.
 
+  **Added (#2529): age-selective LyC escape geometry.** A fourth
+  `dust_attenuation` structural key joins the `lyc_` family,
+  `lyc_escape_geometry`: whether the escaping fraction (`neb_fesc`)
+  bypasses the birth-cloud screen through a geometric hole, instead of
+  only skipping nebular reprocessing (the pre-#2529 behavior, still the
+  default). `'screened'` (default, unchanged): `neb_fesc` never touches
+  the dust screen. `'birth_cloud_holes'`: a covering fraction `neb_fesc`
+  of the young population's light bypasses the birth-cloud screen but
+  still crosses the diffuse ISM (FSPS `frac_obrun`-like). `'clear'`: that
+  same fraction sees no dust at all (Synthesizer `fesc`-like). Applies at
+  every wavelength, not only below the Lyman limit -- a hole in a birth
+  cloud is geometric, not wavelength-selective. One shared formula,
+  `tengri.components.lyc.escape_geometry_transmission`, used by both the
+  exact path and the `WavePrecomp()` energy-balance LUT and photometry
+  LUT (both agree with the exact path to the existing quadrature
+  tolerance). Two-component only (a birth-cloud screen distinct from the
+  diffuse screen is the one thing a hole needs to be in); refused
+  together with `lyc_reprocessed_by='all'` (both would reduce the young
+  population's escaping light from the same `neb_fesc`, double-counting
+  it).
+
 ### Fixed
 
 - SKIRTOR grid caches are keyed on the process float dtype, so a float32
