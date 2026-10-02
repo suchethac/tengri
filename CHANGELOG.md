@@ -2,8 +2,6 @@
 
 ### Fixed
 
-- Calibration floor applied to upper limits: the noise floor (f_cal · |model|) was inflating σ_eff for both detections and limits. Correct physics (Boquien et al. 2019, §4.3; pcigale implementation): the floor applies to detections only; limits are scored with σ_obs (no floor), following the Gaussian CDF. Consequence: limits violated at 3σ were falsely absorbed by a high f_cal, allowing a free noise_frac_cal to escape. Fixed in `censored_neg_log_likelihood`: detections use σ_eff from the floor; limits use σ_obs only. (#2619)
-
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
@@ -17,6 +15,7 @@
   agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
+- Upper and lower limits are scored with the Gaussian CDF at their own σ_obs; the calibration floor `noise_frac_cal · |model|` enters detections only (Boquien et al. 2019, Sect. 4.3; CIGALE). With the floor in the limit term a free `noise_frac_cal` absorbed a limit violated at 3σ (f̂ = 0.45 / 0.13 / 0.03 at S/N 3 / 10 / 50); it stays at 0 (#2619).
 
 ### Added
 

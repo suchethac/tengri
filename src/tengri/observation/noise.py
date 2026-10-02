@@ -331,11 +331,10 @@ def censored_neg_log_likelihood(
     """Negative log-likelihood with per-band censoring.
 
     For detected bands (mask=0), uses the standard Gaussian (or
-    Student-t) likelihood with calibration floor. For upper limits
-    (mask=1), uses the normal CDF: ``ln L_k = ln Phi((f_upper - m_k) / σ_obs)``.
-    For lower limits (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / σ_obs)``.
-
-    The calibration floor applies to detections only; limits use σ_obs.
+    Student-t) likelihood with the calibration floor in its noise. For
+    upper limits (mask=1), uses the normal CDF at the observed uncertainty:
+    ``ln L_k = ln Phi((f_upper - m_k) / sigma_obs_k)``. For lower limits
+    (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / sigma_obs_k)``.
 
     All branches are computed via ``jnp.where`` for JIT compatibility
     (no Python control flow per band).
@@ -373,21 +372,26 @@ def censored_neg_log_likelihood(
     **Censoring model**:
 
     - **Detected** (mask=0): Gaussian or Student-t likelihood with
-      σ_eff² = σ_obs² + (f_cal · |m|)² (floor applied).
-    - **Upper limit** (mask=1): ln L = ln Phi((f_upper - m)/σ_obs)
-      (floor NOT applied).
-    - **Lower limit** (mask=-1): ln L = ln Phi((m - f_lower)/σ_obs)
-      (floor NOT applied).
+      ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``.
+    - **Upper limit** (mask=1): ``ln L = ln Phi((f_upper - m) / sigma_obs)``.
+    - **Lower limit** (mask=-1): ``ln L = ln Phi((m - f_lower) / sigma_obs)``.
 
-    where Phi is the standard normal CDF and σ_obs is the unfloored
-    observational uncertainty.
+    where ``Phi`` is the standard normal CDF. The calibration floor enters
+    detections only; a limit is scored at its own ``sigma_obs`` (Boquien et
+    al. 2019 [1]_, Sect. 4.3; CIGALE).
+
+    **Floor convention**: the floor scales with the MODEL flux,
+    ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``, so ``sigma_eff`` depends
+    on the parameters and the energy carries the term ``ln sigma_eff``.
+    CIGALE's ``additionalerror`` scales with the OBSERVED flux and adds no
+    ``ln sigma`` term; :func:`apply_zp_floor` is tengri's observed-scaled
+    form.
 
     References
     ----------
-    .. [1] Boquien, M., Burgarella, D., Renda, A., et al. (2019).
-        CIGALE: fitting SED and radio AGN properties.
-        A&A 622, A103. Section 4.3 — calibration floor applied to
-        detections only.
+    .. [1] Boquien, M. et al. 2019, A&A, 622, A103. CIGALE: a Python
+       Code Investigating GALaxy Emission. arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
 
@@ -399,12 +403,10 @@ def censored_neg_log_likelihood(
         e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
 
     # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_obs) ---
-    # Limits use sigma_obs only (no calibration floor)
     z_upper = (data - predicted) / noise_obs
     e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
 
     # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_obs) ---
-    # Limits use sigma_obs only (no calibration floor)
     z_lower = (predicted - data) / noise_obs
     e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
 
