@@ -395,47 +395,47 @@ sfh_families = [
     (
         "tsnorm",
         {
-            "sfh_tsnorm_log_total_mass": np.log10(1e10),
-            "sfh_tsnorm_peak_lbt_gyr": 3.0,
-            "sfh_tsnorm_width_gyr": 2.5,
-            "sfh_tsnorm_skew": 0.2,
-            "sfh_tsnorm_trunc": 4.0,
+            "log_total_mass": np.log10(1e10),
+            "peak_lbt_gyr": 3.0,
+            "width_gyr": 2.5,
+            "skew": 0.2,
+            "trunc": 4.0,
         },
     ),
     (
         "dpl",
         {
-            "sfh_dpl_log_total_mass": np.log10(1e10),
-            "sfh_dpl_alpha": 2.0,
-            "sfh_dpl_beta": 1.5,
-            "sfh_dpl_tau_gyr": 2.0,
+            "log_total_mass": np.log10(1e10),
+            "alpha": 2.0,
+            "beta": 1.5,
+            "tau_gyr": 2.0,
         },
     ),
     (
         "dexp",
         {
-            "sfh_dexp_log_total_mass": np.log10(1e10),
-            "sfh_dexp_tau_gyr": 2.5,
+            "log_total_mass": np.log10(1e10),
+            "tau_gyr": 2.5,
         },
     ),
     (
         "lnorm",
         {
-            "sfh_lnorm_log_total_mass": np.log10(1e10),
-            "sfh_lnorm_peak_gyr": 3.0,
-            "sfh_lnorm_width_gyr": 0.6,
+            "log_total_mass": np.log10(1e10),
+            "peak_gyr": 3.0,
+            "width_gyr": 0.6,
         },
     ),
     (
         "dirichlet",
         {
-            "sfh_dir_log_total_mass": np.log10(1e10),
-            "sfh_dir_z_0": 0.6,
-            "sfh_dir_z_1": 0.5,
-            "sfh_dir_z_2": 0.4,
-            "sfh_dir_z_3": 0.3,
-            "sfh_dir_z_4": 0.2,
-            "sfh_dir_z_5": 0.15,
+            "log_total_mass": np.log10(1e10),
+            "z_0": 0.6,
+            "z_1": 0.5,
+            "z_2": 0.4,
+            "z_3": 0.3,
+            "z_4": 0.2,
+            "z_5": 0.15,
         },
     ),
 ]
@@ -709,7 +709,12 @@ dl_cm = float(cosmology.luminosity_distance(z))
 sed_rows = []
 for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
-        "sfh": {"type": sfh_name, "all_params": Fixed(DEFAULT), "met_logzsol": Fixed(-0.1)},
+        "sfh": {
+            "type": sfh_name,
+            "all_params": Fixed(DEFAULT),
+            "met_logzsol": Fixed(-0.1),
+            **{name: Fixed(value) for name, value in truth_sfh.items()},
+        },
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
@@ -724,16 +729,8 @@ for sfh_name, truth_sfh in sfh_families:
     }
     spec = parse_groups(**groups_sfh_fig)
     model = SEDModel(spec, ssp, observation=observation)
-    truth = {
-        **truth_sfh,
-        "met_logzsol": -0.1,
-        "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": z,
-    }
-    sfr_curve = model.predict_sfh(truth)
-    pred = model.predict(truth)
+    sfr_curve = model.predict_sfh({})
+    pred = model.predict({})
     wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
     sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
     sed_rows.append(
@@ -855,15 +852,6 @@ for dust_law in dust_laws:
 fig = plt.figure(figsize=(8.6, 4.4))
 gs = fig.add_gridspec(1, 2, wspace=0.30)
 
-# Fixed SFH for all dust laws
-truth_sfh = {
-    "sfh_tsnorm_log_total_mass": np.log10(1e10),
-    "sfh_tsnorm_peak_lbt_gyr": 3.0,
-    "sfh_tsnorm_width_gyr": 2.5,
-    "sfh_tsnorm_skew": 0.2,
-    "sfh_tsnorm_trunc": 4.0,
-}
-
 # LEFT: Intrinsic SED (zero dust) as reference
 ax_ref = fig.add_subplot(gs[0])
 
@@ -871,6 +859,8 @@ ax_ref = fig.add_subplot(gs[0])
 groups_nodust = {
     "sfh": {
         "type": "tsnorm",
+        "all_params": Fixed(DEFAULT),
+        "met_logzsol": Fixed(-0.1),
         "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
@@ -894,16 +884,7 @@ groups_nodust = {
 spec_nodust = parse_groups(**groups_nodust)
 model_nodust = SEDModel(spec_nodust, ssp, observation=observation)
 
-truth_nodust = {
-    **truth_sfh,
-    "met_logzsol": -0.1,
-    "dust_tau_bc": 0.0,
-    "dust_tau_diff": 0.0,
-    "dust_slope": -0.7,
-    "redshift": z,
-}
-
-pred_nodust = model_nodust.predict(truth_nodust)
+pred_nodust = model_nodust.predict({})
 wave_obs_um = np.asarray(pred_nodust.wave_rest) * (1.0 + z) / 1e4
 sed_fnu_nodust = np.asarray(units.lnu_to_fnu(pred_nodust.rest_sed(), dl_cm, z))
 
@@ -941,6 +922,8 @@ for idx, dust_law in enumerate(dust_laws):
     groups_dustlaw_fig = {
         "sfh": {
             "type": "tsnorm",
+            "all_params": Fixed(DEFAULT),
+            "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
@@ -962,16 +945,7 @@ for idx, dust_law in enumerate(dust_laws):
     spec = parse_groups(**groups_dustlaw_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
-    truth = {
-        **truth_sfh,
-        "met_logzsol": -0.1,
-        "dust_tau_bc": 0.5,
-        "dust_tau_diff": 0.3,
-        "dust_slope": -0.7,
-        "redshift": z,
-    }
-
-    pred = model.predict(truth)
+    pred = model.predict({})
     wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
     sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
 
@@ -1065,20 +1039,6 @@ for emission in dust_emissions:
 fig = plt.figure(figsize=(8.6, 4.4))
 gs = fig.add_gridspec(1, 2, wspace=0.32, width_ratios=[2, 1])
 
-# Fixed SFH/metallicity/dust for all emission models
-truth_base = {
-    "sfh_tsnorm_log_total_mass": np.log10(1e10),
-    "sfh_tsnorm_peak_lbt_gyr": 3.0,
-    "sfh_tsnorm_width_gyr": 2.5,
-    "sfh_tsnorm_skew": 0.2,
-    "sfh_tsnorm_trunc": 4.0,
-    "met_logzsol": -0.1,
-    "dust_tau_bc": 0.5,
-    "dust_tau_diff": 0.3,
-    "dust_slope": -0.7,
-    "redshift": z,
-}
-
 # LEFT: SED templates
 ax_sed = fig.add_subplot(gs[0])
 
@@ -1086,6 +1046,8 @@ for idx, emission in enumerate(dust_emissions):
     groups_emission_fig = {
         "sfh": {
             "type": "tsnorm",
+            "all_params": Fixed(DEFAULT),
+            "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
@@ -1107,7 +1069,7 @@ for idx, emission in enumerate(dust_emissions):
     spec = parse_groups(**groups_emission_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
-    pred = model.predict(truth_base)
+    pred = model.predict({})
     wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
     sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
 
@@ -1142,6 +1104,8 @@ for emission in dust_emissions:
     groups_energy_fig = {
         "sfh": {
             "type": "tsnorm",
+            "all_params": Fixed(DEFAULT),
+            "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
@@ -1162,7 +1126,7 @@ for emission in dust_emissions:
     }
     spec = parse_groups(**groups_energy_fig)
     model = SEDModel(spec, ssp, observation=observation)
-    pred = model.predict(truth_base)
+    pred = model.predict({})
     derived = pred.properties
     l_ir = derived.get("L_ir_rest", 1.0)  # Use fallback 1.0 if not available
     l_ir_values.append(l_ir)
@@ -1276,6 +1240,8 @@ print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 groups_perf = {
     "sfh": {
         "type": "tsnorm",
+        "all_params": Fixed(DEFAULT),
+        "met_logzsol": Fixed(-0.1),
         "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
@@ -1286,7 +1252,7 @@ groups_perf = {
         "type": "two_component",
         "law": "calzetti",
         "all_params": Fixed(DEFAULT),  # deliberately all-fixed for this demo (#1995)
-        "tau_bc": Fixed(0.5),
+        "tau_bc": FREE,
         "tau_diff": Fixed(0.3),
     },
     "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
@@ -1297,18 +1263,7 @@ spec_perf = parse_groups(**groups_perf)
 model_perf = SEDModel(spec_perf, ssp, observation=observation)
 
 # Base truth dict
-truth_perf = {
-    "sfh_tsnorm_log_total_mass": np.log10(1e10),
-    "sfh_tsnorm_peak_lbt_gyr": 3.0,
-    "sfh_tsnorm_width_gyr": 2.5,
-    "sfh_tsnorm_skew": 0.2,
-    "sfh_tsnorm_trunc": 4.0,
-    "met_logzsol": -0.1,
-    "dust_tau_bc": 0.5,
-    "dust_tau_diff": 0.3,
-    "dust_slope": -0.7,
-    "redshift": 0.05,
-}
+truth_perf = {"dust_tau_bc": 0.5}
 
 # Time: single call
 t0 = time.perf_counter()
@@ -1319,8 +1274,7 @@ t_single = time.perf_counter() - t0
 n_iter = 50
 t0 = time.perf_counter()
 for i in range(n_iter):
-    truth_var = truth_perf.copy()
-    truth_var["dust_tau_bc"] = 0.5 + 0.01 * np.sin(i / 10.0)
+    truth_var = {"dust_tau_bc": 0.5 + 0.01 * np.sin(i / 10.0)}
     _ = model_perf.predict_photometry(truth_var)
 t_loop = time.perf_counter() - t0
 

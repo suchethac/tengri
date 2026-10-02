@@ -34,10 +34,24 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # silence XLA/PjRt C++ INFO+WARNING logs
 
+import sys
 import logging
 import warnings
 from copy import deepcopy
 from pathlib import Path
+
+try:
+    _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
+except NameError:
+    _nb_dir = os.getcwd()
+    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
+
+_src = os.path.join(_repo_root, "src")
+if os.path.isdir(os.path.join(_src, "tengri")):
+    sys.path.insert(0, _src)
+sys.path.insert(0, _repo_root)
+sys.path.insert(0, _nb_dir)
 
 import jax
 import jax.numpy as jnp
@@ -279,7 +293,7 @@ for lam_um, label in [
 ax.set_xlim(1e-2, 1e4)
 ax.set_ylim(nuLnu(total).max() * 1e-7, nuLnu(total).max() * 3)
 ax.legend(loc="lower center", ncol=3, frameon=False, fontsize=9)
-ax.set_title(f"Kitchen-sink SED at z = {float(params['redshift']):.1f}")
+ax.set_title(f"Kitchen-sink SED at z = {float(model.spec.get_fixed_values()['redshift']):.1f}")
 fig.tight_layout()
 fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight")
 
