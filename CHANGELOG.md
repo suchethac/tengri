@@ -18,6 +18,7 @@
 
 ### Added
 
+- `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
