@@ -3284,9 +3284,12 @@ def _validate_met_bin_edges(met_type, edges) -> None:
 
     Checks that edges form a valid ladder for metallicity-history binning:
     at least two edges, all finite, and strictly increasing. Also checks that
-    the met_type accepts a custom bin ladder.
+    the met_type accepts a custom bin ladder and that the bin count does not
+    exceed the declared maximum (_N_MET_BINS_DEFAULT).
     """
     import numpy as np
+
+    from tengri.components.stellar.sfh.met_registry import _N_MET_BINS_DEFAULT
 
     # Check that the met type accepts a custom bin ladder
     if met_type not in _MET_LADDER_TYPES:
@@ -3305,6 +3308,39 @@ def _validate_met_bin_edges(met_type, edges) -> None:
 
     if not np.all(np.diff(edges_arr) > 0):
         raise ValueError(f"met_bin_edges_log_yr must be strictly increasing; got {edges}")
+
+    # Check that the bin count does not exceed the declared maximum
+    n_bins = len(edges_arr) - 1
+    if n_bins > _N_MET_BINS_DEFAULT:
+        raise ValueError(
+            f"met_bin_edges_log_yr has {n_bins} bins, which exceeds the declared "
+            f"maximum of {_N_MET_BINS_DEFAULT}. The registry declares met_bin_<i> "
+            f"and met_d_log_z_<i> parameters only up to index {_N_MET_BINS_DEFAULT - 1}."
+        )
+
+
+def _validate_met_ladder_keys(met_type, met_dict, n_bins: int) -> None:
+    """Refuse user-written ``bin_<i>`` / ``d_log_z_<i>`` keys beyond the ladder (#2600).
+
+    ``bins`` reads ``bin_0..bin_{n-1}``; ``bins_continuity`` reads
+    ``d_log_z_0..d_log_z_{n-2}``.  Only keys the user wrote are checked: the
+    registry defaults filled by ``all_params`` are never in ``met_dict``.
+    """
+    import re
+
+    prefix = {"bins": "bin", "bins_continuity": "d_log_z"}.get(met_type)
+    if prefix is None:
+        return
+    max_index = n_bins - 1 if met_type == "bins" else n_bins - 2
+    pattern = re.compile(rf"^(?:met_)?{prefix}_(\d+)$")
+    for key in met_dict:
+        match = pattern.match(key) if isinstance(key, str) else None
+        if match and int(match.group(1)) > max_index:
+            raise ValueError(
+                f"met key {key!r} is outside the {n_bins}-bin ladder given by "
+                f"met_bin_edges_log_yr; the highest valid index for mode "
+                f"{met_type!r} is {prefix}_{max_index}."
+            )
 
 
 def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
@@ -3540,6 +3576,7 @@ def _translate_met(met_dict: dict, result: dict) -> None:
     if "met_bin_edges_log_yr" in met_dict:
         met_type = met_dict.get("type")
         _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
+        _validate_met_ladder_keys(met_type, met_dict, len(met_dict["met_bin_edges_log_yr"]) - 1)
         result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
 
 

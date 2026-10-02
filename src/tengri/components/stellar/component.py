@@ -2518,12 +2518,13 @@ class StellarSEDComponent:
             # Piecewise-constant Z per age bin. Bin edges from config
             # (defaults to log-spaced 1 Myr → 13.7 Gyr); per-bin
             # metallicities from ``met_bin_<i>`` params (i = 0..N-1).
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             metallicities_abs = (
                 jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
                 + LOG10_ZSUN
@@ -2542,12 +2543,13 @@ class StellarSEDComponent:
             # ``met_logzsol_base`` is the oldest bin; ``met_d_log_z_<i>``
             # are the N-1 steps. Reuses the binning primitive with
             # convolved metallicities.
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
             d_log_z = jnp.stack(
                 [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
