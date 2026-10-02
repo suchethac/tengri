@@ -89,8 +89,9 @@ class TestDustAttenuation:
         Leitherer et al. (2002, ApJS 140, 303) eq. 14 holds for λ < 1800 Å and
         Calzetti et al. (2000, ApJ 533, 682) eq. 4 above (#2617). The laws are
         evaluated, not the shared helper, and checked against the polynomials
-        written out here. 1800 Å itself is not tested: float32 puts 0.18 µm on
-        the Calzetti side.
+        written out here. 1800 Å itself is not tested: floating-point rounding
+        of the wavelength conversion (λ[Å]·1e-4) determines which branch is
+        selected; 1799 Å and 1801 Å pin each side.
         """
         from tengri.components.dust import attenuation
 
