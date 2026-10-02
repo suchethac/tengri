@@ -16,7 +16,7 @@
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
 
-- The Asada+2025 CGM Lyα damping-wing cross-section carried the oscillator strength twice, once in the prefactor and once implicitly through the Einstein A coefficient. The prefactor is now 3λ²A/(8π) per Miralda-Escudé (1998), matching the oscillator-strength sum rule πe²f/(m_e c). The CGM damping wing at z ≥ 6 is now the correct strength; τ at z=8 for rest 1220/1230/1240 Å changes from 0.0496/0.764/0.912 to 0.0007/0.523/0.802 (#2629).
+- The Asada et al. (2025) CGM Lyα damping-wing cross-section is σ(ν) = [3λ_α²A/(8π)]·A(ν/ν_α)⁴/[4π²(ν−ν_α)² + A²(ν/ν_α)⁶/4] (Miralda-Escudé 1998); the prefactor 3λ_α²A/(8π) = πe²f/(m_e c) already contains the oscillator strength, which the code multiplied in a second time (0.0046 against 0.01105 cm² Hz). Transmission at z = 8, rest 1220 / 1230 / 1240 Å: 0.0007 / 0.523 / 0.802 (was 0.050 / 0.764 / 0.912) (#2629).
 
 ### Added
 

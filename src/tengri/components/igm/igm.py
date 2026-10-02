@@ -413,16 +413,20 @@ def _cgm_damping_wing_tau(
 
     with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient, in s⁻¹).
     The prefactor equals the oscillator-strength sum rule :math:`\pi e^2 f_{12} / (m_e c)`.
-    Constants come from :mod:`tengri.components.igm.dla`. The previous implementation
-    used a flat Lorentzian with a numerical constant that was ~10⁹ too small.
+    Constants come from :mod:`tengri.components.igm.dla`.
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution; [1]_
-    Miralda-Escudé (1998), ApJ 501, 15, Lyα cross-section; [2]_
-    Totani et al. (2006), PASJ 58, 485, damping-wing profile. [3]_
+    **Upstream**: Asada et al. (2025) [1]_ for column-density evolution;
+    Miralda-Escudé (1998) [2]_ for the Lyα damping-wing cross-section; Totani et al. (2006) [3]_
+    for the damping-wing profile form.
 
-    .. [1] Asada, S., et al. 2025, ApJL 983, L2, doi:10.3847/2041-8213/ad9be2.
-    .. [2] Miralda-Escudé, J. 1998, ApJ 501, 15, doi:10.1086/305814.
-    .. [3] Totani, T., et al. 2006, PASJ 58, 485, doi:10.1093/pasj/58.3.485.
+    .. [1] Yoshihisa Asada, Hiroyuki Hirashita, Akio K. Inoue, and Yoichi Tamura. 2025.
+       Improving Photometric Redshifts of Epoch of Reionization Galaxies: A New Empirical
+       Transmission Curve with Neutral Hydrogen Damping Wing Lyα Absorption. The Astrophysical
+       Journal Letters, 983(2), L2. doi:10.3847/2041-8213/adc388.
+    .. [2] Miralda-Escudé, J. 1998. The Dark Age of the Universe. The Astrophysical Journal,
+       501, 15.
+    .. [3] Totani, T., et al. 2006. Constraints on the Reionization History. Publications of
+       the Astronomical Society of Japan, 58(3), 485.
     """
     # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
