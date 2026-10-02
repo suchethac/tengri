@@ -78,10 +78,10 @@ PSB_LEGACY_CASES = [
         tlast_gyr=0.3,
         tflex_gyr=1.8,
         ratio_young=1.0,
-        ratio_old_0=0.2,
-        ratio_old_1=-0.3,
+        ratio_old_1=0.2,
+        ratio_old_2=-0.3,
     ),
-    dict(log_total_mass=9.0, tlast_gyr=0.02, tflex_gyr=0.9, ratio_young=-1.5, ratio_old_1=0.9),
+    dict(log_total_mass=9.0, tlast_gyr=0.02, tflex_gyr=0.9, ratio_young=-1.5, ratio_old_2=0.9),
 ]
 
 
@@ -91,16 +91,17 @@ def _legacy_psb(age_yr, log_total_mass, tlast_gyr, tflex_gyr, fixed_edges_gyr, *
     Written out from the Suess+2022 / Prospector construction rather than
     delegating to :func:`psb_continuity`: a reference that called the function
     under test would agree with any implementation, including a broken one.
+    ``ratio_old_0`` is the link (oldest flex bin / youngest fixed bin, #2612);
+    ``ratio_old_{i>=1}`` is the adjacent step fixed_{i-1}/fixed_i.
     """
     fixed = np.asarray(fixed_edges_gyr, dtype=float)
     edges = np.concatenate([np.array([0.0, tlast_gyr, tflex_gyr]), fixed[1:]])
     n_fixed = fixed.shape[0] - 1
-    ratio_old = [ratio_kwargs.get(f"ratio_old_{i}", 0.0) for i in range(n_fixed - 1)]
-    # log SFR of each old bin, oldest = reference 0.
+    # log SFR of each FIXED bin, oldest = reference 0.
     log_old = np.zeros(n_fixed)
     for i in range(n_fixed - 2, -1, -1):
-        log_old[i] = log_old[i + 1] + ratio_old[i]
-    log_flex = log_old[0]
+        log_old[i] = log_old[i + 1] + ratio_kwargs.get(f"ratio_old_{i + 1}", 0.0)
+    log_flex = log_old[0] + ratio_kwargs.get("ratio_old_0", 0.0)
     log_young = log_flex + ratio_kwargs.get("ratio_young", 0.0)
     log_bins = np.concatenate([[log_young, log_flex], log_old])
 
@@ -142,8 +143,8 @@ def test_psb_zero_flex_ratios_collapse_onto_the_one_bin_history():
         tlast_gyr=0.3,
         tflex_gyr=1.8,
         ratio_young=1.0,
-        ratio_old_0=0.2,
-        ratio_old_1=-0.3,
+        ratio_old_1=0.2,
+        ratio_old_2=-0.3,
         bin_edges_gyr=PSB_FIXED_EDGES_GYR,
     )
     one = np.asarray(psb_continuity(T_FINE_YR, **case))
@@ -187,8 +188,8 @@ def test_psb_flex_conserves_the_declared_total_mass():
         flex_1=-0.3,
         flex_2=0.2,
         flex_3=0.1,
-        ratio_old_0=-0.2,
-        ratio_old_1=0.3,
+        ratio_old_1=-0.2,
+        ratio_old_2=0.3,
     )
     # Riemann sum on the uniform grid: the history is piecewise constant, so
     # trapezoid would clip half a cell at each jump.
@@ -223,8 +224,8 @@ def test_psb_flex_ladder_is_ascending_for_every_tflex_in_its_prior(tflex_gyr):
         flex_1=-0.3,
         flex_2=0.1,
         flex_3=0.05,
-        ratio_old_0=-0.2,
-        ratio_old_1=0.3,
+        ratio_old_1=-0.2,
+        ratio_old_2=0.3,
     )
     dt = float(T_FINE_YR[1] - T_FINE_YR[0])
     assert float(jnp.sum(sfr) * dt) == pytest.approx(1e10, rel=2e-3, abs=0.0)
@@ -258,8 +259,8 @@ def test_every_psb_flex_ratio_lands_on_the_pair_of_bins_it_names():
             tflex_gyr=tflex_gyr,
             ratio_young=0.6,
             **{f"flex_{i}": flex[i] for i in range(len(flex))},
-            ratio_old_0=-0.25,
-            ratio_old_1=0.35,
+            ratio_old_1=-0.25,
+            ratio_old_2=0.35,
         )
     )
     t_gyr = np.asarray(T_FINE_YR) / 1e9
@@ -278,8 +279,9 @@ def test_every_psb_flex_ratio_lands_on_the_pair_of_bins_it_names():
     assert np.all(per_bin > 0)
 
     got = np.log10(per_bin[:-1] / per_bin[1:])
-    # youngest -> oldest: young/flex_0, the four flex steps, the pinned
-    # flex_last/fixed_0 step, then the two fixed steps.
+    # youngest -> oldest: young/flex_0, the four flex steps, the link
+    # (flex_last/fixed_0, default 0 since ratio_old_0 is omitted here), then
+    # the two fixed-bin adjacent steps.
     want = np.array([0.6, *flex, 0.0, -0.25, 0.35])
     np.testing.assert_allclose(got, want, rtol=0.0, atol=1e-12)
 
@@ -578,8 +580,11 @@ def test_psb_flex_adds_only_the_flex_ratios_to_the_psb_suess2022_parameter_set()
     shared name for name.
 
     This pinned a seven-name set until #2184, ending in a ``ratio_old_2`` that
-    the corrected three-bin fixed section has no step for: it sampled a prior,
-    cost a dimension, and reached no bin.
+    the corrected three-bin fixed section had no step for: it sampled a prior,
+    cost a dimension, and reached no bin. #2612 restores a ``ratio_old_2``
+    here on different grounds: ``ratio_old_0`` through ``ratio_old_2`` are now
+    one entry per fixed bin (the Suess+2022 count), with ``ratio_old_0`` the
+    link to the flexible zone rather than an adjacent-step ratio.
     """
     assert list(SFH_REGISTRY["psb_suess2022"].params) == [
         "sfh_psb2022_log_total_mass",
@@ -588,6 +593,7 @@ def test_psb_flex_adds_only_the_flex_ratios_to_the_psb_suess2022_parameter_set()
         "sfh_psb2022_ratio_young",
         "sfh_psb2022_ratio_old_0",
         "sfh_psb2022_ratio_old_1",
+        "sfh_psb2022_ratio_old_2",
     ]
 
     def _suffixes(prefix, name):
