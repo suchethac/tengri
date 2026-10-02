@@ -56,7 +56,7 @@ from tengri.components.dust.attenuation import (
     two_component_dust,
 )
 from tengri.components.dust.laws._registry import select_law_kwargs
-from tengri.components.lyc import LYMAN_LIMIT_AA
+from tengri.components.lyc import LYMAN_LIMIT_AA, log10_age_sum_lyc
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters._dust_keys import SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
@@ -1296,7 +1296,7 @@ class DustSEDComponent(TemplateThreading):
         # f_dust == 0 but -- unlike log10_add-ing the already
         # fdust-multiplied log_L_lyc_dust -- has a nonzero gradient there too
         # (L_absorbed is linear in fdust).
-        from tengri.forward.energy_balance import bolometric_lyc_log10, log10_add_fdust_credit
+        from tengri.forward.energy_balance import log10_add_fdust_credit
 
         # NOT params.get("neb_fdust_frac", ...): this component's
         # parameter_prefix is "dust_", so slice_params_for_component
@@ -1312,30 +1312,24 @@ class DustSEDComponent(TemplateThreading):
         if self.config.lyc_absorb_all:
             _log_l_lyc_credited = state.derived.get("log_L_lyc")
         else:
-            # Young/birth-cloud-only credit (#2539): per-age ionizing luminosities
-            # from stellar, weighted by the young indicator, summed in log space
-            # to avoid materializing the full SED (which is dead code on the
-            # FeaturePrecomp path, G1/G2).
-            log_L_lyc_age = state.derived.get("log_L_lyc_age")
-            if log_L_lyc_age is not None:
-                y_age_lyc = _young_indicator(
-                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                )
-                # Compute log10(y_age) safely: y_age == 0 -> -inf (dropped by
-                # log10_age_sum_lyc), gradient finite everywhere via jnp.where.
-                log_y_age = log10_magnitude(y_age_lyc)
-                # Sum: log10(sum(y_age * 10^log_L_lyc_age))
-                #    = log10(sum(10^(log_y_age + log_L_lyc_age)))
-                log_L_lyc_age_weighted = log_L_lyc_age + log_y_age
-                from tengri.components.lyc import log10_age_sum_lyc
-                _log_l_lyc_credited = log10_age_sum_lyc(log_L_lyc_age_weighted)
-            else:
-                # Fallback (full SED path): old computation.
-                y_age_lyc = _young_indicator(
-                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                )
-                young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age, axis=0)
-                _log_l_lyc_credited, _ = bolometric_lyc_log10(young_lnu, wave)
+            # Young/birth-cloud-only credit (#2539): per-age ionizing
+            # LUMINOSITIES from stellar (log_L_lyc_age, erg/s -- the Q_H
+            # photon-rate integrand would be the wrong quantity here, G1/G2),
+            # weighted by the young indicator and summed in log space via
+            # log10_age_sum_lyc's own ``weights=`` argument, avoiding the
+            # full-SED materialization that is dead code on the FeaturePrecomp
+            # path. StellarSEDComponent publishes log_L_lyc_age unconditionally
+            # whenever it runs -- the same derived_overrides dict that
+            # publishes ``lnu_age``, read with a required subscript above (it
+            # would already have raised KeyError before reaching here if
+            # stellar had not run) -- so there is no full-grid fallback left
+            # to keep.
+            y_age_lyc = _young_indicator(
+                ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+            )
+            _log_l_lyc_credited = log10_age_sum_lyc(
+                state.derived["log_L_lyc_age"], weights=y_age_lyc
+            )
 
         if _log_l_lyc_credited is not None:
             log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, f_dust)

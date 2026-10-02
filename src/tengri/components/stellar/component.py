@@ -1416,7 +1416,7 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     return t_cosmic_asc, sfr_asc, total_mass
 
 
-from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, log10_lyc_luminosity
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -3012,36 +3012,43 @@ class StellarSEDComponent:
             log_nion = _integrate_nion_log10(
                 _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
             )
-            # Per-age ionizing luminosity (LyC credit, #2539): compute from the
-            # ionizing SLICE only (not the full grid), so the nebular/dust
+            # Per-age ionizing LUMINOSITY (LyC credit, #2539) -- NOT the Q_H
+            # photon RATE computed just above: the dust energy-balance credit
+            # needs erg/s (integrates L_nu dnu), Q_H needs photons/s
+            # (integrates L_nu/(h*nu) dnu); the two integrands differ by a
+            # factor of h*nu and are not interchangeable (G1/G2). Compute from
+            # the ionizing SLICE only (not the full grid), so the nebular/dust
             # components can use log10_age_sum_lyc to combine them without
-            # dragging the full stellar SED into the FeaturePrecomp graph (G1/G2).
+            # dragging the full stellar SED into the FeaturePrecomp graph.
             # Shape: (n_age,). Marginalize over metallicity; contract
             # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met, n_age)
             # over the met axis only.
             _lnu_age_ion = jnp.einsum(
                 "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
-            )  # shape (n_age, n_ion)
-            # Scale by total_mass before integration (same normalization as Q_H).
-            _lnu_age_ion_scaled = _lnu_age_ion * mass_scale_erg
-            # Apply _integrate_nion_log10 to each age. The function expects 1D input,
-            # so vmap over the age axis.
-            from jax import vmap
-            _integrate_nion_single = lambda sed: _integrate_nion_log10(sed, wave[:_n_ion])
-            log_L_lyc_age = vmap(_integrate_nion_single)(_lnu_age_ion_scaled)
+            )  # shape (n_age, n_ion), per-Msun
+            # log10_lyc_luminosity is already vectorized over leading axes (no
+            # vmap/lambda needed); total_mass rides log10_scale as a log10
+            # offset (same normalization as log_nion above), so the ~1e42
+            # erg/s linear product is never materialized (#1206).
+            log_L_lyc_age = log10_lyc_luminosity(
+                _lnu_age_ion, wave[:_n_ion], log10_scale=log10_mass_scale, axis=-1
+            )
         elif _n_ion is not None:
             # n_ion_bins == 0 (static): no grid bins below the Lyman limit
-            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
-            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            # (IR-focused configs) -> Q_H and the LyC luminosity are both
+            # identically zero. Skips the slice machinery: max/argmax over
+            # zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
             log_L_lyc_age = jnp.full((age_weights.shape[0],), -jnp.inf)
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
             # Fallback (full grid) per-age ionizing luminosity: integrate over
-            # the full wavelength range. vmap over age axis.
-            from jax import vmap
-            _integrate_nion_single = lambda sed: _integrate_nion_log10(sed, wave)
-            log_L_lyc_age = vmap(_integrate_nion_single)(lnu_age)
+            # the full wavelength range. ``lnu_age`` is already mass-scaled
+            # (``lnu_age = total_mass * ssp_flux_at_age`` above), so
+            # log10_scale stays at its 0.0 default -- the same absolute
+            # normalization as the sliced branch above, just applied linearly
+            # upstream instead of as a log10 offset.
+            log_L_lyc_age = log10_lyc_luminosity(lnu_age, wave, axis=-1)
         nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────

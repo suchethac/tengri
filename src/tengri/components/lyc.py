@@ -69,6 +69,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
+from tengri.utils.scale import _not_computable, log10_magnitude
 
 __all__ = [
     "LYMAN_LIMIT_AA",
@@ -77,6 +78,7 @@ __all__ = [
     "edge_trapezoid",
     "ionizing_mask",
     "log10_age_sum_lyc",
+    "log10_lyc_luminosity",
     "lyc_shares",
 ]
 
@@ -380,6 +382,105 @@ def edge_bracket_values(
     return y_a, y_b
 
 
+def log10_lyc_luminosity(
+    lnu: jnp.ndarray,
+    wave: jnp.ndarray,
+    *,
+    log10_scale: jnp.ndarray | float = 0.0,
+    edge_aa: float = LYMAN_LIMIT_AA,
+    axis: int = -1,
+) -> jnp.ndarray:
+    r"""log10 of the Lyman-continuum LUMINOSITY, peak-factored for float32 safety.
+
+    THE single source of the LyC luminosity integral:
+
+    .. math::
+
+        L_{\rm LyC} = \int_{\lambda < \lambda_\mathrm{edge}} L_\nu(\lambda)\,d\nu
+
+    via :func:`edge_trapezoid` (``variable="nu"``, ``side="ionizing"``), which
+    applies the step model at the Lyman edge (module docstring) instead of a
+    hard mask. This is a LUMINOSITY (erg/s), not a photon RATE -- it must not
+    be confused with the Q_H integrand
+    :math:`\int L_\nu/(h\nu)\,d\nu` (photons/s) that
+    :func:`tengri.components.stellar.component._integrate_nion_log10` computes;
+    the two integrands differ by a factor of :math:`h\nu` under the integral
+    and are not interchangeable (#2539 G1/G2).
+
+    The computation normalizes ``lnu`` by its peak (|axis|-wise, so each
+    leading-axis row -- e.g. each SSP age -- is normalized independently),
+    integrates in linear-normalized space, and restores the peak and
+    ``log10_scale`` as log10 OFFSETS, keeping every intermediate within
+    float32 range (mirrors :func:`tengri.components.stellar.component.
+    _integrate_nion_log10`, #1206).
+
+    Parameters
+    ----------
+    lnu : array_like, shape (..., n_wave)
+        Rest-frame :math:`L_\nu` [erg/s/Hz], sampled on ``wave`` along
+        ``axis``. Any leading (batch) shape, e.g. ``(n_age, n_wave)``.
+    wave : array_like, shape (n_wave,)
+        Wavelength grid, ascending [Angstrom]; must span the Lyman limit (a
+        few points above 911.76 A suffice -- the boundary bin needs the
+        first non-ionizing point).
+    log10_scale : array_like or float, optional
+        Log10-scale offset [dex] added to the result, broadcast against the
+        ``axis``-reduced shape. Default 0.0 (``lnu`` is already on an
+        absolute scale). Used for mass-scaling a per-Msun cube:
+        ``log10_scale = log10(total_mass) + log10(L_sun / (erg/s))``, so the
+        ``total_mass x L_sun`` linear product (float32-unsafe, #1206) is
+        never materialized.
+    edge_aa : float, optional
+        Lyman edge [Angstrom]. Default :data:`LYMAN_LIMIT_AA` (911.76 Å).
+    axis : int, optional
+        Axis of ``lnu`` along which ``wave`` runs. Default -1. Every other
+        axis is a batch axis: no ``vmap`` is needed, ``edge_trapezoid``
+        already broadcasts over leading axes.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        :math:`\log_{10}(L_{\rm LyC} / (\mathrm{erg/s}))` [dex], with
+        ``axis`` reduced away. ``-inf`` when the slice has no ionizing flux
+        (powers back to exactly 0.0 via :func:`tengri.utils.scale.pow10`).
+        ``+inf`` when the input is corrupt (non-finite); see
+        :func:`tengri.utils.scale.log10_magnitude`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes -- pure ``jnp`` arithmetic; ``log10_scale``,
+    ``edge_aa``, and ``axis`` may be static or traced (``axis`` must be
+    static for ``jax.jit``/``vmap``).
+
+    **Gradient-safe**: yes, with respect to ``lnu`` -- the peak factor is
+    detached (``jax.lax.stop_gradient``) and cancels analytically against
+    the log10(peak) added back, so the gradient is that of the unfactored
+    integral; linear in ``lnu`` for fixed ``wave``/``edge_aa``.
+
+    :func:`tengri.forward.energy_balance.bolometric_lyc_log10` is a thin
+    wrapper around this function (``axis=-1``, no mass scaling) that also
+    reports the integral's sign, for callers combining it with another
+    signed term via :func:`tengri.utils.scale.log10_add`.
+    """
+    lnu = jnp.asarray(lnu)
+    wave = jnp.asarray(wave)
+    # stop_gradient: pure factorization constant (mirrors _integrate_nion_log10,
+    # #1436); log10(peak) is added back below, so the peak cancels analytically.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu), axis=axis, keepdims=True, initial=0.0))
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    ell = lnu / peak  # O(1) normalized L_nu
+    norm = edge_trapezoid(ell, wave, variable="nu", side="ionizing", edge_aa=edge_aa, axis=axis)
+    peak_reduced = jnp.squeeze(peak, axis=axis)
+    # log10_magnitude keeps "no ionizing flux" (-inf) apart from "the input
+    # was corrupt" (+inf) -- see that function's docstring and #1527.
+    log10_norm = log10_magnitude(norm)
+    offsets = jnp.log10(peak_reduced) + log10_scale
+    # -inf + finite is -inf (true zero) and +inf + finite is +inf (corrupt), so
+    # both sentinels survive the offset addition unchanged; only a +inf peak
+    # (lnu itself non-finite) could turn one into NaN, and that is itself corrupt.
+    return jnp.where(_not_computable(log10_norm), jnp.inf, log10_norm + offsets)
+
+
 def lyc_shares(
     neb_fesc: jnp.ndarray | float, neb_fdust_frac: jnp.ndarray | float
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
@@ -481,14 +582,25 @@ def log10_age_sum_lyc(log_L_lyc_age, weights=None):
     Returns
     -------
     ndarray, shape ()
-        log10 of the weighted sum [erg/s]. Returns ``-inf`` if all inputs are
-        ``-inf`` (no ionizing luminosity), following the sentinel contract of
-        :func:`edge_trapezoid` and :func:`bolometric_lyc_log10`.
+        log10 of the weighted sum [erg/s]. ``-inf`` if every (weighted) entry
+        has no ionizing luminosity, following the sentinel contract of
+        :func:`edge_trapezoid` and :func:`bolometric_lyc_log10`. ``+inf`` if
+        any entry of ``log_L_lyc_age`` is corrupt (non-finite), even one with
+        zero weight -- a corrupt age can never read back as "contributed
+        nothing" (the #1527 failure class :func:`log10_magnitude` exists to
+        avoid).
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes, linear in the linear-scale
-    luminosities (10^log_L_lyc_age).
+    **JIT-compatible**: yes. **Gradient-safe**: yes, including at a weight of
+    exactly 0 and when every entry is ``-inf`` -- the *double-where* idiom
+    (twice over, see :func:`tengri.forward.energy_balance.
+    log10_fdust_lyc_credit`): the exponent and the outer ``log10`` argument
+    are each clamped to a finite dummy before the transcendental, with the
+    ``-inf``/``+inf`` sentinel restored afterwards by an independent
+    ``jnp.where``, so a zero weight still carries the correct, nonzero
+    gradient onto the other, non-zero-weighted ages (``d/dw[w * c] = c``
+    at ``w = 0``, not the 0 a single clamp-and-select would give).
 
     Used by :class:`tengri.components.nebular.NebularSEDComponent` to sum over
     all ages (#2539) and by :class:`tengri.components.dust.DustSEDComponent`
@@ -496,28 +608,37 @@ def log10_age_sum_lyc(log_L_lyc_age, weights=None):
     item 2).
     """
     log_L_lyc_age = jnp.asarray(log_L_lyc_age)
+    weights = jnp.ones_like(log_L_lyc_age) if weights is None else jnp.asarray(weights)
 
-    if weights is None:
-        # Uniform weights: equivalent to log10(sum(10^vals))
-        # Use scipy.special.logsumexp-like approach: numerically stable
-        # max trick: log(sum(exp(x))) = max(x) + log(sum(exp(x - max(x))))
-        max_log = jnp.max(log_L_lyc_age)
-        # All -inf case: max is -inf, and sum(exp(-inf)) is 0, log(0) = -inf
-        sum_exp = jnp.sum(jnp.where(jnp.isfinite(log_L_lyc_age),
-                                    jnp.exp(log_L_lyc_age - max_log),
-                                    0.0))
-        result = jnp.where(jnp.isfinite(max_log),
-                          max_log + jnp.log10(sum_exp),
-                          -jnp.inf)
-    else:
-        # Weighted sum: log10(sum(w * 10^log_L_lyc_age))
-        weights = jnp.asarray(weights)
-        max_log = jnp.max(log_L_lyc_age)
-        sum_weighted = jnp.sum(jnp.where(jnp.isfinite(log_L_lyc_age),
-                                         weights * jnp.exp(log_L_lyc_age - max_log),
-                                         0.0))
-        result = jnp.where(jnp.isfinite(max_log),
-                          max_log + jnp.log10(sum_weighted),
-                          -jnp.inf)
+    # Corrupt (+inf/NaN) entries are substituted with -inf for the finite-path
+    # arithmetic below; `any_corrupt` (not this substitution) is what reports
+    # them in the return value -- see the Returns section above.
+    corrupt = _not_computable(log_L_lyc_age)
+    any_corrupt = jnp.any(corrupt)
+    safe_log = jnp.where(corrupt, -jnp.inf, log_L_lyc_age)
+
+    # log10(sum(w * 10^x)) = max_log + log10(sum(w * 10^(x - max_log))),
+    # peak-factored (the logsumexp max trick) so 10**(x - max_log) never
+    # overflows. First double-where: max_log_safe substitutes a finite dummy
+    # (0.0) for the "every entry is -inf" case, so the exponent is never
+    # literally (-inf - -inf); the real -inf sentinel is restored by the
+    # `jnp.isfinite(max_log)` branch of the outer where below.
+    max_log = jnp.max(safe_log, initial=-jnp.inf)
+    max_log_safe = jnp.where(jnp.isfinite(max_log), max_log, 0.0)
+    sum_weighted = jnp.sum(weights * jnp.power(10.0, safe_log - max_log_safe))
+    # Second double-where: the brightest (max_log) age can carry zero weight
+    # while a dimmer age carries all of it, so sum_weighted == 0 is reachable
+    # even when max_log is finite -- jnp.log10(0) is -inf, not NaN, but its
+    # gradient is singular there, the same removable-zero trap
+    # log10_fdust_lyc_credit's docstring derives for a plain jnp.log10. Clamp
+    # the argument to a finite dummy (1.0) before the log; select the -inf
+    # sentinel afterwards with an independent, constant-off-branch where.
+    sum_safe = jnp.where(sum_weighted > 0.0, sum_weighted, 1.0)
+    log_sum = jnp.where(
+        jnp.isfinite(max_log) & (sum_weighted > 0.0),
+        max_log + jnp.log10(sum_safe),
+        -jnp.inf,
+    )
+    result = jnp.where(any_corrupt, jnp.inf, log_sum)
 
     return result

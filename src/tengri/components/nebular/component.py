@@ -37,7 +37,7 @@ from tengri.components.nebular.dig import (
 )
 from tengri.components.template_threading import TemplateThreading
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
-from tengri.forward.energy_balance import bolometric_lyc_log10, log10_fdust_lyc_credit
+from tengri.forward.energy_balance import log10_fdust_lyc_credit
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -1234,6 +1234,7 @@ class NebularSEDComponent(TemplateThreading):
         log_L_lyc_age = state.derived.get("log_L_lyc_age")
         if log_L_lyc_age is not None:
             from tengri.components.lyc import log10_age_sum_lyc
+
             log_L_lyc = log10_age_sum_lyc(log_L_lyc_age)
             # Gradient-safe double-where log-add (#2539 item 3): value is
             # bit-identical to -inf at neb_fdust == 0 (neb_fdust_frac == 0,

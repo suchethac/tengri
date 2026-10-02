@@ -49,7 +49,12 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
+from tengri.components.lyc import (
+    LYMAN_LIMIT_AA,
+    edge_trapezoid,
+    ionizing_mask,
+    log10_lyc_luminosity,
+)
 
 
 def warn_if_corrupt(log_l_absorbed: jnp.ndarray, *, component: str) -> None:
@@ -323,8 +328,19 @@ def bolometric_lyc_log10(
     Absorbed/credited luminosities are ~1e43 erg/s, six decades past the
     float32 ceiling (#1206); this log form is peak-factored the same way as
     :func:`bolometric_absorbed_log10`.
+
+    A thin wrapper around :func:`tengri.components.lyc.log10_lyc_luminosity`
+    (the ONE LyC-luminosity implementation, G1/G2) that also reports the
+    integral's sign: ``sed_lnu`` is a physical :math:`L_\nu` (non-negative
+    pointwise), so the sign is always 0.0 (exactly zero luminosity) or 1.0
+    (some), never -1.0, unless the input is corrupt (``NaN``).
     """
-    return _log10_signed_edge_integral(sed_lnu, wave, side="ionizing", edge_aa=edge_aa)
+    from tengri.utils.scale import _not_computable
+
+    log_magnitude = log10_lyc_luminosity(sed_lnu, wave, edge_aa=edge_aa, axis=-1)
+    corrupt = _not_computable(log_magnitude)
+    sign = jnp.where(corrupt, jnp.nan, jnp.where(jnp.isneginf(log_magnitude), 0.0, 1.0))
+    return log_magnitude, sign
 
 
 def bolometric_absorbed_log10(
