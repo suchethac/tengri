@@ -165,6 +165,27 @@ class ParamDef(NamedTuple):
     -----
     **JIT-compatible**: no; Python dataclass for registry initialization.
 
+    z_capped_onset : bool, optional
+        Marks this parameter as a star-formation onset/age/peak-time lookback
+        time: its :attr:`free_prior` ceiling is only ever correct at z=0, and
+        ``parameters/groups.py``'s ``_narrow_free_priors_to_z`` caps it at
+        ``age_at_z(z_floor)`` at parse time for whatever build declares it.
+        Derived, not hand-listed (#2521): that function iterates every
+        ``ParamDef`` across :data:`SFH_REGISTRY` with this flag set, so a new
+        SFH family cannot reintroduce the gap by omission the way the old
+        3-entry ``_Z_CAPPED_ONSET_PARAMS`` tuple did (18 of 21 such params
+        were missing from it). Default ``False``.
+
+        The ``z_floor`` cap only ever binds the LOWEST redshift a free
+        ``redshift`` prior admits, since that is the only end common to
+        every build. A wide free ``redshift`` prior can therefore still
+        admit a draw near its upper (younger-universe) end whose
+        cosmologically valid onset window is narrower than this parameter's
+        z_floor-capped ceiling; ``groups.py``'s
+        ``_warn_free_redshift_onset_ceiling`` reports that case with a
+        :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning` at
+        build time, since the forward model itself only truncates and
+        conserves mass there without raising or (under ``jax.jit``) warning.
     """
 
     description: str
@@ -172,6 +193,7 @@ class ParamDef(NamedTuple):
     bound_error: str
     default: Distribution
     free_prior: Distribution | None = None
+    z_capped_onset: bool = False
 
 
 class SFHModelSpec(NamedTuple):
@@ -311,6 +333,7 @@ _tsnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_tsnorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -358,6 +381,7 @@ _snorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_snorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -397,6 +421,7 @@ _snorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_snorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -486,6 +511,7 @@ _tsnorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_tsnorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -564,6 +590,7 @@ _norm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
+            z_capped_onset=True,
         ),
         "sfh_norm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -611,6 +638,7 @@ _lnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+            z_capped_onset=True,
         ),
     },
     settings={},
@@ -656,6 +684,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -716,6 +745,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_dpl_lookback_end_gyr": ParamDef(
                 "Younger truncation lookback time (Gyr) "
@@ -785,14 +815,15 @@ _register(
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
-                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (13.81 Gyr, the
-                # actual age of the universe today), so it cannot double as this
-                # free_prior's default without violating its own bounds.
+                # clip in mean_sfh.py) sits ABOVE _AGE_UNIV_GYR (round(age_at_z0_host(),
+                # 3), the actual age of the universe today), so it cannot double
+                # as this free_prior's default without violating its own bounds.
                 # _AGE_UNIV_GYR is used instead, following the same
                 # "default = ceiling" convention already used on
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
+                z_capped_onset=True,
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -845,11 +876,13 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
-            # ``start`` is a lookback: these SFHs form stars only at
-            # ``t_lookback >= start``, so the parameter's ceiling is the age of
-            # the universe at the SOURCE redshift -- 8.6 Gyr at z=0.5, 3.3 at
-            # z=2, 0.9 at z=6. This covers the ``dexp`` and ``const`` onsets
-            # too (see their own entries below/above).
+            # ``start`` is the lookback time of SF onset (galaxy formation):
+            # these SFHs form stars only inside ``[0, start]`` (#2521), zero
+            # outside, so the parameter's ceiling is the age of the universe
+            # at the SOURCE redshift -- 8.6 Gyr at z=0.5, 3.3 at z=2, 0.9 at
+            # z=6. This covers the ``dexp`` onset too (see its own entry
+            # below); ``const``'s onset is unrelated (a flat window, not this
+            # declining shape) and keeps its own separate declaration.
             #
             # The static declaration below uses today's cosmic age
             # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
@@ -866,12 +899,22 @@ _register(
             # test_working_sfh_topologies_still_predict[dexp] draw such a value
             # at z=0.5 and fail `assert jnp.all(flux > 0)` -- exactly the draw
             # the narrowing pass now forecloses.
+            #
+            # The floor excludes 0 (``_lo_positive``, not ``_lo_nonneg``): a
+            # ``[0, 0]`` window is zero-width, forms no mass at any lookback
+            # time, and a ``Fixed(DEFAULT)`` build silently predicts all-zero
+            # flux (#1031 measured this as a 0/0 NaN downstream, in the
+            # calibration ratio of two identically-zero spectra). Default 5.0
+            # mirrors ``declining_exp``'s ``age_gyr`` -- the analogous onset
+            # under the same T = age/start - t_lookback convention, at the
+            # same default ``tau_gyr`` = 2.0.
             "sfh_exp_start_gyr": ParamDef(
                 "Start lookback (Gyr)",
-                _lo_nonneg,
-                "must have lo >= 0",
-                Fixed(0.0),
-                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(5.0),
+                Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -904,14 +947,15 @@ _register(
                 Uniform(0.1, 10.0, default=2.0),
             ),
             # Same redshift-dependent onset, same static ceiling, same
-            # parse-time z-narrowing -- see the shared note on
-            # ``sfh_exp_start_gyr`` above.
+            # parse-time z-narrowing, same excluded-zero floor and default --
+            # see the shared note on ``sfh_exp_start_gyr`` above.
             "sfh_dexp_start_gyr": ParamDef(
                 "Start lookback (Gyr)",
-                _lo_nonneg,
-                "must have lo >= 0",
-                Fixed(0.0),
-                Uniform(0.0, _AGE_UNIV_GYR, default=0.0),
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(5.0),
+                Uniform(0.5, _AGE_UNIV_GYR, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -966,6 +1010,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1015,6 +1060,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_trunc_exp_end_gyr": ParamDef(
                 "Lookback time at which SF ceases (Gyr) (0 = still forming stars)",
@@ -1067,6 +1113,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1110,6 +1157,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1161,6 +1209,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_sfh2exp_burst_age_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
@@ -1207,6 +1256,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
                 "Lookback time of burst/quench onset (Gyr)",
@@ -1276,6 +1326,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
         },
         settings={},
@@ -1347,6 +1398,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.5, 13.0, default=5.0),
+                z_capped_onset=True,
             ),
             "sfh_psb_tau_gyr": ParamDef(
                 "Old-component e-folding timescale (Gyr)",
@@ -1791,6 +1843,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
+                z_capped_onset=True,
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
@@ -1885,6 +1938,7 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(_PSB_TFLEX_FLOOR_GYR, 5.0, default=2.0),
+                z_capped_onset=True,
             ),
             "sfh_psb_flex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex_0); large positive = recent burst",
@@ -2865,6 +2919,14 @@ def resolve_sfh(
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
+            if fn_i is psb_wild2020 and "age_universe_yr" in kw:
+                # Not a declared public parameter (the orchestrator injects it
+                # from the evaluation redshift, component.py's apply()/
+                # compute_joint_weights()), so _build_component_kw's
+                # pub_to_internal filtering above never sees it; forward it
+                # through by name instead, same as every other caller of
+                # psb_wild2020 (#2521 burst re-anchoring to age_at_z(z)).
+                kw_i["age_universe_yr"] = kw["age_universe_yr"]
             smooth = smooth + fn_i(t_lookback, **kw_i)
 
         # 2. Apply burst mixture

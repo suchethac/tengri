@@ -6,6 +6,7 @@ in ``tengri.observation.catalog``.
 """
 
 import chex
+import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -20,7 +21,7 @@ from tengri.observation.catalog import (
     Catalog,
     read_catalog,
 )
-from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
+from tengri.observation.noise import DETECTED, UPPER_LIMIT
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
@@ -156,11 +157,11 @@ class TestMaskConventions:
         npt.assert_allclose(cat.noise[1, u_idx], 0.01)  # abs of -0.01
 
     def test_lower_limit(self, mixed_csv):
-        """Negative flux + positive error → lower limit."""
+        """Negative flux + positive error → detection with signed flux."""
         cat = read_catalog(mixed_csv)
         u_idx = cat.filter_names.index("sdss_u")
-        assert cat.mask[2, u_idx] == LOWER_LIMIT
-        npt.assert_allclose(cat.flux[2, u_idx], 0.08)  # abs of -0.08
+        assert cat.mask[2, u_idx] == DETECTED
+        npt.assert_allclose(cat.flux[2, u_idx], -0.08)  # signed flux
         npt.assert_allclose(cat.noise[2, u_idx], 0.02)
 
     def test_missing_data(self, mixed_csv):
@@ -185,6 +186,99 @@ class TestMaskConventions:
         path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,0.30,0.0\n")
         cat = read_catalog(path)
         assert cat.noise[0, 0] == 1e30
+
+    @pytest.mark.parametrize(
+        "flux_val,err_val,expected_flux,expected_noise,expected_mask",
+        [
+            (-0.004, 0.010, -0.004, 0.010, DETECTED),  # detection, below zero
+            (0.05, 0.01, 0.05, 0.01, DETECTED),  # detection, positive
+            (0.05, -0.01, 0.05, 0.01, UPPER_LIMIT),  # CIGALE: any negative error
+            (0.0, -0.01, 0.0, 0.01, UPPER_LIMIT),  # CIGALE: zero flux + negative error
+            (-9999, 0.010, 0.0, 1e30, DETECTED),  # missing flux, valid error
+            (0.05, -9999, 0.0, 1e30, DETECTED),  # valid flux, missing error
+            (-9999, -9999, 0.0, 1e30, DETECTED),  # both missing (silent)
+            (0.05, 0.0, 0.0, 1e30, DETECTED),  # zero error (missing band)
+        ],
+    )
+    def test_flux_error_combinations(
+        self, tmp_path, flux_val, err_val, expected_flux, expected_noise, expected_mask
+    ):
+        """Test all combinations of flux/error against literature and CIGALE convention."""
+        import warnings as warn_module
+
+        path = tmp_path / "combinations.csv"
+        path.write_text(f"id,redshift,sdss_r,sdss_r_err\ngal1,0.5,{flux_val},{err_val}\n")
+        # Missing data cases should emit warnings (except fully-sentinel -9999/-9999)
+        flux_at_sentinel = flux_val == -9999
+        err_at_sentinel = err_val == -9999
+        both_at_sentinel = flux_at_sentinel and err_at_sentinel
+        is_missing_case = flux_at_sentinel or err_at_sentinel or err_val == 0.0
+        should_warn = is_missing_case and not both_at_sentinel
+        if should_warn:
+            with pytest.warns(UserWarning, match=r"sdss_r"):
+                cat = read_catalog(path)
+        else:
+            # Ensure no warnings are emitted for non-missing cases
+            with warn_module.catch_warnings():
+                warn_module.simplefilter("error")
+                cat = read_catalog(path)
+        npt.assert_allclose(cat.flux[0, 0], expected_flux)
+        npt.assert_allclose(cat.noise[0, 0], expected_noise)
+        assert cat.mask[0, 0] == expected_mask
+
+    def test_negative_detection_likelihood(self, tmp_path):
+        """Negative detection contributes Gaussian likelihood with signed flux."""
+        from tengri.observation.noise import censored_neg_log_likelihood
+
+        # Create a catalog with a negative detection
+        path = tmp_path / "neg_det.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,-0.004,0.010\n")
+        cat = read_catalog(path)
+
+        # Verify it was read as a detection with signed flux
+        assert cat.mask[0, 0] == DETECTED
+        npt.assert_allclose(cat.flux[0, 0], -0.004)
+        npt.assert_allclose(cat.noise[0, 0], 0.010)
+
+        # Compute likelihood with model flux = 0 (no prediction)
+        # For a detected band: E = 0.5 * ((d - m) / sigma)^2
+        # = 0.5 * ((-0.004 - 0) / 0.010)^2
+        # = 0.5 * (-0.4)^2
+        # = 0.5 * 0.16
+        # = 0.08
+        data = jnp.array(cat.flux[0])
+        noise = jnp.array(cat.noise[0])
+        predicted = jnp.array([0.0])  # Model prediction is zero
+        mask = jnp.array(cat.mask[0], dtype=int)
+
+        nll = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
+        # The energy should be 0.5 * ((−0.004 − 0) / 0.010)² = 0.08 (plus log(noise))
+        # log(0.010) ≈ -4.605, so total is approximately 0.08 - 4.605
+        expected_r_squared = 0.5 * ((-0.004 / 0.010) ** 2)
+        expected_nll = expected_r_squared + np.log(0.010)
+        npt.assert_allclose(nll, expected_nll, rtol=1e-5)
+
+    def test_per_column_warning_aggregation(self, tmp_path):
+        """Verify ONE warning per column with first N row IDs for multiple missing rows."""
+        path = tmp_path / "multi_missing.csv"
+        path.write_text(
+            "id,redshift,sdss_r,sdss_r_err\n"
+            "row1,0.5,0.30,0.0\n"  # row1: zero error (missing)
+            "row2,0.6,-9999,0.02\n"  # row2: sentinel flux (missing)
+            "row3,0.7,0.40,0.04\n"  # row3: valid detection
+        )
+        with pytest.warns(UserWarning) as record:
+            cat = read_catalog(path)
+        # Should have exactly one warning (for sdss_r column)
+        assert len(record) == 1
+        warning_msg = str(record[0].message)
+        # Check that the warning includes the column name and row IDs
+        assert "sdss_r" in warning_msg
+        assert "2 of 3 rows masked" in warning_msg
+        assert "row1" in warning_msg
+        assert "row2" in warning_msg
+        # row3 should not be in the first rows (it's not missing)
+        assert "row3" not in warning_msg
 
 
 # ── Catalog methods ───────────────────────────────────────────────
@@ -241,12 +335,12 @@ class TestCatalogMethods:
         _flux, _noise, names = cat.select_detected(1)
         assert "sdss_u" not in names
 
-    def test_select_detected_filters_lower_limit(self, mixed_csv):
-        """Lower limit band excluded from detected selection."""
+    def test_select_detected_filters_negative_detection(self, mixed_csv):
+        """Negative detection (negative flux, positive error) is included."""
         cat = read_catalog(mixed_csv)
-        # gal3 (idx=2): sdss_u=lower limit
+        # gal3 (idx=2): sdss_u is a negative detection (-0.08, 0.02)
         _flux, _noise, names = cat.select_detected(2)
-        assert "sdss_u" not in names
+        assert "sdss_u" in names  # Negative detections are now included
 
     def test_select_detected_flux_noise_match(self, mixed_csv):
         """Returned flux/noise arrays correspond to the returned names."""
@@ -394,6 +488,32 @@ class TestCustomColumns:
         cat = read_catalog(path, missing_value=-99.0)
         assert cat.flux[0, 0] == 0.0
         assert cat.noise[0, 0] == 1e30
+
+    def test_positive_sentinel_9999(self, tmp_path):
+        """Test positive sentinel 9999.0: normal detection stays detected."""
+        path = tmp_path / "pos_sentinel.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,0.05,0.01\n")
+        cat = read_catalog(path, missing_value=9999.0)
+        assert cat.mask[0, 0] == DETECTED
+        npt.assert_allclose(cat.flux[0, 0], 0.05)
+
+    def test_positive_sentinel_9999_masked(self, tmp_path):
+        """Test positive sentinel 9999.0: sentinel flux gets masked."""
+        path = tmp_path / "pos_sent_masked.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,9999.0,0.01\n")
+        with pytest.warns(UserWarning, match="sdss_r"):
+            cat = read_catalog(path, missing_value=9999.0)
+        assert cat.mask[0, 0] == DETECTED
+        assert cat.noise[0, 0] == 1e30
+
+    def test_negative_sentinel_with_neg_flux(self, tmp_path):
+        """Test: negative flux with positive error is detection, even with positive sentinel."""
+        path = tmp_path / "neg_flux_pos_sent.csv"
+        path.write_text("id,redshift,sdss_r,sdss_r_err\ngal1,0.5,-9999,0.01\n")
+        cat = read_catalog(path, missing_value=9999.0)
+        # -9999 is NOT within sentinel margin [9990, 10008] and NOT > 9999, so it's a detection
+        assert cat.mask[0, 0] == DETECTED
+        npt.assert_allclose(cat.flux[0, 0], -9999.0)
 
 
 # ── Error handling ────────────────────────────────────────────────

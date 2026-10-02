@@ -143,7 +143,6 @@ _AGN_PARTITION = {
     "agn_polar_oa": "agn.atten",
     "agn_polar_T": "agn.atten",
     "agn_polar_beta": "agn.atten",
-    "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
     # GRAHSP torus (Buchner+2024): all seven are torus-only per
     # AGN_BLOCK_CONSUMES[("torus", "grahsp")]. Without an explicit entry
     # here, every "agn_grahsp_*" name falls through the catch-all below to
@@ -216,8 +215,9 @@ _AGN_PARTITION = {
     "agn_blr_logU": "agn.blr",
     "agn_blr_logZ": "agn.blr",
     "agn_blr_logn": "agn.blr",
-    # Attenuation: the qsogen_smc block's own reddening knob, the one whose
-    # short name 'ebv' is NOT agn_attenuation_ebv's (R30).
+    # Attenuation: the unified reddening knob for both smc_prevot and qsogen
+    # blocks (R52, #2325). The retired agn_attenuation_ebv is intercepted
+    # in groups.py with a rename hint.
     "agn_ebv": "agn.atten",
     # Genuinely shared, and each says why.
     #

@@ -50,6 +50,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.stellar.sfh.mean_sfh import window_weight
 from tengri.utils.host_array import device_table, host_array
 
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
@@ -100,6 +101,65 @@ def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
     bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
     bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
     sfr = jnp.where(age_yr > bin_edges_yr[-1], 0.0, sfr_bins[bin_idx])
+    return jnp.maximum(sfr, 0.0)
+
+
+def _piecewise_constant_sfr_smooth(age_yr, bin_edges_yr, sfr_bins, n_bins):
+    """Evaluate a binned SFR with partial-cell weighting at each bin edge.
+
+    Generalizes :func:`window_weight`'s exact cell-coverage treatment of a
+    single boundary to an N-bin ladder: each grid cell's value is the
+    coverage-weighted average of every bin's SFR it overlaps, rather than a
+    point-sample lookup of whichever bin its own coordinate falls in. A grid
+    cell lying entirely inside one bin is unaffected (the one window with
+    nonzero coverage there contributes its full SFR, exactly the hard-lookup
+    value); only the 1-2 cells straddling a bin edge differ.
+
+    Use this in place of :func:`_piecewise_constant_sfr` where the bin edges
+    themselves are free parameters (e.g. ``tlast_gyr`` / ``tflex_gyr`` in
+    :func:`psb_continuity` and :func:`psb_continuity_flex`): a hard lookup
+    there makes the moving edge a staircase in that parameter, the same
+    mechanism `window_weight` exists to remove at a single support boundary
+    (#2476). Bins with static edges (:func:`continuity`, :func:`dirichlet`)
+    keep the point-sample lookup, which is exact and cheaper when nothing
+    moves.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback times to evaluate [yr].
+    bin_edges_yr : array_like, shape (n_bins+1,)
+        Bin edges [yr], ascending; may be traced (a function of free
+        parameters).
+    sfr_bins : array_like, shape (n_bins,)
+        SFR in each bin [Msun/yr].
+    n_bins : int
+        Number of bins, a static Python int (the loop below is unrolled at
+        trace time, matching :func:`_piecewise_constant_sfr`'s own
+        constraint on ``n_bins``).
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the Python ``for`` loop over ``n_bins`` unrolls
+    at trace time into ``n_bins`` calls to :func:`window_weight`, each
+    vectorized over ``age_yr``.
+
+    Ages older than ``bin_edges_yr[-1]`` fall outside every bin's window and
+    so are zero, matching :func:`_piecewise_constant_sfr` (#1978); ages
+    younger than ``bin_edges_yr[0]`` are covered by the youngest bin's own
+    window whenever the ladder starts at zero lookback (every ladder these
+    functions build does).
+    """
+    weights = jnp.stack(
+        [window_weight(age_yr, bin_edges_yr[i], bin_edges_yr[i + 1]) for i in range(n_bins)],
+        axis=0,
+    )
+    sfr = jnp.sum(weights * jnp.asarray(sfr_bins)[:, None], axis=0)
     return jnp.maximum(sfr, 0.0)
 
 
@@ -508,9 +568,16 @@ def make_agebins_from_zred(
     """Redshift-dependent SFH bin edges (Prospector-β scheme, Wang+2024).
 
     Constructs bin edges capped at the age of the universe at ``zred`` so
-    that no bin extends into the future. For low redshifts the youngest two
-    bins are fixed at 30 Myr and 100 Myr; interior bins are log-spaced to
-    90% of the universe age; the oldest bin spans 90–100% of the universe age.
+    that no bin extends into the future. For ``zred <= 3`` the youngest two
+    edges are fixed at 30 Myr and 100 Myr, the remaining interior edges are
+    log-spaced from 100 Myr to 90% of the universe age, and the oldest bin
+    spans 90-100% of the universe age. For ``zred > 3`` the universe is too
+    young to hold a 100 Myr bin and still resolve the rest of cosmic time, so
+    none of the youngest edges are fixed: the grid is an ``n_bins``-point
+    log-spacing from ``10**7.1295 yr`` (13.47 Myr, Prospector-beta's own
+    ``amin``) to 90% of the universe age, but ``amin`` only anchors that
+    grid -- it is dropped, and the youngest edge is the grid's SECOND point
+    -- with the oldest bin again spanning 90-100%.
 
     This is a **setup-time utility**: call it when building a
     :class:`~tengri.Parameters` object, not inside the forward
@@ -538,9 +605,13 @@ def make_agebins_from_zred(
     **Not JIT-compatible**: uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
-    Implements Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
-    [1]_), with two changes: uses tengri's Planck 2018 cosmology instead of
-    WMAP9, and returns edges in Gyr rather than log10(yr).
+    Implements Prospector ``zred_to_agebins_pbeta``
+    (``prospect/models/transforms.py``, Johnson et al. 2021 [1]_), including
+    its ``amin = 7.1295`` (log10 yr; 13.47 Myr) grid anchor for ``zred > 3``
+    -- itself dropped from the edges, matching that function's own
+    ``agelims[0] = 0`` overwrite -- with two changes: uses tengri's Planck
+    2018 cosmology instead of WMAP9, and returns edges in Gyr rather than
+    log10(yr).
 
     References
     ----------
@@ -576,8 +647,12 @@ def make_agebins_from_zred(
             log_middle = []
         log_edges = [log_30myr, log_100myr, *log_middle, log_tuniv]
     else:
-        log_amin = 6.0  # 1 Myr
-        log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins - 1))
+        # amin (13.47 Myr) anchors the grid but is itself discarded, exactly
+        # as Prospector-beta's own ``agelims[0] = 0`` overwrite discards its
+        # own first linspace point: the youngest edge here is the SECOND
+        # point of an n_bins-point linspace from amin, not amin itself.
+        log_amin = 7.1295  # 13.47 Myr; Prospector-beta's own amin (transforms.py)
+        log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins)[1:])
         log_edges = [*log_edges_inner, log_tuniv]
 
     edges_gyr = np.array([0.0, *[10.0**le / 1e9 for le in log_edges]])
@@ -727,7 +802,10 @@ def psb_continuity(
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
     sfr_bins_norm = sfr_unnorm * (10.0**log_total_mass) / (mass_unnorm + 1e-30)
 
-    # Piecewise-constant lookup
+    # Piecewise-constant lookup. This function is not registered under any
+    # SFH type name (`psb_continuity_flex` is the registered generalization,
+    # #2184), so it is unreached by any moving free parameter through
+    # `SEDModel.build`; the hard lookup, exact at fixed edges, is unchanged.
     bin_edges_yr = all_edges_gyr * 1e9
     return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins_norm, n_bins_total)
 
