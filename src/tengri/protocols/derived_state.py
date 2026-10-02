@@ -387,6 +387,10 @@ class DerivedState:
     # young, 0 for fully old, with a logistic transition controlled by
     # ``transition_width_dex``.
     dust_young_indicator: jnp.ndarray | None = None
+    # Exact per-SSP-node formed-mass fraction younger than each age boundary an
+    # attenuator requested, shape ``(n_boundary, n_age)``; published by stellar
+    # (components/stellar/age_boundary.py), read by every young/old consumer.
+    age_boundary_younger_fraction: jnp.ndarray | None = None
     # Filter pivot wavelengths in the rest frame (published by stellar
     # when wave_precomp is on; shared by downstream filter-level
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,

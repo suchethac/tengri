@@ -34,6 +34,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri._x64_hold import hold_x64_preference
+from tengri.components.stellar.age_boundary import (
+    age_boundary_younger_fraction_cic,
+    age_boundary_younger_fraction_dsps,
+    validate_age_boundaries,
+)
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.host_array import device_table, host_array
@@ -1742,6 +1747,14 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     lgmet_scatter : float
         Gaussian scatter in log10(Z) (dex) for the DSPS triweight kernel.
         Default 0.2 dex matches Prospector / DSPS convention.
+    age_boundaries_yr : tuple of float
+        Static age boundaries [yr] for which to publish
+        ``age_boundary_younger_fraction``, shape ``(n_boundary, n_age)``: per
+        SSP node, the fraction of its formed mass younger than each boundary
+        (:mod:`tengri.components.stellar.age_boundary`). Empty elides it.
+    age_boundary_width_dex : float
+        Dispersal width [dex] of the survival function at every boundary;
+        ``0`` (default) is the hard step.
     """
 
     name: str = "stellar"
@@ -1781,10 +1794,24 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     # component used the bare registry ``fn`` and the user's edges were
     # accepted, stored on the spec, and silently ignored.
     sfh_bin_edges_gyr: Any = None
+    #: Static age boundaries [yr] at which a consumer (an attenuator's
+    #: young/old split) wants the exact per-node formed-mass fraction younger
+    #: than the boundary. Empty (the default) elides the computation: dust-free
+    #: and single-screen models pay nothing. Set at build time by the one
+    #: decision point ``SEDModel._age_boundary_request``.
+    age_boundaries_yr: tuple = ()
+    #: Dispersal width [dex] of the survival function at every boundary; 0 is
+    #: the hard step (see :mod:`tengri.components.stellar.age_boundary`).
+    age_boundary_width_dex: float = 0.0
 
     def __post_init__(self):
         """Emit deprecation warning for sps_backend and advisory for field=True."""
         self._validate_bin_edges()
+        object.__setattr__(
+            self,
+            "age_boundaries_yr",
+            validate_age_boundaries(self.age_boundaries_yr, self.age_boundary_width_dex),
+        )
 
         if self.sps_backend != "dsps":
             warnings.warn(
@@ -2021,6 +2048,13 @@ class StellarSEDComponent:
                 "stellar_mass_scale, which is ~1e43 and so overflows float32",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
+            DerivedKey(
+                "age_boundary_younger_fraction",
+                "",
+                "Per SSP node, the fraction of its formed mass younger than each "
+                "config.age_boundaries_yr entry, shape (n_boundary, n_age); published "
+                "only when a consumer requested boundaries",
+            ),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
             DerivedKey(
@@ -2838,6 +2872,7 @@ class StellarSEDComponent:
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _used_cic = False
+        younger_fraction = None
         _age_kernel = _resolve_age_kernel(self.config)
         if self.config.metallicity_model == "delta":
             # Delta metallicity: separable joint weights. The age marginal
@@ -2855,6 +2890,10 @@ class StellarSEDComponent:
                 _fine_age_yr, _fine_sfr = _cic_integrand(
                     ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_cic(
+                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                    )
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
@@ -2874,6 +2913,10 @@ class StellarSEDComponent:
                 gal_t_table, gal_sfr_table, _ = _build_dsps_sfh_table(
                     ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_dsps(
+                        gal_t_table, gal_sfr_table, ssp, t_obs_gyr
+                    )
                 dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                     **canonical_dsps_kwargs(
                         gal_t_table=gal_t_table,
@@ -2896,6 +2939,10 @@ class StellarSEDComponent:
                 _fine_age_yr, _fine_sfr = _cic_integrand(
                     ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_cic(
+                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                    )
                 joint_weights, total_mass = _joint_weights_cic_met_table(
                     _fine_age_yr,
                     _fine_sfr,
@@ -2918,6 +2965,8 @@ class StellarSEDComponent:
                     ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
                 )
                 _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_dsps(_t_k, _sfr_k, ssp, t_obs_gyr)
                 dsps_result = calc_rest_sed_sfh_table_met_table(
                     **canonical_dsps_kwargs(
                         gal_t_table=_t_k,
@@ -3259,6 +3308,11 @@ class StellarSEDComponent:
             # needs the SSP age axis to apply the BC/diffuse split).
             ssp_ages_yr=ssp_ages_yr,
         )
+        if younger_fraction is not None:
+            # Exact per-node formed-mass fraction younger than each requested
+            # boundary, shape (n_boundary, n_age): the one young/old split every
+            # attenuator reads (see tengri.components.stellar.age_boundary).
+            derived_overrides["age_boundary_younger_fraction"] = younger_fraction
 
         if self._state is not None and self._state.ssp_phot_lut is not None:
             # Fixed-z path; LUT built at source's z in precompute()
@@ -3576,6 +3630,63 @@ class StellarSEDComponent:
             derived=state.derived.with_(**derived_overrides),
         )
 
+    def _boundary_fraction_cic(self, fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr):
+        """Per-node younger-than-boundary mass fraction, cloud-in-cell kernel."""
+        contrib, idx, f, _, age = _cic_parcels(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
+        return age_boundary_younger_fraction_cic(
+            contrib,
+            idx,
+            f,
+            age,
+            ssp_ages_yr.shape[0],
+            self.config.age_boundaries_yr,
+            self.config.age_boundary_width_dex,
+        )
+
+    def _boundary_fraction_dsps(self, gal_t_table, gal_sfr_table, ssp, t_obs_gyr):
+        """Per-node younger-than-boundary mass fraction, DSPS histogram kernel."""
+        return age_boundary_younger_fraction_dsps(
+            gal_t_table,
+            gal_sfr_table,
+            ssp.ssp_lg_age_gyr,
+            t_obs_gyr,
+            self.config.age_boundaries_yr,
+            self.config.age_boundary_width_dex,
+            _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr),
+        )
+
+    def compute_age_boundary_fractions(self, params, ssp_data=None):
+        """Younger-than-boundary mass fractions WITHOUT the full-wavelength SED.
+
+        The SED-free twin of the ``age_boundary_younger_fraction`` key
+        :meth:`apply` publishes, from the same mass model as
+        :meth:`compute_joint_weights` (same restrictions).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape (n_boundary, n_age)
+            Fraction of each SSP node's formed mass younger than each of
+            ``config.age_boundaries_yr`` [dimensionless].
+
+        Raises
+        ------
+        ValueError
+            If the component was built without ``age_boundaries_yr``.
+        """
+        if not self.config.age_boundaries_yr:
+            raise ValueError(
+                "compute_age_boundary_fractions needs config.age_boundaries_yr; "
+                "the dust attenuator requests it at build time."
+            )
+        return self._joint_weights_impl(params, ssp_data)[3]
+
     def compute_joint_weights(self, params, ssp_data=None):
         """(met, age) CSP weights + total mass WITHOUT the full-wavelength SED.
 
@@ -3622,6 +3733,15 @@ class StellarSEDComponent:
             For any configuration outside delta metallicity / closed-form
             parametric SFH / no alpha-Fe grid: including the tabulated SFH
             (#1395). The caller must use the exact forward there.
+        """
+        return self._joint_weights_impl(params, ssp_data)[:3]
+
+    def _joint_weights_impl(self, params, ssp_data=None):
+        """Weights, mass, ages and (when requested) the younger-than-boundary fractions.
+
+        The one body behind :meth:`compute_joint_weights` and
+        :meth:`compute_age_boundary_fractions`; the fourth element is ``None``
+        unless ``config.age_boundaries_yr`` is set.
         """
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
         from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
@@ -3712,6 +3832,7 @@ class StellarSEDComponent:
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _age_kernel = _resolve_age_kernel(self.config)
+        younger_fraction = None
 
         # Metallicity: delta gives one scalar log10(Z); table gives a per-age
         # curve that routes to the CIC met-table kernel below (matches apply §4).
@@ -3776,6 +3897,8 @@ class StellarSEDComponent:
             gal_t, gal_sfr, _ = _build_dsps_sfh_table(
                 ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
             )
+            if self.config.age_boundaries_yr:
+                younger_fraction = self._boundary_fraction_dsps(gal_t, gal_sfr, ssp, t_obs_gyr)
             _dsps_args = canonical_dsps_kwargs(
                 gal_t=gal_t,
                 gal_sfr=gal_sfr,
@@ -3813,6 +3936,10 @@ class StellarSEDComponent:
             _fine_age_yr, _fine_sfr = _cic_integrand(
                 ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
             )
+            if self.config.age_boundaries_yr:
+                younger_fraction = self._boundary_fraction_cic(
+                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                )
 
             # Per-age metallicity → the joint CIC kernel apply uses (#964), which
             # spreads each mass parcel over the metallicity axis with the MDF
@@ -3847,7 +3974,7 @@ class StellarSEDComponent:
         # function never sees a composite (list) ``sfh_model``: indexing
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
-        return joint_weights, total_mass, ssp_ages_yr
+        return joint_weights, total_mass, ssp_ages_yr, younger_fraction
 
     def compute_log_nion(self, params, ssp_data=None):
         r"""SED-free log-domain ionizing photon rate; no full-wavelength SED.

@@ -241,6 +241,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_diff_attenuation_precomp": "",
     "dust_diff_attenuation_slope_precomp": "1/Angstrom",
     "dust_young_indicator": "",
+    # Stellar: per-node formed-mass fraction younger than each requested age
+    # boundary, shape (n_boundary, n_age) (components/stellar/age_boundary.py).
+    "age_boundary_younger_fraction": "",
     "dust_diff_transmission": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
