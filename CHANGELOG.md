@@ -20,6 +20,12 @@
 
 ### Fixed
 
+- `read_catalog`: a negative error marks an upper limit at the signed flux (any flux sign);
+  a flux or error below −9990, or an error of zero, masks the band and one `UserWarning`
+  per column lists the masked rows; a negative flux with a positive error is a detection
+  with its signed value; the `-1` lower-limit flag is the ingest path's (`catalog_ingest`),
+  never this reader's (#2586).
+
 - The dense-mass step-size stability probe (#1999) now also runs after
   adaptation in the dynamic-HMC backend and in `fit_batch`'s shared window
   adaptation, so those paths refuse a step above the metric's stability limit
@@ -40,6 +46,9 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
+- Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
+  at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
+  of Lyβ follows the paper's Table 2 (#2585).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
