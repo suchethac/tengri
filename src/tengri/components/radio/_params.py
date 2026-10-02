@@ -145,16 +145,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "radio_log_nu_t",
         Fixed(10.0),
         "AGN-DPL log10(transition frequency / Hz); typical 9-11",
-        # The typical interval this description already states. Safe to declare
-        # because the radio wildcard is scoped per model:
-        # _RADIO_AGN_PARAMS_BY_MODEL only routes these four under
-        # ``agn_radio_model="dpl"``, so a powerlaw fit never sees them.
+        # _RADIO_AGN_PARAMS_BY_MODEL routes these three under
+        # ``agn_radio_model="dpl"`` only; a powerlaw fit never sees them.
         free_prior=Uniform(9.0, 11.0, "DPL transition frequency", units="log10(Hz)", default=10.0),
     ),
     ParamDeclaration(
         "radio_log_nu_cut",
         Fixed(13.0),
-        "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
+        "AGN radio log10(synchrotron aging exponential cutoff / Hz) for "
+        "the power-law and DPL models; 40 removes the cutoff; typical 12-14",
         free_prior=Uniform(12.0, 14.0, "DPL aging cutoff", units="log10(Hz)", default=13.0),
     ),
     # ── FIR-radio correlation (FIRRC) evolution coefficients ──────────────

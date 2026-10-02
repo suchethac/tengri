@@ -168,3 +168,89 @@ def test_agn_loudness_is_log10_of_the_5ghz_to_4400_angstrom_ratio():
         )[0]
     )
     assert lnu_5ghz == pytest.approx(l_4400 * 10.0**loudness, rel=1e-6)
+
+
+# ── equivalent-width numbers from the review ──────────────────────
+
+
+@pytest.mark.parametrize("continuum_width", [20, 50, 100])
+def test_equivalent_width_on_steep_continuum_pinned_numbers(continuum_width):
+    """Gaussian line (sigma=1.5 A, unit amplitude, at 6563 A) on L_lambda ~ lambda^-4.
+
+    `equivalent_width` returns pinned numbers for different continuum windows
+    (standard: 50 A wide sidebands; also tested: 20, 100 A).
+    """
+    from tengri.analysis.diagnostics.spectral import equivalent_width
+
+    wl_nm, llam = _gaussian_line_on_power_law(1.0, -4.0)
+    wave_aa = jnp.asarray(wl_nm * 10.0)
+    lnu = llam * wl_nm**2 * 1e7 / _C_NM
+
+    result = float(equivalent_width(wave_aa, jnp.asarray(lnu), 6563.0, 20.0, continuum_width))
+    expected = {20: 3.752, 50: 3.739, 100: 3.704}[continuum_width]
+    assert result == pytest.approx(expected, abs=5e-3)
+
+
+def test_spectral_index_def_on_l_nu_steep_continuum():
+    """SpectralIndexDef on L_nu array gives negative value (Lick absorption convention).
+
+    Same line as the EW tests, measured with SpectralIndexDef using the standard
+    windows (sidebands 50 A wide, centered 50 A from the line window center).
+    """
+    from tengri.observation.spectral_indices import SpectralIndexDef, measure_index_jax
+
+    wl_nm, llam = _gaussian_line_on_power_law(1.0, -4.0)
+    wave_aa = jnp.asarray(wl_nm * 10.0)
+    lnu = llam * wl_nm**2 * 1e7 / _C_NM
+
+    result = float(
+        measure_index_jax(
+            wave_aa,
+            jnp.asarray(lnu),
+            SpectralIndexDef(
+                name="halpha_lnu",
+                index_type="EW",
+                continuum=((6500.0, 6525.0), (6610.0, 6635.0)),
+                feature=(6535.0, 6600.0),
+            ),
+        )
+    )
+    assert result == pytest.approx(-3.752, abs=5e-3)
+
+
+def test_equivalent_width_and_spectral_index_on_flat_continuum():
+    """On a flat continuum, all three implementations agree to ±3.76 A.
+
+    Tests `equivalent_width`, `SpectralIndexDef`, and CIGALE (pcigale).
+    """
+    pytest.importorskip("pcigale")
+    from tengri.analysis.diagnostics.spectral import equivalent_width
+    from tengri.observation.spectral_indices import SpectralIndexDef, measure_index_jax
+
+    wl_nm, llam = _gaussian_line_on_power_law(1.0, 0.0)
+    wave_aa = jnp.asarray(wl_nm * 10.0)
+    lnu = llam * wl_nm**2 * 1e7 / _C_NM
+
+    # CIGALE result
+    pcigale_ew = _ew_pcigale_angstrom(wl_nm, llam)
+
+    # tengri equivalent_width
+    tengri_ew = float(equivalent_width(wave_aa, jnp.asarray(lnu), 6563.0, 20.0, 50.0))
+
+    # tengri SpectralIndexDef on L_lambda (same as CIGALE input)
+    lick_llam = float(
+        measure_index_jax(
+            wave_aa,
+            jnp.asarray(llam),
+            SpectralIndexDef(
+                name="halpha_flat",
+                index_type="EW",
+                continuum=((6500.0, 6525.0), (6610.0, 6635.0)),
+                feature=(6535.0, 6600.0),
+            ),
+        )
+    )
+
+    assert pcigale_ew == pytest.approx(3.760, abs=5e-3)
+    assert tengri_ew == pytest.approx(3.760, abs=5e-3)
+    assert lick_llam == pytest.approx(-3.760, abs=5e-3)

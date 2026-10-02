@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- The power-law AGN radio jet reads `radio_log_nu_cut`: the cutoff $\exp(-\nu/\nu_{\rm cut})$ was fixed at $10^{13}$ Hz on the default model whatever the key said; `radio_log_nu_cut = 40` now removes it, and the default is unchanged. A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for the power-law model now needs `radio_log_nu_cut` (13.0 is the declared default). (#2689).
+
 - The model reference weights the band-averaged flux by `w = 1/λ` (photon counting, the default) instead of `λ`, states the AGN radio loudness as `log10(L_5GHz/L_4400)` instead of `L_5GHz/L_2500`, and gains the CIGALE convention differences it had not stated: equivalent-width sign and continuum, the star-forming radio normalization (q_IR and the anchor frequency), the AGN jet cutoff and loudness anchor, the nebular density axes and the emission-line profile (#2627, #2663, #2626).
 
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass

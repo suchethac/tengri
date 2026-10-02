@@ -1003,6 +1003,7 @@ def radio_total_terms(
     l_bband: float = 0.0,
     log_L_ir: float | None = None,
     log_L_agn_bol: float | None = None,
+    log_nu_cut: float = 13.0,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose radio emission into additive terms for precomputation.
@@ -1066,6 +1067,9 @@ def radio_total_terms(
         [erg/s/Hz]. When > 0, used directly in radio_agn instead of deriving
         from L_agn_bol bolometric correction. Default 0.0 (uses L_bol
         correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -1110,6 +1114,7 @@ def radio_total_terms(
         radio_loudness,
         alpha_agn,
         l_bband=l_bband,
+        log_nu_cut=log_nu_cut,
         log_L_agn_bol=log_L_agn_bol,
     )
     ff = (
@@ -1139,6 +1144,7 @@ def radio_total(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
+    log_nu_cut: float = 13.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1189,6 +1195,9 @@ def radio_total(
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn instead of deriving from L_agn_bol
         bolometric correction. Default 0.0 (uses L_bol correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -1218,6 +1227,7 @@ def radio_total(
         T_e,
         alpha_ff,
         l_bband,
+        log_nu_cut=log_nu_cut,
     )
     return t["sf"] + t["ff"] + t["agn"]
 

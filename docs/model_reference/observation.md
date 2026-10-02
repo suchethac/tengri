@@ -51,7 +51,7 @@ Three implementations of an equivalent width (EW) coexist. They differ in sign a
 
 : Equivalent-width conventions.
 
-For a Gaussian emission line ($\sigma = 1.5\,$Å, unit amplitude) on a continuum $L_\lambda \propto \lambda^{-4}$ the analytic EW is 3.76 Å. CIGALE returns 3.73 Å, `equivalent_width` 3.74 Å and `SpectralIndexDef` $-3.73$ Å; on a flat continuum all three give $\pm 3.76$ Å. The mean-of-sidebands continuum equals the linear one at the center of the line window only when the two sidebands are symmetric about it. To compare with CIGALE, flip the sign of the `SpectralIndexDef` value and use symmetric sidebands.
+The three agree only on a flat continuum. For a Gaussian emission line ($\sigma = 1.5\,$Å, unit amplitude, at 6563 Å) on a continuum $L_\lambda \propto \lambda^{-4}$ the analytic EW is 3.76 Å. Measured on the $L_\lambda$ array with sidebands 6500–6525 Å and 6610–6635 Å and the feature window 6535–6600 Å, CIGALE returns 3.73 Å and `SpectralIndexDef` $-3.73$ Å; `equivalent_width` with a line window of $\pm 20\,$Å and sidebands 50 Å wide returns 3.74 Å (3.75 Å and 3.70 Å for sidebands 20 Å and 100 Å wide). `SpectralIndexDef` takes ratios of window means of the array it is given, and the forward model passes $L_\nu$: on the $L_\nu$ array the same line gives $-3.75$ Å. On a continuum that is flat in the unit of the array all three give $\pm 3.76$ Å. The mean-of-sidebands continuum equals the linear one at the center of the line window only when the two sidebands are symmetric about it. To compare with CIGALE, flip the sign of the `SpectralIndexDef` value, measure on $L_\lambda$ and use the same windows.
 
 (app-joint-fitting)=
 
