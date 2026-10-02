@@ -940,6 +940,104 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
 
 
+def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):
+    r"""Pin formed stellar mass to ``10**log_total_mass`` on the CIC path (#2521).
+
+    The CIC age weights (:func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`,
+    via :func:`_cic_parcels`) already zero the integrand at lookback ages older
+    than ``age_at_z(z)`` and renormalize the surviving weights to sum to 1 --
+    the star-formation *shape* is already correctly bounded to ``[0, age(z)]``.
+    What those functions measure as ``total_mass`` is the trapezoid integral of
+    that shape restricted to the surviving support, computed AFTER
+    ``mean_sfh._renormalize_to_mass``
+    already rescaled the full (unbounded) shape to ``10**log_total_mass`` --
+    so it is strictly less than the declared mass whenever any of the shape
+    fell outside ``[0, age(z)]`` (#683's clamp truncating it away, silently).
+
+    Because ``mean_sfh._renormalize_to_mass``
+    applies one *uniform* rescale to the whole shape, masking commutes with
+    it: pinning the returned scale to the declared ``10**log_total_mass`` here
+    is the exact closed-form equivalent of masking the shape to
+    ``[0, age(z)]`` *before* that first normalization and renormalizing within
+    that support, which is the physical statement #2521 asks for. Derivation::
+
+        SFR_before(t)     = shape(t) * 10**log_total_mass / integral_full(shape)
+        C                 = 10**log_total_mass / integral_[0,age(z)](SFR_before)
+        SFR_before(t) * C = shape(t) * 10**log_total_mass / integral_[0,age(z)](shape)
+
+    which is exactly ``shape`` renormalized over the restricted support.
+
+    Parameters
+    ----------
+    sfh_kwargs : dict
+        Internal SFH kwargs built by :meth:`StellarSEDComponent.apply` /
+        :meth:`StellarSEDComponent.compute_joint_weights`.
+    measured_total_mass : ndarray, shape ()
+        The truncated mass :func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`
+        measured [Msun].
+    is_composite : bool, optional
+        A composite (list) ``sfh_model`` sums multiple additive members, each
+        under its OWN public-prefixed ``log_total_mass`` key (``apply``'s
+        internal-param-map loop writes both the internal and the public name
+        for a composite so two members sharing the internal name
+        ``log_total_mass`` do not collide, #372) -- read here as the sum of
+        every ``sfh_*_log_total_mass`` entry ``sfh_kwargs`` carries.
+
+    Returns
+    -------
+    ndarray, shape ()
+        A single-family build returns ``10**sfh_kwargs["log_total_mass"]``
+        when it declares that parameter, else ``measured_total_mass``
+        unchanged (e.g. ``sfh_model='table'`` has no ``log_total_mass`` at
+        all: its formed mass is legitimately whatever the table integrates
+        to). A composite build returns the sum of ``10**log_total_mass``
+        over every additive member's own key, or ``measured_total_mass``
+        unchanged if none is present.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; a plain ``jnp.where``-free branch on a
+    Python-static condition (``is_composite`` and dict-key membership are
+    both resolved at trace time, never on a traced value).
+
+    **Composite mass is conserved in AGGREGATE, not per member.** Every
+    additive member's own ``mean_sfh._renormalize_to_mass`` call scales its
+    shape to ITS OWN declared mass
+    over the FULL (untruncated) domain; the composed callable then sums the
+    members into one SFR array before the CIC/DSPS kernel integrates and
+    z-caps it as a single unit, so only the pooled measured mass -- not each
+    member's own surviving fraction -- reaches this function. Pinning that
+    pooled measurement to the pooled declared total (here) is therefore
+    exact for the total, but is a single UNIFORM rescale applied across
+    every member: if two members are truncated by different amounts (their
+    onset parameters place different fractions of their own support beyond
+    ``age(z)``), the rescale over-corrects the more-truncated member and
+    under-corrects the less-truncated one relative to each member's own
+    declared mass, even though the pooled total lands exactly on target.
+    Achieving per-member exactness needs the CIC/DSPS kernel to integrate
+    and correct each additive member separately before summing (paralleling
+    how the burst *mixture* already keeps its own mass fraction exact,
+    :func:`_mix_burst_mass_fraction`) -- a larger change to the composite
+    dispatch in both :meth:`StellarSEDComponent.apply` and
+    :meth:`StellarSEDComponent.compute_joint_weights`, not attempted here.
+    """
+    if is_composite:
+        member_masses = [
+            10.0 ** jnp.asarray(v)
+            for k, v in sfh_kwargs.items()
+            if k.startswith("sfh_") and k.endswith("_log_total_mass")
+        ]
+        if not member_masses:
+            return measured_total_mass
+        total = member_masses[0]
+        for m in member_masses[1:]:
+            total = total + m
+        return total
+    if "log_total_mass" not in sfh_kwargs:
+        return measured_total_mass
+    return 10.0 ** jnp.asarray(sfh_kwargs["log_total_mass"])
+
+
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     """Shared parcel machinery for the CIC weight builders (#964).
 
@@ -2361,6 +2459,15 @@ class StellarSEDComponent:
         if isinstance(sfh_model, str) and sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        # ``psb_wild2020`` (registry alias ``psb``) anchors its burst double
+        # power law at the age of the universe AT THIS MODEL'S REDSHIFT, not a
+        # static cosmology default: Wild et al. 2020 Eq. 5 and BAGPIPES
+        # star_formation_history.py:326-348 both measure the burst's cosmic
+        # time from "now" (the observation epoch), which is per-galaxy, so it
+        # is injected from the already-computed ``t_obs_gyr`` rather than a
+        # registry setting.
+        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -2860,6 +2967,15 @@ class StellarSEDComponent:
         joint_weights = joint_weights / jnp.maximum(
             joint_weights.sum(), representable_denominator(1e-300)
         )
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (after both the
+        # "cic" and "dsps" branches above): the CIC weights already zero the
+        # integrand at lookback ages older than age(z) and renormalize
+        # within the surviving support (#2521); the DSPS histogram weights
+        # (GP field, or an explicit ``age_kernel='dsps'`` choice) get the
+        # identical correction here rather than a second copy in that
+        # branch, so a future kernel cannot silently skip it.
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -3495,6 +3611,15 @@ class StellarSEDComponent:
 
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
+        # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
+        # block below so psb_wild2020's age_universe_yr injection (mirroring
+        # apply()'s own ordering) can read it; also feeds the runtime
+        # tabulated SFH and the age-of-universe truncation further down.
+        z = jnp.asarray(
+            require_redshift(params, "components.stellar.component.compute_joint_weights")
+        )
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
         # SFH kwargs: identical registry translation to apply (§2)
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
@@ -3510,12 +3635,11 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        if self.config.sfh_model in ("psb", "psb_wild2020"):
+            # Mirrors apply()'s injection (§2) so the two routes cannot
+            # diverge (#982); t_obs_gyr was hoisted above for this.
+            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
-
-        z = jnp.asarray(
-            require_redshift(params, "components.stellar.component.compute_joint_weights")
-        )
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
         # knots the exact forward builds, from the single shared helper, so the
@@ -3625,27 +3749,25 @@ class StellarSEDComponent:
             # clipped ~10% low. The CIC path (below) bakes it in instead.
             weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
             joint_weights = weights / jnp.maximum(weights.sum(), representable_denominator(1e-300))
-            return joint_weights, total_mass, ssp_ages_yr
+        else:
+            # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
+            # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
+            # with the SFH's exact bin-edge knots injected for binned families) times
+            # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
+            # applies the youngest-bin lookback correction and returns the conserved
+            # total_mass, so (unlike the DSPS histogram path) the caller must NOT
+            # also multiply by ``_youngest_bin_lookback_multiplier`` here.
+            # The SAME builder apply uses, so the two integrands are identical point
+            # for point: the #982 contract, now enforced by construction.
+            _fine_age_yr, _fine_sfr = _cic_integrand(
+                ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
+            )
 
-        # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
-        # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
-        # with the SFH's exact bin-edge knots injected for binned families) times
-        # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
-        # applies the youngest-bin lookback correction and returns the conserved
-        # total_mass, so (unlike the DSPS histogram path) the caller must NOT
-        # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-        # The SAME builder apply uses, so the two integrands are identical point
-        # for point: the #982 contract, now enforced by construction.
-        _fine_age_yr, _fine_sfr = _cic_integrand(
-            ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
-        )
-
-        # Per-age metallicity → the joint CIC kernel apply uses (#964), which
-        # spreads each mass parcel over the metallicity axis with the MDF
-        # centered on that parcel's own Z. It normalizes internally.
-        if lgmet_on_ssp_ages is not None:
-            return (
-                *_joint_weights_cic_met_table(
+            # Per-age metallicity → the joint CIC kernel apply uses (#964), which
+            # spreads each mass parcel over the metallicity axis with the MDF
+            # centered on that parcel's own Z. It normalizes internally.
+            if lgmet_on_ssp_ages is not None:
+                joint_weights, total_mass = _joint_weights_cic_met_table(
                     _fine_age_yr,
                     _fine_sfr,
                     ssp_ages_yr,
@@ -3653,16 +3775,27 @@ class StellarSEDComponent:
                     lgmet_on_ssp_ages,
                     lgmet_scatter,
                     ssp.ssp_lgmet,
-                ),
-                ssp_ages_yr,
-            )
+                )
+            else:
+                age_w_cic, total_mass = _age_weights_cic(
+                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                )
+                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+                joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
+                joint_weights = joint_weights / jnp.maximum(
+                    joint_weights.sum(), representable_denominator(1e-300)
+                )
 
-        age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
-        lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
-        joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-        joint_weights = joint_weights / jnp.maximum(
-            joint_weights.sum(), representable_denominator(1e-300)
-        )
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (mirrors
+        # :meth:`apply`): the CIC weights already zero the integrand at
+        # lookback ages older than age(z) and renormalize within the
+        # surviving support (#2521); the DSPS histogram weights (GP field,
+        # or an explicit ``age_kernel='dsps'`` choice) get the identical
+        # correction here rather than a second copy in that branch. This
+        # function never sees a composite (list) ``sfh_model``: indexing
+        # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         return joint_weights, total_mass, ssp_ages_yr
 
     def compute_log_nion(self, params, ssp_data=None):

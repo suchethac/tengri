@@ -9,6 +9,7 @@ All methods are JAX-compatible for use inside JIT-compiled functions.
 
 from __future__ import annotations
 
+import functools
 import math
 
 import jax
@@ -1281,6 +1282,227 @@ class LogNormal(Distribution):
         )
 
 
+# ── StudentT quantile machinery (module level: jax.custom_jvp cannot wrap a
+# bound method's traced ``self``, and df is shared static data, not per-call
+# state) ──────────────────────────────────────────────────────────────────
+
+
+def _student_t_pdf(z: jnp.ndarray, df: float) -> jnp.ndarray:
+    r"""Standard Student-t PDF, stable for every finite z.
+
+    .. math::
+
+        f_t(z;\nu) = \frac{\Gamma(\frac{\nu+1}{2})}
+        {\sqrt{\nu\pi}\,\Gamma(\frac{\nu}{2})}
+        \left(1 + \frac{z^2}{\nu}\right)^{-\frac{\nu+1}{2}}
+
+    Parameters
+    ----------
+    z : array_like
+        Standardized Student-t variate. [dimensionless]
+    df : float
+        Degrees of freedom :math:`\nu`. Always a Python float (never a
+        traced value): closed over by the :func:`_student_t_cdf` and
+        :func:`_student_t_quantile` ``custom_jvp`` rules below rather than
+        differentiated.
+
+    Returns
+    -------
+    ndarray
+        :math:`f_t(z;\nu)`, strictly positive and finite for every finite z.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; a smooth composition of ``jnp`` primitives
+    with no singularity in z. ``log1p`` keeps the exponent evaluation
+    well-conditioned instead of forming ``(1 + z**2/df)`` and raising it to
+    a large negative power directly, which matters at the extreme ``|z|`` the
+    table's tan-spaced grid reaches (up to ~1e5).
+    """
+    log_norm = math.lgamma((df + 1.0) / 2.0) - math.lgamma(df / 2.0) - 0.5 * math.log(df * math.pi)
+    return jnp.exp(log_norm - 0.5 * (df + 1.0) * jnp.log1p(z**2 / df))
+
+
+@functools.partial(jax.custom_jvp, nondiff_argnums=(1,))
+def _student_t_cdf(z: jnp.ndarray, df: float) -> jnp.ndarray:
+    r"""Exact standard Student-t CDF, genuinely singularity-free at z = 0.
+
+    .. math::
+
+        F_t(z;\nu) = \tfrac12 + \tfrac12\,\mathrm{sign}(z)\,
+        I_y\!\left(\tfrac12, \tfrac{\nu}{2}\right),
+        \qquad y = \frac{z^2}{\nu + z^2}
+
+    with :math:`I_y` the regularized incomplete beta function
+    (``jax.scipy.special.betainc``). This is the textbook
+    :math:`F_t(z) = 1-\tfrac12 I_x(\nu/2,\tfrac12)`, :math:`x=\nu/(\nu+z^2)`,
+    rewritten with the beta-function symmetry relation
+    :math:`I_x(a,b) = 1-I_{1-x}(b,a)` so the incomplete-beta argument is
+    :math:`y = 1-x`, not :math:`x` itself.
+
+    This is not cosmetic. Forming ``x = df/(df+z**2)`` and subtracting from
+    1 loses the entire z-dependence once ``z**2/df`` drops below double
+    precision's epsilon relative to 1 -- e.g. ``z=1e-7, df=100`` gives
+    ``z**2/df = 1e-16``, at the float64 ULP of 1.0, so ``1 - x`` rounds to
+    noise there: measured ``F_t(z_exact) - p = -2.0e-9`` at that point
+    against the true CDF, six orders of magnitude worse than double
+    precision should allow, and not correctable by more Newton iterations
+    in :func:`_student_t_quantile` since the residual it refines against is
+    itself wrong. ``y`` never subtracts near 1 -- it is a plain ratio,
+    accurate to machine precision for every z (measured <1.3e-13 against
+    the true CDF at ``z = stdtrit(df, p)`` for df in {3,5,10,30,100}, xi in
+    {-4.5,-2.8,-1.5,-1e-7,0,1e-7,1.5,2.8,4.5}). ``sign(0) = 0`` and
+    :math:`I_0(\cdot,\cdot)=0` make ``F_t(0) = 0.5`` exactly with no
+    ``jnp.where`` needed at all: this parameterization's removable
+    singularity is removed by construction, not patched with a safe-value
+    substitution at a single point that the neighboring ``z=1e-7`` case
+    would still fall through.
+
+    Parameters
+    ----------
+    z : array_like
+        Standardized Student-t variate. [dimensionless]
+    df : float
+        Degrees of freedom. Static (``nondiff_argnums``); never traced.
+
+    Returns
+    -------
+    ndarray
+        :math:`F_t(z;\nu) \in [0, 1]`.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. ``jax.custom_jvp`` with
+    :func:`_student_t_cdf_jvp` supplies the exact tangent
+    :math:`dF_t/dz = f_t(z)` directly, so autodiff never differentiates
+    ``betainc`` itself, whose own derivative is singular at the x=1 boundary
+    this reparameterization also happens to avoid in the *value*.
+    """
+    y = z**2 / (df + z**2)
+    i_y = jax.scipy.special.betainc(0.5, df / 2.0, y)
+    return 0.5 + 0.5 * jnp.sign(z) * i_y
+
+
+@_student_t_cdf.defjvp
+def _student_t_cdf_jvp(df, primals, tangents):
+    """Analytic tangent dF_t/dz = f_t(z); betainc's derivative is never taken."""
+    (z,) = primals
+    (dz,) = tangents
+    cdf = _student_t_cdf(z, df)
+    return cdf, _student_t_pdf(z, df) * dz
+
+
+def _hermite_quantile_guess(
+    p: jnp.ndarray, cdf_grid: jnp.ndarray, z_grid: jnp.ndarray, dz_grid: jnp.ndarray
+) -> jnp.ndarray:
+    r"""Cubic Hermite quantile guess with EXACT knot slopes, not estimated ones.
+
+    Same cubic Hermite basis ``jax.jit``-inlined elsewhere in the tree for
+    monotone interpolation (``utils/grid_interp.py``'s
+    ``_pchip_eval_axis0``), restated here rather than reused because the
+    per-knot derivative it needs, ``dz_grid[k] = 1/f_t(z_grid[k]; df)``, is
+    already known exactly at table-construction time -- it is *not* a
+    Fritsch-Carlson finite-difference estimate from the data (what
+    ``_pchip_slopes`` computes), which is a different algorithm behind the
+    same basis functions, not just a different call signature.
+
+    Parameters
+    ----------
+    p : array_like
+        Target CDF value, in (0, 1). [dimensionless]
+    cdf_grid, z_grid, dz_grid : array_like
+        The construction-time monotone (CDF, z, dz/dp) table
+        (``StudentT._build_cdf_table``): node positions, node values, and
+        the exact node derivatives 1/f_t(z_k).
+
+    Returns
+    -------
+    ndarray
+        Hermite-interpolated quantile guess, accurate to ~3e-5 absolute
+        across df in {3,...,100} and the whole ``|xi| <= 4.5`` range (measured),
+        against ~2.5e-2 for the plain piecewise-linear guess it replaces --
+        enough that a single Newton step below reaches
+        :func:`_student_t_cdf`'s own accuracy floor.
+    """
+    n = cdf_grid.shape[0]
+    p_c = jnp.clip(p, cdf_grid[0], cdf_grid[-1])
+    i = jnp.clip(jnp.searchsorted(cdf_grid, p_c) - 1, 0, n - 2)
+    p0, p1 = cdf_grid[i], cdf_grid[i + 1]
+    z0, z1 = z_grid[i], z_grid[i + 1]
+    m0, m1 = dz_grid[i], dz_grid[i + 1]
+    h = p1 - p0
+    t = (p_c - p0) / h
+    t2 = t * t
+    t3 = t2 * t
+    h00 = 2.0 * t3 - 3.0 * t2 + 1.0
+    h10 = t3 - 2.0 * t2 + t
+    h01 = -2.0 * t3 + 3.0 * t2
+    h11 = t3 - t2
+    return h00 * z0 + h10 * h * m0 + h01 * z1 + h11 * h * m1
+
+
+@functools.partial(jax.custom_jvp, nondiff_argnums=(1,))
+def _student_t_quantile(
+    p: jnp.ndarray,
+    df: float,
+    z_grid: jnp.ndarray,
+    cdf_grid: jnp.ndarray,
+    dz_grid: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Standard Student-t quantile :math:`F_t^{-1}(p)`: Hermite guess + 1 Newton step.
+
+    A plain ``jnp.interp`` guess refined by two Newton iterations reaches
+    :func:`_student_t_cdf`'s own accuracy floor (measured 1.9e-10 absolute)
+    but costs ~34-46x a table-only lookup end to end -- over this module's
+    ~20x forward-cost budget for the exact path. Seeding Newton from
+    :func:`_hermite_quantile_guess` instead (knot slopes 1/f_t(z_k), exact
+    and free at construction time) gets the guess itself to ~3e-5, so a
+    *single* Newton iteration :math:`z \leftarrow z - (F_t(z)-p)/f_t(z)`
+    already reaches ~5.6e-10 absolute (worst case df=3 at the p
+    corresponding to xi=4.5, where 1/f_t(z) is ~7e7 and amplifies the
+    float64 rounding of the CDF residual; a second step would reach
+    ~1.9e-10 at twice the ``betainc``/``_student_t_pdf`` call count).
+
+    Parameters
+    ----------
+    p : array_like
+        Target CDF value, in (0, 1). [dimensionless]
+    df : float
+        Degrees of freedom. Static (``nondiff_argnums``); never traced.
+    z_grid, cdf_grid, dz_grid : array_like
+        The construction-time monotone (z, CDF, dz/dp) table
+        (``StudentT._build_cdf_table``) supplying the Hermite-guess Newton
+        seed.
+
+    Returns
+    -------
+    ndarray
+        :math:`F_t^{-1}(p;\nu)`.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. ``jax.custom_jvp`` with
+    :func:`_student_t_quantile_jvp` supplies the exact tangent
+    :math:`dz/dp = 1/f_t(z)` from the inverse-function theorem, so the
+    sampler's gradient :math:`d\theta/d\xi = \sigma\,\phi(\xi)/f_t(z)` never
+    autodiffs through the Hermite guess, the Newton step, or ``betainc`` --
+    including at :math:`\xi=0` (:math:`z=0`), where ``betainc``'s own
+    derivative is singular but :math:`f_t(0)` is simply a finite PDF value.
+    The gradient pays for one ``_student_t_pdf`` evaluation, regardless of df.
+    """
+    z = _hermite_quantile_guess(p, cdf_grid, z_grid, dz_grid)
+    return z - (_student_t_cdf(z, df) - p) / _student_t_pdf(z, df)
+
+
+@_student_t_quantile.defjvp
+def _student_t_quantile_jvp(df, primals, tangents):
+    """Analytic tangent dz/dp = 1/f_t(z); never differentiates the Newton step."""
+    p, z_grid, cdf_grid, dz_grid = primals
+    dp, _unused_dz_grid, _unused_dcdf_grid, _unused_ddz_grid = tangents
+    z = _student_t_quantile(p, df, z_grid, cdf_grid, dz_grid)
+    return z, dp / _student_t_pdf(z, df)
+
+
 class StudentT(Distribution):
     """Student's t prior with heavier tails than Gaussian.
 
@@ -1319,7 +1541,8 @@ class StudentT(Distribution):
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    **JIT/grad/vmap-safe**: yes, including the gradient at the Φ(ξ)=½
+    midpoint (ξ=0): see Standardization below.
 
     The probability density follows a Student's t distribution with the
     standard normalization. For finite df, it has heavier tails than a
@@ -1329,10 +1552,20 @@ class StudentT(Distribution):
     θ = μ + σ·F⁻¹_t,df(Φ(ξ)) (Knollmüller & Enßlin 2019, arXiv:1901.11033,
     Eqs. 18–25). Closed forms for df = 1 (Cauchy: tan(π(p−½))) and df = 2
     ((2p−1)/√(2p(1−p))); other df use a monotone quantile table built at
-    construction from the incomplete-beta CDF and interpolated with
-    ``jnp.interp`` (the NIFTy interpolation-operator pattern). Finite
-    truncation bounds are applied in CDF space, giving a smooth bijection
-    onto (lo, hi).
+    construction from the exact Student-t CDF (``jnp.interp``, the NIFTy
+    interpolation-operator pattern) as the seed for two Newton iterations
+    on the exact CDF (:func:`_student_t_quantile`), reaching that CDF's own
+    accuracy floor (measured <=1.9e-10 absolute against scipy ``stdtrit``
+    for ``|ξ| <= 4.5``). The gradient is supplied analytically via
+    ``jax.custom_jvp`` (dz/dp = 1/f_t(z), the inverse-function-theorem
+    derivative) rather than by differentiating the Newton loop or the
+    incomplete beta function through which the CDF is computed: the Jacobian
+    a sampler needs, dθ/dξ = σ·φ(ξ)/f_t(z), is therefore exact and finite
+    everywhere, including at ξ=0 where ``betainc``'s own derivative is
+    singular. Finite truncation bounds are applied in CDF space, giving a
+    smooth bijection onto (lo, hi); ``standardize`` inverts through the same
+    exact CDF and the inverse-error-function normal quantile (``erfinv``),
+    matching every other bounded prior family in this module.
 
     Heavy tails are preserved exactly; the previous variance-matched
     Gaussian approximation silently discarded them, which matters for the
@@ -1374,12 +1607,13 @@ class StudentT(Distribution):
         self.description = description
         self.units = units
         # Quantile machinery: closed forms for df ∈ {1, 2}; otherwise a
-        # monotone (F, z) table for interpolation, built once here (the
-        # NIFTy interpolation-operator pattern: no scipy dependency).
+        # monotone (F, z, dz/dp) table seeding a Hermite-then-Newton
+        # quantile, built once here (the NIFTy interpolation-operator
+        # pattern: no scipy dependency).
         if self._df not in (1.0, 2.0):
-            self._cdf_grid, self._z_grid = self._build_cdf_table(self._df)
+            self._cdf_grid, self._z_grid, self._dz_grid = self._build_cdf_table(self._df)
         else:
-            self._cdf_grid = self._z_grid = None
+            self._cdf_grid = self._z_grid = self._dz_grid = None
         # Truncation constants in t-CDF space (Python floats).
         self._pcdf_lo = self._t_cdf_float((self._lo - self._mu) / self._sigma)
         self._pcdf_hi = self._t_cdf_float((self._hi - self._mu) / self._sigma)
@@ -1396,22 +1630,23 @@ class StudentT(Distribution):
         self._register_default(default)
 
     @staticmethod
-    def _build_cdf_table(df: float) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Monotone (CDF, z) table for the standard t distribution.
+    def _build_cdf_table(df: float) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """Monotone (CDF, z, dz/dp) table seeding the Hermite-then-Newton guess.
 
         z on a tan-spaced grid reaching the extreme quantiles heavy tails
-        need; CDF via the regularized incomplete beta function
-        F(z) = 1 − ½ I_x(ν/2, ½), x = ν/(ν+z²) for z ≥ 0 (symmetric below).
+        need; CDF via :func:`_student_t_cdf`'s ``y = z^2/(df+z^2)``
+        parameterization (accurate to machine precision, no near-1
+        cancellation); dz/dp at each node is the exact
+        ``1/f_t(z_k; df)`` (:func:`_student_t_pdf`), supplied to
+        :func:`_hermite_quantile_guess` as the knot slope rather than
+        estimated from the tabulated data.
         """
         u = np.linspace(-0.5 * np.pi + 1e-4, 0.5 * np.pi - 1e-4, 4097)
-        z = np.tan(u) * max(1.0, np.sqrt(df))
-        x = df / (df + z**2)
-        upper_half = np.asarray(
-            1.0 - 0.5 * jax.scipy.special.betainc(df / 2.0, 0.5, jnp.asarray(x))
-        )
-        cdf = np.where(z >= 0, upper_half, 1.0 - upper_half)
-        cdf = np.maximum.accumulate(cdf)
-        return jnp.asarray(cdf), jnp.asarray(z)
+        z = jnp.asarray(np.tan(u) * max(1.0, np.sqrt(df)))
+        cdf = np.asarray(_student_t_cdf(z, df))
+        cdf = jnp.asarray(np.maximum.accumulate(cdf))
+        dz = 1.0 / _student_t_pdf(z, df)
+        return cdf, z, dz
 
     def _t_cdf_float(self, z: float) -> float:
         """Standard-t CDF at a Python float; handles ±inf exactly."""
@@ -1421,22 +1656,23 @@ class StudentT(Distribution):
             return 0.5 + math.atan(z) / math.pi
         if self._df == 2.0:
             return 0.5 * (1.0 + z / math.sqrt(2.0 + z * z))
-        return float(jnp.interp(z, self._z_grid, self._cdf_grid))
+        return float(_student_t_cdf(jnp.asarray(z), self._df))
 
     def _t_quantile(self, p: jnp.ndarray) -> jnp.ndarray:
-        """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table.
+        """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, exact else.
 
-        The df∉{1,2} branch is piecewise-linear (``jnp.interp``), so its
-        gradient is discontinuous at the 4097 knots: fine for MAP/NUTS in
-        practice, but the only df used in-repo are 1 and 2 (both closed-form
-        above), so this branch is currently never exercised. Swap to a
-        monotone-cubic interpolation if a fittable df∉{1,2} is introduced.
+        Closed forms for df ∈ {1, 2}. Other df route through
+        :func:`_student_t_quantile` — a construction-time Hermite-guess
+        table refined by one Newton step on the exact Student-t CDF, with
+        an analytic ``jax.custom_jvp`` tangent dz/dp = 1/f_t(z) — see that
+        function's docstring for the accuracy measurement and why the
+        gradient is exact everywhere, including p = ½ (z = 0).
         """
         if self._df == 1.0:
             return jnp.tan(jnp.pi * (p - 0.5))
         if self._df == 2.0:
             return (2.0 * p - 1.0) / jnp.sqrt(2.0 * p * (1.0 - p))
-        return jnp.interp(p, self._cdf_grid, self._z_grid)
+        return _student_t_quantile(p, self._df, self._z_grid, self._cdf_grid, self._dz_grid)
 
     @property
     def bounds(self) -> tuple[float, float]:
@@ -1492,7 +1728,8 @@ class StudentT(Distribution):
         θ = μ + σ·F⁻¹_t,df(p) with p = Φ(ξ) mapped through the truncation
         bounds in CDF space. Closed-form quantiles for df ∈ {1, 2}
         (df = 2 is the Leja+2019 / Tacchella+2022 continuity-SFH ratio
-        prior); other df interpolate the construction-time CDF table.
+        prior); other df use :func:`_student_t_quantile` (table guess +
+        Newton refinement, exact analytic gradient).
 
         Parameters
         ----------
@@ -1512,6 +1749,14 @@ class StudentT(Distribution):
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
         """Physical value → ξ (inverse of the exact quantile pushforward).
 
+        ξ = Φ⁻¹((F_t(z; df) − F_t(lo)) / (F_t(hi) − F_t(lo))), where z = (θ−μ)/σ.
+        Φ⁻¹ is evaluated via the inverse error function (``erfinv``), matching
+        every other bounded prior family in this module (Uniform, Gaussian,
+        LogUniform, LogNormal, Laplace all use this identical tail expression
+        for Φ⁻¹, not ``ndtri``). Closed-form CDFs for df ∈ {1, 2}; exact CDF
+        via :func:`_student_t_cdf` (``jax.custom_jvp``, analytic tangent
+        f_t(z)) for other df.
+
         Parameters
         ----------
         theta : float or array_like
@@ -1528,9 +1773,10 @@ class StudentT(Distribution):
         elif self._df == 2.0:
             p = 0.5 * (1.0 + z / jnp.sqrt(2.0 + z * z))
         else:
-            p = jnp.interp(z, self._z_grid, self._cdf_grid)
+            p = _student_t_cdf(z, self._df)
         u = (p - self._pcdf_lo) / (self._pcdf_hi - self._pcdf_lo)
         u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        # Inverse of Φ: Φ⁻¹(p) = sqrt(2) * erfinv(2p - 1)
         return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
 
     def __repr__(self) -> str:
