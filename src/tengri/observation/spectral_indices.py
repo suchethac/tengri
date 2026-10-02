@@ -380,12 +380,41 @@ def measure_index_jax(
 def _window_mean_flux(
     wave: jnp.ndarray, flux: jnp.ndarray, lo: float, hi: float, edge_width: float = 1.0
 ) -> jnp.ndarray:
-    """Mean flux in a wavelength window, using soft sigmoid edges for differentiability."""
+    """Wavelength-weighted mean flux in a window: ∫(flux·dλ) / ∫dλ.
+
+    Uses soft sigmoid edges for differentiability. The weight function is the
+    edge sigmoid product, which is integrated with dλ to give the correct
+    wavelength-weighted mean on any grid (uniform or clustered).
+
+    Parameters
+    ----------
+    wave : ndarray
+        Wavelength grid [Å]
+    flux : ndarray
+        Flux density array (any consistent units)
+    lo, hi : float
+        Window edges [Å]
+    edge_width : float
+        Sigmoid edge width [Å]. Default 1.0.
+
+    Returns
+    -------
+    float
+        Mean flux: ∫(flux·w·dλ) / ∫(w·dλ), where w is the sigmoid edge product.
+    """
+    # Soft window function with sigmoid edges for smooth differentiability
     w_lo = jax.nn.sigmoid((wave - lo) / edge_width)
     w_hi = jax.nn.sigmoid((hi - wave) / edge_width)
     weights = w_lo * w_hi
-    n = jnp.maximum(jnp.sum(weights), 1e-10)
-    return jnp.sum(flux * weights) / n
+
+    # Trapezoid-weighted mean: ∫(flux·w·dλ) / ∫(w·dλ)
+    # This gives the correct wavelength-weighted mean on any grid
+    num = jnp.trapezoid(flux * weights, wave)
+    den = jnp.trapezoid(weights, wave)
+
+    # Avoid division by zero; use a safe denominator
+    ok = den > 1e-20
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
 
 # ── Single-sourced index arithmetic ───────────────────────────────
