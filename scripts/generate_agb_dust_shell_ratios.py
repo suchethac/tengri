@@ -41,6 +41,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 
@@ -92,7 +93,7 @@ OUTPUT_PATH = os.path.join(REPO_ROOT, "data", "agb_dust_shell_ratios_mist.h5")
 # the guard/decimation thresholds can be iterated without repaying FSPS.
 RAW_SPECTRA_CACHE = os.environ.get(
     "AGB_DUST_RAW_CACHE",
-    "/Users/suchethacooray/.claude/jobs/c936b159/tmp/fix2534/agb_dust_raw_spectra.npz",
+    os.path.join(tempfile.gettempdir(), "agb_dust_raw_spectra.npz"),
 )
 
 
@@ -237,7 +238,8 @@ def main() -> None:
     # single-bin trough artifacts. w=1 is unaffected (clip(1, ...) == 1), so
     # the w=1-plane-is-exact-identity assertion below is unchanged.
     RATIO_CLAMP_LO, RATIO_CLAMP_HI = 0.1, 10.0
-    n_clamped = int(np.count_nonzero((ratio_full < RATIO_CLAMP_LO) | (ratio_full > RATIO_CLAMP_HI)))
+    out_of_range = (ratio_full < RATIO_CLAMP_LO) | (ratio_full > RATIO_CLAMP_HI)
+    n_clamped = int(np.count_nonzero(out_of_range))
     print(
         f"Ratio clamp [{RATIO_CLAMP_LO}, {RATIO_CLAMP_HI}]: {n_clamped}/{ratio_full.size} "
         f"bins clamped ({100.0 * n_clamped / ratio_full.size:.4f}%)"
