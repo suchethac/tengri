@@ -65,11 +65,11 @@ from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
-    bolometric_integral_nu as _bolometric_integral_nu,
     planck_lnu as _planck_lnu,
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
+from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
@@ -2228,6 +2228,11 @@ def relagn_disc_from_grid(
     it and made the disc unusable in float32, since the grid's absolute
     ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
 
+    The normalization integral is taken over the template's own native
+    wavelength grid, before resampling, so the output does not depend on the
+    caller's wavelength sampling and a grid that stops short of the template
+    carries only the part of ``L_bol`` that falls inside it.
+
     **Inclination**: grid stored at cos_inc = 0.5, scaled by 2·cos_inc. As with
     ``multicolor_disc``, the bolometric renormalization then divides out any
     wavelength-independent prefactor, so ``agn_cos_inc`` does not change this
@@ -2243,25 +2248,17 @@ def relagn_disc_from_grid(
         scatters=grid["scatters"],
         index_space_interp=True,
     )
-    # Interpolate grid wavelength -> observation wavelength
-    lnu_interp = resample_template(
-        wavelength, jnp.asarray(grid["wave_grid"]), lnu_template, left=0.0, right=0.0
-    )
     # Inclination scaling from reference cos_inc = 0.5
-    lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
+    lnu_template = lnu_template * (2.0 * agn_cos_inc)
+    wave_native = jnp.asarray(grid["wave_grid"])
+    # Interpolate grid wavelength -> observation wavelength
+    lnu_interp = resample_template(wavelength, wave_native, lnu_template, left=0.0, right=0.0)
 
-    # Renormalize to the requested bolometric luminosity (#1206).
-    nu = _wavelength_to_nu(wavelength)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
-    if wavelength.dtype == jnp.float32:
-        # Float32: the template's own bolometric integral is ~1e45 erg/s and
-        # overflows, which would flush the disc to zero. Peak-factor and
-        # regroup: ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
-        # identical to ``l_scale * lnu / (peak * hat_int)``.
-        # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
-        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))
-        peak = jnp.where(peak > 0.0, peak, 1.0)
-        hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
-        return (l_scale / hat_int) * (lnu_interp / peak)
-    integral_safe = _bolometric_integral_nu(lnu_interp, nu, floor=1e-100)
-    return l_scale * lnu_interp / integral_safe
+    # Renormalize to the requested bolometric luminosity (#1206), with the
+    # integral taken on the template's native grid (before resampling) so the
+    # disc does not depend on the caller's wavelength sampling or range. The
+    # float32 peak-factoring (the template's integral is ~1e45 erg/s and would
+    # overflow) lives in the helper.
+    return scale_to_lbol_native(
+        lnu_template, wave_native, lnu_interp, 10.0**agn_log_lbol * _LSUN_ERG
+    )
