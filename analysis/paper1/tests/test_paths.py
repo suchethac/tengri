@@ -62,29 +62,141 @@ class TestRepoRelative:
 def test_sweep_writers_use_repo_relative():
     """Sweep test: ensure writer modules wrap path str() in repo_relative.
 
-    This test scans the writer modules mentioned in the spec and verifies
-    that when they construct JSON payloads with paths, they route through
-    repo_relative.
+    This test scans the writer modules and verifies that when they construct
+    payloads (dicts/lists) that get written to JSON, NPZ, or sidecars with
+    paths, they use repo_relative() to wrap any str(), os.fspath(), or
+    .resolve() calls on path-like names.
+
+    Paths are identified by names containing: path, dir, file, out, summary,
+    results (case-insensitive). The test uses AST walking to find assignments
+    to dict keys or list appends whose values are calls to str() or os.fspath()
+    on such names, and fails unless wrapped in repo_relative(...).
     """
-    writer_modules_with_paths = [
-        "surviving_mass_census.py",  # "results_dir" and "merged_from"
-        "bma_combine.py",             # "generated_from"
-        "fit_one.py",                 # logger calls with paths
-        "_cell_provenance.py",        # "results_dir"
+    import ast
+
+    writer_modules = [
+        "fig11_bma.py",
+        "config_forward_digest.py",
+        "parse_forward_benchmark.py",
+        "surviving_mass_census.py",
+        "bma_combine.py",
+        "fit_one.py",
+        "_cell_provenance.py",
     ]
 
-    for module_name in writer_modules_with_paths:
-        module_path = ANALYSIS_DIR / module_name
+    path_keywords = {"path", "dir", "file", "out", "summary", "results"}
+
+    def is_path_name(name_str: str) -> bool:
+        """Check if a name suggests it holds a file path."""
+        name_lower = name_str.lower()
+        return any(kw in name_lower for kw in path_keywords)
+
+    def extract_name_from_node(node: ast.expr) -> str | None:
+        """Extract a name or attribute from a node."""
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            return node.attr
+        elif isinstance(node, ast.Call):
+            # For chained calls like Path(...).resolve(), get the outermost attr
+            if isinstance(node.func, ast.Attribute):
+                return node.func.attr
+            elif isinstance(node.func, ast.Name):
+                return node.func.id
+        return None
+
+    def check_module(module_path: Path) -> list[str]:
+        """Scan one module for repo_relative violations.
+
+        Returns a list of violations (line_number, description).
+        """
         if not module_path.exists():
-            continue
+            return []
 
         source = module_path.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(source, filename=str(module_path))
+        except SyntaxError:
+            return []
 
-        # Verify the module imports repo_relative if it writes paths
-        has_repo_relative_import = "repo_relative" in source or "from ._paths" in source
-        assert has_repo_relative_import, (
-            f"{module_name} writes paths to artifacts but doesn't import repo_relative"
-        )
+        violations = []
+
+        class PathStringChecker(ast.NodeVisitor):
+            """Walk the AST looking for str/fspath on path-like names in dicts/lists."""
+
+            def visit_Subscript(self, node: ast.Subscript) -> None:
+                """Check dict assignments like d["key"] = str(path)."""
+                # This is d[key], need to check if it's an assignment
+                # Assignments are handled separately via visit_Assign
+                self.generic_visit(node)
+
+            def visit_Assign(self, node: ast.Assign) -> None:
+                """Check assignments like d["key"] = str(path)."""
+                # Check if target is a subscript (dict/list assignment)
+                for target in node.targets:
+                    if isinstance(target, ast.Subscript):
+                        # Assignment to dict: d["key"] = value
+                        value = node.value
+                        if isinstance(value, ast.Call):
+                            func_name = None
+                            if isinstance(value.func, ast.Name):
+                                func_name = value.func.id
+                            elif isinstance(value.func, ast.Attribute):
+                                func_name = value.func.attr
+
+                            if func_name in ("str", "fspath") and value.args:
+                                # Extract the argument
+                                arg_name = extract_name_from_node(value.args[0])
+                                if arg_name and is_path_name(arg_name):
+                                    violations.append(
+                                        f"line {node.lineno}: dict assignment "
+                                        f"{func_name}({arg_name}) "
+                                        f"not wrapped in repo_relative(...)"
+                                    )
+
+                self.generic_visit(node)
+
+            def visit_Dict(self, node: ast.Dict) -> None:
+                """Check dict literals: {"key": str(path)}."""
+                for value in node.values:
+                    if isinstance(value, ast.Call):
+                        func_name = None
+                        if isinstance(value.func, ast.Name):
+                            func_name = value.func.id
+                        elif isinstance(value.func, ast.Attribute):
+                            func_name = value.func.attr
+
+                        if func_name in ("str", "fspath") and value.args:
+                            arg_name = extract_name_from_node(value.args[0])
+                            if arg_name and is_path_name(arg_name):
+                                violations.append(
+                                    f"line {value.lineno}: dict literal "
+                                    f"{func_name}({arg_name}) "
+                                    f"not wrapped in repo_relative(...)"
+                                )
+
+                self.generic_visit(node)
+
+        checker = PathStringChecker()
+        checker.visit(tree)
+
+        return violations
+
+    # Check each module
+    failures = []
+    for module_name in writer_modules:
+        module_path = ANALYSIS_DIR / module_name
+        vios = check_module(module_path)
+        if vios:
+            failures.append((module_name, vios))
+
+    if failures:
+        msg = "Paths stored in output dicts must use repo_relative():\n"
+        for module_name, vios in failures:
+            msg += f"\n{module_name}:\n"
+            for vio in vios:
+                msg += f"  {vio}\n"
+        pytest.fail(msg)
 
 
 if __name__ == "__main__":

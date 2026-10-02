@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _figure_style import CONFIG_COLORS
+from _paths import repo_relative
 from paper1 import _bma_keys as bk
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -906,7 +907,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.data_out:
         args.data_out.parent.mkdir(parents=True, exist_ok=True)
         sidecar = asdict(draw_summary)
-        sidecar["summary_file"] = str(args.summary)
+        sidecar["summary_file"] = repo_relative(args.summary)
         sidecar["selected_set"] = selected_set
         sidecar["code_revision"] = _git_describe()
         with open(args.data_out, "w") as f:
