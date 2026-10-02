@@ -109,13 +109,6 @@ _ANALYTIC_DUST_WAVE_AA = host_array(np.geomspace(1.0e4, 1.0e8, 512))
 # Bookkeeping pseudo-model with no emission of its own, stays grid-less.
 _GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
 
-# Aliases and special cases: dust emission models whose implementation is
-# elsewhere but need wavelength support. The "draine2021_pah" is pah_drude's
-# alias; "mbb" is modified_blackbody's alias (both analytic, covered above).
-# They are handled by explicit entries in _DUST_EMISSION_TEMPLATES or returned
-# from the wrapper functions in emission.py.
-_DUST_ALIASES = frozenset({"draine2021_pah", "mbb"})
-
 # AGN torus templates --------------------------------------------------------
 _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "skirtor": (
@@ -138,6 +131,14 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 # AGN disc templates ---------------------------------------------------------
 _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "relagn": (("relagn_disc_grid.h5", "wavelength_aa", 1.0),),
+    # KD18 (Kubota & Done 2018) discs reach 0.062 A (200 keV) to 12.4 um; 28 per
+    # cent of the bolometric energy lies below the SSP edge (91 A). Without the
+    # native axis the block normalises its energy over the SSP window only and
+    # inflates the UV/optical disc by 1/0.72 (measured #2564).
+    "kd18_agnfitter": (("kd18_agnfitter_disc_grid.h5", "kd18_agnfitter/wavelength", 1.0),),
+    "kd18_agnfitter_warmindex": (
+        ("kd18_agnfitter_warmindex_disc_grid.h5", "kd18_agnfitter_warmindex/wavelength", 1.0),
+    ),
 }
 
 # Analytic AGN torus blocks: single-temperature and multi-temperature graybodies
@@ -157,6 +158,17 @@ _ANALYTIC_TORUS_WAVE_AA = host_array(np.geomspace(1.0e4, 1.0e8, 512))
 
 # Grid-less AGN torus blocks: no emission contribution (kept for symmetry).
 _GRIDLESS_TORUS = frozenset({"none"})
+
+# Declaration stride for template axes denser than the science needs: only every
+# ``stride``-th native node (plus the last one) enters the master grid; the block
+# still interpolates the full-resolution template at whatever points it is
+# handed. Every extra master-grid point costs each jitted predict, so a
+# 4096-point axis (0.28 % steps) adds ~4000 points where ~1000 suffice.
+# ``nenkova_agnfitter``: stride 4 (1025 nodes, 1.1 % steps) leaves the 8-500 um
+# band mean within 1e-4 of the dense-grid value, every sub-band within 1e-4
+# and the peak on the native node (measured for #2564; stride 16 already moves
+# the peak by one 4.5 % step, stride 8 is the last stride with sub-bands < 5e-4).
+_TORUS_DECLARATION_STRIDE = {"nenkova_agnfitter": 4}
 
 # Standalone AGN models that bake their own SED on a native grid (no
 # disc/torus block selection).
@@ -254,20 +266,14 @@ def native_wave_dust_emission(name: str | None) -> np.ndarray | None:
 
     Template models return their file's grid; analytic emitters return the
     synthetic 1 µm – 1 cm grid so the master union grid reaches the submm
-    (#1005). Aliases (e.g., "draine2021_pah" → pah_drude, "mbb" → modified_blackbody)
-    are resolved to their canonical names. Unknown names return ``None`` (callers
+    (#1005); registered aliases (``mbb``, ``draine2021_pah``, ``dl07``, ``dl14``) are
+    declared like the model they alias. Unknown names return ``None`` (callers
     treating "no native grid" as a fall-back to SSP coverage degrade gracefully).
     """
     if name is None or name in _GRIDLESS_DUST_EMISSION:
         return None
     if name in _ANALYTIC_DUST_EMISSION:
         return np.asarray(_ANALYTIC_DUST_WAVE_AA)
-    # Handle aliases: pah_drude, modified_blackbody, etc.
-    if name in _DUST_ALIASES:
-        if name == "draine2021_pah":
-            name = "pah_drude"
-        elif name == "mbb":
-            name = "modified_blackbody"
     candidates = _DUST_EMISSION_TEMPLATES.get(name)
     if candidates is None:
         logger.debug("No native-grid declaration for dust emission %r", name)
@@ -340,7 +346,12 @@ def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
     if candidates is None:
         logger.debug("No native-grid declaration for torus block %r", block)
         return None
-    return _first_present(candidates)
+    wave = _first_present(candidates)
+    stride = _TORUS_DECLARATION_STRIDE.get(block, 1)
+    if wave is None or stride == 1:
+        return wave
+    keep = np.unique(np.append(np.arange(0, wave.size, stride), wave.size - 1))
+    return wave[keep]
 
 
 def native_wave_agn_disc(block: str | None) -> np.ndarray | None:

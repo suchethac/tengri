@@ -1,95 +1,99 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract test: all torus, disc, and dust-emission blocks must declare wavelength support.
+"""Contract (#2564): every registered emitter declares its wavelength support.
 
-Issue #2564: Ensure every registered torus and dust-emission model either declares
-its native wavelength grid support or is explicitly listed as grid-less.
+The master rest-frame grid is the union of the SSP grid and each attached
+component's *declared* native grid (``tengri.forward.wavelength_extension``).
+A block that emits outside, or finer than, the SSP grid but declares nothing is
+silently sampled on the SSP grid: the IR peak moves, the submm tail is cut and
+energy-normalised blocks are renormalised over the truncated window. So every
+registered dust-emission model and AGN torus block must be in exactly one of
+
+* a tabulated declaration (template axis),
+* an analytic declaration (synthetic support grid), or
+* an explicit grid-less list (no emission of its own),
+
+and every AGN disc block must either declare support or appear in
+``_DISC_WITHOUT_DECLARED_SUPPORT`` below with the reason. A newly registered
+block therefore fails this test until someone decides which it is.
 """
+
+from __future__ import annotations
 
 import pytest
 
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
-from tengri.forward.wavelength_extension import (
-    _AGN_TORUS_TEMPLATES,
-    _ANALYTIC_DUST_EMISSION,
-    _ANALYTIC_TORUS,
-    _DUST_EMISSION_TEMPLATES,
-    _GRIDLESS_DUST_EMISSION,
-    _GRIDLESS_TORUS,
-    native_wave_agn_disc,
-    native_wave_agn_torus,
-    native_wave_dust_emission,
-)
+from tengri.forward import wavelength_extension as we
 
 pytestmark = pytest.mark.contract
 
-
-class TestDustEmissionWavelengthSupport:
-    """Every registered dust-emission model must declare wavelength support."""
-
-    def test_all_dust_models_have_support(self):
-        """All dust emission models must have either grid or explicit gridless entry."""
-        missing_support = []
-        for name in sorted(DUST_EMISSION_MODELS.keys()):
-            wave = native_wave_dust_emission(name)
-            if wave is None:
-                missing_support.append(name)
-
-        if missing_support:
-            pytest.fail(
-                f"Dust-emission models without declared wavelength support: {missing_support}\n"
-                f"Each model must either:\n"
-                f"  1. Appear in _DUST_EMISSION_TEMPLATES dict (tabulated)\n"
-                f"  2. Be listed in _ANALYTIC_DUST_EMISSION (analytic models)\n"
-                f"  3. Be listed in _GRIDLESS_DUST_EMISSION (no emission of their own)\n"
-                f"See issue #2564 and wavelength_extension.py for details."
-            )
-
-
-class TestTorusWavelengthSupport:
-    """Every registered torus block must declare wavelength support."""
-
-    def test_all_torus_blocks_have_support(self):
-        """All torus blocks must have either grid or explicit gridless entry."""
-        torus_blocks = AGN_BLOCKS.get("torus", {})
-        missing_support = []
-        for name in sorted(torus_blocks.keys()):
-            # Check if block is declared in one of the support dicts/sets
-            is_declared = (
-                name in _AGN_TORUS_TEMPLATES
-                or name in _ANALYTIC_TORUS
-                or name in _GRIDLESS_TORUS
-            )
-            if not is_declared:
-                missing_support.append(name)
-
-        if missing_support:
-            pytest.fail(
-                f"Torus blocks without declared wavelength support: {missing_support}\n"
-                f"Each block must be added to one of:\n"
-                f"  1. _AGN_TORUS_TEMPLATES (tabulated templates)\n"
-                f"  2. _ANALYTIC_TORUS (analytic models)\n"
-                f"  3. _GRIDLESS_TORUS (no emission of their own)\n"
-                f"See issue #2564 for details."
-            )
+# Discs that declare nothing, with the measured reason (default parameters,
+# L_bol = 1e11 Lsun, energy outside the SSP window 91 A - 160 um; #2564).
+# Analytic discs evaluate on whatever grid they are handed, so a declaration
+# would be an analytic support range: a separate, larger change with its own
+# regression risk (the disc normalisation changes for every model using them).
+_DISC_WITHOUT_DECLARED_SUPPORT = {
+    "none": "no emission",
+    "adaf": "analytic X-ray ADAF, 99 % of the energy below 91 A (physically an X-ray block)",
+    "adaf_lopez2024": "analytic, 1 % beyond 160 um",
+    "grahsp_sbpl": "analytic broken power law, energy inside the SSP window",
+    "kubota_done": "analytic, 21 % of the energy below 91 A (follow-up: analytic EUV support)",
+    "multicolor": "analytic, 2.5 % below 91 A",
+    "powerlaw": "analytic power law, 39 % beyond 160 um by construction",
+    "qsogen": "analytic, energy inside the SSP window",
+    "richards2006": "energy outside the SSP window < 0.1 %",
+    "schartmann2005": "analytic, 0.3 % below 91 A",
+    "schartmann2005_skirtor_atten": "analytic, 0.3 % below 91 A",
+    "skirtor": "analytic, 15 % below 91 A (follow-up: analytic EUV support)",
+    "slone_netzer": "template axis 450 A - 3e7 A, no energy outside the SSP window",
+}
 
 
-class TestDiscWavelengthSupport:
-    """Every registered disc block should have wavelength support (but may truncate gracefully)."""
+def _torus_declared(name: str) -> bool:
+    return name in we._AGN_TORUS_TEMPLATES or name in we._ANALYTIC_TORUS or name in we._GRIDLESS_TORUS
 
-    def test_disc_blocks_with_no_support(self):
-        """Report disc blocks without support; measurement needed to decide if fix required."""
-        disc_blocks = AGN_BLOCKS.get("disc", {})
-        missing_support = []
-        for name in sorted(disc_blocks.keys()):
-            wave = native_wave_agn_disc(name)
-            if wave is None:
-                missing_support.append(name)
 
-        # Unlike torus and dust, discs emit mostly inside SSP range.
-        # Report as a warning for now, but mention they should be checked.
-        if missing_support:
-            pytest.warns(
-                UserWarning,
-                match=f"Disc blocks without wavelength support: {', '.join(missing_support)}"
-            )
+def _dust_declared(name: str) -> bool:
+    return (
+        name in we._DUST_EMISSION_TEMPLATES
+        or name in we._ANALYTIC_DUST_EMISSION
+        or name in we._GRIDLESS_DUST_EMISSION
+    )
+
+
+def test_every_dust_emission_model_declares_support():
+    missing = sorted(n for n in DUST_EMISSION_MODELS if not _dust_declared(n))
+    assert not missing, (
+        f"dust-emission models without declared wavelength support: {missing}. Add each to "
+        "_DUST_EMISSION_TEMPLATES, _ANALYTIC_DUST_EMISSION or _GRIDLESS_DUST_EMISSION (#2564)."
+    )
+
+
+def test_every_torus_block_declares_support():
+    missing = sorted(n for n in AGN_BLOCKS["torus"] if not _torus_declared(n))
+    assert not missing, (
+        f"torus blocks without declared wavelength support: {missing}. Add each to "
+        "_AGN_TORUS_TEMPLATES, _ANALYTIC_TORUS or _GRIDLESS_TORUS (#2564)."
+    )
+
+
+def test_every_disc_block_declares_support_or_is_listed_with_a_reason():
+    undeclared = {n for n in AGN_BLOCKS["disc"] if n not in we._AGN_DISC_TEMPLATES}
+    unlisted = sorted(undeclared - set(_DISC_WITHOUT_DECLARED_SUPPORT))
+    assert not unlisted, (
+        f"disc blocks with neither a declared native grid nor a listed reason: {unlisted} (#2564). "
+        "Measure the energy outside the SSP window and declare, or list with the measurement."
+    )
+
+
+def test_disc_reason_list_has_no_stale_entries():
+    stale = sorted(
+        n
+        for n in _DISC_WITHOUT_DECLARED_SUPPORT
+        if n not in AGN_BLOCKS["disc"] or n in we._AGN_DISC_TEMPLATES
+    )
+    assert not stale, f"entries that are unregistered or now declared, remove them: {stale}"
+
+
+def test_no_torus_block_is_both_declared_and_gridless():
+    assert not (set(we._AGN_TORUS_TEMPLATES) | set(we._ANALYTIC_TORUS)) & set(we._GRIDLESS_TORUS)

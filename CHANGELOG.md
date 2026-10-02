@@ -126,6 +126,20 @@
   truncated grid — a sampling defect that shifted IR peak wavelengths by up to
   7%. Contract test ensures newly registered blocks cannot regress (#2564).
 
+- Every registered AGN torus block and dust-emission model now declares its
+  wavelength support, so `SEDModel.build` samples it on its own grid instead of
+  the SSP grid. The AGNfitter-lineage torus blocks (`nenkova_agnfitter*`,
+  `skirtor_agnfitter*`), `cat3d_wind_lowfwd`, `fritz`, `nenkova`, the analytic
+  tori, `schreiber2018` and `dh02_ce01` had none: their IR peak sat on an
+  SSP node (20 or 40 µm; native 19-31 µm), and the two tabulated dust models were cut at
+  160 µm and renormalised there (3-1000 µm band mean up to 1.9x, 160-1000 µm
+  fraction 2.2-3.6x). `kd18_agnfitter` discs, 28 % of whose energy is below the
+  SSP edge, now carry their native axis and are no longer renormalised over the
+  91 Å - 160 µm window. `nenkova_agnfitter`'s 4096-point axis is declared at
+  stride 4. A contract test fails for any newly registered torus, dust-emission
+  or disc block that neither declares support nor is listed with a reason
+  (#2564).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
