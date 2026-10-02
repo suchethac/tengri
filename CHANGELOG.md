@@ -112,6 +112,12 @@
   thermal continuum on a 0.01 µm–10 mm rest-frame grid, so 70–1000 µm filters read the
   band-averaged closure to 1e-3 instead of zero; the grid ended at 31.6 µm (#2642).
 
+- The `richards2006` disc template read its L_nu [erg/s/Hz] column as nu*F_nu and divided
+  by nu, putting its nu*L_nu peak at 3055 Å instead of the quasar big blue bump near 1260 Å
+  and its 1 µm / 10 µm levels +0.57 / +1.57 dex too high. The crossval test applied the
+  same misreading; a units contract now pins the L_nu reading against Richards et al. 2006
+  Table 3 and guards against future regression (#2563).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
