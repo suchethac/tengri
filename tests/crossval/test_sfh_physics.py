@@ -124,11 +124,11 @@ class TestExponentialSFHPhysics:
             assert mean_peak > mean_present, "Exponential SFH should peak at start lookback time"
 
 
-# ── 3. DELAYED EXPONENTIAL — peaks at start + tau ─────────────────
+# ── 3. DELAYED EXPONENTIAL — peaks at start − tau ─────────────────
 
 
 class TestDelayedExponentialPhysics:
-    """Delayed exponential: SFR(t) ∝ (t_lookback - start) * exp(-(t_lookback-start)/tau)."""
+    """Delayed exponential: SFR ∝ dt · exp(−dt/tau), dt = start − t_lookback, in [0, start]."""
 
     def test_peaks_after_start(self):
         """SFR should NOT peak at start — peak is displaced by tau.

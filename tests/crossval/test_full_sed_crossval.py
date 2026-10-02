@@ -732,16 +732,14 @@ class TestSFRNormalization:
 class TestDelayedTauSFH:
     """Cross-validate the delayed-exponential (dexp) SFH against FSPS and color checks.
 
-    tengri dexp: SFR(t_lb) ∝ (dt/tau) × exp(-dt/tau + 1) where dt = t_lb - start.
-    Peak at dt = tau (i.e. t_lb = start + tau).
+    tengri dexp: SFR(t_lb) ∝ (dt/tau) × exp(-dt/tau + 1) with dt = start - t_lb,
+    inside the window [0, start]. Peak at dt = tau (i.e. t_lb = start - tau).
     FSPS sfh=4 (delayed tau): SFR(t_cosmic) ∝ t × exp(-t/tau).
     Peak at t_cosmic = tau after formation.
 
     These parameterizations are equivalent when:
-      tengri start = 0 (SF starts now, lookback 0)
-      tengri end = large (SF extends far into the past)
+      tengri start = FSPS tage (the onset lookback is the age of the galaxy)
       tengri tau = tau_fsps
-      FSPS tage = age of galaxy
     Both peak at tau Gyr after galaxy formation.
     """
 
