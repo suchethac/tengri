@@ -61,18 +61,18 @@ $python_exe run_candels_fits.py --only-missing
 `adoption_pass: true`, reusing that JSON for the summary table and `fit_summary.json`, and runs
 every other cell. Without the flag the driver runs all nine cells, as before.
 
-**Retune policy (per cell, in `fit_one.py`):** attempt 1 uses a diagonal mass matrix at
-`target_accept_rate` 0.85; attempt 2 keeps the same warmup and raises `target_accept_rate` to
-0.95; attempt 3 keeps the same warmup again and raises it to 0.99; attempt 4 and each further
-attempt keep 0.99 and double the warmup. The step size is therefore tuned twice, at the base
-warmup, before the expensive knob is touched — measured on cell 13097/III (600 warmup + 4×600
-draws, D = 11), attempt 1 at 0.85 missed the bar on 77/2400 divergences at max R̂ 1.012 after
-5741 s, and percent-level divergences are a step-size problem (the standard remedy is a higher
-`adapt_delta`). The mass matrix is never switched to dense by a retune — on cell 13097/II
-(D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂ 1.0014 and the
-old dense-mass retune gave 79/2400 at 1.023. The default is 3 attempts. Config III stops
-at the 0.95 rung (2 attempts) because its met ceiling is the SSP grid extent and the
-residual edge divergences are structural.
+**Retune policy (per cell, in `fit_one.py`):** the default ladder has two rungs. Attempt 1
+uses a diagonal mass matrix at `target_accept_rate` 0.85; attempt 2 keeps the same warmup and
+raises `target_accept_rate` to 0.95. The step size is therefore tuned once, at the base
+warmup, before the target acceptance rate is touched — measured on cell 13097/III (600 warmup +
+4×600 draws, D = 11), attempt 1 at 0.85 missed the bar on 77/2400 divergences at max R̂
+1.012 after 5741 s, and percent-level divergences are a step-size problem (the standard remedy
+is a higher `adapt_delta`). The mass matrix is never switched to dense by a retune — on cell
+13097/II (D = 8), attempt 1 on a diagonal mass matrix gave 3/2400 divergences at max R̂ 1.0014
+and the old dense-mass retune gave 79/2400 at 1.023. Passing `--retune-attempts 3` adds a third
+rung at `target_accept_rate` 0.99 (measured cost 3–5× the first rung and adopted none of cells
+79/II, 15336/II, 16455/II; row VI launched without profiling paid ~4× per attempt), and attempt
+4+ keeps 0.99 and doubles the warmup.
 
 **Every missed attempt is saved before the next one starts.** Once an attempt returns a
 posterior that misses the bar, the best attempt so far is written to `results/fits/<ID>_<config>.npz`

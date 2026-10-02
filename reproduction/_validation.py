@@ -40,8 +40,9 @@ The band-averaged luminosity density is
     \\, d\\lambda}{\\int T(\\lambda) w(\\lambda)\\, d\\lambda},
 
 with :math:`w = 1/\\lambda` for photon-counting detectors (``"photon"``, what
-tengri, DSPS, FSPS, sedpy and prospector default to) and :math:`w = 1/\\lambda^2`
-for energy-counting (``"energy"``, CIGALE's and bagpipes' convention). See
+tengri, DSPS, FSPS, sedpy, prospector and bagpipes default to) and
+:math:`w = 1/\\lambda^2` for energy-counting (``"energy"``, CIGALE's convention for its
+energy-type filters). See
 :class:`tengri.utils.filter_convention.FilterConvention`, which carries the
 references.
 
@@ -265,8 +266,8 @@ def band_average(
         Filter wavelength [Angstrom] and transmission.
     weight : {"photon", "energy"}, optional
         Bandpass weight :math:`w(\\lambda)`: ``"photon"`` uses
-        :math:`1/\\lambda` (default; tengri, DSPS, FSPS, prospector),
-        ``"energy"`` uses :math:`1/\\lambda^2` (CIGALE, bagpipes).
+        :math:`1/\\lambda` (default; tengri, DSPS, FSPS, prospector, bagpipes),
+        ``"energy"`` uses :math:`1/\\lambda^2` (CIGALE, energy-type filters).
 
     Returns
     -------
