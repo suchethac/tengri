@@ -318,36 +318,47 @@ class TestFullModelIdentities:
     def test_fesc_one_birth_cloud_holes_matches_tau_bc_zero_reference(
         self, synthetic_ssp_wide, synthetic_tophat_obs, eb
     ):
-        # At fesc=1, 'birth_cloud_holes' young light == young SED x T_diff,
-        # i.e. the SAME answer as pinning tau_bc=0 outright (no birth-cloud
-        # screen at all) -- a model this feature did not have to introduce
-        # a new formula to express a special case of.
+        # At fesc=1, 'birth_cloud_holes' young light == young SED x T_diff
+        # for EVERY age (escape_geometry_transmission's own construction,
+        # not merely for the mass near y_age ~ 1) -- the SAME answer as
+        # pinning tau_bc=0 outright (no birth-cloud screen at all: T_bc^y
+        # with tau_bc=0 is 1 for any y, too), so this holds to machine
+        # precision regardless of how much of the SSP age grid actually
+        # saturates y_age -> 1.
         ssp, obs = synthetic_ssp_wide, synthetic_tophat_obs
-        m_holes = _build(ssp, obs, fesc=1.0, geometry="birth_cloud_holes", eb=eb, age_gyr=0.0005)
-        m_ref = _build(ssp, obs, fesc=1.0, geometry="screened", eb=eb, age_gyr=0.0005, tau_bc=0.0)
+        m_holes = _build(ssp, obs, fesc=1.0, geometry="birth_cloud_holes", eb=eb, age_gyr=0.003)
+        m_ref = _build(ssp, obs, fesc=1.0, geometry="screened", eb=eb, age_gyr=0.003, tau_bc=0.0)
         sed_holes = _sed_attenuated(m_holes)
         sed_ref = _sed_attenuated(m_ref)
-        np.testing.assert_allclose(sed_holes, sed_ref, rtol=2e-2)
+        np.testing.assert_allclose(sed_holes, sed_ref, rtol=1e-6)
 
     @pytest.mark.parametrize("eb", [False, True])
     def test_fesc_one_clear_matches_fully_unattenuated_reference(
         self, synthetic_ssp_wide, synthetic_tophat_obs, eb
     ):
+        # tau_diff=0.0 on BOTH models isolates the identity from how much of
+        # the SSP age grid actually saturates y_age -> 1 (the old
+        # population, and the covered young sub-beam, both reduce to
+        # T_diff = 1 here identically, so 'clear' at fesc=1 collapses to
+        # EXACTLY 1 at every age via escape_geometry_transmission's own
+        # construction -- not merely approximately for the mass near
+        # y_age ~ 1). tau_bc stays nonzero on ``m_clear`` so the test still
+        # exercises the birth-cloud bypass, not a tau_bc=0 no-op.
         ssp, obs = synthetic_ssp_wide, synthetic_tophat_obs
-        m_clear = _build(ssp, obs, fesc=1.0, geometry="clear", eb=eb, age_gyr=0.0005)
+        m_clear = _build(ssp, obs, fesc=1.0, geometry="clear", eb=eb, age_gyr=0.003, tau_diff=0.0)
         m_ref = _build(
             ssp,
             obs,
             fesc=1.0,
             geometry="screened",
             eb=eb,
-            age_gyr=0.0005,
+            age_gyr=0.003,
             tau_bc=0.0,
             tau_diff=0.0,
         )
         sed_clear = _sed_attenuated(m_clear)
         sed_ref = _sed_attenuated(m_ref)
-        np.testing.assert_allclose(sed_clear, sed_ref, rtol=2e-2)
+        np.testing.assert_allclose(sed_clear, sed_ref, rtol=1e-6)
 
 
 # ---------------------------------------------------------------------------
