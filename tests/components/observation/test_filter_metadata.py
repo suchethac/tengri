@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for filter metadata: effective wavelength, FWHM, facility inference.
 
-Frozen: λ_eff formula (∫T·λ·dλ / ∫T·dλ) reproduces known centers (Gaussian,
+Frozen: pivot formula sqrt(∫T·λ·dλ / ∫T/λ·dλ) reproduces analytic values (Gaussian,
 top-hat); FWHM formula (width at half-max) matches analytical values; wavelength
 formatting (Å/μm/cm ranges); facility inference from filter names; filter_info
 returns complete dict with physical values in expected ranges.
@@ -50,19 +50,26 @@ def tophat_filter():
 
 
 class TestComputeEffectiveWavelength:
-    """Frozen: λ_eff = ∫T·λ·dλ / ∫T·dλ reproduces centers."""
+    """Frozen: the pivot sqrt(∫T·λ·dλ / ∫T/λ·dλ) matches analytic band definitions."""
 
-    def test_gaussian_centered(self, gaussian_filter):
-        """Gaussian transmission → λ_eff ≈ center (6000 Å)."""
+    def test_gaussian_pivot_matches_quadrature_and_sits_below_center(self, gaussian_filter):
+        """Gaussian (6000 Å, σ=300 Å): pivot equals fine-grid quadrature, below the center."""
         wave, trans = gaussian_filter
-        lam_eff = compute_effective_wavelength(wave, trans)
-        assert lam_eff == pytest.approx(6000.0, abs=5.0)
+        fine = np.linspace(wave[0], wave[-1], 400001)
+        t_fine = np.exp(-0.5 * ((fine - 6000.0) / 300.0) ** 2)
+        expected = np.sqrt(np.trapezoid(t_fine * fine, fine) / np.trapezoid(t_fine / fine, fine))
+        lam_p = compute_effective_wavelength(wave, trans)
+        assert lam_p == pytest.approx(expected, rel=1e-6)
+        assert lam_p < 6000.0
 
-    def test_tophat_midpoint(self, tophat_filter):
-        """Uniform transmission → λ_eff = midpoint (6000 Å)."""
+    def test_tophat_pivot_matches_closed_form_and_sits_below_midpoint(self, tophat_filter):
+        """Top-hat [a, b]: pivot = sqrt(((b²-a²)/2) / ln(b/a)), below the midpoint."""
         wave, trans = tophat_filter
-        lam_eff = compute_effective_wavelength(wave, trans)
-        assert lam_eff == pytest.approx(6000.0, abs=2.0)
+        a, b = 5000.0, 7000.0
+        expected = np.sqrt(((b**2 - a**2) / 2.0) / np.log(b / a))
+        lam_p = compute_effective_wavelength(wave, trans)
+        assert lam_p == pytest.approx(expected, rel=1e-6)
+        assert lam_p < 0.5 * (a + b)
 
     def test_zero_transmission_returns_zero(self):
         """All-zero transmission → λ_eff = 0."""

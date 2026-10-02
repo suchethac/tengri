@@ -9,11 +9,12 @@ contributes relative to the cold diffuse component: a *smaller* alpha puts more
 mass at high :math:`U`, shifting the FIR peak blueward and filling in the
 mid-IR.
 
-tengri ships the FSPS/DustEM THEMIS templates (alpha=2.0); the alpha axis is
-added by re-shaping them with CIGALE's DustEM alpha grid, anchored so that
-``alpha = 2.0`` reproduces the FSPS template exactly
-(``scripts/build_themis_alpha_axis.py``). This sweeps alpha at fixed grain
-composition and radiation-field minimum.
+tengri ships the FSPS/DustEM THEMIS templates at the default ``alpha = 2.0``
+and tabulates the ``U^-alpha`` component for ``alpha`` from 1.0 to 3.0 separately
+for each a-C(:H) grain composition (``qhac``), from the CIGALE THEMIS database
+(Jones et al. 2017; Draine & Li 2007, Eq. 23); ``alpha = 2.0`` is the FSPS
+template exactly (``scripts/build_themis_alpha_axis.py``). This sweeps alpha at
+fixed grain composition and radiation-field minimum.
 """
 
 import os

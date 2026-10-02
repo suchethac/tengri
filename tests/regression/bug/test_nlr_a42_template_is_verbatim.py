@@ -67,12 +67,13 @@ _PUBLISHED_A42_FLUXES = (
     0.02, 0.10, 0.33, 0.09, 0.79, 2.86, 2.13, 0.03, 0.77, 0.65, 0.19,
 )  # fmt: skip
 
-#: Vacuum wavelengths [Angstrom] of the three forbidden doublets, as
+#: Vacuum wavelengths [Angstrom] of the three forbidden doublets (the values of
+#: ``observation/eline_catalog.py``, except [O I] 6363, which it does not list), as
 #: ``(strong, weak, tabulated ratio, atomic ratio, why it deviates)``.
 _DOUBLETS = (
-    (5008.31, 4960.37, 8.53 / 2.87, 2.98, "agrees to within the table's rounding"),
-    (6585.37, 6549.96, 2.13 / 0.79, 2.94, "[N II] 6548 is weak and on the H-alpha wing"),
-    (6302.14, 6365.64, 0.33 / 0.09, 3.00, "[O I] 6363 is tabulated to one significant figure"),
+    (5008.24, 4960.30, 8.53 / 2.87, 2.98, "agrees to within the table's rounding"),
+    (6585.28, 6549.86, 2.13 / 0.79, 2.94, "[N II] 6548 is weak and on the H-alpha wing"),
+    (6302.05, 6365.64, 0.33 / 0.09, 3.00, "[O I] 6363 is tabulated to one significant figure"),
 )
 
 

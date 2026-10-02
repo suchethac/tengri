@@ -308,6 +308,53 @@ velocity dispersion:
 is the galaxy's stellar velocity dispersion; it reaches the stellar kernel
 only.
 
+### Order of operations: kinematics, IGM, and the instrument (#2589)
+
+When an IGM component is configured (`igm={'type': 'inoue14'}` or similar),
+the stellar piece's kernel is applied in two physically ordered stages
+instead of one combined convolution:
+
+1. **Stellar kinematics** (`sigma_v_kms`, intrinsic to the source): applied
+   to the stellar piece alone, on the rest-frame model grid, before the
+   IGM transmission multiplies the light. A galaxy's own velocity
+   dispersion cannot broaden a line-of-sight absorption feature imprinted
+   after the light has left the galaxy.
+2. **IGM transmission**: multiplies the already-kinematically-broadened
+   stellar piece and the nebular/shock piece alike (observed-frame, on the
+   model grid).
+3. **Instrument stage**: the stellar piece gets
+   `sqrt(sigma_inst(lambda)^2 * lsf_scale^2 - sigma_lib(lambda)^2)` (no
+   `sigma_v_kms` term -- already applied in stage 1); nebular/shock get
+   `sigma_inst(lambda) * lsf_scale` as before.
+
+The library deconvolution therefore lands on the instrument stage alone,
+which is where the galaxy's own kinematics and the SSP library's
+resolution genuinely compete (`sigma_v_kms < sigma_lib(lambda)` is common:
+galaxy LOSVDs of 100-400 km/s against SSP libraries resolved to 15-90
+km/s). The IGM's sharp Lyman-limit / Lyman-alpha-forest edge consequently
+carries the library-deconvolved instrument width rather than the
+undeconvolved one -- an approximation bounded by the ratio
+`sigma_lib(lambda) / sigma_inst(lambda)`, strictly smaller than the
+`sigma_v_kms`-sized error the pre-#2589 single combined kernel produced
+whenever `sigma_v_kms >~ sigma_lib(lambda)`. With no IGM component
+configured, this split is a no-op: the single combined kernel of the
+previous section is used unchanged.
+
+**Cross-code comparison.** Prospector applies the mean-IGM transmission
+inside the FSPS call, before `smoothspec` convolves with the stellar
+velocity dispersion (`SpecModel.predict_init`, Johnson et al. 2021, ApJS,
+254, 22, arXiv:2012.01426); BAGPIPES applies its IGM transmission before
+the velocity-dispersion convolution in
+`model_galaxy._calculate_full_spectrum` (Carnall et al. 2018, MNRAS, 480,
+4379, arXiv:1712.04452). tengri applies stellar kinematics first instead:
+the Lyman-limit and Lyman-alpha-forest edges (Inoue et al. 2014, MNRAS,
+442, 1805, arXiv:1402.0677; Madau 1995, ApJ, 441, 18) are imprinted on the
+galaxy's already-kinematically-broadened light along the line of sight,
+external to the galaxy, and are only smeared afterward by the instrument
+-- the order used throughout the Lyman-break galaxy spectroscopy
+literature (e.g. Steidel et al. 1996, ApJ, 462, L17; Steidel et al. 2003,
+ApJ, 592, 728, arXiv:astro-ph/0305378).
+
 ### Free instrument-resolution scale
 
 `lsf_scale` (default: `Fixed(1.0)`, free prior `Uniform(0.8, 1.2)`,
