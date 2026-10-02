@@ -181,8 +181,12 @@
   outer radius, shared by `multicolor` and the K&D disc, was 1.67x too large: Laor &
   Netzer's `alpha^{2/9}` had been written `(alpha/0.1)^{2/9}` against the 10^9 M_sun
   normalization (qsosed, RELQSO and K&D 2018 use `2150 alpha^{2/9} m9^{-2/9} mdot^{4/9}`).
-  With it, `test_kd18_vs_agnfitter` passes at all nine nodes (the (8, 0) node at 0.005 dex)
-  (#2572).
+  With it, `test_kd18_vs_agnfitter` passes at all nine nodes (the (8, 0) node at 0.005 dex).
+  The `kubota_done`, `multicolor` and `powerlaw` discs no longer normalize on the caller's
+  wavelength grid: the warm-ring blackbody power, the disc bolometric and the EUV-tail budget
+  are closed form, the tail excess and the `powerlaw` band sit on fixed internal nodes, so an
+  SED value at a wavelength no longer moves (up to 4e-3 at 10-912 A, 3.7e-2 for `multicolor`
+  on coarse grids) with the grid it is evaluated on (#2572).
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;

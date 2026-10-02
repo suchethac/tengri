@@ -523,30 +523,33 @@ _AGN_MBH_DUST = {
 # +0.28%, +0.13% against round 3 at mbh 6, 8, 10; rest_sed_0 -26%, +44%, -3%). Round 5
 # (#2572) corrected the Laor & Netzer self-gravity radius (alpha^{2/9}, not (alpha/0.1)^{2/9}:
 # R_out 1.67x smaller), which moved mbh 6 and 8 again (rest_sed_sum -0.02%, -0.19%;
-# rest_sed_0 +0.4%, +2.4%; mbh 10 sits on the 10 r_isco floor and is unchanged). The
+# rest_sed_0 +0.4%, +2.4%; mbh 10 sits on the 10 r_isco floor and is unchanged).
+# Round 7 (#2572) made the disc normalizations closed-form (ring blackbody power, EUV tail),
+# independent of the caller's grid: rest_sed_sum +1.3e-6 at mbh 6 and <1e-7 at 8 and 10;
+# rest_sed_0 -0.29% at mbh 6, +6e-6 at 8, -2e-7 at 10. The
 # 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
 # the tree it is captured on.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.522019856433821e32,
-        "rest_sed_0": 1.5949436379969758e23,
-        "rest_sed_mid": 3.0594848431257745e28,
-        "rest_sed_last": 8.775344546314201e21,
-        "photometry": (1.0989648378305642e-27, 1.5711790389513042e-27, 1.7648176630656776e-27),
+        "rest_sed_sum": 1.5220218591116609e32,
+        "rest_sed_0": 1.5903783799081077e23,
+        "rest_sed_mid": 3.059488539745631e28,
+        "rest_sed_last": 8.775344956875398e21,
+        "photometry": (1.0989664300276457e-27, 1.5711790531026397e-27, 1.7648176670707843e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5576833824657742e32,
-        "rest_sed_0": 2.38322824959459e24,
-        "rest_sed_mid": 3.1402931063671695e28,
-        "rest_sed_last": 8.793894533363636e21,
-        "photometry": (1.1317061875932764e-27, 1.5717910440359082e-27, 1.7649948192703954e-27),
+        "rest_sed_sum": 1.5576834947559201e32,
+        "rest_sed_0": 2.383241900361217e24,
+        "rest_sed_mid": 3.140293400772146e28,
+        "rest_sed_last": 8.793894646155111e21,
+        "photometry": (1.1317063002281215e-27, 1.5717910477614792e-27, 1.764994820348198e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5580908633312397e32,
-        "rest_sed_0": 2.5942032816481453e24,
-        "rest_sed_mid": 3.137210357997451e28,
-        "rest_sed_last": 8.925752673051914e21,
-        "photometry": (1.1281169770255344e-27, 1.5777076807385118e-27, 1.766194881160471e-27),
+        "rest_sed_sum": 1.5580908762814158e32,
+        "rest_sed_0": 2.5942028439031613e24,
+        "rest_sed_mid": 3.1372103913087018e28,
+        "rest_sed_last": 8.925752647249021e21,
+        "photometry": (1.1281169892638984e-27, 1.5777076796192765e-27, 1.7661948809241624e-27),
     },
 }
 

@@ -113,6 +113,24 @@ _LOG10_L_EDD_1MSUN: float = math.log10(
 _L_EDD_1MSUN_LSUN: float = float(
     4.0 * math.pi * _G_GRAV * _MSUN_G * _M_PROTON * _C_LIGHT / _SIGMA_T
 ) / float(_LSUN_ERG)
+# ENERGY BUDGET AS IMPLEMENTED (kept explicit for the L_bol / inclination work that builds on it).
+# Every disc annulus is ``L_nu = pi * B_nu(T) * 2 pi r dr * cos i`` (``_ring_area``): the
+# isotropic-equivalent luminosity of ONE face of the ring seen at inclination i. Its frequency
+# integral is therefore ``sigma T^4 * 2 pi r dr * cos i``: ONE face, projected by cos i (the 0.01
+# floor of ``_ring_area`` applies), NOT two faces and NOT cos-free. ``_BNU_BOL_PER_T4 * T^4`` is
+# int B_nu dnu, i.e. sigma T^4 / pi; the ring power is that times ``_ring_area``. The same
+# one-face, cos-i-weighted ring power is what the bolometric normalizers sum (``l_bol_outer`` and
+# ``l_bol_warm`` in ``_compute_zone_luminosities``, ``disc_bol_lsun`` in ``multicolor_disc``).
+# The hot corona enters ``kubota_done``'s normalizer as its FULL power
+# ``l_hot_erg = f_hard L_Edd`` (K&D 2018 Eq. 2's two-face dissipation, no cos i), and ``l_seed``
+# is not summed: it only sets Gamma_hot.
+# int B_nu(T) dnu = (2 pi^4 k^4 / 15 h^3 c^2) T^4 = sigma_Planck T^4 / pi, built from the very
+# h, k, c that ``planck_lnu`` uses so the identity is exact for it (it differs from the tabulated
+# sigma_SB by the constants' rounding). [erg s^-1 cm^-2 Hz^0 sr^-1 K^-4]. Used wherever a ring
+# or disc bolometric content is needed: analytic, never a quadrature on the caller's grid (#2572).
+_BNU_BOL_PER_T4: float = float(
+    2.0 * math.pi**4 * _K_BOLTZ**4 / (15.0 * _H_PLANCK**3 * _C_LIGHT**2)
+)
 # 4*pi*sigma_SB / L_sun; l0_lsun = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4.
 _4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
 # 2*pi*sigma_SB / L_sun; per-annulus (sigma T^4 * 2*pi*r*dr) energy in L_sun.
@@ -126,6 +144,10 @@ _LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
 _GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
+
+
+#: Internal normalization band of ``powerlaw_disc`` [Angstrom] (descending = ascending nu).
+_PL_BAND_AA = np.geomspace(1.0e8, 10.0, 2049)
 
 
 def powerlaw_disc(
@@ -185,9 +207,10 @@ def powerlaw_disc(
     :math:`T_{\\rm max}` is the cutoff temperature [K].
 
     The normalization constant :math:`C` is computed numerically by integrating
-    the shape over the wavelength grid via the trapezoidal rule, ensuring that
-    the integral over frequency equals the target luminosity
-    :math:`L_{\\rm bol} \\cdot f_{\\rm disc}`.
+    the shape over the fixed band 10 A - 1e8 A (2049 log-spaced internal nodes; the
+    caller's wavelength grid plays no part), so that the integral over frequency of the
+    shape over that band equals the target luminosity
+    :math:`L_{\\rm bol} \\cdot f_{\\rm disc}` and the SED is the same on any grid.
 
     **Approximation**: This model is a simplified representation of the true
     accretion disc spectrum, which consists of multiple temperature zones
@@ -214,10 +237,12 @@ def powerlaw_disc(
     x_clip = jnp.clip(x, 0.0, 500.0)
     shape = nu**agn_alpha * jnp.exp(-x_clip)
 
-    # Normalize: integrate shape * dnu over the grid via trapezoid
-    # Sort by increasing nu for integration (reuse shape via indices)
-    sort_idx = jnp.argsort(nu)
-    integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
+    # Normalize over the FIXED band [_PL_LAMBDA_HI, _PL_LAMBDA_LO] (log-spaced internal nodes), not
+    # over the caller's grid: the same SED must come out whichever grid it is evaluated on (#2572).
+    nu_int = _wavelength_to_nu(jnp.asarray(_PL_BAND_AA, dtype=nu.dtype))
+    x_int = jnp.clip(_H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
+    shape_int = nu_int**agn_alpha * jnp.exp(-x_int)
+    integral = jnp.trapezoid(shape_int, nu_int)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
@@ -526,9 +551,42 @@ _EUV_TAIL_LAMBDA_BREAK_AA = 912.0  # [A] Lyman limit: onset of the EUV tail
 _EUV_TAIL_LAMBDA_CUT_AA = 30.0  # [A] short-wavelength floor (~0.41 keV)
 _EUV_TAIL_DEFAULT_SLOPE = 1.0  # L_nu ~ nu^slope (CIGALE-skirtor-like rise)
 _EUV_TAIL_FRAC = 0.02  # tail bolometric budget as a fraction of L_disc
+_C_AA_PER_S = float(_C_LIGHT) * 1.0e8  # c [A/s]
 
 
-def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
+def _euv_tail_slope(euv_tail):
+    """Static slope of the EUV tail, or ``None`` when the tail is off."""
+    if euv_tail is None or euv_tail == "wien":
+        return None
+    if euv_tail in ("powerlaw", "both"):
+        return _EUV_TAIL_DEFAULT_SLOPE
+    return float(euv_tail)
+
+
+def _euv_tail_lnu(wavelength, nu, slope, amplitude):
+    """EUV tail ``amplitude * (nu/nu_break)^slope`` on 30-912 A, 0 elsewhere. [erg/s/Hz]"""
+    nu_break = _wavelength_to_nu(jnp.asarray(_EUV_TAIL_LAMBDA_BREAK_AA))
+    in_euv = (wavelength <= _EUV_TAIL_LAMBDA_BREAK_AA) & (wavelength >= _EUV_TAIL_LAMBDA_CUT_AA)
+    return jnp.where(in_euv, (nu / nu_break) ** slope, 0.0) * amplitude
+
+
+def _euv_tail_shape_integral(slope):
+    r"""``int (nu/nu_break)^s dnu`` over the 30-912 A band, closed form [Hz].
+
+    :math:`\nu_b/(s+1)\,[(\nu_c/\nu_b)^{s+1} - 1]` (``nu_b ln(nu_c/nu_b)`` for ``s = -1``).
+    """
+    nu_b = _C_AA_PER_S / _EUV_TAIL_LAMBDA_BREAK_AA  # plain floats: static, safe under jit/grad
+    nu_c = _C_AA_PER_S / _EUV_TAIL_LAMBDA_CUT_AA
+    if abs(slope + 1.0) < 1e-12:
+        return nu_b * math.log(nu_c / nu_b)
+    return nu_b / (slope + 1.0) * ((nu_c / nu_b) ** (slope + 1.0) - 1.0)
+
+
+#: Internal nodes for the EUV-band excess integral (log-spaced, 912 A -> 30 A = ascending nu).
+_EUV_BAND_AA = np.geomspace(_EUV_TAIL_LAMBDA_BREAK_AA, _EUV_TAIL_LAMBDA_CUT_AA, 1025)
+
+
+def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail, disc_bol_lsun):
     r"""Blend an EUV / soft-X-ray power-law tail onto a Wien-cutoff thin disc.
 
     Parameters
@@ -547,6 +605,9 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
           slope ``_EUV_TAIL_DEFAULT_SLOPE``. ``"both"`` is a synonym; the Wien
           core is always preserved (the tail only fills where it exceeds Wien).
         * float: user-defined slope :math:`s` with :math:`L_\nu \propto \nu^s`.
+    disc_bol_lsun : float
+        Bolometric luminosity of the Wien disc, analytic (sum of the ring Stefan-Boltzmann
+        powers), independent of the caller's grid. [L_sun]
 
     Returns
     -------
@@ -565,43 +626,29 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     (``_EUV_TAIL_FRAC``, default 2 %) of the disc's pre-tail bolometric
     luminosity, a bounded "soft-excess"-like budget. (A bare power law
     anchored to the disc peak would diverge in energy and swamp the optical.)
-    It is blended via ``maximum`` so the UV/optical/Wien-peak region is
-    untouched: the tail only contributes where the Wien spectrum has already
-    fallen below it. The caller renormalizes the blended spectrum back to
-    :math:`L_{\rm bol}`, so total energy is conserved and the optical is
+    The shape integral and the disc bolometric are closed-form, so the amplitude does not
+    depend on the wavelength grid the SED is evaluated on (#2572). It is blended via
+    ``maximum`` so the UV/optical/Wien-peak region is untouched: the tail only contributes
+    where the Wien spectrum has already fallen below it. The caller renormalizes the blended
+    spectrum back to :math:`L_{\rm bol}`, so total energy is conserved and the optical is
     reduced only by the ~2 % moved into the EUV.
     """
-    if euv_tail is None or euv_tail == "wien":
+    slope = _euv_tail_slope(euv_tail)
+    if slope is None:
         return l_nu_wien
-    if euv_tail in ("powerlaw", "both"):
-        slope = _EUV_TAIL_DEFAULT_SLOPE
-    else:
-        slope = float(euv_tail)
-
-    nu_break = _wavelength_to_nu(jnp.asarray(_EUV_TAIL_LAMBDA_BREAK_AA))
-    in_euv = (wavelength <= _EUV_TAIL_LAMBDA_BREAK_AA) & (wavelength >= _EUV_TAIL_LAMBDA_CUT_AA)
-    # Power-law SHAPE on the EUV band only (zero elsewhere).
-    shape = jnp.where(in_euv, (nu / nu_break) ** slope, 0.0)
-
-    # Normalize the tail to a fixed fraction of the disc bolometric so the
-    # EUV budget is bounded regardless of slope. Integrate over frequency
-    # (sort ascending; nu descends as wavelength ascends).
-    sort_idx = jnp.argsort(nu)
-    shape_bol = jnp.maximum(jnp.abs(jnp.trapezoid(shape[sort_idx], nu[sort_idx])), 1e-100)
+    # amplitude in erg/s/Hz: FRAC * L_disc / int shape dnu. Folding L_sun in last keeps the
+    # ~1e43 erg/s disc bolometric (past float32's 3.4e38) from ever forming (#1206).
     if l_nu_wien.dtype == jnp.float32:
-        # Float32 (#1206): the disc bolometric integral ``trapz(l_nu_wien, nu)`` ~
-        # 1e28 erg/s/Hz over ~1e15 Hz is ~1e43 erg/s: past float32 max (3.4e38).
-        # Peak-factor it (integrate the O(1) residual, carry the peak) and group
-        # the small factors (``frac · disc_bol/shape_bol`` ~ few·1e-4) before the
-        # ~1e28 peak so no out-of-range product materializes.
-        # stop_gradient: factorization constant, multiplied back below (#1436).
+        # Float32 (#1206/#1436): peak-factor the amplitude exactly as the grid-quadrature form did,
+        # so the reverse-mode cotangent products stay in range: ``disc_bol_hat`` is the O(1e-3..1)
+        # bolometric in units of the peak (stop_gradient constant, multiplied back).
         _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_wien)))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
-        _disc_bol_hat = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx] / _peak, nu[sort_idx]))
-        tail = shape * ((_EUV_TAIL_FRAC * _disc_bol_hat / shape_bol) * _peak)
+        _disc_bol_hat = disc_bol_lsun * (_LSUN_ERG / _peak)
+        amplitude = (_EUV_TAIL_FRAC * _disc_bol_hat / _euv_tail_shape_integral(slope)) * _peak
     else:
-        disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
-        tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
+        amplitude = (_EUV_TAIL_FRAC * disc_bol_lsun / _euv_tail_shape_integral(slope)) * _LSUN_ERG
+    tail = _euv_tail_lnu(wavelength, nu, slope, amplitude)
     return jnp.maximum(l_nu_wien, tail)
 
 
@@ -826,21 +873,54 @@ def multicolor_disc(
         return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)  # (n_radii, n_wave)
-    l_nu_intrinsic = jnp.sum(ring_contributions, axis=0)  # (n_wave,) [erg s^-1 Hz^-1]
+    l_nu_wien = jnp.sum(ring_contributions, axis=0)  # (n_wave,) [erg s^-1 Hz^-1]
+
+    # Bolometric content of the Wien disc, closed form: each ring radiates
+    # int B_nu dnu * area = (sigma_Planck T^4 / pi) * area. Folded in L_sun so the ~1e44 erg/s
+    # total is representable in float32 (#1206); no quadrature on the caller's grid (#2572).
+    _ring_area_all = jax.vmap(lambda rr, drr: _ring_area(rr, drr, agn_cos_inc))(r_grid, dr)
+    # Group the factors so no float32 intermediate leaves the normal range: (c * T^4) ~ 1e19 and
+    # (area / L_sun) ~ 1e0..1e3; the bare ``c / L_sun`` ~ 5e-39 is subnormal, flushed to 0 by XLA.
+    disc_bol_lsun = jnp.sum((_BNU_BOL_PER_T4 * t_profile**4) * (_ring_area_all / float(_LSUN_ERG)))
 
     # Optionally blend an EUV / soft-X-ray power-law tail onto the Wien core
     # before renormalizing, so the tail's energy is taken out of L_bol rather
     # than added on top (energy-conserving). Default "powerlaw" gives the disc
     # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
-    l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
+    l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail, disc_bol_lsun)
+
+    # Bolometric content of the BLENDED spectrum, in units of ``unit`` [erg/s]: the Wien disc plus
+    # what the tail adds where it exceeds Wien, int max(0, tail - wien) dnu, on fixed internal
+    # nodes across the 30-912 A band (the tail is zero outside it). Independent of the caller's
+    # grid (#2572). ``unit`` lets the float32 path carry O(1)-O(1e12) numbers (below) instead of
+    # ~1e43 erg/s, and keeps the reverse-mode cotangent of the band quadrature in range.
+    _slope = _euv_tail_slope(euv_tail)
+
+    def _blended_bol(unit):
+        disc_u = disc_bol_lsun * (_LSUN_ERG / unit)
+        if _slope is None:
+            return disc_u
+        _nu_b = _wavelength_to_nu(jnp.asarray(_EUV_BAND_AA, dtype=nu.dtype))
+        _tail_u = _euv_tail_lnu(
+            jnp.asarray(_EUV_BAND_AA),
+            _nu_b,
+            _slope,
+            _EUV_TAIL_FRAC * disc_u / _euv_tail_shape_integral(_slope),
+        )
+        _wien_u = jnp.sum(
+            jax.vmap(
+                lambda rr, tt, drr: (
+                    _planck_lnu(_nu_b, tt) * (_ring_area(rr, drr, agn_cos_inc) / unit)
+                )
+            )(r_grid, t_profile, dr),
+            axis=0,
+        )
+        return disc_u + jnp.trapezoid(jnp.maximum(_tail_u - _wien_u, 0.0), _nu_b)
 
     # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
     # ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
     # luminosity above).
-    # Sort by ascending frequency before integrating (nu descends when wave ascends).
-    # Using jnp.abs() on a descending-x trapezoid is brittle: sort explicitly.
-    _nu = _wavelength_to_nu(wavelength)
-    _sort_idx = jnp.argsort(_nu)
+    # The bolometric normalization below is closed-form / on fixed internal nodes (#2572).
     if wavelength.dtype == jnp.float32:
         # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
         # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
@@ -878,13 +958,15 @@ def multicolor_disc(
         _norm = jax.lax.stop_gradient(jnp.sum(jnp.abs(_over_peak)))
         _norm = jnp.where(_norm > 0.0, _norm, 1.0)
         _l_hat = _over_peak / _norm
-        _hat_total = jnp.trapezoid(_l_hat[_sort_idx], _nu[_sort_idx])
-        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
-        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
-        # branch (the float32 one) was the guard providing nothing. A zero
-        # integral would take log10 to -inf and the scale to inf. Returns
-        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
-        _log_hat_total = jnp.log10(jnp.maximum(jnp.abs(_hat_total), _representable_floor(1e-100)))
+        # The bolometric of ``_l_hat`` is the closed-form total over the same two constants it
+        # was divided by (kept in log space: ~1e43 erg/s is past float32).
+        # Closed-form bolometric of ``_l_hat``, in its own units (peak * norm): grid-independent,
+        # and every factor stays O(1)..O(1e12), so neither the forward nor the reverse-mode
+        # products leave float32 range (#1439). ``representable_floor``, not the bare 1e-100
+        # (#1492): float32's smallest subnormal is 1.4e-45, so the literal IS 0.0 there.
+        _log_hat_total = jnp.log10(
+            jnp.maximum(_blended_bol(_peak * _norm), _representable_floor(1e-100))
+        )
         # The result's own peak, so it is in range whenever the output is.
         _scale_hat = _pow10(_log_l_bol_req - _log_hat_total)
         # optimization_barrier: without it XLA is free to re-associate
@@ -894,7 +976,7 @@ def multicolor_disc(
         return jax.lax.optimization_barrier(_l_hat) * _scale_hat
 
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
-    l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
+    l_nu_total = _blended_bol(1.0)
     l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
     scale = l_bol_requested / l_nu_total_safe
 
@@ -1406,8 +1488,10 @@ def _compute_zone_luminosities(
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
-        b_nu_plain = _planck_lnu(nu, t_ring)
-        p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
+        # Ring blackbody power per unit area: int B_nu dnu = (sigma_Planck/pi) T^4, closed form.
+        # (It was trapz(B_nu, nu) on the CALLER's grid, which moved the SED by 4e-3 between
+        # grids of different extent and density: #2572.)
+        p_plain = _BNU_BOL_PER_T4 * t_ring**4
         kTbb_keV = _K_BOLTZ_KEV * t_ring
         shape = _nthcomp_lnu_interp(
             nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table
