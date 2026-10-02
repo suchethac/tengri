@@ -356,6 +356,22 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: strict/relaxed energy balance exactly as before. A static Python bool,
     #: not a traced value, so both branches stay JIT-clean.
     log_l_ir_requested: bool = False
+    #: Whether the HII-region dust-heating credit (#2539 item 3) can ever be
+    #: nonzero, resolved from spec provenance by
+    #: ``SEDModel._fdust_credit_active`` and frozen here the same way
+    #: :attr:`log_l_ir_requested` is. ``True`` when ``neb_fdust_frac`` is a
+    #: FREE parameter or Fixed at a nonzero value; ``False`` when it is
+    #: Fixed at exactly 0 or not declared at all (BakedIn backend, or no
+    #: nebular component built). ``False`` makes :meth:`apply` skip forming
+    #: ``energy_balance.log10_add_fdust_credit`` entirely -- including the
+    #: ``lyc_absorb_all=False`` young-weighted credit's own per-age
+    #: reduction, which (unlike the whole-population ``log_L_lyc`` key the
+    #: single/wg00 screens read) is recomputed locally every time and so is
+    #: NOT already elided by the absence of a nebular component -- via a
+    #: static Python ``if``, never a runtime ``where`` on a traced
+    #: ``f_dust``. ``True`` (default, including a component built directly
+    #: with no spec to ask) keeps the smooth combine, unchanged.
+    fdust_credit_active: bool = True
 
 
 @dataclass(frozen=True)

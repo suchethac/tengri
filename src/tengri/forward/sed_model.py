@@ -10689,6 +10689,44 @@ class SEDModel:
             | per_screen_reads
         )
 
+    def _fdust_credit_active(self) -> bool:
+        """Whether the HII-region dust-heating credit (#2539 item 3) can be nonzero.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``neb_fdust_frac`` is a FREE parameter (its value
+            can move away from 0 during fitting, so the smooth combine's
+            nonzero gradient at ``f_dust == 0`` is needed) or Fixed at a
+            value other than exactly 0. ``False`` when it is Fixed at
+            exactly 0 -- the registry default -- or not declared at all
+            (BakedIn backend, whose ``declared_parameters()`` is empty, or
+            no nebular component built at all, ``nebular_backend=None``):
+            in both of those cases the credit is structurally zero for
+            every possible evaluation of this model, not merely at the
+            current parameter vector.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time provenance lookup, the same
+        value-aware shape as ``_warn_agn_dust_double_count``'s
+        ``_positive_active`` helper: a free parameter counts as active
+        unconditionally (its value is not yet known), a Fixed parameter
+        counts only if its value is nonzero. Threaded into
+        ``WG00AttenuationSEDComponentConfig`` /
+        ``DustAttenuationSEDComponentConfig`` / ``DustSEDComponentConfig``'s
+        ``fdust_credit_active`` field (one decision point, computed once,
+        not re-derived per consumer) so ``apply()`` can skip forming
+        ``energy_balance.log10_add_fdust_credit`` entirely via a static
+        Python ``if`` -- never a runtime ``where`` on the traced value of
+        ``f_dust``.
+        """
+        free = set(self.spec.free_params)
+        if "neb_fdust_frac" in free:
+            return True
+        fixed = self.spec.get_fixed_values()
+        return float(fixed.get("neb_fdust_frac", 0.0)) != 0.0
+
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
 
@@ -10869,6 +10907,7 @@ class SEDModel:
             dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
+            dust_fdust_credit_active=self._fdust_credit_active(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
             astrodust_f_cnm=float(getattr(self, "_astrodust_f_cnm", 0.28)),
