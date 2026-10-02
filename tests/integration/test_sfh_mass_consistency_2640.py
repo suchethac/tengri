@@ -7,13 +7,9 @@ Verifies that ∫ sfr_history d(lookback), restricted to the support
 reproducer. The published SFR history must carry the same mass-conserving
 rescale as the age weights so the integral matches the formed mass.
 
-The support restriction uses :func:`window_weight`'s exact trapezoid-
-consistent partial-cell convention (the same one ``component.py`` uses to
-compute the rescale): a plain boolean mask double-counts or drops the one
-grid cell straddling the ``age(z)`` boundary and differs from the true
-identity by a fraction of a percent on this grid, purely from that cell --
-not a fair test of the fix. With ``window_weight`` the identity holds to
-float64 precision by construction.
+The published history is bounded to ``[0, age(z)]`` (it has a node exactly at
+``age(z)``) and carries the factor that makes its own plain trapezoid equal the
+formed mass, so the identity is tested on the published arrays with no mask.
 """
 
 from pathlib import Path
@@ -47,9 +43,19 @@ _Z = 0.1
 
 
 def _trapz_inside_support(sfr, lbt_yr, age_z_yr):
-    """Plain integral of the published history (it is already zero beyond age(z))."""
-    assert np.all(np.asarray(sfr)[np.searchsorted(lbt_yr, age_z_yr) + 1 :] == 0.0)
-    return float(np.trapezoid(np.asarray(sfr), lbt_yr))
+    """Plain integral of the published history, after checking its support.
+
+    The history has a node exactly at age(z) and every older node collapses
+    onto it: no node lies beyond age(z) (to the grid's float32 resolution) and
+    the trapezoid area over cells starting at age(z) is exactly zero.
+    """
+    sfr = np.asarray(sfr)
+    lbt = np.asarray(lbt_yr)
+    assert lbt.max() <= age_z_yr * (1.0 + 1e-6)
+    beyond = lbt[:-1] >= age_z_yr * (1.0 - 1e-6)
+    area_beyond = np.sum((0.5 * (sfr[1:] + sfr[:-1]) * np.diff(lbt))[beyond])
+    assert area_beyond == 0.0
+    return float(np.trapezoid(sfr, lbt))
 
 
 @pytest.fixture(scope="module")

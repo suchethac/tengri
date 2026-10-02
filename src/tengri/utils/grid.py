@@ -127,11 +127,12 @@ def interpolate_to_linear_time(
         Number of points in the output linear grid.
     age_at_z_gyr : float, optional
         Cosmic age at the model redshift [Gyr]. When given, the resampled
-        values are multiplied by the output grid's own cell-overlap window on
-        ``[0, age(z)]`` (exactly zero at every output node beyond it), so the
-        interpolation ramp between a window-boundary node and the next node
-        cannot place star formation before the Big Bang. ``None`` (default)
-        leaves the values unbounded.
+        values are multiplied by the output grid's own cell-overlap weight of
+        ``[0, age(z)]`` (partial weight for the straddling cell) and are
+        exactly zero at every output node beyond ``age(z)``. The AXIS stays
+        redshift independent, so histories of different draws (posterior SFH
+        bands) share one abscissa. ``None`` (default) leaves the values
+        unbounded.
 
     Returns
     -------
@@ -146,7 +147,10 @@ def interpolate_to_linear_time(
     log_t_linear = jnp.log10(t_linear_yr)
     values_linear = jnp.interp(log_t_linear, log_age_grid, values)
     if age_at_z_gyr is not None:
-        from tengri.components.stellar.component import support_window
+        from tengri.components.stellar.sfh.mean_sfh import window_weight
 
-        values_linear = values_linear * support_window(t_linear_yr, age_at_z_gyr)
+        age_yr = age_at_z_gyr * 1e9
+        values_linear = (
+            values_linear * window_weight(t_linear_yr, 0.0, age_yr) * (t_linear_yr <= age_yr)
+        )
     return t_linear_yr / 1e9, values_linear

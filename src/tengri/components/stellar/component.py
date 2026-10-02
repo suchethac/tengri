@@ -34,7 +34,6 @@ import jax
 import jax.numpy as jnp
 
 from tengri._x64_hold import hold_x64_preference
-from tengri.components.stellar.sfh.mean_sfh import window_weight
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.host_array import device_table, host_array
@@ -1089,29 +1088,62 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
 
 
-def support_window(lbt_grid_yr, t_obs_gyr):
-    """Cell-overlap weight of ``[0, age(z)]``, exactly zero at every node beyond age(z).
+def collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr):
+    r"""Put a node exactly at ``age(z)``: every node beyond it collapses onto it.
 
-    ``window_weight`` gives the node straddling ``age(z)`` a partial weight;
-    a node just BEYOND ``age(z)`` can also carry a partial weight (its cell
-    reaches below ``age(z)``), which would publish star formation at
-    ``t > age(z)``. That node is zeroed; the rescale factor is measured on
-    the same zeroed array, so the integral still equals the formed mass.
+    ``t_pub = where(t <= age(z), t, age(z))`` (static shape). The SFR at a
+    collapsed node is the history linearly interpolated at ``age(z)`` between
+    its bracketing native nodes -- the same interpolant the plain trapezoid
+    assumes -- so the trapezoid over ``(t_pub, sfr_pub)`` is the exact
+    integral of that interpolant on ``[0, age(z)]``; collapsed cells have zero
+    width and contribute nothing. No partial weights, no zeroed node.
+
+    Parameters
+    ----------
+    sfr : array_like, shape (n_grid,)
+        SFR on the ascending lookback grid [Msun/yr].
+    lbt_grid_yr : array_like, shape (n_grid,)
+        Lookback grid [yr].
+    t_obs_gyr : float
+        Cosmic age at the redshift [Gyr].
+
+    Returns
+    -------
+    t_pub : ndarray, shape (n_grid,)
+        Non-decreasing grid ending at ``min(t_max, age(z))`` [yr].
+    sfr_pub : ndarray, shape (n_grid,)
+        SFR on ``t_pub`` [Msun/yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes, ``jnp.where`` + ``jnp.interp`` only.
     """
     t = jnp.asarray(lbt_grid_yr)
-    return window_weight(t, 0.0, t_obs_gyr * 1e9) * (t <= t_obs_gyr * 1e9)
+    age_yr = t_obs_gyr * 1e9
+    inside = t <= age_yr
+    s_age = jnp.interp(age_yr, t, sfr)
+    return jnp.where(inside, t, age_yr), jnp.where(inside, sfr, s_age)
+
+
+def history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
+    """The one uniform factor that makes the published history carry ``target_mass``.
+
+    Measured by the plain trapezoid on the :func:`collapse_to_support` grid;
+    ``1`` when that integral is zero.
+    """
+    t_pub, s_pub = collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr)
+    mass = jnp.trapezoid(s_pub, t_pub)
+    ok = mass > representable_denominator(1e-30)
+    return jnp.where(ok, target_mass / jnp.where(ok, mass, 1.0), 1.0)
 
 
 def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
-    r"""Publish an SFR history bounded to ``[0, age(z)]`` and carrying ``target_mass``.
+    r"""Publish ``(t_pub, sfr_pub)``: bounded to ``[0, age(z)]``, integrating to ``target_mass``.
 
     The single mechanism behind every published SFR history (the stellar
-    component's ``sfr_history`` and the ``SEDModel`` plotting/quantity routes):
-    multiply by :func:`~tengri.components.stellar.sfh.mean_sfh.window_weight`
-    on ``[0, age(z)]`` (zero beyond, partial weight for the one straddling
-    cell), then by the single uniform factor that makes
-    :math:`\int \mathrm{SFR}\,dt` over the grid equal ``target_mass``
-    (not applied when the windowed integral is zero).
+    component's ``sfr_history`` and the ``SEDModel`` routes):
+    :func:`collapse_to_support`, then the one uniform
+    :func:`history_rescale_factor`.
 
     Parameters
     ----------
@@ -1126,30 +1158,37 @@ def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
 
     Returns
     -------
-    ndarray, shape (n_grid,)
-        Bounded, rescaled SFR [Msun/yr]; ``trapezoid(out, lbt_grid_yr) ==
-        target_mass`` to float precision.
+    t_pub, sfr_pub : ndarray, shape (n_grid,)
+        ``trapezoid(sfr_pub, t_pub) == target_mass`` to round-off, no node and
+        no trapezoid area beyond ``age(z)``.
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes, elementwise + ``jnp.where`` on a safe argument.
+    **JIT/grad/vmap-safe**: yes.
     """
-    factor = history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
-    return sfr * factor * support_window(lbt_grid_yr, t_obs_gyr)
+    t_pub, s_pub = collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr)
+    return t_pub, s_pub * history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
 
 
-def history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
-    """The one uniform factor that makes the windowed history carry ``target_mass``.
+def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr):
+    """Pin a tabulated history's formed mass on EVERY age kernel (#2621).
 
-    ``1`` when the windowed integral is zero. Shared by
-    :func:`bounded_rescaled_history` and the resampled ``SEDModel.predict_sfh``
-    output, which resamples the un-windowed ``sfr * factor`` and applies the
-    output grid's own window (#2640).
+    The table family declares no ``log_total_mass`` in the SFH kwargs, so
+    :func:`_mass_conserving_total` leaves the kernel's own measurement (the
+    "dsps" histogram kernel mis-measures a bursty table by tens of percent).
+    The pinned mass is the declaration ``sfh_table_log_total_mass`` when one is
+    given, else the table's own integral over its support inside
+    ``[0, age(z)]`` (trapezoid of the table rows, plus the interpolated value at
+    ``age(z)``). Not applied when the kernel measured nothing.
     """
-    windowed = sfr * support_window(lbt_grid_yr, t_obs_gyr)
-    mass = jnp.trapezoid(windowed, lbt_grid_yr)
-    ok = mass > representable_denominator(1e-30)
-    return jnp.where(ok, target_mass / jnp.where(ok, mass, 1.0), 1.0)
+    if tab_lbt_yr is None:
+        return total_mass
+    if "sfh_table_log_total_mass" in params:
+        target = 10.0 ** jnp.asarray(params["sfh_table_log_total_mass"])
+    else:
+        t_pub, s_pub = collapse_to_support(sfh_fn(tab_lbt_yr), tab_lbt_yr, t_obs_gyr)
+        target = jnp.trapezoid(s_pub, t_pub)
+    return jnp.where(total_mass > representable_denominator(1e-30), target, total_mass)
 
 
 def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):
@@ -1507,11 +1546,11 @@ def _tabulated_sfh(params, t_obs_gyr):
     ``sfh_t_gyr``/``sfh_sfr`` (the table family has no declared registry
     params: the table IS the SFH):
 
-    - ``sfh_table_age_gyr`` : an age cut (CIGALE ``sfhfromfile`` convention,
-      #2621). When given, rows with lookback > ``age_gyr`` are zeroed (not
-      dropped -- the table's own nodes stay the knot set for
-      :func:`_inject_edge_knots`), so ``SFR(now)`` matches the table's own
-      value at that cut rather than an older row it never asked for.
+    - ``sfh_table_age_gyr`` : an age cut in lookback time (#2621). When given,
+      rows with lookback > ``age_gyr`` are zeroed (not dropped -- the table's
+      own nodes stay the knot set for :func:`_inject_edge_knots`): the RECENT
+      ``age_gyr`` of the table is kept and "now" stays at the observation
+      time, so ``SFR(now)`` is the table's own value there.
     - ``sfh_table_log_total_mass`` : when given, the (possibly age-cut)
       table is rescaled by a single constant factor so its integral over its
       own support equals ``10**log_total_mass`` exactly, matching the "one
@@ -3268,6 +3307,7 @@ class StellarSEDComponent:
         # branch, so a future kernel cannot silently skip it.
         measured_total_mass = total_mass
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
         # #2644: an SFH that is identically zero inside the support cannot be
         # rescaled to the declared mass -- on EITHER kernel. ``measured_total_mass``
         # above is a genuine trapezoid of the (already support-bounded) SFR on
@@ -3314,37 +3354,16 @@ class StellarSEDComponent:
                     ZeroSFHWarning,
                     stacklevel=2,
                 )
-        # Apply the same mass-conserving rescale to the SFR history so that
-        # ∫ sfr_history d(lookback), restricted to the support [0, age(z)],
-        # equals 10**log_total_mass (the declared mass) -- not the measured
-        # truncated mass (#2640). The rescale is a *uniform* factor applied
-        # to the entire history, matching the rescale on the age weights.
-        #
-        # The factor is measured ON ``sfr_history``'s OWN grid
-        # (``sfh_lbt_grid``), not from ``measured_total_mass`` above: that
-        # quantity comes from a DIFFERENT quadrature (the dense CIC
-        # integrand, or DSPS's per-SSP-age table for a GP field), and a
-        # single scalar cannot reconcile two different discretizations of a
-        # (possibly bursty, field-modulated) history to the tight tolerance
-        # the published-history identity needs -- it would at best match
-        # the AGGREGATE over the two grids' mismatched supports, not the
-        # per-grid integral the identity actually checks. Measuring and
-        # correcting on ``sfr_history``'s own grid makes the identity hold
-        # by construction, to float precision, independent of whichever
-        # kernel ("cic" or "dsps") produced ``measured_total_mass`` for the
-        # SED/flux path above (left untouched).
-        #
-        # ``window_weight`` gives the exact trapezoid-consistent cell
-        # coverage of ``[0, age(z)]`` (partial weight for the one grid cell
-        # straddling the boundary), so
-        # ``trapezoid(sfr_history * support_weight, sfh_lbt_grid)`` carries
-        # the support's mass exactly -- the same partial-cell convention
-        # #2567 already uses for z-capped onsets elsewhere in this module.
-        # The published history is also zeroed beyond age(z) by the same
-        # ``window_weight`` (partial boundary cell), so the PLAIN integral over
-        # the published grid equals the formed mass and no star formation is
-        # published before the Big Bang (#2640).
-        sfr_history = bounded_rescaled_history(sfr_history, sfh_lbt_grid, t_obs_gyr, total_mass)
+        # Published history (#2640): a node is put exactly at age(z) (nodes
+        # beyond collapse onto it, SFR from the same interpolant the
+        # trapezoid assumes) and one uniform factor, measured by the plain
+        # trapezoid on that grid, makes its integral equal the formed mass.
+        # The factor is measured on the history's own grid because the
+        # kernel's ``measured_total_mass`` comes from a different quadrature
+        # (dense CIC integrand / DSPS per-SSP-age table).
+        sfh_grid_pub, sfr_history = bounded_rescaled_history(
+            sfr_history, sfh_lbt_grid, t_obs_gyr, total_mass
+        )
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -3424,8 +3443,8 @@ class StellarSEDComponent:
 
         # ── 9. SFR averages on the SFH grid ─────────────────────────────
         sfr_now = sfr_history[0]
-        sfr_10myr = _time_weighted_sfr(sfr_history, sfh_lbt_grid, 1e7)
-        sfr_100myr = _time_weighted_sfr(sfr_history, sfh_lbt_grid, 1e8)
+        sfr_10myr = _time_weighted_sfr(sfr_history, sfh_grid_pub, 1e7)
+        sfr_100myr = _time_weighted_sfr(sfr_history, sfh_grid_pub, 1e8)
 
         # ── 10. Bolometric L per SSP age bin ────────────────────────────
         # ν = c/λ ⟹ |dν| = c/λ² dλ. Trapezoid in wavelength with the
@@ -3570,7 +3589,7 @@ class StellarSEDComponent:
             age_weights=age_weights,
             log_nion=log_nion,
             nion=nion,
-            sfh_grid_lbt_yr=sfh_lbt_grid,
+            sfh_grid_lbt_yr=sfh_grid_pub,
             sfr_history=sfr_history,
             log_metallicity_history=log_metallicity_history,
             # Published for downstream (dust two-component attenuation
@@ -4176,6 +4195,7 @@ class StellarSEDComponent:
         # function never sees a composite (list) ``sfh_model``: indexing
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
         return joint_weights, total_mass, ssp_ages_yr
 
     def compute_log_nion(self, params, ssp_data=None):

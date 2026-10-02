@@ -3221,8 +3221,8 @@
 
 ### Changed
 
-- The published `sfr_history`, `predict_sfh` (native and linear grids) and the SFR averages now carry the formed mass and are exactly zero beyond `age(z)`: their plain integral equals `10**log_mstar_formed` (ratio 4.0e4 and 4.7 off before for `dpl + field` with onset beyond `age(z)`); the linear grid agrees to ~1e-4 (steps 4e-3) (#2640).
-- `sfh={'type': 'table'}` is zero outside its table instead of edge-clamped (a falling table normalized to 1 Msun formed 13.27 Msun, now 0.9993 = its own integral); optional `sfh_table_age_gyr` cut and `sfh_table_log_total_mass` rescale (#2621).
+- The published `sfr_history`, `predict_sfh` (native and linear grids) and the SFR averages now carry the formed mass and end at `age(z)` (a node sits exactly there; the area beyond it is 0, was 0.56 to 0.97 of the formed mass for `dpl` with onset beyond `age(z)`): the plain integral equals `10**log_mstar_formed` on the native grid and to 5e-4 on the 1000-node linear grid. In default models this moves `sfr_10myr`/`sfr_100myr` (continuity +1.75e-2 at z = 0, +4.5e-3 at z = 2.5, nearer the dense integral; `dpl`/`delayed` defaults whose onset exceeds `age(z)` now form the declared mass), `ugriz` photometry by at most 2e-6 (young-sliver change), stellar mass by 0 (#2640).
+- `sfh={'type': 'table'}` is zero outside its table instead of edge-clamped (a falling table normalized to 1 Msun formed 13.27 Msun, now 0.9993 = its own integral); optional `sfh_table_age_gyr` (zero the table beyond that lookback, keeping its recent part) and `sfh_table_log_total_mass` rescale (#2621).
 - A zero SFH forms zero mass on both age kernels (`dsps` published the declared 1e9) with a `ZeroSFHWarning`; the default `delayed_bq` `age_bq_gyr` prior is bounded to 0.5 Gyr so quench-before-formation is not drawn (explicit priors unchanged) (#2644).
 
 ## [0.1.0] - 2026-05-22

@@ -3,10 +3,9 @@
 out of scope here): every GP-field realization of a ``['delayed', 'field']``
 composite forms the DECLARED mass, not merely the ensemble mean.
 
-Before #2640/#2521's mass-conserving machinery reached the published SFR
-history, the field modulation was applied AFTER mass normalization with no
-further correction, so each draw formed a different mass (reported: declared
-1 Msun, 200 draws, mean 0.996, std 0.228, range 0.62-2.15). pcigale's
+Every draw's published history integrates to the declared mass (the
+per-draw pin of ``_mass_conserving_total`` plus the factor on the published
+``sfr_history``), so the mass does not scatter with the field draw. pcigale's
 ``sfhstochastic_carvajal2025`` (``normalise=True``) returns 1.000000 for
 every seed. DECISION (overrulable by the owner): the declaration states the
 formed mass of each realization; the per-draw normalization is already

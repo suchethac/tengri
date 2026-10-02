@@ -3,10 +3,11 @@
 
 The stellar component's ``sfr_history`` and the ``SEDModel`` routes
 (``predict_sfh``, ``predict_sfh_quantities``) publish ONE history: windowed to
-the support by ``window_weight`` and rescaled by a single factor, so the PLAIN
-integral over the published grid equals ``10**log_mstar_formed`` (float
-precision on the native grid) and no star formation is published before the
-Big Bang.
+the support by putting a node exactly at ``age(z)`` (nodes beyond collapse onto
+it) and rescaled by a single factor, so the PLAIN integral over the published
+grid equals ``10**log_mstar_formed`` (float precision on the native grid), no
+node and no trapezoid area lies beyond ``age(z)``, and the SFR averages are
+unbiased against an independent dense quadrature.
 """
 
 from __future__ import annotations
@@ -96,20 +97,20 @@ def test_published_histories_are_bounded_rescaled_and_agree(synthetic_ssp_wide, 
     sfr = np.asarray(st.derived["sfr_history"])
     formed = 10 ** float(st.derived["log_mstar_formed"])
 
-    # No star formation published before the Big Bang (partial boundary cell
-    # may straddle age(z); nothing strictly beyond the next node).
-    beyond = lbt > age_yr * (1.0 + 1e-9)
-    nxt = np.searchsorted(lbt, age_yr)  # first node beyond age(z)
-    assert np.all(sfr[nxt + 1 :] == 0.0), "published SFR beyond age(z)"
-    del beyond
+    # No node and no trapezoid area beyond the Big Bang: the grid ends at
+    # age(z) (nodes beyond it collapse onto it, zero-width cells).
+    assert lbt.max() <= age_yr * (1.0 + 1e-12)
+    over = lbt > age_yr * (1.0 + 1e-12)
+    assert not over.any()
+    assert np.all(np.diff(lbt) >= 0.0)
 
-    # The PLAIN integral equals the formed mass (window-weighted cell is
-    # part of the published array, so no hard-cut boundary-cell error).
+    # The PLAIN trapezoid is the formed mass to round-off.
     np.testing.assert_allclose(np.trapezoid(sfr, lbt), formed, rtol=1e-8)
 
     # predict_sfh (native grid) is the same history, and its mean is bounded
     # and rescaled to the same mass.
     out = model.predict_sfh(extra, grid="native")
+    np.testing.assert_allclose(np.asarray(out["t_gyr"]) * 1e9, lbt, rtol=1e-12)
     np.testing.assert_allclose(np.asarray(out["sfr_full"]), sfr, rtol=1e-10, atol=0.0)
     np.testing.assert_allclose(np.trapezoid(np.asarray(out["sfr_mean"]), lbt), formed, rtol=1e-8)
 
@@ -121,11 +122,13 @@ def test_resampled_linear_grid_is_bounded_and_carries_the_mass(
 ):
     """``predict_sfh(grid='linear')``: exactly zero beyond age(z); integral ~ formed.
 
-    The un-windowed rescaled history is resampled and the OUTPUT grid's own
-    window is applied after, so no interpolation ramp crosses age(z). The
+    The rescaled history is resampled on the redshift-independent axis and
+    the OUTPUT grid's own cell-overlap weight of ``[0, age(z)]`` is applied
+    (zero at every node beyond), so no interpolation ramp crosses age(z). The
     integral differs from the formed mass only by the resampling error of the
-    output grid (linear interpolation of the native history): < 1e-2 from
-    1000 nodes, < 1e-1 for a bursty field sampled on 200.
+    output grid: < 1e-3 for smooth families at 1000 nodes; a bursty field
+    sampled on a coarse grid is genuine sampling error (here < 1e-2 at 1000,
+    < 1e-1 at 200 nodes).
     """
     model = _build(synthetic_ssp_wide, sfh)
     age_gyr = float(age_at_z(Z))
@@ -139,3 +142,93 @@ def test_resampled_linear_grid_is_bounded_and_carries_the_mass(
         np.testing.assert_allclose(
             np.trapezoid(s, t * 1e9), formed, rtol=1e-2 if n_linear >= 1000 else 1e-1
         )
+
+
+def _dense_averages(model, z, nd=400001):
+    """Independent dense quadrature of the SFR averages of the declared-mass history."""
+    import jax.numpy as jnp
+
+    p = model._get_internal_params({})
+    kw = {
+        k: v
+        for k, v in p.items()
+        if k in model._sfh_internal_names or k in model._sfh_public_names
+    }
+    age = float(age_at_z(z)) * 1e9
+    t = np.concatenate([np.linspace(1.0, age, nd), np.geomspace(age * 1.0000001, 1.4e10, 2000)])
+    s = np.asarray(model._sfh_fn(jnp.asarray(t), **kw))
+    inside = t <= age
+    scale = 10**LOG_MASS / np.trapezoid(s[inside], t[inside])
+    out = {}
+    for name, win in (("sfr_10myr", 1e7), ("sfr_100myr", 1e8)):
+        m = t <= win
+        out[name] = scale * np.trapezoid(s[m], t[m]) / win
+    return out
+
+
+@pytest.mark.parametrize("z", [0.5, 2.5, 6.0])
+@pytest.mark.parametrize("family", ["dpl", "delayed"])
+def test_published_sfr_averages_match_dense_quadrature(synthetic_ssp_wide, family, z):
+    """sfr_10myr / sfr_100myr are unbiased against a dense quadrature, also at z = 6.
+
+    Measured bias of the 256-node log grid: <= 1.3e-3 (the grid's own
+    quadrature of the history, here 1.2e-3 at z = 6); tolerance is 3x that.
+    A zeroed node plus a partial weight at age(z) biased these by +1.4e-2 at z = 6.
+    """
+    sfh = {
+        "type": family,
+        "all_params": Fixed(DEFAULT),
+        "log_total_mass": Fixed(LOG_MASS),
+    }
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        sfh=sfh,
+        met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        dust_emission={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+    )
+    ref = _dense_averages(model, z)
+    d = model.predict_state({}).derived
+    for name in ("sfr_10myr", "sfr_100myr"):
+        assert float(d[name]) == pytest.approx(ref[name], rel=4e-3), name
+
+
+@pytest.mark.parametrize("z", [0.5, 6.0])
+def test_readers_tolerate_the_repeated_abscissa_at_age_of_universe(synthetic_ssp_wide, z):
+    """Readers of the published grid (repeated nodes at age(z)) stay correct.
+
+    ``Prediction`` resamples the history onto ``model.age_yr``: zero beyond
+    age(z), the history's own value at and just inside it. The
+    mass-weighted-metallicity bins (``gradient`` widths) and the SFR
+    averages integrate, so zero-width cells contribute nothing.
+    """
+    import jax.numpy as jnp
+
+    sfh = {"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(LOG_MASS)}
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        sfh=sfh,
+        met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        dust_emission={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+    )
+    age_yr = float(age_at_z(z)) * 1e9
+    pred = model.predict({})
+    pred._ensure_sfh()
+    sfr = np.asarray(pred._cache["sfr"])
+    ages = np.asarray(model.age_yr)
+    assert np.all(sfr[ages > age_yr] == 0.0)
+    assert sfr[ages <= age_yr].min() >= 0.0 and sfr[ages <= age_yr][-1] > 0.0
+
+    d = model.predict_state({}).derived
+    t, s = np.asarray(d["sfh_grid_lbt_yr"]), np.asarray(d["sfr_history"])
+    for x in (age_yr, age_yr * (1.0 - 1e-6)):
+        v = float(jnp.interp(x, t, s))
+        assert np.isfinite(v) and v == pytest.approx(s[t <= age_yr][-1], rel=1e-3)
+    q = model._predict_sfh_quantities({})
+    assert np.isfinite(float(q.mass_weighted_metallicity))
+    assert float(q.sfr_100myr) == pytest.approx(float(d["sfr_100myr"]), rel=1e-12)

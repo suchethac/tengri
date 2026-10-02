@@ -357,20 +357,6 @@ def test_composite_sfh_mass_conserved_in_aggregate(
     )
 
 
-def _window_weight_np(t_lookback, lo, hi):
-    """Numpy mirror of ``mean_sfh.window_weight`` for test-side verification."""
-    t = np.asarray(t_lookback, dtype=np.float64)
-    mid = 0.5 * (t[1:] + t[:-1])
-    edge_lo = np.concatenate([t[:1], mid])
-    edge_hi = np.concatenate([mid, t[-1:]])
-    cell_lo = np.minimum(edge_lo, edge_hi)
-    cell_hi = np.maximum(edge_lo, edge_hi)
-    width = cell_hi - cell_lo
-    overlap = np.clip(np.minimum(cell_hi, hi) - np.maximum(cell_lo, lo), 0.0, None)
-    safe_width = np.where(width > 0.0, width, 1.0)
-    return np.clip(overlap / safe_width, 0.0, 1.0)
-
-
 @pytest.mark.parametrize(
     "family,z,mult,age_kernel",
     [
@@ -388,12 +374,9 @@ def test_sfr_history_integral_equals_formed_mass(family, z, mult, age_kernel, sy
     the support) and truncated (2.0 x age(z), onset exceeds age(z): the
     #2640 regression case) regimes, on both age kernels.
 
-    The published history is multiplied by the ``window_weight`` partial-cell
-    window on ``[0, age(z)]`` and rescaled by one factor, so the PLAIN
-    integral over the published grid equals the formed mass to float64
-    precision (measured ~1e-15). A HARD cut at age(z) of the published array
-    would differ by ~0.7% (one boundary cell, measured on a smooth family);
-    that is the only quadrature caveat and it is not in the published array.
+    The published history ends at ``age(z)`` and carries one factor, so its
+    PLAIN trapezoid over the published grid equals the formed mass to float64
+    precision.
     """
     from tengri.utils.cosmology import age_at_z
 
@@ -475,7 +458,7 @@ def test_sfr_history_integral_equals_formed_mass_composite_field(synthetic_ssp_w
             formed_mass,
             rtol=1e-6,
             err_msg=(
-                f"dpl+field ({label} field): window_weight-consistent "
+                f"dpl+field ({label} field): published "
                 f"∫sfr_history = {trapz_support:.6e}, formed = {formed_mass:.6e}, "
                 f"ratio = {trapz_support / formed_mass:.8f}"
             ),

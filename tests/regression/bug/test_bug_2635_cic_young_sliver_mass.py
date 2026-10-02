@@ -97,8 +97,8 @@ def test_dsps_knot_clamp_overcount_is_bounded():
     in the last age0 years. The true sliver mass is 0.2 * age0 (SFR 1 only on
     [0.8, 1] age0); the one-knot cell cannot carry a negative SFR, so it carries
     SFR(age0) * age0 / 2 = 0.5 * age0: an over-count of 0.3 * age0, bounded by
-    the documented SFR(age0) * age0 / 2 (and below the pre-fix rectangle's
-    over-count of 0.8 * age0).
+    the documented SFR(age0) * age0 / 2 (and below the 0.8 * age0 of a
+    rectangle held at SFR(age0)).
     """
     import jax.numpy as jnp
 
@@ -118,3 +118,26 @@ def test_dsps_knot_clamp_overcount_is_bounded():
     assert overcount == pytest.approx(0.3 * age0, rel=0.05)
     assert overcount <= 0.5 * 1.0 * age0
     assert overcount < 0.8 * age0
+
+
+def test_dsps_knot_clamp_overcount_limit_history_vanishing_in_sliver():
+    """Limit M_sliver -> 0: the over-count reaches, and does not exceed, its bound.
+
+    SFR = 1 for lookback >= age0 and 0 strictly inside the sliver, so the true
+    sliver mass is 0 and the one-knot cell (clamped at v0 = 0) carries
+    SFR(age0) * age0 / 2 -- exactly the documented bound.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.stellar.component import _sliver_equivalent_sfr0
+
+    age0 = 3.0e5
+    ssp_ages = jnp.asarray([age0, 2 * age0, 4 * age0])
+
+    def sfh(t, **_):
+        return jnp.where(t >= age0, 1.0, 0.0)
+
+    v0 = float(_sliver_equivalent_sfr0(ssp_ages, sfh, {}))
+    assert v0 == 0.0
+    overcount = 0.5 * (v0 + 1.0) * age0 - 0.0
+    assert overcount == pytest.approx(0.5 * age0, rel=1e-6)
