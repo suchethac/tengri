@@ -81,6 +81,26 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
+# Rest-frame integration grid of the thermal-continuum models (modified_blackbody,
+# casey2012, graybody): 0.01 um to 10 mm, log-spaced. The closures normalize their SED
+# to L_absorbed by integrating over the grid they are given, and the far-IR/sub-mm
+# filters they feed (Herschel, SCUBA-2, ALMA) sit at 70 um - 3 mm, so the grid has to
+# contain the whole thermal bump and the bands.
+_CONTINUUM_LOG10_WAVE_AA_MIN = 2.0
+_CONTINUUM_LOG10_WAVE_AA_MAX = 8.0
+_CONTINUUM_N_WAVE = 1500
+
+
+def _continuum_wave_rest() -> np.ndarray:
+    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
+    return np.logspace(
+        _CONTINUUM_LOG10_WAVE_AA_MIN,
+        _CONTINUUM_LOG10_WAVE_AA_MAX,
+        _CONTINUUM_N_WAVE,
+        dtype=np.float64,
+    )
+
+
 def _build_grid_modified_blackbody(
     filter_waves: list,
     filter_trans: list,
@@ -114,8 +134,7 @@ def _build_grid_modified_blackbody(
     T_grid = np.asarray(T_grid, dtype=np.float64)
     beta_grid = np.asarray(beta_grid, dtype=np.float64)
 
-    # Standard rest-frame wavelength grid for integration
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
+    wave_rest = _continuum_wave_rest()
 
     # Precompute L_nu for each (T, beta) grid point
     phot_grid = []
@@ -192,8 +211,7 @@ def _build_grid_casey2012(
     alpha_mir_grid = np.asarray(alpha_mir_grid, dtype=np.float64)
     lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
 
-    # Standard rest-frame wavelength grid for integration
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
+    wave_rest = _continuum_wave_rest()
 
     # Precompute L_nu for each (T, beta, alpha_mir, lambda_0_um) grid point
     phot_grid = []
@@ -274,8 +292,7 @@ def _build_grid_graybody(
     beta_grid = np.asarray(beta_grid, dtype=np.float64)
     lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
 
-    # Standard rest-frame wavelength grid for integration
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
+    wave_rest = _continuum_wave_rest()
 
     # Precompute L_nu for each (T, beta, lambda_0_um) grid point
     phot_grid = []

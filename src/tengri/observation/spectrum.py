@@ -339,6 +339,65 @@ def _apply_lsf_variable_r(
     return result / total_weight
 
 
+def broaden_velocity_only(
+    flux: jnp.ndarray,
+    wave: jnp.ndarray,
+    sigma_v_kms: jnp.ndarray | float,
+    n_bins: int = 16,
+) -> jnp.ndarray:
+    r"""Convolve ``flux`` with the galaxy's own velocity dispersion alone (#2589).
+
+    A pure :math:`\sigma_v` Gaussian in log-wavelength space, with no
+    instrument or library term. Unlike :func:`velocity_broaden`, which
+    requires ``wave`` uniform in :math:`\ln\lambda` (one global pixel
+    scale), this dispatches to the piecewise machinery of
+    :func:`apply_lsf`'s variable-resolution path
+    (:func:`_apply_lsf_variable_r`), which reads its pixel scale locally
+    (``jnp.gradient(jnp.log(wave))``) and so works on any strictly
+    increasing grid -- in particular the tengri rest-frame model grid,
+    which is log-uniform over the SSP library's native range but not
+    over its sparser long-wavelength filler. On a grid that *is*
+    log-uniform with a constant :math:`\sigma_v`, every piecewise bin
+    shares one sigma and the raised-cosine blend weights sum to 1, so
+    the result equals the single-FFT :func:`velocity_broaden` to
+    floating-point precision.
+
+    Used to broaden the stellar piece of the spectrum *before* IGM
+    transmission is multiplied in
+    (:func:`~tengri.observation.observation.project_spectrum_kernel_split`),
+    and (since #2506) to give the banded resolution-matrix path its own
+    galaxy-kinematics term ahead of ``R @ model``.
+
+    Parameters
+    ----------
+    flux : ndarray, shape (n,)
+        Spectrum to broaden [erg/s/Hz or erg/s/cm^2/Hz].
+    wave : ndarray, shape (n,)
+        Wavelength grid [Angstrom]. Any strictly increasing grid.
+    sigma_v_kms : float or ndarray
+        Velocity dispersion [km/s]. Non-positive is the identity
+        (``jnp.where`` guard, not a Python branch, so this stays
+        jit/grad-safe for a traced ``sigma_v_kms``).
+    n_bins : int, default 16
+        Piecewise-constant segment count (see :func:`_apply_lsf_variable_r`).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Broadened spectrum (same units as input).
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+    """
+    sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
+    return jnp.where(
+        sigma_v > 0.0,
+        _apply_lsf_variable_r(flux, wave, jnp.broadcast_to(sigma_v, flux.shape), n_bins),
+        flux,
+    )
+
+
 def resolve_sigma_lib_kms(
     wave_obs: jnp.ndarray,
     redshift: jnp.ndarray | float,
@@ -733,12 +792,7 @@ def project_spectrum(
         # the identity, so existing fits are unchanged.
         from tengri.observation.banded import banded_matvec
 
-        sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=flux.dtype), 0.0)
-        flux = jnp.where(
-            sigma_v > 0.0,
-            _apply_lsf_variable_r(flux, wave_obs, jnp.broadcast_to(sigma_v, flux.shape), n_bins),
-            flux,
-        )
+        flux = broaden_velocity_only(flux, wave_obs, sigma_v_kms, n_bins)
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
     elif resolution is not None:
         flux = apply_lsf(

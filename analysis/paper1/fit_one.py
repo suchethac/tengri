@@ -2,20 +2,30 @@
 
 CLI: python fit_one.py --galaxy ID --config {I,II,III} --method mcmc_nuts --out DIR
      [--seed N] [--n-warmup N] [--n-samples N] [--n-chains N]
+     [--profile-mass {auto,on,off}] [--retune-attempts N]
 
 ``--n-warmup`` / ``--n-samples`` / ``--n-chains`` default to 150 / 300 / 4, the recipe
-``mcmc_nuts_fast`` advertises;
-they exist so the pipeline can be smoke-tested at a small budget. Every run writes the
-NPZ and the JSON: an attempt that clears the adoption bar is adopted immediately, and
-otherwise the best of DEFAULT_RETUNE_ATTEMPTS attempts (fewest divergences, then lowest
-max R-hat) is saved with ``adoption_pass: false`` and the process still exits 0.
+``mcmc_nuts_fast`` advertises; they exist so the pipeline can be smoke-tested at a small
+budget. Every run writes the NPZ and the JSON: an attempt that clears the adoption bar is
+adopted immediately, and otherwise the best of DEFAULT_RETUNE_ATTEMPTS attempts (fewest
+divergences, then lowest max R-hat) is saved with ``adoption_pass: false`` and the process
+still exits 0.
 
-The best attempt so far is written after every attempt that misses the bar, not only
-at the end, so a per-cell timeout during a retune cannot erase a completed attempt.
-The retune ladder raises ``target_accept_rate`` twice before it lengthens anything:
-attempt 2 at 0.95 and attempt 3 at 0.99, both on the base warmup, then attempt 4 and
-each further attempt double the warmup at 0.99. A retune never switches the mass
-matrix to dense.
+The best attempt so far is written after every attempt that misses the bar, not only at
+the end, so a per-cell timeout during a retune cannot erase a completed attempt.
+
+The retune ladder (measured on the grid 2026-09-14, 2026-09-29) defaults to a two-rung
+sequence: attempt 1 at ``target_accept_rate=0.85``, then attempt 2 at ``0.95``, both on
+the base warmup. The third rung (``target_accept=0.99``) cost 3-5x the first rung and
+adopted none of cells 79/II, 15336/II, 16455/II, 13097/VI, so it is opt-in via
+``--retune-attempts 3``. Attempt 4 and beyond double the warmup at 0.99. A retune never
+switches the mass matrix to dense.
+
+``--profile-mass`` defaults to ``auto`` (analytic marginalization when linearity guards
+pass, else fall back to sampling). Pass ``on`` to force analytic marginalization (raises
+if a guard refuses), or ``off`` to sample always. Measured 2026-09-14: row VI without
+profiling paid ~4x (11,600-35,000 s per attempt, tree depth 8.5-9.9, up to 90% at the
+depth-10 cap).
 
 Outputs to DIR/<ID>_<config>.npz (parameters, derived quantities, diagnostics) and
 DIR/<ID>_<config>.json (diagnostics summary).
@@ -101,16 +111,20 @@ ESS_FLOOR = 100.0
 #: + 4x600 draws, D = 8), attempt 1 on a diagonal mass matrix gave 3/2400
 #: divergences at max R-hat 1.0014, and the old dense-mass retune gave 79/2400
 #: at 1.023 (#2089). ``DEFAULT_TARGET_ACCEPT`` is ``run_nuts``'s own default.
-#: The target is raised TWICE before any warmup grows: cell 13097/III (D = 11)
+#: The target is raised ONCE more before any warmup grows: cell 13097/III (D = 11)
 #: still missed on 77/2400 divergences (max R-hat 1.012, min ESS 485) after
 #: 5741 s at 0.85, and percent-level divergences are a step-size problem, so
-#: 0.99 is tried at the base warmup -- one run -- before paying for two.
+#: 0.95 is tried at the base warmup — one run. The third rung at 0.99 cost
+#: 3-5x the first rung and adopted none of cells 79/II, 15336/II, 16455/II, 13097/VI
+#: (2026-09-14 audit of grid results), so it is opt-in via --retune-attempts 3.
 DEFAULT_TARGET_ACCEPT = 0.85
 RETUNE_TARGET_ACCEPT_1 = 0.95
 RETUNE_TARGET_ACCEPT_2 = 0.99
 
 #: Attempts the adoption loop makes before it keeps the best one it has.
-DEFAULT_RETUNE_ATTEMPTS = 3
+#: Default two-rung ladder (measured 2026-09-14 on the grid): attempt 1 at 0.85,
+#: attempt 2 at 0.95. The third rung (0.99) is opt-in via --retune-attempts 3.
+DEFAULT_RETUNE_ATTEMPTS = 2
 
 #: Per-configuration override of ``DEFAULT_RETUNE_ATTEMPTS`` (ruling R60).
 #: Edge-mass diagnostics on the best-so-far draws showed pile-up against
@@ -332,14 +346,13 @@ def sampler_kwargs_for(method: str, kwargs: dict) -> dict:
 def retune_settings(attempt: int, base: dict) -> dict:
     """NUTS settings for attempt ``attempt`` (1-based) of the adoption loop.
 
-    Attempt 1 is ``base`` (diagonal mass, target 0.85). Attempts 2 and 3 raise
-    ``target_accept_rate`` -- to RETUNE_TARGET_ACCEPT_1, then to
-    RETUNE_TARGET_ACCEPT_2 -- both on the SAME warmup, because divergences with
-    R-hat near 1.00 are a step-size problem and a smaller step size is the
-    standard remedy (Stan's ``adapt_delta``). Only from attempt 4 does the
-    warmup double, and again per further attempt, since that is the expensive
-    knob. ``dense_mass_matrix`` is never toggled: measured on 13097/II it turned
-    3 divergences into 79.
+    Attempt 1 is ``base`` (diagonal mass, target 0.85). Attempt 2 raises
+    ``target_accept_rate`` to RETUNE_TARGET_ACCEPT_1 (0.95) on the SAME warmup,
+    because divergences with R-hat near 1.00 are a step-size problem and a smaller
+    step size is the standard remedy (Stan's ``adapt_delta``). Attempt 3 and beyond
+    raise to RETUNE_TARGET_ACCEPT_2 (0.99), and only from attempt 4 does the
+    warmup double, since that is the expensive knob. ``dense_mass_matrix`` is never
+    toggled: measured on 13097/II it turned 3 divergences into 79.
 
     A new dict every call; ``base`` is never mutated.
     """
@@ -353,6 +366,37 @@ def retune_settings(attempt: int, base: dict) -> dict:
     if attempt >= 4:
         settings["n_warmup"] = base["n_warmup"] * 2 ** (attempt - 3)
     return settings
+
+
+def resolve_profile_mass_record(requested: str | bool, diagnostics: dict) -> dict:
+    """Record what profile_mass was requested and what the fitter resolved.
+
+    Args:
+        requested: The user-requested value ("auto", True, or False).
+        diagnostics: The per-attempt diagnostics dict from the posterior.
+
+    Returns:
+        Dict with "profile_mass_requested", "profile_mass" (resolved value or the
+        requested value if resolution was not recorded), and "profile_mass_reason"
+        (when present in diagnostics).
+
+    When the fitter resolved the profile_mass (set "profile_mass_resolved"), that
+    resolution is recorded verbatim. When it is absent (e.g. non-NUTS samplers),
+    the requested value is recorded as the resolution, never synthesized as True.
+    """
+    result = {
+        "profile_mass_requested": requested,
+    }
+    resolved = diagnostics.get("profile_mass_resolved")
+    if resolved is not None:
+        result["profile_mass"] = bool(resolved)
+        reason = diagnostics.get("profile_mass_reason")
+        if reason is not None:
+            result["profile_mass_reason"] = reason
+    else:
+        # No resolution in diagnostics: record requested value verbatim
+        result["profile_mass"] = requested
+    return result
 
 
 #: Max R-hat below which an attempt counts as mixed for ranking purposes. An
@@ -743,9 +787,7 @@ def save_fit_outputs(
         model_photometry_p84 = np.percentile(ppd_stack, 84, axis=0)
     else:
         model_photometry_median = np.asarray(
-            sed_model.predict_photometry(
-                {k: float(np.median(v)) for k, v in samples_thin.items()}
-            )
+            sed_model.predict_photometry({k: float(np.median(v)) for k, v in samples_thin.items()})
         )
         model_photometry_p16 = None
         model_photometry_p84 = None
@@ -850,7 +892,7 @@ def run_fit(
     n_warmup: int = DEFAULT_N_WARMUP,
     n_samples: int = DEFAULT_N_SAMPLES,
     n_chains: int = DEFAULT_N_CHAINS,
-    profile_mass: bool = False,
+    profile_mass: str | bool = "auto",
 ) -> dict:
     """Run a single fit for a galaxy and configuration.
 
@@ -867,6 +909,9 @@ def run_fit(
         n_warmup: NUTS warmup draws per chain (default: 150, the advertised recipe)
         n_samples: NUTS kept draws per chain (default: 300, the advertised recipe)
         n_chains: NUTS chains (default: the paper's 4)
+        profile_mass: "auto" (analytic marginalization when linearity guards pass,
+            else fall back to sampling), "on" (force analytic, raise if guards refuse),
+            "off" (sample always), or bool for backward compatibility. Default: "auto".
 
     Returns:
         Dict with fit result and diagnostics
@@ -878,13 +923,35 @@ def run_fit(
         retune_attempts = RETUNE_ATTEMPTS_BY_CONFIG.get(config_key, DEFAULT_RETUNE_ATTEMPTS)
 
     out_dir = Path(out_dir)
+    # Map profile_mass string value to the actual value for forward.fit:
+    # "auto" -> "auto" (the library's own default for intelligently choosing profiling),
+    # "on" -> True (force analytic marginalization, raise if guards refuse),
+    # "off" -> False (sample the mass always).
+    # Backward compatibility: accept bool directly.
+    if isinstance(profile_mass, str):
+        profile_mass_requested = profile_mass
+        profile_mass_resolved = {
+            "auto": "auto",
+            "on": True,
+            "off": False,
+        }.get(profile_mass)
+        if profile_mass_resolved is None:
+            raise ValueError(
+                f"profile_mass must be 'auto', 'on', 'off', or bool; got {profile_mass!r}"
+            )
+        profile_mass = profile_mass_resolved
+    else:
+        # Backward compatibility with bool callers
+        profile_mass_requested = "on" if profile_mass else "off"
+
     out_dir.mkdir(parents=True, exist_ok=True)
     # Serialize the profile-mass reinsertion across the cells of this grid:
     # it is the one step whose transient memory (10 GB measured on a III
     # cell) dwarfs the 3-4 GB a sampling cell holds, and the shared box's
     # watchdog kills whichever cell is spiking when N of them stack. One lock
     # per results directory; a caller that set the variable keeps its own.
-    if profile_mass:
+    # Only needed when profiling (profile_mass is True or "auto" which may resolve to True)
+    if profile_mass is True or profile_mass == "auto":
         os.environ.setdefault(REINSERT_LOCK_ENV, str(out_dir / ".reinsert.lock"))
     # The JSON path is needed before the loop: a failed attempt is persisted
     # before the retune starts (#2089). ``save_fit_outputs`` derives the same
@@ -977,50 +1044,15 @@ def run_fit(
         t_start = time.perf_counter()
 
         try:
-            # profile_mass=False, and this is the expensive choice, taken
-            # deliberately. Profiling is 4.1x faster (cell 79/I, same seed:
-            # 470 s profiled against 1941 s sampled) with far better geometry,
-            # so this costs the grid roughly 24.5 h instead of 6.0 h.
-            #
-            # tengri#2358 (merged 77a202be) fixed the unbounded allocation of
-            # #2356. This tree now carries main's mass_profile.py directly rather
-            # than a graft of it: the branch merged origin/main and took main's
-            # side, which is #2358 plus float32 support, line-flux block scoring
-            # and three linearity-guard fixes, at 26 passing tests. The fix
-            # works: the
-            # two worst cells fell from a predicted 21.3 and 32.3 GB to measured
-            # peaks of 10.56 and 11.90 GB. But both were still SIGKILLed after
-            # converging at 0/2400 divergences, so the acceptance test failed.
-            #
-            # The binding constraint moved rather than closing. Chunking bounded
-            # the post-fit SPIKE to about 3.5 GB, but the profiled path's
-            # steady-state footprint is ~8.5 GB against ~2.2 GB unprofiled.
-            #
-            # SCOPE THAT TO ITS MACHINE. It was measured on a laptop running
-            # with ~4.7 GB free and ~12.5 GB held by the macOS memory
-            # compressor, where an 8.5 GB floor does not fit whatever the spike
-            # does. That is a fact about that laptop, not about profiling. On a
-            # workstation with real headroom the floor is unremarkable, and
-            # profiled cells have since run to adoption on one. Do not cite this
-            # paragraph as a reason the grid cannot be marginalized without
-            # first checking the memory of the machine actually running it.
-            #
-            # So the choice here is not about the fix being wrong. Unprofiled
-            # cells peak near 4 GB and complete; profiled cells are faster and
-            # die. Flip this back to True on a machine with real headroom, and
-            # re-run the two acceptance cells (9884/IV, 9884/V) before trusting
-            # a full grid to it.
-            #
-            # One caution when flipping it: profile_mass=True RAISES if the
-            # linearity guard refuses the model, it does not fall back to
-            # sampling the mass. So enabling it is not purely "the same fits,
-            # faster" -- a configuration the guard rejects fails its cell
-            # outright. These six should be safe, because the guard's failures
-            # trace to the coarse dsps age kernel and all six take the
-            # cloud-in-cell default (tengri#2368 measures cic at 1.2e-13
-            # against a 1e-8 tolerance, four orders inside it), but verify
-            # rather than assume if a configuration is ever added or its age
-            # kernel changed.
+            # Profiling (analytic marginalization of log_total_mass) is 4.1x faster
+            # (cell 79/I, same seed: 470 s profiled against 1941 s sampled) with far
+            # better geometry — row VI without it paid ~4x (11,600–35,000 s per
+            # attempt, tree depth 8.5–9.9, up to 90% at the depth-10 cap). The
+            # library's profile_mass="auto" default marginalizes when every linearity
+            # guard passes and otherwise falls back to sampling (2026-09-14 measurement).
+            # The two-rung retune ladder (attempts at target_accept 0.85 and 0.95)
+            # cost 3–5x less than a 0.99 third rung and adopted none of cells 79/II,
+            # 15336/II, 16455/II, 13097/VI.
             posterior = forward.fit(data, key=key, profile_mass=profile_mass, **fit_kwargs)
             t_elapsed = time.perf_counter() - t_start
 
@@ -1046,6 +1078,10 @@ def run_fit(
                     in ("log_evidence", "log_evidence_err", "n_iterations", "n_dead", "n_live")
                 }
 
+            # Record profile_mass: what was requested and what the fitter resolved
+            profile_mass_record = resolve_profile_mass_record(
+                profile_mass_requested, posterior.diagnostics
+            )
             diagnostics = {
                 "gal_id": gal_id,
                 "config": config_key,
@@ -1059,7 +1095,7 @@ def run_fit(
                 "n_samples": nuts_kwargs["n_samples"],
                 "n_chains": nuts_kwargs["n_chains"],
                 "dense_mass_matrix": nuts_kwargs["dense_mass_matrix"],
-                "profile_mass": profile_mass,
+                **profile_mass_record,
                 "target_accept_rate": nuts_kwargs["target_accept_rate"],
                 # The CLI seed and the key this attempt actually ran at:
                 # PRNGKey(seed + attempt), attempt 1-based, so "seed 42" means
@@ -1216,8 +1252,12 @@ def run_fit(
     return diagnostics_payload(best_diagnostics, attempts, retune_history)
 
 
-def main():
-    """Parse arguments and run fit."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for fit_one.py.
+
+    Returns:
+        ArgumentParser configured with all fit_one CLI arguments.
+    """
     parser = argparse.ArgumentParser(description="Fit a single galaxy with tengri SED model")
     parser.add_argument("--galaxy", type=int, required=True, help="Galaxy ID (e.g. 13097)")
     parser.add_argument(
@@ -1255,11 +1295,28 @@ def main():
     )
     parser.add_argument(
         "--profile-mass",
-        action="store_true",
-        help="Profile log_total_mass analytically instead of sampling it (see the"
-        " comment above forward.fit for why the grid default is off).",
+        type=str,
+        nargs="?",
+        const="on",
+        default="auto",
+        choices=("auto", "on", "off"),
+        help="Profile mass marginalization: auto (analytic when guards pass, else sample),"
+        " on (force analytic, raise if guards refuse), off (sample always)."
+        " Default: auto",
     )
+    parser.add_argument(
+        "--retune-attempts",
+        type=int,
+        default=DEFAULT_RETUNE_ATTEMPTS,
+        help=f"Adoption ladder attempts before keeping best one (default: {DEFAULT_RETUNE_ATTEMPTS},"
+        " the two-rung ladder; 3 adds the 0.99 rung)",
+    )
+    return parser
 
+
+def main():
+    """Parse arguments and run fit."""
+    parser = build_parser()
     args = parser.parse_args()
 
     # Set up logging
@@ -1279,6 +1336,7 @@ def main():
             n_samples=args.n_samples,
             n_chains=args.n_chains,
             profile_mass=args.profile_mass,
+            retune_attempts=args.retune_attempts,
         )
         logger.info(f"✓ Fit complete for galaxy {args.galaxy} config {args.config}")
         return 0
