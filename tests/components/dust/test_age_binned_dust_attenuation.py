@@ -27,7 +27,7 @@ from tengri.components.dust.age_binned import (
 )
 from tengri.components.dust.laws._registry import DUST_LAWS, resolve_dust_law
 from tengri.config.exceptions import ConfigError, ParameterError
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 
 pytestmark = pytest.mark.regression_bug
 
@@ -256,7 +256,7 @@ def test_every_registered_law_normalizes_at_v_band(law_name):
 
 
 def test_age_binned_energy_balance_n3_matches_trapz_integral(_ssp, _obs):
-    """L_absorbed == |trapz(intrinsic - attenuated, over nu, 912A-3um)| for N=3."""
+    """L_absorbed == |trapz(intrinsic - attenuated, over nu, the Lyman edge to 3um)| for N=3."""
     kwargs = dict(
         ssp_data=_ssp,
         observation=_obs,
@@ -308,7 +308,9 @@ def test_age_binned_energy_balance_n3_matches_trapz_integral(_ssp, _obs):
     rest = jnp.asarray(pred.rest_sed())
     rest0 = jnp.asarray(pred0.rest_sed())
     nu = C_AA / wave
-    log_l, _sign = bolometric_absorbed_log10(rest0, rest, nu, wave=wave, lyman_cutoff_aa=912.0)
+    log_l, _sign = bolometric_absorbed_log10(
+        rest0, rest, nu, wave=wave, lyman_cutoff_aa=LYMAN_LIMIT_AA
+    )
     l_trapz = float(pow10(log_l))
 
     from tengri.utils.physics_constants import L_SUN

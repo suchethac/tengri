@@ -612,9 +612,8 @@ def nebular_grid_absorbed_log10(
     Parameters
     ----------
     grid_abs : ndarray, shape (n_tau_a, n_tau_b)
-        Signed absorbed luminosity per unit Q_H at the nebular grid point, in
-        the orientation of the frequency integral (negative on an ascending
-        wavelength grid) [erg/s per (photon/s)].
+        Signed absorbed luminosity per unit Q_H at the nebular grid point,
+        positively oriented (+1 for a net absorber) [erg/s per (photon/s)].
     log_nion : ndarray, shape ()
         :math:`\log_{10} Q_H` [dex re photon/s].
     tau_grids : tuple

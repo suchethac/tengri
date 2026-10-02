@@ -309,8 +309,8 @@ class NebularGridTable:
         Rest-frame twin of the node wavelengths.
     eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, n_tau_a, n_tau_b)`` or None
         SIGNED LyC-masked absorbed nebular luminosity per unit nion through the model's
-        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)], in the orientation
-        of the frequency integral (negative on an ascending wavelength grid); exactly 0
+        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)],
+        positively oriented (+1 for a net absorber); exactly 0
         where the screen is unity.
     eb_tau_a_grid : ndarray, shape (n_tau_a,) or None
         The stellar EnergyBalanceLUT's tau_bc_grid (two_component) or
@@ -318,8 +318,9 @@ class NebularGridTable:
     eb_tau_b_grid : ndarray, shape (n_tau_b,) or None
         The stellar EnergyBalanceLUT's tau_diff_grid (two_component) or its tau_v
         grid (single screen).
-    eb_include_lyc : bool
-        The LyC-mask choice baked into eb_absorbed_per_qh (must equal dust.config.eb_include_lyc).
+    lyc_in_energy_balance : bool
+        The LyC-mask choice baked into eb_absorbed_per_qh (must equal
+        dust.config.lyc_in_energy_balance).
     """
 
     axis_names: tuple
@@ -336,7 +337,7 @@ class NebularGridTable:
     eb_absorbed_per_qh: jnp.ndarray | None = None
     eb_tau_a_grid: jnp.ndarray | None = None
     eb_tau_b_grid: jnp.ndarray | None = None
-    eb_include_lyc: bool = False
+    lyc_in_energy_balance: bool = False
 
     @property
     def serves_dust(self) -> bool:
@@ -1729,8 +1730,8 @@ def reconstruct_nebular_eb_absorbed_per_qh(params, table) -> jnp.ndarray:
     Returns
     -------
     ndarray, shape (n_tau_a, n_tau_b)
-        SIGNED per unit nion, interpolated over the nebular axes [erg/s per (photon/s)], in
-        the orientation of the frequency integral (negative on an ascending wavelength grid).
+        SIGNED per unit nion, interpolated over the nebular axes
+        [erg/s per (photon/s)], positively oriented (+1 for a net absorber).
 
     Notes
     -----

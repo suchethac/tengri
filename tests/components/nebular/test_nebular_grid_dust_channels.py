@@ -45,7 +45,7 @@ from tengri.components.nebular.nebular_grid_precompute import (
     reconstruct_nebular_subband_waves,
 )
 from tengri.forward.energy_balance import bolometric_absorbed_log10
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 
 pytestmark = pytest.mark.conservation
 
@@ -188,7 +188,7 @@ def test_energy_balance_channel_is_exact_at_every_tau_node(built, which):
     wave = state.wave
     nu = C_AA / wave
     log_nion = float(state.derived["log_nion"])
-    cutoff = None if dust_comp.config.eb_include_lyc else 912.0
+    cutoff = None if dust_comp.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
     got = np.asarray(table.eb_absorbed_per_qh)[(0,) * n_ax]
     for a, ta in enumerate(tau_a):
         for b, tb in enumerate(tau_b):
@@ -239,16 +239,16 @@ def test_lyc_cutoff_follows_the_dust_configuration(built):
     from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
 
     _, _, _, dust, _ = built["two"]
-    assert _lyc_cutoff_for(dust) == 912.0
+    assert _lyc_cutoff_for(dust) == LYMAN_LIMIT_AA
     dust_with_lyc_true = dataclasses.replace(
-        dust, config=dataclasses.replace(dust.config, eb_include_lyc=True)
+        dust, config=dataclasses.replace(dust.config, lyc_in_energy_balance=True)
     )
     assert _lyc_cutoff_for(dust_with_lyc_true) is None
 
 
 def test_the_table_records_the_lyc_choice(built):
     m_default, _, _, _, table_default = built["two"]
-    assert table_default.eb_include_lyc is False
+    assert table_default.lyc_in_energy_balance is False
     m_with_lyc_true = SEDModel.build(
         ssp_data=m_default.ssp_data,
         observation=m_default.observation,
@@ -261,7 +261,7 @@ def test_the_table_records_the_lyc_choice(built):
             "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 2.0),
             "tau_diff": Uniform(0.0, 2.0),
-            "eb_include_lyc": True,
+            "lyc_in_energy_balance": True,
         },
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0)},
@@ -277,8 +277,8 @@ def test_the_table_records_the_lyc_choice(built):
         eb_tau_grids=(eb_lyc_true.tau_bc_grid, eb_lyc_true.tau_diff_grid),
         n_subbands=_K,
     )
-    assert table_with_lyc_true.eb_include_lyc is True
-    assert table_default.eb_include_lyc is not table_with_lyc_true.eb_include_lyc
+    assert table_with_lyc_true.lyc_in_energy_balance is True
+    assert table_default.lyc_in_energy_balance is not table_with_lyc_true.lyc_in_energy_balance
 
 
 def test_attaching_a_table_with_the_other_lyc_choice_is_refused(built):
@@ -295,7 +295,7 @@ def test_attaching_a_table_with_the_other_lyc_choice_is_refused(built):
             "all_params": Fixed(DEFAULT),
             "tau_bc": Uniform(0.0, 2.0),
             "tau_diff": Uniform(0.0, 2.0),
-            "eb_include_lyc": True,
+            "lyc_in_energy_balance": True,
         },
         dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
         neb={"type": "cue", "all_params": Fixed(DEFAULT), "neb_logU": Uniform(-3.5, -2.0)},
@@ -312,7 +312,7 @@ def test_attaching_a_table_with_the_other_lyc_choice_is_refused(built):
         n_subbands=_K,
     )
     chain_default = m_default._build_component_chain()
-    with pytest.raises(RuntimeError, match="eb_include_lyc"):
+    with pytest.raises(RuntimeError, match="lyc_in_energy_balance"):
         m_default._chain_with_nebular_grid(chain_default, table_with_lyc_true)
 
 

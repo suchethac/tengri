@@ -10295,12 +10295,12 @@ class SEDModel:
                         f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
                         f"{jnp.shape(grid_lut)}."
                     )
-            if bool(table.eb_include_lyc) != (_lyc_cutoff_for(dust_c) is None):
-                table_lyc = bool(table.eb_include_lyc)
+            if bool(table.lyc_in_energy_balance) != (_lyc_cutoff_for(dust_c) is None):
+                table_lyc = bool(table.lyc_in_energy_balance)
                 dust_lyc = _lyc_cutoff_for(dust_c) is None
                 raise RuntimeError(
-                    f"nebular grid table was built with eb_include_lyc={table_lyc} "
-                    f"but the dust component has eb_include_lyc={dust_lyc}; "
+                    f"nebular grid table was built with lyc_in_energy_balance={table_lyc} "
+                    f"but the dust component has lyc_in_energy_balance={dust_lyc}; "
                     f"rebuild the table with enable_fast_nebular()"
                 )
             # Build flagged chain with both fields set

@@ -39,7 +39,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
@@ -796,7 +796,7 @@ class AgeBinnedDustComponent(TemplateThreading):
             sed_attenuated + sed_neb_attenuated,
             nu,
             wave=wave,
-            lyman_cutoff_aa=912.0,
+            lyman_cutoff_aa=LYMAN_LIMIT_AA,
         )
         warn_if_corrupt(log_L_absorbed, component="age_binned")
 

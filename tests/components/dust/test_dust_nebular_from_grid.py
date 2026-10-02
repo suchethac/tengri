@@ -67,7 +67,7 @@ _ONE = "one"
 
 
 def _orientation(wave) -> float:
-    """Sign of a frequency integral on ``wave``: -1 on an ascending wavelength grid."""
+    """Sign of the absorbed-energy integral on ``wave`` (positively oriented: +1 on any grid)."""
     wave = jnp.asarray(wave)
     one = jnp.ones(wave.shape)
     return float(bolometric_absorbed_log10(one, 0.5 * one, C_AA / wave, wave=wave)[1])
@@ -285,7 +285,7 @@ def test_tau_zero_leaves_the_stellar_term_alone(kind):
 
 
 def test_synthetic_lut_has_the_orientation_of_the_frequency_integral():
-    assert _orientation(_WAVE) == -1.0
+    assert _orientation(_WAVE) == 1.0
     for kind in [_TWO, _ONE]:
         lut = _lut(kind)
         tau_a = _TAU_A_GRID if kind == _TWO else np.zeros(1)
@@ -296,7 +296,7 @@ def test_synthetic_lut_has_the_orientation_of_the_frequency_integral():
             jnp.asarray(tau_a[0]),
             jnp.asarray(_TAU_B_GRID[0]),
         )
-        assert float(sign) == -1.0
+        assert float(sign) == _orientation(_WAVE)
 
 
 def _nebular_sed(wave) -> np.ndarray:

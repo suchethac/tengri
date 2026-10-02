@@ -34,7 +34,7 @@ from tengri.utils.grid_interp import (
     _vectorized_interp,
     subband_quadrature,
 )
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import representable_denominator, representable_floor
 
 __all__ = [
@@ -44,18 +44,17 @@ __all__ = [
     "_nebular_subband_channels",
 ]
 
-_LYMAN_CUTOFF_AA = 912.0
-
 
 def _lyc_cutoff_for(dust) -> float | None:
     """The short-wavelength edge of the dust component's energy-balance integral [Angstrom].
 
     ``None`` when the component counts the Lyman continuum in the absorbed
-    luminosity (``dust.config.eb_include_lyc``), the Lyman edge otherwise. The
-    grid's absorbed-energy channel and the table's record of the choice both
-    read it here, so the configuration key is spelled in one place.
+    luminosity (``dust.config.lyc_in_energy_balance``), the Lyman edge
+    (:data:`tengri.components.lyc.LYMAN_LIMIT_AA`) otherwise. The grid's
+    absorbed-energy channel and the table's record of the choice both read it
+    here, so the configuration key is spelled in one place.
     """
-    return None if dust.config.eb_include_lyc else _LYMAN_CUTOFF_AA
+    return None if dust.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
 
 
 def _nebular_subband_channels(
@@ -228,9 +227,9 @@ def _nebular_eb_channel(
     Returns
     -------
     ndarray, shape (n_points, n_tau_a, n_tau_b)
-        SIGNED absorbed luminosity per unit nion [erg/s per (photon/s)], in the
-        orientation of the frequency integral (negative on an ascending wavelength
-        grid); exactly 0 where the screen is unity.
+        SIGNED absorbed luminosity per unit nion [erg/s per (photon/s)],
+        positively oriented (+1 for a net absorber); exactly 0 where the screen
+        is unity.
 
     Notes
     -----
@@ -418,6 +417,6 @@ def _build_dust_channels(
             eb_absorbed_per_qh=jnp.asarray(eb.reshape(*grid_shape, *eb.shape[1:])),
             eb_tau_a_grid=jnp.asarray(eb_tau_grids[0]),
             eb_tau_b_grid=jnp.asarray(eb_tau_grids[1]),
-            eb_include_lyc=_lyc_cutoff_for(dust_component) is None,
+            lyc_in_energy_balance=_lyc_cutoff_for(dust_component) is None,
         )
     return out
