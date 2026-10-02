@@ -155,6 +155,10 @@ DEFAULT_AGE_KERNEL = "cic"
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 
+#: SFH families whose tx-quantile time axis and mass normalization scale to
+#: the age of the universe at redshift (Iyer et al. 2019; Wild et al. 2020).
+_AGE_FAMILIES = ("dense_basis", "dense_basis_pure", "psb", "psb_wild2020")
+
 
 def _resolve_age_kernel(config) -> str:
     """Which age-weight kernel this config selects: ``"cic"`` or ``"dsps"``.
@@ -2419,7 +2423,7 @@ class StellarSEDComponent:
         sfh_model = self.config.sfh_model
         is_composite = isinstance(sfh_model, list)
         if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, sfh_spec_settings = resolve_sfh(
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
                 sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
             )
             # Bin-edge knot discovery (#765) inspects the first member's callable.
@@ -2429,7 +2433,6 @@ class StellarSEDComponent:
             sfh_fn_composed = None
             spec_params = sfh_spec.params
             internal_param_map = sfh_spec.internal_param_map
-            sfh_spec_settings = sfh_spec.settings
 
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in internal_param_map.items():
@@ -2453,20 +2456,13 @@ class StellarSEDComponent:
                 sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
-        # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
-        # from the configured cosmology; default of 13.47 Gyr matches
-        # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
-        if isinstance(sfh_model, str) and sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        # ``psb_wild2020`` (registry alias ``psb``) anchors its burst double
-        # power law at the age of the universe AT THIS MODEL'S REDSHIFT, not a
-        # static cosmology default: Wild et al. 2020 Eq. 5 and BAGPIPES
-        # star_formation_history.py:326-348 both measure the burst's cosmic
-        # time from "now" (the observation epoch), which is per-galaxy, so it
-        # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting.
-        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+        # ``dense_basis`` and ``dense_basis_pure`` (and by extension
+        # ``psb_wild2020``) must scale the tx-quantile time axis and mass
+        # normalization to the age of the universe AT THIS MODEL'S REDSHIFT
+        # (Iyer et al. 2019 §2). The age is derived from the redshift and
+        # the configured cosmology, not a static registry default. Both routes
+        # use the same families so they cannot diverge (#982).
+        if isinstance(sfh_model, str) and sfh_model in _AGE_FAMILIES:
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -3632,12 +3628,10 @@ class StellarSEDComponent:
                     continue
                 raw = default_scalar
             sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
-        if self.config.sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020"):
-            # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this.
+        # Mirrors apply()'s injection (§2) so the two routes cannot diverge
+        # (#982); t_obs_gyr was hoisted above. Both routes scale the tx-quantile
+        # axis and mass normalization to age(z).
+        if self.config.sfh_model in _AGE_FAMILIES:
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 

@@ -85,6 +85,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     psb_continuity_flex,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
+from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
 from tengri.utils.cosmology import age_at_z0_host
 
@@ -2065,7 +2066,6 @@ _register(
         },
         settings={
             "sfh_db_nparam": 3,
-            "sfh_db_age_universe_gyr": 13.47,
         },
         internal_param_map={
             "sfh_db_log_total_mass": ("log_total_mass", 1.0, 0.0),
@@ -2103,7 +2103,6 @@ _register(
         },
         settings={
             "sfh_dbp_nparam": 3,
-            "sfh_dbp_age_universe_gyr": 13.47,
         },
         internal_param_map={
             "sfh_dbp_log_total_mass": ("log_total_mass", 1.0, 0.0),
@@ -2730,6 +2729,38 @@ def _mix_burst_mass_fraction(t_lookback, smooth, burst_shape, f):
     return (1.0 - f_eff) * smooth + f_eff * m_smooth * burst_shape / safe
 
 
+#: Spellings of the retired per-family age-of-universe setting. The age is a
+#: function of the redshift and the cosmology, never a free setting (#2592).
+_AGE_UNIVERSE_SETTING_KEYS: dict[str, str] = {
+    "sfh_db_age_universe_gyr": "dense_basis",
+    "sfh_dbp_age_universe_gyr": "dense_basis_pure",
+}
+
+
+def age_universe_setting_error(key: str) -> ConfigError:
+    """The one message the age-of-universe settings get, wherever written.
+
+    Parameters
+    ----------
+    key : str
+        The spelling the caller wrote (a key of ``_AGE_UNIVERSE_SETTING_KEYS``).
+
+    Returns
+    -------
+    ConfigError
+        Stating that the tx quantiles are fractions of the age of the universe
+        at the galaxy's redshift, which follows from the redshift and the
+        cosmology and is not a setting (Iyer et al. 2019).
+    """
+    family = _AGE_UNIVERSE_SETTING_KEYS[key]
+    return ConfigError(
+        f"{key!r} is not a setting: the {family!r} tx quantiles are fractions of "
+        f"the age of the universe at the galaxy's redshift, which is fixed by "
+        f"the redshift and the cosmology (Iyer et al. 2019). Set the redshift or "
+        f"the cosmology instead (#2592)."
+    )
+
+
 def resolve_sfh(
     mean_sfh_type: str | list[str],
     bin_edges_gyr: object = None,
@@ -2861,6 +2892,12 @@ def resolve_sfh(
         merged_param_map.update(s.internal_param_map)
         merged_settings.update(s.settings)
 
+    # The age of the universe is derived from the redshift and cosmology, so
+    # the retired settings keys are refused wherever they appear.
+    for retired_key in _AGE_UNIVERSE_SETTING_KEYS:
+        if retired_key in merged_settings:
+            raise age_universe_setting_error(retired_key)
+
     # Build per-spec dispatch info for each additive component.
     #
     # Each entry holds: (callable, public->internal map, set of internal names).
@@ -2919,13 +2956,13 @@ def resolve_sfh(
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
-            if fn_i is psb_wild2020 and "age_universe_yr" in kw:
-                # Not a declared public parameter (the orchestrator injects it
-                # from the evaluation redshift, component.py's apply()/
-                # compute_joint_weights()), so _build_component_kw's
-                # pub_to_internal filtering above never sees it; forward it
-                # through by name instead, same as every other caller of
-                # psb_wild2020 (#2521 burst re-anchoring to age_at_z(z)).
+            # Age-of-universe-dependent families (psb_wild2020, dense_basis,
+            # dense_basis_pure) scale their tx-quantile axis to age(z) as
+            # measured from the galaxy's redshift and cosmology (Iyer et al.
+            # 2019; Wild et al. 2020 eq. 5). The stellar component injects the
+            # age and it is forwarded by name since it is not a declared
+            # public parameter.
+            if fn_i in (psb_wild2020, dense_basis, dense_basis_pure) and "age_universe_yr" in kw:
                 kw_i["age_universe_yr"] = kw["age_universe_yr"]
             smooth = smooth + fn_i(t_lookback, **kw_i)
 

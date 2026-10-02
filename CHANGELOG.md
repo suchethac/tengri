@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time (#2592).
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
