@@ -958,6 +958,14 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
         "status": "production",
         "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
         "short_doc": "N independent screens, each its own law and log-age window (#2528)",
+        # The bare {'type': 'age_binned'} is refused (the screen list is the
+        # structural content), so the row carries the minimal runnable form: the
+        # two_component birth-cloud/diffuse split, legal on any SSP grid.
+        "use": (
+            "SEDModel.build(..., dust_attenuation={'type': 'age_binned', 'screens': "
+            "[{'law': 'calzetti', 'window_log_yr': (None, 7.0)}, "
+            "{'law': 'calzetti', 'window_log_yr': (None, None)}]})"
+        ),
     },
 }
 
@@ -994,7 +1002,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
                 "status": meta.get("status", "production"),
                 "citation": meta.get("citation", ""),
                 "short_doc": meta.get("short_doc", ""),
-                "use": _usage_hint(name, "dust_model"),
+                "use": meta.get("use") or _usage_hint(name, "dust_model"),
             }
         )
     out = _filter_menu(out, "status", status, listing="list_dust_models")

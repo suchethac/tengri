@@ -8269,6 +8269,8 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     the birth-cloud law when unset and so is emitted only when it was given, the
     per-screen law-parameter overrides are stored in one flattened dict, and
     ``lyman_cutoff`` persists as a float wavelength rather than the boolean the
+    grammar takes. ``screens`` (age_binned) is stored as ``(law, lo, hi)``
+    tuples and re-emitted as the ``{'law', 'window_log_yr'}`` dicts the
     grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
@@ -8307,6 +8309,12 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
                 if _base_provenance(_provenance.get(full_name, "")) == "user_fixed":
                     continue
                 group_output[f"{short}_{comp}"] = value
+        # age_binned: the spec stores each screen as a (law, lo, hi) tuple; the
+        # grammar takes {'law', 'window_log_yr'} dicts, so the emit rebuilds them.
+        if getattr(spec, "dust_screens", ()):
+            group_output["screens"] = [
+                {"law": law, "window_log_yr": (lo, hi)} for law, lo, hi in spec.dust_screens
+            ]
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True

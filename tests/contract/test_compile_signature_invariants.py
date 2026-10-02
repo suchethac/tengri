@@ -134,6 +134,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_shock_screen = None
             self._dust_agn_screen = None
             self._dust_law_overrides = {}
+            self._dust_screens = ()  # always set by _init_dust; empty unless age_binned
             self._dust_lyman_cutoff_aa = 912.0
             self._dust_lyc_absorb_all = False
             self._dust_eb_include_lyc = False

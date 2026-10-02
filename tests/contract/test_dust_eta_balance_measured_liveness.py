@@ -37,14 +37,20 @@ from tengri.parameters.groups import _VALID_DUST_TYPES
 pytestmark = pytest.mark.contract
 
 #: Structural kwargs each dust_attenuation type requires beyond 'type' (a law
-#: selector for single/two-component; wg00 needs none -- its curve/geometry/
-#: structure selectors all have defaults). Syntactic requirements of the
-#: grammar, not an allow-list of which types are expected to pass the check
+#: selector for single/two-component; a screen list for age_binned; wg00 needs
+#: none -- its curve/geometry/structure selectors all have defaults). Syntactic
+#: requirements of the grammar, not an allow-list of which types are expected to pass the check
 #: below: every type in _VALID_DUST_TYPES is exercised identically.
 _ATTEN_STRUCTURAL_KWARGS: dict[str, dict] = {
     "single_component": {"law": "calzetti"},
     "two_component": {"law": "calzetti"},
     "wg00": {},
+    "age_binned": {
+        "screens": [
+            {"law": "calzetti", "window_log_yr": (None, 7.0)},
+            {"law": "calzetti", "window_log_yr": (None, None)},
+        ]
+    },
 }
 
 
