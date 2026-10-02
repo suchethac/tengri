@@ -10355,13 +10355,24 @@ class SEDModel:
                 if float(jnp.expm1(nodes[0])) < z < float(jnp.expm1(nodes[-1]))
             }
         )
-        budget = self._EB_LUT_MAX_ELEMENTS // max(per_z, 1)
-        n_keep = int(max(2, min(nodes.shape[0], budget - len(breaks))))
-        if n_keep < nodes.shape[0]:
-            nodes = jnp.linspace(nodes[0], nodes[-1], n_keep)
-        if breaks:
-            nodes = jnp.sort(jnp.concatenate([nodes, jnp.log1p(jnp.asarray(breaks, nodes.dtype))]))
-        return nodes
+        budget = max(2, min(int(nodes.shape[0]), self._EB_LUT_MAX_ELEMENTS // max(per_z, 1)))
+        if not breaks:
+            if budget < nodes.shape[0]:
+                return jnp.linspace(nodes[0], nodes[-1], budget)
+            return nodes
+        # The law is smooth between its breakpoints, so each segment gets the same
+        # number of sub-intervals, with a node exactly on every breakpoint. Spending
+        # the budget evenly per segment, rather than on one uniform axis with the
+        # breakpoints merged in, is what holds the error flat across the range: a
+        # segment where the curve moves fast would otherwise get one or two nodes.
+        z_edges = jnp.expm1(nodes[jnp.asarray([0, -1])])
+        edges = jnp.log1p(
+            jnp.asarray([float(z_edges[0]), *breaks, float(z_edges[1])], nodes.dtype)
+        )
+        n_seg = int(edges.shape[0]) - 1
+        per_seg = max(1, (budget - 1) // n_seg)
+        pieces = [jnp.linspace(edges[i], edges[i + 1], per_seg + 1)[:-1] for i in range(n_seg)]
+        return jnp.concatenate([*pieces, edges[-1:]])
 
     def _response_z_nodes(self, dtype=None):
         """``ln(1+z)`` axis the evaluation-redshift response tables are built on.

@@ -526,6 +526,82 @@ def test_the_z_tabulated_lut_agrees_with_the_single_curve_builder_at_a_node(uv_s
         np.testing.assert_allclose(np.asarray(tabulated.B), np.asarray(single.B), rtol=1e-12)
 
 
+#: A z-tabulated LUT is capped at 31 redshift nodes here, the count the cap allows on a
+#: real SSP with a 24 x 24 optical-depth grid. The accuracy claim is for that regime.
+_CAPPED_NODES = 31
+#: Half the 5e-3 band budget: the LUT is one factor in the IR band beside the stellar
+#: z-table and the R table, so its interpolation may not spend the whole budget.
+_SWEEP_BUDGET = 2.5e-3
+
+
+def _sweep_redshifts() -> np.ndarray:
+    """Dense sweep over the window, plus both sides of every law breakpoint."""
+    breaks = np.arange(1.0, 6.0)
+    near = np.concatenate([breaks - 1e-3, breaks, breaks + 1e-3, [4.7, 5.7, 0.05, 6.0]])
+    return np.unique(np.concatenate([np.linspace(0.05, 6.0, 200), near]))
+
+
+def test_the_z_tabulated_lut_holds_its_budget_across_the_whole_redshift_range(
+    uv_ssp, ir_obs, monkeypatch
+):
+    """L_abs from the capped z-LUT vs the exact curve at 200+ redshifts, kinks included.
+
+    ``narayanan_z`` is piecewise in z (table nodes at integers), so a z axis that
+    ignores that spends its nodes where the curve is flat and misses the segments
+    where it moves: 4.1e-3 in L_abs near z = 4.8 with 31 uniform-plus-breakpoint
+    nodes (1.1e-3 with the budget spent evenly per segment).
+    The reference is the same transmission built directly at each redshift.
+    """
+    from tengri.components.dust.energy_balance_precompute import (
+        _lut_contract,
+        build_energy_balance_lut_over_z,
+    )
+
+    n_met, n_age = uv_ssp.ssp_flux.shape[:2]
+    monkeypatch.setattr(SEDModel, "_EB_LUT_MAX_ELEMENTS", _CAPPED_NODES * n_met * n_age * 24 * 24)
+    model = _law_model(
+        uv_ssp, ir_obs, Fixed(PLACEHOLDER), WavePrecomp(catalog_z_range=_LUT_RANGE, n_z=200)
+    )
+    lut = model._energy_balance_lut_cache
+    assert lut is not None and lut.ln1pz.shape[0] <= _CAPPED_NODES
+    z_nodes = np.expm1(np.asarray(lut.ln1pz))
+    for b in np.arange(1.0, 6.0):
+        assert np.min(np.abs(z_nodes - b)) < 1e-9, f"no node on breakpoint z={b}"
+
+    tb = float(lut.tau_bc_grid[10])
+    td = float(lut.tau_diff_grid[12])
+    zs = _sweep_redshifts()
+    ages = 10.0**uv_ssp.ssp_lg_age_gyr * 1e9
+    truth = build_energy_balance_lut_over_z(
+        uv_ssp.ssp_flux,
+        uv_ssp.ssp_wave,
+        ages,
+        ln1pz=jnp.log1p(jnp.asarray(zs)),
+        params_at_z=lambda z: ({"redshift": z}, {"redshift": z}),
+        law_bc="narayanan_z",
+        law_diff="narayanan_z",
+        f_obscuration=0.0,
+        tau_bc_grid=jnp.asarray([tb]),
+        tau_diff_grid=jnp.asarray([td]),
+    )
+    weights = jnp.ones((n_met, n_age)) / (n_met * n_age)
+    worst = 0.0
+    for i, z in enumerate(zs):
+        exact = float(jnp.sum(weights * (truth.B - truth.G[i, :, :, 0, 0])))
+        got = float(_lut_contract(lut, weights, jnp.asarray(tb), jnp.asarray(td), jnp.asarray(z)))
+        worst = max(worst, abs(got / exact - 1.0))
+    assert worst < _SWEEP_BUDGET, (
+        f"L_abs error {worst:.3e} over the sweep (budget {_SWEEP_BUDGET})"
+    )
+
+
+@pytest.mark.parametrize("z", (0.999, 1.001, 3.999, 4.7, 5.7, 5.999))
+def test_the_ir_band_holds_its_budget_at_the_law_kinks(lut_catalog, uv_ssp, ir_obs, z):
+    got = _catalog_lut_photometry(lut_catalog, z)
+    err = _ir_band_error(got, _law_model(uv_ssp, ir_obs, Fixed(z), None))
+    assert err < LUT_BUDGET, f"z={z}: IR band {err:.3e} from exact"
+
+
 # ── T5: catalog models still share one compile signature ──────────────
 
 
