@@ -1805,13 +1805,12 @@ _register(
 #     at 0.3 Gyr, so the ladder crossed itself over that whole prior,
 #     `jnp.searchsorted` ran on an unsorted array, and the mass closed to
 #     1-3 % instead of exactly.
-#   * The `ratio_old_*` are ADJACENT steps within the fixed section, with the
-#     step from the oldest flex bin to the youngest fixed bin pinned at 0 (the
-#     two share an SFR), so three fixed bins take two ratios. The paper's three
-#     `log(SFRratio,old)` entries are each measured against the first flexible
-#     bin instead, which gives its fixed section one more free amplitude than
-#     this entry has.
-_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+#   * The `ratio_old_*` follow Suess+2022 Table 1: one per fixed bin.
+#     `ratio_old_0` is the link between the oldest flex bin and the youngest
+#     fixed bin [log10(SFR_fixed[0] / SFR_flex[last])]; `ratio_old_{i>0}` are
+#     adjacent steps within the fixed section. Prospector's psb template and
+#     Synthesizer's ContinuityPSB both use this convention.
+_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 
 #: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
 #: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
@@ -1853,7 +1852,11 @@ _register(
             ),
             **{
                 f"sfh_psb2022_ratio_old_{i}": ParamDef(
-                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    (
+                        "log10(SFR youngest fixed / SFR oldest flex); the link parameter"
+                        if i == 0
+                        else f"log10(SFR fixed bin {i} / fixed bin {i-1}); adjacent step"
+                    ),
                     _always_true,
                     "",
                     StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
@@ -1914,7 +1917,7 @@ _register(
 # entry.
 _N_PSB_FLEX_BINS = 5
 _N_PSB_FLEX_RATIOS = _N_PSB_FLEX_BINS - 1
-_N_PSB_FLEX_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+_N_PSB_FLEX_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 _register(
     SFHModelSpec(
         name="psb_flex",
@@ -1957,7 +1960,11 @@ _register(
             },
             **{
                 f"sfh_psb_flex_ratio_old_{i}": ParamDef(
-                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    (
+                        "log10(SFR youngest fixed / SFR oldest flex); the link parameter"
+                        if i == 0
+                        else f"log10(SFR fixed bin {i} / fixed bin {i-1}); adjacent step"
+                    ),
                     _always_true,
                     "",
                     StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),

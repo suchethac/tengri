@@ -711,10 +711,12 @@ def psb_continuity(
           give N+1 equal-width flex bins. Default: no keys, so ``n_flex = 1``
           and the flexible zone is a single bin, which is the layout this
           model shipped with.
-        - ``ratio_old_0``, ``ratio_old_1``, ...: ratios among the old fixed
-          bins. The ratio between the OLDEST flex bin and the youngest fixed
-          bin is pinned at 0 (they share an SFR), so ``n_fixed`` bins take
-          ``n_fixed - 1`` of these.
+        - ``ratio_old_0``, ``ratio_old_1``, ..., ``ratio_old_{n_fixed-1}``: SFR
+          ratios for the fixed old bins. ``ratio_old_0`` is the log-SFR link
+          between the oldest flex bin and the youngest fixed bin
+          [log10(SFR_youngest_fixed / SFR_oldest_flex)]; ``ratio_old_{i>0}`` are
+          adjacent steps within the fixed section
+          [log10(SFR_fixed_i / SFR_fixed_{i-1})]. Follows Suess+2022 Table 1.
 
     Returns
     -------
@@ -751,8 +753,9 @@ def psb_continuity(
     ...     ratio_young=1.0,
     ...     flex_0=0.1,
     ...     flex_1=-0.2,
-    ...     ratio_old_0=0.2,
-    ...     ratio_old_1=-0.3,
+    ...     ratio_old_0=0.2,  # link between oldest flex and youngest fixed
+    ...     ratio_old_1=-0.3,  # adjacent step within fixed section
+    ...     ratio_old_2=0.1,   # adjacent step within fixed section
     ... )
     >>> sfr.shape
     (256,)
@@ -771,26 +774,50 @@ def psb_continuity(
     n_flex_bins = n_flex_ratios + 1
 
     # Full edge array: [0, tlast, <n_flex equal-width flex edges>, old_fixed...]
+    # The flexible bins are equal-width from tlast to tflex.
     flex_edges_gyr = jnp.linspace(tlast_gyr, tflex_gyr, n_flex_bins + 1)[1:]
+    # The fixed bins are equal-width from tflex to the maximum age (oldest edge).
+    max_age_gyr = bin_edges_gyr[-1]
+    fixed_edges_gyr = jnp.linspace(tflex_gyr, max_age_gyr, n_fixed_bins + 1)[1:]
     all_edges_gyr = jnp.concatenate(
-        [jnp.array([0.0, tlast_gyr]), flex_edges_gyr, bin_edges_gyr[1:]]
+        [jnp.array([0.0, tlast_gyr]), flex_edges_gyr, fixed_edges_gyr]
     )
     n_bins_total = all_edges_gyr.shape[0] - 1
 
     # Old bins: log-SFR ratios (oldest = reference = 0)
+    # ratio_old_0 is the link (SFR_fixed[0] / SFR_oldest_flex)
+    # ratio_old_i (i>0) are adjacent steps within the fixed section
     ratio_young = ratio_kwargs.get("ratio_young", 0.0)
     ratio_old = jnp.array(
-        [ratio_kwargs.get(f"ratio_old_{i}", 0.0) for i in range(n_fixed_bins - 1)]
+        [ratio_kwargs.get(f"ratio_old_{i}", 0.0) for i in range(n_fixed_bins)]
     )
-    log_sfr_old = jnp.concatenate([jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])])
+    # Compute log-SFRs of fixed bins relative to oldest fixed bin (reference = 0).
+    # Follows Suess+2022 Table 1: ratio_old has one entry per fixed bin.
+    # ratio_old[0] is the link (handled separately via flex bin shift);
+    # ratio_old[1:] are the adjacent steps that determine the fixed section's relative SFRs.
+    if n_fixed_bins > 1:
+        log_sfr_old = jnp.concatenate(
+            [-jnp.cumsum(ratio_old[1:][::-1])[::-1], jnp.array([0.0])]
+        )
+    else:
+        log_sfr_old = jnp.array([0.0])
 
-    # Flex bins: the OLDEST flex bin is tied to the innermost old bin (ratio
-    # pinned at 0), and each ``flex_i`` steps log-SFR from flex bin i to bin
-    # i+1. With no ``flex_*`` ratios this collapses to the single flex bin at
-    # ``log_sfr_old[0]``, bit-identical to the one-flex-bin model this replaces.
+    # Flex bins: the OLDEST flex bin's SFR relative to the oldest fixed bin is
+    # determined by all ratio_old values. Each ``flex_i`` steps log-SFR from flex
+    # bin i to bin i+1. With no ``flex_*`` ratios this collapses to the single flex
+    # bin, bit-identical to the one-flex-bin model this replaces when all ratio_old = 0.
     flex_ratios = jnp.array([ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)])
+    # The oldest flex bin's log-SFR relative to oldest fixed bin is obtained by
+    # computing the sum of all ratio_old values with the reverse cumsum, similar to
+    # the fixed section. This accounts for the link (ratio_old[0]) plus the adjacent
+    # steps (ratio_old[1:]).
+    if n_fixed_bins > 1:
+        log_sfr_flex_oldest_relative_to_oldest_fixed = -jnp.sum(ratio_old)
+    else:
+        log_sfr_flex_oldest_relative_to_oldest_fixed = -ratio_old[0]
     log_sfr_flex = (
-        jnp.concatenate([jnp.cumsum(flex_ratios[::-1])[::-1], jnp.array([0.0])]) + log_sfr_old[0]
+        jnp.concatenate([jnp.cumsum(flex_ratios[::-1])[::-1], jnp.array([0.0])])
+        + log_sfr_flex_oldest_relative_to_oldest_fixed
     )
     log_sfr_young = log_sfr_flex[0] + ratio_young
 

@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- PSB link ratio parameters: `ratio_old_*` now correctly implements the Suess+2022 Table 1 convention with one parameter per fixed bin: `ratio_old_0` is the link between the oldest flexible bin and the youngest fixed bin [log10(SFR_fixed[0] / SFR_oldest_flex)], and `ratio_old_{i>0}` are adjacent steps within the fixed section. The previous implementation used `n_fixed-1` parameters and computed relative ratios incorrectly. This matches the parameterization in Prospector's psb template and Synthesizer's ContinuityPSB. Also fixed bin-edge construction in `psb_continuity_flex` to create properly sorted equal-width bins spanning [tflex_gyr, max_age_gyr] instead of concatenating unsorted edges (#2612).
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
