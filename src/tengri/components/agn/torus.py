@@ -64,8 +64,7 @@ _TOY_WAVE_HI = 1.0e8  # Angstrom
 
 def _toy_integral(shape_fn: Callable) -> jnp.ndarray:
     """Floored frequency integral of a toy-torus shape on the fixed internal span."""
-    integral = analytic_bolometric_nu(shape_fn, _TOY_WAVE_LO, _TOY_WAVE_HI)
-    return jnp.maximum(jnp.abs(integral), 1e-100)
+    return analytic_bolometric_nu(shape_fn, _TOY_WAVE_LO, _TOY_WAVE_HI, floor=1e-100)
 
 
 # ── Model 1: Simple hot blackbody torus ───────────────────────────

@@ -27,8 +27,8 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_template
+from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 __all__ = [
     "TorusTemplateGrid",
@@ -75,12 +75,21 @@ def native_bolometric_nu(
     wherever the grid stops short of its support and would shift with the node
     density.)
 
+    The integral is that of the interpolant
+    :func:`~tengri.utils.grid_interp.resample_template` builds (a power law
+    between adjacent nodes in :math:`\lambda`), so the resampled template
+    integrates to the same value on any grid fine enough to resolve it. A
+    trapezoid in :math:`\nu` over the native nodes would instead lay a chord
+    across a convex segment and differ by up to ~1e-2 on the coarse (R ~ 7)
+    libraries.
+
     Parameters
     ----------
     lnu_native : array_like, shape (n_native,)
-        Template on ``wave_native`` [arbitrary units per Hz; shape only].
+        Template :math:`L_\nu` on ``wave_native`` [arbitrary units per Hz;
+        shape only].
     wave_native : array_like, shape (n_native,)
-        Template wavelength grid [Angstrom].
+        Template wavelength grid [Angstrom], ascending.
     floor : float, optional
         Lower bound on the returned magnitude, so the division cannot hit zero.
 
@@ -91,13 +100,22 @@ def native_bolometric_nu(
 
     Notes
     -----
+    .. math::
+
+        \int L_\nu\,\mathrm{d}\nu
+        = \int L_\nu(\lambda)\,\frac{c}{\lambda^2}\,\mathrm{d}\lambda,
+
+    where the integrand is a power law in :math:`\lambda` on every segment
+    (:math:`L_\nu\propto\lambda^{s}` gives :math:`\lambda^{s-2}`), integrated
+    in closed form by :func:`~tengri.utils.grid_interp.loglog_integral`.
+
     **JIT-compatible**: yes. **Gradient-safe**: yes. The resampling kernels used
     after this are linear in the template values, so dividing the resampled
     template by this integral equals resampling the normalized template.
     """
-    return _bolometric_integral_nu(
-        jnp.asarray(lnu_native), _wavelength_to_nu(jnp.asarray(wave_native)), floor=floor
-    )
+    wave = jnp.asarray(wave_native)
+    integrand = jnp.asarray(lnu_native) * (_C_AA / wave**2)
+    return jnp.maximum(jnp.abs(loglog_integral(wave, integrand)), floor)
 
 
 def scale_to_lbol_native(
@@ -159,6 +177,8 @@ def analytic_bolometric_nu(
     wave_lo: float,
     wave_hi: float,
     n_nodes: int = 4097,
+    *,
+    floor: float | None = None,
 ) -> jnp.ndarray:
     r"""Frequency integral of an analytic shape on a FIXED internal grid.
 
@@ -179,11 +199,13 @@ def analytic_bolometric_nu(
     n_nodes : int, optional
         Grid nodes. The trapezoid error on a smooth shape is
         :math:`O((\Delta\ln\lambda)^2)`, ~1e-6 at the default.
+    floor : float, optional
+        When given, return ``max(|integral|, floor)`` (safe denominator).
 
     Returns
     -------
     ndarray, shape ()
-        :math:`\int L_\nu\,d\nu` in the shape's units.
+        :math:`\int L_\nu\,d\nu` in the shape's units (floored magnitude if ``floor``).
 
     Notes
     -----
@@ -191,7 +213,7 @@ def analytic_bolometric_nu(
     **Gradient-safe**: yes.
     """
     wave = jnp.asarray(np.geomspace(wave_lo, wave_hi, n_nodes))
-    return _bolometric_integral_nu(shape_fn(wave), _wavelength_to_nu(wave))
+    return _bolometric_integral_nu(shape_fn(wave), _wavelength_to_nu(wave), floor=floor)
 
 
 def torus_lnu_from_grid(
