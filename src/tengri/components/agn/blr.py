@@ -33,7 +33,6 @@ References
 
 """
 
-import functools
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -119,7 +118,7 @@ def _load_fe2_templates():
 
     File format: log10(wavelength), **F_lambda** [erg/s/cm²/Å] (per PyQSOFit
     convention). Only the *shape* of each template is used downstream; the
-    absolute scale is set by the R_Fe / L(H-beta) normalisation in
+    absolute scale is set by the R_Fe / L(H-beta) normalization in
     :func:`_fe2_pseudo_continuum`.
 
     Negative template nodes (numerical ringing in the published tabulations,
@@ -179,36 +178,40 @@ _FE2_RFE_WINDOW = (4434.0, 4684.0)
 
 # Internal grid on which the FeII template is carried, broadened and normalized.
 # Uniform in ln(lambda) (constant velocity step), so a Gaussian of fixed velocity
-# width is one shift-invariant kernel. The step is set by the native template
-# sampling and the narrowest broadening we resolve:
-#   * the native nodes are 104-106 km/s apart (uniform in ln lambda in the files);
-#   * 2 km/s resolves a Gaussian down to FWHM ~ 10 km/s (sigma = 4.2 km/s, 2 samples
-#     per sigma) and keeps the piecewise-linear re-gridding error of the template
-#     integral at (step/native)^2/8 ~ 5e-5.
-# Narrower widths are not resolved but also not needed: BLR FWHM is >= ~1000 km/s;
-# below the step the filter below is the identity to the lattice resolution.
-_FE2_GRID_STEP_KMS = 2.0
-_FE2_GRID_LAMBDA_RANGE = (
-    900.0,
-    9000.0,
-)  # [Angstrom]; covers 1075-7484 A plus the broadening tails
-_FE2_FFT_SIZE = 1 << 19  # >= grid length + the widest kernel support (static)
+# width is one shift-invariant kernel. Step choice, measured against a 0.5 km/s
+# lattice (max |difference| / peak of the broadened spectrum, FWHM 1000 / 5000 km/s):
+#   2 km/s 2.3e-4 / 6.4e-5;  5 km/s 3.8e-4 / 1.0e-4;  10 km/s 3.9e-4 / 1.1e-4;
+#   20 km/s 1.1e-3 / 3.2e-4.
+# The native nodes are 104-106 km/s apart, so the error plateaus at the re-gridding
+# of the piecewise-linear template (~3e-4 of the peak) from 5 km/s down; 5 km/s is
+# the coarsest step on that plateau (20 km/s costs 3x more) and resolves a Gaussian
+# down to FWHM ~ 25 km/s (2 samples per sigma), far below any BLR width (>= ~1000).
+_FE2_GRID_STEP_KMS = 5.0
+# [Angstrom]; covers the 1075-7484 A template plus the broadening tails
+_FE2_GRID_LAMBDA_RANGE = (900.0, 9000.0)
+# Static FFT length: next power of two >= the grid length. The template is zero over
+# >5e4 km/s of padding at each end, so the circular wrap-around never reaches support.
+_FE2_FFT_SIZE = 1 << 18
 
 
-@functools.lru_cache(maxsize=1)
 def _fe2_internal_grid():
-    """Static numpy products of the FeII template on the internal ln(lambda) grid.
+    """FeII template on the internal ln(lambda) grid, built inside the trace.
+
+    The grid is an iota expression and the template is resampled from the native
+    nodes (a few thousand values, the only constants), so no ~n_grid-sized array
+    is baked into a traced graph; the lattice is regenerated in the compiled
+    program.
 
     Returns
     -------
-    wave : ndarray, shape (n_grid,)
+    wave : array, shape (n_grid,)
         Grid wavelengths [Angstrom], uniform in ln(lambda).
-    template : ndarray, shape (n_grid,)
+    template : array, shape (n_grid,)
         Zero-clipped template F_lambda shape, UV below 3500 A and optical above,
         linearly resampled in wavelength from the native nodes, zero outside the
         tabulated range, divided by its maximum (scale-free; the absolute scale is
         set by the R_Fe normalization) [dimensionless].
-    window_weights : ndarray, shape (n_grid,)
+    window_weights : array, shape (n_grid,)
         Weights ``w_i`` with ``sum_i w_i y_i`` = integral of the piecewise-linear
         ``y(lambda)`` over the R_Fe window (4434-4684 A, exact edges) [Angstrom].
     dln : float
@@ -217,29 +220,25 @@ def _fe2_internal_grid():
     dln = _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
     lo, hi = np.log(_FE2_GRID_LAMBDA_RANGE[0]), np.log(_FE2_GRID_LAMBDA_RANGE[1])
     n_grid = int(np.ceil((hi - lo) / dln)) + 1
-    wave = np.exp(lo + dln * np.arange(n_grid))
+    wave = jnp.exp(lo + dln * jnp.arange(n_grid, dtype=jnp.float64))
 
-    uv_w, uv_f = (
-        np.asarray(_FE2_UV_WAVE, dtype=np.float64),
-        np.asarray(_FE2_UV_FLUX, dtype=np.float64),
+    uv = jnp.interp(
+        wave, device_table(_FE2_UV_WAVE), device_table(_FE2_UV_FLUX), left=0.0, right=0.0
     )
-    op_w, op_f = (
-        np.asarray(_FE2_OPT_WAVE, dtype=np.float64),
-        np.asarray(_FE2_OPT_FLUX, dtype=np.float64),
+    op = jnp.interp(
+        wave, device_table(_FE2_OPT_WAVE), device_table(_FE2_OPT_FLUX), left=0.0, right=0.0
     )
-    uv = np.interp(wave, uv_w, uv_f, left=0.0, right=0.0)
-    op = np.interp(wave, op_w, op_f, left=0.0, right=0.0)
-    template = np.where(wave < 3500.0, uv, op)
-    template = template / template.max()
+    template = jnp.where(wave < 3500.0, uv, op)
+    template = template / jnp.max(template)
 
     w0, w1 = wave[:-1], wave[1:]
-    a = np.clip(w0, *_FE2_RFE_WINDOW)
-    b = np.clip(w1, *_FE2_RFE_WINDOW)
+    a = jnp.clip(w0, *_FE2_RFE_WINDOW)
+    b = jnp.clip(w1, *_FE2_RFE_WINDOW)
     half = 0.5 * (b - a)
     ta, tb = (a - w0) / (w1 - w0), (b - w0) / (w1 - w0)
-    weights = np.zeros(n_grid)
-    weights[:-1] += half * ((1.0 - ta) + (1.0 - tb))
-    weights[1:] += half * (ta + tb)
+    weights = jnp.zeros(n_grid)
+    weights = weights.at[:-1].add(half * ((1.0 - ta) + (1.0 - tb)))
+    weights = weights.at[1:].add(half * (ta + tb))
     return wave, template, weights, float(dln)
 
 
@@ -260,7 +259,7 @@ def _fe2_broadened_on_grid(fwhm_kms):
     sigma_samples = (fwhm_kms / 2.3548 / _C_LIGHT_KMS) / dln
     freq = jnp.fft.rfftfreq(n_fft)
     transfer = jnp.exp(-2.0 * (jnp.pi * sigma_samples * freq) ** 2)
-    spec = jnp.fft.rfft(jnp.asarray(template), n=n_fft)
+    spec = jnp.fft.rfft(template, n=n_fft)
     out = jnp.fft.irfft(spec * transfer, n=n_fft)[: template.shape[0]]
     # FFT round-off can leave ~1e-16 negatives on a non-negative function
     return jnp.maximum(out, 0.0)
@@ -280,7 +279,7 @@ def _fe2_pseudo_continuum(
     - Optical (3500–7500 Å): Boroson & Green 1992
 
     The combined UV+optical template is carried on a fixed internal grid
-    uniform in ln(lambda) (2 km/s step), broadened there by a constant-velocity
+    uniform in ln(lambda) (5 km/s step), broadened there by a constant-velocity
     Gaussian (BLR FWHM in km/s; one FFT convolution), normalized there, and only
     then sampled at the input wavelengths. The result is therefore independent of
     the caller's grid (coverage and sampling); JIT/grad/vmap safe in ``fwhm_kms``
@@ -288,7 +287,7 @@ def _fe2_pseudo_continuum(
 
     **Unit convention.** The PyQSOFit template columns are F_lambda
     [erg/s/cm²/Å]; their *shape* is treated as the shape of L_lambda. The
-    output is L_lambda per unit H-beta luminosity [Å⁻¹], normalised so that
+    output is L_lambda per unit H-beta luminosity [Å⁻¹], normalized so that
 
     .. math::
 
@@ -343,12 +342,12 @@ def _fe2_pseudo_continuum(
     # integral(L_lambda d lambda) = fe2_strength per unit L(H-beta). It is computed
     # on the internal grid, so neither the amplitude nor the broadening depends on
     # the caller's wavelength grid (coverage or sampling).
-    window_flux = jnp.sum(jnp.asarray(window_weights) * broadened)
+    window_flux = jnp.sum(window_weights * broadened)
     window_flux = jnp.maximum(window_flux, representable_denominator(1e-30))
 
     # Sample the (smooth) broadened spectrum at the caller's wavelengths; zero outside
     # the internal grid's support.
-    on_caller = jnp.interp(wavelength, jnp.asarray(grid_wave), broadened, left=0.0, right=0.0)
+    on_caller = jnp.interp(wavelength, grid_wave, broadened, left=0.0, right=0.0)
     return fe2_strength * on_caller / window_flux
 
 

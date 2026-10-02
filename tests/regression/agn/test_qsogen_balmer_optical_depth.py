@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""QSOGen Balmer continuum: optical depth runs with the photoionisation cross-section.
+"""QSOGen Balmer continuum: optical depth runs with the photoionization cross-section.
 
 The bound-free cross-section of hydrogen n=2 scales as sigma_bf ~ nu^-3
 (Grandi 1982; Osterbrock & Ferland 2006), so the optical depth of the slab is
@@ -24,6 +24,8 @@ from tengri.components.agn.qsogen import _balmer_continuum
 HC_OVER_K = 1.43877735e8  # h c / k_B [K Angstrom]
 WAV_BE = 3646.0
 
+pytestmark = pytest.mark.regression_bug
+
 
 def _b_lambda(wave, tbc):
     """QSOGen ``bb()`` convention: wav^-3 / (exp(hc/(k T wav)) - 1)."""
@@ -34,7 +36,7 @@ def _reference(wave, cont, bcnorm, tbc, taube, wavbe):
     """Direct evaluation of the Grandi (1982) / QSOGen Balmer continuum.
 
     tau is computed in *frequency* exactly as upstream does:
-    ``taube * (nu_zero / nu)**3``; normalised to ``bcnorm * continuum(3000 A)``.
+    ``taube * (nu_zero / nu)**3``; normalized to ``bcnorm * continuum(3000 A)``.
     """
     c = 2.99792458e18  # Angstrom / s
     nu0 = c / wavbe

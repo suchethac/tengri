@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""FeII pseudo-continuum: unit convention, template handling, normalisation.
+"""FeII pseudo-continuum: unit convention, template handling, normalization.
 
 The PyQSOFit templates tabulate ``log10(lambda)`` and **F_lambda**
 [erg/s/cm^2/A].  The pseudo-continuum must carry the template's F_lambda
@@ -31,6 +31,8 @@ from tengri.utils.physics_constants import C_AA, C_KM_S
 DATA = Path(tengri.__file__).parent / "data" / "agn_fe2"
 WIN = (4434.0, 4684.0)
 FWHM = 5000.0
+
+pytestmark = pytest.mark.regression_bug
 
 
 def _native(name: str):
@@ -116,7 +118,7 @@ def test_negative_template_nodes_are_clipped_at_load():
 def test_resampling_conserves_template_integral(name, lo, hi):
     """Unbroadened pseudo-continuum integral equals the native-node integral (1e-4).
 
-    The grid always contains the R_Fe window (the normalisation needs it); the
+    The grid always contains the R_Fe window (the normalization needs it); the
     integral is taken over ``[lo, hi]`` only, and compared with the trapezoid
     integral of the clipped native nodes, both divided by the native window
     integral.
@@ -139,13 +141,13 @@ def test_unbroadened_shape_is_the_clipped_linear_template():
     got = np.asarray(_fe2_pseudo_continuum(jnp.asarray(wave), 1e-4, 1.0))
     ref = _ref_template(wave)
     scale = got.max() / ref.max()
-    # The template is carried on an internal uniform ln(lambda) grid (2 km/s step) and
+    # The template is carried on an internal uniform ln(lambda) grid (5 km/s step) and
     # re-sampled linearly, which differs from the native piecewise-linear nodes only
-    # within one fine cell of a node: measured 1.6e-4 of the peak.
-    np.testing.assert_allclose(got, ref * scale, rtol=0.0, atol=5e-4 * got.max())
+    # within one fine cell of a node: measured 5.1e-4 of the peak.
+    np.testing.assert_allclose(got, ref * scale, rtol=0.0, atol=1e-3 * got.max())
 
 
-def test_window_normalisation_is_r_fe_times_lhbeta():
+def test_window_normalization_is_r_fe_times_lhbeta():
     """Energy in 4434-4684 A relative to L(Hbeta) equals agn_fe2_strength."""
     wave = np.arange(4300.0, 4800.0, 0.25)
     l5100, cf, eff, fbol = 1e44, 0.1, 0.08, 9.0
@@ -166,7 +168,7 @@ def test_window_normalisation_is_r_fe_times_lhbeta():
         assert _window_integral(wave, lam) / l_hb == pytest.approx(r_fe, rel=1e-3)
 
 
-def test_compute_blr_sed_feii_is_flambda_shape_with_same_normalisation():
+def test_compute_blr_sed_feii_is_flambda_shape_with_same_normalization():
     """The monolithic BLR path (returns L_nu) carries the same FeII L_lambda."""
     wave = np.arange(4000.0, 6000.0, 1.0)
     l_bol, cf, eff, r_fe = 1e45, 0.1, 0.08, 1.3
@@ -196,7 +198,7 @@ def test_feii_provenance_sha256_matches_shipped_file(name):
 
 @pytest.mark.parametrize("fwhm", [1000.0, 5000.0])
 def test_amplitude_is_independent_of_the_callers_wavelength_grid(fwhm):
-    """The R_Fe normalisation is a property of the template, not of the caller's grid.
+    """The R_Fe normalization is a property of the template, not of the caller's grid.
 
     The same grid spacing, once with the R_Fe window (4434-4684 A) on the grid and
     once UV-only (1200-3500 A): the FeII L_lambda at a UV wavelength must be
