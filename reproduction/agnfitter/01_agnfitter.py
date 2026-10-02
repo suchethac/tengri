@@ -2342,6 +2342,7 @@ print(
 # - Just, D. W., et al. 2007, ApJ 665, 1004 [`just2007x`]; Lusso, E. &
 #   Risaliti, G. 2016, ApJ 819, 154 [`lusso2016tight`]; 2017, A&A 602, A79
 #   [`lusso2017quasars`] — α_ox–L₂₅₀₀.
+# - Stern, D. 2015, ApJ 807, 129 — 6 µm ↔ 2–10 keV AGNfitter-rX X-ray prior [`stern2015`].
 # - Mineo, S., et al. 2014, MNRAS 437, 1698 — host XRB / SFR [`mineo2014x`].
 #
 # **Radio (§11)**
@@ -2361,7 +2362,6 @@ print(
 #
 # **Codes & inference**
 # - Hearin, A. P., et al. 2023, MNRAS 521, 1741 — DSPS [`hearin2023dsps`].
-# - Buchner, J. 2019, PASP 131, 108005 — UltraNest [`buchner2019collaborative`].
 
 # %% [markdown]
 # ### BibTeX
