@@ -8575,22 +8575,10 @@ class SEDModel:
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
-        # Surviving mass
-        if self.ssp_data.ssp_mass_remaining is not None:
-            from tengri.components.stellar.sps.dsps_wrapper import (
-                compute_surviving_mass,
-                interpolate_mass_remaining,
-            )
-
-            log_z = p.get("log_z_abs", 0.0)
-            mr_at_met = interpolate_mass_remaining(
-                self.ssp_data.ssp_mass_remaining,
-                self.ssp_data.ssp_lgmet,
-                log_z,
-            )
-            mass_surviving = compute_surviving_mass(weights, mr_at_met)
-        else:
-            mass_surviving = jnp.array(jnp.nan)
+        # Surviving mass from the stellar component's exact joint-weight contraction
+        # (uses each node's own metallicity, not a single Z). Route through the
+        # published value to avoid duplicating the computation (#2613).
+        mass_surviving = 10.0 ** jnp.asarray(state_orch.derived["log_mstar_surviving"])
 
         # SFR averages, time-weighted mean over a lookback-time window.
         # <SFR>_T = sum(SFR_i * dt_i) / sum(dt_i)  for all age_i <= T.
