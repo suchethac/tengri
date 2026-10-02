@@ -34,8 +34,12 @@ Known upstream errors, applied here as explicit conversions (never in ``src/``)
 * Balmer continuum: tengri smooths with sigma = FWHM / 2.355 and keeps the redward tail; the
   two cannot be matched pointwise, so the 210-355 nm integral is compared.
 * Torus support: upstream is hard-zero outside 0.36-100 micron; compared inside 0.4-99 micron.
-* Lines: upstream samples each line on a coarse node set and interpolates linearly, so point
-  values in the wings are not comparable; the flux and width inside each line window are.
+* Lines: upstream evaluates the summed lines on 9 nodes per line (line centre +-3 FWHM, in
+  nm) and interpolates linearly; the table of line wavelengths it reads is float32. Tengri's
+  lines are evaluated at the same nodes (built with the same float32 arithmetic from the same
+  float32 wavelengths) and interpolated the same way, then compared point by point and per
+  line window after the sqrt(2). Evaluated directly on the 5000-point grid the line widths
+  differ by 20% from interpolation alone.
 * tengri zeroes the disc below ``XRAY_FLOOR_NM`` (12.4 nm: GRAHSP has no X-ray physics, so the
   disc must not double-count with the alpha_ox corona); upstream does not. BBB and the BBB
   attenuation are compared at and above that wavelength, and the zeroing itself is asserted.
@@ -48,6 +52,7 @@ Measured residuals sit in the comment beside each tolerance.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import math
 from dataclasses import dataclass
@@ -57,6 +62,7 @@ import h5py
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import scipy.constants as cst
 
 from tengri.components.agn.grahsp.bbb import XRAY_FLOOR_NM
 from tengri.components.agn.grahsp.model import GRAHSPSED, GRAHSPParams, evaluate_grahsp_agn
@@ -126,10 +132,12 @@ N_MIN_TORUS = 2000  # measured 2393 inside 0.4-99 micron
 LINE_WINDOW_NSIG = 6.0  # window half-width in line sigmas
 LINE_WINDOW_MIN_POINTS = 5
 LINE_WINDOW_FLUX_FLOOR = 1e-3  # windows with less than this fraction of the max are skipped
+N_MIN_LINE_POINTS = 140  # measured 143 (1000 km/s broad) .. 890
+TOL_LINE_POINT_DEX = 2e-6  # measured 6.7e-7 dex (float32 line-strength table upstream)
 N_MIN_LINE_WINDOWS = 4  # measured 5 (10000 km/s) .. 29 (1000 km/s)
-TOL_LINE_WINDOW_FLUX = 0.05  # measured 3.5e-2 (1000 km/s); upstream coarse sampling
-TOL_LINE_TOTAL_FLUX = 0.006  # measured 1.0e-3 (broad), 2.6e-3 (narrow)
-TOL_LINE_WIDTH = 0.25  # measured 0.20: upstream's linear interpolation of coarse nodes widens
+TOL_LINE_WINDOW_FLUX = 1e-6  # measured 1.2e-7 relative
+TOL_LINE_TOTAL_FLUX = 1e-6  # measured 3.8e-8 relative
+TOL_LINE_WIDTH = 1e-6  # measured 7.1e-8 relative (rms width / centroid)
 TOL_NORM_12UM_TENGRI = 1e-12  # measured 2.2e-16
 TOL_NORM_12UM_UPSTREAM = 5e-5  # measured 1.2e-5: base-grid interpolation across the 12 um node
 BC_WINDOW_NM = (210.0, 355.0)
@@ -158,6 +166,9 @@ class Case:
     sed: GRAHSPSED  # tengri on the reference grid
     torus_nodes: np.ndarray  # tengri torus on upstream's template nodes
     torus_node_wave: np.ndarray
+    line_nodes: np.ndarray  # upstream's line sampling nodes [nm]
+    broad_on_nodes: np.ndarray  # tengri lines at those nodes (unit-area, before sqrt(2))
+    narrow_on_nodes: np.ndarray
 
 
 def _tengri_params(up: dict) -> GRAHSPParams:
@@ -168,6 +179,21 @@ def _tengri_params(up: dict) -> GRAHSPParams:
 @functools.lru_cache(maxsize=1)
 def _templates():
     return load_grahsp_templates()
+
+
+def _upstream_line_waves(templates) -> np.ndarray:
+    """Line centres as upstream reads them: float32 Angstrom table, times 0.1 in float32."""
+    angstrom = (np.asarray(templates.line_wave_nm) * 10.0).astype(np.float32)
+    return angstrom * 0.1
+
+
+def _upstream_line_nodes(line_wave32: np.ndarray, linewidth_kms: float) -> np.ndarray:
+    """activatelines._init_code: 9 nodes per line over +-3 FWHM, same float32 arithmetic."""
+    chunks = []
+    for lam in line_wave32:
+        width = lam * (linewidth_kms * 1000) / cst.c  # FWHM [nm], float32
+        chunks.append(np.linspace(lam - 3.0 * width, lam + 3.0 * width, 9))
+    return np.unique(np.concatenate(chunks).astype(np.float64))
 
 
 @functools.lru_cache(maxsize=1)
@@ -190,7 +216,14 @@ def load_case(name: str) -> Case:
     sed = evaluate_grahsp_agn(jnp.asarray(wave), params, _templates())
     nodes = _torus_node_wave()
     node_sed = evaluate_grahsp_agn(jnp.asarray(nodes), params, _templates())
-    return Case(name, up, wave, ref, sed, np.asarray(node_sed.torus), nodes)
+    line_wave32 = _upstream_line_waves(_templates())
+    line_nodes = _upstream_line_nodes(line_wave32, params.linewidth_kms)
+    templates32 = dataclasses.replace(_templates(), line_wave_nm=line_wave32.astype(np.float64))
+    line_sed = evaluate_grahsp_agn(jnp.asarray(line_nodes), params, templates32)
+    return Case(
+        name, up, wave, ref, sed, np.asarray(node_sed.torus), nodes,
+        line_nodes, np.asarray(line_sed.broad_lines), np.asarray(line_sed.narrow_lines),
+    )  # fmt: skip
 
 
 def _get(case: Case, key: str) -> np.ndarray:
@@ -363,10 +396,11 @@ def _window_flux_and_width(wave, y, windows):
 @pytest.mark.parametrize("component", ["broad", "narrow"])
 @pytest.mark.parametrize("name", PARAM_SETS)
 def test_lines(name, component):
-    """Per-window flux and width of tengri x sqrt(2) vs upstream (windows of +-6 sigma)."""
+    """Tengri x sqrt(2), on upstream's line nodes, vs upstream: points, window flux and width."""
     case = load_case(name)
     key = {"broad": "agn.activate_EmLines_BL", "narrow": "agn.activate_EmLines_NL"}[component]
-    tengri = np.asarray(getattr(case.sed, f"{component}_lines")) * LINE_FLUX_SCALE
+    on_nodes = case.broad_on_nodes if component == "broad" else case.narrow_on_nodes
+    tengri = np.interp(case.wave, case.line_nodes, on_nodes * LINE_FLUX_SCALE, left=0.0, right=0.0)
     upstream = _get(case, key)
     if component == "broad" and case.up["type"] != 1:
         _assert_inactive(case, tengri, upstream, "broad lines")
@@ -375,6 +409,9 @@ def test_lines(name, component):
     windows = _line_windows(line_wave, case.up["linewidth"])
     t_flux, t_width = _window_flux_and_width(case.wave, tengri, windows)
     u_flux, u_width = _window_flux_and_width(case.wave, upstream, windows)
+    n_pts, dex = _pointwise_dex(tengri, upstream, N_MIN_LINE_POINTS)
+    _report(f"lines_{component}(point)", case, n_pts, dex)
+    assert dex <= TOL_LINE_POINT_DEX, f"[{name}] line points {dex:.3e} dex over {n_pts} points"
     keep = u_flux > LINE_WINDOW_FLUX_FLOOR * u_flux.max()
     n_win = int(keep.sum())
     assert n_win >= N_MIN_LINE_WINDOWS, f"only {n_win} line windows compared"
