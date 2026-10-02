@@ -2,6 +2,11 @@
 
 ### Fixed
 
+- NSS `log_evidence_err` is now sqrt(H / n_eff), with H the information in nats and
+  n_eff the live count corrected for batch deletion, instead of sqrt(ESS) / n_live,
+  which does not track H. log Z is unchanged. On a d = 5 ball prior with R = 100 the
+  old value was 0.24 nats against a measured scatter of 0.44 nats; the new one is 0.42 (#2443).
+
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception

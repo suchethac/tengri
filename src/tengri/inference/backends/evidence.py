@@ -10,8 +10,104 @@ import time
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+from scipy.special import logsumexp
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+
+_N_VOLUME_REALIZATIONS = 100  # simulated prior-volume sequences for H and log Z scatter
+
+
+def _nss_information_and_error(log_w, logL, n_live, num_delete):
+    r"""Information H and evidence error of a nested-sampling run.
+
+    Returns the information H of the run, the standard deviation of
+    :math:`\log Z` that follows from it, and the effective live count used.
+
+    Parameters
+    ----------
+    log_w : ndarray, shape (n_dead, K)
+        Unnormalized log weights :math:`\log(L_i\,\Delta X_i)`, one column per
+        simulated sequence of prior volumes (K realizations).
+    logL : ndarray, shape (n_dead,)
+        Log-likelihood of each dead point, in nats.
+    n_live : int
+        Number of live points.
+    num_delete : int
+        Points removed per iteration.
+
+    Returns
+    -------
+    H : float
+        Information (Kullback-Leibler divergence of posterior from prior), nats.
+    log_evidence_err : float
+        Standard deviation of :math:`\log Z`, nats.
+    n_eff : float
+        Effective live count, dimensionless.
+
+    Raises
+    ------
+    ValueError
+        If ``num_delete`` is not in [1, n_live), or if H is negative by more
+        than round-off (1e-6 nats).
+
+    Notes
+    -----
+    For realization k the posterior weights are
+    :math:`p_{ik} = \exp(\log w_{ik} - \log Z_k)` with
+    :math:`\log Z_k = \log\sum_i \exp(\log w_{ik})`, and
+
+    .. math::
+
+        H = \frac{1}{K}\sum_{k=1}^{K}\Bigl(\sum_i p_{ik}\log L_i - \log Z_k\Bigr).
+
+    Removing ``num_delete`` = :math:`m` points per iteration from a live set of
+    :math:`n` shrinks :math:`\ln X` at the j-th removal by a mean of
+    :math:`1/(n-j)` with variance :math:`1/(n-j)^2`. Reaching the posterior
+    bulk takes about H divided by the mean shrinkage per removal, so
+
+    .. math::
+
+        n_\mathrm{eff} = \frac{\sum_{j=0}^{m-1} (n-j)^{-1}}
+                              {\sum_{j=0}^{m-1} (n-j)^{-2}},
+        \qquad
+        \sigma(\log Z) = \sqrt{H / n_\mathrm{eff}}.
+
+    For :math:`m = 1` this is :math:`n_\mathrm{eff} = n` and Skilling's
+    :math:`\sqrt{H/n}` [1]_. The result is leading order in :math:`1/n`: it
+    treats the log prior volume at the posterior bulk as Gaussian.
+
+    References
+    ----------
+    .. [1] Skilling, J. (2006). Nested sampling for general Bayesian
+           computation. Bayesian Analysis, 1(4), 833-859.
+           doi:10.1214/06-BA127
+    """
+    if num_delete < 1 or num_delete >= n_live:
+        raise ValueError(
+            f"num_delete ({num_delete}) must satisfy 1 <= num_delete < n_live ({n_live})"
+        )
+    log_w = np.asarray(log_w, dtype=np.float64)
+    logL = np.asarray(logL, dtype=np.float64)
+
+    log_z_k = logsumexp(log_w, axis=0)
+    p = np.exp(log_w - log_z_k)
+    # p == 0 where a weight underflows; 0 * (-inf) would be NaN, the term is 0.
+    h_k = np.sum(np.where(p > 0, p * logL[:, None], 0.0), axis=0) - log_z_k
+    information = float(np.mean(h_k))
+
+    if information < -1e-6:
+        raise ValueError(
+            f"information H = {information:.3e} nats is negative beyond round-off "
+            f"(log_w shape {log_w.shape}, logL shape {logL.shape}, "
+            f"log_w range [{log_w.min():.2f}, {log_w.max():.2f}])"
+        )
+    if information < 0.0:
+        information = 0.0
+
+    removal = n_live - np.arange(num_delete, dtype=np.float64)
+    n_eff = float(np.sum(1.0 / removal) / np.sum(1.0 / removal**2))
+    return information, float(np.sqrt(information / n_eff)), n_eff
 
 
 def _resolve_nss_settings(preset, n_live, num_delete, log_evidence_tol, max_shrinkage):
@@ -198,12 +294,13 @@ def run_nss(
 
     Notes
     -----
-    **Preset rationale**: Evidence scatter scales as σ_logZ ≈ √(H/n_live) where
-    H is the entropy. "fast" trades ~2–3× wall time for σ_logZ ≈ 0.3–0.45 nats,
-    fine for BMA when model differences Δlog Z ≳ 1. "accurate" provides σ_logZ
-    ≈ 0.15–0.2 nats, suitable for tight model selection. The required live set
-    must satisfy n_live > D (number of free parameters); a guard checks this
-    after preset resolution.
+    **Preset rationale**: Evidence scatter scales as σ_logZ ≈ √(H/n_eff) where
+    H is the information and n_eff is the effective live count accounting for
+    batch deletion (n_eff = n_live for single-point deletions). "fast" (n=100,
+    k=20, n_eff≈89.8) trades ~2–3× wall time for σ_logZ ≈ 0.3–0.45 nats, fine
+    for BMA when Δlog Z ≳ 1. "accurate" (n=500, k=50, n_eff≈474.6) provides
+    σ_logZ ≈ 0.15–0.2 nats. The required live set must satisfy n_live > D
+    (number of free parameters); a guard checks this after preset resolution.
 
     **Cross-galaxy cache reuse**
 
@@ -224,7 +321,11 @@ def run_nss(
     JIT/grad/vmap: the step body is fully JIT-compatible.
     """
     from tengri.inference.backends.nested.base import NSInfo as _NSInfo
-    from tengri.inference.backends.nested.utils import ess as ns_ess, sample as ns_sample
+    from tengri.inference.backends.nested.utils import (
+        ess as ns_ess,
+        log_weights as ns_log_weights,
+        sample as ns_sample,
+    )
     from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
@@ -316,6 +417,14 @@ def run_nss(
     key, ess_key = jax.random.split(key)
     ess_val = float(ns_ess(ess_key, ns_run))
 
+    key, weight_key = jax.random.split(key)
+    information_nats, log_evidence_err, n_live_effective = _nss_information_and_error(
+        np.asarray(ns_log_weights(weight_key, ns_run, shape=_N_VOLUME_REALIZATIONS)),
+        np.asarray(ns_run.particles.loglikelihood),
+        n_live,
+        num_delete,
+    )
+
     samples_phys = {name: resampled.position[name] for name in context.free_names}
     for name, val in fitter._fixed_values.items():
         samples_phys[name] = jnp.full(n_posterior_samples, val)
@@ -337,7 +446,9 @@ def run_nss(
             "n_iterations": n_iter,
             "n_dead": n_iter * num_delete,
             "log_evidence": logZ,
-            "log_evidence_err": float(jnp.sqrt(jnp.maximum(ess_val, 1.0)) / n_live),
+            "log_evidence_err": log_evidence_err,
+            "information_nats": information_nats,
+            "n_live_effective": n_live_effective,
             "ess": ess_val,
         },
         log_evidence=logZ,
