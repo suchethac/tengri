@@ -78,6 +78,35 @@ class TestDustAttenuation:
         kc = np.array(calzetti(self.WL))
         np.testing.assert_allclose(ks, kc, rtol=0.02)
 
+    @pytest.mark.parametrize("law_name", ["noll09", "salim_sbl18"])
+    @pytest.mark.parametrize(
+        ("wavelength_aa", "branch"),
+        [(1700.0, "l02"), (1799.0, "l02"), (1801.0, "calzetti"), (1900.0, "calzetti")],
+    )
+    def test_l02_calzetti_branch_pinned_at_1800_angstrom(self, law_name, wavelength_aa, branch):
+        """With no bump and no slope the law is k'(λ)/k'(5500 Å); each side of 1800 Å is pinned.
+
+        Leitherer et al. (2002, ApJS 140, 303) eq. 14 holds for λ < 1800 Å and
+        Calzetti et al. (2000, ApJ 533, 682) eq. 4 above (#2617). The laws are
+        evaluated, not the shared helper, and checked against the polynomials
+        written out here. 1800 Å itself is not tested: floating-point rounding
+        of the wavelength conversion (λ[Å]·1e-4) determines which branch is
+        selected; 1799 Å and 1801 Å pin each side.
+        """
+        from tengri.components.dust import attenuation
+
+        def l02(x):  # x = 1/λ[µm]; k = 5.472 + 0.671/λ - 9.218e-3/λ² + 2.620e-3/λ³
+            return 5.472 + 0.671 * x - 9.218e-3 * x**2 + 2.620e-3 * x**3
+
+        def calzetti(x):  # k' = 2.659(-2.156 + 1.509/λ - 0.198/λ² + 0.011/λ³) + 4.05
+            return 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + 4.05
+
+        poly = l02 if branch == "l02" else calzetti
+        law = getattr(attenuation, law_name)
+        k = float(law(jnp.array([wavelength_aa]), dust_bump_strength=0.0, dust_delta=0.0)[0])
+        expected = poly(1e4 / wavelength_aa) / calzetti(1e4 / 5500.0)
+        np.testing.assert_allclose(k, expected, rtol=1e-6)
+
 
 class TestDustLawCombinations:
     """Systematic test of every registered dust attenuation curve.

@@ -194,7 +194,7 @@ def plot_spectrum_fit(
     spec_draws : array_like, shape (n_draws, n_pix), optional
         Posterior predictive spectrum draws for uncertainty shading.
     features : dict, optional
-        Rest-frame line/feature wavelengths to annotate, e.g. ``{"Hα": 6563.0}``.
+        Rest-frame line/feature wavelengths to annotate, e.g. ``{"Hα": 6564.61}``.
     z : float
         Redshift for shifting feature wavelengths to observed frame. Default 0.1.
 
@@ -213,7 +213,7 @@ def plot_spectrum_fit(
             spec_obs,
             noise,
             spec_draws=posterior_spec_draws,
-            features={"Hα": 6563.0, "Hβ": 4861.0},
+            features={"Hα": 6564.61, "Hβ": 4862.68},
             z=0.5,
         )
         fig.savefig("spectrum_fit.pdf")
