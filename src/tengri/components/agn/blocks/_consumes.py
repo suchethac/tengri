@@ -378,16 +378,17 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ),
     # R34: this block's own reddening knob, agn_ebv, was recorded as reading
     # nothing at all -- measured live on predict_photometry once the partition
-    # gave agn_ebv its atten owner. It is NOT agn_attenuation_ebv, the separate
-    # E(B-V) the smc_prevot/qsogen blocks apply (R30).
+    # gave agn_ebv its atten owner.
     ("attenuation", "qsogen_smc"): frozenset({"agn_ebv"}),
-    ("attenuation", "smc_prevot"): frozenset({"agn_attenuation_ebv"}),
+    # R52 (#2325): consolidated to single name agn_ebv; agn_attenuation_ebv
+    # retired with a rename hint in parameters/groups.py.
+    ("attenuation", "smc_prevot"): frozenset({"agn_ebv"}),
     # Task 16 (item 3): previously missing entirely -- the top-level wildcard
     # silently fell back to the full ~50-name superset whenever atten='qsogen'
     # (Temple+2021's own quasar extinction curve, alternates.py
-    # qsogen_quasar_ext_block) was selected. Its signature reads
-    # agn_attenuation_ebv (like smc_prevot above), nothing else.
-    ("attenuation", "qsogen"): frozenset({"agn_attenuation_ebv"}),
+    # qsogen_quasar_ext_block) was selected. Signature reads agn_ebv
+    # (R52, #2325).
+    ("attenuation", "qsogen"): frozenset({"agn_ebv"}),
 }
 
 #: Monolithic (non-composable) AGN model -> the agn_* params it consumes.

@@ -100,6 +100,10 @@ jobs:
     # fail-fast: false so one notebook's failure does not cancel the others.
     # This lets us see every broken notebook in a single run, rather than fixing
     # them one at a time through multiple CI cycles.
+    # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
+    # Sizes from warm working sets; see CHANGELOG.md.
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: "0.25"
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +159,7 @@ jobs:
       # job must pass for the cache to update. See the slow job's cache comment
       # for context.)
       - uses: actions/cache/save@v6
-        if: always() && steps.jax_cache.outputs.cache-hit != 'true'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}

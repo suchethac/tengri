@@ -563,7 +563,7 @@ print(
 # %%
 def tengri_disc_atten(disc_type, atten_type, ebv, **atten_params):
     """Disc SED with a NAMED atten-block law at a given E(B-V), via the public grammar."""
-    atten = {"type": atten_type, "agn_attenuation_ebv": Fixed(ebv)}
+    atten = {"type": atten_type, "ebv": Fixed(ebv)}
     atten.update({k: Fixed(v) for k, v in atten_params.items()})
     m = SEDModel.build(
         ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST,
@@ -2120,8 +2120,19 @@ _BETA_JR16, _GAMMA_JR16 = 0.643, 6.8734  # Lusso & Risaliti (2016) L_2500-L_2keV
 _log_l2kev_mismatched = (_log_l2500_truth + 3.0) * _BETA_JR16 + _GAMMA_JR16  # +3 dex brighter than truth
 
 
+# The hook receives the fit's fully resolved parameter vector, while
+# `model.predict` takes the free parameters (a Fixed parameter's value comes
+# from the model itself). Drop the keys the spec pins before predicting;
+# anything the spec does not pin (free draws, runtime latents) passes through.
+_pinned13 = {
+    name
+    for name in m13_obs.spec.all_params
+    if getattr(m13_obs.spec.get_distribution(name), "is_fixed", False)
+}
+
+
 def _priors_hook(params, state):
-    pred = m13_obs.predict(params)
+    pred = m13_obs.predict({k: v for k, v in params.items() if k not in _pinned13})
     total, _ = agnfitter_priors(
         pred, redshift=_z13, dlum=_dL13, torus_key="sed_agn_torus", disc_key="sed_agn_disc",
         enable_energy_balance=False, enable_agn_fraction=False,

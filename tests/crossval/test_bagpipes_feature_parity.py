@@ -254,6 +254,7 @@ class TestPSBSFHPhysics:
                 alpha=alpha,
                 beta=beta,
                 fburst=fburst,
+                age_universe_yr=age,
             )
             chex.assert_tree_all_finite(sfr)
             assert float(jnp.max(sfr)) > 0
@@ -271,27 +272,40 @@ class TestPSBSFHPhysics:
         from tengri.components.stellar.sfh import psb_wild2020
 
         burstage = 500e6
+        age = 10e9
         t = jnp.geomspace(1e6, 10e9, 2000)
         sfr = psb_wild2020(
             t,
             log_total_mass=10.0,
-            age=10e9,
+            age=age,
             tau=3e9,
             burstage=burstage,
             alpha=2.0,
             beta=2.0,
             fburst=0.5,
+            age_universe_yr=age,
         )
 
         idx = int(jnp.argmin(jnp.abs(t - burstage)))
         assert float(sfr[idx]) > 0, f"SFR is zero at the burst age ({burstage / 1e6:.0f} Myr)"
 
     def test_zero_beyond_age(self):
-        """No star formation before the galaxy formed."""
+        """Negligible star formation before the galaxy formed.
+
+        Evaluated on a dense grid rather than the two sparse points this test
+        used to use: the mass renormalization integrates ``jnp.gradient`` over
+        the supplied lookback grid, and two widely-spaced points are too
+        coarse a cell-width proxy for that integral to be meaningful (the
+        same grid-density issue noted in ``test_sfr_nonzero_at_burstage``,
+        #1728). The old component is windowed to ``burstage < lookback <
+        age`` and so is exactly zero past ``age``; the burst DPL has no
+        lookback window (Wild et al. 2020 Eq. 5) and instead decays smoothly
+        in cosmic time, so "zero" here is negligible rather than exact.
+        """
         from tengri.components.stellar.sfh import psb_wild2020
 
         age = 5e9
-        t = jnp.array([age + 1e9, age + 5e9])
+        t = jnp.geomspace(1e6, 20e9, 4000)
         sfr = psb_wild2020(
             t,
             log_total_mass=1.0,
@@ -301,8 +315,10 @@ class TestPSBSFHPhysics:
             alpha=2.0,
             beta=2.0,
             fburst=0.3,
+            age_universe_yr=age,
         )
-        np.testing.assert_allclose(sfr, 0.0, atol=1e-20)
+        beyond_mask = t > age + 1e9
+        assert float(jnp.max(sfr[beyond_mask])) < 1e-15
 
     def test_jit_and_grad(self):
         """PSB SFH is JIT-compilable and differentiable."""
@@ -321,6 +337,7 @@ class TestPSBSFHPhysics:
                 alpha=2.0,
                 beta=2.0,
                 fburst=0.3,
+                age_universe_yr=10e9,
             )
             return jnp.trapezoid(sfr, t)
 
@@ -330,6 +347,77 @@ class TestPSBSFHPhysics:
             "`grad_val` is identically zero — finite is not enough, "
             "a value that has collapsed to zero is as unusable as a NaN one (#2100)"
         )
+
+    @pytest.mark.parametrize("alpha,beta", [(50.0, 250.0), (10.0, 3.0)])
+    @pytest.mark.parametrize("z", [0.5, 2.0])
+    def test_burst_dpl_matches_bagpipes_anchored_at_age_of_universe(self, alpha, beta, z):
+        """The burst DPL's SFR(lookback) matches BAGPIPES to 1e-3, at two slopes and z.
+
+        Wild et al. 2020 Eq. 5 measures the burst double power law in COSMIC
+        time from the age of the universe AT THE GALAXY'S OWN REDSHIFT, not
+        from the family's own free ``age`` parameter (the old component's
+        independent formation epoch) and not a hardcoded module constant.
+        BAGPIPES (``star_formation_history.psb_wild2020``) does the same via
+        its own ``age_of_universe`` and places NO lookback-time window on the
+        burst (it fills its whole bounded support ``[0, age_of_universe)``,
+        unlike the old exponential component, which stays windowed to
+        ``burstage < lookback < age``).
+
+        Uses BAGPIPES' OWN ``age_of_universe`` (not tengri's ``age_at_z``) as
+        the anchor fed to tengri's ``psb_wild2020``, so this isolates the SFH
+        FORMULA comparison from the two codes' independently-chosen cosmological
+        parameters (a real, expected, ~2% difference at these redshifts that is
+        not the subject of this test). A finer-than-default ``log_sampling``
+        is requested from BAGPIPES because its own normalization integral
+        (a grid sum, not quadrature) needs a denser grid to resolve the
+        alpha=50/beta=250 fiducial's sharp peak to this test's tolerance;
+        verified separately against an independent scipy.integrate.quad
+        ground truth that tengri's own output already agrees with to 1e-5
+        regardless of BAGPIPES' grid.
+        """
+        bagpipes = pytest.importorskip("bagpipes", reason="bagpipes not installed")
+        from bagpipes.models.star_formation_history import star_formation_history
+
+        from tengri.components.stellar.sfh import psb_wild2020
+
+        age, tau, burstage, fburst = 6.0, 5.0, 1.0, 0.1
+        mass = 10.0
+        par = dict(
+            age=age,
+            tau=tau,
+            burstage=burstage,
+            alpha=alpha,
+            beta=beta,
+            fburst=fburst,
+            massformed=mass,
+            metallicity=1.0,
+        )
+        s = star_formation_history({"redshift": z, "psb_wild2020": par}, log_sampling=2.0e-4)
+        age_universe_yr = float(s.age_of_universe)
+
+        t_lookback = jnp.geomspace(1e4, 1.4e10, 300_000)
+        sfr_tg = np.asarray(
+            psb_wild2020(
+                t_lookback,
+                log_total_mass=mass,
+                age=age * 1e9,
+                tau=tau * 1e9,
+                burstage=burstage * 1e9,
+                alpha=alpha,
+                beta=beta,
+                fburst=fburst,
+                age_universe_yr=age_universe_yr,
+            )
+        )
+
+        for lookback_gyr in (0.1, 0.5, 0.9):
+            sfr_bp = float(np.interp(lookback_gyr * 1e9, s.ages, s.sfh))
+            sfr_tg_here = float(np.interp(lookback_gyr * 1e9, np.asarray(t_lookback), sfr_tg))
+            ratio = sfr_tg_here / sfr_bp
+            assert abs(ratio - 1.0) < 1e-3, (
+                f"alpha={alpha} beta={beta} z={z} lookback={lookback_gyr} Gyr: "
+                f"tengri/bagpipes={ratio:.6f}, expected 1 within 1e-3"
+            )
 
 
 # ── 4. VW07 TWO-COMPONENT DUST ────────────────────────────────────

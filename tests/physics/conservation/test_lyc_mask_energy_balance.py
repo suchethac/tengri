@@ -208,10 +208,18 @@ class TestGoldenValues:
     # two_component 5.697121948709991e59, single_screen 7.149162290344824e59,
     # wg00 6.745997586687046e59.
     # Re-pinned after #1731: dust laws renormalized to k(5500)=1; rescale ~+0.031%.
+    # Re-pinned after #2521: the CIC age weights already bounded the tsnorm
+    # shape's SF-onset support to [0, age(z)] and renormalized within it, but
+    # the *total* formed mass fed to the SED scale was still the pre-clamp
+    # trapezoid integral over the full (unbounded) shape -- silently below
+    # 10**log_total_mass whenever any of the tsnorm Gaussian's tail (here
+    # peak_lbt_gyr=6.25, width_gyr=2.6 at z=0.05) fell past age(z). Formed
+    # mass is now pinned to 10**log_total_mass by construction; ~+0.187%
+    # L_absorbed here (the physical fix, not a rescale of an unrelated law).
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.838762e59,
-        "single_screen": 7.32462266124103e59,
-        "wg00": 6.911563171933806e59,
+        "two_component": 5.849679302923598e59,
+        "single_screen": 7.338318188268545e59,
+        "wg00": 6.924486363284743e59,
     }
 
     @pytest.mark.parametrize(

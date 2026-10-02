@@ -403,6 +403,100 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class FreeRedshiftOnsetCeilingWarning(AdvisoryWarning):
+    """A free redshift's own range can outrun a z-capped onset parameter's ceiling.
+
+    Every SF-onset/age/peak-time lookback parameter (``sfh_dpl_age_gyr``,
+    ``sfh_exp_start_gyr``, ``sfh_const_start_gyr``, and 18 others across the
+    SFH registry, #2521) has its free-prior ceiling capped at parse time to
+    ``age_at_z(z_floor)``: the age of the universe at the LOWEST redshift the
+    build's own ``redshift`` prior admits, the most permissive age a single
+    static cap can use without excluding the z_floor end of the range. When
+    ``redshift`` is itself free over a nontrivial span, that floor-based cap
+    does not also bind the range's upper (younger-universe) end: a draw
+    nearer the high-redshift end can pair a still-admissible onset value with
+    a redshift where ``age_at_z`` has fallen below it, placing star formation
+    before the Big Bang even though the parameter's own ceiling passed the
+    z_floor-based cap. (This is the free-redshift generalization of #683's
+    original bug, which the z_floor cap was built to close for a *fixed*
+    high redshift -- it cannot also close the free-redshift case, because a
+    cap keyed to one end of a range cannot bind the other end too.)
+
+    ``_mass_conserving_total`` (#2521) still pins the formed mass to the
+    requested ``log_total_mass`` for such a draw, so nothing raises, no NaN
+    appears, and (because every sampling backend runs under ``jax.jit``,
+    where the eager-only ``SFHBeforeBigBangWarning`` cannot fire) nothing
+    warns at that draw either: only the recovered SFH *shape* is wrong. This
+    category is therefore the one place the gap can be surfaced at all for a
+    jitted fit -- it runs once, at ``SEDModel.build``, over the declared
+    ranges themselves, so it needs no concrete draw and cannot be skipped by
+    jit.
+
+    Warns rather than raises: the model is not ill-posed (a draw in the
+    affected region gives a documented, mass-conserving truncation, not a
+    crash or a NaN), and a user who has already reasoned about the tradeoff
+    between a wide redshift prior and a wide onset prior may deliberately
+    accept it. Narrow the ``redshift`` prior, or give the named onset
+    parameter(s) an explicit, tighter ceiling, to silence the condition
+    itself rather than just the warning.
+
+    See Also
+    --------
+    tengri.parameters.groups._narrow_free_priors_to_z
+        The z_floor-based cap this warning reports the blind spot of.
+    """
+
+
+class NonparametricBinEdgesAtRedshiftCeilingWarning(AdvisoryWarning):
+    """The default nonparametric age-bin ladder is built at a free redshift's
+    youngest admissible age, not at each draw's own age.
+
+    ``continuity``, ``dirichlet``, ``bursty_continuity`` and
+    ``prospector_beta`` default (when no explicit ``bin_edges_gyr`` is given)
+    to a ladder whose oldest edge is the age of the universe at the build's
+    source redshift, following the Prospector-beta convention
+    (:func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`).
+    That convention is a NumPy, Python-control-flow function -- it cannot be
+    traced, so it cannot be re-evaluated once per posterior draw the way a
+    JAX-traced quantity can. For a ``Fixed`` redshift this is exact: one
+    build, one age, one ladder. For a free ``redshift`` it is not: the ladder
+    is built ONCE, at ``age_at_z`` of the prior's UPPER bound (the youngest
+    universe the prior admits), so that no bin lies beyond age(z) anywhere in
+    the prior. A draw at a LOWER redshift then sees a ladder that stops
+    short of that draw's own (older) age of the universe -- cosmic time
+    between the ladder's oldest edge and the true age(z) at that draw is
+    unavailable to the fit, not merely unpopulated.
+
+    Warns rather than raises: every draw still gets a valid, mass-conserving
+    model (``nonparametric._piecewise_constant_sfr``); the cost is missing
+    sensitivity at the old
+    end for draws away from the prior's upper redshift, not an ill-posed
+    forward pass. Pass an explicit ``bin_edges_gyr`` (e.g. built per-galaxy
+    from a fixed or point-estimate redshift) to avoid the tradeoff entirely.
+
+    See Also
+    --------
+    FreeRedshiftOnsetCeilingWarning
+        The same free-redshift blind spot for parametric onset/age/peak-time
+        parameters, which a per-draw cap could close but this ladder cannot.
+    """
+
+
+class CloudyGridIsochroneMismatchWarning(AdvisoryWarning):
+    """The auto-resolved CLOUDY grid's isochrone does not match the SSP's.
+
+    ``neb={'type': 'cloudy'}`` with no explicit ``grid=`` picks a packaged
+    ``cloudy_grid_<isochrone>.h5`` to match the SSP's isochrone (read from
+    ``SSPData.source``, #2426). This fires when exactly one grid is present
+    and it does not match: the ionizing continuum was computed for a
+    different isochrone than the one the stellar templates use, which is
+    not an error (there is nothing else to fall back to) but is worth a
+    fit log entry. Pass ``neb={'type': 'cloudy', 'grid': ...}`` to name a
+    grid explicitly and silence this, or generate the matching one with
+    ``scripts/convert_fsps_cloudy_grid.py``.
+    """
+
+
 class DegenerateParameterPairWarning(AdvisoryWarning):
     """Two freed parameters that enter the model only through one combination.
 
