@@ -13,6 +13,11 @@
   verdict is pinned as spec-driven.
 - `compute_effective_wavelength` returns the pivot wavelength √(∫Tλdλ/∫T/λ dλ) its name and docstring promise; the filter-convention text attributes the photon-counting mean to BAGPIPES as well as DSPS/FSPS/Prospector/Synthesizer and the energy mean to CIGALE's energy-type filters; the facade SED plot derives band wavelengths from the filter curves (#2610).
 
+- `load_ssp_data` gives FSPS MIST + Chabrier grids that carry no `ssp_mass_remaining`
+  the metallicity-dependent FSPS table (12 × 107, packaged) when the grid's age and
+  metallicity nodes match it; other grids keep the metallicity-independent DSPS fit
+  (#2614).
+
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
 
 - The Fritz et al. (2006) torus template is read as luminosity per unit wavelength: the shipped grid holds CIGALE's `model.dust` and `model.disk` arrays (W/nm), and the loader converts them with L_ν = L_λ λ²/c before scaling ∫L_ν dν to the requested luminosity, as the SKIRTOR loader does. Read as L_ν, the array tilted every Fritz torus SED by λ⁻²: at the CIGALE default node (r = 60, τ = 1, β = −0.5, γ = 4, Θ = 100°, ψ = 50.1°) the median wavelength of the torus power was 1.8 µm and the 1–3 µm band held 76 % of it, against 5.8 µm and 28 % in the library. The torus power is unchanged. At the four tested nodes the band fractions agree with the library within 12 % per band (bands holding at least 10 % of the power) and the median power wavelength within 10 %; elsewhere on the grid the triweight lookup in parameter space differs from the library's node values by up to 28 % per band and 18 % in the median (β = −0.75, τ = 0.1; #2606). The grid builder labels `dust` as W/nm per unit integral over wavelength and `disk` as W/nm relative to it, in place of erg/s/Hz (#2604).
