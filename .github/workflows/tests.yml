@@ -662,6 +662,10 @@ jobs:
     # `gallery-changes` carries the `labeled` guard too: when it skips, this job
     # sees an empty output and skips with it, so a label add stays a no-op.
     if: ${{ needs.gallery-changes.outputs.needed == 'true' }}
+    # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
+    # Sizes from warm working sets; see CHANGELOG.md.
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: "0.12"
     strategy:
       fail-fast: false
       matrix:
@@ -691,7 +695,7 @@ jobs:
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
-        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true'
+        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.gallery_jax_cache.outputs.cache-primary-key }}
@@ -865,6 +869,10 @@ jobs:
     if: >-
       ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
       && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
+    # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
+    # Sizes from warm working sets; see CHANGELOG.md.
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"contract":"1.55","components":"0.6","regression-a":"1.0","regression-b1":"0.7","regression-b2":"1.1","regression-c":"0.05","regression-d":"0.65","physics":"0.28"}')[matrix.shard] }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
@@ -1151,15 +1159,18 @@ jobs:
         # untouched by the cap — correct, and it is why raising 35 -> 50 did not
         # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
         #
-        # regression-a budget is 70 minutes; the matrix value stays 50 because the
-        # auto-generated job name "test (shard, paths, workers, budget)" is a
-        # required status check on main, so changing the matrix value renames the job
-        # and blocks every merge until branch protection is re-pinned. When the
-        # protection is re-pinned, move the 70 into the matrix and delete this
-        # expression.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 70 || matrix.budget }}
+        # regression-a and contract budgets are above the matrix: regression-a reached
+        # 61 minutes against its 70-minute cap, and contract reached 71-72 minutes
+        # against its 70-minute cap (killed with all tests passing). The matrix value
+        # stays 50 because the auto-generated job name "test (shard, paths, workers,
+        # budget)" is a required status check on main, so changing the matrix value
+        # renames the job and blocks every merge until branch protection is re-pinned.
+        # When the protection is re-pinned, move the timeouts into the matrix and delete
+        # this expression. The budgets cover a cold cache, because a pyproject.toml
+        # change legitimately cold-starts every shard.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 90 || matrix.budget }}
       - uses: actions/cache/save@v6
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
@@ -1556,6 +1567,10 @@ jobs:
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
+    # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
+    # Sizes from warm working sets; see CHANGELOG.md.
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.2","inference-2":"0.2","inference-3":"0.65","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
     timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
@@ -1635,7 +1650,7 @@ jobs:
         run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
@@ -1670,6 +1685,10 @@ jobs:
       || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
     # 30 -> 45: the per-file loop pays pytest+JAX startup ~55 times, and the
     # first run on a cold compile cache also pays every compilation once.
+    # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
+    # Sizes from warm working sets; see CHANGELOG.md.
+    env:
+      TENGRI_JAX_CACHE_MAX_GB: "0.05"
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -1760,7 +1779,7 @@ jobs:
           name: crossval-test-results
           path: crossval-results/
       - uses: actions/cache/save@v6
-        if: always() && steps.jax_cache.outputs.cache-hit != 'true'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
