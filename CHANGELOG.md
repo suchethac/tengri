@@ -38,6 +38,7 @@
 
 ### Added
 
+- `generate_mock(model, params, key, noise=sigma_obs)` draws each band from `N(flux_true, |sigma_obs|)` with the supplied per-band observed errors (CIGALE's `mock_flag` draw); `snr` is ignored when `noise` is given and the default is unchanged (#2628).
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 

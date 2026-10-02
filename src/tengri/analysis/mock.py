@@ -6,6 +6,7 @@ generation. For the ``SEDModel``-based API, use ``SEDModel.mock()`` instead.
 """
 
 import jax
+import jax.numpy as jnp
 
 # Re-export MockData so callers can import from one place
 from tengri.forward.sed_model import MockData
@@ -51,7 +52,7 @@ jax.tree_util.register_pytree_node(
 )
 
 
-def generate_mock(model, params, key=None, snr=20.0):
+def generate_mock(model, params, key=None, snr=20.0, noise=None):
     """Generate mock galaxy photometry with optional Gaussian noise.
 
     Computes noiseless predicted photometry, then optionally realizes noise
@@ -69,7 +70,14 @@ def generate_mock(model, params, key=None, snr=20.0):
         Random key for noise realization. If ``None``, only noiseless
         photometry is returned (no ``flux_obs`` key in output).
     snr : float, optional
-        Signal-to-noise ratio (flux_true / noise_std). Default: 20.0.
+        Signal-to-noise ratio (flux_true / noise_std). Default: 20.0. Ignored
+        when ``noise`` is given.
+    noise : array_like, shape (n_bands,), optional
+        Observed 1-sigma uncertainties [erg/s/cm²/Hz] to draw each band from
+        (CIGALE's ``mock_flag`` (Boquien et al. 2019, A&A 622, A103):
+        ``flux_obs ~ N(flux_true, |observed error|)``, pcigale
+        ``managers/observations.py`` ``generate_mock``). The absolute
+        value is taken. Default ``None``: ``sigma = flux_true / snr``.
 
     Returns
     -------
@@ -79,14 +87,21 @@ def generate_mock(model, params, key=None, snr=20.0):
         :class:`MockData` object returned by :meth:`SEDModel.mock`). Keys:
 
         - ``flux_true`` : noiseless predicted photometry [erg/s/cm²/Hz]
-        - ``noise`` : noise standard deviation per band [erg/s/cm²/Hz]
+        - ``noise`` : noise standard deviation per band [erg/s/cm²/Hz] (the
+          ``noise`` argument when given, else ``flux_true / snr``)
         - ``params`` : the input parameter values
         - ``flux_obs`` : observed (noisy) photometry (only if key is not None)
 
+    Raises
+    ------
+    ValueError
+        If ``noise`` does not have the shape of the predicted photometry.
+
     Notes
     -----
-    **Noise model**: Assumes Gaussian noise with σ = flux_true / SNR.
-    This is appropriate for photon-limited observations.
+    **Noise model**: Assumes Gaussian noise with σ = flux_true / SNR
+    (appropriate for photon-limited observations), or with the supplied
+    per-band ``noise`` (a catalog's observed errors).
 
     Examples
     --------
@@ -100,16 +115,24 @@ def generate_mock(model, params, key=None, snr=20.0):
     >>> print(f"Obs. flux shape: {mock['flux_obs'].shape}")
     """
     flux_true = model.predict_photometry(params)
-    noise = flux_true / snr
+    if noise is None:
+        sigma = flux_true / snr
+    else:
+        sigma = jnp.abs(jnp.asarray(noise))
+        if sigma.shape != flux_true.shape:
+            raise ValueError(
+                f"noise has shape {sigma.shape}, expected {flux_true.shape} "
+                "(one observed 1-sigma per predicted band)."
+            )
 
     result = MockDict(
         flux_true=flux_true,
-        noise=noise,
+        noise=sigma,
         params=params,
     )
 
     if key is not None:
-        flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
+        flux_obs = flux_true + sigma * jax.random.normal(key, shape=flux_true.shape)
         result["flux_obs"] = flux_obs
 
     return result
