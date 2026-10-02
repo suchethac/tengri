@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression tests for #2583 — corona anchor offset and LMXB Γ default.
+"""Regression tests for #2583: corona anchor energy and LMXB photon index.
 
-Bug 1: The cutoff powerlaw shape spec=(E/E_ref)^(-gamma+1) * exp(-E/E_cut) is
-normalized at the wrong anchor point. The shape equals 1 at E_ref=2 keV BEFORE
-the cutoff factor, but Yang+2020 Eq. 2 defines L_ν(2 keV) as the monochromatic
-luminosity AFTER the exponential cutoff. The spec must be normalized to 1 after
-applying the cutoff: spec = (E/E_ref)^(-gamma+1) * exp(-(E-E_ref)/E_cut).
-
-Bug 2: The LMXB photon index defaults to 1.6, but Yang et al. 2020 Sect. 2.2.2
-adopt Γ = 1.56 (Fabbiano 2006). PCigale and the literature use 1.56.
+The cutoff power-law shape of the AGN corona is ``(E/E_ref)^(1-Gamma) *
+exp(-(E-E_ref)/E_cut)``, which equals 1 at ``E_ref = 2 keV`` with the cutoff
+included: ``L_nu(2 keV)`` is then the monochromatic luminosity of Yang et al. 2020
+Eq. 2 for every ``E_cut`` and ``Gamma``. The cells pin that anchor (plus the 1 %
+scattered fraction at ``log N_H = 0``) on the ``yang20`` corona, its deprecated
+bolometric sibling, and the ``lopez24`` corona's 2-10 keV band luminosity, and pin
+the LMXB photon index default at Gamma = 1.56 (Yang et al. 2020 Sect. 2.2.2;
+Fabbiano 2006).
 """
 
 import jax.numpy as jnp
@@ -18,51 +18,77 @@ import pytest
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric,
     xray_agn_corona,
+    xray_agn_corona_lopez24,
     xray_xrb_terms,
+)
+from tengri.utils.physics_constants import (
+    C_AA as _C_AA,
+    H_PLANCK as _H_PLANCK,
+    KEV_TO_ERG as _KEV_TO_ERG,
+    KEV_TO_HZ as _KEV_TO_HZ,
 )
 
 pytestmark = pytest.mark.regression_bug
+
+#: The wavelength the code maps to exactly 2 keV (its own constants, not rounded ones).
+_W_2KEV = _C_AA * _H_PLANCK / (2.0 * _KEV_TO_ERG)
 
 
 class TestCoronaAnchorAtReferenceEnergy:
     """The shape is normalized to unity at E_ref after the cutoff."""
 
-    def test_anchor_at_2kev_with_scatter_term(self):
-        """L_ν(2 keV)/anchor must equal 1.01 (scatter) at log_nh=0."""
+    @pytest.mark.parametrize("gamma", [1.4, 1.8, 2.4])
+    @pytest.mark.parametrize("e_cut", [50.0, 100.0, 300.0, 500.0, 1000.0])
+    def test_yang20_anchor_at_2kev_with_scatter_term(self, e_cut, gamma):
+        """L_nu(2 keV) / (L_2500 * 10**(alpha_ox/0.3838)) = 1.01 at log N_H = 0.
+
+        The anisotropy factor is switched off: its denominator carries
+        ``0.13397`` (cos 30 deg to five digits), so at the 30 deg anchor it is
+        1 - 2.8e-6, not 1, which is a separate convention from the anchor shape.
+        """
         l2500 = 1e29
-        # Just+2007 Eq. 3, Yang+2020 Eq. 6
-        alpha_ox = -0.137 * np.log10(l2500) + 2.638
+        alpha_ox = -0.137 * np.log10(l2500) + 2.638  # Just+2007 Eq. 3
         anchor = l2500 * 10.0 ** (alpha_ox / 0.3838)
+        lnu2 = float(
+            xray_agn_corona(
+                jnp.asarray([_W_2KEV]),
+                l2500,
+                gamma=gamma,
+                E_cut=e_cut,
+                log_nh=0.0,
+                apply_anisotropy=False,
+            )[0]
+        )
+        assert lnu2 / anchor == pytest.approx(1.01, abs=1e-6)
 
-        HC = 12.398419843  # keV·Angstrom
-        w_2kev = HC / 2.0
-        for ecut_kev in (50.0, 100.0, 300.0, 500.0, 1000.0):
-            lnu2 = float(
-                xray_agn_corona(
-                    jnp.asarray([w_2kev]), l2500, gamma=1.8, E_cut=ecut_kev, log_nh=0.0
-                )[0]
+    @pytest.mark.parametrize("gamma", [1.4, 1.8, 2.4])
+    @pytest.mark.parametrize("e_cut", [50.0, 100.0, 300.0, 500.0, 1000.0])
+    def test_lopez24_band_luminosity_is_1p01_times_nu_lnu_over_alpha_irx(self, e_cut, gamma):
+        """The lopez24 corona has no 2 keV anchor: its 2-10 keV integral is
+        1.01 * nu L_nu(12 um) / 10**alpha_IRX at log N_H = 0, for every E_cut and Gamma.
+
+        Integrated on the 200-point keV trapezoid grid that defines the amplitude
+        (``_cutoff_powerlaw_band_norm``). A 20001-point integral of the same
+        spectrum differs by 4e-6 (Gamma = 1.4) to 4e-5 (Gamma = 2.4): the
+        trapezoid discretization of the shared band norm, not an anchor error.
+        """
+        log_l12, alpha_irx = 44.0, 0.3
+        energy = np.linspace(2.0, 10.0, 200)  # the emitter's own band-norm grid
+        lam = _C_AA * _H_PLANCK / (energy * _KEV_TO_ERG)
+        lnu = np.asarray(
+            xray_agn_corona_lopez24(
+                jnp.asarray(lam),
+                log_l12,
+                alpha_irx=alpha_irx,
+                gamma=gamma,
+                E_cut=e_cut,
+                log_nh=0.0,
+                apply_anisotropy=False,
             )
-            ratio = lnu2 / anchor
-            # With scatter ON (default), ratio should be ~1.01.
-            # The shape alone gives 1.0 (fixed after cutoff); scatter adds 1%.
-            assert ratio == pytest.approx(1.01, abs=1e-4)
-
-    def test_anchor_independent_of_gamma(self):
-        """The anchor point is independent of the photon index Γ."""
-        l2500 = 1e29
-        alpha_ox = -0.137 * np.log10(l2500) + 2.638
-        anchor = l2500 * 10.0 ** (alpha_ox / 0.3838)
-
-        HC = 12.398419843
-        w_2kev = HC / 2.0
-        for gamma in (1.4, 1.6, 1.8, 2.0, 2.4):
-            lnu2 = float(
-                xray_agn_corona(
-                    jnp.asarray([w_2kev]), l2500, gamma=gamma, E_cut=300.0, log_nh=0.0
-                )[0]
-            )
-            ratio = lnu2 / anchor
-            assert ratio == pytest.approx(1.01, abs=1e-4)
+        )
+        band = np.trapezoid(lnu, energy * _KEV_TO_HZ)
+        expected = 1.01 * 10.0 ** (log_l12 - alpha_irx)
+        assert band / expected == pytest.approx(1.0, abs=1e-6)
 
     def test_deprecated_bolometric_corona_anchor_at_2kev(self):
         """The deprecated _xray_agn_corona_bolometric has the same anchor shape."""

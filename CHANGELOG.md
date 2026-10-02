@@ -56,11 +56,10 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
-- The X-ray corona anchor point is now normalised correctly: the cutoff power-law
-  shape `(E/E_ref)^(1-Γ) × exp(−(E−E_ref)/E_cut)` equals 1 at E_ref = 2 keV
-  *after* the exponential cutoff (Yang et al. 2020 Eq. 2), not before. The LMXB
-  photon index default is 1.56 (Fabbiano 2006), matching Yang+2020 Sect. 2.2.2
-  and pcigale, instead of 1.6 (#2583).
+- The X-ray corona shape `(E/E_ref)^(1-Γ) × exp(−(E−E_ref)/E_cut)` equals 1 at E_ref = 2 keV with
+  the exponential cutoff included, so `L_ν(2 keV)` is the monochromatic luminosity of
+  Yang et al. 2020 Eq. 2 for every `E_cut` and Γ. The LMXB photon index default is 1.56
+  (Fabbiano 2006; Yang et al. 2020 Sect. 2.2.2), as in pcigale (#2583).
 
 - The X-ray block's HMXB and hot-gas terms scale with the SFR averaged over the last
   100 Myr (`sfr_100myr`), the quantity the Lehmer et al. 2016 relations are calibrated on

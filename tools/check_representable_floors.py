@@ -75,7 +75,7 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # (which only sees a literal argument) no longer sees them either. The
 # underlying guards did not disappear, only the source shape their old
 # ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
-_PINNED = 26
+_PINNED = 25
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
