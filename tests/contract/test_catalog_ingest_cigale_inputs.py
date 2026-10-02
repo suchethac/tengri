@@ -15,6 +15,8 @@ import warnings
 import numpy as np
 import pytest
 
+from tengri.observation.catalog import read_catalog
+
 pytestmark = pytest.mark.contract
 
 MJY = 1e-26  # erg/s/cm^2/Hz per mJy
@@ -260,3 +262,73 @@ def test_ingest_lim_flag_noscaling_agrees_with_read_catalog(tmp_path):
     np.testing.assert_allclose(ca.flux / MJY, cat.flux, rtol=1e-12)
     np.testing.assert_allclose(ca.noise / MJY, cat.noise, rtol=1e-12)
     assert ca.censor.tolist() == cat.mask.tolist()
+
+
+# ── Edge cases and boundary conditions ──────────────────────────
+
+
+def test_lim_flag_boundary_flux_exactly_minus_9990_is_kept():
+    """Boundary: flux = -9990.0 (strict <, not <=) is KEPT under all lim_flag values."""
+    for flag in ("none", "noscaling", "full"):
+        t = _table(
+            sdss_g=np.array([-9990.0, 1.0, 2.0, 3.0]),
+            sdss_g_err=np.array([0.1, 0.2, 0.3, 0.4]),
+        )
+        ca = _ingest(t, lim_flag=flag)
+        assert ca.presence[0, 0], f"flux = -9990.0 should be kept (strict <) with {flag}"
+
+
+def test_default_relative_error_zero_is_accepted():
+    """default_relative_error=0.0 is accepted and gives error=0 for the missing column."""
+    t = _table(sdss_i=np.array([5.0, 10.0, 15.0, 20.0]))
+    del t["sdss_i_err"]
+    with pytest.warns(UserWarning):
+        ca = _ingest(t, default_relative_error=0.0)
+    np.testing.assert_array_equal(ca.noise[:, 2], np.zeros(4))
+
+
+def test_lim_flag_invalid_and_negative_error_drops_not_limits():
+    """Invalid flux (< -9990) AND negative error under noscaling/full: dropped (not a limit)."""
+    for flag in ("noscaling", "full"):
+        t = _table(
+            sdss_g=np.array([-9999.0, 1.0, 2.0, 3.0]), sdss_g_err=np.array([-0.5, 0.2, 0.3, 0.4])
+        )
+        ca = _ingest(t, lim_flag=flag)
+        assert not ca.presence[0, 0], f"Invalid flux should be dropped under {flag}"
+        assert ca.censor[0, 0] == 0, f"Dropped cell should have censor=0 under {flag}"
+
+
+@pytest.mark.parametrize("flag", ["none", "noscaling", "full"])
+def test_lim_flag_dropped_cells_have_zero_error(flag):
+    """Dropped cells carry error = 0.0 in the noise array for all lim_flag values."""
+    t = _table(
+        sdss_g=np.array([-9999.0, 1.0, 2.0, 3.0]),
+        sdss_g_err=np.array([0.3, -0.4, 0.0, 0.5]),
+    )
+    ca = _ingest(t, lim_flag=flag)
+    # Row 0 (invalid flux): dropped, error = 0.0
+    assert not ca.presence[0, 0]
+    assert ca.noise[0, 0] == 0.0
+    # Row 2 (zero error): dropped, error = 0.0
+    assert not ca.presence[2, 0]
+    assert ca.noise[2, 0] == 0.0
+    if flag == "none":
+        # Row 1 (negative error): dropped, error = 0.0
+        assert not ca.presence[1, 0]
+        assert ca.noise[1, 0] == 0.0
+    if flag in ("noscaling", "full"):
+        # Row 1 (negative error): upper limit, error = |−0.4| * MJY
+        assert ca.presence[1, 0]
+        assert ca.censor[1, 0] == 1
+        assert ca.noise[1, 0] == pytest.approx(0.4 * MJY, rel=1e-12)
+
+
+def test_read_catalog_unregistered_filter_column_skipped(tmp_path):
+    """read_catalog with default_relative_error skips missing-_err column if not a filter."""
+    path = tmp_path / "test_unregistered.csv"
+    path.write_text(
+        "id,redshift,sdss_g,sdss_g_err,unknown_filter\na,0.1,1.0,0.1,5.0\nb,0.2,2.0,0.2,6.0\n"
+    )
+    cat = read_catalog(path, default_relative_error=0.1)
+    assert "unknown_filter" not in cat.filter_names
+    assert cat.filter_names == ("sdss_g",)

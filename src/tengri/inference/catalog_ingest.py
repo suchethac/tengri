@@ -141,6 +141,13 @@ def ingest_catalog(
         instead of raising. ``None`` (default) keeps the refusal. Must be >= 0.
         Not available with ``flux_unit="ab_mag"`` (a magnitude error is not a
         fraction of the flux).
+
+        Without ``lim_flag`` a sentinel flux (for example -9999) receives the
+        finite error ``default_relative_error * 9999`` and stays present, and a
+        flux of exactly 0 receives an error of 0. CIGALE always follows the
+        default error with its invalid-data check, which ``lim_flag`` reproduces:
+        pass ``lim_flag`` together with this option for a table that uses
+        CIGALE's sentinels.
     lim_flag : {"none", "noscaling", "full"}, optional
         CIGALE's ``lim_flag`` convention (Boquien et al. 2019, A&A 622, A103) for
         a table whose error column encodes limits (pcigale
@@ -149,6 +156,11 @@ def ingest_catalog(
         False). ``"noscaling"`` and ``"full"``: a band with ``err < 0`` is an
         upper limit at the flux value with sigma = ``|err|`` (``censor`` = 1,
         ``noise`` = ``|err|``); ``err == 0`` or a flux below -9990 is dropped.
+
+        The -9990 threshold is compared with the table's own numbers, in
+        ``flux_unit`` (CIGALE tables are in mJy): a table in another unit with a
+        different sentinel (for example -99) is not caught by it.
+
         ``"noscaling"`` and ``"full"`` give the same arrays here: CIGALE's
         ``"full"`` adds an analytic rescaling of the model amplitude that tengri
         does not perform (the amplitude is a fitted parameter). ``None`` (default)
