@@ -318,10 +318,11 @@ def tengri_qsogen_full(*, log_lbol=11.0, torus=None):
 # tengri's library at representative ages (0.1 and 5 Gyr) and the fiducial
 # declining-exponential CSP (`SFH_FIDUCIAL`, tau=1 Gyr, age=4.8939 Gyr)
 # are compared against AGNfitter-rX's own tabulated BC03 template at the same node,
-# read through the public `galaxy_template` driver accessor. Both sides are
-# normalized to 1 at 5500 Å (shape only; the two BC03 editions' absolute
-# mass-formed normalization conventions are not established to be equal;
-# see `reproduction/agnfitter/_drivers/agnfitter_driver.py::galaxy_template`).
+# read through the public `galaxy_template` driver accessor. AGNfitter-rX uses
+# every 3rd BC03 wavelength point (407 of 1221) with nearest-band interpolation;
+# tengri uses the full 1221-point grid. Both sides are normalized to 1 at 5500 Å
+# (shape only; the two BC03 editions' absolute mass-formed vs present-mass
+# normalization differs; see `reproduction/agnfitter/_drivers/agnfitter_driver.py::galaxy_template`).
 #
 # **Verification Status:** CROSSVAL (2 tests, thin); CSP integral; CIC age kernel (default)
 
@@ -462,7 +463,16 @@ ax.set_title(rf"Integrated stellar SED ($10^{{{LOG_MASS:.0f}}}\,M_\odot$ host)")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_03_stellar_sed.png")
-print(f"§3  pred.sfh.stellar_mass_surviving / stellar_mass = {float(pred3.sfh.stellar_mass_surviving / pred3.sfh.stellar_mass):.4f}")
+_surv_frac = float(pred3.sfh.stellar_mass_surviving / pred3.sfh.stellar_mass)
+print(f"§3  pred.sfh.stellar_mass_surviving / stellar_mass = {_surv_frac:.4f}")
+print(
+    f"  GA ↔ M* conversion: AGNfitter-RX unit template = ~1 M☉ PRESENT stellar mass. "
+    f"tengri's equivalent (formed mass) at this node = {10**LOG_MASS / _surv_frac:.3e} M☉ formed; "
+    f"surviving fraction = {_surv_frac:.4f}. "
+    f"The prior_stellar_mass prior (AGNfitter-RX Gaussian on GA) maps to tengri via: "
+    f"log M*_present [AGNfitter] = log10({10**LOG_MASS / _surv_frac:.3e}) + log10(4π dL² / (Lsun(1+z))) - 18, "
+    f"then divide by surviving fraction to get formed mass."
+)
 
 # %% [markdown]
 # ## §4 Disk reddening law (Prevot SMC)
@@ -1945,11 +1955,10 @@ print(
 # luminosity against the cold-dust re-emitted luminosity; at
 # `dust_eta_balance`'s default (`Fixed(1.0)`, strict energy balance: `L_IR =
 # eta * L_absorbed`) the two match by construction, so the prior contributes
-# a normal (non-rejecting) log-density here. **Caveat:** `prior_stellar_mass`
-# needs `ga` — AGNfitter-RX's raw galaxy flux-normalization scalar, a
-# template-bookkeeping exponent specific to its own model dictionary with no
-# tengri-side equivalent — left disabled here, exactly as the docstring
-# recommends.
+# a normal (non-rejecting) log-density here. `prior_stellar_mass` maps
+# AGNfitter-RX's raw galaxy flux-normalization exponent `ga` to tengri's
+# stellar mass via the exact conversion below, accounting for the present-mass
+# vs. formed-mass convention difference.
 
 # %%
 from tengri.agn.priors import AGNFITTER_PRIOR_DEFAULTS, agnfitter_priors
