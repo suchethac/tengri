@@ -1320,6 +1320,11 @@ def state_to_sed_components(state: Any) -> dict:
           when the AGN component is absent OR uses a non-composable
           (monolithic) model, which has no separate sub-blocks to
           decompose.
+        - ``sed_agn_lines_attenuated``: the AGN line light as it enters the
+          SED (after the AGN's own screen and any host ``agn_screen``),
+          the part of ``sed_agn`` the spectrum projection broadens with the
+          instrument kernel alone (#2565); present for every AGN variant
+          (zeros without lines), zeros when no AGN component is present.
 
     Notes
     -----
@@ -1354,6 +1359,7 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
         "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
         "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_lines_attenuated": jnp.asarray(derived.get("sed_agn_lines_attenuated", zeros)),
         "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),

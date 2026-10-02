@@ -54,7 +54,10 @@ from tengri.components.agn._lbol_reference import (
 )
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components.agn.unified import resolve_agn_model
+from tengri.components.agn.unified import (
+    monolithic_models_with_line_components,
+    resolve_agn_model,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
 from tengri.parameters.resolve import require_redshift
@@ -213,6 +216,14 @@ class AGNSEDComponent(TemplateThreading):
                 "erg/s/Hz",
                 "AGN NLR+BLR+FeII rest-frame SED, composable model only "
                 "(absent for monolithic AGN models)",
+            ),
+            DerivedKey(
+                "sed_agn_lines_attenuated",
+                "erg/s/Hz",
+                "AGN line-only rest-frame SED (NLR+BLR+FeII; GRAHSP lines+FeII) as it "
+                "enters the pipeline SED, after the AGN's own screen and the host "
+                "agn_screen; zeros for models without lines. Routed to the "
+                "instrument-only kernel in the spectrum projection (#2565)",
             ),
             DerivedKey(
                 "sed_agn_polar",
@@ -543,6 +554,7 @@ class AGNSEDComponent(TemplateThreading):
                 return_components=True,
                 **agn_kwargs,
             )
+            agn_lines_for_kernel = agn_components["lines"]
         else:
             lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
             if use_ref:
@@ -553,11 +565,22 @@ class AGNSEDComponent(TemplateThreading):
                 # the reference so the L_lambda arithmetic stays in float32
                 # range; shape-invariant blocks ignore the kwarg. (#1206)
                 agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": jnp.asarray(agn_log_lbol)}
-            L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
+            if self.config.model in monolithic_models_with_line_components():
+                # Line-only light for the instrument-only kernel (#2565); the
+                # total ``L_agn`` is unchanged.
+                L_agn_unit, line_components = agn_fn(
+                    wave, agn_log_lbol=lbol_eval, return_components=True, **agn_kwargs
+                )
+                lines_unit = line_components["lines"]
+            else:
+                L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
+                lines_unit = jnp.zeros_like(L_agn_unit)
             L_agn = rescale(L_agn_unit, offset) if use_ref else L_agn_unit
+            agn_lines_monolithic = rescale(lines_unit, offset) if use_ref else lines_unit
             L_2500_intrinsic = jnp.asarray(0.0)
             L_4400_intrinsic = jnp.asarray(0.0)
             agn_components = None
+            agn_lines_for_kernel = agn_lines_monolithic
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
@@ -593,6 +616,16 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_torus"] = agn_components["torus"]
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
+        # The line-only light exactly as it enters the pipeline SED (#2565): the
+        # AGN's own screen is already applied (``agn_components["lines"]``, the
+        # monolithic ``return_components`` lines), the host dust screen is not.
+        # The two-component / single-screen dust adapters multiply this by the
+        # transmission they apply to ``sed_agn`` when the AGN runs before them
+        # (``agn_screen != "none"``); when it runs after them nothing else
+        # touches it. The spectrum projection broadens this array with the
+        # instrument kernel alone: AGN lines are painted at their own width and
+        # never pass through the stellar library.
+        derived_overrides["sed_agn_lines_attenuated"] = agn_lines_for_kernel
         if (
             self._state is not None
             and self._state.filter_waves is not None

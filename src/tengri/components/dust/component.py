@@ -577,6 +577,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # Published only when an upstream component (stellar) has put
         # ``filter_eff_waves`` into ``state.derived``: i.e. only when
         # ``approx=WavePrecomp()`` is set on SEDModel.
+
+        # AGN line-only light, when the AGN ran before this screen: it is part of
+        # ``sed_intrinsic`` and so takes the same transmission (#2565). When the
+        # AGN runs after the screen (the canonical order) it is never screened
+        # here and the AGN's own publication stands.
+        sed_agn_lines_unatt = state.derived.get("sed_agn_lines_attenuated")
+
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             dust_diff_transmission=attenuation,
@@ -586,6 +593,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
             log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
+        if sed_agn_lines_unatt is not None:
+            derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_unatt * attenuation
 
         # Discrete emission-line catalog, reddened with this component's single
         # screen (#1867, #2223). The two-component component does the same in
