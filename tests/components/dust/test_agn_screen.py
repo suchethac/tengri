@@ -384,7 +384,7 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     balance integral runs. That delta must equal the independent
     :func:`tengri.forward.energy_balance.bolometric_absorbed` integral of
     (intrinsic AGN, screened AGN), LyC-masked the same way (912 Angstrom,
-    the ``dust_eb_include_lyc=False`` default).
+    the ``dust_lyc_in_energy_balance=False`` default).
     """
     m_screen = _build_agn_dust_model(synthetic_ssp_wide, screen="diffuse", approx=approx)
     m_none = _build_agn_dust_model(synthetic_ssp_wide, screen="none", approx=approx)
