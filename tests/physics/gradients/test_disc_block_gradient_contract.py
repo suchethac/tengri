@@ -60,12 +60,13 @@ _POINT = {
 # h ~ 1e-3 (measured at 0.1166:
 # FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
 # step is far below that.
-_STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3}
+_STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3, "agn_a_spin": 3e-3}
 # ``agn_kt_warm`` and ``agn_a_spin`` are held to 1e-3, not 1e-4: through 50 warm rings the
-# float32-quantised, piecewise-linear template makes the central difference itself scatter
-# by ~5e-4 of its value across steps (agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033,
-# -5.035 against AD -5.0323; agn_a_spin, h = 1e-5..3e-3: 72.54, 73.03, 72.63, 72.59, 72.62,
-# 72.59 against AD 72.601). The kernel-level test below pins the slope itself at 1e-4.
+# float32-quantised, piecewise-linear template makes the central difference itself scatter by
+# ~5e-4 of its value across steps. agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033, -5.035
+# against AD -5.0323. agn_a_spin at the Page-Thorne point, h = 1e-5..3e-3: 4.96, 5.07, 5.02,
+# 4.82, 4.92, 4.91 against AD 4.915, so it is stepped at 3e-3 on the plateau. The kernel-level
+# test below pins the slope itself at 1e-4.
 _TOL = {"agn_kt_warm": 1e-3, "agn_a_spin": 1e-3}
 _DISC_BLOCKS = sorted(name for name in AGN_BLOCKS["disc"] if name != "none")
 
@@ -181,7 +182,11 @@ def test_kubota_done_full_agn_gradient_matches_central_fd(kw):
     h = 1e-4
     fd_lbol = (objective(x[0] + h, x[1]) - objective(x[0] - h, x[1])) / (2 * h)
     fd_mbh = (objective(x[0], x[1] + h) - objective(x[0], x[1] - h)) / (2 * h)
-    assert abs(float(ad[0]) - float(fd_lbol)) / abs(float(fd_lbol)) < _REL_TOL
+    # 1e-4, except at the interior-R_hot point: there the central difference at h=1e-4 straddles
+    # a template slope kink 3e-5 away (FD 318.46 for h = 1e-4..3e-3), while with the template
+    # interpolated in float64 FD(h=1e-5) = 318.55017 equals AD = 318.55017 to 1e-8.
+    tol_lbol = 1e-3 if kw else _REL_TOL
+    assert abs(float(ad[0]) - float(fd_lbol)) / abs(float(fd_lbol)) < tol_lbol
     assert abs(float(ad[1]) - float(fd_mbh)) / abs(float(fd_mbh)) < 1e-2
 
 

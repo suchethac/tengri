@@ -685,8 +685,12 @@ def multicolor_disc(
     **JIT-compatible**: yes, uses ``jnp`` primitives and ``jax.vmap``.
     ``euv_tail`` is a static (trace-time) selector, not a traced argument.
 
-    The temperature profile follows the Novikov-Thorne (1974) emissivity for
-    a thin, radiatively efficient disc:
+    The temperature profile is the Shakura-Sunyaev thin disc with a zero-torque inner
+    boundary at the ISCO (a Newtonian-flux form with the Bardeen ISCO radius), *not* the
+    relativistic Page & Thorne (1974) emissivity: that is used by the Kubota & Done family
+    (:func:`kubota_done_disc`, see :mod:`tengri.components.agn._nt_emissivity`), whose
+    reference model defines it. Its total dissipation is ``1.46 eta Mdot c^2`` at a=0
+    (1.0 for Page-Thorne), so ``L_bol`` here is a normalisation, not an energy balance:
 
     .. math::
 
@@ -1230,10 +1234,9 @@ def _compute_zone_radii(
     -----
     **JIT-compatible**: yes, uses ``jax.lax.scan`` for JAX-compatible bisection.
 
-    **Self-consistent R_hot**: Uses bisection on the analytic Novikov-Thorne
-    integral (40 iterations, exact to ~1e-12) to solve L_diss,hot(R_hot) = f_hard
-    × L_Edd. This replaces the previous approximate closure r_hot ≈ r_isco ×
-    (1 + f_hard λ)^{1/3} which had ~10% error.
+    **Self-consistent R_hot**: Uses bisection on the Page-Thorne (relativistic
+    Novikov-Thorne) dissipation integral (40 iterations, exact to ~1e-12) to solve
+    L_diss,hot(R_hot) = f_hard × L_Edd (K&D 2018 Eq. 2), spin included.
 
     **Self-consistent R_out**: Uses the Laor & Netzer (1989) self-gravity
     (Toomre) radius, which is more accurate for extreme BH masses and Eddington
@@ -1664,7 +1667,7 @@ def kubota_done_disc(
 
     - **R_hot**: Solved via bisection from the energy-balance constraint that
       the dissipated power in the corona equals f_hard × L_Edd. Uses the
-      exact analytic Novikov-Thorne integral rather than approximations.
+      Page-Thorne dissipation integral (Eq. 2), spin included.
     - **R_warm**: Parameterized as a multiple of R_hot (default 2, per K&D).
     - **R_out**: Set to the Laor & Netzer (1989) self-gravity (Toomre) radius,
       beyond which the disc becomes unstable and fragments.
@@ -1744,12 +1747,17 @@ def kubota_done_disc(
 
     **Key self-consistent physics**:
 
-    All three zones share the Novikov-Thorne temperature profile:
+    All three zones share the relativistic Page & Thorne (1974) thin-disc temperature
+    profile (as K&D 2018 and QSOSED/RELQSO; :mod:`tengri.components.agn._nt_emissivity`):
 
     .. math::
 
         T(r) = T_{\\rm in} \\left(\\frac{r}{r_{\\rm ISCO}}\\right)^{-3/4}
-               \\left[1 - \\sqrt{\\frac{r_{\\rm ISCO}}{r}}\\right]^{1/4}
+               R_t(r; a)^{1/4}
+
+    with :math:`R_t = C/B \\to 0` at the ISCO and :math:`\\to 1` far out (the Newtonian
+    zero-torque form :math:`1-\\sqrt{r_{\\rm ISCO}/r}` dissipates 1.46 :math:`L_{\\rm bol}`
+    at a=0 instead of 1.02).
 
     where :math:`T_{\\rm in} = (3 G M M_{\\rm dot} / 8\\pi \\sigma_{\\rm SB}
     r_{\\rm ISCO}^3)^{1/4}`, and the inner temperature increases with accretion
@@ -1824,7 +1832,7 @@ def kubota_done_disc(
         agn_log_mbh, _lbol_shape, agn_a_spin, float32=_f32
     )
 
-    # Novikov-Thorne inner-disc temperature.
+    # Reference inner-disc temperature T_in (the profile is T_in x^-3/4 Rt^1/4).
     if _f32:
         # Log-space: the ``3 G M mdot`` numerator ~1e58 erg/s overflows float32;
         # t_in ~1e5 K is representable.

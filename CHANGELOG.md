@@ -154,20 +154,22 @@
   cell-spanning finite differences for the other two, so `jax.grad` disagreed with
   finite differences (`agn_log_mbh` -1190.6 vs -293.9, `agn_log_lbol` 6% off, at
   `log L_bol` 11.5, `log M_BH` 8.5). A class-wide gradient contract now covers every
-  registered disc block. The `R_hot` solve of the same disc is also fixed: it had zero
-  derivative wherever unclipped (bisection differentiated through its iterations; now
-  an implicit-function-theorem `custom_jvp`); its closed-form NT integral omitted the
-  `R dR` area element, understating `L_diss` by a factor 0.78 to 0.30 so `R_hot` sat too
-  far out; and the corona radiated an invented `min(f_hard L_Edd, L_bol/2)` while `R_hot`
-  was solved from `f_hard L_Edd`. K&D 2018 Sec 4.3 ("Ldiss,hot = 0.02 LEdd, which defines
-  rhot") and the QSOSED/RELQSO source have no such cap, so `R_hot` and the corona now
-  share `L_hot = f_hard L_Edd`, saturating at 0.33 of the NT disc's `L_0` when the disc
-  cannot supply it. **The `kubota_done` / `kubota_done_full` forward SED changes**
-  (`log L_bol` 11.5, `log M_BH` 8.5: UV x2.8, 2-10 keV x0.78; <1% at `log L_bol` 11,
-  default mass). Still open: the disc uses the Newtonian zero-torque `T_NT`, dissipating
-  1.46 `L_bol` where the Page-Thorne profile QSOSED uses gives 1.02, so `R_hot` is 20 not
-  45 `R_g` at `lambda_Edd` 0.03 and two `test_kd18_vs_agnfitter` nodes exceed tolerance
-  (#2572).
+  registered disc block. The `kubota_done` / `kubota_done_full` hot-flow zone is also
+  fixed. `R_hot` had zero derivative wherever unclipped (bisection differentiated through
+  its iterations; now an implicit-function-theorem `custom_jvp`, spin included). Its
+  closed-form NT dissipation integral omitted the `R dR` area element. The corona radiated
+  an invented `min(f_hard L_Edd, L_bol/2)` while `R_hot` was solved from `f_hard L_Edd`;
+  K&D 2018 Sec 4.3 ("Ldiss,hot = 0.02 LEdd, which defines rhot") and the QSOSED/RELQSO
+  source have no such cap, so `R_hot` and the corona now share `L_hot = f_hard L_Edd`
+  (saturating at 99% of the disc's total dissipation when it cannot be supplied). And the
+  disc temperature was the Newtonian zero-torque profile, which dissipates 1.46 `L_bol` at
+  spin 0; it is now the relativistic Page & Thorne (1974) emissivity K&D 2018 and RELQSO
+  use (energy at infinity = `eta(a) Mdot c^2`), for the outer and warm rings, the seed
+  photon temperature, `L_seed` and the `R_hot` integral. `multicolor` stays
+  Shakura-Sunyaev by definition. **The `kubota_done` / `kubota_done_full` forward SED
+  changes** (2500 A x1.4 and 5100 A x1.4 at `log L_bol` 11.5, `log M_BH` 8.5; +30% from
+  the optical to the X-rays at `log L_bol` 11 with the default mass). One node of
+  `test_kd18_vs_agnfitter` ((8, 0), 0.057 vs 0.05 dex) remains over its tolerance (#2572).
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;

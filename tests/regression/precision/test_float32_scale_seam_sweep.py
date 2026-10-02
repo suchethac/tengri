@@ -518,30 +518,32 @@ _AGN_MBH_DUST = {
 # one shared L_hot and a corrected Eq. 2 integral (R_hot moves), so the forward SED moved
 # (rest_sed_sum within 1%; rest_sed_0 by -0.3%, -38%, +33% at mbh 6, 8, 10 against the
 # pre-#2572 literals). Round 3 (#2572) then removed the invented L_bol/2 corona cap, which
-# moved mbh 8 and 10 again (lambda_Edd 0.03 and 3e-4). The
+# moved mbh 8 and 10 again (lambda_Edd 0.03 and 3e-4). Round 4 (#2572) re-captured once
+# more for the Page-Thorne (relativistic) emissivity of the K&D disc (rest_sed_sum +0.05%,
+# +0.28%, +0.13% against round 3 at mbh 6, 8, 10; rest_sed_0 -26%, +44%, -3%). The
 # 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
 # the tree it is captured on.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5215524062055081e32,
-        "rest_sed_0": 2.155407040152672e23,
-        "rest_sed_mid": 3.0587538532169796e28,
-        "rest_sed_last": 8.775513426492424e21,
-        "photometry": (1.0986162842117011e-27, 1.5711841670976002e-27, 1.7648192140610308e-27),
+        "rest_sed_sum": 1.522336098963096e32,
+        "rest_sed_0": 1.5892881530280873e23,
+        "rest_sed_mid": 3.060282686528479e28,
+        "rest_sed_last": 8.775795512948059e21,
+        "photometry": (1.099259212413026e-27, 1.5711935793294186e-27, 1.7648219226075446e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5562496919621836e32,
-        "rest_sed_0": 1.6157664333292132e24,
-        "rest_sed_mid": 3.1332858651938007e28,
-        "rest_sed_last": 8.802873598450634e21,
-        "photometry": (1.1290484653382701e-27, 1.572055237826607e-27, 1.765076000632074e-27),
+        "rest_sed_sum": 1.5605975416687857e32,
+        "rest_sed_0": 2.327183360109691e24,
+        "rest_sed_mid": 3.1468727045405486e28,
+        "rest_sed_last": 8.813544561939709e21,
+        "photometry": (1.1337671802008555e-27, 1.5723862493866198e-27, 1.7651749277835535e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5561012744253507e32,
-        "rest_sed_0": 2.6651793707093944e24,
-        "rest_sed_mid": 3.1335054136622427e28,
-        "rest_sed_last": 8.888475127847431e21,
-        "photometry": (1.126790974445896e-27, 1.5762209959393997e-27, 1.7658442643425922e-27),
+        "rest_sed_sum": 1.5580908633312397e32,
+        "rest_sed_0": 2.5942032816481453e24,
+        "rest_sed_mid": 3.137210357997451e28,
+        "rest_sed_last": 8.925752673051914e21,
+        "photometry": (1.1281169770255344e-27, 1.5777076807385118e-27, 1.766194881160471e-27),
     },
 }
 

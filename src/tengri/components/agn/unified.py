@@ -1441,7 +1441,7 @@ def unified_nlr_blr(
 
     1. **Analytic disc, not a grid**: Synthesizer extracts disc emission from
        precomputed CLOUDY photoionization grids. tengri uses the closed-form
-       ``multicolor_disc`` (Shakura-Sunyaev / Novikov-Thorne) from
+       ``multicolor_disc`` (Shakura-Sunyaev, zero-torque) from
        ``disc.py``. Rationale: grid look-ups are not JAX-jittable under
        gradient tape; analytic models are differentiable by construction.
 
