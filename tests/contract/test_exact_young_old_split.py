@@ -16,6 +16,8 @@ Checks, on the synthetic wide SSP and a delayed-tau SFH:
   type that has no age split.
 """
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -117,3 +119,41 @@ def test_age_split_keys_are_refused_without_an_age_split(synthetic_ssp_wide):
             },
             redshift=Fixed(0.05),
         )
+
+
+@pytest.mark.parametrize("met_table", [False, True])
+def test_tabulated_sfh_publishes_fractions_in_range(
+    synthetic_ssp_wide, synthetic_tophat_obs, met_table
+):
+    """Runtime-array SFH (and per-age metallicity table) paths serve the same fractions."""
+    from tengri.parameters.resolve import merge_fixed_params
+
+    groups = {
+        "ssp_data": synthetic_ssp_wide,
+        "observation": synthetic_tophat_obs,
+        "sfh": {"type": "table"},
+        "dust_attenuation": {
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": Fixed(DEFAULT),
+        },
+        "neb": {"type": "none"},
+        "redshift": Fixed(0.05),
+    }
+    if met_table:
+        groups["met"] = {"type": "table", "all_params": Fixed(DEFAULT)}
+    model = SEDModel.build(**groups)
+    stellar = next(
+        c for c in model._build_component_chain() if type(c).__name__.startswith("Stellar")
+    )
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
+    t_gyr = np.linspace(0.0, 14.0, 57)
+    params["sfh_t_gyr"] = jnp.asarray(t_gyr)
+    params["sfh_sfr"] = jnp.ones_like(jnp.asarray(t_gyr))
+    if met_table:
+        params["met_history"] = jnp.zeros_like(jnp.asarray(t_gyr))
+    frac = np.asarray(stellar.compute_age_boundary_fractions(params))
+    assert frac.shape[0] == 1
+    assert np.all(np.isfinite(frac))
+    assert frac.min() >= 0.0 and frac.max() <= 1.0
+    assert frac[0, 0] > 0.5 and frac[0, -1] == 0.0
