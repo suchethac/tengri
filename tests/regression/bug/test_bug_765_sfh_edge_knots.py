@@ -181,8 +181,8 @@ def test_edge_knots_close_the_post_starburst_formed_mass(synthetic_ssp_wide, sfh
         "tlast_gyr": Fixed(0.3),
         "tflex_gyr": Fixed(2.0),
         "ratio_young": Fixed(-1.5),
-        "ratio_old_0": Fixed(0.2),
-        "ratio_old_1": Fixed(-0.3),
+        "ratio_old_1": Fixed(0.2),
+        "ratio_old_2": Fixed(-0.3),
         "all_params": Fixed(DEFAULT),
     }
     model = SEDModel.build(
