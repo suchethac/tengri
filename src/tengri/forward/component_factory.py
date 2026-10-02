@@ -399,8 +399,9 @@ def build_components(
     dust_agn_screen: str = "none",
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
-    dust_lyc_absorb_all: bool = False,
-    dust_eb_include_lyc: bool = False,
+    dust_lyc_reprocessed_by: str = "young",
+    dust_lyc_in_energy_balance: bool = False,
+    dust_lyc_escape_geometry: str = "screened",
     dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
@@ -431,6 +432,16 @@ def build_components(
     # budget) is unaffected either way. False (default) is today's strict/
     # relaxed energy balance, unchanged.
     dust_log_l_ir_requested: bool = False,
+    # Whether the HII-region dust-heating credit (#2539 item 3,
+    # energy_balance.log10_add_fdust_credit) can ever be nonzero, resolved
+    # from spec provenance by ``SEDModel._fdust_credit_active``: True when
+    # ``neb_fdust_frac`` is FREE or Fixed at a nonzero value, False when it
+    # is Fixed at exactly 0 or not declared at all (BakedIn backend, or no
+    # nebular component built). False lets each attenuator's ``apply()``
+    # skip forming the credit outright (one decision point, not per-
+    # consumer guessing); True (default, including a component built
+    # directly with no spec to ask) keeps the smooth combine, unchanged.
+    dust_fdust_credit_active: bool = True,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -602,6 +613,8 @@ def build_components(
                 geometry=wg00_geometry,
                 structure=wg00_structure,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
@@ -610,7 +623,8 @@ def build_components(
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "age_binned":
             atten_type = "age_binned"
@@ -641,9 +655,11 @@ def build_components(
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                lyc_absorb_all=dust_lyc_absorb_all,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                fdust_credit_active=dust_fdust_credit_active,
             )
 
         components.append(
