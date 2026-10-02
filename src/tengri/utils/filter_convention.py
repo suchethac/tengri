@@ -41,10 +41,10 @@ class FilterConvention(StrEnum):
     - ``BESSELL``: photon-counting, :math:`w = 1/\lambda`. The physically
       correct mean for photon-counting detectors (all optical/NIR CCDs) and
       how the AB system is realized by surveys. Matches DSPS, FSPS, sedpy,
-      and prospector. **This is the default.**
+      Prospector, Synthesizer, and BAGPIPES. **This is the default.**
     - ``ENERGY``: energy-counting, :math:`w = 1/\lambda^2` (i.e. flat in
       frequency, :math:`\int F_\nu T\,d\nu / \int T\,d\nu`). Matches CIGALE
-      and bagpipes; use it when reproducing those codes.
+      for its energy-type filters; use it when reproducing those codes.
 
     The two agree exactly for a flat-:math:`F_\nu` source (the AB reference)
     and diverge by 5–40 mmag, band- and SED-slope-dependent, otherwise.
@@ -94,14 +94,15 @@ def list_filter_conventions():
             {
                 "name": FilterConvention.BESSELL.value,
                 "kind": "filter_convention",
-                "short_doc": "Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).",
+                "short_doc": (
+                    "Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy/"
+                    "Prospector/Synthesizer/BAGPIPES)."
+                ),
             },
             {
                 "name": FilterConvention.ENERGY.value,
                 "kind": "filter_convention",
-                "short_doc": (
-                    "Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes)."
-                ),
+                "short_doc": ("Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE)."),
             },
         ]
     )

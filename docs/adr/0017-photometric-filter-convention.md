@@ -22,8 +22,12 @@ code's source):
 
 | Convention | `w(λ)` | Detector model | Used by |
 |---|---|---|---|
-| **photon (Bessell)** | `1/λ` | photon-counting | DSPS, FSPS, sedpy, prospector |
-| **energy** | `1/λ²` | energy / flat-in-frequency | CIGALE, bagpipes |
+| **photon (Bessell)** | `1/λ` | photon-counting | DSPS, FSPS, sedpy, Prospector, Synthesizer, BAGPIPES |
+| **energy** | `1/λ²` | energy / flat-in-frequency | CIGALE (energy-type filters) |
+
+**Amendment (2026-10-01):** Corrected attribution. BAGPIPES uses the photon-counting convention
+(`1/λ`), matching DSPS/FSPS/Prospector/Synthesizer (issue #2610). CIGALE's energy convention applies
+only to energy-type filters.
 
 They agree exactly for a flat-`F_ν` source (the AB reference) and diverge by
 **5–40 mmag**, band- and SED-slope-dependent, for real SEDs (first measured in
@@ -57,9 +61,9 @@ requires that convention to be available.
    inconsistency of #436 *correctly* (the shared kernel is now the right one).
 
 2. **Expose the energy convention, `w(λ) = 1/λ²`, as a selectable option** for
-   CIGALE / bagpipes parity (ADR-0015). A single `FilterConvention` enum
-   (`bessell` | `energy`) selects `w(λ)` at one chokepoint shared by the exact
-   kernel and the build-time preintegration.
+   CIGALE parity when using energy-type filters (ADR-0015). A single
+   `FilterConvention` enum (`bessell` | `energy`) selects `w(λ)` at one
+   chokepoint shared by the exact kernel and the build-time preintegration.
 
 3. **The convention is a build-time choice.** It is baked into the preintegrated
    `WavePrecomp` lookup table, so the exact path (`approx=None`) and the
