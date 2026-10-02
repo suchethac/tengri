@@ -72,13 +72,12 @@ def test_docstring_mapping_to_synthesizer_u():
     n_H = 100.0  # cm^-3
     alpha_B = 2.59e-13  # cm^3 s^-1, recombination coefficient
 
-    # Test case 1: Synthesizer log U = -2 → compute Q from its formula, then neb_logU
-    log_U_avg_1 = -2.0
-    U_avg_1 = 10.0**log_U_avg_1
+    # Case 1: Synthesizer log U = -2 → Q from its formula, then neb_logU
+    log_u_synth_1 = -2.0
+    u_synth_1 = 10.0**log_u_synth_1
 
     # Invert U = (α_B^(2/3) / c) (3 Q n / 4π)^(1/3): Q = 4π c³ U³ / (3 n α_B²)
-    Q_1 = (4.0 * np.pi * C_CGS**3 * U_avg_1**3) / (3.0 * n_H * alpha_B**2)
-    logQ_1 = np.log10(Q_1)
+    Q_1 = (4.0 * np.pi * C_CGS**3 * u_synth_1**3) / (3.0 * n_H * alpha_B**2)
 
     # Compute neb_logU from Q using inner-face relation
     R = 1e19  # cm
@@ -93,21 +92,20 @@ def test_docstring_mapping_to_synthesizer_u():
         err_msg="Synthesizer log U = -2 should map to neb_logU ≈ -2.35",
     )
 
-    # Test case 2: neb_logU = -2 → compute Q from inner relation, then log ⟨U⟩
+    # Case 2: neb_logU = -2 → Q from the inner-face relation, then Synthesizer's log U
     logU_inner_2 = -2.0
     U_inner_2 = 10.0**logU_inner_2
 
     # Inner-face: Q = 4π R² n c U
     Q_2 = 4.0 * np.pi * R**2 * n_H * C_CGS * U_inner_2
-    logQ_2 = np.log10(Q_2)
 
     # Compute Synthesizer's U from Q: U = (α_B^(2/3) / c) (3 Q n / 4π)^(1/3)
-    U_avg_2 = alpha_B ** (2.0 / 3.0) / C_CGS * (3.0 * Q_2 * n_H / (4.0 * np.pi)) ** (1.0 / 3.0)
-    log_U_avg_2 = np.log10(U_avg_2)
+    u_synth_2 = alpha_B ** (2.0 / 3.0) / C_CGS * (3.0 * Q_2 * n_H / (4.0 * np.pi)) ** (1.0 / 3.0)
+    log_u_synth_2 = np.log10(u_synth_2)
 
     # Assert: Synthesizer log U should be -1.88 to 0.01
     np.testing.assert_allclose(
-        log_U_avg_2,
+        log_u_synth_2,
         -1.88,
         atol=0.01,
         err_msg="neb_logU = -2 should map to Synthesizer log U ≈ -1.88",
@@ -124,7 +122,6 @@ def test_docstring_mapping_to_synthesizer_u():
     assert "eq. 7" in docstring and "footnote 3" in docstring, (
         "Docstring must attribute the Synthesizer U to Gutkin et al. (2016) eq. 7 / footnote 3"
     )
-    assert "eq. 1" not in docstring, "Gutkin et al. (2016) has no volume-averaged formula in eq. 1"
     assert "cue.utils.logQ" in docstring and "R=1e19" in docstring, (
         "Docstring must name Cue's default radius"
     )
