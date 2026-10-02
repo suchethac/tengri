@@ -1797,21 +1797,25 @@ _register(
 # Two tengri layout choices, recorded here because neither is the paper's own
 # construction:
 #
-#   * The three fixed old bins are equal-width from `tflex_gyr` to 13.7 Gyr
-#     (`psb_continuity_flex`'s default), an approximation of the paper's
-#     template edges. Deriving them FROM `tflex_gyr` is what keeps the ladder
-#     ascending for every value the Uniform(1.0, 5.0) prior can draw. Until
-#     #2184 this entry spliced `tflex_gyr` in ahead of a fixed ladder starting
-#     at 0.3 Gyr, so the ladder crossed itself over that whole prior,
-#     `jnp.searchsorted` ran on an unsorted array, and the mass closed to
-#     1-3 % instead of exactly.
-#   * The `ratio_old_*` are ADJACENT steps within the fixed section, with the
-#     step from the oldest flex bin to the youngest fixed bin pinned at 0 (the
-#     two share an SFR), so three fixed bins take two ratios. The paper's three
-#     `log(SFRratio,old)` entries are each measured against the first flexible
-#     bin instead, which gives its fixed section one more free amplitude than
-#     this entry has.
-_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+#   * The three fixed old bins are equal-width from `tflex_gyr` to the oldest
+#     age reachable at this model's redshift (`age_universe_yr`, injected the
+#     same way `psb_wild2020`'s burst already is; #2645), or 13.7 Gyr when that
+#     injection is absent (`psb_continuity_flex`'s bare-function default).
+#     Deriving them FROM `tflex_gyr` is what keeps the ladder ascending for
+#     every value the Uniform(1.0, 5.0) prior can draw. Until #2184 this entry
+#     spliced `tflex_gyr` in ahead of a fixed ladder starting at 0.3 Gyr, so the
+#     ladder crossed itself over that whole prior, `jnp.searchsorted` ran on an
+#     unsorted array, and the mass closed to 1-3 % instead of exactly.
+#   * `ratio_old_0` ... `ratio_old_{n_fixed-1}` are ONE PER FIXED BIN (Suess+2022
+#     Sect. 3.1.4's own count, not `n_fixed - 1`; #2612): every ratio is
+#     YOUNGER over OLDER, `log10(SFR_i / SFR_{i+1})`, matching Prospector's
+#     `psb` template (`prospect/models/transforms.py::psb_logsfr_ratios_to_masses_psb`)
+#     and Synthesizer's `ContinuityPSB`. `ratio_old_0` LINKS the oldest
+#     flexible bin to the youngest fixed bin (`log10(SFR_oldest_flex /
+#     SFR_youngest_fixed)`); defaults to 0 (the two share an SFR), which is
+#     the pre-#2612 behavior exactly. `ratio_old_{i>=1}` is the adjacent step
+#     between fixed bins `i-1` and `i` (oldest fixed bin = reference, 0).
+_N_PSB_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 
 #: Ceiling of the ``tlast_gyr`` prior [Gyr] (Suess+2022 Table 1), and therefore
 #: the floor of the ``tflex_gyr`` prior on both post-starburst entries: the two
@@ -1853,7 +1857,11 @@ _register(
             ),
             **{
                 f"sfh_psb2022_ratio_old_{i}": ParamDef(
-                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    (
+                        "log10 SFR ratio: oldest flex bin / youngest fixed bin (link)"
+                        if i == 0
+                        else f"log10 SFR ratio old bin {i - 1}/{i}"
+                    ),
                     _always_true,
                     "",
                     StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
@@ -1878,7 +1886,8 @@ _register(
     short_doc=(
         "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest "
         "bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed "
-        "old bins out to 13.7 Gyr, with StudentT(0, 0.3, df=2) ratios"
+        "old bins out to the age of the universe at this model's redshift, with "
+        "StudentT(0, 0.3, df=2) ratios"
     ),
 )
 
@@ -1914,7 +1923,7 @@ _register(
 # entry.
 _N_PSB_FLEX_BINS = 5
 _N_PSB_FLEX_RATIOS = _N_PSB_FLEX_BINS - 1
-_N_PSB_FLEX_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED - 1
+_N_PSB_FLEX_OLD_RATIOS = PSB_FLEX_DEFAULT_N_FIXED
 _register(
     SFHModelSpec(
         name="psb_flex",
@@ -1957,7 +1966,11 @@ _register(
             },
             **{
                 f"sfh_psb_flex_ratio_old_{i}": ParamDef(
-                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    (
+                        "log10 SFR ratio: oldest flex bin / youngest fixed bin (link)"
+                        if i == 0
+                        else f"log10 SFR ratio old bin {i - 1}/{i}"
+                    ),
                     _always_true,
                     "",
                     StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
@@ -1988,7 +2001,8 @@ _register(
     short_doc=(
         "Post-starburst non-parametric SFH with a resolved quenching zone "
         "(nflex=5, nfixed=3): youngest bin [0, tlast] + five equal-width flex "
-        "bins out to tflex + three equal-width fixed old bins out to 13.7 Gyr"
+        "bins out to tflex + three equal-width fixed old bins out to the age "
+        "of the universe at this model's redshift"
     ),
 )
 
@@ -2365,9 +2379,10 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
     parameters, so ``n`` edges need exactly ``n - 2`` of them. The post-starburst
     models on :func:`psb_continuity_flex` (``psb_suess2022``, ``psb_flex``) read
     only the *length* and the last entry of the array, and their ``ratio_old_*``
-    count the steps of the fixed section, which again comes to ``n - 2``. The
-    :func:`dirichlet` model declares ``n_bins - 1`` stick-breaking variables
-    ``z_frac_*``, one fewer than bins, so ``n`` edges again need ``n - 2`` of them.
+    declare ONE PER FIXED BIN (#2612: the link plus the adjacent steps), which
+    comes to ``n - 1``. The :func:`dirichlet` model declares ``n_bins - 1``
+    stick-breaking variables ``z_frac_*``, one fewer than bins, so ``n`` edges
+    again need ``n - 2`` of them.
     ``continuity_flex`` spends some of its parameters on bin *widths*, so the
     rule is not applied to it.
 
@@ -2403,16 +2418,17 @@ def validate_bin_edges_gyr(sfh_type, edges) -> None:
         # ``psb_flex``) read only the LENGTH and the last entry: the fixed old
         # bins are equal-width from ``tflex_gyr`` to ``edges[-1]``. So the
         # count rule is its own: ``n`` edges means ``n - 1`` fixed bins, which
-        # take ``n - 2`` ``ratio_old_*`` parameters. Surplus or missing ones
-        # are swallowed by ``**ratio_kwargs`` and change no output, which is
-        # the silent-config failure #1975 exists to refuse.
+        # take ``n - 1`` ``ratio_old_*`` parameters -- one per fixed bin (the
+        # link plus the adjacent steps, #2612), not one per step. Surplus or
+        # missing ones are swallowed by ``**ratio_kwargs`` and change no
+        # output, which is the silent-config failure #1975 exists to refuse.
         n_old = sum(1 for name in spec.params if "ratio_old_" in name)
-        n_needed = arr.shape[0] - 2
+        n_needed = arr.shape[0] - 1
         if n_old and n_needed != n_old:
             raise ValueError(
                 f"sfh type={sfh_type!r} declares {n_old} ratio_old parameters, which needs "
-                f"{n_old + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
-                f"{n_old + 2} edges; only their count and their last entry (the oldest "
+                f"{n_old + 1} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
+                f"{n_old + 1} edges; only their count and their last entry (the oldest "
                 "lookback time) are used, because the fixed bins are equal-width from "
                 "tflex_gyr to that edge."
             )
@@ -2919,13 +2935,14 @@ def resolve_sfh(
         smooth = jnp.zeros_like(t_lookback)
         for fn_i, pub_to_internal, internal_names in additive_info:
             kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
-            if fn_i is psb_wild2020 and "age_universe_yr" in kw:
+            if fn_i in (psb_wild2020, psb_continuity_flex) and "age_universe_yr" in kw:
                 # Not a declared public parameter (the orchestrator injects it
                 # from the evaluation redshift, component.py's apply()/
                 # compute_joint_weights()), so _build_component_kw's
                 # pub_to_internal filtering above never sees it; forward it
                 # through by name instead, same as every other caller of
-                # psb_wild2020 (#2521 burst re-anchoring to age_at_z(z)).
+                # psb_wild2020 (#2521 burst re-anchoring to age_at_z(z)) and
+                # psb_continuity_flex's own fixed-section bound (#2645).
                 kw_i["age_universe_yr"] = kw["age_universe_yr"]
             smooth = smooth + fn_i(t_lookback, **kw_i)
 

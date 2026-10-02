@@ -160,7 +160,7 @@ def cat3d_wind_lowfwd_torus_block(
 @register_agn_block(
     "torus",
     "fritz",
-    citation="Fritz et al. 2006, A&A, 470, 221",
+    citation="Fritz et al. 2006, MNRAS, 366, 767",
     status="production",
     short_doc="Fritz et al. 2006 smooth-dust torus",
     template_loader=load_fritz_default_grid,
@@ -219,7 +219,8 @@ def fritz_torus_block(
 
     References
     ----------
-    .. [1] Fritz, O. et al. 2006, A&A, 470, 221. arXiv:0606147.
+    .. [1] Fritz, J., Franceschini, A. and Hatziminaoglou, E. 2006, MNRAS, 366, 767.
+       arXiv:astro-ph/0511428.
     .. [2] Boquien, M. et al. 2019, A&A, 622, A103. CIGALE. arXiv:1811.03094.
     """
     del l5100_disc

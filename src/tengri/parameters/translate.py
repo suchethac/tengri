@@ -279,7 +279,7 @@ _SINGLE_COMPONENT_DUST_PARAM_MAP = {
 }
 
 
-def _build_param_map(mean_sfh_type, dust_model="two_component"):
+def _build_param_map(mean_sfh_type, dust_model="two_component", dust_screens=()):
     """Build complete param map from SFH registry + non-SFH params + auto-derived components.
 
     Parameters
@@ -287,7 +287,11 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     mean_sfh_type : list[str]
         SFH type tokens, e.g. ``["tsnorm"]`` or ``["tsnorm", "field"]``.
     dust_model : str
-        ``"two_component"`` or ``"single_component"``.
+        ``"two_component"``, ``"single_component"``, ``"wg00"``, or
+        ``"age_binned"``.
+    dust_screens : tuple of (str, float or None, float or None), optional
+        age_binned's validated screen tuple; only consulted when
+        ``dust_model == "age_binned"``.
 
     Returns
     -------
@@ -317,6 +321,28 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
             if k not in ("dust_tau_bc", "dust_tau_diff"):
                 result[k] = v
         result.update(_SINGLE_COMPONENT_DUST_PARAM_MAP)
+    elif dust_model == "age_binned":
+        # age_binned (#2528): identity map (internal name == public name, no
+        # unit conversion) for every per-screen declared parameter. Built
+        # from the SAME AgeBinnedDustComponent.declared_parameters() call
+        # _translate_age_binned / _build_param_registry already use, not a
+        # second hand-written list -- the registry-driven auto-derive below
+        # cannot see these (it walks STATIC components/*/_params.py module
+        # tuples; age_binned's declared parameter set is a per-build
+        # variable with no static tuple to walk).
+        for k, v in _NON_SFH_PARAM_MAP.items():
+            if k not in ("dust_tau_bc", "dust_tau_diff"):
+                result[k] = v
+        from tengri.components.dust.age_binned import (
+            AgeBinnedDustComponent,
+            AgeBinnedDustComponentConfig,
+        )
+
+        decls = AgeBinnedDustComponent(
+            config=AgeBinnedDustComponentConfig(screens=tuple(dust_screens or ()))
+        ).declared_parameters()
+        for decl in decls:
+            result[decl.name] = (decl.name, 1.0, 0.0)
     else:
         result.update(_NON_SFH_PARAM_MAP)
 

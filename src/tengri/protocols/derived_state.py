@@ -438,6 +438,23 @@ class DerivedState:
     # all: shipping only the observed one is #1665, which left every rest-frame
     # consumer on the λ_eff screen and moved 13/13 spectral indices silently.
     nebular_restband_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # Nebular sub-band channels from the per-Q_H grid, published by the nebular
+    # component when the grid serves a dust screen (the continuum is then not
+    # materialized). ``*_lnu_subband_precomp`` is the INTRINSIC band integral of each
+    # of K sub-band chunks per filter, ``(n_filter, K)`` [erg/s/Hz]; the matching
+    # ``*_waves_*`` arrays hold each chunk's rest wavelength [Angstrom]. The dust
+    # component screens them at those nodes, ``sum_k Phi_k T(lambda_k)``, and
+    # publishes the ``_attenuated_`` keys above. The ``_subband_precomp`` suffix keeps
+    # them out of the ``*_phot_lnu_precomp`` / ``*_restband_lnu_precomp`` sweeps in
+    # ``predict_via_precomp``, which would otherwise add the bucket unscreened.
+    nebular_phot_lnu_subband_precomp: jnp.ndarray | None = None
+    nebular_subband_waves_rest_precomp: jnp.ndarray | None = None
+    nebular_restband_lnu_subband_precomp: jnp.ndarray | None = None
+    nebular_restband_subband_waves_precomp: jnp.ndarray | None = None
+    # Absorbed nebular power per unit Q_H on the stellar energy-balance LUT's
+    # ``(tau_bc, tau_diff)`` grid, ``(n_tau_a, n_tau_b)`` [erg/s per (photon/s)],
+    # through the nebular screen.
+    nebular_eb_absorbed_per_qh_grid_precomp: jnp.ndarray | None = None
     # Shock (MAPPINGS V) per filter: rest-frame Lν, erg/s/Hz, intrinsic (no
     # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
     # additive component from the photoionized backend (#851), so it carries its
