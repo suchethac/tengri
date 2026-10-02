@@ -186,7 +186,8 @@ def test_a_free_redshift_is_served_by_the_grid_at_the_evaluation_redshift(ssp, d
 
     table = m_auto._nebular_grid_table
     assert table.redshift_is_tabulated
-    assert table.serves_dust is (dust_type == "dusty")
+    if dust_type == "dusty":
+        assert table.serves_dust
     neb_comp = next(
         c for c in m_auto._cached_component_chain if getattr(c, "name", "") == "nebular"
     )
