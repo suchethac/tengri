@@ -24,12 +24,18 @@ References
 
 from __future__ import annotations
 
+import jax
 import numpy as np
 import pytest
 from astropy.cosmology import Planck18
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tengri.components.stellar.component import _AGE_FAMILIES, age_universe_kwargs
+from tengri.components.stellar.component import (
+    _AGE_FAMILIES,
+    StellarSEDComponent,
+    age_universe_kwargs,
+)
+from tengri.components.stellar.sfh import sample_sfh_prior
 from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
 from tengri.utils.grid import interpolate_to_linear_time
 
@@ -48,10 +54,19 @@ _BEYOND_AGE_FLOOR = 1e-15
 #: Families the builder accepts; the rest are covered by the rule's own test.
 _BUILDABLE = tuple(f for f in _AGE_FAMILIES if f not in UNVALIDATED_SFH_TYPES)
 
-_PSB_SETTINGS = {
-    "age_gyr": Fixed(2.0),
-    "tau_gyr": Fixed(1.0),
-    "burstage_gyr": Fixed(0.3),
+#: Families whose SFH ends at age(z) for every parameter draw. ``psb`` does not:
+#: its own age parameter is bounded by the prior, not by the cosmic age, so a
+#: raw prior draw may form stars before the Big Bang (the model-level cases
+#: above fix that parameter below age(z)).
+_SUPPORT_ENDS_AT_AGE = ("dense_basis", "dense_basis_pure")
+
+#: Per-family SFH settings of the model-level cases. Every buildable family in
+#: ``_AGE_FAMILIES`` needs an entry (``{}`` when the defaults are fine), so a
+#: family added later cannot be skipped silently.
+_FAMILY_SETTINGS = {
+    "dense_basis": {},
+    "dense_basis_pure": {},
+    "psb": {"age_gyr": Fixed(2.0), "tau_gyr": Fixed(1.0), "burstage_gyr": Fixed(0.3)},
 }
 
 
@@ -60,10 +75,16 @@ def _age_yr(z: float) -> float:
     return float(Planck18.age(z).to_value("yr"))
 
 
+def test_every_buildable_age_family_has_settings():
+    """A family added to ``_AGE_FAMILIES`` must be given settings here, not skipped."""
+    missing = [f for f in _BUILDABLE if f not in _FAMILY_SETTINGS]
+    assert not missing, f"add _FAMILY_SETTINGS entries for {missing}"
+
+
 def _sfh_block(family) -> dict:
     block = {"type": family, "all_params": Fixed(DEFAULT)}
-    if family == "psb":
-        block.update(_PSB_SETTINGS)
+    if isinstance(family, str):
+        block.update(_FAMILY_SETTINGS[family])
     return block
 
 
@@ -187,7 +208,7 @@ def test_rule_returns_age_of_universe_at_redshift(family):
     for z in (_Z, _Z_OTHER):
         kwargs = age_universe_kwargs(family, z)
         assert set(kwargs) == {"age_universe_yr"}
-        assert float(kwargs["age_universe_yr"]) == pytest.approx(_age_yr(z), rel=1e-4)
+        assert float(kwargs["age_universe_yr"]) == pytest.approx(_age_yr(z), rel=1e-6)
 
 
 def test_rule_is_silent_for_other_families_and_reads_composites():
@@ -196,3 +217,45 @@ def test_rule_is_silent_for_other_families_and_reads_composites():
     assert age_universe_kwargs(["tsnorm", "burst"], _Z) == {}
     assert set(age_universe_kwargs(["dense_basis_pure", "burst"], _Z)) == {"age_universe_yr"}
     assert set(age_universe_kwargs(("dense_basis", "field"), _Z)) == {"age_universe_yr"}
+
+
+@pytest.mark.parametrize("family", _BUILDABLE)
+def test_precompute_route_equals_exact_route(family, synthetic_ssp_wide):
+    """The weights-only route injects the same age(z) as the exact forward."""
+    model = _build(synthetic_ssp_wide, family, Fixed(_Z))
+    stellar = next(c for c in model._build_component_chain() if isinstance(c, StellarSEDComponent))
+    weights, _, _ = stellar.compute_joint_weights(model._evaluation_params({}, None))
+    exact = np.asarray(model.predict_state({}).derived["joint_weights"])
+
+    np.testing.assert_allclose(np.asarray(weights), exact, rtol=1e-8, atol=1e-14)
+
+
+@pytest.mark.parametrize("family", _BUILDABLE)
+def test_sample_sfh_prior_is_evaluated_at_age_of_the_redshift(family):
+    """Prior draws vanish beyond age(z) and move with the redshift, same key."""
+    key = jax.random.PRNGKey(3)
+    age_yr, curves = sample_sfh_prior(family, key, n=6, redshift=_Z)
+    _, other = sample_sfh_prior(family, key, n=6, redshift=_Z_OTHER)
+    curves = np.asarray(curves)
+    beyond = np.asarray(age_yr) > _age_yr(_Z)
+
+    assert beyond.any()
+    peak = np.max(curves, axis=1)
+    assert np.all(peak > 0.0)
+    if family in _SUPPORT_ENDS_AT_AGE:
+        assert np.all(np.max(np.abs(curves[:, beyond]), axis=1) <= _BEYOND_AGE_FLOOR * peak)
+    assert not np.allclose(curves, np.asarray(other), rtol=1e-3)
+
+
+@pytest.mark.parametrize("family", _BUILDABLE)
+def test_sample_sfh_prior_requires_redshift_for_age_families(family):
+    """No silent default age: an age-anchored family without a redshift raises."""
+    with pytest.raises(ValueError, match="redshift"):
+        sample_sfh_prior(family, jax.random.PRNGKey(0), n=2)
+
+
+def test_sample_sfh_prior_other_families_need_no_redshift():
+    """A family with no age anchor is unchanged by the new argument."""
+    _, plain = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3)
+    _, with_z = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=3, redshift=_Z)
+    np.testing.assert_array_equal(np.asarray(plain), np.asarray(with_z))
