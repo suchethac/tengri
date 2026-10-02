@@ -28,9 +28,7 @@ src/tengri/components/agn/disc.py | jnp.clip with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-100 < 1e-20 -> 4
 src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
-src/tengri/components/agn/disc_cigale.py | jnp.clip with floor 0.0 < 1e-20 -> 3
-src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
-src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/disc_cigale.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 6

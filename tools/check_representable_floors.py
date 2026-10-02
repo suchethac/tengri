@@ -75,7 +75,11 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # (which only sees a literal argument) no longer sees them either. The
 # underlying guards did not disappear, only the source shape their old
 # ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
-_PINNED = 26
+# 26 -> 25: the closed-form normalization of ``disc_cigale.piecewise_powerlaw_disk``
+# (#2601) deleted its ``jnp.maximum(jnp.abs(integral), 1e-100)`` floor outright;
+# the normalization is a log-space subtraction with no divisor. A deletion, not a
+# migration.
+_PINNED = 25
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

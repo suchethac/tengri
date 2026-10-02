@@ -439,7 +439,8 @@ def _agn_sed_components(
     L_lambda_lines_aniso: Array,
     L_lambda_feii: Array,
     L_lambda_lines_iso: Array,
-    central_mask: Array | float,
+    disc_mask: Array | float,
+    lines_mask: Array | float,
     atten_factor: Array,
     torus_factor: Array | float,
     l_nu_conv: Array,
@@ -449,8 +450,9 @@ def _agn_sed_components(
 
     Pure decomposition of the SAME additive pieces :func:`compose_l_nu`
     folds into its un-decomposed ``L_nu_result``: distributes
-    ``central_mask`` and ``atten_factor`` over the ``(disc + aniso-lines)``
-    sum individually instead of multiplying the combined bundle, so the
+    ``disc_mask``, ``lines_mask`` and ``atten_factor`` over the
+    ``(disc + aniso-lines)`` sum individually instead of multiplying the
+    combined bundle, so the
     four returned arrays sum EXACTLY (to floating-point reassociation) back
     to that same total (guarded by the 1e-12-relative sum contract test).
     Extracted as its own function purely for readability -- no behavior
@@ -465,8 +467,14 @@ def _agn_sed_components(
         [erg/s/Å].
     L_lambda_lines_iso : array_like, shape (n_wave,)
         Isotropic (unmasked) NLR :math:`L_\lambda` [erg/s/Å].
-    central_mask : array_like or float
-        Stage-4.5 Type-1/2 obscuration factor applied to disc + aniso-lines.
+    disc_mask : array_like or float
+        Stage-4.5 Type-1/2 obscuration factor applied to the disc: the torus
+        screen, or 1 where the disc is tied to the SKIRTOR template and the
+        library ratio disk(i)/disk(0) already carries the torus extinction.
+    lines_mask : array_like or float
+        Stage-4.5 Type-1/2 obscuration factor applied to the anisotropic
+        lines (broad lines and FeII): always the torus screen (or the gray
+        visibility mask for the other tori).
     atten_factor : array_like, shape (n_wave,)
         Stage-5 attenuation-block multiplicative factor, applied to the
         central engine (disc + lines).
@@ -494,11 +502,9 @@ def _agn_sed_components(
     -----
     **JIT-compatible**: yes, pure JAX arithmetic.
     """
-    L_lambda_lines_total = (
-        L_lambda_lines_aniso + L_lambda_feii
-    ) * central_mask + L_lambda_lines_iso
+    L_lambda_lines_total = (L_lambda_lines_aniso + L_lambda_feii) * lines_mask + L_lambda_lines_iso
     return {
-        "disc": L_lambda_disc * central_mask * atten_factor * l_nu_conv,
+        "disc": L_lambda_disc * disc_mask * atten_factor * l_nu_conv,
         "torus": L_lambda_torus * torus_factor * l_nu_conv,
         "lines": L_lambda_lines_total * atten_factor * l_nu_conv,
         "polar": L_nu_polar,
@@ -713,8 +719,10 @@ agn_torus_block, agn_attenuation_block : str
     # mode with the SKIRTOR torus, CIGALE ties the disc to the SAME
     # ``agn_power`` as the dust via the fixed template ratio
     # ``R = lumin_disk/lumin_dust`` (skirtor2016.py ``norm = 1/∫dust``), so
-    # disc and torus scale together. ``R`` carries the anisotropy factor
-    # ``η(i) = cos(i)(1+2cos(i))/3``. Captured from the UN-reddened disc
+    # disc and torus scale together. The anisotropy
+    # ``η(i) = cos(i)(1+2cos(i))/3`` is in the library ratio disk(i)/disk(0)
+    # (∫disk(i)/∫disk(0) = η(i) to 0.6 % for i <= 40 deg), so ``R`` carries it
+    # once and no explicit factor enters. Captured from the UN-reddened disc
     # shape: R22 removed the ONLY LOS-reddening path that used to reach this
     # far (the polar screen now lives exclusively in the standalone
     # ``polar_dust`` attenuation block, downstream of this R-tie), so the
@@ -888,7 +896,7 @@ agn_torus_block, agn_attenuation_block : str
     #   * fracAGN > 0 (CIGALE-coupled): tie the disc to ``agn_power × R`` so
     #     disc/torus/polar share one reference: *allocation*-conserving (the
     #     components can't drift apart), CIGALE-faithful, inclination-correct via
-    #     the η(i) baked into R. This is NOT *ledger* conservation: ∫total scales
+    #     the library ratio disk(i)/disk(0) in R. This is NOT *ledger* conservation: ∫total scales
     #     with ``agn_power = agn_torus_frac·L_bol``, so agn_torus_frac→0 drives
     #     the whole AGN to zero: outside CIGALE's reachable domain, but a free
     #     agn_torus_frac sampler can reach that degenerate zero-AGN plateau.
@@ -919,18 +927,20 @@ agn_torus_block, agn_attenuation_block : str
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
     # default-inclination models are unchanged. Static dispatch on the torus name
     # is JIT-safe.
-    # ``_central_mask`` is factored out of the (disc + aniso-lines) sum
-    # instead of multiplying ``L_lambda_central`` in place, so the
-    # per-sub-block decomposition below (``sed_agn_disc`` / ``sed_agn_torus``
-    # / ``sed_agn_lines`` / ``sed_agn_polar``, NAMING_CONTRACT §4b.5) can
-    # apply the IDENTICAL mask to the disc and aniso-lines terms
-    # individually: multiplication distributes over the sum, so the two
-    # formulations agree to floating-point reassociation.
-    # Type-1/2 obscuration: disc and lines need separate handling on the tied path.
-    # On the fracAGN-tied path (_disc_R is not None), the disc already carries
-    # the torus extinction via the library ratio disk(i)/disk(0). The lines and
-    # FeII stay screened by the torus. Compute the screen for all TORUS_SCREEN_PARAMS
-    # tori; apply it to lines/FeII always; apply to disc only when untied.
+    # The obscuration factors out of the (disc + aniso-lines) sum instead of
+    # multiplying ``L_lambda_central`` in place, so the per-sub-block
+    # decomposition below (``sed_agn_disc`` / ``sed_agn_torus`` /
+    # ``sed_agn_lines`` / ``sed_agn_polar``, NAMING_CONTRACT §4b.5) applies the
+    # IDENTICAL factors to each term: multiplication distributes over the sum,
+    # so the two formulations agree to floating-point reassociation.
+    #
+    # The broad lines and FeII always carry the torus screen. The disc carries it
+    # unless it is tied to the SKIRTOR template (fracAGN > 0 on the R-tie path):
+    # there the disc is ``agn_power x disk(i)/disk(0) x analytic shape`` and the
+    # library ratio disk(i)/disk(0) already is the torus extinction (about 3e-3 of
+    # the face-on disc at i = 70 deg), so a second screen would remove the same
+    # photons twice. At fracAGN = 0 the disc is the unreweighted analytic shape
+    # and the screen is its only obscuration.
     _lines_mask = 1.0
     _disc_mask = 1.0
     if agn_torus_block in TORUS_SCREEN_PARAMS:
@@ -941,19 +951,16 @@ agn_torus_block, agn_attenuation_block : str
             oa_deg=params.get(_oa_key, 40.0),
             tau_v=params.get(_tau_key, 7.0),
         )
-        _lines_mask = _screen  # lines always screened
-        # disc screened only on untied path (fracAGN=0, _disc_R is None)
-        _disc_mask = jnp.where(_disc_R is not None, 1.0, _screen)
+        _lines_mask = _screen
+        _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
-        _vis_mask = sigmoid_visibility_mask(
+        _lines_mask = sigmoid_visibility_mask(
             params.get("agn_cos_inc", 0.86602540378443864),
             params.get("agn_theta_torus", 30.0),
         )
-        _lines_mask = _vis_mask
-        _disc_mask = _vis_mask
+        _disc_mask = _lines_mask
     L_lambda_central = (
-        L_lambda_disc * _disc_mask
-        + (L_lambda_lines_aniso + L_lambda_feii) * _lines_mask
+        L_lambda_disc * _disc_mask + (L_lambda_lines_aniso + L_lambda_feii) * _lines_mask
     )
     # Isotropic NLR: visible at every inclination, so added after the mask.
     L_lambda_central = L_lambda_central + L_lambda_lines_iso
@@ -983,7 +990,7 @@ agn_torus_block, agn_attenuation_block : str
         # R63: the integrand is the UNMASKED disc. The cone dust re-emits what
         # it absorbed isotropically -- the absorbed power does not depend on
         # where the observer stands -- so ``sed_agn_polar`` is present at full
-        # strength at Type-2 sightlines and the Stage-4.5 ``_central_mask``
+        # strength at Type-2 sightlines and the Stage-4.5 obscuration
         # must not reach this term. Only the LOS reddening is Type-1 only, and
         # ``polar_dust_extinction`` already gates that half itself. CIGALE
         # agrees (verified against a live skirtor2016 run: its polar blackbody
@@ -1145,7 +1152,8 @@ agn_torus_block, agn_attenuation_block : str
             L_lambda_lines_aniso=L_lambda_lines_aniso,
             L_lambda_feii=L_lambda_feii,
             L_lambda_lines_iso=L_lambda_lines_iso,
-            central_mask=_central_mask,
+            disc_mask=_disc_mask,
+            lines_mask=_lines_mask,
             atten_factor=factor,
             torus_factor=_torus_factor,
             l_nu_conv=_conv,

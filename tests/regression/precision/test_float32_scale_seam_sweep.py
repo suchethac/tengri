@@ -514,27 +514,32 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg, tied
+#: SKIRTOR disc carrying disk(i)/disk(0) once, no explicit eta) at mbh 6 / 8 / 10, produced by
+#: :data:`_F64_REFERENCE_CHILD`. ``rest_sed_0``, the first bin, is the tied disc alone; its
+#: level scales as ``1 / eta(30 deg) = 1.26795`` against a disc tied with eta applied a second
+#: time (measured ratio 1.268112, the remaining 1.00013 being the host's share of that bin).
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5215528515600546e32,
-        "rest_sed_0": 2.1618471431580417e23,
-        "rest_sed_mid": 3.05875473371805e28,
-        "rest_sed_last": 8.775513568033312e21,
-        "photometry": (1.0986166566917497e-27, 1.5711841718626467e-27, 1.764819215426025e-27),
+        "rest_sed_sum": 1.522087146372271e32,
+        "rest_sed_0": 2.7414641089992215e23,
+        "rest_sed_mid": 3.059759671014202e28,
+        "rest_sed_last": 8.775691573813786e21,
+        "photometry": (1.0990406680264032e-27, 1.571190125160936e-27, 1.7648209267569442e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.558679481783208e32,
-        "rest_sed_0": 2.621597865262484e24,
-        "rest_sed_mid": 3.1456552202309087e28,
-        "rest_sed_last": 8.823791474594601e21,
-        "photometry": (1.1319561100052943e-27, 1.5726914892133822e-27, 1.7652681401268386e-27),
+        "rest_sed_sum": 1.5692038430133054e32,
+        "rest_sed_0": 3.32447947548655e24,
+        "rest_sed_mid": 3.170035763011865e28,
+        "rest_sed_last": 8.836905506469256e21,
+        "photometry": (1.1413516017138159e-27, 1.5731015599094376e-27, 1.7653901893068474e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5745233941627343e32,
-        "rest_sed_0": 2.0084485779608986e24,
-        "rest_sed_mid": 3.175461013264611e28,
-        "rest_sed_last": 9.02096624152618e21,
-        "photometry": (1.1420945800812812e-27, 1.5791369532676527e-27, 1.766957226624605e-27),
+        "rest_sed_sum": 1.5893067919899514e32,
+        "rest_sed_0": 2.546937562859289e24,
+        "rest_sed_mid": 3.2078590999342967e28,
+        "rest_sed_last": 9.086913093044805e21,
+        "photometry": (1.1542181906962566e-27, 1.5812750837422911e-27, 1.767532048985811e-27),
     },
 }
 

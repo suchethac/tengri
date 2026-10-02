@@ -5,9 +5,10 @@ Three piecewise power-law disc spectrum models for AGN torus emission,
 implementing the same models as CIGALE's ``skirtor2016.py`` module
 (Boquien et al. 2019); validated against its output.
 
-All functions return dimensionless normalized disc spectra (integrated to
-unit area under a linear wavelength grid), ready for luminosity scaling
-and convolution with dust extinction. Wavelength inputs and breakpoints
+All functions return dimensionless normalized disc spectra (unit area over
+the nanometer axis, from the closed-form integral of the broken power law),
+zero below the first and from the last breakpoint, ready for luminosity
+scaling and convolution with dust extinction. Wavelength inputs and breakpoints
 are in **nanometer** (CIGALE's native SED convention); convert from
 Angstrom at the call site if needed.
 
@@ -24,10 +25,12 @@ References
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
-from tengri.utils.scale import pow10 as _pow10
+from tengri.utils.scale import LN10 as _LN10, pow10 as _pow10
+
+# |x| below which (1 - e^-x)/x is evaluated by its series (the quotient cancels).
+_SERIES_X = 1e-4
 
 
 def piecewise_powerlaw_disk(
@@ -35,12 +38,15 @@ def piecewise_powerlaw_disk(
     limits: jnp.ndarray,
     coefs: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Generic piecewise power-law disc spectrum (normalized to unit area).
+    r"""Continuous broken power-law disc spectrum on ``[limits[0], limits[-1])``, unit area.
 
-    Constructs a piecewise power-law spectrum with breakpoints at specified
-    wavelengths and power-law indices in each segment. The spectrum is
-    normalized such that the integral over wavelength equals 1.0 (for
-    compatibility with CIGALE's normalization).
+    The spectrum follows :math:`\lambda^{\alpha_k}` between ``limits[k]`` and
+    ``limits[k+1]``, is continuous at the breakpoints, and is zero outside
+    ``[limits[0], limits[-1])``, the half-open interval of CIGALE's slices. It is
+    normalized by the closed-form integral of the power-law segments, so its level
+    at a given wavelength does not depend on the sampling of ``wavelength``. CIGALE's
+    ``skirtor2016`` ``disk()`` [1]_ builds the same function and divides by the
+    trapezoid area on its own axis.
 
     Parameters
     ----------
@@ -51,94 +57,69 @@ def piecewise_powerlaw_disk(
         Must be strictly increasing.
         Defines n_segment wavelength intervals.
     coefs : array_like, shape (n_segment,)
-        Power-law indices for each segment. The spectrum in segment i
-        follows :math:`\\lambda^{\\alpha_i}` where :math:`\\alpha_i` is coefs[i].
+        Power-law indices :math:`\alpha_k` for each segment.
 
     Returns
     -------
     spectrum : ndarray, shape (n_wave,)
-        Dimensionless normalized spectrum (integral over wavelength = 1.0).
+        Spectrum per nm, integrating to 1 over ``[limits[0], limits[-1])`` and
+        zero elsewhere. [nm^-1]
 
     Notes
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives.
 
-    The construction proceeds as follows:
+    With :math:`a_k` = ``limits[k]``, :math:`b_k` = ``limits[k+1]`` and the
+    continuity constants :math:`c_0 = 1`,
+    :math:`c_k = c_{k-1}\,a_k^{\alpha_{k-1}-\alpha_k}`, the spectrum is
+    :math:`s(\lambda) = c_k\lambda^{\alpha_k}/N` in segment :math:`k` and
 
-    1. For each wavelength segment between limits[i] and limits[i+1],
-       the spectrum is a power law :math:`\\lambda^{\\alpha_i}`.
-    2. Continuity is enforced at breakpoints via normalization factors:
-       :math:`norm_i = norm_{i-1} \\times limits[i]^{\\alpha_{i-1} - \\alpha_i}`.
-    3. The unnormalized spectrum is computed piecewise.
-    4. Integration via trapezoidal rule (linear grid) yields the normalization
-       constant C such that :math:`\\int_0^\\infty C \\times spectrum \\, d\\lambda = 1`.
+    .. math::
 
-    The result is frame-independent and can be scaled by any luminosity.
+        N = \sum_k c_k\,b_k^{\alpha_k+1}\,\ln\frac{b_k}{a_k}\,
+            \frac{1 - e^{-x_k}}{x_k},
+        \qquad x_k = (\alpha_k + 1)\ln\frac{b_k}{a_k},
+
+    whose :math:`\alpha_k = -1` limit is :math:`c_k\ln(b_k/a_k)`. Every term is
+    formed as a base-10 logarithm and exponentiated only after the normalization
+    is subtracted, so no factor leaves the float32 window (a steep segment at
+    :math:`\lambda \sim 10^6`--:math:`10^7` nm has :math:`\lambda^{-4} \sim
+    10^{-40}` against a continuity constant :math:`\sim 10^{40}`).
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
     """
-    # Find which segment each wavelength belongs to
-    segment_indices = jnp.searchsorted(limits, wavelength, side="right") - 1
-    segment_indices = jnp.clip(segment_indices, 0, len(coefs) - 1)
+    segment_indices = jnp.clip(
+        jnp.searchsorted(limits, wavelength, side="right") - 1, 0, len(coefs) - 1
+    )
+    in_range = (wavelength >= limits[0]) & (wavelength < limits[-1])
 
-    # Zero the spectrum outside [limits[0], limits[-1]] (CIGALE skirtor2016.py:112-124).
-    # Without this, searchsorted clips wavelengths below limits[0] to the first
-    # segment, producing a spurious tail in the 1-8 nm range that inflates the
-    # unit-area normalization. Apply the cut BEFORE normalization (exact in any
-    # precision mode).
-    in_range_mask = (wavelength >= limits[0]) & (wavelength <= limits[-1])
+    log_limits = jnp.log10(limits)
+    # log10(c_k) = log10(c_{k-1}) + (alpha_{k-1} - alpha_k) * log10(a_k)
+    log_norm_steps = (coefs[:-1] - coefs[1:]) * log_limits[1 : len(coefs)]
+    log_norms = jnp.concatenate(
+        [jnp.zeros((1,), dtype=log_norm_steps.dtype), jnp.cumsum(log_norm_steps)]
+    )
 
-    if wavelength.dtype == jnp.float32:
-        # Float32 (#1206): the two factors of ``wavelength**coef * norm`` blow past
-        # the float32 window in OPPOSITE directions even though their product is
-        # O(1). With a steep segment (coef = -4) at λ ~1e6-1e7 nm,
-        # ``wavelength**coef`` ~1e-36..1e-40 flushes to 0 while the matching
-        # continuity ``norm`` ~1e40 overflows to inf: so ``0 * inf = nan`` over the
-        # whole long-wavelength tail. Build the same spectrum as a single log10 sum
-        # (continuity norms become a cumulative SUM of ``coef_step * log10(limit)``)
-        # and materialize only the representable result. Exact in float64, which is
-        # why the linear form below is kept verbatim for it.
-        log_limits = jnp.log10(limits)
-        # log10(norm_i) = log10(norm_{i-1}) + (coef_{i-1} - coef_i) * log10(limit_i)
-        log_norm_steps = (coefs[:-1] - coefs[1:]) * log_limits[1 : len(coefs)]
-        log_norms = jnp.concatenate(
-            [jnp.zeros((1,), dtype=log_norm_steps.dtype), jnp.cumsum(log_norm_steps)]
-        )
-        log_spectrum = coefs[segment_indices] * jnp.log10(wavelength) + log_norms[segment_indices]
-        # Peak-factor before exponentiating: the absolute level is arbitrary (the
-        # unit-area normalization divides it straight out), so subtracting the peak
-        # keeps every value in range and leaves the normalized result unchanged.
-        log_spectrum = log_spectrum - jnp.max(log_spectrum)
-        spectrum = _pow10(log_spectrum)
-        # Apply the wavelength-range cut BEFORE normalization.
-        spectrum = jnp.where(in_range_mask, spectrum, 0.0)
-        integral = jnp.trapezoid(spectrum, wavelength)
-        integral_safe = jnp.maximum(jnp.abs(integral), 1e-30)
-        return spectrum / integral_safe
+    # Closed-form segment integrals, in log10. ``g = (1 - e^-x)/x`` has the
+    # series branch for |x| below the cancellation floor (alpha = -1 exactly).
+    ln_ratio = (log_limits[1:] - log_limits[:-1]) * _LN10
+    x = (coefs + 1.0) * ln_ratio
+    small = jnp.abs(x) < _SERIES_X
+    x_safe = jnp.where(small, 1.0, x)
+    g = jnp.where(small, 1.0 - 0.5 * x + x * x / 6.0, -jnp.expm1(-x_safe) / x_safe)
+    log_seg = log_norms + (coefs + 1.0) * log_limits[1:] + jnp.log10(ln_ratio * g)
+    log_peak = jnp.max(log_seg)
+    log_total = log_peak + jnp.log10(jnp.sum(_pow10(log_seg - log_peak)))
 
-    # Compute normalization factors at each breakpoint for continuity
-    norms = jnp.ones(len(coefs))
-
-    def _update_norm(carry, idx):
-        """Update norm using JAX-compatible where instead of if."""
-        norms_arr = carry
-        new_norm = norms_arr[idx - 1] * limits[idx] ** (coefs[idx - 1] - coefs[idx])
-        # Use where to avoid conditional tracing
-        norms_arr = norms_arr.at[idx].set(jnp.where(idx > 0, new_norm, norms_arr[idx]))
-        return norms_arr, None
-
-    norms, _ = jax.lax.scan(_update_norm, norms, jnp.arange(1, len(coefs)))
-
-    # Construct piecewise power-law spectrum
-    coef_at_wave = coefs[segment_indices]
-    norm_at_wave = norms[segment_indices]
-    spectrum = (wavelength**coef_at_wave) * norm_at_wave
-    # Apply the wavelength-range cut BEFORE normalization.
-    spectrum = jnp.where(in_range_mask, spectrum, 0.0)
-
-    # Normalize to unit area
-    integral = jnp.trapezoid(spectrum, wavelength)
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
-
-    return spectrum / integral_safe
+    safe_wave = jnp.where(in_range, wavelength, 1.0)
+    log_spectrum = (
+        coefs[segment_indices] * jnp.log10(safe_wave) + log_norms[segment_indices] - log_total
+    )
+    return jnp.where(in_range, _pow10(log_spectrum), 0.0)
 
 
 def skirtor_disk_spectrum(

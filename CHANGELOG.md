@@ -2,12 +2,7 @@
 
 ### Fixed
 
-<<<<<<< HEAD
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
-=======
-- SKIRTOR disc three defects: (1) anisotropy factor η(i) applied twice (already in the library ratio; removed from R); (2) Type-2 disc screened twice (torus extinction in library + extra torus_screen_transmission on the fracAGN-tied path; screen now skipped when _disc_R is not None); (3) piecewise disc spectrum not zeroed outside [8 nm, 10^6 nm] causing spurious 1–8 nm tail in normalization (now cut before unit-area integration). Measured 0.78–0.19× improvement in Type-1/2 disc luminosity and 15% correction to piecewise disc level against pcigale. (#2601)
-
->>>>>>> 907a69ae9625ab89e222846e4b02455622f798a4
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
@@ -20,6 +15,7 @@
   agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
+- The SKIRTOR disc tied to the torus power (`agn_ir_frac` > 0) carries the library ratio disk(i)/disk(0) once: that ratio is the accretion-disc anisotropy η(i) = cos i (1 + 2 cos i)/3 (∫disk(i)/∫disk(0) over η is 0.9998–1.006 for i ≤ 40°) and, for i > 90° − oa, the torus extinction, so `R` carries no explicit η and the disc is not screened again; the broad lines and FeII keep the torus screen, and at `agn_ir_frac` = 0 the disc keeps it too. Disc power per unit `agn_power` is 0.9946, 0.9945, 0.9943, 0.9920, 0.9892 of CIGALE at i = 0, 30, 50, 70, 90°; the 0.55 % offset at i = 0 is the torus template's triweight smoother (∫torus/`agn_power` = 0.9963) times the 136-node library axis (R_library/R_CIGALE = 0.9981). The CIGALE piecewise discs (`disk_type` 0, 1, 2) are zero below 8 nm and from 10⁶ nm up and are normalized by the closed-form integral of the broken power law (log-space, float32-safe), so their level at a wavelength is independent of the wavelength sampling. (#2601)
 
 ### Added
 
