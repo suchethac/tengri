@@ -62,6 +62,8 @@ a results file is how a figure and its caption come apart.
 | `03_precompute_accuracy.py` | appendix LUT-accuracy envelope, and the speed panel the paper does not print | `fig03_precompute_data.json`, `fig03_bench_forward_2026-08-30.json` |
 | `04_backends.py` | one galaxy through MAP, Laplace, NUTS, HMC and nested slice sampling | `results/backend_sweep_pin/` |
 | `05_mock_joint.py` | the kitchen-sink z=1 mock and its recovery | `mock_joint_truth.npz`, `mock_joint_mcmc_nuts.npz` |
+| `06_xlike_codes.py` | X-like configuration comparison and adoption census | `results/fits_xlike/` grid cells, `xlike_mismatches.json`, `fig10_xlike_one_to_one_data.json` |
+| `07_bma.py` | Bayesian model averaging evidence and posterior | `results/bma_summary.json`, `results/bma_evidence/` |
 
 That is every figure the paper prints. `05_mock_joint.py` writes the paper's
 filename only when the posterior clears its gate and a provisional one, under

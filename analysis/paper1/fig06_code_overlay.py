@@ -37,34 +37,100 @@ jax.config.update("jax_enable_x64", True)
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-#: The galaxies this figure draws, one panel each.
-#:
-#: The completeness guard below measures *these*, not the locked twenty. It
-#: used to measure the twenty, and the two populations are not the same
-#: question: a grid holding one finished cell for some other galaxy made the
-#: guard pass while all three panels here had an empty tengri arm, and the
-#: figure saved at exit 0 under a stamp reporting a grid it does not plot.
-#: A check has to observe the thing it is guarding.
-PANEL_GALAXY_IDS = (13097, 15336, 16049)
+#: The locked sample, read by the grid, by fig09, and by this figure alike.
+SELECTION_20 = Path(__file__).resolve().parent / "results" / "selected_galaxies_20.json"
 
-# Configuration
-FIGURE_WIDTH = 3.4
-FIGURE_HEIGHT = 7.5
+#: The galaxies this figure draws, one panel each: the whole locked sample.
+#:
+#: This was a hand-written three-tuple from the three-galaxy version of the
+#: paper, and it survived the move to the twenty-galaxy grid, so the one figure
+#: that sets the grid against the published codes showed three galaxies while
+#: Section 7 quoted numbers over all twenty. A later fix taught the completeness
+#: guard to measure these three rather than the twenty -- correct for the figure
+#: as it stood, but it made the guard agree with a stale panel list instead of
+#: making the panels agree with the grid. Deriving them from the selection file
+#: removes the second population altogether: the guard and the figure now
+#: measure the same galaxies because there is only one list.
+PANEL_GALAXY_IDS = tuple(load_expected_galaxy_ids(SELECTION_20))
+
+#: Twenty galaxies make a 4 x 5 grid at two-column width.
+PANEL_COLUMNS = 4
+FIGURE_WIDTH = 7.1
+PANEL_ROW_HEIGHT = 1.38
+#: Space under the panels for tick labels, the axis label and two legend rows,
+#: in inches, so the band stays tight whatever the figure's height. At 1.62 in
+#: per row with fractional positions the figure plus its caption ran 101 pt
+#: past the page and LaTeX cut the caption off mid-sentence.
+LEGEND_BAND_IN = 0.80
+
+#: Every panel is centered on its own galaxy but drawn at one common scale, so a
+#: spread that looks twice as wide in one panel is twice as wide. The scale is
+#: set by the tengri posteriors and the published central values, minus margin.
+#: Published values further than this from the galaxy's tengri median are drawn
+#: as arrows at the panel edge instead of setting the scale: galaxy 25489 has a
+#: published log SFR of -11.3, a code reporting essentially zero, and letting
+#: that set a common axis would flatten all twenty panels.
+OFF_PANEL_DEX = 2.5
+PANEL_MARGIN_DEX = 0.12
+
 MARKER_COLORS = dict(CONFIG_COLORS)
+
+#: Secondary encoding for the configurations. The palette validator passes the
+#: five hues but puts III and IV at Delta E 7.6 under deuteranopia -- inside the
+#: band that is legal only when something besides hue also carries identity.
+#: Each configuration's contour outline therefore has its own dash pattern.
+CONFIG_DASHES = {
+    "I": "solid",
+    "II": (0, (4.0, 1.4)),
+    "III": (0, (1.0, 1.0)),
+    "IV": (0, (4.0, 1.2, 1.0, 1.2)),
+    "V": (0, (2.0, 1.2)),
+    # Deferred and not drawn, but covered like CONFIG_COLORS covers it: a
+    # mapping that names only the demonstrated rows is the partial census
+    # test_config_census_coverage exists to catch, and it caught this one.
+    "VI": (0, (6.0, 1.4, 1.0, 1.4, 1.0, 1.4)),
+}
+
+#: One ink for every published code, identity carried by marker shape. The
+#: previous 0.2-0.8 gray ramp put Prospector at 0.8, near-invisible on white,
+#: and a ramp reads as an ordering the codes do not have.
+PUBLISHED_INK = "#4a4a4a"
+TYPE_TAGS = {
+    "blue_star_forming": "star-forming",
+    "red_quiescent": "quiescent",
+    "intermediate_dusty": "dusty",
+    "mir_agn_candidate": "AGN cand.",
+}
+#: Keyed on the code names exactly as the published catalog spells them.
+#:
+#: This table used to say "Dense Basis" while the catalog says "Dense_Basis",
+#: so the lookup missed on every galaxy and Dense Basis was never drawn: the
+#: figure showed four codes under a caption promising five, and nothing
+#: complained. `main` now refuses any code in the data that has no entry here.
 CODE_MARKERS = {
     "BAGPIPES": "o",
     "BEAGLE": "s",
     "CIGALE": "^",
-    "Dense Basis": "v",
+    "Dense_Basis": "v",
     "Prospector": "D",
 }
-CODE_GRAYSCALE = {
-    "BAGPIPES": 0.2,
-    "BEAGLE": 0.35,
-    "CIGALE": 0.5,
-    "Dense Basis": 0.65,
-    "Prospector": 0.8,
-}
+#: Display names, where the catalog's spelling is not the one to print.
+CODE_LABELS = {"Dense_Basis": "Dense Basis"}
+
+
+#: Bump when the cached arrays change meaning or shape.
+CACHE_VERSION = 1
+CACHE_DIR = Path(__file__).resolve().parent / "results" / "fig06_cache"
+
+
+def _cache_key(npz_path: Path, json_path: Path, max_samples: int) -> str:
+    """Content hash of the cell plus the draw count: a re-fit cell misses."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    for path in (npz_path, json_path):
+        digest.update(path.read_bytes())
+    return f"v{CACHE_VERSION}:n{max_samples}:{digest.hexdigest()}"
 
 
 class GalaxyData(NamedTuple):
@@ -105,12 +171,30 @@ def load_fit_results(
         logger.info(f"Skipping {gal_id}_{config} ({verdict.reason})")
         return None
 
+    # The recompute below rebuilds the configuration's model per cell, which is
+    # what makes twenty galaxies expensive. The cache is keyed on the cell's
+    # content, so a re-fit cell is recomputed rather than served stale.
+    # Named cache_key, not key: two loops below iterate `for key in npz.files`,
+    # and under the shorter name the write at the end stored the last array
+    # name ("energy") as the key, so every read missed and every render
+    # silently recomputed all 87 cells.
+    cache_key = _cache_key(npz_path, json_path, max_samples)
+    cache_path = CACHE_DIR / f"{gal_id}_{config}.npz"
+    if cache_path.exists():
+        cached = np.load(cache_path, allow_pickle=False)
+        if str(cached["key"]) == cache_key:
+            return GalaxyData(
+                gal_id=gal_id,
+                z=float(cached["z"]),
+                config=config,
+                params_dict={},
+                mass_formed=np.asarray(cached["mass_formed"]),
+                mass_survived=np.asarray(cached["mass_survived"]),
+                sfr_100myr=np.asarray(cached["sfr_100myr"]),
+            )
+
     # Load NPZ; the number of saved draws is whatever the driver thinned to
     npz = np.load(npz_path, allow_pickle=False)
-    n_params_full = int(npz["redshift"].shape[0])
-
-    # Subsample from the full 2400 using the same indices for all quantities
-    idx = np.round(np.linspace(0, n_params_full - 1, max_samples)).astype(int)
 
     # Extract parameters only (not derived quantities)
     params_dict = {}
@@ -129,6 +213,38 @@ def load_fit_results(
         "obs_sigma",
         "filter_names",
     }
+
+    # The chain length is read off the sampled parameters themselves, not off
+    # any one key by name.
+    #
+    # This used to be ``npz["redshift"].shape[0]``, which worked only because
+    # every cell predated #2296. That change made ``spec.sample()`` return the
+    # FREE keys only, and redshift is ``Fixed(z)`` in every configuration, so
+    # the array stopped being written -- 57 of the 100 cells in rows I-V have
+    # no ``redshift`` in their NPZ (I x17, II x20, IV x20, all of them the
+    # cells launched after the change). A cell records the code it imported at
+    # launch, so a mid-grid API change splits the archive's schema in two and
+    # the figure sees a KeyError rather than a wrong number.
+    #
+    # Sampled parameters carry the full chain while the derived quantities are
+    # written on a subsample, so the longest non-derived 1-D array IS the chain
+    # length whatever the configuration happens to free. Redshift is not needed
+    # here in any case: its value is ``meta["z"]``, read above.
+    sampled_lengths = [
+        int(npz[key].shape[0])
+        for key in npz.files
+        if key not in derived_keys and getattr(npz[key], "ndim", 0) == 1
+    ]
+    if not sampled_lengths:
+        raise KeyError(
+            f"{npz_path.name} carries no sampled-parameter array: cannot "
+            f"determine the chain length (keys: {sorted(npz.files)})"
+        )
+    n_params_full = max(sampled_lengths)
+
+    # Subsample from the full chain using the same indices for all quantities
+    idx = np.round(np.linspace(0, n_params_full - 1, max_samples)).astype(int)
+
     for key in npz.files:
         val = npz[key]
         if (
@@ -142,6 +258,15 @@ def load_fit_results(
     # Compute all derived quantities for the same samples using predict_properties
     mass_formed, mass_survived, sfr = _compute_all_derived_quantities(
         gal_id, config, params_dict, z
+    )
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        cache_path,
+        key=np.array(cache_key),
+        z=np.array(z),
+        mass_formed=mass_formed,
+        mass_survived=mass_survived,
+        sfr_100myr=sfr,
     )
 
     return GalaxyData(
@@ -181,9 +306,16 @@ def _compute_all_derived_quantities(
     candels_io = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(candels_io)
 
-    # Map config letter to function
-    config_fn_map = {"I": configs.config_I, "II": configs.config_II, "III": configs.config_III}
-    config_fn = config_fn_map[config]
+    # Resolve the builder by name rather than restating the census. The literal
+    # map this replaces listed I, II and III -- the three configurations the
+    # paper had when it was written -- and stayed that way when the table grew,
+    # so every panel for a later configuration died on a bare KeyError.
+    if config not in configs.CONFIG_KEYS:
+        raise KeyError(
+            f"configuration {config!r} is not one of {configs.CONFIG_KEYS}; "
+            "add its builder to configs.py before asking a figure for it"
+        )
+    config_fn = getattr(configs, f"config_{config}")
 
     # Load SSP
     ssp = configs.load_ssp_for(config)
@@ -297,113 +429,299 @@ def load_published_values(csv_path: Path) -> dict:
     return values
 
 
+def _darken(color: str, amount: float = 0.28) -> tuple[float, float, float]:
+    """Same hue, closer to black: outline relief for the light Okabe-Ito hues.
+
+    The validator puts orange, pink and sky blue under 3:1 against white. The
+    fills stay the shared palette so this figure matches fig05 and fig09; only
+    the outline is deepened.
+    """
+    from matplotlib.colors import to_rgb
+
+    r, g, b = to_rgb(color)
+    return (r * (1 - amount), g * (1 - amount), b * (1 - amount))
+
+
+def _contour_68(ax, x: np.ndarray, y: np.ndarray, config: str) -> None:
+    """The 68% highest-density region of one configuration's posterior."""
+    pad = 0.15
+    xg = np.linspace(x.min() - pad, x.max() + pad, 160)
+    yg = np.linspace(y.min() - pad, y.max() + pad, 160)
+    X, Y = np.meshgrid(xg, yg, indexing="ij")
+    Z = gaussian_kde(np.vstack([x, y]))(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
+
+    ranked = np.sort(Z.ravel())[::-1]
+    enclosed = np.cumsum(ranked)
+    enclosed /= enclosed[-1]
+    level = ranked[min(np.searchsorted(enclosed, 0.68), ranked.size - 1)]
+
+    color = MARKER_COLORS[config]
+    ax.contourf(X, Y, Z, levels=[level, Z.max()], colors=[color], alpha=0.30, zorder=2)
+    ax.contour(
+        X,
+        Y,
+        Z,
+        levels=[level],
+        colors=[_darken(color)],
+        linewidths=1.1,
+        linestyles=[CONFIG_DASHES[config]],
+        zorder=3,
+    )
+
+
 def plot_galaxy_overlay(
     ax,
     gal_id: int,
     published: dict,
     tengri_data: dict[str, GalaxyData],
+    limits: tuple[tuple[float, float], tuple[float, float]],
 ) -> None:
-    """Plot one galaxy: published codes + tengri overlays."""
+    """One panel: each configuration's 68% region beside the published codes."""
+    (x_lo, x_hi), (y_lo, y_hi) = limits
 
-    # Published code points (grayscale)
-    for code, color_gray in sorted(CODE_GRAYSCALE.items()):
-        if code in published:
-            p = published[code]
-            color = str(color_gray)
-            marker = CODE_MARKERS.get(code, "o")
+    for config in CONFIG_ORDER:
+        if config in tengri_data:
+            data = tengri_data[config]
+            _contour_68(ax, data.mass_survived, data.sfr_100myr, config)
 
-            # Compute asymmetric errors from percentiles
-            xerr_lo = p["logmstar"] - p["logmstar_lo"]
-            xerr_hi = p["logmstar_hi"] - p["logmstar"]
-            yerr_lo = p["logsfr"] - p["logsfr_lo"]
-            yerr_hi = p["logsfr_hi"] - p["logsfr"]
-
+    for code in sorted(CODE_MARKERS):
+        if code not in published:
+            continue
+        p = published[code]
+        x, y = p["logmstar"], p["logsfr"]
+        inside = x_lo <= x <= x_hi and y_lo <= y <= y_hi
+        if inside:
             ax.errorbar(
-                p["logmstar"],
-                p["logsfr"],
-                xerr=[[xerr_lo], [xerr_hi]],
-                yerr=[[yerr_lo], [yerr_hi]],
-                marker=marker,
-                color=color,
-                ecolor=color,
+                x,
+                y,
+                xerr=[[x - p["logmstar_lo"]], [p["logmstar_hi"] - x]],
+                yerr=[[y - p["logsfr_lo"]], [p["logsfr_hi"] - y]],
+                fmt="none",
+                ecolor=PUBLISHED_INK,
+                elinewidth=0.55,
+                alpha=0.38,
+                zorder=4,
+            )
+            ax.plot(
+                x,
+                y,
+                marker=CODE_MARKERS[code],
+                color=PUBLISHED_INK,
+                markeredgecolor="white",
+                markeredgewidth=0.6,
+                markersize=4.6,
                 linestyle="none",
-                markersize=6,
-                linewidth=1.0,
-                zorder=3,
+                zorder=5,
+            )
+        else:
+            # Off the common scale. The code's own marker, hollow, pinned just
+            # inside the edge, with an arrow pointing where the value went. A
+            # bare triangle was used first and was indistinguishable from Dense
+            # Basis, whose marker is a triangle.
+            w, h = x_hi - x_lo, y_hi - y_lo
+            dx = -1 if x < x_lo else 1 if x > x_hi else 0
+            dy = -1 if y < y_lo else 1 if y > y_hi else 0
+            cx = min(max(x, x_lo + 0.12 * w), x_hi - 0.12 * w)
+            cy = min(max(y, y_lo + 0.14 * h), y_hi - 0.14 * h)
+            ax.plot(
+                cx,
+                cy,
+                marker=CODE_MARKERS[code],
+                markerfacecolor="white",
+                markeredgecolor=PUBLISHED_INK,
+                markeredgewidth=0.8,
+                markersize=4.6,
+                linestyle="none",
+                zorder=6,
+            )
+            ax.annotate(
+                "",
+                xy=(cx + dx * 0.10 * w, cy + dy * 0.12 * h),
+                xytext=(cx, cy),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color=PUBLISHED_INK,
+                    lw=0.7,
+                    mutation_scale=6,
+                    shrinkA=3.0,
+                    shrinkB=0.0,
+                ),
+                annotation_clip=False,
+                zorder=6,
             )
 
-    # tengri posteriors (colored contours + open marker)
-    for config in CONFIG_ORDER:
-        if config not in tengri_data:
+    ax.set_xlim(x_lo, x_hi)
+    ax.set_ylim(y_lo, y_hi)
+
+
+def _panel_centers_and_span(panel_ids, published_all, tengri_results):
+    """Each galaxy's center, and one span in (mass, SFR) shared by every panel.
+
+    Extents use the central 68% of each configuration's draws. The first
+    version used 3-97%, and two quiescent galaxies with an unconstrained SFR
+    then set the scale for all twenty -- 25489 alone needed 10.1 dex and 25206
+    5.2, against 2.6 for every other galaxy and a median of 1.3 -- which pressed
+    the other eighteen into a thin strip.
+
+    The SFR span is the 90th percentile of the per-galaxy heights rather than
+    their maximum, for the same reason. The galaxies above it run off the
+    bottom edge of their own panel, which is what an SFR unconstrained from
+    below should look like; they are returned so the caller can say which.
+    """
+    centers, widths, heights = {}, [], {}
+    for gal_id in panel_ids:
+        cells = tengri_results.get(gal_id, {})
+        xs = [v for d in cells.values() for v in np.percentile(d.mass_survived, [16, 84])]
+        ys = [v for d in cells.values() for v in np.percentile(d.sfr_100myr, [16, 84])]
+        if xs:
+            x_ref, y_ref = float(np.median(xs)), float(np.median(ys))
+            for p in published_all.get(gal_id, {}).values():
+                if abs(p["logmstar"] - x_ref) <= OFF_PANEL_DEX:
+                    xs.append(p["logmstar"])
+                if abs(p["logsfr"] - y_ref) <= OFF_PANEL_DEX:
+                    ys.append(p["logsfr"])
+        else:
+            xs = [p["logmstar"] for p in published_all.get(gal_id, {}).values()]
+            ys = [p["logsfr"] for p in published_all.get(gal_id, {}).values()]
+        if not xs or not ys:
             continue
+        centers[gal_id] = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+        widths.append(max(xs) - min(xs))
+        heights[gal_id] = max(ys) - min(ys)
 
-        data = tengri_data[config]
-        color = MARKER_COLORS[config]
+    span_x = max(widths) + 2 * PANEL_MARGIN_DEX
+    span_y = float(np.percentile(list(heights.values()), 90)) + 2 * PANEL_MARGIN_DEX
+    overflowing = sorted(g for g, h in heights.items() if h + 2 * PANEL_MARGIN_DEX > span_y)
+    return centers, (span_x, span_y), overflowing
 
-        # Compute contours on the joint posterior using gaussian_kde
-        # (values are already in log10 from _compute_all_derived_quantities)
-        mass_surv_log = data.mass_survived
-        sfr_log = data.sfr_100myr
 
-        # Create a 200x200 grid spanning sample range +/- 0.15 dex
-        x_min = mass_surv_log.min() - 0.15
-        x_max = mass_surv_log.max() + 0.15
-        y_min = sfr_log.min() - 0.15
-        y_max = sfr_log.max() + 0.15
-        x_grid = np.linspace(x_min, x_max, 200)
-        y_grid = np.linspace(y_min, y_max, 200)
-        X, Y = np.meshgrid(x_grid, y_grid, indexing="ij")
+def _draw_panels(panel_ids, galaxies, published_all, tengri_results):
+    """Twenty panels on a common scale, one shared legend beneath them."""
+    n_rows = -(-len(panel_ids) // PANEL_COLUMNS)
+    fig, axes = plt.subplots(
+        n_rows,
+        PANEL_COLUMNS,
+        figsize=(FIGURE_WIDTH, PANEL_ROW_HEIGHT * n_rows + LEGEND_BAND_IN),
+        squeeze=False,
+    )
+    centers, (span_x, span_y), overflowing = _panel_centers_and_span(
+        panel_ids, published_all, tengri_results
+    )
+    print(
+        f"fig06 common scale: {span_x:.2f} dex in mass, {span_y:.2f} dex in SFR; "
+        f"posteriors taller than that run off their panel for {overflowing}"
+    )
 
-        # Evaluate gaussian_kde on the grid
-        positions = np.vstack([X.ravel(), Y.ravel()])
-        kde = gaussian_kde(np.vstack([mass_surv_log, sfr_log]))
-        Z = kde(positions).reshape(X.shape)
-
-        # Find contour levels for 68% and 95% enclosed probability mass
-        # Cell area for normalization
-        cell_area = (x_grid[1] - x_grid[0]) * (y_grid[1] - y_grid[0])
-        # Flatten density and sort descending
-        Z_flat = Z.ravel()
-        Z_sorted = np.sort(Z_flat)[::-1]
-        # Cumulative sum (density * cell_area, normalized to total probability)
-        Z_cumsum = np.cumsum(Z_sorted) * cell_area
-        Z_cumsum = Z_cumsum / Z_cumsum[-1]  # Normalize to [0, 1]
-
-        # Find levels enclosing 68% and 95%
-        idx_68 = np.searchsorted(Z_cumsum, 0.68)
-        idx_95 = np.searchsorted(Z_cumsum, 0.95)
-        level_68 = Z_sorted[idx_68] if idx_68 < len(Z_sorted) else 0
-        level_95 = Z_sorted[idx_95] if idx_95 < len(Z_sorted) else 0
-
-        # Verify enclosed fractions
-        frac_68 = Z_cumsum[idx_68] if idx_68 < len(Z_cumsum) else 1.0
-        frac_95 = Z_cumsum[idx_95] if idx_95 < len(Z_cumsum) else 1.0
-
-        print(
-            f"Config {config} ({gal_id}): 68% level={level_68:.6f} (frac={frac_68:.4f}), "
-            f"95% level={level_95:.6f} (frac={frac_95:.4f})"
+    for index, ax in enumerate(axes.flat):
+        if index >= len(panel_ids):
+            ax.set_visible(False)
+            continue
+        gal_id = panel_ids[index]
+        cx, cy = centers[gal_id]
+        limits = ((cx - span_x / 2, cx + span_x / 2), (cy - span_y / 2, cy + span_y / 2))
+        plot_galaxy_overlay(
+            ax, gal_id, published_all.get(gal_id, {}), tengri_results.get(gal_id, {}), limits
         )
 
-        # Plot 95% contour (thin line)
-        ax.contour(X, Y, Z, levels=[level_95], colors=[color], linewidths=0.8, zorder=1)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_linewidth(0.6)
+            ax.spines[side].set_color("#8a8a8a")
+        ax.tick_params(labelsize=6.5, width=0.6, length=2.5, color="#8a8a8a", pad=1.5)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(3))
+        ax.yaxis.set_major_locator(plt.MaxNLocator(3))
 
-        # Plot 68% contour (filled + solid line)
-        ax.contourf(X, Y, Z, levels=[level_68, Z.max()], colors=[color], alpha=0.35, zorder=2)
-        ax.contour(X, Y, Z, levels=[level_68], colors=[color], linewidths=1.5, zorder=2)
-
-        # Plot formed mass median as small open marker (values already in log10)
-        formed_log = np.median(data.mass_formed)
-        sfr_med = np.median(data.sfr_100myr)
-        ax.plot(
-            formed_log,
-            sfr_med,
-            "o",
-            color="white",
-            mec=color,
-            markersize=4,
-            markeredgewidth=1.0,
-            zorder=3,
+        tag = TYPE_TAGS.get(galaxies[gal_id]["type_label"], galaxies[gal_id]["type_label"])
+        ax.text(
+            0.04,
+            0.95,
+            f"{gal_id}",
+            transform=ax.transAxes,
+            fontsize=7.5,
+            fontweight="bold",
+            color="#222222",
+            va="top",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=0.6),
+            zorder=7,
         )
+        ax.text(
+            0.04,
+            0.80,
+            tag,
+            transform=ax.transAxes,
+            fontsize=6.3,
+            color="#6b6b6b",
+            va="top",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=0.4),
+            zorder=7,
+        )
+
+    fig_h = PANEL_ROW_HEIGHT * n_rows + LEGEND_BAND_IN
+    fig.supxlabel(
+        r"$\log_{10}\,M_{\star,\mathrm{surv}}\,/\,M_\odot$",
+        fontsize=9,
+        y=(LEGEND_BAND_IN - 0.31) / fig_h,
+        va="center",
+    )
+    fig.supylabel(
+        r"$\log_{10}\,\mathrm{SFR}_{100\,\mathrm{Myr}}\,/\,M_\odot\,\mathrm{yr}^{-1}$",
+        fontsize=9,
+        x=0.015,
+    )
+
+    config_handles = [
+        plt.matplotlib.patches.Patch(
+            facecolor=(*plt.matplotlib.colors.to_rgb(MARKER_COLORS[c]), 0.30),
+            edgecolor=_darken(MARKER_COLORS[c]),
+            linestyle=CONFIG_DASHES[c],
+            linewidth=1.1,
+            label=f"Configuration {c}",
+        )
+        for c in CONFIG_ORDER
+    ]
+    code_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker=CODE_MARKERS[code],
+            color=PUBLISHED_INK,
+            markeredgecolor="white",
+            markeredgewidth=0.6,
+            markersize=5,
+            linestyle="none",
+            label=CODE_LABELS.get(code, code),
+        )
+        for code in sorted(CODE_MARKERS)
+    ]
+    fig.legend(
+        handles=config_handles,
+        loc="lower center",
+        ncol=5,
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(0.53, 0.19 / fig_h),
+        handlelength=2.2,
+        columnspacing=1.2,
+    )
+    fig.legend(
+        handles=code_handles,
+        loc="lower center",
+        ncol=5,
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(0.53, 0.0),
+        columnspacing=1.6,
+    )
+    fig.subplots_adjust(
+        left=0.075,
+        right=0.995,
+        top=0.99,
+        bottom=LEGEND_BAND_IN / fig_h,
+        wspace=0.28,
+        hspace=0.36,
+    )
+    return fig
 
 
 def main(
@@ -476,29 +794,33 @@ def main(
             f"{results_dir}. This figure's whole claim is tengri's posteriors "
             "beside the published codes, so with an empty tengri arm there is no "
             "figure to draw -- only the published points under a caption that "
-            "promises a comparison. Cells for other galaxies of the locked grid "
-            "do not help: this figure does not plot them. Point --results-dir at "
-            "a directory holding cells for these three."
+            "promises a comparison. Point --results-dir at a directory holding "
+            "cells for the locked sample."
         )
     shortfall = completeness_note(present, PANEL_GALAXY_IDS, CONFIG_ORDER)
 
     # Load published values
     csv_path = analysis_dir / "results" / "art_sedfitting_z1.csv"
     published_all = load_published_values(csv_path)
+    unmapped = sorted(
+        {code for gal in PANEL_GALAXY_IDS for code in published_all.get(gal, {})}
+        - set(CODE_MARKERS)
+    )
+    if unmapped:
+        raise SystemExit(
+            f"fig06 has no marker for published code(s) {unmapped}, which the catalog "
+            f"reports for these galaxies. Drawing on would silently omit them from a "
+            f"figure whose caption names every code; add them to CODE_MARKERS."
+        )
 
-    # Load galaxy metadata
-    meta_path = analysis_dir / "results" / "selected_galaxies.json"
+    # Galaxy metadata comes from the same locked selection the panels do. It used
+    # to come from selected_galaxies.json, the three-galaxy file, with a
+    # hand-patched 24497 -> 16049 swap -- a second copy of the sample that only
+    # agreed with the grid for as long as someone remembered to patch it.
+    meta_path = selection_path
     with open(meta_path) as f:
         meta = json.load(f)
     galaxies = {g["id"]: g for g in meta["selected_galaxies"]}
-
-    # Handle swap: 24497 -> 16049 (2026-08-31)
-    if 24497 in galaxies and 16049 not in galaxies:
-        galaxies[16049] = {
-            "id": 16049,
-            "z": 1.047,
-            "type_label": "intermediate_dusty",
-        }
 
     # Load tengri results (only those available)
     tengri_results = {}
@@ -507,6 +829,7 @@ def main(
         "published_data": {},
         "tengri_data": {},
         "pending_cells": [],
+        "refused_cells": [],
         "inter_code_ranges": {},
     }
 
@@ -531,8 +854,20 @@ def main(
         for config in CONFIG_ORDER:
             data = load_fit_results(gal_id, config, results_dir, max_samples)
             if data is None:
-                json_sidecar["pending_cells"].append(f"{gal_id}_{config}")
-                logger.info(f"Skipping {gal_id}_{config} (not ready)")
+                # Two different states, and only one of them will ever change.
+                # A cell whose files are absent has not run; a cell that is on
+                # disk and declined has run and been refused by the adoption
+                # bar, and will stay refused. Recording both as "pending" left
+                # a reader of this sidecar waiting on a verdict already given.
+                on_disk = (results_dir / f"{gal_id}_{config}.npz").exists() and (
+                    results_dir / f"{gal_id}_{config}.json"
+                ).exists()
+                bucket = "refused_cells" if on_disk else "pending_cells"
+                json_sidecar[bucket].append(f"{gal_id}_{config}")
+                logger.info(
+                    f"Skipping {gal_id}_{config} "
+                    f"({'did not pass the adoption bar' if on_disk else 'not yet run'})"
+                )
                 continue
 
             tengri_results[gal_id][config] = data
@@ -637,75 +972,7 @@ def main(
                     print(f"inter_code_ranges[{gal_id}]:")
                     print(json.dumps(json_sidecar["inter_code_ranges"][gal_id], indent=2))
 
-    # Create figure
-    fig, axes = plt.subplots(
-        3,
-        1,
-        figsize=(FIGURE_WIDTH, FIGURE_HEIGHT),
-        sharex=True,
-    )
-
-    for idx, gal_id in enumerate([13097, 15336, 16049]):
-        ax = axes[idx]
-
-        # Set axis labels (y-axis only; x-axis is shared and labeled at the bottom)
-        ax.set_ylabel(r"$\log_{10}$ SFR (M$_\odot$ yr$^{-1}$)")
-
-        # Plot this galaxy
-        if gal_id in tengri_results:
-            plot_galaxy_overlay(
-                ax,
-                gal_id,
-                published_all.get(gal_id, {}),
-                tengri_results[gal_id],
-            )
-
-        # Formatting
-        ax.set_xlim(9.5, 11.8)
-        ax.set_ylim(-1.0, 3.5)
-        ax.grid(True, alpha=0.3)
-
-    # Add shared x-axis label on the bottom panel
-    axes[-1].set_xlabel(r"$\log_{10}$ M$_*$ (M$_\odot$)")
-
-    # Legend (published codes in left column, tengri configurations in right)
-    published_handles = []
-    for code in sorted(CODE_GRAYSCALE.keys()):
-        gray = CODE_GRAYSCALE[code]
-        marker = CODE_MARKERS.get(code, "o")
-        published_handles.append(
-            plt.Line2D(
-                [0],
-                [0],
-                marker=marker,
-                color="w",
-                markerfacecolor=str(gray),
-                markersize=6,
-                label=code,
-            )
-        )
-
-    # tengri configurations in color
-    tengri_handles = []
-    for config in CONFIG_ORDER:
-        color = MARKER_COLORS[config]
-        tengri_handles.append(
-            plt.Line2D([0], [0], color=color, linewidth=1.5, label=f"Configuration {config}")
-        )
-
-    # Add legend at bottom with 2 columns (published on left, tengri on right)
-    # Position below x-axis label with clearance to avoid overlap
-    fig.legend(
-        handles=published_handles + tengri_handles,
-        loc="lower center",
-        ncol=2,
-        fontsize=8,
-        framealpha=0.95,
-        bbox_to_anchor=(0.5, -0.05),
-    )
-
-    # Adjust layout to accommodate legend below x-axis label
-    fig.subplots_adjust(bottom=0.16)
+    fig = _draw_panels(PANEL_GALAXY_IDS, galaxies, published_all, tengri_results)
 
     # A partial grid still draws -- fig05 and fig09 stamp rather than refuse, and
     # a reader comparing panels needs the same sentence on all three. What must
@@ -755,7 +1022,33 @@ if __name__ == "__main__":
         help="Random seed for reproducibility",
     )
 
+    parser.add_argument(
+        "--precompute-only",
+        action="store_true",
+        help="fill the per-cell cache and exit without drawing; pair with --galaxies to shard",
+    )
+    parser.add_argument(
+        "--galaxies",
+        type=str,
+        default="",
+        help="comma-separated galaxy IDs for --precompute-only (default: all panels)",
+    )
+
     args = parser.parse_args()
+    if args.precompute_only:
+        results = args.results_dir or Path(__file__).parent / "results" / "fits"
+        wanted = (
+            [int(g) for g in args.galaxies.split(",") if g.strip()]
+            if args.galaxies
+            else list(PANEL_GALAXY_IDS)
+        )
+        unknown = sorted(set(wanted) - set(PANEL_GALAXY_IDS))
+        if unknown:
+            raise SystemExit(f"not panels of this figure: {unknown}")
+        for gal in wanted:
+            for cfg in CONFIG_ORDER:
+                load_fit_results(gal, cfg, Path(results), args.max_samples)
+        raise SystemExit(0)
     main(
         results_dir=args.results_dir,
         out_dir=args.out_dir,

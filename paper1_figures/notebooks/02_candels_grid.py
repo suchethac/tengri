@@ -9,7 +9,7 @@
 # %% [markdown]
 # # The CANDELS grid
 #
-# Twenty galaxies by six configurations, and the figures that read it: the
+# Twenty galaxies by five configurations, and the figures that read it: the
 # sample in one frame, three galaxies in detail, and the comparison against
 # published per-code values.
 #
@@ -51,7 +51,7 @@ print(f"cells on disk: {n_cells}")
 if n_cells == 0:
     print(
         "\nNo grid cells in analysis/paper1/results/fits/.\n"
-        "The production grid commits to paper1/nss-profile-mass; this branch\n"
+        "The production grid commits to paper1/grid-mac-2026-09-23; this branch\n"
         "carries the scripts, not the cells. Fetch them, or point --results-dir\n"
         "at a directory that has them, and re-run. Skipping the grid figures."
     )

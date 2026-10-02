@@ -1,0 +1,4 @@
+usage: run_candels_fits.py [-h] [--only-missing] [--summary-only]
+                           [--jobs JOBS] [--profile-mass] [--configs I,II,...]
+                           [--galaxies ID,ID,...]
+run_candels_fits.py: error: unrecognized arguments: --galaxies 9884,7837,4171,4056
