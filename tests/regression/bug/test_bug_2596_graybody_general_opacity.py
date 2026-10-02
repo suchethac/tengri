@@ -61,7 +61,9 @@ def _reference_graybody(T, beta, lam0_um, wave):
 def test_graybody_equals_reference_formula(T, beta, lam0):
     """graybody matches independent numpy expression (1 - exp(-(lambda0/lambda)^beta)) * B_nu.
 
-    Max relative error < 1e-2 in float64 over 8-1000 um.
+    Max relative error < 1e-4 in float64 over 8-500 um (measured 5e-5). The window ends at
+    500 um: beyond it the closure's z = 0 CMB contrast term departs from a pure Planck
+    reference, which is physics the reference formula does not contain.
     References Casey 2012 Eq. 1, CIGALE mbb.py:78-80, Synthesizer Greybody(optically_thin=False).
     """
     wave = np.logspace(4, 7.3, 4000)  # 1 um .. 2 mm in Angstrom
@@ -84,15 +86,70 @@ def test_graybody_equals_reference_formula(T, beta, lam0):
     # Reference formula
     ref = _reference_graybody(T, beta, lam0, wave)
 
-    # Select 8-1000 um
-    sel = (wave >= 8e4) & (wave <= 1e7)
+    # Select 8-500 um
+    sel = (wave >= 8e4) & (wave <= 5e6)
 
     # Relative error
     rel_err = np.abs((tg_norm[sel] - ref[sel]) / (ref[sel] + 1e-30))
     max_rel_err = np.max(rel_err)
 
-    assert max_rel_err < 1e-2, (
-        f"Relative error {max_rel_err:.3e} exceeds 1e-2 at T={T}, beta={beta}, lam0={lam0}"
+    assert max_rel_err < 1e-4, (
+        f"Relative error {max_rel_err:.3e} exceeds 1e-4 at T={T}, beta={beta}, lam0={lam0}"
+    )
+
+
+@pytest.mark.parametrize(
+    "T,beta,lam0",
+    [
+        (50.0, 1.5, 200.0),
+        (35.0, 1.6, 200.0),
+        (25.0, 2.0, 100.0),
+        (20.0, 1.5, 100.0),
+        (60.0, 1.2, 300.0),
+    ],
+)
+def test_graybody_equals_cmb_corrected_reference_500_1000um(T, beta, lam0):
+    """graybody matches the CMB-aware reference over 500-1000 um at z = 0.
+
+    The closure applies the da Cunha et al. (2013) CMB terms: the dust temperature
+    T_eff^(4+beta) = T^(4+beta) + T_CMB(z)^(4+beta) - T_CMB(0)^(4+beta) (equal to T at z = 0) and
+    the contrast C = 1 - B_nu(T_CMB(z)) / B_nu(T_eff), with T_CMB = 2.725 K. The reference is
+    (1 - exp(-(lambda0/lambda)^beta)) * B_nu(T_eff) * C, normalized to unit frequency integral on
+    the same grid as the closure. Measured agreement 1e-15 (the plain Planck reference differs by
+    1.4e-3 to 5.4e-3 here, which is why the 8-500 um cell stops at 500 um).
+    """
+    wave = np.logspace(4, 7.3, 4000)
+    tg = np.asarray(
+        M["graybody"](
+            jnp.asarray(wave),
+            1.0,
+            dust_T=T,
+            dust_beta_ir=beta,
+            dust_lambda_0_um=lam0,
+            dust_epsilon_mbb=1.0,
+        )
+    )
+    c = 2.99792458e10
+    nu = c / (wave * 1e-8)
+    tg_norm = tg / -np.trapezoid(tg, nu)
+
+    t_cmb = 2.725
+    t_eff = (T ** (4.0 + beta) + t_cmb ** (4.0 + beta) - t_cmb ** (4.0 + beta)) ** (
+        1.0 / (4.0 + beta)
+    )
+    tau = (lam0 * 1e4 / wave) ** beta
+    b_eff = _bnu(t_eff, wave)
+    # B_nu(T_eff) underflows to 0 at short wavelengths, where the contrast tends to 1.
+    contrast = 1.0 - np.divide(
+        _bnu(t_cmb, wave), b_eff, out=np.zeros_like(wave), where=b_eff > 0.0
+    )
+    s = -np.expm1(-tau) * b_eff * contrast
+    ref = s / -np.trapezoid(s, nu)
+
+    sel = (wave >= 5e6) & (wave <= 1e7)
+    max_rel_err = np.max(np.abs((tg_norm[sel] - ref[sel]) / ref[sel]))
+    assert max_rel_err < 1e-10, (
+        f"Relative error {max_rel_err:.3e} exceeds 1e-10 at T={T}, beta={beta}, lam0={lam0}"
     )
 
 

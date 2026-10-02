@@ -51,6 +51,8 @@
 
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
 
+- The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
+
 ### Added
 
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
@@ -124,6 +126,12 @@
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
   of Lyβ follows the paper's Table 2 (#2585).
+- The BAGPIPES reproduction stores each BC03+MILES node's absolute log10 Z (BAGPIPES's
+  metallicity grid is in units of Z☉ = 0.02) and pins the cross-code comparison at one
+  absolute Z (`met_logzsol = log10(0.02) − log10(0.0142)`) in every stellar-metallicity
+  request, metallicity sweeps included, while gas metallicity is matched solar-scaled
+  (`neb_logZ_gas = log10(z)`); its L_λ↔L_ν conversion uses tengri's speed of light; the
+  validator's birth-cloud control states the `eta` it corresponds to (#2616).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
@@ -1844,9 +1852,9 @@
     declare the swept/restated parameter FREE in ``SEDModel.build`` instead,
     and pass only the free (swept) keys.
   - Call sites that restated a pinned value in the dict, or swept a pinned
-    parameter through it (gallery examples, slow-tier fixtures), declare the
-    swept parameter free and pass only the free keys; a fixture that mocks the
-    model may need the same.
+    parameter through it (gallery examples, spine notebooks, slow-tier
+    fixtures), declare the swept parameter free and pass only the free keys;
+    a fixture that mocks the model may need the same.
 
 ### Fixed
 

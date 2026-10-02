@@ -591,18 +591,17 @@ def pah_drude(
 
     Notes
     -----
-    **JIT-compatible**: yes, pure ``jnp`` primitives (a precomputed lookup in
-    :mod:`~tengri.components.dust.dust_analytic_precompute` is preferred in the
-    hybrid kernel; this is the direct full-wavelength evaluation).
+    **JIT-compatible**: yes, pure ``jnp`` primitives (this is the direct
+    full-wavelength evaluation).
 
     **Gradient-safe**: yes.
 
     **Not energy-balanced standalone**; see the summary above; excluded from
     the cross-model energy-balance contract test for this reason.
 
-    The PAH template is a pure shape (no free axes). Runtime evaluation uses the
-    precomputed lookup from :mod:`~tengri.components.dust.dust_analytic_precompute`
-    and skips the full-wavelength evaluation in the hybrid kernel.
+    The PAH template is a pure shape (no free axes). The adapter in
+    :mod:`~tengri.components.dust.dust_analytic_precompute` is registered in
+    ``forward/precompute/registry.py``; no kernel consumes its lookups today.
 
     References
     ----------
