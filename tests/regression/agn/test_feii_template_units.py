@@ -121,7 +121,7 @@ def test_resampling_conserves_template_integral(name, lo, hi):
     integral of the clipped native nodes, both divided by the native window
     integral.
     """
-    seg = np.linspace(lo, hi, int(round((hi - lo) / 0.2)) + 1)
+    seg = np.linspace(lo, hi, round((hi - lo) / 0.2) + 1)
     win = np.arange(WIN[0], WIN[1] + 0.25, 0.25)
     wave = seg if lo < WIN[0] < hi else np.concatenate([seg, win])
     tiny = np.asarray(_fe2_pseudo_continuum(jnp.asarray(wave), 1e-4, 1.0))
@@ -139,7 +139,10 @@ def test_unbroadened_shape_is_the_clipped_linear_template():
     got = np.asarray(_fe2_pseudo_continuum(jnp.asarray(wave), 1e-4, 1.0))
     ref = _ref_template(wave)
     scale = got.max() / ref.max()
-    np.testing.assert_allclose(got, ref * scale, rtol=1e-6, atol=1e-6 * got.max())
+    # The template is carried on an internal uniform ln(lambda) grid (2 km/s step) and
+    # re-sampled linearly, which differs from the native piecewise-linear nodes only
+    # within one fine cell of a node: measured 1.6e-4 of the peak.
+    np.testing.assert_allclose(got, ref * scale, rtol=0.0, atol=5e-4 * got.max())
 
 
 def test_window_normalisation_is_r_fe_times_lhbeta():
@@ -184,7 +187,9 @@ def test_feii_provenance_sha256_matches_shipped_file(name):
     import re
 
     text = (DATA / "PROVENANCE.md").read_text()
-    m = re.search(rf"\*\*File\*\*: `{re.escape(name)}`.*?\*\*SHA256\*\*: `([0-9a-f]{{64}})`", text, re.S)
+    m = re.search(
+        rf"\*\*File\*\*: `{re.escape(name)}`.*?\*\*SHA256\*\*: `([0-9a-f]{{64}})`", text, re.S
+    )
     assert m is not None, f"no SHA256 recorded for {name} in PROVENANCE.md"
     assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == m.group(1)
 
@@ -208,3 +213,41 @@ def test_amplitude_is_independent_of_the_callers_wavelength_grid(fwhm):
     np.testing.assert_allclose(b[sel], a[: len(uv_only)][sel], rtol=1e-6, atol=0.0)
     # and it is a sane amplitude: a 1-A-wide FeII feature is << R_Fe per Angstrom
     assert b[sel].max() < 1.0
+
+
+@pytest.mark.parametrize("fwhm", [1000.0, 5000.0])
+@pytest.mark.parametrize(("lo", "hi"), [(2000.0, 3300.0), (4000.0, 6500.0)])
+def test_spectrum_is_independent_of_the_callers_sampling(fwhm, lo, hi):
+    """A coarse (25 A) grid must see the same broadened FeII as a fine (1 A) grid.
+
+    Smoothing on the caller's own samples collapses to ~1 sample when the grid
+    step exceeds sigma_lambda (FWHM 1000 km/s -> sigma ~ 7 A at 5000 A), so
+    broadening silently vanished on typical SED grids.  Compared at the coarse
+    nodes (a subset of the fine grid).
+    """
+    fine = np.arange(1200.0, 7500.0 + 1e-9, 1.0)
+    coarse = np.arange(1200.0, 7500.0 + 1e-9, 25.0)
+    a = np.asarray(_fe2_pseudo_continuum(jnp.asarray(fine), fwhm, 1.0))
+    b = np.asarray(_fe2_pseudo_continuum(jnp.asarray(coarse), fwhm, 1.0))
+    a_at = a[::25]
+    sel = (coarse >= lo) & (coarse <= hi)
+    scale = a_at[sel].max()
+    assert scale > 0.0
+    # relative to the band peak: the template has near-zero nodes where a pointwise
+    # relative comparison is meaningless
+    np.testing.assert_allclose(b[sel], a_at[sel], rtol=0.0, atol=1e-3 * scale)
+
+
+def test_fwhm_gradient_is_finite_and_matches_finite_differences():
+    wave = jnp.asarray(np.arange(2000.0, 6500.0, 5.0))
+
+    def f(fwhm):
+        return jnp.sum(_fe2_pseudo_continuum(wave, fwhm, 1.0) * jnp.sin(wave / 300.0))
+
+    import jax
+
+    g = float(jax.grad(f)(3000.0))
+    h = 1.0
+    fd = (float(f(3000.0 + h)) - float(f(3000.0 - h))) / (2.0 * h)
+    assert np.isfinite(g)
+    assert g == pytest.approx(fd, rel=1e-3)
