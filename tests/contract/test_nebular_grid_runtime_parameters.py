@@ -2,7 +2,8 @@
 """Contract: the per-Q_H nebular grid applies the escape and dust-destruction
 fractions at reconstruction, so a free neb_fesc or neb_fdust moves the
 grid-served emission exactly as the exact path does. Every other free
-nebular parameter that the grid bakes in is refused.
+nebular parameter that the grid bakes in is refused. Six tests marked slow
+run nightly; the remaining tests run in the PR tier.
 
 Pinned:
   * neb_fesc ~ Uniform(0, 0.8): -2.95e-2 (fesc = 0) ... +4.73e-2 (fesc = 0.8)
@@ -11,7 +12,6 @@ Pinned:
 
 from __future__ import annotations
 
-import functools
 import types
 import warnings
 from pathlib import Path
@@ -62,6 +62,15 @@ _TWO = {
 }
 
 _SSP = None
+_MODEL_CACHE = {}  # Cache models keyed by (dusty, neb_extra_str)
+_VIEWS_CACHE = {}  # Cache _views results keyed by (dusty, key, lo, hi)
+
+
+def _dict_to_hashable(d):
+    """Convert dict to hashable string for caching."""
+    if not d:
+        return ""
+    return str(sorted((k, str(v)) for k, v in d.items()))
 
 
 def _require():
@@ -85,6 +94,10 @@ def data():
 
 
 def _model(dusty, neb_extra):
+    cache_key = (dusty, _dict_to_hashable(neb_extra))
+    if cache_key in _MODEL_CACHE:
+        return _MODEL_CACHE[cache_key]
+
     kw = dict(
         ssp_data=_SSP,
         observation=Observation(photometry=Photometry.from_names(_BANDS)),
@@ -108,12 +121,18 @@ def _model(dusty, neb_extra):
         kw["dust_emission"] = {"type": "dale2014", "all_params": Fixed(DEFAULT)}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel.build(**kw)
+        model = SEDModel.build(**kw)
+
+    _MODEL_CACHE[cache_key] = model
+    return model
 
 
-@functools.cache
 def _views(dusty: bool, key: str, lo: float, hi: float):
     """(model, grid-served model, evaluation point) for one free nebular parameter."""
+    cache_key = (dusty, key, lo, hi)
+    if cache_key in _VIEWS_CACHE:
+        return _VIEWS_CACHE[cache_key]
+
     m = _model(dusty, {key: Uniform(lo, hi)})
     p = _point(m)
     flux = np.asarray(m.predict_photometry(p))
@@ -122,7 +141,10 @@ def _views(dusty: bool, key: str, lo: float, hi: float):
         fast = Fitter(
             m, data=flux, noise=0.05 * np.abs(flux), data_type="photometry", approx="auto"
         ).model
-    return m, fast, p
+
+    result = (m, fast, p)
+    _VIEWS_CACHE[cache_key] = result
+    return result
 
 
 def _point(m) -> dict:
@@ -143,6 +165,7 @@ def _nebular_share(m, p) -> np.ndarray:
     return neb / (neb + star)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("dusty", [False, True])
 def test_free_escape_fraction_moves_the_grid_served_emission(ssp, dusty):
     m, fast, p = _views(dusty, "fesc", 0.0, 0.8)
@@ -185,6 +208,7 @@ def test_free_escape_fraction_moves_the_grid_served_emission(ssp, dusty):
     assert sensitivities[0] > 10 * _RTOL_PHOT
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("dusty", [False, True])
 def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
     m, fast, p = _views(dusty, "fdust", 0.0, 0.5)
@@ -222,6 +246,7 @@ def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
     assert sensitivities[0] > 10 * _RTOL_PHOT
 
 
+@pytest.mark.slow
 def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp):
     m = _model(True, {"fesc": Fixed(0.3), "fdust": Fixed(0.1)})
     p = _point(m)
@@ -260,6 +285,7 @@ def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp):
     assert sensitivity > 10 * _RTOL_PHOT
 
 
+@pytest.mark.slow
 def test_total_photon_loss_gives_no_nebular_emission(ssp):
     m, fast, p = _views(False, "fesc", 0.0, 1.0)
 
@@ -289,6 +315,7 @@ def test_total_photon_loss_gives_no_nebular_emission(ssp):
     )
 
 
+@pytest.mark.slow
 def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp):
     m, fast, p = _views(True, "fesc", 0.0, 0.8)
 
@@ -315,11 +342,14 @@ def test_the_gradient_with_respect_to_the_escape_fraction_matches(ssp):
     np.testing.assert_allclose(g_fesc_fast, g_fesc_exact, rtol=_RTOL_GRAD)
 
 
+@pytest.mark.slow
 def test_line_fluxes_follow_the_escape_fraction(ssp):
     m, _, p = _views(True, "fesc", 0.0, 0.8)
 
     assert getattr(m, "_nebular_grid_table", None) is None
-    m_lines = m.with_approx((WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67])))
+    m_lines = m.with_approx(
+        (WavePrecomp(), FeaturePrecomp(lines=[6564.6, 4862.7, 1215.67], n_grid=4))
+    )
     assert m_lines._nebular_grid_table is not None
 
     target_wavelengths = jnp.asarray([6564.6, 4862.7, 1215.67])
@@ -365,10 +395,10 @@ def test_a_baked_free_parameter_is_refused(ssp, name):
     assert fast_nebular_can_engage(m) is False
 
     with pytest.raises(ValueError, match=name):
-        m.with_approx((WavePrecomp(), FeaturePrecomp()))
+        m.with_approx((WavePrecomp(), FeaturePrecomp(n_grid=4)))
 
     with pytest.raises(ValueError, match="reference value"):
-        m.with_approx((WavePrecomp(), FeaturePrecomp()))
+        m.with_approx((WavePrecomp(), FeaturePrecomp(n_grid=4)))
 
 
 def test_every_nebular_parameter_has_exactly_one_disposition(ssp):

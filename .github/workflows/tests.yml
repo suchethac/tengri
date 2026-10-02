@@ -1528,14 +1528,15 @@ jobs:
           # these five trees are NOT slow and already run in the default
           # tier; `-m slow` below selects just the individually-decorated
           # ones. Timeout sized from a one-file-per-process measurement of
-          # all 12 currently-slow files here (~546 s serial, all passing);
-          # 30 min leaves >3x headroom for a slower CI runner plus growth.
+          # all 12 currently-slow files here (~546 s serial, all passing), plus
+          # two nebular-grid contract files added 2026-10-02 (~1300 s serial,
+          # measured under load on a Mac); 60 min keeps headroom for growth.
           # As of this change, test_agn_wildcard_measured_liveness.py (#2291)
           # is excluded and runs in its own entry below.
           - suite: components-unit-regression-contract-physics
             paths: tests/components tests/unit tests/regression tests/contract tests/physics
             ignore: --ignore=tests/contract/test_agn_wildcard_measured_liveness.py
-            timeout: 30
+            timeout: 60
           # The exhaustive AGN wildcard liveness sweep (#2291): 130 (category,
           # type) pairs plus the polar atten x torus sweep, each paying a full
           # composable SEDModel.build (~30 s on a runner) and no gradient on a
