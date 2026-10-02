@@ -703,18 +703,38 @@ def escape_geometry_transmission(
 
     References
     ----------
-    FSPS ``frac_obrun`` (Conroy, Gunn & White 2009; Conroy & Gunn 2010):
-    the fraction of O/B stars that have "escaped" their birth cloud, which
-    FSPS's ``add_dust_emission``/``add_igm_absorption`` machinery treats as
-    seeing only the diffuse (``dust2``) screen at every wavelength and
-    contributing no nebular emission. Synthesizer's ``fesc`` parameter on
-    its ``EmissionModel`` (e.g. the ``pacman`` model,
-    ``synthesizer.emission_models.premade.PacmanEmissionModel``):
-    a fraction of the young incident spectrum that escapes with neither
-    nebular reprocessing nor dust attenuation. tengri implements the same
-    two reference models (credited, not ported) as the ``'birth_cloud_holes'``
-    / ``'clear'`` geometries respectively, unified with its own sigmoid
-    age-transition and the existing ``neb_fesc``/:func:`lyc_shares` budget.
+    FSPS ``frac_obrun`` (Conroy, Gunn & White 2009; Conroy & Gunn 2010),
+    ``src/add_dust.f90`` (``ADD_DUST``, installed FSPS Fortran source)::
+
+        cspi = csp1 * EXP(-pset%dust1*(spec_lambda/5500.)**(pset%dust1_index))*&
+             (1-pset%frac_obrun) + csp1*pset%frac_obrun + &
+             csp2 * EXP(-pset%dust3*tau_diff)
+        ...
+        specdust  = (1-pset%frac_nodust) * cspi*diff_dust + cspi*pset%frac_nodust
+
+    (``csp1`` the young/birth-cloud spectrum, ``dust1`` its birth-cloud
+    optical depth, ``diff_dust`` the diffuse-ISM screen applied
+    UNCONDITIONALLY afterward to the combined ``cspi``): a ``frac_obrun``
+    covering fraction of the young population bypasses the birth-cloud
+    term specifically (added back in unattenuated by it, ``csp1*frac_obrun``)
+    while still being multiplied by the diffuse screen two lines later --
+    exactly the ``'birth_cloud_holes'`` geometry here (``T_hole = T_diff``).
+
+    Synthesizer's ``fesc`` (installed Python source),
+    ``emission_models/stellar/models.py``'s ``TransmittedEmissionWithEscaped``
+    builds the escaped term as
+    ``StellarEmissionModel(apply_to=incident, transformer=EscapedFraction(),
+    fesc=fesc)``, and ``emission_models/transformers/escape_fraction.py``'s
+    ``EscapedFraction._transform`` reads ``return emission.scale(fesc, ...)``
+    applied to the UNDUSTED, UNREPROCESSED ``incident`` spectrum: the
+    escaped fraction of the young population sees neither dust nor nebular
+    reprocessing at all -- exactly the ``'clear'`` geometry here
+    (``T_hole = 1``).
+
+    tengri implements the same two reference models (credited, not ported)
+    as the ``'birth_cloud_holes'`` / ``'clear'`` geometries respectively,
+    unified with its own sigmoid age-transition and the existing
+    ``neb_fesc``/:func:`lyc_shares` budget.
 
     Examples
     --------
