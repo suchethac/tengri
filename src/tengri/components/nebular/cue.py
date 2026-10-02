@@ -663,17 +663,17 @@ def _logq_from_logu(
 ) -> jnp.ndarray:
     """Convert ionization parameter logU to logQ.
 
-    Computes logQ = logU + log(4*pi*c) + 2*log(R) + logn using the Stromgren
-    radius as a reference scale.
+    Computes logQ = logU + log(4*pi*c) + 2*log(R) + logn using a fixed
+    reference radius of the inner-face ionization parameter.
 
     Parameters
     ----------
     gas_logu : array
-        Ionization parameter [log10(U)].
+        Inner-face ionization parameter at R = 10^19 cm [log10(U)].
     gas_logn : array
         Gas density [log10(n_H / cm^-3)].
     log_R : float, optional
-        Reference radius [log10(R / cm)]. Default: 19.0 (Stromgren radius).
+        Reference radius [log10(R / cm)]. Default: 19.0 (R = 10^19 cm).
 
     Returns
     -------
@@ -684,8 +684,12 @@ def _logq_from_logu(
     -----
     **JIT-compatible**: yes, simple arithmetic.
 
-    This formula matches Cue's internal convention with R = 1e19 cm
-    (approximately the Stromgren radius for typical HII regions).
+    `neb_logU` is the ionization parameter U = Q_H / (4π R² n_H c) evaluated
+    at the inner face R = 10^19 cm. This is NOT the volume-averaged ionization
+    parameter ⟨U⟩ = (3 Q n α_B² / 4π c³)^(1/3) used by Synthesizer
+    (Gutkin et al. 2016 eq. 1). The two differ by a Q- and n-dependent factor.
+    At n_H = 100 cm⁻³: log ⟨U⟩ = −2 corresponds to neb_logU = −2.35, and
+    neb_logU = −2 corresponds to log ⟨U⟩ = −1.88 (the offset increases with Q).
 
     """
     return gas_logu + device_table(_LOG_4PI) + 2.0 * log_R + gas_logn + device_table(_LOG_C)
