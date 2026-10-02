@@ -32,7 +32,7 @@ FINE = np.logspace(4, 7, 20001)
 BANDS = ((8e4, 2.4e5), (2.4e5, 7e5), (7e5, 1.6e6), (1.6e6, 5e6), (5e6, 1e7))
 
 #: (q_hAC, U_min, alpha, gamma) and the five band fractions of unit power in
-#: 1 um-1 mm from pcigale ``themis.THEMIS(...).process``.
+#: 1 um-1 mm from pcigale 2025.1 ``themis.THEMIS(...).process``.
 PUBLIC_NODES = (
     pytest.param(
         (0.02, 0.5, 1.0, 0.01),
@@ -58,7 +58,25 @@ PUBLIC_NODES = (
     ),
 )
 
-REGISTRY_NODES = ((0.02, 0.5, 1.0, 0.01), (0.17, 1.0, 1.0, 0.1), (0.40, 30.0, 1.0, 0.5))
+REGISTRY_NODES = (
+    (0.02, 0.5, 1.0, 0.01),
+    (0.17, 1.0, 1.0, 0.1),
+    (0.40, 30.0, 1.0, 0.5),
+    (0.02, 0.5, 3.0, 0.1),
+    (0.40, 30.0, 3.0, 0.5),
+    (0.02, 0.5, 2.5, 0.1),
+    (0.40, 30.0, 2.5, 0.5),
+    (0.02, 50.0, 3.0, 0.9),
+    (0.40, 50.0, 1.0, 0.9),
+)
+
+#: Band-power factor (composition-averaged ratio over per-q_hAC ratio) in
+#: 8-24, 24-70, 70-160, 160-500, 500-1000 um, to 3 significant figures.
+AVERAGED_AXIS_FACTORS = (
+    ((0.02, 0.5, 1.0, 0.01), (1.04, 1.34, 1.40, 1.40, 1.40)),
+    ((0.40, 30.0, 1.0, 0.5), (1.05, 0.808, 0.781, 0.779, 0.779)),
+    ((0.02, 50.0, 3.0, 0.9), (1.94, 0.907, 0.885, 0.885, 0.885)),
+)
 
 
 def _unit(wave, y):
@@ -131,22 +149,44 @@ def templates():
         yield {k: h[k][:] for k in h}
 
 
-@pytest.mark.parametrize("node", REGISTRY_NODES)
-def test_registry_band_powers_match_pcigale_at_alpha_1(node, templates):
-    """Registry ``themis`` band powers equal pcigale's per-q_hAC library at alpha = 1."""
-    pytest.importorskip("pcigale")
+def _registry_bands(wave, node):
     from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
     q, u, a, g = node
-    wave = templates["wavelength_aa"]
     lnu = np.asarray(
         DUST_EMISSION_MODELS["themis"](
             wave, 1.0, dust_umin=u, dust_gamma_dl=g, dust_qhac=q, dust_alpha=a
         ),
         dtype=np.float64,
     )
-    got = _bands(_unit(wave, lnu * C_AA / wave**2))
-    np.testing.assert_allclose(got / _pcigale_bands(*node), 1.0, atol=2e-3)
+    return _bands(_unit(wave, lnu * C_AA / wave**2))
+
+
+@pytest.mark.parametrize("node", REGISTRY_NODES)
+def test_registry_band_powers_match_pcigale(node, templates):
+    """Registry ``themis`` band fractions equal pcigale 2025.1 to 1e-6 at alpha != 2 nodes."""
+    pytest.importorskip("pcigale")
+    got = _registry_bands(templates["wavelength_aa"], node)
+    np.testing.assert_allclose(got / _pcigale_bands(*node), 1.0, atol=1e-6)
+
+
+def test_off_node_qhac_lies_between_neighbor_nodes(templates):
+    """At alpha = 1.55 the 8-70 um fractions at q_hAC = 0.08 lie between the 0.06, 0.10 nodes."""
+    wave = templates["wavelength_aa"]
+    low, mid, high = (_registry_bands(wave, (q, 0.5, 1.55, 0.1))[:2] for q in (0.06, 0.08, 0.10))
+    assert np.all(mid > np.minimum(low, high))
+    assert np.all(mid < np.maximum(low, high))
+
+
+def test_alpha_interpolation_is_continuous(templates):
+    """The 8-70 um band fractions change by < 3 % of the 0.1-in-alpha step over delta = 1e-3."""
+    wave = templates["wavelength_aa"]
+    delta = 1e-3
+    below, above, lo, hi = (
+        _registry_bands(wave, (0.08, 0.5, a, 0.1))[:2]
+        for a in (1.55 - delta, 1.55 + delta, 1.5, 1.6)
+    )
+    assert np.all(np.abs(above - below) < 0.03 * np.abs(hi - lo))
 
 
 def test_alpha_2_slice_of_the_ratio_is_exactly_one(templates):
@@ -162,14 +202,52 @@ def test_alpha_2_slice_of_the_ratio_is_exactly_one(templates):
     assert np.array_equal(ratio[:, :, k2], np.ones_like(ratio[:, :, k2]))
 
 
-def test_ratio_is_not_the_qhac_average(templates):
-    """The alpha = 1 PDR power differs from the q_hAC-averaged-ratio power by 0.70-1.38x."""
+@pytest.fixture(scope="module")
+def averaged_axis_engine(templates, tmp_path_factory):
+    """THEMIS engine whose alpha ratio is the q_hAC mean of the stored per-q_hAC ratio."""
+    from tengri.components.dust.emission_templates import create_themis_from_grid
+
+    ratio = templates["powerlaw_alpha_ratio"].astype(np.float64)
+    averaged = np.broadcast_to(ratio.mean(axis=0, keepdims=True), ratio.shape)
+    path = tmp_path_factory.mktemp("themis_averaged") / "themis_templates.h5"
+    with h5py.File(DATA_DIR / "themis_templates.h5", "r") as src, h5py.File(path, "w") as f:
+        for key, value in templates.items():
+            data = averaged.astype(np.float32) if key == "powerlaw_alpha_ratio" else value
+            f.create_dataset(key, data=data)
+        f.attrs.update(src.attrs)
+    return create_themis_from_grid(str(path))
+
+
+@pytest.mark.parametrize(("node", "factors"), AVERAGED_AXIS_FACTORS)
+def test_averaged_axis_band_power_factors(node, factors, templates, averaged_axis_engine):
+    """The q_hAC-averaged alpha axis misses the per-q_hAC band powers by the pinned factors."""
+    from tengri.components.dust.emission_templates import create_themis_from_grid
+
+    q, u, a, g = node
+    wave = templates["wavelength_aa"]
+    kwargs = {"dust_umin": u, "dust_gamma_dl": g, "dust_qhac": q, "dust_alpha": a}
+    per_q = create_themis_from_grid(str(DATA_DIR / "themis_templates.h5"))
+
+    def band_fractions(engine):
+        lnu = np.asarray(engine(wave, 1.0, **kwargs), dtype=np.float64)
+        return _bands(_unit(wave, lnu * C_AA / wave**2))
+
+    np.testing.assert_allclose(
+        band_fractions(averaged_axis_engine) / band_fractions(per_q), factors, rtol=6e-3
+    )
+
+
+@pytest.mark.parametrize(("q", "u", "weight"), ((0.02, 0.5, 0.71), (0.40, 30.0, 1.28)))
+def test_averaged_axis_pdr_power_weight_factor(q, u, weight, templates):
+    """The averaged alpha = 1 axis scales the PDR power weight by the pinned factor."""
     ratio = templates["powerlaw_alpha_ratio"].astype(np.float64)[:, :, 0, :]
     nu = C_AA / templates["wavelength_aa"]
-    per_q = np.trapezoid(templates["powerlaw"] * ratio, nu, axis=-1)
-    averaged = np.trapezoid(templates["powerlaw"] * ratio.mean(axis=0)[None], nu, axis=-1)
-    assert (averaged / per_q).min() < 0.75
-    assert (averaged / per_q).max() > 1.25
+    iq = int(np.argmin(np.abs(templates["qhac_grid"] * 2.2 / 100.0 - q)))
+    iu = int(np.argmin(np.abs(templates["umin_grid"] - u)))
+    plaw = templates["powerlaw"][iq, iu]
+    per_q = np.trapezoid(plaw * ratio[iq, iu], nu)
+    averaged = np.trapezoid(plaw * ratio.mean(axis=0)[iu], nu)
+    assert averaged / per_q == pytest.approx(weight, rel=6e-3)
 
 
 @pytest.mark.parametrize(
@@ -177,7 +255,7 @@ def test_ratio_is_not_the_qhac_average(templates):
     [(0.02, 0.5, 1.0), (0.17, 1.0, 1.0), (0.40, 30.0, 1.0), (0.02, 0.5, 3.0), (0.40, 30.0, 3.0)],
 )
 def test_pdr_power_weight_matches_pcigale(q, u, a, templates):
-    """PDR power over single-U power equals pcigale's database ratio at fixed U_min."""
+    """PDR power over single-U power equals pcigale 2025.1's database ratio to 1e-4."""
     pytest.importorskip("pcigale")
     from pcigale.data import SimpleDatabase
 
@@ -192,22 +270,26 @@ def test_pdr_power_weight_matches_pcigale(q, u, a, templates):
         single = db.get(qhac=q, umin=u, umax=u, alpha=1.0)
         pdr = db.get(qhac=q, umin=u, umax=1e7, alpha=a)
     reference = np.trapezoid(pdr.spec, pdr.wl) / np.trapezoid(single.spec, single.wl)
-    assert weight / reference == pytest.approx(1.0, abs=2e-3)
+    assert weight / reference == pytest.approx(1.0, abs=1e-4)
 
 
 @pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)
 def test_public_sed_dust_ir_band_fractions_literals(node, expected):
-    """``SEDModel.build`` THEMIS ``sed_dust_ir`` band fractions equal pcigale's literals."""
-    np.testing.assert_allclose(_public_band_fractions(node), expected, rtol=3e-3, atol=0.0)
+    """``SEDModel.build`` band fractions equal pcigale 2025.1 literals to 3.5e-4 (absolute).
+
+    The measured maximum is 1.1e-4; it is set by linear interpolation of the
+    576-point template onto the 6570-point model wavelength grid.
+    """
+    np.testing.assert_allclose(_public_band_fractions(node), expected, rtol=0.0, atol=3.5e-4)
 
 
 @pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)
 def test_public_sed_dust_ir_band_fractions_live_pcigale(node, expected):
-    """``SEDModel.build`` THEMIS ``sed_dust_ir`` band fractions equal a live pcigale run."""
+    """``SEDModel.build`` band fractions equal a live pcigale run to 3.5e-4 (absolute)."""
     pytest.importorskip("pcigale")
     live = _pcigale_bands(*node)
     np.testing.assert_allclose(live, expected, rtol=1e-6)
-    np.testing.assert_allclose(_public_band_fractions(node) / live, 1.0, atol=3e-3)
+    np.testing.assert_allclose(_public_band_fractions(node), live, rtol=0.0, atol=3.5e-4)
 
 
 @pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)

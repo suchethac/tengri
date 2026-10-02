@@ -1,36 +1,31 @@
 #!/usr/bin/env python3
-r"""Add a radiation-field-slope (alpha) axis to the FSPS-built THEMIS grid.
+r"""Tabulate the THEMIS radiation-field-slope (alpha) axis per q_hAC composition.
 
-tengri ships the FSPS/DustEM-built THEMIS templates (``build_themis_from_fsps``,
-PR #574): a single-U component and a power-law (PDR) component at the Jones+2017
-default ``alpha = 2.0`` only. CIGALE additionally exposes ``alpha`` (the slope of
-``dU/dM \propto U^{-alpha}``) over [1.0, 3.0]. This script augments the shipped
-FSPS grid with an ``alpha`` axis WITHOUT changing the ``alpha = 2`` behavior:
+The U^-alpha (PDR) component of the THEMIS dust model (Jones et al. 2017,
+A&A 602, A46) is the integral over the starlight intensity U of the single-U
+emission of one grain mixture, with ``dU/dM ~ U^-alpha`` between ``U_min`` and
+``U_max = 1e7`` (Draine & Li 2007, ApJ 657, 810, Eq. 23). The mixture is set by
+q_hAC, so the spectrum at ``alpha != 2`` depends on q_hAC and alpha jointly.
 
-    powerlaw_alpha[q, u, k] = FSPS_powerlaw[q, u] * R(u, alpha_k)
+The script reads the PDR spectra ``S(q, u, alpha)`` of the CIGALE THEMIS database
+(``pcigale.data.SimpleDatabase('themis')``, ``umax = 1e7``) on the nodes of
+``data/themis_templates.h5`` and stores the per-composition ratio
 
-    R(u, alpha) = < CIG_pa[:, u, alpha] / CIG_pa[:, u, alpha2] >_qhac
+    R(q, u, alpha) = S(q, u, alpha) / S(q, u, alpha = 2)
 
-where ``CIG_pa`` is CIGALE's DustEM power-law (``model_minmax``) grid pulled from
-``pcigale.data.SimpleDatabase('themis')`` (``umax = 1e7``). The ratio ``R`` is
-the *relative* alpha-dependence of the PDR spectrum at fixed ``U_min``,
-qhac-averaged (alpha reshapes the U distribution, which is essentially separable
-from the a-C(:H) grain fraction). At ``alpha = 2`` the ratio is identically 1,
-so ``powerlaw_alpha[..., alpha2, :] == FSPS_powerlaw`` bit-for-bit — the default
-SED, energy balance, and the gamma-warming calibration are unchanged.
+as ``powerlaw_alpha_ratio`` with shape ``(n_qhac, n_umin, n_alpha, n_wave)``
+(float32, gzip) beside ``alpha_grid``. The loader forms
+``powerlaw_alpha[q, u, k] = powerlaw[q, u] * R[q, u, k]``, so the ``alpha = 2``
+slice of ``R`` is exactly 1 and the ``alpha = 2`` template, energy balance and
+gamma-warming calibration are those of the stored ``powerlaw`` dataset.
 
-This keeps the scientifically-preferred FSPS normalization as the anchor while
-making ``dust_alpha`` a faithful, CIGALE-derived free parameter.
-
-Requirements: pcigale installed (tengri's main ``.venv`` has it). The FSPS
-``data/themis_templates.h5`` must already exist (``build_themis_from_fsps.py``).
-Output: rewrites ``data/themis_templates.h5`` in place, adding ``alpha_grid``
-and ``powerlaw_alpha`` (idempotent — single_u/powerlaw are read back unchanged).
+Requirements: pcigale importable (tengri's main ``.venv``) and an existing
+``data/themis_templates.h5`` holding ``single_u``, ``powerlaw``, ``qhac_grid``,
+``umin_grid`` and ``wavelength_aa``. The file is rewritten in place.
 
 Usage
 -----
-    PYTHONPATH=. .venv/bin/python \
-        scripts/build_themis_alpha_axis.py
+    PYTHONPATH=. .venv/bin/python scripts/build_themis_alpha_axis.py
 """
 
 from __future__ import annotations
@@ -89,22 +84,20 @@ def main() -> int:
                     m = db.get(qhac=float(q), umin=float(u), umax=UMAX_POWERLAW, alpha=float(a))
                     cig_pa[ci, ui, ki] = np.array(m.spec, dtype=np.float64)
 
-    # Relative alpha-dependence at fixed (q_hAC, U_min), anchored at alpha=2 (ratio=1).
-    # Per-q_hAC: alpha reshapes the U distribution of each grain composition separately
-    # (Jones et al. 2017 Eqs. 5-8, Draine & Li 2007 Eq. 23). ratio[q, u, alpha, wave].
+    # R(q, u, alpha) = S(q, u, alpha) / S(q, u, alpha=2): alpha reshapes the U
+    # distribution of each grain composition separately.
     i_a2 = int(np.argmin(np.abs(ALPHA_GRID - 2.0)))
-    denom = cig_pa[:, :, i_a2, :]  # (cq, u, wave)
-    denom_safe = np.where(np.abs(denom) > 0, denom, 1.0)
-    ratio_per_q = cig_pa / denom_safe[:, :, None, :]  # (cq, u, alpha, wave)
-    ratio = ratio_per_q  # Keep per-q: (cq, u, alpha, wave), R(q, u, alpha)
-    ratio[:, :, i_a2, :] = 1.0  # exact anchor at alpha=2
+    denom = cig_pa[:, :, i_a2, :]  # (n_q, n_u, n_wave)
+    assert np.all(denom > 0.0), (
+        "CIGALE THEMIS alpha=2 spectra must be strictly positive: "
+        f"{int(np.sum(denom <= 0.0))} non-positive entries"
+    )
+    ratio = np.divide(cig_pa, denom[:, :, None, :])
+    ratio = np.where(
+        (np.arange(n_alpha) == i_a2)[None, None, :, None], 1.0, ratio
+    )  # exact anchor at alpha = 2
+    assert np.array_equal(ratio[:, :, i_a2, :], np.ones_like(denom))
 
-    # Assert that α=2 slice is exactly 1 and powerlaw_alpha[:,:,k2] == powerlaw
-    assert np.allclose(ratio[:, :, i_a2, :], 1.0), "alpha=2 ratio must be 1.0"
-
-    # Store the per-q ratio R(q, umin, alpha, wave). The loader
-    # reconstructs powerlaw_alpha = powerlaw[:, :, None, :] * R[q, :, :, :].
-    # This expands from ~3 MB to ~20 MB but captures the full physics.
     ratio_f32 = ratio.astype(np.float32)
 
     with h5py.File(fsps_path, "w") as f:
