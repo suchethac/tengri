@@ -520,3 +520,74 @@ def test_default_profile_mass_override_matches_direct_build_on_real_ssp(ssp_data
     )
     phot_o = np.asarray(f_over.model.predict_photometry(params))
     np.testing.assert_allclose(phot_o, data, rtol=RTOL)
+
+
+# ── The spec is re-derived too: parse-time quantities depend on z ─────────
+#
+# parse_groups narrows onset/age priors to age_at_z(z) and scales the default
+# nonparametric age bins to age(z). Re-pinning the redshift constant alone keeps
+# the FIRST build's ceilings, so the rebuilt model's parameter space differs from
+# a direct build at the new redshift.
+
+_SFH_FOR_SPEC = {
+    "dpl": {"type": "dpl", "all_params": FREE},
+    "dexp": {"type": "dexp", "all_params": FREE},
+    "nonparametric": {"type": "continuity", "all_params": FREE},
+}
+
+
+def _spec_model(ssp, obs, z, sfh):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(z),
+            sfh=sfh,
+            met={"logzsol": Fixed(0.0)},
+            dust_attenuation={"type": "none"},
+            dust_emission={"type": "none"},
+        )
+
+
+@pytest.mark.parametrize("sfh_name", sorted(_SFH_FOR_SPEC))
+@pytest.mark.parametrize("z2", [0.3, 1.0, 2.5])
+def test_rebuilt_spec_equals_a_direct_build_at_the_new_redshift(
+    synthetic_ssp_wide, synthetic_tophat_obs, sfh_name, z2
+):
+    """Bounds and transforms of every parameter match a direct Fixed(z2) build."""
+    sfh = _SFH_FOR_SPEC[sfh_name]
+    base = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, Z_BASE, sfh)
+    direct = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, z2, sfh)
+    rebuilt = base.with_fixed_redshift(z2)
+
+    a, b = rebuilt.spec, direct.spec
+    assert sorted(a.all_params) == sorted(b.all_params)
+    for name in b.all_params:
+        da, db = a.get_distribution(name), b.get_distribution(name)
+        assert repr(da) == repr(db), f"{name}: rebuilt {da!r} != direct {db!r}"
+        assert da.bounds == db.bounds
+    assert a.get_fixed_values() == b.get_fixed_values()
+    assert dict(a._group_provenance) == dict(b._group_provenance)
+    assert (a.bin_edges_gyr is None) == (b.bin_edges_gyr is None)
+    if b.bin_edges_gyr is not None:
+        np.testing.assert_allclose(np.asarray(a.bin_edges_gyr), np.asarray(b.bin_edges_gyr))
+    assert a.cache_key() == b.cache_key()
+
+
+def test_the_spec_check_is_not_vacuous(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Two redshifts really do give different onset ceilings and bin edges."""
+    for sfh_name in ("dexp", "nonparametric"):
+        sfh = _SFH_FOR_SPEC[sfh_name]
+        lo = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, Z_BASE, sfh).spec
+        hi = _spec_model(synthetic_ssp_wide, synthetic_tophat_obs, 2.5, sfh).spec
+        differ = [
+            n
+            for n in hi.all_params
+            if repr(lo.get_distribution(n)) != repr(hi.get_distribution(n)) and n != "redshift"
+        ]
+        e_lo, e_hi = lo.bin_edges_gyr, hi.bin_edges_gyr
+        edges_differ = e_lo is not None and e_hi is not None and not np.allclose(e_lo, e_hi)
+        assert differ or edges_differ, (
+            f"{sfh_name}: no z-dependent spec quantity, so the equality test cannot see one"
+        )

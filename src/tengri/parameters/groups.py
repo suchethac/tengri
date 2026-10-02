@@ -1092,6 +1092,11 @@ def parse_groups(**kwargs) -> Parameters:
     # SEDModel.build -- auto-resolution then falls back to its pre-#2426
     # behavior (see Parameters._default_cloudy_grid).
     ssp_data = kwargs.pop("ssp_data", None)
+    # The build inputs, kept on the returned spec so that a model rebuilt at a
+    # different Fixed redshift re-derives every redshift-dependent quantity
+    # parse_groups computes (onset/age ceilings at age_at_z, nonparametric bin
+    # edges scaled to age(z)) instead of keeping the first build's.
+    parse_inputs = {**kwargs, "ssp_data": ssp_data}
 
     # Redshift is required, and the question asked here is whether the caller
     # PASSED it -- not what its value is. A value-based sentinel cannot answer
@@ -1519,6 +1524,7 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+    object.__setattr__(final_params, "_parse_inputs", parse_inputs)
 
     # Raised HERE, after the groups have been translated and validated, not at
     # the top. A caller with a malformed group AND no redshift should hear about
