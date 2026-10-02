@@ -11,6 +11,15 @@ already covered by ``test_energy_balance_lyc_toggle.py``,
 ``test_lyc_fesc_two_component.py``, ``test_bug_2439_precomp_lyc_mask.py`` and
 ``test_2539_fdust_energy_in_ir_budget.py``.
 
+A third key joined the family with #2529, ``lyc_escape_geometry``
+(``'screened'`` default / ``'birth_cloud_holes'`` / ``'clear'``), not a
+rename of anything retired but wired through the SAME trail as the two
+keys above -- :class:`TestLycEscapeGeometryKey` is this key's dedicated
+contract (parse/validation/round-trip); its physics (the escape-geometry
+formula itself, energy-balance and WavePrecomp parity, cross-code parity,
+gradients) is covered by
+``tests/regression/bug/test_2529_lyc_escape_geometry.py``.
+
 **Old->new equivalence, "internal config mapping" chosen over a bootstrap-head
 snapshot**: a genuinely pre-rename reference would need a second checkout
 (``git archive <bootstrap-head> | tar -x -C <dir>``) built in its own venv so
@@ -254,3 +263,74 @@ class TestRoundTrip:
         phot1 = np.asarray(m.predict_photometry({}))
         phot2 = np.asarray(m2.predict_photometry({}))
         np.testing.assert_array_equal(phot1, phot2)
+
+
+class TestLycEscapeGeometryKey:
+    """#2529's third ``lyc_`` key: the dedicated parse/round-trip contract,
+    following exactly the pattern the two classes above use for its
+    siblings. The formula itself is
+    ``tests/regression/bug/test_2529_lyc_escape_geometry.py``'s job.
+    """
+
+    @staticmethod
+    def _dust_attenuation(*, lyc_escape_geometry="screened"):
+        return {
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.3),
+            "tau_diff": Fixed(0.3),
+            "all_params": Fixed(DEFAULT),
+            "lyc_escape_geometry": lyc_escape_geometry,
+        }
+
+    def _build(self, ssp, obs, lyc_escape_geometry="screened"):
+        return _build_raw(
+            ssp, obs, self._dust_attenuation(lyc_escape_geometry=lyc_escape_geometry)
+        )
+
+    @pytest.mark.parametrize("lyc_escape_geometry", ["birth_cloud_holes", "clear"])
+    def test_internal_attribute_matches_grammar(
+        self, synthetic_ssp_wide, synthetic_tophat_obs, lyc_escape_geometry
+    ):
+        """Same ``copy.copy(spec)`` + direct-attribute-set equivalence
+        :class:`TestOldToNewInternalConfigMapping` uses for the other two
+        keys, here for ``dust_lyc_escape_geometry``."""
+        m_grammar = self._build(
+            synthetic_ssp_wide, synthetic_tophat_obs, lyc_escape_geometry=lyc_escape_geometry
+        )
+        m_base = self._build(synthetic_ssp_wide, synthetic_tophat_obs)
+        spec = copy.copy(m_base.spec)
+        spec.dust_lyc_escape_geometry = lyc_escape_geometry
+        m_mapped = tengri.SEDModel(spec, synthetic_ssp_wide, observation=synthetic_tophat_obs)
+
+        phot_grammar = np.asarray(m_grammar.predict_photometry({}))
+        phot_mapped = np.asarray(m_mapped.predict_photometry({}))
+        np.testing.assert_array_equal(phot_grammar, phot_mapped)
+
+    def test_unknown_value_lists_allowed(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        dust = self._dust_attenuation()
+        dust["lyc_escape_geometry"] = "both"
+        with pytest.raises(ValueError, match=r"screened.*birth_cloud_holes.*clear"):
+            _build_raw(synthetic_ssp_wide, synthetic_tophat_obs, dust)
+
+    @pytest.mark.parametrize("lyc_escape_geometry", ["birth_cloud_holes", "clear"])
+    def test_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs, lyc_escape_geometry):
+        m = self._build(
+            synthetic_ssp_wide, synthetic_tophat_obs, lyc_escape_geometry=lyc_escape_geometry
+        )
+        groups = m.spec.to_groups()
+        atten = groups["dust_attenuation"]
+        assert atten["lyc_escape_geometry"] == lyc_escape_geometry
+
+        m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
+        assert m2.spec.dust_lyc_escape_geometry == lyc_escape_geometry
+
+        phot1 = np.asarray(m.predict_photometry({}))
+        phot2 = np.asarray(m2.predict_photometry({}))
+        np.testing.assert_array_equal(phot1, phot2)
+
+    def test_default_not_emitted_in_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        m = self._build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_escape_geometry="screened")
+        groups = m.spec.to_groups()
+        assert "lyc_escape_geometry" not in groups["dust_attenuation"]

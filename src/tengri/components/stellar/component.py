@@ -116,12 +116,10 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
-    compute_surviving_mass,
     effective_metallicity,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
     interpolate_alpha_only,
-    interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
@@ -1756,10 +1754,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     field_centering: float = 1.0
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
-    # Number of bins for ``metallicity_model="bins"`` /
-    # ``"bins_continuity"``. Defaults to 6 to match
-    # ``MET_REGISTRY``'s ``_N_MET_BINS_DEFAULT`` and the
-    # ``met_bin_<i>`` / ``met_d_log_z_<i>`` parameter declarations.
+    # Maximum number of declared ``met_bin_<i>`` parameters (the
+    # largest ladder the grammar accepts). The physics derives the
+    # bin count from ``met_bin_edges_log_yr`` (n_bins = len(edges) − 1),
+    # not from this field. Defaults to 6 to match ``MET_REGISTRY``'s
+    # ``_N_MET_BINS_DEFAULT``.
     met_n_bins: int = 6
     # Bin edges in ``log10(age/yr)``, sorted ascending. Used by the
     # ``"bins"`` and ``"bins_continuity"`` metallicity modes.
@@ -2462,8 +2461,17 @@ class StellarSEDComponent:
         # star_formation_history.py:326-348 both measure the burst's cosmic
         # time from "now" (the observation epoch), which is per-galaxy, so it
         # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting.
-        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+        # registry setting. ``psb_suess2022``/``psb_flex`` (both
+        # ``psb_continuity_flex``, #2645) share the same injection: their
+        # fixed old bins are bounded to ``[tflex_gyr, age_universe_yr]`` the
+        # same way the burst is bounded to ``[0, age_universe_yr]``, so
+        # neither family's default fixed section extends past the Big Bang.
+        if isinstance(sfh_model, str) and sfh_model in (
+            "psb",
+            "psb_wild2020",
+            "psb_suess2022",
+            "psb_flex",
+        ):
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -2571,7 +2579,6 @@ class StellarSEDComponent:
                 log_z_abs_scalar = log_z_eff + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
-            log_z_for_mr = log_z_abs_scalar
         elif self.config.metallicity_model == "ramp":
             log_z_init_abs = jnp.asarray(params["met_logzsol_0"]) + LOG10_ZSUN
             log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
@@ -2584,9 +2591,6 @@ class StellarSEDComponent:
             lgmet_on_ssp_ages = compute_log_z_evolving(
                 ssp.ssp_lg_age_gyr, log_z_init_abs, log_z_final_abs, t_obs_gyr
             )
-            # For mass-remaining interpolation use the present-day metallicity
-            # (newest stars dominate the mass-loss correction).
-            log_z_for_mr = log_z_final_abs
         elif self.config.metallicity_model == "two_step":
             # Sigmoid-smoothed step at ``met_step_age_gyr``. Stars older than
             # the step get ``met_logzsol_old``, younger get ``met_logzsol_young``.
@@ -2600,8 +2604,6 @@ class StellarSEDComponent:
             log_metallicity_history = two_step_metallicity(
                 sfh_lg_age_gyr, log_z_old_abs, log_z_young_abs, step_age_gyr
             )
-            # Present-day Z (youngest SSP age, lookback ≈ 0).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "psb_two_step":
             # Step tied to the PSB SFH burst onset
             # (``sfh_psb_burstage_gyr``). Pre-burst stars get
@@ -2617,17 +2619,17 @@ class StellarSEDComponent:
             log_metallicity_history = psb_two_step_metallicity(
                 sfh_lg_age_gyr, log_z_old_abs, log_z_burst_abs, burstage_gyr
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "bins":
             # Piecewise-constant Z per age bin. Bin edges from config
             # (defaults to log-spaced 1 Myr → 13.7 Gyr); per-bin
             # metallicities from ``met_bin_<i>`` params (i = 0..N-1).
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             metallicities_abs = (
                 jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
                 + LOG10_ZSUN
@@ -2640,22 +2642,21 @@ class StellarSEDComponent:
             log_metallicity_history = metallicity_bins_on_ssp_grid(
                 sfh_lg_age_yr - 9.0, jnp.asarray(bin_edges_log_yr), metallicities_abs
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "bins_continuity":
             # Cumulative delta-log-Z steps from oldest bin to youngest.
             # ``met_logzsol_base`` is the oldest bin; ``met_d_log_z_<i>``
             # are the N-1 steps. Reuses the binning primitive with
             # convolved metallicities.
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
-            d_log_z = jnp.stack(
-                [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
-            )
+            steps = [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
+            d_log_z = jnp.stack(steps) if steps else jnp.array([])
             lgmet_on_ssp_ages = metallicity_bins_continuity_on_ssp_grid(
                 ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), log_z_base_abs, d_log_z
             )
@@ -2666,7 +2667,6 @@ class StellarSEDComponent:
                 log_z_base_abs,
                 d_log_z,
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "table":
             # Z(t) table from either (a) constructor-time config arrays, or
             # (b) the runtime ``met_history`` param: log10(Z/Zsun) at the
@@ -2681,7 +2681,6 @@ class StellarSEDComponent:
             log_metallicity_history = tabulated_metallicity_on_ssp_grid(
                 sfh_lg_age_yr - 9.0, met_log_age_yr, met_log_z_abs
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "massmap_lin":
             # Linear metallicity tied to cumulative stellar mass formed
             # (ProSpect Bellstedt+2020 massmap_lin model).
@@ -2696,8 +2695,6 @@ class StellarSEDComponent:
             log_metallicity_history = massmap_lin_metallicity(
                 sfh_lg_age_gyr, sfh_lbt_grid, sfr_history, log_z_start_abs, log_z_final_abs
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "massmap_box":
             # Closed-box chemical evolution tied to cumulative stellar mass formed
             # (ProSpect Bellstedt+2020 massmap_box model).
@@ -2723,8 +2720,6 @@ class StellarSEDComponent:
                 log_z_final_abs,
                 yield_rho,
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         else:  # chem_evol
             from tengri.components.stellar.sfh.chemical_evolution import (
                 chem_evol_metallicity_on_ssp_grid,
@@ -2762,8 +2757,6 @@ class StellarSEDComponent:
                 )
                 + LOG10_ZSUN
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
 
         # ── 6. CSP integral via DSPS ────────────────────────────────────
         # We call DSPS directly and use ``result.weights``: the JOINT
@@ -3041,10 +3034,9 @@ class StellarSEDComponent:
         # ``predict_sfh_quantities`` returned NaN here and was right to.
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
-            mr_at_met = interpolate_mass_remaining(
-                ssp.ssp_mass_remaining, ssp.ssp_lgmet, log_z_for_mr
-            )
-            mstar_surv = compute_surviving_mass(age_weights, mr_at_met)
+            # Surviving mass is the joint-weight contraction with each (age, Z) node
+            # at its own remaining-mass fraction.
+            mstar_surv = jnp.sum(joint_weights * ssp.ssp_mass_remaining) * total_mass
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
         else:
@@ -3693,9 +3685,10 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020"):
+        if self.config.sfh_model in ("psb", "psb_wild2020", "psb_suess2022", "psb_flex"):
             # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this.
+            # diverge (#982); t_obs_gyr was hoisted above for this. The
+            # psb_suess2022/psb_flex share here is #2645.
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 

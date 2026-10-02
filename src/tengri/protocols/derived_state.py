@@ -356,12 +356,23 @@ class DerivedState:
     dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    #: #2529 hole geometry at the filter pivot: T_hole(λ_eff) (absent -> the
+    #: pre-#2529 'screened' formula above is used unchanged) and the pivot's
+    #: ionizing flag, shape ``(n_filter,)`` each. See
+    #: ``observation.predict_via_precomp``'s combine and
+    #: ``DustSEDComponent.apply``'s publish.
+    dust_hole_attenuation_precomp: jnp.ndarray | None = None
+    dust_ionizing_flag_precomp: jnp.ndarray | None = None
     # The same two transmissions, evaluated at the sub-band quadrature nodes
     # (#1122), shape ``(n_age, n_filter, n_subbands)``. The law is evaluated live
     # on the node grid rather than tabulated, so its shape parameters (``dust_slope``,
     # bump) stay FREE: no gate, unlike a tau-axis LUT.
     dust_bc_attenuation_subband_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_subband_precomp: jnp.ndarray | None = None
+    #: #2529 hole geometry, exact-node equivalent of the two fields above,
+    #: shape ``(n_filter, n_subbands)`` each.
+    dust_hole_attenuation_subband_precomp: jnp.ndarray | None = None
+    dust_ionizing_flag_subband_precomp: jnp.ndarray | None = None
     #: Single-screen counterpart, shape ``(n_age, n_filter, n_subbands)``.
     dust_attenuation_subband_precomp: jnp.ndarray | None = None
     # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so

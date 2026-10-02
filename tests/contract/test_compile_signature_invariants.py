@@ -137,6 +137,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_lyman_cutoff_aa = 912.0
             self._dust_lyc_reprocessed_by = "young"
             self._dust_lyc_in_energy_balance = False
+            self._dust_lyc_escape_geometry = "screened"
             self._dust_ir_diffuse_screen = False
             self._astrodust_spinning_dust = False
             self._astrodust_f_cnm = 0.5

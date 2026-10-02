@@ -51,8 +51,11 @@ T_YR = jnp.linspace(0.0, 13.8e9, 20_001)
 DT_YR = float(T_YR[1] - T_YR[0])
 
 #: Non-zero ratios from the issue's own reproduction, so no step of the ladder
-#: is silently flat while the test claims to see it.
-RATIOS = {"ratio_young": 0.5, "ratio_old_0": 0.3, "ratio_old_1": -0.2}
+#: is silently flat while the test claims to see it. ``ratio_old_0`` (the
+#: #2612 link) is deliberately left at its registry default (0) here: these
+#: are the two ADJACENT fixed-bin steps #2184 is about, now ``ratio_old_1``
+#: and ``ratio_old_2`` since ``ratio_old_0`` is the link to the flex zone.
+RATIOS = {"ratio_young": 0.5, "ratio_old_1": 0.3, "ratio_old_2": -0.2}
 
 #: Every corner of the joint (tlast_gyr, tflex_gyr) prior box: ``tlast_gyr`` at
 #: each end of Uniform(0.01, 1.0) against ``tflex_gyr`` at the floor, the
@@ -110,17 +113,19 @@ def _expected_ladder_gyr(tlast_gyr: float, tflex_gyr: float) -> np.ndarray:
     return np.concatenate([[0.0, tlast_gyr], fixed])
 
 
-def test_the_entry_declares_one_ratio_for_every_step_of_its_fixed_section():
-    """``n_fixed`` old bins take ``n_fixed - 1`` adjacent-step ratios.
+def test_the_entry_declares_one_ratio_for_every_fixed_bin():
+    """``n_fixed`` old bins take ``n_fixed`` ratios: the link plus adjacent steps.
 
-    The step between the oldest flexible bin and the youngest fixed bin is
-    pinned at zero (the two share an SFR), so a surplus ratio reaches no bin
-    and a missing one leaves a step stuck at zero. #2184 shipped five fixed
-    bins against three ratios, which is the missing-one case.
+    ``ratio_old_0`` links the oldest flexible bin to the youngest fixed bin
+    (#2612; defaults to 0, reproducing the #2184-era pinned behavior), and
+    ``ratio_old_{i>=1}`` is the adjacent step between fixed bins ``i-1`` and
+    ``i``. A surplus ratio reaches no bin and a missing one leaves a step
+    stuck at zero. #2184 shipped five fixed bins against three ratios, which
+    was the missing-two case under the (then two-fewer) count.
     """
-    assert len(_declared_old_ratios()) == PSB_FLEX_DEFAULT_N_FIXED - 1, (
+    assert len(_declared_old_ratios()) == PSB_FLEX_DEFAULT_N_FIXED, (
         f"{_declared_old_ratios()} does not match the {PSB_FLEX_DEFAULT_N_FIXED} fixed "
-        "old bins the entry lays down (#2184)"
+        "old bins the entry lays down (#2184, #2612)"
     )
 
 
@@ -135,8 +140,9 @@ def test_the_ladder_the_history_reveals_is_the_one_the_entry_promises(tlast_gyr,
     ``tlast_gyr``, the two interior fixed edges and the oldest edge where star
     formation stops.
 
-    The ``tflex_gyr`` edge is deliberately absent from that list, because the
-    flex-to-fixed step is pinned at zero: the two bins share an SFR and there is
+    The ``tflex_gyr`` edge is deliberately absent from that list, because
+    :data:`RATIOS` leaves the flex-to-fixed link (``ratio_old_0``, #2612) at
+    its registry default of zero: the two bins share an SFR and there is
     nothing to see at their boundary. At ``(1.0, 1.0)`` the flexible bin has
     zero width, so the promised ladder is non-decreasing rather than strictly
     ascending, while the *visible* steps stay strictly increasing: the youngest
@@ -217,8 +223,8 @@ def test_tflex_is_live_across_its_whole_prior(synthetic_ssp_wide):
                 "tlast_gyr": Fixed(0.2),
                 "tflex_gyr": Fixed(tflex_gyr),
                 "ratio_young": Fixed(RATIOS["ratio_young"]),
-                "ratio_old_0": Fixed(RATIOS["ratio_old_0"]),
                 "ratio_old_1": Fixed(RATIOS["ratio_old_1"]),
+                "ratio_old_2": Fixed(RATIOS["ratio_old_2"]),
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.05),

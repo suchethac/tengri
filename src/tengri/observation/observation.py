@@ -226,8 +226,12 @@ def _split_stellar_and_instrument_only_sed(
         always publishes both).
     sed_spec : ndarray, shape (n_wave,)
         The full rest-frame SED already carrying the IGM transmission
-        (``sed_atten`` in :meth:`Observation.predict`) -- what
-        ``project_spectrum`` would otherwise receive whole.
+        (the ``sed_atten`` local of :func:`project_spectrum_kernel_split`'s
+        no-IGM fallback branch) -- what ``project_spectrum`` would
+        otherwise receive whole. Only used when ``igm_trans is None``
+        (``T\equiv 1`` structurally); when IGM is configured,
+        :func:`_split_stellar_and_instrument_only_sed_pre_igm` is used
+        instead, ahead of the IGM multiply (#2589).
     igm_trans : ndarray, shape (n_wave,), or None
         The same multiplicative IGM transmission already folded into
         ``sed_spec``, applied here to the instrument-only group so the two
@@ -266,9 +270,51 @@ def _split_stellar_and_instrument_only_sed(
     return sed_stellar, sed_instrument_only
 
 
+def _split_stellar_and_instrument_only_sed_pre_igm(
+    state, sed_rest: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Split the rest-frame SED by kernel assignment, before IGM transmission (#2589).
+
+    The pre-IGM counterpart of :func:`_split_stellar_and_instrument_only_sed`,
+    used by :func:`project_spectrum_kernel_split`'s IGM-present branch: the
+    stellar piece needs its own velocity-dispersion convolution (galaxy
+    kinematics, intrinsic to the source) applied *before* the line-of-sight
+    IGM transmission multiplies the light, so the split has to happen on
+    ``sed_rest`` itself, ahead of that multiply, rather than on the
+    already-attenuated ``sed_spec`` the way the no-IGM split does.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output; reads ``state.derived["sed_nebular"]`` /
+        ``["sed_shock"]`` (see :func:`_split_stellar_and_instrument_only_sed`
+        for the component -> kernel assignment and its justification).
+    sed_rest : ndarray, shape (n_wave,)
+        Rest-frame SED *without* IGM transmission folded in
+        (``state.sed_intrinsic`` in :meth:`Observation.predict`).
+
+    Returns
+    -------
+    sed_stellar_rest : ndarray, shape (n_wave,)
+        ``sed_rest`` minus the instrument-only group, pre-IGM.
+    sed_instrument_only_rest : ndarray, shape (n_wave,)
+        ``state.derived["sed_nebular"] + state.derived["sed_shock"]``, pre-IGM.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure array reads and arithmetic, same as
+    :func:`_split_stellar_and_instrument_only_sed`.
+    """
+    sed_nebular = jnp.asarray(state.derived.get("sed_nebular", 0.0))
+    sed_shock = jnp.asarray(state.derived.get("sed_shock", 0.0))
+    sed_instrument_only_rest = sed_nebular + sed_shock
+    sed_stellar_rest = sed_rest - sed_instrument_only_rest
+    return sed_stellar_rest, sed_instrument_only_rest
+
+
 def project_spectrum_kernel_split(
     state,
-    sed_atten: jnp.ndarray,
+    sed_rest: jnp.ndarray,
     igm_trans: jnp.ndarray | None,
     wave_rest: jnp.ndarray,
     wave_obs: jnp.ndarray,
@@ -285,17 +331,87 @@ def project_spectrum_kernel_split(
     conserving: bool = False,
     resolution_matrix: object | None = None,
 ) -> jnp.ndarray:
-    r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526 kernel split.
+    r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
     The single seam every spectrum-prediction surface calls
     (:meth:`Observation.predict`, ``SEDModel._predict_spectrum_on_grid``,
     and so every path built on either of those -- the eager
     ``predict_spectrum``, the compiled ``predict_observables`` kernel), so the
-    stellar/instrument-only split and the ``lsf_scale`` factor cannot drift
-    between them. ``_split_stellar_and_instrument_only_sed``
-    gives the component/kernel assignment and its physical justification.
+    stellar/instrument-only split, the IGM order and the ``lsf_scale``
+    factor cannot drift between them. ``_split_stellar_and_instrument_only_sed``
+    / ``_split_stellar_and_instrument_only_sed_pre_igm`` give the
+    component/kernel assignment and its physical justification.
 
-    Three cases:
+    **Physical order (#2589).** The galaxy's own velocity dispersion
+    :math:`\sigma_v` is intrinsic to the source and acts in the rest
+    frame; the IGM is a line-of-sight absorber that sees the light only
+    after it leaves the galaxy; the instrument LSF acts last, on the
+    ground. The correct order is therefore :math:`\sigma_v \to T_{\rm
+    IGM} \to {\rm LSF}`. Before #2589, ``sed_rest`` already carried
+    :math:`T_{\rm IGM}` by the time it reached this function, and the
+    single combined kernel
+    :math:`\sigma_{\rm eff}=\sqrt{\sigma_v^2+\sigma_{\rm
+    inst}^2-\sigma_{\rm lib}^2}` smeared the IGM transmission's sharp
+    Lyman-limit/Lyman-:math:`\alpha`-forest edge by :math:`\sigma_v`,
+    which can only broaden the instrument's own response to that edge,
+    never the edge itself: measured at :math:`z=6,\ \sigma_v=300`
+    km/s, :math:`R=3000`, the old order's edge differed from the
+    physical order by up to 87% of peak flux with a factor 7.15
+    shallower edge-steepness (#2589).
+
+    When an IGM component is configured (``igm_trans`` is not ``None``),
+    this function now applies :math:`\sigma_v` to the stellar piece
+    *before* multiplying by ``igm_trans``, and reassigns the library
+    deconvolution to the instrument stage alone:
+
+    1. Stellar piece, pre-IGM: :math:`\sigma_v`-only convolution
+       (:func:`~tengri.observation.spectrum.broaden_velocity_only`,
+       grid-robust piecewise machinery -- the tengri rest grid is not
+       uniform in :math:`\ln\lambda` over its full span, so the
+       single-FFT :func:`~tengri.observation.spectrum.velocity_broaden`
+       cannot be used here).
+    2. Multiply by ``igm_trans`` (observed-frame transmission, evaluated
+       on the rest grid at :math:`\lambda_{\rm obs}=\lambda_{\rm
+       rest}(1+z)`).
+    3. Instrument stage: the already-:math:`\sigma_v`-broadened,
+       already-IGM-multiplied stellar piece gets
+       :math:`\sqrt{\sigma_{\rm inst}(\lambda)^2\cdot{\rm
+       lsf\_scale}^2-\sigma_{\rm lib}(\lambda)^2}` (:math:`\sigma_v` is
+       *not* added again); nebular/shock get :math:`\sigma_{\rm
+       inst}\cdot{\rm lsf\_scale}` alone, as before, multiplied by
+       ``igm_trans`` with no kinematic term (#2519 is unaffected).
+
+    **Approximation.** Two sequential Gaussian convolutions
+    (:math:`\sigma_v`, then library-deconvolved :math:`\sigma_{\rm
+    inst}`) are mathematically exact for the quadrature sum they
+    replace -- a Gaussian's Fourier transform is a Gaussian, so
+    convolving with :math:`\sigma_v` then :math:`\sigma_2` multiplies
+    the two kernels' Fourier transforms, equal to one convolution with
+    :math:`\sqrt{\sigma_v^2+\sigma_2^2}` -- *except* that stage 1 runs
+    on the rest/model grid and stage 3 on the resampled pixel grid, two
+    different discretizations the pre-#2589 single-kernel path folded
+    into one. The IGM edge itself, which is what stage 2 multiplies,
+    therefore carries the library-deconvolved instrument width
+    :math:`\sqrt{\sigma_{\rm inst}^2-\sigma_{\rm lib}^2}` rather than
+    the undeconvolved :math:`\sigma_{\rm inst}`: an approximation
+    bounded by the ratio :math:`\sigma_{\rm lib}/\sigma_{\rm inst}`
+    (how much of the instrument width the library subtraction removes),
+    replacing what was previously a :math:`\sigma_v`-sized error -- for
+    any instrument where :math:`\sigma_v \gtrsim \sigma_{\rm lib}`
+    (the common case: galaxy LOSVDs of 100-400 km/s against SSP
+    libraries resolved to 15-90 km/s) this is strictly smaller. The
+    existing build-time warning for :math:`\sigma_{\rm inst} <
+    \sigma_{\rm lib}` (the deficit clamped to zero in
+    :func:`~tengri.observation.spectrum.apply_lsf`) is unchanged by
+    this split.
+
+    **Fallback.** When no IGM component is configured (``igm_trans`` is
+    ``None``, a structural/build-time property, never a traced branch),
+    :math:`T\equiv 1` and there is nothing for the physical order to
+    improve on: this function takes the pre-#2589 single-kernel path
+    unchanged, bit-for-bit.
+
+    Three LSF cases (both the IGM-present and IGM-absent branches):
 
     - ``resolution_matrix`` given (DESI/PFS spectro-perfectionism): the
       matrix already IS the measured instrument response, so there is no
@@ -304,12 +420,13 @@ def project_spectrum_kernel_split(
       ``test_lsf_scale_excluded_from_banded_path`` for why, and
       :func:`~tengri.observation.banded.deconvolve_library_lsf` for how the
       library term is removed from the matrix itself, at build time, before
-      it ever reaches here). The #2519 split still applies: the resampled
-      stellar piece is broadened by ``sigma_v_kms`` before ``R @ model``
-      (the matrix has no galaxy-kinematics term of its own, #2506); the
-      instrument-only piece is not. Because ``R`` is linear,
-      ``R @ stellar_broadened + R @ instrument_only`` is computed as two
-      calls to the unchanged single-kernel :func:`~tengri.observation.spectrum.project_spectrum`
+      it ever reaches here). The #2519 split still applies: the stellar
+      piece is broadened by ``sigma_v_kms`` before ``R @ model`` (pre-IGM,
+      when IGM is configured; on the resampled model otherwise, the matrix
+      has no galaxy-kinematics term of its own, #2506); the instrument-only
+      piece is not. Because ``R`` is linear, ``R @ stellar_broadened + R @
+      instrument_only`` is computed as two calls to the unchanged
+      single-kernel :func:`~tengri.observation.spectrum.project_spectrum`
       banded branch and summed -- equal to ``R @ (stellar_broadened +
       instrument_only)`` exactly.
     - ``resolution`` is ``None``: no LSF is configured at all, so
@@ -329,12 +446,12 @@ def project_spectrum_kernel_split(
     state : ForwardState
         Orchestrator output; reads ``state.derived["sed_nebular"]`` /
         ``["sed_shock"]`` (see ``_split_stellar_and_instrument_only_sed``).
-    sed_atten : ndarray, shape (n_wave,)
-        Full rest-frame SED already carrying the IGM transmission (what a
-        single-kernel projection would otherwise receive whole).
+    sed_rest : ndarray, shape (n_wave,)
+        Full rest-frame SED *without* IGM transmission folded in
+        (``state.sed_intrinsic``).
     igm_trans : ndarray, shape (n_wave,), or None
-        The same transmission already folded into ``sed_atten``, applied to
-        the instrument-only piece too so the split sums back exactly.
+        Observed-frame IGM transmission on the rest grid (``None`` when no
+        IGM component is configured, the structural fallback above).
     wave_rest : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
     wave_obs : ndarray, shape (n_pix,)
@@ -354,7 +471,8 @@ def project_spectrum_kernel_split(
         applied to both Gaussian kernels, not to the banded path.
     n_bins : int, default 16
         Piecewise-constant LSF bin count (Gaussian path) / sigma_v
-        broadening bin count (banded path).
+        broadening bin count (banded path, and the pre-IGM stellar
+        convolution of the IGM-present branch).
     cal_coeffs : ndarray or None
         Calibration polynomial coefficients; ``None`` skips calibration.
     cal_wave_range : tuple[float, float] or None
@@ -373,89 +491,221 @@ def project_spectrum_kernel_split(
     Notes
     -----
     **JIT-compatible**: yes, same structural (pre-trace) None/object
-    branches as :func:`~tengri.observation.spectrum.project_spectrum`.
-    """
-    from tengri.observation.spectrum import project_spectrum
+    branches as :func:`~tengri.observation.spectrum.project_spectrum`;
+    ``igm_trans is None`` is likewise structural (which components are in
+    the chain is fixed at model-build time).
 
-    if resolution_matrix is not None:
-        sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
-            state, sed_atten, igm_trans
-        )
-        flux_stellar = project_spectrum(
-            sed_stellar,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
-        flux_instrument_only = project_spectrum(
-            sed_instrument_only,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=0.0,
-            cal_coeffs=None,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
-        flux = flux_stellar + flux_instrument_only
-    elif resolution is None:
-        flux = project_spectrum(
-            sed_atten,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=None,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
+    **Cross-code comparison (#2589).** Prospector applies the mean-IGM
+    transmission inside the FSPS call, before ``smoothspec`` convolves with
+    the stellar velocity dispersion (``prospect.sources.CSPSpecBasis`` /
+    ``SpecModel.predict_init``, Johnson et al. 2021 [1]_); BAGPIPES applies
+    its IGM transmission before the velocity-dispersion convolution in
+    ``model_galaxy._calculate_full_spectrum`` (Carnall et al. 2018 [2]_).
+    tengri applies stellar kinematics first instead: the Lyman-limit and
+    Lyman-:math:`\alpha`-forest edges (Inoue et al. 2014 [3]_; Madau 1995
+    [4]_) are imprinted on the galaxy's already-kinematically-broadened
+    light along the line of sight, external to the galaxy, and are only
+    smeared afterward by the instrument -- the order used throughout the
+    Lyman-break galaxy spectroscopy literature (e.g. Steidel et al. 1996
+    [5]_, 2003 [6]_: the forest/break is measured on the observed spectrum,
+    the galaxy's own velocity dispersion is a separate, narrower kinematic
+    measurement made from unrelated absorption/emission features).
+
+    References
+    ----------
+    .. [1] Johnson, B. D., Leja, J., Conroy, C., & Speagle, J. S. (2021).
+           "Stellar Population Inference with Prospector."
+           ApJS, 254, 22. arXiv:2012.01426.
+    .. [2] Carnall, A. C., McLure, R. J., Dunlop, J. S., & Davé, R. (2018).
+           "Inferring the star formation histories of massive quiescent
+           galaxies with BAGPIPES: evidence for multiple quenching
+           mechanisms." MNRAS, 480, 4379. arXiv:1712.04452.
+    .. [3] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. (2014).
+           "An updated analytic model for attenuation by the intergalactic
+           medium." MNRAS, 442, 1805. arXiv:1402.0677.
+    .. [4] Madau, P. (1995). "Radiative transfer in a clumpy universe: the
+           colors of high-redshift galaxies." ApJ, 441, 18.
+    .. [5] Steidel, C. C., Giavalisco, M., Pettini, M., Dickinson, M., &
+           Adelberger, K. L. (1996). "Spectroscopic Confirmation of a
+           Population of Normal Star-forming Galaxies at Redshifts z > 3."
+           ApJ, 462, L17.
+    .. [6] Steidel, C. C., Adelberger, K. L., Shapley, A. E., Pettini, M.,
+           Dickinson, M., & Giavalisco, M. (2003). "Lyman Break Galaxies at
+           Redshift z ~ 3: Survey Description and Full Data Set."
+           ApJ, 592, 728. arXiv:astro-ph/0305378.
+    """
+    from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
+
+    if igm_trans is None:
+        # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
+        # to improve on, so this is the pre-#2589 single-kernel path,
+        # unchanged, bit-for-bit (the fallback identity the issue requires).
+        sed_atten = sed_rest
+        if resolution_matrix is not None:
+            sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
+                state, sed_atten, igm_trans
+            )
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux = flux_stellar + flux_instrument_only
+        elif resolution is None:
+            flux = project_spectrum(
+                sed_atten,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=None,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+        else:
+            sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
+                state, sed_atten, igm_trans
+            )
+            resolution_scaled = resolution / lsf_scale
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=0.0,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux = flux_stellar + flux_instrument_only
     else:
-        sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
-            state, sed_atten, igm_trans
+        # IGM present: #2589 three-stage split. sigma_v broadens the
+        # stellar piece first (rest grid, pre-IGM); igm_trans then
+        # multiplies the already-broadened stellar piece and the
+        # (unbroadened) nebular/shock piece alike; the instrument stage
+        # gets sigma_v_kms=0.0 on both (already applied / never applicable).
+        sed_stellar_rest, sed_instrument_only_rest = (
+            _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        resolution_scaled = resolution / lsf_scale
-        flux_stellar = project_spectrum(
-            sed_stellar,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution_scaled,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
-        flux_instrument_only = project_spectrum(
-            sed_instrument_only,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution_scaled,
-            sigma_lib_kms=0.0,
-            n_bins=n_bins,
-            sigma_v_kms=0.0,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
-        flux = flux_stellar + flux_instrument_only
+        sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        sed_stellar = sed_stellar_v * igm_trans
+        sed_instrument_only = sed_instrument_only_rest * igm_trans
+
+        if resolution_matrix is not None:
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux = flux_stellar + flux_instrument_only
+        elif resolution is None:
+            flux = project_spectrum(
+                sed_stellar + sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=None,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+        else:
+            resolution_scaled = resolution / lsf_scale
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=0.0,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux = flux_stellar + flux_instrument_only
 
     if cal_coeffs is not None:
         from tengri.observation.calibration import apply_calibration
@@ -1181,21 +1431,23 @@ class Observation:
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy block ONLY; that is an observed-frame
-        # channel, where the absorber belongs.
+        # ``igm_trans`` feeds the spectroscopy block ONLY, as the separate
+        # ``igm_trans`` argument of ``project_spectrum_kernel_split``, which
+        # multiplies it in at the physically correct stage -- after the
+        # galaxy's own kinematic broadening, before the instrument LSF
+        # (#2589) -- rather than here, up front.
         #
         # The observed-photometry block does NOT use it: ``project_photometry`` reads
         # ``state.sed_intrinsic`` and applies the same transmission itself, so that
         # arbitrary post-build filters (``Prediction.photometry(filters=...)``) go
         # through the identical kernel instead of a copy that could silently omit the
-        # IGM factor. Handing it ``sed_atten`` would square the transmission.
+        # IGM factor.
         #
         # The rest-frame-photometry block does NOT use it either (#1115): the IGM is a
         # line-of-sight absorber, not part of the galaxy's rest-frame SED. See there.
         igm_trans = (
             state.derived.get("igm_transmission", None) if state.derived is not None else None
         )
-        sed_atten = sed_rest if igm_trans is None else sed_rest * igm_trans
 
         out: dict[str, jnp.ndarray] = {}
 
@@ -1209,8 +1461,6 @@ class Observation:
             out["phot_fnu"] = project_photometry(state, params, self.photometry, dl_cm=dl_cm)
 
         if self.can_do_spectroscopy:
-            sed_spec = sed_atten
-
             wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
             resolution = (
                 lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
@@ -1228,7 +1478,7 @@ class Observation:
 
             out["spec_fnu"] = project_spectrum_kernel_split(
                 state,
-                sed_spec,
+                sed_rest,
                 igm_trans,
                 wave_rest,
                 wo,
@@ -1708,7 +1958,31 @@ class Observation:
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
-                if lyc_factor_sub is not None:
+                a_hole_sub = state.derived.get("dust_hole_attenuation_subband_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_sub is not None and fesc_geom is not None:
+                    # #2529 hole geometry: a SEPARATE formula from the
+                    # lyc_factor_sub scalar-multiply rule below (never both
+                    # -- two_component.py's publish skips lyc_factor_sub
+                    # whenever this key is live), affine in fesc_geom across
+                    # the WHOLE sub-band grid, not only the ionizing nodes.
+                    # Mirrors DustSEDComponent.apply §2a exactly:
+                    # escaping sub-beam crosses only the hole, never gated;
+                    # covered sub-beam stays on T_diff·T_bc^y and is zeroed
+                    # at ionizing nodes (the nebular gas still reprocesses
+                    # it), scaled by y_age the same way.
+                    # ``a_hole_sub`` / ``dust_ionizing_flag_subband_precomp``
+                    # already carry the SAME (n_age, n_filter, n_subbands)
+                    # shape as ``a_bc_sub`` / ``a_diff_sub`` themselves (both
+                    # published together in two_component.py from the same
+                    # ``sub_waves``), so no ``[None, :, :]`` broadcast here --
+                    # only ``y_age`` needs the two trailing axes added.
+                    ionizing_sub = state.derived["dust_ionizing_flag_subband_precomp"]
+                    y_age_3d = y_age[:, None, None]
+                    t_hole_contrib_sub = y_age_3d * a_hole_sub + (1.0 - y_age_3d) * a_diff_sub
+                    gate_sub = 1.0 - y_age_3d * ionizing_sub
+                    t_sub = fesc_geom * t_hole_contrib_sub + (1.0 - fesc_geom) * t_sub * gate_sub
+                elif lyc_factor_sub is not None:
                     # two_component's own birth-cloud-graded rule (#2439,
                     # #2427, R2); see nebular/component.py and
                     # dust/two_component.py's publish for why this is exact
@@ -1725,6 +1999,20 @@ class Observation:
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
                 t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
+                a_hole_lut = state.derived.get("dust_hole_attenuation_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_lut is not None and fesc_geom is not None:
+                    # #2529 hole geometry, λ_eff-granularity equivalent of
+                    # the sub-band formula above (see that branch).
+                    ionizing_lut = state.derived["dust_ionizing_flag_precomp"]
+                    t_hole_contrib_lut = (
+                        y_age[:, None] * a_hole_lut[None, :]
+                        + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                    )
+                    gate_lut = 1.0 - y_age[:, None] * ionizing_lut[None, :]
+                    t_per_age = (
+                        fesc_geom * t_hole_contrib_lut + (1.0 - fesc_geom) * t_per_age * gate_lut
+                    )
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
                 # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).
