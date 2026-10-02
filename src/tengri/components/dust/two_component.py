@@ -331,6 +331,21 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: ``dust_attenuation={'lyc_in_energy_balance': True}``. Static,
     #: non-fittable; enters ``compile_signature``.
     lyc_in_energy_balance: bool = False
+    #: Age-selective LyC escape geometry (#2529). ``'screened'`` (default):
+    #: pre-#2529 behavior, bit-identical -- ``neb_fesc`` never touches the
+    #: dust screen, only the nebular-reprocessing budget
+    #: (:func:`tengri.components.lyc.lyc_shares`). ``'birth_cloud_holes'`` /
+    #: ``'clear'``: a covering fraction ``neb_fesc`` of the young
+    #: population's light (every wavelength, not just the Lyman continuum)
+    #: bypasses the birth-cloud screen through a hole -- see
+    #: :func:`tengri.components.lyc.escape_geometry_transmission` for the
+    #: formula and :meth:`apply` §2a for how its output composes with the
+    #: nebular-reprocessing gate. Refused together with
+    #: ``lyc_reprocessed_by='all'`` (both would drive a reduction from the
+    #: same ``neb_fesc`` for the young population). Grammar key
+    #: ``dust_attenuation={'lyc_escape_geometry': ...}``. Static,
+    #: non-fittable; enters ``compile_signature``.
+    lyc_escape_geometry: str = "screened"
     #: Flat shape-parameter names a caller actually asked for, resolved from
     #: spec provenance by ``SEDModel._requested_law_shape_params``. Names
     #: outside the set are not passed to the attenuation law, so the law's own

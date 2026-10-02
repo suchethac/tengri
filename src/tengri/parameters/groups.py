@@ -4128,6 +4128,52 @@ def _validate_lyc_in_energy_balance(value: object) -> bool:
     return value
 
 
+#: CAPABILITY set (#2529), not a type-name alias list: dust_attenuation
+#: 'type's that declare a birth-cloud screen distinct from the diffuse-ISM
+#: screen (independent tau_bc != tau_diff), the one thing a
+#: 'lyc_escape_geometry' hole needs to be IN. 'single_component' and 'wg00'
+#: attenuate with one screen and have no birth-cloud/diffuse split at all,
+#: so a hole-geometry key on either is refused (see the check in
+#: _translate_dust_attenuation) rather than silently ignored. #2650
+#: (age-binned N-screen attenuation) adds a second birth-cloud-screen type
+#: and extends this set; it does not teach a second dust_type branch to
+#: either the validator or tengri.components.lyc.escape_geometry_transmission.
+_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = frozenset({"two_component"})
+
+#: Allowed values of the ``lyc_escape_geometry`` structural key (owner ruling
+#: #2529): whether the escaping fraction (``neb_fesc``, read via
+#: ``tengri.components.lyc.lyc_shares``) bypasses the birth-cloud dust screen
+#: through a geometric hole. ``'screened'`` (default) is the pre-#2529
+#: behavior, bit-identical -- ``neb_fesc`` never touches the dust screen.
+_LYC_ESCAPE_GEOMETRIES: tuple[str, ...] = ("screened", "birth_cloud_holes", "clear")
+
+
+def _validate_lyc_escape_geometry(value: object) -> str:
+    """Validate a ``dust_attenuation['lyc_escape_geometry']`` value.
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    str
+        ``value``, unchanged, when it is one of :data:`_LYC_ESCAPE_GEOMETRIES`.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not one of the allowed strings.
+    """
+    if value not in _LYC_ESCAPE_GEOMETRIES:
+        raise ValueError(
+            f"dust_attenuation['lyc_escape_geometry'] must be one of "
+            f"{_LYC_ESCAPE_GEOMETRIES}; got {value!r}."
+        )
+    return value
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -4175,6 +4221,24 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     if dust_type == "none":
         result["dust_model"] = "off"
         return
+
+    # #2529: a hole-geometry escape fraction needs a birth-cloud screen
+    # distinct from the diffuse-ISM screen for the hole to be IN -- a
+    # single-screen attenuator (single_component, wg00) has nothing a hole
+    # bypasses. Checked by CAPABILITY (_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN),
+    # not by hardcoding 'two_component' at every call site, so a future
+    # birth-cloud-screen type (#2650's age-binned N-screen attenuation) only
+    # has to join that one set, not teach this validator its name.
+    _geom = dust_atten_dict.get("lyc_escape_geometry", "screened")
+    if _geom != "screened" and dust_type not in _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+        raise ValueError(
+            f"dust_attenuation {{'lyc_escape_geometry': {_geom!r}}} needs a "
+            f"birth-cloud screen distinct from the diffuse-ISM screen (got "
+            f"type={dust_type!r}, which has none to put a hole in). Supported "
+            f"types: {sorted(_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}. Drop "
+            f"'lyc_escape_geometry' (default 'screened') or switch "
+            f"dust_attenuation type."
+        )
 
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
@@ -4563,6 +4627,36 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         result["dust_lyc_in_energy_balance"] = _validate_lyc_in_energy_balance(
             dust_atten_dict["lyc_in_energy_balance"]
         )
+
+    # #2529: an age-selective hole-geometry escape fraction only changes the
+    # YOUNG/birth-cloud population's screen (old stars have no birth cloud
+    # to have a hole in). 'lyc_reprocessed_by=\'all\'' additionally routes
+    # the OLD population's Lyman continuum through the same neb_fesc-driven
+    # nebular-reprocessing reduction (DustSEDComponent.apply §2a), applied
+    # UNIFORMLY across every age with no young/old split at all -- there is
+    # no "old-star hole" for the geometry correction to replace there, so
+    # composing the two would double-count exactly the same escaping
+    # fraction's photons (once via the hole bypass, once via the uniform
+    # reduction) for the young population, with nothing analogous defined
+    # for the old one. Refuse the combination rather than silently
+    # double-count; 'young' (the default) is the only reprocessed_by value
+    # lyc_escape_geometry composes with.
+    if "lyc_escape_geometry" in dust_atten_dict:
+        _geometry = _validate_lyc_escape_geometry(dust_atten_dict["lyc_escape_geometry"])
+        if _geometry != "screened":
+            _reprocessed_by = dust_atten_dict.get("lyc_reprocessed_by", "young")
+            if _reprocessed_by == "all":
+                raise ValueError(
+                    f"dust_attenuation={{'lyc_escape_geometry': {_geometry!r}, "
+                    f"'lyc_reprocessed_by': 'all', ...}} is refused: the hole "
+                    f"bypass and the whole-population 'all' reprocessing "
+                    f"reduction both drive their reduction from the SAME "
+                    f"neb_fesc for the young population, and composing them "
+                    f"double-counts its escaping photons. 'lyc_escape_geometry' "
+                    f"only composes with 'lyc_reprocessed_by'='young' (the "
+                    f"default) -- drop one of the two keys."
+                )
+            result["dust_lyc_escape_geometry"] = _geometry
 
 
 def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
@@ -5359,6 +5453,11 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # Include LyC in the dust energy-balance integral (FSPS/Prospector
             # parity) vs the canonical LyC-masked L_absorbed (#922/#961).
             "lyc_in_energy_balance",
+            # Age-selective LyC escape geometry (#2529): whether neb_fesc
+            # bypasses the birth-cloud screen through a hole. Two-component
+            # (birth-cloud-screen types) only -- see
+            # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
+            "lyc_escape_geometry",
             # Per-source dust-screen choice (#2234 replacement):
             # nebular_screen / shock_screen / agn_screen. Derived from
             # screen_keys() in _dust_keys.py -- the single home of this list
@@ -7602,6 +7701,7 @@ def _resolve_value(
             "lyman_cutoff",
             "lyc_reprocessed_by",
             "lyc_in_energy_balance",
+            "lyc_escape_geometry",
         }
         # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
         # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
@@ -8382,6 +8482,9 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
             group_output["lyc_in_energy_balance"] = True
+        # Round-trip the #2529 escape geometry (non-default only).
+        if str(getattr(spec, "dust_lyc_escape_geometry", "screened")) != "screened":
+            group_output["lyc_escape_geometry"] = spec.dust_lyc_escape_geometry
 
 
 def _analyze_wildcard_intent(

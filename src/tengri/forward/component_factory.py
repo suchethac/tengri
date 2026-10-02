@@ -394,6 +394,7 @@ def build_components(
     dust_lyman_cutoff_aa: float = 0.0,
     dust_lyc_reprocessed_by: str = "young",
     dust_lyc_in_energy_balance: bool = False,
+    dust_lyc_escape_geometry: str = "screened",
     dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
@@ -639,6 +640,7 @@ def build_components(
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
                 lyc_reprocessed_by=dust_lyc_reprocessed_by,
                 lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,
             )

@@ -3898,6 +3898,10 @@ class SEDModel:
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
+        # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
+        self._dust_lyc_escape_geometry = str(
+            getattr(spec, "dust_lyc_escape_geometry", "screened")
+        )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -10949,6 +10953,7 @@ class SEDModel:
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
             dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
+            dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_fdust_credit_active=self._fdust_credit_active(),

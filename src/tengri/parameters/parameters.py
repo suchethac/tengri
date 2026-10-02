@@ -1280,6 +1280,32 @@ class Parameters:
                 f"Pass dust_lyc_in_energy_balance={_old_value!r} instead."
             )
         self.dust_lyc_in_energy_balance = bool(kwargs.pop("dust_lyc_in_energy_balance", False))
+        # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
+        # the birth-cloud screen through a hole. Same validation the grammar
+        # layer (groups.py's _translate_dust_attenuation) runs, repeated here
+        # because this flat-kwarg surface bypasses that layer entirely.
+        self.dust_lyc_escape_geometry = str(kwargs.pop("dust_lyc_escape_geometry", "screened"))
+        if self.dust_lyc_escape_geometry not in ("screened", "birth_cloud_holes", "clear"):
+            raise ValueError(
+                f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} must be one of "
+                f"('screened', 'birth_cloud_holes', 'clear')."
+            )
+        if self.dust_lyc_escape_geometry != "screened":
+            if self.dust_model != "two_component":
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} needs a "
+                    f"birth-cloud screen distinct from the diffuse-ISM screen (got "
+                    f"dust_model={self.dust_model!r}, which has none to put a hole in). "
+                    f"Supported: dust_model='two_component'."
+                )
+            if self.dust_lyc_reprocessed_by == "all":
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} with "
+                    f"dust_lyc_reprocessed_by='all' is refused: both drive their reduction "
+                    f"from the SAME neb_fesc for the young population, and composing them "
+                    f"double-counts its escaping photons. 'lyc_escape_geometry' only "
+                    f"composes with dust_lyc_reprocessed_by='young' (the default)."
+                )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
@@ -2804,6 +2830,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
