@@ -32,11 +32,12 @@ from astropy.cosmology import Planck18
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar.component import (
     _AGE_FAMILIES,
+    _FAST_PATH_UNSUPPORTED_SFH_FNS,
     StellarSEDComponent,
     age_universe_kwargs,
 )
 from tengri.components.stellar.sfh import sample_sfh_prior
-from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
 from tengri.utils.grid import interpolate_to_linear_time
 
 pytestmark = pytest.mark.contract
@@ -66,6 +67,8 @@ _SUPPORT_ENDS_AT_AGE = ("dense_basis", "dense_basis_pure")
 _FAMILY_SETTINGS = {
     "dense_basis": {},
     "dense_basis_pure": {},
+    "psb_suess2022": {},
+    "psb_flex": {},
     "psb": {"age_gyr": Fixed(2.0), "tau_gyr": Fixed(1.0), "burstage_gyr": Fixed(0.3)},
 }
 
@@ -219,15 +222,33 @@ def test_rule_is_silent_for_other_families_and_reads_composites():
     assert set(age_universe_kwargs(("dense_basis", "field"), _Z)) == {"age_universe_yr"}
 
 
-@pytest.mark.parametrize("family", _BUILDABLE)
+def _has_fast_path(family: str) -> bool:
+    """Whether the weights-only route supports ``family`` (closed-form SFHs only)."""
+    return SFH_REGISTRY[family].fn not in _FAST_PATH_UNSUPPORTED_SFH_FNS
+
+
+def _stellar_component(model):
+    return next(c for c in model._build_component_chain() if isinstance(c, StellarSEDComponent))
+
+
+@pytest.mark.parametrize("family", [f for f in _BUILDABLE if _has_fast_path(f)])
 def test_precompute_route_equals_exact_route(family, synthetic_ssp_wide):
     """The weights-only route injects the same age(z) as the exact forward."""
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
-    stellar = next(c for c in model._build_component_chain() if isinstance(c, StellarSEDComponent))
-    weights, _, _ = stellar.compute_joint_weights(model._evaluation_params({}, None))
+    weights, _, _ = _stellar_component(model).compute_joint_weights(
+        model._evaluation_params({}, None)
+    )
     exact = np.asarray(model.predict_state({}).derived["joint_weights"])
 
     np.testing.assert_allclose(np.asarray(weights), exact, rtol=1e-8, atol=1e-14)
+
+
+@pytest.mark.parametrize("family", [f for f in _BUILDABLE if not _has_fast_path(f)])
+def test_precompute_route_refuses_families_without_a_fast_path(family, synthetic_ssp_wide):
+    """A family with no closed-form SFR is refused by the weights-only route, not mis-evaluated."""
+    model = _build(synthetic_ssp_wide, family, Fixed(_Z))
+    with pytest.raises(ValueError, match="does not support"):
+        _stellar_component(model).compute_joint_weights(model._evaluation_params({}, None))
 
 
 @pytest.mark.parametrize("family", _BUILDABLE)

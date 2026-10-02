@@ -156,8 +156,16 @@ _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 #: SFH families whose time axis is anchored to the age of the universe at the
 #: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
 #: quantiles on it (Iyer et al. 2019); ``psb`` and ``psb_wild2020`` anchor their
-#: burst to it (Wild et al. 2020, eq. 5).
-_AGE_FAMILIES = ("dense_basis", "dense_basis_pure", "psb", "psb_wild2020")
+#: burst to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex`` bound
+#: their fixed old bins to ``[tflex, age(z)]``.
+_AGE_FAMILIES = (
+    "dense_basis",
+    "dense_basis_pure",
+    "psb",
+    "psb_wild2020",
+    "psb_suess2022",
+    "psb_flex",
+)
 
 
 def age_universe_kwargs(sfh_model, redshift) -> dict:
@@ -2490,12 +2498,15 @@ class StellarSEDComponent:
 
         # Mode-specific settings that are NOT free parameters.
         # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
-        # the universe AT THIS MODEL'S REDSHIFT: ``dense_basis`` and
-        # ``dense_basis_pure`` place their tx quantiles on it (Iyer et al.
-        # 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst to it
-        # (Wild et al. 2020, eq. 5). The age is derived from the redshift and
-        # the configured cosmology, not a static registry default. Both routes
-        # use the same families so they cannot diverge (#982).
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
         sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
