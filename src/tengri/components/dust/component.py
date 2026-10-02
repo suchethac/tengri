@@ -32,6 +32,7 @@ import jax.numpy as jnp
 from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
 from tengri.components.dust.laws._registry import select_law_kwargs
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -117,6 +118,21 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     ``params["dust_log_L_ir"] + LOG10_L_SUN``; ``False`` (default, including a
     component built directly with no spec to ask) keeps strict/relaxed energy
     balance unchanged. A static Python bool, not a traced value.
+    """
+
+    fdust_credit_active: bool = True
+    r"""Whether the HII-region dust-heating credit (#2539 item 3) can ever be
+    nonzero, resolved from spec provenance by
+    ``SEDModel._fdust_credit_active`` and frozen here the same way
+    :attr:`log_l_ir_requested` is. ``True`` when ``neb_fdust_frac`` is a FREE
+    parameter or Fixed at a nonzero value; ``False`` when it is Fixed at
+    exactly 0 or not declared at all (BakedIn backend, or no nebular
+    component built). ``False`` makes :meth:`DustAttenuationSEDComponent.apply`
+    skip forming ``energy_balance.log10_add_fdust_credit`` entirely via a
+    static Python ``if`` -- the credit is structurally zero for every
+    possible evaluation of this model, not a runtime ``where`` on a traced
+    ``f_dust``. ``True`` (default, including a component built directly with
+    no spec to ask) keeps the smooth combine, unchanged.
     """
 
 
@@ -263,6 +279,26 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "log_line_lums",
                 "dex",
                 "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
+            ),
+            DerivedKey(
+                "log_L_lyc",
+                "dex",
+                "RAW (pre-fdust) LyC luminosity of the whole stellar population "
+                "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
+                "unconditionally (not gated on eb_include_lyc, which concerns only "
+                "the screen's own LyC absorption); read via the sed_nebular edge "
+                "above for ordering. Absent when sed_intrinsic was not yet "
+                "populated when the nebular component ran.",
+            ),
+            DerivedKey(
+                "lyc_fdust",
+                "",
+                "Absolute HII-region dust-absorption share (#2539 item 2/3), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436), the "
+                "cross-prefix analog of lyc_transmission; combined with "
+                "log_L_lyc above via the smooth log10_add_fdust_credit. "
+                "Absent/0.0 for BakedIn or at the neb_fdust_frac Fixed(0.0) "
+                "default.",
             ),
         )
 
@@ -448,10 +484,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # space and publish for downstream consumers (dust emission components
         # re-emit it; RadioSEDComponent uses it to set the SF radio
         # amplitude via the FIR-radio correlation). LyC photons ionize H
-        # rather than heat dust, so the canonical integral masks λ < 912 Å
-        # (#922).
+        # rather than heat dust, so the canonical integral excludes the
+        # ionizing side of the Lyman edge (#922; edge at LYMAN_LIMIT_AA,
+        # one Lyman edge -- ``tengri.components.lyc``).
         from tengri.forward.energy_balance import (
-            LYMAN_CUTOFF_AA,
             bolometric_absorbed_log10,
             warn_if_corrupt,
         )
@@ -461,7 +497,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         nu = C_AA / state.wave  # Hz
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
-        # (#1206). The sign only tracks grid orientation; the energy is |L|.
+        # (#1206). The sign follows L_nu_intr - L_nu_att; the energy is |L|.
 
         # Try to use the energy-balance LUT (fast path) if available.
         # The LUT was built with the stellar SED only; for single-component
@@ -479,7 +515,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # None disables the canonical LyC mask so all absorbed energy heats
         # dust. The fast-path LUT bakes the same choice at build time
         # (sed_model passes config.eb_include_lyc), so the two agree either way.
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
+        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
 
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path: use precomputed LUT with degenerate two-component mapping.
@@ -539,6 +575,35 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating;
+        # NebularSEDComponent publishes the RAW (pre-fdust) LyC luminosity as
+        # log_L_lyc and that absolute share as lyc_fdust (#2539 item 3),
+        # combined here with the smooth (log1p) log10_add_fdust_credit rather
+        # than log10_add-ing an already fdust-multiplied term: L_absorbed is
+        # linear in fdust, so the combined gradient must be nonzero at
+        # fdust == 0 too (log10_add_fdust_credit's docstring). This energy
+        # enters the dust IR budget unconditionally (not gated on
+        # eb_include_lyc, which concerns the screen's own LyC absorption, not
+        # HII-region dust). Placed AFTER the fast/slow branches converge to a
+        # single log_l_absorbed (one post-sum edit covers both paths,
+        # including a LUT-served nebular term landing in the same closing
+        # log10_add). Static elision (#2539 last FLOP guard): when
+        # fdust_credit_active is False (neb_fdust_frac Fixed at exactly 0,
+        # or not declared at all), the credit is structurally zero for
+        # every evaluation of this model, so skip forming it at all rather
+        # than computing a smooth combine that always evaluates to the
+        # unchanged log_l_absorbed. A static Python bool, not a runtime
+        # where on the traced value of f_dust.
+        if self.config.fdust_credit_active:
+            _log_l_lyc = state.derived.get("log_L_lyc")
+            if _log_l_lyc is not None:
+                from tengri.forward.energy_balance import log10_add_fdust_credit
+
+                _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+                log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:
