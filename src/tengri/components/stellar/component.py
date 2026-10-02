@@ -3004,28 +3004,35 @@ class StellarSEDComponent:
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
         if _n_ion is not None and _n_ion > 0:
-            # Compute Q_H in log-domain to avoid float32 overflow (#1206).
-            # The tensordot result is O(1); the scale rides the log integral.
-            _tensordot_result = jnp.tensordot(
-                joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
-            )
-            log_nion = _integrate_nion_log10(
-                _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
-            )
+            # ONE contraction over the (n_met, n_age, n_ion) cube, not two.
             # Per-age ionizing LUMINOSITY (LyC credit, #2539) -- NOT the Q_H
-            # photon RATE computed just above: the dust energy-balance credit
-            # needs erg/s (integrates L_nu dnu), Q_H needs photons/s
-            # (integrates L_nu/(h*nu) dnu); the two integrands differ by a
-            # factor of h*nu and are not interchangeable (G1/G2). Compute from
-            # the ionizing SLICE only (not the full grid), so the nebular/dust
-            # components can use log10_age_sum_lyc to combine them without
-            # dragging the full stellar SED into the FeaturePrecomp graph.
-            # Shape: (n_age,). Marginalize over metallicity; contract
-            # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met, n_age)
-            # over the met axis only.
+            # photon RATE: the dust energy-balance credit needs erg/s
+            # (integrates L_nu dnu), Q_H needs photons/s (integrates
+            # L_nu/(h*nu) dnu); the two integrands differ by a factor of h*nu
+            # and are not interchangeable (G1/G2). Marginalize over
+            # metallicity only (met axis), keeping age: contract
+            # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met,
+            # n_age) over the met axis alone -- shape (n_age, n_ion), so the
+            # nebular/dust components can use log10_age_sum_lyc to combine
+            # ages without dragging the full stellar SED into the
+            # FeaturePrecomp graph.
             _lnu_age_ion = jnp.einsum(
                 "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
             )  # shape (n_age, n_ion), per-Msun
+            # Q_H's age+met-marginalized ionizing SED is the age-sum of the
+            # per-age slice above (both reduce the SAME joint_weights over the
+            # SAME met axis; summing the age axis afterward is the met-AND-age
+            # contraction a separate jnp.tensordot(..., axes=([0,1],[0,1]))
+            # would recompute from scratch over the same (n_met, n_age, n_ion)
+            # cube -- paying its O(n_met*n_age*n_ion) element-touch cost
+            # TWICE). This sum is a cheap O(n_age*n_ion) reduction of an
+            # already-computed (n_age, n_ion) array (measured: the duplicate
+            # tensordot was the dominant term in a #1748/#1770-class FLOP
+            # regression on the WavePrecomp fit path, G1/G2).
+            _tensordot_result = jnp.sum(_lnu_age_ion, axis=0)
+            log_nion = _integrate_nion_log10(
+                _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
+            )
             # log10_lyc_luminosity is already vectorized over leading axes (no
             # vmap/lambda needed); total_mass rides log10_scale as a log10
             # offset (same normalization as log_nion above), so the ~1e42
@@ -3033,6 +3040,13 @@ class StellarSEDComponent:
             log_L_lyc_age = log10_lyc_luminosity(
                 _lnu_age_ion, wave[:_n_ion], log10_scale=log10_mass_scale, axis=-1
             )
+            # Published alongside log_L_lyc_age (see that field's docstring):
+            # the UNREDUCED, per-Msun ionizing slice + its wavelength axis, so
+            # a WEIGHTED per-age credit can combine ages first (cheap, linear)
+            # and integrate once, instead of reducing log_L_lyc_age per age
+            # then re-combining in log space (G1/G2 FLOP guard).
+            lnu_age_ion_pub = _lnu_age_ion
+            ssp_wave_ion_pub = wave[:_n_ion]
         elif _n_ion is not None:
             # n_ion_bins == 0 (static): no grid bins below the Lyman limit
             # (IR-focused configs) -> Q_H and the LyC luminosity are both
@@ -3040,6 +3054,8 @@ class StellarSEDComponent:
             # zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
             log_L_lyc_age = jnp.full((age_weights.shape[0],), -jnp.inf)
+            lnu_age_ion_pub = None
+            ssp_wave_ion_pub = None
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
             # Fallback (full grid) per-age ionizing luminosity: integrate over
@@ -3049,6 +3065,11 @@ class StellarSEDComponent:
             # normalization as the sliced branch above, just applied linearly
             # upstream instead of as a log10 offset.
             log_L_lyc_age = log10_lyc_luminosity(lnu_age, wave, axis=-1)
+            # Per-Msun form (ssp_flux_at_age, not lnu_age) to keep the SAME
+            # "needs log10_mass_scale added" contract as the sliced branch
+            # above -- a consumer must not need to know which branch ran.
+            lnu_age_ion_pub = ssp_flux_at_age
+            ssp_wave_ion_pub = wave
         nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
@@ -3097,6 +3118,12 @@ class StellarSEDComponent:
             # nebular and dust components to compute LyC credits without
             # dragging the full stellar SED (G1/G2 FeaturePrecomp guards).
             log_L_lyc_age=log_L_lyc_age,
+            # The unreduced per-Msun ionizing slice + its wavelength axis
+            # (None when n_ion_bins == 0, no ionizing content at all): see
+            # log_L_lyc_age's docstring for the cheap weighted-combine
+            # identity these two exist to enable.
+            lnu_age_ion=lnu_age_ion_pub,
+            ssp_wave_ion=ssp_wave_ion_pub,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead

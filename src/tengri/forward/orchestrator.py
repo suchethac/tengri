@@ -205,6 +205,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "nion": "photons/s",
     "log_nion": "dex",
     "log_L_lyc_age": "dex",
+    "lnu_age_ion": "erg/s/Hz/Msun",
+    "ssp_wave_ion": "Angstrom",
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",

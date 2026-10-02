@@ -115,7 +115,36 @@ class DerivedState:
     #: LyC credits without materializing the full stellar SED (FeaturePrecomp
     #: guards G1/G2). Combined via ``log10_age_sum_lyc`` to yield whole-
     #: population ``log_L_lyc`` and per-age variants.
+    #:
+    #: A per-age *weighted* credit (e.g. the young/birth-cloud-only share
+    #: two_component's ``lyc_absorb_all=False`` needs) should NOT reduce
+    #: THIS array with ``log10_age_sum_lyc(log_L_lyc_age, weights=...)``:
+    #: that pays for peak-factoring and the edge-aware quadrature once PER
+    #: AGE, which a #1748/#1770-class FLOP guard (G1/G2) measured as the
+    #: dominant cost of the WavePrecomp fit path (~5x the cost of the
+    #: alternative below, bit-identical to float64 round-off, since
+    #: :func:`~tengri.components.lyc.edge_trapezoid` is linear in its input
+    #: for fixed wave/edge). Weight-and-sum ``lnu_age_ion`` FIRST (a cheap
+    #: O(n_age x n_ion) linear combine) and call
+    #: :func:`~tengri.components.lyc.log10_lyc_luminosity` ONCE on the
+    #: resulting single slice instead; this field stays published, correct,
+    #: and available for direct per-age inspection (e.g. diagnostics,
+    #: tests), and is simply pruned as dead code by XLA when nothing reads
+    #: it this way.
     log_L_lyc_age: jnp.ndarray | None = None
+    #: Per-age, per-Msun ionizing-wavelength L_nu slice [erg/s/Hz/Msun],
+    #: shape (n_age, n_ion_bins): the UNREDUCED cube ``log_L_lyc_age`` (and
+    #: ``log_nion``) are peak-factored integrals of. Paired with
+    #: ``ssp_wave_ion`` (the matching wavelength axis). Published so a
+    #: weighted per-age LyC credit can be computed via the cheap
+    #: combine-then-integrate identity in the ``log_L_lyc_age`` docstring
+    #: above, instead of reducing ``log_L_lyc_age`` per age.
+    lnu_age_ion: jnp.ndarray | None = None
+    #: Wavelength axis of ``lnu_age_ion`` [Angstrom], shape (n_ion_bins,):
+    #: ``ssp.ssp_wave[:n_ion_bins]`` (the ionizing-side prefix of the
+    #: ascending SSP grid, unprojected -- i.e. before any panchromatic
+    #: extension of ``state.wave``).
+    ssp_wave_ion: jnp.ndarray | None = None
 
     # Stellar: SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None

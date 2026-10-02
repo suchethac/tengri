@@ -26,7 +26,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.lyc import ionizing_mask, lyc_shares
+from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
@@ -1233,9 +1233,31 @@ class NebularSEDComponent(TemplateThreading):
         # dead code on the FeaturePrecomp path, #2539, G1/G2).
         log_L_lyc_age = state.derived.get("log_L_lyc_age")
         if log_L_lyc_age is not None:
-            from tengri.components.lyc import log10_age_sum_lyc
+            lnu_age_ion = state.derived.get("lnu_age_ion")
+            ssp_wave_ion = state.derived.get("ssp_wave_ion")
+            if lnu_age_ion is not None:
+                # Cheap path (G1/G2 FLOP guard): sum the per-age, per-Msun
+                # ionizing slice over ages FIRST (uniform weights -- the
+                # whole population, unlike two_component's young-only share),
+                # THEN peak-factor/integrate ONCE. Mathematically identical
+                # to log10_age_sum_lyc(log_L_lyc_age) (edge_trapezoid is
+                # linear in its input for fixed wave/edge; bit-identical to
+                # float64 round-off) but pays for the edge-aware quadrature a
+                # single time instead of once per age -- see log_L_lyc_age's
+                # docstring in protocols/derived_state.py.
+                whole_population_lnu = jnp.sum(lnu_age_ion, axis=0)
+                log_L_lyc = log10_lyc_luminosity(
+                    whole_population_lnu,
+                    ssp_wave_ion,
+                    log10_scale=state.derived["log_stellar_mass_scale"],
+                )
+            else:
+                # n_ion_bins == 0 (no ionizing content at all): log_L_lyc_age
+                # is a cheap (-inf)-filled array, so the per-age reduction
+                # below costs nothing extra either way.
+                from tengri.components.lyc import log10_age_sum_lyc
 
-            log_L_lyc = log10_age_sum_lyc(log_L_lyc_age)
+                log_L_lyc = log10_age_sum_lyc(log_L_lyc_age)
             # Gradient-safe double-where log-add (#2539 item 3): value is
             # bit-identical to -inf at neb_fdust == 0 (neb_fdust_frac == 0,
             # the default, or neb_fesc == 1), gradient finite everywhere (see
