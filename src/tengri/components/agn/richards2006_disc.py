@@ -28,7 +28,7 @@ import numpy as np
 from tengri.utils.host_array import device_table, host_array
 
 __all__ = [
-    "RICHARDS2006_NU_FNU",
+    "RICHARDS2006_LNU",
     "RICHARDS2006_WAVE_AA",
     "richards2006",
     "richards2006_disc",
@@ -36,26 +36,31 @@ __all__ = [
 
 
 def _load_template() -> tuple[np.ndarray, np.ndarray]:
-    """Load Richards+2006 (wavelength, nu·F_nu) tabulation at import time."""
+    """Load Richards+2006 (wavelength, L_nu) tabulation at import time.
+
+    Column 2 of richards2006.dat is L_nu [erg/s/Hz], matching Richards et al. 2006
+    ApJS 166, 470 Table 3 (mean Type-1 quasar SED, big blue bump only).
+    """
     path = files("tengri.data.agn_bbb") / "richards2006.dat"
     with path.open("r") as fh:
         arr = np.loadtxt(fh)
     wave_aa = np.asarray(arr[:, 0], dtype=np.float64)
-    nu_fnu = np.asarray(arr[:, 1], dtype=np.float64)
-    return wave_aa, nu_fnu
+    lnu = np.asarray(arr[:, 1], dtype=np.float64)
+    return wave_aa, lnu
 
 
-RICHARDS2006_WAVE_AA, RICHARDS2006_NU_FNU = (host_array(x) for x in _load_template())
-"""Tabulated Richards+2006 template, ascending in wavelength [Å]."""
+RICHARDS2006_WAVE_AA, RICHARDS2006_LNU = (host_array(x) for x in _load_template())
+"""Tabulated Richards+2006 template, ascending in wavelength [Å].
+L_nu [erg/s/Hz] as stored in Richards et al. 2006 ApJS 166, 470 Table 3.
+"""
 
-# Pre-compute L_nu shape: nu·F_nu / nu = F_nu, then proportional to L_nu.
-# We treat the shipped column as nu·F_nu (arbitrary scale) and divide by nu
-# to get the F_nu shape, since SED-fitting outputs are normalized at the
-# bolometric anchor downstream.
+# Pre-compute L_nu shape and bolometric integral for normalization.
+# The template's L_nu values are integrated over frequency to determine
+# the arbitrary-unit bolometric value, then rescaled at the bolometric anchor.
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 _RICHARDS2006_NU_HZ = _C_AA_PER_S / RICHARDS2006_WAVE_AA
-_RICHARDS2006_LNU_SHAPE = RICHARDS2006_NU_FNU / _RICHARDS2006_NU_HZ
+_RICHARDS2006_LNU_SHAPE = RICHARDS2006_LNU
 # Integrate L_nu shape over frequency for bolometric normalization
 _idx_sort = np.argsort(_RICHARDS2006_NU_HZ)
 _RICHARDS2006_BOL_INTEGRAL = float(
