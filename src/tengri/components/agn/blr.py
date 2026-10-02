@@ -189,7 +189,10 @@ def _window_integral(wavelength: jnp.ndarray, values: jnp.ndarray, lo: float, hi
     v0, v1 = values[:-1], values[1:]
     a = jnp.clip(w0, lo, hi)
     b = jnp.clip(w1, lo, hi)
-    slope = (v1 - v0) / jnp.maximum(w1 - w0, 1e-30)
+    dw = w1 - w0
+    # Select the denominator (not a floor): a degenerate (zero-width) interval has
+    # a == b so its contribution is exactly zero, and the VJP stays finite.
+    slope = (v1 - v0) / jnp.where(dw > 0.0, dw, 1.0)
     fa = v0 + slope * (a - w0)
     fb = v0 + slope * (b - w0)
     return jnp.sum(0.5 * (fa + fb) * (b - a))
