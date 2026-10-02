@@ -368,18 +368,13 @@ def _nthcomp_interp(
 
     **Custom JVP**: differentiating the composed ``jnp.interp`` chain directly
     returns NaN, so :func:`_nthcomp_interp_jvp` supplies the exact
-    piecewise-linear slopes instead (#2572). It is a ``custom_jvp`` rather than the
-    ``custom_vjp`` this
-    used to be (#1206) because a ``custom_vjp`` is opaque to forward mode, which
+    piecewise-linear slopes instead (#2572). It is a ``custom_jvp`` rather than a
+    ``custom_vjp`` because a ``custom_vjp`` is opaque to forward mode, which
     takes out geoVI.
 
     **Which operands carry a tangent is documented on that rule, and is
-    deliberately not repeated here.** This paragraph used to keep its own copy,
-    and the copy went stale the moment the rule changed: after #1822 gave
-    ``kTe`` a tangent, this text still read "``nu``, ``kTe_keV`` and ``kTbb_keV``
-    are held fixed during fitting and carry exactly zero derivative": the
-    precise false belief #1822 existed to correct, restated one screen above the
-    correction. Two copies of a contract do not stay in sync; one does.
+    deliberately not repeated here** -- the contract lives in one place so it
+    cannot drift.
 
     References
     ----------
@@ -420,22 +415,19 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     **Exact slopes, not finite differences (#2572).** The forward value is a
     trilinear interpolation in log space followed by a linear resample onto
     ``nu``, so it is piecewise linear in each operand and its derivative is
-    known in closed form (:func:`_interp_with_slopes`). This rule used to take
-    one-sided finite differences in ``gamma`` and ``kTe`` (steps of ~1e-3 and
-    ~1e-4, i.e. a tenth to a third of a template cell) and to drop the
-    ``kTbb`` tangent altogether. Both were wrong where it matters:
+    known in closed form (:func:`_interp_with_slopes`). All three operand tangents
+    are carried:
 
     * ``kTbb_keV = k_B * t_ring`` from ``disc.py``'s warm zone, so it moves with
-      ``agn_log_mbh`` and ``agn_log_lbol`` through every ring. The omission was
-      justified by a check of ``d/d(agn_log_mbh)`` at three masses, made where
-      the warm-zone Planck term dominates; in the UV and soft X-ray, where the
-      Comptonized shape carries the flux, the log-derivative of the disc SED was
-      off by up to 0.4, and the issue's summed objective by 305%.
-    * The finite steps span template nodes, where the slope is discontinuous, so
-      they returned a cell-averaged slope (``agn_kt_warm`` -3.5%,
-      ``agn_gamma_warm`` 2e-4 against a central difference).
+      ``agn_log_mbh`` and ``agn_log_lbol`` through every ring; in the UV and soft
+      X-ray, where the Comptonized shape carries the flux, omitting its tangent
+      would misstate the log-derivative of the disc SED by up to 0.4.
+    * ``gamma`` and ``kTe_keV`` slopes are taken on the template cell the operand
+      sits in; a finite-difference step spans template nodes, where the slope is
+      discontinuous, and returns a cell-averaged slope instead.
 
-    Exact slopes also cost one kernel evaluation instead of three.
+    Exact slopes cost one kernel evaluation instead of the three a finite-difference
+    rule needs.
 
     **A ``custom_jvp``, not a ``custom_vjp`` (#1206).** A ``custom_vjp`` is
     *opaque to forward mode* -- ``jax.jvp`` raises ``TypeError`` -- which takes

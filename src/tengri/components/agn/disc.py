@@ -267,8 +267,7 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float, a_spin: flo
     evaluated by fixed-node Gauss-Legendre quadrature in ``ln x`` (no closed form for
     a != 0). ``h(1) = 0`` (empty corona); for the Newtonian zero-torque profile
     ``Rt = 1 - x^-1/2`` it would be ``1/3 - 1/x + 2/(3 x^{3/2})``. The trailing ``x`` of the
-    integrand ``x^-3 Rt x`` is the ``R dR`` area element; an earlier ``1/10 - ...`` form
-    integrated without it (#2572).
+    integrand ``x^-3 Rt x`` is the ``R dR`` area element.
 
     Parameters
     ----------
@@ -486,17 +485,13 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
 
     where lambda_Edd = Mdot / Mdot_Edd (= L_bol / L_Edd) is the Eddington ratio and
     alpha is the Shakura-Sunyaev viscosity parameter (default 0.1). ``alpha`` enters as
-    ``alpha^{2/9}``, **not** ``(alpha/0.1)^{2/9}``: with alpha = 0.1 the form is the
-    ``2150 (M/1e8)^{-2/9} lambda^{4/9}`` of the 10^8 M_sun normalization. An earlier
-    revision of this docstring and function used ``(alpha/0.1)^{2/9}`` with the 10^9
-    normalization, a factor ``10^{2/9} = 1.67`` too large at alpha = 0.1; the reference
-    codes both read ``alpha ** (2.0/9.0)`` with ``alpha = 0.1`` fixed
-    (``Sed.gravity_radius`` in qsosed, Quera-Bofarull; ``calc_rsg`` in the QSOSED/RELQSO
-    Fortran, Hagen & Done), which is what the AGNfitter-rX KD18 grid (K&D 2018, agnsed,
-    "rout ... set to equal the self-gravity rsg (Laor & Netzer 1989)") was built with.
+    ``alpha^{2/9}`` (not ``(alpha/0.1)^{2/9}``), so at alpha = 0.1 the form is
+    ``2150 (M/1e8)^{-2/9} lambda^{4/9}``. This is the expression evaluated by
+    ``Sed.gravity_radius`` in qsosed (Quera-Bofarull) and ``calc_rsg`` in the
+    QSOSED/RELQSO Fortran (Hagen & Done), and the outer radius of the K&D 2018 disc
+    ("rout ... set to equal the self-gravity rsg (Laor & Netzer 1989)").
 
     Reference: Laor, A. & Netzer, H. (1989), MNRAS 238, 897.
-    Also used in qsosed (Quera-Bofarull) as `gravity_radius`.
 
     Parameters
     ----------
@@ -1005,8 +1000,8 @@ def _hot_corona_lnu(
     Normalized so that the frequency-integrated luminosity equals
     ``l_hot_erg``. The normalization integral is computed on a fixed internal
     frequency grid matching RELAGN's default [1e-4, 1e4] keV, making the result
-    independent of the caller's wavelength grid (fixing an earlier bug where
-    the corona's optical contribution varied by 2-4x with grid extent).
+    independent of the caller's wavelength grid (the corona's optical contribution
+    does not vary with grid extent).
 
     Parameters
     ----------
@@ -1156,8 +1151,8 @@ def _hot_flow_luminosity(
     luminosity in the corona Lx_diss=0.02Ledd", and when the integral never reaches it
     ("WARNING!!! Ldiss never reaches 0.02Ledd => No upper limit for r_hot") the whole
     flow is hot, ``rh = rout``, with no disc or warm zone. There is **no** ``L_bol / 2``
-    cap in either; the earlier ``min(f_hard L_Edd, L_bol / 2)`` was invented here and
-    made the corona 21% too weak at ``log lambda_Edd = -1.5``.
+    cap in either, so the corona radiates the full ``f_hard L_Edd`` (a ``min(f_hard L_Edd,
+    L_bol / 2)`` cap would weaken it by 21% at ``log lambda_Edd = -1.5``).
 
     tengri cannot drop zones (static shapes), so the unreachable case is represented by
     saturating: ``L_hot`` is limited to ``L0 * h_ceiling(a)``, the ceiling of the R_hot
