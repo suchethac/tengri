@@ -198,7 +198,7 @@ def survival_cell_mean(lo, hi, boundary_yr: float, width_dex: float):
     transition = jnp.sum(integrand * jnp.asarray(_GL_W, dtype=lo.dtype)[None, None, :], axis=-1)
     transition = jnp.sum(transition, axis=-1) * (v_z - v_a) * half
     smooth = (young_floor + transition) / safe_width
-    s_edge = jax.nn.sigmoid(-jnp.log(jnp.maximum(lo, 1e-30) / b) / c)
+    s_edge = jax.nn.sigmoid(-jnp.log(jnp.maximum(lo, jnp.finfo(lo.dtype).tiny) / b) / c)
     return jnp.where(positive, jnp.clip(smooth, 0.0, 1.0), s_edge)
 
 
@@ -345,7 +345,11 @@ def age_boundary_younger_fraction_dsps(
             core = m_edge[:-1] - mass_older_than(jnp.log10(clipped))
         else:
             c = float(width_dex) * math.log(10.0)
-            v_edge = jnp.clip(jnp.log(jnp.maximum(e_gyr, 1e-300) / b_gyr) / c, -_V_CLIP, _V_CLIP)
+            v_edge = jnp.clip(
+                jnp.log(jnp.maximum(e_gyr, jnp.finfo(e_gyr.dtype).tiny) / b_gyr) / c,
+                -_V_CLIP,
+                _V_CLIP,
+            )
             s_edge = jax.nn.sigmoid(-v_edge)
             v_a, v_z = v_edge[:-1], v_edge[1:]
             frac = (jnp.arange(_N_PANEL, dtype=v_edge.dtype) + 0.5) / _N_PANEL

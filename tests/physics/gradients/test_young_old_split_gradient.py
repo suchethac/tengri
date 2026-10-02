@@ -62,5 +62,6 @@ def test_photometry_gradient_matches_central_difference(
         lo = dict(base, **{name: base[name] - step})
         fd = (float(objective(hi)) - float(objective(lo))) / (2.0 * step)
         g = float(grad[name])
-        assert np.isfinite(g), name
+        assert np.isfinite(g), f"{name}: non-finite gradient through the young fraction"
+        assert g != 0.0, f"{name}: identically zero gradient (split blind to the SFH)"
         np.testing.assert_allclose(g, fd, rtol=2e-3, atol=1e-8, err_msg=name)

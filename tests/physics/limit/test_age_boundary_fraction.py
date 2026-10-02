@@ -137,4 +137,5 @@ def test_fraction_is_monotone_in_boundary_and_differentiable_in_mass():
         return jnp.sum(_cic(c, idx, f, (B_YR,), 0.3))
 
     grad = jax.grad(total_young)(jnp.asarray(contrib))
-    assert bool(jnp.all(jnp.isfinite(grad)))
+    assert bool(jnp.all(jnp.isfinite(grad))), "non-finite gradient w.r.t. parcel mass"
+    assert bool(jnp.any(grad != 0.0)), "identically zero gradient w.r.t. parcel mass"
