@@ -932,13 +932,8 @@ class DustSEDComponent(TemplateThreading):
             if self.config.lyc_absorb_all:
                 sed_attenuated = sed_attenuated * _lyc_t
             else:
-                # "Which stars are inside their birth cloud" is ONE physical
-                # quantity, so it must be ONE function. It was previously spelled
-                # three different ways: the logistic in ``two_component_dust``, and
-                # base-10 sigmoids here and in the LUT's ``dust_young_indicator``.
-                # 10^u = e^(u·ln10), so those two were 2.3× sharper than the screen
-                # they were supposed to agree with: the LyC escape fraction was
-                # applied to a different set of stars than the birth-cloud dust.
+                # The LUT reddens exactly the stars ``_young_indicator`` selects —
+                # the same definition the exact screen uses.
                 y_age = _young_indicator(
                     ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
                 )
@@ -1568,13 +1563,8 @@ class DustSEDComponent(TemplateThreading):
             # dust emission: the emission components handle that via their own
             # precompute paths.
 
-            # Young-star indicator on the SSP age grid: smooth sigmoid
-            # transition around t_birth (matches two_component_dust).
-            # The LUT must redden exactly the stars the exact screen reddens. This
-            # line used to spell the indicator as ``1 / (1 + 10**u)`` while the
-            # exact path used the logistic: 2.3x sharper, so the fast path put a
-            # different set of stars behind the birth cloud (#1122). One function,
-            # one definition.
+            # Young-star indicator on the SSP age grid: the same sigmoid
+            # definition the exact screen uses.
             y_age = _young_indicator(
                 ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
             )
@@ -1605,9 +1595,7 @@ class DustSEDComponent(TemplateThreading):
 
             # IR re-emission is now handled by separate dust emission components.
 
-            # Young-star indicator y(a) on the SSP age grid: the same definition
-            # the screen and the photometry LUT use; published even when only the
-            # spectrum LUT is active.
+            # Young-star indicator y(a) on the SSP age grid.
             if "dust_young_indicator" not in derived_overrides:
                 y_age = _young_indicator(
                     ssp_ages_yr,

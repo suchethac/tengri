@@ -121,12 +121,12 @@ def _young_sfh_and_laws():
 def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sfh, law):
     r"""Spectrum LUT agrees with exact for young 0-20/100 Myr and default SFH.
 
-    The SpectrumPrecomp LUT and the exact path must redden the same stars. Before
-    the fix, the LUT used a 2.3x sharper indicator, causing disagreement up to
-    20% in young-dominated SFHs.
-
-    Issue #617 documents the LUT residual class: 0.8–1.5 % for the two-component
-    birth-cloud approximation. Deviation from that class signals the indicator bug.
+    The SpectrumPrecomp LUT and the exact path must redden the same stars. The
+    bound of 0.015 is the documented two-component LUT residual class (#617:
+    0.8–1.5 %) — deviation from that class signals the indicator is incorrect.
+    The three laws test the same selector because the indicator is law-independent;
+    one per family (Calzetti polynomial, power law, Noll bump+slope) and the
+    first test covers every registered law.
 
     Parameters
     ----------
@@ -179,11 +179,10 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
     ratio = spec_lut / spec_exact
 
     # The bound is the documented LUT residual class (#617: 0.8–1.5 %).
-    # The unfixed base-10 indicator is 20%+ too high for young populations.
     max_rel_error = np.max(np.abs(ratio - 1.0))
     err_msg = (
         f"sfh={sfh['type']}, law={law}: "
-        f"LUT/exact max rel error {max_rel_error:.2%} exceeds 2.0% bound. "
-        f"The young indicator may not be using the correct formula (#2591)."
+        f"LUT/exact max rel error {max_rel_error:.2%} exceeds 1.5% bound. "
+        f"The young indicator may not be using the correct formula."
     )
-    assert max_rel_error < 0.02, err_msg
+    assert max_rel_error < 0.015, err_msg
