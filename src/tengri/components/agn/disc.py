@@ -480,21 +480,20 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
     r > r_sg the disc fragments into clumps rather than accreting.
     This is the physically motivated outer boundary for the thin disc.
 
-    Laor & Netzer (1989), Eq. 10:
-        r_sg = 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9}
-
+    Laor & Netzer (1989):
+        r_sg = 2150 * alpha^{2/9} * lambda_Edd^{4/9}
                * (M_BH / 10^9 M_sun)^{-2/9}   [R_g]
 
-    where lambda_Edd = L_bol / L_Edd is the Eddington ratio and
-    alpha is the Shakura-Sunyaev viscosity parameter (default 0.1).
-
-    The mass normalization is 10^9 M_sun, matching the canonical qsosed
-    implementation (Quera-Bofarull, ``Sed.gravity_radius``):
-    ``r_sg = 2150 * mass^{-2/9} * mdot^{4/9} * alpha^{2/9}`` with
-    ``mass = M_BH / 10^9 M_sun``. A prior version normalized by 10^8 M_sun,
-    which made r_sg a factor 10^{2/9} ~ 1.67 too small at every mass and
-    truncated the coolest outer annuli (deficient near-IR disc tail vs the
-    AGNfitter-rX KD18 reference).
+    where lambda_Edd = Mdot / Mdot_Edd (= L_bol / L_Edd) is the Eddington ratio and
+    alpha is the Shakura-Sunyaev viscosity parameter (default 0.1). ``alpha`` enters as
+    ``alpha^{2/9}``, **not** ``(alpha/0.1)^{2/9}``: with alpha = 0.1 the form is the
+    ``2150 (M/1e8)^{-2/9} lambda^{4/9}`` of the 10^8 M_sun normalization. An earlier
+    revision of this docstring and function used ``(alpha/0.1)^{2/9}`` with the 10^9
+    normalization, a factor ``10^{2/9} = 1.67`` too large at alpha = 0.1; the reference
+    codes both read ``alpha ** (2.0/9.0)`` with ``alpha = 0.1`` fixed
+    (``Sed.gravity_radius`` in qsosed, Quera-Bofarull; ``calc_rsg`` in the QSOSED/RELQSO
+    Fortran, Hagen & Done), which is what the AGNfitter-rX KD18 grid (K&D 2018, agnsed,
+    "rout ... set to equal the self-gravity rsg (Laor & Netzer 1989)") was built with.
 
     Reference: Laor, A. & Netzer, H. (1989), MNRAS 238, 897.
     Also used in qsosed (Quera-Bofarull) as `gravity_radius`.
@@ -513,15 +512,12 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
     float
         r_sg in units of R_g.
     """
-    m9 = 10.0**log_mbh / 1.0e9  # M_BH / 10^9 M_sun (qsosed convention)
+    m9 = 10.0**log_mbh / 1.0e9  # M_BH / 10^9 M_sun
     m9_safe = jnp.maximum(m9, 1e-6)
     lambda_safe = jnp.clip(l_edd_ratio, 1e-10, 1.0)
     alpha_safe = jnp.maximum(alpha_visc, 1e-4)
     return (
-        2150.0
-        * (alpha_safe / 0.1) ** (2.0 / 9.0)
-        * lambda_safe ** (4.0 / 9.0)
-        * m9_safe ** (-2.0 / 9.0)
+        2150.0 * alpha_safe ** (2.0 / 9.0) * lambda_safe ** (4.0 / 9.0) * m9_safe ** (-2.0 / 9.0)
     )
 
 
@@ -772,7 +768,7 @@ def multicolor_disc(
     # Outer disc radius: Laor & Netzer (1989) self-gravity (Toomre) radius.
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
-    # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
+    # r_sg = 2150 * alpha^{2/9} * lambda_Edd^{4/9} * (M/1e9)^{-2/9} R_g.
     if wavelength.dtype == jnp.float32:
         # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
         # numerator never materialize (float32 max 3.4e38). The RESULTS

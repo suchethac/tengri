@@ -168,8 +168,12 @@
   photon temperature, `L_seed` and the `R_hot` integral. `multicolor` stays
   Shakura-Sunyaev by definition. **The `kubota_done` / `kubota_done_full` forward SED
   changes** (2500 A x1.4 and 5100 A x1.4 at `log L_bol` 11.5, `log M_BH` 8.5; +30% from
-  the optical to the X-rays at `log L_bol` 11 with the default mass). One node of
-  `test_kd18_vs_agnfitter` ((8, 0), 0.057 vs 0.05 dex) remains over its tolerance (#2572).
+  the optical to the X-rays at `log L_bol` 11 with the default mass). The self-gravity
+  outer radius, shared by `multicolor` and the K&D disc, was 1.67x too large: Laor &
+  Netzer's `alpha^{2/9}` had been written `(alpha/0.1)^{2/9}` against the 10^9 M_sun
+  normalization (qsosed, RELQSO and K&D 2018 use `2150 alpha^{2/9} m9^{-2/9} mdot^{4/9}`).
+  With it, `test_kd18_vs_agnfitter` passes at all nine nodes (the (8, 0) node at 0.005 dex)
+  (#2572).
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;

@@ -520,23 +520,26 @@ _AGN_MBH_DUST = {
 # pre-#2572 literals). Round 3 (#2572) then removed the invented L_bol/2 corona cap, which
 # moved mbh 8 and 10 again (lambda_Edd 0.03 and 3e-4). Round 4 (#2572) re-captured once
 # more for the Page-Thorne (relativistic) emissivity of the K&D disc (rest_sed_sum +0.05%,
-# +0.28%, +0.13% against round 3 at mbh 6, 8, 10; rest_sed_0 -26%, +44%, -3%). The
+# +0.28%, +0.13% against round 3 at mbh 6, 8, 10; rest_sed_0 -26%, +44%, -3%). Round 5
+# (#2572) corrected the Laor & Netzer self-gravity radius (alpha^{2/9}, not (alpha/0.1)^{2/9}:
+# R_out 1.67x smaller), which moved mbh 6 and 8 again (rest_sed_sum -0.02%, -0.19%;
+# rest_sed_0 +0.4%, +2.4%; mbh 10 sits on the 10 r_isco floor and is unchanged). The
 # 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
 # the tree it is captured on.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.522336098963096e32,
-        "rest_sed_0": 1.5892881530280873e23,
-        "rest_sed_mid": 3.060282686528479e28,
-        "rest_sed_last": 8.775795512948059e21,
-        "photometry": (1.099259212413026e-27, 1.5711935793294186e-27, 1.7648219226075446e-27),
+        "rest_sed_sum": 1.522019856433821e32,
+        "rest_sed_0": 1.5949436379969758e23,
+        "rest_sed_mid": 3.0594848431257745e28,
+        "rest_sed_last": 8.775344546314201e21,
+        "photometry": (1.0989648378305642e-27, 1.5711790389513042e-27, 1.7648176630656776e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5605975416687857e32,
-        "rest_sed_0": 2.327183360109691e24,
-        "rest_sed_mid": 3.1468727045405486e28,
-        "rest_sed_last": 8.813544561939709e21,
-        "photometry": (1.1337671802008555e-27, 1.5723862493866198e-27, 1.7651749277835535e-27),
+        "rest_sed_sum": 1.5576833824657742e32,
+        "rest_sed_0": 2.38322824959459e24,
+        "rest_sed_mid": 3.1402931063671695e28,
+        "rest_sed_last": 8.793894533363636e21,
+        "photometry": (1.1317061875932764e-27, 1.5717910440359082e-27, 1.7649948192703954e-27),
     },
     10.0: {
         "rest_sed_sum": 1.5580908633312397e32,
