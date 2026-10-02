@@ -2379,11 +2379,11 @@ def load_themis_templates(filepath: str) -> dict:
                     powerlaw_alpha = np.array(f["powerlaw_alpha"][:])
                 elif "powerlaw_alpha_ratio" in f:
                     # Compact storage: reconstruct the 4-D PDR grid from the
-                    # FSPS power-law and a (n_umin, n_alpha, n_wave) reshaping
-                    # ratio (scripts/build_themis_alpha_axis.py). Uses the RAW
-                    # power-law (before the L_nu normalization below).
+                    # FSPS power-law and a per-q_hAC reshaping ratio of shape
+                    # (n_qhac, n_umin, n_alpha, n_wave) (scripts/build_themis_alpha_axis.py).
+                    # Uses the RAW power-law (before the L_nu normalization below).
                     _ratio = np.array(f["powerlaw_alpha_ratio"][:], dtype=np.float64)
-                    powerlaw_alpha = powerlaw[:, :, None, :] * _ratio[None, :, :, :]
+                    powerlaw_alpha = powerlaw[:, :, None, :] * _ratio[:, :, :, :]
             elif "grid" in f:
                 wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
                 single_u = np.array(f["spectra/single_u"][:])

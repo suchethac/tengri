@@ -313,9 +313,9 @@ def photometry(wave_rest, lnu, filters, *, redshift, convention=None, dl_cm=None
 
            A bare list of ``FilterCurve`` carries **no** convention. If the model
            you are comparing against was built on
-           :attr:`~FilterConvention.ENERGY` (the CIGALE / bagpipes convention),
-           passing bare curves here silently answers in BESSELL and the two
-           disagree by ~0.5-0.8 %. Pass the model's ``Photometry``; or
+           :attr:`~FilterConvention.ENERGY` (the CIGALE convention for energy-type
+           filters), passing bare curves here silently answers in BESSELL and the
+           two disagree by ~0.5-0.8 %. Pass the model's ``Photometry``; or
            :func:`from_prediction`, which inherits it: and the question cannot
            arise.
 

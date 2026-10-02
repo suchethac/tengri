@@ -283,8 +283,9 @@ class TestSynthesizerConventionSFHs:
     - ``SFH.ContinuityPSB`` orders its ratios youngest-to-oldest as
       ``[logsfr_ratio_young] + logsfr_ratios + logsfr_ratio_old``, so
       ``logsfr_ratio_old[0]`` is the step from the oldest flex bin to the
-      youngest fixed bin. tengri pins that step at 0, so exact agreement needs
-      ``logsfr_ratio_old[0] == 0``.
+      youngest fixed bin (the link). tengri's ``ratio_old_0`` is exactly this
+      same link (#2612), so ``logsfr_ratio_old`` maps onto tengri's
+      ``ratio_old_*`` index for index, with no shift and no forced zero.
     """
 
     # Fine, uniform: the truncation boundaries then fall inside one narrow cell.
@@ -410,12 +411,15 @@ class TestSynthesizerConventionSFHs:
     @pytest.mark.parametrize(
         ("nflex", "nfixed", "tlast_gyr", "tflex_gyr", "max_age_gyr", "ratio_young", "flex", "old"),
         [
-            # The synthesizer defaults: nflex=5, nfixed=3.
+            # The synthesizer defaults: nflex=5, nfixed=3. Link (old[0]) = 0.
             (5, 3, 0.2, 2.0, 13.8, 0.3, [0.1, -0.2, 0.05, 0.1], [0.0, -0.1, 0.2]),
-            # Stronger structure inside the quenching zone.
+            # Stronger structure inside the quenching zone. Link = 0.
             (5, 3, 0.2, 2.0, 13.8, -0.8, [0.9, -0.8, 0.6, -0.5], [0.0, 0.4, -0.3]),
-            # nflex=1: the layout tengri's psb_suess2022 already had.
+            # nflex=1: the layout tengri's psb_suess2022 already had. Link = 0.
             (1, 4, 0.15, 2.5, 13.7, 0.4, [], [0.0, -0.2, 0.35, 0.1]),
+            # Nonzero link (#2612): the oldest flex bin / youngest fixed bin
+            # ratio tengri could not previously express at all.
+            (5, 3, 0.2, 2.0, 13.8, 0.3, [0.1, -0.2, 0.05, 0.1], [0.4, -0.1, 0.2]),
         ],
     )
     def test_psb_flex_matches_synthesizer_continuity_psb(
@@ -425,13 +429,14 @@ class TestSynthesizerConventionSFHs:
 
         Both are piecewise constant and both normalize by an exact sum over bin
         widths, so this comparison is exact in the SFR values themselves, not
-        only in shape.
+        only in shape. ``old`` maps 1:1 onto tengri's ``ratio_old_*`` (#2612):
+        ``old[0]`` is the link (oldest flex bin / youngest fixed bin) and
+        ``old[i>=1]`` are the adjacent fixed-bin steps, matching synthesizer's
+        own ``logsfr_ratio_old`` convention exactly -- no shift, no forced zero.
         """
         from synthesizer.parametric.sf_hist import ContinuityPSB
 
         from tengri.components.stellar.sfh.nonparametric import psb_continuity_flex
-
-        assert old[0] == 0.0, "tengri pins the flex-to-fixed step at 0"
 
         sfh_synth = ContinuityPSB(
             logsfr_ratio_young=ratio_young,
@@ -447,7 +452,7 @@ class TestSynthesizerConventionSFHs:
         sfr_synth = np.asarray(sfh_synth.get_sfr(t_yr))
 
         kwargs = {f"flex_{i}": flex[i] for i in range(len(flex))}
-        kwargs.update({f"ratio_old_{i}": old[i + 1] for i in range(nfixed - 1)})
+        kwargs.update({f"ratio_old_{i}": old[i] for i in range(nfixed)})
         sfr_tengri = np.asarray(
             psb_continuity_flex(
                 jnp.array(t_yr),
@@ -516,8 +521,9 @@ class TestSynthesizerConventionSFHs:
                 tflex_gyr=2.0,
                 bin_edges_gyr=jnp.array(np.linspace(2.0, 13.8, 4)),
                 ratio_young=0.3,
-                ratio_old_0=old[1],
-                ratio_old_1=old[2],
+                ratio_old_0=old[0],
+                ratio_old_1=old[1],
+                ratio_old_2=old[2],
             )
         )
         p = one_bin / np.trapezoid(one_bin, t_yr)

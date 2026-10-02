@@ -52,3 +52,7 @@ component goldens `astrodust.npy` (0.99%) and `draine2021_pah_ir.npy`
 (0.74%) were re-frozen with the same call path as
 `tests/regression/test_dust_goldens_852.py`. `graybody.npy` and
 `schreiber2018.npy` are new.
+
+## Regenerated 2026-10-01 (#2596)
+
+`graybody.npy` — the closure no longer carries the optically-thin `(nu/nu_ref)^beta` factor on top of the general-opacity term; every other node of every other template unchanged.

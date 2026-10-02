@@ -645,31 +645,79 @@ class TestGraybodyBounds:
             f"Peak at {peak_wavelength_um} um is outside expected range [140-200]"
         )
 
-    def test_graybody_large_lambda_0_optically_thin_limit(self, wave_ir):
-        """When lambda_0_um >> wavelength, graybody → optically-thin limit."""
+    @staticmethod
+    def _planck_nu(wave_aa, temperature):
+        """B_nu(T) in numpy [erg/s/cm^2/Hz/sr] from the Planck function (CGS constants)."""
+        h, k, c = 6.62607015e-27, 1.380649e-16, 2.99792458e10
+        nu = c / (np.asarray(wave_aa, dtype=np.float64) * 1e-8)
+        return 2.0 * h * nu**3 / c**2 / np.expm1(h * nu / (k * temperature))
+
+    def test_graybody_small_lambda_0_optically_thin_limit(self, wave_ir):
+        """lambda_0 = 1e-2 um: tau <= 4e-6 for lambda >= 10 um, so S_nu -> nu^beta B_nu(T).
+
+        Casey (2012) Eq. 1: S_nu ~ (1 - exp(-(lambda_0/lambda)^beta)) B_nu(T) -> tau B_nu
+        with tau = (lambda_0/lambda)^beta ~ nu^beta, the optically thin modified blackbody.
+        The reference is built in numpy from the Planck function, and the registry
+        ``modified_blackbody`` at the same (T, beta) must give the same shape.
+        """
         from tengri.components.dust.emission import graybody, modified_blackbody
 
-        # lambda_0 = 1e6 um means tau << 1 everywhere on the IR grid
-        sed_graybody = graybody(
-            wave_ir,
-            L_absorbed=1e10,
-            dust_T=30.0,
-            dust_beta_ir=1.8,
-            dust_lambda_0_um=1e6,
-        )
-        sed_optically_thin = modified_blackbody(
-            wave_ir, L_absorbed=1e10, dust_T=30.0, dust_beta_ir=1.8
-        )
+        temperature, beta = 30.0, 1.8
+        wave_np = np.asarray(wave_ir, dtype=np.float64)
+        # 10-300 um: the closure's z = 0 CMB heating/contrast terms (da Cunha+2013) are
+        # below 1e-5 here and reach percent level only beyond ~1 mm.
+        sel = (wave_np >= 1e5) & (wave_np <= 3e6)
+        nu = 2.99792458e10 / (wave_np * 1e-8)
 
-        # Shapes should match in the thin limit (contrast factor nearly cancels)
-        # Compare on wavelengths where contrast ~ 1 (FIR)
-        wave_fir_idx = wave_ir >= 1e5  # 10 um and longer
-        if jnp.any(wave_fir_idx):
-            max_sb = jnp.max(sed_graybody[wave_fir_idx]) + 1e-30
-            max_ot = jnp.max(sed_optically_thin[wave_fir_idx]) + 1e-30
-            shape_graybody = sed_graybody[wave_fir_idx] / max_sb
-            shape_optically_thin = sed_optically_thin[wave_fir_idx] / max_ot
-            np.testing.assert_allclose(shape_graybody, shape_optically_thin, rtol=1e-6)
+        reference = nu**beta * self._planck_nu(wave_np, temperature)
+        reference = reference[sel] / reference[sel].max()
+
+        sed_gray = np.asarray(
+            graybody(
+                wave_ir,
+                L_absorbed=1e10,
+                dust_T=temperature,
+                dust_beta_ir=beta,
+                dust_lambda_0_um=1e-2,
+            )
+        )[sel]
+        sed_mbb = np.asarray(
+            modified_blackbody(wave_ir, L_absorbed=1e10, dust_T=temperature, dust_beta_ir=beta)
+        )[sel]
+
+        np.testing.assert_allclose(sed_gray / sed_gray.max(), reference, rtol=1e-5)
+        np.testing.assert_allclose(sed_gray / sed_gray.max(), sed_mbb / sed_mbb.max(), rtol=1e-5)
+
+    def test_graybody_large_lambda_0_optically_thick_limit(self, wave_ir):
+        """lambda_0 = 1e6 um: tau >= 100^1.8 on the grid, so S_nu -> B_nu(T), beta-free.
+
+        Casey (2012) Eq. 1: (1 - exp(-tau)) -> 1 for tau >> 1, the blackbody limit; the
+        shape cannot depend on beta there.
+        """
+        from tengri.components.dust.emission import graybody
+
+        temperature = 30.0
+        wave_np = np.asarray(wave_ir, dtype=np.float64)
+        # lambda <= 300 um: the closure's z = 0 CMB contrast (da Cunha+2013) is < 1e-7 here.
+        sel = wave_np <= 3e6
+        reference = self._planck_nu(wave_np, temperature)[sel]
+        reference = reference / reference.max()
+
+        shapes = []
+        for beta in (1.2, 2.0):
+            sed = np.asarray(
+                graybody(
+                    wave_ir,
+                    L_absorbed=1e10,
+                    dust_T=temperature,
+                    dust_beta_ir=beta,
+                    dust_lambda_0_um=1e6,
+                )
+            )[sel]
+            shapes.append(sed / sed.max())
+
+        np.testing.assert_allclose(shapes[0], shapes[1], rtol=1e-10)
+        np.testing.assert_allclose(shapes[0], reference, rtol=1e-6)
 
     def test_graybody_energy_balance(self):
         """Graybody integral over frequency equals L_absorbed."""
