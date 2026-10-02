@@ -61,7 +61,9 @@ def _reference_graybody(T, beta, lam0_um, wave):
 def test_graybody_equals_reference_formula(T, beta, lam0):
     """graybody matches independent numpy expression (1 - exp(-(lambda0/lambda)^beta)) * B_nu.
 
-    Max relative error < 1e-2 in float64 over 8-1000 um.
+    Max relative error < 1e-4 in float64 over 8-500 um (measured 5e-5). The window ends at
+    500 um: beyond it the closure's z = 0 CMB contrast term departs from a pure Planck
+    reference, which is physics the reference formula does not contain.
     References Casey 2012 Eq. 1, CIGALE mbb.py:78-80, Synthesizer Greybody(optically_thin=False).
     """
     wave = np.logspace(4, 7.3, 4000)  # 1 um .. 2 mm in Angstrom
@@ -84,15 +86,15 @@ def test_graybody_equals_reference_formula(T, beta, lam0):
     # Reference formula
     ref = _reference_graybody(T, beta, lam0, wave)
 
-    # Select 8-1000 um
-    sel = (wave >= 8e4) & (wave <= 1e7)
+    # Select 8-500 um
+    sel = (wave >= 8e4) & (wave <= 5e6)
 
     # Relative error
     rel_err = np.abs((tg_norm[sel] - ref[sel]) / (ref[sel] + 1e-30))
     max_rel_err = np.max(rel_err)
 
-    assert max_rel_err < 1e-2, (
-        f"Relative error {max_rel_err:.3e} exceeds 1e-2 at T={T}, beta={beta}, lam0={lam0}"
+    assert max_rel_err < 1e-4, (
+        f"Relative error {max_rel_err:.3e} exceeds 1e-4 at T={T}, beta={beta}, lam0={lam0}"
     )
 
 
