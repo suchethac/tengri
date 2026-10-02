@@ -1661,10 +1661,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     field_centering: float = 1.0
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
-    # Number of bins for ``metallicity_model="bins"`` /
-    # ``"bins_continuity"``. Defaults to 6 to match
-    # ``MET_REGISTRY``'s ``_N_MET_BINS_DEFAULT`` and the
-    # ``met_bin_<i>`` / ``met_d_log_z_<i>`` parameter declarations.
+    # Maximum number of declared ``met_bin_<i>`` parameters (the
+    # largest ladder the grammar accepts). The physics derives the
+    # bin count from ``met_bin_edges_log_yr`` (n_bins = len(edges) − 1),
+    # not from this field. Defaults to 6 to match ``MET_REGISTRY``'s
+    # ``_N_MET_BINS_DEFAULT``.
     met_n_bins: int = 6
     # Bin edges in ``log10(age/yr)``, sorted ascending. Used by the
     # ``"bins"`` and ``"bins_continuity"`` metallicity modes.
@@ -2551,9 +2552,8 @@ class StellarSEDComponent:
             )
             n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
-            d_log_z = jnp.stack(
-                [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
-            )
+            steps = [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
+            d_log_z = jnp.stack(steps) if steps else jnp.array([])
             lgmet_on_ssp_ages = metallicity_bins_continuity_on_ssp_grid(
                 ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), log_z_base_abs, d_log_z
             )

@@ -92,7 +92,7 @@ def _bin_means(ssp, met, edges):
 
 
 @pytest.mark.parametrize("mode", ["bins", "bins_continuity"])
-@pytest.mark.parametrize("n_bins", [2, 3, 6])
+@pytest.mark.parametrize("n_bins", [1, 2, 3, 6])
 def test_each_bin_carries_its_own_metallicity(synthetic_ssp_wide, mode, n_bins):
     ssp = synthetic_ssp_wide
     edges = _edges(n_bins)
@@ -111,7 +111,7 @@ def test_bins_continuity_three_bin_ladder_gives_three_metallicities(synthetic_ss
     np.testing.assert_allclose(means, targets, atol=1e-6)
 
 
-@pytest.mark.parametrize("n_bins", [2, 3, 6])
+@pytest.mark.parametrize("n_bins", [1, 2, 3, 6])
 def test_bins_and_bins_continuity_agree_on_the_same_ladder(synthetic_ssp_wide, n_bins):
     ssp = synthetic_ssp_wide
     edges = _edges(n_bins)
@@ -126,7 +126,7 @@ def test_seven_bin_ladder_raises(synthetic_ssp_wide, mode):
     edges = _edges(7)  # 8 edges -> 7 bins, one more than the declared six
     targets = _targets(np.asarray(synthetic_ssp_wide.ssp_lgmet), 6)
     met = _met_dict(mode, edges, targets)
-    with pytest.raises(ValueError, match="6"):
+    with pytest.raises(ValueError, match="declared maximum"):
         _build(synthetic_ssp_wide, met)
 
 
