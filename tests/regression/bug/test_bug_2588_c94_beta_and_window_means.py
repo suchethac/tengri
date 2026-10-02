@@ -459,3 +459,87 @@ def test_dn4000_native_ssp_grid_edge_inclusive():
     assert abs(red / blue - 1.07840) < 1e-5
     d = float(dn4000(jnp.asarray(wave), jnp.asarray(lnu)))
     assert abs(d - red / blue) < 1e-5, f"{d:.6f} vs {red / blue:.6f}"
+
+
+# ── Line-flux window means on the model's own wNE spectrum ─────────
+
+_PC_CM = 3.0856775814913673e18  # parsec [cm]
+_LINE_WAVES = np.array([4862.68, 5008.24, 6564.61, 6585.28])
+_LINE_NAMES = ("Hbeta", "OIII_5007", "Halpha", "NII_6584")
+
+
+def _soft_window_mean_numpy(w: np.ndarray, f: np.ndarray, lo: float, hi: float) -> float:
+    """⟨F⟩ = ∫F W dλ / ∫W dλ with the 1 Å sigmoid-edge W, trapezoid on the pixel edges."""
+
+    from scipy.special import expit
+
+    weight = expit(w - lo) * expit(hi - w)
+    return float(np.trapezoid(f * weight, w) / np.trapezoid(weight, w))
+
+
+def _line_flux_numpy(w, lnu, line, dl_cm) -> float:
+    """Catalog-style line flux of the documented operator from the numpy window means."""
+    (blo, bhi), (rlo, rhi) = line.continuum
+    flo, fhi = line.feature
+    f_blue = _soft_window_mean_numpy(w, lnu, blo, bhi)
+    f_red = _soft_window_mean_numpy(w, lnu, rlo, rhi)
+    f_feat = _soft_window_mean_numpy(w, lnu, flo, fhi)
+    lam_c = 0.5 * (flo + fhi)
+    x_b, x_r = 0.5 * (blo + bhi), 0.5 * (rlo + rhi)
+    cont = f_blue + (f_red - f_blue) * (lam_c - x_b) / (x_r - x_b)
+    return (f_feat - cont) * C_AA / lam_c**2 * (fhi - flo) / (4.0 * np.pi * dl_cm**2)
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [
+        ("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5", {"type": "none"}),
+        ("data/fsps_prsc_miles_chabrier.h5", {"type": "cue", "all_params": Fixed(DEFAULT)}),
+    ],
+    ids=["wNE-baked-in", "cue-additive"],
+)
+def test_measure_line_fluxes_exact_path_is_the_wavelength_integral_mean(backend):
+    """Exact-path line fluxes of the wNE model equal the Δλ-weighted window integral.
+
+    The reference is the documented operator written in numpy on the model's own
+    rest spectrum: window means ∫F W dλ / ∫W dλ (trapezoid on the wavelength
+    differences, 1 Å sigmoid edges), a linear side-band continuum at the feature
+    center, and (L_ν − L_ν^cont) (c / λ_c²) Δλ / (4π d_L²) at the 10 pc distance of
+    z = 0. Measured agreement is 1e-13 or better; the test allows 1e-10. The
+    pixel-count mean differs from the integral by +7.2e-6 (Hβ), −3.2e-6 (OIII 5007),
+    +1.1e-5 (Hα) and −1.7e-3 (NII 6584) on the wNE model, and by +4.7e-2, +8.2e-3,
+    +5.7e-2 and −2.9e-2 on the Cue model (narrow additive lines on a non-uniform
+    grid), so 1e-10 separates the two forms by at least four orders of magnitude.
+    """
+    from tengri.observation.line_measurement import default_line_defs
+
+    ssp_path, neb = backend
+    with jax.enable_x64(True):
+        ssp = load_ssp_data(ssp_path)
+        model = SEDModel.build(
+            ssp_data=ssp,
+            sfh={
+                "type": "delayed",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Fixed(10.0),
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+                "tau_diff": Fixed(0.75),
+                "tau_bc": Fixed(0.0),
+            },
+            neb=neb,
+            redshift=Fixed(0.0),
+        )
+        line_defs = default_line_defs(_LINE_WAVES, _LINE_NAMES)
+        measured = np.asarray(model.measure_line_fluxes({}, line_defs, approx=False))
+        rest = model._predict_rest_sed({})
+        wave = np.asarray(rest.wavelength, dtype=np.float64)
+        lnu = np.asarray(rest.sed, dtype=np.float64)
+
+    expected = np.array([_line_flux_numpy(wave, lnu, ld, 10.0 * _PC_CM) for ld in line_defs])
+    np.testing.assert_allclose(measured, expected, rtol=1e-10, atol=0.0)
