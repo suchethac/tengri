@@ -859,7 +859,6 @@ ax_ref = fig.add_subplot(gs[0])
 groups_nodust = {
     "sfh": {
         "type": "tsnorm",
-        "all_params": Fixed(DEFAULT),
         "met_logzsol": Fixed(-0.1),
         "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
@@ -922,7 +921,6 @@ for idx, dust_law in enumerate(dust_laws):
     groups_dustlaw_fig = {
         "sfh": {
             "type": "tsnorm",
-            "all_params": Fixed(DEFAULT),
             "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
@@ -1046,7 +1044,6 @@ for idx, emission in enumerate(dust_emissions):
     groups_emission_fig = {
         "sfh": {
             "type": "tsnorm",
-            "all_params": Fixed(DEFAULT),
             "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
@@ -1104,7 +1101,6 @@ for emission in dust_emissions:
     groups_energy_fig = {
         "sfh": {
             "type": "tsnorm",
-            "all_params": Fixed(DEFAULT),
             "met_logzsol": Fixed(-0.1),
             "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
@@ -1240,7 +1236,6 @@ print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 groups_perf = {
     "sfh": {
         "type": "tsnorm",
-        "all_params": Fixed(DEFAULT),
         "met_logzsol": Fixed(-0.1),
         "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),

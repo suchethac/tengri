@@ -1815,8 +1815,9 @@
     declare the swept/restated parameter FREE in ``SEDModel.build`` instead,
     and pass only the free (swept) keys.
   - Call sites that restated a pinned value in the dict, or swept a pinned
-    parameter through it (gallery examples, spine notebooks, slow-tier fixtures), declare the
-    swept parameter free and pass only the free keys; a fixture that mocks the
+    parameter through it (gallery examples, spine notebooks, slow-tier fixtures),
+    declare the swept parameter free and pass only the free keys; a fixture that
+    mocks the
     model may need the same.
 
 ### Fixed
