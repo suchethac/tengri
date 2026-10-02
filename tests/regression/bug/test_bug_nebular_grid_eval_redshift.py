@@ -65,7 +65,10 @@ class _Models:
             self._cache[key] = SEDModel.build(
                 ssp_data=self.ssp,
                 observation=self.obs,
-                sfh={"type": "dpl", "all_params": FREE},
+                # age is pinned: its prior support is bounded by the age of the universe at the
+                # build redshift, so a free age would put the same standardized point at
+                # different physical ages in models built at different redshifts
+                sfh={"type": "dpl", "all_params": FREE, "age_gyr": Fixed(_SFH["sfh_dpl_age_gyr"])},
                 dust_attenuation={"type": "none"},
                 redshift=redshift,
                 neb=neb,
@@ -88,7 +91,7 @@ def models(ssp_data_fsps):
 def _point(model, **over):
     """A parameter point for ``model``: a fixed draw with the young-population SFH."""
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    p.update({k: jnp.asarray(v) for k, v in _SFH.items()})
+    p.update({k: jnp.asarray(v) for k, v in _SFH.items() if k in p})
     p.update({k: jnp.asarray(v) for k, v in over.items() if k in p or k == "redshift"})
     return p
 
