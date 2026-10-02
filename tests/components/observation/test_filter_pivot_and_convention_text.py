@@ -7,6 +7,7 @@ not the mean wavelength ∫Tλ dλ / ∫T dλ; convention text attributes BAGPIP
 the filter curve's wave/trans instead of reading a non-existent lambda_eff attribute.
 """
 
+import os
 from types import SimpleNamespace
 
 import numpy as np
@@ -31,14 +32,11 @@ class TestEffectiveWavelengthIsPivot:
     )
     def test_effective_wavelength_is_the_pivot(self, filter_file):
         """Effective wavelength equals the pivot wavelength for shipped curves."""
-        import os
-
         # Load the shipped curve from file
         data_dir = os.environ.get("TENGRI_DATA_DIR", "data")
         filter_path = os.path.join(data_dir, "filters", filter_file)
 
-        if not os.path.exists(filter_path):
-            pytest.skip(f"Filter file not found: {filter_path}")
+        assert os.path.exists(filter_path), f"shipped filter curve missing: {filter_path}"
 
         wave_aa, trans = np.loadtxt(filter_path, unpack=True)
 
@@ -55,14 +53,11 @@ class TestEffectiveWavelengthIsPivot:
 
     def test_pivot_literature_values(self):
         """Check against literature pivot values from BAGPIPES for SDSS g band."""
-        import os
-
         # SDSS g band should have pivot around 4702.5 Å according to BAGPIPES
         data_dir = os.environ.get("TENGRI_DATA_DIR", "data")
         filter_path = os.path.join(data_dir, "filters", "SLOAN_SDSS_g.dat")
 
-        if not os.path.exists(filter_path):
-            pytest.skip(f"Filter file not found: {filter_path}")
+        assert os.path.exists(filter_path), f"shipped filter curve missing: {filter_path}"
 
         wave_aa, trans = np.loadtxt(filter_path, unpack=True)
 
@@ -113,6 +108,27 @@ class TestConventionTextAttributionAccurate:
         assert "bagpipes" in bessell_bullet
         assert "bagpipes" not in energy_bullet
         assert "cigale" in energy_bullet
+
+
+class TestConventionCitationAttribution:
+    """Emitted citations attribute each convention to the code that uses it."""
+
+    @staticmethod
+    def _emitted_keys(convention):
+        from tengri.citations.collect import collect_citations
+
+        run = SimpleNamespace(
+            observation=SimpleNamespace(photometry=SimpleNamespace(convention=convention))
+        )
+        return {c.key for c in collect_citations(run, include_backend=False)}
+
+    def test_energy_cites_cigale_not_bagpipes(self):
+        keys = self._emitted_keys("energy")
+        assert "cigale" in keys
+        assert "bagpipes" not in keys
+
+    def test_bessell_cites_bagpipes(self):
+        assert "bagpipes" in self._emitted_keys("bessell")
 
 
 class TestFacadeFilterMetadata:

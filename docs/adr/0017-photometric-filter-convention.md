@@ -25,7 +25,7 @@ code's source):
 | **photon (Bessell)** | `1/λ` | photon-counting | DSPS, FSPS, sedpy, Prospector, Synthesizer, BAGPIPES |
 | **energy** | `1/λ²` | energy / flat-in-frequency | CIGALE (energy-type filters) |
 
-**Amendment (2026-10-01):** Corrected attribution. BAGPIPES uses the photon-counting convention
+**Amendment (2026-10-02):** Corrected attribution. BAGPIPES uses the photon-counting convention
 (`1/λ`), matching DSPS/FSPS/Prospector/Synthesizer (issue #2610). CIGALE's energy convention applies
 only to energy-type filters.
 

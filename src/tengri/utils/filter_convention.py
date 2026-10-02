@@ -44,7 +44,9 @@ class FilterConvention(StrEnum):
       Prospector, Synthesizer, and BAGPIPES. **This is the default.**
     - ``ENERGY``: energy-counting, :math:`w = 1/\lambda^2` (i.e. flat in
       frequency, :math:`\int F_\nu T\,d\nu / \int T\,d\nu`). Matches CIGALE
-      for its energy-type filters; use it when reproducing those codes.
+      for its energy-type filters (e.g. 2MASS, WISE, SPIRE); CIGALE's
+      photon-type filters (e.g. SDSS, JWST) follow ``BESSELL``. Use it when
+      reproducing those energy-type bands.
 
     The two agree exactly for a flat-:math:`F_\nu` source (the AB reference)
     and diverge by 5–40 mmag, band- and SED-slope-dependent, otherwise.
@@ -102,7 +104,10 @@ def list_filter_conventions():
             {
                 "name": FilterConvention.ENERGY.value,
                 "kind": "filter_convention",
-                "short_doc": ("Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE)."),
+                "short_doc": (
+                    "Energy-counting, weight 1/lambda^2 / flat-in-frequency "
+                    "(CIGALE energy-type filters)."
+                ),
             },
         ]
     )
