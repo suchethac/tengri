@@ -366,13 +366,17 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         # than computing a smooth combine that always evaluates to the
         # unchanged log_l_absorbed. A static Python bool, not a runtime
         # where on the traced value of f_dust.
+        # The credit exists only where a photoionized nebular backend published
+        # both its HII-dust share ``lyc_fdust`` and the LyC luminosity it applies to.
         if self.config.fdust_credit_active:
-            from tengri.forward.energy_balance import log10_add_fdust_credit
-
             _log_l_lyc = state.derived.get("log_L_lyc")
-            if _log_l_lyc is not None:
-                _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
-                log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
+            _f_dust = state.derived.get("lyc_fdust")
+            if _log_l_lyc is not None and _f_dust is not None:
+                from tengri.forward.energy_balance import log10_add_fdust_credit
+
+                log_l_absorbed = log10_add_fdust_credit(
+                    log_l_absorbed, _log_l_lyc, jnp.asarray(_f_dust)
+                )
 
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:

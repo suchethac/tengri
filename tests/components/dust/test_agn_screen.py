@@ -27,7 +27,7 @@ from tengri.forward.energy_balance import bolometric_absorbed
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ForwardState
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 
 pytestmark = pytest.mark.contract
 
@@ -383,7 +383,7 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     ``'diffuse'`` it is attenuated by the diffuse screen before dust's energy
     balance integral runs. That delta must equal the independent
     :func:`tengri.forward.energy_balance.bolometric_absorbed` integral of
-    (intrinsic AGN, screened AGN), LyC-masked the same way (912 Angstrom,
+    (intrinsic AGN, screened AGN), LyC-masked the same way (the step at ``LYMAN_LIMIT_AA``,
     the ``dust_lyc_in_energy_balance=False`` default).
     """
     m_screen = _build_agn_dust_model(synthetic_ssp_wide, screen="diffuse", approx=approx)
@@ -431,7 +431,7 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     expected = abs(
         float(
             bolometric_absorbed(
-                sed_agn, sed_agn * transmission, nu, wave=wave, lyman_cutoff_aa=912.0
+                sed_agn, sed_agn * transmission, nu, wave=wave, lyman_cutoff_aa=LYMAN_LIMIT_AA
             )
         )
     )

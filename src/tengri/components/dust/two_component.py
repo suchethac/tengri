@@ -1316,7 +1316,12 @@ class DustSEDComponent(TemplateThreading):
         # every call, so it is NOT already elided by the absence of a
         # nebular component and must be skipped explicitly here. A static
         # Python bool, not a runtime where on the traced value of f_dust.
-        if self.config.fdust_credit_active:
+        # The credit exists only where a photoionized nebular backend published
+        # its HII-dust share ``lyc_fdust``: no publisher, no HII-region dust
+        # channel, so nothing is credited (and the stellar ionizing keys below
+        # are not read). The same gate the single-screen and WG00 attenuators use.
+        _lyc_fdust = state.derived.get("lyc_fdust") if self.config.fdust_credit_active else None
+        if _lyc_fdust is not None:
             from tengri.forward.energy_balance import log10_add_fdust_credit
 
             # NOT params.get("neb_fdust_frac", ...): this component's
@@ -1328,7 +1333,7 @@ class DustSEDComponent(TemplateThreading):
             # lyc_shares(neb_fesc, neb_fdust_frac)[1]) as ``lyc_fdust`` for
             # exactly this cross-component reason (#2539 item 2, same pattern as
             # ``lyc_transmission`` above).
-            f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+            f_dust = jnp.asarray(_lyc_fdust)
 
             if self.config.lyc_reprocessed_by == "all":
                 _log_l_lyc_credited = state.derived.get("log_L_lyc")
