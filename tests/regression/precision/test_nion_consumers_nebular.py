@@ -157,7 +157,9 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
         lines_ppq = 10.0 ** _interp(table.log_sed_lines_per_qh).astype(np.float64)
         cont_ppq = 10.0 ** _interp(table.log_cont_ztable_per_qh)[0].astype(np.float64)
         cont_ppq = cont_ppq * np.asarray(table.cont_keep)[0]
-        band_ppq = (lines_ppq[:, None] * np.asarray(table.line_band_kernel_fixed)).sum(0) + cont_ppq
+        band_ppq = (lines_ppq[:, None] * np.asarray(table.line_band_kernel_fixed)).sum(
+            0
+        ) + cont_ppq
 
         # The log-domain result (new path)
         log_result = np.asarray(reconstruct_nebular_phot(log_nion, p, table))
