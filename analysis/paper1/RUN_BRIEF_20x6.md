@@ -71,13 +71,15 @@ Run **a configuration at a time**, not the whole grid in one call:
 
 ```bash
 python -m paper1.run_candels_fits --configs I --jobs 1               # measure the row
-python -m paper1.run_candels_fits --configs I --jobs N --only-missing # then widen
+python -m paper1.run_candels_fits --configs I --only-missing         # then widen (--jobs defaults to cpu_count // 4)
 ```
 
 Without `--configs` the driver builds all 120 cells galaxy-major under one
 global `--jobs`, so the first fill is one galaxy crossed with every row and the
-configurations interleave from the start. Concurrency has to be sized per row
-(see §4), and that cannot be measured from a mixture.
+configurations interleave from the start. Concurrency defaults to `cpu_count // 4`
+(one cell uses ~4.5 cores, measured 2026-09-14); `--jobs` refuses values above
+`cpu_count // 2`. Per-row concurrency has to be sized against that row's memory
+peak (see §4), and that cannot be measured from a mixture.
 
 `aggregate_summary` iterates the full sample regardless, so a per-row run writes
 a summary in which every not-yet-run cell reads as failed. Rebuild it once at
@@ -94,7 +96,7 @@ cell silently skipped and quietly wrong.
 Recipe and bar, unchanged from the pinned driver:
 
 - 150 warmup / 300 kept draws, 4 chains, seed 42
-- ladder `target_accept` 0.85 -> 0.95 -> 0.99, then doubled warmup
+- default retune ladder: attempt 1 uses `target_accept` 0.85, attempt 2 raises to 0.95; `--retune-attempts 3` opts into a third rung at 0.99 (measured cost 3–5× the first rung and adopted none of cells 79/II, 15336/II, 16455/II; row VI launched without profiling paid ~4× per attempt), attempt 4+ doubles warmup
 - adoption bar: **0 divergences AND max split R-hat < 1.01**
 - `RETUNE_ATTEMPTS_BY_CONFIG` is now empty — see the comment in `fit_one.py`.
   The old `{"III": 2}` cap was written about a model that no longer bears that
@@ -102,9 +104,13 @@ Recipe and bar, unchanged from the pinned driver:
 
 ## 4. Memory
 
-`profile_mass` peaks well above steady state at the reinsertion step, and the
-peak is easy to miss because steady state is only ~3.4 GB/cell. Measured on the
-previous suite: ~22-29 GB for the lightest model, ~12.5 GB for the heaviest,
+The default `--profile-mass auto` uses analytic mass marginalization when the
+linearity guards pass; `--profile-mass off` forces sampling. Marginalizing
+avoids reinsertion entirely where the physics permits, cutting memory to steady
+state alone (~3.4 GB/cell). When the guards fail, `auto` falls back to sampling,
+which peaks well above steady state at the reinsertion step. The peak is easy to
+miss because steady state is only ~3.4 GB/cell. Measured on the previous suite
+with sampling: ~22-29 GB for the lightest model, ~12.5 GB for the heaviest,
 ~3.5 GB for the middle one. The counter-intuitive part is that the *lightest*
 payload peaks highest — a small per-draw payload yields a wide chunk and so a
 big working set.
@@ -114,12 +120,13 @@ them as a warning about shape, not as a table to schedule against. Every row's
 physics changed, so which row is heaviest is unknown.
 
 Size each row against **N simultaneous reinsertion peaks of that row**, not one
-peak plus N-1 steady states. The launch stagger (`stagger_seconds`, 20 s) is
-applied only to the initial fill, deliberately — it exists to keep N JIT
-compilations off the box at startup. Refills are not staggered, so when a cell
-finishes its replacement starts immediately and its compile can land on top of
-another cell's reinsertion peak at an arbitrary point hours in. Nothing spaces
-those, and that overlap is what killed two cells on the previous grid.
+peak plus N-1 steady states, when using `--profile-mass off`. The launch stagger
+(`stagger_seconds`, 20 s) is applied only to the initial fill, deliberately — it
+exists to keep N JIT compilations off the box at startup. Refills are not
+staggered, so when a cell finishes its replacement starts immediately and its
+compile can land on top of another cell's reinsertion peak at an arbitrary point
+hours in. Nothing spaces those, and that overlap is what killed two cells on the
+previous grid.
 
 Do not raise the OOM watchdog ceiling to make a cell fit. If a row's peak makes
 even two concurrent cells uncomfortable, run that row at `--jobs 1` and widen

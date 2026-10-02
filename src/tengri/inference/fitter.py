@@ -487,6 +487,66 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+# Redshift-override clones, memoized per (source model, override z).
+#
+# ``params_override={"redshift": z}`` on a model without ``catalog_z_range`` is
+# evaluated on a model rebuilt at ``z`` (see ``_model_at_override_redshift``).
+# Same rationale as ``_APPROX_CLONE_CACHE``: the compile caches key on model
+# identity, so the same (source, z) must return the same object or every fit at
+# that z recompiles. Distinct z values get distinct models, hence distinct
+# programs; a program compiled against another z's tables can never be reused.
+_REDSHIFT_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _model_at_override_redshift(model, params_override):
+    """The model to evaluate under a ``params_override`` redshift.
+
+    On a model without ``catalog_z_range`` the redshift is a compile constant,
+    and so is every table built from it at construction (fixed-z stellar LUT,
+    IGM band factors, nebular grid reference, dust-IR band response,
+    energy-balance LUT, radio/X-ray term responses, ``_dl_cm_fixed``,
+    ``_z_fixed``, line-catalog snapping). Merging the override into the loss's
+    fixed values alone leaves all of them at the model's own redshift. The
+    override is therefore made exactly equivalent to building the model at that
+    redshift: the model is rebuilt there once per (source, z) and reused.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The fit model (after ``approx`` resolution). Never mutated.
+    params_override : dict or None
+        The fit's per-fit overrides.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        ``model`` itself when there is nothing to rebuild (no redshift
+        override, a ``catalog_z_range`` model whose redshift is a runtime
+        input, a free redshift which the Fitter refuses, an override equal to
+        the model's own redshift, or a model type without the rebuild seam);
+        otherwise the model built at the override redshift.
+    """
+    if not params_override or "redshift" not in params_override:
+        return model
+    if _model_catalog_z_range(model) is not None:
+        return model
+    rebuild = getattr(model, "with_fixed_redshift", None)
+    spec = getattr(model, "spec", None)
+    if not callable(rebuild) or spec is None or not spec.is_fixed("redshift"):
+        return model
+    z = float(params_override["redshift"])
+    try:
+        bucket = _REDSHIFT_CLONE_CACHE.setdefault(model, {})
+    except TypeError:
+        return rebuild(z)
+    key = round(z, 12)
+    clone = bucket.get(key)
+    if clone is None:
+        clone = rebuild(z)
+        bucket[key] = clone
+    return clone
+
+
 def _component_chains(model) -> tuple:
     """Every component chain ``model`` owns, or ``()`` if none can be inspected.
 
@@ -1702,6 +1762,15 @@ class Fitter:
         # run() so that merely constructing a fitter stays cheap: the probe
         # costs one exact forward, and only an executed fit should pay it.
         self._pre_approx_model = model if self.model is not model else None
+        # A redshift override on a fixed-z model evaluates a model BUILT at that
+        # redshift (not the caller's), so every redshift-dependent build-time
+        # table is at the override z. ``fitter.model`` (and the returned
+        # posterior's model) is this rebuilt model; ``model`` is untouched.
+        self.model = _model_at_override_redshift(self.model, params_override)
+        if self._pre_approx_model is not None:
+            self._pre_approx_model = _model_at_override_redshift(
+                self._pre_approx_model, params_override
+            )
         self._lut_bias_checked = False
         self.spec = self.model.spec
 
@@ -1798,8 +1867,14 @@ class Fitter:
         # loss because the ``data_args`` injection always overrides it.
         # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
         # a shared loss closure can never silently run at another fit's baked z.
-        # Overrides on models without a ztable keep #1331's bake, there the
-        # redshift genuinely is a compile constant.
+        # Overrides on models without a ztable are a compile constant, and so
+        # is every table built from that constant at model construction. They
+        # are handled by rebuilding the model at the override redshift
+        # (``_model_at_override_redshift``, applied to ``self.model`` above), so
+        # the bake into ``_fixed_values`` here agrees with every table the
+        # compiled program reads; the override stays in the engine cache key
+        # and the rebuilt model is a distinct object per z, so a program
+        # compiled against another z's tables is never reused.
         self._runtime_redshift = None
         if (
             self._params_override is not None
@@ -1809,7 +1884,7 @@ class Fitter:
             self._runtime_redshift = float(self._params_override["redshift"])
 
         # ── Data arguments ─────────────────────────────────────────
-        self._data_args = self._build_data_args(model)
+        self._data_args = self._build_data_args(self.model)
 
         # ── Auto-build Protocol likelihood (option β default) ──────
         # When the user didn't pass a custom likelihood AND none of the
