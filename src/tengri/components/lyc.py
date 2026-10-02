@@ -403,7 +403,7 @@ def log10_lyc_luminosity(
     hard mask. This is a LUMINOSITY (erg/s), not a photon RATE -- it must not
     be confused with the Q_H integrand
     :math:`\int L_\nu/(h\nu)\,d\nu` (photons/s) that
-    :func:`tengri.components.stellar.component._integrate_nion_log10` computes;
+    ``tengri.components.stellar.component._integrate_nion_log10`` computes;
     the two integrands differ by a factor of :math:`h\nu` under the integral
     and are not interchangeable (#2539 G1/G2).
 
@@ -411,8 +411,8 @@ def log10_lyc_luminosity(
     leading-axis row -- e.g. each SSP age -- is normalized independently),
     integrates in linear-normalized space, and restores the peak and
     ``log10_scale`` as log10 OFFSETS, keeping every intermediate within
-    float32 range (mirrors :func:`tengri.components.stellar.component.
-    _integrate_nion_log10`, #1206).
+    float32 range (mirrors ``tengri.components.stellar.component.
+    _integrate_nion_log10``, #1206).
 
     Parameters
     ----------
@@ -602,8 +602,9 @@ def log10_age_sum_lyc(log_L_lyc_age, weights=None):
     gradient onto the other, non-zero-weighted ages (``d/dw[w * c] = c``
     at ``w = 0``, not the 0 a single clamp-and-select would give).
 
-    Used by :class:`tengri.components.nebular.NebularSEDComponent` to sum over
-    all ages (#2539) and by :class:`tengri.components.dust.DustSEDComponent`
+    Used by :class:`tengri.components.nebular.component.NebularSEDComponent`
+    to sum over all ages (#2539) and by
+    :class:`tengri.components.dust.two_component.DustSEDComponent`
     (two_component path) to sum over young ages only (lyc_absorb_all=False, #2539
     item 2).
     """
