@@ -113,3 +113,64 @@ def test_graybody_peak_position():
     peak_um = wave[peak_idx] / 1e4
 
     assert 71.5 <= peak_um <= 72.5, f"Peak position {peak_um:.1f} um outside 71.5-72.5 um"
+
+
+def test_graybody_ratio_to_modified_blackbody():
+    """graybody / modified_blackbody equals (1 − e^{−(λ0/λ)^β}) / (ν/ν_ref)^β up to constant.
+
+    Cell c: At fixed (T=50 K, β=1.5, λ0=200 µm), the shape ratio graybody / mbb divided
+    by the expected ratio (opacity / emissivity) should be constant to relative scatter < 1e-6
+    over 8–1000 µm. ν_ref = c/250 µm as in the thin closure.
+    """
+    T, beta, lam0 = 50.0, 1.5, 200.0
+    wave = np.logspace(4, 7.3, 4000)
+
+    # Graybody shape: (1 - exp(-(lambda0/lambda)^beta)) * B_nu
+    tg = np.asarray(
+        M["graybody"](
+            jnp.asarray(wave),
+            1.0,
+            dust_T=T,
+            dust_beta_ir=beta,
+            dust_lambda_0_um=lam0,
+            dust_epsilon_mbb=1.0,
+        )
+    )
+
+    # Modified blackbody shape: (nu/nu_ref)^beta * B_nu
+    tmbb = np.asarray(
+        M["modified_blackbody"](
+            jnp.asarray(wave),
+            1.0,
+            dust_T=T,
+            dust_beta_ir=beta,
+            dust_epsilon_mbb=1.0,
+        )
+    )
+
+    # Reference formula: ratio = opacity / emissivity
+    # = (1 - exp(-(lambda0/lambda)^beta)) / (nu/nu_ref)^beta
+    c = 2.99792458e10
+    nu = c / (wave * 1e-8)
+    nu_ref = c / (250.0 * 1e-4)  # c/250 µm in CGS
+    tau = (lam0 * 1e4 / wave) ** beta
+    opacity = -np.expm1(-tau)
+    emissivity = (nu / nu_ref) ** beta
+    ratio_ref = opacity / (emissivity + 1e-30)
+
+    # Compute observed ratio
+    obs_ratio = tg / (tmbb + 1e-30)
+
+    # Normalize by expected ratio
+    normalized = obs_ratio / (ratio_ref + 1e-30)
+
+    # Select 8-1000 um
+    sel = (wave >= 8e4) & (wave <= 1e7)
+
+    # The normalized ratio should be approximately constant (the constant is the relative scale)
+    normalized_sel = normalized[sel]
+    normalized_sel = normalized_sel / np.mean(normalized_sel)
+
+    # Scatter about the mean
+    scatter = np.std(normalized_sel)
+    assert scatter < 1e-6, f"Normalized ratio scatter {scatter:.3e} exceeds 1e-6 over 8-1000 um"
