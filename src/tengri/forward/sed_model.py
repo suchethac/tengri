@@ -5298,24 +5298,42 @@ class SEDModel:
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
-    def _publish_history(self, sfr, params, state=None):
+    def _publish_history(self, sfr, params, state=None, resample=None):
         """Bound ``sfr`` to ``[0, age(z)]`` and rescale it to the formed mass (#2640).
 
         Applies the component's own :func:`bounded_rescaled_history` after the
         SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
         the same history the stellar component does (no second normalization).
+
+        With ``resample`` (a callable ``(values, age_at_z_gyr) -> (t_gyr, values_out)``) the
+        UN-windowed rescaled history is resampled first and the output grid's
+        own window on ``[0, age(z)]`` is applied after (inside the resampler), so no
+        interpolation ramp between the boundary node and the next (zero) node
+        can cross ``age(z)``; returns ``(t_gyr, values_out)``.
         """
-        from tengri.components.stellar.component import bounded_rescaled_history
+        from tengri.components.stellar.component import (
+            bounded_rescaled_history,
+            history_rescale_factor,
+        )
 
         if state is None:
             state = self.predict_state(params)
         if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
             # The registry callable of a runtime table is a zero placeholder;
             # the history lives in the component state.
-            return jnp.asarray(state.derived["sfr_history"])
-        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
-        t_obs_gyr = age_at_z(self._get_redshift(params))
-        return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+            sfr_pub = jnp.asarray(state.derived["sfr_history"])
+            if resample is None:
+                return sfr_pub
+            raw = sfr_pub
+            factor = 1.0
+        else:
+            formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+            t_obs_gyr = age_at_z(self._get_redshift(params))
+            if resample is None:
+                return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+            raw = sfr
+            factor = history_rescale_factor(sfr, self.age_yr, t_obs_gyr, formed)
+        return resample(raw * factor, age_at_z(self._get_redshift(params)))
 
     def _compute_sfr(self, p):
         """Compute SFR via the composed SFH function.
@@ -5682,20 +5700,23 @@ class SEDModel:
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
         _state = self.predict_state(params)
-        sfr_mean = self._publish_history(sfr_mean, params, _state)
-        sfr_full = self._publish_history(sfr_full, params, _state)
 
         if grid == "native":
             return {
                 "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
-                "sfr_mean": sfr_mean,
-                "sfr_full": sfr_full,
+                "sfr_mean": self._publish_history(sfr_mean, params, _state),
+                "sfr_full": self._publish_history(sfr_full, params, _state),
             }
 
-        t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
-            self.log_age_grid, sfr_mean, n_linear
+        def _resample(values, age_gyr):
+            return interpolate_to_linear_time(
+                self.log_age_grid, values, n_linear, age_at_z_gyr=age_gyr
+            )
+
+        t_gyr_mean, sfr_mean_lin = self._publish_history(
+            sfr_mean, params, _state, resample=_resample
         )
-        _, sfr_full_lin = interpolate_to_linear_time(self.log_age_grid, sfr_full, n_linear)
+        _, sfr_full_lin = self._publish_history(sfr_full, params, _state, resample=_resample)
 
         return {
             "t_gyr": t_gyr_mean,

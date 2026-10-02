@@ -1089,6 +1089,19 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
 
 
+def support_window(lbt_grid_yr, t_obs_gyr):
+    """Cell-overlap weight of ``[0, age(z)]``, exactly zero at every node beyond age(z).
+
+    ``window_weight`` gives the node straddling ``age(z)`` a partial weight;
+    a node just BEYOND ``age(z)`` can also carry a partial weight (its cell
+    reaches below ``age(z)``), which would publish star formation at
+    ``t > age(z)``. That node is zeroed; the rescale factor is measured on
+    the same zeroed array, so the integral still equals the formed mass.
+    """
+    t = jnp.asarray(lbt_grid_yr)
+    return window_weight(t, 0.0, t_obs_gyr * 1e9) * (t <= t_obs_gyr * 1e9)
+
+
 def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
     r"""Publish an SFR history bounded to ``[0, age(z)]`` and carrying ``target_mass``.
 
@@ -1121,11 +1134,22 @@ def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
     -----
     **JIT/grad/vmap-safe**: yes, elementwise + ``jnp.where`` on a safe argument.
     """
-    support_weight = window_weight(lbt_grid_yr, 0.0, t_obs_gyr * 1e9)
-    windowed = sfr * support_weight
+    factor = history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
+    return sfr * factor * support_window(lbt_grid_yr, t_obs_gyr)
+
+
+def history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
+    """The one uniform factor that makes the windowed history carry ``target_mass``.
+
+    ``1`` when the windowed integral is zero. Shared by
+    :func:`bounded_rescaled_history` and the resampled ``SEDModel.predict_sfh``
+    output, which resamples the un-windowed ``sfr * factor`` and applies the
+    output grid's own window (#2640).
+    """
+    windowed = sfr * support_window(lbt_grid_yr, t_obs_gyr)
     mass = jnp.trapezoid(windowed, lbt_grid_yr)
     ok = mass > representable_denominator(1e-30)
-    return windowed * jnp.where(ok, target_mass / jnp.where(ok, mass, 1.0), 1.0)
+    return jnp.where(ok, target_mass / jnp.where(ok, mass, 1.0), 1.0)
 
 
 def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):

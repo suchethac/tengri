@@ -12,11 +12,11 @@ lookback, 4.7 Gyr older than the universe.
 The fix bounds the fixed section to ``[tflex_gyr, age_universe_yr]``, the
 same ``age_universe_yr`` injection :func:`psb_wild2020` already receives
 (component.py's ``apply``/``compute_joint_weights``), for a fixed redshift at
-build time. A free redshift is served by the ceiling convention #2567
-documents (:class:`NonparametricBinEdgesAtRedshiftCeilingWarning` for the
-other z-scaled nonparametric ladders) through the same ``age_at_z``-based
-injection, since the injected ``age_universe_yr`` already tracks
-``t_obs_gyr`` per draw at eager-forward time.
+build time. Under a free redshift the injected ``age_universe_yr`` is traced
+and follows ``t_obs_gyr`` on every draw, so the bound is exact per draw; these
+two families do not use the prior-ceiling convention of the z-scaled
+nonparametric ladders and emit no
+:class:`NonparametricBinEdgesAtRedshiftCeilingWarning`.
 
 References: Suess et al. 2022, ApJ 935, 146, §3.1.4; Wild et al. 2020 Eq. 5
 (psb_wild2020's own age_universe_yr injection); issue #2567 (the z-ceiling

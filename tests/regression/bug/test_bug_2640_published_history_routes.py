@@ -112,3 +112,30 @@ def test_published_histories_are_bounded_rescaled_and_agree(synthetic_ssp_wide, 
     out = model.predict_sfh(extra, grid="native")
     np.testing.assert_allclose(np.asarray(out["sfr_full"]), sfr, rtol=1e-10, atol=0.0)
     np.testing.assert_allclose(np.trapezoid(np.asarray(out["sfr_mean"]), lbt), formed, rtol=1e-8)
+
+
+@pytest.mark.parametrize(("sfh", "extra"), [c for c in _cases() if "table" not in c.id])
+@pytest.mark.parametrize("n_linear", [200, 1000, 5000])
+def test_resampled_linear_grid_is_bounded_and_carries_the_mass(
+    synthetic_ssp_wide, sfh, extra, n_linear
+):
+    """``predict_sfh(grid='linear')``: exactly zero beyond age(z); integral ~ formed.
+
+    The un-windowed rescaled history is resampled and the OUTPUT grid's own
+    window is applied after, so no interpolation ramp crosses age(z). The
+    integral differs from the formed mass only by the resampling error of the
+    output grid (linear interpolation of the native history): < 1e-2 from
+    1000 nodes, < 1e-1 for a bursty field sampled on 200.
+    """
+    model = _build(synthetic_ssp_wide, sfh)
+    age_gyr = float(age_at_z(Z))
+    st = model.predict_state(extra)
+    formed = 10 ** float(st.derived["log_mstar_formed"])
+    out = model.predict_sfh(extra, n_linear=n_linear)
+    t = np.asarray(out["t_gyr"])
+    for key in ("sfr_mean", "sfr_full"):
+        s = np.asarray(out[key])
+        assert t[s > 0].max() <= age_gyr, f"{key}: SFR > 0 beyond age(z)"
+        np.testing.assert_allclose(
+            np.trapezoid(s, t * 1e9), formed, rtol=1e-2 if n_linear >= 1000 else 1e-1
+        )
