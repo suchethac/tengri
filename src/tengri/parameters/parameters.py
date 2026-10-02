@@ -719,6 +719,7 @@ class Parameters:
             mean_sfh_type,
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
+            dust_screens=self.dust_screens,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1099,11 +1100,25 @@ class Parameters:
         # forward model reads as use_dust=False (a dust-free model).
         if self.dust_model == "none":
             self.dust_model = "off"
-        if self.dust_model not in ("two_component", "single_component", "wg00", "off"):
+        if self.dust_model not in (
+            "two_component",
+            "single_component",
+            "wg00",
+            "age_binned",
+            "off",
+        ):
             raise ValueError(
                 f"dust_model must be 'two_component', 'single_component', 'wg00', "
-                f"or 'off'/'none' (no dust), got '{self.dust_model}'"
+                f"'age_binned', or 'off'/'none' (no dust), got '{self.dust_model}'"
             )
+
+        # age_binned (#2528): N independent screens, each (law, lo, hi) in
+        # log10(age/yr), already validated by the grammar
+        # (_translate_age_binned) or supplied directly on this flat-kwarg
+        # "expert escape hatch" surface as a pre-validated tuple. Structural,
+        # non-fittable; enters compile_signature via component_factory's
+        # dust_screens kwarg.
+        self.dust_screens: tuple = tuple(kwargs.pop("dust_screens", ()) or ())
 
         # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
         # static structural selectors. Always stored so the forward model and
@@ -2788,6 +2803,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
+    "dust_screens": content(
+        "age_binned (#2528) screen list (law, log-age window per screen) "
+        "determines the indexed per-screen parameters"
+    ),
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
     "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
     "dust_wg00_structure": content("WG00 dust structure determines parameters"),

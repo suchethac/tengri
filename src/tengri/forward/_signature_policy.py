@@ -136,6 +136,11 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
     "_dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
     "_dust_law_overrides": content("per-component dust law parameter overrides"),
+    "_dust_screens": content(
+        "age_binned screen list ((law, lo, hi) per screen): sets the declared parameters "
+        "and the age-window weights in the graph; also carried by the retained "
+        "AgeBinnedDustComponentConfig"
+    ),
     "_dust_lyman_cutoff_aa": content("Lyman-limit clip wavelength changes the FUV curve"),
     "_dust_lyc_absorb_all": content("young-only vs absorb-all stellar LyC changes the chain"),
     "_dust_eb_include_lyc": content("LyC-in-energy-balance flag rescales L_IR"),
