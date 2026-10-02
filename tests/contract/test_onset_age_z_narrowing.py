@@ -48,7 +48,11 @@ def test_dexp_onset_freed_with_z_aware_ceiling():
 
     assert "sfh_dexp_start_gyr" in spec.free_params
     lo, hi = spec.get_distribution("sfh_dexp_start_gyr").bounds
-    assert lo == pytest.approx(0.0)
+    # The floor excludes 0 (#2521): a [0, 0] onset window is zero-width and
+    # forms no mass at any lookback time, so the registry declares a
+    # positive floor rather than 0.0 -- narrowing only ever moves the
+    # ceiling, never this floor.
+    assert lo == pytest.approx(0.5)
     assert hi == pytest.approx(float(age_at_z(0.5)), rel=1e-9)
 
 
@@ -104,12 +108,12 @@ def test_free_redshift_caps_at_its_own_floor():
 
 def test_explicit_user_prior_is_never_narrowed():
     spec = _build_dexp(
-        sfh={"type": "dexp", "start_gyr": Uniform(0.0, 5.0), "all_params": Fixed(DEFAULT)},
+        sfh={"type": "dexp", "start_gyr": Uniform(0.1, 5.0), "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.5),
     )
 
     lo, hi = spec.get_distribution("sfh_dexp_start_gyr").bounds
-    assert (lo, hi) == (0.0, 5.0)
+    assert (lo, hi) == (0.1, 5.0)
     assert spec._group_provenance["sfh_dexp_start_gyr"] == "user_prior"
 
 

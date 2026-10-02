@@ -36,6 +36,7 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
+from tests._step_excess import step_excess as _step_excess
 
 pytestmark = [pytest.mark.gradient, pytest.mark.regression_bug]
 
@@ -75,12 +76,6 @@ def observation():
 def _sweep(model):
     f = jax.jit(lambda a: sum(model.predict_photometry({"sfh_lnorm_age_gyr": a})))
     return np.array([float(f(float(a))) for a in AGES])
-
-
-def _step_excess(values: np.ndarray) -> float:
-    """Largest single step, in units of the median step. Smooth curves sit near 1."""
-    steps = np.abs(np.diff(values)) / np.abs(values[:-1])
-    return float(steps.max() / np.median(steps))
 
 
 def test_the_probe_would_see_a_sawtooth_if_one_were_there(ssp_data_wne, observation):

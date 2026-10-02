@@ -349,14 +349,9 @@ class Catalog:
 
         Parameters are documented in the class docstring.
         """
-        self.fwd = fwd
         self.table = table
         # Set by from_histories; makes predict() argument-optional (#1396).
         self._history_columns = None
-        # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
-        # calls instead of being rebuilt (and recompiled) each time. Shared with
-        # every other Catalog over this model, see _batched_cache_for.
-        self._batched_cache = _batched_cache_for(fwd)
 
         # Fail fast: ingest and validate at construction.
         if table is not None:
@@ -406,27 +401,90 @@ class Catalog:
                     )
 
                 # Per-galaxy redshift is now confirmed to be in play. An
-                # SF-onset lookback (sfh_exp_start_gyr / sfh_dexp_start_gyr /
-                # sfh_const_start_gyr) freed by 'all_params: FREE' was capped
-                # at build time against age_at_z of the model's single
-                # placeholder redshift (see
-                # tengri.parameters.groups._narrow_free_priors_to_z) --
-                # parse_groups never saw this catalog's per-galaxy spread of
-                # redshifts, so that cap is not valid for every row. Refuse
-                # here, where the catalog IS visible, rather than silently
-                # fitting every galaxy against one galaxy's cosmic-age ceiling.
+                # SF-onset lookback (e.g. sfh_dpl_age_gyr, sfh_exp_start_gyr)
+                # freed by 'all_params: FREE' was capped at build time
+                # against age_at_z of the model's single placeholder
+                # redshift (see tengri.parameters.groups
+                # ._narrow_free_priors_to_z) -- parse_groups never saw this
+                # catalog's per-galaxy spread of redshifts, so that cap is
+                # not the right one for every row. Re-narrow here, where the
+                # catalog IS visible: the forward model already forms the
+                # declared mass inside [0, age(z_i)] per galaxy at runtime
+                # (#2521, mass-conserving truncation), so the prior only
+                # needs one ceiling wide enough to cover every galaxy's own
+                # admissible range without being invalid for any of them --
+                # that is age_at_z at the catalog's LOWEST redshift (the
+                # oldest universe in the sample), the same "most permissive
+                # single cap" convention _narrow_free_priors_to_z itself
+                # uses for one galaxy's z_floor.
                 from tengri.parameters.groups import _z_narrowed_onset_params
 
                 z_narrowed = _z_narrowed_onset_params(model_spec)
                 if z_narrowed:
-                    raise ValueError(
-                        f"redshift_col was provided (per-galaxy redshift), but "
-                        f"{sorted(z_narrowed)} was freed by 'all_params: FREE' and "
-                        f"capped at the age of the universe at the model's single "
-                        f"redshift={redshift_prior.value:g} -- that cap is not valid "
-                        f"for every redshift in this catalog. Pass an explicit onset "
-                        f"prior that is valid across your whole catalog's redshift "
-                        f"range instead, e.g. sfh={{'start_gyr': Uniform(lo, hi)}}."
+                    import copy as _copy
+
+                    from tengri.config.exceptions import FreeRedshiftOnsetCeilingWarning
+                    from tengri.parameters.priors import Uniform
+                    from tengri.utils.cosmology import age_at_z
+
+                    catalog_z_min = float(ca.redshift.min())
+                    catalog_z_max = float(ca.redshift.max())
+                    new_cap = float(age_at_z(catalog_z_min))
+
+                    new_distributions = dict(model_spec._distributions)
+                    offenders: list[tuple[str, float]] = []
+                    for pname in sorted(z_narrowed):
+                        dist = model_spec.get_distribution(pname)
+                        lo = dist.lo
+                        if new_cap <= lo:
+                            continue  # no admissible window left; leave as declared
+                        default = dist.default
+                        if default is not None:
+                            default = min(max(default, lo), new_cap)
+                        new_distributions[pname] = Uniform(
+                            lo, new_cap, dist.description, units=dist.units, default=default
+                        )
+                        offenders.append((pname, float(dist.hi)))
+
+                    new_spec = _copy.copy(model_spec)
+                    object.__setattr__(new_spec, "_distributions", new_distributions)
+                    # ForwardModel.spec is a read-only property delegating to
+                    # populations[0].sed.spec, and both ForwardModel and
+                    # Population are frozen dataclasses -- rebuild that chain
+                    # (dataclasses.replace) around a shallow copy of the one
+                    # genuinely mutable link, the inner SEDModel.
+                    import dataclasses as _dataclasses
+
+                    inner_sed = _copy.copy(fwd.populations[0].sed)
+                    inner_sed.spec = new_spec
+                    new_population = _dataclasses.replace(fwd.populations[0], sed=inner_sed)
+                    fwd = _dataclasses.replace(
+                        fwd, populations=(new_population, *fwd.populations[1:])
+                    )
+                    model_spec = new_spec
+
+                    named = ", ".join(
+                        f"{n} (was ceiling {h:.4g} Gyr)" for n, h in sorted(offenders)
+                    )
+                    warn_measured(
+                        f"redshift_col was provided (per-galaxy redshift) over "
+                        f"[{catalog_z_min:g}, {catalog_z_max:g}], but "
+                        f"{named} was freed by 'all_params: FREE' and capped at "
+                        f"the age of the universe at the model's single placeholder "
+                        f"redshift={redshift_prior.value:g}, not this catalog's range. "
+                        f"Re-narrowed to {new_cap:.4g} Gyr, the age of the universe at "
+                        f"this catalog's lowest redshift {catalog_z_min:g} -- the widest "
+                        f"single ceiling valid for every galaxy in it. A galaxy at a "
+                        f"higher redshift than {catalog_z_min:g} still forms the "
+                        f"declared mass inside its own [0, age(z_i)] (#2521, "
+                        f"mass-conserving truncation), so this only widens or narrows "
+                        f"the sampler's exploration range, not the physics.",
+                        FreeRedshiftOnsetCeilingWarning,
+                        stacklevel=2,
+                        catalog_z_min=catalog_z_min,
+                        catalog_z_max=catalog_z_max,
+                        new_cap_gyr=new_cap,
+                        n_renarrowed_params=len(offenders),
                     )
 
                 # A catalog_z_range lets per-galaxy redshift flow as a runtime
@@ -471,6 +529,16 @@ class Catalog:
                 )
         else:
             self._catalog_arrays = None
+
+        # Set after validation: the per-galaxy-redshift branch above may have
+        # rebound the local `fwd` to a copy carrying a catalog-renarrowed
+        # spec, and every downstream use (batched-cache keying, prediction)
+        # must see that one, not the model the caller originally passed in.
+        self.fwd = fwd
+        # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
+        # calls instead of being rebuilt (and recompiled) each time. Shared with
+        # every other Catalog over this model, see _batched_cache_for.
+        self._batched_cache = _batched_cache_for(fwd)
 
     def fit(
         self,

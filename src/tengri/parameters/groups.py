@@ -106,6 +106,7 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     ConfigError,
     DefaultFixedParametersWarning,
+    FreeRedshiftOnsetCeilingWarning,
     ParameterError,
     WildcardPartialFreeWarning,
     warn_measured,
@@ -1505,7 +1506,12 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
-    _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _approx = kwargs.get("approx")
+    _catalog_z_range = getattr(_approx, "catalog_z_range", None)
+    _catalog_z_lo = float(_catalog_z_range[0]) if _catalog_z_range is not None else None
+    _narrow_free_priors_to_z(resolved_kwargs, provenance, catalog_z_lo=_catalog_z_lo)
+    _warn_free_redshift_onset_ceiling(resolved_kwargs)
+    _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
@@ -1761,26 +1767,60 @@ def _narrow_free_priors_to_grid(
             provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
 
 
-#: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
-#: correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
-#: each one at ``age_at_z(z)`` when the build's redshift floor is known.
-#: Membership here is purely "this narrows", not "this is freeable" -- that is
-#: the declaration's business (``free_prior`` in the SFH registry, see
-#: ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` in
-#: ``components/stellar/sfh/registry.py``). A model that does not declare one
-#: of these (e.g. a ``dpl``-only build) simply never resolves it, and this
-#: tuple has nothing to narrow.
-_Z_CAPPED_ONSET_PARAMS: tuple[str, ...] = (
-    "sfh_exp_start_gyr",
-    "sfh_dexp_start_gyr",
-    "sfh_const_start_gyr",
-)
+@lru_cache(maxsize=8)
+def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
+    """SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
+    correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
+    each one at ``age_at_z(z)`` when the build's redshift floor is known.
+
+    Derived from :data:`~tengri.components.stellar.sfh.registry.SFH_REGISTRY`
+    (#2521): every ``ParamDef`` across every registered family whose
+    ``z_capped_onset`` flag is set, rather than a hand-written tuple. Before
+    this, a 3-entry tuple (``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` /
+    ``sfh_const_start_gyr``) covered only 3 of the 21 onset/age/peak-time
+    parameters across the registry -- the other 18 kept a static ceiling of
+    today's cosmic age even when the build's redshift prior made that
+    unphysical, so a free or high-z prior could silently place star
+    formation before the Big Bang with no warning (#2521). Deriving the set
+    from the registry means a new SFH family cannot reintroduce the gap by
+    omission.
+
+    Membership here is purely "this narrows", not "this is freeable" -- that
+    is the declaration's own business (``free_prior`` in the SFH registry). A
+    model that does not declare one of these (e.g. a ``dpl_lookback``-only
+    build never resolving ``sfh_dpl_age_gyr``) simply never resolves it, and
+    this set has nothing to narrow.
+
+    Parameters
+    ----------
+    _registry_keys : frozenset of str
+        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it
+        makes a plugin registering a new SFH type invalidate the memo rather
+        than being shadowed by a stale one (mirrors :func:`_sfh_type_prefixes`).
+
+    Returns
+    -------
+    tuple of str
+        Every marked public parameter name, deduplicated (aliases such as
+        ``psb_wild2020`` / ``psb`` share one ``SFHModelSpec`` instance).
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    names: dict[str, None] = {}
+    for spec in SFH_REGISTRY.values():
+        for pname, pdef in spec.params.items():
+            if getattr(pdef, "z_capped_onset", False):
+                names[pname] = None
+    return tuple(names)
 
 
-def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
+def _narrow_free_priors_to_z(
+    resolved: dict, provenance: dict[str, str], catalog_z_lo: float | None = None
+) -> None:
     """Cap SF-onset lookback priors at the age of the universe at the source z.
 
-    :data:`_Z_CAPPED_ONSET_PARAMS` each declare a static ``free_prior``
+    :func:`_z_capped_onset_params`'s marked parameters each declare a static
+    ``free_prior``
     ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
     that is ever correct, since a registry declaration cannot know the source
     redshift a given build will use. This intersects that declared range with
@@ -1830,10 +1870,11 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
       omission is raised later, after this function returns.
 
     Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
-    cap retains roughly 6.5% of the 13.81 Gyr declared range (0.9 / 13.81),
-    and declining to narrow on that basis would reintroduce exactly the
-    zero-flux draws this pass exists to prevent. For a cosmological ceiling
-    the narrowing IS the physics, not a tidy-up of an incidentally dead tail.
+    cap retains only a small fraction of today's cosmic age
+    (:func:`~tengri.utils.cosmology.age_at_z0_host`), and declining to narrow
+    on that basis would reintroduce exactly the zero-flux draws this pass
+    exists to prevent. For a cosmological ceiling the narrowing IS the
+    physics, not a tidy-up of an incidentally dead tail.
 
     A catalog fit with a per-galaxy redshift cannot be narrowed here: the
     build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
@@ -1845,27 +1886,45 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
     z-narrowed onset parameter free beside a ``redshift_col``; see
     :func:`_z_narrowed_onset_params`.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
     from tengri.parameters.priors import Uniform
     from tengri.utils.cosmology import age_at_z
 
-    redshift_dist = resolved.get("redshift")
-    if redshift_dist is None:
-        # No redshift to narrow against yet -- either not given at all
-        # (introspection's `_allow_empty_wildcard`, whose caller has no
-        # target redshift) or not yet resolved. Either way, raising here
-        # would preempt the more specific "redshift is required" error this
-        # function's caller raises afterwards; leaving the static declaration
-        # untouched is exactly the earlier, correct-but-wide behavior.
-        return
-    try:
-        z_floor = redshift_dist.bounds[0]
-    except (AttributeError, NotImplementedError):
-        return
-    if z_floor is None:
-        return
+    if catalog_z_lo is not None:
+        # approx=WavePrecomp(catalog_z_range=(zlo, zhi)) means this build's
+        # own `redshift` is only a placeholder -- a runtime z override (the
+        # Catalog / Fitter `params_override`/`fixed_values` path) replaces
+        # it per galaxy, and the age-of-universe cutoff that mass
+        # conservation applies genuinely tracks that runtime value (#2521).
+        # But this static PRIOR CEILING is still fixed once, at build time,
+        # so it must use catalog_z_range's own lower bound (the oldest
+        # universe the range admits, the same "most permissive single cap"
+        # this function already uses for one galaxy's z_floor) rather than
+        # the placeholder redshift -- otherwise two builds of the same
+        # catalog_z_range model at different placeholder redshifts would
+        # declare different prior widths for the identical parameter, and a
+        # value standardized against one would not unstandardize to the
+        # same physical age against the other.
+        z_floor = catalog_z_lo
+    else:
+        redshift_dist = resolved.get("redshift")
+        if redshift_dist is None:
+            # No redshift to narrow against yet -- either not given at all
+            # (introspection's `_allow_empty_wildcard`, whose caller has no
+            # target redshift) or not yet resolved. Either way, raising here
+            # would preempt the more specific "redshift is required" error this
+            # function's caller raises afterwards; leaving the static declaration
+            # untouched is exactly the earlier, correct-but-wide behavior.
+            return
+        try:
+            z_floor = redshift_dist.bounds[0]
+        except (AttributeError, NotImplementedError):
+            return
+        if z_floor is None:
+            return
     cap = float(age_at_z(float(z_floor)))
 
-    for pname in _Z_CAPPED_ONSET_PARAMS:
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
         if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
             continue
         dist = resolved.get(pname)
@@ -1896,6 +1955,226 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
             default=default,
         )
         provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
+    """Warn once when a free redshift's own range can outrun an onset ceiling.
+
+    :func:`_narrow_free_priors_to_z` caps each z-capped onset/age/peak-time
+    parameter (:func:`_z_capped_onset_params`) at ``age_at_z(z_floor)``, the
+    age of the universe at the LOWEST redshift the build's own ``redshift``
+    prior admits. That is the most permissive age a single static cap can
+    use, and it is deliberately silent about the redshift range's upper
+    (younger-universe) end (see that function's docstring). This check
+    covers exactly that blind spot: it re-reads each z-capped parameter's
+    FINAL declared ceiling -- after any z_floor-based narrowing, so it also
+    sees a user's own untouched explicit prior -- and compares it against
+    ``age_at_z(z_ceil)``, the age at the redshift range's upper end. A draw
+    near ``z_ceil`` paired with an onset value between the two ages places
+    star formation before the Big Bang at that draw, even though the value
+    is within the parameter's own declared range.
+
+    Fires at most once per build, naming every offending parameter together
+    with both ages, rather than once per parameter: the underlying cause
+    (redshift is free) is shared, and one build-time notice is enough to act
+    on. See :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning`
+    for why this warns rather than raises, and for why a build-time check is
+    the only way to surface this at all for a fit that runs under
+    ``jax.jit`` (every sampling backend).
+
+    Parameters
+    ----------
+    resolved : dict
+        Final resolved ``{param_name: Distribution}`` kwargs, read after
+        :func:`_narrow_free_priors_to_z` has already run.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    A ``Fixed`` redshift has ``bounds == (z0, z0)``, so ``z_ceil <= z_floor``
+    and this returns immediately -- the warning never fires for a fixed
+    redshift. A z-capped parameter that is itself ``Fixed`` is skipped the
+    same way: fixing an onset value is exactly how a user opts out of the
+    z_floor-based cap's assumption, and this check does not second-guess
+    that choice.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.utils.cosmology import age_at_z
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None or redshift_dist.is_fixed:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None or z_ceil is None or z_ceil <= z_floor:
+        return
+    age_at_z_ceil = float(age_at_z(float(z_ceil)))
+
+    offenders: list[tuple[str, float]] = []
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
+        dist = resolved.get(pname)
+        if dist is None or dist.is_fixed:
+            continue
+        hi = dist.bounds[1]
+        if hi is None or hi <= age_at_z_ceil:
+            continue
+        offenders.append((pname, float(hi)))
+    if not offenders:
+        return
+
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    named = ", ".join(f"{n} (ceiling {h:.4g} Gyr)" for n, h in sorted(offenders))
+    tightest_offender_ceiling = min(h for _, h in offenders)
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}], spanning cosmic ages "
+        f"{age_at_z_floor:.4g} down to {age_at_z_ceil:.4g} Gyr. The following free "
+        f"SF-onset/age/peak-time parameter(s) keep a prior ceiling above "
+        f"{age_at_z_ceil:.4g} Gyr, the age of the universe at the redshift range's "
+        f"upper end: {named}. A prior draw near redshift {z_ceil:g} paired with an "
+        f"onset value above that ceiling places star formation before the Big Bang; "
+        f"the forward model truncates it and still conserves the requested formed "
+        f"mass (#2521), so the fit runs and reports no error there -- only the SFH "
+        f"shape at that draw is wrong, and under jax.jit not even the eager "
+        f"SFHBeforeBigBangWarning fires. Narrow the redshift prior, or give the "
+        f"affected parameter(s) an explicit tighter ceiling, e.g. "
+        f"{offenders[0][0]}=Uniform(lo, {age_at_z_ceil:.4g}).",
+        FreeRedshiftOnsetCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
+        n_offending_params=len(offenders),
+        tightest_offender_ceiling_gyr=tightest_offender_ceiling,
+    )
+
+
+#: SFH families whose default (unset) bin ladder is scaled to the source
+#: redshift rather than fixed at 0-13.7 Gyr. Distinct from
+#: :data:`_z_capped_onset_params`: this is a structural setting
+#: (``bin_edges_gyr``), not a free-parameter prior, and applies only to the
+#: families that share the plain ``DEFAULT_BIN_EDGES_GYR`` ladder --
+#: ``continuity_flex``, ``psb_suess2022`` and ``psb_flex`` derive their own
+#: edges from other declared parameters (``tflex_gyr`` and friends) and are
+#: out of scope here.
+_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES = frozenset(
+    {"continuity", "dirichlet", "bursty_continuity", "prospector_beta"}
+)
+
+
+def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
+    """Scale the default nonparametric age-bin ladder to the source redshift.
+
+    ``continuity``, ``dirichlet``, ``bursty_continuity`` and
+    ``prospector_beta`` share a bin ladder (``DEFAULT_BIN_EDGES_GYR``) fixed
+    at 0-13.7 Gyr when no explicit ``bin_edges_gyr`` is given, regardless of
+    redshift: at z=6 (age 0.93 Gyr) 3 of 7 default bins lie entirely beyond
+    the age of the universe, taking no likelihood while
+    ``_mass_conserving_total`` (#2521) still redistributes their nominal
+    mass share across the bins that remain reachable, biasing the recovered
+    shape toward ages the ladder happens to offer a bin for. This builds the
+    default ladder from the source redshift instead, via
+    :func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`
+    (the Prospector-beta scheme, Wang et al. 2024): for a source redshift
+    ``<= 3`` the two youngest edges stay fixed (30 Myr, 100 Myr) and the
+    remaining interior edges are log-spaced up to 90% of the universe age;
+    for ``> 3`` the universe is too young to hold a 100 Myr bin and still
+    resolve the rest of cosmic time, so none of the youngest edges are
+    fixed: the edges are log-spaced against a grid anchored at 13.47 Myr
+    (Prospector-beta's own ``amin = 7.1295`` in log10 yr), which the youngest
+    edge itself skips past, matching that scheme's own construction exactly.
+    Either way the oldest edge is set to ``age_at_z`` of the source
+    redshift -- so no default bin can lie beyond cosmic time.
+
+    An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
+    same convention the z-capped onset/age/peak-time *parameters* follow
+    (:func:`_narrow_free_priors_to_z` only narrows a declaration-sourced free
+    prior, never a user's own explicit value): a caller who names their own
+    edges has already made the reachability decision, and nothing here
+    second-guesses it or warns about it.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place by
+        setting ``resolved["bin_edges_gyr"]`` when applicable. Also reads the
+        structural ``resolved["mean_sfh_type"]`` (str or list) and
+        ``resolved["redshift"]``.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only --
+    ``make_agebins_from_zred`` is itself a NumPy, Python-control-flow
+    function and cannot be traced (see
+    :class:`~tengri.config.exceptions.NonparametricBinEdgesAtRedshiftCeilingWarning`
+    for what that costs when ``redshift`` is free).
+
+    For a ``Fixed`` redshift the ladder is built once, at that value: exact
+    for every draw, since there is only one. For a free ``redshift`` the
+    edges cannot be re-built per draw (they are not traced quantities), so
+    this builds them once, at ``age_at_z`` of the redshift prior's UPPER
+    bound -- the youngest universe the prior admits, and so the one ladder
+    that stays inside cosmic time for every draw. Emits
+    ``NonparametricBinEdgesAtRedshiftCeilingWarning`` in that case, since a
+    draw at a lower redshift then sees a ladder that stops short of its own
+    (older) age of the universe.
+    """
+    if resolved.get("bin_edges_gyr") is not None:
+        return  # explicit user edges: never overridden (see docstring)
+
+    mean_sfh_type = resolved.get("mean_sfh_type")
+    if mean_sfh_type is None:
+        return
+    types = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+    if not (_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES & set(types)):
+        return
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None:
+        return
+
+    from tengri.components.stellar.sfh.nonparametric import (
+        DEFAULT_N_BINS,
+        make_agebins_from_zred,
+    )
+
+    is_free = z_ceil is not None and z_ceil > z_floor
+    z_for_edges = float(z_ceil) if is_free else float(z_floor)
+    resolved["bin_edges_gyr"] = make_agebins_from_zred(zred=z_for_edges, n_bins=DEFAULT_N_BINS)
+
+    if not is_free:
+        return
+
+    from tengri.config.exceptions import NonparametricBinEdgesAtRedshiftCeilingWarning
+    from tengri.utils.cosmology import age_at_z
+
+    age_at_z_ceil = float(age_at_z(z_for_edges))
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}]: the default nonparametric "
+        f"age-bin ladder is built once, at age_at_z({z_ceil:g}) = {age_at_z_ceil:.4g} Gyr "
+        f"(the youngest universe the prior admits), so no bin lies beyond cosmic time "
+        f"for any draw. A draw near redshift {z_floor:g} (age {age_at_z_floor:.4g} Gyr) "
+        f"therefore has cosmic time between {age_at_z_ceil:.4g} and {age_at_z_floor:.4g} "
+        f"Gyr that no bin covers, even though it is available to that draw. Pass an "
+        f"explicit sfh={{'bin_edges_gyr': ...}} built from a fixed or point-estimate "
+        f"redshift to avoid the tradeoff.",
+        NonparametricBinEdgesAtRedshiftCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
+    )
 
 
 def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
@@ -2005,7 +2284,7 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
 
 
 def _z_narrowed_onset_params(spec) -> frozenset[str]:
-    """Free :data:`_Z_CAPPED_ONSET_PARAMS` on ``spec`` whose prior was z-narrowed.
+    """Free :func:`_z_capped_onset_params` names on ``spec`` whose prior was z-narrowed.
 
     Parameters
     ----------
@@ -2015,7 +2294,7 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Returns
     -------
     frozenset of str
-        Names from :data:`_Z_CAPPED_ONSET_PARAMS` that are free on ``spec``
+        Names from :func:`_z_capped_onset_params` that are free on ``spec``
         and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
         ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
         capped at ``age_at_z`` of the build's own redshift. Empty for a spec
@@ -2030,13 +2309,15 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Exists so a caller that CAN see a catalog's per-galaxy redshift --
     :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
     against a single placeholder redshift without duplicating
-    :data:`_Z_CAPPED_ONSET_PARAMS` or the provenance-suffix convention.
+    :func:`_z_capped_onset_params` or the provenance-suffix convention.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
     provenance = getattr(spec, "_group_provenance", None) or {}
     free = set(getattr(spec, "free_params", ()))
     return frozenset(
         name
-        for name in _Z_CAPPED_ONSET_PARAMS
+        for name in _z_capped_onset_params(frozenset(SFH_REGISTRY))
         if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
     )
 
