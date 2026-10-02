@@ -12,9 +12,10 @@ three disc models:
    shape driver, the Eddington ratio, hence the disc temperature profile, is
    derived from ``agn_log_lbol`` and ``agn_log_mbh``).
 
-3. **cigale_disc** (piecewise power-law from CIGALE): Empirical disc model
-   with fixed wavelength breakpoints and power-law segments. No free axes
-   (shape is fixed; only ``agn_log_lbol`` scales at runtime).
+3. **cigale_disc** (piecewise power-law from CIGALE) (not one of CIGALE's
+   `disk_type` discs; see #2670): Empirical disc model with fixed wavelength
+   breakpoints and power-law segments. No free axes (shape is fixed; only
+   ``agn_log_lbol`` scales at runtime).
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
@@ -237,10 +238,13 @@ def _build_grid_cigale(
     filter_trans: list,
     redshift: float,
 ) -> PreintegratedGrid:
-    """Preintegrate cigale piecewise-powerlaw disc (scalar template, no axes).
+    """Preintegrate the axis-less broken-power-law disc template of the ``cigale_disc`` precompute.
 
-    The CIGALE disc model uses empirical wavelength breakpoints and power-law
-    indices. It is a fixed shape, scaled only by luminosity at runtime.
+    The template is a fixed broken power law defined by the limits and slopes
+    written in this function; it is not the SKIRTOR (disk_type 0) or Schartmann
+    et al. 2005 (disk_type 1) disc of :mod:`tengri.components.agn.disc_cigale`,
+    whose breakpoints and slopes differ; it is scaled only by luminosity at
+    runtime; the mismatch is tracked in issue #2670.
 
     Parameters
     ----------
