@@ -331,9 +331,11 @@ def censored_neg_log_likelihood(
     """Negative log-likelihood with per-band censoring.
 
     For detected bands (mask=0), uses the standard Gaussian (or
-    Student-t) likelihood. For upper limits (mask=1), uses the normal
-    CDF: ``ln L_k = ln Phi((f_upper - m_k) / sigma_k)``. For lower
-    limits (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / sigma_k)``.
+    Student-t) likelihood with calibration floor. For upper limits
+    (mask=1), uses the normal CDF: ``ln L_k = ln Phi((f_upper - m_k) / σ_obs)``.
+    For lower limits (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / σ_obs)``.
+
+    The calibration floor applies to detections only; limits use σ_obs.
 
     All branches are computed via ``jnp.where`` for JIT compatibility
     (no Python control flow per band).
@@ -370,11 +372,22 @@ def censored_neg_log_likelihood(
 
     **Censoring model**:
 
-    - **Detected** (mask=0): Gaussian or Student-t likelihood of residual.
-    - **Upper limit** (mask=1): ln L = ln Phi((f_upper - m)/σ).
-    - **Lower limit** (mask=-1): ln L = ln Phi((m - f_lower)/σ).
+    - **Detected** (mask=0): Gaussian or Student-t likelihood with
+      σ_eff² = σ_obs² + (f_cal · |m|)² (floor applied).
+    - **Upper limit** (mask=1): ln L = ln Phi((f_upper - m)/σ_obs)
+      (floor NOT applied).
+    - **Lower limit** (mask=-1): ln L = ln Phi((m - f_lower)/σ_obs)
+      (floor NOT applied).
 
-    where Phi is the standard normal CDF.
+    where Phi is the standard normal CDF and σ_obs is the unfloored
+    observational uncertainty.
+
+    References
+    ----------
+    .. [1] Boquien, M., Burgarella, D., Renda, A., et al. (2019).
+        CIGALE: fitting SED and radio AGN properties.
+        A&A 622, A103. Section 4.3 — calibration floor applied to
+        detections only.
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
 
@@ -385,12 +398,14 @@ def censored_neg_log_likelihood(
     else:
         e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
 
-    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma) ---
-    z_upper = (data - predicted) / sigma_eff
+    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_obs) ---
+    # Limits use sigma_obs only (no calibration floor)
+    z_upper = (data - predicted) / noise_obs
     e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
 
-    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma) ---
-    z_lower = (predicted - data) / sigma_eff
+    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_obs) ---
+    # Limits use sigma_obs only (no calibration floor)
+    z_lower = (predicted - data) / noise_obs
     e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
 
     # Apply the noise model band by band
