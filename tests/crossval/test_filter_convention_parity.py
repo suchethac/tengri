@@ -7,8 +7,9 @@ Pins tengri's two conventions to their reference codes:
   **DSPS** (``dsps.photometry`` — ``_obs_flux_ssp`` / ``_flux_ab0_at_10pc`` /
   ``calc_obs_mag``), which is the FSPS / Fukugita+1996 / Hogg+2002 photon AB
   convention. DSPS is the reference of record (tengri's own SSP engine).
-- ``ENERGY`` (``w = 1/lambda^2``, flat-in-frequency) is the CIGALE / bagpipes
-  energy mean; pinned to an independent analytic reference (and to ``pcigale``
+- ``ENERGY`` (``w = 1/lambda^2``, flat-in-frequency) is the CIGALE energy mean
+  (for its energy-type filters; its photon-type bands follow ``BESSELL``);
+  pinned to an independent analytic reference (and to ``pcigale``
   when it is importable).
 
 These are the regression guard for the convention fix: tengri must agree with
