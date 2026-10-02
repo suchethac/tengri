@@ -155,8 +155,10 @@ DEFAULT_AGE_KERNEL = "cic"
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 
-#: SFH families whose tx-quantile time axis and mass normalization scale to
-#: the age of the universe at redshift (Iyer et al. 2019; Wild et al. 2020).
+#: SFH families whose time axis is anchored to the age of the universe at the
+#: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
+#: quantiles on it (Iyer et al. 2019); ``psb`` and ``psb_wild2020`` anchor their
+#: burst to it (Wild et al. 2020, eq. 5).
 _AGE_FAMILIES = ("dense_basis", "dense_basis_pure", "psb", "psb_wild2020")
 
 
@@ -2456,10 +2458,11 @@ class StellarSEDComponent:
                 sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
-        # ``dense_basis`` and ``dense_basis_pure`` (and by extension
-        # ``psb_wild2020``) must scale the tx-quantile time axis and mass
-        # normalization to the age of the universe AT THIS MODEL'S REDSHIFT
-        # (Iyer et al. 2019 §2). The age is derived from the redshift and
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT: ``dense_basis`` and
+        # ``dense_basis_pure`` place their tx quantiles on it (Iyer et al.
+        # 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst to it
+        # (Wild et al. 2020, eq. 5). The age is derived from the redshift and
         # the configured cosmology, not a static registry default. Both routes
         # use the same families so they cannot diverge (#982).
         if isinstance(sfh_model, str) and sfh_model in _AGE_FAMILIES:
@@ -3608,9 +3611,10 @@ class StellarSEDComponent:
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
         # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
-        # block below so psb_wild2020's age_universe_yr injection (mirroring
-        # apply()'s own ordering) can read it; also feeds the runtime
-        # tabulated SFH and the age-of-universe truncation further down.
+        # block below so the age_universe_yr injection for every family in
+        # ``_AGE_FAMILIES`` (mirroring apply()'s own ordering) can read it;
+        # also feeds the runtime tabulated SFH and the age-of-universe
+        # truncation further down.
         z = jnp.asarray(
             require_redshift(params, "components.stellar.component.compute_joint_weights")
         )
@@ -3629,8 +3633,8 @@ class StellarSEDComponent:
                 raw = default_scalar
             sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
         # Mirrors apply()'s injection (§2) so the two routes cannot diverge
-        # (#982); t_obs_gyr was hoisted above. Both routes scale the tx-quantile
-        # axis and mass normalization to age(z).
+        # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
+        # of every ``_AGE_FAMILIES`` member to age(z).
         if self.config.sfh_model in _AGE_FAMILIES:
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())

@@ -28,8 +28,8 @@ import numpy as np
 import pytest
 from astropy.cosmology import Planck18
 
-from tengri import DEFAULT, ConfigError, Fixed, SEDModel
-from tengri.components.stellar.component import SFHBeforeBigBangWarning
+from tengri import DEFAULT, ConfigError, Fixed, SEDModel, Uniform
+from tengri.components.stellar.component import SFHBeforeBigBangWarning, StellarSEDComponent
 
 pytestmark = pytest.mark.conservation
 
@@ -66,6 +66,7 @@ def _sfh_dict(family) -> dict:
 
 
 def _build(ssp, z, family, **extra):
+    extra.setdefault("redshift", Fixed(z))
     return SEDModel.build(
         ssp_data=ssp,
         sfh=_sfh_dict(family),
@@ -73,7 +74,6 @@ def _build(ssp, z, family, **extra):
         dust_attenuation={"type": "none"},
         dust_emission={"type": "none"},
         neb={"type": "none"},
-        redshift=Fixed(z),
         **extra,
     )
 
@@ -196,3 +196,51 @@ def test_no_before_big_bang_warning(family, z, synthetic_ssp_wide):
         _build(synthetic_ssp_wide, z, family).predict_state({})
     texts = [str(w.message) for w in caught if issubclass(w.category, SFHBeforeBigBangWarning)]
     assert not texts, f"{family} z={z}: {texts[0]}"
+
+
+def _stellar_of(model):
+    """The stellar component of ``model``'s built chain."""
+    return next(c for c in model._build_component_chain() if isinstance(c, StellarSEDComponent))
+
+
+@pytest.mark.parametrize("z", (0.5, 2.0))
+@pytest.mark.parametrize("family", _FAMILIES)
+def test_precompute_route_support_bounded_by_age_at_z(family, z, synthetic_ssp_wide):
+    """The weights-only route has no weight above the age(z) bracketing node and keeps the mass."""
+    model = _build(synthetic_ssp_wide, z, family)
+    stellar = _stellar_of(model)
+    joint_weights, total_mass, ages_yr = stellar.compute_joint_weights(
+        model._evaluation_params({}, None)
+    )
+    weight_per_age = np.asarray(joint_weights).sum(axis=0)
+    ages_yr = np.asarray(ages_yr)
+    age_yr = _age_yr(z)
+
+    assert ages_yr.max() > age_yr, "SSP grid must extend beyond age(z) for the bound to bite"
+    bracket_yr = ages_yr[ages_yr >= age_yr].min()
+    beyond = float(weight_per_age[ages_yr > bracket_yr].sum())
+    assert beyond == 0.0, f"{family} z={z}: weight {beyond:.3e} above {bracket_yr / 1e9:.3f} Gyr"
+    assert float(total_mass) == pytest.approx(10.0**10.0, rel=_RTOL_MASS), (
+        f"{family} z={z}: precompute mass {float(total_mass):.6e} vs declared {1e10:.6e}"
+    )
+    # The CIC kernel truncates at age(z) on its own, so (a) and (b) hold even when the
+    # tx axis is scaled to the wrong age; the weights' shape pins the injection.
+    exact = np.asarray(model.predict_state({}).derived["joint_weights"])
+    np.testing.assert_allclose(np.asarray(joint_weights), exact, rtol=1e-8, atol=1e-14)
+
+
+@pytest.mark.parametrize("family", _FAMILIES)
+def test_free_redshift_uses_each_samples_age(family, synthetic_ssp_wide):
+    """With a free redshift each sample's history spans [0, age(z)] of its own redshift."""
+    model = _build(synthetic_ssp_wide, 0.5, family, redshift=Uniform(0.3, 3.0))
+    assert "redshift" in model.spec.free_params
+    for z in (0.5, 2.0):
+        state = model.predict_state({"redshift": z})
+        lbt_yr = np.asarray(state.derived["sfh_grid_lbt_yr"])
+        sfr = np.asarray(state.derived["sfr_history"])
+        age_yr = _age_yr(z)
+        oldest = float(np.max(lbt_yr[sfr > 0.0]))
+        assert 0.9 * age_yr <= oldest <= age_yr, (
+            f"{family} z={z}: oldest SFR at {oldest / 1e9:.3f} Gyr, "
+            f"age(z) = {age_yr / 1e9:.3f} Gyr"
+        )
