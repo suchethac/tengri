@@ -56,9 +56,7 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
         ("dale2014_templates_v2.h5", "wavelength_aa", 1.0),
         ("dale2014_templates.h5", "wavelength_aa", 1.0),
     ),
-    "dale2014_cigale": (
-        ("dale2014_templates_cigale.h5", "wavelength_aa", 1.0),
-    ),
+    "dale2014_cigale": (("dale2014_templates_cigale.h5", "wavelength_aa", 1.0),),
     "draine_li2007": (
         ("dl07_templates_v2.h5", "wavelength", 1.0),
         ("dl07_templates.h5", "wavelength", 1.0),
@@ -117,12 +115,20 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     ),
     "silva04": (("silva04_torus_grid.h5", "silva04/wavelength", 1.0),),
     "cat3d_wind": (("cat3d_wind_torus_grid.h5", "cat3d_wind/wavelength", 1.0),),
-    "cat3d_wind_lowfwd": (("cat3d_wind_lowfwd_torus_grid.h5", "cat3d_wind_lowfwd/wavelength", 1.0),),
+    "cat3d_wind_lowfwd": (
+        ("cat3d_wind_lowfwd_torus_grid.h5", "cat3d_wind_lowfwd/wavelength", 1.0),
+    ),
     "fritz": (("fritz2006_torus_grid.h5", "fritz2006/wavelength_aa", 1.0),),
     "nenkova": (("nenkova08_torus_grid.h5", "nenkova/wavelength", 1.0),),
-    "nenkova_agnfitter": (("nenkova_agnfitter_torus_grid.h5", "nenkova_agnfitter/wavelength", 1.0),),
-    "nenkova_agnfitter_2p": (("nenkova_agnfitter_2p_torus_grid.h5", "nenkova_agnfitter_2p/wavelength", 1.0),),
-    "nenkova_agnfitter_3p": (("nenkova_agnfitter_3p_torus_grid.h5", "nenkova_agnfitter_3p/wavelength", 1.0),),
+    "nenkova_agnfitter": (
+        ("nenkova_agnfitter_torus_grid.h5", "nenkova_agnfitter/wavelength", 1.0),
+    ),
+    "nenkova_agnfitter_2p": (
+        ("nenkova_agnfitter_2p_torus_grid.h5", "nenkova_agnfitter_2p/wavelength", 1.0),
+    ),
+    "nenkova_agnfitter_3p": (
+        ("nenkova_agnfitter_3p_torus_grid.h5", "nenkova_agnfitter_3p/wavelength", 1.0),
+    ),
     "skirtor_agnfitter": (("skirtor_mean3p_torus_grid.h5", "skirtor_mean3p/wavelength", 1.0),),
     "skirtor_agnfitter_1p": (("skirtor_mean1p_torus_grid.h5", "skirtor_mean1p/wavelength", 1.0),),
     "skirtor_agnfitter_2p": (("skirtor_mean2p_torus_grid.h5", "skirtor_mean2p/wavelength", 1.0),),
@@ -201,9 +207,9 @@ _GRIDLESS_DISC = frozenset(
 # covers IR/submm (#2564).
 _ANALYTIC_TORUS = frozenset(
     {
-        "grahsp",       # GRAHSP log-Gaussian + Si feature (analytic dust continua)
-        "qsogen",       # QSOgen single-T hot-dust blackbody (analytic)
-        "simple",       # Single-temperature graybody torus
+        "grahsp",  # GRAHSP log-Gaussian + Si feature (analytic dust continua)
+        "qsogen",  # QSOgen single-T hot-dust blackbody (analytic)
+        "simple",  # Single-temperature graybody torus
         "two_temperature",  # Hot + warm graybody torus
     }
 )
@@ -417,14 +423,14 @@ def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
         return None
     if block in _ANALYTIC_DISC_RANGE_AA:
         lo, hi = _ANALYTIC_DISC_RANGE_AA[block]
-        n = int(round(np.log10(hi / lo) * _DISC_PTS_PER_DECADE)) + 1
+        n = round(np.log10(hi / lo) * _DISC_PTS_PER_DECADE) + 1
         return np.geomspace(lo, hi, n)
     candidates = _AGN_DISC_TEMPLATES.get(block)
     if candidates is None:
         return None
     wave = _first_present(candidates)
     if wave is not None and block in _DISC_DENSIFIED:
-        n = int(round(np.log10(wave.max() / wave.min()) * _DISC_PTS_PER_DECADE)) + 1
+        n = round(np.log10(wave.max() / wave.min()) * _DISC_PTS_PER_DECADE) + 1
         wave = np.unique(np.concatenate([wave, np.geomspace(wave.min(), wave.max(), n)]))
     return wave
 

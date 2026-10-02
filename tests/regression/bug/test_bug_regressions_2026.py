@@ -34,7 +34,7 @@ class TestBalmerContinuumTauDirection:
     """
 
     def test_tau_rises_toward_the_edge(self):
-        """For tau << 1 the component is B_lambda * tau, so (BC / B_lambda) must rise with lambda."""
+        """For tau << 1 the component is B_lambda * tau, so BC / B_lambda must rise with lambda."""
         import numpy as np
 
         from tengri.components.agn.qsogen import _balmer_continuum

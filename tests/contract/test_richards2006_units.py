@@ -19,19 +19,24 @@ import h5py
 import numpy as np
 import pytest
 
-from tengri.utils.physics_constants import C_AA
-
 pytestmark = pytest.mark.contract
 
 
-_RICHARDS_DAT = Path(__file__).resolve().parents[2] / "src" / "tengri" / "data" / "agn_bbb" / "richards2006.dat"
+_RICHARDS_DAT = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "tengri"
+    / "data"
+    / "agn_bbb"
+    / "richards2006.dat"
+)
 _REF_H5 = Path(__file__).resolve().parents[2] / "data" / "agnfitter_bbb_reference.h5"
 
 
 @pytest.fixture(scope="module")
 def richards_dat_values():
     """Load Richards+2006 template from .dat file."""
-    with open(_RICHARDS_DAT, "r") as fh:
+    with open(_RICHARDS_DAT) as fh:
         arr = np.loadtxt(fh)
     wave_aa = np.asarray(arr[:, 0], dtype=np.float64)
     lnu = np.asarray(arr[:, 1], dtype=np.float64)
@@ -130,12 +135,15 @@ class TestRichards2006StoredValues:
             f"may indicate double division by nu."
         )
 
-    def test_tengri_lnu_shape_2500_aa_not_double_divided(self, tengri_runtime, richards_dat_values):
+    def test_tengri_lnu_shape_2500_aa_not_double_divided(
+        self, tengri_runtime, richards_dat_values
+    ):
         """Tengri's L_nu shape must NOT be the data double-divided by nu.
 
         If the bug persists (division by nu when loading), the shape would be ~3.2e15,
         which is the stored value (3.785e30) divided by nu (1.18e15).
-        The correct shape should match the stored value directly (or be the same order of magnitude).
+        The correct shape should match the stored value directly (or be the same order of
+        magnitude).
 
         This test FAILS if division by nu is still happening.
         """
@@ -164,7 +172,8 @@ class TestRichards2006StoredValues:
         ratio = val_2500_shape / val_2500_raw
 
         assert ratio > 1e-10, (
-            f"L_nu shape is {ratio:.3e}x the raw data (raw={val_2500_raw:.3e}, shape={val_2500_shape:.3e}). "
+            f"L_nu shape is {ratio:.3e}x the raw data "
+            f"(raw={val_2500_raw:.3e}, shape={val_2500_shape:.3e}). "
             f"This suggests the column is being divided by nu (wrong). "
             f"Should be approximately 1 (or 1/normalization factor)."
         )

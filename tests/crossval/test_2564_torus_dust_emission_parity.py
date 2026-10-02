@@ -20,10 +20,12 @@ Conventions
   log-log interpolation). Dust sub-bands are compared as fractions of the
   3-1000 um total.
 * Three parity statements are checked per model: (i) the peak wavelength equals the
-  dense-grid peak of the block to within one declared-grid step; (ii) at the native template nodes inside the
+  dense-grid peak of the block to within one declared-grid step; (ii) at the native
+  template nodes inside the
   band the SEDModel SED has the native shape (log-log interpolation of the
   SEDModel grid onto the nodes; exact when the master grid contains the nodes;
-  see ``node_parity`` for the scale convention); (iii) the SEDModel band mean equals the band mean of the block
+  see ``node_parity`` for the scale convention); (iii) the SEDModel band mean equals the
+  band mean of the block
   evaluated on a dense reference grid (the quadrature-converged truth of the
   block's own interpolant). The native grids of the coarse blocks (105-136
   points) have a ~0.4 per cent trapezoid error against that truth, so the
@@ -67,8 +69,14 @@ _COS30 = float(np.cos(np.deg2rad(30.0)))
 _TORUS_CASES = [
     ("nenkova_agnfitter", {"agn_cos_inc": _COS30}),
     ("nenkova_agnfitter_2p", {"agn_cos_inc": _COS30, "agn_oa_nenkova": 40.0}),
-    ("nenkova_agnfitter_3p", {"agn_cos_inc": _COS30, "agn_oa_nenkova": 40.0, "agn_tv_nenkova": 60.0}),
-    ("skirtor_agnfitter", {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0, "agn_tv_skirtor": 7.0}),
+    (
+        "nenkova_agnfitter_3p",
+        {"agn_cos_inc": _COS30, "agn_oa_nenkova": 40.0, "agn_tv_nenkova": 60.0},
+    ),
+    (
+        "skirtor_agnfitter",
+        {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0, "agn_tv_skirtor": 7.0},
+    ),
     ("skirtor_agnfitter_1p", {"agn_incl_skirtor": 30.0}),
     ("skirtor_agnfitter_2p", {"agn_oa_skirtor": 40.0, "agn_incl_skirtor": 30.0}),
     ("cat3d_wind_lowfwd", {"agn_cos_inc": _COS30}),
@@ -94,7 +102,7 @@ def ssp():
 
 
 def band_mean(wave_aa, lnu, lo_um, hi_um):
-    """Mean of ``lnu`` over ln(lambda) in [lo_um, hi_um], own grid points plus interpolated edges."""
+    """Mean of ``lnu`` over ln(lambda) in [lo_um, hi_um]; own points plus edges."""
     w = np.asarray(wave_aa, float)
     y = np.asarray(lnu, float)
     order = np.argsort(w)
@@ -159,7 +167,7 @@ def _predict_torus(ssp, block, kw):
 
 
 def _eval_torus(block, kw, w):
-    """Block evaluated on wavelength grid ``w`` [A]; returns ``L_nu`` (the runner converts L_lambda with lambda^2 / c)."""
+    """Block on wavelength grid ``w`` [A]; returns ``L_nu`` (L_lambda x lambda^2 / c)."""
     w = np.asarray(w, float)
     l_lambda = AGN_BLOCKS["torus"][block](jnp.asarray(w), 11.0, 0.0, **kw)
     return np.asarray(l_lambda, float) * w**2 / 2.99792458e18
@@ -179,7 +187,11 @@ def node_parity(w_m, l_m, w_n, l_n, lo_um, hi_um):
     sel = (w_n >= lo_um * _UM) & (w_n <= hi_um * _UM) & (np.asarray(l_n) > 0)
     o = np.argsort(w_m)
     lm_at = np.exp(
-        np.interp(np.log(w_n[sel]), np.log(np.asarray(w_m)[o]), np.log(np.clip(np.asarray(l_m)[o], 1e-300, None)))
+        np.interp(
+            np.log(w_n[sel]),
+            np.log(np.asarray(w_m)[o]),
+            np.log(np.clip(np.asarray(l_m)[o], 1e-300, None)),
+        )
     )
     r = lm_at / np.asarray(l_n)[sel]
     return float(np.max(np.abs(r / np.median(r) - 1.0)))
@@ -203,7 +215,8 @@ def test_torus_sedmodel_matches_native_grid(ssp, block, kw):
     pk_d, _ = peak_um(w_d, l_d)
     _, step_n = peak_um(w_n, l_n)
     assert abs(np.log(pk_m / pk_d)) <= step_n, (
-        f"{block}: SEDModel peak {pk_m:.3f} um vs dense {pk_d:.3f} um (declared step {step_n:.4f} in ln lambda)"
+        f"{block}: SEDModel peak {pk_m:.3f} um vs dense {pk_d:.3f} um "
+        f"(declared step {step_n:.4f} in ln lambda)"
     )
 
     dev = node_parity(w_m, l_m, w_n, l_n, *_TORUS_BAND_UM)
@@ -211,7 +224,9 @@ def test_torus_sedmodel_matches_native_grid(ssp, block, kw):
 
     bm = band_mean(w_m, l_m, *_TORUS_BAND_UM)
     bd = band_mean(w_d, l_d, *_TORUS_BAND_UM)
-    assert bm == pytest.approx(bd, rel=_TORUS_BAND_RTOL), f"{block}: 8-500 um band mean SEDModel/dense = {bm / bd:.5f}"
+    assert bm == pytest.approx(bd, rel=_TORUS_BAND_RTOL), (
+        f"{block}: 8-500 um band mean SEDModel/dense = {bm / bd:.5f}"
+    )
 
 
 def _predict_dust(ssp, name, kw):
@@ -224,7 +239,11 @@ def _predict_dust(ssp, name, kw):
             "dust_tau_v": Fixed(1.0),
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": name, **{k: Fixed(v) for k, v in kw.items()}, "all_params": Fixed(DEFAULT)},
+        dust_emission={
+            "type": name,
+            **{k: Fixed(v) for k, v in kw.items()},
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.0),
     )
@@ -239,9 +258,13 @@ def _predict_dust(ssp, name, kw):
 
 
 def _eval_dust(name, kw, pred, w):
-    """Dust closure on grid ``w`` [A] with the model's own absorbed / IR budgets (erg/s); returns ``L_nu``."""
+    """Dust closure on grid ``w`` [A], own absorbed / IR budgets [erg/s]; returns ``L_nu``."""
     l_abs = float(pred.properties["l_dust_absorbed"]) * _LSUN
-    extra = {"log_L_ir": float(np.log10(float(pred.properties["l_dust_absorbed"]) * _LSUN))} if name == "dh02_ce01" else {}
+    extra = (
+        {"log_L_ir": float(np.log10(float(pred.properties["l_dust_absorbed"]) * _LSUN))}
+        if name == "dh02_ce01"
+        else {}
+    )
     return np.asarray(DUST_EMISSION_MODELS[name](jnp.asarray(w), l_abs, **kw, **extra), float)
 
 
@@ -251,7 +274,9 @@ _DUST_SUBBANDS_UM = [(3.0, 8.0), (8.0, 30.0), (30.0, 100.0), (100.0, 160.0), (16
 @pytest.mark.parametrize(
     ("name", "kw"),
     _DUST_CASES,
-    ids=[f"{n}-{'-'.join(f'{k}{v:g}' for k, v in kw.items()) or 'default'}" for n, kw in _DUST_CASES],
+    ids=[
+        f"{n}-{'-'.join(f'{k}{v:g}' for k, v in kw.items()) or 'default'}" for n, kw in _DUST_CASES
+    ],
 )
 def test_dust_sedmodel_matches_native_grid(ssp, name, kw):
     w_m, l_m, pred = _predict_dust(ssp, name, kw)
@@ -274,7 +299,9 @@ def test_dust_sedmodel_matches_native_grid(ssp, name, kw):
 
     tot_m = band_mean(w_m, l_m, *_DUST_BAND_UM)
     tot_d = band_mean(w_d, l_d, *_DUST_BAND_UM)
-    assert tot_m == pytest.approx(tot_d, rel=_DUST_BAND_RTOL), f"{name}: 3-1000 um mean SEDModel/dense = {tot_m / tot_d:.5f}"
+    assert tot_m == pytest.approx(tot_d, rel=_DUST_BAND_RTOL), (
+        f"{name}: 3-1000 um mean SEDModel/dense = {tot_m / tot_d:.5f}"
+    )
     for lo, hi in _DUST_SUBBANDS_UM:
         frac_m = band_mean(w_m, l_m, lo, hi) / tot_m
         frac_d = band_mean(w_d, l_d, lo, hi) / tot_d
@@ -292,8 +319,8 @@ def test_dust_sedmodel_matches_native_grid(ssp, name, kw):
 # design); (b) the master grid covers >= 1 - 1e-3 of the block's energy on a
 # 1e-3 A - 1e10 A evaluation (not for ``powerlaw``, which has no low-frequency
 # cut-off: its energy beyond a wavelength is set by where the grid ends);
-# (c) the levels at the model nodes nearest 1216 A and 5100 A equal those of the same block evaluated on
-# a 200000-point grid over the same range (1e-3).
+# (c) the levels at the model nodes nearest 1216 A and 5100 A equal those of the same block
+# evaluated on a 200000-point grid over the same range (1e-3).
 # ---------------------------------------------------------------------------
 _DISC_LBOL = 10.0**11 * _LSUN
 _DISC_TOL = 1.0e-3
@@ -362,16 +389,23 @@ def test_disc_sedmodel_conserves_energy_and_level(ssp, disc):
     bol_m = float(np.trapezoid(lam_m, w_m))
     bol_d = float(np.trapezoid(lam_d, w_d))
     if disc != "schartmann2005_skirtor_atten":
-        # kubota_done integrates to 0.99876 L_bol on a 1e-3 A - 1e10 A grid by its own construction (not the grid).
+        # kubota_done integrates to 0.99876 L_bol on a 1e-3 A - 1e10 A grid by its own
+        # construction (not the grid).
         tol = 2.0e-3 if disc == "kubota_done" else _DISC_TOL
-        assert bol_m == pytest.approx(_DISC_LBOL, rel=tol), f"{disc}: bolometric / L_bol = {bol_m / _DISC_LBOL:.5f}"
-    assert bol_m == pytest.approx(bol_d, rel=_DISC_TOL), f"{disc}: bolometric SEDModel/dense = {bol_m / bol_d:.5f}"
+        assert bol_m == pytest.approx(_DISC_LBOL, rel=tol), (
+            f"{disc}: bolometric / L_bol = {bol_m / _DISC_LBOL:.5f}"
+        )
+    assert bol_m == pytest.approx(bol_d, rel=_DISC_TOL), (
+        f"{disc}: bolometric SEDModel/dense = {bol_m / bol_d:.5f}"
+    )
 
     for wl in (1216.0, 5100.0):
         i = int(np.argmin(np.abs(w_m - wl)))  # nearest model node (values are exact there)
         lm = float(lam_m[i])
         ld = float(np.interp(w_m[i], w_d, lam_d))
-        assert lm == pytest.approx(ld, rel=_DISC_TOL), f"{disc}: L_lambda({wl:g} A) SEDModel/dense = {lm / ld:.5f}"
+        assert lm == pytest.approx(ld, rel=_DISC_TOL), (
+            f"{disc}: L_lambda({wl:g} A) SEDModel/dense = {lm / ld:.5f}"
+        )
 
     if disc != "powerlaw":
         w_w = np.geomspace(1.0e-3, 1.0e10, 200000)
@@ -379,5 +413,6 @@ def test_disc_sedmodel_conserves_energy_and_level(ssp, disc):
         inside = (w_w >= w_m.min()) & (w_w <= w_m.max())
         cover = np.trapezoid(lam_w[inside], w_w[inside]) / np.trapezoid(lam_w, w_w)
         assert cover >= 1.0 - _DISC_TOL, (
-            f"{disc}: master grid {w_m.min():.3g}-{w_m.max():.3g} A holds only {cover:.5f} of the block's energy"
+            f"{disc}: master grid {w_m.min():.3g}-{w_m.max():.3g} A holds only "
+            f"{cover:.5f} of the block's energy"
         )

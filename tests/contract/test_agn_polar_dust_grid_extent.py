@@ -134,7 +134,11 @@ def union_loses_the_skirtor_axis(monkeypatch):
     monkeypatch.setattr(
         wavelength_extension,
         "_ANALYTIC_DISC_RANGE_AA",
-        {k: v for k, v in wavelength_extension._ANALYTIC_DISC_RANGE_AA.items() if k != "schartmann2005"},
+        {
+            k: v
+            for k, v in wavelength_extension._ANALYTIC_DISC_RANGE_AA.items()
+            if k != "schartmann2005"
+        },
     )
     return patched
 

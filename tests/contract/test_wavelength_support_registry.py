@@ -28,8 +28,11 @@ from tengri.forward import wavelength_extension as we
 
 pytestmark = pytest.mark.contract
 
+
 def _torus_declared(name: str) -> bool:
-    return name in we._AGN_TORUS_TEMPLATES or name in we._ANALYTIC_TORUS or name in we._GRIDLESS_TORUS
+    return (
+        name in we._AGN_TORUS_TEMPLATES or name in we._ANALYTIC_TORUS or name in we._GRIDLESS_TORUS
+    )
 
 
 def _dust_declared(name: str) -> bool:
@@ -58,21 +61,26 @@ def test_every_torus_block_declares_support():
 
 def _disc_declared(name: str) -> bool:
     return (
-        name in we._AGN_DISC_TEMPLATES or name in we._ANALYTIC_DISC_RANGE_AA or name in we._GRIDLESS_DISC
+        name in we._AGN_DISC_TEMPLATES
+        or name in we._ANALYTIC_DISC_RANGE_AA
+        or name in we._GRIDLESS_DISC
     )
 
 
 def test_every_disc_block_declares_support():
     missing = sorted(n for n in AGN_BLOCKS["disc"] if not _disc_declared(n))
     assert not missing, (
-        f"disc blocks without declared wavelength support: {missing}. Add each to _AGN_DISC_TEMPLATES, "
-        "_ANALYTIC_DISC_RANGE_AA or _GRIDLESS_DISC after measuring the energy outside the SSP window (#2564)."
+        f"disc blocks without declared wavelength support: {missing}. "
+        "Add each to _AGN_DISC_TEMPLATES, _ANALYTIC_DISC_RANGE_AA or _GRIDLESS_DISC after "
+        "measuring the energy outside the SSP window (#2564)."
     )
 
 
 def test_disc_declarations_are_consistent():
     n_decl = [set(we._AGN_DISC_TEMPLATES), set(we._ANALYTIC_DISC_RANGE_AA), set(we._GRIDLESS_DISC)]
-    assert not (n_decl[0] & n_decl[1]) and not (n_decl[0] & n_decl[2]) and not (n_decl[1] & n_decl[2])
+    assert (
+        not (n_decl[0] & n_decl[1]) and not (n_decl[0] & n_decl[2]) and not (n_decl[1] & n_decl[2])
+    )
     stale = sorted(set().union(*n_decl) - set(AGN_BLOCKS["disc"]))
     assert not stale, f"declared disc names that are not registered blocks: {stale}"
     for name in we._GRIDLESS_DISC:
