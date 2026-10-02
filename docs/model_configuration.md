@@ -274,6 +274,8 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - `'Rv_bc'`, `'Rv_diff'`, `'Rv_neb'`: Per-screen RV overrides (two-component only). Accepted only when that screen's law reads R_V.
 - `'delta_bc'`, `'delta_diff'`, `'delta_neb'`: Per-screen delta overrides (two-component only). Accepted only when that screen's law reads a slope modification.
 - `'lyman_cutoff'`: Zero attenuation below 912 Å (Lyman limit). Two-component only.
+- `'t_birth_yr'`: Birth-cloud lifetime [yr] (`type='two_component'` only; default `1e7`). Stars younger than this sit behind the birth-cloud screen, stars older behind the diffuse screen alone. The split is exact: each SSP age node's share of mass formed younger than `t_birth_yr` is taken through the SFH kernel, so a node straddling the boundary is partly young and the result does not depend on where the SSP nodes fall. The default is a hard step, as in pcigale (`separation_age`) and FSPS (`dust_tesc`).
+- `'transition_width_dex'`: Dispersal width [dex] of every age edge (`two_component`, `age_binned`). The default `0` is the hard step; a positive value replaces it with a logistic dispersal of that width in `log10(age)`.
 - `'lyc_reprocessed_by'`: Which stellar population's ionizing photons are absorbed by `neb_fesc`: `'young'` (default, birth-cloud only) or `'all'` (FSPS/CIGALE style). Two-component only.
 - `'lyc_in_energy_balance'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)

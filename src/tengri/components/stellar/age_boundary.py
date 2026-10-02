@@ -120,7 +120,7 @@ def validate_age_boundaries(boundaries_yr: Sequence[float], width_dex: float) ->
 def cic_cell_edges(age):
     """Lower and upper lookback edges of every trapezoid parcel cell [yr].
 
-    The cells are the ones :func:`tengri.components.stellar.component._cic_parcels`
+    The cells are the ones ``_cic_parcels`` in the stellar component
     integrates: parcel ``i`` carries ``SFR_i * (hi_i - lo_i)``.
 
     Parameters

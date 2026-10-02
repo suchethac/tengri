@@ -820,7 +820,7 @@ class AgeBinnedDustComponent(TemplateThreading):
             discrete line wavelengths for the catalog).
         neb_weights : ndarray, shape (n_interval,)
             Share of the ionizing luminosity produced in each age interval
-            (:func:`~tengri.components.dust._age_mixture.ionizing_interval_weights`).
+            (``ionizing_interval_weights``).
 
         Returns
         -------

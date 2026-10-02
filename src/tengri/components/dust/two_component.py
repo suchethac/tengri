@@ -119,7 +119,7 @@ def _screen_transmission(
     population mixture
     :math:`T = q_0\,T_{\rm birth\_cloud} + (1 - q_0)\,T_{\rm diffuse}`,
     with :math:`q_j` the share of the ionizing luminosity produced in age
-    interval :math:`j` (:func:`~tengri.components.dust._age_mixture.ionizing_interval_weights`):
+    interval :math:`j` (``ionizing_interval_weights``):
     HII regions are lit by stars of every age, and only the stars younger than
     the birth-cloud lifetime sit inside the cloud.  ``None`` (shock and AGN,
     which are placed in the young-star screen) is the young-limit ``q = (1, 0)``.
@@ -877,7 +877,7 @@ class DustSEDComponent(TemplateThreading):
             declares.
         neb_weights : ndarray, shape (2,)
             Ionizing-luminosity share ``(q_young, q_old)`` of the two age
-            intervals (:func:`~tengri.components.dust._age_mixture.ionizing_interval_weights`);
+            intervals (``ionizing_interval_weights``);
             the ``"birth_cloud"`` choice mixes the two screens by it.
 
         Returns

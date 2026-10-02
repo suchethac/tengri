@@ -422,7 +422,7 @@ def two_component_dust(
     rather than a single age.  ``y(a)`` in ``{0, 1}`` (a node wholly inside one
     population) reduces to that population's own transmission.  The one
     implementation of the mixture is
-    :mod:`tengri.components.dust._age_mixture`, shared with ``age_binned``.
+    ``_age_mixture``, shared with ``age_binned``.
 
     References
     ----------

@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- One exact young/old split serves every attenuator. The stellar component publishes, per SSP age node, the share of its formed mass younger than each boundary age (`age_boundary_younger_fraction`), computed through the same SFH kernel as the node weights, instead of each screen evaluating a step or logistic at the node ages. `two_component` defaults to a hard step at `t_birth_yr=1e7`; `transition_width_dex > 0` opts into the smooth law, and `age_binned` windows use the same machinery. A node's transmission is the mixture of its populations' transmissions (not of their optical depths). Nebular and line screens are weighted by ionizing luminosity, the energy-balance lookup table carries young and old populations and mixes them at runtime, `age_binned` gains the `lyc_` key family, and the refusal of age windows narrower than five node spacings is gone. Golden: `two_component` `L_absorbed` 5.932047709369588e59 -> 5.93036676326139e59 erg/s (-0.0283%), matching an independent dense-parcel step reference to 5.6e-9.
+
 ### Fixed
 
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
