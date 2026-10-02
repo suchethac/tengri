@@ -24,6 +24,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import planck_lnu, wavelength_to_nu
+from tengri.components.agn._template_grid import analytic_bolometric_nu
 from tengri.components.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
@@ -494,6 +495,14 @@ def polar_dust_extinction(
     return l_nu_attenuated, l_absorbed
 
 
+# Fixed span of the graybody's normalization integral: Wien-suppressed below
+# 1e3 A for T < 2000 K (exp(-hc/(lambda k T)) < e^-72), and falling as
+# nu^(2+beta) beyond lambda_0, < 1e-10 of the peak power by 1e9 A (10 cm) for
+# T >= 20 K.
+_GRAYBODY_WAVE_LO = 1.0e3  # Angstrom
+_GRAYBODY_WAVE_HI = 1.0e9  # Angstrom
+
+
 def polar_dust_emission(
     l_absorbed_total: float,
     wavelength: jnp.ndarray,
@@ -503,8 +512,9 @@ def polar_dust_emission(
 ) -> jnp.ndarray:
     """Graybody reemission from polar dust.
 
-    Energy-conserving: the integral of the reemitted spectrum equals the
-    total absorbed luminosity.
+    Energy-conserving: the integral of the reemitted spectrum over its whole
+    support (taken on a fixed internal grid, so independent of ``wavelength``)
+    equals the total absorbed luminosity.
 
     Parameters
     ----------
@@ -532,20 +542,19 @@ def polar_dust_emission(
 
     **Gradient-safe**: yes, fully differentiable.
     """
+
     # Graybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
-    opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
-    b_nu = planck_lnu(wavelength_to_nu(wavelength), temperature)
-    unnormalized = opacity_factor * b_nu
+    def _graybody(wave):
+        opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wave) ** beta))
+        return opacity_factor * planck_lnu(wavelength_to_nu(wave), temperature)
 
-    # Normalize so that integral(L_reemit * dnu) = l_absorbed_total
-    # dnu = -c / lambda^2 * dlambda, but we use |dnu|
-    # For a wavelength grid, dnu_i ~ c / lambda_i^2 * |dlambda_i|
-    nu = _C_AA / wavelength
-    # Use trapezoidal spacing; for boundary, replicate nearest interval
-    delta_nu = jnp.abs(jnp.diff(nu))
-    delta_nu = jnp.concatenate([delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]])
+    unnormalized = _graybody(wavelength)
 
-    integral = jnp.sum(unnormalized * delta_nu)
+    # Normalize so that integral(L_reemit * dnu) = l_absorbed_total over the
+    # graybody's whole support, on a fixed internal grid and never on the
+    # caller's wavelength array (a grid that stops short of the far-IR would
+    # otherwise pile all of l_absorbed_total into the part it holds).
+    integral = analytic_bolometric_nu(_graybody, _GRAYBODY_WAVE_LO, _GRAYBODY_WAVE_HI)
     # Avoid division by zero when integral is tiny (e.g., all wavelengths
     # far from the emission peak)
     safe_integral = jnp.where(integral > 0.0, integral, 1.0)
