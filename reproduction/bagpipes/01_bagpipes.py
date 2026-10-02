@@ -823,14 +823,13 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 # panel and UV-to-NIR bandpass statistics. Fiducial SFH: 5 Gyr delayed-τ with
 # τ = 1 Gyr, all with nebular emission on (logU −2, matched gas metallicity).
 # Stars are matched at the same absolute Z on the same BC03 node
-# (`met_logzsol = log10(z × 0.02) − log10(0.0142)`). Gas is matched as each
-# code's solar-scaled value, `neb_logZ_gas = log10(z)`. BAGPIPES's Cloudy grid
-# sets 12 + log(O/H) = 8.71 at its solar value (oxygen −3.29 in
-# `make_cloudy_models.py`); the source of tengri does not state Cue's absolute
-# solar O/H, so the gas-phase O/H agreement is not verified to better than that
-# unstated reference.
-# UV-to-NIR bandpass ratio: median 1.002×, worst 1.058× (1 of 10 bands
-# outside 5%).
+# (`met_logzsol = log10(z × 0.02) − log10(0.0142)`). Gas is matched solar-scaled,
+# `neb_logZ_gas = log10(z)`, which is the same gas-phase oxygen abundance in both
+# codes: both take Dopita et al. (2000) solar abundances and depletion (total solar
+# log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71 at
+# the solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Carbon
+# and nitrogen differ: Cue holds [C/O] and [N/O] at their solar defaults, while
+# BAGPIPES scales nitrogen with metallicity through its own prescription.
 
 # %%
 _Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
@@ -1715,8 +1714,12 @@ save_fig("bagpipes_08_nebular.png")
 # line-luminosity ratios (Hα, Hβ, [O III], [O II]) are shown for each case.
 # Stars sit at the same absolute Z (BC03 node, `log10(z × 0.02) − log10(0.0142)`);
 # gas is matched solar-scaled, `neb_logZ_gas = log10(z)`, against BAGPIPES's
-# `metallicity = z` (12 + log(O/H) = 8.71 at z = 1 in its Cloudy grid; Cue's
-# absolute solar O/H is not stated in tengri's source).
+# `metallicity = z`. That is the same gas-phase oxygen abundance in both codes: both
+# take Dopita et al. (2000) solar abundances and depletion (total solar
+# log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71 at the
+# solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Cue holds
+# [C/O] and [N/O] at their solar defaults, while BAGPIPES scales nitrogen with
+# metallicity through its own prescription.
 #
 # At logU=−2, Z=1 Z☉ (matching §9): Hα 0.98×, Hβ 0.98×, [O III] 1.01×,
 # [O II] 0.77×. The Z=2 Z☉ case is the outlier (Hα/Hβ rise to 1.86×/1.82×
@@ -1810,12 +1813,14 @@ for label, logu, z, fesc in neb_cases_list:
 # (km/s), convolving in log-wavelength space. Tengri's `velocity_broaden`
 # JIT-compiles the same convolution.
 #
-# At matched `veldisp = 150 km/s` (a typical late-type-galaxy value),
-# the broadened Hα profile has FWHM `2.355 σ_v λ / c`. BAGPIPES' default
-# spectral grid has `R_spec = 1000` (σ ≈ 127 km/s), so the effective
-# Hα width at `veldisp = 150 km/s` is σ_eff = sqrt(127² + 150²) ≈ 197 km/s,
-# FWHM ≈ 10 Å. Tengri's `velocity_broaden` operates on unbinned input
-# and returns the pure-Gaussian profile at σ = 150 km/s (FWHM ≈ 7.7 Å).
+# At matched `veldisp = 150 km/s` (a typical late-type-galaxy value), the Gaussian
+# kernel alone has FWHM `2.355 σ_v λ / c` = 7.733 Å at Hα. The measured Hα line is
+# wider than the kernel because each code's nebular line has a width of its own before
+# the kernel is applied: Cue emits the line at its trained resolution, BAGPIPES places
+# the Cloudy line on its spectral grid. Because the two pre-broadening profiles differ
+# in shape, the widths do not add in quadrature with the kernel. After broadening, the
+# measured FWHM is 9.420 Å for tengri and 9.500 Å for BAGPIPES (0.8 % apart); the
+# printed analytic 7.733 Å is the kernel's contribution, not the expected total.
 #
 # **Verification Status:** CROSSVAL: Spectroscopy forward model
 
@@ -2590,8 +2595,9 @@ plt.show()
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy 22.00 for Cue (tengri,
 #   Li et al. 2025, ApJ 986, 9, arXiv:2405.04598): tengri Hα ≈ 0.98 × BAGPIPES
 #   Hα.
-# - **§10 LSF.** tengri's `velocity_broaden` matches the analytic
-#   Gaussian σ = 150 km/s FWHM to 0.8 %.
+# - **§10 LSF.** With σ_v = 150 km/s the measured Hα FWHM is 9.420 Å (tengri) and
+#   9.500 Å (BAGPIPES), 0.8 % apart; both exceed the 7.733 Å kernel width because
+#   each nebular line carries its own width before broadening.
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
@@ -2607,7 +2613,8 @@ plt.show()
 #   difference: the band-averaged residual drops from ⟨Δ⟩ −0.020 → −0.008 mag
 #   with the nebular block removed, leaving only the ≈ 0.01 mag §4 stellar
 #   color mismatch.
-# - **§14 timing.** Both codes finish a full SED in 80–125 ms.
+# - **§14 timing.** Both codes build one SED in of order 0.1 s (same performance
+#   class); the printed §14 timings give the run's values.
 # - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
 #   one axis with a fractional-residual panel and an optical normalization
 #   ratio + 16–84 % spread. With the dust corrected the continuum sits at
