@@ -580,7 +580,7 @@ def escape_geometry_transmission(
     tengri's pre-#2529 young/old transmission is Charlot & Fall (2000)'s
     sigmoid-weighted screen, :math:`T_\mathrm{bc}(\lambda)^{y(a)}\,
     T_\mathrm{diff}(\lambda)` (``y(a)`` the birth-cloud weight,
-    :func:`tengri.components.dust.two_component._young_indicator`): every
+    ``tengri.components.dust.two_component._young_indicator``): every
     photon of a given age sees the SAME combined optical depth, scaled
     continuously by age. #2529 observed that this makes ``neb_fesc`` (the
     nebular escape fraction already read off this transmission downstream)
@@ -618,7 +618,7 @@ def escape_geometry_transmission(
     (``exp(-tau_v1 k_bc)`` / ``exp(-tau_v2 k_diff)``, no ``f_obscuration``
     floor): the caller applies the shared ``f_obscuration`` affine wrap
     (``f_obs + (1 - f_obs) * (...)``) to this function's OUTPUT once, the
-    same way :func:`tengri.components.dust._apply.two_component_dust` wraps
+    same way ``tengri.components.dust._apply.two_component_dust`` wraps
     its own sigmoid term, so a nonzero obscuration floor is not
     double-applied to the escaping sub-beam specifically.
 

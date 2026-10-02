@@ -226,15 +226,20 @@ class TestEscapeGeometryTransmissionIdentities:
                 assert bool(jnp.all(T >= -1e-10))
                 assert bool(jnp.all(T <= 1.0 + 1e-10))
 
-    def test_gradient_wrt_fesc_finite(self):
+    def test_gradient_wrt_fesc_finite_and_nonzero(self):
         def f(fesc):
             T = escape_geometry_transmission(
                 self.y_age, self.T_bc, self.T_diff, fesc, "birth_cloud_holes"
             )
             return jnp.sum(T)
 
-        g = jax.grad(f)(0.3)
-        assert np.isfinite(float(g))
+        g = float(jax.grad(f)(0.3))
+        assert np.isfinite(g), "a corrupt (NaN/inf) fesc gradient breaks any gradient-based fit"
+        assert g != 0.0, (
+            "T_hole != T_bc**y*T_diff for a nonzero y_age slice (birth_cloud_holes with "
+            "T_bc != T_diff), so d(sum T)/d(fesc) is genuinely nonzero here -- a zero "
+            "would mean the hole term silently dropped out, the #2100 failure shape"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +612,7 @@ class TestKeyValidationAndRefusal:
 
 class TestGradient:
     @pytest.mark.parametrize("geometry", ["birth_cloud_holes", "clear"])
-    def test_photometry_gradient_wrt_neb_fesc_finite(
+    def test_photometry_gradient_wrt_neb_fesc_finite_and_nonzero(
         self, synthetic_ssp_wide, synthetic_tophat_obs, geometry
     ):
         ssp, obs = synthetic_ssp_wide, synthetic_tophat_obs
@@ -634,5 +639,10 @@ class TestGradient:
         def f(fesc):
             return jnp.sum(m.predict_photometry({"neb_fesc": fesc}))
 
-        g = jax.grad(f)(0.3)
-        assert np.isfinite(float(g))
+        g = float(jax.grad(f)(0.3))
+        assert np.isfinite(g), "a corrupt (NaN/inf) fesc gradient breaks any gradient-based fit"
+        assert g != 0.0, (
+            "the hole/screened mix is genuinely fesc-dependent at tau_bc=0.8 != 0 here "
+            "-- a zero gradient would mean the geometry correction silently dropped out "
+            "of the traced computation, the #2100 failure shape"
+        )
