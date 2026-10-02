@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract: the FSPS-parity ``eb_include_lyc`` toggle changes L_absorbed (#961).
+"""Contract: the FSPS-parity ``lyc_in_energy_balance`` toggle changes L_absorbed (#961).
 
 The canonical energy balance masks the Lyman continuum out of ``L_absorbed``
 (#922: LyC photons ionize H, they don't heat dust). FSPS/Prospector re-emit
 the *full* absorbed luminosity, which left tengri's far-IR ~10 % low at the
-Prospector reproduction fiducial. ``dust={'eb_include_lyc': True}`` opts in
+Prospector reproduction fiducial. ``dust={'lyc_in_energy_balance': True}`` opts in
 to the FSPS convention; these tests pin that the toggle (a) reaches the
 forward pass (not a silent no-op), (b) reproduces the manual masked/unmasked
 integrals against a dust-free twin's intrinsic SED, (c) round-trips through
@@ -36,7 +36,7 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust["eb_include_lyc"] = True
+        dust["lyc_in_energy_balance"] = True
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
@@ -103,7 +103,7 @@ class TestEnergyBalanceLycToggle:
         L_full = float(jnp.asarray(s_full.derived["L_absorbed"]))
         # The synthetic SSP is LyC-bright, so including the LyC must add energy.
         assert L_full > L_masked * 1.0001, (
-            f"eb_include_lyc is a no-op: L_absorbed {L_masked:.6e} -> {L_full:.6e}"
+            f"lyc_in_energy_balance is a no-op: L_absorbed {L_masked:.6e} -> {L_full:.6e}"
         )
 
     def test_matches_manual_integrals(self, synthetic_ssp_wide):
@@ -135,9 +135,9 @@ class TestEnergyBalanceLycToggle:
     def test_grammar_round_trip(self, synthetic_ssp_wide):
         m = _build(synthetic_ssp_wide, True)
         groups = m.spec.to_groups()
-        assert groups["dust_attenuation"].get("eb_include_lyc") is True
+        assert groups["dust_attenuation"].get("lyc_in_energy_balance") is True
         m_default = _build(synthetic_ssp_wide, False)
-        assert "eb_include_lyc" not in m_default.spec.to_groups()["dust_attenuation"]
+        assert "lyc_in_energy_balance" not in m_default.spec.to_groups()["dust_attenuation"]
 
 
 def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
@@ -156,7 +156,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust["eb_include_lyc"] = True
+        dust["lyc_in_energy_balance"] = True
     centers = (3500.0, 6200.0, 1.0e6)
     obs = Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
     return SEDModel.build(
