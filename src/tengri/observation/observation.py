@@ -1958,7 +1958,31 @@ class Observation:
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
-                if lyc_factor_sub is not None:
+                a_hole_sub = state.derived.get("dust_hole_attenuation_subband_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_sub is not None and fesc_geom is not None:
+                    # #2529 hole geometry: a SEPARATE formula from the
+                    # lyc_factor_sub scalar-multiply rule below (never both
+                    # -- two_component.py's publish skips lyc_factor_sub
+                    # whenever this key is live), affine in fesc_geom across
+                    # the WHOLE sub-band grid, not only the ionizing nodes.
+                    # Mirrors DustSEDComponent.apply §2a exactly:
+                    # escaping sub-beam crosses only the hole, never gated;
+                    # covered sub-beam stays on T_diff·T_bc^y and is zeroed
+                    # at ionizing nodes (the nebular gas still reprocesses
+                    # it), scaled by y_age the same way.
+                    # ``a_hole_sub`` / ``dust_ionizing_flag_subband_precomp``
+                    # already carry the SAME (n_age, n_filter, n_subbands)
+                    # shape as ``a_bc_sub`` / ``a_diff_sub`` themselves (both
+                    # published together in two_component.py from the same
+                    # ``sub_waves``), so no ``[None, :, :]`` broadcast here --
+                    # only ``y_age`` needs the two trailing axes added.
+                    ionizing_sub = state.derived["dust_ionizing_flag_subband_precomp"]
+                    y_age_3d = y_age[:, None, None]
+                    t_hole_contrib_sub = y_age_3d * a_hole_sub + (1.0 - y_age_3d) * a_diff_sub
+                    gate_sub = 1.0 - y_age_3d * ionizing_sub
+                    t_sub = fesc_geom * t_hole_contrib_sub + (1.0 - fesc_geom) * t_sub * gate_sub
+                elif lyc_factor_sub is not None:
                     # two_component's own birth-cloud-graded rule (#2439,
                     # #2427, R2); see nebular/component.py and
                     # dust/two_component.py's publish for why this is exact
@@ -1975,6 +1999,20 @@ class Observation:
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
                 t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
+                a_hole_lut = state.derived.get("dust_hole_attenuation_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_lut is not None and fesc_geom is not None:
+                    # #2529 hole geometry, λ_eff-granularity equivalent of
+                    # the sub-band formula above (see that branch).
+                    ionizing_lut = state.derived["dust_ionizing_flag_precomp"]
+                    t_hole_contrib_lut = (
+                        y_age[:, None] * a_hole_lut[None, :]
+                        + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                    )
+                    gate_lut = 1.0 - y_age[:, None] * ionizing_lut[None, :]
+                    t_per_age = (
+                        fesc_geom * t_hole_contrib_lut + (1.0 - fesc_geom) * t_per_age * gate_lut
+                    )
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
                 # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).

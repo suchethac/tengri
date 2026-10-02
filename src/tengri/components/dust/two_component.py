@@ -1049,9 +1049,7 @@ class DustSEDComponent(TemplateThreading):
                     ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
                 )
                 f_esc = jnp.asarray(state.derived.get("lyc_fesc", 0.0))
-                f_obs = jnp.asarray(
-                    params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
-                )
+                f_obs = jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION))
                 k_bc_full = _lyman_clip(
                     _resolve_law(self.config.law_bc)(
                         wave, **select_law_kwargs(self.config.law_bc, bc_kw)
@@ -1643,6 +1641,26 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
 
+            # #2529 hole geometry: publish T_hole(λ_eff) (absent -> 'screened',
+            # the observation.py consumer's existing a_diff·a_bc^y formula is
+            # untouched) and the per-filter ionizing flag the consumer needs
+            # to gate the covered sub-beam's Lyman continuum the same way
+            # the exact path's apply() §2a does. A single λ_eff evaluation
+            # per filter -- the SAME granularity the non-subband Taylor path
+            # already uses for everything else here; the sub-band quadrature
+            # block below does the exact-wavelength equivalent.
+            if self.config.lyc_escape_geometry != "screened":
+                from tengri.components.lyc import ionizing_mask
+
+                derived_overrides["dust_hole_attenuation_precomp"] = (
+                    a_diff
+                    if self.config.lyc_escape_geometry == "birth_cloud_holes"
+                    else jnp.ones_like(a_diff)
+                )
+                derived_overrides["dust_ionizing_flag_precomp"] = ionizing_mask(filter_eff).astype(
+                    a_diff.dtype
+                )
+
             # The nebular bucket's screen, integrated THROUGH the band rather than
             # sampled at λ_eff (#1738). ``A(λ_eff)·Φ_neb`` is only correct where the
             # screen is flat across the filter, and nebular emission is line-dominated:
@@ -1778,6 +1796,25 @@ class DustSEDComponent(TemplateThreading):
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+
+                # #2529 hole geometry, exact-node equivalent of the λ_eff
+                # publish above. Presence of this key is the signal
+                # observation.py's combine uses to switch formulas entirely
+                # -- it does NOT also read ``stellar_subband_lyc_factor_precomp``
+                # in that case, so skip overwriting that key below with the
+                # (wrong, pre-#2529) scalar-factor rule; NebularSEDComponent's
+                # own flat publish of it is simply unused on this path.
+                if self.config.lyc_escape_geometry != "screened":
+                    from tengri.components.lyc import ionizing_mask
+
+                    derived_overrides["dust_hole_attenuation_subband_precomp"] = (
+                        a_diff_sub
+                        if self.config.lyc_escape_geometry == "birth_cloud_holes"
+                        else jnp.ones_like(a_diff_sub)
+                    )
+                    derived_overrides["dust_ionizing_flag_subband_precomp"] = ionizing_mask(
+                        sub_waves
+                    ).astype(a_diff_sub.dtype)
 
                 # Lyman-continuum sub-band factor (#2439, #2427, R2):
                 # overwrites NebularSEDComponent's flat publish (SAME key,

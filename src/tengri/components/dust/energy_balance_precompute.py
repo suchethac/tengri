@@ -125,6 +125,7 @@ def build_energy_balance_lut(
     tau_diff_grid: jnp.ndarray,
     fesc_exact: bool = False,
     lyc_reprocessed_by: str = "young",
+    lyc_escape_geometry: str = "screened",
 ) -> EnergyBalanceLUT:
     r"""Precompute ``B`` and ``G`` for the two-component energy balance.
 
@@ -169,49 +170,26 @@ def build_energy_balance_lut(
         population (``t_birth_yr``/``transition_width_dex``-weighted) is
         credited, matching ``two_component.py``'s
         ``lyc_factor = 1 - y_age*(1 - fesc)``.
+    lyc_escape_geometry : str, optional
+        Mirrors ``DustSEDComponent.config.lyc_escape_geometry`` (#2529).
+        ``'screened'`` (default): unchanged, falls through to the
+        ``fesc_exact`` family above (or neither). ``'birth_cloud_holes'`` /
+        ``'clear'``: builds a SEPARATE ``B``/``G`` (A_0) and ``B_fesc``/
+        ``G_fesc`` (A_1) family from
+        :func:`tengri.components.lyc.escape_geometry_transmission`'s own
+        affine-in-``fesc`` construction, active across the WHOLE spectrum
+        (not just the Lyman continuum the ``fesc_exact`` family above
+        targets -- a hole bypasses the birth-cloud screen at every
+        wavelength). Mutually exclusive with ``fesc_exact``'s family: a
+        non-``'screened'`` geometry is refused together with
+        ``lyc_reprocessed_by='all'`` upstream (parameters/groups.py), so
+        this branch only ever runs with ``lyc_reprocessed_by='young'``.
 
     Returns
     -------
     EnergyBalanceLUT
     """
     mask_nonlyc = ~ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)
-
-    sspm_fesc = None
-    if fesc_exact and lyc_in_energy_balance:
-        # A(fesc) = A_0 + fesc * A_1 (#2539 item 1): lyc_factor(age) =
-        # 1 - y_age*(1-fesc) is affine in fesc, so the per-(met,age,wave) SSP
-        # weight in the LyC region splits into a fesc-independent piece
-        # ((1-y_age), or 0 under lyc_reprocessed_by='all') and a fesc-linear
-        # piece (y_age, or 1 under lyc_reprocessed_by='all'). Outside the LyC
-        # region the weight is always 1 for A_0 and 0 for A_1 -- unaffected by
-        # fesc, matching the runtime exact integral (two_component.py §2a/§3).
-        from tengri.components.dust.two_component import _young_indicator
-
-        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
-        ones_age = jnp.ones_like(y_age)[:, None]
-        if lyc_reprocessed_by == "all":
-            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, 0.0)
-            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, ones_age)
-        else:
-            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, (1.0 - y_age)[:, None])
-            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, y_age[:, None])
-        sspm = ssp_flux * weight_a0[None, :, :]  # (n_met, n_age, n_wave)
-        sspm_fesc = ssp_flux * weight_a1[None, :, :]
-    else:
-        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
-        sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
-
-    # side="all": each array (sspm / sspm_fesc) already carries its own
-    # per-region weight (mask_nonlyc / weight_a0 / weight_a1 above), so the
-    # edge-aware reduction just needs to sum everything it holds -- the
-    # bracket cell straddling LYMAN_LIMIT_AA is then split into its two
-    # rectangles using whatever weight is actually present on each side
-    # (zero on a masked-out ionizing node), which is bit-identical to
-    # selecting "nonionizing"/"ionizing" explicitly when one side is zeroed.
-    B = edge_trapezoid(
-        sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1
-    )  # (n_met, n_age)
-
     bc_params = bc_params or {}
     diff_params = diff_params or {}
 
@@ -251,13 +229,136 @@ def build_energy_balance_lut(
             axis=-2,
         )  # (n_met, n_age, n_tau_bc, n_tau_diff)
 
-    G = _build_g(sspm)
+    if lyc_escape_geometry != "screened":
+        # #2529: escape_geometry_transmission's own construction,
+        # (1 - fesc)*screened + fesc*hole_contrib, is affine in fesc at
+        # EVERY wavelength (not just the Lyman continuum the fesc_exact
+        # family below targets -- a hole bypasses the birth-cloud screen at
+        # every wavelength, continuum included). Reusing that affine split
+        # algebraically: writing gate(age,λ) = 1 - y_age(age)*ionizing_mask(λ)
+        # (the SAME per-age, per-wavelength weight the #2539-item-1
+        # ``weight_a0`` below uses, restated so it applies across the whole
+        # grid, not only inside the Lyman continuum where ``weight_a0``'s own
+        # outer ``mask_nonlyc`` already pins it to 1 anyway):
+        #
+        #   intrinsic_gate = gate + fesc*(1 - gate)
+        #   T_observed      = f_obs + (1-f_obs)*[gate*T_screened_raw
+        #                                         + (1-gate)*fesc*T_hole_raw]
+        #
+        # so B / G (A_0, this fesc's coefficient) and B_fesc / G_fesc (A_1)
+        # are, per (met, age):
+        #
+        #   B       = sum_λ SSP * gate * mask              (edge-aware)
+        #   B_fesc  = sum_λ SSP * (1 - gate) * mask
+        #   G       = sum_λ SSP * gate * mask * T_screened_wrapped
+        #              + f_obs * B_fesc
+        #           = g_at(B's own SSP*gate*mask, tb, td) + f_obs * B_fesc
+        #   G_fesc  = sum_λ SSP * mask * T_hole_wrapped  -  G
+        #
+        # (the last identity is an algebraic simplification, not a separate
+        # derivation: expand both sides in terms of the un-wrapped raw
+        # curves and the f_obs + (1-f_obs)*(...) affine wrap and they
+        # collapse to the same expression -- see #2529 PR description for
+        # the full expansion). Mutually exclusive with the fesc_exact family
+        # below: a non-'screened' geometry is refused together with
+        # lyc_reprocessed_by='all' upstream (parameters/groups.py /
+        # parameters.py), so this branch only ever runs with
+        # lyc_reprocessed_by='young'.
+        from tengri.components.dust.two_component import _young_indicator
 
-    B_fesc = None
-    G_fesc = None
-    if sspm_fesc is not None:
+        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
+        gate = 1.0 - y_age[:, None] * ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)[None, :]
+        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
+        mask_f = mask.astype(gate.dtype)[None, :]  # (1, n_wave)
+
+        sspm0 = ssp_flux * (gate * mask_f)[None, :, :]  # (n_met, n_age, n_wave)
+        sspm1 = ssp_flux * ((1.0 - gate) * mask_f)[None, :, :]
+
+        B = edge_trapezoid(sspm0, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+        B_fesc = edge_trapezoid(sspm1, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+
+        f_obs = jnp.asarray(f_obscuration)
+        G = _build_g(sspm0) + f_obs * B_fesc[:, :, None, None]
+
+        def g_hole_at(tb, td):
+            # T_hole_contrib has no tau_bc dependence (a hole bypasses the
+            # birth-cloud screen specifically); tb is accepted only so the
+            # same nested tau_bc_grid x tau_diff_grid loop below can call
+            # this exactly like g_at_compiled.
+            del tb
+            t_diff_raw_rows = two_component_dust(
+                wavelength=ssp_wave,
+                age_grid=ssp_ages_yr,
+                tau_v1=0.0,  # nulls the birth-cloud term regardless of weight
+                tau_v2=jnp.asarray(td),
+                law_bc=law_bc,
+                law_diff=law_diff,
+                f_obscuration=0.0,
+                t_birth=t_birth_yr,
+                transition_width=transition_width_dex,
+                diff_params={k: jnp.asarray(v) for k, v in diff_params.items()},
+                lyman_cutoff_aa=lyman_cutoff_aa,
+            )  # (n_age, n_wave); every row identical (tau_v1=0 above)
+            t_hole_rows = (
+                t_diff_raw_rows
+                if lyc_escape_geometry == "birth_cloud_holes"
+                else jnp.ones_like(t_diff_raw_rows)
+            )
+            y_age_col = y_age[:, None]
+            t_hole_contrib = y_age_col * t_hole_rows + (1.0 - y_age_col) * t_diff_raw_rows
+            t_hole_wrapped = f_obs + (1.0 - f_obs) * t_hole_contrib
+            integrand = ssp_flux * (mask_f * t_hole_wrapped)[None, :, :]
+            return edge_trapezoid(integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+
+        g_hole_at_compiled = jax.jit(g_hole_at)
+        G_hole_full = jnp.stack(
+            [
+                jnp.stack([g_hole_at_compiled(tb, td) for td in tau_diff_grid], axis=-1)
+                for tb in tau_bc_grid
+            ],
+            axis=-2,
+        )
+        G_fesc = G_hole_full - G
+    elif fesc_exact and lyc_in_energy_balance:
+        # A(fesc) = A_0 + fesc * A_1 (#2539 item 1): lyc_factor(age) =
+        # 1 - y_age*(1-fesc) is affine in fesc, so the per-(met,age,wave) SSP
+        # weight in the LyC region splits into a fesc-independent piece
+        # ((1-y_age), or 0 under lyc_reprocessed_by='all') and a fesc-linear
+        # piece (y_age, or 1 under lyc_reprocessed_by='all'). Outside the LyC
+        # region the weight is always 1 for A_0 and 0 for A_1 -- unaffected by
+        # fesc, matching the runtime exact integral (two_component.py §2a/§3).
+        from tengri.components.dust.two_component import _young_indicator
+
+        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
+        ones_age = jnp.ones_like(y_age)[:, None]
+        if lyc_reprocessed_by == "all":
+            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, 0.0)
+            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, ones_age)
+        else:
+            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, (1.0 - y_age)[:, None])
+            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, y_age[:, None])
+        sspm = ssp_flux * weight_a0[None, :, :]  # (n_met, n_age, n_wave)
+        sspm_fesc = ssp_flux * weight_a1[None, :, :]
+
+        # side="all": each array (sspm / sspm_fesc) already carries its own
+        # per-region weight (mask_nonlyc / weight_a0 / weight_a1 above), so
+        # the edge-aware reduction just needs to sum everything it holds --
+        # the bracket cell straddling LYMAN_LIMIT_AA is then split into its
+        # two rectangles using whatever weight is actually present on each
+        # side (zero on a masked-out ionizing node), which is bit-identical
+        # to selecting "nonionizing"/"ionizing" explicitly when one side is
+        # zeroed.
+        B = edge_trapezoid(sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+        G = _build_g(sspm)
         B_fesc = edge_trapezoid(sspm_fesc, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
         G_fesc = _build_g(sspm_fesc)
+    else:
+        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
+        sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
+        B = edge_trapezoid(sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+        G = _build_g(sspm)
+        B_fesc = None
+        G_fesc = None
 
     return EnergyBalanceLUT(
         B=B,

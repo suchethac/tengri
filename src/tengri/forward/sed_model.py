@@ -3899,9 +3899,7 @@ class SEDModel:
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
-        self._dust_lyc_escape_geometry = str(
-            getattr(spec, "dust_lyc_escape_geometry", "screened")
-        )
+        self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -10354,6 +10352,7 @@ class SEDModel:
                     tau_diff_grid=tau_diff_grid,
                     fesc_exact=_fesc_exact,
                     lyc_reprocessed_by=dust.config.lyc_reprocessed_by,
+                    lyc_escape_geometry=dust.config.lyc_escape_geometry,
                 )
 
         self._energy_balance_lut_cache = lut

@@ -285,6 +285,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "lyman_cutoff",
         "lyc_reprocessed_by",
         "lyc_in_energy_balance",
+        "lyc_escape_geometry",
         # a PARAMETER (dust_eta_balance) reachable as a dust_emission grammar key,
         # emitted by the parameter walk rather than by a structural rule
         "eta_balance",
