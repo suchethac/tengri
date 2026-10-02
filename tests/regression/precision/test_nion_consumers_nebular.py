@@ -151,7 +151,7 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
         assert table.line_band_kernel_fixed is not None  # fixed-redshift model
         point = tuple(jnp.asarray(p[name]).reshape(()) for name in table.axis_names)
 
-        def _interp(arr):
+        def _interp(arr, point=point):
             return np.asarray(interp_nd_pchip(arr, table.axes, point, _kinds(table)))
 
         lines_ppq = 10.0 ** _interp(table.log_sed_lines_per_qh).astype(np.float64)
