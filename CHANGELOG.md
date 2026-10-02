@@ -72,6 +72,10 @@
 
 - `dust_emission={'type': 'graybody'}` is the general-opacity greybody `(1 − e^{−(λ0/λ)^β})·B_ν(T)` of Casey (2012) Eq. 1 with no additional `ν^β` emissivity factor (νL_ν peak 72 µm at T = 50 K, β = 1.5, λ0 = 200 µm; CIGALE `mbb` and Synthesizer `Greybody(optically_thin=False)` agree) (#2596).
 
+- The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`) integrates the
+  thermal continuum on a 0.01 µm–10 mm rest-frame grid, so 70–1000 µm filters read the
+  band-averaged closure to 1e-3 instead of zero; the grid ended at 31.6 µm (#2642).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
