@@ -20,7 +20,8 @@ with no (1 + z) factor and no distance factor (``dl_cm = 1``).
 
 The nodes carry 0.2 % spacing around the query point: the lookup is a triweight average over the
 nodes, and in the Wien tail a 1 % spacing smooths the value by more than the 1e-3 tolerance (the
-15 K cells below measure it).
+15 K cells below measure it). The 1e-3 pinned by the 27 continuum cells is the accuracy at
+closely spaced nodes only: the default node grids give 4-10 % off-node error (#2676).
 """
 
 import functools
@@ -156,8 +157,8 @@ def test_pah_drude_lookup_equals_exact_closure(z, band_um):
 
     Nothing in ``src/tengri`` applies the redshift to a ``pah_drude`` lookup afterwards: the only
     references are the adapter's own registration (``forward/precompute/registry.py``, whose
-    ``resolve`` has no caller) and a docstring mention of a "hybrid kernel" that does not exist,
-    so the builder has to integrate the filters at the rest wavelengths itself.
+    ``resolve`` has no caller) and docstrings that name a hybrid kernel, which consumes no lookup
+    from this adapter, so the builder has to integrate the filters at the rest wavelengths itself.
     """
     filt_wave, filt_trans = _tophat(*band_um)
     result = adapter.precompute([filt_wave], [filt_trans], z, None, model="pah_drude")
@@ -244,7 +245,12 @@ _COLD_MEASURED_1PCT = {"modified_blackbody": 1.0292, "graybody": 1.0305}
 
 @pytest.mark.parametrize("model", ["modified_blackbody", "graybody"])
 def test_cold_dust_mid_ir_band_is_smoothed_by_one_percent_nodes(model):
-    """At 15 K, 8-24 um, 1 % node spacing: lookup/exact is the smoothing, not agreement."""
+    """At 15 K, 8-24 um, 1 % node spacing: lookup/exact is the smoothing, not agreement.
+
+    The ~1.03 is a measured limit of the lookup (triweight smoothing over the T nodes), recorded
+    so a change is noticed and tracked in #2676; it is not intended behavior, and the cell is to
+    be tightened when that issue closes.
+    """
     ratio = _ratio(model, 0.0, _COLD_BAND_UM, spacing=0.01, temperature=_COLD_T)
     assert ratio == pytest.approx(_COLD_MEASURED_1PCT[model], abs=0.01)
     assert ratio > 1.02
@@ -252,7 +258,12 @@ def test_cold_dust_mid_ir_band_is_smoothed_by_one_percent_nodes(model):
 
 @pytest.mark.parametrize("model", ["modified_blackbody", "graybody"])
 def test_cold_dust_mid_ir_band_at_fine_node_spacing(model):
-    """With 0.2 % nodes the lookup is within 1e-2 of exact, on the rest-grid floor."""
+    """With 0.2 % nodes the lookup is within 1e-2 of exact, on the rest-grid floor.
+
+    The ~1.009 is a measured limit of the lookup (the 1500-point rest grid interpolated linearly
+    across the Wien tail), recorded so a change is noticed and tracked in #2676; it is not intended
+    behavior, and the cell is to be tightened when that issue closes.
+    """
     ratio = _ratio(model, 0.0, _COLD_BAND_UM, spacing=0.002, temperature=_COLD_T)
     assert ratio == pytest.approx(1.0, abs=1e-2)
     central = {**_CENTRAL, "dust_T": _COLD_T}

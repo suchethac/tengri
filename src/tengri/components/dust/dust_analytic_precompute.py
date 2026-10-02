@@ -342,9 +342,9 @@ def _build_grid_pah_drude(
 ) -> PreintegratedGrid:
     """Preintegrate PAH Drude template through filters.
 
-    The PAH template is pure shape (no axes); runtime amplitude scales it.
-    Precomputes the filter-integrated template so the hybrid kernel can scale
-    by the user's PAH amplitude parameter at runtime.
+    The PAH template is pure shape (no axes); an amplitude scales it. The adapter is
+    registered in ``forward/precompute/registry.py``; no kernel consumes its lookups
+    today.
 
     Parameters
     ----------

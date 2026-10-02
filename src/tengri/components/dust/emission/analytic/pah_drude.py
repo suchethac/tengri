@@ -44,10 +44,10 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
     much of ``L_ir`` unaccounted for, so it should not be used alone
     or cross-validated against energy-balance tests.
 
-    The PAH template is a pure shape (no free parameters). Runtime evaluation
-    uses the precomputed lookup from
-    :mod:`~tengri.components.dust.dust_analytic_precompute` in the hybrid kernel;
-    this component provides the full-wavelength evaluation.
+    The PAH template is a pure shape (no free parameters). This component provides
+    the full-wavelength evaluation; the adapter in
+    :mod:`~tengri.components.dust.dust_analytic_precompute` is registered in
+    ``forward/precompute/registry.py``, and no kernel consumes its lookups today.
 
     References
     ----------
