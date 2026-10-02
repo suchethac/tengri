@@ -926,21 +926,35 @@ agn_torus_block, agn_attenuation_block : str
     # apply the IDENTICAL mask to the disc and aniso-lines terms
     # individually: multiplication distributes over the sum, so the two
     # formulations agree to floating-point reassociation.
-    _central_mask = 1.0
+    # Type-1/2 obscuration: disc and lines need separate handling on the tied path.
+    # On the fracAGN-tied path (_disc_R is not None), the disc already carries
+    # the torus extinction via the library ratio disk(i)/disk(0). The lines and
+    # FeII stay screened by the torus. Compute the screen for all TORUS_SCREEN_PARAMS
+    # tori; apply it to lines/FeII always; apply to disc only when untied.
+    _lines_mask = 1.0
+    _disc_mask = 1.0
     if agn_torus_block in TORUS_SCREEN_PARAMS:
         _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
-        _central_mask = torus_screen_transmission(
+        _screen = torus_screen_transmission(
             wave,
             cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
             oa_deg=params.get(_oa_key, 40.0),
             tau_v=params.get(_tau_key, 7.0),
         )
+        _lines_mask = _screen  # lines always screened
+        # disc screened only on untied path (fracAGN=0, _disc_R is None)
+        _disc_mask = jnp.where(_disc_R is not None, 1.0, _screen)
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
-        _central_mask = sigmoid_visibility_mask(
+        _vis_mask = sigmoid_visibility_mask(
             params.get("agn_cos_inc", 0.86602540378443864),
             params.get("agn_theta_torus", 30.0),
         )
-    L_lambda_central = (L_lambda_disc + L_lambda_lines_aniso + L_lambda_feii) * _central_mask
+        _lines_mask = _vis_mask
+        _disc_mask = _vis_mask
+    L_lambda_central = (
+        L_lambda_disc * _disc_mask
+        + (L_lambda_lines_aniso + L_lambda_feii) * _lines_mask
+    )
     # Isotropic NLR: visible at every inclination, so added after the mask.
     L_lambda_central = L_lambda_central + L_lambda_lines_iso
 

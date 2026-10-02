@@ -79,6 +79,13 @@ def piecewise_powerlaw_disk(
     segment_indices = jnp.searchsorted(limits, wavelength, side="right") - 1
     segment_indices = jnp.clip(segment_indices, 0, len(coefs) - 1)
 
+    # Zero the spectrum outside [limits[0], limits[-1]] (CIGALE skirtor2016.py:112-124).
+    # Without this, searchsorted clips wavelengths below limits[0] to the first
+    # segment, producing a spurious tail in the 1-8 nm range that inflates the
+    # unit-area normalization. Apply the cut BEFORE normalization (exact in any
+    # precision mode).
+    in_range_mask = (wavelength >= limits[0]) & (wavelength <= limits[-1])
+
     if wavelength.dtype == jnp.float32:
         # Float32 (#1206): the two factors of ``wavelength**coef * norm`` blow past
         # the float32 window in OPPOSITE directions even though their product is
@@ -101,6 +108,8 @@ def piecewise_powerlaw_disk(
         # keeps every value in range and leaves the normalized result unchanged.
         log_spectrum = log_spectrum - jnp.max(log_spectrum)
         spectrum = _pow10(log_spectrum)
+        # Apply the wavelength-range cut BEFORE normalization.
+        spectrum = jnp.where(in_range_mask, spectrum, 0.0)
         integral = jnp.trapezoid(spectrum, wavelength)
         integral_safe = jnp.maximum(jnp.abs(integral), 1e-30)
         return spectrum / integral_safe
@@ -122,6 +131,8 @@ def piecewise_powerlaw_disk(
     coef_at_wave = coefs[segment_indices]
     norm_at_wave = norms[segment_indices]
     spectrum = (wavelength**coef_at_wave) * norm_at_wave
+    # Apply the wavelength-range cut BEFORE normalization.
+    spectrum = jnp.where(in_range_mask, spectrum, 0.0)
 
     # Normalize to unit area
     integral = jnp.trapezoid(spectrum, wavelength)
