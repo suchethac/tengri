@@ -37,7 +37,7 @@ class TestGordon03SMCBar:
         (R_V = 2.74)
 
         The dust_extinction.averages.G03_SMCBar model tabulates and extends
-        these data via FM90 formula at high x (>= 3.3 µm⁻¹). This test verifies
+        these data via FM90 formula at high x (>= 3.70 µm⁻¹ (λ ≤ 2700 Å)). This test verifies
         that our fine-grid evaluation of the model matches the model's own output.
         """
         pytest.importorskip("dust_extinction")
@@ -112,7 +112,7 @@ class TestGordon03SMCBar:
     def test_fm90_uv(self):
         """k at UV wavenumbers matches FM90 formula to rtol 5e-3.
 
-        Gordon et al. (2003) Table 4 SMC-bar FM90 parameters (for x >= 3.3 µm⁻¹):
+        Gordon et al. (2003) Table 4 SMC-bar FM90 parameters (for x >= 3.70 µm⁻¹ (λ ≤ 2700 Å)):
         c1=-4.959, c2=2.264, c3=0.389, c4=0.461, x0=4.6, γ=1.0, R_V=2.74
         FM90 form: k(x) = c1 + c2*x + c3*D(x; x0, γ) + c4*F(x)
         where D = x²/((x²−x0²)² + x²γ²) (Drude profile)

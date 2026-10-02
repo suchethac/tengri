@@ -2449,12 +2449,13 @@ def gordon03_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     Precomputed from ``dust_extinction.averages.G03_SMCBar`` at module import
     time by evaluating the model on a fine grid spanning exactly 1000–33333 Å
-    (0.3 µm⁻¹ ≤ x ≤ 10 µm⁻¹). Between x ≈ 3.3 and 3.5 µm⁻¹, the dust_extinction
-    model blends the Table 4 nodes with the FM90 form (the law is +3.5 % above pure
-    FM90 at x = 3.3). Redward of 33333 Å the curve holds its end value 0.0624;
+    (0.3 µm⁻¹ ≤ x ≤ 10 µm⁻¹). For x ≥ 3.70 µm⁻¹ (λ ≤ 2700 Å) the model is the
+    FM90 form; redward of 2700 Å it is a cubic spline through the Table 4
+    optical/NIR nodes anchored on FM90 at 2700 and 2600 Å (the spline sits 3.5 %
+    above pure FM90 at x = 3.3 µm⁻¹). Redward of 33333 Å the curve holds its end value 0.0624;
     blueward of 1000 Å it holds 9.6346.
 
-    For x ≥ 3.3 µm⁻¹ (λ ≤ 3030 Å), the model implements the Fitzpatrick & Massa
+    For x ≥ 3.70 µm⁻¹ (λ ≤ 2700 Å), the model implements the Fitzpatrick & Massa
     (1990) form with SMC-bar FM90 parameters: c1 = −4.959, c2 = 2.264,
     c3 = 0.389, c4 = 0.461, x0 = 4.600 µm⁻¹, γ = 1.000 µm⁻¹, R_V = 2.74.
 
