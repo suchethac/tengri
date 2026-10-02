@@ -187,3 +187,24 @@ def test_feii_provenance_sha256_matches_shipped_file(name):
     m = re.search(rf"\*\*File\*\*: `{re.escape(name)}`.*?\*\*SHA256\*\*: `([0-9a-f]{{64}})`", text, re.S)
     assert m is not None, f"no SHA256 recorded for {name} in PROVENANCE.md"
     assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == m.group(1)
+
+
+@pytest.mark.parametrize("fwhm", [1000.0, 5000.0])
+def test_amplitude_is_independent_of_the_callers_wavelength_grid(fwhm):
+    """The R_Fe normalisation is a property of the template, not of the caller's grid.
+
+    The same grid spacing, once with the R_Fe window (4434-4684 A) on the grid and
+    once UV-only (1200-3500 A): the FeII L_lambda at a UV wavelength must be
+    identical.  Previously the window integral was taken on the caller's grid and
+    floored at 1e-30 when the grid did not cover it, so a UV-only grid returned
+    garbage (amplitude ~1e30 too large).
+    """
+    full = np.arange(1200.0, 7000.0, 0.5)
+    uv_only = np.arange(1200.0, 3500.0, 0.5)
+    a = np.asarray(_fe2_pseudo_continuum(jnp.asarray(full), fwhm, 1.0))
+    b = np.asarray(_fe2_pseudo_continuum(jnp.asarray(uv_only), fwhm, 1.0))
+    sel = (uv_only >= 1800.0) & (uv_only <= 3200.0)  # >5 sigma from the UV-only grid end
+    assert np.all(np.isfinite(b)) and b[sel].max() > 0.0
+    np.testing.assert_allclose(b[sel], a[: len(uv_only)][sel], rtol=1e-6, atol=0.0)
+    # and it is a sane amplitude: a 1-A-wide FeII feature is << R_Fe per Angstrom
+    assert b[sel].max() < 1.0

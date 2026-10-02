@@ -176,26 +176,45 @@ except FileNotFoundError:
 _FE2_RFE_WINDOW = (4434.0, 4684.0)
 
 
-def _window_integral(wavelength: jnp.ndarray, values: jnp.ndarray, lo: float, hi: float):
-    """Integral of the piecewise-linear ``values(wavelength)`` over ``[lo, hi]``.
+# Fixed internal grid for the R_Fe normalisation [Angstrom]: step, and padding
+# either side of the window so the velocity kernel (sigma <~ 60 A) is not truncated.
+_FE2_NORM_STEP = 0.25
+_FE2_NORM_PAD = 600.0
 
-    The window edges are honoured exactly (each grid interval is clipped to the
-    window and the integrand linearly interpolated to the clipped ends), so the
-    result does not depend on whether ``lo``/``hi`` happen to fall on grid
-    points. ``wavelength`` must be ascending [Angstrom]; the result has the
-    units of ``values`` times Angstrom.
+
+def _fe2_broadened_template(out_wave: jnp.ndarray, src_wave: jnp.ndarray, fwhm_kms: float):
+    """Zero-clipped PyQSOFit FeII F_lambda shape, velocity-broadened.
+
+    The template (UV below 3500 A, optical above; linear resampling onto
+    ``src_wave``, zero outside the tabulated range) is smoothed with a Gaussian of
+    FWHM ``fwhm_kms`` [km/s] (sigma_lambda = lambda * FWHM / 2.3548 / c at each
+    output point), kernel normalised over the ``src_wave`` samples, and returned at
+    ``out_wave`` [Angstrom]. Unnormalised shape, units of the template (F_lambda).
     """
-    w0, w1 = wavelength[:-1], wavelength[1:]
-    v0, v1 = values[:-1], values[1:]
-    a = jnp.clip(w0, lo, hi)
-    b = jnp.clip(w1, lo, hi)
-    dw = w1 - w0
-    # Select the denominator (not a floor): a degenerate (zero-width) interval has
-    # a == b so its contribution is exactly zero, and the VJP stays finite.
-    slope = (v1 - v0) / jnp.where(dw > 0.0, dw, 1.0)
-    fa = v0 + slope * (a - w0)
-    fb = v0 + slope * (b - w0)
-    return jnp.sum(0.5 * (fa + fb) * (b - a))
+    uv_wave = jnp.asarray(device_table(_FE2_UV_WAVE), dtype=jnp.float64)
+    uv_flux = jnp.asarray(device_table(_FE2_UV_FLUX), dtype=jnp.float64)
+    opt_wave = jnp.asarray(device_table(_FE2_OPT_WAVE), dtype=jnp.float64)
+    opt_flux = jnp.asarray(device_table(_FE2_OPT_FLUX), dtype=jnp.float64)
+
+    # Linear interpolation in wavelength of the (non-negative) F_lambda nodes,
+    # zero outside the tabulated range. Linear (not log-log) resampling keeps
+    # the template integral: log-log power-law chords between nodes of a
+    # sign-changing, non-power-law template err by up to ~1 dex.
+    uv_interp = jnp.interp(src_wave, uv_wave, uv_flux, left=0.0, right=0.0)
+    opt_interp = jnp.interp(src_wave, opt_wave, opt_flux, left=0.0, right=0.0)
+    # UV where available (1200-3500 A), else optical (UV dominates the overlap).
+    template = jnp.where(src_wave < 3500.0, uv_interp, opt_interp)
+
+    sigma_wave = out_wave * (fwhm_kms / 2.3548) / _C_LIGHT_KMS
+
+    def _smooth_at(w_i, sigma_i):
+        kernel = jnp.exp(-0.5 * ((src_wave - w_i) / sigma_i) ** 2)
+        return jnp.sum(template * kernel) / jnp.sum(kernel)
+
+    from jax import vmap
+
+    return vmap(_smooth_at)(out_wave, sigma_wave)
+
 
 
 def _fe2_pseudo_continuum(
@@ -265,63 +284,21 @@ def _fe2_pseudo_continuum(
             "fe_optical_pyqsofit.txt exist in src/tengri/data/agn_fe2/."
         )
 
-    # Convert NumPy arrays to JAX (one-time cost at function call)
-    uv_wave = jnp.asarray(device_table(_FE2_UV_WAVE), dtype=jnp.float64)
-    uv_flux = jnp.asarray(device_table(_FE2_UV_FLUX), dtype=jnp.float64)
-    opt_wave = jnp.asarray(device_table(_FE2_OPT_WAVE), dtype=jnp.float64)
-    opt_flux = jnp.asarray(device_table(_FE2_OPT_FLUX), dtype=jnp.float64)
-
-    # Interpolate UV and optical templates onto the common wavelength grid
-    # Linear interpolation in wavelength of the (non-negative) F_lambda nodes,
-    # zero outside the tabulated range. Linear (not log-log) resampling keeps
-    # the template integral: log-log power-law chords between nodes of a
-    # sign-changing, non-power-law template err by up to ~1 dex.
-    uv_interp = jnp.interp(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
-    opt_interp = jnp.interp(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
-
-    # Combine: use UV where available (1200–3500 A), else optical
-    # In the overlap region (2200–3500 A), UV dominates by design (Tsuzuki+06)
-    fe2_combined = jnp.where(wavelength < 3500.0, uv_interp, opt_interp)
-
-    # Apply Gaussian broadening via convolution in velocity space
-    # Velocity broadening σ_v [km/s] → wavelength σ_λ [A] at each wavelength
-    sigma_kms = fwhm_kms / 2.3548  # Convert FWHM to sigma
-    sigma_wave = wavelength * sigma_kms / _C_LIGHT_KMS
-
-    # Build Gaussian kernel at the wavelength grid (centered at each point)
-    # For JIT-safe convolution, use numerical convolution with kernel truncated
-    # to ±3 sigma (capture ~99.7% of Gaussian probability).
-    # Note: Full FFT convolution is overkill here; numerical works fine.
-
-    # Simple numerical convolution: smooth the template by applying
-    # a Gaussian kernel at each wavelength point
-    def _convolve_with_gaussian(flux_array, sigma_array):
-        """Smooth flux array with position-dependent Gaussian kernel."""
-        n_wave = flux_array.shape[0]
-
-        def _smooth_at(i):
-            """Smooth value at index i using Gaussian kernel."""
-            sigma_i = sigma_array[i]
-            # Kernel extends ±3 sigma from this point
-            dw = jnp.abs(wavelength - wavelength[i])
-            kernel = jnp.exp(-0.5 * (dw / sigma_i) ** 2)
-            # Normalize so it integrates to 1 in wavelength space
-            # (ignoring the Jacobian; we just want smooth interpolation)
-            kernel = kernel / jnp.sum(kernel)
-            return jnp.sum(flux_array * kernel)
-
-        # vmap over all wavelength indices to smooth all points
-        from jax import vmap
-
-        return vmap(_smooth_at)(jnp.arange(n_wave))
-
-    fe2_broadened = _convolve_with_gaussian(fe2_combined, sigma_wave)
+    fe2_broadened = _fe2_broadened_template(wavelength, wavelength, fwhm_kms)
 
     # Normalise: energy in the R_Fe window (4434-4684 A, Boroson & Green 1992)
-    # is integral(L_lambda d lambda) = fe2_strength per unit L(H-beta).
-    opt_window_flux = _window_integral(
-        wavelength, fe2_broadened, _FE2_RFE_WINDOW[0], _FE2_RFE_WINDOW[1]
+    # is integral(L_lambda d lambda) = fe2_strength per unit L(H-beta). The
+    # window integral is evaluated ONCE on a fixed internal fine grid (not on
+    # the caller's wavelength grid), so the amplitude does not depend on whether
+    # the caller's grid covers, or how finely it samples, 4434-4684 A.
+    win = jnp.arange(_FE2_RFE_WINDOW[0], _FE2_RFE_WINDOW[1] + 0.5 * _FE2_NORM_STEP, _FE2_NORM_STEP)
+    src = jnp.arange(
+        _FE2_RFE_WINDOW[0] - _FE2_NORM_PAD,
+        _FE2_RFE_WINDOW[1] + _FE2_NORM_PAD + 0.5 * _FE2_NORM_STEP,
+        _FE2_NORM_STEP,
     )
+    win_broadened = _fe2_broadened_template(win, src, fwhm_kms)
+    opt_window_flux = jnp.trapezoid(win_broadened, win)
     opt_window_flux = jnp.maximum(opt_window_flux, 1e-30)
 
     return fe2_strength * fe2_broadened / opt_window_flux
