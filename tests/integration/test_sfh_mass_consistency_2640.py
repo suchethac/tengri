@@ -36,8 +36,8 @@ _skip_no_ssp = pytest.mark.skipif(
 )
 
 # The issue's own reproducer: age(z=0.1) = 12.4417 Gyr < 13.81 Gyr, so the
-# dpl's onset genuinely exceeds the support -- the case the inherited fix
-# (an earlier, cross-grid rescale) got wrong by up to 155% for a bursty field.
+# dpl's onset genuinely exceeds the support: the history must be windowed to
+# [0, age(z)] before it is normalized to the formed mass.
 _AGE_GYR = 13.81
 _Z = 0.1
 
@@ -161,11 +161,10 @@ class TestSFRHistoryFormationMass:
     def test_random_field_integral_matches_formed_mass(self, model_dpl_field, spec_dpl_field):
         """∫ sfr_history (support) = 10**log_mstar_formed for a bursty field draw.
 
-        This is the cell the earlier (cross-grid) fix got wrong by 155%
-        (ratio 2.55 instead of 1.0) -- the GP field modulates the published
-        history multiplicatively on top of the shape's own normalization, so
-        a rescale measured on a DIFFERENT grid cannot reconcile the two to
-        tight tolerance.
+        The GP field modulates the published history multiplicatively on top
+        of the shape's own normalization, so the rescale factor must be
+        measured on the published grid itself: a factor measured on a
+        different grid leaves the integral off by a factor of 2.55 here.
         """
         n_grid = spec_dpl_field.n_grid
         age_z_yr = float(age_at_z(_Z)) * 1e9
