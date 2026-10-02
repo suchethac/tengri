@@ -77,7 +77,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     name: str = "dust_attenuation"
     lyman_cutoff_aa: float = 0.0
     """Lyman clip applied to the attenuation curve, mirroring two_component."""
-    eb_include_lyc: bool = False
+    lyc_in_energy_balance: bool = False
     """FSPS-parity toggle (#961), mirroring ``DustSEDComponentConfig``.
 
     ``False`` applies the canonical LyC mask to the energy-balance integral --
@@ -285,7 +285,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "dex",
                 "RAW (pre-fdust) LyC luminosity of the whole stellar population "
                 "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
-                "unconditionally (not gated on eb_include_lyc, which concerns only "
+                "unconditionally (not gated on lyc_in_energy_balance, which concerns only "
                 "the screen's own LyC absorption); read via the sed_nebular edge "
                 "above for ordering. Absent when sed_intrinsic was not yet "
                 "populated when the nebular component ran.",
@@ -514,8 +514,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # FSPS-parity toggle (#961), the same expression DustSEDComponent uses:
         # None disables the canonical LyC mask so all absorbed energy heats
         # dust. The fast-path LUT bakes the same choice at build time
-        # (sed_model passes config.eb_include_lyc), so the two agree either way.
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
+        # (sed_model passes config.lyc_in_energy_balance), so the two agree either way.
+        _eb_cutoff = None if self.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
 
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path: use precomputed LUT with degenerate two-component mapping.
@@ -586,7 +586,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # linear in fdust, so the combined gradient must be nonzero at
         # fdust == 0 too (log10_add_fdust_credit's docstring). This energy
         # enters the dust IR budget unconditionally (not gated on
-        # eb_include_lyc, which concerns the screen's own LyC absorption, not
+        # lyc_in_energy_balance, which concerns the screen's own LyC absorption, not
         # HII-region dust). Placed AFTER the fast/slow branches converge to a
         # single log_l_absorbed (one post-sum edit covers both paths,
         # including a LUT-served nebular term landing in the same closing

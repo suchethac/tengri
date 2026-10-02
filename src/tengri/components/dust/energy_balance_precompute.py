@@ -89,13 +89,13 @@ class EnergyBalanceLUT(NamedTuple):
         The fesc-LINEAR-COEFFICIENT family (#2539 item 1), same shapes as
         ``B``/``G``: the stellar absorbed integral is affine in the live
         nebular escape fraction, ``A(fesc) = A_0 + fesc * A_1``, when
-        ``eb_include_lyc=True`` unmasks the Lyman continuum. ``B``/``G`` above
+        ``lyc_in_energy_balance=True`` unmasks the Lyman continuum. ``B``/``G`` above
         are then the fesc-INDEPENDENT ``A_0`` family (non-LyC everywhere, plus
         the fesc=0 remainder of the LyC region); ``B_fesc``/``G_fesc`` are the
         ``A_1`` coefficient (the young/birth-cloud-weighted, or -- under
-        ``lyc_absorb_all=True`` -- unweighted, LyC-only contribution). ``None``
+        ``lyc_reprocessed_by='all'`` -- unweighted, LyC-only contribution). ``None``
         when the model never needs fesc-exactness (single-component dust,
-        ``eb_include_lyc=False``, or no live photoionized nebular component):
+        ``lyc_in_energy_balance=False``, or no live photoionized nebular component):
         ``lut_l_absorbed_stellar_log10`` then behaves exactly as before.
     """
 
@@ -120,11 +120,11 @@ def build_energy_balance_lut(
     bc_params: dict | None = None,
     diff_params: dict | None = None,
     lyman_cutoff_aa: float = 0.0,
-    eb_include_lyc: bool = False,
+    lyc_in_energy_balance: bool = False,
     tau_bc_grid: jnp.ndarray,
     tau_diff_grid: jnp.ndarray,
     fesc_exact: bool = False,
-    lyc_absorb_all: bool = False,
+    lyc_reprocessed_by: str = "young",
 ) -> EnergyBalanceLUT:
     r"""Precompute ``B`` and ``G`` for the two-component energy balance.
 
@@ -145,11 +145,11 @@ def build_energy_balance_lut(
     f_obscuration, t_birth_yr, transition_width_dex, bc_params, diff_params,
     lyman_cutoff_aa
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
-    eb_include_lyc : bool, optional
+    lyc_in_energy_balance : bool, optional
         FSPS-parity toggle (#961): when True, the LyC (ionizing side of LYMAN_LIMIT_AA) is kept in
         the absorbed-luminosity integrand (all absorbed energy heats dust)
         instead of the canonical LyC mask (#922). Must match the runtime
-        ``DustSEDComponent.config.eb_include_lyc``.
+        ``DustSEDComponent.config.lyc_in_energy_balance``.
     tau_bc_grid, tau_diff_grid : ndarray
         Optical-depth grid nodes (keyword-only).
     fesc_exact : bool, optional
@@ -157,17 +157,18 @@ def build_energy_balance_lut(
         stellar absorbed integral's fesc-linear coefficient, so
         :func:`lut_l_absorbed_stellar_log10` can be exact in a live nebular
         escape fraction instead of declining the LUT outright. Only
-        meaningful when ``eb_include_lyc=True`` (otherwise the LyC region is
+        meaningful when ``lyc_in_energy_balance=True`` (otherwise the LyC region is
         masked out of the integral regardless of fesc, and ``B``/``G`` alone
         are already exact); ignored otherwise.
-    lyc_absorb_all : bool, optional
-        Mirrors ``DustSEDComponent.config.lyc_absorb_all`` (#961/#2539): when
-        True, ALL stellar ages route their LyC through the gas uniformly (no
+    lyc_reprocessed_by : str, optional
+        Mirrors ``DustSEDComponent.config.lyc_reprocessed_by`` (#961/#2539): when
+        ``'all'``, ALL stellar ages route their LyC through the gas uniformly (no
         young/old split), so the fesc-linear ``A_1`` term is the UNWEIGHTED
         LyC contribution of every age, and ``A_0`` excludes the LyC region
-        entirely. When False (default), only the young/birth-cloud population
-        (``t_birth_yr``/``transition_width_dex``-weighted) is credited, matching
-        ``two_component.py``'s ``lyc_factor = 1 - y_age*(1 - fesc)``.
+        entirely. When ``'young'`` (default), only the young/birth-cloud
+        population (``t_birth_yr``/``transition_width_dex``-weighted) is
+        credited, matching ``two_component.py``'s
+        ``lyc_factor = 1 - y_age*(1 - fesc)``.
 
     Returns
     -------
@@ -176,19 +177,19 @@ def build_energy_balance_lut(
     mask_nonlyc = ~ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)
 
     sspm_fesc = None
-    if fesc_exact and eb_include_lyc:
+    if fesc_exact and lyc_in_energy_balance:
         # A(fesc) = A_0 + fesc * A_1 (#2539 item 1): lyc_factor(age) =
         # 1 - y_age*(1-fesc) is affine in fesc, so the per-(met,age,wave) SSP
         # weight in the LyC region splits into a fesc-independent piece
-        # ((1-y_age), or 0 under lyc_absorb_all=True) and a fesc-linear piece
-        # (y_age, or 1 under lyc_absorb_all=True). Outside the LyC region the
-        # weight is always 1 for A_0 and 0 for A_1 -- unaffected by fesc,
-        # matching the runtime exact integral (two_component.py §2a/§3).
+        # ((1-y_age), or 0 under lyc_reprocessed_by='all') and a fesc-linear
+        # piece (y_age, or 1 under lyc_reprocessed_by='all'). Outside the LyC
+        # region the weight is always 1 for A_0 and 0 for A_1 -- unaffected by
+        # fesc, matching the runtime exact integral (two_component.py §2a/§3).
         from tengri.components.dust.two_component import _young_indicator
 
         y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
         ones_age = jnp.ones_like(y_age)[:, None]
-        if lyc_absorb_all:
+        if lyc_reprocessed_by == "all":
             weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, 0.0)
             weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, ones_age)
         else:
@@ -197,7 +198,7 @@ def build_energy_balance_lut(
         sspm = ssp_flux * weight_a0[None, :, :]  # (n_met, n_age, n_wave)
         sspm_fesc = ssp_flux * weight_a1[None, :, :]
     else:
-        mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else mask_nonlyc
+        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
         sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
 
     # side="all": each array (sspm / sspm_fesc) already carries its own

@@ -80,9 +80,9 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: FSPS/Prospector-parity toggle (#961, #2539 item 1): include the Lyman
     #: continuum in the energy-balance integral instead of the canonical
     #: LyC-masked ``L_absorbed`` (default; #922). Threaded from
-    #: ``dust={'eb_include_lyc': True}`` the same way
-    #: ``DustAttenuationSEDComponentConfig.eb_include_lyc`` /
-    #: ``DustSEDComponentConfig.eb_include_lyc`` are: WG00's absorbed-energy
+    #: ``dust={'lyc_in_energy_balance': True}`` the same way
+    #: ``DustAttenuationSEDComponentConfig.lyc_in_energy_balance`` /
+    #: ``DustSEDComponentConfig.lyc_in_energy_balance`` are: WG00's absorbed-energy
     #: integral (:meth:`WG00AttenuationSEDComponent.apply`) calls the SAME
     #: :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` with
     #: the SAME Lyman-edge switch point as ``single_component``, so there is one
@@ -90,7 +90,7 @@ class WG00AttenuationSEDComponentConfig(SEDComponentConfig):
     #: this field existed the grammar accepted the key for ``dust_type=3``
     #: (wg00) but ``component_factory.py`` never passed it through: a silent
     #: no-op. Static, non-fittable.
-    eb_include_lyc: bool = False
+    lyc_in_energy_balance: bool = False
     #: Whether the HII-region dust-heating credit (#2539 item 3) can ever be
     #: nonzero, resolved from spec provenance by
     #: ``SEDModel._fdust_credit_active`` and frozen here the same way
@@ -231,7 +231,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
                 "dex",
                 "RAW (pre-fdust) LyC luminosity of the whole stellar population "
                 "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
-                "unconditionally (not gated on eb_include_lyc, which concerns only "
+                "unconditionally (not gated on lyc_in_energy_balance, which concerns only "
                 "the screen's own LyC absorption); read via the sed_nebular edge "
                 "above for ordering. Absent when sed_intrinsic was not yet "
                 "populated when the nebular component ran.",
@@ -331,7 +331,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
         # LyC-masked (the ionizing side of the Lyman edge ionizes H, it does
-        # not heat dust: #922), unless eb_include_lyc opts into the
+        # not heat dust: #922), unless lyc_in_energy_balance opts into the
         # FSPS/Prospector convention (#2539 item 1): None disables the mask
         # so all absorbed energy heats dust, the same expression
         # DustAttenuationSEDComponent/DustSEDComponent use, so every dust
@@ -344,7 +344,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_LIMIT_AA
+        _eb_cutoff = None if self.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
         # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
         log_l_absorbed, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave, lyman_cutoff_aa=_eb_cutoff
@@ -359,7 +359,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         # that function's docstring for why log10_add-ing the already
         # fdust-multiplied form has a gradient defect at fdust == 0. This
         # energy enters the dust IR budget unconditionally (not gated on
-        # eb_include_lyc). Static elision (#2539 last FLOP guard): when
+        # lyc_in_energy_balance). Static elision (#2539 last FLOP guard): when
         # fdust_credit_active is False (neb_fdust_frac Fixed at exactly 0,
         # or not declared at all), the credit is structurally zero for
         # every evaluation of this model, so skip forming it at all rather
