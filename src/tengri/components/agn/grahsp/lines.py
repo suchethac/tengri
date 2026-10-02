@@ -176,6 +176,7 @@ def feii_forest(
     l5100: float,
     a_lines: float,
     a_feii: float,
+    agn_type: int = AGN_TYPE_BL,
 ) -> Array:
     r"""Bruhweiler+Verner 2008 FeII forest, scaled to the broad H-beta budget.
 
@@ -201,6 +202,11 @@ def feii_forest(
     a_feii : float
         FeII strength relative to broad H-beta (paper ``AFeII``,
         reasonable range 2-10).
+    agn_type : {1, 2, 3}, optional
+        FeII is emitted by the broad-line region, so it is present only for
+        ``1`` (broad-line AGN) and zero for ``2`` (Sy2) and ``3`` (LINER), the
+        same switch that gates the broad lines and the Balmer continuum
+        (upstream ``activatelines``). Default ``1``. **static** under JIT.
 
     Returns
     -------
@@ -213,6 +219,8 @@ def feii_forest(
     template support: no extrapolation.
     """
     wave_nm = jnp.asarray(wave_nm)
+    if agn_type != AGN_TYPE_BL:
+        return jnp.zeros_like(wave_nm)
     l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines
     interp = jnp.interp(
         wave_nm,

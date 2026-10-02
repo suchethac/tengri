@@ -297,6 +297,7 @@ def evaluate_grahsp_agn(
         l5100=params.l5100,
         a_lines=params.a_lines,
         a_feii=params.a_feii,
+        agn_type=params.agn_type,
     )
     # --- Balmer continuum (Grandi 1982); only for broad-line AGN (type 1). ---
     if params.agn_type == 1:

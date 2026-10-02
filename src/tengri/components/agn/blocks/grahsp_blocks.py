@@ -471,6 +471,7 @@ def grahsp_feii_block(
     *,
     agn_grahsp_a_lines: float = 1.0,
     agn_grahsp_a_feii: float = 5.0,
+    agn_type: int = 1,
     templates=None,
     **_params,
 ) -> Array:
@@ -478,6 +479,9 @@ def grahsp_feii_block(
 
     Parameters
     ----------
+    agn_type : int
+        ``1`` (broad-line AGN) emits the forest; ``2`` / ``3`` return zeros,
+        as for the broad lines (FeII is broad-line-region emission).
     templates : GRAHSPTemplates, optional
         Same template-hoist contract as :func:`grahsp_lines_block`.
     """
@@ -492,6 +496,7 @@ def grahsp_feii_block(
         l5100=l5100_disc,
         a_lines=agn_grahsp_a_lines,
         a_feii=agn_grahsp_a_feii,
+        agn_type=agn_type,
     )
     return feii * 0.1
 
@@ -510,6 +515,7 @@ def grahsp_veroncetty_feii_block(
     *,
     agn_grahsp_a_lines: float = 1.0,
     agn_grahsp_a_feii: float = 5.0,
+    agn_type: int = 1,
     templates=None,
     **_params,
 ) -> Array:
@@ -517,6 +523,9 @@ def grahsp_veroncetty_feii_block(
 
     Parameters
     ----------
+    agn_type : int
+        ``1`` (broad-line AGN) emits the forest; ``2`` / ``3`` return zeros,
+        as for the broad lines (FeII is broad-line-region emission).
     templates : GRAHSPTemplates, optional
         Same template-hoist contract as :func:`grahsp_lines_block`.
     """
@@ -536,6 +545,7 @@ def grahsp_veroncetty_feii_block(
         l5100=l5100_disc,
         a_lines=agn_grahsp_a_lines,
         a_feii=agn_grahsp_a_feii,
+        agn_type=agn_type,
     )
     return feii * 0.1
 

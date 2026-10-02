@@ -294,26 +294,7 @@ def test_bbb(name):
     assert dex <= TOL_POINTWISE_DEX, f"[{name}] BBB {dex:.3e} dex over {n} points"
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            n,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "FINDING: evaluate_grahsp_agn emits the FeII forest for agn_type=2 "
-                    "(tengri peak 1.68e-3 vs upstream exactly 0). FeII is broad-line-region "
-                    "emission and upstream gates it on type 1; model.py gates only the "
-                    "broad lines and the Balmer continuum."
-                ),
-            ),
-        )
-        if n == "type_2"
-        else n
-        for n in PARAM_SETS
-    ],
-)
+@pytest.mark.parametrize("name", PARAM_SETS)
 def test_feii(name):
     case = load_case(name)
     upstream = _get(case, "agn.activate_FeLines")
