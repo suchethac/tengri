@@ -29,6 +29,7 @@ import numpy as np
 
 from . import _bma_keys as bk
 from ._atomic_io import _atomic_replace_write
+from ._paths import repo_relative
 
 
 def softmax_weights(log_z: dict[str, float]) -> dict[str, float]:
@@ -547,7 +548,7 @@ def combine_bma(
             "Derived factorial marginals: isochrone (mist|prsc|bpass) and spectral_library (c3k|miles) from ssp axis."
         ),
         "n_galaxies": len(galaxies),
-        "generated_from": str(evidence_dir),
+        "generated_from": repo_relative(evidence_dir),
         "galaxies": {str(gid): gdata for gid, gdata in galaxies.items()},
         "invalid_counts": invalid_counts,
         "galaxies_per_model": galaxies_per_model,

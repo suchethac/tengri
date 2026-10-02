@@ -45,6 +45,7 @@ from ._adoption import (
     divergence_rate,
 )
 from ._atomic_io import _atomic_replace_write
+from ._paths import repo_relative
 from ._posterior_utils import build_npz_payload, divergent_draw_payload, thin_samples
 from .candels_io import load_candels_z1, photometry_for_row
 from .config_metadata import XLIKE_CONFIGS
@@ -803,11 +804,11 @@ def save_fit_outputs(
     _atomic_replace_write(
         output_npz, lambda tmp_path: np.savez(tmp_path, **npz_payload), tmp_suffix=".npz"
     )
-    logger.info(f"Saved results to {output_npz}")
+    logger.info(f"Saved results to {repo_relative(output_npz)}")
 
     # Save JSON with diagnostics (same shape as the per-attempt writes)
     write_diagnostics_json(output_json, best_diagnostics, attempts, retune_history)
-    logger.info(f"Saved diagnostics to {output_json}")
+    logger.info(f"Saved diagnostics to {repo_relative(output_json)}")
 
     return output_npz, output_json
 

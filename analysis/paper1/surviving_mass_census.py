@@ -38,6 +38,7 @@ if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
 from ._figure_style import CONFIG_ORDER
+from ._paths import repo_relative
 from .fig06_code_overlay import load_fit_results
 from .run_candels_fits import GALAXIES
 
@@ -89,7 +90,7 @@ def build_census(results_dir: Path, max_samples: int, out_path: Path, galaxies: 
     offsets = [c["offset_dex_p50"] for c in cells.values()]
     payload = {
         "max_samples_requested": max_samples,
-        "results_dir": str(results_dir),
+        "results_dir": repo_relative(results_dir),
         "configurations": list(CONFIG_ORDER),
         "galaxies": [int(g) for g in galaxies],
         "n_galaxies": len(galaxies),
@@ -133,7 +134,7 @@ def merge_shards(paths: list[Path], out_path: Path) -> dict:
         "max_samples_requested": sorted(requested)[0]
         if len(requested) == 1
         else sorted(requested),
-        "merged_from": [str(x) for x in paths],
+        "merged_from": [repo_relative(x) for x in paths],
         "configurations": list(CONFIG_ORDER),
         "galaxies": sorted(set(galaxies)),
         "n_galaxies": len(set(galaxies)),
