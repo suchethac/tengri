@@ -1080,7 +1080,7 @@ def extract_line_luminosity(
         passes ``state.derived["line_lums"]``, which is [erg/s].
     target_waves : tuple of float
         Target wavelength(s) in Angstrom. For doublets, pass both
-        components (e.g., ``(3727.12, 3730.12)`` for [OII]).
+        components (e.g., ``(3727.09, 3729.88)`` for [OII]).
 
     Returns
     -------

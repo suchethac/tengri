@@ -42,7 +42,12 @@
   adaptation, so those paths refuse a step above the metric's stability limit
   like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
   item in #2157 (Refs #2157).
-- The emission-line catalog's [O I] 6300 entry is the vacuum wavelength (6302.05 Å, the 6300.304 Å air value converted with the IAU standard relation), and the hard-coded line-wavelength tables (Richardson NLR template, shock fallback lines, `KEY_LINES`, `DESI_LINES`, plotting `SPECTRAL_FEATURES`) take the catalog's vacuum values for every line it lists; `noll09`'s docstring states the Leitherer/Calzetti switch at 1800 Å, as the code does (#2617).
+
+- The emission-line catalog's [O I] 6300 entry is the vacuum wavelength (6302.05 Å, the 6300.304 Å
+  air value converted with the IAU standard relation), and the hard-coded line-wavelength tables
+  (Richardson NLR template, shock fallback lines, `KEY_LINES`, `DESI_LINES`, plotting
+  `SPECTRAL_FEATURES`) take the catalog's vacuum values for every line it lists; the `noll09` and
+  `salim_sbl18` docs state the Leitherer/Calzetti switch at 1800 Å, as the code does (#2617).
 
 - A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
   thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular

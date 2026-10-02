@@ -18,7 +18,6 @@ The air values declared in ``components/nebular/_shared.py`` are deliberate
 from __future__ import annotations
 
 import importlib
-import importlib.util
 from pathlib import Path
 
 import numpy as np
@@ -64,12 +63,10 @@ LINE_TABLES = (
 
 
 def _fsps_line_waves():
-    spec = importlib.util.find_spec("dsps")
-    if spec is None or not spec.submodule_search_locations:
-        pytest.skip("dsps is not installed: FSPS emlines_info.dat unavailable")
-    path = Path(next(iter(spec.submodule_search_locations))) / "data" / "emlines_info.dat"
-    if not path.is_file():
-        pytest.skip(f"FSPS line list not found at {path}")
+    import dsps
+
+    path = Path(dsps.__file__).parent / "data" / "emlines_info.dat"
+    assert path.is_file(), f"FSPS line list missing from the dsps install: {path}"
     rows = [line.split(",", 1)[0] for line in path.read_text().splitlines() if line.strip()]
     return np.array([float(r) for r in rows])
 
