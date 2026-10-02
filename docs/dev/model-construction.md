@@ -155,7 +155,14 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   `two_component` bit-identically. Not yet supported under
   `approx=WavePrecomp()`/`SpectrumPrecomp()` (both raise, naming the exact
   path); a fit's `approx="auto"` policy resolves to the exact path instead of
-  raising (#2528).
+  raising (#2528). Nebular continuum and the line catalog are attenuated only
+  by screens whose window is unbounded below (the `t -> 0` limit -- the same
+  convention `two_component`, Prospector's `dust1`/`dust2`, and BAGPIPES's
+  `dust_birth_cloud`/`eta*A_V` apply to lines), so a screen's finite lower
+  edge must sit at least five transition widths above the loaded SSP grid's
+  youngest node; a closer edge raises `ConfigError` at build time, naming the
+  screen, the edge, the grid's youngest node, and the two fixes (make the
+  edge unbounded, or raise it).
 - **Sentinels** `FREE` / `DEFAULT` are singletons exported from `tengri`.
   `FREE` defers a parameter to the registry's default prior; `DEFAULT` is
   legal only as `Fixed(DEFAULT)`, pinning a parameter at the registry default

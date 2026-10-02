@@ -30,6 +30,7 @@ import jax.numpy as jnp
 from tengri.components.dust._params import ATTENUATION_PARAMS, DEFAULT_DUST_ETA_BALANCE
 from tengri.components.dust.laws._registry import law_kwarg_names, resolve_dust_law
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
@@ -224,6 +225,91 @@ def validate_screens(screens_raw: Any) -> tuple[ScreenSpec, ...]:
     return tuple(resolved)
 
 
+def _youngest_log_age_yr(ssp_lg_age_gyr: Any) -> float:
+    """Youngest SSP node, :math:`\\log_{10}(\\mathrm{age}/\\mathrm{yr})`, off the loaded grid."""
+    return float(jnp.min(jnp.asarray(ssp_lg_age_gyr))) + 9.0
+
+
+def validate_screens_against_grid(
+    screens: tuple[ScreenSpec, ...],
+    ssp_data: Any,
+    transition_width_dex: float = 0.3,
+) -> None:
+    r"""Refuse a finite lower window edge too close to the loaded grid's youngest node.
+
+    Nebular continuum and the discrete line catalog are attenuated by the
+    :math:`t \to 0` limit of :math:`\tau(t,\lambda)` (see
+    :class:`AgeBinnedDustComponent`'s class docstring): only screens whose
+    lower edge is unbounded (``lo is None``) contribute. A screen with a
+    *finite* ``lo`` sitting too close to the loaded SSP grid's youngest node
+    therefore gives that node a non-negligible, continuous window weight
+    from :func:`_age_window_weight` on the stellar path while the same
+    screen contributes exactly 0 on the line/nebular path -- a silent
+    per-screen miss that grows the closer ``lo`` sits to the youngest node
+    (e.g. ``lo`` five transition widths below a 1e6 yr grid floor gives the
+    youngest node a continuous weight of 0.81 from that screen). This is the
+    same :math:`t \to 0` convention ``two_component``, Prospector's
+    ``dust1``/``dust2``, and BAGPIPES's ``dust_birth_cloud``/:math:`\eta
+    \cdot A_V` all apply to lines, and it is what makes the two-component
+    identity in the class docstring exact -- so the fix here is a build-time
+    refusal of the inconsistent configuration, not a change to the rule.
+
+    A screen's weight at the youngest node is below :math:`\sigma(-5)
+    \approx 0.67\%` once ``lo >= youngest_log_age_yr + 5 *
+    transition_width_dex``; this function refuses any screen whose ``lo``
+    falls short of that threshold.
+
+    Parameters
+    ----------
+    screens : tuple of (str, float or None, float or None)
+        Validated screen specs, as returned by :func:`validate_screens`.
+    ssp_data : SSPData
+        The loaded SSP library the model is built against; only
+        ``ssp_lg_age_gyr`` is read.
+    transition_width_dex : float
+        Shared logistic transition width :math:`\Delta` [dex] (matches
+        :attr:`AgeBinnedDustComponentConfig.transition_width_dex`). Default 0.3.
+
+    Raises
+    ------
+    ConfigError
+        Naming the offending screen index, its ``lo``, the grid's youngest
+        node, the threshold, and the two fixes (make the edge unbounded, or
+        raise it to the threshold).
+
+    Notes
+    -----
+    **JIT-compatible**: no (construction-time grid introspection; ``ssp_data``
+    is concrete numpy/JAX arrays loaded from disk, never a traced value).
+    A ``None`` ``ssp_data`` (no grid to check against) is a silent no-op --
+    callers that have not yet loaded a grid get no refusal here.
+    """
+    if ssp_data is None or not screens:
+        return
+    youngest = _youngest_log_age_yr(ssp_data.ssp_lg_age_gyr)
+    threshold = youngest + 5.0 * transition_width_dex
+    for i, (law, lo, _hi) in enumerate(screens):
+        if lo is None or lo >= threshold:
+            continue
+        miss_frac = float(jax.nn.sigmoid((youngest - lo) / transition_width_dex))
+        raise ConfigError(
+            f"dust_attenuation 'screens'[{i}] (law={law!r}): finite lower "
+            f"window_log_yr edge lo={lo} is too close to the loaded SSP grid's "
+            f"youngest node, {youngest:.4f} log10(age/yr). Nebular continuum and "
+            "the discrete line catalog are attenuated only by screens whose "
+            "window is unbounded below (the t -> 0 limit; the same convention "
+            "two_component, Prospector's dust1/dust2, and BAGPIPES's "
+            "dust_birth_cloud/eta*A_V apply to lines), so this screen would give "
+            f"the youngest SSP node a continuous weight of {100 * miss_frac:.2f}% "
+            "on the stellar path while the lines see 0% of it -- a silent "
+            f"per-screen miss. Need lo >= {threshold:.4f} (youngest node + "
+            f"5 * transition_width_dex={transition_width_dex}). Fix: either make "
+            "this screen's lower edge unbounded (window_log_yr=(None, hi)) if it "
+            f"should also attenuate nebular/line emission, or raise lo to >= "
+            f"{threshold:.4f}."
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class AgeBinnedDustComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`AgeBinnedDustComponent`.
@@ -281,6 +367,18 @@ class AgeBinnedDustComponent(TemplateThreading):
     factor of 1. Transmission is :math:`T(t, \lambda) = \exp[-\tau(t,
     \lambda)]`. Windows need not partition the age axis: a screen with window
     :math:`(-\infty, \infty)` (``window_log_yr=(None, None)``) is global.
+    When they do tile it (adjacent finite edges, as in a birth-cloud /
+    mid-age / diffuse-ISM split), the partition is exact (:math:`\sum_i
+    w_i(t) = 1`) only in the N = 2 limit, where the one shared edge has a
+    half-infinite screen on each side. With a third, finite-width screen
+    sharing two edges, each neighbor's own sigmoid still independently
+    reaches 0.5 at the shared edge (the construction is a product of
+    independent sigmoids per screen, not a normalized partition), so
+    :math:`\sum_i w_i(t)` runs slightly *above* 1 near and between the
+    edges -- measured 1.0033 at a shared edge and up to 1.0058 at the
+    middle screen's center for three screens with :math:`\Delta = 0.3` dex
+    tiling two 1.5-dex-wide edges (7.0, 8.5 dex); it returns to 1 to
+    machine precision far from every edge.
 
     **Two-component identity**: ``screens = [{'law': law_bc, 'window_log_yr':
     (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None,
@@ -306,6 +404,19 @@ class AgeBinnedDustComponent(TemplateThreading):
     above this is exactly :math:`\tau_{\rm bc}\,k_{\rm bc}(\lambda) +
     \tau_{\rm diff}\,k_{\rm diff}(\lambda)`, matching
     ``two_component``'s ``nebular_screen="birth_cloud"`` default.
+
+    This is the same convention ``two_component``, Prospector's
+    ``dust1``/``dust2``, and BAGPIPES's ``dust_birth_cloud``/:math:`\eta
+    \cdot A_V` all apply to lines, and it is what makes the two-component
+    identity above exact, so a *finite* lower edge must sit at least five
+    transition widths above the loaded SSP grid's youngest node (where its
+    stellar-path weight falls below :math:`\sigma(-5) \approx 0.67\%`):
+    closer than that, the screen would give the youngest node a
+    non-negligible weight on the stellar path while the lines saw none of
+    it from the same screen. :func:`validate_screens_against_grid` refuses
+    such a configuration at build time (see
+    :meth:`~tengri.forward.sed_model.SEDModel.build`'s dust dispatch)
+    rather than attenuate the two paths inconsistently.
 
     **Scope** (deliberately narrower than ``two_component``, #2528): no
     per-source screen choice (``nebular_screen``/``shock_screen``/

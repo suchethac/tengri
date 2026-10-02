@@ -41,6 +41,7 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 # seam (single dispatch, #844), only their config dataclasses are imported here.
 from tengri.components.dust.age_binned import (
     AgeBinnedDustComponentConfig,
+    validate_screens_against_grid,
 )
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
@@ -614,6 +615,13 @@ def build_components(
         elif dust_model == "age_binned":
             atten_type = "age_binned"
             atten_config = AgeBinnedDustComponentConfig(screens=tuple(dust_screens))
+            # Reviewer finding #2528: a finite lower window edge too close to
+            # the loaded grid's youngest SSP node silently mismatches the
+            # stellar path (nonzero weight) against the line/nebular path
+            # (the t -> 0 rule gives it exactly 0). Refuse at build time.
+            validate_screens_against_grid(
+                atten_config.screens, ssp_data, atten_config.transition_width_dex
+            )
         else:
             atten_type = "two_component"
             _overrides = dust_law_overrides or {}

@@ -23,9 +23,10 @@ from tengri.components.dust.age_binned import (
     AgeBinnedDustComponentConfig,
     _age_window_weight,
     validate_screens,
+    validate_screens_against_grid,
 )
 from tengri.components.dust.laws._registry import DUST_LAWS, resolve_dust_law
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ConfigError, ParameterError
 from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
@@ -183,6 +184,19 @@ def test_age_binned_partition_sums_to_one_away_from_edges():
     assert int(far.sum()) > 100  # the mask must not be vacuous
     np.testing.assert_allclose(np.asarray(total)[np.asarray(far)], 1.0, atol=1e-6)
 
+    # AT a shared edge the partition is NOT exact for N=3: each neighbor's
+    # sigmoid independently reaches 0.5 there (this is a product of
+    # independent per-screen sigmoids, not a normalized partition), so the
+    # sum runs slightly above 1 -- exact only for N=2, where the shared
+    # edge has one half-infinite screen on each side (see the class
+    # docstring). Pin the measured values rather than call it exact.
+    edges = jnp.array([7.0, 8.5])
+    total_at_edges = jnp.zeros_like(edges)
+    for _law, lo, hi in screens:
+        total_at_edges = total_at_edges + _age_window_weight(edges, lo, hi, width)
+    np.testing.assert_allclose(np.asarray(total_at_edges), 1.00334643, atol=1e-6)
+    assert float(jnp.max(total)) == pytest.approx(1.0057544634761175, abs=1e-6)
+
 
 def test_age_binned_middle_screen_tau_only_changes_its_own_window():
     """Zeroing the middle screen's tau changes flux only in SSPs its window covers.
@@ -250,10 +264,16 @@ def test_age_binned_energy_balance_n3_matches_trapz_integral(_ssp, _obs):
         neb={"type": "none"},
         redshift=Fixed(0.0),
     )
+    # Screen 1's lower edge (7.5) sits exactly at the build-time threshold
+    # (synthetic_ssp_wide's youngest node, 6.0 log10(age/yr), + 5 *
+    # transition_width_dex=0.3 -- see validate_screens_against_grid):
+    # a full SEDModel.build goes through that grid-dependent refusal,
+    # unlike the partition/gradient tests above that call validate_screens
+    # or AgeBinnedDustComponent directly.
     screens = [
-        {"law": "calzetti", "window_log_yr": (None, 7.0)},
-        {"law": "power_law", "window_log_yr": (7.0, 8.5)},
-        {"law": "cardelli", "window_log_yr": (8.5, None)},
+        {"law": "calzetti", "window_log_yr": (None, 7.5)},
+        {"law": "power_law", "window_log_yr": (7.5, 9.0)},
+        {"law": "cardelli", "window_log_yr": (9.0, None)},
     ]
     m = SEDModel.build(
         dust_attenuation={
@@ -330,7 +350,15 @@ def test_age_binned_dust_ir_receives_l_absorbed(_ssp, _obs):
 
 
 def test_age_binned_gradients_finite_and_match_finite_difference():
-    """jax.grad wrt every dust_tau_i: finite, nonzero, within 1% of central FD."""
+    """jax.grad wrt every dust_tau_i: finite, nonzero, and within 1e-5 relative
+    of central finite differences.
+
+    A 1% tolerance left four orders of magnitude of undetected slack: central
+    FD at eps=1e-4 has an O(eps^2) truncation floor of ~1e-8 relative (the
+    third-derivative term), and the measured agreement here is ~1e-9-1e-10
+    relative per tau_i. 1e-5 keeps ~3 orders of margin above that floor
+    while still catching a gradient bug many orders tighter than 1%.
+    """
     screens = validate_screens(
         [
             {"law": "calzetti", "window_log_yr": (None, 7.0)},
@@ -356,7 +384,7 @@ def test_age_binned_gradients_finite_and_match_finite_difference():
     fd1 = (objective(0.5, 1.0 + eps, 0.3) - objective(0.5, 1.0 - eps, 0.3)) / (2 * eps)
     fd2 = (objective(0.5, 1.0, 0.3 + eps) - objective(0.5, 1.0, 0.3 - eps)) / (2 * eps)
     for g, fd in zip((g0, g1, g2), (fd0, fd1, fd2)):
-        assert abs(float(g) - float(fd)) / abs(float(fd)) < 0.01
+        assert abs(float(g) - float(fd)) / abs(float(fd)) < 1e-5
 
 
 # ── 6. LUT: no WavePrecomp/SpectrumPrecomp; approx="auto" stays exact ──────
@@ -544,4 +572,109 @@ def test_mutation_drop_screen_weight_factor_breaks_identity(tmp_path):
     with pytest.raises(AssertionError):
         np.testing.assert_allclose(np.asarray(correct_w0), np.asarray(mutated_w0), atol=1e-6)
     # FAILED lines captured: Max absolute difference, Mismatched elements
+
+
+# ── 9. Grid-dependent screen validation (reviewer finding #2528 follow-up) ──
+#
+# The t -> 0 nebular/line rule (section "Nebular continuum..." in the class
+# docstring) gives any screen with a finite lower edge exactly 0 weight on
+# the line/nebular path, unconditionally. A finite lo close to the loaded
+# grid's youngest SSP node gives that SAME node a non-negligible, nonzero
+# weight on the STELLAR path -- the two paths then silently disagree about
+# how much that screen's tau applies to the youngest population.
+# validate_screens_against_grid refuses lo < youngest + 5*transition_width_dex
+# (where the stellar-path weight is still >= sigma(-5) ~ 0.67%) at build time.
+
+
+def test_age_binned_finite_lower_edge_too_close_to_grid_floor_raises(_ssp, _obs):
+    """RED on the unguarded rule: lo=5.0 on a 1e6 yr-floor grid (synthetic_ssp_wide's
+    youngest node, log10(age/yr)=6.0) would silently give the youngest SSP node a
+    96.6% stellar-path weight from this screen while the lines see 0% of it.
+    GREEN: validate_screens_against_grid refuses it, naming the screen index,
+    lo, the grid's youngest node, the threshold, and both fixes -- both as a
+    direct function call and through the SEDModel.build dispatch that calls it.
+    """
+    screens = validate_screens(
+        [
+            {"law": "calzetti", "window_log_yr": (5.0, None)},
+            {"law": "cardelli", "window_log_yr": (None, None)},
+        ]
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        validate_screens_against_grid(screens, _ssp, transition_width_dex=0.3)
+    msg = str(exc_info.value)
+    assert "screens'[0]" in msg
+    assert "lo=5.0" in msg
+    assert "6.0000" in msg  # the grid's youngest node, log10(age/yr)
+    assert "7.5000" in msg  # threshold = youngest + 5 * transition_width_dex
+    assert "unbounded" in msg  # fix 1: make the edge unbounded
+    assert "raise lo" in msg  # fix 2: raise lo to the threshold
+
+    # A model build goes through the exact same refusal (component_factory's
+    # age_binned dispatch calls validate_screens_against_grid).
+    with pytest.raises(ConfigError, match=r"screens'\[0\].*lo=5\.0"):
+        SEDModel.build(
+            ssp_data=_ssp,
+            observation=_obs,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "age_binned",
+                "screens": [
+                    {"law": "calzetti", "window_log_yr": (5.0, None)},
+                    {"law": "cardelli", "window_log_yr": (None, None)},
+                ],
+                "tau_0": 0.5,
+                "tau_1": 0.3,
+                "other_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.0),
+        )
+
+
+def test_age_binned_screen_at_threshold_builds_and_lines_see_none_of_it(_ssp, _obs):
+    """A legal finite lo (== the threshold) builds; its weight on the youngest
+    SSP node is < 0.7% (consistent with the lines' exact 0%, within the
+    build-time tolerance validate_screens_against_grid enforces)."""
+    t_birth_log_yr = 6.0 + 5.0 * 0.3  # youngest node (6.0) + 5 * transition_width_dex
+    screens_raw = [
+        {"law": "calzetti", "window_log_yr": (t_birth_log_yr, None)},
+        {"law": "cardelli", "window_log_yr": (None, None)},
+    ]
+
+    SEDModel.build(
+        ssp_data=_ssp,
+        observation=_obs,
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "age_binned",
+            "screens": screens_raw,
+            "tau_0": 0.5,
+            "tau_1": 0.3,
+            "other_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+    )  # must not raise
+
+    # The same screens config, evaluated directly (same law/window pair the
+    # build above used, so this is what that build's dust component computes).
+    screens = validate_screens(screens_raw)
+    comp = AgeBinnedDustComponent(config=AgeBinnedDustComponentConfig(screens=screens))
+    wave = jnp.array([5500.0])
+
+    # (1) Lines/nebular continuum see exactly 0 from screen 0 (lo is finite):
+    # only the global screen 1 contributes, unconditionally -- not a close
+    # call, the t -> 0 rule excludes screen 0 by construction.
+    params_screen0_only = {"dust_tau_0": 0.5, "dust_tau_1": 0.0}
+    tau_neb = comp._youngest_screen_tau(params_screen0_only, wave)
+    np.testing.assert_array_equal(np.asarray(tau_neb), 0.0)
+
+    # (2) The youngest SSP node's window weight from screen 0 is < 0.7%,
+    # consistent with (within tolerance of) the lines' exact 0%.
+    youngest_log_age_yr = 6.0
+    w0_at_youngest = _age_window_weight(
+        jnp.array([youngest_log_age_yr]), t_birth_log_yr, None, 0.3
+    )
+    assert float(w0_at_youngest[0]) < 0.007
     # (same shape as pytest's own AssertionError report from a live mutation).
