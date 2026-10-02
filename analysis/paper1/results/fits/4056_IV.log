@@ -1,5 +1,5 @@
 2026-09-24 00:47:15,645 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 3.906e-31 erg/s/cm2/Hz
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/src/tengri/forward/sed_model.py:3962: CloudyGridIonizingSpectrumWarning: CloudyGridBackend: Q_H is computed from your DSPS SSPs (correct for stellar mass accounting), but the ionizing spectral shape used to compute the CLOUDY grid was BPASS v2.1 binary stars. If your SSPs have a significantly harder/softer ionizing SED than BPASS (e.g., single-star models, stripped-star prescriptions, very young/old populations), predicted line ratios will be biased. Use CueBackend if ionizing SED shape variation matters for your science. To suppress: pass ionizing_source_warning='suppress'.
+src/tengri/forward/sed_model.py:3962: CloudyGridIonizingSpectrumWarning: CloudyGridBackend: Q_H is computed from your DSPS SSPs (correct for stellar mass accounting), but the ionizing spectral shape used to compute the CLOUDY grid was BPASS v2.1 binary stars. If your SSPs have a significantly harder/softer ionizing SED than BPASS (e.g., single-star models, stripped-star prescriptions, very young/old populations), predicted line ratios will be biased. Use CueBackend if ionizing SED shape variation matters for your science. To suppress: pass ionizing_source_warning='suppress'.
   self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
 2026-09-24 00:47:33,322 - __main__ - INFO - Galaxy 4056 (z=1.071): 14 detected bands
 2026-09-24 00:47:33,322 - __main__ - INFO - Config IV: 11 free parameters
@@ -22,13 +22,13 @@ This isn't necessarily a bug; constant-folding is inherently a trade-off between
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
 2026-09-24 00:55:08,322 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 423.2s. Divergences: 0/1200 (0.0%). Tree depth: mean 4.9, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 00:55:08,438 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 00:55:08,438 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
 2026-09-24 00:55:08,438 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 2026-09-24 00:55:30,707 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 68 draws (14.66 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 00:55:30,744 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 00:56:28,981 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0019, ess_min=529
-2026-09-24 00:56:48,809 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/4056_IV.npz
-2026-09-24 00:56:48,811 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/4056_IV.json
+2026-09-24 00:56:48,809 - __main__ - INFO - Saved results to analysis/paper1/results/fits/4056_IV.npz
+2026-09-24 00:56:48,811 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/4056_IV.json
 2026-09-24 00:56:48,812 - __main__ - INFO - ✓ Fit complete for galaxy 4056 config IV
   MAP initialization (1000 steps)...
   MAP init done (loss=31.83)

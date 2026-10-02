@@ -1,6 +1,6 @@
 {
   "max_samples_requested": 40,
-  "results_dir": "/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits",
+  "results_dir": "analysis/paper1/results/fits",
   "configurations": [
     "I",
     "II",

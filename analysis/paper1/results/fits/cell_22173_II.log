@@ -50,13 +50,13 @@ If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo an
 2026-09-24 12:03:34,228 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
 2026-09-24 12:21:11,919 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1057.7s). Step size: 0.2947. Divergent in the final warmup window: 0%
 2026-09-24 12:29:02,126 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1527.7s. Divergences: 0/1200 (0.0%). Tree depth: mean 3.9, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 12:29:02,219 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 12:29:02,219 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/.reinsert.lock
 2026-09-24 12:31:29,815 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 2026-09-24 12:32:34,502 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 201 draws (4.96 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 12:32:34,560 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 12:34:48,357 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=0.9999, ess_min=432
-2026-09-24 12:35:11,254 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/22173_II.npz
-2026-09-24 12:35:11,255 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/22173_II.json
+2026-09-24 12:35:11,254 - __main__ - INFO - Saved results to analysis/paper1/results/fits/22173_II.npz
+2026-09-24 12:35:11,255 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/22173_II.json
 2026-09-24 12:35:11,256 - __main__ - INFO - ✓ Fit complete for galaxy 22173 config II
   MAP initialization (1000 steps)...
   MAP init done (loss=197.36)

@@ -50,7 +50,7 @@ This isn't necessarily a bug; constant-folding is inherently a trade-off between
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
 2026-09-24 12:07:33,810 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 9125.1s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.5, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 12:07:34,693 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 12:07:34,693 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/.reinsert.lock
 2026-09-24 12:07:34,694 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 E0924 12:08:27.163343 116026779 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 8s:
 
@@ -70,8 +70,8 @@ If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo an
 2026-09-24 12:11:34,599 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 235 draws (4.24 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 12:11:35,163 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 12:17:57,043 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=0.9996, ess_min=232
-2026-09-24 12:18:22,587 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/25489_II.npz
-2026-09-24 12:18:22,588 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/25489_II.json
+2026-09-24 12:18:22,587 - __main__ - INFO - Saved results to analysis/paper1/results/fits/25489_II.npz
+2026-09-24 12:18:22,588 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/25489_II.json
 2026-09-24 12:18:22,590 - __main__ - INFO - ✓ Fit complete for galaxy 25489 config II
   MAP initialization (1000 steps)...
   MAP init done (loss=11.18)

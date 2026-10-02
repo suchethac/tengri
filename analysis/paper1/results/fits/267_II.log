@@ -35,13 +35,13 @@ If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo an
 2026-09-24 11:17:22,748 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
 2026-09-24 11:39:34,416 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1331.7s). Step size: 0.0708. Divergent in the final warmup window: 0%
 2026-09-24 12:40:23,722 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 4980.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.9, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 12:40:23,813 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/.reinsert.lock
+2026-09-24 12:40:23,813 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/fits/.reinsert.lock
 2026-09-24 12:40:23,813 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 2026-09-24 12:41:07,563 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 211 draws (4.74 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 12:41:07,619 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 12:42:27,689 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0477, ess_min=19
-2026-09-24 12:42:46,658 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/267_II.npz
-2026-09-24 12:42:46,659 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/267_II.json
+2026-09-24 12:42:46,658 - __main__ - INFO - Saved results to analysis/paper1/results/fits/267_II.npz
+2026-09-24 12:42:46,659 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/267_II.json
 2026-09-24 12:42:46,660 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
 2026-09-24 12:42:46,660 - __main__ - INFO - Attempt 2/3: target_accept 0.95, warmup 150, diagonal mass
 2026-09-24 12:42:49,029 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.95

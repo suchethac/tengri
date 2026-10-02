@@ -50,13 +50,13 @@ This isn't necessarily a bug; constant-folding is inherently a trade-off between
 
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
 2026-09-24 12:11:55,198 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 9331.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.5, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 12:11:55,664 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 12:11:55,664 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/.reinsert.lock
 2026-09-24 12:17:56,869 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 2026-09-24 12:18:57,771 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 202 draws (4.94 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 12:18:57,873 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 12:21:31,974 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0071, ess_min=139
-2026-09-24 12:21:54,478 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/25206_II.npz
-2026-09-24 12:21:54,480 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/25206_II.json
+2026-09-24 12:21:54,478 - __main__ - INFO - Saved results to analysis/paper1/results/fits/25206_II.npz
+2026-09-24 12:21:54,480 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/25206_II.json
 2026-09-24 12:21:54,481 - __main__ - INFO - ✓ Fit complete for galaxy 25206 config II
   MAP initialization (1000 steps)...
   MAP init done (loss=13.91)

@@ -1,9 +1,9 @@
 {
   "max_samples_requested": 40,
   "merged_from": [
-    "/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/surviving_mass_shardA.json",
-    "/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/surviving_mass_shardB.json",
-    "/Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/surviving_mass_shardC.json"
+    "analysis/paper1/results/surviving_mass_shardA.json",
+    "analysis/paper1/results/surviving_mass_shardB.json",
+    "analysis/paper1/results/surviving_mass_shardC.json"
   ],
   "configurations": [
     "I",

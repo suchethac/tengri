@@ -20,13 +20,13 @@ This isn't necessarily a bug; constant-folding is inherently a trade-off between
 If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
 2026-09-24 15:07:25,296 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (1018.4s). Step size: 0.0589. Divergent in the final warmup window: 0%
 2026-09-24 16:01:01,823 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 4234.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.4, at cap on 0% of iterations (max_num_doublings=10)
-2026-09-24 16:01:01,913 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/.reinsert.lock
+2026-09-24 16:01:01,913 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock analysis/paper1/results/.reinsert.lock
 2026-09-24 16:01:01,913 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
 2026-09-24 16:02:02,693 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 201 draws (4.97 MB/draw, target=1.0 GB), ceiling 64
 2026-09-24 16:02:02,732 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
 2026-09-24 16:03:41,569 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0004, ess_min=163
-2026-09-24 16:03:59,858 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_II.npz
-2026-09-24 16:03:59,859 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fits/18160_II.json
+2026-09-24 16:03:59,858 - __main__ - INFO - Saved results to analysis/paper1/results/fits/18160_II.npz
+2026-09-24 16:03:59,859 - __main__ - INFO - Saved diagnostics to analysis/paper1/results/fits/18160_II.json
 2026-09-24 16:03:59,860 - __main__ - INFO - ✓ Fit complete for galaxy 18160 config II
   MAP initialization (1000 steps)...
   MAP init done (loss=17.48)

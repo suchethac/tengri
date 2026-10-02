@@ -46,7 +46,7 @@
 2026-09-24 06:31:37,178 - __main__ - INFO - ✓ SUCCESS: galaxy 26398 config IV (570.5s)
 2026-09-24 06:31:37,178 - __main__ - INFO - Completed: 20/20 (running: 0/1)
 2026-09-24 06:31:37,185 - __main__ - INFO - 
-Summary saved to /Users/suchethacooray/Projects/tengri/.claude/worktrees/grid-mac/analysis/paper1/results/fit_summary.json
+Summary saved to analysis/paper1/results/fit_summary.json
 2026-09-24 06:31:37,185 - __main__ - INFO - 
 ✓ All 20 fits completed (20 adopted; the table above carries the per-cell verdict)
 
