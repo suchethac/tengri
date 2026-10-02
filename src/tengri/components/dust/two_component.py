@@ -89,13 +89,12 @@ def _young_indicator(
     with :math:`\sigma` the logistic sigmoid. 1 for the youngest bins, 0 for the
     oldest.
 
-    This is the single definition. It is the same function
-    ``tengri.components.dust._apply.two_component_dust`` uses for the screen
-    itself, so the stars that sit behind the birth cloud, the stars whose Lyman
-    continuum is reprocessed, and the stars the photometry LUT reddens are all the
-    same stars. Two other spellings (``1 / (1 + 10**u)``) existed here and in the
-    LUT's ``dust_young_indicator``; because :math:`10^u = e^{u\ln 10}`, they were
-    2.3x sharper than the screen they claimed to match (#1122).
+    This is the single definition. The screen, the photometry LUT and the spectrum
+    LUT all publish it, so the same stars sit behind the birth cloud on every path.
+    All three paths use this sigmoid: the exact screen applies it to mask stars
+    during the integration, the photometry LUT applies it to select which SSP bins
+    read the birth-cloud reddening, and the spectrum LUT applies it to select stars
+    in its lookup table.
 
     Parameters
     ----------
@@ -933,13 +932,8 @@ class DustSEDComponent(TemplateThreading):
             if self.config.lyc_absorb_all:
                 sed_attenuated = sed_attenuated * _lyc_t
             else:
-                # "Which stars are inside their birth cloud" is ONE physical
-                # quantity, so it must be ONE function. It was previously spelled
-                # three different ways: the logistic in ``two_component_dust``, and
-                # base-10 sigmoids here and in the LUT's ``dust_young_indicator``.
-                # 10^u = e^(u·ln10), so those two were 2.3× sharper than the screen
-                # they were supposed to agree with: the LyC escape fraction was
-                # applied to a different set of stars than the birth-cloud dust.
+                # The LUT reddens exactly the stars ``_young_indicator`` selects —
+                # the same definition the exact screen uses.
                 y_age = _young_indicator(
                     ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
                 )
@@ -1569,13 +1563,8 @@ class DustSEDComponent(TemplateThreading):
             # dust emission: the emission components handle that via their own
             # precompute paths.
 
-            # Young-star indicator on the SSP age grid: smooth sigmoid
-            # transition around t_birth (matches two_component_dust).
-            # The LUT must redden exactly the stars the exact screen reddens. This
-            # line used to spell the indicator as ``1 / (1 + 10**u)`` while the
-            # exact path used the logistic: 2.3x sharper, so the fast path put a
-            # different set of stars behind the birth cloud (#1122). One function,
-            # one definition.
+            # Young-star indicator on the SSP age grid: the same sigmoid
+            # definition the exact screen uses.
             y_age = _young_indicator(
                 ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
             )
@@ -1606,15 +1595,13 @@ class DustSEDComponent(TemplateThreading):
 
             # IR re-emission is now handled by separate dust emission components.
 
-            # Young-star indicator y(a) on the SSP age grid (same sigmoid as
-            # the filter branch): published even when only the spectrum LUT
-            # is active.
+            # Young-star indicator y(a) on the SSP age grid.
             if "dust_young_indicator" not in derived_overrides:
-                t_birth = self.config.t_birth_yr
-                transition = self.config.transition_width_dex
-                log_t = jnp.log10(jnp.maximum(ssp_ages_yr, 1.0))
-                log_t_birth = jnp.log10(t_birth)
-                y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
+                y_age = _young_indicator(
+                    ssp_ages_yr,
+                    self.config.t_birth_yr,
+                    self.config.transition_width_dex,
+                )
                 derived_overrides["dust_young_indicator"] = y_age
 
         return state.with_(
