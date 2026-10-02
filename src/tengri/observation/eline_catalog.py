@@ -40,7 +40,9 @@ EMISSION_LINES: dict[str, tuple[float, str, float]] = {
     "Hbeta": (4862.68, "recombination", 0.15),
     "OIII4959": (4960.30, "forbidden", 0.15),
     "OIII5007": (5008.24, "forbidden", 0.15),
-    "OI6300": (6300.30, "forbidden", 0.4),
+    # [O I] air wavelength 6300.304 A converted to vacuum with the IAU standard
+    # relation (Morton 2000, ApJS 130, 403, eq. 8): 6302.05 A.
+    "OI6300": (6302.05, "forbidden", 0.4),
     "NII6548": (6549.86, "forbidden", 0.3),
     "Halpha": (6564.61, "recombination", 0.15),
     "NII6583": (6585.28, "forbidden", 0.3),

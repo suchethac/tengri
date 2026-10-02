@@ -411,10 +411,10 @@ def default_line_defs(
 #: crowded Halpha+[NII]+[SII] complex is approximate and should be tuned to the
 #: target survey's continuum definition (see the module Balmer caveat).
 DESI_LINES = (
-    LineDef("Hbeta", 4862.71, ((4820.0, 4845.0), (4880.0, 4905.0)), (4855.0, 4871.0)),
+    LineDef("Hbeta", 4862.68, ((4820.0, 4845.0), (4880.0, 4905.0)), (4855.0, 4871.0)),
     LineDef("OIII_5007", 5008.24, ((4975.0, 4995.0), (5020.0, 5045.0)), (5000.0, 5017.0)),
     LineDef("Halpha", 6564.61, ((6505.0, 6535.0), (6600.0, 6620.0)), (6556.0, 6573.0)),
-    LineDef("NII_6584", 6585.27, ((6505.0, 6535.0), (6600.0, 6620.0)), (6577.0, 6593.0)),
+    LineDef("NII_6584", 6585.28, ((6505.0, 6535.0), (6600.0, 6620.0)), (6577.0, 6593.0)),
     LineDef("SII_6717", 6718.29, ((6690.0, 6708.0), (6745.0, 6770.0)), (6711.0, 6725.0)),
 )
 
