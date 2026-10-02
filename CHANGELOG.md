@@ -16,6 +16,11 @@
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
 
+- `load_ssp_data` gives FSPS MIST + Chabrier grids that carry no `ssp_mass_remaining`
+  the metallicity-dependent FSPS table (12 × 107, packaged) when the grid's age and
+  metallicity nodes match it; other grids keep the metallicity-independent DSPS fit
+  (#2614).
+
 ### Added
 
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
