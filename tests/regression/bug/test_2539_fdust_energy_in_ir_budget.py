@@ -38,16 +38,16 @@ once: (1) the new #2539 credit, and (2) the pre-existing, correct reduction
 in nebular-continuum absorption from a smaller ``k``. Holding
 ``f_total = fesc + fdust`` fixed (by trading one for the other) holds ``k``,
 hence the nebular-continuum contribution, EXACTLY fixed, isolating (1) alone.
-Since ``eb_include_lyc=False`` (default) masks the LyC region out of the
+Since ``lyc_in_energy_balance=False`` (default) masks the LyC region out of the
 screen's own integral regardless of how much of it (fesc vs 0) remains in
 ``sed_intrinsic``, the *entire* measured difference is attributable to the
 credit. This is a stronger, cleaner test of the identity the brief asked for
 than comparing fdust values directly would have been.
 
 **Population match (#2539 item 2)**: ``single_component``, ``wg00``, and
-``two_component`` with ``lyc_absorb_all=True`` credit the WHOLE stellar
+``two_component`` with ``lyc_reprocessed_by='all'`` credit the WHOLE stellar
 population's LyC (matching the population the nebular fesc/fdust mask
-actually ran over). ``two_component`` with ``lyc_absorb_all=False`` (default)
+actually ran over). ``two_component`` with ``lyc_reprocessed_by='young'`` (default)
 only routes the YOUNG/birth-cloud population's LyC through the gas
 (``two_component.py``'s ``lyc_factor = 1 - y_age*(1-lyc_t)``), so its credit
 uses the SAME ``y_age``-weighted population, computed independently in this
@@ -58,11 +58,11 @@ file from ``lnu_age`` via ``tengri.components.dust.two_component._young_indicato
 (independent of ``neb_fdust_frac``); the credited absolute ``f_dust``
 fraction, and the ``f_gas`` fraction that ionizes gas (``lyc_shares``,
 #2436), never reach ``sed_intrinsic`` at all, so a dust screen (even with
-``eb_include_lyc=True``)
+``lyc_in_energy_balance=True``)
 can only ever re-absorb the ``fesc`` remainder, never energy already credited
 to HII-region dust. This is verified two ways here: directly (the LyC content
 of ``sed_intrinsic`` equals ``fesc`` times the raw stellar LyC, to machine
-precision) and via an invariant (the EXTRA energy ``eb_include_lyc=True``
+precision) and via an invariant (the EXTRA energy ``lyc_in_energy_balance=True``
 finds is independent of ``fdust`` at fixed ``fesc``, since it can only ever
 draw on the ``fesc``-sized remainder).
 
@@ -168,8 +168,8 @@ def _build(
     fesc=0.0,
     fdust=0.0,
     free_fdust: bool = False,
-    lyc_absorb_all: bool = False,
-    eb_include_lyc: bool = False,
+    lyc_reprocessed_by: str = "young",
+    lyc_in_energy_balance: bool = False,
     tau: float = 1.0,
     neb_type: str = "cue",
 ) -> SEDModel:
@@ -184,7 +184,7 @@ def _build(
             law_diff="calzetti",
             tau_bc=Fixed(tau),
             tau_diff=Fixed(tau),
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
     elif dust_type == "single_component":
         dust.update(law="calzetti", tau_v=Fixed(tau))
@@ -192,8 +192,8 @@ def _build(
         dust.update(dust_curve="mw", geometry="shell", structure="homogeneous", tau_v=Fixed(tau))
     else:
         raise ValueError(dust_type)
-    if eb_include_lyc:
-        dust["eb_include_lyc"] = True
+    if lyc_in_energy_balance:
+        dust["lyc_in_energy_balance"] = True
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
@@ -204,12 +204,12 @@ def _build(
     )
 
 
-# (dust_type, lyc_absorb_all, is young-credited population)
+# (dust_type, lyc_reprocessed_by, is young-credited population)
 ATTENUATORS = [
-    pytest.param("single_component", False, False, id="single_component"),
-    pytest.param("two_component", False, True, id="two_component-lyc_absorb_all_False"),
-    pytest.param("two_component", True, False, id="two_component-lyc_absorb_all_True"),
-    pytest.param("wg00", False, False, id="wg00"),
+    pytest.param("single_component", "young", False, id="single_component"),
+    pytest.param("two_component", "young", True, id="two_component-lyc_reprocessed_by_young"),
+    pytest.param("two_component", "all", False, id="two_component-lyc_reprocessed_by_all"),
+    pytest.param("wg00", "young", False, id="wg00"),
 ]
 
 
@@ -242,11 +242,11 @@ def _build_nodust(ssp, *, fesc=0.0, fdust=0.0, neb_type: str = "cue") -> SEDMode
     )
 
 
-def _pre_screen_state(ssp, dust_type: str, *, fesc: float, fdust: float, lyc_absorb_all: bool):
+def _pre_screen_state(ssp, dust_type: str, *, fesc: float, fdust: float, lyc_reprocessed_by: str):
     """The pre-screen (screen-transparent) state, from whichever twin
     reconstructs it exactly for this attenuator.
 
-    ``two_component`` with ``lyc_absorb_all=False`` reprocesses only the
+    ``two_component`` with ``lyc_reprocessed_by='young'`` reprocesses only the
     YOUNG/birth-cloud population's LyC (#2539 item 3); that per-age
     young/old split is reconstructed inside ``DustSEDComponent.apply()``
     itself (the ``lyc_factor`` weighting), so recovering it needs a REAL
@@ -262,7 +262,9 @@ def _pre_screen_state(ssp, dust_type: str, *, fesc: float, fdust: float, lyc_abs
     if dust_type == "wg00":
         m0 = _build_nodust(ssp, fesc=fesc, fdust=fdust)
     else:
-        m0 = _build(ssp, dust_type, fesc=fesc, fdust=fdust, lyc_absorb_all=lyc_absorb_all, tau=0.0)
+        m0 = _build(
+            ssp, dust_type, fesc=fesc, fdust=fdust, lyc_reprocessed_by=lyc_reprocessed_by, tau=0.0
+        )
     s0 = m0.predict_state({})
     return s0, np.asarray(s0.wave)
 
@@ -275,13 +277,21 @@ class TestFdustCreditIdentity:
     fdust-vs-zero directly.
     """
 
-    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
-    def test_identity(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+    @pytest.mark.parametrize("dust_type,lyc_reprocessed_by,young_only", ATTENUATORS)
+    def test_identity(self, synthetic_ssp_wide, dust_type, lyc_reprocessed_by, young_only):
         m_escape = _build(
-            synthetic_ssp_wide, dust_type, fesc=0.3, fdust=0.0, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=0.3,
+            fdust=0.0,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         m_dust = _build(
-            synthetic_ssp_wide, dust_type, fesc=0.0, fdust=0.3, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=0.0,
+            fdust=0.3,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         s_escape = m_escape.predict_state({})
         s_dust = m_dust.predict_state({})
@@ -294,9 +304,9 @@ class TestFdustCreditIdentity:
         assert expected > 0.0, "setup: credited population has zero LyC luminosity"
         np.testing.assert_allclose(L_dust - L_escape, expected, rtol=1e-6)
 
-    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    @pytest.mark.parametrize("dust_type,lyc_reprocessed_by,young_only", ATTENUATORS)
     def test_sed_intrinsic_lyc_region_no_double_count(
-        self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only
+        self, synthetic_ssp_wide, dust_type, lyc_reprocessed_by, young_only
     ):
         """The LyC that gas/HII-dust consumed is actually removed from the
         SED a screen would see (#2539 item 2): the final (tau=0, so
@@ -304,11 +314,11 @@ class TestFdustCreditIdentity:
         threads on to downstream components -- has EXACTLY ``fesc`` of the
         credited population's raw LyC below 912 A -- never the fdust or
         gas-ionizing shares -- so there is nothing left for
-        ``eb_include_lyc=True`` to double-count against the #2539 credit.
+        ``lyc_in_energy_balance=True`` to double-count against the #2539 credit.
 
-        single_component/wg00 (and two_component with lyc_absorb_all=True)
+        single_component/wg00 (and two_component with lyc_reprocessed_by='all')
         mask the WHOLE population uniformly by fesc. two_component with
-        lyc_absorb_all=False (default) only masks the YOUNG/birth-cloud
+        lyc_reprocessed_by='young' (default) only masks the YOUNG/birth-cloud
         population -- the per-age lyc_factor leaves old-star LyC completely
         unmasked (point 3: "populations not reprocessed... their LyC meets
         the screen as usual") -- so the expected observed LyC there is
@@ -316,13 +326,17 @@ class TestFdustCreditIdentity:
         L_lyc(total)``.
         """
         s, wave = _pre_screen_state(
-            synthetic_ssp_wide, dust_type, fesc=0.3, fdust=0.3, lyc_absorb_all=lyc_absorb_all
+            synthetic_ssp_wide,
+            dust_type,
+            fesc=0.3,
+            fdust=0.3,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         lnu_total = np.sum(np.asarray(s.derived["lnu_age"]), axis=0)
         raw_lyc_total = _l_lyc(wave, lnu_total)
         observed_lyc = _l_lyc(wave, np.asarray(s.sed_intrinsic))
 
-        if dust_type == "two_component" and not lyc_absorb_all:
+        if dust_type == "two_component" and lyc_reprocessed_by == "young":
             lnu_young = _credited_lnu(s, young_only=True)
             raw_lyc_young = _l_lyc(wave, lnu_young)
             raw_lyc_old = raw_lyc_total - raw_lyc_young
@@ -334,7 +348,7 @@ class TestFdustCreditIdentity:
     @pytest.mark.parametrize("dust_type", ["single_component", "two_component", "wg00"])
     def test_screen_absorbed_lyc_independent_of_fdust(self, synthetic_ssp_wide, dust_type):
         """No double counting (#2539 item 2), the invariant form: the EXTRA
-        energy ``eb_include_lyc=True`` finds over the default (the screen's
+        energy ``lyc_in_energy_balance=True`` finds over the default (the screen's
         own absorption of whatever LyC still remains in ``sed_intrinsic``)
         must depend on ``fesc`` alone -- it can only draw on the ``fesc``
         remainder, which does not depend on ``fdust`` -- never on ``fdust``,
@@ -345,13 +359,13 @@ class TestFdustCreditIdentity:
         for fdust in (0.0, 0.15, 0.3):
             m_default = _build(synthetic_ssp_wide, dust_type, fesc=0.4, fdust=fdust)
             m_full = _build(
-                synthetic_ssp_wide, dust_type, fesc=0.4, fdust=fdust, eb_include_lyc=True
+                synthetic_ssp_wide, dust_type, fesc=0.4, fdust=fdust, lyc_in_energy_balance=True
             )
             L_default = float(
                 10.0 ** np.asarray(m_default.predict_state({}).derived["log_L_absorbed"])
             )
             L_full = float(10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"]))
-            assert L_full > L_default, "setup: eb_include_lyc should add energy"
+            assert L_full > L_default, "setup: lyc_in_energy_balance should add energy"
             screen_absorbed.append(L_full - L_default)
         np.testing.assert_allclose(screen_absorbed, screen_absorbed[0], rtol=1e-6)
 
@@ -366,7 +380,7 @@ class TestLycConservationClosure:
       nebular step does not reprocess (#2539 item 3), minus whatever the
       dust screen itself further removes;
     - **screen-absorbed**: the above screen removal, credited to
-      ``log_L_absorbed`` only when ``eb_include_lyc=True``;
+      ``log_L_absorbed`` only when ``lyc_in_energy_balance=True``;
     - **gas-ionizing**: the credited population's ``f_gas`` share
       (``lyc_shares(neb_fesc, neb_fdust_frac)[2]``, #2436), which
       photoionizes hydrogen (by construction of the fesc/fdust/k-factor
@@ -385,8 +399,8 @@ class TestLycConservationClosure:
     genuinely mixed-age population to close the budget over.
     """
 
-    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
-    def test_closure(self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only):
+    @pytest.mark.parametrize("dust_type,lyc_reprocessed_by,young_only", ATTENUATORS)
+    def test_closure(self, synthetic_ssp_wide, dust_type, lyc_reprocessed_by, young_only):
         # #2436: neb_fdust_frac is the fraction of the NON-escaping budget, so
         # the absolute f_dust/f_gas shares this closure needs are derived
         # through lyc_shares, not read off (1 - fesc - fdust_frac) directly
@@ -403,7 +417,7 @@ class TestLycConservationClosure:
             dust_type,
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
 
         lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
@@ -434,14 +448,14 @@ class TestLycConservationClosure:
             dust_type,
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         m_escape_only = _build(
             synthetic_ssp_wide,
             dust_type,
             fesc=f_esc + f_dust,
             fdust=0.0,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         s_default = m_default.predict_state({})
         L_absorbed_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
@@ -452,7 +466,7 @@ class TestLycConservationClosure:
         np.testing.assert_allclose(hii_dust_credit, f_dust * L_lyc_credited, rtol=1e-6)
 
         # -- screen-absorbed: an ACTUAL log_L_absorbed difference across the
-        # eb_include_lyc toggle, cross-checked against a direct SED integral
+        # lyc_in_energy_balance toggle, cross-checked against a direct SED integral
         # of the pre-screen vs. post-screen LyC content. ``post_screen_measured``
         # reads ``s_default.sed_intrinsic`` (every attenuator reassigns it to
         # its own combined post-screen SED, #2539), not the ``sed_dust_attenuated``
@@ -464,8 +478,8 @@ class TestLycConservationClosure:
             dust_type,
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
-            eb_include_lyc=True,
+            lyc_reprocessed_by=lyc_reprocessed_by,
+            lyc_in_energy_balance=True,
         )
         L_absorbed_full = float(
             10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"])
@@ -480,7 +494,7 @@ class TestLycConservationClosure:
         # closure sum below uses.
         screen_absorbed_derived = escaped_measured - post_screen_measured
 
-        # Two_component's ``eb_include_lyc=True`` integral used to read a
+        # Two_component's ``lyc_in_energy_balance=True`` integral used to read a
         # UNIFORM (all-ages) fesc-masked bookkeeping value
         # (``sed_intrinsic_stellar``) for the newly-unmasked LyC region
         # instead of the per-age young/old-split value ``sed_attenuated``
@@ -489,7 +503,7 @@ class TestLycConservationClosure:
         # ``two_component.py``, honoring the SAME ``lyc_factor`` split for
         # both the exact and LUT paths). The model's own measured toggle
         # diff and the independent SED-integral derivation now agree exactly
-        # for every attenuator x lyc_absorb_all combination.
+        # for every attenuator x lyc_reprocessed_by combination.
         np.testing.assert_allclose(screen_absorbed_measured, screen_absorbed_derived, rtol=1e-6)
 
         # -- closure: nothing counted twice, nothing lost --
@@ -500,10 +514,10 @@ class TestLycConservationClosure:
         )
 
 
-class TestWG00EbIncludeLyc:
-    """wg00 + eb_include_lyc (#2539 item 1): the grammar accepted the key for
+class TestWG00LycInEnergyBalance:
+    """wg00 + lyc_in_energy_balance (#2539 item 1): the grammar accepted the key for
     dust_type='wg00' but a bug in ``groups.py``'s wg00 branch (an early
-    ``return`` before the generic eb_include_lyc translation) meant it was
+    ``return`` before the generic lyc_in_energy_balance translation) meant it was
     silently never read; ``component_factory.py`` also never forwarded it.
     Both are fixed; wg00's absorbed-energy integral uses the SAME
     ``bolometric_absorbed_log10`` call with the SAME Lyman-edge switch as
@@ -513,15 +527,19 @@ class TestWG00EbIncludeLyc:
 
     def test_toggle_reaches_forward_pass_and_matches_manual_integral(self, synthetic_ssp_wide):
         m_default = _build(synthetic_ssp_wide, "wg00", fesc=0.2, fdust=0.0)
-        m_full = _build(synthetic_ssp_wide, "wg00", fesc=0.2, fdust=0.0, eb_include_lyc=True)
-        assert m_default.spec.to_groups()["dust_attenuation"].get("eb_include_lyc") is not True
-        assert m_full.spec.to_groups()["dust_attenuation"]["eb_include_lyc"] is True
+        m_full = _build(
+            synthetic_ssp_wide, "wg00", fesc=0.2, fdust=0.0, lyc_in_energy_balance=True
+        )
+        assert (
+            m_default.spec.to_groups()["dust_attenuation"].get("lyc_in_energy_balance") is not True
+        )
+        assert m_full.spec.to_groups()["dust_attenuation"]["lyc_in_energy_balance"] is True
 
         s_default = m_default.predict_state({})
         s_full = m_full.predict_state({})
         L_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
         L_full = float(10.0 ** np.asarray(s_full.derived["log_L_absorbed"]))
-        assert L_full > L_default, "eb_include_lyc is a no-op for wg00"
+        assert L_full > L_default, "lyc_in_energy_balance is a no-op for wg00"
 
         # Independent manual integral of the extra (now-unmasked) LyC energy
         # the SAME screen absorbs: the TRUE pre-screen SED (a no-dust twin,
@@ -536,13 +554,15 @@ class TestWG00EbIncludeLyc:
         wave = np.asarray(s_full.wave)
         sed_attenuated = np.asarray(s_full.sed_intrinsic)
         absorbed = sed_intrinsic.astype(np.float64) - sed_attenuated.astype(np.float64)
-        # side="all" (eb_include_lyc=True) minus side="nonionizing" (default)
+        # side="all" (lyc_in_energy_balance=True) minus side="nonionizing" (default)
         # is exactly side="ionizing" of the SAME integrand -- reuse the same
         # independent step-model oracle as the LyC credit (_l_lyc) rather
         # than a second, plain-masked-trapezoid formula for what is the same
         # quantity.
         extra_lyc_absorbed = _l_lyc(wave, absorbed)
-        assert extra_lyc_absorbed > 0.0, "setup: eb_include_lyc should unmask nonzero LyC energy"
+        assert extra_lyc_absorbed > 0.0, (
+            "setup: lyc_in_energy_balance should unmask nonzero LyC energy"
+        )
         np.testing.assert_allclose(L_full - L_default, extra_lyc_absorbed, rtol=1e-6)
 
 
@@ -558,11 +578,11 @@ class TestDefaultsBitIdentical:
     true no-op at the default, not just numerically negligible.
     """
 
-    @pytest.mark.parametrize("dust_type,lyc_absorb_all,young_only", ATTENUATORS)
+    @pytest.mark.parametrize("dust_type,lyc_reprocessed_by,young_only", ATTENUATORS)
     def test_defaults_are_noop_and_finite(
-        self, synthetic_ssp_wide, dust_type, lyc_absorb_all, young_only
+        self, synthetic_ssp_wide, dust_type, lyc_reprocessed_by, young_only
     ):
-        m = _build(synthetic_ssp_wide, dust_type, lyc_absorb_all=lyc_absorb_all)
+        m = _build(synthetic_ssp_wide, dust_type, lyc_reprocessed_by=lyc_reprocessed_by)
         s = m.predict_state({})
         log_lyc_dust = s.derived.get("log_L_lyc_dust")
         if log_lyc_dust is not None:
@@ -683,8 +703,8 @@ def _build_two_component_lut(
     *,
     fesc=0.0,
     fdust=0.0,
-    lyc_absorb_all=False,
-    eb_include_lyc=False,
+    lyc_reprocessed_by="young",
+    lyc_in_energy_balance=False,
     tau=0.5,
     neb_type="cue",
 ) -> SEDModel:
@@ -707,8 +727,8 @@ def _build_two_component_lut(
             "law_diff": "calzetti",
             "tau_bc": Fixed(tau),
             "tau_diff": Fixed(tau),
-            "lyc_absorb_all": lyc_absorb_all,
-            "eb_include_lyc": eb_include_lyc,
+            "lyc_reprocessed_by": lyc_reprocessed_by,
+            "lyc_in_energy_balance": lyc_in_energy_balance,
             "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
@@ -720,20 +740,20 @@ def _build_two_component_lut(
 class TestLutFescExact:
     """#2539 item 1: the WavePrecomp energy-balance LUT is now EXACT in a
     live nebular ``neb_fesc`` (affine combine A(fesc) = A_0 + fesc*A_1)
-    instead of declining to the exact path whenever ``eb_include_lyc=True``
+    instead of declining to the exact path whenever ``lyc_in_energy_balance=True``
     meets a live photoionized nebular component. Also item 4: the fdust
     identity, the LyC closure, and the fdust sign relation must hold on the
     LUT path exactly as they do on the exact path.
     """
 
-    @pytest.mark.parametrize("eb_include_lyc", [False, True])
-    @pytest.mark.parametrize("lyc_absorb_all", [False, True])
+    @pytest.mark.parametrize("lyc_in_energy_balance", [False, True])
+    @pytest.mark.parametrize("lyc_reprocessed_by", ["young", "all"])
     @pytest.mark.parametrize("fesc", [0.1, 0.3, 0.9])
     def test_lut_matches_exact_l_absorbed(
-        self, synthetic_ssp_wide, eb_include_lyc, lyc_absorb_all, fesc
+        self, synthetic_ssp_wide, lyc_in_energy_balance, lyc_reprocessed_by, fesc
     ):
         """LUT vs exact parity for the full L_absorbed (integration check),
-        across every combination of eb_include_lyc and lyc_absorb_all, at
+        across every combination of lyc_in_energy_balance and lyc_reprocessed_by, at
         three fesc values.
 
         ``tau_bc``/``tau_diff`` are ``Fixed`` (a single LUT node), so this is
@@ -757,19 +777,19 @@ class TestLutFescExact:
             synthetic_ssp_wide,
             WavePrecomp(),
             fesc=fesc,
-            lyc_absorb_all=lyc_absorb_all,
-            eb_include_lyc=eb_include_lyc,
+            lyc_reprocessed_by=lyc_reprocessed_by,
+            lyc_in_energy_balance=lyc_in_energy_balance,
         )
         m_exact = _build_two_component_lut(
             synthetic_ssp_wide,
             None,
             fesc=fesc,
-            lyc_absorb_all=lyc_absorb_all,
-            eb_include_lyc=eb_include_lyc,
+            lyc_reprocessed_by=lyc_reprocessed_by,
+            lyc_in_energy_balance=lyc_in_energy_balance,
         )
         assert getattr(m_lut, "_energy_balance_lut_cache", None) is not None
         lut = m_lut._energy_balance_lut_cache
-        if eb_include_lyc:
+        if lyc_in_energy_balance:
             # The fesc-exact family only needs to exist when it can matter.
             assert lut.B_fesc is not None and lut.G_fesc is not None
         L_lut = float(10.0 ** np.asarray(m_lut.predict_state({}).derived["log_L_absorbed"]))
@@ -777,17 +797,17 @@ class TestLutFescExact:
         assert np.isfinite(L_lut) and np.isfinite(L_exact)
         np.testing.assert_allclose(L_lut, L_exact, rtol=0.02)
 
-    @pytest.mark.parametrize("lyc_absorb_all", [False, True])
+    @pytest.mark.parametrize("lyc_reprocessed_by", ["young", "all"])
     @pytest.mark.parametrize("fesc", [0.1, 0.3, 0.9])
     def test_lut_stellar_term_matches_exact_affine_combine(
-        self, synthetic_ssp_wide, lyc_absorb_all, fesc
+        self, synthetic_ssp_wide, lyc_reprocessed_by, fesc
     ):
         """Direct, undiluted check of ``lut_l_absorbed_stellar_log10``'s
         fesc-affine combine (#2539 item 1): the STELLAR-only contribution
         against an independent exact per-age integral, built by hand from
         the raw SSP cube with the SAME ``lyc_factor(age) = 1 -
         y_age*(1-fesc)`` weighting ``two_component.py``'s §2a applies (or,
-        under ``lyc_absorb_all=True``, the uniform ``fesc`` weight over every
+        under ``lyc_reprocessed_by='all'``, the uniform ``fesc`` weight over every
         age). See ``test_lut_matches_exact_l_absorbed`` above for why the
         full end-to-end ``log_L_absorbed`` cannot be trusted to catch a bug
         confined to this term alone.
@@ -813,11 +833,11 @@ class TestLutFescExact:
             t_birth_yr=t_birth_yr,
             transition_width_dex=transition_width_dex,
             lyman_cutoff_aa=0.0,
-            eb_include_lyc=True,
+            lyc_in_energy_balance=True,
             tau_bc_grid=jnp.asarray([tau_bc]),
             tau_diff_grid=jnp.asarray([tau_diff]),
             fesc_exact=True,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         assert lut.B_fesc is not None and lut.G_fesc is not None
 
@@ -847,7 +867,7 @@ class TestLutFescExact:
         nu = C_AA / jnp.asarray(ssp.ssp_wave)
 
         lyc_t = jnp.where(jnp.asarray(ssp.ssp_wave) < LYC_CUTOFF_AA, fesc, 1.0)
-        if lyc_absorb_all:
+        if lyc_reprocessed_by == "all":
             lyc_factor = jnp.broadcast_to(lyc_t[None, :], lnu_age.shape)
         else:
             lyc_factor = 1.0 - y_age[:, None] * (1.0 - lyc_t[None, :])
@@ -889,17 +909,17 @@ class TestLutFescExact:
         must give the identical answer either way, exactly as it does on the
         exact path.
 
-        ``eb_include_lyc=False`` (the default, left unset here) is
+        ``lyc_in_energy_balance=False`` (the default, left unset here) is
         deliberate, matching the module docstring's warning: with
-        ``eb_include_lyc=True`` the screen's OWN LyC absorption also differs
+        ``lyc_in_energy_balance=True`` the screen's OWN LyC absorption also differs
         between the two builds (``sed_intrinsic``'s LyC content depends on
         fesc), confounding this identity with a second effect. That
-        eb_include_lyc=True + live-fesc combination is exactly what
+        lyc_in_energy_balance=True + live-fesc combination is exactly what
         ``test_lut_matches_exact_l_absorbed`` already covers (the fesc-exact
         LUT family, item 1); this test isolates the credit (item 2/3) alone,
         so the LUT's B_fesc family need not even engage here (it does not,
-        at eb_include_lyc=False) -- the credit itself is what is under test.
-        ``lyc_absorb_all=True`` gives a whole-population credit, so
+        at lyc_in_energy_balance=False) -- the credit itself is what is under test.
+        ``lyc_reprocessed_by='all'`` gives a whole-population credit, so
         ``_credited_lnu`` needs no per-age reconstruction.
         """
         m_escape = _build_two_component_lut(
@@ -907,14 +927,14 @@ class TestLutFescExact:
             WavePrecomp(),
             fesc=0.3,
             fdust=0.0,
-            lyc_absorb_all=True,
+            lyc_reprocessed_by="all",
         )
         m_dust = _build_two_component_lut(
             synthetic_ssp_wide,
             WavePrecomp(),
             fesc=0.0,
             fdust=0.3,
-            lyc_absorb_all=True,
+            lyc_reprocessed_by="all",
         )
         s_escape = m_escape.predict_state({})
         s_dust = m_dust.predict_state({})
@@ -941,14 +961,14 @@ class TestLutFescExact:
         # (see TestLycConservationClosure.test_closure's comment).
         fesc, fdust_frac = 0.3, 0.3
         f_esc, f_dust, f_gas = (float(x) for x in lyc_shares(fesc, fdust_frac))
-        dust_type, lyc_absorb_all, young_only = "two_component", True, False
+        dust_type, lyc_reprocessed_by, young_only = "two_component", "all", False
 
         s0, wave = _pre_screen_state(
             synthetic_ssp_wide,
             dust_type,
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         lnu_total = np.sum(np.asarray(s0.derived["lnu_age"]), axis=0)
         lnu_credited = _credited_lnu(s0, young_only=young_only)
@@ -969,14 +989,14 @@ class TestLutFescExact:
             WavePrecomp(),
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         m_escape_only = _build_two_component_lut(
             synthetic_ssp_wide,
             WavePrecomp(),
             fesc=f_esc + f_dust,
             fdust=0.0,
-            lyc_absorb_all=lyc_absorb_all,
+            lyc_reprocessed_by=lyc_reprocessed_by,
         )
         s_default = m_default.predict_state({})
         L_absorbed_default = float(10.0 ** np.asarray(s_default.derived["log_L_absorbed"]))
@@ -991,8 +1011,8 @@ class TestLutFescExact:
             WavePrecomp(),
             fesc=fesc,
             fdust=fdust_frac,
-            lyc_absorb_all=lyc_absorb_all,
-            eb_include_lyc=True,
+            lyc_reprocessed_by=lyc_reprocessed_by,
+            lyc_in_energy_balance=True,
         )
         L_absorbed_full = float(
             10.0 ** np.asarray(m_full.predict_state({}).derived["log_L_absorbed"])
@@ -1039,10 +1059,10 @@ class TestLutFescExact:
         """
         approx = WavePrecomp() if use_lut else None
         m_escape = _build_two_component_lut(
-            synthetic_ssp_wide, approx, fesc=0.3, fdust=0.0, lyc_absorb_all=True
+            synthetic_ssp_wide, approx, fesc=0.3, fdust=0.0, lyc_reprocessed_by="all"
         )
         m_dust = _build_two_component_lut(
-            synthetic_ssp_wide, approx, fesc=0.0, fdust=0.3, lyc_absorb_all=True
+            synthetic_ssp_wide, approx, fesc=0.0, fdust=0.3, lyc_reprocessed_by="all"
         )
         if use_lut:
             assert getattr(m_escape, "_energy_balance_lut_cache", None) is not None
