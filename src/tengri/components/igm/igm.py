@@ -375,7 +375,7 @@ def _cgm_damping_wing_tau(
 
     At z > 5, neutral hydrogen in the circumgalactic medium produces a redward
     Lyα damping wing on top of the Inoue+2014 mean IGM. The cross-section is the
-    Totani et al. (2006) Eq. 4 frequency-dependent form, and the column-density
+    Miralda-Escudé (1998) Eq. 1 frequency-dependent form (Totani et al. 2006), and the column-density
     evolution defaults to the Asada+2025 paper sigmoid (Eq. 2). Closes #502.
 
     Parameters
@@ -419,14 +419,12 @@ def _cgm_damping_wing_tau(
     Miralda-Escudé (1998) [2]_ for the Lyα damping-wing cross-section; Totani et al. (2006) [3]_
     for the damping-wing profile form.
 
-    .. [1] Yoshihisa Asada, Hiroyuki Hirashita, Akio K. Inoue, and Yoichi Tamura. 2025.
-       Improving Photometric Redshifts of Epoch of Reionization Galaxies: A New Empirical
-       Transmission Curve with Neutral Hydrogen Damping Wing Lyα Absorption. The Astrophysical
-       Journal Letters, 983(2), L2. doi:10.3847/2041-8213/adc388.
-    .. [2] Miralda-Escudé, J. 1998. The Dark Age of the Universe. The Astrophysical Journal,
-       501, 15.
-    .. [3] Totani, T., et al. 2006. Constraints on the Reionization History. Publications of
-       the Astronomical Society of Japan, 58(3), 485.
+    .. [1] Asada, Y., Desprez, G., Willott, C. J., et al. 2025. Improving Photometric
+       Redshifts of Epoch of Reionization Galaxies: A New Empirical Transmission Curve with
+       Neutral Hydrogen Damping Wing Lyα Absorption. The Astrophysical Journal Letters,
+       983(1), L2. doi:10.3847/2041-8213/adc388.
+    .. [2] Miralda-Escudé, J. 1998. The Astrophysical Journal, 501, 15.
+    .. [3] Totani, T., et al. 2006. Publications of the Astronomical Society of Japan, 58, 485.
     """
     # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
@@ -449,8 +447,9 @@ def _cgm_damping_wing_tau(
     delta_nu = nu_rest - _NU_LYA
     nu_ratio = nu_rest / _NU_LYA  # = ν / ν_α
 
-    # Totani+06 Eq. 4. The (ν/ν_α)^4 factor is what curves the cross-section
-    # away from a flat Lorentzian in the far wing.
+    # Miralda-Escudé (1998) Eq. 1 form: the prefactor 3 λ_α² A/(8π) already
+    # equals the sum rule π e² f/(m_e c), so f must not be multiplied in again.
+    # The (ν/ν_α)^4 factor curves the cross-section away from a flat Lorentzian.
     lam_cm = _WL_LYA * 1e-8
     prefactor = 3.0 * lam_cm**2 * _A_LYA / (8.0 * jnp.pi)
     numerator = _A_LYA * nu_ratio**4

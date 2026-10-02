@@ -1,11 +1,24 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression tests for #2629 — asada25 Lyα damping-wing cross-section bug.
+"""#2629: the asada25 CGM Lyα damping-wing cross-section carried f twice.
 
-The Lyα damping-wing cross-section in the Asada+2025 CGM model carried the
-oscillator strength f twice: once in the prefactor and once implicitly through
-the Einstein A coefficient. The prefactor should be 3λ²A/(8π) = 0.011052 cm²·Hz
-(from the Miralda-Escudé 1998, Eq. 1 form), not 3λ²f·A/(8π) = 0.004600.
-This raised τ ≈ 0.41× too small, making the CGM damping wing invisible at z ≥ 6.
+The Lorentzian Lyα wing is (Miralda-Escudé 1998, ApJ 501, 15, Eq. 1; Totani et al.
+2006, PASJ 58, 485)
+
+    sigma(nu) = [3 lam^2 A / (8 pi)] * A r^4 / [4 pi^2 (nu - nu_a)^2 + A^2 r^6 / 4],
+    r = nu / nu_a,
+
+and the prefactor 3 lam^2 A/(8 pi) equals the sum-rule value pi e^2 f/(m_e c) with
+g2/g1 = 3, so the oscillator strength is already inside A. The code multiplied f in a
+second time (0.0046 against 0.01105 cm^2 Hz).
+
+Every expected value below is computed here from the formula and CODATA constants
+written in this file. Nothing is imported from ``tengri.components.igm.dla`` except the
+DLA Voigt cross-section that cell d compares against.
+
+Constants: lam_a = 1215.6701 Angstrom is the rest wavelength the code uses
+(Morton 2003, ``dla.py``). The brief's 1215.67 differs by 8e-9 relative, which shifts
+nu - nu_a at |dnu|/nu_a = 1e-4 by 8e-5 and the cross-section by 1.6e-4, so the exact
+value is used wherever a 1e-6 comparison is made.
 """
 
 from __future__ import annotations
@@ -15,224 +28,264 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.igm.dla import (
-    _A_LYA,
-    _NU_LYA,
-    _deltanu_doppler,
-    _sigma_lya,
-)
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform
+from tengri.components.igm.dla import _deltanu_doppler, _sigma_lya
 from tengri.components.igm.igm import (
+    _cgm_damping_wing_tau,
+    igm_transmission,
     igm_transmission_asada25,
 )
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
 
-# CODATA constants (CGS) — written in the test, not imported from tengri
-_E_CHARGE_ESU = 4.80320471e-10  # statcoulomb
-_M_ELECTRON = 9.1093837015e-28  # gram
-_C_CGS = 2.99792458e10  # cm/s
+# CODATA, cgs
+_E = 4.80320471e-10  # esu
+_ME = 9.1093837015e-28  # g
+_C = 2.99792458e10  # cm/s
+_C_KMS = 2.99792458e5  # km/s
+# Lyα atomic data
+_LAM_ANG = 1215.6701  # Angstrom (see module docstring)
+_A = 6.265e8  # s^-1
+_F = 0.4164  # sum-rule oscillator strength
+_NU_A = _C / (_LAM_ANG * 1e-8)
+_PREFACTOR = 3.0 * (_LAM_ANG * 1e-8) ** 2 * _A / (8.0 * np.pi)
+_SUM_RULE = np.pi * _E**2 * _F / (_ME * _C)
 
-# Lyα atomic data (from references.bib or constants)
-_LYA_LAMBDA_ANG = 1215.67  # Å
-_LYA_A_COEFF = 6.265e8  # s⁻¹
-_LYA_OSC_STRENGTH = 0.4164  # dimensionless
+
+def _n_hi(z):
+    """Asada et al. (2025) N_HI(z), the sigmoid in the ``_cgm_damping_wing_tau`` docstring."""
+    return 10.0 ** (3.592 / (1.0 + np.exp(-1.841 * (z - 6.0))) + 18.001)
 
 
-def test_sum_rule_formula_identity():
-    """Test that 3λ²A/(8π) equals πe²f/(m_e c) to 1e-3 (sum rule)."""
-    lam = _LYA_LAMBDA_ANG * 1e-8  # cm
+def _sigma_formula(wave_rest_ang):
+    """Miralda-Escudé (1998) Eq. 1 Lorentzian wing [cm^2] at rest wavelengths [Angstrom]."""
+    nu = _C / (np.asarray(wave_rest_ang, dtype=float) * 1e-8)
+    r = nu / _NU_A
+    return _PREFACTOR * _A * r**4 / (4.0 * np.pi**2 * (nu - _NU_A) ** 2 + _A**2 * r**6 / 4.0)
 
-    # Miralda-Escudé 1998 Eq. 1 prefactor
-    prefactor_formula = 3 * lam**2 * _A_LYA / (8 * np.pi)
 
-    # Oscillator-strength sum rule: πe²f/(m_e c)
-    sum_rule = np.pi * _E_CHARGE_ESU**2 * _LYA_OSC_STRENGTH / (_M_ELECTRON * _C_CGS)
+def _rest_at_velocity(dv_kms):
+    """Rest wavelength [Angstrom] a velocity dv redward of Lyα."""
+    return _LAM_ANG * (1.0 + dv_kms / _C_KMS)
 
-    np.testing.assert_allclose(
-        prefactor_formula,
-        sum_rule,
-        rtol=1e-3,
-        err_msg="Prefactor 3λ²A/(8π) should equal πe²f/(m_e c) by sum rule",
+
+def _rest_at_frac(x):
+    """Rest wavelength [Angstrom] with nu = nu_a (1 - x), i.e. redward by |dnu|/nu_a = x."""
+    return _LAM_ANG / (1.0 - x)
+
+
+# ── a. the code's cross-section against the formula ──────────────────────────────
+
+
+@pytest.mark.parametrize("x", [1e-4, 1e-3, 1e-2, 3e-2, 1e-1])
+def test_a_code_cross_section_equals_lorentzian_formula(x):
+    """tau/N_HI from the code equals the formula to 1e-6 (same A, c and lam_a)."""
+    z = 8.0
+    rest = _rest_at_frac(x)
+    tau = float(_cgm_damping_wing_tau(jnp.asarray([rest * (1.0 + z)]), z)[0])
+    np.testing.assert_allclose(tau / _n_hi(z), _sigma_formula(rest), rtol=1e-6)
+
+
+# ── b. sum rule ───────────────────────────────────────────────────────────────────
+
+
+def test_b_i_sum_rule_identity():
+    """3 lam^2 A/(8 pi) = pi e^2 f/(m_e c) to 1e-3: why no second f belongs there."""
+    np.testing.assert_allclose(_PREFACTOR, _SUM_RULE, rtol=1e-3)
+
+
+@pytest.mark.parametrize("x", [1e-3, 1e-2])
+def test_b_ii_code_prefactor_equals_sum_rule(x):
+    """The code's prefactor, recovered from its tau, equals pi e^2 f/(m_e c) to 1e-3."""
+    z = 8.0
+    rest = _rest_at_frac(x)
+    nu = _C / (rest * 1e-8)
+    r = nu / _NU_A
+    tau = float(_cgm_damping_wing_tau(jnp.asarray([rest * (1.0 + z)]), z)[0])
+    denominator = 4.0 * np.pi**2 * (nu - _NU_A) ** 2 + _A**2 * r**6 / 4.0
+    numerator = _A * r**4
+    recovered = tau * denominator / numerator / _n_hi(z)
+    np.testing.assert_allclose(recovered, _SUM_RULE, rtol=1e-3)
+
+
+# ── c. public transmission ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("z", [6.0, 8.0, 10.0])
+@pytest.mark.parametrize("dv", [1000.0, 2000.0, 5000.0])
+def test_c_transmission_is_inoue14_times_wing(z, dv):
+    """T_asada25 = T_inoue14 * exp(-N_HI sigma_formula) to 1e-3, redward of the line."""
+    rest = _rest_at_velocity(dv)
+    wave_obs = jnp.asarray([rest * (1.0 + z)])
+    expected = float(igm_transmission(wave_obs, z)[0]) * np.exp(
+        -_n_hi(z) * _sigma_formula(rest)[()]
     )
-
-
-def test_code_prefactor_matches_sum_rule():
-    """Test that the CODE's prefactor equals the sum rule to 1e-3."""
-    lam = _LYA_LAMBDA_ANG * 1e-8  # cm
-
-    # The code's prefactor (from igm.py line 451)
-    prefactor_code = 3 * lam**2 * _A_LYA / (8 * np.pi)
-
-    # The sum rule
-    sum_rule = np.pi * _E_CHARGE_ESU**2 * _LYA_OSC_STRENGTH / (_M_ELECTRON * _C_CGS)
-
-    np.testing.assert_allclose(
-        prefactor_code,
-        sum_rule,
-        rtol=1e-3,
-        err_msg="Code prefactor should equal sum rule (no extra f)",
-    )
+    got = float(igm_transmission_asada25(wave_obs, z)[0])
+    np.testing.assert_allclose(got, expected, rtol=1e-3)
 
 
 @pytest.mark.parametrize(
-    "z,rest_wl,T_expected",
+    "z, rest, literal, literal_rtol",
     [
-        (8.0, 1220.0, 0.00073),
-        (8.0, 1230.0, 0.523),
-        (8.0, 1240.0, 0.8015),
-        (10.0, 1225.0, 0.1527),
+        # 0.00073 is 0.000734 to two significant figures: half a unit in the last digit
+        # is 0.5/73 = 0.7 %, so the literal is pinned at 1e-2 (the formula value, at 1e-3).
+        (8.0, 1220.0, 0.00073, 1e-2),
+        (8.0, 1230.0, 0.523, 2e-3),
+        (8.0, 1240.0, 0.8015, 2e-3),
+        (10.0, 1225.0, 0.1527, 2e-3),
     ],
 )
-def test_transmission_literals(z, rest_wl, T_expected):
-    """Test transmission T at specific (z, rest_λ) matches formula; report literals."""
-    lam = _LYA_LAMBDA_ANG * 1e-8  # cm
-    prefactor = 3 * lam**2 * _A_LYA / (8 * np.pi)
-
-    # N_HI(z) from Asada+2025 Eq. 2
-    n_hi = 10.0 ** (3.592 / (1 + np.exp(-1.841 * (z - 6.0))) + 18.001)
-
-    # Compute τ from formula
-    wave_rest = rest_wl * 1e-8  # cm
-    nu_rest = _C_CGS / wave_rest
-    delta_nu = nu_rest - _NU_LYA
-    nu_ratio = nu_rest / _NU_LYA
-
-    num = _A_LYA * nu_ratio**4
-    denom = 4 * np.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4
-    sigma = prefactor * num / denom
-    tau = n_hi * sigma
-
-    T_formula = np.exp(-tau)
-
-    # Compute T via public API
-    wave_obs = jnp.asarray([rest_wl * (1 + z)])
-    T_code = float(igm_transmission_asada25(wave_obs, z)[0])
-
-    # First check: code should match formula to 1e-3
-    np.testing.assert_allclose(
-        T_code,
-        T_formula,
-        rtol=1e-3,
-        err_msg=f"Transmission at z={z}, rest {rest_wl:.0f} Å does not match formula",
+def test_c_issue_literals(z, rest, literal, literal_rtol):
+    """The issue's four transmissions: formula value at 1e-3, printed literal at its precision."""
+    wave_obs = jnp.asarray([rest * (1.0 + z)])
+    got = float(igm_transmission_asada25(wave_obs, z)[0])
+    t_formula = float(igm_transmission(wave_obs, z)[0]) * np.exp(
+        -_n_hi(z) * _sigma_formula(rest)[()]
     )
-
-    # Second check: verify literals match to 2e-3
-    rel_error = abs(T_code - T_expected) / T_expected if T_expected > 0 else 0
-    if rel_error <= 2e-3:
-        np.testing.assert_allclose(
-            T_code,
-            T_expected,
-            rtol=2e-3,
-        )
-    # If literal does not match to 2e-3, the measured value is reported in final report
+    np.testing.assert_allclose(got, t_formula, rtol=1e-3)
+    np.testing.assert_allclose(got, literal, rtol=literal_rtol)
 
 
-@pytest.mark.parametrize("rest_wl", [1220.0, 1230.0, 1260.0])
-def test_cgm_dla_wing_ratio(rest_wl):
-    """Test CGM and DLA damping wings agree to within line-shape differences."""
+# ── d. CGM Lorentzian wing against the DLA Voigt wing ────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "dv, measured_ratio",
+    [(3000.0, 0.9449), (10000.0, 0.8297)],
+)
+def test_d_cgm_to_dla_wing_ratio(dv, measured_ratio):
+    """sigma_CGM / sigma_DLA(T = 1e4 K) at the same column, to the measured ratio +- 1 %.
+
+    With the double f the ratio was 0.41 x these (0.39 / 0.34 near 3000 / 10000 km/s), so
+    this cell fails under the bug. The residual from unity is the line-shape difference,
+    not f: the CGM form carries the Rayleigh factor r^4 = (nu/nu_a)^4 (0.96 at 3000 km/s,
+    0.875 at 10000 km/s) while the DLA form carries the Lee (2013) asymmetry factor
+    1 - 1.792 x dnu_D/nu_a, which is 1.018 / 1.060 redward; 0.96/1.018 = 0.943 and
+    0.875/1.060 = 0.826. What is left (about 0.2 %) is the 4-digit atomic data
+    (f = 0.4162 in ``dla.py`` against 0.4164, A, lam_a) and the Voigt core term.
+    """
     z = 8.0
-    dnu_d = float(_deltanu_doppler(1e4, 0.0))  # 10,000 K Doppler width
-
-    # CGM cross-section from formula
-    lam = _LYA_LAMBDA_ANG * 1e-8  # cm
-    prefactor_cgm = 3 * lam**2 * _A_LYA / (8 * np.pi)
-
-    wave_rest = rest_wl * 1e-8  # cm
-    nu_rest = _C_CGS / wave_rest
-    delta_nu = nu_rest - _NU_LYA
-    nu_ratio = nu_rest / _NU_LYA
-    num = _A_LYA * nu_ratio**4
-    denom = 4 * np.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4
-    sigma_cgm = prefactor_cgm * num / denom
-
-    # DLA sigma (Voigt) at same Δν via x = Δν/dν_D
-    x = delta_nu / dnu_d
+    rest = _rest_at_velocity(dv)
+    tau = float(_cgm_damping_wing_tau(jnp.asarray([rest * (1.0 + z)]), z)[0])
+    sigma_cgm = tau / _n_hi(z)
+    dnu_d = float(_deltanu_doppler(1e4, 0.0))
+    x = (_C / (rest * 1e-8) - _NU_A) / dnu_d
     sigma_dla = float(_sigma_lya(jnp.asarray([x]), 1e4, 0.0)[0])
+    np.testing.assert_allclose(sigma_cgm / sigma_dla, measured_ratio, rtol=1e-2)
 
-    ratio = sigma_cgm / sigma_dla
 
-    # Assert the ratio is within reasonable line-shape difference bounds
-    # (CGM Lorentzian vs DLA Voigt)
-    assert 0.25 < ratio < 1.2, (
-        f"CGM/DLA ratio {ratio:.2f} at {rest_wl} Å outside expected range "
-        "(likely due to line-shape differences: Lorentzian vs Voigt)"
+# ── e. public path: photometry through a model built with the asada25 IGM ─────────
+
+_Z = 8.0
+_BAND = (1220.0 * (1.0 + _Z), 1260.0 * (1.0 + _Z))  # observed Angstrom, rest 1220-1260
+
+
+def _ssp():
+    """Smooth synthetic SSP; flux scaled so L_nu stays below float32 overflow."""
+    wave = jnp.logspace(2.0, 7.0, 1600)
+    ages = jnp.linspace(-3.0, 1.14, 25)
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    base = (5000.0 / wave) ** 2
+    flux = (
+        base[None, None, :]
+        * (1.0 + 0.15 * (ages - ages.mean()))[None, :, None]
+        * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    )
+    return SSPData(
+        ssp_wave=wave,
+        ssp_flux=(jnp.abs(flux) + 1e-12) * 1e-16,
+        ssp_lg_age_gyr=ages,
+        ssp_lgmet=lgmet,
     )
 
 
-def test_transmission_matches_inoue14_formula():
-    """Test that T_asada25 equals T_inoue14 · exp(-τ_formula) to 1e-3."""
-    # This test verifies the public path: that igm_transmission_asada25 composes
-    # the Inoue+2014 IGM transmission with the Asada+2025 CGM damping wing.
-    z = 8.0
-    rest_wl = 1230.0
-    wave_obs = jnp.asarray([rest_wl * (1 + z)])
+def _filter():
+    wave = jnp.linspace(_BAND[0], _BAND[1], 41)
+    trans = jnp.sin(jnp.linspace(0.0, jnp.pi, 41))
+    return wave, trans
 
-    # Get T_asada25 from public API (includes Inoue+2014 + CGM)
-    T_asada25 = float(igm_transmission_asada25(wave_obs, z)[0])
 
-    # Compute the formula value for comparison
-    lam = _LYA_LAMBDA_ANG * 1e-8  # cm
-    prefactor = 3 * lam**2 * _A_LYA / (8 * np.pi)
-
-    n_hi = 10.0 ** (3.592 / (1 + np.exp(-1.841 * (z - 6.0))) + 18.001)
-
-    wave_rest = rest_wl * 1e-8  # cm
-    nu_rest = _C_CGS / wave_rest
-    delta_nu = nu_rest - _NU_LYA
-    nu_ratio = nu_rest / _NU_LYA
-
-    num = _A_LYA * nu_ratio**4
-    denom = 4 * np.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4
-    sigma = prefactor * num / denom
-    tau = n_hi * sigma
-
-    T_formula = np.exp(-tau)
-
-    # The code should match the formula
-    np.testing.assert_allclose(
-        T_asada25,
-        T_formula,
-        rtol=1e-3,
-        err_msg=f"Transmission via public API does not match formula at z={z}",
+def _build(igm, *, free_z=False):
+    wave, trans = _filter()
+    obs = Observation(
+        photometry=Photometry(filters=(FilterCurve(wave=wave, trans=trans, name="lya_red"),))
+    )
+    return SEDModel.build(
+        ssp_data=_ssp(),
+        observation=obs,
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(7.5, 8.5) if free_z else Fixed(_Z),
+        igm={"type": igm},
     )
 
 
-def test_float32_float64_agreement():
-    """Test float32 vs float64 transmission agreement to 1e-4."""
-    z = 8.0
-    rest_wl = 1230.0
-    wave_obs = jnp.asarray([rest_wl * (1 + z)])
+def _band_flux(model, key=1):
+    params = model.spec.sample(jax.random.PRNGKey(key))
+    return params, model.predict(params)
 
-    # float64 (default)
-    T_f64_arr = igm_transmission_asada25(wave_obs, z)
-    T_f64 = float(T_f64_arr[0])
 
-    # float32
+def test_e_photometry_matches_band_average_of_inoue_times_wing():
+    """pred.photometry() of the asada25 model equals the test's band average to 2e-3.
+
+    The test's average: the Inoue+2014 model's observed SED times exp(-N_HI sigma_formula)
+    on the model wavelength grid, weighted by transmission/lambda^2 (the default Bessell
+    filter convention), over the same top-hat filter; the denominator is the same average
+    without the wing. Measured agreement is below 1e-3 (the grid has only seven nodes in
+    the band, so the quadrature differences are the residual).
+    """
+    model_inoue = _build("inoue14")
+    model_asada = _build("asada25")
+    params, pred_inoue = _band_flux(model_inoue)
+    pred_asada = model_asada.predict(params)
+
+    lam = np.asarray(pred_inoue.wave_obs)
+    sed = np.asarray(pred_inoue.obs_sed())
+    fwave, ftrans = (np.asarray(a) for a in _filter())
+    weight = np.interp(lam, fwave, ftrans, left=0.0, right=0.0) / lam**2
+
+    tau = _n_hi(_Z) * _sigma_formula(lam / (1.0 + _Z))
+    tau = np.where(lam > _LAM_ANG * (1.0 + _Z), tau, 0.0)
+    expected = np.trapezoid(sed * np.exp(-tau) * weight, lam) / np.trapezoid(sed * weight, lam)
+
+    measured = float(pred_asada.photometry()[0] / pred_inoue.photometry()[0])
+    assert 0.3 < expected < 0.95  # a real attenuation, so the comparison is not vacuous
+    np.testing.assert_allclose(measured, expected, rtol=2e-3)
+
+
+def test_e_float32_agrees_with_float64():
+    """The asada25 band flux in float32 equals float64 to 1e-4, and is float32."""
+    model64 = _build("asada25")
+    params64, pred64 = _band_flux(model64)
+    flux64 = float(pred64.photometry()[0])
     with jax.enable_x64(False):
-        T_f32_arr = igm_transmission_asada25(wave_obs, z)
-        T_f32 = float(T_f32_arr[0])
-
-    # Verify dtype before conversion
-    assert T_f64_arr.dtype == jnp.float64
-    # float32 mode may return float32
-    np.testing.assert_allclose(
-        T_f32,
-        T_f64,
-        rtol=1e-4,
-        err_msg="float32 and float64 transmission disagree beyond tolerance",
-    )
+        model32 = _build("asada25")
+        # Same parameter values as the float64 run (a float32 PRNG draw is a different sample).
+        params32 = {k: jnp.asarray(np.asarray(v)) for k, v in params64.items()}
+        phot32 = model32.predict(params32).photometry()
+        assert phot32.dtype == jnp.float32
+        flux32 = float(phot32[0])
+    np.testing.assert_allclose(flux32, flux64, rtol=1e-4)
 
 
-def test_gradient_wrt_redshift_finite_nonzero():
-    """Test that ∂T/∂z is finite and non-zero."""
-    z = 8.0
-    rest_wl = 1230.0
-    wave_obs = jnp.asarray([rest_wl * (1 + z)])
+def test_e_redshift_gradient_is_finite_and_nonzero():
+    """d(band flux)/dz is finite and non-zero, and matches a central difference."""
+    model = _build("asada25", free_z=True)
+    params = {**model.spec.sample(jax.random.PRNGKey(1)), "redshift": jnp.asarray(_Z)}
 
-    def T_fn(z_val):
-        return jnp.sum(igm_transmission_asada25(wave_obs, z_val))
+    def band_flux(z):
+        return model.predict({**params, "redshift": z}).photometry()[0]
 
-    grad_z = jax.grad(T_fn)(z)
-
-    assert jnp.isfinite(grad_z), "Gradient w.r.t. redshift is not finite"
-    assert abs(grad_z) > 1e-6, "Gradient w.r.t. redshift is numerically zero"
+    grad = float(jax.grad(band_flux)(jnp.asarray(_Z)))
+    h = 1e-3
+    fd = float(band_flux(jnp.asarray(_Z + h)) - band_flux(jnp.asarray(_Z - h))) / (2.0 * h)
+    assert np.isfinite(grad)
+    assert grad != 0.0
+    np.testing.assert_allclose(grad, fd, rtol=1e-2)
