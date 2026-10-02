@@ -410,7 +410,7 @@ class NebularSEDComponent(TemplateThreading):
                 "component's 'dust_'-prefixed params slice never carries a "
                 "'neb_'-prefixed key (slice_params_for_component, ADR-0006); "
                 "two_component reads this instead of re-deriving it from "
-                "params['neb_fdust_frac'] when lyc_absorb_all=False to "
+                "params['neb_fdust_frac'] when lyc_reprocessed_by='young' to "
                 "compute its own young-weighted credit.",
             ),
             DerivedKey(
@@ -1107,7 +1107,7 @@ class NebularSEDComponent(TemplateThreading):
         # orchestrator's slice_params_for_component (ADR-0006) NEVER hands it
         # a "neb_"-prefixed key -- params.get("neb_fdust_frac", ...) inside a
         # dust component silently and always returns the 0.0 default, a
-        # measured bug (two_component's lyc_absorb_all=False credit was a
+        # measured bug (two_component's lyc_reprocessed_by='young' credit was a
         # permanent no-op through this path). Cross-component values only
         # travel through ``state.derived``, never through another
         # component's params slice; this is the neb_fdust analog of
@@ -1174,7 +1174,7 @@ class NebularSEDComponent(TemplateThreading):
         # without a two_component dust screen. (2) ``DustSEDComponent``
         # (two_component), when it runs, OVERWRITES this same key with its
         # own y(age)-graded ``1 - y(a)(1-fesc)`` (or the flat rule under
-        # ``lyc_absorb_all=True``) -- same key, so whichever component runs
+        # ``lyc_reprocessed_by='all'``) -- same key, so whichever component runs
         # last for a given model wins, by construction, and there is exactly
         # one factor per model. When R1 forced a chunk boundary at the
         # physical edge (LYMAN_LIMIT_AA(1+z)), ``ionizing_mask(sub_waves)``
@@ -1217,9 +1217,9 @@ class NebularSEDComponent(TemplateThreading):
         # Population match (#2539 item 2): single_component and wg00 have no
         # birth-cloud/diffuse split, so the whole population credited here is
         # exactly the population their screen ran the fesc/fdust mask over.
-        # two_component with lyc_absorb_all=True also routes ALL stellar LyC
+        # two_component with lyc_reprocessed_by='all' also routes ALL stellar LyC
         # through the gas (two_component.py Sec. 2a), so this key matches
-        # there too. two_component with lyc_absorb_all=False (default) routes
+        # there too. two_component with lyc_reprocessed_by='young' (default) routes
         # only the YOUNG/birth-cloud population's LyC through the gas; it does
         # NOT read this key in that case, it recomputes its own young-weighted
         # credit from its own per-age cube (see DustSEDComponent.apply), using

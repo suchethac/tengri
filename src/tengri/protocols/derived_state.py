@@ -117,7 +117,7 @@ class DerivedState:
     #: population ``log_L_lyc`` and per-age variants.
     #:
     #: A per-age *weighted* credit (e.g. the young/birth-cloud-only share
-    #: two_component's ``lyc_absorb_all=False`` needs) should NOT reduce
+    #: two_component's ``lyc_reprocessed_by='young'`` needs) should NOT reduce
     #: THIS array with ``log10_age_sum_lyc(log_L_lyc_age, weights=...)``:
     #: that pays for peak-factoring and the edge-aware quadrature once PER
     #: AGE, which a #1748/#1770-class FLOP guard (G1/G2) measured as the

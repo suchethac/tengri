@@ -605,8 +605,8 @@ def log10_age_sum_lyc(log_L_lyc_age, weights=None):
     Used by :class:`tengri.components.nebular.component.NebularSEDComponent`
     to sum over all ages (#2539) and by
     :class:`tengri.components.dust.two_component.DustSEDComponent`
-    (two_component path) to sum over young ages only (lyc_absorb_all=False, #2539
-    item 2).
+    (two_component path) to sum over young ages only
+    (lyc_reprocessed_by='young', #2539 item 2).
     """
     log_L_lyc_age = jnp.asarray(log_L_lyc_age)
     weights = jnp.ones_like(log_L_lyc_age) if weights is None else jnp.asarray(weights)
