@@ -84,6 +84,10 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
         "tengri.components.stellar._params",
         "EVOLVING_ALPHA_PARAMS",
     ),
+    "_AGB_DUST_PARAMS": (
+        "tengri.components.stellar.agb_dust_shell",
+        "PARAMS",
+    ),
 }
 
 
@@ -198,6 +202,7 @@ def _build_param_registry(
     radio=False,
     xray=False,
     shock=False,
+    agb_dust=False,
     igm_patchy=False,
     dla=False,
     evolving_metallicity=False,
@@ -336,6 +341,12 @@ def _build_param_registry(
     if shock:
         shock_bucket = _resolve_lazy_bucket("_SHOCK_PARAMS")
         for pname, (desc, check, err, default) in shock_bucket.items():
+            registry[pname] = (desc, check, err)
+            defaults[pname] = default
+
+    if agb_dust:
+        agb_dust_bucket = _resolve_lazy_bucket("_AGB_DUST_PARAMS")
+        for pname, (desc, check, err, default) in agb_dust_bucket.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 

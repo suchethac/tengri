@@ -54,8 +54,8 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 ### Grammar rules
 
 - **Groups** are the physics blocks: `sfh`, `stellar`, `dust`, `neb`, `shock`,
-  `agn`, `igm`, `radio`, `xray` (plus top-level settings `redshift`,
-  `apply_igm`, `n_grid`).
+  `agb_dust`, `agn`, `igm`, `radio`, `xray` (plus top-level settings
+  `redshift`, `apply_igm`, `n_grid`).
 - Each group dict accepts:
   - `'type'` — the structural choice (which variant), validated against the
     domain's registered names.

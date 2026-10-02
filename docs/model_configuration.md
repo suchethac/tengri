@@ -251,6 +251,26 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - A tabulated (per-SSP-age) `met=` beside a non-tabulated `sfh` warns but does not raise.
 
 
+### AGB circumstellar dust shell: `agb_dust`
+
+**Structural keys:**
+- `'type'`: AGB dust-shell model: `'fsps_shell'` (the only supported type). Omitting the group, or `agb_dust={'type': 'none'}`, leaves the SSP grid untouched.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+
+**Minimal example:**
+```python
+agb_dust={'type': 'fsps_shell'}  # weight fixed at 1.0 (bit-identical to omitting the group)
+agb_dust={'type': 'fsps_shell', 'weight': Uniform(0, 3)}  # free
+agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default strength
+```
+
+**Gotchas:**
+- `'weight'` is the short-form override for `agb_dust_weight`, the dimensionless scale on FSPS's Villaume, Conroy & Johnson (2015) circumstellar AGB dust-shell reprocessing. Default `Fixed(1.0)` (the grid as shipped, FSPS's own `agb_dust` default). Free prior `Uniform(0, 3)`.
+- MIST-isochrone SSP libraries only (`fsps_mist_*`): FSPS's `add_agb_dust_model` routine is MIST-only. Any other grid raises at build time, naming the supported grids.
+- A **fixed** weight is baked into the SSP tensor at `SEDModel.build` time, so the exact path and every precompute table (`WavePrecomp`, `SpectrumPrecomp`, `FeaturePrecomp`) stay bit-exact.
+- A **free** weight cannot be baked (its value is only known per sample), so it disables `WavePrecomp` and `SpectrumPrecomp` — building a model with either raises, naming the exact path. `approx='auto'` already resolves to the exact path for such a model.
+
+
 ### Dust attenuation: `dust_attenuation`
 
 **Structural keys:**

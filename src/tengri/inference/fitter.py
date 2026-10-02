@@ -2007,6 +2007,20 @@ class Fitter:
             WavePrecomp,
         )
 
+        # AGB dust-shell (#2534): a free agb_dust_weight makes the SSP cube
+        # parameter-dependent, which no precompute LUT can represent (see the
+        # refusal in StellarSEDComponent.precompute); "auto" must resolve to
+        # the exact path for such a model rather than building one that would
+        # raise at construction. Checked structurally (model.spec), not by
+        # attempting the build, so this stays cheap on every other fit.
+        spec = getattr(model, "spec", None)
+        if (
+            spec is not None
+            and getattr(spec, "agb_dust", False)
+            and "agb_dust_weight" in getattr(spec, "free_params", ())
+        ):
+            return None
+
         if self.data_type in ("spectroscopy", "joint"):
             base = SpectrumPrecomp()
         elif self.data_type == "photometry":
