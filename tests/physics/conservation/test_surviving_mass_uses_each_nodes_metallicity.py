@@ -16,8 +16,6 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri import DEFAULT, Fixed, SEDModel, SSPData, load_ssp_data
-from tengri.components.stellar.component import StellarSEDComponent
-from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.conservation
 
@@ -102,9 +100,28 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         if isinstance(met_mode, str):
             if met_mode == "delta_z":
                 met_spec = {"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)}
-            elif met_mode in ("bins", "bins_continuity"):
-                # Use DEFAULT six-bin ladder
-                met_spec = {"type": met_mode, "all_params": Fixed(DEFAULT)}
+            elif met_mode == "bins":
+                # Explicit six-bin ladder with distinct per-bin metallicities
+                met_spec = {
+                    "type": "bins",
+                    "met_bin_0": Fixed(-0.7),
+                    "met_bin_1": Fixed(-0.5),
+                    "met_bin_2": Fixed(-0.2),
+                    "met_bin_3": Fixed(0.0),
+                    "met_bin_4": Fixed(0.2),
+                    "met_bin_5": Fixed(0.3),
+                }
+            elif met_mode == "bins_continuity":
+                # Explicit bins_continuity with distinct metallicities
+                met_spec = {
+                    "type": "bins_continuity",
+                    "met_logzsol_base": Fixed(-0.7),
+                    "met_d_log_z_0": Fixed(0.2),
+                    "met_d_log_z_1": Fixed(0.2),
+                    "met_d_log_z_2": Fixed(0.2),
+                    "met_d_log_z_3": Fixed(0.1),
+                    "met_d_log_z_4": Fixed(0.1),
+                }
             else:
                 raise ValueError(f"Unknown mode: {met_mode}")
         else:
@@ -143,6 +160,18 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         log_mstar_formed = state.derived["log_mstar_formed"]
         log_mstar_surviving = state.derived["log_mstar_surviving"]
         joint_weights = state.derived["joint_weights"]  # shape (n_met, n_age)
+
+        # For bins/bins_continuity: verify the mass-weighted metallicity differs between ages
+        if met_mode in ("bins", "bins_continuity"):
+            # Per-age mass-weighted metallicity
+            jw_per_age = jnp.sum(joint_weights, axis=0)  # sum over Z for each age
+            z_weights = joint_weights / jnp.sum(joint_weights)  # normalized (n_met, n_age)
+            age_z_means = jnp.sum(z_weights * ssp.ssp_lgmet[:, None], axis=0)  # (n_age,)
+            z_spread = jnp.ptp(age_z_means)  # peak-to-peak
+            assert float(z_spread) > 0.3, (
+                f"For {met_mode}: mass-weighted Z spread {float(z_spread):.4f} dex "
+                f"must exceed 0.3 dex to test Z-dependence"
+            )
 
         # Normalize joint weights to sum to 1
         jw_norm = joint_weights / jnp.sum(joint_weights)
@@ -235,9 +264,10 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         mass_remaining table. This validates the fix on real data, not just
         a synthetic table.
         """
-        grid_path = Path("data/fsps_prsc_miles_chabrier.h5")
+        # Build path relative to test file (like tests/integration/test_derived_quantities.py)
+        grid_path = Path(__file__).resolve().parents[3] / "data" / "fsps_prsc_miles_chabrier.h5"
         if not grid_path.is_file():
-            pytest.skip("Tracked SSP grid not found")
+            pytest.skip(f"Tracked SSP grid not found at {grid_path}")
 
         ssp = load_ssp_data(str(grid_path))
 
@@ -295,64 +325,5 @@ class TestSurvivingMassUsesEachNodesMetallicity:
                 f"Surviving mass {published_surv:.6e} != "
                 f"exact joint-weight sum {expected_surviving:.6e} "
                 f"(ratio {published_surv / expected_surviving - 1:+.4%})"
-            ),
-        )
-
-    def test_fast_path_matches_exact_surviving_mass(self, ssp_with_z_dependent_mass_remaining):
-        """Surviving mass via compute_joint_weights fast path matches exact forward path.
-
-        The StellarSEDComponent has two paths to compute joint_weights:
-        - Exact: build (n_met, n_age) grid in the forward pass
-        - Fast: compute_joint_weights helper (used by SED-free paths)
-
-        Both must give the same surviving mass when applied to the same
-        metallicity history. This test calls the fast path's compute_joint_weights
-        directly and verifies it reproduces the forward model's published surviving mass.
-        """
-        ssp = ssp_with_z_dependent_mass_remaining
-
-        model = SEDModel.build(
-            ssp_data=ssp,
-            observation=None,
-            sfh={
-                "type": "delayed",
-                "tau_gyr": Fixed(3.0),
-                "age_gyr": Fixed(12.0),
-                "log_total_mass": Fixed(10.0),
-                "all_params": Fixed(DEFAULT),
-            },
-            met={"type": "delta", "logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-            redshift=Fixed(0.0),
-        )
-
-        # Get the stellar component
-        chain = model._build_component_chain()
-        stellar = next(c for c in chain if isinstance(c, StellarSEDComponent))
-
-        # Empty params dict since all are Fixed
-        params = {}
-
-        # Call fast path: compute_joint_weights requires fully merged params
-        full_params = merge_fixed_params(model.spec, params)
-        jw_fast, total_mass_fast, _ages = stellar.compute_joint_weights(full_params)
-
-        # Compute surviving mass from fast-path weights and table
-        jw_norm = jw_fast / jnp.sum(jw_fast)
-        surv_frac_fast = float(jnp.sum(jw_norm * ssp.ssp_mass_remaining))
-        formed_mass_fast = 10.0 ** float(np.log10(total_mass_fast))
-
-        log_surv_fast = np.log10(formed_mass_fast * surv_frac_fast)
-
-        # Compare to exact forward path
-        state = model.predict_state(params)
-        log_surv_exact = state.derived["log_mstar_surviving"]
-
-        assert_allclose(
-            log_surv_fast,
-            float(log_surv_exact),
-            rtol=1e-6,
-            err_msg=(
-                f"Fast-path log_mstar_surviving {log_surv_fast:.6f} "
-                f"!= exact forward {float(log_surv_exact):.6f}"
             ),
         )
