@@ -205,8 +205,16 @@ class TestJITCompatibility:
         def mass_fn(p):
             return base_model.predict_properties(p, names=("stellar_mass",))["stellar_mass"]
 
-        # Find a free SFH parameter
+        # Find a free SFH parameter. Prefer *_log_total_mass: stellar_mass is
+        # pinned to exactly 10**log_total_mass regardless of the SFH shape
+        # (#2521, mass-conserving truncation), so an onset/shape parameter
+        # like sfh_dpl_age_gyr now gives an EXACTLY zero gradient of
+        # stellar_mass by design -- not a collapsed/dead parameter, just the
+        # wrong property to probe it with. log_total_mass is the one free SFH
+        # parameter stellar_mass is guaranteed to respond to.
         free_sfh_params = [n for n in base_model.spec.free_params if n.startswith("sfh_")]
+        mass_params = [n for n in free_sfh_params if n.endswith("_log_total_mass")]
+        free_sfh_params = mass_params or free_sfh_params
         if free_sfh_params:
             param_name = free_sfh_params[0]
             grad_fn = jax.grad(mass_fn)

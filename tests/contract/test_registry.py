@@ -146,9 +146,12 @@ class TestResolveComposed:
             sfh_tsnorm_skew=0.0,
             sfh_tsnorm_trunc=3.0,
             # exp: 10^9 Msun formed (10× less — must not collide with tsnorm's mass)
+            # start_gyr is the SF onset lookback [yr]; 0.0 is a zero-width
+            # [0, start] window (#2521) and forms no mass, so use a value
+            # comfortably inside the grid instead.
             sfh_exp_log_total_mass=9.0,
             sfh_exp_tau_gyr=2e9,
-            sfh_exp_start_gyr=0.0,
+            sfh_exp_start_gyr=5e9,
         )
         assert_non_negative(sfr, name="sfr")
         m_total = float(jnp.trapezoid(sfr, t))
@@ -168,7 +171,7 @@ class TestResolveComposed:
             sfh_tsnorm_trunc=3.0,
             sfh_exp_log_total_mass=9.5,
             sfh_exp_tau_gyr=2e9,
-            sfh_exp_start_gyr=0.0,
+            sfh_exp_start_gyr=5e9,
             sfh_lnorm_log_total_mass=8.5,
             sfh_lnorm_peak_gyr=3e9,
             sfh_lnorm_width_gyr=0.3,

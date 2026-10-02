@@ -98,6 +98,7 @@ _WINDOW_PARAMS = [
             "alpha": 3.0,
             "beta": 3.0,
             "fburst": 0.3,
+            "age_universe_yr": 13.0e9,
         },
         "age",
         6e9,
