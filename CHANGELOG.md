@@ -4,7 +4,14 @@
 
 - `compute_effective_wavelength` returns the pivot wavelength √(∫Tλdλ/∫T/λ dλ) its name and docstring promise; the filter-convention text attributes the photon-counting mean to BAGPIPES as well as DSPS/FSPS/Prospector/Synthesizer and the energy mean to CIGALE's energy-type filters; the facade SED plot derives band wavelengths from the filter curves (#2610).
 
+- `load_ssp_data` gives FSPS MIST + Chabrier grids that carry no `ssp_mass_remaining`
+  the metallicity-dependent FSPS table (12 × 107, packaged) when the grid's age and
+  metallicity nodes match it; other grids keep the metallicity-independent DSPS fit
+  (#2614).
+
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
+- The THEMIS `U^−α` dust-emission component for α ≠ 2 is tabulated per q_hAC grain composition (Jones et al. 2017; Draine & Li 2007 Eq. 23), so the power-law axis follows the carbon-grain fraction. Relative to the composition-averaged axis, band power at α = 1 changes by 1.40× (24–1000 µm at q_hAC 0.02, U_min 0.5) and 0.78× (q_hAC 0.40, U_min 30), the 8–24 µm band at α = 3 by 1.94× (q_hAC 0.02, U_min 50, γ 0.9), and the PDR power weight by 0.71–1.28×; α = 2 is unchanged. (#2598)
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
@@ -18,10 +25,7 @@
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
 
-- `load_ssp_data` gives FSPS MIST + Chabrier grids that carry no `ssp_mass_remaining`
-  the metallicity-dependent FSPS table (12 × 107, packaged) when the grid's age and
-  metallicity nodes match it; other grids keep the metallicity-independent DSPS fit
-  (#2614).
+- A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
 
 ### Added
 
@@ -54,6 +58,13 @@
   adaptation, so those paths refuse a step above the metric's stability limit
   like the single-galaxy NUTS/HMC paths; the fused-scan paths remain the design
   item in #2157 (Refs #2157).
+
+- The emission-line catalog's [O I] 6300 entry is the vacuum wavelength (6302.05 Å, the 6300.304 Å
+  air value converted with the IAU standard relation), and the hard-coded line-wavelength tables
+  (Richardson NLR template, shock fallback lines, `KEY_LINES`, `DESI_LINES`, plotting
+  `SPECTRAL_FEATURES`) take the catalog's vacuum values for every line it lists; the `noll09` and
+  `salim_sbl18` docs state the Leitherer/Calzetti switch at 1800 Å, as the code does (#2617).
+
 - A model on an SSP that includes nebular emission (a wNE grid) with a radio block carries one
   thermal free-free term at every wavelength (#2574): the SSP flux already holds the nebular
   continuum up to the SSP grid edge (1 cm for `ssp_prsc_miles_chabrier_wNE`), and the radio
