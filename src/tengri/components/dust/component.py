@@ -774,9 +774,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     _t = self.nebular_screen_transmission(params, _lam.reshape(-1)).reshape(
                         _lam.shape
                     )
-                    derived_overrides[_out_key] = jnp.sum(
-                        jnp.asarray(state.derived[_phi_key]) * _t, axis=-1
-                    )
+                    _chunks = jnp.asarray(state.derived[_phi_key]) * _t
+                    derived_overrides[_out_key] = jnp.sum(_chunks, axis=-1)
+                    if _out_key == "nebular_phot_lnu_attenuated_precomp":
+                        # Per chunk, for the IGM at each chunk's node (#2679).
+                        derived_overrides["nebular_phot_lnu_subband_screened_precomp"] = _chunks
             elif _neb_phot is not None and _sed_neb is not None:
                 # The reddened continuum integrated through each band: the screen is
                 # applied where the emission is. ``A(lambda_eff) * Phi_neb`` is only

@@ -142,3 +142,35 @@ def test_a_band_the_igm_cannot_reach_publishes_nothing(ssp):
     model = _model(ssp, ["sdss_r", "sdss_i"], 0.1, WavePrecomp(igm_fold="exact"))
     state = model.predict_state({})
     assert state.derived.get("igm_rest_transmission_precomp") is None
+
+
+def test_a_dusty_nebular_grid_takes_the_igm_at_its_sub_band_nodes(ssp):
+    """#2679: the grid serves dusty nebular flux as screened chunks, no spectrum.
+
+    With dust emission the energy-balance LUT exists and the per-Q_H grid serves
+    the dusty nebular band flux (#2570), so there is no dense nebular spectrum to
+    weight by. Each chunk takes ``T`` at its own node instead. Measured, z = 6.5
+    to 7.3: worst band 0.94 % with the chunk correction, 10.1 % without (F090W,
+    z = 7.0).
+    """
+    from tengri import FeaturePrecomp
+
+    groups = {
+        "dust_attenuation": {
+            "type": "two_component",
+            "law": "calzetti",
+            "tau_bc": Fixed(0.7),
+            "tau_diff": Fixed(0.3),
+            "other_params": Fixed(DEFAULT),
+        },
+        "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+    }
+    z = 7.0
+    lut = _model(ssp, BANDS, z, (WavePrecomp(igm_fold="exact"), FeaturePrecomp()), **groups)
+    state = lut.predict_state({}, observables_only=True)
+    assert state.derived.get("nebular_phot_lnu_subband_screened_precomp") is not None, (
+        "the nebular grid no longer serves this dusty model; the probe tests nothing"
+    )
+    reference = _model(ssp, BANDS, z, None, **groups).predict_photometry({})
+    worst = _worst(lut.predict_photometry({}), reference)
+    assert worst < 0.02, f"grid-served dusty nebular off the integrator by {worst:.3%}"

@@ -308,6 +308,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # The dense rest-grid SEDs the three attenuated band keys are integrated
     # from; the IGM weights its transmission by them (never summed).
     "sed_nebular_attenuated_precomp": "erg/s/Hz",
+    "nebular_phot_lnu_subband_screened_precomp": "erg/s/Hz",
     "sed_shock_attenuated_precomp": "erg/s/Hz",
     "sed_agn_attenuated_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).

@@ -887,12 +887,23 @@ class DustSEDComponent(TemplateThreading):
         integral of each sub-band chunk and its rest wavelength. The screen is
         the one :meth:`nebular_screen_transmission` evaluates.
         """
+        return jnp.sum(
+            self._screened_subband_chunks(
+                params, phi_sub, lam_sub, neb_law, neb_bc_params, diff_law_kw
+            ),
+            axis=-1,
+        )
+
+    def _screened_subband_chunks(
+        self, params, phi_sub, lam_sub, neb_law, neb_bc_params, diff_law_kw
+    ) -> jnp.ndarray:
+        """``Phi_k T(lambda_k)`` per filter and chunk, shape ``(n_filter, K)``."""
         phi = jnp.asarray(phi_sub)
         lam = jnp.asarray(lam_sub)
         t_sub = self._line_transmission(
             params, lam.reshape(-1), neb_law, neb_bc_params, diff_law_kw
         ).reshape(lam.shape)
-        return jnp.sum(phi * t_sub, axis=-1)
+        return phi * t_sub
 
     def attenuate_line_catalog(
         self,
@@ -1561,16 +1572,19 @@ class DustSEDComponent(TemplateThreading):
                 # the chunk's flux-weighted rest wavelength, and the screen is
                 # applied at those nodes, ``sum_k Phi_k T(lambda_k)``, the same
                 # K-point form the stellar continuum uses (#1122).
-                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
-                    self._screened_subband_sum(
-                        params,
-                        state.derived["nebular_phot_lnu_subband_precomp"],
-                        state.derived["nebular_subband_waves_rest_precomp"],
-                        neb_law,
-                        neb_bc_params,
-                        diff_law_kw,
-                    )
+                _chunks = self._screened_subband_chunks(
+                    params,
+                    state.derived["nebular_phot_lnu_subband_precomp"],
+                    state.derived["nebular_subband_waves_rest_precomp"],
+                    neb_law,
+                    neb_bc_params,
+                    diff_law_kw,
                 )
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = jnp.sum(
+                    _chunks, axis=-1
+                )
+                # Per chunk, for the IGM at each chunk's node (#2679).
+                derived_overrides["nebular_phot_lnu_subband_screened_precomp"] = _chunks
             elif _neb_phot is not None and _sed_neb is not None:
                 from tengri.components._band_projection import (
                     project_additive_onto_photometry,

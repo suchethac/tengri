@@ -454,6 +454,10 @@ class DerivedState:
     # ``predict_via_precomp``, which would otherwise add the bucket unscreened.
     nebular_phot_lnu_subband_precomp: jnp.ndarray | None = None
     nebular_subband_waves_rest_precomp: jnp.ndarray | None = None
+    # The same chunks after the dust screen, shape (n_filter, n_subbands)
+    # [erg/s/Hz]: summed over chunks they are ``nebular_phot_lnu_attenuated_precomp``.
+    # Kept per chunk so the IGM can be evaluated at each chunk's node (#2679).
+    nebular_phot_lnu_subband_screened_precomp: jnp.ndarray | None = None
     nebular_restband_lnu_subband_precomp: jnp.ndarray | None = None
     nebular_restband_subband_waves_precomp: jnp.ndarray | None = None
     # Absorbed nebular power per unit Q_H on the stellar energy-balance LUT's

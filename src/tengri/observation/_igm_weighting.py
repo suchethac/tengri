@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-__all__ = ["igm_weighted_parts", "spectral_igm_correction"]
+__all__ = ["igm_weighted_parts", "spectral_igm_correction", "subband_igm_correction"]
 
 
 def _sum_seds(*seds):
@@ -156,3 +156,43 @@ def spectral_igm_correction(
         t_own = jnp.where(live, num / jnp.where(live, den, 1.0), t_avg)
         correction = correction.at[reach].add(band_flux[reach] * (t_own - t_avg))
     return correction
+
+
+def subband_igm_correction(chunks, nodes_rest, transmission, wave, reach, band_factor):
+    r"""Correction for a band flux served as sub-band chunks, with no dense spectrum.
+
+    The nebular grid serves a dusty model's nebular band flux as screened chunks
+    :math:`\Phi_k` at flux-weighted rest nodes :math:`\lambda_k` (#2570) and never
+    materializes the spectrum :func:`spectral_igm_correction` would weight by.
+    Each chunk instead takes :math:`T` at its own node, the K-point form the
+    stellar continuum used before the exact fold (#1135), so the band moves from
+    :math:`\langle T\rangle_b\sum_k\Phi_k` to :math:`\sum_k\Phi_k T(\lambda_k)` (#2679).
+
+    Parameters
+    ----------
+    chunks : ndarray, shape (n_filters, n_subbands)
+        Screened sub-band band fluxes [erg/s/Hz].
+    nodes_rest : ndarray, shape (n_filters, n_subbands)
+        Their rest-frame nodes [Angstrom].
+    transmission : ndarray, shape (n_wave,)
+        IGM transmission on the rest grid at the runtime redshift.
+    wave : ndarray, shape (n_wave,)
+        Rest wavelength grid [Angstrom].
+    reach : ndarray of int, shape (n_reach,)
+        Filters the IGM can reach.
+    band_factor : ndarray, shape (n_filters,)
+        The band-averaged transmission the caller already applied.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        :math:`\sum_k \Phi_k (T(\lambda_k) - \langle T\rangle_b)` [erg/s/Hz], zero
+        outside ``reach``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    t_nodes = jnp.interp(nodes_rest[reach], wave, transmission)
+    delta = jnp.sum(chunks[reach] * (t_nodes - band_factor[reach][:, None]), axis=-1)
+    return jnp.zeros_like(band_factor).at[reach].add(delta)

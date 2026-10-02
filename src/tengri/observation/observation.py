@@ -2208,6 +2208,7 @@ class Observation:
                 from tengri.observation._igm_weighting import (
                     igm_weighted_parts,
                     spectral_igm_correction,
+                    subband_igm_correction,
                 )
 
                 if a_bc_lut is not None and (_have_subband or per_age is not None):
@@ -2227,6 +2228,16 @@ class Observation:
                     igm_factor,
                     convention=self.photometry.convention,
                 )
+                neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
+                if neb_chunks is not None:
+                    correction = correction + subband_igm_correction(
+                        neb_chunks,
+                        state.derived["nebular_subband_waves_rest_precomp"],
+                        rest_t,
+                        state.wave,
+                        reach,
+                        igm_factor,
+                    )
             if stellar_attenuated_igm is not None:
                 # Stellar already carries T evaluated AT the quadrature nodes
                 # (#1135), so the band factor must not touch it; that would apply
