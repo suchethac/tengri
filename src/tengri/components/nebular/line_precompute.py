@@ -180,7 +180,10 @@ def precompute_line_per_qh(
     from tengri.components.nebular.nebular_grid_precompute import reference_redshift
 
     ref_z = caller_z if caller_z is not None else reference_redshift(model)
-    ref_params["redshift"] = ref_z
+    if "redshift" in set(model.spec.free_params) or caller_z is not None:
+        # A Fixed redshift stays out of the dict: ``spec.sample`` is free-only and a
+        # resolved Fixed key would be refused as a call-time override (#2296).
+        ref_params["redshift"] = ref_z
 
     # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
     # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate

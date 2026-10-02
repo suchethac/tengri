@@ -144,19 +144,26 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
         log_nion = float(np.asarray(st.derived["log_nion"]))
         nion = float(np.sum(np.asarray(st.derived["nion"])))
 
-        # Get log_ppq from the same interpolator the function uses
-        if not table.axis_names:
-            log_ppq = table.log_phot_per_qh
-        else:
-            point = tuple(jnp.asarray(p[name]).reshape(()) for name in table.axis_names)
-            log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point, _kinds(table))
-        log_ppq = np.asarray(log_ppq)
+        # The photometry is served as lines + continuum (the band value depends on
+        # the evaluation redshift), each interpolated over the grid axes in log10.
+        # The linear-domain reference interpolates the same stored channels and
+        # combines them with a plain float64 ``nion *`` multiply.
+        assert table.line_band_kernel_fixed is not None  # fixed-redshift model
+        point = tuple(jnp.asarray(p[name]).reshape(()) for name in table.axis_names)
+
+        def _interp(arr):
+            return np.asarray(interp_nd_pchip(arr, table.axes, point, _kinds(table)))
+
+        lines_ppq = 10.0 ** _interp(table.log_sed_lines_per_qh).astype(np.float64)
+        cont_ppq = 10.0 ** _interp(table.log_cont_ztable_per_qh)[0].astype(np.float64)
+        cont_ppq = cont_ppq * np.asarray(table.cont_keep)[0]
+        band_ppq = (lines_ppq[:, None] * np.asarray(table.line_band_kernel_fixed)).sum(0) + cont_ppq
 
         # The log-domain result (new path)
         log_result = np.asarray(reconstruct_nebular_phot(log_nion, p, table))
 
         # The reference linear result
-        linear_result = nion * (10.0**log_ppq)
+        linear_result = nion * band_ppq
 
         # They must agree at machine precision
         with np.errstate(divide="ignore", invalid="ignore"):
