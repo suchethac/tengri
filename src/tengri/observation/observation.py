@@ -133,6 +133,9 @@ def _restband_lnu(state) -> jnp.ndarray:
             stellar_att = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
         else:
             stellar_att = a_single * stellar
+        nebular_exact = state.derived.get("nebular_restband_lnu_attenuated_precomp")
+        if nebular_exact is not None:
+            return stellar_att + nebular_exact + a_single * shock_only + unattenuated
         return stellar_att + a_single * nebular + unattenuated
 
     return total
@@ -1700,27 +1703,14 @@ class Observation:
           path on a fixture built to maximize it. Previously screened at
           :math:`\lambda_{\rm eff}`, which inflated the total gap by up to 26x
           over the stellar floor while carrying only 0.8-3.5 % of the band flux.
-        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}``: **still at**
-          :math:`\lambda_{\rm eff}`. The qualifier above is not pedantry: this
-          docstring claimed nebular was exact full stop, and it was measured
-          wrong within a day of being written. :class:`DustAttenuationSEDComponent`
-          declares ``sed_nebular`` an *optional* input purely as a topological
-          ordering edge, its own docstring notes the screen "does not read the
-          key directly (it acts on the already-summed ``sed_intrinsic``") so no
-          separately reddened nebular SED exists there to project. Measured on an
-          FSPS SSP through SDSS *gri*: 1.787e-03 at :math:`\tau_v`\ =1/z=0.05 and
-          1.955e-03 at :math:`\tau_v`\ =2/z=1, against a stellar-only floor of
-          ~6.1e-04, a ~3x inflation, versus the 26x removed on two-component.
-          Bounded in ``tests/contract/test_precomp_channel_drift.py``.
-
-          Fixing it means computing ``sed_neb · exp(-tau_v · k)`` in that
-          component and projecting it through the same seam. Deliberately
-          sequenced **after** #1808, which asks whether ``k(λ)`` may be
-          precomputed at all: a nebular term reading today's cached ``k`` would
-          inherit the freeze, and a later fix would move the stellar term onto
-          the live curve while leaving nebular on the stale one. Two screens
-          disagreeing inside one model is worse than the uniform staleness
-          there now.
+        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}``:
+          :class:`DustAttenuationSEDComponent` publishes the reddened continuum
+          integrated through each band exactly as the two-component component
+          does, and this path prefers it over the screen at
+          :math:`\lambda_{\rm eff}`. Measured on an FSPS SSP through SDSS *gri*
+          against the exact path: 2.7e-04, 6.1e-04 and 5.7e-04 over the three
+          ``(tau_v, z)`` cases of ``tests/contract/test_precomp_channel_drift.py``,
+          at the stellar-only floor of ~6.3e-04.
         - **Shock**: the worst remaining channel by two orders of magnitude, and
           **not** a band-averaging error despite what this docstring said for a
           long time. This path multiplies shock by ``a_diff·a_bc``; the exact
@@ -2054,6 +2044,10 @@ class Observation:
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
         elif a_lut is not None:
+            nebular_screened = state.derived.get("nebular_phot_lnu_attenuated_precomp")
+            nebular_term = (
+                nebular_screened if nebular_screened is not None else a_lut * nebular_phi_for_dust
+            )
             # Sub-band quadrature (#1122), single screen. Per-age Phi_k contracted
             # against the law EVALUATED at each node. Must be checked before the
             # Taylor form: the quadrature supersedes it, and without this branch a
@@ -2076,11 +2070,13 @@ class Observation:
                 if sub_per_age_igm is not None:
                     # Same screen, same nodes, only the weights carry T (#1135).
                     stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_lyc, axis=(0, 2))
-                # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
-                dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
+                # Nebular (if any) is screened at the emission, not at λ_eff.
+                dust_attenuated = stellar_attenuated + nebular_term
             else:
                 # Zeroth order: flat attenuation at the filter effective wavelength.
-                dust_attenuated = a_lut * dust_attenuable_phi
+                dust_attenuated = (
+                    a_lut * (dust_attenuable_phi - nebular_phi_for_dust) + nebular_term
+                )
                 # First-order Taylor (Ψ) correction, applied only when the moment
                 # tensor and attenuation slope were built, i.e.
                 # approx=WavePrecomp(taylor_correction=True) (#617). With

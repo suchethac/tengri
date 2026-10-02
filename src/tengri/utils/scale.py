@@ -736,6 +736,37 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     return jnp.where(corrupt, jnp.inf, summed)
 
 
+def log10_add_signed(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
+    """Return ``log10|s_a·10**log_a + s_b·10**log_b|`` and the sign of that sum.
+
+    :func:`log10_add` with the sign of the sum beside its magnitude, for a
+    partial sum that a later :func:`log10_add` combines with a further term.
+
+    Parameters
+    ----------
+    log_a, log_b : array_like
+        Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
+    sign_a, sign_b : array_like, optional
+        Signs of the two terms (+1.0, -1.0, or 0.0 for an empty term). Default +1.0.
+
+    Returns
+    -------
+    log_magnitude : ndarray
+        ``log10`` of the magnitude of the sum [dex], exactly :func:`log10_add`.
+    sign : ndarray
+        Sign of the sum: +1.0, -1.0, or 0.0 when the terms are both zero or
+        cancel exactly; ``NaN`` when a term is corrupt.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. The sign is piecewise constant and carries no gradient.
+    """
+    larger = jnp.maximum(log_a, log_b)
+    offset = jnp.where(jnp.isfinite(larger), larger, 0.0)
+    total = sign_a * pow10(log_a - offset) + sign_b * pow10(log_b - offset)
+    return log10_add(log_a, log_b, sign_a=sign_a, sign_b=sign_b), jnp.sign(total)
+
+
 def log10_weighted_sum(log_values, weights, axis=-1):
     r"""``log10(sum_i w_i * 10**log_i)``: a weighted sum without leaving log space.
 

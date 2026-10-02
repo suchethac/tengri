@@ -62,6 +62,7 @@ __all__ = [
     "build_energy_balance_lut_over_z",
     "lut_l_absorbed_stellar",
     "lut_l_absorbed_stellar_log10",
+    "nebular_grid_absorbed_log10",
 ]
 
 
@@ -501,3 +502,62 @@ def lut_l_absorbed_stellar(
         if redshift is None
         else _lut_contract(lut, joint_weights, tau_bc, tau_diff, redshift)
     )
+
+
+def nebular_grid_absorbed_log10(
+    grid_abs: jnp.ndarray,
+    log_nion: jnp.ndarray,
+    tau_grids: tuple,
+    tau_a: jnp.ndarray,
+    tau_b: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Absorbed nebular luminosity from the per-Q_H grid: log10 magnitude and sign.
+
+    .. math::
+
+        L_{\rm abs}^{\rm neb} = Q_H \sum_{a,b} w_a \, A_{ab} \, w_b
+
+    where :math:`A_{ab}` is the signed absorbed luminosity per unit
+    :math:`Q_H` [erg/s per (photon/s)] on the optical-depth nodes and
+    :math:`w_a`, :math:`w_b` the two-node linear weights at
+    ``(tau_a, tau_b)``.
+
+    Parameters
+    ----------
+    grid_abs : ndarray, shape (n_tau_a, n_tau_b)
+        Signed absorbed luminosity per unit Q_H at the nebular grid point, in
+        the orientation of the frequency integral (negative on an ascending
+        wavelength grid) [erg/s per (photon/s)].
+    log_nion : ndarray, shape ()
+        :math:`\log_{10} Q_H` [dex re photon/s].
+    tau_grids : tuple
+        ``(tau_a_nodes, tau_b_nodes)``, each a uniform ascending sequence.
+    tau_a, tau_b : ndarray, shape ()
+        Optical depths of the evaluation point.
+
+    Returns
+    -------
+    log_magnitude : ndarray, shape ()
+        :math:`\log_{10} |L_{\rm abs}^{\rm neb}|` [dex re erg/s]; ``-inf`` when
+        nothing is absorbed.
+    sign : ndarray, shape ()
+        Sign of the signed value, the same convention
+        :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` returns.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe: the empty case takes the where-dummy path, so no NaN
+    reaches the backward pass. The magnitude per unit Q_H is ~1e-11 and
+    ``log_nion`` ~53, so the product is formed in the log domain (#1206).
+    """
+    grid_a = jnp.asarray(tau_grids[0], dtype=grid_abs.dtype)
+    grid_b = jnp.asarray(tau_grids[1], dtype=grid_abs.dtype)
+    ia, wa = _interp_bracket(grid_a, tau_a)
+    ib, wb = _interp_bracket(grid_b, tau_b)
+    sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
+    per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
+    magnitude = jnp.abs(per_qh)
+    nonzero = magnitude > 0
+    safe = jnp.where(nonzero, magnitude, 1.0)
+    log_abs = jnp.where(nonzero, jnp.asarray(log_nion) + jnp.log10(safe), -jnp.inf)
+    return log_abs, jnp.sign(per_qh)
