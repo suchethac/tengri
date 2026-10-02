@@ -204,6 +204,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",
+    "log_L_lyc_age": "dex",
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
@@ -245,6 +246,10 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_ir": "dex",
     "log_L_absorbed": "dex",
     "log_L_ir_emergent": "dex",
+    "log_L_lyc_dust": "dex",
+    "log_L_lyc": "dex",
+    "lyc_fdust": "",
+    "lyc_fesc": "",
     "log_L_agn_bol": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",

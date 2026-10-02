@@ -21,7 +21,7 @@ two unrelated names:
 One quantity, one name. ``neb_xid`` is retired, and writing it anywhere gets a
 single loud message naming the replacement and its placement -- the generic
 key resolver would otherwise answer it in the ``neb`` group with *"Did you
-mean: neb_fdust?"*, a real and entirely unrelated parameter.
+mean: neb_fdust_frac?"*, a real and entirely unrelated parameter.
 
 The liveness half of R41 (the axis is interpolated, not snapped, so a fit can
 move it) lives in the grid-gated tests at the bottom of this module.
@@ -150,7 +150,7 @@ def _message_for(**groups) -> str:
 
 #: parse_groups resolves the CLOUDY grid file before validating keys, so the
 #: retired-key message can only be observed on a type that needs no file; cue is
-#: chosen because its parameter set includes neb_fdust, the name the generic
+#: chosen because its parameter set includes neb_fdust_frac, the name the generic
 #: resolver used to mis-suggest.
 _GRID_FREE_NEB_TYPE = "cue"
 
@@ -158,7 +158,7 @@ _GRID_FREE_NEB_TYPE = "cue"
 @pytest.mark.parametrize("key", _RETIRED_SPELLINGS)
 def test_the_retired_key_in_the_neb_group_names_the_replacement(key):
     """The worst of the three: the generic resolver sent ``neb_xid`` to
-    ``neb_fdust``, a real parameter of an unrelated quantity."""
+    ``neb_fdust_frac``, a real parameter of an unrelated quantity."""
     _message_for(neb={"type": _GRID_FREE_NEB_TYPE, key: Fixed(0.5)})
 
 
