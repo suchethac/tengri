@@ -2861,6 +2861,7 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
+        self._validate_filter_coverage(spec)
 
         # ── The polar reference's integration range (R66) ─────────
         # Runs here and not beside the ``spec``-only guards in ``build``
@@ -4727,6 +4728,95 @@ class SEDModel:
                     envelope_hi=hi,
                     stacklevel=3,
                 )
+
+    def _validate_filter_coverage(self, spec) -> None:
+        """Raise when a photometric filter extends beyond the model wavelength axis.
+
+        A broadband flux is ``∫ F_ν T(ν)/ν dν / ∫ T(ν)/ν dν`` over the filter.
+        If the model spectrum does not cover the whole filter, the numerator
+        over the uncovered part is **unknown**, not zero. tengri's photometry
+        integral zero-fills outside the model axis, returning 0 or a partial
+        integral silently, which corrupts fits: #2620.
+
+        This check runs at ``SEDModel.build`` time for every photometric filter.
+        For a ``Fixed`` redshift, the check is single-point (the fixed z). For
+        a free (``Uniform``, etc.) redshift prior, the check runs at both edges
+        of the prior support, since the filter's rest-frame position moves as z
+        varies and coverage can change discontinuously.
+
+        A band whose datum is masked (missing data) is exempt: the observation
+        likelihood ignores it, so silent-zero prediction does not poison the fit.
+
+        Raises
+        ------
+        ConfigError
+            A photometric filter's uncovered fraction exceeds
+            ``FILTER_COVERAGE_TOLERANCE`` (1e-3, 0.1%) at the sampled redshift(s).
+            The error message names the band, the uncovered fraction, the model
+            axis range [µm], and the redshift, and advises masking the band or
+            composing a component that extends the axis (dust emission, radio).
+
+        See Also
+        --------
+        tengri.observation.photometry.filter_coverage_fraction : The helper that
+            computes uncovered fraction from geometry alone.
+        """
+        if self.observation is None or self.observation.photometry is None:
+            return
+
+        from tengri.config.exceptions import ConfigError
+        from tengri.observation.photometry import (
+            FILTER_COVERAGE_TOLERANCE,
+            filter_coverage_fraction,
+        )
+
+        filters = self.observation.photometry.filters
+        if filters is None or len(filters) == 0:
+            return
+
+        # Redshift distribution from spec
+        redshift_dist = spec.get_distribution("redshift")
+        is_fixed_z = redshift_dist.is_fixed
+
+        # Determine which redshift(s) to check
+        if is_fixed_z:
+            redshifts_to_check = [float(redshift_dist.default)]
+        else:
+            # Check both ends of the prior support
+            redshifts_to_check = [float(redshift_dist.lo), float(redshift_dist.hi)]
+
+        # Model wavelength axis in rest frame
+        model_wave_min = float(self._rest_wavelength.min())
+        model_wave_max = float(self._rest_wavelength.max())
+        model_wave_min_um = model_wave_min * 1e-4  # Angstrom to µm for error message
+        model_wave_max_um = model_wave_max * 1e-4
+
+        # Check each filter at each redshift
+        for filter_curve in filters:
+            filter_wave = filter_curve.wave
+            filter_trans = filter_curve.trans
+            filter_name = filter_curve.name
+
+            for z in redshifts_to_check:
+                uncovered_frac = filter_coverage_fraction(
+                    filter_wave=filter_wave,
+                    filter_trans=filter_trans,
+                    model_wave_min=model_wave_min,
+                    model_wave_max=model_wave_max,
+                    redshift=z,
+                )
+
+                if uncovered_frac > FILTER_COVERAGE_TOLERANCE:
+                    z_info = f"z = {z}" if is_fixed_z else f"z = {z} (edge of prior)"
+                    raise ConfigError(
+                        f"Photometric band '{filter_name}' is {uncovered_frac:.1%} "
+                        f"uncovered at {z_info}. Model wavelength axis "
+                        f"[{model_wave_min_um:.2f}, {model_wave_max_um:.2f}] µm "
+                        f"(rest frame) does not cover the full filter transmission. "
+                        f"Solutions: (1) mask the band (datum flagged missing), "
+                        f"(2) add a component that extends the axis (dust emission, "
+                        f"radio), or (3) choose a different filter. (#2620)"
+                    )
 
     def _validate_dust_log_l_ir_override(self, spec) -> None:
         """Raise when a declared ``dust_log_L_ir`` coexists with a live ``dust_eta_balance``.

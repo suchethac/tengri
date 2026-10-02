@@ -33,6 +33,7 @@ __all__ = [
     "compute_flux_density",
     "compute_flux_density_batch",
     "compute_photometry",
+    "filter_coverage_fraction",
     "list_filter_conventions",
     "lnu_filter_integral",
     "lnu_filter_integral_batch",
@@ -162,6 +163,96 @@ def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
     """
     pos = jnp.arange(fw_padded.shape[0], dtype=fw_padded.dtype)
     return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
+
+
+# Photometric filter coverage validation
+FILTER_COVERAGE_TOLERANCE = 1e-3  # Maximum uncovered fraction before raising ConfigError (0.1%)
+
+
+def filter_coverage_fraction(
+    filter_wave: float | jnp.ndarray,
+    filter_trans: float | jnp.ndarray,
+    model_wave_min: float,
+    model_wave_max: float,
+    redshift: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> float:
+    r"""Compute the uncovered fraction of a filter's photon-weighted transmission integral.
+
+    When the SED model does not cover the full transmission profile of a photometric
+    filter, the uncovered part's flux is unknown (not zero). This helper quantifies
+    the fraction of the filter's photon-weighted integral that falls outside the
+    model's rest-frame wavelength axis after redshifting the filter to rest frame.
+
+    .. math::
+
+        f_{\rm uncovered}
+        = 1 - \frac{\int_{covered} T(\lambda_{\rm obs}) w(\lambda_{\rm obs})
+                    d\lambda_{\rm obs}}
+               {\int T(\lambda_{\rm obs}) w(\lambda_{\rm obs}) d\lambda_{\rm obs}}
+
+    where the covered region is the part of the filter whose rest-frame wavelength
+    :math:`\lambda_{\rm rest} = \lambda_{\rm obs}/(1+z)` falls within
+    [model_wave_min, model_wave_max], and :math:`w=1/\lambda` for the photon-counting
+    ``BESSELL`` convention.
+
+    Parameters
+    ----------
+    filter_wave : array, shape (n_filt,)
+        Filter wavelength grid [Ångstrom], in observed frame.
+    filter_trans : array, shape (n_filt,)
+        Filter transmission (dimensionless, 0–1).
+    model_wave_min : float
+        Model's minimum rest-frame wavelength [Ångstrom].
+    model_wave_max : float
+        Model's maximum rest-frame wavelength [Ångstrom].
+    redshift : float
+        Source redshift z.
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
+
+    Returns
+    -------
+    float
+        Uncovered fraction in [0, 1]. Returns 0 if the filter is fully covered,
+        1 if completely outside the model axis.
+
+    Notes
+    -----
+    Pure numpy function (no JAX); intended for build-time validation only.
+    Uses the same photon-counting convention as :func:`lnu_filter_integral`.
+    """
+    import numpy as np
+
+    # Convert to numpy for build-time execution
+    filter_wave_np = np.asarray(filter_wave)
+    filter_trans_np = np.asarray(filter_trans)
+
+    # Redshift filter to rest frame
+    filter_wave_rest = filter_wave_np / (1.0 + redshift)
+
+    # Identify which filter points fall within the model wavelength range
+    in_range = (filter_wave_rest >= model_wave_min) & (filter_wave_rest <= model_wave_max)
+
+    # Compute the weight: photon-counting weight (1/lambda) for BESSELL
+    if convention == FilterConvention.BESSELL:
+        weight = filter_trans_np / filter_wave_np
+    else:  # ENERGY convention
+        weight = filter_trans_np / (filter_wave_np**2)
+
+    # Covered integral: sum of transmission * weight for points in range
+    covered_integrand = np.where(in_range, filter_trans_np * weight, 0.0)
+    covered_integral = np.trapezoid(covered_integrand, filter_wave_np)
+
+    # Total integral
+    total_integral = np.trapezoid(filter_trans_np * weight, filter_wave_np)
+
+    # Avoid division by zero
+    if total_integral <= 0.0:
+        return 0.0
+
+    # Return uncovered fraction
+    return float(1.0 - covered_integral / total_integral)
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))
