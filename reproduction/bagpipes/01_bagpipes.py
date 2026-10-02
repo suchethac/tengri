@@ -1829,7 +1829,8 @@ for label, logu, z, fesc in neb_cases_list:
 # wider than the kernel because each code's nebular line has a width of its own before
 # the kernel is applied: tengri places each line with a triweight profile of
 # dispersion `neb_eline_sigma_kms` (declared default 100 km/s, `σ_λ = σ_v λ / c`),
-# and BAGPIPES puts each Cloudy line into a single pixel of its 0.5 Å spectral grid.
+# and BAGPIPES puts each Cloudy line into a single pixel of its internal model grid,
+# sampled at R_spec = 1000 (Δλ = λ / 2R ≈ 3.3 Å at Hα), before the kernel is applied.
 # Because the two pre-broadening profiles differ in shape, the widths do not add in
 # quadrature with the kernel. After broadening, the measured FWHM is 9.420 Å for
 # tengri and 9.500 Å for BAGPIPES (0.8 % apart); the printed analytic 7.733 Å is the
@@ -2611,7 +2612,7 @@ plt.show()
 # - **§10 LSF.** With σ_v = 150 km/s the measured Hα FWHM is 9.420 Å (tengri) and
 #   9.500 Å (BAGPIPES), 0.8 % apart; both exceed the 7.733 Å kernel width because
 #   tengri's line profile (`neb_eline_sigma_kms`) and BAGPIPES's one-pixel line
-#   (0.5 Å grid) each carry a width before broadening.
+#   (one internal-grid pixel, ≈ 3.3 Å at Hα) each carry a width before broadening.
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
