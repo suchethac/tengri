@@ -118,32 +118,34 @@ def compute_nlr_sed(
 
 # Emission line wavelengths and normalized fluxes from Richardson+2014 Table 3 'a42'.
 # Lines sorted by wavelength [Angstrom], fluxes normalized to Hbeta=1.
-# Source: FSPS emline_wavelengths at indices
+# Lines listed in ``observation/eline_catalog.py`` carry the catalog vacuum
+# wavelength (#2617); the others keep the FSPS ``emline_wavelengths`` value.
+# FSPS emline_wavelengths indices of the 23 lines:
 # [38, 40, 41, 43, 45, 50, 51, 52, 59, 61, 62, 64, 68, 69, 70, 72, 73, 74, 75, 76, 77, 78, 80]
 _RICHARDSON_WAVES = host_array(
     [
-        3727.1180,  # [O II] 3726
+        3727.09,  # [O II] 3726
         3799.0277,  # Ba-8 3798
         3836.5280,  # Ba-7 3835
         3869.9172,  # [Ne III] 3869
         3890.2127,  # Ba-6 3889
-        4102.9514,  # Ba-delta 4101.76A
-        4341.7476,  # Ba-gamma 4341
+        4102.89,  # Ba-delta 4101.76A
+        4341.68,  # Ba-gamma 4341
         4364.2938,  # [O III] 4363
-        4862.7629,  # Ba-beta 4861
-        4960.3702,  # [O III] 4959
-        5008.3137,  # [O III] 5007
+        4862.68,  # Ba-beta 4861
+        4960.30,  # [O III] 4959
+        5008.24,  # [O III] 5007
         5201.7880,  # [N I] 5200
         5756.2941,  # [N II] 5755
         5877.3583,  # He I 5875.64A
-        6302.1385,  # [O I] 6300
+        6302.05,  # [O I] 6300
         6365.6364,  # [O I] 6363
-        6549.9587,  # [N II] 6548
-        6564.7229,  # Ba-alpha 6563 (H-alpha)
-        6585.3687,  # [N II] 6584
+        6549.86,  # [N II] 6548
+        6564.61,  # Ba-alpha 6563 (H-alpha)
+        6585.28,  # [N II] 6584
         6680.0956,  # He I 6678.15A
-        6718.3965,  # [S II] 6716
-        6732.7805,  # [S II] 6731
+        6718.29,  # [S II] 6716
+        6732.67,  # [S II] 6731
         7137.8656,  # [Ar III] 7135
     ]
 )

@@ -288,7 +288,7 @@ def _infer_facility(name: str) -> str:
 
 
 def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
-    """Photon-counting effective wavelength (pivot wavelength): λ_eff = ∫T·λ·dλ / ∫T·dλ.
+    r"""Pivot wavelength for photometric filter convolution.
 
     Parameters
     ----------
@@ -300,27 +300,35 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
     Returns
     -------
     float
-        Photon-counting effective wavelength (pivot wavelength) [Angstrom].
+        Pivot wavelength [Angstrom], defined as
+        :math:`\lambda_{\mathrm{pivot}} = \sqrt{\int T(\lambda) \lambda \, d\lambda /
+        \int T(\lambda) / \lambda \, d\lambda}`.
 
     Notes
     -----
-    This function computes the **standard astronomical photon-counting**
-    effective wavelength, also known as the **pivot wavelength**. It is
-    used for filter metadata, observational work, and validation against
-    external codes (e.g., FSPS).
+    The pivot wavelength is the wavelength at which the band-averaged
+    f_λ and f_ν are related exactly by
+    :math:`\langle f_\lambda \rangle = \langle f_\nu \rangle c / \lambda_p^2`.
+    It depends on the passband only, not on the source spectrum; this is
+    the photon-counting form (response weight 1/λ) [1]_ (Eq. A16). For an
+    energy-response passband the pivot is
+    :math:`\sqrt{\int T\,d\lambda / \int T/\lambda^2\,d\lambda}`.
+    Used for filter metadata, observational work, and validation against
+    external codes (FSPS, Prospector, BAGPIPES, Synthesizer).
 
-    NOT the same as the power-weighted (transmission x flux) effective
-    wavelength sometimes used in approximate photometry schemes.
-
-    Not JAX-compatible (uses NumPy). Intended for filter metadata
-    computation, not forward model evaluation.
+    References
+    ----------
+    .. [1] Bessell, M. & Murphy, S. 2012,
+       "Spectrophotometric Libraries, Revised Photonic Passbands, and
+       Zero Points for UBVRI, Hipparcos, and Tycho Photometry",
+       PASP 124, 140, https://doi.org/10.1086/664083.
 
     """
     num = _np_trapezoid(trans * wave, wave)
-    den = _np_trapezoid(trans, wave)
-    if den == 0:
+    den = _np_trapezoid(trans / wave, wave)
+    if num == 0 or den == 0:
         return 0.0
-    return float(num / den)
+    return float(np.sqrt(num / den))
 
 
 def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:

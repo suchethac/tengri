@@ -1152,7 +1152,7 @@ def noll09(
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
     This is the ``N09`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    Uses Leitherer (2002) for λ < 1800 Å (0.18 µm) and Calzetti (2000) above.
     The modification order is: **(base + bump) × power_law**.
 
     This differs from ``kriek_conroy`` which does NOT use L02 and applies
@@ -1201,7 +1201,7 @@ def noll09(
     wave_um = wavelength / 1e4
     rv = 4.05
 
-    # Base k'(lambda) = A(lambda)/E(B-V): L02 below 0.15 um, Calzetti above
+    # Base k'(lambda) = A(lambda)/E(B-V): L02 below 0.18 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
 
     # UV bump (Drude profile)
@@ -1292,7 +1292,7 @@ def salim_sbl18(
     r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
     This is the ``SBL18`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    Uses Leitherer (2002) for λ < 1800 Å (0.18 µm) and Calzetti (2000) above.
     The modification order is: **(base × power_law) + bump**.
 
     This differs from ``noll09`` and ``kriek_conroy``, which both apply:
@@ -1365,7 +1365,7 @@ def salim_sbl18(
     rv = 4.05
     rv_mod = _sbl18_rv_mod(dust_delta, rv_cal=rv)
 
-    # Base k'(lambda): L02 below 0.15 um, Calzetti above
+    # Base k'(lambda): L02 below 0.18 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
 
     # UV bump (Drude profile)
@@ -2176,6 +2176,66 @@ except ImportError:
     _GRAIN_MODELS_AVAILABLE = False
 
 
+def _precompute_averages_curve(model_name: str) -> tuple[np.ndarray, np.ndarray]:
+    """Evaluate an averages attenuation model on a fine grid and return wavelength + k(λ).
+
+    Parameters
+    ----------
+    model_name : str
+        Name of the averages model (e.g., "G03_SMCBar" for Gordon+2003).
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n,)
+        Wavelength array [Å], sorted ascending.
+    k_norm : ndarray, shape (n,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no, uses astropy units at call time.
+    Call at module level (import time), not inside JIT.
+
+    The model is evaluated on a fine grid of 4001 points spanning its x_range
+    (wavenumber domain). The fine grid provides continuous interpolation with
+    minimal truncation error.
+    """
+    import astropy.units as u
+    from dust_extinction.averages import G03_SMCBar
+
+    if model_name == "G03_SMCBar":
+        m = G03_SMCBar()
+    else:
+        raise ValueError(f"Unknown averages model: {model_name}")
+
+    # Evaluate the model on a fine grid spanning its native wavenumber range
+    # x_range is in [1/micron]; evaluate on 4001 points for smooth interpolation
+    x_min, x_max = m.x_range
+    x_fine = np.linspace(x_min, x_max, 4001)
+    # Apply model: evaluate at each wavenumber with astropy units
+    k_fine = np.asarray(m(x_fine / u.micron), dtype=np.float64)
+
+    # Convert wavenumber to wavelength [Å]
+    wave_aa = 1e4 / x_fine
+    # Sort ascending (wavenumber was descending, so reverse the order)
+    order = np.argsort(wave_aa)
+    wave_aa, k = wave_aa[order], k_fine[order]
+
+    # Normalize to k(V-band) = 1 for consistency with other tengri dust laws
+    k_at_5500 = float(np.interp(V_BAND_ANGSTROM, wave_aa, k))
+    return wave_aa, k / k_at_5500
+
+
+# Precompute Gordon+2003 SMC-bar curve from dust_extinction (averages model).
+try:
+    from dust_extinction.averages import G03_SMCBar  # noqa: F401 (ensures package present)
+
+    _G03_SMCBAR = _precompute_averages_curve("G03_SMCBar")
+    _AVERAGES_MODELS_AVAILABLE = True
+except ImportError:
+    _AVERAGES_MODELS_AVAILABLE = False
+
+
 def _grain_law_unavailable(wavelength: jnp.ndarray) -> jnp.ndarray:
     """Fallback when dust-extinction package is not installed."""
     raise ImportError(
@@ -2361,3 +2421,67 @@ def hd23_mwrv31(wavelength: jnp.ndarray) -> jnp.ndarray:
     if not _GRAIN_MODELS_AVAILABLE:
         return _grain_law_unavailable(wavelength)
     return _make_grain_law(*_HD23_MWRV31)(wavelength)
+
+
+@register_dust_law(
+    "gordon03_smcbar",
+    citation="Gordon et al. 2003 (ApJ 594, 279)",
+    short_doc="Gordon+2003 SMC Bar average extinction curve",
+)
+def gordon03_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
+    r"""Gordon et al. (2003) SMC-bar average extinction curve.
+
+    Empirically-derived SMC-bar average extinction curve from direct observations
+    of SMC stars: steep ultraviolet rise, no 2175 Å bump. Represents the Magellanic
+    Cloud population most relevant for high-redshift star-forming galaxies.
+
+    The attenuation curve is evaluated from the dust_extinction model on a fine
+    grid (4001 points) spanning the model's native wavenumber domain and interpolated
+    via ``jnp.interp`` with linear interpolation.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), k(5500 Å) = 1 [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, uses ``jnp.interp`` on precomputed curve.
+
+    Precomputed from ``dust_extinction.averages.G03_SMCBar`` at module import
+    time by evaluating the model on a fine grid spanning exactly 1000–33333 Å
+    (0.3 µm⁻¹ ≤ x ≤ 10 µm⁻¹). For x ≥ 3.70 µm⁻¹ (λ ≤ 2700 Å) the model is the
+    FM90 form; redward of 2700 Å it is a cubic spline through the Table 4
+    optical/NIR nodes anchored on FM90 at 2700 and 2600 Å (the spline sits 3.5 %
+    above pure FM90 at x = 3.3 µm⁻¹). Redward of 33333 Å the curve holds its end value 0.0624;
+    blueward of 1000 Å it holds 9.6346.
+
+    For x ≥ 3.70 µm⁻¹ (λ ≤ 2700 Å), the model implements the Fitzpatrick & Massa
+    (1990) form with SMC-bar FM90 parameters: c1 = −4.959, c2 = 2.264,
+    c3 = 0.389, c4 = 0.461, x0 = 4.600 µm⁻¹, γ = 1.000 µm⁻¹, R_V = 2.74.
+
+    Repackaged from the dust_extinction package (astropy-affiliated). The same
+    curve is shipped by FSPS as ``dust_type=5`` and by BAGPIPES as ``"SMC"`` type.
+
+    References
+    ----------
+    .. [1] K. D. Gordon, G. C. Clayton, K. A. Misselt, A. U. Landolt, and
+       M. J. Wolff, "A Quantitative Comparison of the Small Magellanic Cloud,
+       Large Magellanic Cloud, and Milky Way Ultraviolet to Near-Infrared
+       Extinction Curves," ApJ, 594, 279 (2003). arXiv:astro-ph/0305257.
+       https://doi.org/10.1086/376774
+    .. [2] E. L. Fitzpatrick and D. Massa, "An analysis of the shapes of
+       ultraviolet extinction curves. III - an atlas of ultraviolet extinction
+       curves," ApJS, 72, 163 (1990). https://doi.org/10.1086/191413
+    """
+    if not _AVERAGES_MODELS_AVAILABLE:
+        raise ImportError(
+            "dust-extinction package required for averages-based dust laws. "
+            "Install with: pip install dust-extinction"
+        )
+    return _make_grain_law(*_G03_SMCBAR)(wavelength)

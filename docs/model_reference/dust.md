@@ -82,6 +82,7 @@ Table {ref}`1 <tab-dust-curves>` lists the attenuation curves registered in ten
 | `noll09` | Noll+2009 | Yes | $\delta$, $E_b$ |
 | `salim_sbl18` | Salim+2018 (modified Calzetti+L02) | Yes | $\delta$, $E_b$ |
 | `smc` | Pei 1992 | No | None |
+| `gordon03_smcbar` | Gordon et al. 2003 | No | None |
 | `lmc` | Pei 1992 | Weak | None |
 | `cardelli` | Cardelli+1989 | Yes | $R_V$ |
 | `li08` | Li et al. (2008) | Yes | $c_1$, $c_2$, $c_3$, $c_4$ |

@@ -187,12 +187,12 @@ def setup_style(style="tengri"):
 #: on an SED plot, keyed by a matplotlib-ready mathtext label. Vacuum
 #: wavelengths, matching the rest of the package.
 SPECTRAL_FEATURES = {
-    r"Ly$\alpha$": 1216.0,
+    r"Ly$\alpha$": 1215.67,
     "D4000": 4000.0,
-    r"H$\delta$": 4102.0,
-    r"H$\gamma$": 4340.0,
-    r"H$\beta$": 4861.0,
-    "[O III]": 5007.0,
+    r"H$\delta$": 4102.89,
+    r"H$\gamma$": 4341.68,
+    r"H$\beta$": 4862.68,
+    "[O III]": 5008.24,
     "Mg b": 5175.0,
     "Na D": 5893.0,
     r"H$\alpha$": 6564.61,
