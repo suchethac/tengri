@@ -107,13 +107,16 @@ def _restband_lnu(state) -> jnp.ndarray:
     y_age = state.derived.get("dust_young_indicator")
 
     if a_bc is not None and a_diff is not None:
-        # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+        # Two-component (Charlot & Fall): each SSP node mixes the young population
+        # (birth cloud + diffuse) and the old one (diffuse only) by the node's young
+        # mass fraction y(a): T(a, λ) = y·T_diff·T_bc + (1 - y)·T_diff.
         a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
         a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
         if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
             # K-point quadrature across the rest band, the screen is EVALUATED at
             # each node, not extrapolated from the pivot (#1122).
-            t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+            y3 = y_age[:, None, None]
+            t_sub = a_diff_sub * (y3 * a_bc_sub + (1.0 - y3))
             stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
         else:
             stellar_att = a_diff * a_bc * stellar
@@ -1947,70 +1950,65 @@ class Observation:
                 # Converges as 1/K² (K=5: ≲0.6 % worst case in GALEX FUV) where the
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
-                t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+                y3 = y_age[:, None, None]
                 a_hole_sub = state.derived.get("dust_hole_attenuation_subband_precomp")
                 fesc_geom = state.derived.get("lyc_fesc")
+                young_gate_sub = state.derived.get("dust_young_lyc_gate_subband_precomp")
                 if a_hole_sub is not None and fesc_geom is not None:
-                    # #2529 hole geometry: a SEPARATE formula from the
-                    # lyc_factor_sub scalar-multiply rule below (never both
-                    # -- two_component.py's publish skips lyc_factor_sub
-                    # whenever this key is live), affine in fesc_geom across
-                    # the WHOLE sub-band grid, not only the ionizing nodes.
-                    # Mirrors DustSEDComponent.apply §2a exactly:
-                    # escaping sub-beam crosses only the hole, never gated;
-                    # covered sub-beam stays on T_diff·T_bc^y and is zeroed
-                    # at ionizing nodes (the nebular gas still reprocesses
-                    # it), scaled by y_age the same way.
-                    # ``a_hole_sub`` / ``dust_ionizing_flag_subband_precomp``
-                    # already carry the SAME (n_age, n_filter, n_subbands)
-                    # shape as ``a_bc_sub`` / ``a_diff_sub`` themselves (both
-                    # published together in two_component.py from the same
-                    # ``sub_waves``), so no ``[None, :, :]`` broadcast here --
-                    # only ``y_age`` needs the two trailing axes added.
+                    # #2529 hole geometry: the young population's light is
+                    # (1 - fesc) on the screened sightline, zeroed where the gas
+                    # absorbs the ionizing photons, plus fesc through the hole
+                    # (never gated); the old population sees the diffuse screen.
+                    # Mirrors DustSEDComponent.apply §2a through the same
+                    # ``hole_young_transmission``.
+                    from tengri.components.lyc import hole_young_transmission
+
                     ionizing_sub = state.derived["dust_ionizing_flag_subband_precomp"]
-                    y_age_3d = y_age[:, None, None]
-                    t_hole_contrib_sub = y_age_3d * a_hole_sub + (1.0 - y_age_3d) * a_diff_sub
-                    gate_sub = 1.0 - y_age_3d * ionizing_sub
-                    t_sub = fesc_geom * t_hole_contrib_sub + (1.0 - fesc_geom) * t_sub * gate_sub
-                elif lyc_factor_sub is not None:
-                    # two_component's own birth-cloud-graded rule (#2439,
-                    # #2427, R2); see nebular/component.py and
-                    # dust/two_component.py's publish for why this is exact
-                    # (not "y_age-weighted twice": the graded factor stands
-                    # in for the dense path's ``lyc_factor``, a SEPARATE
-                    # multiplicative term from the dust screen ``t_sub``
-                    # already carries, not folded into ``a_bc_sub`` before
-                    # its own ``**y_age``).
+                    t_young = hole_young_transmission(
+                        a_diff_sub * a_bc_sub * (1.0 - ionizing_sub), a_hole_sub, fesc_geom
+                    )
+                else:
+                    t_young = a_diff_sub * a_bc_sub
+                    if young_gate_sub is not None:
+                        # ``lyc_reprocessed_by='young'``: the gas around the
+                        # birth clouds reprocesses the young population's LyC.
+                        t_young = t_young * young_gate_sub
+                # Population mixture at every quadrature node.
+                t_sub = y3 * t_young + (1.0 - y3) * a_diff_sub
+                if young_gate_sub is None and a_hole_sub is None and lyc_factor_sub is not None:
+                    # Whole-population gate (``lyc_reprocessed_by='all'``).
                     t_sub = t_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
                     # Same screen, same nodes, only the weights carry T (#1135).
                     stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub, axis=(0, 2))
             else:
-                atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
-                t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
                 a_hole_lut = state.derived.get("dust_hole_attenuation_precomp")
                 fesc_geom = state.derived.get("lyc_fesc")
                 if a_hole_lut is not None and fesc_geom is not None:
                     # #2529 hole geometry, λ_eff-granularity equivalent of
                     # the sub-band formula above (see that branch).
+                    from tengri.components.lyc import hole_young_transmission
+
                     ionizing_lut = state.derived["dust_ionizing_flag_precomp"]
-                    t_hole_contrib_lut = (
-                        y_age[:, None] * a_hole_lut[None, :]
-                        + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                    t_young_lut = hole_young_transmission(
+                        a_diff_lut * a_bc_lut * (1.0 - ionizing_lut), a_hole_lut, fesc_geom
                     )
-                    gate_lut = 1.0 - y_age[:, None] * ionizing_lut[None, :]
-                    t_per_age = (
-                        fesc_geom * t_hole_contrib_lut + (1.0 - fesc_geom) * t_per_age * gate_lut
-                    )
+                else:
+                    t_young_lut = a_diff_lut * a_bc_lut
+                # Population mixture: y·T_young + (1 - y)·T_old, T_old = diffuse only.
+                t_per_age = (
+                    y_age[:, None] * t_young_lut[None, :]
+                    + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                )
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
                 # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).
-                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
-                # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
-                #   T_a' = T_a · (logslope_diff + y·logslope_bc)
-                # This avoids the A_bc^(y−1) pole, at X-ray/UV bands far off the
-                # dust curve A_bc → 0, but T_a → 0 too, so T_a' → 0 (no 0·inf NaN).
+                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). The node is a
+                # mixture of two populations, T_a = y·T_young + (1 − y)·T_old, so
+                # T_a' = y·T_young·(logslope_diff + logslope_bc) + (1 − y)·T_old·logslope_diff
+                # by the log-derivative identity of each population's own product of
+                # screens: no A_bc^(y−1) pole at bands far off the dust curve.
                 moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
                 logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
                 logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
@@ -2019,8 +2017,9 @@ class Observation:
                     and logslope_diff is not None
                     and logslope_bc is not None
                 ):
-                    t_slope_per_age = t_per_age * (
-                        logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
+                    t_slope_per_age = (
+                        y_age[:, None] * (t_young_lut * (logslope_diff + logslope_bc))[None, :]
+                        + (1.0 - y_age[:, None]) * (a_diff_lut * logslope_diff)[None, :]
                     )
                     stellar_attenuated = stellar_attenuated + jnp.sum(
                         moment_per_age * t_slope_per_age, axis=0
@@ -2308,17 +2307,18 @@ class Observation:
         per_age = state.derived.get("stellar_spec_lnu_per_age_precomp")
 
         if t_bc is not None and t_diff is not None and per_age is not None:
-            # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+            # Two-component (Charlot & Fall): each node mixes the young population
+            # (birth cloud + diffuse) and the old one (diffuse only) by the node's
+            # young mass fraction: T(a, λ) = y·T_diff·T_bc + (1 − y)·T_diff.
             y_age = state.derived["dust_young_indicator"]
-            atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
-            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
-            # Nebular emission arises in the HII regions around the youngest
-            # stars, so it sees the full young-limit screen, birth cloud AND
-            # diffuse (T_bc · T_diff, i.e. y=1), matching the exact path's
-            # emission treatment (two_component.py reddens the nebular SED by
-            # τ_bc·k_bc + τ_diff·k_diff). Applying only T_diff here under-
-            # attenuated the nebular lines by the missing 1/T_bc factor.
-            nebular_attenuated = t_diff * t_bc * nebular_phi
+            atten_per_age = t_diff[None, :] * (
+                y_age[:, None] * t_bc[None, :] + (1.0 - y_age[:, None])
+            )  # (n_age, n_pix)
+            stellar_attenuated = jnp.sum(per_age * atten_per_age, axis=0)
+            # Nebular emission is lit by stars of every age: the dust component
+            # publishes its screen at the pixels, the interval mixture weighted by
+            # each interval's share of the ionizing luminosity.
+            nebular_attenuated = state.derived["dust_spec_neb_transmission_precomp"] * nebular_phi
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.

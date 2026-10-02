@@ -41,11 +41,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, ClassVar
 
-import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._age_mixture import (
+    interval_fractions,
+    ionizing_interval_weights,
+    mix_intervals,
+)
 from tengri.components.dust._params import (
     DEFAULT_DUST_ETA_BALANCE,
     DEFAULT_DUST_F_OBSCURATION,
@@ -54,9 +58,10 @@ from tengri.components.dust.attenuation import (
     merge_neb_screen_live_overrides,
     resolve_bc_diff_law_params,
     two_component_dust,
+    two_component_interval_transmission,
 )
 from tengri.components.dust.laws._registry import select_law_kwargs
-from tengri.components.lyc import LYMAN_LIMIT_AA, log10_age_sum_lyc, log10_lyc_luminosity
+from tengri.components.lyc import LYMAN_LIMIT_AA, credited_log10_lyc
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters._dust_keys import SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
@@ -77,48 +82,6 @@ __all__ = [
 ]
 
 
-def _young_indicator(
-    ssp_ages_yr: jnp.ndarray, t_birth_yr: float, transition_width_dex: float
-) -> jnp.ndarray:
-    r"""Fraction of stars of each age still inside their birth cloud.
-
-    .. math::
-
-        y(t) = \sigma\!\left(-\frac{\log_{10} t - \log_{10} t_{\rm birth}}
-                                  {\Delta_{\rm trans}}\right)
-
-    with :math:`\sigma` the logistic sigmoid. 1 for the youngest bins, 0 for the
-    oldest.
-
-    This is the single definition. The screen, the photometry LUT and the spectrum
-    LUT all publish it, so the same stars sit behind the birth cloud on every path.
-    All three paths use this sigmoid: the exact screen applies it to mask stars
-    during the integration, the photometry LUT applies it to select which SSP bins
-    read the birth-cloud reddening, and the spectrum LUT applies it to select stars
-    in its lookup table.
-
-    Parameters
-    ----------
-    ssp_ages_yr : ndarray, shape (n_age,)
-        SSP lookback ages [yr].
-    t_birth_yr : float
-        Birth-cloud dispersal age: the sigmoid center [yr].
-    transition_width_dex : float
-        Sigmoid width [dex].
-
-    Returns
-    -------
-    ndarray, shape (n_age,)
-        Young-star indicator in [0, 1] [dimensionless].
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-    """
-    log_t = jnp.log10(jnp.maximum(jnp.asarray(ssp_ages_yr), 1.0))
-    return jax.nn.sigmoid(-(log_t - jnp.log10(t_birth_yr)) / transition_width_dex)
-
-
 def _screen_transmission(
     choice: str,
     *,
@@ -127,6 +90,7 @@ def _screen_transmission(
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
     f_obsc: jnp.ndarray,
+    neb_weights: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Dust-screen transmission for one emission source's configured choice.
 
@@ -150,6 +114,17 @@ def _screen_transmission(
             \exp\!\left(-\tau_{\rm diff} k_{\rm diff}\right)
 
         T_{\rm none} = 1
+
+    ``neb_weights`` turns the ``"birth_cloud"`` choice into the nebular
+    population mixture
+    :math:`T = q_0\,T_{\rm birth\_cloud} + (1 - q_0)\,T_{\rm diffuse}`,
+    with :math:`q_j` the share of the ionizing luminosity produced in age
+    interval :math:`j` (:func:`~tengri.components.dust._age_mixture.ionizing_interval_weights`):
+    HII regions are lit by stars of every age, and only the stars younger than
+    the birth-cloud lifetime sit inside the cloud.  ``None`` (shock and AGN,
+    which are placed in the young-star screen) is the young-limit ``q = (1, 0)``.
+    ``"diffuse"`` is the old-star screen and ``"none"`` is unity, whatever the
+    weights.
 
     ``choice`` is a static Python string (one of
     ``tengri.parameters._dust_keys.SCREEN_CHOICES``), read off a frozen
@@ -176,6 +151,9 @@ def _screen_transmission(
     f_obsc : ndarray
         Clumpy-geometry obscuration floor, ``dust_f_obscuration``
         [dimensionless, in [0, 1]].
+    neb_weights : ndarray, shape (2,), optional
+        Ionizing-luminosity share ``(q_young, q_old)`` of the two age
+        intervals; only read when ``choice == "birth_cloud"``.
 
     Returns
     -------
@@ -201,6 +179,11 @@ def _screen_transmission(
         return jnp.ones_like(jnp.asarray(k_diff))
     if choice == "birth_cloud":
         tau = jnp.asarray(tau_bc) * jnp.asarray(k_bc) + jnp.asarray(tau_diff) * jnp.asarray(k_diff)
+        if neb_weights is not None:
+            f_obsc = jnp.asarray(f_obsc)
+            t_young = f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
+            t_old = f_obsc + (1.0 - f_obsc) * jnp.exp(-jnp.asarray(tau_diff) * jnp.asarray(k_diff))
+            return neb_weights[0] * t_young + neb_weights[1] * t_old
     elif choice == "diffuse":
         tau = jnp.asarray(tau_diff) * jnp.asarray(k_diff)
     else:
@@ -237,10 +220,13 @@ class DustSEDComponentConfig(SEDComponentConfig):
         screen (``law_diff``). See ``neb_law_overrides`` for the matching
         per-parameter knob.
     t_birth_yr : float
-        Birth-cloud dispersal age (sigmoid center, yr).
-        Default 1e7 (10 Myr) per Charlot & Fall (2000).
+        Birth-cloud dispersal age [yr]. Default 1e7 (10 Myr) per Charlot &
+        Fall (2000); pcigale's ``separation_age`` (Myr) is the same quantity.
     transition_width_dex : float
-        Sigmoid width (dex) for the BC→diffuse age transition.
+        Width [dex] of the log-logistic spread of the dispersal age; ``0``
+        (default) is the hard step.  The young share of an SSP node is the
+        exact fraction of its formed mass younger than ``t_birth_yr``
+        (:mod:`tengri.components.stellar.age_boundary`).
     nebular_screen : str
         Which screen attenuates the nebular continuum, the discrete line
         catalog, and the fast-nebular fallback grid (#2234): ``"birth_cloud"``
@@ -279,7 +265,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     name: str = "dust"
     law_neb: str | None = None
     t_birth_yr: float = 1e7
-    transition_width_dex: float = 0.3
+    transition_width_dex: float = 0.0
     #: Per-source dust-screen choice (#2234 replacement). Defaults match
     #: the pre-#2234 behavior for ``nebular_screen`` (young-limit screen,
     #: unconditional) and are a NEW default for ``shock_screen`` (previously
@@ -388,6 +374,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: with no spec to ask) keeps the smooth combine, unchanged.
     fdust_credit_active: bool = True
 
+    @property
+    def age_boundaries_yr(self) -> tuple[float, ...]:
+        """Age boundaries [yr] the stellar component publishes younger-than fractions for."""
+        return (float(self.t_birth_yr),)
+
+    @property
+    def age_boundary_width_dex(self) -> float:
+        """Dispersal width [dex] of the survival function at those boundaries."""
+        return float(self.transition_width_dex)
+
 
 @dataclass(frozen=True)
 class DustSEDComponentState(SEDComponentState):
@@ -428,6 +424,10 @@ class DustSEDComponent(TemplateThreading):
     """
 
     config: DustSEDComponentConfig = field(default_factory=DustSEDComponentConfig)
+    #: The nebular screen is the ionizing-luminosity mixture of the age intervals,
+    #: so a stateless caller (no ForwardState) must supply the interval weights
+    #: (``SEDModel._nebular_interval_weights``) to ``attenuate_line_catalog``.
+    needs_nebular_interval_weights: ClassVar[bool] = True
     name: str = "dust"
     parameter_prefix: str = "dust_"
     #: When set (via ``approx=WavePrecomp(fast_dust_emission=True)``), project IR
@@ -440,6 +440,11 @@ class DustSEDComponent(TemplateThreading):
     #: Optical-depth nodes ``(tau_a, tau_b)`` of the grid's energy-balance channel,
     #: as tuples of floats; set with ``nebular_from_grid``.
     nebular_eb_tau_grids: tuple | None = None
+    #: Age-interval weight vectors the nebular grid's energy-balance table keeps one
+    #: channel for: the absorbed energy is linear in the nebular screen, which is the
+    #: ionizing-luminosity mixture of the young and old screens, so the table bakes the
+    #: two pure screens and the runtime mixes them.
+    nebular_weight_channels: tuple = ((1.0, 0.0), (0.0, 1.0))
 
     def materialized(self) -> DustSEDComponent:
         """Return a copy with nebular_from_grid reset to False for full-state exact path.
@@ -736,9 +741,9 @@ class DustSEDComponent(TemplateThreading):
         self,
         params: Mapping[str, jnp.ndarray],
         wavelength: jnp.ndarray,
-        ssp_ages_yr: jnp.ndarray,
+        younger_fraction: jnp.ndarray,
     ) -> jnp.ndarray:
-        r"""Age-resolved two-component transmission :math:`T(\lambda, \mathrm{age})`.
+        r"""Age-resolved two-component transmission :math:`T(\lambda, a)` of every SSP node.
 
         The single source of this component's dust screen. :meth:`apply` calls it
         on the full SSP wave grid; the FeaturePrecomp path
@@ -758,14 +763,17 @@ class DustSEDComponent(TemplateThreading):
             ``dust_f_obscuration`` and per-law override keys).
         wavelength : ndarray, shape (n_wave,)
             Rest-frame wavelengths [Å] at which to evaluate the screen.
-        ssp_ages_yr : ndarray, shape (n_age,)
-            SSP lookback ages [yr]: the birth-cloud axis.
+        younger_fraction : ndarray, shape (1, n_age)
+            The stellar component's ``age_boundary_younger_fraction`` for
+            ``config.age_boundaries_yr``: per-node formed-mass fraction
+            younger than ``t_birth_yr`` [dimensionless].
 
         Returns
         -------
         ndarray, shape (n_age, n_wave)
-            Transmission in ``[0, 1]``: the youngest bins (age < ``t_birth``)
-            carry birth-cloud + diffuse, older bins the diffuse screen only.
+            Transmission in ``[0, 1]``: the mixture ``y T_young + (1 - y)
+            T_old`` of the birth-cloud + diffuse and the diffuse-only
+            populations each node holds.
 
         Notes
         -----
@@ -781,11 +789,11 @@ class DustSEDComponent(TemplateThreading):
             redshift=params.get("redshift"),
         )
         return self._transmission_from_law_params(
-            params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
+            params, wavelength, jnp.asarray(younger_fraction)[0], bc_law_params, diff_law_params
         )
 
     def _transmission_from_law_params(
-        self, params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
+        self, params, wavelength, younger_fraction, bc_law_params, diff_law_params
     ) -> jnp.ndarray:
         """:func:`two_component_dust` evaluated with pre-resolved law params.
 
@@ -796,7 +804,7 @@ class DustSEDComponent(TemplateThreading):
         """
         return two_component_dust(
             wavelength=jnp.asarray(wavelength),
-            age_grid=jnp.asarray(ssp_ages_yr),
+            younger_fraction=jnp.asarray(younger_fraction),
             tau_v1=jnp.asarray(params["dust_tau_bc"]),
             tau_v2=jnp.asarray(params["dust_tau_diff"]),
             law_bc=self.config.law_bc,
@@ -804,12 +812,33 @@ class DustSEDComponent(TemplateThreading):
             f_obscuration=jnp.asarray(
                 params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
             ),
-            t_birth=self.config.t_birth_yr,
-            transition_width=self.config.transition_width_dex,
             bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
             diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
             lyman_cutoff_aa=self.config.lyman_cutoff_aa,
         )  # (n_age, n_wave), in [0, 1]
+
+    def _interval_transmissions(
+        self, params, wavelength, bc_law_params, diff_law_params
+    ) -> jnp.ndarray:
+        """The two populations' transmissions, shape ``(2, n_wave)``: young then old.
+
+        The one curve evaluation behind :meth:`_transmission_from_law_params`
+        and :meth:`apply`; row 0 is the birth cloud plus the diffuse ISM, row 1
+        the diffuse ISM only, each with its own ``f_obscuration`` mixture.
+        """
+        return two_component_interval_transmission(
+            wavelength=jnp.asarray(wavelength),
+            tau_v1=jnp.asarray(params["dust_tau_bc"]),
+            tau_v2=jnp.asarray(params["dust_tau_diff"]),
+            law_bc=self.config.law_bc,
+            law_diff=self.config.law_diff,
+            f_obscuration=jnp.asarray(
+                params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+            ),
+            bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
+            diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
+            lyman_cutoff_aa=self.config.lyman_cutoff_aa,
+        )
 
     def _line_transmission(
         self,
@@ -818,6 +847,7 @@ class DustSEDComponent(TemplateThreading):
         neb_law: str,
         neb_bc_params: Mapping[str, jnp.ndarray],
         diff_law_kw: Mapping[str, jnp.ndarray],
+        neb_weights: jnp.ndarray,
     ) -> jnp.ndarray:
         r"""``self.config.nebular_screen`` transmission at discrete line wavelengths.
 
@@ -845,6 +875,10 @@ class DustSEDComponent(TemplateThreading):
         diff_law_kw : mapping
             Diffuse-ISM law kwargs, narrowed to what ``config.law_diff``
             declares.
+        neb_weights : ndarray, shape (2,)
+            Ionizing-luminosity share ``(q_young, q_old)`` of the two age
+            intervals (:func:`~tengri.components.dust._age_mixture.ionizing_interval_weights`);
+            the ``"birth_cloud"`` choice mixes the two screens by it.
 
         Returns
         -------
@@ -879,12 +913,14 @@ class DustSEDComponent(TemplateThreading):
             tau_bc=jnp.asarray(params["dust_tau_bc"]),
             tau_diff=jnp.asarray(params["dust_tau_diff"]),
             f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
+            neb_weights=neb_weights,
         )
 
     def nebular_screen_transmission(
         self,
         params: Mapping[str, jnp.ndarray],
         wavelength: jnp.ndarray,
+        neb_weights: jnp.ndarray,
     ) -> jnp.ndarray:
         r"""``config.nebular_screen`` transmission at arbitrary rest wavelengths.
 
@@ -902,6 +938,9 @@ class DustSEDComponent(TemplateThreading):
             and optionally ``dust_f_obscuration``.
         wavelength : ndarray, shape (n_wave,)
             Rest-frame wavelengths [Å] at which to evaluate the transmission.
+        neb_weights : ndarray, shape (2,)
+            Ionizing-luminosity share ``(q_young, q_old)`` of the two age
+            intervals; see :meth:`_line_transmission`.
 
         Returns
         -------
@@ -931,7 +970,7 @@ class DustSEDComponent(TemplateThreading):
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         return self._line_transmission(
-            params, jnp.asarray(wavelength), neb_law, neb_bc_params, diff_law_kw
+            params, jnp.asarray(wavelength), neb_law, neb_bc_params, diff_law_kw, neb_weights
         )
 
     def _screened_subband_sum(
@@ -942,6 +981,7 @@ class DustSEDComponent(TemplateThreading):
         neb_law: str,
         neb_bc_params: Mapping[str, jnp.ndarray],
         diff_law_kw: Mapping[str, jnp.ndarray],
+        neb_weights: jnp.ndarray,
     ) -> jnp.ndarray:
         """``sum_k Phi_k T(lambda_k)`` per filter, from already-resolved law kwargs.
 
@@ -952,7 +992,7 @@ class DustSEDComponent(TemplateThreading):
         phi = jnp.asarray(phi_sub)
         lam = jnp.asarray(lam_sub)
         t_sub = self._line_transmission(
-            params, lam.reshape(-1), neb_law, neb_bc_params, diff_law_kw
+            params, lam.reshape(-1), neb_law, neb_bc_params, diff_law_kw, neb_weights
         ).reshape(lam.shape)
         return jnp.sum(phi * t_sub, axis=-1)
 
@@ -961,6 +1001,7 @@ class DustSEDComponent(TemplateThreading):
         params: Mapping[str, jnp.ndarray],
         line_wave: jnp.ndarray,
         log_line_lums: jnp.ndarray,
+        neb_weights: jnp.ndarray,
     ) -> jnp.ndarray:
         """THE single source of the two-component line screen (#1867, #2223).
 
@@ -986,6 +1027,12 @@ class DustSEDComponent(TemplateThreading):
             log10 of the INTRINSIC line luminosities [dex, erg/s]. The log
             form, never the linear one: line luminosities (~1e40-1e43 erg/s)
             overflow float32 (#1534/#1837).
+        neb_weights : ndarray, shape (2,)
+            Ionizing-luminosity share ``(q_young, q_old)`` of the two age
+            intervals: the lines are lit by stars of every age, so the
+            birth-cloud screen weighs in by where the ionizing photons come
+            from. A caller with no state gets it from
+            ``SEDModel._nebular_interval_weights``.
 
         Returns
         -------
@@ -1020,11 +1067,11 @@ class DustSEDComponent(TemplateThreading):
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         transmission = self._line_transmission(
-            params, jnp.asarray(line_wave), neb_law, neb_bc_params, diff_law_kw
+            params, jnp.asarray(line_wave), neb_law, neb_bc_params, diff_law_kw, neb_weights
         )
         return jnp.asarray(log_line_lums) + log10_magnitude(transmission)
 
-    def _nebular_grid_absorbed(self, state, tau_a, tau_b):
+    def _nebular_grid_absorbed(self, state, tau_a, tau_b, neb_weights):
         """(log10 magnitude, sign) of the absorbed nebular luminosity read from the grid."""
         from tengri.components.dust.energy_balance_precompute import nebular_grid_absorbed_log10
 
@@ -1039,6 +1086,7 @@ class DustSEDComponent(TemplateThreading):
             self.nebular_eb_tau_grids,
             tau_a,
             tau_b,
+            weights=neb_weights,
         )
 
     def apply(
@@ -1079,9 +1127,30 @@ class DustSEDComponent(TemplateThreading):
 
         wave = state.wave
         lnu_age = jnp.asarray(state.derived["lnu_age"])  # (n_age, n_wave)
-        ssp_ages_yr = jnp.asarray(state.derived["ssp_ages_yr"])
 
         # ── 1. Two-component transmission T(λ, age) ─────────────────────
+        # Every SSP node holds a mixture of two stellar populations: the
+        # fraction ``y`` of its formed mass younger than the birth-cloud
+        # lifetime (published by stellar, exact on every age kernel) sees the
+        # birth cloud AND the diffuse ISM; the rest only the diffuse ISM. The
+        # node's transmission is the mass-weighted mixture of the two
+        # populations' own transmissions (see ``_age_mixture``).
+        younger = state.derived.get("age_boundary_younger_fraction")
+        if younger is None:
+            raise ValueError(
+                "DustSEDComponent.apply requires the stellar component's "
+                "age_boundary_younger_fraction (state.derived). SEDModel asks stellar for "
+                "it at build time via config.age_boundaries_yr; a hand-built chain must "
+                "set StellarSEDComponentConfig(age_boundaries_yr=(t_birth_yr,), "
+                "age_boundary_width_dex=transition_width_dex)."
+            )
+        younger = jnp.asarray(younger)  # (1, n_age)
+        y_age = younger[0]  # (n_age,): the one definition of "young"
+        fractions = interval_fractions(younger)  # (2, n_age): young, old
+        # Where the ionizing photons come from: the nebular continuum and lines
+        # are lit by stars of every age, so the birth-cloud screen weighs in by
+        # each interval's share of the ionizing luminosity, not by mass.
+        neb_weights = ionizing_interval_weights(fractions, state.derived["log_L_lyc_age"])
         # Resolve per-component (birth-cloud vs diffuse) law parameters once:
         # reused below for the nebular-continuum screen. The screen itself is
         # single-sourced with the FeaturePrecomp fast path via
@@ -1103,13 +1172,11 @@ class DustSEDComponent(TemplateThreading):
         # screen are bound separately -- do not re-derive these locally.
         bc_kw = {k: jnp.asarray(v) for k, v in bc_law_params.items()}
         diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
-        transmission = self._transmission_from_law_params(
-            params, wave, ssp_ages_yr, bc_law_params, diff_law_params
-        )  # (n_age, n_wave), in [0, 1]
+        t_int = self._interval_transmissions(params, wave, bc_law_params, diff_law_params)
+        transmission = mix_intervals(fractions, t_int)  # (n_age, n_wave), in [0, 1]
 
         # ── 2. Apply transmission per age and aggregate ────────────────
-        lnu_age_attenuated = lnu_age * transmission
-        sed_attenuated = jnp.sum(lnu_age_attenuated, axis=0)
+        sed_attenuated = jnp.sum(lnu_age * transmission, axis=0)
         sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
 
         # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
@@ -1160,46 +1227,24 @@ class DustSEDComponent(TemplateThreading):
         if _lyc_t is not None:
             _lyc_t = jnp.asarray(_lyc_t)
             sed_intrinsic_stellar = sed_intrinsic_stellar * _lyc_t
-            if self.config.lyc_reprocessed_by == "all":
-                sed_attenuated = sed_attenuated * _lyc_t
-                sed_intrinsic_stellar_eb = sed_intrinsic_stellar
-            elif self.config.lyc_escape_geometry == "screened":
-                # The LUT reddens exactly the stars ``_young_indicator`` selects —
-                # the same definition the exact screen uses.
-                y_age = _young_indicator(
-                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                )
-                lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
-                sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
-                sed_intrinsic_stellar_eb = jnp.sum(lnu_age * lyc_factor, axis=0)
+            # The gas that reprocesses the ionizing photons surrounds the young
+            # population: its interval gets the gate on both the intrinsic and
+            # the observed side, the old interval passes untouched (or every
+            # interval, under ``lyc_reprocessed_by='all'``). Mixed with the SAME
+            # node fractions as the screen. #2529: a hole-geometry fraction
+            # ``f_esc`` of the young population's light bypasses the birth-cloud
+            # screen at every wavelength and never meets the gas.
+            from tengri.components.dust._age_mixture import lyc_interval_transmissions
+            from tengri.components.lyc import ionizing_mask
+
+            if self.config.lyc_escape_geometry == "screened":
+                covered_raw = hole_raw = jnp.ones_like(wave)
             else:
-                # #2529: a hole-geometry fraction ``f_esc`` of the young
-                # population's light already bypasses the birth-cloud screen
-                # (not just the Lyman continuum -- "a hole is geometric, not
-                # wavelength selective"), computed directly from the raw,
-                # un-sigmoid-weighted curves via
-                # :func:`tengri.components.lyc.escape_geometry_transmission`.
-                # The nebular gas still reprocesses the COVERED (1 - f_esc)
-                # sub-beam's ionizing photons exactly as before (the
-                # ``lyc_factor`` formula above, restricted to that sub-beam
-                # only); the escaping sub-beam never touches any gas either,
-                # by the #2529 physical picture, so it is never gated.
-                # ``lyc_reprocessed_by == 'all'`` cannot reach this branch
-                # (refused together with a non-'screened' geometry at
-                # parse/build time, parameters/groups.py and parameters.py):
-                # 'all' has no young/old split for a hole correction to
-                # replace.
                 from tengri.components.dust.attenuation import (
                     apply_lyman_cutoff as _lyman_clip,
                     resolve_dust_law as _resolve_law,
                 )
-                from tengri.components.lyc import escape_geometry_transmission, ionizing_mask
 
-                y_age = _young_indicator(
-                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                )
-                f_esc = jnp.asarray(state.derived.get("lyc_fesc", 0.0))
-                f_obs = jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION))
                 k_bc_full = _lyman_clip(
                     _resolve_law(self.config.law_bc)(
                         wave, **select_law_kwargs(self.config.law_bc, bc_kw)
@@ -1214,60 +1259,29 @@ class DustSEDComponent(TemplateThreading):
                     wave,
                     self.config.lyman_cutoff_aa,
                 )
-                t_bc_raw = jnp.exp(-jnp.asarray(params["dust_tau_bc"]) * k_bc_full)  # (n_wave,)
-                t_diff_raw = jnp.exp(
-                    -jnp.asarray(params["dust_tau_diff"]) * k_diff_full
-                )  # (n_wave,)
-
-                # The two additive sub-beams of escape_geometry_transmission's
-                # own construction, (1 - f_esc)*screened + f_esc*hole_contrib
-                # -- read off AT its own f_esc = 0 / 1 endpoints (its
-                # identities, pinned above) rather than re-deriving either
-                # formula here a second time.
-                t_screened_raw = escape_geometry_transmission(
-                    y_age[:, None],
-                    t_bc_raw[None, :],
-                    t_diff_raw[None, :],
-                    0.0,
-                    self.config.lyc_escape_geometry,
-                )  # (n_age, n_wave); == t_bc_raw**y_age * t_diff_raw
-                t_hole_contrib = escape_geometry_transmission(
-                    y_age[:, None],
-                    t_bc_raw[None, :],
-                    t_diff_raw[None, :],
-                    1.0,
-                    self.config.lyc_escape_geometry,
-                )  # (n_age, n_wave); == y_age*T_hole + (1 - y_age)*t_diff_raw
-
-                # Nebular reprocessing gate (the SAME physical effect the
-                # 'screened' lyc_factor above applies, restricted to the
-                # covered sub-beam only): zero below the Lyman edge, scaled
-                # by y_age so old stars are untouched. The escaping sub-beam
-                # bypasses the gas by the #2529 picture (a hole skips BOTH
-                # the dust and the HII region it would otherwise cross), so
-                # it is never gated, on either the observed or the intrinsic
-                # side.
-                gate = 1.0 - y_age[:, None] * ionizing_mask(wave)[None, :]
-                covered_raw = (1.0 - f_esc) * t_screened_raw
-                escaping_raw = f_esc * t_hole_contrib
-                t_observed_raw = escaping_raw + covered_raw * gate
-                transmission_observed = f_obs + (1.0 - f_obs) * t_observed_raw
-
-                # Intrinsic side mirrors the SAME escaping/covered split and
-                # gate -- not bare ``lnu_age`` -- so the energy-balance
-                # difference (intrinsic - attenuated) correctly excludes the
-                # covered sub-beam's reprocessed-away photons from dust
-                # heating (they went to the gas, not the grains) even when
-                # ``lyc_in_energy_balance=True`` unmasks the Lyman continuum:
-                # both sides carry the identical gate=0 there, so their
-                # difference is unaffected by it, exactly as the 'screened'
-                # branch's single shared ``lyc_factor`` already guarantees.
-                # No f_obscuration here: f_obscuration is the DUST screen's
-                # own floor, irrelevant to the intrinsic (pre-screen) side.
-                intrinsic_gate = f_esc + (1.0 - f_esc) * gate
-
-                sed_attenuated = jnp.sum(lnu_age * transmission_observed, axis=0)
-                sed_intrinsic_stellar_eb = jnp.sum(lnu_age * intrinsic_gate, axis=0)
+                t_bc_raw = jnp.exp(-jnp.asarray(params["dust_tau_bc"]) * k_bc_full)
+                t_diff_raw = jnp.exp(-jnp.asarray(params["dust_tau_diff"]) * k_diff_full)
+                covered_raw = t_bc_raw * t_diff_raw
+                hole_raw = (
+                    t_diff_raw
+                    if self.config.lyc_escape_geometry == "birth_cloud_holes"
+                    else jnp.ones_like(t_diff_raw)
+                )
+            observed_int, intrinsic_int = lyc_interval_transmissions(
+                t_int,
+                lyc_t=_lyc_t,
+                mode=self.config.lyc_reprocessed_by,
+                geometry=self.config.lyc_escape_geometry,
+                f_esc=state.derived.get("lyc_fesc", 0.0),
+                f_obscuration=params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION),
+                ionizing=ionizing_mask(wave),
+                covered_raw=covered_raw,
+                hole_raw=hole_raw,
+            )
+            sed_attenuated = jnp.sum(lnu_age * mix_intervals(fractions, observed_int), axis=0)
+            sed_intrinsic_stellar_eb = jnp.sum(
+                lnu_age * mix_intervals(fractions, intrinsic_int), axis=0
+            )
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
@@ -1338,6 +1352,7 @@ class DustSEDComponent(TemplateThreading):
             tau_bc=_tau_bc,
             tau_diff=_tau_diff,
             f_obsc=_f_obsc,
+            neb_weights=neb_weights,
         )
 
         # ── 2c. Emission-line catalog attenuation (#1867, #2223) ───────────
@@ -1383,10 +1398,12 @@ class DustSEDComponent(TemplateThreading):
             # Transmission is O(1) and dimensionless, so its log10 is
             # representable in float32 for any tau. A fully opaque screen gives
             # -inf, the catalog's existing "genuinely dark line" sentinel.
-            transmission = self._line_transmission(
-                params, line_wave, neb_law, neb_bc_params, diff_law_kw
+            line_transmission = self._line_transmission(
+                params, line_wave, neb_law, neb_bc_params, diff_law_kw, neb_weights
             )
-            log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(transmission)
+            log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(
+                line_transmission
+            )
 
         # ── 2d. Shock SED attenuation (#851, #1434) ────────────────────────
         # Computed here, BEFORE the energy-balance integral (§3), so the
@@ -1503,6 +1520,7 @@ class DustSEDComponent(TemplateThreading):
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
                 fesc=state.derived.get("lyc_fesc"),
+                younger_fraction=y_age,
             )
             # Nebular + shock + AGN combined into ONE integral (rather than
             # multiple log10_add terms) so no intermediate sign has to be
@@ -1516,7 +1534,7 @@ class DustSEDComponent(TemplateThreading):
                 # and join through log10_add_signed, each term keeping the sign of
                 # its own integral.
                 log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
-                    state, _tau_bc, _tau_diff
+                    state, _tau_bc, _tau_diff, neb_weights
                 )
                 log_other, sign_other = bolometric_absorbed_log10(
                     sed_shock + sed_agn,
@@ -1560,7 +1578,10 @@ class DustSEDComponent(TemplateThreading):
                 from tengri.utils.scale import log10_add
 
                 log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
-                    state, jnp.asarray(params["dust_tau_bc"]), jnp.asarray(params["dust_tau_diff"])
+                    state,
+                    jnp.asarray(params["dust_tau_bc"]),
+                    jnp.asarray(params["dust_tau_diff"]),
+                    neb_weights,
                 )
                 log_L_absorbed = log10_add(
                     log_L_absorbed, log_neb_grid, sign_a=sign_all, sign_b=sign_neb_grid
@@ -1627,45 +1648,9 @@ class DustSEDComponent(TemplateThreading):
             # ``lyc_transmission`` above).
             f_dust = jnp.asarray(_lyc_fdust)
 
-            if self.config.lyc_reprocessed_by == "all":
-                _log_l_lyc_credited = state.derived.get("log_L_lyc")
-            else:
-                # Young/birth-cloud-only credit (#2539): per-age ionizing
-                # LUMINOSITIES from stellar (log_L_lyc_age, erg/s -- the Q_H
-                # photon-rate integrand would be the wrong quantity here, G1/G2),
-                # weighted by the young indicator. StellarSEDComponent publishes
-                # log_L_lyc_age unconditionally whenever it runs -- the same
-                # derived_overrides dict that publishes ``lnu_age``, read with a
-                # required subscript above (it would already have raised KeyError
-                # before reaching here if stellar had not run) -- so there is no
-                # full-grid fallback left to keep.
-                y_age_lyc = _young_indicator(
-                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                )
-                lnu_age_ion = state.derived.get("lnu_age_ion")
-                ssp_wave_ion = state.derived.get("ssp_wave_ion")
-                if lnu_age_ion is not None:
-                    # Cheap path (G1/G2 FLOP guard): weight-and-sum the per-age,
-                    # per-Msun ionizing slice over ages FIRST (a linear combine),
-                    # THEN peak-factor/integrate ONCE -- mathematically identical
-                    # to log10_age_sum_lyc(log_L_lyc_age, weights=y_age_lyc)
-                    # (edge_trapezoid is linear in its input for fixed wave/edge;
-                    # bit-identical to float64 round-off) but pays for the
-                    # edge-aware quadrature a single time instead of once per age
-                    # -- see log_L_lyc_age's docstring in protocols/derived_state.py.
-                    young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age_ion, axis=0)
-                    _log_l_lyc_credited = log10_lyc_luminosity(
-                        young_lnu,
-                        ssp_wave_ion,
-                        log10_scale=state.derived["log_stellar_mass_scale"],
-                    )
-                else:
-                    # n_ion_bins == 0 (no ionizing content at all): log_L_lyc_age
-                    # is a cheap (-inf)-filled array, so the per-age reduction
-                    # below costs nothing extra either way.
-                    _log_l_lyc_credited = log10_age_sum_lyc(
-                        state.derived["log_L_lyc_age"], weights=y_age_lyc
-                    )
+            _log_l_lyc_credited = credited_log10_lyc(
+                state.derived, y_age, self.config.lyc_reprocessed_by
+            )
 
             if _log_l_lyc_credited is not None:
                 log_L_absorbed = log10_add_fdust_credit(
@@ -1888,6 +1873,7 @@ class DustSEDComponent(TemplateThreading):
                         neb_law,
                         neb_bc_params,
                         diff_law_kw,
+                        neb_weights,
                     )
                 )
             elif _neb_phot is not None and _sed_neb is not None:
@@ -2050,10 +2036,12 @@ class DustSEDComponent(TemplateThreading):
                     if self.config.lyc_reprocessed_by == "all":
                         lyc_factor_sub = lyc_chunk
                     else:
-                        y_age_sub = _young_indicator(
-                            ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-                        )
-                        lyc_factor_sub = 1.0 - y_age_sub[:, None, None] * (1.0 - lyc_chunk)
+                        # Population-level gate of the YOUNG interval (the gas
+                        # around the birth clouds) for the observed mixture in
+                        # ``predict_via_precomp``, plus the per-node intrinsic
+                        # factor ``1 - y (1 - lyc_t)`` it implies.
+                        derived_overrides["dust_young_lyc_gate_subband_precomp"] = lyc_chunk
+                        lyc_factor_sub = 1.0 - y_age[:, None, None] * (1.0 - lyc_chunk)
                     derived_overrides["stellar_subband_lyc_factor_precomp"] = lyc_factor_sub
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
@@ -2083,6 +2071,7 @@ class DustSEDComponent(TemplateThreading):
                         neb_law,
                         neb_bc_params,
                         diff_law_kw,
+                        neb_weights,
                     )
                 )
             elif rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
@@ -2112,11 +2101,8 @@ class DustSEDComponent(TemplateThreading):
             # dust emission: the emission components handle that via their own
             # precompute paths.
 
-            # Young-star indicator on the SSP age grid: the same sigmoid
-            # definition the exact screen uses.
-            y_age = _young_indicator(
-                ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-            )
+            # Young-population fraction on the SSP age grid: the same row the
+            # exact screen mixes with (the LUT consumers' contract).
             derived_overrides["dust_young_indicator"] = y_age
 
         # SpectrumPrecomp: per-pixel BC + diffuse transmission.
@@ -2141,17 +2127,16 @@ class DustSEDComponent(TemplateThreading):
             t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, **diff_kw))
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
+            # The nebular emission's screen at the pixels: the same one-place
+            # dispatch as the continuum and the lines.
+            derived_overrides["dust_spec_neb_transmission_precomp"] = (
+                self.nebular_screen_transmission(params, spec_eff, neb_weights)
+            )
 
             # IR re-emission is now handled by separate dust emission components.
 
-            # Young-star indicator y(a) on the SSP age grid.
-            if "dust_young_indicator" not in derived_overrides:
-                y_age = _young_indicator(
-                    ssp_ages_yr,
-                    self.config.t_birth_yr,
-                    self.config.transition_width_dex,
-                )
-                derived_overrides["dust_young_indicator"] = y_age
+            # Young-population fraction y(a) on the SSP age grid.
+            derived_overrides["dust_young_indicator"] = y_age
 
         return state.with_(
             sed_intrinsic=sed_total,

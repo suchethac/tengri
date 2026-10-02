@@ -74,6 +74,7 @@ from tengri.parameters._builders import (
     _resolve_lazy_bucket,
 )
 from tengri.parameters._dust_keys import (
+    DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
@@ -1295,6 +1296,20 @@ class Parameters:
                 f"Pass dust_lyc_in_energy_balance={_old_value!r} instead."
             )
         self.dust_lyc_in_energy_balance = bool(kwargs.pop("dust_lyc_in_energy_balance", False))
+        # Young/old split (static, never fittable): the birth-cloud dispersal age
+        # [yr] and the dispersal width [dex] of every age edge (0 = hard step).
+        # Same validation the grammar layer runs, repeated for the flat surface.
+        self.dust_t_birth_yr = float(kwargs.pop("dust_t_birth_yr", 1e7))
+        self.dust_transition_width_dex = float(kwargs.pop("dust_transition_width_dex", 0.0))
+        if not 0.0 < self.dust_t_birth_yr < float("inf"):
+            raise ValueError(
+                f"dust_t_birth_yr must be finite and > 0 yr, got {self.dust_t_birth_yr!r}"
+            )
+        if not 0.0 <= self.dust_transition_width_dex < float("inf"):
+            raise ValueError(
+                f"dust_transition_width_dex must be finite and >= 0, got "
+                f"{self.dust_transition_width_dex!r}"
+            )
         # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
         # the birth-cloud screen through a hole. Same validation the grammar
         # layer (groups.py's _translate_dust_attenuation) runs, repeated here
@@ -1306,12 +1321,12 @@ class Parameters:
                 f"('screened', 'birth_cloud_holes', 'clear')."
             )
         if self.dust_lyc_escape_geometry != "screened":
-            if self.dust_model != "two_component":
+            if self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
                 raise ValueError(
                     f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} needs a "
                     f"birth-cloud screen distinct from the diffuse-ISM screen (got "
                     f"dust_model={self.dust_model!r}, which has none to put a hole in). "
-                    f"Supported: dust_model='two_component'."
+                    f"Supported: {sorted(DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}."
                 )
             if self.dust_lyc_reprocessed_by == "all":
                 raise ValueError(
@@ -2846,6 +2861,8 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
     "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
     "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
+    "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
+    "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
     "dust_screens": content(

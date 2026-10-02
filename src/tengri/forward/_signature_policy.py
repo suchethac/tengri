@@ -144,6 +144,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_lyman_cutoff_aa": content("Lyman-limit clip wavelength changes the FUV curve"),
     "_dust_lyc_reprocessed_by": content("young-only vs absorb-all stellar LyC changes the chain"),
     "_dust_lyc_in_energy_balance": content("LyC-in-energy-balance flag rescales L_IR"),
+    "_dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old split"),
+    "_dust_transition_width_dex": content(
+        "dispersal width of the young/old split (0 = hard step) changes the mass fractions"
+    ),
     "_dust_lyc_escape_geometry": content(
         "age-selective LyC escape geometry (#2529) changes the dust screen"
     ),

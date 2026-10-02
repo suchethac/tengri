@@ -84,6 +84,14 @@ def structural_key_reference() -> str:
             "clouds, default) or 'all' (FSPS/CIGALE style). Two-component only."
         ),
         "lyc_in_energy_balance": "Include ionizing luminosity in dust energy-balance integral.",
+        "t_birth_yr": (
+            "Birth-cloud dispersal age [yr] (default 1e7; pcigale ``separation_age``). "
+            "Two-component only."
+        ),
+        "transition_width_dex": (
+            "Dispersal width [dex] of every age edge; 0 (default) is the hard step. "
+            "Two-component and age_binned."
+        ),
         # Dust emission
         "spinning_dust": "Include small spinning dust grains.",
         "f_cnm": "Cold neutral medium fraction.",

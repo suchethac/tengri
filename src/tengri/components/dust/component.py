@@ -528,6 +528,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
             self.nebular_eb_tau_grids,
             tau_a,
             tau_b,
+            weights=jnp.ones((1,)),  # one screen, one channel
         )
 
     def apply(

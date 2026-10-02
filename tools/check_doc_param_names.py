@@ -83,6 +83,10 @@ STRUCTURAL_KEYS: frozenset[str] = frozenset(
         "dust_lyc_reprocessed_by",
         "dust_lyc_in_energy_balance",
         "dust_lyc_escape_geometry",
+        # Age-split structural keys (dust_attenuation grammar keys
+        # ``t_birth_yr`` / ``transition_width_dex``; static, never fittable).
+        "dust_t_birth_yr",
+        "dust_transition_width_dex",
         # #2533: opt-in single-pass diffuse-screen attenuation of re-emitted
         # IR dust emission. Flat spelling / grammar key "diffuse_screen" on
         # dust_emission; never a fittable parameter.

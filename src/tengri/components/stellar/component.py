@@ -3687,6 +3687,41 @@ class StellarSEDComponent:
             )
         return self._joint_weights_impl(params, ssp_data)[3]
 
+    def compute_log_L_lyc_age(self, params, ssp_data=None):
+        """Per-age ionizing luminosity WITHOUT the full-wavelength SED.
+
+        The SED-free twin of the ``log_L_lyc_age`` key :meth:`apply` publishes,
+        from the same weights as :meth:`compute_joint_weights` (same
+        restrictions): the ionizing slice per node, integrated edge-aware.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape (n_age,)
+            ``log10(L_LyC / (erg/s))`` per SSP node [dex]; ``-inf`` where a
+            node holds no ionizing light (or the grid has no ionizing bins).
+        """
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        joint_weights, total_mass, _, _ = self._joint_weights_impl(params, ssp)
+        wave = ssp.ssp_wave
+        if self._state is not None and self._state.n_ion_bins is not None:
+            n_ion = self._state.n_ion_bins
+        else:
+            n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
+        if n_ion == 0:
+            return jnp.full((joint_weights.shape[1],), -jnp.inf)
+        lnu_age_ion = jnp.einsum("ma,mai->ai", joint_weights, ssp.ssp_flux[:, :, :n_ion])
+        log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
+            LSUN_ERG_PER_S
+        )
+        return log10_lyc_luminosity(lnu_age_ion, wave[:n_ion], log10_scale=log10_scale, axis=-1)
+
     def compute_joint_weights(self, params, ssp_data=None):
         """(met, age) CSP weights + total mass WITHOUT the full-wavelength SED.
 

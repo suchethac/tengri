@@ -387,6 +387,13 @@ class DerivedState:
     # young, 0 for fully old, with a logistic transition controlled by
     # ``transition_width_dex``.
     dust_young_indicator: jnp.ndarray | None = None
+    # Population gate of the YOUNG interval's Lyman continuum at the sub-band
+    # quadrature nodes, shape ``(n_filter, K)``: ``where(lambda < 912, neb_fesc, 1)``
+    # (only under ``lyc_reprocessed_by='young'``).
+    dust_young_lyc_gate_subband_precomp: jnp.ndarray | None = None
+    # Nebular-emission screen at the spectrum pixels, shape ``(n_pix,)``: the
+    # interval mixture weighted by each interval's share of the ionizing luminosity.
+    dust_spec_neb_transmission_precomp: jnp.ndarray | None = None
     # Exact per-SSP-node formed-mass fraction younger than each age boundary an
     # attenuator requested, shape ``(n_boundary, n_age)``; published by stellar
     # (components/stellar/age_boundary.py), read by every young/old consumer.

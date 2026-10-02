@@ -9,26 +9,30 @@ energy-balance absorbed luminosity: feed the output, and the exact
 stellar cube. That single dependency resurrects the cube and costs ~40× per
 evaluation (30 µs → 1.2 ms on a photometry-only fit).
 
-The integral factorizes. With per-age transmission ``T_a(λ)`` independent of the
-SFH,
+The integral factorizes over stellar *populations*. A node :math:`(m, a)`
+holds the fraction :math:`y_a` of its formed mass in the young population
+(birth cloud + diffuse screen) and :math:`1 - y_a` in the old one (diffuse
+screen only); the absorbed energy is linear in the populations, so with
+transmissions :math:`T_p(\lambda)` independent of the SFH,
 
 .. math::
 
     L_{\rm abs}^{\star} = M_\star \, L_\odot \sum_{m,a} w_{m,a}
-        \left[ B_{m,a} - G_{m,a}(\tau_{\rm bc}, \tau_{\rm diff}) \right]
+        \sum_{p} y_{a,p} \left[ B_{m,a} - G^{p}_{m,a}(\tau_{\rm bc}, \tau_{\rm diff}) \right]
 
-with
+(:math:`y_{a,{\rm young}} = y_a`, :math:`y_{a,{\rm old}} = 1 - y_a`) with
 
 .. math::
 
     B_{m,a}      &= \int \mathrm{SSP}_{m,a}(\lambda)\, d\nu \\
-    G_{m,a}(\boldsymbol\tau) &= \int \mathrm{SSP}_{m,a}(\lambda)\,
-        T_a(\lambda;\boldsymbol\tau)\, d\nu
+    G^{p}_{m,a}(\boldsymbol\tau) &= \int \mathrm{SSP}_{m,a}(\lambda)\,
+        T_p(\lambda;\boldsymbol\tau)\, d\nu
 
 where :math:`w_{m,a}` are the runtime DSPS joint (metallicity, age) weights and
 :math:`M_\star L_\odot` the runtime mass scaling. ``B`` and ``G`` depend only on
 the fixed SSP grid, the (fixed-shape) attenuation curves, and the optical depths
-:math:`(\tau_{\rm bc}, \tau_{\rm diff})`. They are precomputed once on a small
+:math:`(\tau_{\rm bc}, \tau_{\rm diff})`: the node's age is not baked in, only
+combined at runtime through :math:`y_a`. They are precomputed once on a small
 :math:`(\tau_{\rm bc}, \tau_{\rm diff})` grid; at runtime ``G`` is bilinearly
 interpolated and contracted with the weights: no full-wavelength cube.
 
@@ -47,8 +51,8 @@ contract is pinned by ``tests/contract/test_energy_balance_lut.py``. Both
 through :func:`tengri.components.lyc.edge_trapezoid` rather than a plain
 ``jnp.trapezoid``, so the SSP grid cell straddling the edge gets the SAME
 step-model rectangle split the exact path applies (one Lyman edge, see that
-module's docstring); the per-node ``mask_nonlyc``/``weight_a0``/``weight_a1``
-region weighting below is unchanged, only the final reduction is edge-aware.
+module's docstring); the per-population Lyman-continuum region weights
+below are applied before the edge-aware reduction.
 """
 
 from __future__ import annotations
@@ -59,7 +63,6 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
-from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
 
 __all__ = [
@@ -74,14 +77,22 @@ __all__ = [
 class EnergyBalanceLUT(NamedTuple):
     """Precomputed bolometric absorption LUT for the stellar energy balance.
 
+    The integral is linear in the stellar populations an SSP node holds, so the
+    table keeps one family per POPULATION and the runtime mixes them with the
+    node's young fraction (``y`` from the stellar component's
+    ``age_boundary_younger_fraction``): nothing about the node's age is baked
+    in.  The young population sees the birth cloud and the diffuse ISM, the old
+    one the diffuse ISM only.
+
     Attributes
     ----------
     B : ndarray, shape (n_met, n_age)
-        Intrinsic bolometric SSP luminosity per unit mass, ``∫ SSP dν`` (signed,
-        masked to the non-ionizing side of LYMAN_LIMIT_AA). [erg/s/Hz · Hz per Lsun-flux unit]
+        Intrinsic bolometric SSP luminosity per unit mass, ``∫ SSP dν`` of the
+        YOUNG population (signed, masked to the non-ionizing side of
+        LYMAN_LIMIT_AA). [erg/s/Hz · Hz per Lsun-flux unit]
     G : ndarray, shape (n_met, n_age, n_tau_bc, n_tau_diff)
-        Attenuated bolometric SSP luminosity ``∫ SSP·T_a dν`` on the optical-depth
-        grid.
+        Attenuated bolometric SSP luminosity ``∫ SSP·T_young dν`` on the
+        optical-depth grid.
     tau_bc_grid : ndarray, shape (n_tau_bc,)
         Birth-cloud optical-depth grid nodes.
     tau_diff_grid : ndarray, shape (n_tau_diff,)
@@ -91,13 +102,15 @@ class EnergyBalanceLUT(NamedTuple):
         ``B``/``G``: the stellar absorbed integral is affine in the live
         nebular escape fraction, ``A(fesc) = A_0 + fesc * A_1``, when
         ``lyc_in_energy_balance=True`` unmasks the Lyman continuum. ``B``/``G`` above
-        are then the fesc-INDEPENDENT ``A_0`` family (non-LyC everywhere, plus
-        the fesc=0 remainder of the LyC region); ``B_fesc``/``G_fesc`` are the
-        ``A_1`` coefficient (the young/birth-cloud-weighted, or -- under
-        ``lyc_reprocessed_by='all'`` -- unweighted, LyC-only contribution). ``None``
-        when the model never needs fesc-exactness (single-component dust,
-        ``lyc_in_energy_balance=False``, or no live photoionized nebular component):
-        ``lut_l_absorbed_stellar_log10`` then behaves exactly as before.
+        are then the fesc-INDEPENDENT ``A_0`` family; ``B_fesc``/``G_fesc`` are the
+        ``A_1`` coefficient. ``None`` when the model never needs fesc-exactness
+        (single-component dust, ``lyc_in_energy_balance=False``, or no live
+        photoionized nebular component).
+    B_old, G_old, B_fesc_old, G_fesc_old : ndarray or None
+        The same families for the OLD population (diffuse ISM only; the gas
+        gate does not act on it unless ``lyc_reprocessed_by='all'``).  ``None``
+        on a single-population table (single-screen dust), where the young
+        family is the whole answer.
     """
 
     B: jnp.ndarray
@@ -106,18 +119,19 @@ class EnergyBalanceLUT(NamedTuple):
     tau_diff_grid: jnp.ndarray
     B_fesc: jnp.ndarray | None = None
     G_fesc: jnp.ndarray | None = None
+    B_old: jnp.ndarray | None = None
+    G_old: jnp.ndarray | None = None
+    B_fesc_old: jnp.ndarray | None = None
+    G_fesc_old: jnp.ndarray | None = None
 
 
 def build_energy_balance_lut(
     ssp_flux: jnp.ndarray,
     ssp_wave: jnp.ndarray,
-    ssp_ages_yr: jnp.ndarray,
     *,
     law_bc: str,
     law_diff: str,
     f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
-    t_birth_yr: float = 1e7,
-    transition_width_dex: float = 0.3,
     bc_params: dict | None = None,
     diff_params: dict | None = None,
     lyman_cutoff_aa: float = 0.0,
@@ -127,12 +141,15 @@ def build_energy_balance_lut(
     fesc_exact: bool = False,
     lyc_reprocessed_by: str = "young",
     lyc_escape_geometry: str = "screened",
+    single_population: bool = False,
 ) -> EnergyBalanceLUT:
-    r"""Precompute ``B`` and ``G`` for the two-component energy balance.
+    r"""Precompute the young and old population families of the energy balance.
 
-    The transmission ``T_a(λ)`` is built with the *same*
-    :func:`two_component_dust` the runtime path uses, so the LUT reproduces the
-    exact spectral integral at every grid node.
+    The transmissions are built with the *same*
+    :func:`two_component_interval_transmission` the runtime path uses, so the
+    LUT reproduces the exact spectral integral at every grid node.  Nothing
+    depends on the node's age: the runtime mixes the two populations with the
+    node's young fraction.
 
     Parameters
     ----------
@@ -140,13 +157,10 @@ def build_energy_balance_lut(
         SSP specific luminosity per unit mass [Lsun/Hz/Msun].
     ssp_wave : ndarray, shape (n_wave,)
         Rest-frame SSP wavelength grid [Å], ascending.
-    ssp_ages_yr : ndarray, shape (n_age,)
-        SSP age axis [yr].
     law_bc, law_diff : str
         Attenuation-law registry keys (fixed shape).
-    f_obscuration, t_birth_yr, transition_width_dex, bc_params, diff_params,
-    lyman_cutoff_aa
-        Passed verbatim to :func:`two_component_dust` for node-exact agreement.
+    f_obscuration, bc_params, diff_params, lyman_cutoff_aa
+        Passed verbatim to :func:`two_component_interval_transmission`.
     lyc_in_energy_balance : bool, optional
         FSPS-parity toggle (#961): when True, the LyC (ionizing side of LYMAN_LIMIT_AA) is kept in
         the absorbed-luminosity integrand (all absorbed energy heats dust)
@@ -158,209 +172,115 @@ def build_energy_balance_lut(
         Also build the ``B_fesc``/``G_fesc`` family (#2539 item 1): the
         stellar absorbed integral's fesc-linear coefficient, so
         :func:`lut_l_absorbed_stellar_log10` can be exact in a live nebular
-        escape fraction instead of declining the LUT outright. Only
-        meaningful when ``lyc_in_energy_balance=True`` (otherwise the LyC region is
-        masked out of the integral regardless of fesc, and ``B``/``G`` alone
-        are already exact); ignored otherwise.
+        escape fraction. Only meaningful when ``lyc_in_energy_balance=True``
+        (otherwise the LyC region is masked out regardless of fesc).
     lyc_reprocessed_by : str, optional
-        Mirrors ``DustSEDComponent.config.lyc_reprocessed_by`` (#961/#2539): when
-        ``'all'``, ALL stellar ages route their LyC through the gas uniformly (no
-        young/old split), so the fesc-linear ``A_1`` term is the UNWEIGHTED
-        LyC contribution of every age, and ``A_0`` excludes the LyC region
-        entirely. When ``'young'`` (default), only the young/birth-cloud
-        population (``t_birth_yr``/``transition_width_dex``-weighted) is
-        credited, matching ``two_component.py``'s
-        ``lyc_factor = 1 - y_age*(1 - fesc)``.
+        Mirrors ``DustSEDComponent.config.lyc_reprocessed_by``: ``'all'``
+        routes every population's LyC through the gas, ``'young'`` only the
+        young population's.
     lyc_escape_geometry : str, optional
-        Mirrors ``DustSEDComponent.config.lyc_escape_geometry`` (#2529).
-        ``'screened'`` (default): unchanged, falls through to the
-        ``fesc_exact`` family above (or neither). ``'birth_cloud_holes'`` /
-        ``'clear'``: builds a SEPARATE ``B``/``G`` (A_0) and ``B_fesc``/
-        ``G_fesc`` (A_1) family from
-        :func:`tengri.components.lyc.escape_geometry_transmission`'s own
-        affine-in-``fesc`` construction, active across the WHOLE spectrum
-        (not just the Lyman continuum the ``fesc_exact`` family above
-        targets -- a hole bypasses the birth-cloud screen at every
-        wavelength). Mutually exclusive with ``fesc_exact``'s family: a
-        non-``'screened'`` geometry is refused together with
-        ``lyc_reprocessed_by='all'`` upstream (parameters/groups.py), so
-        this branch only ever runs with ``lyc_reprocessed_by='young'``.
+        Mirrors ``DustSEDComponent.config.lyc_escape_geometry`` (#2529):
+        ``'birth_cloud_holes'`` / ``'clear'`` build the affine-in-fesc family
+        of :func:`tengri.components.lyc.hole_young_transmission` across the
+        whole spectrum (a hole bypasses the birth-cloud screen at every
+        wavelength); refused with ``lyc_reprocessed_by='all'`` upstream.
+    single_population : bool, optional
+        Build the young family only (single-screen dust: no birth cloud, so
+        young and old transmissions coincide at ``tau_bc = 0``).
 
     Returns
     -------
     EnergyBalanceLUT
     """
-    mask_nonlyc = ~ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)
-    bc_params = bc_params or {}
-    diff_params = diff_params or {}
+    from tengri.components.dust._apply import two_component_interval_transmission
 
-    def g_at(sspm_in, tb, td):
-        transmission = two_component_dust(
-            wavelength=ssp_wave,
-            age_grid=ssp_ages_yr,
-            tau_v1=jnp.asarray(tb),
-            tau_v2=jnp.asarray(td),
+    ion = ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA).astype(ssp_flux.dtype)
+    mask = jnp.ones_like(ion) if lyc_in_energy_balance else 1.0 - ion
+    bc_params = {k: jnp.asarray(v) for k, v in (bc_params or {}).items()}
+    diff_params = {k: jnp.asarray(v) for k, v in (diff_params or {}).items()}
+    f_obs = jnp.asarray(f_obscuration)
+    geometry = lyc_escape_geometry != "screened"
+    has_fesc = geometry or (fesc_exact and lyc_in_energy_balance)
+    gate_all = lyc_reprocessed_by == "all"
+
+    def transmissions(tb, td):
+        kw = dict(
             law_bc=law_bc,
             law_diff=law_diff,
-            f_obscuration=jnp.asarray(f_obscuration),
-            t_birth=t_birth_yr,
-            transition_width=transition_width_dex,
-            bc_params={k: jnp.asarray(v) for k, v in bc_params.items()},
-            diff_params={k: jnp.asarray(v) for k, v in diff_params.items()},
+            bc_params=bc_params,
+            diff_params=diff_params,
             lyman_cutoff_aa=lyman_cutoff_aa,
-        )  # (n_age, n_wave)
-        integrand = sspm_in * transmission[None, :, :]  # (n_met, n_age, n_wave)
-        return edge_trapezoid(
-            integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1
-        )  # (n_met, n_age)
-
-    # Build-time Python loop over the (small) optical-depth grid. Eagerly,
-    # the 576-node loop spends its time in per-op Python dispatch inside
-    # the attenuation law, not math: jit once and reuse. The SSP cube is
-    # threaded as an argument so it enters the graph as a runtime input,
-    # not a constant to fold.
-    g_at_compiled = jax.jit(g_at)
-
-    def _build_g(sspm_in):
-        return jnp.stack(
-            [
-                jnp.stack([g_at_compiled(sspm_in, tb, td) for td in tau_diff_grid], axis=-1)
-                for tb in tau_bc_grid
-            ],
-            axis=-2,
-        )  # (n_met, n_age, n_tau_bc, n_tau_diff)
-
-    if lyc_escape_geometry != "screened":
-        # #2529: escape_geometry_transmission's own construction,
-        # (1 - fesc)*screened + fesc*hole_contrib, is affine in fesc at
-        # EVERY wavelength (not just the Lyman continuum the fesc_exact
-        # family below targets -- a hole bypasses the birth-cloud screen at
-        # every wavelength, continuum included). Reusing that affine split
-        # algebraically: writing gate(age,λ) = 1 - y_age(age)*ionizing_mask(λ)
-        # (the SAME per-age, per-wavelength weight the #2539-item-1
-        # ``weight_a0`` below uses, restated so it applies across the whole
-        # grid, not only inside the Lyman continuum where ``weight_a0``'s own
-        # outer ``mask_nonlyc`` already pins it to 1 anyway):
-        #
-        #   intrinsic_gate = gate + fesc*(1 - gate)
-        #   T_observed      = f_obs + (1-f_obs)*[gate*T_screened_raw
-        #                                         + (1-gate)*fesc*T_hole_raw]
-        #
-        # so B / G (A_0, this fesc's coefficient) and B_fesc / G_fesc (A_1)
-        # are, per (met, age):
-        #
-        #   B       = sum_λ SSP * gate * mask              (edge-aware)
-        #   B_fesc  = sum_λ SSP * (1 - gate) * mask
-        #   G       = sum_λ SSP * gate * mask * T_screened_wrapped
-        #              + f_obs * B_fesc
-        #           = g_at(B's own SSP*gate*mask, tb, td) + f_obs * B_fesc
-        #   G_fesc  = sum_λ SSP * mask * T_hole_wrapped  -  G
-        #
-        # (the last identity is an algebraic simplification, not a separate
-        # derivation: expand both sides in terms of the un-wrapped raw
-        # curves and the f_obs + (1-f_obs)*(...) affine wrap and they
-        # collapse to the same expression -- see #2529 PR description for
-        # the full expansion). Mutually exclusive with the fesc_exact family
-        # below: a non-'screened' geometry is refused together with
-        # lyc_reprocessed_by='all' upstream (parameters/groups.py /
-        # parameters.py), so this branch only ever runs with
-        # lyc_reprocessed_by='young'.
-        from tengri.components.dust.two_component import _young_indicator
-
-        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
-        gate = 1.0 - y_age[:, None] * ionizing_mask(ssp_wave, edge_aa=LYMAN_LIMIT_AA)[None, :]
-        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
-        mask_f = mask.astype(gate.dtype)[None, :]  # (1, n_wave)
-
-        sspm0 = ssp_flux * (gate * mask_f)[None, :, :]  # (n_met, n_age, n_wave)
-        sspm1 = ssp_flux * ((1.0 - gate) * mask_f)[None, :, :]
-
-        B = edge_trapezoid(sspm0, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-        B_fesc = edge_trapezoid(sspm1, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-
-        f_obs = jnp.asarray(f_obscuration)
-        G = _build_g(sspm0) + f_obs * B_fesc[:, :, None, None]
-
-        def g_hole_at(tb, td):
-            # T_hole_contrib has no tau_bc dependence (a hole bypasses the
-            # birth-cloud screen specifically); tb is accepted only so the
-            # same nested tau_bc_grid x tau_diff_grid loop below can call
-            # this exactly like g_at_compiled.
-            del tb
-            t_diff_raw_rows = two_component_dust(
-                wavelength=ssp_wave,
-                age_grid=ssp_ages_yr,
-                tau_v1=0.0,  # nulls the birth-cloud term regardless of weight
-                tau_v2=jnp.asarray(td),
-                law_bc=law_bc,
-                law_diff=law_diff,
-                f_obscuration=0.0,
-                t_birth=t_birth_yr,
-                transition_width=transition_width_dex,
-                diff_params={k: jnp.asarray(v) for k, v in diff_params.items()},
-                lyman_cutoff_aa=lyman_cutoff_aa,
-            )  # (n_age, n_wave); every row identical (tau_v1=0 above)
-            t_hole_rows = (
-                t_diff_raw_rows
-                if lyc_escape_geometry == "birth_cloud_holes"
-                else jnp.ones_like(t_diff_raw_rows)
-            )
-            y_age_col = y_age[:, None]
-            t_hole_contrib = y_age_col * t_hole_rows + (1.0 - y_age_col) * t_diff_raw_rows
-            t_hole_wrapped = f_obs + (1.0 - f_obs) * t_hole_contrib
-            integrand = ssp_flux * (mask_f * t_hole_wrapped)[None, :, :]
-            return edge_trapezoid(integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-
-        g_hole_at_compiled = jax.jit(g_hole_at)
-        G_hole_full = jnp.stack(
-            [
-                jnp.stack([g_hole_at_compiled(tb, td) for td in tau_diff_grid], axis=-1)
-                for tb in tau_bc_grid
-            ],
-            axis=-2,
         )
-        G_fesc = G_hole_full - G
-    elif fesc_exact and lyc_in_energy_balance:
-        # A(fesc) = A_0 + fesc * A_1 (#2539 item 1): lyc_factor(age) =
-        # 1 - y_age*(1-fesc) is affine in fesc, so the per-(met,age,wave) SSP
-        # weight in the LyC region splits into a fesc-independent piece
-        # ((1-y_age), or 0 under lyc_reprocessed_by='all') and a fesc-linear
-        # piece (y_age, or 1 under lyc_reprocessed_by='all'). Outside the LyC
-        # region the weight is always 1 for A_0 and 0 for A_1 -- unaffected by
-        # fesc, matching the runtime exact integral (two_component.py §2a/§3).
-        from tengri.components.dust.two_component import _young_indicator
+        wrapped = two_component_interval_transmission(
+            ssp_wave, jnp.asarray(tb), jnp.asarray(td), f_obscuration=f_obs, **kw
+        )
+        raw = two_component_interval_transmission(
+            ssp_wave, jnp.asarray(tb), jnp.asarray(td), f_obscuration=0.0, **kw
+        )
+        return wrapped, raw
 
-        y_age = _young_indicator(ssp_ages_yr, t_birth_yr, transition_width_dex)  # (n_age,)
-        ones_age = jnp.ones_like(y_age)[:, None]
-        if lyc_reprocessed_by == "all":
-            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, 0.0)
-            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, ones_age)
-        else:
-            weight_a0 = jnp.where(mask_nonlyc[None, :], ones_age, (1.0 - y_age)[:, None])
-            weight_a1 = jnp.where(mask_nonlyc[None, :], 0.0, y_age[:, None])
-        sspm = ssp_flux * weight_a0[None, :, :]  # (n_met, n_age, n_wave)
-        sspm_fesc = ssp_flux * weight_a1[None, :, :]
+    def observed(population, tb, td):
+        """Per-wavelength observed weights ``(obs_0, obs_1)`` of one population at (tb, td)."""
+        wrapped, raw = transmissions(tb, td)
+        t_pop = wrapped[population]
+        if not has_fesc:
+            return t_pop, None
+        if geometry and population == 0:
+            t_hole = raw[1] if lyc_escape_geometry == "birth_cloud_holes" else jnp.ones_like(ion)
+            t_cov = raw[0] * (1.0 - ion)
+            obs0 = f_obs + (1.0 - f_obs) * t_cov
+            obs1 = (1.0 - f_obs) * (t_hole - t_cov)
+            return obs0, obs1
+        if population == 1 and not gate_all:
+            return t_pop, jnp.zeros_like(t_pop)
+        # LyC gate of the gas, A(f) = A_0 + f A_1: obs = T (1 - ion + f ion).
+        return t_pop * (1.0 - ion), t_pop * ion
 
-        # side="all": each array (sspm / sspm_fesc) already carries its own
-        # per-region weight (mask_nonlyc / weight_a0 / weight_a1 above), so
-        # the edge-aware reduction just needs to sum everything it holds --
-        # the bracket cell straddling LYMAN_LIMIT_AA is then split into its
-        # two rectangles using whatever weight is actually present on each
-        # side (zero on a masked-out ionizing node), which is bit-identical
-        # to selecting "nonionizing"/"ionizing" explicitly when one side is
-        # zeroed.
-        B = edge_trapezoid(sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-        G = _build_g(sspm)
-        B_fesc = edge_trapezoid(sspm_fesc, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-        G_fesc = _build_g(sspm_fesc)
+    def intrinsic(population):
+        if not has_fesc:
+            return jnp.ones_like(ion), None
+        if geometry and population == 0:
+            return 1.0 - ion, ion
+        if population == 1 and not gate_all:
+            return jnp.ones_like(ion), jnp.zeros_like(ion)
+        return 1.0 - ion, ion
+
+    def integrate(ssp, weight):
+        integrand = ssp * (mask * weight)[None, None, :]
+        return edge_trapezoid(integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+
+    def family(population):
+        i0, i1 = intrinsic(population)
+        b0 = integrate(ssp_flux, i0)
+        b1 = None if i1 is None else integrate(ssp_flux, i1)
+
+        # Build-time Python loop over the (small) optical-depth grid. Eagerly,
+        # the node loop spends its time in per-op Python dispatch inside the
+        # attenuation law, not math: jit once and reuse. The SSP cube is threaded
+        # as an argument so it enters the graph as a runtime input, not a
+        # constant to fold.
+        def g_at(ssp, tb, td):
+            o0, o1 = observed(population, tb, td)
+            g0 = integrate(ssp, o0)
+            return g0 if o1 is None else jnp.stack([g0, integrate(ssp, o1)])
+
+        g_jit = jax.jit(g_at)
+        rows = jnp.stack(
+            [
+                jnp.stack([g_jit(ssp_flux, tb, td) for td in tau_diff_grid], axis=-1)
+                for tb in tau_bc_grid
+            ],
+            axis=-2,
+        )  # (n_met, n_age, ntb, ntd), or (2, n_met, n_age, ntb, ntd) with an fesc family
+        if b1 is None:
+            return b0, rows, None, None
+        return b0, rows[0], b1, rows[1]
+
+    B, G, B_fesc, G_fesc = family(0)
+    if single_population:
+        B_old = G_old = B_fesc_old = G_fesc_old = None
     else:
-        mask = jnp.ones_like(ssp_wave, dtype=bool) if lyc_in_energy_balance else mask_nonlyc
-        sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
-        B = edge_trapezoid(sspm, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
-        G = _build_g(sspm)
-        B_fesc = None
-        G_fesc = None
-
+        B_old, G_old, B_fesc_old, G_fesc_old = family(1)
     return EnergyBalanceLUT(
         B=B,
         G=G,
@@ -368,6 +288,10 @@ def build_energy_balance_lut(
         tau_diff_grid=jnp.asarray(tau_diff_grid),
         B_fesc=B_fesc,
         G_fesc=G_fesc,
+        B_old=B_old,
+        G_old=G_old,
+        B_fesc_old=B_fesc_old,
+        G_fesc_old=G_fesc_old,
     )
 
 
@@ -454,15 +378,54 @@ def _contract_bg(
     return jnp.sum(joint_weights * (B - g_interp))
 
 
+def _population_contract(
+    B,
+    G,
+    B_old,
+    G_old,
+    lut: EnergyBalanceLUT,
+    joint_weights: jnp.ndarray,
+    younger_fraction: jnp.ndarray | None,
+    tau_bc: jnp.ndarray,
+    tau_diff: jnp.ndarray,
+) -> jnp.ndarray:
+    """Per-unit-mass signed absorbed luminosity of one family, young and old mixed.
+
+    Each node holds the fraction ``y`` of its mass in the young population and
+    ``1 - y`` in the old one; the absorbed energy is linear in the populations,
+    so the weights ``w * y`` and ``w * (1 - y)`` contract the two families.
+    A single-population table (no old family) contracts the young one alone.
+    """
+    if G_old is None or younger_fraction is None:
+        return _contract_bg(
+            B, G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights, tau_bc, tau_diff
+        )
+    y = jnp.asarray(younger_fraction)[None, :]
+    young = _contract_bg(
+        B, G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights * y, tau_bc, tau_diff
+    )
+    old = _contract_bg(
+        B_old,
+        G_old,
+        lut.tau_bc_grid,
+        lut.tau_diff_grid,
+        joint_weights * (1.0 - y),
+        tau_bc,
+        tau_diff,
+    )
+    return young + old
+
+
 def _lut_contract(
     lut: EnergyBalanceLUT,
     joint_weights: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    younger_fraction: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Per-unit-mass signed absorbed luminosity of the ``A_0`` (or the only) family."""
-    return _contract_bg(
-        lut.B, lut.G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights, tau_bc, tau_diff
+    return _population_contract(
+        lut.B, lut.G, lut.B_old, lut.G_old, lut, joint_weights, younger_fraction, tau_bc, tau_diff
     )
 
 
@@ -473,6 +436,7 @@ def lut_l_absorbed_stellar_log10(
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
     fesc: jnp.ndarray | None = None,
+    younger_fraction: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 magnitude and sign of the stellar absorbed luminosity.
 
@@ -506,6 +470,11 @@ def lut_l_absorbed_stellar_log10(
         overflow risk and no need for :func:`tengri.utils.scale.log10_add`.
         Ignored (exactly reproduces the pre-#2539-item-1 answer) when ``None``
         or when the LUT lacks the fesc family.
+    younger_fraction : ndarray, shape (n_age,), optional
+        Per-node formed-mass fraction younger than the birth-cloud lifetime
+        (row 0 of the stellar component's ``age_boundary_younger_fraction``).
+        Mixes the young and old population families of a two-population LUT;
+        ignored by a single-population one.
 
     Returns
     -------
@@ -535,14 +504,16 @@ def lut_l_absorbed_stellar_log10(
     """
     from tengri.utils.scale import _not_computable, log10_magnitude
 
-    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction)
     if fesc is not None and lut.B_fesc is not None and lut.G_fesc is not None:
-        contracted_fesc = _contract_bg(
+        contracted_fesc = _population_contract(
             lut.B_fesc,
             lut.G_fesc,
-            lut.tau_bc_grid,
-            lut.tau_diff_grid,
+            lut.B_fesc_old,
+            lut.G_fesc_old,
+            lut,
             joint_weights,
+            younger_fraction,
             tau_bc,
             tau_diff,
         )
@@ -559,6 +530,7 @@ def lut_l_absorbed_stellar(
     mass_scale: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    younger_fraction: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Signed stellar bolometric absorbed luminosity from the LUT.
 
@@ -577,6 +549,8 @@ def lut_l_absorbed_stellar(
         ``total_mass × L_sun`` scaling applied to the SSP luminosities.
     tau_bc, tau_diff : float
         Runtime optical depths.
+    younger_fraction : ndarray, shape (n_age,), optional
+        Per-node young fraction mixing the two population families.
 
     Returns
     -------
@@ -588,7 +562,7 @@ def lut_l_absorbed_stellar(
     ``mass_scale`` is ~1e43, so this product overflows float32. Use
     :func:`lut_l_absorbed_stellar_log10` on a pure-float32 path (#1206).
     """
-    return mass_scale * _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    return mass_scale * _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction)
 
 
 def nebular_grid_absorbed_log10(
@@ -597,6 +571,7 @@ def nebular_grid_absorbed_log10(
     tau_grids: tuple,
     tau_a: jnp.ndarray,
     tau_b: jnp.ndarray,
+    weights: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""Absorbed nebular luminosity from the per-Q_H grid: log10 magnitude and sign.
 
@@ -611,15 +586,21 @@ def nebular_grid_absorbed_log10(
 
     Parameters
     ----------
-    grid_abs : ndarray, shape (n_tau_a, n_tau_b)
+    grid_abs : ndarray, shape (n_tau_a, n_tau_b) or (K, n_tau_a, n_tau_b)
         Signed absorbed luminosity per unit Q_H at the nebular grid point,
         positively oriented (+1 for a net absorber) [erg/s per (photon/s)].
+        A leading channel axis holds one table per age interval's screen (the
+        absorbed energy is linear in the screen, so channels mix linearly with
+        ``weights``).
     log_nion : ndarray, shape ()
         :math:`\log_{10} Q_H` [dex re photon/s].
     tau_grids : tuple
         ``(tau_a_nodes, tau_b_nodes)``, each a uniform ascending sequence.
     tau_a, tau_b : ndarray, shape ()
         Optical depths of the evaluation point.
+    weights : ndarray, shape (K,), optional
+        Interval weights mixing the channels (the nebular screen's
+        ionizing-luminosity shares); required when ``grid_abs`` has channels.
 
     Returns
     -------
@@ -640,8 +621,18 @@ def nebular_grid_absorbed_log10(
     grid_b = jnp.asarray(tau_grids[1], dtype=grid_abs.dtype)
     ia, wa = _interp_bracket(grid_a, tau_a)
     ib, wb = _interp_bracket(grid_b, tau_b)
-    sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
-    per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
+    if grid_abs.ndim == 3:
+        if weights is None:
+            raise ValueError("nebular_grid_absorbed_log10: a channelled grid needs `weights`.")
+        k = grid_abs.shape[0]
+        sub = jax.lax.dynamic_slice(
+            grid_abs, (jnp.zeros((), jnp.int32), ia, ib), (k, wa.shape[0], wb.shape[0])
+        )
+        per_channel = jnp.einsum("a,kab,b->k", wa, sub, wb)
+        per_qh = jnp.dot(jnp.asarray(weights)[:k], per_channel)
+    else:
+        sub = jax.lax.dynamic_slice(grid_abs, (ia, ib), (wa.shape[0], wb.shape[0]))
+        per_qh = jnp.einsum("a,ab,b->", wa, sub, wb)
     magnitude = jnp.abs(per_qh)
     nonzero = magnitude > 0
     safe = jnp.where(nonzero, magnitude, 1.0)

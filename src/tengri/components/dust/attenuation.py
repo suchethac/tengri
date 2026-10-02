@@ -1810,14 +1810,13 @@ from tengri.components.dust._apply import (
     TWO_COMPONENT_OVERRIDE_KEYS as TWO_COMPONENT_OVERRIDE_KEYS,
     apply_lyman_cutoff as apply_lyman_cutoff,
     merge_neb_screen_live_overrides as merge_neb_screen_live_overrides,
-    precompute_dust_age_mask as precompute_dust_age_mask,
-    precompute_dust_age_weights as precompute_dust_age_weights,
     resolve_bc_diff_law_params as resolve_bc_diff_law_params,
     single_component_dust as single_component_dust,
     single_component_dust_fast as single_component_dust_fast,
     two_component_dust as two_component_dust,
     two_component_dust_fast as two_component_dust_fast,
     two_component_dust_separable as two_component_dust_separable,
+    two_component_interval_transmission as two_component_interval_transmission,
 )
 
 

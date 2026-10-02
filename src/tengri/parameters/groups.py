@@ -113,6 +113,8 @@ from tengri.config.exceptions import (
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters._dust_keys import (
+    DUST_TYPES_WITH_AGE_SPLIT,
+    DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
@@ -4240,17 +4242,68 @@ def _validate_lyc_in_energy_balance(value: object) -> bool:
     return value
 
 
-#: CAPABILITY set (#2529), not a type-name alias list: dust_attenuation
-#: 'type's that declare a birth-cloud screen distinct from the diffuse-ISM
-#: screen (independent tau_bc != tau_diff), the one thing a
-#: 'lyc_escape_geometry' hole needs to be IN. 'single_component' and 'wg00'
-#: attenuate with one screen and have no birth-cloud/diffuse split at all,
-#: so a hole-geometry key on either is refused (see the check in
-#: _translate_dust_attenuation) rather than silently ignored. #2650
-#: (age-binned N-screen attenuation) adds a second birth-cloud-screen type
-#: and extends this set; it does not teach a second dust_type branch to
-#: either the validator or tengri.components.lyc.escape_geometry_transmission.
-_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = frozenset({"two_component"})
+_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
+
+
+def _validate_t_birth_yr(value: object) -> float:
+    """Validate a ``dust_attenuation['t_birth_yr']`` value [yr].
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    float
+        The birth-cloud dispersal age [yr].
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a finite positive number.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"dust_attenuation['t_birth_yr'] must be a number [yr]; got {value!r}.")
+    out = float(value)
+    if not (0.0 < out < float("inf")):
+        raise ValueError(
+            f"dust_attenuation['t_birth_yr'] must be finite and > 0 yr; got {value!r}. "
+            f"(pcigale's separation_age is in Myr: 10 Myr is t_birth_yr=1e7.)"
+        )
+    return out
+
+
+def _validate_transition_width_dex(value: object) -> float:
+    """Validate a ``dust_attenuation['transition_width_dex']`` value [dex].
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    float
+        The dispersal width [dex]; ``0`` is the hard step.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a finite number >= 0.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"dust_attenuation['transition_width_dex'] must be a number [dex]; got {value!r}."
+        )
+    out = float(value)
+    if not (0.0 <= out < float("inf")):
+        raise ValueError(
+            f"dust_attenuation['transition_width_dex'] must be finite and >= 0 "
+            f"(0 is the hard step); got {value!r}."
+        )
+    return out
+
 
 #: Allowed values of the ``lyc_escape_geometry`` structural key (owner ruling
 #: #2529): whether the escaping fraction (``neb_fesc``, read via
@@ -4352,6 +4405,22 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
             f"dust_attenuation type."
         )
 
+    # The young/old split keys: ``t_birth_yr`` is the two-component birth-cloud
+    # lifetime; ``transition_width_dex`` is the dispersal width of every age
+    # edge (age_binned windows included). Refuse them on a type that has no
+    # age split rather than drop them silently.
+    if "t_birth_yr" in dust_atten_dict and dust_type != "two_component":
+        raise ValueError(
+            f"dust_attenuation 't_birth_yr' is the two_component birth-cloud lifetime "
+            f"(got type={dust_type!r}). age_binned takes its edges from each screen's "
+            f"'window_log_yr'; drop 't_birth_yr'."
+        )
+    if "transition_width_dex" in dust_atten_dict and dust_type not in DUST_TYPES_WITH_AGE_SPLIT:
+        raise ValueError(
+            f"dust_attenuation 'transition_width_dex' needs an age split (got "
+            f"type={dust_type!r}). Supported types: {sorted(DUST_TYPES_WITH_AGE_SPLIT)!r}."
+        )
+
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
     # WG00, and SEDModelComponents do not route through it yet).
@@ -4393,6 +4462,7 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # single_component-specific.
     if dust_type == "age_binned":
         _translate_age_binned(dust_atten_dict, result)
+        _translate_age_split_and_lyc_keys(dust_atten_dict, result)
         return
 
     # Reject nested dust_attenuation={'emission': ...}: emission is now a top-level group
@@ -4734,6 +4804,31 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     # wavelength so the forward model and compile_signature carry a single float.
     if dust_atten_dict.get("lyman_cutoff"):
         result["dust_lyman_cutoff_aa"] = 912.0
+
+    _translate_age_split_and_lyc_keys(dust_atten_dict, result)
+
+
+def _translate_age_split_and_lyc_keys(dust_atten_dict: dict, result: dict) -> None:
+    """Translate the young/old split keys and the ``lyc_`` family (one parse, every type).
+
+    ``t_birth_yr`` / ``transition_width_dex`` (the age split) and
+    ``lyc_reprocessed_by`` / ``lyc_in_energy_balance`` / ``lyc_escape_geometry``
+    are static structural settings read by every attenuator that has a
+    birth-cloud screen; this is their one parser.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict.
+    result : dict
+        Shared structural-kwargs accumulator; mutated in place.
+    """
+    if "t_birth_yr" in dust_atten_dict:
+        result["dust_t_birth_yr"] = _validate_t_birth_yr(dust_atten_dict["t_birth_yr"])
+    if "transition_width_dex" in dust_atten_dict:
+        result["dust_transition_width_dex"] = _validate_transition_width_dex(
+            dust_atten_dict["transition_width_dex"]
+        )
 
     # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) or only the
     # young/birth-cloud population (default; bagpipes). See DustSEDComponent.
@@ -5585,6 +5680,10 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # (birth-cloud-screen types) only -- see
             # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
             "lyc_escape_geometry",
+            # Young/old split: birth-cloud dispersal age [yr] (two_component) and
+            # the dispersal width [dex] of every age edge (0 = hard step). Static.
+            "t_birth_yr",
+            "transition_width_dex",
             # Per-source dust-screen choice (#2234 replacement):
             # nebular_screen / shock_screen / agn_screen. Derived from
             # screen_keys() in _dust_keys.py -- the single home of this list
@@ -7884,6 +7983,8 @@ def _resolve_value(
             "lyc_reprocessed_by",
             "lyc_in_energy_balance",
             "lyc_escape_geometry",
+            "t_birth_yr",
+            "transition_width_dex",
         }
         # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
         # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
@@ -8672,6 +8773,11 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
             group_output["lyc_in_energy_balance"] = True
+        # Round-trip the young/old split (non-default only).
+        if float(getattr(spec, "dust_t_birth_yr", 1e7)) != 1e7:
+            group_output["t_birth_yr"] = float(spec.dust_t_birth_yr)
+        if float(getattr(spec, "dust_transition_width_dex", 0.0)) != 0.0:
+            group_output["transition_width_dex"] = float(spec.dust_transition_width_dex)
         # Round-trip the #2529 escape geometry (non-default only).
         if str(getattr(spec, "dust_lyc_escape_geometry", "screened")) != "screened":
             group_output["lyc_escape_geometry"] = spec.dust_lyc_escape_geometry

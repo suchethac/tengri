@@ -74,10 +74,12 @@ from tengri.utils.scale import _not_computable, log10_magnitude
 __all__ = [
     "LYC_ESCAPE_GEOMETRIES",
     "LYMAN_LIMIT_AA",
+    "credited_log10_lyc",
     "edge_bracket_values",
     "edge_interp",
     "edge_trapezoid",
     "escape_geometry_transmission",
+    "hole_young_transmission",
     "ionizing_mask",
     "log10_age_sum_lyc",
     "log10_lyc_luminosity",
@@ -568,6 +570,41 @@ def lyc_shares(
 LYC_ESCAPE_GEOMETRIES: tuple[str, ...] = ("screened", "birth_cloud_holes", "clear")
 
 
+def hole_young_transmission(
+    T_covered: jnp.ndarray, T_hole: jnp.ndarray, f_esc: jnp.ndarray | float
+) -> jnp.ndarray:
+    r"""The young population's transmission with a covering-fraction hole (#2529).
+
+    .. math::
+
+        T_\mathrm{young} = (1 - f_\mathrm{esc})\,T_\mathrm{covered}
+            + f_\mathrm{esc}\,T_\mathrm{hole}
+
+    The one place the hole formula is written: the exact path, the energy
+    balance table and the photometry table all build it through this.
+
+    Parameters
+    ----------
+    T_covered : array_like
+        Raw transmission of the screened sightline [dimensionless, in [0, 1]].
+    T_hole : array_like
+        Raw transmission of the hole sightline [dimensionless, in [0, 1]].
+    f_esc : array_like or float
+        Escaping covering fraction ``neb_fesc`` [dimensionless, in [0, 1]].
+
+    Returns
+    -------
+    ndarray
+        Young-population transmission, broadcast shape of the inputs.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: pure arithmetic.
+    """
+    f_esc = jnp.asarray(f_esc)
+    return (1.0 - f_esc) * jnp.asarray(T_covered) + f_esc * jnp.asarray(T_hole)
+
+
 def escape_geometry_transmission(
     y_age: jnp.ndarray,
     T_bc: jnp.ndarray,
@@ -575,36 +612,32 @@ def escape_geometry_transmission(
     f_esc: jnp.ndarray | float,
     geometry: str,
 ) -> jnp.ndarray:
-    r"""Age-selective dust-screen transmission with a #2529 LyC escape geometry.
+    r"""Population-mixture dust transmission with a #2529 LyC escape geometry.
 
-    tengri's pre-#2529 young/old transmission is Charlot & Fall (2000)'s
-    sigmoid-weighted screen, :math:`T_\mathrm{bc}(\lambda)^{y(a)}\,
-    T_\mathrm{diff}(\lambda)` (``y(a)`` the birth-cloud weight,
-    ``tengri.components.dust.two_component._young_indicator``): every
-    photon of a given age sees the SAME combined optical depth, scaled
-    continuously by age. #2529 observed that this makes ``neb_fesc`` (the
-    nebular escape fraction already read off this transmission downstream)
-    unable to describe a literal hole in the birth cloud: a hole is a
-    covering-fraction split of the young population into two sub-beams with
-    DIFFERENT screens, not a continuous rescaling of one shared optical
-    depth.
-
-    This function adds that split as an explicit age- AND wavelength-
-    independent affine term in ``f_esc`` on top of the existing sigmoid
-    (never replacing it): a covering fraction ``f_esc`` of the young
-    population's light (at every wavelength, continuum and Lyman continuum
-    alike -- "a hole in a birth cloud is geometric, not wavelength
-    selective") bypasses the birth-cloud screen through a hole that still
-    crosses ``T_hole(\lambda)``; the complementary ``1 - f_esc`` stays on
-    the ordinary sigmoid-screened sightline:
+    Every SSP node holds a mixture of two stellar populations: the fraction
+    :math:`y(a)` of its formed mass younger than the birth-cloud lifetime
+    (:mod:`tengri.components.stellar.age_boundary`), seen through the birth
+    cloud *and* the diffuse ISM, and the rest, seen through the diffuse ISM
+    only.  Without a hole the node's transmission is the mixture
 
     .. math::
 
-        T_\mathrm{hole\_contrib}(\lambda, a) &= y(a)\,T_\mathrm{hole}(\lambda)
-            + \bigl(1 - y(a)\bigr)\,T_\mathrm{diff}(\lambda) \\
-        T(\lambda, a) &= (1 - f_\mathrm{esc})\,T_\mathrm{bc}(\lambda)^{y(a)}
-            \,T_\mathrm{diff}(\lambda)
-            + f_\mathrm{esc}\,T_\mathrm{hole\_contrib}(\lambda, a)
+        T(\lambda, a) = y(a)\,T_\mathrm{bc}(\lambda)\,T_\mathrm{diff}(\lambda)
+            + [1 - y(a)]\,T_\mathrm{diff}(\lambda).
+
+    #2529 observed that a hole in a birth cloud is a covering-fraction split
+    of the *young population* into two sub-beams with DIFFERENT screens: a
+    covering fraction ``f_esc`` of the young population's light (at every
+    wavelength, continuum and Lyman continuum alike -- "a hole in a birth
+    cloud is geometric, not wavelength selective") bypasses the birth-cloud
+    screen through a hole that still crosses :math:`T_\mathrm{hole}(\lambda)`;
+    the complementary :math:`1 - f_\mathrm{esc}` stays on the screened
+    sightline:
+
+    .. math::
+
+        T(\lambda, a) = y(a)\bigl[(1 - f_\mathrm{esc})\,T_\mathrm{bc}\,T_\mathrm{diff}
+            + f_\mathrm{esc}\,T_\mathrm{hole}\bigr] + [1 - y(a)]\,T_\mathrm{diff}
 
     with :math:`T_\mathrm{hole} = T_\mathrm{diff}` for ``'birth_cloud_holes'``
     (FSPS ``frac_obrun``-like: the hole still crosses the general diffuse
@@ -617,22 +650,18 @@ def escape_geometry_transmission(
     ``T_bc``/``T_diff`` are the RAW, un-weighted per-screen transmissions
     (``exp(-tau_v1 k_bc)`` / ``exp(-tau_v2 k_diff)``, no ``f_obscuration``
     floor): the caller applies the shared ``f_obscuration`` affine wrap
-    (``f_obs + (1 - f_obs) * (...)``) to this function's OUTPUT once, the
-    same way ``tengri.components.dust._apply.two_component_dust`` wraps
-    its own sigmoid term, so a nonzero obscuration floor is not
-    double-applied to the escaping sub-beam specifically.
+    (``f_obs + (1 - f_obs) * (...)``) to this function's OUTPUT once, so a
+    nonzero obscuration floor is not double-applied to the escaping sub-beam
+    specifically.
 
     This function returns the DUST-SCREEN-ONLY transmission (what the
     energy-balance integral attenuates). It does not include the separate
     Lyman-continuum nebular-reprocessing gate (``neb_fesc``'s OTHER role,
-    already handled by :func:`lyc_shares` and the per-age ``lyc_factor`` in
-    ``DustSEDComponent.apply``): the covered (``1 - f_esc``) sub-beam's
-    ionizing photons still reach the HII gas and are reprocessed there, so a
-    caller building the OBSERVED stellar continuum must additionally zero
-    that sub-beam's contribution below :data:`LYMAN_LIMIT_AA` -- see the
-    ``apply`` docstring (§2a) for the exact gate, which this function
-    deliberately leaves to the caller (it has no wavelength array to test
-    against the edge).
+    already handled by :func:`lyc_shares`): the covered (``1 - f_esc``)
+    sub-beam's ionizing photons still reach the HII gas and are reprocessed
+    there, so a caller building the OBSERVED stellar continuum passes
+    ``T_bc * (1 - ionizing_mask(wave))`` as ``T_bc`` (the gate lives on the
+    covered young sub-beam only; see ``DustSEDComponent.apply`` §2a).
 
     Parameters
     ----------
@@ -656,10 +685,7 @@ def escape_geometry_transmission(
         ``'birth_cloud_holes'`` or ``'clear'``. Static Python string, never
         traced (resolved once at build time); ``'screened'`` is a caller
         error here -- the caller should skip this function entirely for
-        ``'screened'`` and reuse its existing bit-identical sigmoid call
-        instead (this function does not reproduce that call bit-for-bit,
-        only to machine precision, so routing the default through it would
-        silently perturb the pre-#2529 regression baseline).
+        ``'screened'`` and reuse its plain mixture call instead.
 
     Returns
     -------
@@ -678,25 +704,23 @@ def escape_geometry_transmission(
     Python string.
 
     **Gradient-safe**: yes, with respect to ``y_age``, ``T_bc``, ``T_diff``,
-    ``f_esc`` -- pure ``jnp`` arithmetic (one ``**`` with a traced base in
-    ``[0, 1]`` and a traced exponent in ``[0, 1]``, both well-behaved) and no
-    branching on traced values.
+    ``f_esc`` -- pure ``jnp`` arithmetic, no branching on traced values.
 
     Identities (owner ruling #2529, pinned by
     ``tests/regression/bug/test_2529_lyc_escape_geometry.py``):
 
-    - ``f_esc = 0``: :math:`T = T_\mathrm{bc}^{y(a)}\,T_\mathrm{diff}`
-      regardless of ``geometry`` -- construction-exact (the ``T_hole``
-      term is multiplied by ``f_esc = 0``), so ``'birth_cloud_holes'`` and
-      ``'clear'`` agree with each other AND with the (bypassed, bit-exact)
-      ``'screened'`` sigmoid to machine precision.
+    - ``f_esc = 0``: :math:`T = y(a)\,T_\mathrm{bc}\,T_\mathrm{diff} +
+      [1 - y(a)]\,T_\mathrm{diff}` regardless of ``geometry`` --
+      construction-exact (the ``T_hole`` term is multiplied by
+      ``f_esc = 0``), so ``'birth_cloud_holes'`` and ``'clear'`` agree with
+      each other AND with the plain ``'screened'`` mixture.
     - ``f_esc = 1``, ``'clear'``: :math:`T = y(a) + (1 - y(a))\,
       T_\mathrm{diff}(\lambda)`; at :math:`y(a) = 1`, :math:`T = 1`
       (unattenuated).
     - ``f_esc = 1``, ``'birth_cloud_holes'``: :math:`T = T_\mathrm{diff}
-      (\lambda)` for ANY :math:`y(a)` (``T_hole = T_diff`` cancels the
-      ``y(a)`` mix exactly), matching FSPS ``frac_obrun``: an OB star
-      outside its birth cloud sees only the diffuse screen.
+      (\lambda)` for ANY :math:`y(a)` (``T_hole = T_diff`` makes both
+      populations see the diffuse screen), matching FSPS ``frac_obrun``: an
+      OB star outside its birth cloud sees only the diffuse screen.
     - ``y(a) = 0``: :math:`T = T_\mathrm{diff}(\lambda)` to machine
       precision for any ``f_esc``/``geometry`` -- old stars have no birth
       cloud.
@@ -733,7 +757,7 @@ def escape_geometry_transmission(
 
     tengri implements the same two reference models (credited, not ported)
     as the ``'birth_cloud_holes'`` / ``'clear'`` geometries respectively,
-    unified with its own sigmoid age-transition and the existing
+    unified with its own young/old population mixture and the existing
     ``neb_fesc``/:func:`lyc_shares` budget.
 
     Examples
@@ -750,7 +774,7 @@ def escape_geometry_transmission(
         raise ValueError(
             f"escape_geometry_transmission: geometry must be one of "
             f"('birth_cloud_holes', 'clear') -- 'screened' is handled by the "
-            f"caller's existing exact sigmoid call, never routed through this "
+            f"caller's plain mixture call, never routed through this "
             f"function; got {geometry!r}."
         )
     y_age = jnp.asarray(y_age)
@@ -758,9 +782,8 @@ def escape_geometry_transmission(
     T_diff = jnp.asarray(T_diff)
     f_esc = jnp.asarray(f_esc)
     T_hole = T_diff if geometry == "birth_cloud_holes" else jnp.ones_like(T_diff)
-    t_screened = jnp.power(T_bc, y_age) * T_diff
-    t_hole_contrib = y_age * T_hole + (1.0 - y_age) * T_diff
-    return (1.0 - f_esc) * t_screened + f_esc * t_hole_contrib
+    t_young = hole_young_transmission(T_bc * T_diff, T_hole, f_esc)
+    return y_age * t_young + (1.0 - y_age) * T_diff
 
 
 def log10_age_sum_lyc(log_L_lyc_age, weights=None):
@@ -850,3 +873,51 @@ def log10_age_sum_lyc(log_L_lyc_age, weights=None):
     result = jnp.where(any_corrupt, jnp.inf, log_sum)
 
     return result
+
+
+def credited_log10_lyc(derived, young_fraction, mode: str):
+    r"""log10 of the ionizing luminosity the HII-region dust credit is taken over.
+
+    The credited luminosity must be the Lyman continuum of the SAME stellar
+    population the nebular escape/dust factor was applied to: the whole
+    population under ``lyc_reprocessed_by='all'`` (FSPS/CIGALE), the youngest
+    interval (stars younger than the youngest window edge, weighted by each
+    node's formed-mass fraction there) under ``'young'``.  Crediting the whole
+    population in the latter case would credit dust for old-star ionizing
+    light that never reached any gas.
+
+    Parameters
+    ----------
+    derived : mapping
+        ``state.derived`` carrying stellar's ``log_L_lyc`` (whole population),
+        ``lnu_age_ion`` / ``ssp_wave_ion`` (per-age ionizing slice, per Msun),
+        ``log_stellar_mass_scale`` and ``log_L_lyc_age``.
+    young_fraction : ndarray, shape (n_age,)
+        Fraction of each SSP node's formed mass in the youngest interval
+        [dimensionless].
+    mode : str
+        ``'young'`` or ``'all'``.
+
+    Returns
+    -------
+    ndarray, shape () or None
+        ``log10(L_LyC / (erg/s))``, or ``None`` when ``mode='all'`` and the
+        nebular component published no whole-population key.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible.**  The ``'young'`` branch weights-and-sums the
+    per-age ionizing slice over ages first (linear) and integrates once, which
+    equals ``log10_age_sum_lyc(log_L_lyc_age, weights=young_fraction)`` to
+    round-off but pays for the edge-aware quadrature a single time.
+    """
+    if mode == "all":
+        return derived.get("log_L_lyc")
+    lnu_age_ion = derived.get("lnu_age_ion")
+    ssp_wave_ion = derived.get("ssp_wave_ion")
+    if lnu_age_ion is not None:
+        young_lnu = jnp.sum(young_fraction[:, None] * lnu_age_ion, axis=0)
+        return log10_lyc_luminosity(
+            young_lnu, ssp_wave_ion, log10_scale=derived["log_stellar_mass_scale"]
+        )
+    return log10_age_sum_lyc(derived["log_L_lyc_age"], weights=young_fraction)

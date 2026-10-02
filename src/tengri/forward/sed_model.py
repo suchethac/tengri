@@ -3915,6 +3915,10 @@ class SEDModel:
         self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
         self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
+        # Young/old split: birth-cloud dispersal age [yr] and the dispersal width
+        # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
+        self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
+        self._dust_transition_width_dex = float(getattr(spec, "dust_transition_width_dex", 0.0))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -6709,10 +6713,34 @@ class SEDModel:
             return line_lums
         from tengri.utils.scale import log10_magnitude, pow10
 
+        extra = ()
+        if getattr(component, "needs_nebular_interval_weights", False):
+            extra = (self._nebular_interval_weights(params),)
         log_atten = component.attenuate_line_catalog(
-            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums))
+            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums)), *extra
         )
         return pow10(log_atten)
+
+    def _nebular_interval_weights(self, params):
+        """Share of the ionizing luminosity produced in each age interval, no ForwardState.
+
+        The stateless twin of what an age-split attenuator's ``apply`` computes
+        from stellar's published ``age_boundary_younger_fraction`` and
+        ``log_L_lyc_age``: the nebular lines are lit by stars of every age, so
+        their screen weighs the age intervals by this share. ``params`` is the
+        merged evaluation dict.
+        """
+        from tengri.components.dust._age_mixture import (
+            interval_fractions,
+            ionizing_interval_weights,
+        )
+
+        chain = self._cached_component_chain or self._build_component_chain()
+        stellar = next(c for c in chain if c.name == "stellar")
+        return ionizing_interval_weights(
+            interval_fractions(stellar.compute_age_boundary_fractions(params)),
+            stellar.compute_log_L_lyc_age(params),
+        )
 
     def _line_igm_component(self):
         """The chain's IGM component (``name`` "igm"), or ``None`` (#2520).
@@ -7880,6 +7908,11 @@ class SEDModel:
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
         joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+        younger_fraction = (
+            stellar.compute_age_boundary_fractions(full_params)
+            if stellar.config.age_boundaries_yr
+            else None
+        )
 
         pc = self._index_window_precomp(index_defs)
 
@@ -7889,7 +7922,9 @@ class SEDModel:
         if dust is None:
             transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
         else:
-            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(
+                full_params, pc.window_centers, younger_fraction
+            )
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
@@ -8167,7 +8202,9 @@ class SEDModel:
                 transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
             else:
                 transmission = dust.compute_transmission(
-                    full_params, pc.window_centers, ssp_ages_yr
+                    full_params,
+                    pc.window_centers,
+                    stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
@@ -10457,17 +10494,13 @@ class SEDModel:
                 lyc_in_energy_balance = dust.config.lyc_in_energy_balance
                 lyman_cutoff_aa = dust.config.lyman_cutoff_aa
 
-                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
-
                 lut = build_energy_balance_lut(
                     jnp.asarray(self.ssp_data.ssp_flux),
                     jnp.asarray(self.ssp_data.ssp_wave),
-                    jnp.asarray(ssp_ages_yr),
                     law_bc=law,
                     law_diff=law,
                     f_obscuration=0.0,
-                    t_birth_yr=1e7,
-                    transition_width_dex=0.3,
+                    single_population=True,
                     bc_params={k: float(v) for k, v in dust_params.items()},
                     diff_params={k: float(v) for k, v in dust_params.items()},
                     lyman_cutoff_aa=lyman_cutoff_aa,
@@ -10488,8 +10521,6 @@ class SEDModel:
                 )
                 law_bc = dust.config.law_bc
                 law_diff = dust.config.law_diff
-                t_birth_yr = dust.config.t_birth_yr
-                transition_width_dex = dust.config.transition_width_dex
                 lyc_in_energy_balance = dust.config.lyc_in_energy_balance
 
                 # #2539 item 1: the LUT's stellar B/G terms
@@ -10533,17 +10564,12 @@ class SEDModel:
 
             if not is_single_component:
                 # Two-component: use the standard LUT builder
-                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
-
                 lut = build_energy_balance_lut(
                     jnp.asarray(self.ssp_data.ssp_flux),
                     jnp.asarray(self.ssp_data.ssp_wave),
-                    jnp.asarray(ssp_ages_yr),
                     law_bc=law_bc,
                     law_diff=law_diff,
                     f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                    t_birth_yr=t_birth_yr,
-                    transition_width_dex=transition_width_dex,
                     bc_params={k: float(v) for k, v in bc_params.items()},
                     diff_params={k: float(v) for k, v in diff_params.items()},
                     lyman_cutoff_aa=(
@@ -11158,6 +11184,8 @@ class SEDModel:
             dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
             dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
+            dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
+            dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_fdust_credit_active=self._fdust_credit_active(),

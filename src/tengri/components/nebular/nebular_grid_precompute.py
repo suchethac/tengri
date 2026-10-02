@@ -307,7 +307,7 @@ class NebularGridTable:
         Rest-frame twin (filters at redshift 0), same shape and units.
     restband_subband_waves_rest : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
         Rest-frame twin of the node wavelengths.
-    eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, n_tau_a, n_tau_b)`` or None
+    eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, K, n_tau_a, n_tau_b)`` or None
         SIGNED LyC-masked absorbed nebular luminosity per unit nion through the model's
         NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)],
         positively oriented (+1 for a net absorber); exactly 0
@@ -1729,8 +1729,9 @@ def reconstruct_nebular_eb_absorbed_per_qh(params, table) -> jnp.ndarray:
 
     Returns
     -------
-    ndarray, shape (n_tau_a, n_tau_b)
-        SIGNED per unit nion, interpolated over the nebular axes
+    ndarray, shape (K, n_tau_a, n_tau_b)
+        SIGNED per unit nion (one channel per pure nebular screen),
+        interpolated over the nebular axes
         [erg/s per (photon/s)], positively oriented (+1 for a net absorber).
 
     Notes
