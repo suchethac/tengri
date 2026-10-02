@@ -3894,10 +3894,10 @@ class SEDModel:
         self._dust_lyman_cutoff_aa = float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) vs the
         # default young/birth-cloud-only (bagpipes). See DustSEDComponent.
-        self._dust_lyc_absorb_all = bool(getattr(spec, "dust_lyc_absorb_all", False))
+        self._dust_lyc_reprocessed_by = str(getattr(spec, "dust_lyc_reprocessed_by", "young"))
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
-        self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
+        self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -10161,6 +10161,7 @@ class SEDModel:
         )
         from tengri.components.dust.laws._registry import law_kwarg_names
         from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
 
         lut = None
         dust = next(
@@ -10247,7 +10248,7 @@ class SEDModel:
                 # (#922: LyC photons ionize H rather than heat dust). Baking a
                 # different cutoff here than DustAttenuationSEDComponent.apply()
                 # uses is what made the LUT disagree with the exact integral.
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
                 lyman_cutoff_aa = dust.config.lyman_cutoff_aa
 
                 ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
@@ -10264,7 +10265,7 @@ class SEDModel:
                     bc_params={k: float(v) for k, v in dust_params.items()},
                     diff_params={k: float(v) for k, v in dust_params.items()},
                     lyman_cutoff_aa=lyman_cutoff_aa,
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=jnp.asarray([0.0]),
                     tau_diff_grid=tau_v_grid,
                 )
@@ -10283,7 +10284,36 @@ class SEDModel:
                 law_diff = dust.config.law_diff
                 t_birth_yr = dust.config.t_birth_yr
                 transition_width_dex = dust.config.transition_width_dex
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
+
+                # #2539 item 1: the LUT's stellar B/G terms
+                # (energy_balance_precompute.build_energy_balance_lut) are
+                # integrated from the raw SSP cube alone -- on their own they
+                # carry no nebular-fesc dependence, unlike
+                # DustSEDComponent.apply()'s exact path, which reads the SAME
+                # per-age, gas-reprocessed population ``sed_attenuated``
+                # attenuates (see the §2a/§3 comments in two_component.py).
+                # ``neb_fesc`` can be a runtime FREE parameter, so that
+                # per-age masking cannot be baked into a build-time LUT the
+                # way (tau_bc, tau_diff) are -- but the absorbed integral IS
+                # affine in fesc (A(fesc) = A_0 + fesc*A_1), so build the
+                # SECOND (fesc-linear) B/G family instead of declining the
+                # LUT outright: ``lut_l_absorbed_stellar_log10`` then combines
+                # it with the runtime fesc exactly, no approximation. Only
+                # worth the extra build-time cost when a live photoionized
+                # nebular component is in the chain (BakedIn/no-nebular
+                # models never publish ``lyc_transmission``/``lyc_fesc``, so
+                # the runtime fesc combine is a no-op there regardless) and
+                # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
+                # place (otherwise B/G alone are already exact, LyC-masked
+                # out unconditionally).
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _live_neb = any(
+                    isinstance(c, NebularSEDComponent)
+                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    for c in chain
+                )
+                _fesc_exact = lyc_in_energy_balance and _live_neb
 
                 def _grid(name):
                     if name in free:
@@ -10315,9 +10345,11 @@ class SEDModel:
                         if hasattr(dust.config, "lyman_cutoff_aa")
                         else 0.0
                     ),
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
                     tau_diff_grid=tau_diff_grid,
+                    fesc_exact=_fesc_exact,
+                    lyc_reprocessed_by=dust.config.lyc_reprocessed_by,
                 )
 
         self._energy_balance_lut_cache = lut
@@ -10701,6 +10733,44 @@ class SEDModel:
             | per_screen_reads
         )
 
+    def _fdust_credit_active(self) -> bool:
+        """Whether the HII-region dust-heating credit (#2539 item 3) can be nonzero.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``neb_fdust_frac`` is a FREE parameter (its value
+            can move away from 0 during fitting, so the smooth combine's
+            nonzero gradient at ``f_dust == 0`` is needed) or Fixed at a
+            value other than exactly 0. ``False`` when it is Fixed at
+            exactly 0 -- the registry default -- or not declared at all
+            (BakedIn backend, whose ``declared_parameters()`` is empty, or
+            no nebular component built at all, ``nebular_backend=None``):
+            in both of those cases the credit is structurally zero for
+            every possible evaluation of this model, not merely at the
+            current parameter vector.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time provenance lookup, the same
+        value-aware shape as ``_warn_agn_dust_double_count``'s
+        ``_positive_active`` helper: a free parameter counts as active
+        unconditionally (its value is not yet known), a Fixed parameter
+        counts only if its value is nonzero. Threaded into
+        ``WG00AttenuationSEDComponentConfig`` /
+        ``DustAttenuationSEDComponentConfig`` / ``DustSEDComponentConfig``'s
+        ``fdust_credit_active`` field (one decision point, computed once,
+        not re-derived per consumer) so ``apply()`` can skip forming
+        ``energy_balance.log10_add_fdust_credit`` entirely via a static
+        Python ``if`` -- never a runtime ``where`` on the traced value of
+        ``f_dust``.
+        """
+        free = set(self.spec.free_params)
+        if "neb_fdust_frac" in free:
+            return True
+        fixed = self.spec.get_fixed_values()
+        return float(fixed.get("neb_fdust_frac", 0.0)) != 0.0
+
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
 
@@ -10877,10 +10947,11 @@ class SEDModel:
             dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
-            dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
-            dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
+            dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
+            dust_fdust_credit_active=self._fdust_credit_active(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
             astrodust_f_cnm=float(getattr(self, "_astrodust_f_cnm", 0.28)),

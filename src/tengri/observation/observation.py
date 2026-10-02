@@ -1668,7 +1668,7 @@ class Observation:
           dust-free mean-IGM branch), then OVERWRITTEN by
           :class:`~tengri.components.dust.two_component.DustSEDComponent`
           with its own y(age)-graded ``1-y(a)(1-fesc)`` rule (or the flat
-          rule under ``lyc_absorb_all=True``) when a dusty model runs it —
+          rule under ``lyc_reprocessed_by='all'``) when a dusty model runs it —
           same key, so whichever component is later in the chain wins, and
           there is exactly one factor per model, never a double-count. R3
           conservation invariants (tested explicitly, not just implied):

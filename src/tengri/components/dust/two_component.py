@@ -56,6 +56,7 @@ from tengri.components.dust.attenuation import (
     two_component_dust,
 )
 from tengri.components.dust.laws._registry import select_law_kwargs
+from tengri.components.lyc import LYMAN_LIMIT_AA, log10_age_sum_lyc, log10_lyc_luminosity
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters._dust_keys import SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
@@ -311,15 +312,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
     lyman_cutoff_aa: float = 0.0
     #: Which stellar populations have their Lyman continuum (λ < 912 Å) absorbed
-    #: by ``neb_fesc``. ``False`` (default) is **young/birth-cloud only**: only
+    #: by ``neb_fesc``. ``'young'`` (default) is **young/birth-cloud only**: only
     #: stars inside birth clouds (weighted by the young indicator) have their LyC
     #: reprocessed, so the old/diffuse stellar LyC passes through (matches
     #: bagpipes ``model_galaxy``, which zeros only ``spectrum_bc[<912]``, and is
     #: consistent with ``neb_fesc`` being a birth-cloud escape fraction).
-    #: ``True``: **all** stellar LyC absorbed (old + young), matching FSPS
+    #: ``'all'``: **all** stellar LyC absorbed (old + young), matching FSPS
     #: (``frac_obrun`` on the whole spectrum) and CIGALE (absorbed_old +
     #: absorbed_young). Static, non-fittable; enters ``compile_signature``.
-    lyc_absorb_all: bool = False
+    lyc_reprocessed_by: str = "young"
     #: Include the Lyman continuum (λ < 912 Å) in the dust energy-balance
     #: integral. ``False`` (default): canonical LyC-masked ``L_absorbed``
     #: (#922): LyC photons ionize H and re-emerge as nebular emission, not
@@ -327,9 +328,9 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: dust, matching FSPS/Prospector, whose ``add_dust_emission`` re-emits
     #: the full absorbed luminosity (measured ~10 % higher L_IR at the
     #: star-forming reproduction fiducial, #961). Grammar key
-    #: ``dust={'eb_include_lyc': True}``. Static, non-fittable; enters
-    #: ``compile_signature``.
-    eb_include_lyc: bool = False
+    #: ``dust_attenuation={'lyc_in_energy_balance': True}``. Static,
+    #: non-fittable; enters ``compile_signature``.
+    lyc_in_energy_balance: bool = False
     #: Flat shape-parameter names a caller actually asked for, resolved from
     #: spec provenance by ``SEDModel._requested_law_shape_params``. Names
     #: outside the set are not passed to the attenuation law, so the law's own
@@ -355,6 +356,22 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: strict/relaxed energy balance exactly as before. A static Python bool,
     #: not a traced value, so both branches stay JIT-clean.
     log_l_ir_requested: bool = False
+    #: Whether the HII-region dust-heating credit (#2539 item 3) can ever be
+    #: nonzero, resolved from spec provenance by
+    #: ``SEDModel._fdust_credit_active`` and frozen here the same way
+    #: :attr:`log_l_ir_requested` is. ``True`` when ``neb_fdust_frac`` is a
+    #: FREE parameter or Fixed at a nonzero value; ``False`` when it is
+    #: Fixed at exactly 0 or not declared at all (BakedIn backend, or no
+    #: nebular component built). ``False`` makes :meth:`apply` skip forming
+    #: ``energy_balance.log10_add_fdust_credit`` entirely -- including the
+    #: ``lyc_reprocessed_by='young'`` young-weighted credit's own per-age
+    #: reduction, which (unlike the whole-population ``log_L_lyc`` key the
+    #: single/wg00 screens read) is recomputed locally every time and so is
+    #: NOT already elided by the absence of a nebular component -- via a
+    #: static Python ``if``, never a runtime ``where`` on a traced
+    #: ``f_dust``. ``True`` (default, including a component built directly
+    #: with no spec to ask) keeps the smooth combine, unchanged.
+    fdust_credit_active: bool = True
 
 
 @dataclass(frozen=True)
@@ -489,6 +506,16 @@ class DustSEDComponent(TemplateThreading):
                 "Stellar LyC survival fraction where(λ<912, neb_fesc, 1); absent for BakedIn",
             ),
             DerivedKey(
+                "lyc_fdust",
+                "",
+                "Absolute HII-region dust-absorption share (#2539 item 2), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436); read "
+                "(instead of the unreachable params['neb_fdust_frac']) when "
+                "lyc_reprocessed_by='young' to compute the young-weighted HII-region "
+                "dust credit locally. Absent/0.0 for BakedIn or when "
+                "neb_fdust_frac is at its Fixed(0.0) default.",
+            ),
+            DerivedKey(
                 "line_waves",
                 "Angstrom",
                 "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
@@ -497,6 +524,26 @@ class DustSEDComponent(TemplateThreading):
                 "log_line_lums",
                 "dex",
                 "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
+            ),
+            DerivedKey(
+                "log_L_lyc",
+                "dex",
+                "RAW (pre-fdust) LyC luminosity of the whole stellar population "
+                "(#2539 item 3); read only when lyc_reprocessed_by='all' (full-population "
+                "credit matches this component's population there), combined with "
+                "lyc_fdust via the smooth log10_add_fdust_credit. Read via the "
+                "sed_nebular edge above for ordering; when lyc_reprocessed_by='young' this "
+                "component recomputes its own young-weighted raw LyC term instead "
+                "(see apply()).",
+            ),
+            DerivedKey(
+                "lyc_fesc",
+                "",
+                "Raw neb_fesc value (#2539 item 1): the WavePrecomp energy-balance "
+                "LUT branch reads this to combine its precomputed A_0 + fesc*A_1 "
+                "stellar tables (energy_balance_precompute.lut_l_absorbed_stellar_log10). "
+                "Absent for BakedIn / no live nebular component, matching the "
+                "always-fesc=1 behavior in that case.",
             ),
             DerivedKey(
                 "sed_shock",
@@ -914,23 +961,43 @@ class DustSEDComponent(TemplateThreading):
         # ``sed_intrinsic_stellar`` mirrors the nebular component's *uniform*
         # mask on ``state.sed_intrinsic`` (all ages × neb_fesc below 912) so the
         # ``non_stellar_other`` bookkeeping below stays clean; the below-912
-        # region is excluded from the energy-balance integral, so this uniform
-        # bookkeeping value never feeds L_ir.
+        # region is excluded from the energy-balance integral BY DEFAULT, so
+        # this uniform bookkeeping value never feeds L_ir there. It DOES feed
+        # ``non_stellar_pre_dust`` (§4 below) unconditionally, so it must stay
+        # the uniform (all-ages) mask -- do not repoint it at the per-age
+        # split below.
         #
         # ``sed_attenuated`` (the actual stellar output) uses the physical rule:
-        #   * default (``lyc_absorb_all=False``): **young/birth-cloud only**.
+        #   * default (``lyc_reprocessed_by='young'``): **young/birth-cloud only**.
         #     ``neb_fesc`` is a birth-cloud escape fraction, so only stars inside
         #     birth clouds (young indicator ``y(a)``) have their LyC reprocessed;
         #     the old/diffuse stellar LyC passes through. Matches bagpipes.
         #     Per-age factor ``1 - y(a)·(1 - lyc_t(λ))`` -> young→neb_fesc,
         #     old→1 below 912; both →1 above 912.
-        #   * ``lyc_absorb_all=True``: all stellar LyC absorbed (FSPS/CIGALE).
+        #   * ``lyc_reprocessed_by='all'``: all stellar LyC absorbed (FSPS/CIGALE).
+        #
+        # ``sed_intrinsic_stellar_eb``: the pre-screen input the energy-balance
+        # integral (§3 below) uses is a SEPARATE quantity from the uniform
+        # bookkeeping one above (sibling defect to #2539, found by its own
+        # closure test). With ``lyc_in_energy_balance=True`` the LyC region enters
+        # that integral, so the integral's "intrinsic" side must be the SAME
+        # per-age, gas-reprocessed population ``sed_attenuated`` itself is the
+        # dust-screen output of -- i.e. ``lnu_age * lyc_factor`` (the exact
+        # pre-transmission input §2a already forms for ``sed_attenuated``),
+        # not the uniform all-ages mask. For ``lyc_reprocessed_by='all'`` the two
+        # already agree (both apply ``_lyc_t`` uniformly across every age), so
+        # this is a no-op there. With ``lyc_in_energy_balance=False`` (default) the
+        # ionizing region is masked out of that integral regardless of what
+        # this array holds there (``_eb_cutoff=LYMAN_LIMIT_AA``, see §3), so
+        # switching to this quantity is bit-identical at the default.
         _lyc_t = state.derived.get("lyc_transmission")
+        sed_intrinsic_stellar_eb = sed_intrinsic_stellar
         if _lyc_t is not None:
             _lyc_t = jnp.asarray(_lyc_t)
             sed_intrinsic_stellar = sed_intrinsic_stellar * _lyc_t
-            if self.config.lyc_absorb_all:
+            if self.config.lyc_reprocessed_by == "all":
                 sed_attenuated = sed_attenuated * _lyc_t
+                sed_intrinsic_stellar_eb = sed_intrinsic_stellar
             else:
                 # The LUT reddens exactly the stars ``_young_indicator`` selects —
                 # the same definition the exact screen uses.
@@ -939,6 +1006,7 @@ class DustSEDComponent(TemplateThreading):
                 )
                 lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
                 sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
+                sed_intrinsic_stellar_eb = jnp.sum(lnu_age * lyc_factor, axis=0)
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
@@ -1146,8 +1214,8 @@ class DustSEDComponent(TemplateThreading):
         log_mass_scale = state.derived.get("log_stellar_mass_scale")
         # FSPS-parity toggle (#961): None disables the canonical LyC mask so
         # all absorbed energy heats dust. The fast-path LUT bakes the same
-        # choice at build time (sed_model passes config.eb_include_lyc).
-        _eb_cutoff = None if self.config.eb_include_lyc else 912.0
+        # choice at build time (sed_model passes config.lyc_in_energy_balance).
+        _eb_cutoff = None if self.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
@@ -1161,12 +1229,19 @@ class DustSEDComponent(TemplateThreading):
             from tengri.forward.energy_balance import bolometric_absorbed_log10
             from tengri.utils.scale import log10_add
 
+            # ``lut_l_absorbed_stellar_log10``'s own ``fesc`` combine is a
+            # no-op unless the LUT was BUILT with the A_0/A_1 fesc-exact
+            # family (``SEDModel._energy_balance_lut``, #2539 item 1 -- only
+            # when lyc_in_energy_balance=True and a live photoionized nebular
+            # component is in the chain): passing ``lyc_fesc`` here is always
+            # safe, it is simply ignored otherwise.
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),
                 jnp.asarray(log_mass_scale),
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
+                fesc=state.derived.get("lyc_fesc"),
             )
             # Nebular + shock + AGN combined into ONE integral (rather than
             # multiple log10_add terms) so no intermediate sign has to be
@@ -1185,13 +1260,126 @@ class DustSEDComponent(TemplateThreading):
         else:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
 
+            # Exact path: ``sed_intrinsic_stellar_eb`` (not the uniformly
+            # masked ``sed_intrinsic_stellar``) is the correct pre-screen
+            # side here -- see the §2a comment above for why. Outside the LyC
+            # region (or whenever ``lyc_in_energy_balance=False`` masks it out of
+            # this integral via ``_eb_cutoff``) the two are identical, so this
+            # is bit-identical at the default.
             log_L_absorbed, _ = bolometric_absorbed_log10(
-                sed_intrinsic_stellar + sed_neb + sed_shock + sed_agn,
+                sed_intrinsic_stellar_eb + sed_neb + sed_shock + sed_agn,
                 sed_attenuated + sed_neb_attenuated + sed_shock_attenuated + sed_agn_attenuated,
                 nu,
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating; the
+        # credited luminosity must be the LyC of the SAME stellar population
+        # the nebular escape/dust k-factor was actually applied to (item 2),
+        # not gated on lyc_in_energy_balance (which concerns only the screen's own
+        # LyC absorption, a different channel).
+        #
+        # lyc_reprocessed_by='all' routes ALL stellar LyC through the gas (§2a
+        # above: ``sed_attenuated = sed_attenuated * _lyc_t`` over every age),
+        # matching CIGALE/FSPS and matching the WHOLE-population integral
+        # NebularSEDComponent already publishes as log_L_lyc -- read it
+        # directly.
+        #
+        # lyc_reprocessed_by='young' (default, bagpipes parity) routes only the
+        # YOUNG/birth-cloud population's LyC through the gas: the per-age
+        # ``lyc_factor = 1 - y_age*(1 - lyc_t)`` in §2a leaves old-star LyC
+        # untouched by neb_fesc/the f_dust share (old stars sit outside their
+        # birth clouds, so no HII-region gas reprocesses their ionizing
+        # photons).
+        # Crediting the WHOLE-population key here would also credit dust for
+        # old-star LyC that never reached any gas to be dust-absorbed in the
+        # first place -- energy invented from nothing. Recompute the credit
+        # from the SAME lnu_age cube and the SAME y_age weighting §2a used, so
+        # the credited population always matches the population the k-factor
+        # was actually applied to.
+        #
+        # Both branches combine via log10_add_fdust_credit (#2539 item 3), a
+        # smooth log1p form that is bit-identical to log_L_absorbed at
+        # f_dust == 0 but -- unlike log10_add-ing the already
+        # fdust-multiplied log_L_lyc_dust -- has a nonzero gradient there too
+        # (L_absorbed is linear in fdust).
+        #
+        # Static elision (#2539 last FLOP guard): when fdust_credit_active is
+        # False (neb_fdust_frac Fixed at exactly 0, or not declared at all),
+        # the credit is structurally zero for every evaluation of this
+        # model. Unlike the single/wg00 screens, the lyc_reprocessed_by='young'
+        # branch below does not read the whole-population log_L_lyc key --
+        # it recomputes its own young-weighted reduction from lnu_age_ion
+        # every call, so it is NOT already elided by the absence of a
+        # nebular component and must be skipped explicitly here. A static
+        # Python bool, not a runtime where on the traced value of f_dust.
+        # The credit exists only where a photoionized nebular backend published
+        # its HII-dust share ``lyc_fdust``: no publisher, no HII-region dust
+        # channel, so nothing is credited (and the stellar ionizing keys below
+        # are not read). The same gate the single-screen and WG00 attenuators use.
+        _lyc_fdust = state.derived.get("lyc_fdust") if self.config.fdust_credit_active else None
+        if _lyc_fdust is not None:
+            from tengri.forward.energy_balance import log10_add_fdust_credit
+
+            # NOT params.get("neb_fdust_frac", ...): this component's
+            # parameter_prefix is "dust_", so slice_params_for_component
+            # (ADR-0006) never hands it a "neb_"-prefixed key -- that read would
+            # always, silently see the 0.0 default (measured: the young-weighted
+            # credit below was a permanent no-op through that path).
+            # NebularSEDComponent publishes the absolute share (#2436:
+            # lyc_shares(neb_fesc, neb_fdust_frac)[1]) as ``lyc_fdust`` for
+            # exactly this cross-component reason (#2539 item 2, same pattern as
+            # ``lyc_transmission`` above).
+            f_dust = jnp.asarray(_lyc_fdust)
+
+            if self.config.lyc_reprocessed_by == "all":
+                _log_l_lyc_credited = state.derived.get("log_L_lyc")
+            else:
+                # Young/birth-cloud-only credit (#2539): per-age ionizing
+                # LUMINOSITIES from stellar (log_L_lyc_age, erg/s -- the Q_H
+                # photon-rate integrand would be the wrong quantity here, G1/G2),
+                # weighted by the young indicator. StellarSEDComponent publishes
+                # log_L_lyc_age unconditionally whenever it runs -- the same
+                # derived_overrides dict that publishes ``lnu_age``, read with a
+                # required subscript above (it would already have raised KeyError
+                # before reaching here if stellar had not run) -- so there is no
+                # full-grid fallback left to keep.
+                y_age_lyc = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                )
+                lnu_age_ion = state.derived.get("lnu_age_ion")
+                ssp_wave_ion = state.derived.get("ssp_wave_ion")
+                if lnu_age_ion is not None:
+                    # Cheap path (G1/G2 FLOP guard): weight-and-sum the per-age,
+                    # per-Msun ionizing slice over ages FIRST (a linear combine),
+                    # THEN peak-factor/integrate ONCE -- mathematically identical
+                    # to log10_age_sum_lyc(log_L_lyc_age, weights=y_age_lyc)
+                    # (edge_trapezoid is linear in its input for fixed wave/edge;
+                    # bit-identical to float64 round-off) but pays for the
+                    # edge-aware quadrature a single time instead of once per age
+                    # -- see log_L_lyc_age's docstring in protocols/derived_state.py.
+                    young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age_ion, axis=0)
+                    _log_l_lyc_credited = log10_lyc_luminosity(
+                        young_lnu,
+                        ssp_wave_ion,
+                        log10_scale=state.derived["log_stellar_mass_scale"],
+                    )
+                else:
+                    # n_ion_bins == 0 (no ionizing content at all): log_L_lyc_age
+                    # is a cheap (-inf)-filled array, so the per-age reduction
+                    # below costs nothing extra either way.
+                    _log_l_lyc_credited = log10_age_sum_lyc(
+                        state.derived["log_L_lyc_age"], weights=y_age_lyc
+                    )
+
+            if _log_l_lyc_credited is not None:
+                log_L_absorbed = log10_add_fdust_credit(
+                    log_L_absorbed, _log_l_lyc_credited, f_dust
+                )
+
         from tengri.forward.energy_balance import warn_if_corrupt
 
         warn_if_corrupt(log_L_absorbed, component="two_component")
@@ -1484,9 +1672,9 @@ class DustSEDComponent(TemplateThreading):
                 # wins) with this component's own birth-cloud-graded rule,
                 # matching the dense ``lyc_factor`` in §2a exactly:
                 # ``1 - y(a)*(1-fesc)`` under the default
-                # ``lyc_absorb_all=False`` (only birth-cloud/young stars
+                # ``lyc_reprocessed_by='young'`` (only birth-cloud/young stars
                 # reprocess LyC; old/diffuse stellar LyC passes through), or
-                # the flat rule under ``lyc_absorb_all=True`` (matching §2a's
+                # the flat rule under ``lyc_reprocessed_by='all'`` (matching §2a's
                 # ``sed_attenuated = sed_attenuated * _lyc_t`` there). Gated
                 # on the SAME ``lyc_transmission`` signal §2a reads: absent ->
                 # no nebular component -> nothing to correct, and this key is
@@ -1509,7 +1697,7 @@ class DustSEDComponent(TemplateThreading):
                     # R1's forced edge keeps every node off of when the mask is
                     # live) without re-deriving fesc at all.
                     lyc_chunk = jnp.interp(sub_waves, wave, _lyc_t)
-                    if self.config.lyc_absorb_all:
+                    if self.config.lyc_reprocessed_by == "all":
                         lyc_factor_sub = lyc_chunk
                     else:
                         y_age_sub = _young_indicator(

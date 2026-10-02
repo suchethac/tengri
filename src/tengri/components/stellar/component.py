@@ -1512,6 +1512,7 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     return t_cosmic_asc, sfr_asc, total_mass
 
 
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, log10_lyc_luminosity
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -1555,9 +1556,10 @@ def _subband_live_floor() -> float:
     return representable_floor(1e-150)
 
 
-# Lyman limit: wavelengths below this contribute to the ionizing
-# photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
-_HI_LIMIT_AA: float = 911.76
+# Lyman limit: wavelengths below this contribute to the ionizing photon
+# rate. The one edge for every LyC consumer (:mod:`tengri.components.lyc`);
+# kept as a local alias so the ~4 call sites below need no further churn.
+_HI_LIMIT_AA: float = LYMAN_LIMIT_AA
 
 
 def _integrate_nion_log10(
@@ -1567,10 +1569,11 @@ def _integrate_nion_log10(
 
     THE single source of the Q_H integral: log-domain computation to prevent
     float32 overflow (Q_H ~ 1e56 exceeds float32 max ~3.4e38). Integrates
-    :math:`Q_H = \int_{\nu>\nu_{912}} L_\nu/(h\nu)\,d\nu` with the partial-bin
-    Lyman-limit correction (#537): the boundary bin's contribution is a rectangle
-    from ``nu_edge`` to the last ionizing grid point, not the trapezoid triangle
-    a hard mask would give.
+    :math:`Q_H = \int_{\nu>\nu_{912}} L_\nu/(h\nu)\,d\nu` via
+    :func:`tengri.components.lyc.edge_trapezoid`, which applies the
+    partial-bin Lyman-limit step model (#537): the boundary bin's
+    contribution is a rectangle from ``nu_edge`` to the last ionizing grid
+    point, not the trapezoid triangle a hard mask would give.
 
     The computation normalizes the SED by its peak, defers the Planck constant
     division, and performs the trapezoid integral in linear-normalized space,
@@ -1605,18 +1608,12 @@ def _integrate_nion_log10(
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     ell = sed_lnu / peak  # O(1) normalized L_nu
     nu = C_AA / wave
-    nu_edge = C_AA / _HI_LIMIT_AA
     integrand = ell / nu  # NO H_PLANCK division; that's deferred to avoid f32 overflow
-    ionizing_mask = wave < _HI_LIMIT_AA
-    integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-    idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(wave.shape[0]), -1))
-    idx_above = idx_below + 1
-    integrand_below = integrand[idx_below]
-    # Boundary bin: subtract the trapezoid triangle, add the true rectangle.
-    triangle_overcount = 0.5 * integrand_below * jnp.abs(nu[idx_below] - nu[idx_above])
-    rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
-    nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
-    norm = nion_bulk - triangle_overcount + rectangle_correct  # #537 correction BEFORE the log
+    # #537 partial-bin Lyman correction, generalized: the one shared
+    # step-model integral (module docstring of tengri.components.lyc).
+    norm = edge_trapezoid(
+        integrand, wave, variable="nu", side="ionizing", edge_aa=_HI_LIMIT_AA
+    )  # #537 correction BEFORE the log
     # log10_magnitude keeps "no ionizing flux" (-inf) apart from "the SED was
     # corrupt" (+inf). The hand-rolled ``norm > 0`` here was False for NaN, so a
     # non-finite ionizing SED gave log_nion = -inf, pow10 -> 0, and nebular
@@ -3115,21 +3112,72 @@ class StellarSEDComponent:
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
         if _n_ion is not None and _n_ion > 0:
-            # Compute Q_H in log-domain to avoid float32 overflow (#1206).
-            # The tensordot result is O(1); the scale rides the log integral.
-            _tensordot_result = jnp.tensordot(
-                joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
-            )
+            # ONE contraction over the (n_met, n_age, n_ion) cube, not two.
+            # Per-age ionizing LUMINOSITY (LyC credit, #2539) -- NOT the Q_H
+            # photon RATE: the dust energy-balance credit needs erg/s
+            # (integrates L_nu dnu), Q_H needs photons/s (integrates
+            # L_nu/(h*nu) dnu); the two integrands differ by a factor of h*nu
+            # and are not interchangeable (G1/G2). Marginalize over
+            # metallicity only (met axis), keeping age: contract
+            # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met,
+            # n_age) over the met axis alone -- shape (n_age, n_ion), so the
+            # nebular/dust components can use log10_age_sum_lyc to combine
+            # ages without dragging the full stellar SED into the
+            # FeaturePrecomp graph.
+            _lnu_age_ion = jnp.einsum(
+                "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
+            )  # shape (n_age, n_ion), per-Msun
+            # Q_H's age+met-marginalized ionizing SED is the age-sum of the
+            # per-age slice above (both reduce the SAME joint_weights over the
+            # SAME met axis; summing the age axis afterward is the met-AND-age
+            # contraction a separate jnp.tensordot(..., axes=([0,1],[0,1]))
+            # would recompute from scratch over the same (n_met, n_age, n_ion)
+            # cube -- paying its O(n_met*n_age*n_ion) element-touch cost
+            # TWICE). This sum is a cheap O(n_age*n_ion) reduction of an
+            # already-computed (n_age, n_ion) array (measured: the duplicate
+            # tensordot was the dominant term in a #1748/#1770-class FLOP
+            # regression on the WavePrecomp fit path, G1/G2).
+            _tensordot_result = jnp.sum(_lnu_age_ion, axis=0)
             log_nion = _integrate_nion_log10(
                 _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
             )
+            # log10_lyc_luminosity is already vectorized over leading axes (no
+            # vmap/lambda needed); total_mass rides log10_scale as a log10
+            # offset (same normalization as log_nion above), so the ~1e42
+            # erg/s linear product is never materialized (#1206).
+            log_L_lyc_age = log10_lyc_luminosity(
+                _lnu_age_ion, wave[:_n_ion], log10_scale=log10_mass_scale, axis=-1
+            )
+            # Published alongside log_L_lyc_age (see that field's docstring):
+            # the UNREDUCED, per-Msun ionizing slice + its wavelength axis, so
+            # a WEIGHTED per-age credit can combine ages first (cheap, linear)
+            # and integrate once, instead of reducing log_L_lyc_age per age
+            # then re-combining in log space (G1/G2 FLOP guard).
+            lnu_age_ion_pub = _lnu_age_ion
+            ssp_wave_ion_pub = wave[:_n_ion]
         elif _n_ion is not None:
             # n_ion_bins == 0 (static): no grid bins below the Lyman limit
-            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
-            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            # (IR-focused configs) -> Q_H and the LyC luminosity are both
+            # identically zero. Skips the slice machinery: max/argmax over
+            # zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
+            log_L_lyc_age = jnp.full((age_weights.shape[0],), -jnp.inf)
+            lnu_age_ion_pub = None
+            ssp_wave_ion_pub = None
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
+            # Fallback (full grid) per-age ionizing luminosity: integrate over
+            # the full wavelength range. ``lnu_age`` is already mass-scaled
+            # (``lnu_age = total_mass * ssp_flux_at_age`` above), so
+            # log10_scale stays at its 0.0 default -- the same absolute
+            # normalization as the sliced branch above, just applied linearly
+            # upstream instead of as a log10 offset.
+            log_L_lyc_age = log10_lyc_luminosity(lnu_age, wave, axis=-1)
+            # Per-Msun form (ssp_flux_at_age, not lnu_age) to keep the SAME
+            # "needs log10_mass_scale added" contract as the sliced branch
+            # above -- a consumer must not need to know which branch ran.
+            lnu_age_ion_pub = ssp_flux_at_age
+            ssp_wave_ion_pub = wave
         nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
@@ -3174,6 +3222,16 @@ class StellarSEDComponent:
             # taken from the overflowed linear value.
             log_L_age=log_L_age,
             lnu_age=lnu_age,
+            # Per-age ionizing luminosity [erg/s], shape (n_age,). Used by
+            # nebular and dust components to compute LyC credits without
+            # dragging the full stellar SED (G1/G2 FeaturePrecomp guards).
+            log_L_lyc_age=log_L_lyc_age,
+            # The unreduced per-Msun ionizing slice + its wavelength axis
+            # (None when n_ion_bins == 0, no ionizing content at all): see
+            # log_L_lyc_age's docstring for the cheap weighted-combine
+            # identity these two exist to enable.
+            lnu_age_ion=lnu_age_ion_pub,
+            ssp_wave_ion=ssp_wave_ion_pub,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
