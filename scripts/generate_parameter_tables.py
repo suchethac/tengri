@@ -79,10 +79,11 @@ def structural_key_reference() -> str:
         "delta_diff": "Diffuse delta override (two_component).",
         "delta_neb": "Nebular delta override (two_component).",
         "lyman_cutoff": "Zero attenuation below 912 Å (Lyman limit). Two-component only.",
-        "lyc_absorb_all": (
-            "Absorb all ionizing photons (FSPS/CIGALE style) vs young-only. Two-component only."
+        "lyc_reprocessed_by": (
+            "Which stars' non-escaping ionizing photons are reprocessed: 'young' (birth "
+            "clouds, default) or 'all' (FSPS/CIGALE style). Two-component only."
         ),
-        "eb_include_lyc": "Include ionizing luminosity in dust energy-balance integral.",
+        "lyc_in_energy_balance": "Include ionizing luminosity in dust energy-balance integral.",
         # Dust emission
         "spinning_dust": "Include small spinning dust grains.",
         "f_cnm": "Cold neutral medium fraction.",

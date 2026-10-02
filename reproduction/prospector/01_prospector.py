@@ -1381,7 +1381,7 @@ save_fig("prospector_05b_dust_av_bc.png")
 # including LyC. Tengri's canonical balance excludes λ < 912 Å (those photons
 # re-emerge as nebular, the CIGALE convention). At this fiducial, LyC
 # carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
-# Both ratios are printed. Opt-in `dust={'lyc_in_energy_balance': True}` closes the gap.
+# Both ratios are printed. Opt-in `dust_attenuation={'lyc_in_energy_balance': True}` closes the gap.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL: Dust IR emission physics (MBB, Casey12, CMB)
@@ -1491,7 +1491,7 @@ m_ir_fsps = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "lyc_in_energy_balance": True,  # FSPS parity: LyC heats dust too (#961)
+        "lyc_in_energy_balance": True,  # FSPS parity: LyC heats dust too
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={
@@ -2241,7 +2241,7 @@ plt.show()
 # 1. **Far-IR amplitude**: tengri's canonical energy balance excludes the
 #    Lyman continuum from dust heating, while FSPS re-emits all of it.
 #    At this fiducial the difference is ~11 % in every FIR band. Opt into
-#    the FSPS convention with `dust={'lyc_in_energy_balance': True}` (§6).
+#    the FSPS convention with `dust_attenuation={'lyc_in_energy_balance': True}` (§6).
 # 2. **IGM**: `SEDModel.build` defaults the IGM **on** (Inoue+2014).
 #    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
 #    moves a GALEX FUV band by ~18 % (rest-frame Lyman continuum). Match
