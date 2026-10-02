@@ -6298,6 +6298,42 @@ def _neb_xid_retired_error(group: str, key: str) -> ValueError:
 #: The re-review that found this (task-16-followup-review.md #4) measured it
 #: reachable and silently inert: ``nlr={'type': 'feltre', 'agn_alpha_ion':
 #: FREE}`` (or the short form) parsed, freed the parameter, and moved nothing.
+_ALPHA_ION_KEYS: frozenset[str] = frozenset({"agn_alpha_ion", "alpha_ion"})
+
+
+def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_alpha_ion`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.nlr'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, why the old name never worked, and the one
+        placement that does.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_alpha_pl' (short "
+        f"form 'nlr_alpha_pl'): the Feltre+2016 NLR ionizing power-law slope was "
+        f"carried under two names -- identical prior and default -- and "
+        f"'agn_alpha_ion' was read by nothing while 'agn_nlr_alpha_pl' is what "
+        f"blocks/nlr.py actually reads. The axis belongs to the 'nlr' sub-block, "
+        f"which is what reads it:\n"
+        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
+        f"'agn_nlr_alpha_pl': Uniform(-2.0, -1.2)}}}}"
+    )
+
+
+#: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
+#: declaration and the short form the sub-block grammar would have resolved it
+#: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
+#: surviving name ``agn_ebv``. The retired spelling is intercepted before the
+#: generic key resolver reaches it, in every group.
 _RETIRED_AGN_ATTEN_EBV: frozenset[str] = frozenset(
     {"agn_attenuation_ebv", "attenuation_ebv"}  # flat + short dict spelling
 )
@@ -6328,36 +6364,6 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
         f"(QSOgen SMC reddening):\n"
         f"  agn={{'type': 'composable', 'atten': {{'law': 'prevot_smc', "
         f"'ebv': Uniform(0.0, 1.0)}}}}"
-    )
-
-_ALPHA_ION_KEYS: frozenset[str] = frozenset({"agn_alpha_ion", "alpha_ion"})
-
-
-def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
-    """The one message the retired ``agn_alpha_ion`` gets, wherever written.
-
-    Parameters
-    ----------
-    group : str
-        The group the key was found in (``'agn'``, ``'agn.nlr'``, ...).
-    key : str
-        The spelling the caller wrote.
-
-    Returns
-    -------
-    ValueError
-        Naming the replacement, why the old name never worked, and the one
-        placement that does.
-    """
-    return ValueError(
-        f"{key!r} (found in group {group!r}) was renamed 'agn_nlr_alpha_pl' (short "
-        f"form 'nlr_alpha_pl'): the Feltre+2016 NLR ionizing power-law slope was "
-        f"carried under two names -- identical prior and default -- and "
-        f"'agn_alpha_ion' was read by nothing while 'agn_nlr_alpha_pl' is what "
-        f"blocks/nlr.py actually reads. The axis belongs to the 'nlr' sub-block, "
-        f"which is what reads it:\n"
-        f"  agn={{'type': 'composable', 'nlr': {{'type': 'feltre', "
-        f"'agn_nlr_alpha_pl': Uniform(-2.0, -1.2)}}}}"
     )
 
 
@@ -6452,6 +6458,9 @@ def _check_dict_keys(
         if key in _ALPHA_ION_KEYS:
             raise _alpha_ion_retired_error(group, str(key))
 
+        # R52 (#2325): the retired agn_attenuation_ebv is intercepted in every
+        # group before the generic resolver reaches it. The E(B-V) parameter
+        # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
         # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
@@ -7092,15 +7101,11 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 raise ValueError(
                     f"agn['atten'] type={type_key!r} is no longer supported. "
                     "Use the new form with law key instead:\n"
-                    f"  agn={{'atten': {{'law': {law_name!r}, "
-                    f"'attenuation_ebv': Uniform(...)}}}}\n"
+                    f"  agn={{'atten': {{'law': {law_name!r}, 'ebv': Uniform(...)}}}}\n"
                     f"{law_name!r} is the only law this block implements -- it applies "
                     "that curve unconditionally, so the rename is a spelling change, "
-                    "not a new choice. 'attenuation_ebv' is the short spelling of "
-                    "agn_attenuation_ebv, the E(B-V) this block itself applies -- NOT "
-                    "the unrelated, pre-existing agn_ebv parameter (the separate "
-                    "qsogen_smc attenuation block's own reddening knob), whose short "
-                    "spelling is 'ebv'."
+                    "not a new choice. 'ebv' (the short spelling of agn_ebv) is the "
+                    "E(B-V) parameter for the attenuation stage."
                 )
 
             if law_key is not None:
