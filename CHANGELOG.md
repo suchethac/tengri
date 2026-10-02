@@ -2,8 +2,20 @@
 
 ### Fixed
 
-- Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 - `compute_effective_wavelength` returns the pivot wavelength √(∫Tλdλ/∫T/λ dλ) its name and docstring promise; the filter-convention text attributes the photon-counting mean to BAGPIPES as well as DSPS/FSPS/Prospector/Synthesizer and the energy mean to CIGALE's energy-type filters; the facade SED plot derives band wavelengths from the filter curves (#2610).
+
+- Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
+
+- CI compile caches fit the GitHub Actions quota: pull request runs no longer save
+  JAX compile cache entries to the repo's shared cache (reducing PR-scoped bloat from
+  6 GB per push), and per-job `TENGRI_JAX_CACHE_MAX_GB` caps bind each job's entries
+  so their union fits GitHub's 10 GB repository cache limit (sizes from warm working
+  sets: contract 1.55, components 0.6, regression-a 1.0, regression-b1/b2 0.7/1.1,
+  regression-c 0.05, regression-d 0.65, physics 0.28, slow inference parts 1/2/3
+  and integration 0.2/0.2/0.65/0.5, components-unit-regression-contract-physics 0.12,
+  agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
+  regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
+  without renaming the required checks (#2549).
 
 ### Added
 
@@ -229,7 +241,8 @@
   autodiff could not see the jumps, which NUTS read as divergences. The boundary cell
   now carries a smoothstep partial-cell weight at the grid's own spacing; bit-identical
   wherever the kernel was already small at onset; ported from the paper-1 pin branch
-  (f01975f46). Periodic and tsnorm remain measured staircases (#2476).
+  (f01975f46). See the SFH-support entry below for the other forms this class of
+  defect touches (#2476).
 - The `met` group accepts `met_bin_edges_log_yr` (a structural key) for the `bins` and
   `bins_continuity` metallicity types, refusing it on ladder-free types. The key is
   threaded through `parse_groups()`, `sed_model`, and `component_factory()` to
@@ -429,6 +442,48 @@
   gated on `packaging.version` comparison. The orphan-atime repair stays
   load-bearing on JAX < 0.11.2 and remains useful for recovery on all versions.
 
+- Every SFH family's star-formation support is bounded to `[0, age(z)]`,
+  forming the requested mass on both age kernels and for additive
+  composites (pooled total; a uniform rescale, so per-member truncation is
+  still approximate). `exp`/`dexp` get a genuine `[0, start]` window
+  (`start` now reads as the lookback time of formation, not of an
+  unbounded-into-the-past peak). **Breaking**: `sfh_exp_start_gyr`/
+  `sfh_dexp_start_gyr` default to `Fixed(5.0)` (floor `0.5`), not
+  `Fixed(0.0)` (floor `0.0`) -- under the corrected `[0, start]` window a
+  zero onset is a zero-width window with no stars at all (ill-posed;
+  #1031's own fixture divided a vanishing mass by a vanishing width, 0/0).
+  `psb_wild2020`'s burst is anchored to the cosmic age at z (`age_at_z(z)`,
+  following Wild et al. 2020 Eq. 5), not its own `age` parameter (the OLD
+  component's independent formation epoch) and not a hardcoded module
+  constant; the burst carries no lookback window on its support, filling
+  the whole bounded range rather than being cut off at `burstage`. A free
+  `redshift`'s
+  upper end can still admit an onset draw before the Big Bang; `SEDModel
+  .build` now warns (`FreeRedshiftOnsetCeilingWarning`) instead of
+  truncating unremarked. `continuity`/`dirichlet`'s default bin ladder is
+  built from the source redshift (Prospector-beta scheme) instead of fixed
+  at 0-13.7 Gyr; a free redshift warns too
+  (`NonparametricBinEdgesAtRedshiftCeilingWarning`). Moving-boundary
+  staircases (#2476) are fixed for `psb_suess2022`/`psb_flex`'s bin edges;
+  `delayed_bq`'s burst/quench switch, `periodic`'s burst onset, spacing and
+  width, `periodic`'s rectangular type, `tsnorm`'s SSP-grid aliasing, and
+  `psb_suess2022`/`psb_flex`'s `tlast_gyr` on the `dsps` age kernel (an
+  exactly flat direction: both the finite difference and the analytic
+  gradient are zero) remain measured staircases on at least one age kernel
+  (#2521, #2457, #2476) -- a partial-cell quadrature narrow enough to pass
+  every existing CIGALE parity test for these two families was not found
+  this round, so their moving-boundary integration stays the CIGALE-matching
+  hard edge.
+- A catalog fit's per-galaxy `redshift_col` can free a z-capped onset
+  parameter (e.g. `sfh_dpl_age_gyr`) whose ceiling was narrowed to the age
+  of the universe at the model's single placeholder redshift, not the
+  catalog's actual per-galaxy range. `Catalog` now re-narrows that ceiling
+  to the age of the universe at the catalog's lowest redshift -- the
+  widest single ceiling valid for every galaxy in it, since the
+  mass-conserving truncation (#2521) still forms each galaxy's declared
+  mass inside its own `[0, age(z_i)]` at fit time regardless of the prior's
+  width -- and warns (`FreeRedshiftOnsetCeilingWarning`) naming the
+  catalog's z range instead of refusing the fit outright.
 - Composable AGN torus no longer collapses at the 1 mm node (#1512): the
   composable disc+skirtor path with cigale_joint normalization computes an
   inclination-attenuation ratio `disk(i)/disk(0)` by resampling the SKIRTOR

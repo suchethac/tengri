@@ -950,10 +950,14 @@ def exponential(
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Declining exponential SFH (in lookback time, from ``start`` outward).
+    """Declining exponential SFH: forms stars in ``[0, start]``, from ``start`` outward.
 
-    Shape is ``exp(-(t - start) / tau)`` for ``t >= start``, zero otherwise.
-    Rescaled so the integrated mass equals ``10**log_total_mass``.
+    ``start`` is the lookback time of SF onset (galaxy formation): shape is
+    ``exp(-(start - t) / tau)`` for ``0 <= t <= start``, zero outside --
+    maximal at formation (``t = start``), declining toward the present, the
+    same ``T = age - t_lookback`` convention as :func:`declining_exponential`
+    with ``start`` playing the role ``age`` does there. Rescaled so the
+    integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
@@ -964,7 +968,8 @@ def exponential(
     tau : float
         e-folding timescale [yr].
     start : float
-        Start lookback time [yr]. Default 0 (present).
+        Lookback time of SF onset (galaxy formation) [yr]. Default 0
+        (formed at the present, degenerate).
 
     Returns
     -------
@@ -975,20 +980,28 @@ def exponential(
     -----
     **JIT-compatible**: yes, uses ``jnp`` primitives for exponential and masking.
 
+    Before this, the window was ``[start, inf)`` -- mass sat at lookback
+    ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
+    between ``start`` and the present: the mirror image of this docstring's
+    own "declining exponential from start" and of the verified-correct
+    :func:`declining_exponential` (#2521).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
+    >>> sfr = exponential(t, log_total_mass=10.0, tau=2e9, start=5e9)
     >>> sfr.shape
     (64,)
     """
     # Clamped so the exponential is finite where the window is zero, then the
     # cell-averaged window multiplies (#1374; a hard ``dt >= 0`` step left
-    # ``start`` with exactly zero autodiff gradient).
-    dt = jnp.maximum(t_lookback - start, 0.0)
-    shape = jnp.exp(-dt / tau) * window_weight(t_lookback, start, jnp.inf)
+    # ``start`` with exactly zero autodiff gradient). Mirrors
+    # ``declining_exponential``'s ``age - t_lookback`` exactly, with ``start``
+    # in the role ``age`` plays there.
+    dt = jnp.maximum(start - t_lookback, 0.0)
+    shape = jnp.exp(-dt / tau) * window_weight(t_lookback, 0.0, start)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -998,10 +1011,15 @@ def delayed_exponential(
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Delayed exponential SFH: shape peaks at start + tau.
+    """Delayed exponential SFH: forms stars in ``[0, start]``, peaking cosmic-time tau after formation.
 
-    Shape is ``(dt/tau) * exp(-dt/tau + 1)`` for ``t >= start``. Rescaled
-    so the integrated mass equals ``10**log_total_mass``.
+    ``start`` is the lookback time of SF onset (galaxy formation). In cosmic
+    time since formation ``T = start - t_lookback`` (``0 <= T <= start``, the
+    same convention :func:`sfhdelayed` uses with ``start`` playing the role
+    ``age`` does there), shape is ``(T/tau) * exp(-T/tau + 1)``: rises from 0
+    at formation, peaks at cosmic time ``T = tau`` (lookback ``start - tau``),
+    declines toward the present. Zero outside ``[0, start]``. Rescaled so the
+    integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
@@ -1010,9 +1028,11 @@ def delayed_exponential(
     log_total_mass : float
         log10 of total stellar mass formed [Msun].
     tau : float
-        Timescale [yr]. Peak shape value occurs at start + tau.
+        Timescale [yr]. Peak shape value occurs at cosmic time ``tau`` after
+        formation (lookback ``start - tau``).
     start : float
-        Start lookback time [yr]. Default 0 (present).
+        Lookback time of SF onset (galaxy formation) [yr]. Default 0
+        (formed at the present, degenerate).
 
     Returns
     -------
@@ -1023,19 +1043,24 @@ def delayed_exponential(
     -----
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
+    Before this, the window was ``[start, inf)`` -- mass sat at lookback
+    ``>= start``, unbounded toward the oldest SSP template age, with zero SFR
+    between ``start`` and the present (#2521; shares the mechanism
+    :func:`exponential` had).
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import delayed_exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
+    >>> sfr = delayed_exponential(t, log_total_mass=10.0, tau=2e9, start=5e9)
     >>> sfr.shape
     (64,)
     """
-    dt = jnp.maximum(t_lookback - start, 0.0)  # finite outside the window too
+    dt = jnp.maximum(start - t_lookback, 0.0)  # finite outside the window too
     ratio = dt / tau
     raw = ratio * jnp.exp(-ratio + 1.0)
-    shape = jnp.maximum(raw, 0.0) * window_weight(t_lookback, start, jnp.inf)
+    shape = jnp.maximum(raw, 0.0) * window_weight(t_lookback, 0.0, start)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -1500,6 +1525,7 @@ def psb_wild2020(
     alpha: float,
     beta: float,
     fburst: float,
+    age_universe_yr: float,
 ) -> jnp.ndarray:
     """Post-starburst SFH (Wild+2020).
 
@@ -1522,13 +1548,22 @@ def psb_wild2020(
     tau : float
         e-folding timescale of old exponential component [yr].
     burstage : float
-        Lookback time of burst onset [yr]. Burst active for 0 < t < burstage.
+        Lookback time of the burst [yr]: the burst double power law turns
+        over at cosmic time ``age_universe_yr - burstage`` (Wild et al. 2020
+        Eq. 5). The burst carries no lookback window; it fills the bounded
+        support ``[0, age_universe_yr]``.
     alpha : float
         DPL falling slope [dimensionless] (post-peak in cosmic time).
     beta : float
         DPL rising slope [dimensionless] (pre-peak in cosmic time).
     fburst : float
         Fraction of total stellar mass in burst [dimensionless], range [0, 1].
+    age_universe_yr : float
+        Age of the universe at the model's own redshift [yr]
+        (``age_at_z(z)``); the cosmic-time origin the burst double power law
+        is measured from (Wild et al. 2020 Eq. 5). Not a free parameter:
+        the orchestrator injects it from the evaluation redshift, the same
+        way it injects ``dense_basis``'s ``age_universe_yr``.
 
     Returns
     -------
@@ -1542,17 +1577,32 @@ def psb_wild2020(
     # --- Old component: declining exponential between burstage and age ---
     # Clamped, then windowed by cell-averaged weights: the hard mask left ``age``
     # with exactly zero autodiff gradient (#1374), and the discarded branch
-    # evaluated exp(+large) for t_lookback > age.
+    # evaluated exp(+large) for t_lookback > age. ``age`` (a free, z-capped
+    # onset parameter) is the right anchor here: it is the OLD component's own
+    # formation lookback, independent of the burst's cosmic-time origin below.
     t_cosmic_old = jnp.maximum(age - t_lookback, 0.0)
     sfr_exp = jnp.exp(-t_cosmic_old / tau) * window_weight(t_lookback, burstage, age)
 
     # --- Burst component: DPL in cosmic time, peaks at (age_universe - burstage) ---
-    age_universe = AGEMAX_YR
-    t_cosmic = age_universe - t_lookback
-    tau_burst = age_universe - burstage
+    # Anchored to the age of the universe AT THE MODEL'S REDSHIFT
+    # (``age_universe_yr``, Wild et al. 2020 Eq. 5 and BAGPIPES
+    # star_formation_history.py:326-348), not the family's own free ``age``
+    # parameter and not the hardcoded ``AGEMAX_YR`` (14 Gyr) module constant:
+    # the burst is a RECENT (observation-anchored) episode, so its cosmic-time
+    # coordinate tracks "now" (the galaxy's own redshift), not the OLD
+    # component's independently free formation epoch. No lookback window on
+    # the burst, unlike the old component above: Wild et al. 2020 Eq. 5 and
+    # BAGPIPES let the DPL fill its whole bounded support [0, age_universe]
+    # rather than cutting it off at ``burstage`` -- measured, BAGPIPES puts
+    # 0.884 of the burst mass at lookback > burstage for alpha=10/beta=3 (only
+    # negligible at Wild's own fiducial beta=250). The age-of-universe
+    # truncation elsewhere in the pipeline (``_age_weights_cic`` /
+    # ``_mass_conserving_total``, #2521) already zeroes and renormalizes
+    # anything beyond ``age_universe_yr``, so no window is needed here either.
+    t_cosmic = age_universe_yr - t_lookback
+    tau_burst = age_universe_yr - burstage
     log_ratio = jnp.log(jnp.maximum(t_cosmic, 1.0) / jnp.maximum(tau_burst, 1.0))
     sfr_burst = jnp.exp(-jnp.logaddexp(alpha * log_ratio, -beta * log_ratio))
-    sfr_burst = sfr_burst * window_weight(t_lookback, -jnp.inf, burstage)
 
     # --- Mass-normalize each component (per-component unit mass) ---
     # jnp.gradient gives symmetric finite-difference widths; correct for
