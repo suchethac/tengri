@@ -277,6 +277,7 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - `'lyc_absorb_all'`: Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
+- `'screens'`: `type='age_binned'` only (#2528). A list of `{'law': <law name>, 'window_log_yr': (lo, hi)}` dicts, one per screen; `lo`/`hi` are `log10(age/yr)` edges, either or both `None` for unbounded. N independent screens generalize the birth-cloud/diffuse pair to any N; windows need not partition the age axis. Per-screen parameters are indexed from the screen count: `'tau_0'`, `'tau_1'`, ... (full name `dust_tau_i`), plus one `'<lawparam>_i'` for every shape parameter that screen's own law declares (e.g. `'slope_0'`, `'Rv_2'`), defaulting to that law's own published value. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `'two_component'` bit-identically. Not supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (raises at construction; a fit's `approx="auto"` resolves to the exact path instead).
 
 Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
 `'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
@@ -309,6 +310,17 @@ dust_attenuation={'type': 'two_component', 'law_bc': 'ccm89', 'law_diff': 'calze
 
 # WG00 screen with structural selectors
 dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', 'structure': 'clumpy'}
+
+# Age-binned: N independent screens (#2528)
+dust_attenuation={
+    'type': 'age_binned',
+    'screens': [
+        {'law': 'calzetti', 'window_log_yr': (None, 7.0)},
+        {'law': 'power_law', 'window_log_yr': (7.0, 8.5)},
+        {'law': 'cardelli', 'window_log_yr': (8.5, None)},
+    ],
+    'tau_0': 0.5, 'tau_1': 1.0, 'tau_2': 0.3, 'other_params': Fixed(DEFAULT),
+}
 ```
 
 **Gotchas:**

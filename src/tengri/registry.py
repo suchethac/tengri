@@ -954,6 +954,11 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
         "citation": "Witt & Gordon 2000 (ApJ 528, 799)",
         "short_doc": "Radiative-transfer grid (geometry/structure/curve selectors)",
     },
+    "age_binned": {
+        "status": "production",
+        "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
+        "short_doc": "N independent screens, each its own law and log-age window (#2528)",
+    },
 }
 
 

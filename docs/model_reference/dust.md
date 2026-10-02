@@ -46,6 +46,21 @@ $$ (eq-dust-sigmoid)
 $$ (eq-tau-total)
  where $k(\lambda)$ is normalized at $\lambda = 5500$ Å. This requires the full $(n_{\rm age} \times n_\lambda)$ outer product for the exponential, but preserves smooth differentiability through the age boundary, which may matter for gradient-based inference when the data constrain the transition region.
 
+### Age-Binned ($N$-Screen) Framework
+
+The age-binned mode generalizes the two-component model to $N$ independent screens, each with its own attenuation curve $k_i(\lambda)$ and a window $(l_i, h_i)$ in $\log_{10}(t_{\rm age}/{\rm yr})$, either edge of which may be unbounded. Windows need not partition the age axis. The optical depth seen by an SSP of age $t_{\rm age}$ is $$\tau(\lambda, t_{\rm age}) = \sum_{i} w_i(t_{\rm age})\, \tau_i\, k_i(\lambda),
+\qquad
+w_i(t_{\rm age}) = \sigma\!\left(\frac{\log_{10} t_{\rm age} - l_i}{\Delta_{\rm trans}}\right)
+\sigma\!\left(\frac{h_i - \log_{10} t_{\rm age}}{\Delta_{\rm trans}}\right),
+
+$$ (eq-dust-agebinned)
+ with $\sigma$ the logistic sigmoid of Equation {eq}`eq-dust-sigmoid` and $\Delta_{\rm trans}$ the shared transition width (default 0.3 dex); an unbounded window side contributes a factor of 1. The two-component model is the $N = 2$ case: the screens $\{(k_{\rm BC}, (-\infty, \log_{10} t_{\rm birth})),\, (k_{\rm ISM}, (-\infty, \infty))\}$ reduce $w_0(t_{\rm age})$ to the $w(t_{\rm age})$ of Equation {eq}`eq-dust-sigmoid` and $w_1(t_{\rm age}) \equiv 1$, recovering Equation {eq}`eq-tau-total` exactly.
+
+Nebular continuum and the discrete emission-line catalog are attenuated at the youngest age, the $t_{\rm age} \to 0$ limit of Equation {eq}`eq-dust-agebinned`: screens with a finite lower edge vanish there, leaving $$\tau_{\rm neb}(\lambda) = \sum_{i:\; l_i = -\infty} \tau_i\, k_i(\lambda).
+
+$$ (eq-dust-agebinned-neb)
+ Each screen carries its own optical depth $\tau_i$ and the shape parameters of its curve; the clumpy geometry of the next section is not applied in this mode.
+
 ### Clumpy Geometry
 
 All three modes support the clumpy-screen geometry of Lower et al. (2022), in which a fraction $f_{\rm obs}$ of sightlines are unobscured: $$T(\lambda, t_{\rm age}) = f_{\rm obs} + (1 - f_{\rm obs}) \cdot \exp\!\bigl[-\tau(\lambda, t_{\rm age})\bigr].

@@ -1093,6 +1093,12 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             )
         from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
 
+        # age_binned (#2528): no WavePrecomp/SpectrumPrecomp LUT, mirroring
+        # Fitter._auto_approx_config's same-named guard -- "auto" stays exact
+        # rather than attempting a clone that raises at construction.
+        if getattr(getattr(model, "spec", None), "dust_model", None) == "age_binned":
+            return model
+
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             has_wave = state is not None and state.wave_precomp
@@ -2006,6 +2012,13 @@ class Fitter:
             SpectrumPrecomp,
             WavePrecomp,
         )
+
+        # age_binned (#2528) has no WavePrecomp/SpectrumPrecomp LUT (a build
+        # with either explicit raises at construction, see SEDModel.__init__);
+        # "auto" must still resolve to a model that fits, so it stays exact
+        # here rather than attempting a clone that would raise.
+        if getattr(getattr(model, "spec", None), "dust_model", None) == "age_binned":
+            return None
 
         if self.data_type in ("spectroscopy", "joint"):
             base = SpectrumPrecomp()

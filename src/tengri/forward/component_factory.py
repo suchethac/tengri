@@ -39,6 +39,9 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 
 # Attenuator component CLASSES are resolved from _REGISTRY via the dispatch
 # seam (single dispatch, #844), only their config dataclasses are imported here.
+from tengri.components.dust.age_binned import (
+    AgeBinnedDustComponentConfig,
+)
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
 )
@@ -126,7 +129,7 @@ def _build_domain_membership_map() -> dict[str, set[str]]:
 
     domain_membership: dict[str, set[str]] = {
         "dust_emission": set(),
-        "dust_attenuation": {"single_component", "two_component", "wg00"},
+        "dust_attenuation": {"single_component", "two_component", "wg00", "age_binned"},
         "nebular": {"nebular", "shock"},
         "agn": {
             "agn",
@@ -384,6 +387,9 @@ def build_components(
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
     dust_law_neb: str | None = None,
+    # age_binned (#2528): N independent screens, each (law, lo, hi) in
+    # log10(age/yr). Only consulted when dust_model="age_binned".
+    dust_screens: tuple = (),
     # Per-source dust-screen choice (#2234 replacement). Only threaded
     # into DustSEDComponentConfig (the two_component atten_type below);
     # single_component/wg00/off never read them.
@@ -605,6 +611,9 @@ def build_components(
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
                 eb_include_lyc=dust_eb_include_lyc,
             )
+        elif dust_model == "age_binned":
+            atten_type = "age_binned"
+            atten_config = AgeBinnedDustComponentConfig(screens=tuple(dust_screens))
         else:
             atten_type = "two_component"
             _overrides = dust_law_overrides or {}

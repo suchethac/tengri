@@ -2720,6 +2720,24 @@ class SEDModel:
             wave_cfgs = [c for c in configs if isinstance(c, WavePrecomp)]
             spec_cfgs = [c for c in configs if isinstance(c, SpectrumPrecomp)]
             feat_cfgs = [c for c in configs if isinstance(c, FeaturePrecomp)]
+            # age_binned (#2528): no WavePrecomp/SpectrumPrecomp LUT support --
+            # the per-screen age-window weights are not published to the
+            # precompute path. Refuse loudly here rather than silently
+            # mis-attenuating (or crashing deep inside predict_photometry on a
+            # missing LUT key). FeaturePrecomp alone is unaffected: dust
+            # attenuation never branches on filter_eff/spec_eff presence, so
+            # the dense SED is always computed the same way either way.
+            if (wave_cfgs or spec_cfgs) and getattr(spec, "dust_model", None) == "age_binned":
+                raise NotImplementedError(
+                    "dust_attenuation={'type': 'age_binned'} has no WavePrecomp/"
+                    "SpectrumPrecomp LUT support (#2528): the per-screen age-window "
+                    "weights are not published to the precompute path. Use the "
+                    "exact wave-grid path instead -- approx=None (the default), or "
+                    "drop WavePrecomp()/SpectrumPrecomp() from a composite approx=. "
+                    "A Fitter's approx='auto' policy already resolves to the exact "
+                    "path for this dust type, so a fit still runs without naming "
+                    "approx= explicitly."
+                )
             known = (WavePrecomp, SpectrumPrecomp, FeaturePrecomp)
             unknown = [c for c in configs if not isinstance(c, known)]
             if (
@@ -3631,6 +3649,7 @@ class SEDModel:
         return _build_param_map(
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
+            dust_screens=getattr(spec, "dust_screens", ()),
         )
 
     def _init_metallicity(self, spec):
@@ -3871,6 +3890,9 @@ class SEDModel:
 
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
+        # age_binned (#2528): N independent screens, each (law, lo, hi) in
+        # log10(age/yr). Empty for every other dust_model.
+        self._dust_screens = getattr(spec, "dust_screens", ()) or ()
         # Nebular birth-cloud law (None -> inherit the stellar birth cloud).
         # Decouples HII-region reddening from the stars while sharing the
         # diffuse ISM screen; consumed by ``DustSEDComponent`` via
@@ -10828,6 +10850,7 @@ class SEDModel:
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
+            dust_screens=getattr(self, "_dust_screens", ()),
             dust_nebular_screen=getattr(self, "_dust_nebular_screen", "birth_cloud"),
             dust_shock_screen=getattr(self, "_dust_shock_screen", "diffuse"),
             dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
