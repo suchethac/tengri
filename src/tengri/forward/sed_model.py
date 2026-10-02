@@ -10602,7 +10602,7 @@ class SEDModel:
             which case the caller keeps the exact per-call dense filter integral.
             Term order is the emitter's ``emission_terms`` dict order. The consumer
             reads it at the evaluation redshift via
-            :func:`tengri.components._term_response.term_band_response`.
+            ``term_band_response`` in ``components/_term_response.py``.
 
         Notes
         -----
