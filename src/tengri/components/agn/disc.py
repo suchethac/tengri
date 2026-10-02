@@ -43,6 +43,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._nt_emissivity import (
+    X_MAX as _NT_X_MAX,
+    isco_radius as _isco_radius,
+    nt_dh_dlogx as _nt_dh_dlogx,
+    nt_h as _nt_h,
+    nt_h_ceiling as _nt_h_ceiling,
+    nt_rt as _nt_rt,
+)
 from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
@@ -219,39 +227,6 @@ def powerlaw_disc(
 # ── Model 2: Multi-color disc (Shakura-Sunyaev thin disc) ─────────
 
 
-def _isco_radius(a_spin: float) -> float:
-    """Innermost stable circular orbit in units of R_g = GM/c^2.
-
-    Bardeen, Press & Teukolsky (1972) formula for prograde orbits.
-
-    Parameters
-    ----------
-    a_spin : float
-        Dimensionless spin parameter (0 to 0.998).
-
-    Returns
-    -------
-    float
-        r_isco / R_g.
-
-    Notes
-    -----
-    To ensure finite gradients at the Schwarzschild limit (a=0), we clamp
-    the argument to the final square root to a small positive value (1e-20).
-    The BPT72 formula has a gradient singularity at a=0 where (3-z1)→0,
-    which makes sqrt((3-z1)*(3+z1+2*z2)) undefined in AD. The physical
-    limit is correct (r_isco=6 for a=0), but the gradient path must be
-    stabilized for JAX autodiff to work.
-    """
-    # Clamp spin to physical range
-    a = jnp.clip(a_spin, 0.0, 0.998)
-    z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
-    z2 = jnp.sqrt(3.0 * a**2 + z1**2)
-    # Clamp sqrt argument to avoid zero-to-zero gradient singularity at a=0
-    sqrt_arg = jnp.maximum((3.0 - z1) * (3.0 + z1 + 2.0 * z2), 1e-20)
-    return 3.0 + z2 - jnp.sqrt(sqrt_arg)
-
-
 def _log10_eddington_luminosity(log_mbh: float) -> float:
     r"""log10 Eddington luminosity, :math:`\log_{10} L_{\rm Edd}` [log10(erg/s)].
 
@@ -274,36 +249,37 @@ def _gravitational_radius(log_mbh: float) -> float:
     return _GRAV_RADIUS_PER_MSUN * _pow10(log_mbh)
 
 
-def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
-    """Analytic NT emissivity integral over the hot corona zone (K&D 2018 Eq. 2).
+def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float, a_spin: float = 0.0) -> float:
+    """NT dissipation of the hot flow, K&D 2018 Eq. 2, with the Page-Thorne emissivity.
 
-    Integrates F_NT = σ T_NT^4(R) over the disc annuli from R_ISCO to R_hot.
-    With T_NT(R) = T_in * (R/R_isco)^{-3/4} * (1 - sqrt(R_isco/R))^{1/4},
+    Integrates ``F_NT = sigma T_NT^4`` over the disc annuli from R_ISCO to R_hot, both
+    faces::
 
-        L_diss = 2 * ∫_{R_isco}^{R_hot} σ T_NT^4 * 2πR dR
-               = L_0 * h(x_hot)
+        L_diss = 2 * int_{R_isco}^{R_hot} sigma T_NT^4 * 2 pi R dR = L_0 * h(x_hot)
 
-    where L_0 = 4π R_isco^2 σ T_in^4 and, with s = x^{-1/2},
+    with ``L_0 = 4 pi R_isco^2 sigma T_in^4``, ``x = R / R_isco`` and
+    ``sigma T_NT^4 = sigma T_in^4 x^-3 Rt(x; a)``, where ``Rt`` is the Page & Thorne
+    (1974, ApJ 191, 499) factor of :mod:`tengri.components.agn._nt_emissivity` (zero at the
+    ISCO, -> 1 far out)::
 
-        h(x) = 1/3 - 1/x + 2/(3 x^{3/2}) = (1 - s)^2 (1 + 2 s) / 3   (x = R_hot / R_isco ≥ 1)
+        h(x) = int_1^x x'^-2 Rt(x'; a) dx'
 
-    (the product form is the same function without the cancellation of the
-    first). h(1) = 0 (empty corona), h(∞) → 1/3 (the entire NT disc luminosity,
-    L_0/3 = 3 G M Mdot / 2 R_isco / 3 = G M Mdot / 2 R_isco).
-
-    The integrand is ``x^-3 (1 - x^-1/2) * x`` -- the trailing ``x`` is the
-    ``R dR`` area element. An earlier form, ``1/10 - 1/(2x^2) + 2/(5 x^{5/2})``,
-    integrated without it (#2572), understating L_diss by a factor 0.78 (x=1.5) to 0.30
-    (x→∞) and so placing R_hot too far out for any target.
+    evaluated by fixed-node Gauss-Legendre quadrature in ``ln x`` (no closed form for
+    a != 0). ``h(1) = 0`` (empty corona); for the Newtonian zero-torque profile
+    ``Rt = 1 - x^-1/2`` it would be ``1/3 - 1/x + 2/(3 x^{3/2})``. The trailing ``x`` of the
+    integrand ``x^-3 Rt x`` is the ``R dR`` area element; an earlier ``1/10 - ...`` form
+    integrated without it (#2572).
 
     Parameters
     ----------
     x_hot : float
-        R_hot / R_ISCO ≥ 1.
+        R_hot / R_ISCO >= 1.
     r_isco_cm : float
         ISCO radius [cm].
     t_in : float
-        Inner disc temperature T_in [K].
+        Reference temperature ``T_in = (3 G M Mdot / 8 pi sigma R_isco^3)^(1/4)`` [K].
+    a_spin : float, optional
+        Dimensionless BH spin (default 0).
 
     Returns
     -------
@@ -311,13 +287,14 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
         L_diss [erg s^-1].
     """
     l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
-    return l0 * jnp.maximum(_nt_h(jnp.log(x_hot)), 0.0)
+    return l0 * jnp.maximum(_nt_h(jnp.log(x_hot), a_spin), 0.0)
 
 
 def _nt_l0(r_isco_cm: float, t_in: float, float32: bool = False) -> float:
     """``L_0 = 4 pi R_isco^2 sigma T_in^4`` [erg/s; L_sun on the float32 path (#1206)].
 
-    The NT disc's total luminosity is ``L_0 / 3`` (``h(inf) = 1/3``).
+    The NT disc's total dissipation is ``L_0 * h(inf)``; ``h(inf) = 1/3`` for the
+    Newtonian profile and 0.233 (a=0) .. 0.1 (a=0.998) for Page-Thorne.
     """
     if float32:
         return _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4
@@ -330,100 +307,89 @@ def _r_hot_bisect(
     l_hot_target: float,
     n_iter: int = 40,
     float32: bool = False,
+    a_spin: float = 0.0,
 ) -> float:
     r"""Solve for R_hot from K&D 2018 Eq. 2 by bisection in log(x_hot).
 
-    The NT emissivity integral has closed form
-    :math:`L_{\rm diss}(x) = L_0\,[1/3 - 1/x + 2/(3 x^{3/2})]`
-    (see :func:`_nt_l_diss_analytic`), strictly monotone in
-    :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After
-    ``n_iter=40`` the bracket width is :math:`< 2^{-40} \approx 10^{-12}`
-    of its initial log-width: enough for machine precision.
+    :math:`L_{\rm diss}(x) = L_0\,h(x)` with the Page-Thorne dissipation integral
+    :math:`h` (see :func:`_nt_l_diss_analytic`), strictly monotone in
+    :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After ``n_iter=40`` the bracket width is
+    :math:`< 2^{-40} \approx 10^{-12}` of its initial log-width: enough for machine
+    precision.
 
-    ``l_hot_target`` is clipped below :math:`0.33\,L_0` (:math:`L_{\max} = L_0/3`).
+    ``l_hot_target`` is clipped to :math:`0.99\,L_0 h(10^4)` (see
+    :func:`tengri.components.agn._nt_emissivity.nt_h_ceiling`).
 
     Differentiable: see :func:`_solve_log_x_hot` (implicit-function JVP, #2572).
     """
-    # Maximum possible L_diss (entire disc, x→∞): h→1/3, so L_max = L0 / 3.
     # Float32 (#1206): ``l0`` is ~1e42 erg/s (overflow); the bisection needs only
     # the RATIO l_hot_target / l0, so compute both in L_sun units (``l_hot_target``
     # arrives in L_sun on the float32 path). The pre-divided 4*pi*sigma/L_sun
     # constant folds first so no ~1e42 intermediate forms.
     l0 = _nt_l0(r_isco_cm, t_in, float32)
-    # The target is clipped to (0, 0.33 L0) inside the solve; if l_hot_target >= L_max,
-    # r_hot -> the ceiling's root.
-    x_hot = jnp.exp(_solve_log_x_hot(l_hot_target, l0, n_iter))
+    x_hot = jnp.exp(_solve_log_x_hot(l_hot_target, l0, a_spin, n_iter))
     return x_hot * r_isco_cm
 
 
 _X_LO = 1.001
-_X_HI = 1.0e4
-#: Ceiling on the R_hot target in units of L0: 0.33 of the h(∞) = 1/3 asymptote, which
-#: sits inside the bisection bracket (h(1e4) = 0.3332).
-_H_CEILING = 0.33
 
 
-def _nt_h(log_x):
-    """Normalised NT emissivity integral h(x), x = exp(log_x) (see ``_nt_l_diss_analytic``)."""
-    s = jnp.exp(-0.5 * log_x)
-    return (1.0 - s) ** 2 * (1.0 + 2.0 * s) / 3.0
-
-
-def _bisect_log_x(l_hot_target, l0, n_iter):
+def _bisect_log_x(l_hot_target, l0, a_spin, n_iter):
     """Bisect ``l0 * h(x) = l_target`` in log(x) over [log 1.001, log 1e4] (``lax.scan``).
 
-    ``l_target = clip(l_hot_target, 1e-100, 0.33 L0)``.
+    ``l_target = clip(l_hot_target, 1e-100, l0 * h_ceiling(a))``.
     """
-    l_target = jnp.clip(l_hot_target, 1e-100, l0 * _H_CEILING)
+    l_target = jnp.clip(l_hot_target, 1e-100, l0 * _nt_h_ceiling(a_spin))
 
     def _step(state, _):
         """Single bisection step in log-space to solve for R_hot."""
         lo_i, hi_i = state
         mid = (lo_i + hi_i) * 0.5
-        go_right = l0 * _nt_h(mid) < l_target
+        go_right = l0 * _nt_h(mid, a_spin) < l_target
         return (jnp.where(go_right, mid, lo_i), jnp.where(go_right, hi_i, mid)), None
 
-    (lo_f, hi_f), _ = jax.lax.scan(_step, (jnp.log(_X_LO), jnp.log(_X_HI)), None, length=n_iter)
+    (lo_f, hi_f), _ = jax.lax.scan(
+        _step, (jnp.log(_X_LO), jnp.log(_NT_X_MAX)), None, length=n_iter
+    )
     return (lo_f + hi_f) * 0.5
 
 
-@functools.partial(jax.custom_jvp, nondiff_argnums=(2,))
-def _solve_log_x_hot(l_hot_target, l0, n_iter):
-    """Root ``log(x_hot)`` of ``F = l0*h(x) - l_target``, differentiable by the IFT (#2572).
+@functools.partial(jax.custom_jvp, nondiff_argnums=(3,))
+def _solve_log_x_hot(l_hot_target, l0, a_spin, n_iter):
+    """Root ``log(x_hot)`` of ``F = l0*h(x; a) - l_target``, differentiable by the IFT (#2572).
 
-    The forward value is the bisection above, unchanged. Differentiating *through*
-    the ``scan`` returns exactly 0 (the bracket ends are constants and ``where`` only
-    selects between them), so ``R_hot`` carried no sensitivity to ``M_BH``, ``L_bol``
-    or ``f_hard`` wherever it is not clipped. The rule below is the implicit-function
-    derivative at the converged root::
+    The forward value is the bisection above. Differentiating *through* the ``scan``
+    returns exactly 0 (the bracket ends are constants and ``where`` only selects between
+    them), so ``R_hot`` carried no sensitivity to ``M_BH``, ``L_bol``, ``f_hard`` or spin
+    wherever it is not clipped. The rule below is the implicit-function derivative at the
+    converged root::
 
-        d(log x)/d theta = -(dF/d theta) / (dF/d log x),
-        dF/d log x = l0 * (x^-1 - x^-1.5),
-        dF = dl_target - h(x) * dl0.
+        d(log x) = (dl_target - h dl0 - l0 (dh/da) da) / (l0 dh/d log x),
+        dh/d log x = Rt(x) / x   (exact integrand),  dh/da by autodiff of the quadrature.
 
-    It is exactly 0 where the target's clip (to ``(1e-100, 0.33 L0)``) is active or the root
-    is pinned to a bracket end, where ``R_hot`` really is independent of the target:
-    evaluating the IFT there would leave ~1e-14 of bisection residual amplified by
-    ``r_isco`` (~1e14 cm).
+    It is exactly 0 where the target's clip (to ``(1e-100, l0 h_ceiling)``) is active or
+    the root is pinned to a bracket end, where ``R_hot`` really is independent of the
+    target: evaluating the IFT there would leave ~1e-14 of bisection residual amplified
+    by ``r_isco`` (~1e14 cm). (The weak ``a`` dependence of the saturation root itself is
+    neglected there.)
     """
-    return _bisect_log_x(l_hot_target, l0, n_iter)
+    return _bisect_log_x(l_hot_target, l0, a_spin, n_iter)
 
 
 @_solve_log_x_hot.defjvp
 def _solve_log_x_hot_jvp(n_iter, primals, tangents):
     """Implicit-function-theorem JVP of :func:`_solve_log_x_hot`."""
-    l_hot_target, l0 = primals
-    d_target, d_l0 = tangents
-    u = _bisect_log_x(l_hot_target, l0, n_iter)
-    x = jnp.exp(u)
-    dh_du = 1.0 / x - x ** (-1.5)  # x dh/dx, dh/dx = x^-2 - x^-2.5
-    dF_du = l0 * dh_du
+    l_hot_target, l0, a_spin = primals
+    d_target, d_l0, d_a = tangents
+    u = _bisect_log_x(l_hot_target, l0, a_spin, n_iter)
+    h_u, dh_da = jax.jvp(lambda aa: _nt_h(u, aa), (a_spin,), (jnp.asarray(d_a, dtype=u.dtype),))
+    dF_du = l0 * _nt_dh_dlogx(u, a_spin)
     interior = (
-        (l_hot_target > l0 * _nt_h(jnp.log(_X_LO)))
-        & (l_hot_target < l0 * _H_CEILING)
+        (l_hot_target > l0 * _nt_h(jnp.log(_X_LO), a_spin))
+        & (l_hot_target < l0 * _nt_h_ceiling(a_spin))
         & (l_hot_target > 1e-100)
     )
-    neg_dF_dtheta = d_target - _nt_h(u) * d_l0  # -dF/dtheta for F = l0 h - l_target
+    neg_dF_dtheta = d_target - h_u * d_l0 - l0 * dh_da  # -dF/dtheta for F = l0 h - l_target
     safe = jnp.where(interior, dF_du, 1.0)
     tangent = jnp.where(interior, neg_dF_dtheta / safe, 0.0)
     return u, tangent
@@ -436,6 +402,7 @@ def _l_seed_geometric(
     t_in: float,
     n_radii: int = 100,
     float32: bool = False,
+    a_spin: float = 0.0,
 ) -> float:
     """Geometric seed photon luminosity intercepted by the hot corona (K&D 2018 Eq. 3).
 
@@ -480,8 +447,8 @@ def _l_seed_geometric(
 
     # NT temperature and emissivity
     r_ratio = r / r_isco_cm
-    torque = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
-    t_r = t_in * r_ratio ** (-0.75) * torque  # [K]
+    rt = jnp.maximum(_nt_rt(r_ratio, a_spin), 1e-30) ** 0.25  # Page-Thorne (1974) factor
+    t_r = t_in * r_ratio ** (-0.75) * rt  # [K]
     # Float32 (#1206): the seed integral (integrand * dr) reaches ~1e43 erg/s and
     # overflows; return L_seed in L_sun units by folding 1/L_sun into the surface
     # flux. Downstream ratios (Beloborodov) are unit-invariant.
@@ -1176,6 +1143,7 @@ def _hot_flow_luminosity(
     agn_f_hard: float,
     log10_l_edd: float,
     l0: float,
+    a_spin: float = 0.0,
     float32: bool = False,
     agn_log_mbh: float = 0.0,
 ) -> float:
@@ -1192,11 +1160,11 @@ def _hot_flow_luminosity(
     made the corona 21% too weak at ``log lambda_Edd = -1.5``.
 
     tengri cannot drop zones (static shapes), so the unreachable case is represented by
-    saturating: ``L_hot`` is limited to ``0.33 L0``, the ceiling of the R_hot solve
-    (99% of the NT disc's total ``L0 / 3``), which places R_hot at the ceiling root, at
-    most ``0.5 R_out`` by the zone clip. Where the disc can supply ``f_hard L_Edd`` --
-    every ``lambda_Edd`` above ~0.02, the paper's grid is ``mdot = 0.03 - 1`` --
-    ``L_diss,hot(R_hot) = L_hot = f_hard L_Edd`` exactly.
+    saturating: ``L_hot`` is limited to ``L0 * h_ceiling(a)``, the ceiling of the R_hot
+    solve (99% of the Page-Thorne disc's total dissipation ``L0 h(inf)``), which places
+    R_hot at the ceiling root, at most ``0.5 R_out`` by the zone clip. Where the disc can
+    supply ``f_hard L_Edd`` -- the paper's grid is ``mdot = 0.03 - 1`` -- ``L_diss,hot(R_hot)
+    = L_hot = f_hard L_Edd`` exactly.
 
     Both ``R_hot`` (the zone radii) and the corona normalisation (the SED) use THIS
     value. ``l0`` is ``4 pi R_isco^2 sigma T_in^4`` (:func:`_nt_l0`).
@@ -1208,7 +1176,7 @@ def _hot_flow_luminosity(
         l_hot = f_hard_safe * (_L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh)
     else:
         l_hot = f_hard_safe * _pow10(log10_l_edd)
-    return jnp.minimum(l_hot, l0 * _H_CEILING)
+    return jnp.minimum(l_hot, l0 * _nt_h_ceiling(a_spin))
 
 
 def _compute_zone_radii(
@@ -1222,6 +1190,7 @@ def _compute_zone_radii(
     agn_r_warm_ratio: float,
     log10_l_edd: float,
     float32: bool = False,
+    agn_a_spin: float = 0.0,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
 
@@ -1287,18 +1256,19 @@ def _compute_zone_radii(
         agn_f_hard,
         log10_l_edd,
         _nt_l0(r_isco_cm, t_in, float32),
+        agn_a_spin,
         float32=float32,
         agn_log_mbh=agn_log_mbh,
     )
     if float32:
         l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
-        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True)
+        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True, a_spin=agn_a_spin)
         l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
     else:
         # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value
         # rather than as a standalone linear constant, so the removed
         # ``_eddington_luminosity`` product never reappears here.
-        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
+        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, a_spin=agn_a_spin)
         # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
         # agn_log_lbol (not the now-derived agn_log_ledd).
         l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
@@ -1334,6 +1304,7 @@ def _compute_zone_luminosities(
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_lbol_shape: float = 0.0,
+    agn_a_spin: float = 0.0,
     nthcomp_table=None,
 ) -> tuple:
     """Compute self-consistent luminosities of the three AGN zones.
@@ -1407,8 +1378,8 @@ def _compute_zone_luminosities(
     r_outer = 10.0**log_r_outer
 
     r_ratio_outer = r_outer / r_isco_cm
-    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
-    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
+    rt_outer = jnp.maximum(_nt_rt(r_ratio_outer, agn_a_spin), 1e-30) ** 0.25
+    t_outer = t_in * r_ratio_outer ** (-0.75) * rt_outer
 
     d_log_r_outer = log_r_outer[1] - log_r_outer[0]
     dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
@@ -1433,8 +1404,8 @@ def _compute_zone_luminosities(
     r_warm_grid = 10.0**log_r_warm_grid
 
     r_ratio_warm = r_warm_grid / r_isco_cm
-    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
-    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
+    rt_warm = jnp.maximum(_nt_rt(r_ratio_warm, agn_a_spin), 1e-30) ** 0.25
+    t_warm = t_in * r_ratio_warm ** (-0.75) * rt_warm
 
     d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
@@ -1468,13 +1439,16 @@ def _compute_zone_luminosities(
         agn_f_hard,
         log10_l_edd,
         _nt_l0(r_isco_cm, t_in, float32),
+        agn_a_spin,
         float32=float32,
         agn_log_mbh=agn_log_mbh,
     )
     if float32:
-        l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True)
+        l_seed_geom = _l_seed_geometric(
+            r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True, a_spin=agn_a_spin
+        )
     else:
-        l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
+        l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, a_spin=agn_a_spin)
 
     kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
 
@@ -1884,6 +1858,7 @@ def kubota_done_disc(
         agn_r_warm_ratio,
         log10_l_edd,
         float32=_f32,
+        agn_a_spin=agn_a_spin,
     )
 
     # Normalization magnitude from agn_log_lbol (the reference on the float32
@@ -1913,6 +1888,7 @@ def kubota_done_disc(
         float32=_f32,
         agn_log_mbh=agn_log_mbh,
         agn_log_lbol_shape=_lbol_shape,
+        agn_a_spin=agn_a_spin,
         nthcomp_table=_template,
     )
 
