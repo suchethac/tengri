@@ -19,6 +19,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.observation.noise import censored_neg_log_likelihood
 
 __all__ = [
     "build_loglikelihood_fn",
@@ -518,13 +519,23 @@ def _build_data_neg_log_likelihood_fn(fitter):
             # line-flux DATA channel, applied to the array compared against
             # the data, never inside ``predict_line_fluxes`` itself.
             model_lf = model_lf * params.get("line_flux_scaling", 1.0)
-            chi2_lines = jnp.sum(
-                standardized_residual(
-                    data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+            # Score with censored likelihood if limits are present, else chi-squared
+            line_flux_limit_mask = data_args.get("line_flux_limit_mask")
+            if line_flux_limit_mask is not None:
+                e_lh = e_lh + censored_neg_log_likelihood(
+                    data_args["line_flux_obs"],
+                    data_args["line_flux_err"],
+                    model_lf,
+                    line_flux_limit_mask,
                 )
-                ** 2
-            )
-            e_lh = e_lh + 0.5 * chi2_lines
+            else:
+                chi2_lines = jnp.sum(
+                    standardized_residual(
+                        data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+                    )
+                    ** 2
+                )
+                e_lh = e_lh + 0.5 * chi2_lines
         if has_line_ratios:
             model_lr = model.predict_line_ratios(_free_params, model.observation.line_ratios)
             chi2_ratios = jnp.sum(
