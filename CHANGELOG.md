@@ -70,6 +70,8 @@
   bound is pinned at test time with a corruption probe on the engaged
   preintegrated grid; no check runs inside `precompute()` itself.
 
+- `dust_emission={'type': 'graybody'}` is the general-opacity greybody `(1 − e^{−(λ0/λ)^β})·B_ν(T)` of Casey (2012) Eq. 1 with no additional `ν^β` emissivity factor (νL_ν peak 72 µm at T = 50 K, β = 1.5, λ0 = 200 µm; CIGALE `mbb` and Synthesizer `Greybody(optically_thin=False)` agree) (#2596).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
