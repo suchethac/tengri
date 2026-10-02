@@ -529,10 +529,10 @@ def project_spectrum_kernel_split(
            Adelberger, K. L. (1996). "Spectroscopic Confirmation of a
            Population of Normal Star-forming Galaxies at Redshifts z > 3."
            ApJ, 462, L17.
-    .. [6] Steidel, C. C., Shapley, A. E., Pettini, M., Adelberger, K. L.,
-           Erb, D. K., Reddy, N. A., & Hunt, M. P. (2003). "A Survey of
-           Star-forming Galaxies in the 1.4 < z < 2.5 Redshift Desert:
-           Overview." ApJ, 592, 728. arXiv:astro-ph/0305378.
+    .. [6] Steidel, C. C., Adelberger, K. L., Shapley, A. E., Pettini, M.,
+           Dickinson, M., & Giavalisco, M. (2003). "Lyman Break Galaxies at
+           Redshift z ~ 3: Survey Description and Full Data Set."
+           ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
     from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
 
