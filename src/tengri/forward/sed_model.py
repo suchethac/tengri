@@ -3894,10 +3894,10 @@ class SEDModel:
         self._dust_lyman_cutoff_aa = float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) vs the
         # default young/birth-cloud-only (bagpipes). See DustSEDComponent.
-        self._dust_lyc_absorb_all = bool(getattr(spec, "dust_lyc_absorb_all", False))
+        self._dust_lyc_reprocessed_by = str(getattr(spec, "dust_lyc_reprocessed_by", "young"))
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
-        self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
+        self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -10204,7 +10204,7 @@ class SEDModel:
                 # (#922: LyC photons ionize H rather than heat dust). Baking a
                 # different cutoff here than DustAttenuationSEDComponent.apply()
                 # uses is what made the LUT disagree with the exact integral.
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
                 lyman_cutoff_aa = dust.config.lyman_cutoff_aa
 
                 ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
@@ -10221,7 +10221,7 @@ class SEDModel:
                     bc_params={k: float(v) for k, v in dust_params.items()},
                     diff_params={k: float(v) for k, v in dust_params.items()},
                     lyman_cutoff_aa=lyman_cutoff_aa,
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=jnp.asarray([0.0]),
                     tau_diff_grid=tau_v_grid,
                 )
@@ -10240,7 +10240,7 @@ class SEDModel:
                 law_diff = dust.config.law_diff
                 t_birth_yr = dust.config.t_birth_yr
                 transition_width_dex = dust.config.transition_width_dex
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
 
                 # #2539 item 1: the LUT's stellar B/G terms
                 # (energy_balance_precompute.build_energy_balance_lut) are
@@ -10260,7 +10260,7 @@ class SEDModel:
                 # nebular component is in the chain (BakedIn/no-nebular
                 # models never publish ``lyc_transmission``/``lyc_fesc``, so
                 # the runtime fesc combine is a no-op there regardless) and
-                # ``eb_include_lyc=True`` unmasks the LyC region in the first
+                # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
                 _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
@@ -10269,7 +10269,7 @@ class SEDModel:
                     and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
                     for c in chain
                 )
-                _fesc_exact = eb_include_lyc and _live_neb
+                _fesc_exact = lyc_in_energy_balance and _live_neb
 
                 def _grid(name):
                     if name in free:
@@ -10301,11 +10301,11 @@ class SEDModel:
                         if hasattr(dust.config, "lyman_cutoff_aa")
                         else 0.0
                     ),
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
                     tau_diff_grid=tau_diff_grid,
                     fesc_exact=_fesc_exact,
-                    lyc_absorb_all=dust.config.lyc_absorb_all,
+                    lyc_reprocessed_by=dust.config.lyc_reprocessed_by,
                 )
 
         self._energy_balance_lut_cache = lut
@@ -10903,8 +10903,8 @@ class SEDModel:
             dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
-            dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
-            dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
+            dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_fdust_credit_active=self._fdust_credit_active(),

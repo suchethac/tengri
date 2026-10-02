@@ -392,8 +392,8 @@ def build_components(
     dust_agn_screen: str = "none",
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
-    dust_lyc_absorb_all: bool = False,
-    dust_eb_include_lyc: bool = False,
+    dust_lyc_reprocessed_by: str = "young",
+    dust_lyc_in_energy_balance: bool = False,
     dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
@@ -605,7 +605,7 @@ def build_components(
                 geometry=wg00_geometry,
                 structure=wg00_structure,
                 log_l_ir_requested=dust_log_l_ir_requested,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
                 fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "single_component":
@@ -615,7 +615,7 @@ def build_components(
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
                 fdust_credit_active=dust_fdust_credit_active,
             )
         else:
@@ -637,8 +637,8 @@ def build_components(
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                lyc_absorb_all=dust_lyc_absorb_all,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
                 log_l_ir_requested=dust_log_l_ir_requested,
                 fdust_credit_active=dust_fdust_credit_active,
             )

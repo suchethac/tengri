@@ -1256,12 +1256,30 @@ class Parameters:
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young/birth-cloud
-        # only (default; bagpipes). See DustSEDComponent.lyc_absorb_all.
-        self.dust_lyc_absorb_all = bool(kwargs.pop("dust_lyc_absorb_all", False))
+        # only (default; bagpipes). See DustSEDComponent.lyc_reprocessed_by.
+        # #2529 ("one lyc_ key family"): the retired bare bool is intercepted
+        # here too -- the expert flat-kwarg Parameters(...) escape hatch
+        # bypasses groups.py's grammar-level rename hint entirely.
+        if "dust_lyc_absorb_all" in kwargs:
+            _old_value = kwargs.pop("dust_lyc_absorb_all")
+            raise ValueError(
+                f"dust_lyc_absorb_all={_old_value!r} was renamed 'dust_lyc_reprocessed_by' "
+                f"(owner ruling #2529, 'one lyc_ key family'): False -> 'young' (default), "
+                f"True -> 'all'. Pass "
+                f"dust_lyc_reprocessed_by={'all' if _old_value else 'young'!r} instead."
+            )
+        self.dust_lyc_reprocessed_by = str(kwargs.pop("dust_lyc_reprocessed_by", "young"))
         # Include the LyC (λ < 912 Å) in the dust energy-balance integral
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
-        self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
+        if "dust_eb_include_lyc" in kwargs:
+            _old_value = kwargs.pop("dust_eb_include_lyc")
+            raise ValueError(
+                f"dust_eb_include_lyc={_old_value!r} was renamed 'dust_lyc_in_energy_balance' "
+                f"(owner ruling #2529, 'one lyc_ key family'): same bool, same default False. "
+                f"Pass dust_lyc_in_energy_balance={_old_value!r} instead."
+            )
+        self.dust_lyc_in_energy_balance = bool(kwargs.pop("dust_lyc_in_energy_balance", False))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
@@ -2696,7 +2714,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dla": content("DLA model determines parameters"),
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
     "dust_approx": content("dust approximation type determines parameters"),
-    "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_lyc_in_energy_balance": content("dust LyC treatment determines parameters"),
     "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
@@ -2709,7 +2727,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
         "in the component chain when != 'none' (#2260)"
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
-    "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
