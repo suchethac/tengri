@@ -6450,7 +6450,6 @@ class SEDModel:
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         wave_rest = state.wave
         igm_trans = state.derived.get("igm_transmission", None)
-        sed_atten = state.sed_intrinsic if igm_trans is None else state.sed_intrinsic * igm_trans
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6482,7 +6481,7 @@ class SEDModel:
 
         return project_spectrum_kernel_split(
             state,
-            sed_atten,
+            state.sed_intrinsic,
             igm_trans,
             wave_rest,
             wave_obs,

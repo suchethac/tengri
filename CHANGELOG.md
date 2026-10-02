@@ -78,6 +78,12 @@
   bound is pinned at test time with a corruption probe on the engaged
   preintegrated grid; no check runs inside `precompute()` itself.
 
+- `dust_emission={'type': 'graybody'}` is the general-opacity greybody `(1 − e^{−(λ0/λ)^β})·B_ν(T)` of Casey (2012) Eq. 1 with no additional `ν^β` emissivity factor (νL_ν peak 72 µm at T = 50 K, β = 1.5, λ0 = 200 µm; CIGALE `mbb` and Synthesizer `Greybody(optically_thin=False)` agree) (#2596).
+
+- The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`) integrates the
+  thermal continuum on a 0.01 µm–10 mm rest-frame grid, so 70–1000 µm filters read the
+  band-averaged closure to 1e-3 instead of zero; the grid ended at 31.6 µm (#2642).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
@@ -3164,6 +3170,14 @@
   disagreed with the vendored grid's top node, `log10(0.07) =
   -1.154901959985743`, by 9.8e-5 — five orders of magnitude above the guard's
   1e-9 tolerance. Transcribed exactly now; the guard covers 29 cases (#2214).
+
+- The spectroscopy projector multiplied the IGM transmission into the rest-frame
+  SED before convolving with the galaxy's own velocity dispersion, so `sigma_v_kms`
+  smeared the IGM's sharp Lyman-limit/Lyman-alpha-forest edge — a line-of-sight
+  feature imprinted after the light leaves the galaxy, which the galaxy's own
+  kinematics cannot broaden. `sigma_v_kms` now acts on the stellar piece before
+  the IGM transmission, on every spectrum-prediction path, including
+  `analysis.simulate.spectrum_from_sfh` (#2589).
 
 - `agn={'type': 'off'}` raised `agn['type']='off' is not an AGN model` —
   both dust groups already accept `'off'` as a synonym of `'none'`
