@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression tests for #2665, #2666 — line-flux limits scored as detections.
+"""Line-flux upper and lower limits are scored as censored likelihoods (#2665, #2666).
 
-Root cause: `LineFluxData.log_likelihood` reads `is_upper_limit` but ignores
-`is_lower_limit`, scoring a lower-limit line as a Gaussian detection at the
-limit value. The upper-limit term clamps at z < -11.46, silencing gradients for
-strongly violated limits. The joint/spectroscopy path in `loss_functions.py`
-inlines a χ² for the line-flux term and ignores the limit mask.
-
-Expected physics: detection `ln L = -½((F - m)/σ)² - ln σ - ½ ln 2π`; upper
-limit `ln L = ln Φ((F - m)/σ)`; lower limit `ln L = ln Φ((m - F)/σ)`,
-evaluated with `jax.scipy.stats.norm.logcdf` / `log_ndtr` (no clamp).
+Per line, with sigma the flux uncertainty, F the tabulated flux (the limit
+value for a limit) and m the model flux: a detection scores
+``ln L = -0.5 ((F - m)/sigma)^2 - ln sigma - 0.5 ln 2 pi``, an upper limit
+``ln L = ln Phi((F - m)/sigma)`` and a lower limit
+``ln L = ln Phi((m - F)/sigma)``, with Phi evaluated by a log-CDF (no floor,
+no clamp). ``LineFluxData.log_likelihood`` and the line-flux term of the
+joint/spectroscopy loss must both follow these forms. Every expected value is
+computed here with numpy/scipy in float64.
 
 https://github.com/suchethac/tengri/issues/2665
 https://github.com/suchethac/tengri/issues/2666
@@ -17,389 +16,307 @@ https://github.com/suchethac/tengri/issues/2666
 
 from __future__ import annotations
 
+import functools
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from scipy import stats
+from scipy import special, stats
 
+import tengri
+from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.observation.photometry import FilterCurve
+from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.regression_bug
 
-
-class TestLineFluxLikelihood:
-    """Test cells (a)-(d): LineFluxData methods."""
-
-    def test_log_likelihood_detections_and_limits_at_multiple_sigma(self):
-        """Cell (a): log_likelihood equals closed-form logpdf/logcdf to 1e-10.
-
-        Two-line container: line 1 exact, line 2 at z ∈ {-3, 0, +3} × {detection,
-        upper, lower}.
-        """
-        # Use float64 for the test reference
-        with jax.enable_x64(True):
-            names = ("Ha", "Hb")
-            w = jnp.array([6564.61, 4862.68])
-            obs = jnp.array([1.0, 1.0])
-            err = jnp.array([0.1, 0.1])
-            model = jnp.array([1.0, 1.3])  # line 2: model 3 sigma above obs
-
-            # Detection: both lines are detections
-            lfd_det = LineFluxData(names=names, fluxes=obs, errors=err, wavelengths=w)
-            log_l_det = float(lfd_det.log_likelihood(model))
-
-            # Upper limit: line 2 flagged as upper limit
-            lfd_upper = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_upper_limit=jnp.array([False, True]),
-            )
-            log_l_upper = float(lfd_upper.log_likelihood(model))
-
-            # Lower limit: line 2 flagged as lower limit
-            lfd_lower = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_lower_limit=jnp.array([False, True]),
-            )
-            log_l_lower = float(lfd_lower.log_likelihood(model))
-
-            # Compute expected values using closed-form physics from brief
-            # Physics: ln L = −½((F−m)/σ)² − ln σ − ½ ln 2π
-            # Line 1 (detection): F=1.0, m=1.0, σ=0.1 → r=0
-            line1_det = float(-0.5 * (0.0**2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi))
-            # Line 2 (detection): F=1.0, m=1.3, σ=0.1 → r=-3
-            line2_det = float(-0.5 * ((-3.0) ** 2) - np.log(0.1) - 0.5 * np.log(2.0 * np.pi))
-            exp_det = line1_det + line2_det
-
-            # Upper limit: ln L = ln Φ((F-m)/σ)
-            # Line 1 stays detection, Line 2: z = (1.0-1.3)/0.1 = -3
-            exp_upper = line1_det + float(stats.norm.logcdf(-3.0))
-
-            # Lower limit: ln L = ln Φ((m-F)/σ)
-            # Line 1 stays detection, Line 2: z = (1.3-1.0)/0.1 = +3
-            exp_lower = line1_det + float(stats.norm.logcdf(3.0))
-
-            assert np.isclose(log_l_det, exp_det, rtol=1e-10), (
-                f"Detection mismatch: got {log_l_det}, expected {exp_det}"
-            )
-            assert np.isclose(log_l_upper, exp_upper, rtol=1e-10), (
-                f"Upper limit mismatch: got {log_l_upper}, expected {exp_upper}"
-            )
-            assert np.isclose(log_l_lower, exp_lower, rtol=1e-10), (
-                f"Lower limit mismatch: got {log_l_lower}, expected {exp_lower}"
-            )
-
-    def test_lower_limit_gradient_and_monotonicity(self):
-        """Cell (b): lower-limit value and gradient have correct behavior.
-
-        At m=F+3σ (satisfied) > m=F-3σ (violated).
-        grad_m = +φ(z)/Φ(z)/σ.
-        """
-        with jax.enable_x64(True):
-            names = ("Ha", "Hb")
-            w = jnp.array([6564.61, 4862.68])
-            obs = jnp.array([1.0, 1.0])
-            err = jnp.array([0.1, 0.1])
-
-            lfd = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_lower_limit=jnp.array([False, True]),
-            )
-
-            # Evaluate at m=F+3σ (satisfied, z=+3)
-            m_satisfied = jnp.array([1.0, 1.3])
-            log_l_satisfied = float(lfd.log_likelihood(m_satisfied))
-
-            # Evaluate at m=F-3σ (violated, z=-3)
-            m_violated = jnp.array([1.0, 0.7])
-            log_l_violated = float(lfd.log_likelihood(m_violated))
-
-            # Satisfied lower limit should have higher likelihood
-            assert log_l_satisfied > log_l_violated, (
-                f"Lower limit: satisfied {log_l_satisfied} should exceed violated {log_l_violated}"
-            )
-
-            # Gradient at m=F+3σ: grad = +φ(z)/Φ(z)/σ
-            z_sat = 3.0
-            grad_f = jax.grad(lambda m: lfd.log_likelihood(jnp.array([1.0, m])))
-            grad_m_satisfied = float(grad_f(1.3))
-            exact_grad_sat = float(
-                jnp.exp(stats.norm.logpdf(z_sat) - stats.norm.logcdf(z_sat)) / 0.1
-            )
-            assert np.isclose(grad_m_satisfied, exact_grad_sat, rtol=1e-8), (
-                f"Gradient at z=+3: got {grad_m_satisfied}, expected {exact_grad_sat}"
-            )
-
-    def test_upper_limit_strongly_violated_no_clamp(self):
-        """Cell (c): upper limit at z ∈ {-15, -30, -100} equals log_ndtr, nonzero grad.
-
-        No 1e-30 clamp: value equals `log_ndtr(z)` (relative 1e-10) and gradient
-        is nonzero and equals -φ(z)/Φ(z)/σ (relative 1e-8).
-        """
-        with jax.enable_x64(True):
-            names = ("Ha", "Hb")
-            w = jnp.array([6564.61, 4862.68])
-            obs = jnp.array([1.0, 1.0])
-            err = jnp.array([0.1, 0.1])
-
-            lfd = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_upper_limit=jnp.array([False, True]),
-            )
-
-            base = float(stats.norm.logpdf(0.0, scale=0.1))
-
-            def likelihood_fn(x):
-                return lfd.log_likelihood(jnp.array([1.0, x])) - base
-
-            for z in (-15.0, -30.0, -100.0):
-                # Model flux giving (U - m)/sigma = z
-                m = 1.0 - 0.1 * z
-
-                log_l = float(likelihood_fn(m))
-                exp_log_l = float(jax.scipy.special.log_ndtr(z))
-
-                # Check value relative error
-                rel_err = abs(log_l - exp_log_l) / abs(exp_log_l)
-                assert rel_err < 1e-10, (
-                    f"At z={z}: value {log_l} vs expected {exp_log_l}, rel_err {rel_err}"
-                )
-
-                # Check gradient is nonzero and correct
-                grad_m = float(jax.grad(likelihood_fn)(m))
-                exact_grad = -float(jnp.exp(stats.norm.logpdf(z) - stats.norm.logcdf(z)) / 0.1)
-
-                assert grad_m != 0.0, f"At z={z}: gradient {grad_m} should be nonzero"
-                rel_grad_err = abs(grad_m - exact_grad) / abs(exact_grad)
-                assert rel_grad_err < 1e-8, (
-                    f"At z={z}: gradient {grad_m} vs expected {exact_grad}, rel_err {rel_grad_err}"
-                )
-
-    def test_chi2_detection_only(self):
-        """Cell (d): chi2 sums detections only (no limits)."""
-        with jax.enable_x64(True):
-            names = ("Ha", "Hb", "Hg")
-            w = jnp.array([6564.61, 4862.68, 4341.68])
-            obs = jnp.array([1.0, 1.0, 1.0])
-            err = jnp.array([0.1, 0.1, 0.1])
-            model = jnp.array([1.0, 1.3, 0.8])  # line 2: +3σ, line 3: -2σ
-
-            # All detections
-            lfd_det = LineFluxData(names=names, fluxes=obs, errors=err, wavelengths=w)
-            chi2_det = float(lfd_det.chi2(model))
-
-            # With line 2 as upper limit and line 3 as lower limit
-            lfd_mixed = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_upper_limit=jnp.array([False, True, False]),
-                is_lower_limit=jnp.array([False, False, True]),
-            )
-            chi2_mixed = float(lfd_mixed.chi2(model))
-
-            # chi2 should equal sum of detections only (line 1 and 3? NO!)
-            # chi2 sums DETECTIONS ONLY, not limits
-            # Lines 2 and 3 are limits, so chi2_mixed should = line 1 only
-            exp_chi2 = ((1.0 - 1.0) / 0.1) ** 2
-            assert np.isclose(chi2_mixed, exp_chi2, rtol=1e-10), (
-                f"chi2 with limits: got {chi2_mixed}, expected {exp_chi2}"
-            )
+_NAMES = ("Ha", "Hb")
+_WAVES = np.array([6564.61, 4862.68])
+_FLUX = 1.0
+_SIGMA = 0.1
+_KIND_FLAGS = {
+    "detection": {},
+    "upper": {"is_upper_limit": np.array([False, True])},
+    "lower": {"is_lower_limit": np.array([False, True])},
+}
 
 
-class TestJointSpectroscopyPath:
-    """Test cell (e): loss_functions joint/spectroscopy branch respects limits."""
+def _detection_norm(sigma):
+    """Normalisation -ln sigma - 0.5 ln 2 pi of a detection with zero residual."""
+    return -np.log(sigma) - 0.5 * np.log(2.0 * np.pi)
 
-    def test_joint_path_line_flux_limits_vs_detection(self):
-        """Cell (e): joint/spectroscopy energy reflects limit penalties correctly.
 
-        Build minimal real model + Fitter reaching the loss_functions branch.
-        For each of detection/upper/lower at scale ∈ {0.5, 2.0}:
-        - Energy difference vs detection equals closed-form per-line difference (1e-8 rel).
-        - Energies differ (upper vs lower).
-        - With no limits, energy unchanged from inlined χ² formula.
-        """
-        import tengri
-        from tengri import (
-            DEFAULT,
-            Fitter,
-            Fixed,
-            Observation,
-            Photometry,
-            SEDModel,
-            Uniform,
+def _container(kind, dtype=None):
+    """Two-line container: line 1 a detection, line 2 of the given kind."""
+    return LineFluxData(
+        names=_NAMES,
+        fluxes=jnp.full(2, _FLUX, dtype=dtype),
+        errors=jnp.full(2, _SIGMA, dtype=dtype),
+        wavelengths=jnp.asarray(_WAVES, dtype=dtype),
+        **{k: jnp.asarray(v) for k, v in _KIND_FLAGS[kind].items()},
+    )
+
+
+def _line2_closed_form(kind, flux, model, sigma):
+    """Closed-form ln L of one line from float64 numpy scalars."""
+    r = (flux - model) / sigma
+    if kind == "detection":
+        return -0.5 * r**2 - np.log(sigma) - 0.5 * np.log(2.0 * np.pi)
+    if kind == "upper":
+        return special.log_ndtr(r)
+    return special.log_ndtr(-r)
+
+
+@pytest.mark.parametrize("kind", ["detection", "upper", "lower"])
+@pytest.mark.parametrize("d", [-3.0, 0.0, 3.0])
+def test_log_likelihood_matches_closed_form(kind, d):
+    """Cell (a): ln L equals the closed form to 1e-10 for model line 2 at d = (m - F)/sigma."""
+    model = np.array([_FLUX, _FLUX + d * _SIGMA])
+    expected = _detection_norm(_SIGMA) + _line2_closed_form(kind, _FLUX, model[1], _SIGMA)
+    got = float(_container(kind).log_likelihood(jnp.asarray(model)))
+    assert got == pytest.approx(expected, rel=1e-10, abs=1e-10)
+
+
+@pytest.mark.parametrize("z", [-3.0, 3.0])
+def test_lower_limit_gradient(z):
+    """Cell (b): d ln L / dm = +phi(z)/Phi(z)/sigma, z = (m - F)/sigma, violated and satisfied."""
+    lfd = _container("lower")
+    m = _FLUX + z * _SIGMA
+    z_np = (m - _FLUX) / _SIGMA
+    expected = np.exp(stats.norm.logpdf(z_np) - special.log_ndtr(z_np)) / _SIGMA
+
+    def total(x):
+        return lfd.log_likelihood(jnp.stack([jnp.asarray(_FLUX), x]))
+
+    grad = float(jax.grad(total)(jnp.asarray(m)))
+    assert expected > 0.0
+    assert grad == pytest.approx(expected, rel=1e-8)
+
+
+def test_lower_limit_value_increases_when_satisfied():
+    """Cell (b): the lower-limit value at m = F + 3 sigma exceeds the value at m = F - 3 sigma."""
+    lfd = _container("lower")
+    satisfied = float(lfd.log_likelihood(jnp.array([_FLUX, _FLUX + 3 * _SIGMA])))
+    violated = float(lfd.log_likelihood(jnp.array([_FLUX, _FLUX - 3 * _SIGMA])))
+    assert satisfied > violated
+
+
+@pytest.mark.parametrize("z", [-15.0, -30.0, -100.0])
+def test_upper_limit_strongly_violated_value_and_gradient(z):
+    """Cell (c): ln L = log_ndtr(z) (rel 1e-10); d ln L / dm = -phi/Phi/sigma (rel 1e-8)."""
+    lfd = _container("upper")
+    m = _FLUX - z * _SIGMA
+    z_np = (_FLUX - m) / _SIGMA
+    norm = _detection_norm(_SIGMA)
+
+    def second_line(x):
+        return lfd.log_likelihood(jnp.stack([jnp.asarray(_FLUX), x])) - norm
+
+    value = float(second_line(jnp.asarray(m)))
+    assert value == pytest.approx(float(special.log_ndtr(z_np)), rel=1e-10)
+    grad = float(jax.grad(second_line)(jnp.asarray(m)))
+    expected = -np.exp(stats.norm.logpdf(z_np) - special.log_ndtr(z_np)) / _SIGMA
+    assert grad != 0.0
+    assert grad == pytest.approx(expected, rel=1e-8)
+
+
+def test_chi2_sums_detections_only():
+    """Cell (d): chi2 of a detection, an upper and a lower limit is the detection's alone."""
+    fluxes = np.array([1.0, 1.0, 1.0])
+    model = np.array([1.2, 1.3, 0.8])
+    lfd = LineFluxData(
+        names=("Ha", "Hb", "Hg"),
+        fluxes=jnp.asarray(fluxes),
+        errors=jnp.full(3, _SIGMA),
+        wavelengths=jnp.array([6564.61, 4862.68, 4341.68]),
+        is_upper_limit=jnp.array([False, True, False]),
+        is_lower_limit=jnp.array([False, False, True]),
+    )
+    expected = ((fluxes[0] - model[0]) / _SIGMA) ** 2
+    assert float(lfd.chi2(jnp.asarray(model))) == pytest.approx(expected, rel=1e-10)
+
+
+# -- Cell (e): joint/spectroscopy path ---------------------------------
+
+_LOG_TOTAL_MASS = 11.8
+_LINE_WAVES = jnp.array([6564.61, 4862.71])
+_LINE_ERR_FRAC = 0.05
+
+
+@functools.lru_cache(maxsize=1)
+def _joint_setup():
+    ssp = tengri.load_ssp()
+    curves = tuple(
+        FilterCurve(
+            wave=np.linspace(c - 500, c + 500, 32),
+            trans=np.ones(32),
+            name=f"b{i}",
         )
-        from tengri.observation.photometry import FilterCurve
-        from tengri.observation.spectroscopy import Spectroscopy
+        for i, c in enumerate([4000.0, 5500.0, 7000.0, 9000.0])
+    )
+    phot = Photometry(filters=curves)
+    spec = Spectroscopy(wave_obs=np.linspace(4000.0, 9000.0, 40))
 
-        ssp = tengri.load_ssp()
-
-        # Build minimal photometry and spectroscopy
-        curves = []
-        for i, c in enumerate([4000.0, 5500.0, 7000.0, 9000.0]):
-            wv = np.linspace(c - 500, c + 500, 32)
-            curves.append(FilterCurve(wave=wv, trans=np.ones_like(wv), name=f"b{i}"))
-        phot = Photometry(filters=tuple(curves))
-        spec = Spectroscopy(wave_obs=np.linspace(4000.0, 9000.0, 40))
-
-        names = ("Halpha", "Hbeta")
-        waves = jnp.array([6564.61, 4862.71])
-
-        def build_model(lfd=None):
-            return SEDModel.build(
-                ssp_data=ssp,
-                observation=Observation(photometry=phot, spectroscopy=spec, line_fluxes=lfd),
-                sfh={
-                    "type": "dpl",
-                    "all_params": Fixed(DEFAULT),
-                    "log_total_mass": Uniform(8.0, 12.0),
-                },
-                dust_attenuation={"type": "none"},
-                neb={"type": "cue", "all_params": Fixed(DEFAULT)},
-                redshift=Fixed(0.1),
-            )
-
-        m0 = build_model()
-        p0 = {"sfh_dpl_log_total_mass": 11.8}
-        lf = np.asarray(m0.predict_line_fluxes(p0, target_wavelengths=waves))
-        data = np.concatenate(
-            [
-                np.asarray(m0.predict_photometry(p0)),
-                np.asarray(m0.predict_spectrum(p0)),
-            ]
+    def build(lfd):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(photometry=phot, spectroscopy=spec, line_fluxes=lfd),
+            sfh={
+                "type": "dpl",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(8.0, 12.0),
+            },
+            dust_attenuation={"type": "none"},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(0.1),
         )
-        noise = 0.05 * np.abs(data)
-        mask = np.zeros(data.size, int)
 
-        # Energy function for a given line kind and scale
-        def energy_joint_path(kind, scale, log_tm):
-            obs_lf = lf * np.array([1.0, scale])
-            err = np.abs(lf) * 0.05
-            kw = (
-                {"is_upper_limit": jnp.array([False, True])}
-                if kind == "upper"
-                else {"is_lower_limit": jnp.array([False, True])}
-                if kind == "lower"
-                else {}
-            )
-            lfd = LineFluxData(
-                names=names,
-                fluxes=jnp.asarray(obs_lf),
-                errors=jnp.asarray(err),
-                wavelengths=waves,
-                **kw,
-            )
-            m = build_model(lfd)
-            f = Fitter(m, data=data, noise=noise, data_type="joint", data_mask=mask)
-            loss_fn = f._get_or_build_loss_fn()
-            da = f._build_data_args(m)
-            u = f._initialize_unbounded(jax.random.PRNGKey(0))
-            key = next(k for k in u if "log_total_mass" in k)
-            u = {
-                **u,
-                key: f.spec.get_distribution(key).standardize(jnp.asarray(float(log_tm))),
-            }
-            return float(loss_fn(u, da)), "line_flux_limit_mask" in da
-
-        # Test at two scales
-        for scale in (0.5, 2.0):
-            log_tm_base = 11.8
-            energies_at_scale = {}
-            for kind in ("detection", "lower", "upper"):
-                e, _ = energy_joint_path(kind, scale, log_tm_base)
-                energies_at_scale[kind] = e
-
-            # Energies should differ between kinds
-            assert energies_at_scale["detection"] != energies_at_scale["upper"], (
-                f"Scale {scale}: detection and upper should differ"
-            )
-            assert energies_at_scale["detection"] != energies_at_scale["lower"], (
-                f"Scale {scale}: detection and lower should differ"
-            )
+    params = {"sfh_dpl_log_total_mass": _LOG_TOTAL_MASS}
+    base = build(None)
+    model_lf = np.asarray(base.predict_line_fluxes(params, target_wavelengths=_LINE_WAVES))
+    data = np.concatenate(
+        [np.asarray(base.predict_photometry(params)), np.asarray(base.predict_spectrum(params))]
+    )
+    return build, model_lf, data
 
 
-class TestFloat32Precision:
-    """Test cell (f): float32 maintains reasonable precision and stability."""
+@functools.cache
+def _joint_energy(kind, scale):
+    """Joint-path loss with line 1 at its model flux and line 2 at ``scale`` times its.
 
-    def test_upper_limit_float32_vs_float64(self):
-        """Cell (f): float32 agrees with float64 and handles extreme z gracefully."""
-        # Reference in float64
-        with jax.enable_x64(True):
-            names = ("Ha", "Hb")
-            w = jnp.array([6564.61, 4862.68])
-            obs = jnp.array([1.0, 1.0])
-            err = jnp.array([0.1, 0.1])
+    ``kind`` is "detection", "upper" or "lower" (the flag on line 2). Returns
+    the loss, the ``data_args`` keys, and the line fluxes that
+    ``predict_line_fluxes`` returns on the Fitter's own model at the evaluated
+    parameters (the model the loss scores the lines against).
+    """
+    build, base_lf, data = _joint_setup()
+    lfd = LineFluxData(
+        names=("Halpha", "Hbeta"),
+        fluxes=jnp.asarray(base_lf * np.array([1.0, scale])),
+        errors=jnp.asarray(np.abs(base_lf) * _LINE_ERR_FRAC),
+        wavelengths=_LINE_WAVES,
+        **{k: jnp.asarray(v) for k, v in _KIND_FLAGS[kind].items()},
+    )
+    model = build(lfd)
+    fitter = Fitter(
+        model,
+        data=data,
+        noise=0.05 * np.abs(data),
+        data_type="joint",
+        data_mask=np.zeros(data.size, int),
+    )
+    loss_fn = fitter._get_or_build_loss_fn()
+    data_args = fitter._build_data_args(model)
+    u = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+    key = next(k for k in u if "log_total_mass" in k)
+    u = {
+        **u,
+        key: fitter.spec.get_distribution(key).standardize(jnp.asarray(_LOG_TOTAL_MASS)),
+    }
+    energy = float(loss_fn(u, data_args))
+    # The Fitter resolves its own approximation on the model it scores
+    # against; its ``predict_line_fluxes`` returns the fluxes the loss compares
+    # with the data.
+    model_lf = np.asarray(
+        fitter.model.predict_line_fluxes(
+            {"sfh_dpl_log_total_mass": _LOG_TOTAL_MASS}, target_wavelengths=_LINE_WAVES
+        )
+    )
+    return energy, frozenset(data_args), model_lf
 
-            lfd_f64 = LineFluxData(
-                names=names,
-                fluxes=obs,
-                errors=err,
-                wavelengths=w,
-                is_upper_limit=jnp.array([False, True]),
-            )
 
-            base_f64 = float(
-                lfd_f64.log_likelihood(jnp.array([1.0, 1.0])) - stats.norm.logpdf(0.0, scale=0.1)
-            )
+def _residuals(scale, model_lf):
+    """(F - m)/sigma per line for the observed fluxes of ``_joint_energy``."""
+    _, base_lf, _ = _joint_setup()
+    sigma = np.abs(base_lf) * _LINE_ERR_FRAC
+    return (base_lf * np.array([1.0, scale]) - model_lf) / sigma, sigma
 
-            # z = ±3
-            for z in (-3.0, 3.0):
-                m = 1.0 - 0.1 * z
-                log_l_f64 = float(
-                    lfd_f64.log_likelihood(jnp.array([1.0, m])) - stats.norm.logpdf(0.0, scale=0.1)
-                )
-                exp_f64 = float(jax.scipy.special.log_ndtr(z))
-                assert np.isclose(log_l_f64, exp_f64, rtol=1e-10)
 
-        # Check float32 precision (z = ±3)
-        with jax.enable_x64(False):
-            lfd_f32 = LineFluxData(
-                names=names,
-                fluxes=obs.astype(jnp.float32),
-                errors=err.astype(jnp.float32),
-                wavelengths=w.astype(jnp.float32),
-                is_upper_limit=jnp.array([False, True]),
-            )
+@pytest.mark.parametrize("kind", ["upper", "lower"])
+@pytest.mark.parametrize("scale", [0.5, 2.0])
+def test_joint_path_limit_energy_difference(kind, scale):
+    """Cell (e): energy(kind) - energy(detection) equals the closed form to 1e-8 relative.
 
-            for z in (-3.0, 3.0):
-                m = 1.0 - 0.1 * z
-                log_l_f32 = float(
-                    lfd_f32.log_likelihood(jnp.array([1.0, m], dtype=jnp.float32))
-                    - stats.norm.logpdf(0.0, scale=0.1)
-                )
-                exp_f64 = float(jax.scipy.special.log_ndtr(z))
-                rel_err = abs(log_l_f32 - exp_f64) / abs(exp_f64)
-                assert rel_err < 1e-5, (
-                    f"Float32 at z={z}: {log_l_f32} vs {exp_f64}, rel_err {rel_err}"
-                )
+    The detection energy is the inlined 0.5 r^2 per line; the censored energy
+    adds ln sigma_1 for detected line 1 (it carries ln sigma, the inlined
+    chi-square does not) and, for limit line 2, -ln Phi(z) - 0.5 r_2^2, with
+    r_2 = (F_2 - m_2)/sigma_2 and z = r_2 (upper) or -r_2 (lower).
+    """
+    e_kind, keys, model_lf = _joint_energy(kind, scale)
+    e_det, _, _ = _joint_energy("detection", scale)
+    r, sigma = _residuals(scale, model_lf)
+    z = r[1] if kind == "upper" else -r[1]
+    expected = np.log(sigma[0]) - special.log_ndtr(z) - 0.5 * r[1] ** 2
+    assert "line_flux_limit_mask" in keys
+    assert (e_kind - e_det) == pytest.approx(expected, rel=1e-8)
 
-            # z = -30: should be finite with nonzero gradient
-            m_extreme = 1.0 - 0.1 * (-30.0)
-            log_l_extreme = float(
-                lfd_f32.log_likelihood(jnp.array([1.0, m_extreme], dtype=jnp.float32))
-                - stats.norm.logpdf(0.0, scale=0.1)
-            )
-            assert np.isfinite(log_l_extreme), (
-                f"Float32 at z=-30: log_likelihood should be finite, got {log_l_extreme}"
-            )
 
-            grad_f = jax.grad(
-                lambda m: lfd_f32.log_likelihood(jnp.array([1.0, m], dtype=jnp.float32))
-            )
-            grad_extreme = float(grad_f(jnp.float32(m_extreme)))
-            assert grad_extreme != 0.0, (
-                f"Float32 at z=-30: gradient should be nonzero, got {grad_extreme}"
-            )
+@pytest.mark.parametrize("scale", [0.5, 2.0])
+def test_joint_path_energies_differ(scale):
+    """Cell (e): detection, upper-limit and lower-limit energies are three different values."""
+    energies = {k: _joint_energy(k, scale)[0] for k in ("detection", "upper", "lower")}
+    assert len(set(energies.values())) == 3
+
+
+@pytest.mark.parametrize("scale", [0.5, 2.0])
+def test_joint_path_without_limits_is_inlined_chi_square(scale):
+    """Cell (e): with no limit flags the energy moves by 0.5 sum r^2 relative to scale 1.
+
+    Both energies run through the inlined chi-square line term, so their
+    difference is 0.5 (sum r(scale)^2 - sum r(1)^2) computed from the model
+    line fluxes.
+    """
+    e_s, keys, lf_s = _joint_energy("detection", scale)
+    e_1, _, lf_1 = _joint_energy("detection", 1.0)
+    chi2_s = np.sum(_residuals(scale, lf_s)[0] ** 2)
+    chi2_1 = np.sum(_residuals(1.0, lf_1)[0] ** 2)
+    assert "line_flux_limit_mask" not in keys
+    assert (e_s - e_1) == pytest.approx(0.5 * (chi2_s - chi2_1), rel=1e-8)
+
+
+# -- Cell (f): float32 -------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", ["upper", "lower"])
+@pytest.mark.parametrize("z", [-3.0, 3.0])
+def test_float32_limit_value_matches_float64_closed_form(kind, z):
+    """Cell (f): float32 ln L is within four float32 ulp of the float64 closed form.
+
+    The tolerance is four float32 ulp of the expected value (the float32
+    evaluation of Phi and of the sum of the two line terms each round at the
+    ulp level); the closed form uses the float32 inputs actually passed in.
+    """
+    sign = -1.0 if kind == "upper" else 1.0
+    with jax.enable_x64(False):
+        lfd = _container(kind, dtype=jnp.float32)
+        model = jnp.array([_FLUX, _FLUX + sign * z * _SIGMA], dtype=jnp.float32)
+        assert model.dtype == jnp.float32
+        got = float(lfd.log_likelihood(model))
+        f, m, s = (np.asarray(v, dtype=np.float64) for v in (lfd.fluxes, model, lfd.errors))
+    expected = _detection_norm(s[0]) + _line2_closed_form(kind, f[1], m[1], s[1])
+    atol = 4 * float(np.spacing(np.float32(abs(expected))))
+    assert got == pytest.approx(expected, rel=0.0, abs=atol)
+
+
+def test_float32_strongly_violated_upper_limit_is_finite_with_gradient():
+    """Cell (f): at z = -30 float32 gives log_ndtr(-30) (rel 1e-5), finite gradient."""
+    with jax.enable_x64(False):
+        lfd = _container("upper", dtype=jnp.float32)
+        m = jnp.float32(_FLUX + 30.0 * _SIGMA)
+
+        def total(x):
+            return lfd.log_likelihood(jnp.stack([jnp.float32(_FLUX), x]))
+
+        value = float(total(m))
+        grad = float(jax.grad(total)(m))
+        f, s = (np.asarray(v, dtype=np.float64) for v in (lfd.fluxes, lfd.errors))
+        m64 = float(m)
+    z_np = (f[1] - m64) / s[1]
+    assert np.isfinite(value)
+    assert (value - _detection_norm(s[0])) == pytest.approx(
+        float(special.log_ndtr(z_np)), rel=1e-5
+    )
+    assert np.isfinite(grad)
+    assert grad != 0.0
