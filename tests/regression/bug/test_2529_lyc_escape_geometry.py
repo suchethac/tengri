@@ -103,9 +103,25 @@ def _build(
     tau_diff: float = 0.3,
     age_gyr: float = 0.003,
     approx=None,
+    with_dust_emission: bool = False,
 ):
     """Young-dominated star-forming model with a live photoionized nebular
-    backend (so ``neb_fesc`` / ``lyc_fesc`` actually propagate)."""
+    backend (so ``neb_fesc`` / ``lyc_fesc`` actually propagate).
+
+    ``with_dust_emission=True`` is required for ``approx=WavePrecomp()`` to
+    actually build and consult the energy-balance LUT for ``log_L_absorbed``
+    / ``L_ir`` at all: ``SEDModel._energy_balance_lut`` gates the whole LUT
+    construction on ``needs_l_ir = has_dust_emission or
+    _chain_consumes(chain, "L_ir")``, so a model with no dust_emission block
+    silently computes ``log_L_absorbed`` through the EXACT path regardless
+    of ``approx`` -- and a LUT-vs-exact comparison without this is
+    comparing the exact path to itself, unable to catch the LUT ever
+    disagreeing (the gap a RED run against this test file's own mutation
+    (b) surfaced).
+    """
+    kwargs = {}
+    if with_dust_emission:
+        kwargs["dust_emission"] = {"type": "modified_blackbody", "all_params": Fixed(DEFAULT)}
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
@@ -130,6 +146,7 @@ def _build(
             tau_bc=tau_bc,
             tau_diff=tau_diff,
         ),
+        **kwargs,
         redshift=Fixed(0.0),
         approx=approx,
     )
@@ -388,14 +405,92 @@ class TestLycClosure:
 
 class TestWavePrecompParity:
     @pytest.mark.parametrize("geometry", ["birth_cloud_holes", "clear"])
+    def test_lut_stellar_matches_hand_rolled_exact_unit(self, synthetic_ssp_wide, geometry):
+        """Unit-level LUT-vs-exact at the stellar-absorbed-luminosity level,
+        bypassing the full forward model entirely: isolates the LUT's own
+        fesc-affine construction from the nebular-absorbed term (which the
+        model-level comparisons below also exercise, but which can dominate
+        ``log_L_absorbed`` enough to mask a broken stellar LUT at ordinary
+        dust/mass fiducials -- the gap a RED run against this test's own
+        mutation (b) surfaced). Single-node tau grids at exactly the query
+        point eliminate the LUT's OTHER (bilinear tau-interpolation) error
+        source, isolating the fesc-affine one this test targets.
+        """
+        from tengri.components.dust.attenuation import resolve_dust_law
+        from tengri.components.dust.energy_balance_precompute import (
+            build_energy_balance_lut,
+            lut_l_absorbed_stellar_log10,
+        )
+        from tengri.components.dust.two_component import _young_indicator
+        from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
+
+        ssp = synthetic_ssp_wide
+        ssp_wave = jnp.asarray(ssp.ssp_wave)
+        ssp_flux = jnp.asarray(ssp.ssp_flux)  # (n_met, n_age, n_wave)
+        ssp_ages_yr = (10.0 ** jnp.asarray(ssp.ssp_lg_age_gyr)) * 1e9
+
+        tau_bc_q, tau_diff_q, fesc_q = 0.8, 0.3, 0.6
+        tau_bc_grid = jnp.asarray([tau_bc_q])
+        tau_diff_grid = jnp.asarray([tau_diff_q])
+
+        met_idx, age_idx = 0, 0  # the youngest available SSP age node
+        joint_weights = jnp.zeros(ssp_flux.shape[:2]).at[met_idx, age_idx].set(1.0)
+
+        lut = build_energy_balance_lut(
+            ssp_flux,
+            ssp_wave,
+            ssp_ages_yr,
+            law_bc="calzetti",
+            law_diff="calzetti",
+            t_birth_yr=1e7,
+            transition_width_dex=0.3,
+            lyc_in_energy_balance=False,
+            tau_bc_grid=tau_bc_grid,
+            tau_diff_grid=tau_diff_grid,
+            lyc_escape_geometry=geometry,
+        )
+        log_mag_lut, sign_lut = lut_l_absorbed_stellar_log10(
+            lut, joint_weights, jnp.asarray(0.0), tau_bc_q, tau_diff_q, fesc=fesc_q
+        )
+        lut_val = float(10 ** float(log_mag_lut)) * float(sign_lut)
+
+        y_age = _young_indicator(ssp_ages_yr, 1e7, 0.3)
+        k_bc = resolve_dust_law("calzetti")(ssp_wave)
+        k_diff = resolve_dust_law("calzetti")(ssp_wave)
+        t_bc_raw = jnp.exp(-tau_bc_q * k_bc)
+        t_diff_raw = jnp.exp(-tau_diff_q * k_diff)
+        t_eb_raw = escape_geometry_transmission(
+            y_age[age_idx], t_bc_raw, t_diff_raw, fesc_q, geometry
+        )
+        intrinsic = ssp_flux[met_idx, age_idx, :]
+        mask_nonlyc = ssp_wave >= LYMAN_LIMIT_AA
+        B = edge_trapezoid(intrinsic * mask_nonlyc, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA)
+        G = edge_trapezoid(
+            intrinsic * t_eb_raw * mask_nonlyc, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA
+        )
+        exact_val = float(B - G)
+
+        assert lut_val == pytest.approx(exact_val, rel=1e-9)
+
+    @pytest.mark.parametrize("geometry", ["birth_cloud_holes", "clear"])
     @pytest.mark.parametrize("eb", [False, True])
     @pytest.mark.parametrize("fesc", [0.0, 0.3, 1.0])
     def test_log_l_absorbed_lut_matches_exact(
         self, synthetic_ssp_wide, synthetic_tophat_obs, geometry, eb, fesc
     ):
         ssp, obs = synthetic_ssp_wide, synthetic_tophat_obs
-        m_exact = _build(ssp, obs, fesc=fesc, geometry=geometry, eb=eb, approx=None)
-        m_lut = _build(ssp, obs, fesc=fesc, geometry=geometry, eb=eb, approx=WavePrecomp())
+        m_exact = _build(
+            ssp, obs, fesc=fesc, geometry=geometry, eb=eb, approx=None, with_dust_emission=True
+        )
+        m_lut = _build(
+            ssp,
+            obs,
+            fesc=fesc,
+            geometry=geometry,
+            eb=eb,
+            approx=WavePrecomp(),
+            with_dust_emission=True,
+        )
         L_exact = _log_l_absorbed(m_exact)
         L_lut = _log_l_absorbed(m_lut)
         assert L_exact == pytest.approx(L_lut, abs=1e-6)
