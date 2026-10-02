@@ -615,7 +615,7 @@ def build_components(
         elif dust_model == "age_binned":
             atten_type = "age_binned"
             atten_config = AgeBinnedDustComponentConfig(screens=tuple(dust_screens))
-            # Reviewer finding #2528: a finite lower window edge too close to
+            # #2528: a finite lower window edge too close to
             # the loaded grid's youngest SSP node silently mismatches the
             # stellar path (nonzero weight) against the line/nebular path
             # (the t -> 0 rule gives it exactly 0). Refuse at build time.

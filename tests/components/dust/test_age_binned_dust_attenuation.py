@@ -574,7 +574,7 @@ def test_mutation_drop_screen_weight_factor_breaks_identity(tmp_path):
     # FAILED lines captured: Max absolute difference, Mismatched elements
 
 
-# ── 9. Grid-dependent screen validation (reviewer finding #2528 follow-up) ──
+# ── 9. Grid-dependent screen validation (#2528) ──
 #
 # The t -> 0 nebular/line rule (section "Nebular continuum..." in the class
 # docstring) gives any screen with a finite lower edge exactly 0 weight on
