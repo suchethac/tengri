@@ -5298,6 +5298,25 @@ class SEDModel:
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
+    def _publish_history(self, sfr, params, state=None):
+        """Bound ``sfr`` to ``[0, age(z)]`` and rescale it to the formed mass (#2640).
+
+        Applies the component's own :func:`bounded_rescaled_history` after the
+        SFH evaluation, so ``predict_sfh`` / ``predict_sfh_quantities`` publish
+        the same history the stellar component does (no second normalization).
+        """
+        from tengri.components.stellar.component import bounded_rescaled_history
+
+        if state is None:
+            state = self.predict_state(params)
+        if getattr(self.spec, "mean_sfh_type", None) in ("table", ["table"]):
+            # The registry callable of a runtime table is a zero placeholder;
+            # the history lives in the component state.
+            return jnp.asarray(state.derived["sfr_history"])
+        formed = 10.0 ** jnp.asarray(state.derived["log_mstar_formed"])
+        t_obs_gyr = age_at_z(self._get_redshift(params))
+        return bounded_rescaled_history(sfr, self.age_yr, t_obs_gyr, formed)
+
     def _compute_sfr(self, p):
         """Compute SFR via the composed SFH function.
 
@@ -5605,6 +5624,9 @@ class SEDModel:
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+        _state = self.predict_state(params)
+        sfr_mean = self._publish_history(sfr_mean, params, _state)
+        sfr_full = self._publish_history(sfr_full, params, _state)
 
         if grid == "native":
             return {
@@ -8572,6 +8594,7 @@ class SEDModel:
         # values someone happened to test; the rest kept the divergent path. Now
         # there is no path to diverge.
         state_orch = self.predict_state(params)
+        sfr = self._publish_history(sfr, params, state_orch)
         weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 

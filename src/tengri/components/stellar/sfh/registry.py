@@ -1233,6 +1233,18 @@ _register(
 )
 
 
+#: Floor of the ``age_main_gyr`` prior [Gyr] below (Ciesla+2017 convention), and
+#: therefore the ceiling of the ``age_bq_gyr`` prior: the burst/quench onset
+#: must be reachable from EVERY ``age_main_gyr`` draw a user leaves free, i.e.
+#: ``age_bq_gyr <= age_main_gyr`` even for the smallest ``age_main_gyr`` the
+#: prior allows (#2644; "quench after formation", mirroring CIGALE's
+#: ``sfhdelayedbq`` requirement). ``age_main_gyr`` is also ``z_capped_onset``
+#: (#2567): that narrows its CEILING to ``age_at_z(z_floor)``, never its
+#: floor, so this static peg stays valid at any redshift without its own
+#: z-aware narrowing. Same technique as ``_PSB_TFLEX_FLOOR_GYR`` above.
+_DELAYED_BQ_AGE_MAIN_FLOOR_GYR = 0.5
+_DELAYED_BQ_AGE_BQ_CEIL_GYR = _DELAYED_BQ_AGE_MAIN_FLOOR_GYR
+
 # --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---
 _register(
     SFHModelSpec(
@@ -1255,20 +1267,22 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0, default=5.0),
+                Uniform(_DELAYED_BQ_AGE_MAIN_FLOOR_GYR, 13.0, default=5.0),
                 z_capped_onset=True,
             ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
-                "Lookback time of burst/quench onset (Gyr)",
+                "Lookback time of burst/quench onset (Gyr); prior ceiling equals "
+                "the age_main_gyr floor so quench-before-formation (#2644) is "
+                "unreachable by default",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 5.0, default=0.5),
+                Uniform(0.01, _DELAYED_BQ_AGE_BQ_CEIL_GYR, default=0.3),
             ),
             "sfh_delayed_bq_r_sfr": ParamDef(
-                "SFR ratio after/before burst/quench",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 10.0, default=1.0),
+                "SFR ratio after/before burst/quench (0 = full quench, #2623)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Uniform(0.0, 10.0, default=1.0),
             ),
         },
         settings={},

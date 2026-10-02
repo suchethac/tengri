@@ -3164,6 +3164,46 @@
   `'none'` only. `'off'` now normalizes onto `'none'` before the validator
   runs, so the two spellings parse and predict identically (#2214).
 
+- The published `sfr_history` (and the SFR averages/sSFR derived from it)
+  did not carry the mass-conserving rescale the age weights already did, so
+  `∫ sfr_history d(lookback)` (inside the support) no longer matched the
+  declared `10**log_mstar_formed` whenever a composite SFH's onset exceeded
+  `age(z)`. The rescale factor is now measured on the history's own
+  lookback grid (not a cross-grid quantity), making the identity exact to
+  float precision on both age kernels. The published history is also zeroed
+  beyond `age(z)` (partial boundary cell), so its plain integral over the
+  published grid equals the formed mass and no star formation is published
+  before the Big Bang; `predict_sfh` and `predict_sfh_quantities` publish the
+  same bounded, rescaled history (#2640).
+- A star formation history identically zero inside its support published a
+  phantom formed mass on the `dsps` age kernel (the declared mass, with zero
+  SFR and zero flux) while the `cic` kernel correctly floored it; both
+  kernels now agree on zero, and a new `ZeroSFHWarning` names the cause.
+  `delayed_bq`'s `age_bq_gyr` prior is now bounded so quench-before-formation
+  is unreachable by the default free priors (#2644).
+- `sfh={'type': 'table'}` edge-clamped outside the table's declared support
+  (`jnp.interp`'s default), so a table shorter than the model's lookback
+  grid silently formed up to 13x its declared mass. SFR is now zero outside
+  the table; an optional `sfh_table_age_gyr` applies an age cut (CIGALE
+  `sfhfromfile` convention), and an optional `sfh_table_log_total_mass`
+  rescales the (possibly cut) table to the declared mass (#2621).
+- The GP-field SFH modulation and `sfh2exp`'s burst window are documented
+  and tested against the declared-mass convention: every field realization
+  forms the declared mass exactly (pcigale `sfhstochastic_carvajal2025`
+  parity; part of #2622), and `sfh2exp`'s burst is now bounded to
+  `[0, min(burst_age, age)]` so no mass forms before the main population's
+  formation epoch, while keeping the declared `f_burst` fraction exact
+  (#2623).
+- `delayed_bq`'s `sfh_delayed_bq_r_sfr` refused `Fixed(0.0)` (full quench),
+  since its bound predicate required a strictly positive floor; the floor
+  is now `>= 0`, matching CIGALE's `sfhdelayedbq` (#2623).
+- An SFH whose entire support lies inside `[0, age0]` (younger than any SSP
+  template) formed zero mass and zero flux on both age kernels: the
+  `[0, age0]` sliver was approximated as a rectangle held at `SFR(age0)`,
+  which is zero for an SFH that has already ended there. The sliver is now
+  integrated from the SFH itself (both age kernels), assigning its true
+  mass to the youngest template (#2635).
+
 ## [0.1.0] - 2026-05-22
 
 First public preview release.
