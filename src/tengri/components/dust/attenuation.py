@@ -1152,7 +1152,7 @@ def noll09(
     r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
     This is the ``N09`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    Uses Leitherer (2002) for λ < 1800 Å (0.18 µm) and Calzetti (2000) above.
     The modification order is: **(base + bump) × power_law**.
 
     This differs from ``kriek_conroy`` which does NOT use L02 and applies
@@ -1201,7 +1201,7 @@ def noll09(
     wave_um = wavelength / 1e4
     rv = 4.05
 
-    # Base k'(lambda) = A(lambda)/E(B-V): L02 below 0.15 um, Calzetti above
+    # Base k'(lambda) = A(lambda)/E(B-V): L02 below 0.18 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
 
     # UV bump (Drude profile)
@@ -1292,7 +1292,7 @@ def salim_sbl18(
     r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
     This is the ``SBL18`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    Uses Leitherer (2002) for λ < 1800 Å (0.18 µm) and Calzetti (2000) above.
     The modification order is: **(base × power_law) + bump**.
 
     This differs from ``noll09`` and ``kriek_conroy``, which both apply:
@@ -1365,7 +1365,7 @@ def salim_sbl18(
     rv = 4.05
     rv_mod = _sbl18_rv_mod(dust_delta, rv_cal=rv)
 
-    # Base k'(lambda): L02 below 0.15 um, Calzetti above
+    # Base k'(lambda): L02 below 0.18 um, Calzetti above
     k_base = _calzetti_l02_kprime(wavelength)
 
     # UV bump (Drude profile)

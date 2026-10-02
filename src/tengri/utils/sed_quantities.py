@@ -60,16 +60,16 @@ __all__ = [
 
 KEY_LINES = {
     "lya": (1215.67,),
-    "civ_1549": (1548.19, 1550.78),
-    "oii": (3727.12, 3730.12),
-    "hbeta": (4862.76,),
+    "civ_1549": (1548.20, 1550.78),
+    "oii": (3727.09, 3729.88),
+    "hbeta": (4862.68,),
     "oiii_4959": (4960.30,),
-    "oiii_5007": (5008.31,),
-    "nii_6548": (6549.96,),
-    "halpha": (6564.72,),
-    "nii_6584": (6585.37,),
-    "sii_6717": (6718.40,),
-    "sii_6731": (6732.78,),
+    "oiii_5007": (5008.24,),
+    "nii_6548": (6549.86,),
+    "halpha": (6564.61,),
+    "nii_6584": (6585.28,),
+    "sii_6717": (6718.29,),
+    "sii_6731": (6732.67,),
 }
 """Key emission lines for survey diagnostics.
 
@@ -1077,7 +1077,7 @@ def extract_line_luminosity(
         passes ``state.derived["line_lums"]``, which is [erg/s].
     target_waves : tuple of float
         Target wavelength(s) in Angstrom. For doublets, pass both
-        components (e.g., ``(3727.12, 3730.12)`` for [OII]).
+        components (e.g., ``(3727.09, 3729.88)`` for [OII]).
 
     Returns
     -------
