@@ -160,7 +160,7 @@ class TestFreeRedshiftFollowsEvaluationRedshift:
         p_fixed = {k: v for k, v in p.items() if k != "redshift"}
         neb_free = _neb_band(fast_free, p)
         neb_fixed = _neb_band(fast_fixed, p_fixed)
-        rel_neb = float(np.max(np.abs(neb_free / neb_fixed - 1.0)))
+        rel_neb = _rel(neb_free, neb_fixed)
         rel = _rel(_phot(fast_free, p), _phot(fast_fixed, p_fixed))
         print(f"{prior} z={z}: nebular band {rel_neb:.2e}, total {rel:.2e}")
         assert rel_neb < 3e-2
