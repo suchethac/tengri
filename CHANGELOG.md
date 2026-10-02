@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
