@@ -1186,13 +1186,14 @@ V.print_window_table(
 # ## §8 Nebular emission
 #
 # ProSpect uses `emissionLines`, tying Hα to the SFR and distributing other lines via Levesque et al. (2010).
-# Tengri uses Cue (Li et al. 2025), a neural emulator on Cloudy 17 that predicts lines from the ionizing spectrum.
+# Tengri uses Cue (Li et al. 2025, ApJ 986, 9, arXiv:2405.04598), a neural emulator trained on
+# Cloudy 22.00 that predicts lines from the ionizing spectrum.
 # Cue needs a bare-stellar SSP (FSPS MIST + MILES here).
 #
 # **Matched ionization parameter.** ProSpect's `emissionLines` derives the ionization parameter from metallicity via `Z2q` (Orsi 2014). At solar Z,
 # this gives a soft `q ≈ 1.4e7` cm/s that suppresses metal lines: [O III]/Hα ≈ 0.014 (roughly 50 times below Cloudy).
 # ProSpect receives the matching `q = U·c ≈ 3e8` cm/s for Cue's `logU = -2` and then returns [O III]/Hα ≈ 0.21; the
-# residual versus Cue's 0.72 is a genuine Levesque-2010 versus Cloudy-17 difference, not an ionization mismatch.
+# residual versus Cue's 0.72 is a genuine Levesque-2010 versus Cloudy-22.00 difference, not an ionization mismatch.
 # Balmer lines remain q-insensitive.
 
 # %% [markdown]

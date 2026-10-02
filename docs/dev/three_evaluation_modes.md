@@ -100,7 +100,7 @@ L_nu = composable_agn_l_nu(
     agn_log_lbol=45.0,
     agn_grahsp_log_l5100=44.0,
     agn_tau_skirtor=7.0,
-    agn_attenuation_ebv=0.1,
+    agn_ebv=0.1,
 )
 ```
 
