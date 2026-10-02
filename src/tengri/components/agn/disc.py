@@ -283,11 +283,18 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
         L_diss = 2 * ∫_{R_isco}^{R_hot} σ T_NT^4 * 2πR dR
                = L_0 * h(x_hot)
 
-    where L_0 = 4π R_isco^2 σ T_in^4 and the analytic form is:
+    where L_0 = 4π R_isco^2 σ T_in^4 and, with s = x^{-1/2},
 
-        h(x) = 1/10 - 1/(2x^2) + 2/(5 x^{5/2})     (x = R_hot / R_isco ≥ 1)
+        h(x) = 1/3 - 1/x + 2/(3 x^{3/2}) = (1 - s)^2 (1 + 2 s) / 3   (x = R_hot / R_isco ≥ 1)
 
-    h(1) = 0 (empty corona), h(∞) → 0.1 (entire NT disc luminosity).
+    (the product form is the same function without the cancellation of the
+    first). h(1) = 0 (empty corona), h(∞) → 1/3 (the entire NT disc luminosity,
+    L_0/3 = 3 G M Mdot / 2 R_isco / 3 = G M Mdot / 2 R_isco).
+
+    The integrand is ``x^-3 (1 - x^-1/2) * x`` -- the trailing ``x`` is the
+    ``R dR`` area element. An earlier form, ``1/10 - 1/(2x^2) + 2/(5 x^{5/2})``,
+    integrated without it (#2572), understating L_diss by a factor 0.78 (x=1.5) to 0.30
+    (x→∞) and so placing R_hot too far out for any target.
 
     Parameters
     ----------
@@ -304,8 +311,7 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
         L_diss [erg s^-1].
     """
     l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
-    h = 0.1 - 0.5 * x_hot ** (-2.0) + 0.4 * x_hot ** (-2.5)
-    return l0 * jnp.maximum(h, 0.0)
+    return l0 * jnp.maximum(_nt_h(jnp.log(x_hot)), 0.0)
 
 
 def _r_hot_bisect(
@@ -318,14 +324,17 @@ def _r_hot_bisect(
     r"""Solve for R_hot from K&D 2018 Eq. 2 by bisection in log(x_hot).
 
     The NT emissivity integral has closed form
-    :math:`L_{\rm diss}(x) = L_0\,[1/10 - 1/(2x^2) + 2/(5 x^{5/2})]`,
-    strictly monotone in :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After
+    :math:`L_{\rm diss}(x) = L_0\,[1/3 - 1/x + 2/(3 x^{3/2})]`
+    (see :func:`_nt_l_diss_analytic`), strictly monotone in
+    :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After
     ``n_iter=40`` the bracket width is :math:`< 2^{-40} \approx 10^{-12}`
     of its initial log-width: enough for machine precision.
 
-    ``l_hot_target`` is clipped below :math:`L_{\max} = L_0/10`.
+    ``l_hot_target`` is clipped below :math:`0.33\,L_0` (:math:`L_{\max} = L_0/3`).
+
+    Differentiable: see :func:`_solve_log_x_hot` (implicit-function JVP, #2572).
     """
-    # Maximum possible L_diss (entire disc, x→∞): h→0.1, so L_max = L0 * 0.1.
+    # Maximum possible L_diss (entire disc, x→∞): h→1/3, so L_max = L0 / 3.
     # Float32 (#1206): ``l0`` is ~1e42 erg/s (overflow); the bisection needs only
     # the RATIO l_hot_target / l0, so compute both in L_sun units (``l_hot_target``
     # arrives in L_sun on the float32 path). The pre-divided 4*pi*sigma/L_sun
@@ -334,29 +343,83 @@ def _r_hot_bisect(
         l0 = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4
     else:
         l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
-    # Clip target to (0, L_max); if l_hot_target >= L_max, r_hot → ∞ (use upper bound)
-    l_target = jnp.clip(l_hot_target, 1e-100, l0 * 0.099)
+    # The target is clipped to (0, 0.33 L0) inside the solve; if l_hot_target >= L_max,
+    # r_hot -> the ceiling's root.
+    x_hot = jnp.exp(_solve_log_x_hot(l_hot_target, l0, n_iter))
+    return x_hot * r_isco_cm
 
-    def _h(log_x):
-        """Compute normalized NT emissivity integral h(x_hot) in log-space."""
-        x = jnp.exp(log_x)
-        return l0 * (0.1 - 0.5 * x ** (-2.0) + 0.4 * x ** (-2.5))
 
-    # Bisect in log(x_hot) in [log(1.001), log(1e4)]
-    lo = jnp.log(1.001)
-    hi = jnp.log(1.0e4)
+_X_LO = 1.001
+_X_HI = 1.0e4
+#: Ceiling on the R_hot target in units of L0: 0.33 of the h(∞) = 1/3 asymptote, which
+#: sits inside the bisection bracket (h(1e4) = 0.3332).
+_H_CEILING = 0.33
+
+
+def _nt_h(log_x):
+    """Normalised NT emissivity integral h(x), x = exp(log_x) (see ``_nt_l_diss_analytic``)."""
+    s = jnp.exp(-0.5 * log_x)
+    return (1.0 - s) ** 2 * (1.0 + 2.0 * s) / 3.0
+
+
+def _bisect_log_x(l_hot_target, l0, n_iter):
+    """Bisect ``l0 * h(x) = l_target`` in log(x) over [log 1.001, log 1e4] (``lax.scan``).
+
+    ``l_target = clip(l_hot_target, 1e-100, 0.33 L0)``.
+    """
+    l_target = jnp.clip(l_hot_target, 1e-100, l0 * _H_CEILING)
 
     def _step(state, _):
         """Single bisection step in log-space to solve for R_hot."""
         lo_i, hi_i = state
         mid = (lo_i + hi_i) * 0.5
-        l_mid = _h(mid)
-        go_right = l_mid < l_target
+        go_right = l0 * _nt_h(mid) < l_target
         return (jnp.where(go_right, mid, lo_i), jnp.where(go_right, hi_i, mid)), None
 
-    (lo_f, hi_f), _ = jax.lax.scan(_step, (lo, hi), None, length=n_iter)
-    x_hot = jnp.exp((lo_f + hi_f) * 0.5)
-    return x_hot * r_isco_cm
+    (lo_f, hi_f), _ = jax.lax.scan(_step, (jnp.log(_X_LO), jnp.log(_X_HI)), None, length=n_iter)
+    return (lo_f + hi_f) * 0.5
+
+
+@functools.partial(jax.custom_jvp, nondiff_argnums=(2,))
+def _solve_log_x_hot(l_hot_target, l0, n_iter):
+    """Root ``log(x_hot)`` of ``F = l0*h(x) - l_target``, differentiable by the IFT (#2572).
+
+    The forward value is the bisection above, unchanged. Differentiating *through*
+    the ``scan`` returns exactly 0 (the bracket ends are constants and ``where`` only
+    selects between them), so ``R_hot`` carried no sensitivity to ``M_BH``, ``L_bol``
+    or ``f_hard`` wherever it is not clipped. The rule below is the implicit-function
+    derivative at the converged root::
+
+        d(log x)/d theta = -(dF/d theta) / (dF/d log x),
+        dF/d log x = l0 * (x^-1 - x^-1.5),
+        dF = dl_target - h(x) * dl0.
+
+    It is exactly 0 where the target's clip (to ``(1e-100, 0.33 L0)``) is active or the root
+    is pinned to a bracket end, where ``R_hot`` really is independent of the target:
+    evaluating the IFT there would leave ~1e-14 of bisection residual amplified by
+    ``r_isco`` (~1e14 cm).
+    """
+    return _bisect_log_x(l_hot_target, l0, n_iter)
+
+
+@_solve_log_x_hot.defjvp
+def _solve_log_x_hot_jvp(n_iter, primals, tangents):
+    """Implicit-function-theorem JVP of :func:`_solve_log_x_hot`."""
+    l_hot_target, l0 = primals
+    d_target, d_l0 = tangents
+    u = _bisect_log_x(l_hot_target, l0, n_iter)
+    x = jnp.exp(u)
+    dh_du = 1.0 / x - x ** (-1.5)  # x dh/dx, dh/dx = x^-2 - x^-2.5
+    dF_du = l0 * dh_du
+    interior = (
+        (l_hot_target > l0 * _nt_h(jnp.log(_X_LO)))
+        & (l_hot_target < l0 * _H_CEILING)
+        & (l_hot_target > 1e-100)
+    )
+    neg_dF_dtheta = d_target - _nt_h(u) * d_l0  # -dF/dtheta for F = l0 h - l_target
+    safe = jnp.where(interior, dF_du, 1.0)
+    tangent = jnp.where(interior, neg_dF_dtheta / safe, 0.0)
+    return u, tangent
 
 
 def _l_seed_geometric(
@@ -1102,6 +1165,37 @@ def _compute_bh_params(
     return r_g, r_isco_rg, r_isco_cm, eta, log10_l_edd, mdot
 
 
+def _hot_flow_luminosity(
+    agn_f_hard: float,
+    log10_l_edd: float,
+    agn_log_lbol_shape: float,
+    float32: bool = False,
+    agn_log_mbh: float = 0.0,
+) -> float:
+    """Hot-flow luminosity ``L_hot = min(f_hard L_Edd, L_bol / 2)``: the ONE definition (#2572).
+
+    K&D 2018 (MNRAS 480, 1247) Eq. 2 defines ``R_hot`` by
+    ``L_diss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR`` with
+    ``L_diss,hot = f_hard L_Edd`` (their Sec. 2.2, 0.02 L_Edd). Tengri additionally
+    caps the corona at half the bolometric luminosity so a low-Eddington-ratio object
+    cannot radiate more in the corona than it accretes. Both ``R_hot`` (the zone radii)
+    and the corona normalisation (the SED) use THIS value; previously R_hot was solved
+    from the uncapped ``f_hard L_Edd`` while the SED radiated the capped one.
+
+    ``agn_log_lbol_shape`` is the SHAPE luminosity (the true ``L_bol``), not the
+    normalisation reference, so the cap does not move with ``agn_lum_ratio``.
+
+    Returns erg/s, or L_sun on the float32 path (#1206: ~1e44 erg/s overflows).
+    """
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    if float32:
+        l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
+        return jnp.minimum(f_hard_safe * l_edd_lsun, 10.0**agn_log_lbol_shape * 0.5)
+    return jnp.minimum(
+        f_hard_safe * _pow10(log10_l_edd), 10.0**agn_log_lbol_shape * _LSUN_ERG * 0.5
+    )
+
+
 def _compute_zone_radii(
     r_g: float,
     r_isco_rg: float,
@@ -1169,21 +1263,22 @@ def _compute_zone_radii(
     .. [2] A. Laor and B. Netzer, "Dust Sublimation Depth in the Infrared-Emitting
        Accretion Disks of Quasars," MNRAS, 238, 897 (1989).
     """
-    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     # Float32 (#1206, #2210): L_Edd ~1e46 erg/s overflows, but the zone structure
     # needs only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd =
     # L_bol / L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay
     # representable.
+    # R_hot is solved from the SAME capped L_hot the corona radiates (#2572).
+    l_hot_target = _hot_flow_luminosity(
+        agn_f_hard, log10_l_edd, agn_log_lbol, float32=float32, agn_log_mbh=agn_log_mbh
+    )
     if float32:
         l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
-        l_hot_target = f_hard_safe * l_edd_lsun  # L_sun
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True)
         l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
     else:
         # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value
         # rather than as a standalone linear constant, so the removed
         # ``_eddington_luminosity`` product never reappears here.
-        l_hot_target = f_hard_safe * _pow10(log10_l_edd)
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
         # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
         # agn_log_lbol (not the now-derived agn_log_ledd).
@@ -1346,17 +1441,16 @@ def _compute_zone_luminosities(
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
     # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
-    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     # Float32 (#1206): l_hot_erg ~5e43 and l_seed ~1e44 erg/s overflow. Work both
     # in L_sun units (l_edd from M_BH, L_bol from the SHAPE luminosity: the
     # corona fraction lambda_Edd must track the TRUE L_bol, not the reference the
     # magnitude normalizes to). Beloborodov uses only their ratio, so units cancel.
+    l_hot_erg = _hot_flow_luminosity(
+        agn_f_hard, log10_l_edd, agn_log_lbol_shape, float32=float32, agn_log_mbh=agn_log_mbh
+    )
     if float32:
-        _l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
-        l_hot_erg = jnp.minimum(f_hard_safe * _l_edd_lsun, 10.0**agn_log_lbol_shape * 0.5)
         l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True)
     else:
-        l_hot_erg = jnp.minimum(f_hard_safe * _pow10(log10_l_edd), l_bol_erg * 0.5)
         l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
 
     kt_hot_erg = agn_kt_hot * _KEV_TO_ERG

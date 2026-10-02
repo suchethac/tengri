@@ -60,7 +60,12 @@ _POINT = {
 # h ~ 1e-3 (measured at 0.1166:
 # FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
 # step is far below that.
-_STEP = {"agn_kt_warm": 1e-3, "agn_gamma_warm": 1e-3}
+_STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3}
+# ``agn_kt_warm`` is held to 1e-3, not 1e-4: through 50 warm rings the float32-quantised,
+# piecewise-linear template makes the central difference itself scatter by ~5e-4 of its
+# value across h = 1e-3..5e-3 (-5.029, -5.032, -5.033, -5.035 against AD -5.0323). The
+# kernel-level test below pins the slope itself at 1e-4.
+_TOL = {"agn_kt_warm": 1e-3}
 _DISC_BLOCKS = sorted(name for name in AGN_BLOCKS["disc"] if name != "none")
 
 pytestmark = pytest.mark.skipif(not _SSP.is_file(), reason=f"BC03 SSP not found at {_SSP}")
@@ -89,13 +94,13 @@ def _build_agn_only(ssp, disc_spec: dict):
     return SEDModel.build(ssp, sfh=sfh, agn=agn, redshift=Fixed(0.5))
 
 
-def _grad_and_fd(model):
+def _grad_and_fd(model, overrides=None):
     """Return ``{param: (ad, fd)}`` of sum(log10 sed_agn) over the free agn_* params."""
     base = {
         k: jnp.asarray(v, dtype=jnp.float64)
         for k, v in model.spec.sample(jax.random.PRNGKey(0)).items()
     }
-    for name, value in _POINT.items():
+    for name, value in {**_POINT, **(overrides or {})}.items():
         if name in base:
             base[name] = jnp.asarray(value, dtype=jnp.float64)
     free = [k for k in base if k.startswith("agn_")]
@@ -115,11 +120,24 @@ def _grad_and_fd(model):
     return out
 
 
-@pytest.mark.parametrize("disc_type", _DISC_BLOCKS)
-def test_disc_block_gradient_matches_central_fd(ssp, disc_type):
+# Extra kubota_done point (#2572). ``agn_f_hard=0.005`` puts the hot-flow target at
+# ~0.0376 L0 (inside the 0.33 L0 ceiling) and below 0.5 L_bol, so R_hot is solved in
+# the interior of its bracket and the cap is inactive. (Before #2572's consistency fix
+# the default f_hard pinned R_hot at the ceiling for every other point in this file;
+# this one is interior whichever way the cap is handled.)
+_CASES = [(name, "", {}) for name in _DISC_BLOCKS] + [
+    ("kubota_done", "-r_hot_unclipped", {"agn_f_hard": 0.005}),
+]
+
+
+@pytest.mark.parametrize(
+    ("disc_type", "overrides"),
+    [pytest.param(n, o, id=n + tag) for n, tag, o in _CASES],
+)
+def test_disc_block_gradient_matches_central_fd(ssp, disc_type, overrides):
     """AD and central FD of sum(log10 sed_agn) agree to 1e-4 for every free parameter."""
     model = _build_agn_only(ssp, {"type": disc_type, "all_params": FREE})
-    grads = _grad_and_fd(model)
+    grads = _grad_and_fd(model, overrides)
 
     scale = max(abs(fd) for _, fd in grads.values())
     assert scale > 0.0, "vacuous check: the SED does not respond to any free parameter"
@@ -127,14 +145,15 @@ def test_disc_block_gradient_matches_central_fd(ssp, disc_type):
     for name, (ad, fd) in grads.items():
         denom = max(abs(fd), _ZERO_FLOOR * scale)
         rel = abs(ad - fd) / denom
-        if not rel < _REL_TOL:
+        if not rel < _TOL.get(name, _REL_TOL):
             failures.append(f"{name}: AD={ad:.6e} FD={fd:.6e} rel={rel:.2e}")
     assert not failures, (
         f"{disc_type}: gradient != central FD (rel tol {_REL_TOL}):\n" + "\n".join(failures)
     )
 
 
-def test_kubota_done_full_agn_gradient_matches_central_fd():
+@pytest.mark.parametrize("kw", [{}, {"agn_f_hard": 0.005}], ids=["default", "r_hot_unclipped"])
+def test_kubota_done_full_agn_gradient_matches_central_fd(kw):
     """``kubota_done_full_agn`` shares the K&D disc path, so it shares the defect.
 
     Monolithic (not a registered disc block, so outside the parametrised contract
@@ -154,7 +173,7 @@ def test_kubota_done_full_agn_gradient_matches_central_fd():
     uv = wl < 4000.0
 
     def objective(lbol, mbh):
-        sed = kubota_done_full_agn(wl, lbol, agn_log_mbh=mbh)
+        sed = kubota_done_full_agn(wl, lbol, agn_log_mbh=mbh, **kw)
         return jnp.sum(jnp.log10(jnp.maximum(sed, 1e-300))[uv])
 
     x = (jnp.float64(11.5), jnp.float64(8.5))

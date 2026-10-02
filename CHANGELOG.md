@@ -153,8 +153,16 @@
   temperature. Its `custom_jvp` had dropped the seed-temperature tangent and taken
   cell-spanning finite differences for the other two, so `jax.grad` disagreed with
   finite differences (`agn_log_mbh` -1190.6 vs -293.9, `agn_log_lbol` 6% off, at
-  `log L_bol` 11.5, `log M_BH` 8.5). Forward SEDs are bit-identical; a class-wide
-  gradient contract now covers every registered disc block (#2572).
+  `log L_bol` 11.5, `log M_BH` 8.5). A class-wide gradient contract now covers every
+  registered disc block. The `R_hot` solve of the same disc is also fixed: it had zero
+  derivative wherever unclipped (bisection differentiated through its iterations; now
+  an implicit-function-theorem `custom_jvp`), it was solved from `f_hard L_Edd` while
+  the corona radiated `min(f_hard L_Edd, L_bol/2)` (now one shared `L_hot`, as K&D 2018
+  Eq. 2 defines `R_hot` from the hot flow's dissipation), and its closed-form NT
+  integral omitted the `R dR` area element, understating `L_diss` by a factor 0.78 to
+  0.30, so `R_hot` sat too far out. **The `kubota_done` / `kubota_done_full` forward SED
+  changes** (`R_hot` at `log L_bol` 11.5, `log M_BH` 8.5: 20.3 to 2.7 `R_ISCO`; UV
+  x3.6, 2-10 keV x0.65 there; <1% at `log L_bol` 11, default mass) (#2572).
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;

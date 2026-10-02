@@ -514,27 +514,32 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+# Re-captured for #2572, deliberately: the kubota_done hot-flow zone is now solved from
+# one capped L_hot and a corrected Eq. 2 integral (R_hot moves), so the forward SED moved
+# (rest_sed_sum within 1%; rest_sed_0 by -0.3%, -54%, -31% at mbh 6, 8, 10). The
+# 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
+# the tree it is captured on.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5215528515600546e32,
-        "rest_sed_0": 2.1618471431580417e23,
-        "rest_sed_mid": 3.05875473371805e28,
-        "rest_sed_last": 8.775513568033312e21,
-        "photometry": (1.0986166566917497e-27, 1.5711841718626467e-27, 1.764819215426025e-27),
+        "rest_sed_sum": 1.5215524062055081e32,
+        "rest_sed_0": 2.155407040152672e23,
+        "rest_sed_mid": 3.0587538532169796e28,
+        "rest_sed_last": 8.775513426492424e21,
+        "photometry": (1.0986162842117011e-27, 1.5711841670976002e-27, 1.7648192140610308e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.558679481783208e32,
-        "rest_sed_0": 2.621597865262484e24,
-        "rest_sed_mid": 3.1456552202309087e28,
-        "rest_sed_last": 8.823791474594601e21,
-        "photometry": (1.1319561100052943e-27, 1.5726914892133822e-27, 1.7652681401268386e-27),
+        "rest_sed_sum": 1.5565513396881064e32,
+        "rest_sed_0": 1.2167528066571685e24,
+        "rest_sed_mid": 3.1332129408000186e28,
+        "rest_sed_last": 8.802371689097138e21,
+        "photometry": (1.1291056923321986e-27, 1.5720397325069094e-27, 1.76507135505819e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5745233941627343e32,
-        "rest_sed_0": 2.0084485779608986e24,
-        "rest_sed_mid": 3.175461013264611e28,
-        "rest_sed_last": 9.02096624152618e21,
-        "photometry": (1.1420945800812812e-27, 1.5791369532676527e-27, 1.766957226624605e-27),
+        "rest_sed_sum": 1.5888866633145728e32,
+        "rest_sed_0": 1.377380551366272e24,
+        "rest_sed_mid": 3.1915797942043907e28,
+        "rest_sed_last": 9.483414357810568e21,
+        "photometry": (1.147006436623392e-27, 1.5906334564923414e-27, 1.770984912046167e-27),
     },
 }
 

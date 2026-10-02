@@ -801,6 +801,7 @@ def _compute_bh_and_radii(
     """
     from tengri.components.agn.disc import (
         _gravitational_radius,
+        _hot_flow_luminosity,
         _isco_radius,
         _r_hot_bisect,
         _self_gravity_radius,
@@ -829,8 +830,8 @@ def _compute_bh_and_radii(
     ) ** 0.25
 
     # Zone radii
-    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_target = f_hard_safe * _pow10(log10_l_edd)
+    # Same capped L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
+    l_hot_target = _hot_flow_luminosity(agn_f_hard, log10_l_edd, agn_log_lbol)
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
@@ -1083,6 +1084,7 @@ def kubota_done_disc_preintegrated(
     """
     from tengri.components.agn.disc import (
         _gravitational_radius,
+        _hot_flow_luminosity,
         _isco_radius,
         _l_seed_geometric,
         _log10_eddington_luminosity,
@@ -1103,7 +1105,6 @@ def kubota_done_disc_preintegrated(
     # the bottom of the declared agn_log_mbh prior, past float32's 3.403e38.
     log10_l_edd = _log10_eddington_luminosity(agn_log_mbh)
     # E fix (#846): L_bol is the knob; Eddington ratio derived (see runtime path).
-    l_bol_erg = 10.0**agn_log_lbol * L_SUN
 
     r_hot_cm, r_warm_cm, r_out_cm, t_in, _eta = _compute_bh_and_radii(
         agn_log_mbh,
@@ -1146,8 +1147,7 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_erg = jnp.minimum(f_hard_safe * _pow10(log10_l_edd), l_bol_erg * 0.5)
+    l_hot_erg = _hot_flow_luminosity(agn_f_hard, log10_l_edd, agn_log_lbol)
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
