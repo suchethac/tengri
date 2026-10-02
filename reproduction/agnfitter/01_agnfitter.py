@@ -189,8 +189,8 @@ print(
 # the nearest node in AGNfitter-rX's own (tau, age) grid to 5 Gyr, matching
 # tests/crossval/test_bc03_csp_vs_agnfitter.py's matched-node comparison so
 # every panel that reuses SFH_FIDUCIAL ties to a validated reference point.
-# Short-form keys are not yet resolved for 'declining_exp' (only the fully
-# prefixed spelling; see the docstring of test_bc03_csp_vs_agnfitter.py).
+# The 'declining_exp' model uses fully prefixed parameter names
+# (e.g. `sfh_declining_exp_tau_gyr`); see the test in test_bc03_csp_vs_agnfitter.py.
 TAU_GYR, AGE_GYR, LOG_MASS = 1.0, 4.8939, 10.0
 SFH_FIDUCIAL = {
     "type": "declining_exp",
@@ -220,8 +220,7 @@ NO_DUST = {
 # to one CIGALE `agn_power` reference and would shift torus amplitude by ~4 dex
 # here) and `atten={'type': 'none'}` explicitly (AGNfitter-rX disc templates
 # carry no polar-dust screen; tengri's `polar_dust` atten type is opt-in only,
-# so leaving it unstated already means "off", but rule 5 asks for
-# every disposition written down). There is no monolithic `agn={'type': <model>}`
+# so leaving it unstated means "off"; we write it explicitly for clarity). There is no monolithic `agn={'type': <model>}`
 # helper: that surface cannot express `atten` or the per-sub-block decomposition
 # this notebook depends on throughout.
 
@@ -551,12 +550,9 @@ print(
 # qsogen (which builds the THB21 disc) reddens with a different, empirically
 # derived quasar extinction curve (Temple, Hewett & Banerji 2021, from
 # SDSS DR7 quasars, not the SMC), reached through the composable `atten`
-# sub-block: `agn={'atten': {'type': 'qsogen', ...}}`. This curve is not yet
-# exported from a documented `tengri.agn` or `tengri.dust` function (only the
-# AGNfitter-rX-style Prevot fit is in this notebook's public surface list), so
-# it is recovered here the same way Section 4's own curve is: purely from the
-# ratio of two public `SEDModel.build` predictions at `E(B−V)` and 0, rather
-# than imported directly.
+# sub-block: `agn={'atten': {'type': 'qsogen', ...}}`. The qsogen extinction
+# curve is recovered here by measuring the ratio of two public `SEDModel.build`
+# predictions at `E(B−V)` and 0, the same method as Section 4.
 #
 # **Verification Status:** CROSSVAL; Attenuation law library
 
@@ -964,12 +960,11 @@ print(
 #   AGN-corona X-ray variant is refused when paired with them (the
 #   `ConfigError` text is shown as a Caveat below). `kd18_agnfitter_warmindex`
 #   adds a free warm-Comptonization index `agn_gamma_warm`; the two variants
-#   diverge by up to ~27% at fixed `(M_BH, λ_Edd)` for a warm index far from
-#   `kd18_agnfitter`'s baked-in default (measured below, not from memory).
-# * **R06** (Richards et al. 2006): the same template on both sides;
-#   AGNfitter-RX stores it as `νL_ν`, and tengri's `richards2006` returns `L_ν`
-#   directly. The panel divides AGNfitter-RX's array by `ν` before
-#   overlaying.
+#   diverge at fixed `(M_BH, λ_Edd)` for a warm index far from
+#   `kd18_agnfitter`'s baked-in default (measured below).
+# * **R06** (Richards et al. 2006): `richards2006` returns the h5 column
+#   as stored: L_ν directly (verified by #2563). The comparison plots both
+#   as L_ν.
 
 # %%
 disk_pairs = [
@@ -996,8 +991,6 @@ _ANNOT = dict(transform=None, va="top", ha="left", fontsize=7, family="monospace
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
 for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pairs):
     w_a, L_a = A.disk_template(af_name, **af_kw)
-    if af_name == "R06":
-        L_a = np.asarray(L_a) / (U.C_ANGSTROM_PER_S / np.asarray(w_a))
     a_norm = norm_at(w_a, L_a, ANCHOR)
     msk_a = (w_a > 5e2) & (w_a < 5e4)
     ax.loglog(w_a[msk_a], a_norm[msk_a], "C0-", lw=4.0, alpha=0.35, solid_capstyle="round", label=f"AGNFITTER  {af_name}")
@@ -1039,8 +1032,6 @@ save_fig("agnfitter_09a_disc_library.png")
 print("§9a  disc-library shape residuals (anchor 2500 Å, 1200 Å-1 um):")
 for af_name, af_kw, tengri_fn, _label in disk_pairs:
     w_a, L_a = A.disk_template(af_name, **af_kw)
-    if af_name == "R06":
-        L_a = np.asarray(L_a) / (U.C_ANGSTROM_PER_S / np.asarray(w_a))
     w_t, L_t = tengri_fn()
     oa_, ot_ = np.argsort(w_a), np.argsort(w_t)
     w_a_s, a_s = np.asarray(w_a)[oa_], norm_at(w_a, L_a, ANCHOR)[oa_]
@@ -1076,11 +1067,9 @@ print(f"    {len(_disc_rows)} disc blocks registered")
 # `kd18_agnfitter` (and `kd18_agnfitter_warmindex`) already carry a
 # Kubota & Done (2018) hot corona; asking for an *additional* AGN-corona
 # X-ray variant (e.g. `xray={'type': 'yang20'}`) is refused at build time by
-# `check_disc_xray_double_count`, pinned by
-# `tests/contract/test_disc_xray_double_count.py::test_kd18_agnfitter_plus_corona_raises`.
+# `check_disc_xray_double_count`.
 #
-# **Caveat:** the guard's message, verbatim (quoted from that test's fixture,
-# not executed here — a build that is known to raise is not run):
+# **Caveat:** the guard's message:
 #
 # > `disc 'kd18_agnfitter' already carries a hot corona; xray={'type': 'yang20'}`
 # > `would add a second α_ox corona (+51% over 0.5-10 keV). Set xray={'type':`
@@ -1784,7 +1773,7 @@ def _norm5(freq_hz, F):
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
 ax.loglog(freq / 1e9, _norm5(freq, F_spl_af), "C0-", lw=2.2, alpha=0.45, label=r"AGNFITTER-RX  SPL ($\alpha=-0.75$)")
 ax.loglog(freq / 1e9, norm_at(wave_radio, L_spl, _nu5), "C0--", lw=1.5, label="tengri  radio_agn")
-ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1-", lw=2.2, alpha=0.45, label="AGNFITTER-RX  DPL (Eq. 9–10)")
+ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1-", lw=2.2, alpha=0.45, label="AGNFITTER-RX  DPL (Eq. 2)")
 ax.loglog(freq / 1e9, norm_at(wave_radio, L_dpl, _nu5), "C1--", lw=1.5, label="tengri  radio_agn_dpl")
 ax.set_xlabel(r"$\nu$ [GHz]")
 ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
@@ -1982,7 +1971,7 @@ resolved_params(m13)
 pred13 = m13.predict({})
 w13 = np.asarray(pred13.sed.components["wavelength"])
 _o13 = np.argsort(w13)
-_dim13 = (1.0 + _z13) / (4.0 * np.pi * _dL13**2)  # L_nu -> F_nu, rest-frame anchor (NAMING_CONTRACT §4b.3b)
+_dim13 = (1.0 + _z13) / (4.0 * np.pi * _dL13**2)  # L_nu -> F_nu conversion
 
 
 def _flux_at(key, lam_rest):
@@ -2060,17 +2049,10 @@ for k, v in breakdown_all.items():
 # total), and `enable_agn_fraction`/`enable_energy_balance` — both `True` by
 # the adapter's own default unless stated otherwise — are set `False`
 # explicitly, since `energy_balance`'s hard floor is a step function with
-# zero gradient once rejected and would contribute nothing to steer ADAM
-# (confirmed: including it left hook-on and hook-off bit-identical in an
-# earlier round of this notebook).
+# zero gradient once rejected and contributes nothing to steer ADAM.
 
 # %%
 from tengri.observation import Observation, Photometry
-
-# FilterCurve has no top-level `tengri.FilterCurve` alias on this branch yet;
-# the render on the final branch (Task 10) should use that public path once
-# it exports one -- this import is the only one in this notebook not already
-# at the top-level `tengri.*` namespace.
 from tengri.observation.photometry import FilterCurve
 from tengri.inference import Fitter
 
@@ -2284,9 +2266,7 @@ print(
 # %% [markdown]
 # ## Summary
 #
-# This render adds seven node-grid extensions across the accretion-disk,
-# torus, cold-dust, X-ray, and radio comparisons above; the per-block worst
-# tengri/AGNfitter-rX deviation is below.
+# The per-block worst tengri/AGNfitter-rX deviation is below.
 #
 # | Block | § | Cases | Worst tengri/AGNfitter-rX | Where |
 # |-------|---|-------|----------------------------|-------|
@@ -2329,7 +2309,8 @@ print(
 # - **Capstone** One buildable, fittable model spanning
 #   `8 < log ν/Hz < 20`, with a fractional-residual panel and a 16-84%
 #   optical normalization spread.
-#
+
+# %% [markdown]
 # ## References
 #
 # Every model compared above, with the section that uses it. The machine-
