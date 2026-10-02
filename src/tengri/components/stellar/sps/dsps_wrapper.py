@@ -1012,37 +1012,30 @@ def _reference_mass_remaining(
     table : ndarray, shape (n_met, n_age) or None
         Surviving-mass fraction table, or ``None`` if any condition fails.
     """
-    # Require FSPS or SSP products (exclude other isochrone families)
     first_token = filename_stem.split("_")[0].lower()
     if first_token not in ("fsps", "ssp"):
         return None
 
-    # Detect isochrone from filename
     isochrones = {iso for iso, _ in _MASS_REMAINING_DATA_FILES}
     tokens = filename_stem.split("_")
     isochrone = next((t.lower() for t in tokens if t.lower() in isochrones), None)
     if isochrone is None:
         return None
 
-    # Normalize IMF: extract the base name (e.g., "Chabrier (2003)" -> "chabrier")
+    # "Chabrier (2003)" -> "chabrier"
     imf_normalized = (imf.lower().split() or ["unknown"])[0] if isinstance(imf, str) else "unknown"
 
-    # Check if (isochrone, IMF) combination exists
     key = (isochrone, imf_normalized)
     if key not in _MASS_REMAINING_DATA_FILES:
         return None
 
-    # Load reference table
     log_age_yr_ref, lgmet_ref, table_ref = _load_mass_remaining_reference(key)
 
-    # Convert grid ages to yr from Gyr for comparison
     lg_age_yr = ssp_lg_age_gyr + 9.0
 
-    # Check for age-0 anchor (log age = -inf)
     if not np.isfinite(lg_age_yr).all():
         return None
 
-    # Match age and metallicity nodes
     age_match = lg_age_yr.shape == log_age_yr_ref.shape and np.allclose(
         lg_age_yr, log_age_yr_ref, rtol=0.0, atol=1e-6
     )
