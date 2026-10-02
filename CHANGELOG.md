@@ -3071,7 +3071,8 @@
   smeared the IGM's sharp Lyman-limit/Lyman-alpha-forest edge — a line-of-sight
   feature imprinted after the light leaves the galaxy, which the galaxy's own
   kinematics cannot broaden. `sigma_v_kms` now acts on the stellar piece before
-  the IGM transmission, on every spectrum-prediction path (#2589).
+  the IGM transmission, on every spectrum-prediction path, including
+  `analysis.simulate.spectrum_from_sfh` (#2589).
 
 - `agn={'type': 'off'}` raised `agn['type']='off' is not an AGN model` —
   both dust groups already accept `'off'` as a synonym of `'none'`

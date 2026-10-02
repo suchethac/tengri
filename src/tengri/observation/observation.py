@@ -495,11 +495,44 @@ def project_spectrum_kernel_split(
     ``igm_trans is None`` is likewise structural (which components are in
     the chain is fixed at model-build time).
 
+    **Cross-code comparison (#2589).** Prospector applies the mean-IGM
+    transmission inside the FSPS call, before ``smoothspec`` convolves with
+    the stellar velocity dispersion (``prospect.sources.CSPSpecBasis`` /
+    ``SpecModel.predict_init``, Johnson et al. 2021 [1]_); BAGPIPES applies
+    its IGM transmission before the velocity-dispersion convolution in
+    ``model_galaxy._calculate_full_spectrum`` (Carnall et al. 2018 [2]_).
+    tengri applies stellar kinematics first instead: the Lyman-limit and
+    Lyman-:math:`\alpha`-forest edges (Inoue et al. 2014 [3]_; Madau 1995
+    [4]_) are imprinted on the galaxy's already-kinematically-broadened
+    light along the line of sight, external to the galaxy, and are only
+    smeared afterward by the instrument -- the order used throughout the
+    Lyman-break galaxy spectroscopy literature (e.g. Steidel et al. 1996
+    [5]_, 2003 [6]_: the forest/break is measured on the observed spectrum,
+    the galaxy's own velocity dispersion is a separate, narrower kinematic
+    measurement made from unrelated absorption/emission features).
+
     References
     ----------
     .. [1] Johnson, B. D., Leja, J., Conroy, C., & Speagle, J. S. (2021).
            "Stellar Population Inference with Prospector."
            ApJS, 254, 22. arXiv:2012.01426.
+    .. [2] Carnall, A. C., McLure, R. J., Dunlop, J. S., & Davé, R. (2018).
+           "Inferring the star formation histories of massive quiescent
+           galaxies with BAGPIPES: evidence for multiple quenching
+           mechanisms." MNRAS, 480, 4379. arXiv:1712.04452.
+    .. [3] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. (2014).
+           "An updated analytic model for attenuation by the intergalactic
+           medium." MNRAS, 442, 1805. arXiv:1402.0677.
+    .. [4] Madau, P. (1995). "Radiative transfer in a clumpy universe: the
+           colors of high-redshift galaxies." ApJ, 441, 18.
+    .. [5] Steidel, C. C., Giavalisco, M., Pettini, M., Dickinson, M., &
+           Adelberger, K. L. (1996). "Spectroscopic Confirmation of a
+           Population of Normal Star-forming Galaxies at Redshifts z > 3."
+           ApJ, 462, L17.
+    .. [6] Steidel, C. C., Shapley, A. E., Pettini, M., Adelberger, K. L.,
+           Erb, D. K., Reddy, N. A., & Hunt, M. P. (2003). "A Survey of
+           Star-forming Galaxies in the 1.4 < z < 2.5 Redshift Desert:
+           Overview." ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
     from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
 

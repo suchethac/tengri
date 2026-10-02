@@ -340,6 +340,21 @@ whenever `sigma_v_kms >~ sigma_lib(lambda)`. With no IGM component
 configured, this split is a no-op: the single combined kernel of the
 previous section is used unchanged.
 
+**Cross-code comparison.** Prospector applies the mean-IGM transmission
+inside the FSPS call, before `smoothspec` convolves with the stellar
+velocity dispersion (`SpecModel.predict_init`, Johnson et al. 2021, ApJS,
+254, 22, arXiv:2012.01426); BAGPIPES applies its IGM transmission before
+the velocity-dispersion convolution in
+`model_galaxy._calculate_full_spectrum` (Carnall et al. 2018, MNRAS, 480,
+4379, arXiv:1712.04452). tengri applies stellar kinematics first instead:
+the Lyman-limit and Lyman-alpha-forest edges (Inoue et al. 2014, MNRAS,
+442, 1805, arXiv:1402.0677; Madau 1995, ApJ, 441, 18) are imprinted on the
+galaxy's already-kinematically-broadened light along the line of sight,
+external to the galaxy, and are only smeared afterward by the instrument
+-- the order used throughout the Lyman-break galaxy spectroscopy
+literature (e.g. Steidel et al. 1996, ApJ, 462, L17; Steidel et al. 2003,
+ApJ, 592, 728, arXiv:astro-ph/0305378).
+
 ### Free instrument-resolution scale
 
 `lsf_scale` (default: `Fixed(1.0)`, free prior `Uniform(0.8, 1.2)`,
