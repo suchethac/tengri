@@ -134,6 +134,16 @@ def _cases() -> list[tuple[str, str, dict]]:
                 "dust_attenuation": (
                     {"type": n, "law": "calzetti", "all_params": Fixed(DEFAULT)}
                     if n in ("two_component", "single_component")
+                    else {
+                        "type": n,
+                        # age_binned's structural content is the screen list.
+                        "screens": [
+                            {"law": "calzetti", "window_log_yr": (None, 7.0)},
+                            {"law": "calzetti", "window_log_yr": (None, None)},
+                        ],
+                        "all_params": Fixed(DEFAULT),
+                    }
+                    if n == "age_binned"
                     else {"type": n, "all_params": Fixed(DEFAULT)}
                 )
             },
