@@ -281,3 +281,103 @@ def test_dust_sedmodel_matches_native_grid(ssp, name, kw):
         assert frac_m == pytest.approx(frac_d, rel=_DUST_BAND_RTOL), (
             f"{name}: {lo:g}-{hi:g} um band fraction SEDModel/dense = {frac_m / frac_d:.5f}"
         )
+
+
+# ---------------------------------------------------------------------------
+# AGN discs. The disc blocks normalise their energy to L_bol by a trapezoid over
+# the grid they are handed, so a master grid that stops at the SSP window
+# (91 A - 160 um) renormalises a disc that emits outside it and inflates its
+# UV/optical level. Checked per disc: (a) the SEDModel disc integrates to L_bol
+# (1e-3; not for the attenuated variant, whose atten factor removes energy by
+# design); (b) the master grid covers >= 1 - 1e-3 of the block's energy on a
+# 1e-3 A - 1e10 A evaluation (not for ``powerlaw``, which has no low-frequency
+# cut-off: its energy beyond a wavelength is set by where the grid ends);
+# (c) the levels at the model nodes nearest 1216 A and 5100 A equal those of the same block evaluated on
+# a 200000-point grid over the same range (1e-3).
+# ---------------------------------------------------------------------------
+_DISC_LBOL = 10.0**11 * _LSUN
+_DISC_TOL = 1.0e-3
+_DISC_CASES = [
+    "kubota_done",
+    "multicolor",
+    "skirtor",
+    "schartmann2005",
+    "schartmann2005_skirtor_atten",
+    "adaf",
+    "adaf_lopez2024",
+    "powerlaw",
+    "kd18_agnfitter",
+    "kd18_agnfitter_warmindex",
+]
+_C_AA_PER_S = 2.99792458e18
+
+
+def _predict_disc(ssp, disc):
+    model = SEDModel.build(
+        ssp_data=ssp,
+        sfh=_SFH,
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        agn={
+            "type": "composable",
+            "disc": {"type": disc, "all_params": Fixed(DEFAULT)},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "atten": {"type": "none"},
+            "agn_log_lbol": Fixed(11.0),
+            "all_params": Fixed(DEFAULT),
+            "norm": "independent",
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pred = model.predict({})
+    w = np.asarray(pred.sed.components["wavelength"], float)
+    l_nu = np.asarray(pred.sed.components["sed_agn_disc"], float)
+    return w, l_nu * _C_AA_PER_S / w**2  # L_lambda [erg/s/A]
+
+
+def _disc_block(disc, w):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = AGN_BLOCKS["disc"][disc](jnp.asarray(w), 11.0)
+    return np.nan_to_num(np.asarray(out, float))
+
+
+@pytest.mark.parametrize("disc", _DISC_CASES)
+def test_disc_sedmodel_conserves_energy_and_level(ssp, disc):
+    w_m, lam_m = _predict_disc(ssp, disc)
+
+    w_d = np.geomspace(w_m.min(), w_m.max(), 200000)
+    lam_d = _disc_block(disc, w_d)
+
+    bol_m = float(np.trapezoid(lam_m, w_m))
+    bol_d = float(np.trapezoid(lam_d, w_d))
+    if disc != "schartmann2005_skirtor_atten":
+        # kubota_done integrates to 0.99876 L_bol on a 1e-3 A - 1e10 A grid by its own construction (not the grid).
+        tol = 2.0e-3 if disc == "kubota_done" else _DISC_TOL
+        assert bol_m == pytest.approx(_DISC_LBOL, rel=tol), f"{disc}: bolometric / L_bol = {bol_m / _DISC_LBOL:.5f}"
+    assert bol_m == pytest.approx(bol_d, rel=_DISC_TOL), f"{disc}: bolometric SEDModel/dense = {bol_m / bol_d:.5f}"
+
+    for wl in (1216.0, 5100.0):
+        i = int(np.argmin(np.abs(w_m - wl)))  # nearest model node (values are exact there)
+        lm = float(lam_m[i])
+        ld = float(np.interp(w_m[i], w_d, lam_d))
+        assert lm == pytest.approx(ld, rel=_DISC_TOL), f"{disc}: L_lambda({wl:g} A) SEDModel/dense = {lm / ld:.5f}"
+
+    if disc != "powerlaw":
+        w_w = np.geomspace(1.0e-3, 1.0e10, 200000)
+        lam_w = _disc_block(disc, w_w)
+        inside = (w_w >= w_m.min()) & (w_w <= w_m.max())
+        cover = np.trapezoid(lam_w[inside], w_w[inside]) / np.trapezoid(lam_w, w_w)
+        assert cover >= 1.0 - _DISC_TOL, (
+            f"{disc}: master grid {w_m.min():.3g}-{w_m.max():.3g} A holds only {cover:.5f} of the block's energy"
+        )

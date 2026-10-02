@@ -133,11 +133,19 @@
   tori, `schreiber2018` and `dh02_ce01` had none: their IR peak sat on an
   SSP node (20 or 40 µm; native 19-31 µm), and the two tabulated dust models were cut at
   160 µm and renormalised there (3-1000 µm band mean up to 1.9x, 160-1000 µm
-  fraction 2.2-3.6x). `kd18_agnfitter` discs, 28 % of whose energy is below the
-  SSP edge, now carry their native axis and are no longer renormalised over the
-  91 Å - 160 µm window. `nenkova_agnfitter`'s 4096-point axis is declared at
+  fraction 2.2-3.6x). AGN disc blocks were cut
+  the same way: on the SSP grid each renormalised its energy to `L_bol` over
+  91 Å - 160 µm although it emits outside it (energy outside before / after:
+  `kd18_agnfitter*` 28 % / < 1e-3, `kubota_done` 21 % / < 1e-3, `skirtor` 15 % /
+  7e-4, `multicolor` 2.5 % / < 1e-3, `adaf` 99 % / < 1e-3, `adaf_lopez2024`
+  1.2 % / 1e-6, `schartmann2005*` 0.3 % / < 1e-3), inflating their UV/optical
+  level by up to 1/0.72; each now declares its template axis or an analytic
+  support range (the coronal/X-ray end and the outer Rayleigh-Jeans tail), at
+  40 points per decade. The deprecated `powerlaw` disc has no
+  low-frequency cut-off and takes the 1 cm end used by the analytic
+  dust and torus grids. `nenkova_agnfitter`'s 4096-point axis is declared at
   stride 4. A contract test fails for any newly registered torus, dust-emission
-  or disc block that neither declares support nor is listed with a reason
+  or disc block that neither declares support nor is explicitly grid-less
   (#2564).
 
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time

@@ -141,6 +141,59 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     ),
 }
 
+# Analytic AGN disc blocks (#2564). These blocks evaluate on whatever grid they
+# are handed and normalise their energy to ``L_bol`` by a trapezoid over that
+# grid, so a grid that stops at the SSP edges (91 A, 160 um) renormalises the
+# disc over the truncated window and inflates its UV/optical level. Each range
+# [lo, hi] Angstrom is chosen so that < 1e-3 of the block's energy (default
+# parameters, measured on a 1e-3 A - 1e10 A grid) lies outside it, and is
+# justified by the emission physics:
+#   kubota_done: hot Comptonising corona to ~0.01 A (1 MeV) through the
+#     colour-corrected disc to the outer-edge Rayleigh-Jeans tail at 100 um.
+#   multicolor: bare Shakura-Sunyaev disc plus the CIGALE-like EUV power-law
+#     tail (starts at 8 A) to the outer-edge Rayleigh-Jeans tail at 100 um.
+#   skirtor / schartmann2005*: CIGALE piecewise power laws with breakpoints
+#     at 8 nm ... 1e6 nm (80 A ... 1e7 A), the steep lambda^-4 tail beyond;
+#     the short side falls as lambda^alpha, < 1e-3 of the energy below 1 A.
+#   adaf: Mahadevan 1997 cyclo-synchrotron (nu^0.4 rise to the mm peak), Compton
+#     power law and bremsstrahlung cut off at kT_e/h (T_e < ~1e10 K gives
+#     lambda > ~5e-3 A); the grid reaches 1e-3 A and 1 mm (1e7 A).
+#   adaf_lopez2024: CIGALE ADAF/thin-disc blend, 8 A - 1e8 A.
+#   powerlaw: nu^alpha exp(-h nu/k T_max) has no low-frequency cut-off; its
+#     energy fraction beyond a wavelength is set by where the grid ends. It
+#     takes the same 1 cm end as the analytic dust and torus support grids, and
+#     starts where the T_max = 1e5 K exponential cut-off has removed the energy.
+# 40 points per decade keeps the disc level at every node within 7e-4 of a
+# 200000-point evaluation (measured: 20 per decade leaves 2.5e-3 for the ADAF
+# blocks, 80 per decade buys nothing the test tolerance needs).
+_DISC_PTS_PER_DECADE = 40
+# Tabulated discs whose template axis is too coarse for that normalisation
+# accuracy (KD18: 100 nodes over 6.3 decades, 1.6e-3): the declared grid is
+# the axis plus a log grid at the same density as the analytic discs.
+_DISC_DENSIFIED = frozenset({"kd18_agnfitter", "kd18_agnfitter_warmindex"})
+_ANALYTIC_DISC_RANGE_AA: dict[str, tuple[float, float]] = {
+    "kubota_done": (1.0e-2, 1.0e6),
+    "multicolor": (8.0, 1.0e6),
+    "skirtor": (1.0, 1.0e7),
+    "schartmann2005": (1.0, 1.0e7),
+    "schartmann2005_skirtor_atten": (1.0, 1.0e7),
+    "adaf": (1.0e-3, 1.0e7),
+    "adaf_lopez2024": (8.0, 1.0e8),
+    "powerlaw": (1.0e1, 1.0e8),
+}
+
+# Disc blocks that stay grid-less: nothing (or < 1e-3 of the energy) lies
+# outside the SSP window, measured with default parameters (#2564).
+_GRIDLESS_DISC = frozenset(
+    {
+        "none",  # no emission
+        "grahsp_sbpl",  # 1e-4 of the energy beyond 160 um, none below 91 A
+        "qsogen",  # 7e-6 beyond 160 um
+        "richards2006",  # 4e-4 below 91 A, 1e-5 beyond 160 um
+        "slone_netzer",  # template axis 450 A - 3e7 A, nothing outside the window
+    }
+)
+
 # Analytic AGN torus blocks: single-temperature and multi-temperature graybodies
 # spanning 1 µm – 1 cm (IR dust emission through submm) without a template file.
 # Same semantics as _ANALYTIC_DUST_EMISSION: the blocks compute their SED on any
@@ -355,13 +408,25 @@ def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
 
 
 def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
-    """Native wavelength grid [Å] for an AGN disc block selection."""
-    if not block or block == "none":
+    """Native wavelength grid [Å] for an AGN disc block selection.
+
+    Template discs return their file's axis, analytic discs a log grid over
+    their emission range (``_ANALYTIC_DISC_RANGE_AA``), grid-less discs ``None``.
+    """
+    if not block or block in _GRIDLESS_DISC:
         return None
+    if block in _ANALYTIC_DISC_RANGE_AA:
+        lo, hi = _ANALYTIC_DISC_RANGE_AA[block]
+        n = int(round(np.log10(hi / lo) * _DISC_PTS_PER_DECADE)) + 1
+        return np.geomspace(lo, hi, n)
     candidates = _AGN_DISC_TEMPLATES.get(block)
     if candidates is None:
         return None
-    return _first_present(candidates)
+    wave = _first_present(candidates)
+    if wave is not None and block in _DISC_DENSIFIED:
+        n = int(round(np.log10(wave.max() / wave.min()) * _DISC_PTS_PER_DECADE)) + 1
+        wave = np.unique(np.concatenate([wave, np.geomspace(wave.min(), wave.max(), n)]))
+    return wave
 
 
 def native_wave_agn_model(model: str | None) -> np.ndarray | None:
