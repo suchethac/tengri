@@ -2,8 +2,7 @@
 
 ### Fixed
 
-- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time (#2592).
-
+- Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save
@@ -19,6 +18,7 @@
 
 ### Added
 
+- `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
@@ -57,6 +57,8 @@
   differ by 22-28%, so the thermal component steps by that much at the SSP edge. Validation
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
+
+- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time (#2592).
 
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
