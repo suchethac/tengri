@@ -42,6 +42,7 @@ __all__ = [
     "delta_line_band_kernel",
     "ln1pz_grid",
     "rendered_line_band_kernel",
+    "z_bracket",
 ]
 
 #: Smallest positive table value kept when a log is taken, relative to the
@@ -300,14 +301,26 @@ def continuum_z_slab(log_table, lnz_grid, redshift):
         (the table is not extrapolated).
     """
     n_dims = log_table.ndim - 2
+    i, w = z_bracket(lnz_grid, redshift)
+    if lnz_grid.shape[0] == 1:
+        return jax.lax.slice_in_dim(log_table, 0, 1, axis=n_dims), 0, 0.0
+    return jax.lax.dynamic_slice_in_dim(log_table, i, 2, axis=n_dims), i, w
+
+
+def z_bracket(lnz_grid, redshift):
+    """Lower node index and upper-node weight of ``ln(1+z)`` on the grid.
+
+    Weight linear in :math:`\\ln(1+z)` and clipped to [0, 1]: the table is not
+    extrapolated. A one-node grid returns ``(0, 0.0)``.
+    """
     n_z = lnz_grid.shape[0]
     if n_z == 1:
-        return jax.lax.slice_in_dim(log_table, 0, 1, axis=n_dims), 0, 0.0
+        return 0, 0.0
     lnz = jnp.log1p(jnp.asarray(redshift))
     i = jnp.clip(jnp.searchsorted(lnz_grid, lnz, side="right") - 1, 0, n_z - 2)
     span = lnz_grid[i + 1] - lnz_grid[i]
     w = jnp.clip((lnz - lnz_grid[i]) / span, 0.0, 1.0)
-    return jax.lax.dynamic_slice_in_dim(log_table, i, 2, axis=n_dims), i, w
+    return i, w
 
 
 def continuum_band_from_slab(log_nion, log_bands, keep, lower, weight):

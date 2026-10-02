@@ -296,6 +296,12 @@ _CANONICAL_UNITS: dict[str, str] = {
     # summation sweep in ``predict_via_precomp``.
     "nebular_phot_lnu_attenuated_precomp": "erg/s/Hz",
     "nebular_restband_lnu_attenuated_precomp": "erg/s/Hz",
+    # Nebular sub-band channels served by the per-Q_H grid (see DerivedState).
+    "nebular_phot_lnu_subband_precomp": "erg/s/Hz",
+    "nebular_subband_waves_rest_precomp": "Angstrom",
+    "nebular_restband_lnu_subband_precomp": "erg/s/Hz",
+    "nebular_restband_subband_waves_precomp": "Angstrom",
+    "nebular_eb_absorbed_per_qh_grid_precomp": "erg/s per (photon/s)",
     # Shock (MAPPINGS V), filter LUT. A separate additive component from the
     # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",

@@ -794,10 +794,11 @@ class NebularSEDComponent(TemplateThreading):
         Returns
         -------
         ForwardState
-            New state with ``derived["sed_nebular"]`` and
-            ``derived["sed_shock"]`` always populated (zeros for the
-            non-active branch), and (for non-BakedIn backends)
-            ``sed_intrinsic`` updated to include the active emission.
+            New state with ``derived["sed_nebular"]`` and ``derived["sed_shock"]``
+            populated (zeros for the non-active branch), except when the grid
+            serves nebular emission with dust channels, where ``derived["sed_shock"]``
+            is absent. ``sed_intrinsic`` is updated to include the active emission
+            for non-BakedIn backends.
         """
         # NOTE: do not publish ``self.config.backend`` (a Python string)
         # to ``state.derived``: strings are not JAX leaves and break
@@ -1079,11 +1080,18 @@ class NebularSEDComponent(TemplateThreading):
             # photometry channel, so XLA prunes the Cue forward from
             # ``predict_photometry``. log10(Q_H) is the stellar-published ``log_nion``.
             from tengri.components.nebular.nebular_grid_precompute import (
+                nebular_subband_decomposition,
+                reconstruct_nebular_eb_absorbed_per_qh,
                 reconstruct_nebular_phot,
+                reconstruct_nebular_phot_subband,
                 reconstruct_nebular_restband,
+                reconstruct_nebular_restband_subband,
+                reconstruct_nebular_subband_waves,
+                reconstruction_amplitude_log10,
+                reconstruction_escape_factor,
             )
 
-            log_nion = state.derived["log_nion"]
+            log_nion = reconstruction_amplitude_log10(state.derived["log_nion"], params)
             interp_point = self._grid_interp_point(
                 grid, params, state, neb_logU=common_kwargs["neb_logU"]
             )
@@ -1146,6 +1154,66 @@ class NebularSEDComponent(TemplateThreading):
                 neb_dig_delta_logU=_dig_delta_logU,
                 dig_active=self.config.dig_active,
             )
+            # Dust-screen channels: published only when the grid serves a dust screen.
+            if grid.serves_dust:
+                # A zero ``sed_shock`` placeholder would make the dust component
+                # integrate an all-zero shock SED over every filter on each call;
+                # ``sed_shock`` is absent, as it is when no shock component runs.
+                derived_overrides.pop("sed_shock", None)
+                # Per-subband nebular photometry (observed and rest frames)
+                if grid.serves_split_bands:
+                    # The observed sub-bands at the EVALUATION redshift: one chunk per
+                    # SED line (at its rest wavelength) plus the continuum's chunks.
+                    # The ``log_phot_subband_per_qh`` channel is the reference
+                    # redshift's and is not read here.
+                    phi_sub, lam_sub = nebular_subband_decomposition(packed, z, grid)
+                    derived_overrides["nebular_phot_lnu_subband_precomp"] = phi_sub
+                    derived_overrides["nebular_subband_waves_rest_precomp"] = lam_sub
+                else:
+                    derived_overrides["nebular_phot_lnu_subband_precomp"] = (
+                        mix_dig_grid_reconstruction(
+                            reconstruct_nebular_phot_subband,
+                            log_nion,
+                            interp_point,
+                            grid,
+                            neb_dig_frac=_dig_frac,
+                            neb_dig_delta_logU=_dig_delta_logU,
+                            dig_active=self.config.dig_active,
+                        )
+                    )
+                    derived_overrides["nebular_subband_waves_rest_precomp"] = (
+                        reconstruct_nebular_subband_waves(interp_point, grid, rest=False)
+                    )
+                derived_overrides["nebular_restband_lnu_subband_precomp"] = (
+                    mix_dig_grid_reconstruction(
+                        reconstruct_nebular_restband_subband,
+                        log_nion,
+                        interp_point,
+                        grid,
+                        neb_dig_frac=_dig_frac,
+                        neb_dig_delta_logU=_dig_delta_logU,
+                        dig_active=self.config.dig_active,
+                    )
+                )
+                # Rest-band wavelengths: HII point only, linear per unit Q_H
+                derived_overrides["nebular_restband_subband_waves_precomp"] = (
+                    reconstruct_nebular_subband_waves(interp_point, grid, rest=True)
+                )
+                # Energy balance: linear per unit Q_H, mixed linearly
+                derived_overrides["nebular_eb_absorbed_per_qh_grid_precomp"] = (
+                    reconstruction_escape_factor(params)
+                    * mix_dig_grid_reconstruction(
+                        lambda log_nion_, point, tbl: reconstruct_nebular_eb_absorbed_per_qh(
+                            point, tbl
+                        ),
+                        jnp.zeros(()),
+                        interp_point,
+                        grid,
+                        neb_dig_frac=_dig_frac,
+                        neb_dig_delta_logU=_dig_delta_logU,
+                        dig_active=self.config.dig_active,
+                    )
+                )
         elif (
             self._state is not None
             and self._state.filter_waves is not None

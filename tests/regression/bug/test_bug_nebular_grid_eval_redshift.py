@@ -624,3 +624,53 @@ class TestContinuumTable:
         assert band(3.0) == pytest.approx(tab[-1, 0], rel=1e-12)
         mid = band(0.6)
         assert min(tab[:, 0]) <= mid <= max(tab[:, 0])
+
+
+# ── dusty Cue, free redshift: the dust-screen channels follow the redshift too ───────
+
+#: The budget of the dusty-grid contract tests for the fast path against WavePrecomp
+#: (``test_dusty_nebular_grid_parity``: twice the measured 1.25e-3).
+DUSTY_BUDGET = 2.5e-3
+
+
+class TestDustyFreeRedshift:
+    @staticmethod
+    def _dusty(models, approx):
+        key = ("dusty", repr(approx))
+        if key not in models._cache:
+            models._cache[key] = SEDModel.build(
+                ssp_data=models.ssp,
+                observation=models.obs,
+                sfh={"type": "dpl", "all_params": FREE, "age_gyr": Fixed(_SFH["sfh_dpl_age_gyr"])},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                    "tau_bc": Uniform(0.0, 2.0),
+                    "tau_diff": Uniform(0.0, 2.0),
+                },
+                dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+                neb={"type": "cue", "all_params": Fixed(DEFAULT), "logU": Uniform(-3.5, -2.0)},
+                redshift=Uniform(0.05, 2.0),
+                approx=approx,
+            )
+        return models._cache[key]
+
+    @pytest.mark.parametrize("z", [0.3, 1.5])
+    def test_dusty_grid_photometry_follows_z_and_is_engaged(self, models, z):
+        fast = self._dusty(models, (WavePrecomp(), FeaturePrecomp(n_grid=4)))
+        exact = self._dusty(models, WavePrecomp())
+        comp = _grid_component(fast)
+        assert comp.grid_table.serves_dust and comp.grid_table.redshift_is_tabulated
+        assert not comp.must_materialize_sed
+        assert any(getattr(c, "nebular_from_grid", False) for c in fast._cached_component_chain)
+        p = _point(exact, redshift=z, neb_logU=-2.7, dust_tau_bc=1.0, dust_tau_diff=1.0)
+        state = fast.predict_state(
+            p, fixed_values=fast.spec.get_fixed_values(), observables_only=True
+        )
+        assert float(jnp.max(jnp.abs(state.derived["sed_nebular"]))) == 0.0
+        n_lines = comp.grid_table.sed_line_waves.shape[0]
+        assert state.derived["nebular_phot_lnu_subband_precomp"].shape[-1] > n_lines
+        rel = _rel(_phot(fast, p), _phot(exact, p))
+        print(f"dusty z={z}: fast vs WavePrecomp max rel {rel:.2e}")
+        assert rel < DUSTY_BUDGET
