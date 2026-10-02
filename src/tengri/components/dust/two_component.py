@@ -1306,61 +1306,74 @@ class DustSEDComponent(TemplateThreading):
         # f_dust == 0 but -- unlike log10_add-ing the already
         # fdust-multiplied log_L_lyc_dust -- has a nonzero gradient there too
         # (L_absorbed is linear in fdust).
-        from tengri.forward.energy_balance import log10_add_fdust_credit
+        #
+        # Static elision (#2539 last FLOP guard): when fdust_credit_active is
+        # False (neb_fdust_frac Fixed at exactly 0, or not declared at all),
+        # the credit is structurally zero for every evaluation of this
+        # model. Unlike the single/wg00 screens, the lyc_absorb_all=False
+        # branch below does not read the whole-population log_L_lyc key --
+        # it recomputes its own young-weighted reduction from lnu_age_ion
+        # every call, so it is NOT already elided by the absence of a
+        # nebular component and must be skipped explicitly here. A static
+        # Python bool, not a runtime where on the traced value of f_dust.
+        if self.config.fdust_credit_active:
+            from tengri.forward.energy_balance import log10_add_fdust_credit
 
-        # NOT params.get("neb_fdust_frac", ...): this component's
-        # parameter_prefix is "dust_", so slice_params_for_component
-        # (ADR-0006) never hands it a "neb_"-prefixed key -- that read would
-        # always, silently see the 0.0 default (measured: the young-weighted
-        # credit below was a permanent no-op through that path).
-        # NebularSEDComponent publishes the absolute share (#2436:
-        # lyc_shares(neb_fesc, neb_fdust_frac)[1]) as ``lyc_fdust`` for
-        # exactly this cross-component reason (#2539 item 2, same pattern as
-        # ``lyc_transmission`` above).
-        f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+            # NOT params.get("neb_fdust_frac", ...): this component's
+            # parameter_prefix is "dust_", so slice_params_for_component
+            # (ADR-0006) never hands it a "neb_"-prefixed key -- that read would
+            # always, silently see the 0.0 default (measured: the young-weighted
+            # credit below was a permanent no-op through that path).
+            # NebularSEDComponent publishes the absolute share (#2436:
+            # lyc_shares(neb_fesc, neb_fdust_frac)[1]) as ``lyc_fdust`` for
+            # exactly this cross-component reason (#2539 item 2, same pattern as
+            # ``lyc_transmission`` above).
+            f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
 
-        if self.config.lyc_absorb_all:
-            _log_l_lyc_credited = state.derived.get("log_L_lyc")
-        else:
-            # Young/birth-cloud-only credit (#2539): per-age ionizing
-            # LUMINOSITIES from stellar (log_L_lyc_age, erg/s -- the Q_H
-            # photon-rate integrand would be the wrong quantity here, G1/G2),
-            # weighted by the young indicator. StellarSEDComponent publishes
-            # log_L_lyc_age unconditionally whenever it runs -- the same
-            # derived_overrides dict that publishes ``lnu_age``, read with a
-            # required subscript above (it would already have raised KeyError
-            # before reaching here if stellar had not run) -- so there is no
-            # full-grid fallback left to keep.
-            y_age_lyc = _young_indicator(
-                ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
-            )
-            lnu_age_ion = state.derived.get("lnu_age_ion")
-            ssp_wave_ion = state.derived.get("ssp_wave_ion")
-            if lnu_age_ion is not None:
-                # Cheap path (G1/G2 FLOP guard): weight-and-sum the per-age,
-                # per-Msun ionizing slice over ages FIRST (a linear combine),
-                # THEN peak-factor/integrate ONCE -- mathematically identical
-                # to log10_age_sum_lyc(log_L_lyc_age, weights=y_age_lyc)
-                # (edge_trapezoid is linear in its input for fixed wave/edge;
-                # bit-identical to float64 round-off) but pays for the
-                # edge-aware quadrature a single time instead of once per age
-                # -- see log_L_lyc_age's docstring in protocols/derived_state.py.
-                young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age_ion, axis=0)
-                _log_l_lyc_credited = log10_lyc_luminosity(
-                    young_lnu,
-                    ssp_wave_ion,
-                    log10_scale=state.derived["log_stellar_mass_scale"],
-                )
+            if self.config.lyc_absorb_all:
+                _log_l_lyc_credited = state.derived.get("log_L_lyc")
             else:
-                # n_ion_bins == 0 (no ionizing content at all): log_L_lyc_age
-                # is a cheap (-inf)-filled array, so the per-age reduction
-                # below costs nothing extra either way.
-                _log_l_lyc_credited = log10_age_sum_lyc(
-                    state.derived["log_L_lyc_age"], weights=y_age_lyc
+                # Young/birth-cloud-only credit (#2539): per-age ionizing
+                # LUMINOSITIES from stellar (log_L_lyc_age, erg/s -- the Q_H
+                # photon-rate integrand would be the wrong quantity here, G1/G2),
+                # weighted by the young indicator. StellarSEDComponent publishes
+                # log_L_lyc_age unconditionally whenever it runs -- the same
+                # derived_overrides dict that publishes ``lnu_age``, read with a
+                # required subscript above (it would already have raised KeyError
+                # before reaching here if stellar had not run) -- so there is no
+                # full-grid fallback left to keep.
+                y_age_lyc = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
                 )
+                lnu_age_ion = state.derived.get("lnu_age_ion")
+                ssp_wave_ion = state.derived.get("ssp_wave_ion")
+                if lnu_age_ion is not None:
+                    # Cheap path (G1/G2 FLOP guard): weight-and-sum the per-age,
+                    # per-Msun ionizing slice over ages FIRST (a linear combine),
+                    # THEN peak-factor/integrate ONCE -- mathematically identical
+                    # to log10_age_sum_lyc(log_L_lyc_age, weights=y_age_lyc)
+                    # (edge_trapezoid is linear in its input for fixed wave/edge;
+                    # bit-identical to float64 round-off) but pays for the
+                    # edge-aware quadrature a single time instead of once per age
+                    # -- see log_L_lyc_age's docstring in protocols/derived_state.py.
+                    young_lnu = jnp.sum(y_age_lyc[:, None] * lnu_age_ion, axis=0)
+                    _log_l_lyc_credited = log10_lyc_luminosity(
+                        young_lnu,
+                        ssp_wave_ion,
+                        log10_scale=state.derived["log_stellar_mass_scale"],
+                    )
+                else:
+                    # n_ion_bins == 0 (no ionizing content at all): log_L_lyc_age
+                    # is a cheap (-inf)-filled array, so the per-age reduction
+                    # below costs nothing extra either way.
+                    _log_l_lyc_credited = log10_age_sum_lyc(
+                        state.derived["log_L_lyc_age"], weights=y_age_lyc
+                    )
 
-        if _log_l_lyc_credited is not None:
-            log_L_absorbed = log10_add_fdust_credit(log_L_absorbed, _log_l_lyc_credited, f_dust)
+            if _log_l_lyc_credited is not None:
+                log_L_absorbed = log10_add_fdust_credit(
+                    log_L_absorbed, _log_l_lyc_credited, f_dust
+                )
 
         from tengri.forward.energy_balance import warn_if_corrupt
 

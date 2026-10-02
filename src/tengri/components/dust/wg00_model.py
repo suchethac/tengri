@@ -359,13 +359,20 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         # that function's docstring for why log10_add-ing the already
         # fdust-multiplied form has a gradient defect at fdust == 0. This
         # energy enters the dust IR budget unconditionally (not gated on
-        # eb_include_lyc).
-        from tengri.forward.energy_balance import log10_add_fdust_credit
+        # eb_include_lyc). Static elision (#2539 last FLOP guard): when
+        # fdust_credit_active is False (neb_fdust_frac Fixed at exactly 0,
+        # or not declared at all), the credit is structurally zero for
+        # every evaluation of this model, so skip forming it at all rather
+        # than computing a smooth combine that always evaluates to the
+        # unchanged log_l_absorbed. A static Python bool, not a runtime
+        # where on the traced value of f_dust.
+        if self.config.fdust_credit_active:
+            from tengri.forward.energy_balance import log10_add_fdust_credit
 
-        _log_l_lyc = state.derived.get("log_L_lyc")
-        if _log_l_lyc is not None:
-            _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
-            log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
+            _log_l_lyc = state.derived.get("log_L_lyc")
+            if _log_l_lyc is not None:
+                _f_dust = jnp.asarray(state.derived.get("lyc_fdust", 0.0))
+                log_l_absorbed = log10_add_fdust_credit(log_l_absorbed, _log_l_lyc, _f_dust)
 
         warn_if_corrupt(log_l_absorbed, component="wg00")
         if self.config.log_l_ir_requested:
