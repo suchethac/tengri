@@ -84,7 +84,6 @@
   request, metallicity sweeps included, while gas metallicity is matched solar-scaled
   (`neb_logZ_gas = log10(z)`); its L_λ↔L_ν conversion uses tengri's speed of light; the
   validator's birth-cloud control states the `eta` it corresponds to (#2616).
-
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant

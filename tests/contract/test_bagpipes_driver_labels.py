@@ -118,6 +118,11 @@ def test_driver_z_sun_is_the_bc03_solar_literal():
     assert z_sun == pytest.approx(0.02, rel=0, abs=1e-15)
 
 
+_REQUEST_KEYS = ("logzsol", "met_logzsol")
+_Z_CHECKS = ((1.0, 0.02), (2.5, 0.05))
+_NODE_ZS = (0.2, 1.0, 2.5)
+
+
 def _names(node: ast.AST) -> set[str]:
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
@@ -134,48 +139,87 @@ def _assignments(tree: ast.Module) -> dict[str, list[ast.AST]]:
     return assigned
 
 
-def _logzsol_requests(node: ast.AST, loops: tuple[ast.For, ...] = ()) -> list:
-    """``(Fixed argument, enclosing for-loops)`` of every ``"logzsol": Fixed(...)`` entry."""
+def _fixed_argument(value: ast.expr) -> ast.expr:
+    assert isinstance(value, ast.Call) and value.args, "stellar request is not Fixed(...)"
+    return value.args[0]
+
+
+def _stellar_requests(node: ast.AST, loops: tuple[ast.For, ...] = ()) -> list:
+    """``(Fixed argument, enclosing for-loops)`` of every ``logzsol`` request."""
     found = []
     if isinstance(node, ast.Dict):
         for key, value in zip(node.keys, node.values):
-            if isinstance(key, ast.Constant) and key.value == "logzsol":
-                assert isinstance(value, ast.Call) and value.args, "logzsol is not Fixed(...)"
-                found.append((value.args[0], loops))
+            if isinstance(key, ast.Constant) and key.value in _REQUEST_KEYS:
+                found.append((_fixed_argument(value), loops))
+    if isinstance(node, ast.Call):
+        found.extend(
+            (_fixed_argument(kw.value), loops) for kw in node.keywords if kw.arg in _REQUEST_KEYS
+        )
     inner = (*loops, node) if isinstance(node, ast.For) else loops
     for child in ast.iter_child_nodes(node):
-        found.extend(_logzsol_requests(child, inner))
+        found.extend(_stellar_requests(child, inner))
     return found
 
 
-def _carries_pin(node: ast.AST) -> bool:
-    return set(_PIN_NAMES) <= _names(node)
-
-
-def _is_pin_built(name: str, loops: tuple[ast.For, ...], assigned: dict) -> bool:
-    """True if ``name`` is the pin, assigned from it, or a loop variable over such a list."""
-    if name == "MET_LOGZSOL":
-        return True
-    if any(_carries_pin(v) for v in assigned.get(name, [])):
-        return True
+def _loop_source(name: str, loops: tuple[ast.For, ...], assigned: dict) -> ast.AST | None:
+    """The list expression a loop variable ``name`` iterates over, by zip position."""
     for loop in loops:
-        if name in _names(loop.target):
-            return any(_carries_pin(v) for src in _names(loop.iter) for v in assigned.get(src, []))
-    return False
+        if not isinstance(loop.target, ast.Tuple) or not isinstance(loop.iter, ast.Call):
+            continue
+        targets = [t.id for t in loop.target.elts if isinstance(t, ast.Name)]
+        if name in targets and len(targets) == len(loop.iter.args):
+            source = loop.iter.args[targets.index(name)]
+            return assigned[source.id][0] if isinstance(source, ast.Name) else source
+    return None
 
 
-def test_every_notebook_stellar_request_is_built_from_the_pin():
-    """No ``logzsol`` request in the notebook is a bare gas-style ``log10(z)``."""
-    tree = _tree(_NOTEBOOK)
+def _request_expression(arg: ast.expr, loops: tuple, assigned: dict) -> ast.expr:
+    """The expression that computes the request, in terms of the sweep variable ``z``."""
+    assert isinstance(arg, ast.Name), f"unexpected stellar request {ast.unparse(arg)}"
+    source = _loop_source(arg.id, loops, assigned)
+    if source is None:
+        assert arg.id in assigned, f"`{arg.id}` is not assigned in the file"
+        source = assigned[arg.id][0]
+    return source.elt if isinstance(source, ast.ListComp) else source
+
+
+def _evaluate_requests(path: Path, zs: tuple[float, ...]) -> list[tuple[str, float, float]]:
+    """``(expression, z, value)`` for every stellar request in ``path`` at each ``z``."""
+    tree = _tree(path)
     assigned = _assignments(tree)
-    requests = _logzsol_requests(tree)
-    assert len(requests) >= 4, f"expected >= 4 logzsol requests, found {len(requests)}"
-    for arg, loops in requests:
-        assert isinstance(arg, ast.Name), f"unexpected logzsol request {ast.unparse(arg)}"
-        assert _is_pin_built(arg.id, loops, assigned), (
-            f"`{arg.id}` feeds a stellar logzsol request but is not built from "
-            "Z_SUN_BAGPIPES and LOG10_ZSUN"
-        )
+    z_sun = _evaluate(_single_assignment_value(_DRIVER_SRC, "Z_SUN_BAGPIPES"), {})
+    results = []
+    for arg, loops in _stellar_requests(tree):
+        expr = _request_expression(arg, loops, assigned)
+        for z in zs:
+            ns = {"np": np, "float": float, "z": z, "LOG10_ZSUN": LOG10_ZSUN}
+            ns["Z_SUN_BAGPIPES"] = z_sun
+            ns["MET_LOGZSOL"] = (
+                _met_logzsol_from_source(path) if "MET_LOGZSOL" in _names(expr) else 0
+            )
+            results.append((ast.unparse(expr), z, _evaluate(expr, ns)))
+    return results
+
+
+@pytest.mark.parametrize("path", [_NOTEBOOK, _VALIDATOR], ids=lambda p: p.name)
+def test_every_stellar_request_evaluates_to_the_absolute_pin(path):
+    """Each ``logzsol`` request is log10(0.02 z) - log10(0.0142) at z = 1 and z = 2.5."""
+    requests = _evaluate_requests(path, tuple(z for z, _ in _Z_CHECKS))
+    assert len(requests) >= 2 * (4 if path == _NOTEBOOK else 1)
+    expected = {z: float(np.log10(zabs) - LOG10_ZSUN) for z, zabs in _Z_CHECKS}
+    for text, z, value in requests:
+        constant = "z" not in {n for n in _names(ast.parse(text, mode="eval"))}
+        if constant and z != 1.0:
+            continue
+        assert value == pytest.approx(expected[z], rel=0, abs=1e-12), f"{text} at z={z}"
+
+
+def test_stellar_requests_land_on_grid_nodes(driver):
+    """For z = 0.2, 1, 2.5 the notebook's request plus log10(0.0142) is a grid node."""
+    nodes = driver.absolute_lgmet()
+    for text, z, value in _evaluate_requests(_NOTEBOOK, _NODE_ZS):
+        distance = np.min(np.abs(nodes - (value + LOG10_ZSUN)))
+        assert distance < 1e-9, f"{text} at z={z} is {distance:.2e} dex from a node"
 
 
 def test_generated_grid_lgmet(driver):

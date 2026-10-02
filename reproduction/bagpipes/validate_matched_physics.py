@@ -63,10 +63,7 @@ from reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps import Z_SUN_BAGPIPES
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.utils.physics_constants import LOG10_ZSUN
-
-L_SUN = 3.828e33
-C_AA = 2.998e18
+from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 HERE = Path(__file__).resolve().parent
 FIGS = HERE / "_figs"

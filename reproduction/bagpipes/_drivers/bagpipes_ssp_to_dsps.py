@@ -48,9 +48,6 @@ ZSOL_FRACTIONS: tuple[float, ...] = (0.005, 0.020, 0.200, 0.400, 1.000, 2.500, 5
 # The absolute log10(Z) values match tengri's native BC03+MILES grid nodes.
 Z_SUN_BAGPIPES: float = 0.02
 
-# Z_sun absolute (Asplund+2009; same value DSPS uses for log10(Z_sun) = -1.848).
-Z_SUN_ABSOLUTE: float = 10.0**-1.848
-
 
 def absolute_lgmet(zsol_fractions: tuple[float, ...] = ZSOL_FRACTIONS) -> np.ndarray:
     """Compute absolute log10(Z) for BAGPIPES metallicity fractions.

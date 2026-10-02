@@ -822,14 +822,20 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 # Extended Z/Z☉ ∈ {0.2, 0.5, 1, 1.5, 2.5} sweep with tengri/BAGPIPES ratio
 # panel and UV-to-NIR bandpass statistics. Fiducial SFH: 5 Gyr delayed-τ with
 # τ = 1 Gyr, all with nebular emission on (logU −2, matched gas metallicity).
-# Stars are matched at the same absolute Z on the same BC03 node
-# (`met_logzsol = log10(z × 0.02) − log10(0.0142)`). Gas is matched solar-scaled,
-# `neb_logZ_gas = log10(z)`, which is the same gas-phase oxygen abundance in both
-# codes: both take Dopita et al. (2000) solar abundances and depletion (total solar
-# log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71 at
-# the solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Carbon
-# and nitrogen differ: Cue holds [C/O] and [N/O] at their solar defaults, while
-# BAGPIPES scales nitrogen with metallicity through its own prescription.
+# Stars are requested at the same absolute Z
+# (`met_logzsol = log10(z × 0.02) − log10(0.0142)`). That is the same BC03 grid node
+# for z ∈ {0.2, 1, 2.5}; for the other z it is a metallicity between two nodes, where
+# the codes interpolate differently (BAGPIPES linearly in Z between the two
+# straddling nodes, tengri with a triweight kernel in log Z). Gas is matched
+# solar-scaled, `neb_logZ_gas = log10(z)`, which is the same gas-phase oxygen
+# abundance in both codes: both take Dopita et al. (2000) solar abundances and
+# depletion (total solar log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase
+# 12 + log(O/H) = 8.71 at the solar value; Cue, Li et al. 2025 §2; BAGPIPES
+# `make_cloudy_models.py`). Both hold C/O at the Dopita et al. solar ratio; only
+# nitrogen differs: BAGPIPES scales nitrogen with metallicity
+# (`−4.57 + log z − 0.22 − log z` for log z ≤ −0.63, else
+# `−3.94 + 2 log z − 0.22 − log z`, the trailing `− log z` offsetting the `metals`
+# scaling), while Cue holds [N/O] at solar.
 
 # %%
 _Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
@@ -1712,14 +1718,19 @@ save_fig("bagpipes_08_nebular.png")
 # f_esc ∈ {0, 0.5} (6 cases total). BAGPIPES uses `nebular: {logU, metallicity, fesc}`,
 # while tengri uses free `neb_logU`, `neb_logZ_gas`, `neb_fesc` in Cue. Per-case tengri/BAGPIPES
 # line-luminosity ratios (Hα, Hβ, [O III], [O II]) are shown for each case.
-# Stars sit at the same absolute Z (BC03 node, `log10(z × 0.02) − log10(0.0142)`);
-# gas is matched solar-scaled, `neb_logZ_gas = log10(z)`, against BAGPIPES's
-# `metallicity = z`. That is the same gas-phase oxygen abundance in both codes: both
-# take Dopita et al. (2000) solar abundances and depletion (total solar
-# log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71 at the
-# solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Cue holds
-# [C/O] and [N/O] at their solar defaults, while BAGPIPES scales nitrogen with
-# metallicity through its own prescription.
+# Stars are requested at the same absolute Z (`log10(z × 0.02) − log10(0.0142)`): the
+# same BC03 grid node for Z = 1 Z☉, and a metallicity between two nodes for the others,
+# where the codes interpolate differently (BAGPIPES linearly in Z, tengri with a
+# triweight kernel in log Z). Gas is matched solar-scaled, `neb_logZ_gas = log10(z)`,
+# against BAGPIPES's `metallicity = z`. That is the same gas-phase oxygen abundance in
+# both codes: both take Dopita et al. (2000) solar abundances and depletion (total
+# solar log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71
+# at the solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Both
+# hold C/O at the Dopita et al. solar ratio; only
+# nitrogen differs: BAGPIPES scales nitrogen with metallicity
+# (`−4.57 + log z − 0.22 − log z` for log z ≤ −0.63, else
+# `−3.94 + 2 log z − 0.22 − log z`, the trailing `− log z` offsetting the `metals`
+# scaling), while Cue holds [N/O] at solar.
 #
 # At logU=−2, Z=1 Z☉ (matching §9): Hα 0.98×, Hβ 0.98×, [O III] 1.01×,
 # [O II] 0.77×. The Z=2 Z☉ case is the outlier (Hα/Hβ rise to 1.86×/1.82×
@@ -1816,11 +1827,13 @@ for label, logu, z, fesc in neb_cases_list:
 # At matched `veldisp = 150 km/s` (a typical late-type-galaxy value), the Gaussian
 # kernel alone has FWHM `2.355 σ_v λ / c` = 7.733 Å at Hα. The measured Hα line is
 # wider than the kernel because each code's nebular line has a width of its own before
-# the kernel is applied: Cue emits the line at its trained resolution, BAGPIPES places
-# the Cloudy line on its spectral grid. Because the two pre-broadening profiles differ
-# in shape, the widths do not add in quadrature with the kernel. After broadening, the
-# measured FWHM is 9.420 Å for tengri and 9.500 Å for BAGPIPES (0.8 % apart); the
-# printed analytic 7.733 Å is the kernel's contribution, not the expected total.
+# the kernel is applied: tengri places each line with a triweight profile of
+# dispersion `neb_eline_sigma_kms` (declared default 100 km/s, `σ_λ = σ_v λ / c`),
+# and BAGPIPES puts each Cloudy line into a single pixel of its 0.5 Å spectral grid.
+# Because the two pre-broadening profiles differ in shape, the widths do not add in
+# quadrature with the kernel. After broadening, the measured FWHM is 9.420 Å for
+# tengri and 9.500 Å for BAGPIPES (0.8 % apart); the printed analytic 7.733 Å is the
+# kernel's contribution, not the expected total.
 #
 # **Verification Status:** CROSSVAL: Spectroscopy forward model
 
@@ -2597,7 +2610,8 @@ plt.show()
 #   Hα.
 # - **§10 LSF.** With σ_v = 150 km/s the measured Hα FWHM is 9.420 Å (tengri) and
 #   9.500 Å (BAGPIPES), 0.8 % apart; both exceed the 7.733 Å kernel width because
-#   each nebular line carries its own width before broadening.
+#   tengri's line profile (`neb_eline_sigma_kms`) and BAGPIPES's one-pixel line
+#   (0.5 Å grid) each carry a width before broadening.
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
