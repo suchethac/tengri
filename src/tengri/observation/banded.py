@@ -403,6 +403,14 @@ def deconvolve_library_lsf(
     with ``sigma_lib_kms=0.0`` to :func:`~tengri.observation.spectrum.project_spectrum`
     (which applies velocity broadening before ``R @ model``), rather than
     letting ``R`` apply the instrument LSF on top of the library's.
+
+    Same curve source as the default Gaussian ``apply_lsf`` path (#2518):
+    pass ``sigma_lib=SSPData.ssp_resolution_kms`` (rest-frame array,
+    interpolated onto ``wave`` in the observed frame at the model's
+    redshift -- see :func:`~tengri.observation.spectrum.resolve_sigma_lib_kms`)
+    when the loaded SSP grid documents one, rather than a flat per-library
+    scalar, so both paths subtract the same per-wavelength library
+    resolution.
     """
     offs = np.asarray(bm.offsets).ravel()
     order = np.argsort(offs)

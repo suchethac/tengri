@@ -74,8 +74,9 @@ Relation to Synthesizer grids
 The Synthesizer (Lovell et al. 2025; Roper et al. 2026) AGN grids (CLOUDY c23.01, 215 lines,
 6 axes: BH mass, Eddington ratio, cos(inclination), metallicity, log U, n_H)
 are structurally the closest published counterpart to the grids on which Cue
-was trained.  Key similarities: c17+ CLOUDY physics, broad line coverage, and
-physical BH-mass + Eddington-ratio parameterization.  Key difference: Cue
+was trained.  Key similarities: Cloudy 22.00 physics (Li et al. 2025), broad
+line coverage, and physical BH-mass + Eddington-ratio parameterization.  Key
+difference: Cue
 replaces the physical-BH axes with the 7 ionizing-spectrum shape parameters
 (``ionspec_index1..4``, ``ionspec_logLratio1..3``), which makes it agnostic
 to the specific accretion-disc model.
@@ -147,6 +148,55 @@ from tengri.components.nebular.ionizing_spectrum import (
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
+
+
+# ── Trained parameter ranges (#2569) ────────────────────────────────
+#
+# Cue is a neural network, not a grid: nothing clips a value outside these
+# ranges, and the network keeps producing a smooth (not flat) prediction, so
+# the #1586 zero-gradient mechanism `components/grid_support.py` was built
+# for does not apply here -- see `grid_support.EXTRAPOLATING_SUPPORT`. They
+# are registered anyway (`GRID_SUPPORT[("neb", "cue")]`) because a value
+# outside them is extrapolating past where the emulator was ever validated
+# against CLOUDY, which is worth narrowing a free prior to and warning
+# about, the same way an unvalidated grid extrapolation would be.
+#
+# Source: Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598), Table 1, the bottom
+# five rows ("the ionizing gas properties"), read directly off the published
+# table (not a paraphrase). The top seven rows (ionizing-spectrum shape:
+# ionspec_index1..4, ionspec_logLratio1..3) are set from the SSP at the
+# high-level path and are not user-facing free priors on the shared
+# declaration the way the five below are, so they are not registered here.
+#
+# Table 1 columns are dimensioned exactly as named; converting each to the
+# units tengri's OWN declaration uses (`_params.py` / `CUE_GAS_EXTRA_PARAMS`)
+# is noted per constant.
+
+#: log U (dimensionless): Table 1 gives ``[-4, -1]`` directly -- the same
+#: quantity and units as the declared ``neb_logU``/``gas_logu``.
+CUE_TRAINED_LOG_U: tuple[float, float] = (-4.0, -1.0)
+
+#: log n_H [cm^-3]: Table 1 gives ``[1, 4]`` directly -- the same quantity
+#: and units as the declared ``gas_logn`` (``CUE_GAS_EXTRA_PARAMS``).
+CUE_TRAINED_LOG_NH: tuple[float, float] = (1.0, 4.0)
+
+#: Gas-phase metallicity, ``log(O/H)/(O/H)_sun``: Table 1 gives
+#: ``[-2.2, 0.5]`` directly. This is the same relative-to-solar quantity
+#: `_resolve_cue_params` already treats ``gas_logz`` as (see its docstring:
+#: ``gas_logz = neb_logZ_gas - LOG10_ZSUN``, #2437) -- i.e. the declared
+#: ``neb_logZ_gas`` (log10(Z/Zsun) at the declaration) reaches this same
+#: trained axis, so no further conversion is applied here.
+CUE_TRAINED_LOG_Z_GAS: tuple[float, float] = (-2.2, 0.5)
+
+#: C/O and N/O: Table 1 gives ``(C/O)/(C/O)_sun`` and ``(N/O)/(N/O)_sun``
+#: as LINEAR ratios, ``[0.1, 5.4]`` each -- confirmed from the table
+#: image directly: these two rows' headers carry no "log", unlike the
+#: log U / log n_H / log(O/H)/(O/H)_sun rows above them. The declared
+#: ``gas_logco``/``gas_logno`` (``CUE_GAS_EXTRA_PARAMS``) are ``log10`` of
+#: that same ratio ("[C/O]"/"[N/O]" abundance ratio, dex), so the range is
+#: converted: log10(0.1) = -1.0, log10(5.4) ~= 0.7324.
+CUE_TRAINED_LOG_CO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
+CUE_TRAINED_LOG_NO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 
 
 # ── Data containers (immutable NamedTuples for JAX tracing) ───────
@@ -1236,6 +1286,10 @@ class CueBackend:
         from SSP.  Explicit overrides take precedence over derived values.
         Low-level (ssp_weights=None): fills from defaults.
 
+        Unit conventions: `neb_logZ_gas` is ABSOLUTE log10(Z) while Cue's
+        `gas_logz` is RELATIVE log10(Z/Zsun). Low-level path converts with
+        `gas_logz = neb_logZ_gas - LOG10_ZSUN` (or 0.0 if neb_logZ_gas is None).
+
         Returns a flat dict with all 12 Cue params + gas_logqion.
         """
         if ssp_weights is not None:
@@ -1293,10 +1347,11 @@ class CueBackend:
                 return derived[name]
             return default
 
+        _default_gas_logz = neb_logZ_gas - _LOG10_ZSUN if neb_logZ_gas is not None else 0.0
         return dict(
             gas_logu=_pick("gas_logu", gas_logu, neb_logU),
             gas_logn=gas_logn,
-            gas_logz=_pick("gas_logz", gas_logz, 0.0),
+            gas_logz=_pick("gas_logz", gas_logz, _default_gas_logz),
             gas_logno=gas_logno,
             gas_logco=gas_logco,
             gas_logqion=_pick("gas_logqion", gas_logqion, self.default_gas_logqion),

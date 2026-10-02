@@ -298,7 +298,13 @@ class TestIntegrationViaForwardModel:
         # Via _predict_spectrum_on_grid (the delegation target)
         flux_via_grid_method = model._predict_spectrum_on_grid(params, wave_obs_spec)
 
-        # Assert bit-exact equality (rtol=0, atol=0)
-        # This verifies that project_spectrum is correctly delegated
-        # and that the spectrum projection seam is consolidated.
-        chex.assert_trees_all_close(flux_manual, flux_via_grid_method, rtol=0, atol=0)
+        # _predict_spectrum_on_grid now routes through
+        # project_spectrum_kernel_split (#2519/#2526): with no nebular/shock
+        # component the instrument-only piece is a zero array rather than a
+        # structurally absent one, so the split still resamples and
+        # convolves it separately from the stellar piece and sums, instead
+        # of running project_spectrum once on the combined SED as
+        # flux_manual does here. Summation is not perfectly associative in
+        # floating point, so the two agree to double-precision roundoff
+        # (measured ~1e-15 relative) rather than bit-for-bit.
+        chex.assert_trees_all_close(flux_manual, flux_via_grid_method, rtol=1e-10, atol=1e-30)

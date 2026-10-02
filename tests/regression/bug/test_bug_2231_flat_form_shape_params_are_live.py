@@ -329,13 +329,17 @@ class TestGrammarProvenanceUnchanged:
             "dust_tau_diff": "wildcard_fixed",
             "dust_tea_scatter": "wildcard_fixed",
             "line_flux_scaling": "registry_default",
+            "lsf_scale": "registry_default",
             "met_alpha_fe": "wildcard_fixed",
             "met_logzsol": "wildcard_fixed",
             "met_logzsol_scatter": "wildcard_fixed",
             "noise_dof": "registry_default",
             "noise_frac_cal": "registry_default",
             "redshift": "user_fixed",
-            "sfh_dpl_age_gyr": "wildcard_free",
+            # z-capped onset (#2521): a Fixed redshift narrows this free
+            # prior's ceiling to age_at_z, tagging its provenance distinctly
+            # from an un-narrowed wildcard_free.
+            "sfh_dpl_age_gyr": "wildcard_free_zcap",
             "sfh_dpl_alpha": "user_fixed",
             "sfh_dpl_beta": "user_prior",
             "sfh_dpl_log_total_mass": "wildcard_free",

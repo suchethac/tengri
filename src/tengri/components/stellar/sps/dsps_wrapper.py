@@ -17,6 +17,7 @@ Appendix A.1 for metallicity marginalization and precomputation schemes.
 
 import hashlib
 import weakref
+from functools import cache
 from typing import NamedTuple
 
 import jax
@@ -166,6 +167,13 @@ class SSPData(NamedTuple):
     ssp_lg_age_gyr: jnp.ndarray
     ssp_lgmet: jnp.ndarray
     ssp_mass_remaining: jnp.ndarray | None = None
+    # Per-wavelength SSP library resolution [km/s] (#2518): velocity dispersion
+    # σ_lib(λ) derived from the loaded library's documented LSF. Used to
+    # subtract library broadening in apply_lsf (and project_spectrum) when
+    # convolving spectra. Example: MILES has FWHM ≈ 2.51 Å (constant in
+    # wavelength), giving σ_v(λ) ∝ 1/λ, from 91 km/s at 3525 Å to 43 km/s
+    # at 7500 Å. None if not populated (e.g., loaded from older file format).
+    ssp_resolution_kms: jnp.ndarray | None = None
     # Future: ssp_alpha_fe grid for alpha-enhanced templates (Vazdekis+2015, MIST)
     # When available, ssp_flux becomes (n_met, n_alpha, n_age, n_wave) and
     # interpolation adds a third dimension. The current met_alpha_fe parameter
@@ -223,13 +231,29 @@ def _sspdata_flatten(s):
         s.ssp_lgmet,
         s.ssp_mass_remaining,
         s.ssp_alpha_fe,
+        s.ssp_resolution_kms,
     )
     aux = (s.imf, s.source, s.nebular)
     return children, aux
 
 
 def _sspdata_unflatten(aux, children):
-    return SSPData(*children, imf=aux[0], source=aux[1], nebular=aux[2])
+    # All-keyword reconstruction: the flattened ``children`` order
+    # (..., ssp_alpha_fe, ssp_resolution_kms) does not match the field
+    # declaration order (..., ssp_resolution_kms, ssp_alpha_fe). Keywords
+    # make the mapping explicit and immune to reordering either tuple.
+    return SSPData(
+        ssp_wave=children[0],
+        ssp_flux=children[1],
+        ssp_lg_age_gyr=children[2],
+        ssp_lgmet=children[3],
+        ssp_mass_remaining=children[4],
+        ssp_alpha_fe=children[5],
+        ssp_resolution_kms=children[6],
+        imf=aux[0],
+        source=aux[1],
+        nebular=aux[2],
+    )
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
@@ -242,6 +266,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "ssp_lgmet": content("metallicity grid defines the Z discretization"),
     "ssp_mass_remaining": content("stellar mass fractions define mass normalization"),
     "ssp_alpha_fe": content("alpha enhancement grid defines the stellar templates"),
+    "ssp_resolution_kms": content("per-wavelength library resolution affects LSF subtraction"),
     "imf": content("initial mass function affects stellar population synthesis"),
     "source": content("source/library identity affects stellar templates"),
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
@@ -653,13 +678,40 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         if "ssp_alpha_fe" in f:
             alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
 
+        # Per-wavelength library resolution (#2518): match the library token
+        # in the filename to the FSPS-derived reference table and read off
+        # the library's own per-node velocity dispersion, but ONLY when
+        # ``ssp_wave`` actually is that library's reference grid: the
+        # filename token alone is not sufficient (a grid built from a
+        # different library on a wavelength axis that happens to echo
+        # another library's name -- e.g. a BPASS grid whose filename
+        # contains the C3K token -- must not receive that library's
+        # curve). No warning here when the library has no reference table
+        # or its wavelength grid does not match: a missing curve is simply
+        # "no correction", and every grid passes through this function
+        # regardless of whether it will ever be used spectroscopically.
+        # The correctly-scoped warning is at ``SEDModel`` build time
+        # (``_init_instrument``), which fires only when the model actually
+        # configures spectroscopy and falls back to the flat
+        # ``sigma_lib_kms`` scalar, naming the grid.
+        ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
+        library_stem = fp.stem
+        library_key = _detect_library_resolution_key(library_stem)
+        if library_key is not None and _wave_matches_reference(
+            np.asarray(ssp_wave, dtype=float), _load_library_resolution_reference(library_key)[0]
+        ):
+            ssp_resolution_kms, _ = _resolve_ssp_resolution(ssp_wave, library_key)
+        else:
+            ssp_resolution_kms = None
+
         return SSPData(
-            ssp_wave=_load_float(f["ssp_wave"], dtype=dtype),
+            ssp_wave=ssp_wave,
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
+            ssp_resolution_kms=ssp_resolution_kms,
             imf=imf,
             source=fp.stem,
             nebular=nebular,
@@ -763,6 +815,175 @@ def _detect_nebular(h5_file, filename: str) -> str:
     if "wne" in filename.lower():
         return "included"
     return "unknown"
+
+
+#: Spectral-library resolution reference tables (#2518): maps the library
+#: token in a filename to the package-data file holding FSPS's own per-node
+#: velocity dispersion for that library (see
+#: ``src/tengri/data/ssp_library_resolution/PROVENANCE.md`` for source and
+#: format). ``load_ssp_data`` looks this token up against
+#: ``<code>_<isochrone>_<library>_<imf>`` (the download catalog's
+#: ``fsps_<isochrone>_<library>_<imf>.h5``, ``_data_setup._KNOWN_SSPS``, and
+#: the locally generated ``..._wNE_logGasU<...>_logGasZ<...>`` variants both
+#: carry this token). A library absent here has no reference resolution
+#: (``ssp_resolution_kms`` stays ``None``; the flat ``sigma_lib_kms`` scalar
+#: is the fallback).
+_LIBRARY_RESOLUTION_DATA_FILES: dict[str, str] = {
+    "miles": "miles.dat",
+    "c3k_a": "c3k_afe0.0.dat",
+}
+
+
+def _detect_library_resolution_key(filename_stem: str) -> str | None:
+    """Match a filename's spectral-library token to a resolution table key.
+
+    Splits ``filename_stem`` on ``_`` and checks every contiguous token
+    window (two-token windows first, so ``"c3k_a"`` is preferred over the
+    single-token ``"c3k"`` it contains) against
+    :data:`_LIBRARY_RESOLUTION_DATA_FILES`.
+
+    Parameters
+    ----------
+    filename_stem : str
+        SSP HDF5 filename without the ``.h5`` extension.
+
+    Returns
+    -------
+    str or None
+        Key into :data:`_LIBRARY_RESOLUTION_DATA_FILES`, or ``None`` if no
+        token matches.
+    """
+    tokens = filename_stem.split("_")
+    for width in (2, 1):
+        for i in range(len(tokens) - width + 1):
+            candidate = "_".join(tokens[i : i + width])
+            if candidate in _LIBRARY_RESOLUTION_DATA_FILES:
+                return candidate
+    return None
+
+
+@cache
+def _load_library_resolution_reference(library_key: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load a library's reference resolution table from package data.
+
+    Parameters
+    ----------
+    library_key : str
+        Key into :data:`_LIBRARY_RESOLUTION_DATA_FILES`.
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n_ref,)
+        Reference rest-frame wavelength grid [Angstrom].
+    sigma_kms_signed : ndarray, shape (n_ref,)
+        Velocity dispersion [km/s], FSPS's own sign convention: positive
+        where the library's own template measurement sets the value,
+        negative where it is FSPS's approximate extrapolation.
+    """
+    from importlib.resources import files
+
+    path = (
+        files("tengri.data.ssp_library_resolution") / _LIBRARY_RESOLUTION_DATA_FILES[library_key]
+    )
+    with path.open("r") as fh:
+        arr = np.loadtxt(fh)
+    return arr[:, 0], arr[:, 1]
+
+
+def _wave_matches_reference(query_wave: np.ndarray, ref_wave: np.ndarray) -> bool:
+    """Whether ``query_wave`` is a library's own reference wavelength grid.
+
+    Requires the same node count and every node equal to ``rtol=1e-6``: a
+    grid built by evolving the same library's templates on a different
+    (e.g. resampled or truncated) wavelength axis has the library's own
+    filename token but is not the grid the resolution table was measured
+    on, and must not be treated as if it were.
+
+    Parameters
+    ----------
+    query_wave, ref_wave : ndarray
+        Wavelength grids to compare [Angstrom].
+
+    Returns
+    -------
+    bool
+    """
+    return query_wave.shape == ref_wave.shape and bool(
+        np.allclose(query_wave, ref_wave, rtol=1e-6, atol=0.0)
+    )
+
+
+def _resolve_ssp_resolution(
+    ssp_wave: jnp.ndarray, library_key: str
+) -> tuple[jnp.ndarray, np.ndarray]:
+    """Per-wavelength library resolution [km/s] and its approximate mask (#2518).
+
+    Reads FSPS's own per-node velocity dispersion for ``library_key``
+    directly when ``ssp_wave`` matches the reference grid node for node
+    (every shipped ``fsps_*.h5`` catalog grid), otherwise interpolates
+    log-linearly in (wavelength, sigma) onto ``ssp_wave``. Interpolation
+    never blends across a sign change in the reference table -- FSPS's own
+    boundary between a library's measured window and an extrapolated wing
+    -- a query bracketed by nodes of opposite sign is snapped to the nearer
+    one instead of interpolated between them. A resolution-regime boundary
+    that FSPS does not sign-flag (e.g. C3K's R=3000-to-R=500 step, both
+    positive) is not detected this way; a query landing within one
+    reference node-spacing of such a boundary is smoothly blended across
+    it rather than snapped, a narrow interpolation artifact that does not
+    arise for an ``ssp_wave`` matching the reference grid exactly.
+
+    Parameters
+    ----------
+    ssp_wave : array, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom] to evaluate the curve on.
+    library_key : str
+        Key into :data:`_LIBRARY_RESOLUTION_DATA_FILES`.
+
+    Returns
+    -------
+    sigma_kms : ndarray, shape (n_wave,)
+        Velocity dispersion [km/s], always positive.
+    approximate : ndarray of bool, shape (n_wave,)
+        ``True`` where the value is FSPS's approximate extrapolation rather
+        than a direct library measurement.
+    """
+    ref_wave, ref_sigma_signed = _load_library_resolution_reference(library_key)
+    query_wave = np.asarray(ssp_wave, dtype=float)
+
+    if _wave_matches_reference(query_wave, ref_wave):
+        sigma = np.abs(ref_sigma_signed)
+        approximate = ref_sigma_signed < 0.0
+        return jnp.asarray(sigma, dtype=jnp.result_type(float)), approximate
+
+    ref_sign = np.sign(ref_sigma_signed)
+    ref_log_wave = np.log(ref_wave)
+    ref_log_sigma = np.log(np.abs(ref_sigma_signed))
+
+    n = ref_wave.size
+    clipped_query = np.clip(query_wave, ref_wave[0], ref_wave[-1])
+    idx1 = np.clip(np.searchsorted(ref_wave, clipped_query), 1, n - 1)
+    idx0 = idx1 - 1
+    same_regime = ref_sign[idx0] == ref_sign[idx1]
+
+    w0, w1 = ref_log_wave[idx0], ref_log_wave[idx1]
+    s0, s1 = ref_log_sigma[idx0], ref_log_sigma[idx1]
+    query_log_wave = np.log(clipped_query)
+    span = np.where(w1 > w0, w1 - w0, 1.0)
+    t = (query_log_wave - w0) / span
+    interp_log_sigma = s0 + t * (s1 - s0)
+
+    nearer = np.where(
+        np.abs(clipped_query - ref_wave[idx0]) <= np.abs(ref_wave[idx1] - clipped_query),
+        idx0,
+        idx1,
+    )
+
+    out_log_sigma = np.where(same_regime, interp_log_sigma, ref_log_sigma[nearer])
+    out_sign = np.where(same_regime, ref_sign[idx0], ref_sign[nearer])
+
+    sigma = np.exp(out_log_sigma)
+    approximate = out_sign < 0.0
+    return jnp.asarray(sigma, dtype=jnp.result_type(float)), approximate
 
 
 def _synthesize_mass_remaining(
