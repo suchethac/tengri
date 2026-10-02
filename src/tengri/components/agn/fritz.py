@@ -43,6 +43,7 @@ from tengri.components.agn._phys import (
 )
 from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 class FritzComponents(NamedTuple):
@@ -51,14 +52,17 @@ class FritzComponents(NamedTuple):
     Attributes
     ----------
     disk : jnp.ndarray, shape (n_wave,)
-        Accretion disk emission (direct + scattered) [erg/s/Hz].
+        Accretion disk emission (direct + scattered) [erg s⁻¹ Hz⁻¹].
     dust : jnp.ndarray, shape (n_wave,)
-        Dust thermal emission from the torus [erg/s/Hz].
+        Dust thermal emission from the torus [erg s⁻¹ Hz⁻¹].
 
     Notes
     -----
-    The disk component is the accretion-disk SED, and dust is the thermal
-    torus emission. Both are rest-frame spectral luminosity densities.
+    The disk and dust components are the accretion-disk SED and thermal
+    torus emission from the Fritz et al. (2006) radiative-transfer grid.
+    Both arrays are rest-frame spectral luminosity densities L_ν, converted
+    from the grid's stored L_λ (luminosity per unit wavelength) using the
+    relation L_ν = L_λ × λ²/c, following the SKIRTOR model (PR #468).
     """
 
     disk: jnp.ndarray
@@ -121,7 +125,10 @@ def _interpolate_and_normalize(
     Parameters
     ----------
     grid_jax : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
-        Template grid [erg/s/Hz, per-L_sun normalized at runtime].
+        Template grid stored as L_λ [W/nm per unit integral over wavelength].
+        The shipped HDF5 file holds pcigale's model.dust and model.disk arrays,
+        which are luminosity per unit wavelength (W/nm), normalized with a
+        wavelength integral.
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -143,14 +150,26 @@ def _interpolate_and_normalize(
     Notes
     -----
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
+
+    The input template is L_λ (luminosity per unit wavelength); this function
+    normalizes it as L_λ via a wavelength integral, then converts to L_ν using
+    L_ν = L_λ × λ²/c (see PR #468 for the SKIRTOR precedent, #2604 for Fritz).
     """
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
     template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
-    sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
+    # The template grid contains L_λ (luminosity per unit wavelength). The shipped
+    # file holds pcigale's model.dust/disk, which are already normalized by wavelength
+    # integral (trapezoid(L_λ, λ) = 1.0 in pcigale's convention). We resample to the
+    # user grid, convert L_λ → L_ν, then normalize by the L_ν integral to match the
+    # old frequency-integral normalization behavior while using the L_λ data correctly.
+    sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
+    # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
+    sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
+    # Normalize by frequency integral to match l_scale (same as old code behavior).
     nu = _wavelength_to_nu(wavelength)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-    return l_scale * sed / integral_safe
+    integral_safe = _bolometric_integral_nu(sed_nu, nu, floor=1e-100)
+    return l_scale * sed_nu / integral_safe
 
 
 class FritzGrid(NamedTuple):

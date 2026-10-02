@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- Fritz et al. (2006) torus library was treated as L_ν (luminosity per unit frequency) but the data are L_λ (luminosity per unit wavelength) from pcigale's SimpleDatabase. The loader now converts L_λ → L_ν using L_ν = L_λ × λ²/c, following the SKIRTOR precedent (PR #468 for #459). At the default pcigale node (r=60, τ=1.0, β=-0.5, γ=4.0, opening_angle=40°, ψ=50.1°), the torus median wavelength of power shifts from 1.8 µm to 5.8 µm (matching pcigale), and the 8–20 µm band moves from 2% to 28% of the torus power. Band fractions match pcigale's library read directly at grid nodes to 1e-3 (1–20% residual is the smoothing from node-fidelity issue #2606, not corrected here). (#2604)
+
 - Direct calls to the composable AGN runner (`compose_l_nu`) overflowed float32: the reference-L_bol factoring (#1206) lived only in `AGNSEDComponent`, so the runner exponentiated the true `agn_log_lbol` inside the blocks. The factoring lives in `components/agn/_lbol_reference.py` and is called by the runner and by the component's monolithic branch, so the direct call and the `SEDModel` path share it. float64 outputs on the `SEDModel` path are bit-identical (measured). (#2321)
 
 - CI compile caches fit the GitHub Actions quota: pull request runs no longer save

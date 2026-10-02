@@ -255,8 +255,14 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
         g.attrs["title"] = "Fritz et al. (2006) AGN torus SED grid"
         g.attrs["source"] = "CIGALE pcigale.data.SimpleDatabase('fritz2006')"
         g.attrs["grid_shape"] = "[r_ratio, tau, beta, gamma, opening_angle, psy, wavelength]"
-        g.attrs["dust_unit"] = "erg/s/Hz (accretion-disk normalized, pre-interpolation)"
-        g.attrs["disk_unit"] = "erg/s/Hz (accretion-disk component, pre-interpolation)"
+        g.attrs["dust_unit"] = (
+            "W/nm per unit wavelength integral (pcigale model.dust, stored as L_λ; "
+            "loader converts to L_ν)"
+        )
+        g.attrs["disk_unit"] = (
+            "W/nm per unit wavelength integral (pcigale model.disk, stored as L_λ; "
+            "loader converts to L_ν)"
+        )
         g.attrs["wavelength_unit"] = "Angstrom"
         g.attrs["opening_angle_unit"] = "degrees (half-opening angle, direct grid parameter)"
         g.attrs["psy_unit"] = "degrees (viewing angle from torus axis; 0=type2, 90=type1)"
