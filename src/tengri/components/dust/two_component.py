@@ -1013,7 +1013,7 @@ class DustSEDComponent(TemplateThreading):
             if self.config.lyc_reprocessed_by == "all":
                 sed_attenuated = sed_attenuated * _lyc_t
                 sed_intrinsic_stellar_eb = sed_intrinsic_stellar
-            else:
+            elif self.config.lyc_escape_geometry == "screened":
                 # The LUT reddens exactly the stars ``_young_indicator`` selects —
                 # the same definition the exact screen uses.
                 y_age = _young_indicator(
@@ -1022,6 +1022,104 @@ class DustSEDComponent(TemplateThreading):
                 lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
                 sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
                 sed_intrinsic_stellar_eb = jnp.sum(lnu_age * lyc_factor, axis=0)
+            else:
+                # #2529: a hole-geometry fraction ``f_esc`` of the young
+                # population's light already bypasses the birth-cloud screen
+                # (not just the Lyman continuum -- "a hole is geometric, not
+                # wavelength selective"), computed directly from the raw,
+                # un-sigmoid-weighted curves via
+                # :func:`tengri.components.lyc.escape_geometry_transmission`.
+                # The nebular gas still reprocesses the COVERED (1 - f_esc)
+                # sub-beam's ionizing photons exactly as before (the
+                # ``lyc_factor`` formula above, restricted to that sub-beam
+                # only); the escaping sub-beam never touches any gas either,
+                # by the #2529 physical picture, so it is never gated.
+                # ``lyc_reprocessed_by == 'all'`` cannot reach this branch
+                # (refused together with a non-'screened' geometry at
+                # parse/build time, parameters/groups.py and parameters.py):
+                # 'all' has no young/old split for a hole correction to
+                # replace.
+                from tengri.components.dust.attenuation import (
+                    apply_lyman_cutoff as _lyman_clip,
+                    resolve_dust_law as _resolve_law,
+                )
+                from tengri.components.lyc import escape_geometry_transmission, ionizing_mask
+
+                y_age = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+                )
+                f_esc = jnp.asarray(state.derived.get("lyc_fesc", 0.0))
+                f_obs = jnp.asarray(
+                    params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)
+                )
+                k_bc_full = _lyman_clip(
+                    _resolve_law(self.config.law_bc)(
+                        wave, **select_law_kwargs(self.config.law_bc, bc_kw)
+                    ),
+                    wave,
+                    self.config.lyman_cutoff_aa,
+                )
+                k_diff_full = _lyman_clip(
+                    _resolve_law(self.config.law_diff)(
+                        wave, **select_law_kwargs(self.config.law_diff, diff_kw)
+                    ),
+                    wave,
+                    self.config.lyman_cutoff_aa,
+                )
+                t_bc_raw = jnp.exp(-jnp.asarray(params["dust_tau_bc"]) * k_bc_full)  # (n_wave,)
+                t_diff_raw = jnp.exp(
+                    -jnp.asarray(params["dust_tau_diff"]) * k_diff_full
+                )  # (n_wave,)
+
+                # The two additive sub-beams of escape_geometry_transmission's
+                # own construction, (1 - f_esc)*screened + f_esc*hole_contrib
+                # -- read off AT its own f_esc = 0 / 1 endpoints (its
+                # identities, pinned above) rather than re-deriving either
+                # formula here a second time.
+                t_screened_raw = escape_geometry_transmission(
+                    y_age[:, None],
+                    t_bc_raw[None, :],
+                    t_diff_raw[None, :],
+                    0.0,
+                    self.config.lyc_escape_geometry,
+                )  # (n_age, n_wave); == t_bc_raw**y_age * t_diff_raw
+                t_hole_contrib = escape_geometry_transmission(
+                    y_age[:, None],
+                    t_bc_raw[None, :],
+                    t_diff_raw[None, :],
+                    1.0,
+                    self.config.lyc_escape_geometry,
+                )  # (n_age, n_wave); == y_age*T_hole + (1 - y_age)*t_diff_raw
+
+                # Nebular reprocessing gate (the SAME physical effect the
+                # 'screened' lyc_factor above applies, restricted to the
+                # covered sub-beam only): zero below the Lyman edge, scaled
+                # by y_age so old stars are untouched. The escaping sub-beam
+                # bypasses the gas by the #2529 picture (a hole skips BOTH
+                # the dust and the HII region it would otherwise cross), so
+                # it is never gated, on either the observed or the intrinsic
+                # side.
+                gate = 1.0 - y_age[:, None] * ionizing_mask(wave)[None, :]
+                covered_raw = (1.0 - f_esc) * t_screened_raw
+                escaping_raw = f_esc * t_hole_contrib
+                t_observed_raw = escaping_raw + covered_raw * gate
+                transmission_observed = f_obs + (1.0 - f_obs) * t_observed_raw
+
+                # Intrinsic side mirrors the SAME escaping/covered split and
+                # gate -- not bare ``lnu_age`` -- so the energy-balance
+                # difference (intrinsic - attenuated) correctly excludes the
+                # covered sub-beam's reprocessed-away photons from dust
+                # heating (they went to the gas, not the grains) even when
+                # ``lyc_in_energy_balance=True`` unmasks the Lyman continuum:
+                # both sides carry the identical gate=0 there, so their
+                # difference is unaffected by it, exactly as the 'screened'
+                # branch's single shared ``lyc_factor`` already guarantees.
+                # No f_obscuration here: f_obscuration is the DUST screen's
+                # own floor, irrelevant to the intrinsic (pre-screen) side.
+                intrinsic_gate = f_esc + (1.0 - f_esc) * gate
+
+                sed_attenuated = jnp.sum(lnu_age * transmission_observed, axis=0)
+                sed_intrinsic_stellar_eb = jnp.sum(lnu_age * intrinsic_gate, axis=0)
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
