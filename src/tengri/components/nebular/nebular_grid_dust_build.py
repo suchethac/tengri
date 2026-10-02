@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.forward.energy_balance import bolometric_absorbed_log10
+from tengri.parameters.resolve import require_redshift
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np
 from tengri.utils.grid_interp import (
     _np_trapezoid,
@@ -395,7 +396,11 @@ def _build_dust_channels(
     filters = _nebular_filters(model) if n_subbands is not None and phot_all is not None else None
     if filters is not None:
         k = int(n_subbands)
-        ref_z = float(ref_params.get("redshift", 0.0))
+        ref_z = float(
+            require_redshift(
+                ref_params, "components.nebular.nebular_grid_dust_build._build_dust_channels"
+            )
+        )
         n_wave_nodes = int(np.asarray(wave_rest).size)
         phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k)
         _check_conservation(phi, phot_all, "observed-band", n_nodes=n_wave_nodes)
