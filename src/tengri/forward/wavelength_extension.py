@@ -169,10 +169,12 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 #     energy fraction beyond a wavelength is set by where the grid ends. It
 #     takes the same 1 cm end as the analytic dust and torus support grids, and
 #     starts where the T_max = 1e5 K exponential cut-off has removed the energy.
-# 40 points per decade keeps the disc level at every node within 7e-4 of a
-# 200000-point evaluation (measured: 20 per decade leaves 2.5e-3 for the ADAF
-# blocks, 80 per decade buys nothing the test tolerance needs).
-_DISC_PTS_PER_DECADE = 40
+# 200 points per decade resolves the multicolor EUV peak: the model-grid
+# trapezoid of the bolometric disc SED is within 1.3e-4 of L_bol (40 per decade
+# leaves 1.2e-3; the error falls as ~1/density), kubota_done 7.8e-6 of a
+# 200000-point evaluation, and the disc level at every node stays within 7e-4
+# of it (20 per decade leaves 2.5e-3 for the ADAF blocks).
+_DISC_PTS_PER_DECADE = 200
 # Tabulated discs whose template axis is too coarse for that normalisation
 # accuracy (KD18: 100 nodes over 6.3 decades, 1.6e-3): the declared grid is
 # the axis plus a log grid at the same density as the analytic discs.

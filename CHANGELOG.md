@@ -150,7 +150,7 @@
   1.2 % / 1e-6, `schartmann2005*` 0.3 % / < 1e-3), inflating their UV/optical
   level by up to 1/0.72; each now declares its template axis or an analytic
   support range (the coronal/X-ray end and the outer Rayleigh-Jeans tail), at
-  40 points per decade. The deprecated `powerlaw` disc has no
+  200 points per decade. The deprecated `powerlaw` disc has no
   low-frequency cut-off and takes the 1 cm end used by the analytic
   dust and torus grids. `nenkova_agnfitter`'s 4096-point axis is declared at
   stride 4. A contract test fails for any newly registered torus, dust-emission
