@@ -118,6 +118,14 @@
   same misreading; a units contract now pins the L_nu reading against Richards et al. 2006
   Table 3 and guards against future regression (#2563).
 
+- All AGN torus blocks (nenkova, nenkova_agnfitter variants, skirtor_agnfitter
+  variants, fritz, cat3d_wind_lowfwd) and dust-emission models (schreiber2018,
+  dh02_ce01) now declare their native wavelength-grid support. Before the fix,
+  these models' SEDs truncated at the SSP edge (160 µm for BC03) and submm
+  photometry was silently zero, while energy balance re-normalized on the
+  truncated grid — a sampling defect that shifted IR peak wavelengths by up to
+  7%. Contract test ensures newly registered blocks cannot regress (#2564).
+
 - `double_powerlaw` and `delayed_tau` now evaluate their shapes in cosmic time
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
