@@ -56,6 +56,9 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
         ("dale2014_templates_v2.h5", "wavelength_aa", 1.0),
         ("dale2014_templates.h5", "wavelength_aa", 1.0),
     ),
+    "dale2014_cigale": (
+        ("dale2014_templates_cigale.h5", "wavelength_aa", 1.0),
+    ),
     "draine_li2007": (
         ("dl07_templates_v2.h5", "wavelength", 1.0),
         ("dl07_templates.h5", "wavelength", 1.0),
@@ -65,13 +68,23 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
         ("dl07_templates_v2.h5", "wavelength", 1.0),
         ("dl07_templates.h5", "wavelength", 1.0),
     ),
+    "dl07": (
+        ("dl07_templates_v2.h5", "wavelength", 1.0),
+        ("dl07_templates.h5", "wavelength", 1.0),
+    ),
     "draine_li2014": (
+        ("dl14_templates_v2.h5", "wavelength", 1.0),
+        ("dl14_templates.h5", "wavelength", 1.0),
+    ),
+    "dl14": (
         ("dl14_templates_v2.h5", "wavelength", 1.0),
         ("dl14_templates.h5", "wavelength", 1.0),
     ),
     "astrodust": (("astrodust_templates.h5", "wavelength_um", 1e4),),
     "bosa": (("bosa_templates.h5", "wavelength_aa", 1.0),),
     "themis": (("themis_templates.h5", "wavelength_aa", 1.0),),
+    "schreiber2018": (("schreiber2018_templates.h5", "schreiber2018/wavelength", 1.0),),
+    "dh02_ce01": (("dh02_ce01_grid.h5", "dh02_ce01/wavelength", 1.0),),
 }
 
 # Analytic dust-emission models, no template file, but their emission still
@@ -88,11 +101,20 @@ _ANALYTIC_DUST_EMISSION = frozenset(
         "pah_drude",
         "schreiber2016",
         "energy_balance_split",
+        "draine2021_pah",  # Alias for pah_drude
+        "mbb",  # Alias for modified_blackbody
     }
 )
 _ANALYTIC_DUST_WAVE_AA = host_array(np.geomspace(1.0e4, 1.0e8, 512))
 # Bookkeeping pseudo-model with no emission of its own, stays grid-less.
 _GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
+
+# Aliases and special cases: dust emission models whose implementation is
+# elsewhere but need wavelength support. The "draine2021_pah" is pah_drude's
+# alias; "mbb" is modified_blackbody's alias (both analytic, covered above).
+# They are handled by explicit entries in _DUST_EMISSION_TEMPLATES or returned
+# from the wrapper functions in emission.py.
+_DUST_ALIASES = frozenset({"draine2021_pah", "mbb"})
 
 # AGN torus templates --------------------------------------------------------
 _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
@@ -102,12 +124,39 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     ),
     "silva04": (("silva04_torus_grid.h5", "silva04/wavelength", 1.0),),
     "cat3d_wind": (("cat3d_wind_torus_grid.h5", "cat3d_wind/wavelength", 1.0),),
+    "cat3d_wind_lowfwd": (("cat3d_wind_lowfwd_torus_grid.h5", "cat3d_wind_lowfwd/wavelength", 1.0),),
+    "fritz": (("fritz2006_torus_grid.h5", "fritz2006/wavelength_aa", 1.0),),
+    "nenkova_agnfitter": (("nenkova_agnfitter_torus_grid.h5", "nenkova_agnfitter/wavelength", 1.0),),
+    "nenkova_agnfitter_2p": (("nenkova_agnfitter_2p_torus_grid.h5", "nenkova_agnfitter_2p/wavelength", 1.0),),
+    "nenkova_agnfitter_3p": (("nenkova_agnfitter_3p_torus_grid.h5", "nenkova_agnfitter_3p/wavelength", 1.0),),
+    "skirtor_agnfitter": (("skirtor_mean3p_torus_grid.h5", "skirtor_mean3p/wavelength", 1.0),),
+    "skirtor_agnfitter_1p": (("skirtor_mean1p_torus_grid.h5", "skirtor_mean1p/wavelength", 1.0),),
+    "skirtor_agnfitter_2p": (("skirtor_mean2p_torus_grid.h5", "skirtor_mean2p/wavelength", 1.0),),
 }
 
 # AGN disc templates ---------------------------------------------------------
 _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "relagn": (("relagn_disc_grid.h5", "wavelength_aa", 1.0),),
 }
+
+# Analytic AGN torus blocks: single-temperature and multi-temperature graybodies
+# spanning 1 µm – 1 cm (IR dust emission through submm) without a template file.
+# Same semantics as _ANALYTIC_DUST_EMISSION: the blocks compute their SED on any
+# wavelength grid handed to them, so this synthetic grid ensures the master grid
+# covers IR/submm (#2564).
+_ANALYTIC_TORUS = frozenset(
+    {
+        "grahsp",       # GRAHSP log-Gaussian + Si feature (analytic dust continua)
+        "qsogen",       # QSOgen single-T hot-dust blackbody (analytic)
+        "nenkova",      # Nenkova CLUMPY (analytic radiative-transfer)
+        "simple",       # Single-temperature graybody torus
+        "two_temperature",  # Hot + warm graybody torus
+    }
+)
+_ANALYTIC_TORUS_WAVE_AA = host_array(np.geomspace(1.0e4, 1.0e8, 512))
+
+# Grid-less AGN torus blocks: no emission contribution (kept for symmetry).
+_GRIDLESS_TORUS = frozenset({"none"})
 
 # Standalone AGN models that bake their own SED on a native grid (no
 # disc/torus block selection).
@@ -205,13 +254,20 @@ def native_wave_dust_emission(name: str | None) -> np.ndarray | None:
 
     Template models return their file's grid; analytic emitters return the
     synthetic 1 µm – 1 cm grid so the master union grid reaches the submm
-    (#1005). Unknown names return ``None`` (callers treating "no native
-    grid" as a fall-back to SSP coverage degrade gracefully).
+    (#1005). Aliases (e.g., "draine2021_pah" → pah_drude, "mbb" → modified_blackbody)
+    are resolved to their canonical names. Unknown names return ``None`` (callers
+    treating "no native grid" as a fall-back to SSP coverage degrade gracefully).
     """
     if name is None or name in _GRIDLESS_DUST_EMISSION:
         return None
     if name in _ANALYTIC_DUST_EMISSION:
         return np.asarray(_ANALYTIC_DUST_WAVE_AA)
+    # Handle aliases: pah_drude, modified_blackbody, etc.
+    if name in _DUST_ALIASES:
+        if name == "draine2021_pah":
+            name = "pah_drude"
+        elif name == "mbb":
+            name = "modified_blackbody"
     candidates = _DUST_EMISSION_TEMPLATES.get(name)
     if candidates is None:
         logger.debug("No native-grid declaration for dust emission %r", name)
@@ -270,11 +326,19 @@ def native_wave_nebular(model: str | None) -> np.ndarray | None:
 
 
 def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
-    """Native wavelength grid [Å] for an AGN torus block selection."""
-    if not block or block == "none":
+    """Native wavelength grid [Å] for an AGN torus block selection.
+
+    Template blocks return their file's grid; analytic torus blocks return the
+    synthetic 1 µm – 1 cm grid so the master union grid reaches the submm
+    (#2564). Grid-less blocks (``"none"``) return ``None``.
+    """
+    if not block or block in _GRIDLESS_TORUS:
         return None
+    if block in _ANALYTIC_TORUS:
+        return np.asarray(_ANALYTIC_TORUS_WAVE_AA)
     candidates = _AGN_TORUS_TEMPLATES.get(block)
     if candidates is None:
+        logger.debug("No native-grid declaration for torus block %r", block)
         return None
     return _first_present(candidates)
 
