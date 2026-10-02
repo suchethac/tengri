@@ -237,9 +237,8 @@ print(
 
 # Fiducial host galaxy: AGNfitter-rX's own declining-exponential (tau-model)
 # SFH (Martínez-Ramírez et al. 2024, p.7), tau = 1 Gyr, age = 4.8939 Gyr —
-# the nearest node in AGNfitter-rX's own (tau, age) grid to 5 Gyr, matching
-# tests/crossval/test_bc03_csp_vs_agnfitter.py's matched-node comparison so
-# every panel that reuses SFH_FIDUCIAL ties to a validated reference point.
+# the nearest node in AGNfitter-rX's own (tau, age) grid to 5 Gyr, so every
+# panel that reuses SFH_FIDUCIAL ties to a matched reference node.
 # The 'declining_exp' model takes its fully prefixed parameter names
 # (e.g. `sfh_declining_exp_tau_gyr`).
 TAU_GYR, AGE_GYR, LOG_MASS = 1.0, 4.8939, 10.0
