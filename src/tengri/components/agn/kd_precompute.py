@@ -803,6 +803,7 @@ def _compute_bh_and_radii(
         _gravitational_radius,
         _hot_flow_luminosity,
         _isco_radius,
+        _nt_l0,
         _r_hot_bisect,
         _self_gravity_radius,
     )
@@ -830,8 +831,8 @@ def _compute_bh_and_radii(
     ) ** 0.25
 
     # Zone radii
-    # Same capped L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
-    l_hot_target = _hot_flow_luminosity(agn_f_hard, log10_l_edd, agn_log_lbol)
+    # Same L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
+    l_hot_target = _hot_flow_luminosity(agn_f_hard, log10_l_edd, _nt_l0(r_isco_cm, t_in))
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
@@ -1088,6 +1089,7 @@ def kubota_done_disc_preintegrated(
         _isco_radius,
         _l_seed_geometric,
         _log10_eddington_luminosity,
+        _nt_l0,
         beloborodov_gamma_hot,
     )
     from tengri.utils.physics_constants import (
@@ -1147,7 +1149,7 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    l_hot_erg = _hot_flow_luminosity(agn_f_hard, log10_l_edd, agn_log_lbol)
+    l_hot_erg = _hot_flow_luminosity(agn_f_hard, log10_l_edd, _nt_l0(r_isco_cm, t_in))
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)

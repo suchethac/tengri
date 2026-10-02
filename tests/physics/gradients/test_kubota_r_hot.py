@@ -92,40 +92,62 @@ def _eq2_l_diss(x_hot, r_isco, t_in):
 
 
 def _hot_zone(log_mbh, log_lbol, f_hard):
-    """``(x_hot, l_diss_hot, l_edd_term, cap_term)`` for the radii ``kubota_done_disc`` uses."""
+    """``(x_hot, x_out, l_diss_hot, f_hard L_Edd, 0.33 L0)`` as ``kubota_done_disc`` forms them."""
     r_g, r_isco_rg, r_isco, t_in, log10_l_edd = _disc_scalars(log_mbh, log_lbol)
-    r_hot, _, _ = D._compute_zone_radii(
+    r_hot, _, r_out = D._compute_zone_radii(
         r_g, r_isco_rg, r_isco, t_in, log_mbh, log_lbol, f_hard, 2.0, log10_l_edd, float32=False
     )
     x_hot = r_hot / r_isco
     l_diss = _eq2_l_diss(float(x_hot), r_isco, t_in)
     return (
         float(x_hot),
+        float(r_out / r_isco),
         float(l_diss),
         f_hard * 10.0**log10_l_edd,
-        0.5 * 10.0**log_lbol * _LSUN_ERG,
+        0.33 * float(_l0(r_isco, t_in)),
     )
 
 
 @pytest.mark.parametrize(
-    ("f_hard", "cap_binds"), [(0.02, True), (0.005, False)], ids=["cap_binds", "cap_inactive"]
+    ("log_lbol", "f_hard"),
+    [(11.5, 0.02), (11.5, 0.005), (12.3, 0.02)],
+    ids=["issue_point", "f_hard_0.005", "lambda_0.2"],
 )
-def test_dissipated_hot_flow_luminosity_equals_l_hot(f_hard, cap_binds):
-    """K&D 2018 Eq. 2: L_diss,hot(R_hot) == the L_hot the SED radiates, at rtol 1e-6.
+def test_dissipated_hot_flow_luminosity_is_f_hard_l_edd(log_lbol, f_hard):
+    """K&D 2018 Eq. 2 with L_diss,hot = f_hard L_Edd ("Ldiss,hot = 0.02 LEdd, which defines
+    rhot"; QSOSED/RELQSO source agrees): the quadrature of Eq. 2 at R_hot equals the
+    luminosity the SED radiates, rtol 1e-6, with NO L_bol/2 cap.
 
-    At the #2572 point (log L_bol 11.5, log M_BH 8.5) ``f_hard = 0.02`` gives
-    ``f_hard L_Edd = 7.95e44`` against ``0.5 L_bol = 3.14e44`` erg/s: the cap binds.
+    (11.5, 0.02) is the #2572 point where the invented cap used to bind (f L_Edd = 7.95e44
+    vs 0.5 L_bol = 6.05e44 erg/s), lambda_Edd ~ 0.03, the paper's grid edge; 12.3 is
+    lambda ~ 0.2.
     """
-    x_hot, l_diss, l_edd_term, cap_term = _hot_zone(8.5, 11.5, f_hard)
-    l_hot = min(l_edd_term, cap_term)
-    print(f"f_hard={f_hard}: x_hot={x_hot:.4f} L_diss={l_diss:.6e} L_hot={l_hot:.6e}")
-    assert (cap_term < l_edd_term) is cap_binds
-    assert 1.001 < x_hot < 1.0e4
-    np.testing.assert_allclose(l_diss, l_hot, rtol=1e-6)
-    # ...and it is the very value the corona is normalised to.
+    x_hot, x_out, l_diss, l_edd_term, reach = _hot_zone(8.5, log_lbol, f_hard)
+    print(f"L_bol={log_lbol} f={f_hard}: x_hot={x_hot:.4f} L_diss={l_diss:.6e}")
+    assert l_edd_term < reach, "point must be in the reachable regime"
+    assert 1.001 < x_hot < 0.5 * x_out
+    np.testing.assert_allclose(l_diss, l_edd_term, rtol=1e-6)
+    ledd = _disc_scalars(8.5, log_lbol)[4]
+    l0 = float(_l0(*_disc_scalars(8.5, log_lbol)[2:4]))
     np.testing.assert_allclose(
-        float(D._hot_flow_luminosity(f_hard, _disc_scalars(8.5, 11.5)[4], 11.5)), l_hot, rtol=1e-12
+        float(D._hot_flow_luminosity(f_hard, ledd, l0)), l_edd_term, rtol=1e-12
     )
+
+
+def test_unreachable_hot_flow_saturates_instead_of_inventing_a_cap():
+    """When the disc cannot supply f_hard L_Edd (lambda_Edd << 0.02) the whole flow is hot
+    (RELQSO: "Ldiss never reaches 0.02Ledd => No upper limit for r_hot", rh = rout).
+
+    tengri keeps static zone shapes, so L_hot saturates at 0.33 L0 (99% of the NT total
+    L0/3) and R_hot sits at its zone ceiling 0.5 R_out; the corona never exceeds the
+    accretion power by construction, with no L_bol-dependent switch.
+    """
+    x_hot, x_out, _, l_edd_term, reach = _hot_zone(8.5, 9.0, 0.02)
+    assert l_edd_term > reach
+    ledd = _disc_scalars(8.5, 9.0)[4]
+    l0 = float(_l0(*_disc_scalars(8.5, 9.0)[2:4]))
+    np.testing.assert_allclose(float(D._hot_flow_luminosity(0.02, ledd, l0)), reach, rtol=1e-12)
+    np.testing.assert_allclose(x_hot, 0.5 * x_out, rtol=1e-12)
 
 
 def test_closed_form_nt_integral_matches_quadrature():

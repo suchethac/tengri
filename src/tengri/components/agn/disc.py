@@ -314,6 +314,16 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float) -> float:
     return l0 * jnp.maximum(_nt_h(jnp.log(x_hot)), 0.0)
 
 
+def _nt_l0(r_isco_cm: float, t_in: float, float32: bool = False) -> float:
+    """``L_0 = 4 pi R_isco^2 sigma T_in^4`` [erg/s; L_sun on the float32 path (#1206)].
+
+    The NT disc's total luminosity is ``L_0 / 3`` (``h(inf) = 1/3``).
+    """
+    if float32:
+        return _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4
+    return 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
+
+
 def _r_hot_bisect(
     r_isco_cm: float,
     t_in: float,
@@ -339,10 +349,7 @@ def _r_hot_bisect(
     # the RATIO l_hot_target / l0, so compute both in L_sun units (``l_hot_target``
     # arrives in L_sun on the float32 path). The pre-divided 4*pi*sigma/L_sun
     # constant folds first so no ~1e42 intermediate forms.
-    if float32:
-        l0 = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4
-    else:
-        l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
+    l0 = _nt_l0(r_isco_cm, t_in, float32)
     # The target is clipped to (0, 0.33 L0) inside the solve; if l_hot_target >= L_max,
     # r_hot -> the ceiling's root.
     x_hot = jnp.exp(_solve_log_x_hot(l_hot_target, l0, n_iter))
@@ -1168,32 +1175,40 @@ def _compute_bh_params(
 def _hot_flow_luminosity(
     agn_f_hard: float,
     log10_l_edd: float,
-    agn_log_lbol_shape: float,
+    l0: float,
     float32: bool = False,
     agn_log_mbh: float = 0.0,
 ) -> float:
-    """Hot-flow luminosity ``L_hot = min(f_hard L_Edd, L_bol / 2)``: the ONE definition (#2572).
+    """Hot-flow dissipation ``L_hot = f_hard L_Edd``, limited by what the disc can supply (#2572).
 
-    K&D 2018 (MNRAS 480, 1247) Eq. 2 defines ``R_hot`` by
-    ``L_diss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR`` with
-    ``L_diss,hot = f_hard L_Edd`` (their Sec. 2.2, 0.02 L_Edd). Tengri additionally
-    caps the corona at half the bolometric luminosity so a low-Eddington-ratio object
-    cannot radiate more in the corona than it accretes. Both ``R_hot`` (the zone radii)
-    and the corona normalisation (the SED) use THIS value; previously R_hot was solved
-    from the uncapped ``f_hard L_Edd`` while the SED radiated the capped one.
+    K&D 2018 (MNRAS 480, 1247) Sec 4.3: "we fix Ldiss,hot = 0.02 LEdd, which defines
+    rhot" (Eq. 2: ``Ldiss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR``). The
+    public QSOSED/RELQSO source (``relqso.f``, Hagen & Done) does the same: the
+    "disc truncation radius (Rhot) is set by the requirement that the dissipated
+    luminosity in the corona Lx_diss=0.02Ledd", and when the integral never reaches it
+    ("WARNING!!! Ldiss never reaches 0.02Ledd => No upper limit for r_hot") the whole
+    flow is hot, ``rh = rout``, with no disc or warm zone. There is **no** ``L_bol / 2``
+    cap in either; the earlier ``min(f_hard L_Edd, L_bol / 2)`` was invented here and
+    made the corona 21% too weak at ``log lambda_Edd = -1.5``.
 
-    ``agn_log_lbol_shape`` is the SHAPE luminosity (the true ``L_bol``), not the
-    normalisation reference, so the cap does not move with ``agn_lum_ratio``.
+    tengri cannot drop zones (static shapes), so the unreachable case is represented by
+    saturating: ``L_hot`` is limited to ``0.33 L0``, the ceiling of the R_hot solve
+    (99% of the NT disc's total ``L0 / 3``), which places R_hot at the ceiling root, at
+    most ``0.5 R_out`` by the zone clip. Where the disc can supply ``f_hard L_Edd`` --
+    every ``lambda_Edd`` above ~0.02, the paper's grid is ``mdot = 0.03 - 1`` --
+    ``L_diss,hot(R_hot) = L_hot = f_hard L_Edd`` exactly.
+
+    Both ``R_hot`` (the zone radii) and the corona normalisation (the SED) use THIS
+    value. ``l0`` is ``4 pi R_isco^2 sigma T_in^4`` (:func:`_nt_l0`).
 
     Returns erg/s, or L_sun on the float32 path (#1206: ~1e44 erg/s overflows).
     """
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
     if float32:
-        l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
-        return jnp.minimum(f_hard_safe * l_edd_lsun, 10.0**agn_log_lbol_shape * 0.5)
-    return jnp.minimum(
-        f_hard_safe * _pow10(log10_l_edd), 10.0**agn_log_lbol_shape * _LSUN_ERG * 0.5
-    )
+        l_hot = f_hard_safe * (_L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh)
+    else:
+        l_hot = f_hard_safe * _pow10(log10_l_edd)
+    return jnp.minimum(l_hot, l0 * _H_CEILING)
 
 
 def _compute_zone_radii(
@@ -1267,9 +1282,13 @@ def _compute_zone_radii(
     # needs only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd =
     # L_bol / L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay
     # representable.
-    # R_hot is solved from the SAME capped L_hot the corona radiates (#2572).
+    # R_hot is solved from the SAME L_hot the corona radiates (#2572).
     l_hot_target = _hot_flow_luminosity(
-        agn_f_hard, log10_l_edd, agn_log_lbol, float32=float32, agn_log_mbh=agn_log_mbh
+        agn_f_hard,
+        log10_l_edd,
+        _nt_l0(r_isco_cm, t_in, float32),
+        float32=float32,
+        agn_log_mbh=agn_log_mbh,
     )
     if float32:
         l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
@@ -1446,7 +1465,11 @@ def _compute_zone_luminosities(
     # corona fraction lambda_Edd must track the TRUE L_bol, not the reference the
     # magnitude normalizes to). Beloborodov uses only their ratio, so units cancel.
     l_hot_erg = _hot_flow_luminosity(
-        agn_f_hard, log10_l_edd, agn_log_lbol_shape, float32=float32, agn_log_mbh=agn_log_mbh
+        agn_f_hard,
+        log10_l_edd,
+        _nt_l0(r_isco_cm, t_in, float32),
+        float32=float32,
+        agn_log_mbh=agn_log_mbh,
     )
     if float32:
         l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True)

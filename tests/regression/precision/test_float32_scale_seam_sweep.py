@@ -515,8 +515,10 @@ _AGN_MBH_DUST = {
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
 # Re-captured for #2572, deliberately: the kubota_done hot-flow zone is now solved from
-# one capped L_hot and a corrected Eq. 2 integral (R_hot moves), so the forward SED moved
-# (rest_sed_sum within 1%; rest_sed_0 by -0.3%, -54%, -31% at mbh 6, 8, 10). The
+# one shared L_hot and a corrected Eq. 2 integral (R_hot moves), so the forward SED moved
+# (rest_sed_sum within 1%; rest_sed_0 by -0.3%, -38%, +33% at mbh 6, 8, 10 against the
+# pre-#2572 literals). Round 3 (#2572) then removed the invented L_bol/2 corona cap, which
+# moved mbh 8 and 10 again (lambda_Edd 0.03 and 3e-4). The
 # 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
 # the tree it is captured on.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
@@ -528,18 +530,18 @@ _REF_F64_AGN_BLACK_HOLE_MASS = {
         "photometry": (1.0986162842117011e-27, 1.5711841670976002e-27, 1.7648192140610308e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5565513396881064e32,
-        "rest_sed_0": 1.2167528066571685e24,
-        "rest_sed_mid": 3.1332129408000186e28,
-        "rest_sed_last": 8.802371689097138e21,
-        "photometry": (1.1291056923321986e-27, 1.5720397325069094e-27, 1.76507135505819e-27),
+        "rest_sed_sum": 1.5562496919621836e32,
+        "rest_sed_0": 1.6157664333292132e24,
+        "rest_sed_mid": 3.1332858651938007e28,
+        "rest_sed_last": 8.802873598450634e21,
+        "photometry": (1.1290484653382701e-27, 1.572055237826607e-27, 1.765076000632074e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5888866633145728e32,
-        "rest_sed_0": 1.377380551366272e24,
-        "rest_sed_mid": 3.1915797942043907e28,
-        "rest_sed_last": 9.483414357810568e21,
-        "photometry": (1.147006436623392e-27, 1.5906334564923414e-27, 1.770984912046167e-27),
+        "rest_sed_sum": 1.5561012744253507e32,
+        "rest_sed_0": 2.6651793707093944e24,
+        "rest_sed_mid": 3.1335054136622427e28,
+        "rest_sed_last": 8.888475127847431e21,
+        "photometry": (1.126790974445896e-27, 1.5762209959393997e-27, 1.7658442643425922e-27),
     },
 }
 

@@ -61,11 +61,12 @@ _POINT = {
 # FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
 # step is far below that.
 _STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3}
-# ``agn_kt_warm`` is held to 1e-3, not 1e-4: through 50 warm rings the float32-quantised,
-# piecewise-linear template makes the central difference itself scatter by ~5e-4 of its
-# value across h = 1e-3..5e-3 (-5.029, -5.032, -5.033, -5.035 against AD -5.0323). The
-# kernel-level test below pins the slope itself at 1e-4.
-_TOL = {"agn_kt_warm": 1e-3}
+# ``agn_kt_warm`` and ``agn_a_spin`` are held to 1e-3, not 1e-4: through 50 warm rings the
+# float32-quantised, piecewise-linear template makes the central difference itself scatter
+# by ~5e-4 of its value across steps (agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033,
+# -5.035 against AD -5.0323; agn_a_spin, h = 1e-5..3e-3: 72.54, 73.03, 72.63, 72.59, 72.62,
+# 72.59 against AD 72.601). The kernel-level test below pins the slope itself at 1e-4.
+_TOL = {"agn_kt_warm": 1e-3, "agn_a_spin": 1e-3}
 _DISC_BLOCKS = sorted(name for name in AGN_BLOCKS["disc"] if name != "none")
 
 pytestmark = pytest.mark.skipif(not _SSP.is_file(), reason=f"BC03 SSP not found at {_SSP}")
@@ -121,10 +122,9 @@ def _grad_and_fd(model, overrides=None):
 
 
 # Extra kubota_done point (#2572). ``agn_f_hard=0.005`` puts the hot-flow target at
-# ~0.0376 L0 (inside the 0.33 L0 ceiling) and below 0.5 L_bol, so R_hot is solved in
-# the interior of its bracket and the cap is inactive. (Before #2572's consistency fix
-# the default f_hard pinned R_hot at the ceiling for every other point in this file;
-# this one is interior whichever way the cap is handled.)
+# ~0.0376 L0, inside the 0.33 L0 ceiling, so R_hot is solved in the interior of its
+# bracket (x_hot 1.6). Before the derivative fix the default f_hard pinned R_hot at the
+# old ceiling at the issue point; this point is interior either way.
 _CASES = [(name, "", {}) for name in _DISC_BLOCKS] + [
     ("kubota_done", "-r_hot_unclipped", {"agn_f_hard": 0.005}),
 ]
