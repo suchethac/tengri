@@ -54,7 +54,13 @@ _POINT = {
     "agn_log_mbh": 8.5,
     "agn_log_ledd": -1.0,
     "agn_kt_warm": 0.13,
+    "agn_a_spin": 0.5,
 }
+# ``agn_a_spin = 0.5`` (a moderately spinning hole) replaces the prior draw 0.4874, which sits
+# 1.8e-3 below a genuine slope kink: warm ring 31 of 50 crosses the nthcomp template's kTbb
+# node 0.00044122 keV at a = 0.48916 (d sum(log10 L)/da drops 13.22 -> 13.06 across it, while
+# AD = FD = 12.9466 for h <= 1e-3 with the template interpolated in float64). At 0.5 no ring
+# crosses a template node anywhere in a +- 0.006.
 # The nthcomp kernel quantises kTe to float32 (relative 6e-8) on the forward pass, so a
 # central difference in ``agn_kt_warm`` (likewise ``agn_gamma_warm``) is noise below
 # h ~ 1e-3 (measured at 0.1166:
