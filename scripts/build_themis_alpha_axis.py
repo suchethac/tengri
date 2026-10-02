@@ -79,9 +79,9 @@ def main() -> int:
         cig_qhac = sorted({float(q) for q in db.parameters["qhac"]})
         # Verify that CIGALE q_hAC values match tengri's (unit: q_hAC = nstirling / 220)
         fsps_qhac_conv = qhac_grid * 2.2 / 100.0
-        assert np.allclose(
-            fsps_qhac_conv, cig_qhac, rtol=1e-6
-        ), f"qhac mismatch: FSPS {fsps_qhac_conv} vs CIGALE {cig_qhac}"
+        assert np.allclose(fsps_qhac_conv, cig_qhac, rtol=1e-6), (
+            f"qhac mismatch: FSPS {fsps_qhac_conv} vs CIGALE {cig_qhac}"
+        )
         cig_pa = np.zeros((len(cig_qhac), n_u, n_alpha, n_wave))
         for ci, q in enumerate(cig_qhac):
             for ui, u in enumerate(umin_grid):

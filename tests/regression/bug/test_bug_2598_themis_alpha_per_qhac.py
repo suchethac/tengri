@@ -1,213 +1,241 @@
 # SPDX-License-Identifier: BSD-3-Clause
+"""THEMIS ``U^-alpha`` component: the alpha != 2 axis is tabulated per q_hAC.
 
+The PDR emission is the U-integral of the single-U emission of the grains of one
+q_hAC mixture, so the template shape and power weight at alpha != 2 depend on
+q_hAC and alpha jointly.
+
+References
+----------
+.. [1] Jones, A. P. et al. 2017, A&A, 602, A46 (THEMIS).
+.. [2] Draine, B. T. & Li, A. 2007, ApJ, 657, 810, Eq. 23 (``dU/dM ~ U^-alpha``).
+"""
+
+from __future__ import annotations
+
+import h5py
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import DEFAULT, Fixed, SEDModel, WavePrecomp, load_ssp
+from tengri.observation import Observation, Photometry
+from tengri.observation.photometry import FilterCurve
+from tests._data_skip import DATA_DIR
+
 pytestmark = pytest.mark.regression_bug
 
+C_AA = 2.99792458e18
+FINE = np.logspace(4, 7, 20001)
+#: 8-24, 24-70, 70-160, 160-500, 500-1000 um in Angstrom.
+BANDS = ((8e4, 2.4e5), (2.4e5, 7e5), (7e5, 1.6e6), (1.6e6, 5e6), (5e6, 1e7))
 
-def test_themis_alpha_per_qhac_band_powers():
-    """Band powers per-q_hAC match pcigale (Jones et al. 2017 Eq. 5-8).
+#: (q_hAC, U_min, alpha, gamma) and the five band fractions of unit power in
+#: 1 um-1 mm from pcigale ``themis.THEMIS(...).process``.
+PUBLIC_NODES = (
+    pytest.param(
+        (0.02, 0.5, 1.0, 0.01),
+        (
+            0.6490117412330542,
+            0.08170433312876643,
+            0.001106415141096436,
+            6.162261024891557e-05,
+            1.3011576867341749e-06,
+        ),
+        id="q0.02-U0.5-a1-g0.01",
+    ),
+    pytest.param(
+        (0.40, 30.0, 3.0, 0.5),
+        (
+            0.2752405514720881,
+            0.24097820880302298,
+            0.17465381416148637,
+            0.022238535987217457,
+            0.0002508506522407425,
+        ),
+        id="q0.40-U30-a3-g0.5",
+    ),
+)
 
-    PDR spectrum at each α is the U-integral of single-U emissivity per grain
-    composition, so the α-dependent ratio must be per-q_hAC, not averaged.
+REGISTRY_NODES = ((0.02, 0.5, 1.0, 0.01), (0.17, 1.0, 1.0, 0.1), (0.40, 30.0, 1.0, 0.5))
 
-    References
-    ----------
-    .. [1] Jones et al. 2017, A&A 602, A46 (THEMIS model)
-    .. [2] Draine & Li 2007, ApJ 657, 810 (U^-α distribution)
-    """
-    import h5py
 
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
+def _unit(wave, y):
+    y = np.interp(FINE, wave, y, left=0.0, right=0.0)
+    return y / np.trapezoid(y, FINE)
 
-    pytest.importorskip("pcigale")
+
+def _bands(y):
+    grid = FINE
+    masks = [(grid >= lo) & (grid <= hi) for lo, hi in BANDS]
+    return np.array([np.trapezoid(y[m], grid[m]) for m in masks])
+
+
+def _pcigale_bands(q, u, a, g):
     from pcigale.sed import SED
     from pcigale.sed_modules import themis
 
-    # Load THEMIS templates
-    h = h5py.File("data/themis_templates.h5", "r")
-    W = h["wavelength_aa"][:]
-    C_AA = 2.99792458e18
-    nu = C_AA / W
-
-    FINE = np.logspace(4, 7, 20001)
-    BANDS = ((8e4, 2.4e5), (2.4e5, 7e5), (7e5, 1.6e6), (1.6e6, 5e6), (5e6, 1e7))
-
-    def unit(w, y):
-        y = np.interp(FINE, w, y, left=0, right=0)
-        return y / np.trapezoid(y, FINE)
-
-    def bands(y):
-        return np.array(
-            [
-                np.trapezoid(
-                    y[(a <= FINE) & (b >= FINE)], FINE[(a <= FINE) & (b >= FINE)]
-                )
-                for a, b in BANDS
-            ]
-        )
-
-    def pcigale(q, u, a, g):
-        s = SED()
-        s.add_info("dust.luminosity", 1.0, True, unit="W")
-        themis.THEMIS(name="themis", qhac=q, umin=u, alpha=a, gamma=g).process(s)
-        return unit(s.wavelength_grid * 10.0, s.luminosity / 10.0)
-
-    def tengri(q, u, a, g):
-        lnu = np.asarray(
-            M["themis"](W, 1.0, dust_umin=u, dust_gamma_dl=g, dust_qhac=q, dust_alpha=a),
-            dtype=float,
-        )
-        return unit(W, lnu * C_AA / W**2)
-
-    # Test cases from issue: (q_hAC, U_min, α, γ)
-    test_cases = [
-        (0.02, 0.5, 1.0, 0.01),
-        (0.17, 1.0, 1.0, 0.1),
-        (0.40, 30.0, 1.0, 0.5),
-    ]
-
-    for q, u, a, g in test_cases:
-        r = bands(tengri(q, u, a, g)) / bands(pcigale(q, u, a, g))
-        # Band ratios should be within 2e-3 (0.2% error)
-        assert np.all(np.abs(r - 1.0) < 2e-3), (
-            f"Band ratio mismatch at qhac={q}, umin={u}, alpha={a}, gamma={g}: {r}"
-        )
+    sed = SED()
+    sed.add_info("dust.luminosity", 1.0, True, unit="W")
+    themis.THEMIS(name="themis", qhac=q, umin=u, alpha=a, gamma=g).process(sed)
+    return _bands(_unit(sed.wavelength_grid * 10.0, sed.luminosity / 10.0))
 
 
-def test_themis_alpha_2_unchanged():
-    """α=2 slice remains bit-identical to original powerlaw."""
-    import h5py
-
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
-
-    h = h5py.File("data/themis_templates.h5", "r")
-    W = h["wavelength_aa"][:]
-    powerlaw = np.array(h["powerlaw"][:])
-
-    C_AA = 2.99792458e18
-    nu = C_AA / W
-
-    FINE = np.logspace(4, 7, 20001)
-    BANDS = ((8e4, 2.4e5), (2.4e5, 7e5), (7e5, 1.6e6), (1.6e6, 5e6), (5e6, 1e7))
-
-    def unit(w, y):
-        y = np.interp(FINE, w, y, left=0, right=0)
-        return y / np.trapezoid(y, FINE)
-
-    def bands(y):
-        return np.array(
-            [
-                np.trapezoid(
-                    y[(a <= FINE) & (b >= FINE)], FINE[(a <= FINE) & (b >= FINE)]
-                )
-                for a, b in BANDS
-            ]
-        )
-
-    def tengri(q, u, a, g):
-        lnu = np.asarray(
-            M["themis"](W, 1.0, dust_umin=u, dust_gamma_dl=g, dust_qhac=q, dust_alpha=a),
-            dtype=float,
-        )
-        return unit(W, lnu * C_AA / W**2)
-
-    # α=2 band powers
-    q, u, a, g = 0.17, 1.0, 2.0, 0.1
-    lnu = np.asarray(
-        M["themis"](W, 1.0, dust_umin=u, dust_gamma_dl=g, dust_qhac=q, dust_alpha=a),
-        dtype=float,
+def _model(node, observation=None, approx=None):
+    q, u, a, g = node
+    kwargs = {} if observation is None else {"observation": observation}
+    if approx is not None:
+        kwargs["approx"] = approx
+    return SEDModel.build(
+        ssp_data=load_ssp("fsps_prsc_miles_chabrier", download=False),
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(1.0),
+            "tau_diff": Fixed(1.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_emission={
+            "type": "themis",
+            "dust_qhac": Fixed(q),
+            "dust_umin": Fixed(u),
+            "dust_alpha": Fixed(a),
+            "dust_gamma_dl": Fixed(g),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+        **kwargs,
     )
-    unfixed_bands = bands(unit(W, lnu * C_AA / W**2))
-
-    # Should still equal same values (α=2 is anchor)
-    assert np.allclose(unfixed_bands, unfixed_bands, rtol=1e-7)
 
 
-def test_themis_alpha_ratio_qhac_dependent():
-    """Guard: ratio must be per-q_hAC (not qhac-averaged)."""
-    import h5py
-
-    h = h5py.File("data/themis_templates.h5", "r")
-
-    # Check that alpha-axis is present and per-q
-    assert "alpha_grid" in h, "alpha_grid missing from h5"
-    if "powerlaw_alpha" in h:
-        pla = h["powerlaw_alpha"][:]
-        assert pla.ndim == 4, f"powerlaw_alpha should be 4D [q,u,alpha,wave], got {pla.shape}"
-    elif "powerlaw_alpha_ratio" in h:
-        ratio = h["powerlaw_alpha_ratio"][:]
-        # Must be per-q: [q, u, alpha, wave] not [u, alpha, wave]
-        assert ratio.ndim == 4, (
-            f"powerlaw_alpha_ratio should be 4D [q,u,alpha,wave], got {ratio.shape}"
-        )
-        assert ratio.shape[0] == h["qhac_grid"].shape[0], (
-            f"ratio shape[0] != qhac_grid len: {ratio.shape[0]} vs {h['qhac_grid'].shape[0]}"
-        )
+def _public_band_fractions(node):
+    state = _model(node).predict_state({})
+    wave = np.asarray(state.wave, dtype=np.float64)
+    sed = np.asarray(state.derived["sed_dust_ir"], dtype=np.float64)
+    return _bands(_unit(wave, sed * C_AA / wave**2))
 
 
-def test_themis_pdr_power_weight():
-    """PDR power weight R matches pcigale at five (q, u, alpha) nodes."""
-    import h5py
+@pytest.fixture(scope="module")
+def templates():
+    with h5py.File(DATA_DIR / "themis_templates.h5", "r") as h:
+        yield {k: h[k][:] for k in h}
 
 
-    h = h5py.File("data/themis_templates.h5", "r")
-    W = h["wavelength_aa"][:]
-    C_AA = 2.99792458e18
-    nu = C_AA / W
-    single_u = h["single_u"][:]
-    powerlaw = h["powerlaw"][:]
-    qhac = h["qhac_grid"][:] * 2.2 / 100.0
-    umin = h["umin_grid"][:]
+@pytest.mark.parametrize("node", REGISTRY_NODES)
+def test_registry_band_powers_match_pcigale_at_alpha_1(node, templates):
+    """Registry ``themis`` band powers equal pcigale's per-q_hAC library at alpha = 1."""
+    pytest.importorskip("pcigale")
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
-    def lint(x):
-        return -np.trapezoid(x, nu)
+    q, u, a, g = node
+    wave = templates["wavelength_aa"]
+    lnu = np.asarray(
+        DUST_EMISSION_MODELS["themis"](
+            wave, 1.0, dust_umin=u, dust_gamma_dl=g, dust_qhac=q, dust_alpha=a
+        ),
+        dtype=np.float64,
+    )
+    got = _bands(_unit(wave, lnu * C_AA / wave**2))
+    np.testing.assert_allclose(got / _pcigale_bands(*node), 1.0, atol=2e-3)
 
-    # pcigale reference literals: R_pcigale for 5 nodes computed offline
-    pcigale_refs = {
-        (0.02, 0.5, 1.0): 0.714,
-        (0.40, 30.0, 1.0): 1.284,
-        (0.02, 0.5, 3.0): 1.125,
-        (0.40, 30.0, 3.0): 0.865,
-        (0.17, 1.0, 1.0): 1.012,
-    }
 
+def test_alpha_2_slice_of_the_ratio_is_exactly_one(templates):
+    """The alpha = 2 slice of ``powerlaw_alpha_ratio`` is 1 at every (q_hAC, U_min, wave)."""
+    ratio = templates["powerlaw_alpha_ratio"]
+    k2 = int(np.argmin(np.abs(templates["alpha_grid"] - 2.0)))
+    assert ratio.shape == (
+        templates["qhac_grid"].size,
+        templates["umin_grid"].size,
+        templates["alpha_grid"].size,
+        templates["wavelength_aa"].size,
+    )
+    assert np.array_equal(ratio[:, :, k2], np.ones_like(ratio[:, :, k2]))
+
+
+def test_ratio_is_not_the_qhac_average(templates):
+    """The alpha = 1 PDR power differs from the q_hAC-averaged-ratio power by 0.70-1.38x."""
+    ratio = templates["powerlaw_alpha_ratio"].astype(np.float64)[:, :, 0, :]
+    nu = C_AA / templates["wavelength_aa"]
+    per_q = np.trapezoid(templates["powerlaw"] * ratio, nu, axis=-1)
+    averaged = np.trapezoid(templates["powerlaw"] * ratio.mean(axis=0)[None], nu, axis=-1)
+    assert (averaged / per_q).min() < 0.75
+    assert (averaged / per_q).max() > 1.25
+
+
+@pytest.mark.parametrize(
+    ("q", "u", "a"),
+    [(0.02, 0.5, 1.0), (0.17, 1.0, 1.0), (0.40, 30.0, 1.0), (0.02, 0.5, 3.0), (0.40, 30.0, 3.0)],
+)
+def test_pdr_power_weight_matches_pcigale(q, u, a, templates):
+    """PDR power over single-U power equals pcigale's database ratio at fixed U_min."""
     pytest.importorskip("pcigale")
     from pcigale.data import SimpleDatabase
 
+    nu = C_AA / templates["wavelength_aa"]
+    iq = int(np.argmin(np.abs(templates["qhac_grid"] * 2.2 / 100.0 - q)))
+    iu = int(np.argmin(np.abs(templates["umin_grid"] - u)))
+    ia = int(np.argmin(np.abs(templates["alpha_grid"] - a)))
+    plaw = templates["powerlaw"][iq, iu] * templates["powerlaw_alpha_ratio"][iq, iu, ia]
+    weight = np.trapezoid(plaw, nu) / np.trapezoid(templates["single_u"][iq, iu], nu)
+
     with SimpleDatabase("themis") as db:
-        for (q, u, a), _expected in pcigale_refs.items():
-            # Tengri: h5 powerlaw × ratio / single_u
-            iq = np.argmin(np.abs(qhac - q))
-            iu = np.argmin(np.abs(umin - u))
-            ia = np.argmin(np.abs(h["alpha_grid"][:] - a))
-
-            plaw = powerlaw[iq, iu]
-            single = single_u[iq, iu]
-            ratio = h["powerlaw_alpha_ratio"][:]
-            tengri_r = lint(plaw * ratio[iq, iu, ia]) / lint(single)
-
-            # pcigale reference
-            A = db.get(qhac=q, umin=u, umax=u, alpha=1.0)
-            B = db.get(qhac=q, umin=u, umax=1e7, alpha=a)
-            pcigale_r = np.trapezoid(B.spec, B.wl) / np.trapezoid(A.spec, A.wl)
-
-            # Both within 2e-3 of unity and of each other
-            assert np.abs(tengri_r / pcigale_r - 1.0) < 2e-3, (
-                f"PDR weight mismatch at q={q}, u={u}, a={a}: "
-                f"tengri={tengri_r:.3f}, pcigale={pcigale_r:.3f}"
-            )
+        single = db.get(qhac=q, umin=u, umax=u, alpha=1.0)
+        pdr = db.get(qhac=q, umin=u, umax=1e7, alpha=a)
+    reference = np.trapezoid(pdr.spec, pdr.wl) / np.trapezoid(single.spec, single.wl)
+    assert weight / reference == pytest.approx(1.0, abs=2e-3)
 
 
-def test_themis_public_api_registered():
-    """Public API: themis model is registered in the component factory."""
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS
-
-    # Verify themis is registered with per-q_hAC capability
-    themis_fn = DUST_EMISSION_MODELS.get("themis")
-    assert themis_fn is not None, "themis not in DUST_EMISSION_MODELS registry"
+@pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)
+def test_public_sed_dust_ir_band_fractions_literals(node, expected):
+    """``SEDModel.build`` THEMIS ``sed_dust_ir`` band fractions equal pcigale's literals."""
+    np.testing.assert_allclose(_public_band_fractions(node), expected, rtol=3e-3, atol=0.0)
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+@pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)
+def test_public_sed_dust_ir_band_fractions_live_pcigale(node, expected):
+    """``SEDModel.build`` THEMIS ``sed_dust_ir`` band fractions equal a live pcigale run."""
+    pytest.importorskip("pcigale")
+    live = _pcigale_bands(*node)
+    np.testing.assert_allclose(live, expected, rtol=1e-6)
+    np.testing.assert_allclose(_public_band_fractions(node) / live, 1.0, atol=3e-3)
+
+
+@pytest.mark.parametrize(("node", "expected"), PUBLIC_NODES)
+def test_public_float32_matches_float64(node, expected):
+    """Pure-float32 ``sed_dust_ir`` band fractions agree with float64 to 1e-4."""
+    ref = _public_band_fractions(node)
+    with jax.enable_x64(False):
+        state = _model(node).predict_state({})
+        assert state.derived["sed_dust_ir"].dtype == jnp.float32
+        wave = np.asarray(state.wave, dtype=np.float64)
+        sed = np.asarray(state.derived["sed_dust_ir"], dtype=np.float64)
+    got = _bands(_unit(wave, sed * C_AA / wave**2))
+    np.testing.assert_allclose(got, ref, rtol=0.0, atol=1e-4)
+
+
+def test_precompute_photometry_matches_exact_in_far_ir_top_hats():
+    """``WavePrecomp`` and exact THEMIS photometry agree to 1e-3 at alpha = 1."""
+
+    def tophat(center, frac=0.16, n=40):
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    obs = Observation(
+        photometry=Photometry(filters=tuple(tophat(c) for c in (2.4e5, 1.0e6, 3.5e6)))
+    )
+    node = PUBLIC_NODES[0].values[0]
+    exact = np.asarray(_model(node, observation=obs).predict_photometry({}))
+    fast = np.asarray(_model(node, observation=obs, approx=WavePrecomp()).predict_photometry({}))
+    assert np.all(exact > 0.0)
+    np.testing.assert_allclose(fast, exact, rtol=1e-3)
