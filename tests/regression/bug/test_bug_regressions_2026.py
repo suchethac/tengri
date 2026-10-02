@@ -6,7 +6,7 @@ verifies the correct behavior. These tests MUST fail if the bug is
 reintroduced.
 
 Bug index (from CLAUDE.md):
-- QSOgen Balmer continuum tau direction (tau ∝ (λ_BE/λ)³)
+- QSOgen Balmer continuum tau direction (tau ∝ (λ/λ_BE)³, largest at the edge)
 - QSOgen hot dust BB normalization (bbnorm = f_bb/f_cont at 2μm)
 - agn_torus_frac gradient discontinuity at 0.5 (removed auto-derivation)
 - Nebular line profile unit bug (spurious LSUN_ERG on Gaussian profiles)
@@ -25,28 +25,30 @@ pytestmark = pytest.mark.regression_bug
 
 
 class TestBalmerContinuumTauDirection:
-    """Regression: tau must increase at shorter wavelengths (blueward).
+    """Regression: tau is largest AT the Balmer edge and falls toward the blue.
 
-    Bug: tau was computed as (λ/λ_BE)³ instead of (λ_BE/λ)³.
-    Fix: qsogen.py now uses tau = tau_BE * (λ_BE/λ)³ (Osterbrock & Ferland AGN² Eq. 2.4).
+    sigma_bf(nu) ~ nu^-3 (Grandi 1982), so tau(lambda) = tau_BE * (lambda/lambda_BE)^3,
+    which is upstream QSOGen's ``taube * (nuzero/nu)**3``. An earlier version of this
+    test pinned the *inverse* ((lambda_BE/lambda)^3, tau rising blueward), which was a
+    transcription error of the frequency ratio into wavelengths.
     """
 
-    def test_tau_increases_blueward(self):
-        """Balmer continuum absorption must be stronger at shorter wavelengths."""
+    def test_tau_rises_toward_the_edge(self):
+        """For tau << 1 the component is B_lambda * tau, so (BC / B_lambda) must rise with lambda."""
+        import numpy as np
+
         from tengri.components.agn.qsogen import _balmer_continuum
 
-        wave = jnp.linspace(2000.0, 3700.0, 500)
-        # Use a flat continuum so any shape comes from the Balmer component
+        wave = jnp.linspace(1500.0, 3000.0, 200)
         flat_cont = jnp.ones_like(wave)
-        bc = _balmer_continuum(wave, flat_cont, bcnorm=1.0, tbc=15000.0, taube=1.0)
+        bc = _balmer_continuum(wave, flat_cont, bcnorm=1.0, tbc=15000.0, taube=1e-6)
 
-        # The Balmer edge is at 3646 Å. Below it, emission should be stronger
-        # at shorter wavelengths (because tau increases and absorption = 1-exp(-tau) increases)
-        bc_3000 = float(jnp.interp(jnp.array([3000.0]), wave, bc)[0])
-        bc_3500 = float(jnp.interp(jnp.array([3500.0]), wave, bc)[0])
-        assert bc_3000 > bc_3500, (
-            f"Balmer continuum at 3000A ({bc_3000:.4e}) must exceed 3500A ({bc_3500:.4e}) "
-            "because tau ∝ (λ_BE/λ)³ increases blueward"
+        w = np.asarray(wave)
+        b_lam = w ** (-3.0) / np.expm1(1.43877735e8 / (15000.0 * w))
+        ratio = np.asarray(bc) / b_lam  # proportional to tau(lambda)
+        assert np.all(np.diff(ratio) > 0.0), (
+            "tau must increase with wavelength toward the Balmer edge "
+            "(tau ∝ (λ/λ_BE)³, sigma_bf ∝ nu^-3)"
         )
 
 

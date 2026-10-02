@@ -98,6 +98,8 @@
 
 - The FeII pseudo-continuum (`agn.feii` `boroson_green`, and the FeII term of the analytic `compute_blr_sed`) treated the PyQSOFit template's F_lambda column as L_nu and then multiplied by c/lambda^2, imprinting a spurious lambda^-2 tilt (fitted log-slope error -2.05; 0.39 and 1.99 slope offsets against the template over 4000-6000 and 2200-3000 A in the regression test). The template shape is now carried as L_lambda, normalised so the 4434-4684 A energy equals `agn_fe2_strength` x L(H-beta) (window edges honoured exactly, grid independent), negative template nodes are clipped before resampling and broadening, and the resampling is linear in wavelength (log-log resampling of the sign-changing template was off by up to 1.3 dex). `data/agn_fe2/PROVENANCE.md` recorded SHA256 values that differed from the shipped files by one character each; corrected and now tested.
 
+- The QSOGen Balmer continuum optical depth ran the wrong way: `tau = tau_BE (lambda_BE/lambda)^3` rose toward the blue, the inverse of the photoionisation cross-section scaling sigma_bf ~ nu^-3 (Grandi 1982) and of upstream QSOGen's `taube * (nuzero/nu)**3`, which is `(lambda/lambda_BE)^3`. It also disagreed with the component's own 3000 A normalisation, so `agn_bcnorm=1` produced a Balmer continuum 1.95x the power law at 3000 A instead of 1x. Default spectra (`agn_bcnorm=0`) are unchanged.
+
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant

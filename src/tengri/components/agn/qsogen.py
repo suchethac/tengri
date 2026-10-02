@@ -395,7 +395,7 @@ def _balmer_continuum(
 
     Adds hydrogen recombination continuum below the Balmer edge at 3646 A.
     Matches the original qsogen prescription: B_nu(T_BC) * (1 - exp(-tau))
-    where tau = tau_BE * (nu_BE / nu)^3.
+    where tau = tau_BE * (nu_BE / nu)^3 = tau_BE * (lambda / lambda_BE)^3.
 
     Parameters
     ----------
@@ -427,10 +427,13 @@ def _balmer_continuum(
     x_clip = jnp.clip(x, 0.0, representable_exponent(500.0, base=math.e))
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
-    # Optical depth: sigma_bf(nu) ~ nu^{-3} (Osterbrock & Ferland, AGN^2 Eq. 2.4), so
-    # tau(lambda) = tau_BE * (lambda_BE / lambda)^3: tau INCREASES at shorter wavelengths
-    # (higher frequencies), reaching tau_BE at the Balmer edge and falling beyond.
-    tau = taube * (wavbe / wavelength) ** 3
+    # Optical depth: sigma_bf(nu) ~ nu^{-3} (Grandi 1982; Osterbrock & Ferland, AGN^2
+    # Eq. 2.4), so tau(nu) = tau_BE * (nu_BE / nu)^3 = tau_BE * (lambda / lambda_BE)^3
+    # (nu ~ 1/lambda, so the ratio is INVERTED relative to the frequency form):
+    # tau is largest AT the Balmer edge and falls toward the blue, where the
+    # bound-free cross-section is smaller. This is the upstream QSOGen form
+    # (``taube * (nuzero / nu)**3``).
+    tau = taube * (wavelength / wavbe) ** 3
     tau_clip = jnp.clip(tau, 0.0, 50.0)
     absorption = 1.0 - jnp.exp(-tau_clip)
 
