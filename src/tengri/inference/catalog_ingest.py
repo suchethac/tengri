@@ -7,6 +7,7 @@ Handles name-matching, explicit units, NaN policies, and censor semantics.
 
 from __future__ import annotations
 
+import warnings
 from typing import NamedTuple
 
 import numpy as np
@@ -14,6 +15,12 @@ import numpy as np
 from tengri.utils.conversions import maggies_to_fnu, ujy_to_fnu
 
 __all__ = ["CatalogArrays", "ingest_catalog"]
+
+# CIGALE ``pdf_analysis`` ``lim_flag`` options (pcigale 2025.1,
+# ``analysis_modules/pdf_analysis/__init__.py``) and the sentinel below which
+# ``ObservationsManagerPassbands._check_invalid`` treats a flux as invalid.
+_CIGALE_LIM_FLAGS = ("none", "noscaling", "full")
+_CIGALE_INVALID_FLUX_THRESHOLD = -9990.0
 
 
 class CatalogArrays(NamedTuple):
@@ -70,6 +77,8 @@ def ingest_catalog(
     line_err_cols=None,
     line_censor_cols=None,
     missing="error",
+    default_relative_error=None,
+    lim_flag=None,
 ) -> CatalogArrays:
     """Convert a heterogeneous table into contiguous validated arrays.
 
@@ -125,6 +134,28 @@ def ingest_catalog(
         Policy for NaN flux values. "error" raises with guidance on
         `missing="mask"`; "mask" sets presence to False for that cell.
 
+    default_relative_error : float, optional
+        CIGALE's ``defaulterror`` (Boquien et al. 2019, A&A 622, A103). When given,
+        a flux column whose error column is absent from the table gets
+        ``error = default_relative_error * |flux|`` (a warning names the band),
+        instead of raising. ``None`` (default) keeps the refusal. Must be >= 0.
+        Not available with ``flux_unit="ab_mag"`` (a magnitude error is not a
+        fraction of the flux).
+    lim_flag : {"none", "noscaling", "full"}, optional
+        CIGALE's ``lim_flag`` convention (Boquien et al. 2019, A&A 622, A103) for
+        a table whose error column encodes limits (pcigale
+        ``managers/observations.py`` ``_check_invalid``). ``"none"``: a band
+        with ``err <= 0`` (or a flux below -9990) is dropped (``presence``
+        False). ``"noscaling"`` and ``"full"``: a band with ``err < 0`` is an
+        upper limit at the flux value with sigma = ``|err|`` (``censor`` = 1,
+        ``noise`` = ``|err|``); ``err == 0`` or a flux below -9990 is dropped.
+        ``"noscaling"`` and ``"full"`` give the same arrays here: CIGALE's
+        ``"full"`` adds an analytic rescaling of the model amplitude that tengri
+        does not perform (the amplitude is a fitted parameter). ``None`` (default)
+        leaves errors untouched. The two limit-producing options refuse
+        ``censor_cols`` (two sources of censor flags), and every option refuses
+        ``flux_unit="ab_mag"``.
+
     Returns
     -------
     CatalogArrays
@@ -149,6 +180,7 @@ def ingest_catalog(
     """
     if flux_unit is None:
         raise TypeError("flux_unit is required")
+    _validate_cigale_input_options(default_relative_error, lim_flag, flux_unit, censor_cols)
 
     n_bands = photometry.n_filters
     band_names = tuple(photometry.names)
@@ -189,13 +221,25 @@ def ingest_catalog(
         actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
         raise ValueError(f"Missing flux column '{col_name}'. Table columns: {actual_cols}") from e
 
-    try:
-        for col_name in err_cols:
+    for band_name, col_name, flux_arr in zip(band_names, err_cols, flux_arrays, strict=True):
+        try:
             err_arrays.append(np.asarray(table[col_name]))
-    except (KeyError, TypeError) as e:
-        # List actual columns for the user
-        actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
-        raise ValueError(f"Missing error column '{col_name}'. Table columns: {actual_cols}") from e
+        except (KeyError, TypeError) as e:
+            if default_relative_error is None:
+                # List actual columns for the user
+                actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
+                raise ValueError(
+                    f"Missing error column '{col_name}'. Table columns: {actual_cols}"
+                ) from e
+            # CIGALE ``defaulterror``: error = fraction * |flux| (pcigale
+            # ``ObservationsManagerPassbands._check_errors``).
+            warnings.warn(
+                f"{default_relative_error * 100}% of {band_name} taken as errors "
+                f"(column '{col_name}' absent; default_relative_error).",
+                UserWarning,
+                stacklevel=2,
+            )
+            err_arrays.append(np.abs(np.asarray(flux_arr, dtype=float)) * default_relative_error)
 
     # Step 3: Stack into (N, n_bands) arrays
     flux_raw = np.column_stack(flux_arrays)  # (N, n_bands)
@@ -232,6 +276,13 @@ def ingest_catalog(
             )
     # Set error NaN to 0 (for absent bands where flux was also NaN)
     err_raw = np.nan_to_num(err_raw, nan=0.0)
+
+    # Step 5b: CIGALE ``lim_flag`` encoding of limits / invalid bands
+    censor_from_flag = None
+    if lim_flag is not None:
+        presence, err_raw, censor_from_flag = _apply_cigale_lim_flag(
+            flux_raw, err_raw, presence, lim_flag
+        )
 
     # Step 6: Convert units
     flux, err = _convert_flux_unit(flux_raw, err_raw, flux_unit)
@@ -284,6 +335,8 @@ def ingest_catalog(
                     f"allowed: 0 (detected), 1 (upper limit), -1 (lower limit)."
                 )
             censor[:, band_idx] = col.astype(int)
+    elif censor_from_flag is not None:
+        censor = censor_from_flag
     else:
         censor = None
 
@@ -482,3 +535,45 @@ def _convert_flux_unit(
     else:
         valid_units = {"cgs_fnu", "mJy", "uJy", "maggies", "ab_mag"}
         raise ValueError(f"Unknown flux_unit='{flux_unit}'. Valid options: {sorted(valid_units)}")
+
+
+def _validate_cigale_input_options(default_relative_error, lim_flag, flux_unit, censor_cols):
+    """Refuse an inconsistent ``default_relative_error`` / ``lim_flag`` request."""
+    if default_relative_error is not None and not default_relative_error >= 0.0:
+        raise ValueError(
+            f"default_relative_error must be >= 0 (CIGALE: 'The relative default "
+            f"error must be positive'); got {default_relative_error!r}."
+        )
+    if lim_flag is not None and lim_flag not in _CIGALE_LIM_FLAGS:
+        raise ValueError(f"lim_flag={lim_flag!r} not in {list(_CIGALE_LIM_FLAGS)}.")
+    if (default_relative_error is not None or lim_flag is not None) and flux_unit == "ab_mag":
+        raise ValueError(
+            "default_relative_error and lim_flag encode CIGALE's linear-flux "
+            "tables; they are not defined for flux_unit='ab_mag'. Convert the "
+            "table to a flux unit first."
+        )
+    if lim_flag in ("noscaling", "full") and censor_cols is not None:
+        raise ValueError(
+            f"lim_flag={lim_flag!r} derives the censor flags from negative "
+            "errors; it cannot be combined with censor_cols (two sources of "
+            "censor flags). Pass one of them."
+        )
+
+
+def _apply_cigale_lim_flag(flux_raw, err_raw, presence, lim_flag):
+    """Apply CIGALE's ``lim_flag`` rules (pcigale ``_check_invalid``).
+
+    Returns new ``(presence, err, censor)``; the inputs are not modified.
+    ``censor`` is ``None`` for ``"none"`` and an int array otherwise.
+    """
+    invalid_flux = flux_raw < _CIGALE_INVALID_FLUX_THRESHOLD
+    if lim_flag == "none":
+        drop = invalid_flux | (err_raw <= 0.0)
+        limit = np.zeros(drop.shape, dtype=bool)
+    else:
+        drop = invalid_flux | (err_raw == 0.0)
+        limit = (~drop) & (err_raw < 0.0)
+    new_presence = presence & ~drop
+    new_err = np.where(limit, -err_raw, np.where(drop, 0.0, err_raw))
+    censor = None if lim_flag == "none" else limit.astype(int)
+    return new_presence, new_err, censor

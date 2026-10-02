@@ -38,6 +38,8 @@
 
 ### Added
 
+- `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).
+
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
