@@ -3837,10 +3837,16 @@ save_fig("cigale_11_radio_synchrotron.png")
 # forest continuum suppression, so transmission redward of the Lyman
 # limit at z = 3 sits at ~0.18–0.25 rather than 1. tengri ships the
 # matching `igm.meiksin06`; this panel uses it directly so both sides
-# apply the same Meiksin prescription. The printed max and median |ΔT| at
-# z = 3, 5, 7 are at float precision with no point anywhere above 1e-3:
-# tengri matches CIGALE's Meiksin transmission to the last digit, not just
-# visually.
+# apply the same Meiksin prescription.
+#
+# **Caveat:** CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series optical
+# depths at the source redshift (`redshifting.py:63-81`), while tengri
+# evaluates every line at its absorber redshift z_n = λ_obs/λ_n − 1 as
+# Meiksin (2006) Table 1 defines. At observed 1730 Å the paper's Table 2
+# gives 0.038532 (z = 3) and 0.003277 (z = 5); tengri gives 0.038559 and
+# 0.003283, CIGALE 0.030353 and 0.000909. Redward of Lyβ (rest ≥ 1026 Å)
+# only Lyα is active and the two agree to floating precision, so the
+# printed |ΔT| statistics below are dominated by the region blueward of Lyβ.
 #
 # **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
