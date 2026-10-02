@@ -58,7 +58,7 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
-- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time (#2592).
+- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time; `predict_sfh` and `predict_sfh_quantities` evaluate the age-anchored families at the age of the universe of the model's redshift, through the same rule as the forward model (#2592).
 
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward

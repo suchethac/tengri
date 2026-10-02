@@ -162,6 +162,38 @@ _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 _AGE_FAMILIES = ("dense_basis", "dense_basis_pure", "psb", "psb_wild2020")
 
 
+def age_universe_kwargs(sfh_model, redshift) -> dict:
+    """The ``age_universe_yr`` kwarg of an age-anchored SFH, at ``redshift``.
+
+    The one definition of the rule every route that evaluates the SFH
+    function follows: the exact forward, the SED-free precompute and the SED
+    model's own history routes. A model whose SFH family (or, for a composite,
+    any member) is in ``_AGE_FAMILIES`` receives ``age_universe_yr`` equal to
+    the age of the universe at ``redshift`` under the configured cosmology
+    [yr]; every other model receives nothing.
+
+    Parameters
+    ----------
+    sfh_model : str or sequence of str
+        The SFH family, or the members of a composite SFH. ``"field"`` (the GP
+        modulator) is not a family and is ignored.
+    redshift : float or array_like
+        Redshift of THIS evaluation, fixed or sampled; may be traced.
+
+    Returns
+    -------
+    dict
+        ``{"age_universe_yr": age(z) [yr]}`` for an age-anchored model, else
+        ``{}``. A new dict on every call.
+    """
+    members = (sfh_model,) if isinstance(sfh_model, str) else tuple(sfh_model)
+    if not any(m in _AGE_FAMILIES for m in members):
+        return {}
+    from tengri.cosmology import age_at_z
+
+    return {"age_universe_yr": jnp.asarray(age_at_z(redshift)).reshape(()) * 1e9}
+
+
 def _resolve_age_kernel(config) -> str:
     """Which age-weight kernel this config selects: ``"cic"`` or ``"dsps"``.
 
@@ -2465,8 +2497,7 @@ class StellarSEDComponent:
         # (Wild et al. 2020, eq. 5). The age is derived from the redshift and
         # the configured cosmology, not a static registry default. Both routes
         # use the same families so they cannot diverge (#982).
-        if isinstance(sfh_model, str) and sfh_model in _AGE_FAMILIES:
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -3635,8 +3666,7 @@ class StellarSEDComponent:
         # Mirrors apply()'s injection (§2) so the two routes cannot diverge
         # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
         # of every ``_AGE_FAMILIES`` member to age(z).
-        if self.config.sfh_model in _AGE_FAMILIES:
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
