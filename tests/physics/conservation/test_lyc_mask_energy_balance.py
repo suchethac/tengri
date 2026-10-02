@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Conservation: L_absorbed excludes the Lyman continuum (λ < 912 Å) — #922.
+"""Conservation: L_absorbed excludes the Lyman continuum — #922.
 
 LyC photons ionize hydrogen rather than heat dust, so the canonical
 energy-balance integral (:func:`tengri.forward.energy_balance.
-bolometric_absorbed`) masks λ < 912 Å. This matches CIGALE (attenuation
-zeroed at λ ≤ 91.2 nm) and Bagpipes (``fesc`` masking of the ionizing
-continuum); FSPS by contrast includes LyC absorption in its dust heating.
+bolometric_absorbed`) masks the ionizing side of
+:data:`tengri.components.lyc.LYMAN_LIMIT_AA` (911.76 Å; the one Lyman edge,
+see that module's docstring -- edge moved from a bare 912 Å literal). This
+matches CIGALE (attenuation zeroed at λ ≤ 91.2 nm) and Bagpipes (``fesc``
+masking of the ionizing continuum); FSPS by contrast includes LyC absorption
+in its dust heating.
 
 The synthetic wide SSP is UV-bright (a ``(5000 Å/λ)²`` continuum down to
 100 Å), so the unmasked integral exceeds the masked one by a large factor —
@@ -109,10 +112,22 @@ def _params(model):
 
 
 def _zero_lyc(ssp):
-    """Copy of the SSP with all flux below 912 Å zeroed."""
+    """Copy of the SSP with all ionizing-side flux zeroed.
+
+    Uses :func:`tengri.components.lyc.ionizing_mask` (edge at
+    ``LYMAN_LIMIT_AA`` = 911.76 Å), not a bare ``912.0`` literal: on
+    ``synthetic_ssp_wide``'s 1600-node logspace grid the node at 911.9583 Å
+    sits strictly between 911.76 and 912.0, so a ``912.0``-based zeroing
+    would also zero the node ``edge_trapezoid`` uses as the "nonionizing"
+    anchor of the bracket cell straddling the true edge -- breaking the
+    invariance this fixture exists to test (measured ~1.3% spurious
+    difference) for a reason that has nothing to do with the physics.
+    """
+    from tengri.components.lyc import ionizing_mask
+
     return SSPData(
         ssp_wave=ssp.ssp_wave,
-        ssp_flux=ssp.ssp_flux * (ssp.ssp_wave >= 912.0),
+        ssp_flux=ssp.ssp_flux * (~ionizing_mask(ssp.ssp_wave)),
         ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
         ssp_lgmet=ssp.ssp_lgmet,
     )
@@ -216,10 +231,24 @@ class TestGoldenValues:
     # peak_lbt_gyr=6.25, width_gyr=2.6 at z=0.05) fell past age(z). Formed
     # mass is now pinned to 10**log_total_mass by construction; ~+0.187%
     # L_absorbed here (the physical fix, not a rescale of an unrelated law).
+    # Re-pinned (L2, one-Lyman-edge): the physical edge moved from a bare
+    # 912.0 A literal to LYMAN_LIMIT_AA = 911.76 A, and the grid cell
+    # straddling it is now integrated with the step model
+    # (tengri.components.lyc.edge_trapezoid: two rectangles, not a linear
+    # ramp) instead of a plain trapezoid over a node-level boolean mask.
+    # Moving the edge down widens the non-ionizing (dust-heating) side by
+    # one SSP node on this 1600-node logspace grid, and the step-model
+    # rectangle for that bracket cell no longer underweights it -- both
+    # push L_absorbed up by ~1.3-1.4%, in the same direction as the #964
+    # and #1731 re-pins above. This re-pin combines the #2521 formed-mass
+    # fix and the L2 edge move, which landed independently on two merge
+    # parents: two_component 5.849679302923598e59 -> 5.932047709369588e59
+    # (+1.408%), single_screen 7.338318188268545e59 -> 7.4319301202253715e59
+    # (+1.276%), wg00 6.924486363284743e59 -> 7.022833393235165e59 (+1.420%).
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.849679302923598e59,
-        "single_screen": 7.338318188268545e59,
-        "wg00": 6.924486363284743e59,
+        "two_component": 5.932047709369588e59,
+        "single_screen": 7.4319301202253715e59,
+        "wg00": 7.022833393235165e59,
     }
 
     @pytest.mark.parametrize(
@@ -302,7 +331,7 @@ class TestFiniteGuard:
     def test_inf_sed_clamps_to_zero(self):
         wave = jnp.logspace(2.0, 5.0, 50)
         nu = C_AA / wave
-        # Index 30 sits well above the 912 Å cutoff, so the Inf survives the
+        # Index 30 sits well above the Lyman edge, so the Inf survives the
         # LyC mask and must be caught by the finiteness guard instead.
         assert float(wave[30]) > 912.0
         sed_intr = jnp.ones_like(wave).at[30].set(jnp.inf)
@@ -312,10 +341,47 @@ class TestFiniteGuard:
         assert float(out) == 0.0
 
     def test_finite_inputs_unaffected(self):
+        """Finite inputs pass through the ordinary (edge-aware) integral unclamped.
+
+        The oracle here is an INDEPENDENT step-model integral (numpy, not
+        calling ``tengri.components.lyc``): an ordinary trapezoid over every
+        panel entirely on the non-ionizing side of ``LYMAN_LIMIT_AA``, plus
+        the ONE bracket panel's non-ionizing rectangle (the first
+        non-ionizing node's value times the non-ionizing portion of that
+        panel's width) -- never a linear ramp through the bracket cell.
+
+        Re-derived (L2, one-Lyman-edge) from a bare ``jnp.trapezoid(where(wave
+        >= 912.0, ...), nu)`` oracle: that formula reproduced the exact
+        partial-bin ramp bug (#537/#2447) this task removes -- it zeroed the
+        whole ionizing side at NODE level and then ran a plain trapezoid
+        through the bracket cell, so it no longer describes what
+        ``bolometric_absorbed`` (now edge-aware) computes. ``bolometric_absorbed``
+        is also positively oriented now (module docstring's "Sign convention"
+        note), so this oracle is not negated, unlike the retired formula.
+        """
         wave = jnp.logspace(2.0, 5.0, 50)
         nu = C_AA / wave
         sed_intr = jnp.ones_like(wave)
         sed_att = 0.5 * sed_intr
         out = bolometric_absorbed(sed_intr, sed_att, nu, wave=wave)
-        expected = jnp.trapezoid(jnp.where(wave >= 912.0, sed_intr - sed_att, 0.0), nu)
-        np.testing.assert_array_equal(np.asarray(out), np.asarray(expected))
+
+        integrand = np.asarray(sed_intr - sed_att)
+        wave_np = np.asarray(wave)
+        nu_np = np.asarray(nu)
+        edge = 911.76
+        nu_edge = float(C_AA) / edge
+        total = 0.0
+        for i in range(len(wave_np) - 1):
+            w_lo, w_hi = wave_np[i], wave_np[i + 1]
+            y_lo, y_hi = integrand[i], integrand[i + 1]
+            nu_lo, nu_hi = nu_np[i], nu_np[i + 1]
+            if w_hi < edge:
+                continue  # fully ionizing panel: excluded from the non-ionizing side
+            if w_lo >= edge:
+                total += 0.5 * (y_lo + y_hi) * abs(nu_hi - nu_lo)  # ordinary trapezoid
+                continue
+            # Bracket panel: edge falls inside [w_lo, w_hi). Step model holds
+            # the non-ionizing portion at y_hi across |nu_hi - nu_edge|.
+            total += y_hi * abs(nu_hi - nu_edge)
+
+        np.testing.assert_allclose(np.asarray(out), total, rtol=1e-12)
