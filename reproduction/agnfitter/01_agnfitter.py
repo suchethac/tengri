@@ -1854,13 +1854,13 @@ print(f"§11′  cont'd worst over the full grid: max|ratio-1| = {max(_spl_grid_
 # ## §11b Star-formation radio: bell2003_split parity, then tengri's default
 #
 # AGNfitter-RX's `S17_radio` extends its Schreiber+2018 dust SED with the
-# Bell (2003) IR-radio correlation split 90%/10% non-thermal/thermal (`q_IR
-# = 2.64` on the TOTAL). tengri's `radio_sfr_bell2003_split` reproduces this
-# exact parity mode; its *default* architecture (`radio_sfr_bell2003` +
-# separately-normalized `radio_freefree`) is a different `q_IR` convention —
-# not compared here, since mixing conventions would double-count.
-# `sfr_from_lir(L_ir, calibration='murphy2011')` gives the SFR calibration
-# this L_IR would imply.
+# Bell (2003) IR-radio correlation. The upstream S17_radio table embeds
+# `q_IR = 2.900` (i.e., 2.64 + σ; paper p.3), which tengri's
+# `radio_sfr_bell2003_split` reproduces at this exact parity mode. Its *default*
+# architecture (`radio_sfr_bell2003` + separately-normalized `radio_freefree`)
+# is a different `q_IR` convention — not compared here, since mixing conventions
+# would double-count. `sfr_from_lir(L_ir, calibration='murphy2011')` gives the
+# SFR calibration this L_IR would imply.
 
 # %%
 from tengri.radio import radio_sfr_bell2003_split, sfr_from_lir
@@ -1878,7 +1878,7 @@ _ir_band = (wave_all > 8e4) & (wave_all < 1e7)
 _order = np.argsort(_nu_all)
 L_dust_ir = -float(np.trapezoid(np.where(_ir_band, L_dust, 0.0)[_order], _nu_all[_order]))
 L_dust = L_dust * (L_IR_NODE / abs(L_dust_ir))
-L_radio_split = np.asarray(radio_sfr_bell2003_split(jnp.asarray(wave_all), L_IR_NODE, q_ir=2.64))
+L_radio_split = np.asarray(radio_sfr_bell2003_split(jnp.asarray(wave_all), L_IR_NODE, q_ir=2.900))
 L_te_total = L_dust + L_radio_split
 
 fig, ax = plt.subplots(figsize=(8.2, 4.8))
@@ -1902,12 +1902,22 @@ _lam_14 = U.C_ANGSTROM_PER_S / 1.4e9
 _af_14 = np.interp(np.log10(_lam_14), np.log10(w_afr), L_afr / np.max(L_afr[msk_af]))
 _te_14 = np.interp(np.log10(_lam_14), np.log10(wave_all), L_te_total / _peak_te)
 _sfr_bell = float(sfr_from_lir(L_IR_NODE, calibration="murphy2011"))
+# Compute the effect of q_IR = 2.64 vs 2.900
+_q_low = 2.64
+_q_high = 2.900
+_radio_low = np.asarray(radio_sfr_bell2003_split(jnp.asarray(wave_all), L_IR_NODE, q_ir=_q_low))
+_radio_ratio_1p4ghz = np.interp(np.log10(_lam_14), np.log10(wave_all), _radio_low / L_radio_split)
 print(
-    f"§11b  SF radio (parity mode): Both sides normalized to their FIR peak; "
+    f"§11b  SF radio (parity mode): q_IR = {_q_high} (the value embedded in upstream S17_radio). "
+    f"Both sides normalized to their FIR peak; "
     f"reference template is scaled by 1e-20 (AGNfitter-rX's starburst cosmetic factor) "
-    f"while tengri uses physical L_IR for radio calibration; no ratio quoted. "
+    f"while tengri uses physical L_IR for radio calibration. "
     f"sfr_from_lir(murphy2011) at L_IR node {L_IR_NODE:.3e} erg/s = {_sfr_bell:.3e} Msun/yr "
     f"(public API demonstration)."
+)
+print(
+    f"  **Caveat:** Using the older default q_IR = {_q_low} instead of {_q_high} would "
+    f"reduce 1.4 GHz flux by {_radio_ratio_1p4ghz:.2f}× (tenGri/reference)."
 )
 
 # %% [markdown]
