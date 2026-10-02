@@ -1099,8 +1099,7 @@ def skirtor_disc_dust_ratio(
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
-    R = eta * jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    R = jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
     # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
