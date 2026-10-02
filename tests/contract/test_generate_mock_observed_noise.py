@@ -37,6 +37,16 @@ def test_noise_is_the_absolute_observed_error_and_replaces_snr():
     np.testing.assert_allclose(mock["flux_true"], np.asarray(_FLUX), rtol=0, atol=0)
 
 
+def test_draw_formula_is_exact():
+    """A fixed key draws flux_obs = flux_true + |sigma_obs| * N(0,1) exactly."""
+    key = jax.random.PRNGKey(42)
+    mock = generate_mock(_FixedFluxModel(), {}, key=key, noise=_SIGMA_OBS)
+    expected = np.asarray(_FLUX) + np.abs(np.asarray(_SIGMA_OBS)) * np.asarray(
+        jax.random.normal(key, shape=np.asarray(_FLUX).shape)
+    )
+    np.testing.assert_allclose(mock["flux_obs"], expected, rtol=1e-12, atol=0)
+
+
 def test_draws_have_the_observed_standard_deviation():
     """1000 draws per band: (flux_obs - flux_true) / sigma_obs is N(0, 1) (Kolmogorov-Smirnov)."""
     keys = jax.random.split(jax.random.PRNGKey(7), 1000)
@@ -57,6 +67,12 @@ def test_default_snr_path_is_unchanged():
 def test_noise_shape_mismatch_is_refused():
     with pytest.raises(ValueError, match="noise has shape"):
         generate_mock(_FixedFluxModel(), {}, key=jax.random.PRNGKey(0), noise=jnp.ones(3))
+
+
+def test_noise_shape_mismatch_same_size_different_shape_is_refused():
+    """Shape (n_bands, 1) has the same size as (n_bands,) but different shape."""
+    with pytest.raises(ValueError, match="noise has shape"):
+        generate_mock(_FixedFluxModel(), {}, key=jax.random.PRNGKey(0), noise=jnp.ones((4, 1)))
 
 
 def test_observed_noise_through_a_real_forward_model(synthetic_ssp_wide, synthetic_tophat_obs):

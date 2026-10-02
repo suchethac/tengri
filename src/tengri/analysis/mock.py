@@ -72,12 +72,18 @@ def generate_mock(model, params, key=None, snr=20.0, noise=None):
     snr : float, optional
         Signal-to-noise ratio (flux_true / noise_std). Default: 20.0. Ignored
         when ``noise`` is given.
-    noise : array_like, shape (n_bands,), optional
+    noise : array_like, optional
         Observed 1-sigma uncertainties [erg/s/cm²/Hz] to draw each band from
         (CIGALE's ``mock_flag`` (Boquien et al. 2019, A&A 622, A103):
         ``flux_obs ~ N(flux_true, |observed error|)``, pcigale
-        ``managers/observations.py`` ``generate_mock``). The absolute
-        value is taken. Default ``None``: ``sigma = flux_true / snr``.
+        ``managers/observations.py`` ``generate_mock``). Must have the shape
+        of the predicted photometry: ``(n_bands,)`` for a single parameter set,
+        ``(n_batch, n_bands)`` for batched parameters; scalars are refused.
+        The absolute value is taken. CIGALE draws its mock from the errors
+        after its model-error term has been added in quadrature
+        (``additionalerror``, 10 % of the flux by default), so to reproduce a
+        CIGALE mock pass ``sqrt(err**2 + (0.1 * flux)**2)``; the raw catalog
+        errors give less scatter. Default ``None``: ``sigma = flux_true / snr``.
 
     Returns
     -------
