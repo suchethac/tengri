@@ -13,6 +13,11 @@
   verdict is pinned as spec-driven.
 - `compute_effective_wavelength` returns the pivot wavelength √(∫Tλdλ/∫T/λ dλ) its name and docstring promise; the filter-convention text attributes the photon-counting mean to BAGPIPES as well as DSPS/FSPS/Prospector/Synthesizer and the energy mean to CIGALE's energy-type filters; the facade SED plot derives band wavelengths from the filter curves (#2610).
 
+- `load_ssp_data` gives FSPS MIST + Chabrier grids that carry no `ssp_mass_remaining`
+  the metallicity-dependent FSPS table (12 × 107, packaged) when the grid's age and
+  metallicity nodes match it; other grids keep the metallicity-independent DSPS fit
+  (#2614).
+
 - Spectroscopy-only models under `SpectrumPrecomp` redden the same young stars as the exact screen: the spectrum LUT published its own, 2.3× sharper birth-cloud age indicator, which put the LUT spectrum of a 1–100 Myr population up to 21 % above the exact path at rest 1600 Å; the LUT agrees with the exact path to the documented two-component residual (#2591).
 
 - The Fritz et al. (2006) torus template is read as luminosity per unit wavelength: the shipped grid holds CIGALE's `model.dust` and `model.disk` arrays (W/nm), and the loader converts them with L_ν = L_λ λ²/c before scaling ∫L_ν dν to the requested luminosity, as the SKIRTOR loader does. Read as L_ν, the array tilted every Fritz torus SED by λ⁻²: at the CIGALE default node (r = 60, τ = 1, β = −0.5, γ = 4, Θ = 100°, ψ = 50.1°) the median wavelength of the torus power was 1.8 µm and the 1–3 µm band held 76 % of it, against 5.8 µm and 28 % in the library. The torus power is unchanged. At the four tested nodes the band fractions agree with the library within 12 % per band (bands holding at least 10 % of the power) and the median power wavelength within 10 %; elsewhere on the grid the triweight lookup in parameter space differs from the library's node values by up to 28 % per band and 18 % in the median (β = −0.75, τ = 0.1; #2606). The grid builder labels `dust` as W/nm per unit integral over wavelength and `disk` as W/nm relative to it, in place of erg/s/Hz (#2604).
@@ -34,11 +39,27 @@
 - `psb_flex` and `psb_suess2022` now include the link ratio (`ratio_old_0`) between the oldest flexible bin and the youngest fixed bin, matching Suess et al. 2022's one-ratio-per-fixed-bin count (previously `n_fixed − 1` ratios, with that step silently pinned at 0) and enabling independent control of the post-starburst SFH amplitude across the quenching-to-old transition. **Breaking:** `ratio_old_*` indices shift: the new `ratio_old_0` is the link (default 0, reproducing today's SFHs bit-exactly); former `ratio_old_0` through `ratio_old_{n_fixed−2}` (the adjacent-step ratios) are now `ratio_old_1` through `ratio_old_{n_fixed−1}`. A caller that passes only `n_fixed − 1` values through the flat-kwarg path (e.g. `ratio_old_0=0.2, ratio_old_1=-0.3`) now leaves the link (`ratio_old_0`) at its default 0 and reads the adjacent steps one index higher than it meant to — there is no silent re-indexing to the old meaning, so update call sites to `ratio_old_1=0.2, ratio_old_2=-0.3` (plus an explicit `ratio_old_0` if a nonzero link is wanted) (#2612).
 - `psb_flex` and `psb_suess2022`'s fixed old bins now span `[tflex_gyr, age_at_z(z)]` instead of a redshift-independent `[tflex_gyr, 13.7 Gyr]`, through the same `age_universe_yr` injection `psb_wild2020`'s burst already receives. Previously the default model at z = 0.5 formed 33% of its stellar mass before the Big Bang (`SFHBeforeBigBangWarning`) and published star formation out to 13.3 Gyr lookback, 4.7 Gyr older than the universe; now no default-configuration psb build warns. At z = 0 the oldest edge shifts from 13.7 to `age_at_z(0)` = 13.7869 Gyr (#2645).
 
+- The Asada et al. (2025) CGM Lyα damping-wing cross-section is σ(ν) = [3λ_α²A/(8π)]·A(ν/ν_α)⁴/[4π²(ν−ν_α)² + A²(ν/ν_α)⁶/4] (Miralda-Escudé 1998); the prefactor 3λ_α²A/(8π) = πe²f/(m_e c) already contains the oscillator strength, which the code multiplied in a second time (0.0046 against 0.01105 cm² Hz). Transmission at z = 8, rest 1220 / 1230 / 1240 Å: 0.0007 / 0.523 / 0.802 (was 0.050 / 0.764 / 0.912) (#2629).
+
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
+
+- The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
 
 ### Added
 
+- `WavePrecomp(igm_fold="exact")` and `"auto"` now fold the IGM exactly on a free redshift: the sub-band ratio is taken at every node of the photometry z-table, where it previously refused. Measured on a z = 6.5-7.5 bare-stellar model against `approx=None`, worst over bands with more than 5 % surviving flux: exact 0.42 % at `n_z=32` (1.6 % at 16), node fold 105 %. What remains is the triweight z-interpolation, so it shrinks with the z spacing. Bands redward of Ly-alpha skip the quadrature (their ratio is exactly one) and the table is content-cached beside the z-table in `~/.cache/tengri_precomp`, so the exact build costs about what the node build does.
+
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).
+- The per-Q_H nebular grid serves broadband photometry and line fluxes to dusty models when the dust component has a stellar energy-balance LUT (`nebular_from_grid=True`). Dust channels populate the table: observed and rest-frame sub-band nebular photometry, flux-weighted wavelength per sub-band, and dust-absorbed nebular luminosity per unit Q_H on the optical-depth grid (signed). Measured on the paper's configurations, galaxy 79, quiet machine: fit-surface gradient 2.69 ms (configuration I) and 2.35 ms (II) against 25-32 ms; gradient FLOPs 4.0-4.1 M against 67-94 M (#2387).
+
+- Single-component dust now reddens the nebular band flux where the emission is (the band integral of the reddened continuum), matching two-component dust since #1738. `WavePrecomp()` against the exact model at tau_v = 2.3 on paper configuration II: 4.0e-2 before, 2.7e-3 after (#1738).
+
+- The grid applies `neb_fesc` and `neb_fdust` at reconstruction (computed per-galaxy from parameters); the table is built at zero for both and every channel is scaled by `lyc_dust_escape_factor`. Any other free nebular parameter held at the build value (`neb_fesc_lya`, `ionspec_*`, `gas_*`, `neb_eline_sigma_kms`, `neb_log_nH`, `neb_co`, `neb_dno`, `neb_hbfrac`) is refused by enumeration of the namespace.
+
+- With a free redshift (``redshift=Uniform(...)``) or a runtime redshift (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only; band fluxes take the exact nebular path. Measured before: up to 7.35e-2.
+
+- **Known limits** (not changed by this feature): the grid holds the ionizing spectrum shape at the reference star formation history. For a population with no recent star formation and zero birth-cloud optical depth the u bands were off by 3.3e-2 on one prior draw of configuration I; over 32 prior draws as drawn the worst band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4 (I) and 1.3e-3 (II).
+
 - The vmapped catalog MCMC engine now profiles the stellar mass: `profile_mass="auto"` applies to `CatalogFitter`'s native NUTS/HMC path, and the analytically marginalized mass is reinserted per galaxy (via `mass_profile.reinsert_profiled_mass`, against that galaxy's own channels) before summaries are attached — 4.9x on a 6-galaxy photometry catalog. Previously the vectorized engines pinned `profile_mass=False` (#2254); a positional-array `init_from` still stands profiling down, since its width is the un-profiled dimension (#2423).
 
 - `dust_emission={'diffuse_screen': True}` passes the re-emitted IR dust emission once through the diffuse dust screen (single pass; the IR energy absorbed on the way out is removed, not re-emitted); `log_L_ir_emergent` reports the escaping IR luminosity while `L_ir`/`L_absorbed` keep the absorbed budget. Off by default (#2533).
@@ -49,8 +70,14 @@
 - The spine sync script gains a `--check` mode that diffs the normalized twins against the committed files and the smoke job runs it, so a stale docs/spine twin fails CI instead of shipping (#2134).
 - `predict_line_fluxes` and `measure_line_fluxes` now apply the model's configured IGM transmission, profile-averaged over the line's Gaussian width in observed wavelength, matching the same `igm_absorption` dispatch the spectrum/photometry channels already use. Previously the line-flux surfaces read a rest-frame catalog and divided by `4 pi d_L^2` directly, so a line at a redshift where the Lyman forest bites (e.g. Ly-alpha at z >~ 2) came out brighter than the same galaxy's own spectrum. `igm={'type': 'none'}` (or an absent IGM component) leaves line fluxes unchanged; every registered mean-IGM model is supported (#2520).
 - A declared `line_flux_scaling` nuisance parameter (default `Fixed(1.0)`, free via `spec.merge_observation_params(line_flux_scaling=LogNormal(mu=0.0, sigma=0.05))`) multiplies every predicted flux of the `Observation.line_fluxes` channel before the likelihood comparison, absorbing an aperture / absolute-flux-calibration mismatch between that channel and the rest of a joint fit. Fixed at 1.0 by default, so an existing fit is unaffected unless a user opts in; `profile_mass=True` refuses when it is free alongside a profiled line-flux channel, since the two amplitudes are otherwise degenerate (#2527).
+- `dust_attenuation={'type': 'age_binned', 'screens': [...]}` generalizes the Charlot & Fall (2000) two-component (birth-cloud/diffuse) screen to N independent screens, each its own registered attenuation law and a log-age window `(lo, hi)` in `log10(age/yr)` (`None` = unbounded); windows need not partition the age axis. Optical depth is `tau(t, lambda) = sum_i w_i(t) tau_i k_i(lambda)` with `w_i` a shared-width logistic window weight; nebular continuum and the line catalog are attenuated at the youngest age. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `two_component` bit-identically (the N=2 case). Per-screen parameters are indexed (`dust_tau_0`, `dust_tau_1`, ..., `dust_<lawparam>_i`), generated from the screen count the way the nonparametric SFH/metallicity ladders generate indexed declarations; each law-parameter's registry default is that law's own published value, not the shared two_component stem. Not yet supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (both raise, naming the exact path); a fit's `approx="auto"` policy resolves to the exact path for this type instead of raising (#2528).
 
 ### Fixed
+
+- A dusty model whose nebular flux the per-Q_H grid serves (#2570) now takes the IGM at each nebular sub-band chunk's node rather than the band-averaged `<T>`: a two-component Cue model with dust emission at z = 7 read F090W 10.1 % off `approx=None` near Ly-alpha, now 0.94 % at worst over z = 6.5-7.3 (#2679).
+- Under `WavePrecomp` the IGM now reaches nebular, shock and AGN band fluxes through each component's own spectrum, `∫S·T/∫S` per band, instead of the band-averaged `<T>` alone, which formed `<S><T>`. Near Ly-alpha that was the dominant LUT error at high redshift: a Cue model at z = 7.3 read F115W +10.3 % and sdss_z +5.6 % against `approx=None` under the exact stellar fold; both are now 0.0000 %. The transmission is tabulated at build time over the absorbed end of the rest grid, and only for bands the IGM can reach in the model's redshift range, so a low-redshift model is unchanged bit for bit and pays nothing. Under the exact fold the stellar dust screen on the IGM-folded tensor is also evaluated where the IGM-surviving light sits: at the bare sub-band node a two-component model at z = 7 read sdss_z 8.7 % off, now 0.11 %. A composable AGN beside Cue reads <= 0.28 % (node fold 48 %).
+- The exact IGM fold now takes its sub-band ratio over the partition of the tensor it multiplies. A model with a live nebular Lyman-continuum mask (every Cue model: `neb_fesc` is fixed below one by default) splits each band into K + 1 chunks with a forced edge at 912 Å; the ratio was built as K + 1 equal-mass chunks without the edge, so shapes matched and nothing raised. Band fluxes straddling the Lyman limit were off by 12.7 % (GALEX NUV, z = 2) to 44 % (z = 2.5); a Cue model at z = 7.3 read i +11.6 % under the exact fold, now -1.2 %. The filter convention is passed through for the same reason.
+- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time; `predict_sfh`, `predict_sfh_quantities` and `sample_sfh_prior` (which takes a `redshift`) evaluate the age-anchored families at the age of the universe of the model's redshift, through the same rule as the forward model (#2592).
 
 - `bins` and `bins_continuity` metallicity histories take their bin count from `met_bin_edges_log_yr` — a one-bin ladder gives the base metallicity at every age (both modes), a three-bin ladder gives three metallicities; a ladder with more bins than the six declared parameters, or a `bin_<i>` / `d_log_z_<i>` beyond the ladder, is refused at build time (#2600).
 
@@ -95,11 +122,40 @@
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
 
-- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time; `predict_sfh`, `predict_sfh_quantities` and `sample_sfh_prior` (which takes a `redshift`) evaluate the age-anchored families at the age of the universe of the model's redshift, through the same rule as the forward model (#2592).
+- The X-ray corona shape `(E/E_ref)^(1-Γ) × exp(−(E−E_ref)/E_cut)` equals 1 at E_ref = 2 keV with
+  the exponential cutoff included, so `L_ν(2 keV)` is the monochromatic luminosity of
+  Yang et al. 2020 Eq. 2 for every `E_cut` and Γ. The LMXB photon index default is 1.56
+  (Fabbiano 2006; Yang et al. 2020 Sect. 2.2.2), as in pcigale (#2583).
+
+- The X-ray block's HMXB and hot-gas terms scale with the SFR averaged over the last
+  100 Myr (`sfr_100myr`), the quantity the Lehmer et al. 2016 relations are calibrated on
+  (Yang et al. 2022, Sect. 3.3); the instantaneous SFR stands in only for an SFH that
+  publishes no 100 Myr average. The registered properties `log_l_x_xrb` and `log_l_x_agn`
+  are the 2-10 keV luminosities of the emitted HMXB + LMXB terms and of the emitted AGN
+  corona (absorber, scattered fraction and anisotropy included), published by the X-ray
+  component as `log_L_x_xrb_2_10` / `log_L_x_agn_2_10` in log10 space, so they equal the
+  band integral of `sed_xray`'s terms in float64 and float32. `log_l_x_agn` is `-inf`
+  without an AGN. `compute_log_l_x_xrb`, `compute_log_l_x_agn`, `compute_l_x_xrb` and
+  `compute_l_x_agn` (the 2.6e39·SFR and Duras relations, none re-exported at a public
+  `__init__`) are removed (#2582).
+
+- The `lopez24` corona is anchored to the 12 um nu L_nu of the AGN model itself. The
+  AGN component publishes `log_L_12um` and `log_L_6um` (dex re erg/s; disc + torus + polar
+  dust of the composable model, the whole SED of a monolithic one), and
+  `L(2-10 keV) = nu L_nu(12 um) / 10^alpha_IRX` is formed in log10 space, so the X-ray
+  wing is finite in pure float32. A model with no AGN has a zero corona, and the 0.07 L_bol
+  bolometric-correction anchor is removed together with `compute_l_12um_from_lbol`. `xray_agn_corona_lopez24` and
+  `xray_total_lopez24*` take `log_l_12um_erg` (dex) in place of `l_12um_erg_hz` (#2581).
 
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
   of Lyβ follows the paper's Table 2 (#2585).
+- The BAGPIPES reproduction stores each BC03+MILES node's absolute log10 Z (BAGPIPES's
+  metallicity grid is in units of Z☉ = 0.02) and pins the cross-code comparison at one
+  absolute Z (`met_logzsol = log10(0.02) − log10(0.0142)`) in every stellar-metallicity
+  request, metallicity sweeps included, while gas metallicity is matched solar-scaled
+  (`neb_logZ_gas = log10(z)`); its L_λ↔L_ν conversion uses tengri's speed of light; the
+  validator's birth-cloud control states the `eta` it corresponds to (#2616).
 - The composable AGN precompute LUT's accuracy is now measured and pinned
   against the exact recipe evaluation (#2288). `interp_nd_triweight` is a
   kernel smoother, not an interpolant, so node parity is not a valid invariant
@@ -1820,9 +1876,9 @@
     declare the swept/restated parameter FREE in ``SEDModel.build`` instead,
     and pass only the free (swept) keys.
   - Call sites that restated a pinned value in the dict, or swept a pinned
-    parameter through it (gallery examples, slow-tier fixtures), declare the
-    swept parameter free and pass only the free keys; a fixture that mocks the
-    model may need the same.
+    parameter through it (gallery examples, spine notebooks, slow-tier
+    fixtures), declare the swept parameter free and pass only the free keys;
+    a fixture that mocks the model may need the same.
 
 ### Fixed
 
