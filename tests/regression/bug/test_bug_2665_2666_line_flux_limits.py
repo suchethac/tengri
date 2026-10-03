@@ -118,6 +118,9 @@ def test_upper_limit_strongly_violated_value_and_gradient(z):
     assert value == pytest.approx(float(special.log_ndtr(z_np)), rel=1e-10)
     grad = float(jax.grad(second_line)(jnp.asarray(m)))
     expected = -np.exp(stats.norm.logpdf(z_np) - special.log_ndtr(z_np)) / _SIGMA
+    assert np.isfinite(grad), (
+        "a non-finite gradient would mean the log-CDF was evaluated outside its stable range"
+    )
     assert grad != 0.0
     assert grad == pytest.approx(expected, rel=1e-8)
 
