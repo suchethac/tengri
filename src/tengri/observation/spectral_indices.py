@@ -7,7 +7,9 @@ Supports two index types:
   relative to a pseudo-continuum defined by sideband windows. The default
   follows the Lick definition (Trager et al. 1998): the pseudo-continuum is
   the straight line through the mean flux of the two sidebands, placed at the
-  sideband mid-wavelengths, and the flux is :math:`F_\lambda`.
+  sideband mid-wavelengths, and the flux is :math:`F_\lambda`. The additive
+  offsets of Trager et al. (1998) Sect. 5 that place indices on the IDS system
+  are not applied.
 - **break** (flux ratio): ratio of mean fluxes in two continuum windows
   (e.g., Dn4000).
 

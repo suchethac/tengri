@@ -261,3 +261,76 @@ class TestLickDefinitionVsBagpipes:
         wave, _, flam = _ssp_flam(10.0)
         bp_val = bp_indices.single_index(_bp_index_dict(name), np.column_stack([wave, flam]), 0.0)
         assert abs(float(bp_val) - _lick_hard(wave, flam, STANDARD_INDICES[name])) > min_gap
+
+    def test_default_matches_pcigale_linear_continuum(self):
+        """Tengri default (Lick/Trager) agrees with pcigale's RestframeParam.EW on SSP spectra.
+
+        pcigale EW is emission-positive with the continuum interpolated linearly between
+        the sideband centers and integrates (line − cont)/cont over the feature window,
+        so the comparison is tengri_default == −pcigale_ew within abs=0.06 Å (the difference
+        between an integral of the ratio and a ratio of integrals plus the 1 Å soft edges).
+
+        Also asserts that the OLD arithmetic (pseudo_continuum="mean" on L_ν) differs from
+        −pcigale_ew by more than 0.2 Å for HgA at 10 Gyr.
+        """
+        pytest.importorskip("pcigale")  # EW in nm
+        from pcigale.sed import SED
+        from pcigale.sed_modules.restframe_parameters import RestframeParam
+
+        # Test on HgA and Fe4383 at 1 and 10 Gyr
+        cases = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0)]
+        measured_values = []
+
+        for name, age in cases:
+            wave, lnu, flam = _ssp_flam(age)
+            idx = STANDARD_INDICES[name]
+
+            # Build pcigale EW parameter string in nm format
+            (b_lo, b_hi), (r_lo, r_hi) = idx.continuum
+            f_lo, f_hi = idx.feature
+            edges_nm = "/".join(f"{x / 10:.3f}" for x in (b_lo, b_hi, f_lo, f_hi, r_lo, r_hi))
+            pcigale_param = f"{name}/{edges_nm}"
+
+            # Call pcigale: compute L_λ and scale to match pcigale's typical magnitude
+            sed = SED()
+            wave_nm = wave / 10.0  # Convert Å to nm
+            # L_λ = L_ν * c / λ² (already in flam from _ssp_flam)
+            # Scale to match pcigale's typical magnitudes (synthetic spectra use ~1e30)
+            flam_scaled = flam * 1e30
+            sed.add_contribution("x", wave_nm.copy(), flam_scaled.copy())
+            kwargs = dict.fromkeys(RestframeParam.parameters, False)
+            kwargs.update({k: "" for k in kwargs if k.endswith("_filters")})
+            kwargs["EW"] = pcigale_param  # EW parameter accepts the full spec string
+            module = RestframeParam(name="rf", **kwargs)
+            pcigale_ew = float(module.EW(sed)[name])  # Emission-positive
+
+            # Tengri default (absorption-positive Lick definition)
+            tengri_default = float(measure_index_jax(jnp.array(wave), jnp.array(lnu), idx))
+
+            # Old arithmetic (pseudo_continuum="mean" on L_ν)
+            tengri_mean = float(
+                measure_index_jax(jnp.array(wave), jnp.array(lnu), _mean_def(name))
+            )
+
+            measured_values.append((name, age, tengri_default, pcigale_ew, tengri_mean))
+
+        # Print summary
+        for name, age, tengri_default, pcigale_ew, tengri_mean in measured_values:
+            print(
+                f"{name:8s} {age:4.1f} Gyr: "
+                f"tengri_default={tengri_default:7.4f}, "
+                f"−pcigale_ew={-pcigale_ew:7.4f}, "
+                f"tengri_mean={tengri_mean:7.4f}"
+            )
+
+        # pcigale's EW is in nm (its windows are given in nm) and emission-positive;
+        # tengri's Lick EW is in Angstrom and absorption-positive.
+        for name, age, tengri_default, pcigale_ew, _tengri_mean in measured_values:
+            pcigale_aa = -10.0 * pcigale_ew
+            assert tengri_default == pytest.approx(pcigale_aa, abs=0.06), (
+                f"{name} {age} Gyr: tengri default {tengri_default:.4f} vs "
+                f"pcigale {pcigale_aa:.4f} A"
+            )
+        old = {(n, a): m for n, a, _, _, m in measured_values}
+        ref = {(n, a): -10.0 * p for n, a, _, p, _ in measured_values}
+        assert abs(old[("HgA", 10.0)] - ref[("HgA", 10.0)]) > 0.2
