@@ -264,7 +264,14 @@ class Posterior:
         - **NUTS**: ``{"n_divergent": int, "accept_rate": float}``, etc.
         - **Ray Tracing**: ``{"accept_rate": float, "step_size": float}``, etc.
         - **MAP**: ``{"final_loss": float, "n_steps": int}``, etc.
-        - **NSS**: ``{"n_live": int, "log_evidence_err": float}``, etc.
+        - **NSS**: ``{"n_live": int, "log_evidence_err": float,
+          "information_nats": float, "n_live_effective": float}``, etc.
+          ``log_evidence_err`` is the standard deviation of log Z [nats],
+          sqrt(H / n_eff); ``information_nats`` is the information H [nats]
+          (Kullback-Leibler divergence of the posterior from the prior);
+          ``n_live_effective`` is n_eff [dimensionless], the live count corrected
+          for batch deletion (n_eff = n_live when one point is deleted per
+          iteration).
 
     loss_history : ndarray or None
         Optimization loss values over iterations (MAP/Laplace/Pathfinder only).
@@ -952,6 +959,7 @@ class Posterior:
         "sed_agn_disc",
         "sed_agn_torus",
         "sed_agn_lines",
+        "sed_agn_lines_attenuated",
         "sed_agn_polar",
         "sed_radio",
         "sed_xray",
@@ -983,10 +991,10 @@ class Posterior:
             ``sed_attenuated``, ``sed_intrinsic``, ``sed_nebular``,
             ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_agn_disc``,
             ``sed_agn_torus``, ``sed_agn_lines`` (nlr+blr+feii),
-            ``sed_agn_polar``, ``sed_radio``, ``sed_xray``). The four
-            ``sed_agn_*`` sub-block keys are zeros for a non-composable
-            (monolithic) AGN model or no AGN component at all. Each
-            component array has shape ``(n_wave,)`` for MAP and
+            ``sed_agn_lines_attenuated``, ``sed_agn_polar``, ``sed_radio``,
+            ``sed_xray``). The ``sed_agn_*`` sub-block keys are zeros for a
+            non-composable (monolithic) AGN model or no AGN component at all.
+            Each component array has shape ``(n_wave,)`` for MAP and
             ``(n_samples, n_wave)`` for sampling.
 
         Raises

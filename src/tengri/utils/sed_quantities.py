@@ -436,6 +436,41 @@ def compute_l_dust_absorbed(
     return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
 
 
+def band_integral(wave, y, lam_lo, lam_hi):
+    """Edge-inclusive trapezoid integral of ``y`` over exactly ``[lam_lo, lam_hi]``.
+
+    ``y`` is interpolated linearly at the band bounds, so a partial pixel at either
+    edge contributes its in-band fraction. Where the grid does not reach a bound,
+    the integral covers only the grid's overlap with the band.
+
+    Parameters
+    ----------
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom (ascending).
+    y : array, shape (n_wave,)
+        Integrand sampled on ``wave``.
+    lam_lo, lam_hi : float
+        Band edges [Å].
+
+    Returns
+    -------
+    integral : float
+        :math:`\\int_{\\lambda_{lo}}^{\\lambda_{hi}} y\\,d\\lambda` over the covered band.
+    width : float
+        Covered band width :math:`\\int d\\lambda` [Å].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; static shapes. Pixels outside the band are clipped
+    onto its bounds, where they have zero width.
+    """
+    y_lo = jnp.interp(lam_lo, wave, y)
+    y_hi = jnp.interp(lam_hi, wave, y)
+    xc = jnp.clip(wave, lam_lo, lam_hi)
+    yc = jnp.where(wave < lam_lo, y_lo, jnp.where(wave > lam_hi, y_hi, y))
+    return jnp.trapezoid(yc, xc), jnp.trapezoid(jnp.ones_like(xc), xc)
+
+
 def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     """Mean flux density in a wavelength band.
 
@@ -456,12 +491,8 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     float
         Mean L_ν in the band (erg/s/Hz).
     """
-    mask = (wave >= lam_lo) & (wave <= lam_hi)
-    w = mask.astype(sed.dtype)
-    # Trapezoid-weighted mean: ∫(sed * dλ) / ∫(dλ) within the band
-    sed_masked = jnp.where(mask, sed, 0.0)
-    num = jnp.trapezoid(sed_masked, wave)
-    den = jnp.trapezoid(w, wave)
+    # Edge-inclusive trapezoid mean: ∫ sed dλ / ∫ dλ over exactly [lam_lo, lam_hi]
+    num, den = band_integral(wave, sed, lam_lo, lam_hi)
     # Return NaN if the band has no wavelength coverage (den ≈ 0). Denominator
     # selected before the divide: see compute_mass_weighted_age (#1860).
     ok = den > 1e-20

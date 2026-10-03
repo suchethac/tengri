@@ -194,7 +194,7 @@ def test_the_transmission_is_evaluated_at_the_per_metallicity_node(ssp):
     from tengri.components.igm.igm import igm_absorption
 
     z = 0.8
-    m = _build(ssp, WavePrecomp(), z=z)
+    m = _build(ssp, WavePrecomp(igm_fold="node"), z=z)  # the node fold is the subject
     lut = m._cached_component_chain[0]._state.ssp_phot_lut
     assert lut.ssp_subband_phot_igm is not None, "the IGM fold did not happen"
     assert lut.ssp_subband_phot_igm.shape == lut.ssp_subband_phot.shape

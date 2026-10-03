@@ -2,6 +2,23 @@
 
 ### Fixed
 
+- The power-law AGN radio jet reads `radio_log_nu_cut`: the cutoff $\exp(-\nu/\nu_{\rm cut})$ was fixed at $10^{13}$ Hz on the default model whatever the key said; `radio_log_nu_cut = 40` now removes it, and the default is unchanged. A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for the power-law model now needs `radio_log_nu_cut` (13.0 is the declared default). (#2689).
+
+- The model reference weights the band-averaged flux by `w = 1/λ` (photon counting, the default) instead of `λ`, states the AGN radio loudness as `log10(L_5GHz/L_4400)` instead of `L_5GHz/L_2500`, and gains the CIGALE convention differences it had not stated: equivalent-width sign and continuum, the star-forming radio normalization (q_IR and the anchor frequency), the AGN jet cutoff and loudness anchor, the nebular density axes and the emission-line profile (#2627, #2663, #2626).
+
+- NSS `log_evidence_err` is now sqrt(H / n_eff), with H the information in nats and
+  n_eff the live count corrected for batch deletion, instead of sqrt(ESS) / n_live,
+  which does not track H. log Z is unchanged. On a d = 5 ball prior with R = 100 the
+  old value was 0.24 nats against a measured scatter of 0.44 nats; the new one is 0.42 (#2443).
+
+- Line-flux limits are scored as censored likelihoods on every path: an upper
+  limit contributes ln Phi((F - m)/sigma) and a lower limit ln Phi((m - F)/sigma)
+  (F the limit value, m the model flux, sigma the flux uncertainty), evaluated
+  with a log-CDF with no floor, so a strongly violated limit keeps a finite value
+  and gradient. `LineFluxData.log_likelihood` honors `is_lower_limit`,
+  `LineFluxData.chi2` sums detections only, and the joint/spectroscopy loss scores
+  the line-flux term through `censored_neg_log_likelihood` when the data carry
+  limit flags (#2665, #2666).
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`) interpolates ln(band flux) with a monotone cubic Hermite (PCHIP) on nodes that span each parameter's declared prior, geometric in `dust_T` and `dust_lambda_0_um`. The nodes are band integrals of the closed-form model on a rest grid of 0.01 µm to 10 m, evaluated in batches, so a band from the far infrared to the radio reads the model's flux; a band whose rest-frame red edge lies beyond 10 m raises `ValueError`, and below 0.01 µm the template is taken as zero. The grid is stored as ln(band flux) taken in float64, so float32 values and gradients are finite. Against the exact closure at random points inside the declared priors, the maximum error at the default nodes is 3.5e-4 (`modified_blackbody`), 2.9e-4 (`graybody`) and 5.3e-4 (`casey2012`) in the 60-90, 250-500 and 750-950 µm bands at z = 0, and under 1e-3 in 250-500 and 750-950 µm at z = 3; `casey2012` at 8-24 µm is 2.7e-3 at z = 0, and at z = 3 it is 3.6e-3 in 60-90 µm and 6.8e-3 in 8-24 µm. The #2676 reproducer (T 47.3 K, β 1.65, λ₀ 130 µm) gives lookup/exact of 1.0000 in all three bands for all three models, where the old lookup was 4 % low to 10 % high, and 0.9999 / 0.9998 for 15 K dust in 8-24 µm, where it was 0.9-1.0 % high (#2676).
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
@@ -37,6 +54,8 @@
   agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
+- The SKIRTOR disc tied to the torus power (`agn_ir_frac` > 0) carries the library ratio disk(i)/disk(0) once: that ratio is the accretion-disc anisotropy η(i) = cos i (1 + 2 cos i)/3 (∫disk(i)/∫disk(0) over η is 0.9998–1.006 for i ≤ 40°) and, for i > 90° − oa, the torus extinction, so `R` carries no explicit η and the disc is not screened again; the broad lines and FeII keep the torus screen, and at `agn_ir_frac` = 0 the disc keeps it too. With polar dust off, disc power per unit `agn_power` is 0.9946, 0.9945, 0.9943, 0.9920, 0.9892 of CIGALE at i = 0, 30, 50, 70, 90° (with polar dust on, the disc normalization differs: #2602); the 0.55 % offset at i = 0 is the torus template's triweight smoother (∫torus/`agn_power` = 0.9963) times the 136-node library axis (R_library/R_CIGALE = 0.9981). The CIGALE piecewise discs (`disk_type` 0, 1, 2) are zero below 8 nm and from 10⁶ nm up and are normalized by the closed-form integral of the broken power law (log-space, float32-safe), so their level at a wavelength is independent of the wavelength sampling; the 2500 Å and 4400 Å intrinsic-luminosity anchors of the `skirtor` piecewise disc rise by 14 % with its 8 nm cut (α_ox and radio loudness follow), those of the Schartmann disc by 0.2 %. (#2601)
+
 - Upper and lower limits are scored with the Gaussian CDF at their own σ_obs (Boquien et al. 2019, Eq. 15); the calibration floor `noise_frac_cal · |model|` enters detections only, as in the CIGALE implementation (#2619).
 
 - `psb_flex` and `psb_suess2022` now include the link ratio (`ratio_old_0`) between the oldest flexible bin and the youngest fixed bin, matching Suess et al. 2022's one-ratio-per-fixed-bin count (previously `n_fixed − 1` ratios, with that step silently pinned at 0) and enabling independent control of the post-starburst SFH amplitude across the quenching-to-old transition. **Breaking:** `ratio_old_*` indices shift: the new `ratio_old_0` is the link (default 0, reproducing today's SFHs bit-exactly); former `ratio_old_0` through `ratio_old_{n_fixed−2}` (the adjacent-step ratios) are now `ratio_old_1` through `ratio_old_{n_fixed−1}`. A caller that passes only `n_fixed − 1` values through the flat-kwarg path (e.g. `ratio_old_0=0.2, ratio_old_1=-0.3`) now leaves the link (`ratio_old_0`) at its default 0 and reads the adjacent steps one index higher than it meant to — there is no silent re-indexing to the old meaning, so update call sites to `ratio_old_1=0.2, ratio_old_2=-0.3` (plus an explicit `ratio_old_0` if a nonzero link is wanted) (#2612).
@@ -49,8 +68,12 @@
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
 
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
+- AGN emission lines (composable NLR, BLR and FeII; GRAHSP's lines and FeII forest; QSOGen's line template) receive the instrument kernel alone in the spectrum projection, like nebular and shock emission: each line is painted at its own width and never passes through the stellar library, so the observed width is √(σ_line² + σ_inst²) and no longer grows with the stellar σ_v (a 500 km/s FWHM narrow line read 290 km/s at σ_v = 200 km/s against the true 218 km/s, +33 %). The AGN component publishes the line-only light `sed_agn_lines_attenuated`, as it enters the SED after the AGN's own screen, and the dust adapters apply the host `agn_screen` to it when the AGN runs first (#2565).
 
 ### Added
+
+- `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).
+- `generate_mock(model, params, key, noise=sigma_obs)` draws each band from `N(flux_true, |sigma_obs|)` with the supplied per-band observed errors (CIGALE's `mock_flag` draw); `snr` is ignored when `noise` is given and the default is unchanged (#2628).
 
 - `WavePrecomp(igm_fold="exact")` and `"auto"` now fold the IGM exactly on a free redshift: the sub-band ratio is taken at every node of the photometry z-table, where it previously refused. Measured on a z = 6.5-7.5 bare-stellar model against `approx=None`, worst over bands with more than 5 % surviving flux: exact 0.42 % at `n_z=32` (1.6 % at 16), node fold 105 %. What remains is the triweight z-interpolation, so it shrinks with the z spacing. Bands redward of Ly-alpha skip the quadrature (their ratio is exactly one) and the table is content-cached beside the z-table in `~/.cache/tengri_precomp`, so the exact build costs about what the node build does.
 
@@ -79,6 +102,16 @@
 
 ### Fixed
 
+- The dust-IR band response, the radio and X-ray term responses, and the
+  energy-balance LUT of a redshift-reading attenuation law (`narayanan_z`)
+  followed a build-time redshift, so under `WavePrecomp(catalog_z_range=...)`,
+  where each galaxy evaluates at its own runtime redshift while the spec carries a
+  placeholder, catalog fits got 50-300% WISE W3/W4 errors (measured 0.50-0.98 in
+  W4 and 0.51-2.98 in W3 at z = 0.5-1.5 for `catalog_z_range=(0.05, 2)`). They
+  are now tabulated over the model's redshift range, uniform in ln(1+z), and read
+  at the evaluation redshift, so every catalog engine inherits them, and a
+  free-redshift model uses the fast path instead of falling back to the exact
+  per-call integral.
 - A dusty model whose nebular flux the per-Q_H grid serves (#2570) now takes the IGM at each nebular sub-band chunk's node rather than the band-averaged `<T>`: a two-component Cue model with dust emission at z = 7 read F090W 10.1 % off `approx=None` near Ly-alpha, now 0.94 % at worst over z = 6.5-7.3 (#2679).
 - Under `WavePrecomp` the IGM now reaches nebular, shock and AGN band fluxes through each component's own spectrum, `∫S·T/∫S` per band, instead of the band-averaged `<T>` alone, which formed `<S><T>`. Near Ly-alpha that was the dominant LUT error at high redshift: a Cue model at z = 7.3 read F115W +10.3 % and sdss_z +5.6 % against `approx=None` under the exact stellar fold; both are now 0.0000 %. The transmission is tabulated at build time over the absorbed end of the rest grid, and only for bands the IGM can reach in the model's redshift range, so a low-redshift model is unchanged bit for bit and pays nothing. Under the exact fold the stellar dust screen on the IGM-folded tensor is also evaluated where the IGM-surviving light sits: at the bare sub-band node a two-component model at z = 7 read sdss_z 8.7 % off, now 0.11 %. A composable AGN beside Cue reads <= 0.28 % (node fold 48 %).
 - The exact IGM fold now takes its sub-band ratio over the partition of the tensor it multiplies. A model with a live nebular Lyman-continuum mask (every Cue model: `neb_fesc` is fixed below one by default) splits each band into K + 1 chunks with a forced edge at 912 Å; the ratio was built as K + 1 equal-mass chunks without the edge, so shapes matched and nothing raised. Band fluxes straddling the Lyman limit were off by 12.7 % (GALEX NUV, z = 2) to 44 % (z = 2.5); a Cue model at z = 7.3 read i +11.6 % under the exact fold, now -1.2 %. The filter convention is passed through for the same reason.
@@ -89,6 +122,14 @@
   per column lists the masked rows; a negative flux with a positive error is a detection
   with its signed value; the `-1` lower-limit flag is the ingest path's (`catalog_ingest`),
   never this reader's (#2586).
+- `analysis.diagnostics.spectral.uv_slope_beta` is one least-squares fit of log F_λ against
+  log λ over the pixels inside the ten Calzetti et al. (1994) Table 2 windows (window 6 =
+  1677–1740 Å) with hard window bounds per Eq. 3 and a centered abscissa, so it is stable in
+  float32. The window means in `_window_mean_flux`, `dn4000`, `equivalent_width` and the
+  spectral-index and line-flux window LUT (`soft_window_ssp_integral`) are wavelength
+  integrals, ∫F dλ / ∫dλ, trapezoid-weighted and edge-inclusive, so they do not depend on
+  how the wavelength grid is sampled; the `equivalent_width` pseudo-continuum is the
+  integrated mean over both sidebands (Vollmann & Eversberg 2006) (#2588).
 
 - The surviving stellar mass is `M_formed · Σ_age Σ_Z w(age, Z) · m_rem(age, Z)` over the joint weights the spectrum uses — each (age, Z) node at its own remaining-mass fraction, for every metallicity history; `predict_sfh_quantities` reads the component's published `log_mstar_surviving` (#2613).
 
@@ -776,6 +817,7 @@
 
 ### Changed
 
+- `WavePrecomp(igm_fold=...)` now defaults to `"auto"`: the exact IGM fold wherever it can be built (fixed and free redshift), the node fold only where the transmission carries free parameters (patchy reionization, DLAs). The node fold was off `approx=None` by 85-107 % at z = 7 in bands straddling Ly-alpha and ~10 % in GALEX FUV at z = 1.5; the exact fold is ~1e-14 at fixed z and 0.42 % on a free z grid of 32 nodes. WavePrecomp photometry of any band the IGM reaches moves; pass `igm_fold="node"` for the old behavior (#2445).
 - `agn_attenuation_ebv` is retired; every AGN attenuation block (`smc_prevot`,
   `qsogen`) reads `agn_ebv`, the precompute-axis name; the retired spelling —
   flat or under `agn={'atten': {...}}` — is refused with a rename hint (#2325).
@@ -1901,7 +1943,7 @@
   immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
   `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
   disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
-  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  and honors `suppress` and an explicit `neb` declaration; the bare-grid
   refusal does not fire when nebular emission is off (#2362).
 
 - Both unwired guards are wired and the class is closed (#2326):
