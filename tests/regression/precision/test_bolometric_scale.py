@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tengri.utils.sed_quantities import (
     compute_bolometric_luminosity,
@@ -33,8 +34,18 @@ pytestmark = pytest.mark.regression_bug
 
 
 def _grid(n=600):
-    """Wavelength grid spanning UV to far-IR [Angstrom]."""
-    return jnp.asarray(np.logspace(np.log10(500.0), np.log10(5.0e6), n))
+    """Wavelength grid from the Lyman edge to the far-IR [Angstrom].
+
+    Starts exactly at the edge. The bolometric reductions integrate the cell that
+    straddles the edge with the step model (a stellar SED has a break there; this
+    smooth test SED does not, and the step model sits 2.9e-5 from the plain
+    trapezoid on it). A grid that starts at the edge has no straddling cell, so
+    these tests compare the reformulation's arithmetic to the frozen one and not
+    the edge convention, which
+    ``tests/contract/test_l_dust_absorbed_lyc_consistency.py`` and
+    ``test_energy_balance_edge_cell_follows_the_step_model`` cover.
+    """
+    return jnp.asarray(np.logspace(np.log10(LYMAN_LIMIT_AA), np.log10(5.0e6), n))
 
 
 def _sed(wave, scale=1.0e28):
