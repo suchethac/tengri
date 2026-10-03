@@ -124,6 +124,9 @@ import jax.numpy as jnp
 #: is reproduced exactly rather than "corrected" to ``-jnp.inf``.
 AGNFITTER_HARD_REJECT = -9999.0
 
+#: Relative slack of the energy-balance rejection [dimensionless]: roundoff on an identity.
+_ENERGY_BALANCE_RTOL = 1.0e-9
+
 
 def gaussian_log_prior(mu, sigma, par):
     r"""Gaussian log-prior density, including the normalization constant.
@@ -279,7 +282,12 @@ def prior_energy_balance(
         raise ValueError(f"mode must be 'flexible' or 'restrictive', got {mode!r}")
     l_gal_att = jnp.asarray(l_gal_att, dtype=float)
     l_sb_emit = jnp.asarray(l_sb_emit, dtype=float)
-    is_rejected = l_sb_emit < l_gal_att
+    # Energy balance is an identity for the dust models that conserve energy
+    # (``l_sb_emit = l_gal_att`` by construction), so the two luminosities differ only by
+    # float roundoff (~1e-14 relative) and a strict ``<`` rejects on its sign. Reject
+    # only a deficit beyond 1e-9 relative, far above roundoff and far below any physical
+    # imbalance.
+    is_rejected = l_sb_emit < l_gal_att * (1.0 - _ENERGY_BALANCE_RTOL)
     frac_sb_att_gal = jnp.log10(l_sb_emit / l_gal_att)
     if mode == "flexible":
         physical_value = jnp.zeros_like(frac_sb_att_gal)
