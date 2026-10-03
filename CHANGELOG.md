@@ -36,6 +36,10 @@
 
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
 
+### Changed
+
+- Breaking: `Spectroscopy.resample` defaults to `"auto"` (was `"point"`), decided in the model's rest frame at the fixed (or lowest prior) redshift by one function that every spectrum path calls, including `spectrum_from_sfh`. Pixels wider than the model grid now return the pixel mean of the light after the line-spread function (the Gaussian LSF acts on the model grid, then the bin integral; a DESI resolution matrix still acts on the pixels): a sigma = 1 Å line in 2 Å pixels read +14 % at its centre when point-sampled. `Spectroscopy(resample="point")` restores the old values. `SpectrumPrecomp` raises on pixels wider than the model grid instead of warning; pixel-integral gradients in redshift are continuous (#2530).
+
 ### Added
 
 - `gordon03_smcbar`: Gordon et al. (2003) SMC Bar empirical extinction curve, tabulated and interpolated, normalized to k(5500 Å) = 1, alongside the existing `smc` (Pei 1992) and `prevot_smc` curves. Registered as a parameterless dust law repackaged from dust_extinction.averages.G03_SMCBar (#2528).

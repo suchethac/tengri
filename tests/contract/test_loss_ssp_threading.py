@@ -80,10 +80,12 @@ def test_ssp_grid_is_threaded_not_baked(synthetic_ssp_wide, channel):
         obs = Observation(photometry=_PHOT)
         data = jnp.ones(len(_PHOT.filters))
     elif channel == "spectroscopy":
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE))
         data = jnp.ones(_SPEC_WAVE.shape[0])
     else:  # joint
-        obs = Observation(photometry=_PHOT, spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        obs = Observation(
+            photometry=_PHOT, spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE)
+        )
         data = jnp.ones(len(_PHOT.filters) + _SPEC_WAVE.shape[0])
 
     model = _build_model(ssp, obs)
@@ -115,10 +117,12 @@ def test_threaded_and_baked_loss_agree_bit_for_bit(synthetic_ssp_wide, channel):
         obs = Observation(photometry=_PHOT)
         data = jnp.ones(len(_PHOT.filters))
     elif channel == "spectroscopy":
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE))
         data = jnp.ones(_SPEC_WAVE.shape[0])
     else:
-        obs = Observation(photometry=_PHOT, spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        obs = Observation(
+            photometry=_PHOT, spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE)
+        )
         data = jnp.ones(len(_PHOT.filters) + _SPEC_WAVE.shape[0])
 
     model = _build_model(ssp, obs)
@@ -201,9 +205,11 @@ def _obs_and_data(channel):
     if channel == "photometry":
         return Observation(photometry=_PHOT), jnp.ones(len(_PHOT.filters))
     if channel == "spectroscopy":
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE))
         return obs, jnp.ones(_SPEC_WAVE.shape[0])
-    obs = Observation(photometry=_PHOT, spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+    obs = Observation(
+        photometry=_PHOT, spectroscopy=Spectroscopy(resample="point", wave_obs=_SPEC_WAVE)
+    )
     return obs, jnp.ones(len(_PHOT.filters) + _SPEC_WAVE.shape[0])
 
 

@@ -2610,24 +2610,45 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
-            # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
-            # pixel grid at build time, so it does NOT honor a flux-conserving
-            # resample. Warn rather than silently ignore the request, the exact
-            # path (approx=None) carries the conserving low-resolution fix.
-            spectro = getattr(observation, "spectroscopy", None)
-            if spectro is not None and getattr(spectro, "resample", "point") != "point":
-                import numpy as _np
+            if self._spectrum_lut_needs_pixel_integral(observation):
+                raise ValueError(
+                    f"approx=SpectrumPrecomp() samples the model at the pixel "
+                    f"centers, but resample="
+                    f"{observation.spectroscopy.resample!r} resolves to the "
+                    f"flux-conserving pixel integral for this model grid and "
+                    f"pixel grid (pixels wider than the model grid), which the LUT "
+                    f"cannot carry (#2530). Use approx=None for the exact "
+                    f"spectrum, or Spectroscopy(resample='point') to accept point "
+                    f"sampling."
+                )
 
-                if spectro.resolve_conserving(_np.asarray(self.ssp_data.ssp_wave)):
-                    import warnings
+    def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
+        """Whether the spectrum channel resolves to the pixel integral (#2530).
 
-                    warnings.warn(
-                        f"resample={spectro.resample!r} requests a flux-conserving "
-                        f"resample, but approx=SpectrumPrecomp() point-interpolates the "
-                        f"SSP onto the pixel grid and does not apply it. Use approx=None "
-                        f"for the flux-conserving low-resolution spectrum (#1166).",
-                        stacklevel=3,
-                    )
+        The spectrum LUT evaluates every component (attenuation, nebular lines,
+        AGN) at the pixel center, so it cannot carry a pixel integral; when the
+        resample decision is the bin integral the LUT would return point
+        samples.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the LUT must not serve this spectrum channel.
+        """
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None:
+            return False
+        import numpy as _np
+
+        grid = getattr(self, "_rest_wavelength", None)
+        if grid is None:
+            grid = self.ssp_data.ssp_wave
+        return bool(spectro.resolve_conserving(_np.asarray(grid), self._resample_z_ref()))
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -2796,7 +2817,11 @@ class SEDModel:
             and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
         ):
             self._approx = self._approx.replace(wave_precomp=True)
-            self._approx = self._approx.replace(spectrum_precomp=True)
+            # The spectrum channel is promoted onto its LUT only when that LUT
+            # can serve it: pixels wider than the model grid stay on the exact
+            # path (#2530).
+            if not self._spectrum_lut_needs_pixel_integral(observation):
+                self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
@@ -5294,7 +5319,54 @@ class SEDModel:
             "lsf_sigma_lib_curve": self._sigma_lib_curve_for(self.ssp_data),
             "lsf_n_bins": self._lsf_n_bins,
             "lsf_scale": self._get_lsf_scale(params),
+            "resample_z_ref": self._resample_z_ref(),
         }
+
+    def _spectrum_resample_decision(self) -> bool | None:
+        """The static point-vs-pixel-integral decision of the spectrum channel (#2530).
+
+        ``resample="auto"`` depends on the redshift and the model grid as well as
+        on the pixels, so the resolved flag (not just the mode string) must key
+        the compiled kernel: two models with identical pixels but different
+        redshifts may resolve differently.
+
+        Returns
+        -------
+        bool or None
+            ``True`` for the bin integral, ``False`` for point sampling,
+            ``None`` when there is no spectroscopy channel.
+        """
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is None:
+            return None
+        return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
+
+    def _resample_z_ref(self) -> float:
+        """Redshift at which ``resample="auto"`` is decided (#2530).
+
+        The fixed redshift when redshift is fixed; the lowest redshift of the
+        prior when it is free (the coarsest rest-frame pixels, where a point
+        sample is worst). Every path that turns the model into pixels passes
+        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
+        same decision.
+
+        Returns
+        -------
+        float
+            Reference redshift (>= 0).
+        """
+        try:
+            d = self.spec.get_distribution("redshift")
+        except (AttributeError, KeyError):
+            d = None
+        if d is None:
+            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+        if getattr(d, "is_fixed", False):
+            return max(0.0, float(d.value))
+        lo = getattr(d, "lo", None)
+        return max(0.0, float(lo)) if lo is not None else 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -6147,6 +6219,7 @@ class SEDModel:
             tail=(
                 ("x64", bool(jax.config.jax_enable_x64)),
                 ("backend", jax.default_backend()),
+                ("spec_resample_conserving", self._spectrum_resample_decision()),
             ),
         )
         self._signature_memo = signature
@@ -6528,7 +6601,7 @@ class SEDModel:
         # grid is fixed, so this is a Python bool baked into the trace, not a
         # branch on the sampled redshift.
         conserving = (
-            spectroscopy.resolve_conserving(self.wavelengths)
+            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
             if spectroscopy is not None
             else False
         )
@@ -9698,6 +9771,7 @@ class SEDModel:
         lsf_resolution = self._lsf_resolution
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
+        resample_z_ref = self._resample_z_ref()
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -9784,6 +9858,7 @@ class SEDModel:
                     lsf_sigma_lib_curve=sigma_lib_curve,
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
+                    resample_z_ref=resample_z_ref,
                     observables_type=observables_type,
                 )
             if use_lut:

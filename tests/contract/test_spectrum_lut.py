@@ -101,7 +101,7 @@ class TestSpectrumLUTAccuracy:
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
         # Diffuse-only dust (tau_bc=0): continuum, mass normalization, and the
         # diffuse screen all agree to machine precision. This is a sharp guard
@@ -140,7 +140,7 @@ class TestSpectrumLUTAccuracy:
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
         # Diffuse-only dust — see fixed-z note: isolates the normalization
         # contract (#616) from the birth-cloud LUT residual (#617). z=0.05 is
@@ -180,7 +180,9 @@ class TestSpectrumLUTAccuracy:
         from tengri import Fixed, Observation, Spectroscopy, Uniform, load_ssp_data
 
         ssp = load_ssp_data(ssp_path)
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 48)))
+        obs = Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 48))
+        )
         m = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05))
         m_free = _build(ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"))
 
@@ -203,7 +205,9 @@ class TestSpectrumLUTGuards:
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=5000.0))
+        obs = Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, resolution=5000.0)
+        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             m = SEDModel.build(
@@ -230,7 +234,7 @@ class TestSpectrumLUTGuards:
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 32))
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+        obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
         import warnings
 
@@ -304,7 +308,9 @@ class TestSpectrumLUTLines:
         from tengri import Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(bare)
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 64)))
+        obs = Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
+        )
         m = self._build_cue(ssp, obs, SpectrumPrecomp())
         # Guard lifted: a line-publishing backend is allowed and engages.
         assert m._approx.get("spectrum_precomp") is True
@@ -316,7 +322,9 @@ class TestSpectrumLUTLines:
         from tengri import Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(bare)
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 64)))
+        obs = Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
+        )
         m_lut = self._build_cue(ssp, obs, SpectrumPrecomp())
         m_exact = self._build_cue(ssp, obs, None)
         targets = jnp.asarray([4862.69, 5008.24, 6564.61])  # Hβ, [OIII]5008, Hα (vacuum)
@@ -332,7 +340,9 @@ class TestSpectrumLUTLines:
         from tengri import Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(bare)
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 64)))
+        obs = Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
+        )
         pred = self._build_cue(ssp, obs, SpectrumPrecomp()).predict({})
         # pred.lines.* must be finite under the precomp path.
         assert jnp.isfinite(pred.lines.halpha)
@@ -364,7 +374,9 @@ class TestJointPrecomp:
         )
         return Observation(
             photometry=Photometry(filters=curves),
-            spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, n_pix)),
+            spectroscopy=Spectroscopy(
+                resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, n_pix)
+            ),
         )
 
     @staticmethod

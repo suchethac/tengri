@@ -266,6 +266,24 @@ spec_config = SpectroscopyConfig(
 )
 ```
 
+### Resampling onto pixels
+
+`resample` chooses how the model becomes pixel values (#2530). `"point"`
+interpolates the model at each pixel center; `"conserving"` takes the mean of
+the model over each pixel; `"auto"` (the default) takes the mean where some
+pixel is wider than the model-grid interval it lies in, and the point sample
+otherwise. The decision is made once in the model's rest frame, at the fixed
+redshift or the lowest redshift of the prior, and every path that produces a
+spectrum (`predict_spectrum`, `Prediction.spectrum`, the fit kernel,
+`spectrum_from_sfh`) uses it. In the pixel-mean mode the Gaussian line-spread function and the
+velocity dispersion act on the model grid and the pixel mean is taken last, as the detector does;
+a banded resolution matrix (DESI) acts on the pixels by construction. The point mode keeps
+its order (resample, then broaden). The broadened pixel mean costs more per gradient than the
+point sample because the convolution runs on the model grid. A Gaussian line of sigma = 1 Å in 2 Å pixels reads
+13.7 % high at its center when point-sampled. `SpectrumPrecomp` samples at the
+pixel centers and raises for pixels wider than the model grid: use `approx=None`
+or `resample="point"`.
+
 ### LSF configuration
 
 Two parameters control the line-spread function convolution:

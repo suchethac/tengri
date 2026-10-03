@@ -293,6 +293,7 @@ class TestIntegrationViaForwardModel:
             resolution=spectroscopy.resolution,
             sigma_lib_kms=spectroscopy.sigma_lib_kms,
             sigma_v_kms=0.0,
+            conserving=spectroscopy.resolve_conserving(wave_rest, z),
         )
 
         # Via _predict_spectrum_on_grid (the delegation target)

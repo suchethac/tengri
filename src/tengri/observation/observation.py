@@ -22,7 +22,7 @@ from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
-from tengri.observation.spectroscopy import Spectroscopy
+from tengri.observation.spectroscopy import Spectroscopy, static_redshift
 from tengri.parameters.priors import Distribution
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.scale import apply_log10_scale, log10_flux_scale
@@ -1285,7 +1285,7 @@ class Observation:
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
-        conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
+        conserving = self.spectroscopy.resolve_conserving(wave_rest, static_redshift(z))
         sigma_lib_kms = resolve_sigma_lib_kms(
             wave_obs, z, self.spectroscopy.sigma_lib_kms, sigma_lib_curve
         )
@@ -1320,6 +1320,8 @@ class Observation:
         lsf_sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         lsf_n_bins: int | None = None,
         lsf_scale: float = 1.0,
+        resample_z_ref: float | None = None,
+        conserving: bool | None = None,
         observables_type=None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
@@ -1372,6 +1374,15 @@ class Observation:
             reproduces the un-scaled kernel bit-for-bit. Not applied on the
             banded ``resolution_matrix`` path (see the Notes on that
             branch below).
+        resample_z_ref : float, optional
+            Redshift at which ``Spectroscopy.resample="auto"`` compares the
+            pixel width with the model grid (#2530): the fixed redshift, or the
+            lowest redshift of the prior when redshift is free. ``None`` uses
+            ``z`` when it is a concrete value and 0 when it is traced.
+        conserving : bool, optional
+            The pixel-integral decision when it was already made outside a
+            ``vmap`` (a traced model grid cannot be inspected). ``None``
+            resolves it here from ``state.wave``.
         observables_type : type or None
             If provided, a :class:`typing.NamedTuple` class produced by
             :func:`build_observables_class`. When ``None``, returns a dict
@@ -1472,7 +1483,12 @@ class Observation:
             )
             sigma_lib = resolve_sigma_lib_kms(wo, z, sigma_lib_flat, lsf_sigma_lib_curve)
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
-            conserving = self.spectroscopy.resolve_conserving(state.wave)
+            if conserving is None:
+                conserving = self.spectroscopy.resolve_conserving(
+                    state.wave,
+                    static_redshift(z) if resample_z_ref is None else resample_z_ref,
+                    wave_obs=wo,
+                )
             cal_coeffs = self.spectroscopy.calibration_coeffs(params)
             cal_wave_range = self.spectroscopy.calibration_wave_range
 
