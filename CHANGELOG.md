@@ -2,6 +2,20 @@
 
 ### Fixed
 
+- The analytic dust-emission precompute (`modified_blackbody`, `graybody`, `casey2012`,
+  `pah_drude`) reads the band integral of the closed-form spectrum, not an
+  interpolation of it: Gauss-Legendre quadrature at the filters' own rest wavelengths
+  $\lambda_{\rm obs}/(1+z)$, sub-divided to resolve the Wien slope, so a cold-dust
+  mid-infrared band is no longer 1 % high and a band beyond 0.01 µm - 10 mm (or
+  `pah_drude` beyond 31.6 µm) reads its true value, not 0. The band table is carried as
+  ln(flux) over the declared prior range of every parameter and read with a node-exact
+  tensor-product cubic spline (C2 in the parameters, evaluated in float32 for float32
+  queries), replacing the triweight kernel whose off-node error was 4-10 %. Caveats:
+  off-node lookups agree with the quadrature to 1e-3 (0 <= z <= 6) where the band flux
+  is at least 1e-150 per unit absorbed luminosity; below that the lookup is small and
+  positive, not the true integral. A filter with zero transmission raises. The node grids
+  now span the declared prior ranges, and queries outside them are clipped to them (#2676).
+
 - The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:
   BAGPIPES is built on a converged wavelength grid (median λ/Δλ asserted),
   band integrals run on each SED's own nodes through `band_average(...,

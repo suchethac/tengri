@@ -50,6 +50,11 @@ _F32_SMALLEST_SUBNORMAL = float(np.nextafter(np.float32(0), np.float32(1)))
 #: goes through ``representable_floor`` at trace time. Add to this only with a
 #: reason of that shape — "it's fine" is not one.
 _ALLOWED: dict[str, str] = {
+    "tengri.components.dust.dust_analytic_precompute.TABLE_FLUX_FLOOR": (
+        "documentation only: the band flux per unit absorbed luminosity below "
+        "which the 1e-3 accuracy claim of the analytic precompute does not hold; "
+        "read in docstrings and tests, never in an array expression (#2676)."
+    ),
     "tengri.components.nebular.cloudy_cb19._HB_PER_QH_LSUN": (
         "float64-only: consumed once at grid-build time as "
         "float(np.log10(...)) -> GridData.log_hb_per_qh, and the runtime path "
