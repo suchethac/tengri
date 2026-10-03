@@ -97,34 +97,40 @@ def _filter_fixture_warnings() -> None:
 #: figures on this fixture's wavelength-separable synthetic SSP, i.e. a
 #: shape-preserving mass renormalization, not a new approximation). rtol is
 #: unchanged at 1e-12.
+#:
+#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
+#: integrated from the SFH instead of held at SFR(age0), which moves these
+#: values by about 1.5e-9 relative (continuum <= 2e-6 on the default models).
+#: The invariant itself -- ``redshift`` never reaches a law that does not
+#: declare it -- is pinned ulp-free by the resolver test below.
 _UNTOUCHED_LAW_PHOTOMETRY: dict[tuple[str, str], tuple[float, ...]] = {
     ("single_component", "calzetti"): (
-        2.0575538240416306e-13,
-        1.9399471893663044e-13,
-        1.4326872248843876e-13,
-        7.996951032238666e-14,
-        5.165045664785074e-14,
+        2.05755382704491e-13,
+        1.939947192197928e-13,
+        1.4326872269755943e-13,
+        7.996951043911334e-14,
+        5.1650456723241795e-14,
     ),
     ("single_component", "kriek_conroy"): (
-        2.0607500072210218e-13,
-        1.934707917464008e-13,
-        1.3935335068100254e-13,
-        7.934589381984924e-14,
-        5.160837953159269e-14,
+        2.0607500102289744e-13,
+        1.9347079202879839e-13,
+        1.3935335088440816e-13,
+        7.934589393566451e-14,
+        5.1608379606922155e-14,
     ),
     ("two_component", "calzetti"): (
-        2.0575538240416306e-13,
-        1.9399471893663044e-13,
-        1.4326872248843876e-13,
-        7.996951032238668e-14,
-        5.165045664785074e-14,
+        2.05755382704491e-13,
+        1.939947192197928e-13,
+        1.4326872269755943e-13,
+        7.996951043911334e-14,
+        5.1650456723241795e-14,
     ),
     ("two_component", "kriek_conroy"): (
-        2.0607500072210218e-13,
-        1.934707917464008e-13,
-        1.3935335068100254e-13,
-        7.934589381984924e-14,
-        5.160837953159269e-14,
+        2.060750010228974e-13,
+        1.9347079202879839e-13,
+        1.393533508844082e-13,
+        7.934589393566451e-14,
+        5.1608379606922155e-14,
     ),
 }
 
