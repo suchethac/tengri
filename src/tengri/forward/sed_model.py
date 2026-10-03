@@ -4046,7 +4046,11 @@ class SEDModel:
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
                     delta[name] = (name, 1.0, 0.0)
-            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+            self._nebular_backend = CueBackend(
+                spec.cue_weights_path,
+                ssp_data=ssp_data,
+                nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+            )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
 
