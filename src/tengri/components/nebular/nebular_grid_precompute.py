@@ -1723,8 +1723,8 @@ def _split_band_fields(
     )(jnp.eye(n_lines))  # (n_lines, n_wave): each line's rendered profile [1/Hz]
     unit = np.asarray(unit)
     dlam = np.gradient(wave_np)
-    centre = np.clip(np.searchsorted(wave_np, np.asarray(sed_line_waves)), 2, wave_np.size - 3)
-    idx = centre[:, None] + np.arange(-2, 3)[None, :]
+    center = np.clip(np.searchsorted(wave_np, np.asarray(sed_line_waves)), 2, wave_np.size - 3)
+    idx = center[:, None] + np.arange(-2, 3)[None, :]
     mass = np.take_along_axis(unit, idx, axis=1) * dlam[idx]
     tot = mass.sum(axis=1, keepdims=True)
     weights = np.where(tot > 0.0, mass / np.where(tot > 0.0, tot, 1.0), 0.2)
@@ -2036,7 +2036,7 @@ def nebular_subband_decomposition(packed, redshift, table):
     n_filt = cont.shape[0]
     # Each line is spread over its rendered profile: a few points weighted by the
     # triweight kernel, so a screen that steps across the line (IGM at Lyman-alpha)
-    # is averaged over the profile rather than sampled at its centre.
+    # is averaged over the profile rather than sampled at its center.
     line_lam = jnp.asarray(table.sed_line_node_waves).reshape(-1)  # (n_lines*m,)
     w_u = jnp.asarray(table.sed_line_node_weights)  # (n_lines, m)
     phi_lines = (lines[:, None, :] * w_u[:, :, None]).reshape(-1, n_filt)
