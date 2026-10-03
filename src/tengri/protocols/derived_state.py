@@ -507,9 +507,9 @@ class DerivedState:
     #: Absolute HII-region dust-absorption share (#2539 item 2),
     #: ``lyc_shares(neb_fesc, neb_fdust_frac)[1]`` (#2436), the
     #: ``lyc_transmission`` analog for the dust-absorption fraction: a dust
-    #: component's ``parameter_prefix`` ("dust_") means
+    #: component's ``parameter_prefix`` (``dust_``) means
     #: ``slice_params_for_component`` (ADR-0006) never hands it a
-    #: "neb_"-prefixed key, so ``two_component`` reads this cross-component
+    #: ``neb_``-prefixed key, so ``two_component`` reads this cross-component
     #: value instead of ``params["neb_fdust_frac"]`` (which would silently
     #: see only the 0.0 default) to compute its own young-weighted HII-region
     #: dust credit.
@@ -519,7 +519,7 @@ class DerivedState:
     #: energy-balance LUT branch can pass the runtime fesc into
     #: ``lut_l_absorbed_stellar_log10``'s exact affine (A_0 + fesc*A_1)
     #: combine, the same cross-component reason ``lyc_fdust`` exists (a dust
-    #: component's ``parameter_prefix`` never sees a "neb_"-prefixed key).
+    #: component's ``parameter_prefix`` never sees a ``neb_``-prefixed key).
     lyc_fesc: jnp.ndarray | None = None
     # Nebular: photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
