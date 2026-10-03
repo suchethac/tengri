@@ -1587,8 +1587,10 @@ class RadioProperties(_CachedBase):
 class XRayProperties(_CachedBase):
     """Lazy property accessor for X-ray derived quantities.
 
-    Uses empirical scaling relations from Lehmer et al. (2010, 2016) for
-    X-ray binaries and Duras et al. (2020) for AGN bolometric corrections.
+    The 2-10 keV luminosities of the X-ray terms the model emits: the HMXB +
+    LMXB terms (Lehmer et al. 2016, SFR averaged over 100 Myr) and the AGN
+    corona, published by the X-ray component (``log_L_x_xrb_2_10``,
+    ``log_L_x_agn_2_10``).
 
     Attributes
     ----------
@@ -1613,7 +1615,7 @@ class XRayProperties(_CachedBase):
     Examples
     --------
     >>> pred = model.predict(params)
-    >>> pred.xray.l_x_xrb  # XRB luminosity (0.5-8 keV), in Lsun
+    >>> pred.xray.l_x_xrb  # XRB luminosity (2-10 keV), in Lsun
     Array(8.1e6, dtype=float64)
     """
 
@@ -1624,7 +1626,7 @@ class XRayProperties(_CachedBase):
         Returns
         -------
         float
-            XRB X-ray luminosity in 0.5–8 keV band [Lsun].
+            2-10 keV luminosity of the emitted HMXB + LMXB terms [Lsun].
 
         Notes
         -----

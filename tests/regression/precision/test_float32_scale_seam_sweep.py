@@ -80,7 +80,6 @@ _TOOL = _load_tool("check_float32_scale_seams")
 _SWEEP_OF_FAMILY: dict[str, str] = {
     "stellar_mass_scale": "stellar_mass_scale",
     "agn_bolometric_renorm": "agn_bolometric",
-    "xrb_mass_scale": "xrb_mass_scale",
 }
 
 #: Sweep resolution. Nine points across the declared prior, endpoints included:
@@ -210,47 +209,9 @@ def _agn_bolometric(ssp, dtype):
         return name, _evaluate(objective, lo, hi, dtype)
 
 
-def _xrb_mass_scale(ssp, dtype):
-    """The XRB mass term (#722), read through its float32 path, across the prior.
-
-    Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
-    in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
-    ceiling before it is multiplied by anything, so the sum overflows even at
-    zero SFR -- and ``utils.sed_quantities.compute_log_l_x_xrb`` is the
-    documented companion that carries both coefficients in log space. Sweeping
-    the linear form would measure a documented impossibility; sweeping the
-    companion measures whether the seam's actual float32 path holds across the
-    whole declared mass prior, which is the claim ``_HANDLED`` records.
-    """
-    name, lo, hi = _declared_range(r"^sfh_delayed_log_total_mass$")
-    with jax.enable_x64(dtype is jnp.float64):
-        sed = SEDModel.build(
-            ssp_data=ssp,
-            observation=Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"])),
-            approx=None,
-            sfh={
-                "type": "delayed",
-                "all_params": Fixed(DEFAULT),
-                "log_total_mass": Uniform(lo, hi),
-                "tau_gyr": 1.0,
-                "age_gyr": 5.0,
-            },
-            redshift=Fixed(0.1),
-            dust_attenuation=_DUST,
-            xray={"type": "simple"},
-        )
-        base = _reference_point(sed)
-
-        def objective(x):
-            return jnp.asarray(sed.predict({**base, name: x}).properties["log_l_x_xrb"]).sum()
-
-        return name, _evaluate(objective, lo, hi, dtype)
-
-
 _SWEEPS = {
     "stellar_mass_scale": _stellar_mass_scale,
     "agn_bolometric": _agn_bolometric,
-    "xrb_mass_scale": _xrb_mass_scale,
 }
 
 
@@ -514,31 +475,38 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
+#: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
+#: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
+#: ``test_tied_disc_reference_of_the_seam_sweep`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
+#: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
+#: disc is multiplied by ``eta(30 deg) T``.
 #: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
 #: integrated from the SFH instead of held at SFR(age0), which moves these
 #: references by up to 1.6e-6 relative (``rest_sed_0``, the most ill-conditioned
 #: key) and photometry by up to 9e-7.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5215526212343478e32,
-        "rest_sed_0": 2.1618438478305343e23,
-        "rest_sed_mid": 3.05875453805499e28,
-        "rest_sed_last": 8.775513506180217e21,
-        "photometry": (1.098616571590072e-27, 1.5711830788044064e-27, 1.7648177280498726e-27),
+        "rest_sed_sum": 1.5220869151907556e32,
+        "rest_sed_0": 2.7414599301514256e23,
+        "rest_sed_mid": 3.059759473819298e28,
+        "rest_sed_last": 8.775691511689354e21,
+        "photometry": (1.0990405822784014e-27, 1.5711890320936083e-27, 1.764819439378196e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5586791978745043e32,
-        "rest_sed_0": 2.6215938693952546e24,
-        "rest_sed_mid": 3.145654892113582e28,
-        "rest_sed_last": 8.823791339150894e21,
-        "photometry": (1.1319559740838862e-27, 1.5726903938575035e-27, 1.765266652066388e-27),
+        "rest_sed_sum": 1.5692035400112239e32,
+        "rest_sed_0": 3.324474407941189e24,
+        "rest_sed_mid": 3.1700353977217445e28,
+        "rest_sed_last": 8.836905351035666e21,
+        "photometry": (1.1413514514707368e-27, 1.5731004639284887e-27, 1.765388701060335e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5745230983865813e32,
-        "rest_sed_0": 2.0084455174887774e24,
-        "rest_sed_mid": 3.1754606397665404e28,
-        "rest_sed_last": 9.020965805526526e21,
-        "photometry": (1.142094428705671e-27, 1.5791358480868626e-27, 1.7669557359894598e-27),
+        "rest_sed_sum": 1.5893064583446953e32,
+        "rest_sed_0": 2.5469336805307245e24,
+        "rest_sed_mid": 3.207858676989594e28,
+        "rest_sed_last": 9.086912556521545e21,
+        "photometry": (1.1542180208404769e-27, 1.5812739753023431e-27, 1.7675305574744464e-27),
     },
 }
 

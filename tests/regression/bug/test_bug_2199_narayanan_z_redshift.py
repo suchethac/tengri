@@ -632,15 +632,15 @@ def test_the_energy_balance_lut_is_built_at_the_model_redshift(z, uv_ssp, ir_obs
     )
 
 
-def test_a_free_redshift_disables_the_lut_only_for_a_law_that_reads_it(uv_ssp, ir_obs):
-    """A free z is a free curve-shape parameter exactly when the law reads z.
+def test_a_free_redshift_tabulates_the_lut_only_for_a_law_that_reads_it(uv_ssp, ir_obs):
+    """A free z moves the curve exactly when the law reads z: the LUT follows it.
 
     A build-time LUT cannot hold a curve that moves with a sampled parameter,
     which is why a free ``dust_delta`` disables it. ``redshift`` is not spelled
-    ``dust_*``, so the existing filter could not see it. ``kriek_conroy`` reads
-    no redshift, so its LUT must survive a free z: a blanket "free redshift
-    disables the LUT" would cost every photometric-redshift fit the
-    optimization for nothing.
+    ``dust_*``, so the existing filter could not see it. For ``narayanan_z`` the
+    LUT is tabulated over ``ln(1+z)`` and read at the sampled redshift, so a
+    photometric-redshift fit keeps the optimization; ``kriek_conroy`` reads no
+    redshift, so its LUT keeps a single curve.
     """
     free_z = Uniform(0.1, 5.0)
     ours = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, WavePrecomp())
@@ -651,18 +651,20 @@ def test_a_free_redshift_disables_the_lut_only_for_a_law_that_reads_it(uv_ssp, i
     fixed_z = _build_ir(uv_ssp, ir_obs, "narayanan_z", Fixed(2.0), WavePrecomp())
 
     def lut(model):
-        return getattr(model, "_energy_balance_lut_cache", None) is not None
+        return getattr(model, "_energy_balance_lut_cache", None)
 
-    assert not lut(free_shape), "a free dust_delta must already disable the LUT"
-    assert not lut(ours), (
-        "a free redshift left the LUT engaged on narayanan_z, so every sample "
-        "would share one baked curve (#2199)."
+    assert lut(free_shape) is None, "a free dust_delta must already disable the LUT"
+    assert lut(ours) is not None and lut(ours).ln1pz is not None, (
+        "a free redshift must keep the LUT on narayanan_z, tabulated over redshift "
+        "so every sample reads its own curve (#2199)."
     )
-    assert lut(reads_no_z), "a free redshift disabled the LUT for a law that ignores z"
-    assert lut(fixed_z), "a fixed redshift must keep the LUT on narayanan_z"
+    assert lut(reads_no_z) is not None and lut(reads_no_z).ln1pz is None
+    assert lut(fixed_z) is not None and lut(fixed_z).ln1pz is None, (
+        "a fixed redshift keeps the single-curve LUT on narayanan_z"
+    )
 
-    # The public effect, not only the cache: with the LUT off, the free-redshift
-    # model must still track the exact path.
+    # The public effect, not only the cache: the free-redshift model must track
+    # the exact path.
     exact = _build_ir(uv_ssp, ir_obs, "narayanan_z", free_z, None)
     with warnings.catch_warnings():
         _filter_fixture_warnings()

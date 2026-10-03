@@ -486,7 +486,7 @@ class TestStoredInclinationNormIsApplied:
         ``i_deg=0`` is the CONTROL, not a defect probe: ``norm(0)/norm(0)`` is
         1.0 by construction, so that case passed before the fix too. It is
         here because the fix must leave the face-on reference exactly where it
-        was -- the polar share at i=0 is a shipped number (0.200035) that no
+        was -- the polar share at i=0 is a shipped number (0.200204) that no
         inclination normalization may move.
         """
         _d0, _di, ratio, _r = self._file_derivation(i_deg)
@@ -510,19 +510,20 @@ class TestStoredInclinationNormIsApplied:
 
         Measured, tengri / pcigale: before the fix 0.9758 / 0.9539 / 0.5679 /
         0.4439 at i = 0 / 30 / 60 / 80 -- flat at 0.200035 while CIGALE's
-        rises 2.20x. After: 0.9758 / 0.9760 / 0.9793 / 0.9818, from tengri
-        shares 0.200035 / 0.204670 / 0.344936 / 0.442378, rising 2.2115x
-        against CIGALE's 2.1981x.
+        rises 2.20x. With the stored normalization and the unit-area disc
+        zero below 8 nm: 0.9767 / 0.9768 / 0.9800 / 0.9824, from tengri shares
+        0.200204 / 0.204842 / 0.345175 / 0.442639, rising 2.2110x against CIGALE's 2.1981x.
 
         The residual decomposes exactly, which is why a 5% band is the right
         one here. Writing the share as ``x/(1+x)`` with
         ``x = g R_faceon J``, ``x_cigale/x_tengri`` factors into
         ``R_faceon``'s own ratio -- 1.001912 / 1.001909 / 1.003310 / 1.004471,
         i.e. the two grids' per-inclination quadratures -- times
-        ``1.029181``, IDENTICAL at all four inclinations. That constant
-        2.9182% sits in the absorbed-power proxy ``g J`` (the cone factor and
-        the disc-shape-weighted absorbed fraction), is untouched by R64, and
-        is what remains of this fiducial's disagreement.
+        ``1.02809``, IDENTICAL at all four inclinations to 1e-5 (1.028094 /
+        1.028100 / 1.028090 / 1.028088). That constant 2.809% sits in the
+        absorbed-power proxy ``g J`` (the cone factor and the disc-shape-weighted
+        absorbed fraction) and is what remains of this fiducial's disagreement:
+        the SMC extinction curve (see ``TestTheResidualPolarShareConstantIsTheSmcCurve``).
         """
         from tengri.components.agn.blocks.runner import compose_l_nu
         from tengri.components.agn.skirtor import _load_raw_disk_dust_grid
@@ -738,20 +739,20 @@ class TestRadiusRatioReachesTheDiscTie:
 
 
 class TestTheResidualPolarShareConstantIsTheSmcCurve:
-    """R72: the isolated 2.9182% in ``g.J`` is the SMC extinction curve.
+    """R72: the isolated 2.809% in ``g.J`` is the SMC extinction curve.
 
     After the stored inclination normalization landed, the tengri/pcigale
     polar-share comparison factored exactly into ``R_faceon``'s own
-    per-inclination quadrature times a constant ``1.029181``, identical at
+    per-inclination quadrature times a constant ``1.02809``, identical at
     i = 0, 30, 60 and 80. ``g(40 deg) = 0.261007`` is common to both sides, so
     the constant sits in ``J = int(disc.(1 - e^-tau)) / int(disc)`` -- the
     disc-shape-weighted absorbed fraction, which depends on the disc shape
     (the same analytic one on both sides) and on the extinction curve (not).
 
     Substituting pcigale's own ``k_ext`` for tengri's on the same disc and the
-    same native grid takes ``J`` from 0.216524061 to 0.222615502, a factor
-    **1.028133** -- so the curve accounts for 2.81 of the 2.92 percentage
-    points and leaves 0.102%. The two curves are two different published SMC
+    same native grid takes ``J`` from 0.216753119 to 0.222831745, a factor
+    **1.028044** -- so the curve accounts for 2.80 of the 2.81 percentage
+    points and leaves 0.004%. The two curves are two different published SMC
     parameterizations: Pei (1992) Table 4's six-component Drude sum with that
     table's ``R_V = 2.93`` on tengri's side, the ``1.39 (lambda/um)^-1.2``
     power law (Bongiorno et al. 2012, Prevot et al. 1984 family, implied
@@ -761,7 +762,7 @@ class TestTheResidualPolarShareConstantIsTheSmcCurve:
     """
 
     _EBV = 0.03
-    _CONSTANT = 1.029181
+    _CONSTANT = 1.02809
 
     @staticmethod
     def _curves_and_shape():
@@ -799,16 +800,23 @@ class TestTheResidualPolarShareConstantIsTheSmcCurve:
         j_tengri = self._j(wl, shape, k_tengri)
         j_cigale = self._j(wl, shape, k_cigale)
         ratio = j_cigale / j_tengri
-        assert j_tengri == pytest.approx(0.216524061, rel=1e-6, abs=0.0)
-        assert j_cigale == pytest.approx(0.222615502, rel=1e-6, abs=0.0)
-        assert ratio == pytest.approx(1.028133, rel=1e-5, abs=0.0), (
-            f"J_cigale/J_tengri = {ratio:.9f}, not the measured 1.028133"
+        # Derived from CIGALE's own disc (``schartmann2005_disk``: zero below 8 nm,
+        # unit trapezoid area) on the same native grid: the block's shape equals it
+        # to 1e-12, so the two J values are CIGALE's disc-shape-weighted fractions.
+        pcigale_skirtor = pytest.importorskip("pcigale.sed_modules.skirtor2016")
+        cigale_shape = pcigale_skirtor.schartmann2005_disk(wl / 10.0, delta=0.0)
+        assert j_tengri == pytest.approx(self._j(wl, cigale_shape, k_tengri), rel=1e-9, abs=0.0)
+        assert j_cigale == pytest.approx(self._j(wl, cigale_shape, k_cigale), rel=1e-9, abs=0.0)
+        assert j_tengri == pytest.approx(0.216753119, rel=1e-6, abs=0.0)
+        assert j_cigale == pytest.approx(0.222831745, rel=1e-6, abs=0.0)
+        assert ratio == pytest.approx(1.028044, rel=1e-5, abs=0.0), (
+            f"J_cigale/J_tengri = {ratio:.9f}, not the measured 1.028044"
         )
         residual = self._CONSTANT / ratio
-        assert residual == pytest.approx(1.0, abs=1.5e-3), (
+        assert residual == pytest.approx(1.0, abs=2e-4), (
             f"substituting pcigale's SMC curve leaves {residual - 1.0:+.6f} of the "
             f"{self._CONSTANT - 1.0:+.6f} constant unexplained, more than the "
-            "0.102% measured -- something other than the extinction curve has moved."
+            "0.004% measured -- something other than the extinction curve has moved."
         )
 
     def test_the_two_curves_are_different_published_parameterizations(self):

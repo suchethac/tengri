@@ -279,7 +279,7 @@ for lam_um, label in [
 ax.set_xlim(1e-2, 1e4)
 ax.set_ylim(nuLnu(total).max() * 1e-7, nuLnu(total).max() * 3)
 ax.legend(loc="lower center", ncol=3, frameon=False, fontsize=9)
-ax.set_title(f"Kitchen-sink SED at z = {float(params['redshift']):.1f}")
+ax.set_title(f"Kitchen-sink SED at z = {float(model.spec.get_fixed_values()['redshift']):.1f}")
 fig.tight_layout()
 fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight")
 

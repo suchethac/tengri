@@ -33,9 +33,6 @@ References
 - Wang et al. 2024, ApJ; modified Balmer break
 - Bell 2003, ApJ, 586, 794: FIR-radio correlation
 - Murphy et al. 2011, ApJ, 737, 67: radio-SFR calibration
-- Lehmer et al. 2010, ApJ, 724, 559: XRB scaling relations
-- Lehmer et al. 2016, ApJ, 825, 7: updated XRB scaling
-- Duras et al. 2020, A&A, 636, A73: AGN bolometric corrections
 - Condon 1992, ARA&A, 30, 575: thermal radio emission
 
 """
@@ -439,6 +436,41 @@ def compute_l_dust_absorbed(
     return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
 
 
+def band_integral(wave, y, lam_lo, lam_hi):
+    """Edge-inclusive trapezoid integral of ``y`` over exactly ``[lam_lo, lam_hi]``.
+
+    ``y`` is interpolated linearly at the band bounds, so a partial pixel at either
+    edge contributes its in-band fraction. Where the grid does not reach a bound,
+    the integral covers only the grid's overlap with the band.
+
+    Parameters
+    ----------
+    wave : array, shape (n_wave,)
+        Wavelength in Angstrom (ascending).
+    y : array, shape (n_wave,)
+        Integrand sampled on ``wave``.
+    lam_lo, lam_hi : float
+        Band edges [Å].
+
+    Returns
+    -------
+    integral : float
+        :math:`\\int_{\\lambda_{lo}}^{\\lambda_{hi}} y\\,d\\lambda` over the covered band.
+    width : float
+        Covered band width :math:`\\int d\\lambda` [Å].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; static shapes. Pixels outside the band are clipped
+    onto its bounds, where they have zero width.
+    """
+    y_lo = jnp.interp(lam_lo, wave, y)
+    y_hi = jnp.interp(lam_hi, wave, y)
+    xc = jnp.clip(wave, lam_lo, lam_hi)
+    yc = jnp.where(wave < lam_lo, y_lo, jnp.where(wave > lam_hi, y_hi, y))
+    return jnp.trapezoid(yc, xc), jnp.trapezoid(jnp.ones_like(xc), xc)
+
+
 def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     """Mean flux density in a wavelength band.
 
@@ -459,12 +491,8 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     float
         Mean L_ν in the band (erg/s/Hz).
     """
-    mask = (wave >= lam_lo) & (wave <= lam_hi)
-    w = mask.astype(sed.dtype)
-    # Trapezoid-weighted mean: ∫(sed * dλ) / ∫(dλ) within the band
-    sed_masked = jnp.where(mask, sed, 0.0)
-    num = jnp.trapezoid(sed_masked, wave)
-    den = jnp.trapezoid(w, wave)
+    # Edge-inclusive trapezoid mean: ∫ sed dλ / ∫ dλ over exactly [lam_lo, lam_hi]
+    num, den = band_integral(wave, sed, lam_lo, lam_hi)
     # Return NaN if the band has no wavelength coverage (den ≈ 0). Denominator
     # selected before the divide: see compute_mass_weighted_age (#1860).
     ok = den > 1e-20
@@ -1334,172 +1362,6 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     return jnp.log10(jnp.maximum(l_tir_w, _FLOOR()) / 3.75e12) - jnp.log10(
         jnp.maximum(l_radio_w, _FLOOR())
     )
-
-
-# ── X-ray quantities (empirical scaling relations) ────────────────
-
-
-def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
-    """X-ray luminosity from X-ray binaries (0.5–8 keV).
-
-    Combines high-mass XRBs (proportional to SFR) and low-mass XRBs
-    (proportional to stellar mass) following Lehmer et al. (2010, 2016):
-
-    .. math::
-
-        L_{X,{\\rm XRB}} = 2.6 \\times 10^{39} \\times {\\rm SFR}
-                          + 9.05 \\times 10^{28} \\times M_\\star
-
-    Parameters
-    ----------
-    sfr : float
-        Star formation rate in Msun/yr.
-    stellar_mass : float
-        Stellar mass in Msun.
-
-    Returns
-    -------
-    float
-        L_X in erg/s.
-    """
-    l_hmxb = 2.6e39 * sfr
-    l_lmxb = 9.05e28 * stellar_mass
-    return l_hmxb + l_lmxb
-
-
-#: ``log10`` of the Lehmer+ XRB coefficients, as Python floats. Kept pre-logged
-#: because ``2.6e39`` is past float32's ceiling: any expression that materializes it
-#: in the working dtype (including ``jnp.log10(2.6e39)``) is ``inf`` before the log
-#: is applied. Computed in numpy (float64) at import, read as a scalar thereafter.
-_LOG10_HMXB_COEFF: float = float(np.log10(2.6e39))
-_LOG10_LMXB_COEFF: float = float(np.log10(9.05e28))
-
-
-def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.ndarray:
-    r"""``log10`` of :func:`compute_l_x_xrb`, without forming the linear value.
-
-    The float32-safe companion. The HMXB coefficient alone is
-    :math:`2.6\times10^{39}`, past float32's 3.4e38 ceiling, so *the first term
-    overflows before it is even multiplied by the SFR*: the linear form cannot be
-    evaluated in float32 at any star formation rate, including zero.
-
-    Parameters
-    ----------
-    sfr : array_like
-        Star formation rate [Msun/yr].
-    log_stellar_mass : array_like
-        ``log10`` stellar mass [dex re Msun]. Taken in log because that is how the
-        stellar component publishes it (``log_mstar``); the linear form is ~1e10
-        and representable, but round-tripping through it is pointless.
-
-    Returns
-    -------
-    ndarray
-        ``log10(L_X,XRB / (erg/s))`` [dex].
-
-    Notes
-    -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes; an exactly-zero SFR enters as
-    ``-inf`` and drops out of the sum without producing NaN.
-
-    .. math::
-
-        \log_{10} L_{X,\rm XRB} = \log_{10}\!\left(
-            10^{\,39.415 + \log_{10}\rm SFR} + 10^{\,28.957 + \log_{10}M_\star}\right)
-
-    evaluated as a base-10 ``logsumexp``. The two terms are the HMXB (SFR-tracking)
-    and LMXB (mass-tracking) populations of Lehmer et al. (2010, 2016); they differ
-    by ~10 decades, so the sum is dominated by one or the other and a naive
-    ``max`` would be close but not equal; ``logsumexp`` is exact.
-
-    References
-    ----------
-    .. [1] Lehmer, B. D. et al. "The 2 Ms Chandra Deep Field-North Survey and the
-       740 ks Extended Chandra Deep Field-South Survey: Improved Point-Source
-       Catalogs." 2010, ApJ, 724, 559. :doi:`10.1088/0004-637X/724/1/559`
-    """
-    log_sfr = log10_magnitude(jnp.asarray(sfr))
-    # The COEFFICIENTS are pre-logged as Python floats. Writing `jnp.log10(2.6e39)`
-    # instead puts 2.6e39 into a float32 array first, where it is already `inf`,
-    # the log is taken of infinity and the whole companion returns `inf` on inputs
-    # that are perfectly representable. Caught by this module's own float32 test.
-    log_hmxb = _LOG10_HMXB_COEFF + log_sfr
-    log_lmxb = _LOG10_LMXB_COEFF + jnp.asarray(log_stellar_mass)
-    stacked = jnp.stack(jnp.broadcast_arrays(log_hmxb, log_lmxb))
-    return logsumexp(LN10 * stacked, axis=0) / LN10
-
-
-def compute_log_l_x_agn(log_l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
-    r"""``log10`` of :func:`compute_l_x_agn`, without forming the linear value.
-
-    Parameters
-    ----------
-    log_l_bol_agn_erg : array_like
-        ``log10`` AGN bolometric luminosity [dex re erg/s].
-
-    Returns
-    -------
-    ndarray
-        ``log10(L_X,AGN / (erg/s))`` [dex].
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-
-    The bolometric correction is *already* a function of the log luminosity:
-    ``k_bol = a[1 + (log10(L_bol/Lsun)/b)^c]``; so the linear form takes a log,
-    applies the correction, and then divides in linear space. This one stays in
-    log throughout:
-
-    .. math::
-
-        \log_{10} L_{X,\rm AGN} = \log_{10} L_{\rm bol} - \log_{10} k_{\rm bol}
-
-    Identical arithmetic on the correction itself, so it tracks
-    :func:`compute_l_x_agn` to round-off in float64 and is finite in float32 where
-    the linear form is ``inf``.
-
-    References
-    ----------
-    .. [1] Duras, F. et al. "Universal bolometric corrections for active galactic
-       nuclei over seven luminosity decades." 2020, A&A, 636, A73.
-       :doi:`10.1051/0004-6361/201936817`
-    """
-    log_l_bol = jnp.asarray(log_l_bol_agn_erg)
-    log_l_sol = log_l_bol - LOG10_L_SUN
-    a, b, c = 15.33, 11.48, 16.20
-    k_bol = a * (1.0 + (log_l_sol / b) ** c)
-    return log_l_bol - jnp.log10(jnp.maximum(k_bol, 1.0))
-
-
-def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
-    """AGN X-ray luminosity (2–10 keV) from bolometric luminosity.
-
-    Uses the Duras et al. (2020) bolometric correction:
-
-    .. math::
-
-        k_{\\rm bol} = a \\left[1 + \\left(
-            \\frac{\\log L_{\\rm bol} / L_\\odot}{b}
-        \\right)^c \\right]
-
-    with a=15.33, b=11.48, c=16.20 for the 2–10 keV band.
-
-    Parameters
-    ----------
-    l_bol_agn_erg : float
-        AGN bolometric luminosity in erg/s.
-
-    Returns
-    -------
-    float
-        AGN 2–10 keV luminosity in erg/s.
-    """
-    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, _FLOOR()) / L_SUN)
-    # Duras+2020 Eq. 6, Table 2 (2-10 keV)
-    a, b, c = 15.33, 11.48, 16.20
-    k_bol = a * (1.0 + (log_l_sol / b) ** c)
-    return l_bol_agn_erg / jnp.maximum(k_bol, 1.0)
 
 
 # ── Ionizing photon budget ────────────────────────────────────────

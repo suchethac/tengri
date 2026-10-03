@@ -88,14 +88,20 @@ _CUE_F64_REF = np.array(
     [4.812422818209422e-16, 5.883854251437421e-16, 1.6985543682447306e-15, 5.314457200689803e-16]
 )
 
-#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64, same capture
-#: and #2517 re-take as ``_CUE_F64_REF``.
+#: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
+#: operator with each window mean defined as the wavelength integral
+#: ``∫F W dλ / ∫W dλ`` (trapezoid on the wavelength differences, 1 Å sigmoid edges).
+#: Relative to the pixel-count mean (Hβ 2.769656969949378e-16, [O III] 5007
+#: 4.085943225429073e-16, Hα 1.3469922014700263e-15, [N II] 6584 3.219346394066372e-18)
+#: the values move by +7.2e-6, -3.2e-6, +1.1e-5 and -1.7e-3. The exact path
+#: (``approx=False``) on the same model is pinned against a numpy implementation of the
+#: integral definition in ``test_bug_2588_c94_beta_and_window_means.py``. 17 significant digits.
 _WNE_F64_REF = np.array(
     [
-        2.7696019590093475e-16,
-        4.0858713898722696e-16,
-        1.3469747005931489e-15,
-        3.2195189936205713e-18,
+        2.7696220064667116e-16,
+        4.0858581331167685e-16,
+        1.3469890145145336e-15,
+        3.2141211596098763e-18,
     ]
 )
 
@@ -311,8 +317,8 @@ def test_measure_line_fluxes_approx_wne_float32_tracks_float64(ssp_wne):
         _WNE_F64_REF,
         rtol=1e-9,
         err_msg=(
-            "float64 measure_line_fluxes(approx=True) (wNE) moved vs the origin/main "
-            "reference captured before the #1206 line-channel fix"
+            "float64 measure_line_fluxes(approx=True) (wNE) moved vs the pinned "
+            "float64 reference of the wavelength-integral window mean"
         ),
     )
 
