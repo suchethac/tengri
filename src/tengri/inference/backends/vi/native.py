@@ -847,7 +847,8 @@ def run_native_vi(
     # --- Post-fit diagnostics ---
     diag_warnings = []
 
-    # Check chi2/dof
+    # Check chi2/dof. Diagnostic only: censored bands enter this sum as Gaussian
+    # residuals at the limit value, unlike the fitted energy.
     if fitter.data_type == "photometry":
         pred = fitter.model.predict_photometry(best_params)
         chi2_dof = float(

@@ -288,7 +288,9 @@ class TestLineFluxUpperLimits:
         # Line 2 (upper limit): censored term = -2 * ln Phi(z) with z = (limit - model)/sigma
         #   z = (3.0e-17 - 4.0e-17) / 1.0e-17 = -1, so -2 * ln Phi(-1) ≈ 3.68
         # Total: 1 + 3.68 ≈ 4.68
-        assert chi2 == pytest.approx(4.68, abs=0.01)
+        from scipy.stats import norm
+
+        assert float(chi2) == pytest.approx(1.0 - 2.0 * norm.logcdf(-1.0), abs=1e-10)
 
     def test_log_likelihood_upper_limit_below_limit(self):
         """SEDModel flux below upper limit → high likelihood (close to 0)."""

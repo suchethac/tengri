@@ -340,3 +340,51 @@ def test_nifty_methods_accept_an_all_detected_mask():
     check_nifty_supports_data_mask(jnp.zeros(5, dtype=jnp.int32))
     check_nifty_supports_data_mask(None)
     assert DETECTED == 0
+
+
+def test_catalog_scores_each_galaxys_own_line_limit(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Each catalog galaxy is scored with its own limit flag, not the template galaxy's.
+
+    Galaxy A carries an upper limit on Halpha and galaxy B a detection. The
+    sequential engine rebuilds the line record per galaxy; its line-channel
+    log-likelihood must equal that of a stand-alone single-galaxy record to
+    1e-10. Keeping the template flags gives B the limit term (or A the
+    detection term) and misses by many units. The batched engines compile one
+    mask for the whole catalog, so a catalog whose galaxies differ is refused
+    there (test_issue_1469_line_censor_cols).
+    """
+    from tengri.inference.catalog_fitter import CatalogFitter
+    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
+
+    cat, _ = build_two_galaxy_catalog(
+        halpha=(1.0e-16, 4.0e-16),
+        ssp=synthetic_ssp_wide,
+        obs_base=synthetic_tophat_obs,
+        line_censor=[1, 0],
+        line_censor_cols=["halpha_limit"],
+    )
+    ca = cat._catalog_arrays
+    galaxies = [
+        {
+            "flux_obs": ca.flux[i],
+            "noise": ca.noise[i],
+            "line_flux_obs": ca.line_flux_obs[i],
+            "line_flux_err": ca.line_flux_err[i],
+            "line_censor": ca.line_censor[i],
+        }
+        for i in range(2)
+    ]
+    fitter = CatalogFitter(cat.fwd, galaxies, data_type="photometry")
+    model_flux = jnp.array([2.0e-16])
+    for i, flag in enumerate((1, 0)):
+        record = fitter._galaxy_line_fluxes(galaxies[i])
+        alone = LineFluxData(
+            names=record.names,
+            wavelengths=record.wavelengths,
+            fluxes=jnp.asarray(ca.line_flux_obs[i]),
+            errors=jnp.asarray(ca.line_flux_err[i]),
+            is_upper_limit=jnp.array([True]) if flag == 1 else None,
+        )
+        assert float(record.log_likelihood(model_flux)) == pytest.approx(
+            float(alone.log_likelihood(model_flux)), abs=1e-10
+        )
