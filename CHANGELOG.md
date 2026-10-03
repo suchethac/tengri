@@ -7,6 +7,14 @@
   which does not track H. log Z is unchanged. On a d = 5 ball prior with R = 100 the
   old value was 0.24 nats against a measured scatter of 0.44 nats; the new one is 0.42 (#2443).
 
+- Line-flux limits are scored as censored likelihoods on every path: an upper
+  limit contributes ln Phi((F - m)/sigma) and a lower limit ln Phi((m - F)/sigma)
+  (F the limit value, m the model flux, sigma the flux uncertainty), evaluated
+  with a log-CDF with no floor, so a strongly violated limit keeps a finite value
+  and gradient. `LineFluxData.log_likelihood` honors `is_lower_limit`,
+  `LineFluxData.chi2` sums detections only, and the joint/spectroscopy loss scores
+  the line-flux term through `censored_neg_log_likelihood` when the data carry
+  limit flags (#2665, #2666).
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception
@@ -55,6 +63,9 @@
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
 
 ### Added
+
+- `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).
+- `generate_mock(model, params, key, noise=sigma_obs)` draws each band from `N(flux_true, |sigma_obs|)` with the supplied per-band observed errors (CIGALE's `mock_flag` draw); `snr` is ignored when `noise` is given and the default is unchanged (#2628).
 
 - `WavePrecomp(igm_fold="exact")` and `"auto"` now fold the IGM exactly on a free redshift: the sub-band ratio is taken at every node of the photometry z-table, where it previously refused. Measured on a z = 6.5-7.5 bare-stellar model against `approx=None`, worst over bands with more than 5 % surviving flux: exact 0.42 % at `n_z=32` (1.6 % at 16), node fold 105 %. What remains is the triweight z-interpolation, so it shrinks with the z spacing. Bands redward of Ly-alpha skip the quadrature (their ratio is exactly one) and the table is content-cached beside the z-table in `~/.cache/tengri_precomp`, so the exact build costs about what the node build does.
 
@@ -780,6 +791,7 @@
 
 ### Changed
 
+- `WavePrecomp(igm_fold=...)` now defaults to `"auto"`: the exact IGM fold wherever it can be built (fixed and free redshift), the node fold only where the transmission carries free parameters (patchy reionization, DLAs). The node fold was off `approx=None` by 85-107 % at z = 7 in bands straddling Ly-alpha and ~10 % in GALEX FUV at z = 1.5; the exact fold is ~1e-14 at fixed z and 0.42 % on a free z grid of 32 nodes. WavePrecomp photometry of any band the IGM reaches moves; pass `igm_fold="node"` for the old behavior (#2445).
 - `agn_attenuation_ebv` is retired; every AGN attenuation block (`smc_prevot`,
   `qsogen`) reads `agn_ebv`, the precompute-axis name; the retired spelling —
   flat or under `agn={'atten': {...}}` — is refused with a rename hint (#2325).
@@ -1905,7 +1917,7 @@
   immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
   `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
   disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
-  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  and honors `suppress` and an explicit `neb` declaration; the bare-grid
   refusal does not fire when nebular emission is off (#2362).
 
 - Both unwired guards are wired and the class is closed (#2326):
