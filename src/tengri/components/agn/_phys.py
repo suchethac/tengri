@@ -21,6 +21,7 @@ from tengri.utils.physics_constants import (
     K_BOLTZ,
     L_SUN,
 )
+from tengri.utils.scale import representable_floor
 
 __all__ = [
     "ANGSTROM_CM",
@@ -29,9 +30,9 @@ __all__ = [
     "K_BOLTZ",
     "L_SUN",
     "bolometric_integral_nu",
-    "compute_l_12um_from_lbol",
     "gaussian_line_profile",
     "lines_to_sed",
+    "log10_nu_lnu_at",
     "planck_lnu",
     "ring_area",
     "wavelength_to_nu",
@@ -296,62 +297,49 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
 # ── Line list → SED convolution ───────────────────────────────────
 
 
-def compute_l_12um_from_lbol(
-    agn_log_lbol: float | jnp.ndarray, f_12: float = 0.07
-) -> float | jnp.ndarray:
-    r"""Compute rest-frame 12 μm monochromatic luminosity from AGN bolometric luminosity.
-
-    Derives the nuclear 12 μm monochromatic luminosity density using a parametric
-    bolometric correction calibrated against AGN SED templates (Krawczyk et al. 2013).
-    This correction is used by :func:`~tengri.components.xray.xray.xray_agn_corona_lopez24`
-    to compute X-ray luminosity from the α_IRX relation.
+def log10_nu_lnu_at(
+    wave: jnp.ndarray,
+    lnu: jnp.ndarray,
+    wavelength_aa: float,
+    log10_scale: float | jnp.ndarray = 0.0,
+) -> jnp.ndarray:
+    r"""``log10`` of :math:`\nu L_\nu` at one wavelength, by log-log interpolation.
 
     Parameters
     ----------
-    agn_log_lbol : float or jnp.ndarray
-        AGN bolometric luminosity. [log10(L_sun)]
-    f_12 : float, optional
-        Bolometric correction fraction L_12μm / L_bol. Default: 0.07.
-        [dimensionless]
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid, ascending [Angstrom].
+    lnu : array_like, shape (n_wave,)
+        Spectral luminosity density sampled on ``wave`` [erg/s/Hz], possibly
+        carried at a reference scale (see ``log10_scale``).
+    wavelength_aa : float
+        Wavelength at which to evaluate :math:`\nu L_\nu` [Angstrom].
+    log10_scale : float, optional
+        ``log10`` of the factor by which the true spectrum exceeds ``lnu`` [dex].
+        Added in log space so a float32 spectrum evaluated at a low reference
+        luminosity never forms the true ~1e45 erg/s linear value. Default 0.
 
     Returns
     -------
-    float or jnp.ndarray
-        Monochromatic luminosity density at rest 12 μm. [erg/s/Hz]
+    ndarray, scalar
+        :math:`\log_{10}[\nu L_\nu(\lambda)/(\mathrm{erg\,s^{-1}})]` [dex];
+        ``-inf`` where the spectrum is zero at that wavelength.
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives.
-
-    **Bolometric correction calibration** (Krawczyk et al. 2013 [1]_):
-    For typical Type 1 AGN, the ratio of 12 μm monochromatic flux to
-    bolometric luminosity is approximately constant:
-
-    .. math::
-
-        L_{12\mu\mathrm{m}} = f_{12} \times L_{\mathrm{bol}}
-
-    with :math:`f_{12} \approx 0.07` derived from stacking AGN SED templates
-    in the mid-infrared. This is numerically equivalent to
-
-    .. math::
-
-        L_\nu(12\mu\mathrm{m}) = f_{12} \times L_{\mathrm{bol}} / \nu_{12\mu\mathrm{m}}
-
-    where :math:`\nu_{12\mu\mathrm{m}} = c / 12 \mu\mathrm{m}`.
-
-    References
-    ----------
-    .. [1] C. Krawczyk et al., "The mid-infrared AGN fraction in the XMM-COSMOS
-       survey," ApJS, 206, 4 (2013). arXiv:1301.1688.
-       https://doi.org/10.1088/0067-0049/206/1/4
+    **JIT/grad/vmap-safe.** The interpolation is linear in
+    :math:`(\log\lambda, \log L_\nu)`, exact for a power law, and the
+    wavelength is clamped to the grid ends by ``jnp.interp``.
     """
-    l_bol_erg = 10.0**agn_log_lbol * L_SUN
-    # 12 μm = 1.2e5 Å; ν = c / λ [Hz]
-    nu_12um = C_LIGHT / (1.2e5 * ANGSTROM_CM)
-    l_12um_erg = f_12 * l_bol_erg
-    l_12um_erg_hz = l_12um_erg / nu_12um
-    return l_12um_erg_hz
+    wave = jnp.asarray(wave)
+    lnu = jnp.asarray(lnu)
+    floor = representable_floor(1e-30)
+    log_lnu = jnp.interp(
+        jnp.log10(wavelength_aa), jnp.log10(wave), jnp.log10(jnp.maximum(lnu, floor))
+    )
+    log_nu = jnp.log10(C_LIGHT / (wavelength_aa * ANGSTROM_CM))
+    nonzero = log_lnu > jnp.log10(floor) + 1.0
+    return jnp.where(nonzero, log_lnu + log_nu + log10_scale, -jnp.inf)
 
 
 def lines_to_sed(

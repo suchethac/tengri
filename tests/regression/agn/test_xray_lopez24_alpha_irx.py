@@ -23,17 +23,15 @@ from tengri.components.xray.xray import xray_agn_corona_lopez24
 pytestmark = [pytest.mark.regression_bug]
 
 _C_AA = 2.998e18  # Å/s
-_NU_12UM = _C_AA / 1.2e5  # 12 µm = 120000 Å
 
 
 def _integrated_lx_2to10(nu_lnu_12um: float, alpha_irx: float) -> float:
     """Integrate the (unabsorbed, isotropic) lopez24 corona over 2-10 keV."""
-    l_nu_12um = nu_lnu_12um / _NU_12UM  # νLν -> Lν [erg/s/Hz]
     e_kev = np.logspace(np.log10(0.5), np.log10(30.0), 4000)
     lam_aa = 12.398 / e_kev
     sed = np.asarray(
         xray_agn_corona_lopez24(
-            lam_aa, l_nu_12um, alpha_irx=alpha_irx, log_nh=18.0, apply_anisotropy=False
+            lam_aa, np.log10(nu_lnu_12um), alpha_irx=alpha_irx, log_nh=18.0, apply_anisotropy=False
         )
     )
     nu = _C_AA / lam_aa
@@ -74,9 +72,8 @@ def test_lopez24_registered_and_dispatches():
 def test_xray_component_dispatches_to_lopez24():
     """XRaySEDComponent(model='lopez24') routes its corona through α_IRX·L_12µm.
 
-    Applies the component to a minimal state carrying an AGN L_agn_bol (no
-    published L_12µm, so the bolometric-correction fallback is exercised) and
-    checks the emitted corona weakens as α_IRX rises.
+    Applies the component to a minimal state carrying the AGN's published
+    ``log_L_12um`` and checks the emitted corona weakens as α_IRX rises.
     """
     import jax.numpy as jnp
 
@@ -90,7 +87,7 @@ def test_xray_component_dispatches_to_lopez24():
         derived={
             "sfr": jnp.asarray(1.0),
             "log_mstar": jnp.asarray(10.5),
-            "L_agn_bol": jnp.asarray(1e45),
+            "log_L_12um": jnp.asarray(44.0),
         }
     )
 
