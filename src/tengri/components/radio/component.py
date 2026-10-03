@@ -280,10 +280,12 @@ class RadioSEDComponent(TemplateThreading):
         is derived from the same tuple, so the two registration paths
         are guaranteed to agree.
 
-        DPL parameters (``radio_alpha_thin``, ``radio_alpha_thick``,
-        ``radio_log_nu_t``, ``radio_log_nu_cut``) are declared but
-        ``Fixed`` by default, so the component is a no-op extension when
-        ``agn_radio_model="powerlaw"``.
+        DPL-only parameters (``radio_alpha_thin``, ``radio_alpha_thick``,
+        ``radio_log_nu_t``) are declared in the parameter registry but are
+        refused when ``agn_radio_model="powerlaw"`` — they have no meaning on a
+        single power law. The power-law model reads ``radio_log_nu_cut``, which
+        is shared with the DPL model; it can be varied even on the power-law
+        model to move or remove the synchrotron-aging cutoff.
         """
         return list(_RADIO_PARAMS)
 
@@ -518,6 +520,7 @@ class RadioSEDComponent(TemplateThreading):
                     alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
                     radio_loudness=jnp.asarray(params["radio_loudness"]),
                     alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
+                    log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                     sfr_mode=self.config.sfr_mode,
                     log_mstar=log_mstar,
                     redshift=z,

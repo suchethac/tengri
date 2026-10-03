@@ -990,6 +990,7 @@ def radio_total_terms(
     alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
+    log_nu_cut: float = 13.0,
     sfr_mode: str = "bell2003",
     log_mstar: float = 10.0,
     redshift: float = 0.0,
@@ -1032,6 +1033,9 @@ def radio_total_terms(
         AGN radio-loudness log10(L_5GHz / L_B) [dimensionless]. Default 0.0.
     alpha_agn : float
         AGN radio spectral index [dimensionless]. Default 0.7.
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz] for the AGN power-law
+        jet. Default 13.0 (10 THz). Matches AGNfitter-rX's SPL jet.
     sfr_mode : str
         Star formation radio physics model. One of:
 
@@ -1109,6 +1113,7 @@ def radio_total_terms(
         L_agn_bol,
         radio_loudness,
         alpha_agn,
+        log_nu_cut=log_nu_cut,
         l_bband=l_bband,
         log_L_agn_bol=log_L_agn_bol,
     )
@@ -1128,6 +1133,7 @@ def radio_total(
     alpha_sf: float = _ALPHA_SF_DEFAULT,
     radio_loudness: float = _LOUDNESS_DEFAULT,
     alpha_agn: float = 0.7,
+    log_nu_cut: float = 13.0,
     sfr_mode: str = "bell2003",
     log_mstar: float = 10.0,
     redshift: float = 0.0,
@@ -1207,6 +1213,7 @@ def radio_total(
         alpha_sf,
         radio_loudness,
         alpha_agn,
+        log_nu_cut,
         sfr_mode,
         log_mstar,
         redshift,

@@ -5130,6 +5130,43 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
                 raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
+
+            # Validate model-specific keys are only used with the model that reads them
+            # (#2689: dpl-only keys were accepted and ignored on powerlaw)
+            if agn_variant in _RADIO_AGN_PARAMS_BY_MODEL:
+                allowed_params = _RADIO_AGN_PARAMS_BY_MODEL[agn_variant]
+                # Skip structural keys ('type', '*', 'all_params', 'other_params')
+                structural_keys = {"type", "*", "all_params", "other_params"}
+                provided_keys = {k for k in agn_dict if k not in structural_keys}
+                # Normalize to radio_* prefixed keys (strip potential short names)
+                provided_radio_keys = {
+                    (f"radio_{k}" if not k.startswith("radio_") else k) for k in provided_keys
+                }
+                # Find keys not in the allowed set for this model
+                disallowed = provided_radio_keys - allowed_params
+                if disallowed:
+                    # Find which model reads the disallowed keys
+                    model_readers = {
+                        model
+                        for model, params in _RADIO_AGN_PARAMS_BY_MODEL.items()
+                        if disallowed & params
+                    }
+                    reader_names = ", ".join(sorted(model_readers))
+                    many = len(disallowed) > 1
+                    noun = "keys" if many else "key"
+                    offending = ", ".join(
+                        sorted(repr(k.replace("radio_", "")) for k in disallowed)
+                    )
+                    verb = "are" if many else "is"
+                    pronoun = "them" if many else "it"
+                    adj = "These" if many else "This"
+                    raise ConfigError(
+                        f"radio.agn: {offending} {verb} not read by {agn_variant!r} "
+                        f"(selected for radio_agn_model), so writing {pronoun} here "
+                        f"would be silently ignored. {adj} {noun} {verb} read by: "
+                        f"{reader_names}. Drop {pronoun} or select a radio_agn_model "
+                        f"that reads {pronoun}."
+                    )
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -5154,7 +5191,7 @@ _RADIO_SF_PARAMS_BY_MODE: dict[str, frozenset[str]] = {
     "mccheyne2022": frozenset({"radio_mcch_q0", "radio_mcch_mass_slope", "radio_mcch_z_slope"}),
 }
 _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
-    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn"}),
+    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn", "radio_log_nu_cut"}),
     "dpl": frozenset(
         {
             "radio_loudness",
