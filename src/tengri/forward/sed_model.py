@@ -6740,11 +6740,14 @@ class SEDModel:
             ionizing_interval_weights,
         )
 
-        chain = self._cached_component_chain or self._build_component_chain()
+        chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
         stellar = next(c for c in chain if c.name == "stellar")
+        # A caller may hand free-only or already-merged params; fill the Fixed
+        # values in underneath either (the stellar methods read redshift, Z, ...).
+        full = {**dict(self.spec.get_fixed_values()), **dict(params)}
         return ionizing_interval_weights(
-            interval_fractions(stellar.compute_age_boundary_fractions(params)),
-            stellar.compute_log_L_lyc_age(params),
+            interval_fractions(stellar.compute_age_boundary_fractions(full)),
+            stellar.compute_log_L_lyc_age(full),
         )
 
     def _line_igm_component(self):

@@ -307,7 +307,7 @@ def _nebular_filters(model) -> tuple | None:
     """Observed-frame ``(wave, trans)`` tables the nebular component cached, or None."""
     from tengri.components.nebular.component import NebularSEDComponent
 
-    chain = model._cached_component_chain or model._build_component_chain()
+    chain = getattr(model, "_cached_component_chain", None) or model._build_component_chain()
     for comp in chain:
         if isinstance(comp, NebularSEDComponent):
             state = comp._state

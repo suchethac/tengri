@@ -168,6 +168,11 @@ def _resolved_transmission(model, params, wave) -> np.ndarray:
     )
     from tengri.components.dust.laws._registry import resolve_dust_law, select_law_kwargs
 
+    state = model.predict_state(params)
+    young = np.asarray(state.derived["age_boundary_younger_fraction"])[0]
+    log_lyc = np.asarray(state.derived["log_L_lyc_age"])
+    lyc = 10.0 ** (log_lyc - np.max(log_lyc))
+    q_young = float(np.sum(young * lyc) / np.sum(lyc))
     params = _full_params(model, params)
     component = model._line_dust_component()
     config = component.config
@@ -189,9 +194,15 @@ def _resolved_transmission(model, params, wave) -> np.ndarray:
     k_diff = apply_lyman_cutoff(
         resolve_dust_law(config.law_diff)(wave, **diff_params), wave, config.lyman_cutoff_aa
     )
-    tau = jnp.asarray(params["dust_tau_bc"]) * k_bc + jnp.asarray(params["dust_tau_diff"]) * k_diff
+    tau_young = (
+        jnp.asarray(params["dust_tau_bc"]) * k_bc + jnp.asarray(params["dust_tau_diff"]) * k_diff
+    )
+    tau_old = jnp.asarray(params["dust_tau_diff"]) * k_diff
     f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
-    return np.asarray(f_obsc + (1.0 - f_obsc) * jnp.exp(-tau))
+    t_young = f_obsc + (1.0 - f_obsc) * jnp.exp(-tau_young)
+    # The line screen weighs the two age intervals by their share of the ionizing
+    # luminosity: the young interval sees both screens, the old one the diffuse alone.
+    return np.asarray(q_young * t_young + (1.0 - q_young) * jnp.exp(-tau_old))
 
 
 def _line_transmission(model, params, wave, lum) -> np.ndarray:

@@ -203,8 +203,17 @@ def survival_cell_mean(lo, hi, boundary_yr: float, width_dex: float):
 
 
 def _safe_fraction(young, total):
-    """``young / total`` per node, 0 where the node holds no mass, clipped to [0, 1]."""
-    has_mass = total > 0.0
+    """``young / total`` per node, 0 where the node holds no usable mass, clipped to [0, 1].
+
+    A node is live when its mass exceeds ``eps**2`` of the heaviest node's. Testing
+    ``total > 0`` would pass a node holding 1e-250 of the mass: its value is a
+    fine ratio, but the quotient rule squares ``total`` and the derivative divides
+    by an underflowed zero (the narrow-SFH NaN of #1397). A node that light
+    carries no measurable flux, so its fraction is immaterial.
+    """
+    total = jnp.asarray(total)
+    floor = jnp.finfo(total.dtype).eps ** 2 * jnp.max(total)
+    has_mass = total > floor
     frac = jnp.where(has_mass, young / jnp.where(has_mass, total, 1.0), 0.0)
     return jnp.clip(frac, 0.0, 1.0)
 
