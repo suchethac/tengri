@@ -132,11 +132,13 @@ def test_subband_channels_sum_to_the_whole_band(built, which):
     log_nion = jnp.asarray(_LOG_NION)
     # At a grid node the chunks partition the band exactly; between nodes each
     # channel is interpolated on its own, so the sum agrees to the interpolation error.
+    # The whole-band photometry is served from the continuum z-table, stored in
+    # float32 (4e-6 relative), so the node agreement is that, not machine precision.
     node = {
         k: float(table.axes[i][len(table.axes[i]) // 2]) for i, k in enumerate(table.axis_names)
     }
     between = _point(m, table)
-    for pt, rtol in ((node, 1e-8), (between, 5e-3)):
+    for pt, rtol in ((node, 2e-5), (between, 5e-3)):
         parts = reconstruct_nebular_phot_subband(log_nion, pt, table)
         assert parts.shape == (len(_BANDS), _K)
         np.testing.assert_allclose(

@@ -435,6 +435,23 @@ class DerivedState:
     # For BakedIn nebular this is None: the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # The fast nebular grid's split of ``nebular_phot_lnu_precomp`` at the evaluation
+    # redshift, published only by the per-Q_H grid path (``FeaturePrecomp``):
+    # ``nebular_phot_lnu_precomp == nebular_phot_lnu_lines_precomp.sum(0) +
+    # nebular_phot_lnu_cont_precomp``. Rest-frame Lν, erg/s/Hz, intrinsic (no dust, no
+    # cosmology, no IGM), exactly like the total. The lines are one row per SED line
+    # (``nebular_line_phot_waves_rest`` [Angstrom] gives the rest wavelength each row
+    # sits at, the wavelength the SED renders it at); the continuum is one value per
+    # filter.
+    #
+    # THE INFIX IS LOAD-BEARING. ``predict_via_precomp`` sums every key ending
+    # ``_phot_lnu_precomp`` into the total: these two are DECOMPOSITIONS of the total,
+    # not additive terms, so a name ending in that suffix would count the nebular
+    # bucket three times. ``_lnu_lines_precomp`` / ``_lnu_cont_precomp`` stay out of
+    # that sweep, as ``_attenuated_precomp`` does below.
+    nebular_phot_lnu_lines_precomp: jnp.ndarray | None = None
+    nebular_phot_lnu_cont_precomp: jnp.ndarray | None = None
+    nebular_line_phot_waves_rest: jnp.ndarray | None = None
     # The same bucket with the young-limit dust screen already integrated THROUGH
     # each band, published by the dust component from the reddened continuum it
     # computes anyway (#1738). ``predict_via_precomp`` prefers this over reddening

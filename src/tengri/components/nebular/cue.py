@@ -1998,6 +1998,99 @@ class CueBackend:
         ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
 
         """
+        # One split (lines + continuum from the same resolved params, so no double
+        # computation), then the lines are rendered onto the grid and added. The
+        # split is the single source of the SED's two halves: the fast nebular grid
+        # tabulates them separately from :meth:`predict_nebular_split`.
+        cont_lsun, line_wav, line_lum = self.predict_nebular_split(
+            ssp_wave=ssp_wave,
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages_yr,
+            log_z=log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
+            template_data=template_data,
+            **neb_params,
+        )
+
+        # Add emission lines via the shared renderer: velocity triweight when
+        # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the
+        # fixed-Å Gaussian / nearest-pixel delta fallbacks.
+        neb_sed = cont_lsun + render_nebular_lines(
+            line_wav, line_lum, ssp_wave, line_sigma_aa, line_sigma_kms
+        )
+
+        # Convert from internal Lsun/Hz to erg/s/Hz
+        return neb_sed * _LSUN_ERG
+
+    def predict_nebular_split(
+        self,
+        ssp_wave: jnp.ndarray | None = None,
+        ssp_weights: jnp.ndarray | None = None,
+        ssp_log_ages_yr: jnp.ndarray | None = None,
+        log_z: float | None = None,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
+        template_data: Any | None = None,
+        **neb_params,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        r"""The two halves of :meth:`predict_nebular_sed`: continuum and line catalog.
+
+        The nebular SED is exactly
+
+        .. math::
+
+            L_\nu(\lambda) = \mathrm{cont}(\lambda) +
+            \sum_l L_l\,\phi_l(\lambda),
+
+        where ``cont`` is the emulator continuum linearly interpolated onto
+        ``ssp_wave`` (free-free tail past the last node) and :math:`\phi_l` the
+        unit-area line profile that :func:`render_nebular_lines` places at the
+        line's wavelength. Both halves are linear in :math:`Q_H`.
+        :meth:`predict_nebular_sed` is built from this method, so the two cannot
+        drift; the fast nebular grid tabulates the halves separately because a
+        line moves through a bandpass as :math:`(1+z)\lambda_0` while the
+        continuum is a smooth function of :math:`z` (the halves need different
+        redshift treatments).
+
+        Parameters
+        ----------
+        ssp_wave : array_like, shape (n_wave,)
+            Output wavelength grid [Angstrom].
+        ssp_weights, ssp_log_ages_yr, log_z, neb_logU, neb_logZ_gas
+            As :meth:`predict_nebular_sed`.
+        neb_fesc, neb_fesc_lya, neb_fdust : float
+            Escape / dust-absorption fractions [dimensionless, in [0, 1]]. The
+            CIGALE k-factor is applied to both halves; ``neb_fesc_lya`` to the
+            Lyman-alpha line only.
+        template_data : Any or None
+            Cue weights threaded as a JIT argument (default ``self.weights``).
+        **neb_params
+            Cue-specific overrides (``gas_logn``, ``ionspec_*``, ...).
+
+        Returns
+        -------
+        cont : ndarray, shape (n_wave,)
+            Continuum on ``ssp_wave`` [Lsun/Hz].
+        line_wav : ndarray, shape (n_lines,)
+            Line centers **as the SED renders them** [Angstrom]: the raw network
+            wavelengths, which for Cue's upstream file are AIR wavelengths
+            (H-beta at 4861.3), not the vacuum values the published catalog
+            carries. Anything that must agree with the SED uses these.
+        line_lum : ndarray, shape (n_lines,)
+            Integrated line luminosities [Lsun] (k-factor and Lyman-alpha escape
+            applied), all ~138 catalog lines.
+
+        Notes
+        -----
+        **JIT-compatible**: yes; ``jnp`` primitives only.
+        """
         # Resolve params once (avoids double computation for lines + continuum)
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
@@ -2028,17 +2121,8 @@ class CueBackend:
 
         # Interpolate continuum onto SSP grid; past the emulator's last node (1e8 Å)
         # continue as optically thin free-free (#2346).
-        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wav, cont_lum)
-
-        # Add emission lines via the shared renderer: velocity triweight when
-        # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the
-        # fixed-Å Gaussian / nearest-pixel delta fallbacks.
-        neb_sed = neb_sed + render_nebular_lines(
-            line_wav, line_lum, ssp_wave, line_sigma_aa, line_sigma_kms
-        )
-
-        # Convert from internal Lsun/Hz to erg/s/Hz
-        return neb_sed * _LSUN_ERG
+        cont = interp_continuum_with_freefree_tail(ssp_wave, cont_wav, cont_lum)
+        return cont, line_wav, line_lum
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this backend's structure.

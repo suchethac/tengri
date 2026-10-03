@@ -54,12 +54,23 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
+from tengri.components.nebular._shared import render_nebular_lines
+from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
+from tengri.components.nebular.nebular_band_z import (
+    continuum_band_from_slab,
+    continuum_z_slab,
+    continuum_ztable,
+    delta_line_band_kernel,
+    ln1pz_grid,
+    rendered_line_band_kernel,
+    z_bracket,
+)
 from tengri.components.nebular.nebular_grid_dust_build import (
     _build_dust_channels,
     _nebular_eb_channel,  # noqa: F401  (re-exported build helper)
     _nebular_screen_for,  # noqa: F401  (re-exported build helper)
-    _nebular_subband_channels,  # noqa: F401  (re-exported build helper)
+    _nebular_subband_channels,
 )
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.resolve import merge_fixed_params
@@ -296,6 +307,51 @@ class NebularGridTable:
         :func:`precompute_nebular_grid` now always populates it alongside
         ``log_phot_per_qh``, and a table missing it disables the fast path
         rather than serving a half-answer.
+    reference_redshift : float or None
+        The redshift the model was evaluated at while the table was built. A
+        convention only: the fixed value for a fixed-redshift model, else the
+        lower bound of the prior (or of ``catalog_z_range``), floored at 1e-3.
+        Every per-Q_H channel except the redshift-dependent band photometry
+        below is independent of it (the line table to 8e-6 relative, measured on
+        the FSPS/MILES SSP between ``z_ref = 0.1`` and ``17.3``, and the rest
+        band exactly).
+    sed_line_waves : ndarray, shape (n_sed_lines,) or None
+        Rest wavelengths of the lines **as the nebular SED renders them**
+        [Angstrom]. For Cue these are the raw network wavelengths, which are
+        AIR wavelengths (H-beta at 4861.3); the published catalog
+        (``wavelengths`` above is a subset of it) is the vacuum conversion.
+    sed_line_node_waves : ndarray, shape (n_sed_lines, 5) or None
+        The five SED-grid wavelengths nearest each line [Angstrom]; the SED renderer puts
+        a line's flux on grid nodes, and a screen that steps across a line (the IGM at
+        Lyman-alpha) must be evaluated where the flux is.
+    sed_line_node_weights : ndarray, shape (n_sed_lines, 5) or None
+        Share of each line's rendered flux on those nodes (rows sum to 1).
+    log_sed_lines_per_qh : ndarray, shape ``(*grid_dims, n_sed_lines)`` or None
+        ``log10`` of every SED line's luminosity per unit ``nion`` [erg/s per
+        (photons/s)], floored at -300 for a dark line.
+    line_band_kernel_fixed : ndarray, shape (n_sed_lines, n_filter) or None
+        Exact band response of each rendered unit-luminosity line [1/Hz] at
+        ``reference_redshift``. Present only for a model whose redshift is a
+        build-time constant; ``None`` means the lines are evaluated as delta
+        lines at the traced redshift.
+    cont_lnz : ndarray, shape (n_z,) or None
+        ``ln(1+z)`` at the continuum table's redshift nodes (uniform). One node
+        for a fixed-redshift model.
+    log_cont_ztable_per_qh : ndarray, shape ``(*grid_dims, n_z, n_filter)`` or None
+        ``log10`` of the continuum's band ``L_nu`` per unit ``nion``
+        [erg/s/Hz per (photons/s)] at each redshift node, float32. Where the
+        band is exactly zero (below the 915 Angstrom truncation) the entry is a
+        placeholder and ``cont_keep`` is False.
+    cont_keep : ndarray, shape (n_z, n_filter) or None
+        Bool: False where the continuum band is exactly zero at every node.
+    cont_subband_frac : ndarray, shape (n_z, n_filter, K) or None
+        Fraction of the continuum band in each of K quadrature chunks at each redshift
+        node (rows sum to 1); present when a dust screen is served. Taken at the
+        middle grid node.
+    cont_subband_waves_rest : ndarray, shape (n_z, n_filter, K) or None
+        Flux-weighted rest wavelength of the continuum in each chunk [Angstrom].
+    band_filter_waves, band_filter_trans : tuple of ndarray
+        The observed-frame filter curves the band channels were built with.
     log_phot_subband_per_qh : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
         log10 of the intrinsic rest-frame L_nu per unit nion integrated through
         sub-band chunk k of each OBSERVED-frame filter [erg/s/Hz per (photon/s)];
@@ -329,6 +385,34 @@ class NebularGridTable:
     log_phot_per_qh: jnp.ndarray | None = None
     axis_kinds: tuple = ()
     log_restband_per_qh: jnp.ndarray | None = None
+    reference_redshift: float | None = None
+    sed_line_waves: jnp.ndarray | None = None
+    sed_line_node_waves: jnp.ndarray | None = None
+    sed_line_node_weights: jnp.ndarray | None = None
+    log_sed_lines_per_qh: jnp.ndarray | None = None
+    line_band_kernel_fixed: jnp.ndarray | None = None
+    cont_lnz: jnp.ndarray | None = None
+    log_cont_ztable_per_qh: jnp.ndarray | None = None
+    cont_keep: jnp.ndarray | None = None
+    cont_subband_frac: jnp.ndarray | None = None
+    cont_subband_waves_rest: jnp.ndarray | None = None
+    band_filter_waves: tuple = ()
+    band_filter_trans: tuple = ()
+
+    @property
+    def serves_split_bands(self) -> bool:
+        """Whether photometry is served as lines + continuum at the evaluation redshift."""
+        return self.log_cont_ztable_per_qh is not None
+
+    @property
+    def redshift_is_tabulated(self) -> bool:
+        """Whether the band photometry depends on the evaluation redshift.
+
+        ``False`` for a table built for one fixed redshift (its exact rendered line
+        responses and single-redshift continuum are the answer at that redshift).
+        """
+        return self.serves_split_bands and self.line_band_kernel_fixed is None
+
     log_phot_subband_per_qh: jnp.ndarray | None = None
     phot_subband_waves_rest: jnp.ndarray | None = None
     log_restband_subband_per_qh: jnp.ndarray | None = None
@@ -340,7 +424,10 @@ class NebularGridTable:
 
     @property
     def serves_dust(self) -> bool:
-        """True iff all seven dust-channel arrays are not None."""
+        """True iff all seven dust-channel arrays (and, when the band photometry is
+        split by redshift, the continuum chunk channels) are not None."""
+        if self.serves_split_bands and self.cont_subband_frac is None:
+            return False
         return all(
             getattr(self, attr) is not None
             for attr in (
@@ -466,6 +553,117 @@ def _axis_range(spec, name):
         stacklevel=3,
     )
     return _DEFAULT_RANGE[name]
+
+
+#: Floor of a dark line's ``log10`` luminosity per Q_H [dex]: the same 1e-300
+#: floor every other channel of this table takes.
+_LOG_DARK_LINE = -300.0
+
+#: Lowest reference redshift the grid is built at [dimensionless]. Keeps
+#: ``4 pi d_L^2`` (which the line channel divides out and back in) away from the
+#: ``d_L = 0`` singularity at exactly z = 0.
+_REF_Z_FLOOR = 1e-3
+
+#: Redshift nodes in the continuum table when the model's own ``WavePrecomp`` does
+#: not say (its ``n_z`` default).
+_DEFAULT_N_Z = 250
+
+
+def reference_redshift(model) -> float:
+    """The redshift a nebular grid is built at: deterministic, and only a convention.
+
+    Every table channel that does not depend on redshift (the line and rest-band
+    channels; the band photometry is tabulated over redshift instead) is built
+    by evaluating ``model`` at one redshift. That redshift used to be
+    ``spec.sample(PRNGKey(0))["redshift"]``: a prior draw for a free redshift
+    (17.3 for ``Uniform(0, 20)``), the placeholder for a catalog fit. It is now
+
+    * the ``Fixed`` value, for a model whose redshift is a build-time constant;
+    * the lower bound of ``catalog_z_range`` for a catalog fit (the ``Fixed``
+      placeholder means nothing);
+    * the lower bound of a bounded prior for a free redshift;
+
+    each floored at :data:`_REF_Z_FLOOR` except a ``Fixed`` value, which is used
+    as given.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model the grid is built from.
+
+    Returns
+    -------
+    float
+        Reference redshift [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time.
+    """
+    spec = model.spec
+    catalog = getattr(model, "_catalog_z_range", None)
+    dist = spec.get_distribution("redshift")
+    if catalog is not None:
+        return max(float(catalog[0]), _REF_Z_FLOOR)
+    if dist.is_fixed:
+        return float(merge_fixed_params(spec, {})["redshift"])
+    bounds = _finite_prior_bounds(dist)
+    return max(bounds[0], _REF_Z_FLOOR) if bounds is not None else _REF_Z_FLOOR
+
+
+def nebular_z_request(model) -> tuple[float, float, int] | None:
+    """The redshift range and node count the continuum table must cover.
+
+    Mirrors how the stellar z-table sizes its own grid, so the two cover the same
+    redshifts: the prior support padded by 1 % (``catalog_z_range`` unpadded),
+    overridden by ``WavePrecomp(z_min=, z_max=)``, at ``WavePrecomp.n_z`` nodes
+    (default 250), uniform in :math:`\\ln(1+z)`.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model the grid is built from.
+
+    Returns
+    -------
+    tuple of (float, float, int) or None
+        ``(z_min, z_max, n_z)``, or ``None`` when the redshift is a build-time
+        constant (``Fixed`` and no ``catalog_z_range``): the table is then built
+        at that one redshift, exactly.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time.
+    """
+    spec = model.spec
+    catalog = getattr(model, "_catalog_z_range", None)
+    dist = spec.get_distribution("redshift")
+    if dist.is_fixed and catalog is None:
+        return None
+    cfg = getattr(model, "_approx_config_wave", None)
+    if catalog is not None:
+        z_lo, z_hi = catalog
+        pad = 0.0
+    else:
+        bounds = _finite_prior_bounds(dist)
+        if bounds is None:
+            z_lo, z_hi, pad = 0.001, 3.0, 0.0
+        else:
+            z_lo, z_hi = bounds
+            pad = 0.01 * (z_hi - z_lo)
+    cfg_zmin = getattr(cfg, "z_min", None)
+    cfg_zmax = getattr(cfg, "z_max", None)
+    z_min = float(cfg_zmin) if cfg_zmin is not None else max(0.001, float(z_lo) - pad)
+    z_max = float(cfg_zmax) if cfg_zmax is not None else float(z_hi) + pad
+    return z_min, z_max, int(getattr(cfg, "n_z", _DEFAULT_N_Z))
+
+
+def _nebular_component(model):
+    """The model's (exact-path) nebular component, or ``None`` if it has no chain."""
+    chain = getattr(model, "_cached_component_chain", None)
+    if chain is None and hasattr(model, "_build_component_chain"):
+        chain = model._cached_component_chain = model._build_component_chain()
+    return next((c for c in chain or () if isinstance(c, NebularSEDComponent)), None)
 
 
 def _log_nion_of_state(state) -> jnp.ndarray:
@@ -849,6 +1047,8 @@ def precompute_nebular_grid(
     ranges: dict | None = None,
     ref_params: dict | None = None,
     snap_met_to_ssp_nodes: bool = True,
+    redshift_range="auto",
+    n_z: int | None = None,
     dust_component=None,
     eb_tau_grids=None,
     n_subbands=None,
@@ -894,7 +1094,18 @@ def precompute_nebular_grid(
         prior support (else :data:`_DEFAULT_RANGE`).
     ref_params : dict, optional
         Reference parameter dict (grid axes are overwritten per point). Defaults
-        to a mid-range sample.
+        to a mid-range sample, with the redshift set by :func:`reference_redshift`
+        (a deterministic convention, not a prior draw): a caller-supplied
+        ``redshift`` is honored.
+    redshift_range : tuple of float, None or "auto", optional
+        Redshift range the band photometry is tabulated over (see Notes).
+        ``"auto"`` (default) asks the model (:func:`nebular_z_request`);
+        ``None`` builds for the single reference redshift, which is only right
+        for a model whose redshift is a build-time constant; ``(z_min, z_max)``
+        forces a range.
+    n_z : int, optional
+        Nodes in the redshift table (uniform in ln(1+z)); default the model's
+        ``WavePrecomp.n_z`` (250).
     snap_met_to_ssp_nodes : bool, optional
         Place knots on the SSP metallicity nodes and interpolate that axis
         linearly (default True). ``met_logzsol`` reaches the forward through a
@@ -936,6 +1147,29 @@ def precompute_nebular_grid(
     snapped + linear                  23      0.46 %      0.24 %
     snapped + linear                  30      0.28 %      0.15 %
     ==========================  ========  ==========  ==========
+
+    **Band photometry follows the evaluation redshift.** The nebular SED is a
+    continuum plus a line catalog, both linear in :math:`Q_H`, and both are
+    tabulated separately. The lines are stored as luminosities per :math:`Q_H`
+    and placed in each band at the traced redshift as delta lines
+    (:func:`~tengri.components.nebular.nebular_band_z.delta_line_band_kernel`);
+    the continuum's band value is tabulated at ``n_z`` redshifts uniform in
+    :math:`\\ln(1+z)` and interpolated
+    (:func:`~tengri.components.nebular.nebular_band_z.continuum_band_at_z`). The
+    former single table, projected at a build-time reference redshift, was wrong
+    at every other redshift by 8 to 22 % of the band flux on a dust-free Cue
+    model. For a model whose redshift is a build-time constant the lines'
+    exact rendered responses and a one-node continuum table are stored
+    instead (exact there). Measured against the exact projection on the
+    FSPS/MILES SSP: FREE ``Uniform(0, 20)`` p95 9.4e-4 / max 0.19, and
+    ``Uniform(0.05, 2)`` p95 5.3e-5 / max 1.7e-2, of the nebular band; lines
+    median 1.3e-4, p95 1.4e-2, max 6.2e-2 of the nebular band (narrow-band
+    edges), at most 6e-3 of the total flux.
+
+    **Memory**: the continuum table is ``n_z x n_filter`` floats (float32) per
+    grid node: about 8.8 MB for a two-axis 16 x 16 grid and 70 MB for three
+    axes at 12 filters and 250 redshifts. The fast path threads it as a runtime
+    JIT argument (``template_data["nebular_grid"]``), not a closure constant.
 
     **DIG mixing (#2222)**: two lookups against this same table (HII at
     ``neb_logU``, DIG at ``neb_logU + neb_dig_delta_logU``), mixed by
@@ -1028,15 +1262,21 @@ def precompute_nebular_grid(
         )
 
     wavelengths = jnp.asarray(wavelengths)
+    caller_z = None
     if ref_params is None:
         ref_params = dict(spec.sample(jax.random.PRNGKey(0)))
     else:
         ref_params = dict(ref_params)
+        caller_z = ref_params.get("redshift")
     # spec.sample() (and any caller-supplied stand-in) is free-only (#2296):
     # merge the spec's Fixed values in explicitly, so e.g. a Fixed redshift is
     # actually present below rather than silently defaulting to 0.0.
     ref_params = merge_fixed_params(spec, ref_params)
-    ref_z = ref_params.get("redshift", 0.0)
+    # The reference redshift is a documented convention, not a prior draw: the
+    # per-Q_H channels below are independent of it, and the band photometry is
+    # tabulated over redshift.
+    ref_z = caller_z if caller_z is not None else reference_redshift(model)
+    ref_params["redshift"] = ref_z
     # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
     # its runtime arrays and the stellar component raises before the first row.
     # This table is per-Q_H and so independent of the SFH that built it (#1718),
@@ -1102,6 +1342,13 @@ def precompute_nebular_grid(
     axes = tuple(axes)
     axis_kinds = tuple(axis_kinds)
 
+    def _params_at(point_values):
+        """Resolved reference parameters with the grid axes set to ``point_values``."""
+        p = dict(ref_params)
+        for name, v in zip(axis_names, point_values, strict=True):
+            p[name] = jnp.asarray(float(v))
+        return p
+
     collect_sed = n_subbands is not None or (
         dust_component is not None and eb_tau_grids is not None
     )
@@ -1117,7 +1364,28 @@ def precompute_nebular_grid(
         line, phot, rest, _, _ = _row_traced(row, want_phot=True, wave_sink=wave_sink)
         return line, (None if phot is None else phot), (None if rest is None else rest)
 
-    def _row_traced(row, *, want_phot, wave_sink=None):
+    neb_comp = _nebular_component(model)
+    neb_state = getattr(neb_comp, "_state", None)
+    filter_waves = getattr(neb_state, "filter_waves", None)
+    filter_trans = getattr(neb_state, "filter_trans", None)
+    # The band channels can be split (lines + continuum) only where the model
+    # carries the filters the photometry is projected through.
+    can_split = filter_waves is not None and filter_trans is not None
+
+    def _split_row(p, state, neg_log_qh):
+        """(continuum, line waves, log line luminosities), each per unit Q_H."""
+        from tengri.forward.orchestrator import slice_params_for_component
+
+        cont, sed_wave, log_lum = neb_comp.split_sed(
+            state, slice_params_for_component(neb_comp, p)
+        )
+        return (
+            apply_log10_scale(cont, neg_log_qh),
+            sed_wave,
+            jnp.maximum(log_lum + neg_log_qh, _LOG_DARK_LINE),
+        )
+
+    def _row_traced(row, *, want_phot, want_split=False, wave_sink=None):
         """Per-Q_H line (and optionally phot) vector at one grid point, tracer-safe.
 
         ``row`` is a ``(n_axes,)`` array so this vmaps: ``predict_state`` compiles
@@ -1190,7 +1458,10 @@ def precompute_nebular_grid(
             if collect_sed and "sed_nebular" in state.derived
             else None
         )
-        return line_per_qh, phot_per_qh, rest_per_qh, sed_neb, neg_log_qh
+        base = (line_per_qh, phot_per_qh, rest_per_qh, sed_neb, neg_log_qh)
+        if not want_split:
+            return base
+        return (*base, *_split_row(p, state, neg_log_qh))
 
     if not axis_names:
         grid_shape: tuple = ()
@@ -1236,28 +1507,36 @@ def precompute_nebular_grid(
             return jnp.concatenate(parts, axis=0)
         return tuple(jnp.concatenate([p[k] for p in parts], axis=0) for k in range(n_out))
 
+    want_split = has_phot and can_split
+    split_all = None
     if has_phot:
 
         @jax.jit
         @jax.vmap
-        def _eval_both(row):
-            line, phot, rest, sed_neb, neg_log_qh = _row_traced(row, want_phot=True)
-            if not collect_sed:
-                return line, phot, rest
-            if sed_neb is None:
-                raise RuntimeError(
-                    "nebular fast grid: a dust channel was requested but the reference "
-                    "model does not publish 'sed_nebular' (a BakedIn or line-only nebular "
-                    "has no continuum to tabulate)."
-                )
-            return line, phot, rest, sed_neb, neg_log_qh
+        def _eval_all(row):
+            line, phot, rest, sed_neb, neg_log_qh, *split = _row_traced(
+                row, want_phot=True, want_split=want_split
+            )
+            outs = [line, phot, rest]
+            if collect_sed:
+                if sed_neb is None:
+                    raise RuntimeError(
+                        "nebular fast grid: a dust channel was requested but the reference "
+                        "model does not publish 'sed_nebular' (a BakedIn or line-only nebular "
+                        "has no continuum to tabulate)."
+                    )
+                outs += [sed_neb, neg_log_qh]
+            return (*outs, *split)
 
-        # (n_points, n_line), (n_points, n_phot), (n_points, n_phot)
-        # and, when a dust channel is built: (n_points, n_wave), (n_points,)
-        n_out = 5 if collect_sed else 3
-        outs = _in_chunks(_eval_both, pts_arr, n_out)
+        # (n_points, n_line), 2 x (n_points, n_phot); when a dust channel is built
+        # (n_points, n_wave), (n_points,); when split: (n_points, n_wave) continuum,
+        # (n_points, n_sed_lines) waves and (n_points, n_sed_lines) log luminosities.
+        n_out = 3 + (2 if collect_sed else 0) + (3 if want_split else 0)
+        outs = list(_in_chunks(_eval_all, pts_arr, n_out))
         line_all, phot_all, rest_all = outs[:3]
-        sed_all, neg_log_qh_all = (outs[3], outs[4]) if collect_sed else (None, None)
+        rest_outs = outs[3:]
+        sed_all, neg_log_qh_all = rest_outs[:2] if collect_sed else (None, None)
+        split_all = rest_outs[2 if collect_sed else 0 :] if want_split else None
     else:
 
         @jax.jit
@@ -1292,6 +1571,24 @@ def precompute_nebular_grid(
     log_phot = None if phot_all is None else _stack_log(phot_all)
     log_rest = None if rest_all is None else _stack_log(rest_all)
 
+    split_fields = {}
+    if split_all is not None:
+        cont_all, sed_wave_all, sed_log_all = split_all
+        state0 = model.predict_state(_params_at(points[0]), fixed_values={})
+        request = nebular_z_request(model) if redshift_range == "auto" else redshift_range
+        split_fields = _split_band_fields(
+            params0=_params_at(points[0]),
+            wave=state0.wave,
+            cont_nodes=cont_all,
+            sed_line_waves=sed_wave_all[0],
+            log_sed_lines=sed_log_all,
+            grid_shape=grid_shape,
+            filters=(filter_waves, filter_trans),
+            ref_z=ref_z,
+            request=request,
+            n_z=n_z,
+            n_subbands=n_subbands if collect_sed else None,
+        )
     dust_channels = _build_dust_channels(
         model,
         grid_shape=grid_shape,
@@ -1314,8 +1611,136 @@ def precompute_nebular_grid(
         log_phot_per_qh=log_phot,
         axis_kinds=axis_kinds,
         log_restband_per_qh=log_rest,
+        reference_redshift=float(ref_z),
+        **split_fields,
         **dust_channels,
     )
+
+
+def _split_band_fields(
+    *,
+    params0,
+    wave,
+    cont_nodes,
+    sed_line_waves,
+    log_sed_lines,
+    grid_shape,
+    filters,
+    ref_z,
+    request,
+    n_z,
+    n_subbands=None,
+) -> dict:
+    """The redshift-dependent band channels of :class:`NebularGridTable`.
+
+    Parameters
+    ----------
+    params0 : dict
+        Resolved reference parameters at the first grid node (source of the line
+        width, the same ``neb_eline_sigma_kms`` the exact path renders with).
+    wave : array_like, shape (n_wave,)
+        The model's rest wavelength grid [Angstrom].
+    cont_nodes : ndarray, shape (n_nodes, n_wave)
+        Continuum per Q_H at every node [erg/s/Hz per photon/s].
+    sed_line_waves : ndarray, shape (n_sed_lines,)
+        Line wavelengths as the SED renders them [Angstrom].
+    log_sed_lines : ndarray, shape (n_nodes, n_sed_lines)
+        ``log10`` line luminosity per Q_H at every node.
+    grid_shape : tuple of int
+        Grid node counts per axis (empty for a zero-axis table).
+    filters : tuple of (sequence, sequence)
+        Observed-frame filter waves and transmissions.
+    ref_z : float
+        Reference redshift.
+    request : tuple or None
+        ``(z_min, z_max, n_z)`` from :func:`nebular_z_request`, or ``None`` for a
+        build-time-constant redshift.
+    n_z : int or None
+        Override for the node count.
+    n_subbands : int or None
+        When given (a dust screen will be applied to the nebular), also tabulate how
+        the continuum band divides into ``n_subbands`` quadrature chunks at each
+        redshift, with each chunk's flux-weighted rest wavelength.
+
+    Returns
+    -------
+    dict
+        The new :class:`NebularGridTable` fields.
+    """
+    filter_waves, filter_trans = filters
+    wave_np = np.asarray(wave, dtype=np.float64)
+    n_lines = int(np.asarray(sed_line_waves).shape[0])
+    if request is None:
+        lnz = ln1pz_grid(ref_z, ref_z, 1)
+        sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", 100.0))
+        profiles = jax.vmap(
+            lambda unit: render_nebular_lines(
+                jnp.asarray(sed_line_waves), unit, jnp.asarray(wave_np), 0.0, sigma
+            )
+        )(jnp.eye(n_lines))
+        kernel = rendered_line_band_kernel(profiles, wave_np, filter_waves, filter_trans, ref_z)
+    else:
+        z_lo, z_hi, n_default = request
+        if z_hi <= z_lo:
+            z_hi = z_lo + 1e-3
+        lnz = ln1pz_grid(z_lo, z_hi, max(2, int(n_z if n_z is not None else n_default)))
+        kernel = None
+
+    table = continuum_ztable(cont_nodes, wave_np, filter_waves, filter_trans, lnz)
+    zero = np.all(table <= 0.0, axis=0)  # (n_z, n_filter): exactly dark at every node
+    positive = table[table > 0.0]
+    floor = 1e-3 * float(positive.min()) if positive.size else 1e-300
+    log_table = np.log10(np.maximum(table, floor)).astype(np.float32)
+    n_filt = table.shape[-1]
+    sub = {}
+    if n_subbands is not None:
+        # The continuum's chunk fractions and wavelengths at each redshift, taken at
+        # the middle grid node: the continuum shape across a band depends only
+        # weakly on the ionization parameters, and the dust screen is applied to
+        # the chunk it falls in. The lines carry their own exact wavelengths.
+        k = int(n_subbands)
+        mid = np.asarray(cont_nodes)[cont_nodes.shape[0] // 2 : cont_nodes.shape[0] // 2 + 1]
+        filters_np = [
+            (np.asarray(fw, dtype=np.float64), np.asarray(ft, dtype=np.float64))
+            for fw, ft in zip(filter_waves, filter_trans, strict=True)
+        ]
+        frac = np.zeros((lnz.size, n_filt, k))
+        lam = np.zeros_like(frac)
+        for iz, z in enumerate(np.expm1(lnz)):
+            phi, lam_z = _nebular_subband_channels(mid, wave_np, filters_np, float(z), k)
+            tot = phi[0].sum(axis=-1, keepdims=True)
+            frac[iz] = np.where(tot > 0.0, phi[0] / np.where(tot > 0.0, tot, 1.0), 1.0 / k)
+            lam[iz] = lam_z[0]
+        sub = {
+            "cont_subband_frac": jnp.asarray(frac),
+            "cont_subband_waves_rest": jnp.asarray(lam),
+        }
+    sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", 100.0))
+    unit = jax.vmap(
+        lambda e: render_nebular_lines(
+            jnp.asarray(sed_line_waves), e, jnp.asarray(wave_np), 0.0, sigma
+        )
+    )(jnp.eye(n_lines))  # (n_lines, n_wave): each line's rendered profile [1/Hz]
+    unit = np.asarray(unit)
+    dlam = np.gradient(wave_np)
+    center = np.clip(np.searchsorted(wave_np, np.asarray(sed_line_waves)), 2, wave_np.size - 3)
+    idx = center[:, None] + np.arange(-2, 3)[None, :]
+    mass = np.take_along_axis(unit, idx, axis=1) * dlam[idx]
+    tot = mass.sum(axis=1, keepdims=True)
+    weights = np.where(tot > 0.0, mass / np.where(tot > 0.0, tot, 1.0), 0.2)
+    return {
+        **sub,
+        "sed_line_node_waves": jnp.asarray(wave_np[idx]),
+        "sed_line_node_weights": jnp.asarray(weights),
+        "sed_line_waves": jnp.asarray(sed_line_waves),
+        "log_sed_lines_per_qh": jnp.asarray(log_sed_lines).reshape(*grid_shape, n_lines),
+        "line_band_kernel_fixed": None if kernel is None else jnp.asarray(kernel),
+        "cont_lnz": jnp.asarray(lnz),
+        "log_cont_ztable_per_qh": jnp.asarray(log_table.reshape(*grid_shape, lnz.size, n_filt)),
+        "cont_keep": jnp.asarray(~zero),
+        "band_filter_waves": tuple(jnp.asarray(fw) for fw in filter_waves),
+        "band_filter_trans": tuple(jnp.asarray(ft) for ft in filter_trans),
+    }
 
 
 def _kinds(table):
@@ -1448,16 +1873,27 @@ def reconstruct_nebular_line_log_lums(log_nion, params, table) -> jnp.ndarray:
     return jnp.asarray(log_nion) + log_lpq  # node-exact geometric interp
 
 
-def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
+def reconstruct_nebular_phot(
+    log_nion, params, table, redshift=None, *, packed: bool = False
+) -> jnp.ndarray:
     r"""Reconstruct the intrinsic nebular photometry precompute: no Cue forward.
 
     The broadband analog of :func:`reconstruct_nebular_lines`. Returns the
     **rest-frame** filter-integrated ``L_nu`` (one column per filter) that the
-    nebular component would publish as ``nebular_phot_lnu_precomp``:
+    nebular component would publish as ``nebular_phot_lnu_precomp`` **at the
+    evaluation redshift**:
 
     .. math::
 
-        L_\nu^{\rm neb}(b) = 10^{\log_{10} n_{\rm ion} + \log_{10}\ell_b}
+        L_\nu^{\rm neb}(b) = \sum_l 10^{\log_{10} n_{\rm ion}+\log_{10}\ell_l}\,
+            K_{lb}(z) + 10^{\log_{10} n_{\rm ion}}\,c_b(z)
+
+    with :math:`\ell_l` the line luminosities per :math:`Q_H`,
+    :math:`K_{lb}(z)` the line band response (delta lines at the traced
+    redshift, :func:`~tengri.components.nebular.nebular_band_z.delta_line_band_kernel`),
+    and :math:`c_b(z)` the tabulated continuum band value
+    (:func:`~tengri.components.nebular.nebular_band_z.continuum_band_at_z`). One
+    grid-axis interpolation serves both terms.
 
     **No cosmology or dust here**: unlike the line channel, this matches the
     intrinsic precompute contract: :meth:`Observation.predict_via_precomp`
@@ -1474,27 +1910,149 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
         Parameter dict: the free-axis values locate the query point.
     table : NebularGridTable
         The grid from :func:`precompute_nebular_grid`, built from a
-        ``WavePrecomp`` model so ``log_phot_per_qh`` is populated.
+        ``WavePrecomp`` model so the photometry channels are populated.
+    redshift : float or ndarray, shape (), optional
+        Evaluation redshift [dimensionless]; may be traced. Required when the
+        table tabulates redshift (:attr:`NebularGridTable.redshift_is_tabulated`).
+        A table built for a build-time-constant redshift ignores it.
+    packed : bool, keyword-only
+        Return the per-line rows and the continuum row stacked instead of their
+        sum: what one linear DIG mix (:func:`mix_dig_grid_reconstruction`) needs
+        to keep the two terms separable. Default ``False``.
 
     Returns
     -------
-    ndarray, shape (n_filter,)
-        Intrinsic nebular filter-integrated rest-frame ``L_nu`` [erg/s/Hz].
+    ndarray, shape (n_filter,) or (n_sed_lines + 1, n_filter)
+        Intrinsic nebular filter-integrated rest-frame ``L_nu`` [erg/s/Hz]; with
+        ``packed=True`` the rows are the SED lines (at ``table.sed_line_waves``)
+        followed by the continuum.
 
     Raises
     ------
     ValueError
-        If the table carries no photometry channel (``log_phot_per_qh is None``)
-        rebuild from a ``WavePrecomp`` model with photometric filters.
+        If the table carries no photometry channel (``log_phot_per_qh is None``),
+        or it tabulates redshift and none was given: rebuild from a
+        ``WavePrecomp`` model with photometric filters, and pass the evaluation
+        redshift.
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP + log-domain add.
-    The sibling :func:`reconstruct_nebular_line_lums` and
-    :func:`reconstruct_nebular_lines` still take linear ``nion`` (their erg/s
-    output is deferred to #1206 items 2/3).
+    **JIT-compatible / gradient-safe**: yes, node-exact PCHIP over the grid axes,
+    a piecewise-linear redshift dependence (finite gradient everywhere, including
+    where the continuum band is exactly zero). The line term is exponentiated as
+    ``10^(log_nion + log l + log K)``, so the ~1e40 erg/s luminosity is never
+    materialized and float32 stays finite (#1859).
+
+    A table without the split channels (built before the band photometry
+    followed the evaluation redshift) serves ``log_phot_per_qh`` as it always did:
+    correct at the redshift it was built at.
     """
-    return _reconstruct_band_channel(log_nion, params, table, "log_phot_per_qh", "photometry")
+    if not table.serves_split_bands:
+        if packed:
+            raise ValueError("NebularGridTable has no split (lines + continuum) band channels.")
+        return _reconstruct_band_channel(log_nion, params, table, "log_phot_per_qh", "photometry")
+    if table.redshift_is_tabulated and redshift is None:
+        raise ValueError(
+            "This NebularGridTable tabulates the band photometry over redshift; "
+            "pass the evaluation redshift (redshift=...). Serving it without one would "
+            "return the value at an arbitrary reference redshift."
+        )
+    interp = _node_interpolator(params, table)
+    n_lines = table.log_sed_lines_per_qh.shape[-1]
+    # ONE grid-axis interpolation for the lines and for the two bracketing
+    # redshift rows of the continuum: they share the axes, so they share the
+    # weights (and the cost).
+    slab, lower, weight = continuum_z_slab(
+        table.log_cont_ztable_per_qh, table.cont_lnz, 0.0 if redshift is None else redshift
+    )
+    lead = table.log_sed_lines_per_qh.shape[:-1]
+    joint = jnp.concatenate(
+        [
+            table.log_sed_lines_per_qh,
+            slab.astype(table.log_sed_lines_per_qh.dtype).reshape(*lead, -1),
+        ],
+        axis=-1,
+    )
+    out = interp(joint)
+    log_lum = out[:n_lines]  # (n_sed_lines,) log10 erg/s per Q_H
+    log_bands = out[n_lines:].reshape(slab.shape[-2:])
+    if table.line_band_kernel_fixed is not None:
+        kernel = table.line_band_kernel_fixed
+    else:
+        kernel = delta_line_band_kernel(
+            redshift, table.sed_line_waves, table.band_filter_waves, table.band_filter_trans
+        )
+    lit = kernel > 0.0
+    safe = jnp.where(lit, kernel, 1.0)
+    # Safe-where on the EXPONENT: where the line misses the band the exponent is set to
+    # a value whose pow10 is finite in float32 (the unmasked ``log_nion + log l`` is ~41,
+    # past float32's 38.5 and overflows), so the discarded branch has a finite gradient.
+    expo = jnp.where(lit, jnp.asarray(log_nion) + log_lum[:, None] + jnp.log10(safe), 0.0)
+    lines = jnp.where(lit, pow10(expo), 0.0)
+    continuum = continuum_band_from_slab(log_nion, log_bands, table.cont_keep, lower, weight)
+    if packed:
+        return jnp.concatenate([lines, continuum[None, :]], axis=0)
+    return lines.sum(axis=0) + continuum
+
+
+def nebular_subband_decomposition(packed, redshift, table):
+    r"""The observed nebular band as sub-band chunks at the evaluation redshift.
+
+    What the dust screen needs: ``sum_k Phi_k T(lambda_k)`` per filter. Each SED
+    line is its own chunk at its rest wavelength (the screen is evaluated where
+    the line is), and the continuum band is divided into the tabulated quadrature
+    chunks of that redshift.
+
+    Parameters
+    ----------
+    packed : ndarray, shape (n_sed_lines + 1, n_filter)
+        ``reconstruct_nebular_phot(..., packed=True)``: line rows, then the continuum.
+    redshift : float or ndarray, shape ()
+        Evaluation redshift [dimensionless]; may be traced.
+    table : NebularGridTable
+        A table with the continuum chunk channels.
+
+    Returns
+    -------
+    phi : ndarray, shape (n_filter, 5 n_sed_lines + K)
+        Band ``L_nu`` of each chunk [erg/s/Hz]; sums over the last axis to the band.
+    lam : ndarray, shape (n_filter, 5 n_sed_lines + K)
+        Rest wavelength of each chunk [Angstrom].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes.
+    """
+    lines, cont = packed[:-1], packed[-1]
+    i, w = z_bracket(table.cont_lnz, redshift)
+    frac_t, lam_t = table.cont_subband_frac, table.cont_subband_waves_rest
+    if table.cont_lnz.shape[0] == 1:
+        frac, lam_c = frac_t[0], lam_t[0]
+    else:
+        f2 = jax.lax.dynamic_slice_in_dim(frac_t, i, 2, axis=0)
+        l2 = jax.lax.dynamic_slice_in_dim(lam_t, i, 2, axis=0)
+        frac = (1.0 - w) * f2[0] + w * f2[1]
+        lam_c = (1.0 - w) * l2[0] + w * l2[1]
+    n_filt = cont.shape[0]
+    # Each line is spread over its rendered profile: a few points weighted by the
+    # triweight kernel, so a screen that steps across the line (IGM at Lyman-alpha)
+    # is averaged over the profile rather than sampled at its center.
+    line_lam = jnp.asarray(table.sed_line_node_waves).reshape(-1)  # (n_lines*m,)
+    w_u = jnp.asarray(table.sed_line_node_weights)  # (n_lines, m)
+    phi_lines = (lines[:, None, :] * w_u[:, :, None]).reshape(-1, n_filt)
+    line_lam = jnp.broadcast_to(line_lam[None, :], (n_filt, line_lam.shape[0]))
+    phi = jnp.concatenate([phi_lines.T, cont[:, None] * frac], axis=-1)
+    lam = jnp.concatenate([line_lam, lam_c], axis=-1)
+    return phi, lam
+
+
+def _node_interpolator(params, table):
+    """``slab -> value`` interpolation of the leading grid axes at ``params``."""
+    if not table.axis_names:
+        return lambda slab: slab
+    point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
+    kinds = _kinds(table)
+    return lambda slab: interp_nd_pchip(slab, table.axes, point, kinds)
 
 
 def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndarray:

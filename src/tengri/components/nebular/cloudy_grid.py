@@ -1048,6 +1048,66 @@ class CloudyGridBackend:
         neb_fdust.
 
         """
+        cont, line_wave, line_lum = self.predict_nebular_split(
+            ssp_weights,
+            ssp_wave,
+            ssp_log_ages_yr,
+            log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
+            template_data=template_data,
+        )
+
+        # Add emission lines
+        neb_sed = cont + render_nebular_lines(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa, line_sigma_kms
+        )
+
+        # Convert from internal Lsun/Hz to erg/s/Hz
+        return neb_sed * _LSUN_ERG
+
+    def predict_nebular_split(
+        self,
+        ssp_weights: jnp.ndarray,
+        ssp_wave: jnp.ndarray,
+        ssp_log_ages_yr: jnp.ndarray,
+        log_z: float,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
+        template_data: Any | None = None,
+        **_kwargs,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        r"""The two halves of :meth:`predict_nebular_sed`: continuum and line catalog.
+
+        Parameters
+        ----------
+        ssp_weights, ssp_wave, ssp_log_ages_yr, log_z, neb_logU, neb_logZ_gas
+            As :meth:`predict_nebular_sed`.
+        neb_fesc, neb_fesc_lya, neb_fdust : float
+            Escape / dust-absorption fractions [dimensionless, in [0, 1]].
+        template_data : Any or None
+            Grid arrays threaded as a JIT argument.
+
+        Returns
+        -------
+        cont : ndarray, shape (n_wave,)
+            Continuum on ``ssp_wave`` [Lsun/Hz].
+        line_wave : ndarray, shape (n_lines,)
+            Line centers as the SED renders them [Angstrom].
+        line_lum : ndarray, shape (n_lines,)
+            Integrated line luminosities [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: yes. :meth:`predict_nebular_sed` is built from this
+        method (continuum + rendered lines), so the two cannot drift.
+        """
         # Get line luminosities
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights,
@@ -1075,15 +1135,8 @@ class CloudyGridBackend:
 
         # Interpolate continuum onto SSP wavelength grid; past the table's last node (1e8 Å)
         # continue as optically thin free-free (#2346).
-        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wave, cont_lum)
-
-        # Add emission lines
-        neb_sed = neb_sed + render_nebular_lines(
-            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa, line_sigma_kms
-        )
-
-        # Convert from internal Lsun/Hz to erg/s/Hz
-        return neb_sed * _LSUN_ERG
+        cont = interp_continuum_with_freefree_tail(ssp_wave, cont_wave, cont_lum)
+        return cont, jnp.asarray(line_wave), jnp.asarray(line_lum)
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this backend's structure.

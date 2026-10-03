@@ -69,6 +69,7 @@ src/tengri/components/nebular/fesc_model.py | jnp.clip with floor 0.0 < 1e-20 ->
 src/tengri/components/nebular/fesc_model.py | jnp.maximum with floor 1e-50 < 1e-20 -> 1
 src/tengri/components/nebular/ionizing_spectrum.py | jnp.clip with floor 0.0 < 1e-20 -> 4
 src/tengri/components/nebular/line_precompute.py | jnp.maximum with floor -30.0 < 1e-20 -> 1
+src/tengri/components/nebular/nebular_band_z.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor -30.0 < 1e-20 -> 1
 src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
