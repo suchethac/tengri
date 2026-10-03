@@ -11,9 +11,9 @@ within a band, which is exactly where a Lyman break falls inside a bandpass.
 The feature shipped with no test at all. These pin the three things that can
 regress silently:
 
-1. the default stays ``"node"``. Roughly twenty peer sessions build against
-   this code, so flipping the default changes their numbers without any
-   diagnostic;
+1. the default is ``"auto"`` (#2445 step 2), with ``"node"`` kept as an explicit
+   choice. A further change moves every WavePrecomp photometry near the Lyman
+   break without any diagnostic, so it is pinned;
 2. the refusals fire, rather than quietly returning the node answer, when the
    exact fold cannot be built;
 3. **the exact fold actually is more accurate**, measured against
@@ -102,10 +102,10 @@ def _photometry(model):
     return np.asarray(model.predict_photometry({}), dtype=np.float64)
 
 
-def test_default_fold_is_node():
-    """The default must not move: peer sessions build against it."""
-    assert WavePrecomp().igm_fold == "node"
-    assert WavePrecomp(n_subbands=5).igm_fold == "node"
+def test_default_fold_is_auto():
+    """The default is ``"auto"`` (#2445 step 2): exact wherever it can be built."""
+    assert WavePrecomp().igm_fold == "auto"
+    assert WavePrecomp(n_subbands=5).igm_fold == "auto"
 
 
 def test_exact_is_an_accepted_value():
@@ -268,9 +268,9 @@ def test_auto_is_an_accepted_value():
     assert WavePrecomp(igm_fold="auto").igm_fold == "auto"
 
 
-def test_adding_auto_does_not_move_the_default():
-    """A new mode must not change what an unconfigured WavePrecomp does."""
-    assert WavePrecomp().igm_fold == "node"
+def test_node_is_still_an_explicit_choice():
+    """The node fold stays available as an explicit A/B against the default."""
+    assert WavePrecomp(igm_fold="node").igm_fold == "node"
 
 
 def test_auto_is_not_resolved_at_construction(ssp, observation):

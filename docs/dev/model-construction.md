@@ -133,20 +133,28 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 - **`dust_attenuation={'type': 'age_binned', 'screens': [...]}`** generalizes
   the two-component birth-cloud/diffuse screen to N independent screens, each
   its own registered law and a `log10(age/yr)` window (`None` = unbounded;
-  windows need not partition the age axis):
+  windows need not partition the age axis). Optical depths add over every
+  screen whose window contains a star's age, so NESTED windows cascade the
+  way the birth cloud and the diffuse medium do in `two_component`:
 
   ```python
   dust_attenuation={
       'type': 'age_binned',
       'screens': [
-          {'law': 'calzetti', 'window_log_yr': (None, 7.0)},   # young
-          {'law': 'power_law', 'window_log_yr': (7.0, 8.5)},   # intermediate
-          {'law': 'cardelli', 'window_log_yr': (8.5, None)},   # old
+          {'law': 'calzetti', 'window_log_yr': (None, 7.0)},    # birth cloud: < 10 Myr
+          {'law': 'power_law', 'window_log_yr': (None, 8.5)},   # second screen: < 300 Myr
+          {'law': 'cardelli', 'window_log_yr': (None, None)},   # diffuse: every age
       ],
       'tau_0': Uniform(0, 2), 'tau_1': Uniform(0, 2), 'tau_2': Uniform(0, 2),
       'other_params': Fixed(DEFAULT),
   }
   ```
+
+  A 5 Myr star sees `tau_0 k_0 + tau_1 k_1 + tau_2 k_2`, a 100 Myr star
+  `tau_1 k_1 + tau_2 k_2`, an old star `tau_2 k_2`: each `tau_i` is the depth
+  screen `i` ADDS. Windows may instead TILE the age axis, e.g.
+  `(None, 7.0)`, `(7.0, 8.5)`, `(8.5, None)`; each age then sees one screen
+  only, nothing cascades, and each `tau_i` is the total depth of its age bin.
 
   Per-screen parameters are indexed from the screen count (`dust_tau_0`,
   `dust_tau_1`, ...; `dust_<lawparam>_i` for every shape parameter that
