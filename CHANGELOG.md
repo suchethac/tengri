@@ -2,6 +2,19 @@
 
 ### Fixed
 
+- AGN template and analytic components no longer normalize over the caller's wavelength
+  grid. `torus_lnu_from_grid` (skirtor/nenkova AGNfitter 1p/2p/3p, `cat3d_wind`,
+  `cat3d_wind_lowfwd`), the CLUMPY closure, `silva04`, `fritz`, `kd18_agnfitter` (+
+  `warmindex`), `slone_netzer`, `relagn_disc_from_grid`, `qsogen`, the toy tori, `adaf`,
+  `polar_dust_emission` and the `relagn_agn` torus budget divided by a trapezoid over
+  whatever grid they were handed, so L_ν at a fixed wavelength moved by 2e-4 to 2e-2
+  between a coarse and a fine grid, by 15% (KD18) to a factor 44 (ADAF) on a grid that
+  starts at 10 Å, and by order unity on a 912 Å-3 µm grid. Templates integrate the
+  power-law interpolant on their own native grid before resampling; analytic shapes
+  integrate on a fixed internal grid spanning their support. On a grid that covers the
+  support the values reproduce the old fine-grid ones to ≤ 2e-4 (most to ~2e-6); ADAF
+  moves by 4.7% because the old reference grid stopped at 1e8 Å and dropped that share of
+  the low-frequency synchrotron.
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception
