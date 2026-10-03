@@ -599,16 +599,12 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # ----------------------------------------------------------------------------------
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
-#: ``(sum, first bin, middle bin, last bin)``.
+#: ``(sum, first bin, middle bin, last bin)``, on the model's master grid (the disc's
+#: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, where the disc has no flux).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5215528515600546e32, 2.1618471431580417e23, 3.05875473371805e28, 8.775513568033312e21),
-    8.0: (1.558679481783208e32, 2.621597865262484e24, 3.1456552202309087e28, 8.823791474594601e21),
-    10.0: (
-        1.5745233941627343e32,
-        2.0084485779608986e24,
-        3.175461013264611e28,
-        9.02096624152618e21,
-    ),
+    6.0: (1.707584176604523e32, 0.0, 2.8257434327612434e28, 8.775354965942364e21),
+    8.0: (1.744572068257409e32, 0.0, 2.9067458749929174e28, 8.793930148865026e21),
+    10.0: (1.746115019861102e32, 0.0, 2.8988813064229277e28, 8.926156177607457e21),
 }
 
 

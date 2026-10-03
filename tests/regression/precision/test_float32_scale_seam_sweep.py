@@ -482,27 +482,34 @@ _AGN_MBH_DUST = {
 #: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
 #: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
 #: disc is multiplied by ``eta(30 deg) T``.
+#: Re-captured on the native kubota_done wavelength axis: the model's master grid now
+#: carries the disc's own 0.01 A - 1e8 A axis (200 points per decade), so the node-sum
+#: ``rest_sed_sum`` and the node-wise entries are values on that axis (``rest_sed_0`` is the
+#: 0.01 A node, where the disc has no flux). The composable runner's budgets no longer
+#: depend on the caller's grid, which is what makes the entries a property of the
+#: model: the same model on a 40-point-per-decade master grid agrees node-for-node to
+#: 3e-4 (median 1e-5; photometry 1.5e-4, the coarse grid's own filter-quadrature error).
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.522087146372271e32,
-        "rest_sed_0": 2.7414641089992215e23,
-        "rest_sed_mid": 3.059759671014202e28,
-        "rest_sed_last": 8.775691573813786e21,
-        "photometry": (1.0990406680264032e-27, 1.571190125160936e-27, 1.7648209267569442e-27),
+        "rest_sed_sum": 1.7083331107955833e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.827004002334766e28,
+        "rest_sed_last": 8.775487829046938e21,
+        "photometry": (1.099485281464173e-27, 1.5714178193034902e-27, 1.765141009257632e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5692038430133054e32,
-        "rest_sed_0": 3.32447947548655e24,
-        "rest_sed_mid": 3.170035763011865e28,
-        "rest_sed_last": 8.836905506469256e21,
-        "photometry": (1.1413516017138159e-27, 1.5731015599094376e-27, 1.7653901893068474e-27),
+        "rest_sed_sum": 1.75527715638312e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.9298020958379187e28,
+        "rest_sed_last": 8.799040217240228e21,
+        "photometry": (1.1410939500257432e-27, 1.5721949541751284e-27, 1.7653659559875667e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5893067919899514e32,
-        "rest_sed_0": 2.546937562859289e24,
-        "rest_sed_mid": 3.2078590999342967e28,
-        "rest_sed_last": 9.086913093044805e21,
-        "photometry": (1.1542181906962566e-27, 1.5812750837422911e-27, 1.767532048985811e-27),
+        "rest_sed_sum": 1.7572271174554748e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.919821376331864e28,
+        "rest_sed_last": 8.966696103654109e21,
+        "photometry": (1.136582272771934e-27, 1.579718381918873e-27, 1.766891935391155e-27),
     },
 }
 
