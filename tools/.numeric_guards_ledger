@@ -9,7 +9,7 @@
 # linear floor each replaced, not a new 30-orders-smaller one. The pattern
 # matcher reads the literal, not the space it lives in.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
-src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 5
+src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 4
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/_nthcomp.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/adaf.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -28,9 +28,7 @@ src/tengri/components/agn/disc.py | jnp.clip with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-100 < 1e-20 -> 4
 src/tengri/components/agn/disc.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
-src/tengri/components/agn/disc_cigale.py | jnp.clip with floor 0.0 < 1e-20 -> 3
-src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
-src/tengri/components/agn/disc_cigale.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
+src/tengri/components/agn/disc_cigale.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 6
@@ -45,6 +43,7 @@ src/tengri/components/agn/skirtor.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/agn/unified.py | jnp.clip with floor 0.0 < 1e-20 -> 1
+src/tengri/components/_z_response.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 10
 src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
@@ -106,7 +105,6 @@ src/tengri/observation/banded.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/observation/calibration.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/eline_priors.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/observation/eline_priors.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
-src/tengri/observation/line_flux_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/observation/line_ratio_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/observation/spectral_indices.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/spectral_indices.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1

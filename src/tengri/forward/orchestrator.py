@@ -269,6 +269,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_agn_disc": "erg/s/Hz",
     "sed_agn_torus": "erg/s/Hz",
     "sed_agn_lines": "erg/s/Hz",
+    "sed_agn_lines_attenuated": "erg/s/Hz",
     "sed_agn_polar": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
     # AGN, filter LUT (WavePrecomp).

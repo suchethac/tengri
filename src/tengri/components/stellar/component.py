@@ -153,6 +153,52 @@ DEFAULT_AGE_KERNEL = "cic"
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 
+#: SFH families whose time axis is anchored to the age of the universe at the
+#: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
+#: quantiles on it (Iyer et al. 2019); ``psb`` and ``psb_wild2020`` anchor their
+#: burst to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex`` bound
+#: their fixed old bins to ``[tflex, age(z)]``.
+_AGE_FAMILIES = (
+    "dense_basis",
+    "dense_basis_pure",
+    "psb",
+    "psb_wild2020",
+    "psb_suess2022",
+    "psb_flex",
+)
+
+
+def age_universe_kwargs(sfh_model, redshift) -> dict:
+    """The ``age_universe_yr`` kwarg of an age-anchored SFH, at ``redshift``.
+
+    The one definition of the rule every route that evaluates the SFH
+    function follows: the exact forward, the SED-free precompute and the SED
+    model's own history routes. A model whose SFH family (or, for a composite,
+    any member) is in ``_AGE_FAMILIES`` receives ``age_universe_yr`` equal to
+    the age of the universe at ``redshift`` under the configured cosmology
+    [yr]; every other model receives nothing.
+
+    Parameters
+    ----------
+    sfh_model : str or sequence of str
+        The SFH family, or the members of a composite SFH. ``"field"`` (the GP
+        modulator) is not a family and is ignored.
+    redshift : float or array_like
+        Redshift of THIS evaluation, fixed or sampled; may be traced.
+
+    Returns
+    -------
+    dict
+        ``{"age_universe_yr": age(z) [yr]}`` for an age-anchored model, else
+        ``{}``. A new dict on every call.
+    """
+    members = (sfh_model,) if isinstance(sfh_model, str) else tuple(sfh_model)
+    if not any(m in _AGE_FAMILIES for m in members):
+        return {}
+    from tengri.cosmology import age_at_z
+
+    return {"age_universe_yr": jnp.asarray(age_at_z(redshift)).reshape(()) * 1e9}
+
 
 def _resolve_age_kernel(config) -> str:
     """Which age-weight kernel this config selects: ``"cic"`` or ``"dsps"``.
@@ -1959,7 +2005,15 @@ class StellarSEDComponent:
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
-    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
+    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_", "agb_dust_")
+    #: AGB circumstellar dust-shell ratio template (#2534), resampled onto
+    #: ``ssp_data``'s own axes. Set only when ``agb_dust_weight`` is FREE (a
+    #: Fixed weight is baked directly into ``ssp_data`` upstream instead, see
+    #: ``components/stellar/agb_dust_shell.py``): then ``apply`` multiplies
+    #: ``ssp_flux_for_csp`` by the live ratio at the metallicity/age-weight
+    #: seam, and ``precompute`` refuses to build a precompute LUT (which
+    #: cannot represent a parameter-dependent SSP cube).
+    agb_dust_ratio: Any | None = None
     _state: StellarSEDComponentState | None = None
 
     def citations(self) -> tuple[str, ...]:
@@ -2121,6 +2175,30 @@ class StellarSEDComponent:
         from dataclasses import replace as _replace_state
 
         state = StellarSEDComponentState(name=self.name)
+
+        # AGB circumstellar dust-shell weighting (#2534): a FREE
+        # agb_dust_weight cannot be represented in any precompute LUT -- the
+        # LUT is built once, here, from a concrete SSP cube and cached
+        # independently of params, but a free weight's correction is only
+        # known per parameter sample. Refuse loudly, naming the exact path,
+        # rather than silently building a LUT at some fixed implicit weight.
+        # (FeaturePrecomp's own activation is not a key on this ``approx``
+        # dict -- its line/photometry LUTs are built by the nebular
+        # component, not here -- so only the two stellar-cube LUTs this
+        # component itself can build are checked.)
+        if self.agb_dust_ratio is not None and (
+            approx.get("wave_precomp") or approx.get("spectrum_precomp")
+        ):
+            raise ValueError(
+                "A free agb_dust_weight (agb_dust={'type': 'fsps_shell', "
+                "'weight': Uniform(...)}) cannot be represented in a precompute "
+                "LUT (WavePrecomp / SpectrumPrecomp): the SSP "
+                "cube it corrects is parameter-dependent, but every LUT is built "
+                "once, before any parameter value is known. Use the exact path "
+                "(approx=None, the default) instead -- approx='auto' already "
+                "resolves to it for this model. Fix agb_dust_weight (e.g. "
+                "agb_dust={'weight': Fixed(1.0)}) to use a precompute LUT."
+            )
 
         # Static ionizing-bin count from the concrete build-time SSP grid, so
         # ``apply`` can compute Q_H over the ionizing slice alone (see the field
@@ -2441,7 +2519,7 @@ class StellarSEDComponent:
         sfh_model = self.config.sfh_model
         is_composite = isinstance(sfh_model, list)
         if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, sfh_spec_settings = resolve_sfh(
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
                 sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
             )
             # Bin-edge knot discovery (#765) inspects the first member's callable.
@@ -2451,7 +2529,6 @@ class StellarSEDComponent:
             sfh_fn_composed = None
             spec_params = sfh_spec.params
             internal_param_map = sfh_spec.internal_param_map
-            sfh_spec_settings = sfh_spec.settings
 
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in internal_param_map.items():
@@ -2475,30 +2552,17 @@ class StellarSEDComponent:
                 sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
-        # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
-        # from the configured cosmology; default of 13.47 Gyr matches
-        # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
-        if isinstance(sfh_model, str) and sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        # ``psb_wild2020`` (registry alias ``psb``) anchors its burst double
-        # power law at the age of the universe AT THIS MODEL'S REDSHIFT, not a
-        # static cosmology default: Wild et al. 2020 Eq. 5 and BAGPIPES
-        # star_formation_history.py:326-348 both measure the burst's cosmic
-        # time from "now" (the observation epoch), which is per-galaxy, so it
-        # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting. ``psb_suess2022``/``psb_flex`` (both
-        # ``psb_continuity_flex``, #2645) share the same injection: their
-        # fixed old bins are bounded to ``[tflex_gyr, age_universe_yr]`` the
-        # same way the burst is bounded to ``[0, age_universe_yr]``, so
-        # neither family's default fixed section extends past the Big Bang.
-        if isinstance(sfh_model, str) and sfh_model in (
-            "psb",
-            "psb_wild2020",
-            "psb_suess2022",
-            "psb_flex",
-        ):
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -2589,6 +2653,18 @@ class StellarSEDComponent:
             )
         else:
             ssp_flux_for_csp = ssp.ssp_flux
+
+        # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
+        # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
+        # ``SEDModel.__init__``). Multiplying here, before the metallicity
+        # interpolation and the SFH age-weight sum, makes the correction
+        # exact per SSP and differentiable in ``agb_dust_weight``.
+        # ``ssp_flux_for_csp`` is 3-D here (an alpha-enhanced cube was collapsed
+        # above); the ratio is independent of [alpha/Fe], so applying it after
+        # the collapse equals applying it before.
+        _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp_flux_for_csp)
+        if _agb_dust_cube is not None:
+            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
@@ -3640,9 +3716,10 @@ class StellarSEDComponent:
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
         # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
-        # block below so psb_wild2020's age_universe_yr injection (mirroring
-        # apply()'s own ordering) can read it; also feeds the runtime
-        # tabulated SFH and the age-of-universe truncation further down.
+        # block below so the age_universe_yr injection for every family in
+        # ``_AGE_FAMILIES`` (mirroring apply()'s own ordering) can read it;
+        # also feeds the runtime tabulated SFH and the age-of-universe
+        # truncation further down.
         z = jnp.asarray(
             require_redshift(params, "components.stellar.component.compute_joint_weights")
         )
@@ -3660,14 +3737,10 @@ class StellarSEDComponent:
                     continue
                 raw = default_scalar
             sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
-        if self.config.sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020", "psb_suess2022", "psb_flex"):
-            # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this. The
-            # psb_suess2022/psb_flex share here is #2645.
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        # Mirrors apply()'s injection (§2) so the two routes cannot diverge
+        # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
+        # of every ``_AGE_FAMILIES`` member to age(z).
+        sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
@@ -3827,6 +3900,44 @@ class StellarSEDComponent:
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         return joint_weights, total_mass, ssp_ages_yr
 
+    def _agb_dust_cube_ratio(self, params, ssp_flux):
+        """Live AGB dust-shell ratio cube for a free ``agb_dust_weight`` (#2534).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict; carries ``agb_dust_weight`` when it is free.
+        ssp_flux : array, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
+            The cube the ratio will multiply; fixes how the ratio is broadcast.
+
+        Returns
+        -------
+        ndarray or None
+            ``R(w)`` on the SSP grid [dimensionless], with an [alpha/Fe] axis
+            for a 4-D cube, or ``None`` when the weight is not free (a Fixed
+            weight is baked into the SSP cube).
+
+        Notes
+        -----
+        **JIT-compatible**: yes; differentiable in ``agb_dust_weight`` between
+        stored weight nodes.
+        """
+        if self.agb_dust_ratio is None:
+            return None
+        from tengri.components.stellar.agb_dust_shell import (
+            PARAMS as _AGB_DUST_PARAMS,
+            agb_dust_ratio as _agb_dust_ratio_fn,
+            align_ratio_to_cube,
+        )
+        from tengri.protocols.component import declared_default
+
+        # The generic prefix routing always supplies a free weight in
+        # ``params``; the declared default is the defensive fallback (#2241).
+        weight = jnp.asarray(
+            params.get("agb_dust_weight", declared_default(_AGB_DUST_PARAMS, "agb_dust_weight"))
+        )
+        return align_ratio_to_cube(_agb_dust_ratio_fn(self.agb_dust_ratio, weight), ssp_flux)
+
     def compute_log_nion(self, params, ssp_data=None):
         r"""SED-free log-domain ionizing photon rate; no full-wavelength SED.
 
@@ -3882,7 +3993,11 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
+        ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
+        agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
+        if agb_dust_cube is not None:
+            ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
+        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -3948,15 +4063,16 @@ def _time_weighted_sfr(
 # at every call site. With registration cold-compile drops by an
 # order of magnitude.
 #
-# ``ssp_data`` is the only data field (it's a JAX-pytree-compatible
-# NamedTuple with ndarray leaves). Everything else is structural
-# (config, name, parameter_prefix) → meta.
+# ``ssp_data`` and ``agb_dust_ratio`` (#2534) are the data fields: both are
+# JAX-pytree-compatible NamedTuples with ndarray leaves (``None`` when the
+# AGB dust-shell weight is absent or Fixed, itself a valid empty pytree).
+# Everything else is structural (config, name, parameter_prefix) -> meta.
 
 from jax import tree_util as _tree_util
 
 _tree_util.register_dataclass(
     StellarSEDComponent,
-    data_fields=("ssp_data",),
+    data_fields=("ssp_data", "agb_dust_ratio"),
     meta_fields=("config", "name", "parameter_prefix", "_state"),
 )
 

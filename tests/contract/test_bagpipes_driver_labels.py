@@ -6,7 +6,10 @@ BAGPIPES labels its BC03 metallicity nodes as fractions of Z = 0.02; tengri's
 nodes as absolute log10(Z), and every stellar-metallicity request in the
 notebook and the validator is built from that pin, so both codes read the same
 BC03 node. These tests pin the node labels, the speed-of-light constant, the
-two ``MET_LOGZSOL`` expressions and the notebook's stellar requests.
+two ``MET_LOGZSOL`` expressions and the notebook's stellar requests. The grid is
+written in BAGPIPES's solar luminosity (3.826e33 erg/s), so the writer stamps
+``lsun_erg_per_s`` and ``load_ssp_data`` rescales to the IAU value tengri converts
+with; the last tests pin the stamp and the rescale.
 """
 
 from __future__ import annotations
@@ -229,3 +232,65 @@ def test_generated_grid_lgmet(driver):
     with h5py.File(_DRIVER_GRID, "r") as h:
         stored = np.asarray(h["ssp_lgmet"][:])
     np.testing.assert_allclose(stored, driver.absolute_lgmet(), rtol=0, atol=1e-6)
+
+
+_LSUN_BAGPIPES = 3.826e33
+
+
+def _writer_stamp_value() -> ast.expr:
+    """The right-hand side of ``h.attrs["lsun_erg_per_s"] = ...`` in ``repackage_bc03_miles``."""
+    writer = next(
+        n
+        for n in _tree(_DRIVER_SRC).body
+        if isinstance(n, ast.FunctionDef) and n.name == "repackage_bc03_miles"
+    )
+    values = [
+        n.value
+        for n in ast.walk(writer)
+        if isinstance(n, ast.Assign)
+        and any(
+            isinstance(t, ast.Subscript)
+            and isinstance(t.slice, ast.Constant)
+            and t.slice.value == "lsun_erg_per_s"
+            for t in n.targets
+        )
+    ]
+    assert len(values) == 1, "repackage_bc03_miles must stamp lsun_erg_per_s exactly once"
+    return values[0]
+
+
+def test_writer_stamps_bagpipes_lsun(units):
+    """The writer stamps ``lsun_erg_per_s`` from ``units.L_SUN_ERG_PER_S`` (3.826e33)."""
+    value = _writer_stamp_value()
+    assert isinstance(value, ast.Name) and value.id == "L_SUN_ERG_PER_S"
+    assert units.L_SUN_ERG_PER_S == _LSUN_BAGPIPES
+
+
+def test_generated_grid_carries_the_lsun_stamp():
+    """If the generated grid exists, it carries ``lsun_erg_per_s`` = 3.826e33 erg/s."""
+    if not _DRIVER_GRID.exists():
+        pytest.skip(f"generated grid not present at {_DRIVER_GRID}")
+    with h5py.File(_DRIVER_GRID, "r") as h:
+        stamp = h.attrs.get("lsun_erg_per_s")
+    assert stamp is not None, (
+        "regenerate the grid: python -m reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps"
+    )
+    assert float(stamp) == _LSUN_BAGPIPES
+
+
+def test_stamped_grid_loads_in_bagpipes_lsun():
+    """``load_ssp_data`` rescales a stamped grid so ``flux * L_SUN`` is the file's erg/s."""
+    from tengri import load_ssp_data
+    from tengri.utils.physics_constants import L_SUN
+
+    if not _DRIVER_GRID.exists():
+        pytest.skip(f"generated grid not present at {_DRIVER_GRID}")
+    with h5py.File(_DRIVER_GRID, "r") as h:
+        if "lsun_erg_per_s" not in h.attrs:
+            pytest.fail("generated grid carries no lsun_erg_per_s stamp")
+        raw = np.asarray(h["ssp_flux"][4, 100, :], dtype=np.float64)
+    loaded = np.asarray(load_ssp_data(str(_DRIVER_GRID)).ssp_flux[4, 100, :], dtype=np.float64)
+    keep = raw > 0
+    np.testing.assert_allclose(
+        loaded[keep] * L_SUN / (raw[keep] * _LSUN_BAGPIPES), 1.0, rtol=1e-5, atol=0
+    )

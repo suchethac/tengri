@@ -251,6 +251,30 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - A tabulated (per-SSP-age) `met=` beside a non-tabulated `sfh` warns but does not raise.
 
 
+### AGB circumstellar dust shell: `agb_dust`
+
+**Structural keys:**
+- `'type'`: AGB dust-shell model: `'fsps_shell'` (the only supported type). Omitting the group, or `agb_dust={'type': 'none'}`, leaves the SSP grid untouched.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+
+**Minimal example:**
+```python
+agb_dust={'type': 'fsps_shell'}  # weight fixed at 1.0 (bit-identical to omitting the group)
+agb_dust={'type': 'fsps_shell', 'weight': Uniform(0, 3)}  # free
+agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default strength
+```
+
+**Gotchas:**
+- `'weight'` is the short-form override for `agb_dust_weight`, the dimensionless scale on FSPS's Villaume, Conroy & Johnson (2015) circumstellar AGB dust-shell reprocessing. Default `Fixed(1.0)` (the grid as shipped, FSPS's own `agb_dust` default). Free prior `Uniform(0, 3)`.
+- MIST-isochrone SSP libraries only (`fsps_mist_*`): FSPS's `add_agb_dust_model` routine is MIST-only. Any other grid raises at build time, naming the supported grids.
+- The ratio was computed with FSPS 0.4.7 using MIST isochrones, the MILES spectral library and a Chabrier IMF, and is reused for the `c3k_a` grids and the Kroupa and Salpeter IMFs. The IMF dependence was measured only at solar metallicity (ages 0.3, 1, 3 Gyr; weights 0 and 3): at most 0.004 (Kroupa) and 0.019 (Salpeter) in the ratio. The spectral-library dependence could not be measured.
+- The ratio is stored on a ladder of weights and interpolated linearly between them: between stored weights it matches direct FSPS to better than 2% over 2-30 um (0.4-1.6% per interval, measured at solar metallicity for 0.3, 1 and 3 Gyr). Below w = 1/1024 the error reaches 4% (3.6% over 2-30 um), because the ratio is nearly discontinuous at w = 0 (FSPS switches the shell off); a weight near 0 carries a few-percent error. A free weight reaches the exact spectrum, the photometry and `compute_log_nion`; the nebular Q_H tables built once at model construction read the unweighted cube (measured effect below 1e-4 dex up to 10 Myr, at most 0.107 dex in single 45-100 Myr cells where Q_H is negligible).
+- The gradient with respect to the weight is the slope of the bracketing segment, so it has a kink at every stored weight (1/1024, 1/128, 1/8, 7/32, 5/16, 7/16, 9/16, 13/16, 1, 5/4, 13/8, 2, 3). For a 1 Gyr population the 10 um ratio peaks close to w = 1, so its slope changes sign around it.
+- The ratio spans 0.055 (far-infrared, w = 0) to 236 (old, metal-poor populations at 1200-1500 A) and is not clamped. It is exactly 1 outside 284 A to 3.4e7 A; the lower edge comes from a few 45-100 Myr low-metallicity populations at the 1e-4 threshold, not from shell absorption.
+- A **fixed** weight is baked into the SSP tensor at `SEDModel.build` time, so the exact path and every precompute table (`WavePrecomp`, `SpectrumPrecomp`, `FeaturePrecomp`) stay bit-exact.
+- A **free** weight cannot be baked (its value is only known per sample). Exact photometry, spectra and the ionizing rate apply it live. Everything built once from the SSP cube refuses, naming the exact path: `WavePrecomp`, `SpectrumPrecomp`, the `FeaturePrecomp` window table for baked-in lines, and `approx=True` on `predict_spectral_indices` / `measure_line_fluxes`. The `FeaturePrecomp` Cue grid reads the live ionizing rate and works. `approx='auto'` resolves to the exact path for single, catalog and population fits.
+
+
 ### Dust attenuation: `dust_attenuation`
 
 **Structural keys:**
@@ -277,7 +301,7 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - `'lyc_absorb_all'`: Absorb all ionizing photons (FSPS/CIGALE style) vs young-only (default). Two-component only.
 - `'eb_include_lyc'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
-- `'screens'`: `type='age_binned'` only (#2528). A list of `{'law': <law name>, 'window_log_yr': (lo, hi)}` dicts, one per screen; `lo`/`hi` are `log10(age/yr)` edges, either or both `None` for unbounded. N independent screens generalize the birth-cloud/diffuse pair to any N; windows need not partition the age axis. Per-screen parameters are indexed from the screen count: `'tau_0'`, `'tau_1'`, ... (full name `dust_tau_i`), plus one `'<lawparam>_i'` for every shape parameter that screen's own law declares (e.g. `'slope_0'`, `'Rv_2'`), defaulting to that law's own published value. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `'two_component'` bit-identically. Not supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (raises at construction; a fit's `approx="auto"` resolves to the exact path instead). Nebular continuum and the line catalog are attenuated only by screens whose window is unbounded below (the `t -> 0` limit, the same convention `'two_component'` applies to lines); a finite lower edge must sit at least five transition widths above the loaded SSP grid's youngest node or the build raises `ConfigError`, naming the screen, the edge, the grid's youngest node, and the two fixes.
+- `'screens'`: `type='age_binned'` only (#2528). A list of `{'law': <law name>, 'window_log_yr': (lo, hi)}` dicts, one per screen; `lo`/`hi` are `log10(age/yr)` edges, either or both `None` for unbounded. N independent screens generalize the birth-cloud/diffuse pair to any N; windows need not partition the age axis. Optical depths add over every screen whose window contains a star's age: nested windows (each `(None, hi_i)` with increasing `hi_i`, the last unbounded) cascade as the birth cloud and diffuse medium do in `'two_component'`, and `tau_i` is the depth screen `i` adds; windows that tile the age axis give each age a single screen, and `tau_i` is the total depth of that age bin. Per-screen parameters are indexed from the screen count: `'tau_0'`, `'tau_1'`, ... (full name `dust_tau_i`), plus one `'<lawparam>_i'` for every shape parameter that screen's own law declares (e.g. `'slope_0'`, `'Rv_2'`), defaulting to that law's own published value. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `'two_component'` bit-identically. Not supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (raises at construction; a fit's `approx="auto"` resolves to the exact path instead). Nebular continuum and the line catalog are attenuated only by screens whose window is unbounded below (the `t -> 0` limit, the same convention `'two_component'` applies to lines); a finite lower edge must sit at least five transition widths above the loaded SSP grid's youngest node or the build raises `ConfigError`, naming the screen, the edge, the grid's youngest node, and the two fixes.
 
 Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,
 `'Rv_bc'`, `'delta_bc'`, and their `'_diff'`/`'_neb'` siblings) takes
@@ -311,7 +335,19 @@ dust_attenuation={'type': 'two_component', 'law_bc': 'ccm89', 'law_diff': 'calze
 # WG00 screen with structural selectors
 dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', 'structure': 'clumpy'}
 
-# Age-binned: N independent screens (#2528)
+# Age-binned, nested windows (#2528): a cascade; young stars see all three screens,
+# and each tau_i is the depth that screen adds
+dust_attenuation={
+    'type': 'age_binned',
+    'screens': [
+        {'law': 'calzetti', 'window_log_yr': (None, 7.0)},
+        {'law': 'power_law', 'window_log_yr': (None, 8.5)},
+        {'law': 'cardelli', 'window_log_yr': (None, None)},
+    ],
+    'tau_0': 0.5, 'tau_1': 0.3, 'tau_2': 0.2, 'other_params': Fixed(DEFAULT),
+}
+
+# Age-binned, tiling windows: each age sees one screen; each tau_i is that bin's total depth
 dust_attenuation={
     'type': 'age_binned',
     'screens': [
@@ -319,7 +355,7 @@ dust_attenuation={
         {'law': 'power_law', 'window_log_yr': (7.0, 8.5)},
         {'law': 'cardelli', 'window_log_yr': (8.5, None)},
     ],
-    'tau_0': 0.5, 'tau_1': 1.0, 'tau_2': 0.3, 'other_params': Fixed(DEFAULT),
+    'tau_0': 1.0, 'tau_1': 0.5, 'tau_2': 0.2, 'other_params': Fixed(DEFAULT),
 }
 ```
 
