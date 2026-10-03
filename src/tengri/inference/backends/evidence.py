@@ -106,7 +106,10 @@ def _nss_information_and_error(log_w, logL, n_live, num_delete):
         information = 0.0
 
     removal = n_live - np.arange(num_delete, dtype=np.float64)
-    n_eff = float(np.sum(1.0 / removal) / np.sum(1.0 / removal**2))
+    # Reciprocal once, then square it (the float32 guard bans 1/x**2 spellings
+    # tree-wide; removal is an O(n_live) count, but the idiom is the rule).
+    inv_removal = 1.0 / removal
+    n_eff = float(np.sum(inv_removal) / np.sum(inv_removal**2))
     return information, float(np.sqrt(information / n_eff)), n_eff
 
 
