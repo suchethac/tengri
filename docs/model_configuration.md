@@ -251,6 +251,30 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - A tabulated (per-SSP-age) `met=` beside a non-tabulated `sfh` warns but does not raise.
 
 
+### AGB circumstellar dust shell: `agb_dust`
+
+**Structural keys:**
+- `'type'`: AGB dust-shell model: `'fsps_shell'` (the only supported type). Omitting the group, or `agb_dust={'type': 'none'}`, leaves the SSP grid untouched.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+
+**Minimal example:**
+```python
+agb_dust={'type': 'fsps_shell'}  # weight fixed at 1.0 (bit-identical to omitting the group)
+agb_dust={'type': 'fsps_shell', 'weight': Uniform(0, 3)}  # free
+agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default strength
+```
+
+**Gotchas:**
+- `'weight'` is the short-form override for `agb_dust_weight`, the dimensionless scale on FSPS's Villaume, Conroy & Johnson (2015) circumstellar AGB dust-shell reprocessing. Default `Fixed(1.0)` (the grid as shipped, FSPS's own `agb_dust` default). Free prior `Uniform(0, 3)`.
+- MIST-isochrone SSP libraries only (`fsps_mist_*`): FSPS's `add_agb_dust_model` routine is MIST-only. Any other grid raises at build time, naming the supported grids.
+- The ratio was computed with FSPS 0.4.7 using MIST isochrones, the MILES spectral library and a Chabrier IMF, and is reused for the `c3k_a` grids and the Kroupa and Salpeter IMFs. The IMF dependence was measured only at solar metallicity (ages 0.3, 1, 3 Gyr; weights 0 and 3): at most 0.004 (Kroupa) and 0.019 (Salpeter) in the ratio. The spectral-library dependence could not be measured.
+- The ratio is stored on a ladder of weights and interpolated linearly between them: between stored weights it matches direct FSPS to better than 2% over 2-30 um (0.4-1.6% per interval, measured at solar metallicity for 0.3, 1 and 3 Gyr). Below w = 1/1024 the error reaches 4% (3.6% over 2-30 um), because the ratio is nearly discontinuous at w = 0 (FSPS switches the shell off); a weight near 0 carries a few-percent error. A free weight reaches the exact spectrum, the photometry and `compute_log_nion`; the nebular Q_H tables built once at model construction read the unweighted cube (measured effect below 1e-4 dex up to 10 Myr, at most 0.107 dex in single 45-100 Myr cells where Q_H is negligible).
+- The gradient with respect to the weight is the slope of the bracketing segment, so it has a kink at every stored weight (1/1024, 1/128, 1/8, 7/32, 5/16, 7/16, 9/16, 13/16, 1, 5/4, 13/8, 2, 3). For a 1 Gyr population the 10 um ratio peaks close to w = 1, so its slope changes sign around it.
+- The ratio spans 0.055 (far-infrared, w = 0) to 236 (old, metal-poor populations at 1200-1500 A) and is not clamped. It is exactly 1 outside 284 A to 3.4e7 A; the lower edge comes from a few 45-100 Myr low-metallicity populations at the 1e-4 threshold, not from shell absorption.
+- A **fixed** weight is baked into the SSP tensor at `SEDModel.build` time, so the exact path and every precompute table (`WavePrecomp`, `SpectrumPrecomp`, `FeaturePrecomp`) stay bit-exact.
+- A **free** weight cannot be baked (its value is only known per sample). Exact photometry, spectra and the ionizing rate apply it live. Everything built once from the SSP cube refuses, naming the exact path: `WavePrecomp`, `SpectrumPrecomp`, the `FeaturePrecomp` window table for baked-in lines, and `approx=True` on `predict_spectral_indices` / `measure_line_fluxes`. The `FeaturePrecomp` Cue grid reads the live ionizing rate and works. `approx='auto'` resolves to the exact path for single, catalog and population fits.
+
+
 ### Dust attenuation: `dust_attenuation`
 
 **Structural keys:**

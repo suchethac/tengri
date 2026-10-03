@@ -2655,6 +2655,22 @@ class SEDModel:
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
+
+        # AGB circumstellar dust-shell weighting (#2534): a Fixed weight is
+        # baked directly into a NEW ssp_data here, before anything (the
+        # exact path, every precompute LUT) reads self.ssp_data, so the
+        # correction is exact and free everywhere downstream. A free weight
+        # cannot be baked (the value is only known per sample); that case is
+        # threaded live into StellarSEDComponent by _build_chain_configs
+        # instead (see components/stellar/agb_dust_shell.py module docstring).
+        if (
+            getattr(self.spec, "agb_dust", False)
+            and "agb_dust_weight" not in self.spec.free_params
+        ):
+            from tengri.components.stellar.agb_dust_shell import bake_agb_dust_shell
+
+            _agb_dust_w = self.spec.get_fixed_values().get("agb_dust_weight", 1.0)
+            self.ssp_data = bake_agb_dust_shell(self.ssp_data, float(_agb_dust_w))
         self._forward_dtype = jnp.dtype(forward_dtype)
         if self._forward_dtype != jnp.dtype("float64"):
             # Retired, not merely undocumented (#1433). The knob has cast nothing
@@ -2861,6 +2877,9 @@ class SEDModel:
         self._validate_metallicity_bounds(spec, ssp_data)
         self._validate_alpha_fe_identifiability(spec, ssp_data)
 
+        # ── AGB circumstellar dust-shell weighting (#2534) ─────────
+        param_map_deltas.append(self._init_agb_dust_param_map(spec))
+
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
         self._validate_dust_log_l_ir_override(spec)
@@ -2974,6 +2993,23 @@ class SEDModel:
         # cleared by _invalidate_signature() from the two methods that change
         # structure after construction.
         self._signature_memo = None
+
+        # AGB circumstellar dust-shell weighting (#2534): a free
+        # agb_dust_weight can never build a precompute LUT (see the refusal
+        # in StellarSEDComponent.precompute) -- raised here, directly, rather
+        # than left to the eager precompute attempts below. Those catch ANY
+        # chain-build failure, warn, and leave ``_cached_component_chain``
+        # unset; for a TRANSIENT failure a later lazy rebuild can succeed,
+        # but this refusal is deterministic (same spec, same SSP, every
+        # time), so the first real ``predict_photometry`` call would hit the
+        # identical error uncaught. Raising immediately, before that soft
+        # catch ever runs, is the only way this spec actually gets the
+        # documented behavior: a clear error naming the exact path, not a
+        # model that "builds" and then always fails on first use.
+        if self._has_free_agb_dust_weight() and (
+            self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp")
+        ):
+            raise self._free_agb_dust_lut_error("WavePrecomp / SpectrumPrecomp")
 
         # Eagerly build + cache the component chain when SpectrumPrecomp is
         # active. The fixed-z spectrum LUT (precompute_spectroscopy) runs
@@ -3151,6 +3187,8 @@ class SEDModel:
         # Baked-in / wNE: the lines are inside the SSP templates, so they are
         # measured off the spectrum through the window LUT. Build it eagerly (the
         # SSP grid is concrete at construction) and tell the likelihood to use it.
+        if self._has_free_agb_dust_weight():
+            raise self._free_agb_dust_lut_error("FeaturePrecomp SSP window")
         self._feature_precomp_lines = lines
         self._line_window_precomp(tuple(default_line_defs(np.asarray(lines))))
         self._fast_line_measurement = True
@@ -3697,6 +3735,33 @@ class SEDModel:
             )
 
         return delta
+
+    @staticmethod
+    def _init_agb_dust_param_map(spec):
+        """Identity param-map entry for ``agb_dust_weight`` (#2534).
+
+        ``agb_dust_weight`` has no unit conversion: ``StellarSEDComponent``
+        reads it directly from the flat params dict (Fixed weights never
+        reach ``params`` at all -- they are baked into ``self.ssp_data`` in
+        ``__init__``, before this runs). An identity entry, like
+        :meth:`_calibration_param_map`'s ``cal_c*`` coefficients, is enough
+        to satisfy :meth:`_validate_and_freeze_param_map`, which refuses any
+        free parameter with no declared owner.
+
+        Parameters
+        ----------
+        spec : Parameters
+            The resolved spec.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            ``{"agb_dust_weight": ("agb_dust_weight", 1.0, 0.0)}`` when the
+            group is active, else ``{}``.
+        """
+        if not getattr(spec, "agb_dust", False):
+            return {}
+        return {"agb_dust_weight": ("agb_dust_weight", 1.0, 0.0)}
 
     # Names of every public-API metallicity parameter that resolves to a
     # log10(Z/Zsun) lookup on the SSP grid. Each lives on the same grid
@@ -7761,6 +7826,35 @@ class SEDModel:
             self._cached_component_chain = chain
         return chain
 
+    def _has_free_agb_dust_weight(self) -> bool:
+        """Whether ``agb_dust_weight`` is a free parameter of this model (#2534)."""
+        return bool(getattr(self.spec, "agb_dust", False)) and (
+            "agb_dust_weight" in self.spec.free_params
+        )
+
+    @staticmethod
+    def _free_agb_dust_lut_error(table: str) -> ValueError:
+        """The refusal for a precompute table built from the SSP cube (#2534).
+
+        Parameters
+        ----------
+        table : str
+            Name of the table that cannot be built, e.g. ``"WavePrecomp"``.
+
+        Returns
+        -------
+        ValueError
+            Naming the exact path and the Fixed-weight alternative.
+        """
+        return ValueError(
+            f"A free agb_dust_weight (agb_dust={{'type': 'fsps_shell', 'weight': "
+            f"Uniform(...)}}) cannot be represented in a {table} table: the SSP cube it "
+            "corrects is parameter-dependent, but the table is built once, before any "
+            "parameter value is known. Use the exact path instead (approx=None, the "
+            "default; approx='auto' already resolves to it for this model), or fix the "
+            "weight (agb_dust={'weight': Fixed(1.0)}) to use a precompute table."
+        )
+
     def _index_window_precomp(self, index_defs):
         """Build (and memoize) the SSP window-integral LUT for ``index_defs``.
 
@@ -7866,6 +7960,8 @@ class SEDModel:
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
             raise ValueError(f"{caller}(approx=True) requires a stellar component.")
+        if self._has_free_agb_dust_weight():
+            raise self._free_agb_dust_lut_error(f"{caller}(approx=True) SSP window")
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
@@ -11284,8 +11380,20 @@ class SEDModel:
                 getattr(self, "_dust_law_neb", None),
             )
 
+        # AGB dust-shell (#2534): a FREE weight cannot be baked into
+        # ssp_data at __init__ time (the value is only known per sample), so
+        # thread the resampled ratio template into StellarSEDComponent for
+        # live application in its apply(). A Fixed weight was already baked
+        # into self.ssp_data in __init__, so this stays None there.
+        _agb_dust_ratio = None
+        if getattr(self.spec, "agb_dust", False) and "agb_dust_weight" in self.spec.free_params:
+            from tengri.components.stellar.agb_dust_shell import prepare_free_agb_dust_shell
+
+            _agb_dust_ratio = prepare_free_agb_dust_shell(self.ssp_data)
+
         chain = build_components(
             ssp_data=self.ssp_data,
+            agb_dust_ratio=_agb_dust_ratio,
             dust_live_shape_params=dust_live_shape_params,
             sfh_model=mean_model,
             field=field_on,
@@ -11840,6 +11948,7 @@ class SEDModel:
         dust_emission=None,
         neb=None,
         shock=None,
+        agb_dust=None,
         agn=None,
         igm=None,
         radio=None,
@@ -11913,6 +12022,14 @@ class SEDModel:
             ``'none'``), ``'norm'`` (``'frac'``, ``'lhalpha'``, ``'component'``),
             ``'abundance'``, ``'all_params'``, parameters. Default: off.
             Composes with ``neb`` when both are on.
+        agb_dust : dict, optional
+            AGB circumstellar dust-shell weighting (Villaume, Conroy &
+            Johnson 2015). Keys: ``'type'`` (required; ``'fsps_shell'``,
+            ``'none'``), ``'all_params'``, and ``'weight'``
+            (``agb_dust_weight``, dimensionless, default ``Fixed(1.0)`` =
+            the weight baked into the shipped FSPS MIST grid, free
+            ``Uniform(0, 3)``). Default: off (grid untouched). Supported
+            only on ``fsps_mist_*`` SSP grids.
         agn : dict, optional
             AGN emission. Keys: ``'type'`` (required; ``'composable'``, ``'legacy'``,
             ``'none'``), ``'norm'`` (``'cigale_joint'`` or ``'independent'``), and
@@ -12094,6 +12211,7 @@ class SEDModel:
                 dust_emission=dust_emission,
                 neb=neb,
                 shock=shock,
+                agb_dust=agb_dust,
                 agn=agn,
                 igm=igm,
                 radio=radio,

@@ -882,7 +882,18 @@ _AGN_ATTEN_LAW_TYPES: dict[str, str] = {"smc_prevot": "prevot_smc"}
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
 #: the emitter instead of retyped beside it.
 _TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
-    {"sfh", "dust_attenuation", "dust_emission", "neb", "shock", "igm", "radio", "xray", "agn"}
+    {
+        "sfh",
+        "dust_attenuation",
+        "dust_emission",
+        "neb",
+        "shock",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "agb_dust",
+    }
 )
 
 #: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
@@ -3466,6 +3477,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_neb(group_dict, result)
         elif group_name == "shock":
             _translate_shock(group_dict, result)
+        elif group_name == "agb_dust":
+            _translate_agb_dust(group_dict, result)
         elif group_name == "igm":
             _translate_igm(group_dict, result)
         elif group_name == "radio":
@@ -5306,6 +5319,25 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     result["foreground_rv"] = float(rv)
 
 
+def _translate_agb_dust(agb_dust_dict: dict, result: dict) -> None:
+    """Translate the ``agb_dust`` group to ``agb_dust=True/False``.
+
+    Mirrors :func:`_translate_xray`: a single active type (``'fsps_shell'``)
+    plus the universal ``'none'`` off-switch, no structural sub-keys.
+    """
+    agb_dust_type = _normalize_off_switch(agb_dust_dict.get("type", "none"))
+
+    valid_agb_dust = ("fsps_shell", "none")
+    if agb_dust_type not in valid_agb_dust:
+        raise _unknown_name_error(
+            "AGB dust-shell type", agb_dust_type, valid_agb_dust, keyword="type"
+        )
+
+    result["agb_dust"] = agb_dust_type != "none"
+    if agb_dust_type != "none":
+        result["agb_dust_model"] = agb_dust_type
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
@@ -5430,6 +5462,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # raises instead of silently dropping the path.
     "neb": frozenset({"type", "*", "all_params", "full_catalog"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
+    # AGB circumstellar dust-shell weighting (#2534): a one-parameter group,
+    # no structural sub-keys beyond the universal 'type'/'*'/'all_params'.
+    "agb_dust": frozenset({"type", "*", "all_params"}),
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
@@ -7404,6 +7439,8 @@ def _partition_by_group(
             partition[name] = "neb"
         elif name.startswith("shock_"):
             partition[name] = "shock"
+        elif name.startswith("agb_dust_"):
+            partition[name] = "agb_dust"
         elif dust_emission_active and name in _DUST_EMISSION_PARAM_NAMES:
             partition[name] = "dust_emission"
         elif name.startswith("dust_"):
@@ -7903,6 +7940,8 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
         return full_param_name[4:]
     elif full_param_name.startswith("shock_"):
         return full_param_name[6:]
+    elif full_param_name.startswith("agb_dust_"):
+        return full_param_name[9:]
     elif full_param_name.startswith("ionspec_"):
         return full_param_name[8:]
     elif full_param_name.startswith("gas_log"):
@@ -8280,6 +8319,15 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``shock`` is a boolean toggle on Parameters; the grammar type is
         # ``"mappings"`` when active and ``"none"`` when off (#851).
         return "mappings" if getattr(spec, "shock", False) else "none"
+    elif group_name == "agb_dust":
+        # ``agb_dust`` is a boolean toggle on Parameters, like ``shock``
+        # above; the grammar type is the stored ``agb_dust_model`` when
+        # active and ``"none"`` when off (#2534).
+        return (
+            getattr(spec, "agb_dust_model", "fsps_shell")
+            if getattr(spec, "agb_dust", False)
+            else "none"
+        )
     elif group_name == "igm":
         # ``apply_igm`` is the on/off switch; ``igm_model`` stores the
         # internal spelling (e.g. ``"inoue"``), which is also a registered

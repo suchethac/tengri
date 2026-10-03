@@ -2115,7 +2115,15 @@ class StellarSEDComponent:
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
-    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
+    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_", "agb_dust_")
+    #: AGB circumstellar dust-shell ratio template (#2534), resampled onto
+    #: ``ssp_data``'s own axes. Set only when ``agb_dust_weight`` is FREE (a
+    #: Fixed weight is baked directly into ``ssp_data`` upstream instead, see
+    #: ``components/stellar/agb_dust_shell.py``): then ``apply`` multiplies
+    #: ``ssp_flux_for_csp`` by the live ratio at the metallicity/age-weight
+    #: seam, and ``precompute`` refuses to build a precompute LUT (which
+    #: cannot represent a parameter-dependent SSP cube).
+    agb_dust_ratio: Any | None = None
     _state: StellarSEDComponentState | None = None
 
     def citations(self) -> tuple[str, ...]:
@@ -2277,6 +2285,30 @@ class StellarSEDComponent:
         from dataclasses import replace as _replace_state
 
         state = StellarSEDComponentState(name=self.name)
+
+        # AGB circumstellar dust-shell weighting (#2534): a FREE
+        # agb_dust_weight cannot be represented in any precompute LUT -- the
+        # LUT is built once, here, from a concrete SSP cube and cached
+        # independently of params, but a free weight's correction is only
+        # known per parameter sample. Refuse loudly, naming the exact path,
+        # rather than silently building a LUT at some fixed implicit weight.
+        # (FeaturePrecomp's own activation is not a key on this ``approx``
+        # dict -- its line/photometry LUTs are built by the nebular
+        # component, not here -- so only the two stellar-cube LUTs this
+        # component itself can build are checked.)
+        if self.agb_dust_ratio is not None and (
+            approx.get("wave_precomp") or approx.get("spectrum_precomp")
+        ):
+            raise ValueError(
+                "A free agb_dust_weight (agb_dust={'type': 'fsps_shell', "
+                "'weight': Uniform(...)}) cannot be represented in a precompute "
+                "LUT (WavePrecomp / SpectrumPrecomp): the SSP "
+                "cube it corrects is parameter-dependent, but every LUT is built "
+                "once, before any parameter value is known. Use the exact path "
+                "(approx=None, the default) instead -- approx='auto' already "
+                "resolves to it for this model. Fix agb_dust_weight (e.g. "
+                "agb_dust={'weight': Fixed(1.0)}) to use a precompute LUT."
+            )
 
         # Static ionizing-bin count from the concrete build-time SSP grid, so
         # ``apply`` can compute Q_H over the ionizing slice alone (see the field
@@ -2734,6 +2766,18 @@ class StellarSEDComponent:
             )
         else:
             ssp_flux_for_csp = ssp.ssp_flux
+
+        # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
+        # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
+        # ``SEDModel.__init__``). Multiplying here, before the metallicity
+        # interpolation and the SFH age-weight sum, makes the correction
+        # exact per SSP and differentiable in ``agb_dust_weight``.
+        # ``ssp_flux_for_csp`` is 3-D here (an alpha-enhanced cube was collapsed
+        # above); the ratio is independent of [alpha/Fe], so applying it after
+        # the collapse equals applying it before.
+        _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp_flux_for_csp)
+        if _agb_dust_cube is not None:
+            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
@@ -3982,6 +4026,44 @@ class StellarSEDComponent:
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         return joint_weights, total_mass, ssp_ages_yr
 
+    def _agb_dust_cube_ratio(self, params, ssp_flux):
+        """Live AGB dust-shell ratio cube for a free ``agb_dust_weight`` (#2534).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict; carries ``agb_dust_weight`` when it is free.
+        ssp_flux : array, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
+            The cube the ratio will multiply; fixes how the ratio is broadcast.
+
+        Returns
+        -------
+        ndarray or None
+            ``R(w)`` on the SSP grid [dimensionless], with an [alpha/Fe] axis
+            for a 4-D cube, or ``None`` when the weight is not free (a Fixed
+            weight is baked into the SSP cube).
+
+        Notes
+        -----
+        **JIT-compatible**: yes; differentiable in ``agb_dust_weight`` between
+        stored weight nodes.
+        """
+        if self.agb_dust_ratio is None:
+            return None
+        from tengri.components.stellar.agb_dust_shell import (
+            PARAMS as _AGB_DUST_PARAMS,
+            agb_dust_ratio as _agb_dust_ratio_fn,
+            align_ratio_to_cube,
+        )
+        from tengri.protocols.component import declared_default
+
+        # The generic prefix routing always supplies a free weight in
+        # ``params``; the declared default is the defensive fallback (#2241).
+        weight = jnp.asarray(
+            params.get("agb_dust_weight", declared_default(_AGB_DUST_PARAMS, "agb_dust_weight"))
+        )
+        return align_ratio_to_cube(_agb_dust_ratio_fn(self.agb_dust_ratio, weight), ssp_flux)
+
     def compute_log_nion(self, params, ssp_data=None):
         r"""SED-free log-domain ionizing photon rate; no full-wavelength SED.
 
@@ -4037,7 +4119,11 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
+        ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
+        agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
+        if agb_dust_cube is not None:
+            ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
+        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -4103,15 +4189,16 @@ def _time_weighted_sfr(
 # at every call site. With registration cold-compile drops by an
 # order of magnitude.
 #
-# ``ssp_data`` is the only data field (it's a JAX-pytree-compatible
-# NamedTuple with ndarray leaves). Everything else is structural
-# (config, name, parameter_prefix) → meta.
+# ``ssp_data`` and ``agb_dust_ratio`` (#2534) are the data fields: both are
+# JAX-pytree-compatible NamedTuples with ndarray leaves (``None`` when the
+# AGB dust-shell weight is absent or Fixed, itself a valid empty pytree).
+# Everything else is structural (config, name, parameter_prefix) -> meta.
 
 from jax import tree_util as _tree_util
 
 _tree_util.register_dataclass(
     StellarSEDComponent,
-    data_fields=("ssp_data",),
+    data_fields=("ssp_data", "agb_dust_ratio"),
     meta_fields=("config", "name", "parameter_prefix", "_state"),
 )
 
