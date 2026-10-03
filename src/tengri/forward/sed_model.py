@@ -3648,6 +3648,8 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
             dust_screens=getattr(spec, "dust_screens", ()),
+            dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
+            dust_law_neb=getattr(spec, "dust_law_neb", None),
         )
 
     def _init_metallicity(self, spec):

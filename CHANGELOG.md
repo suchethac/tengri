@@ -75,6 +75,8 @@
 
 ### Added
 
+- `dust_attenuation={'nebular_screen': 'own'}` gives the nebular continuum and every line flux their own screen, `T_neb(λ) = exp(−tau_neb · k_neb(λ))`, with the law `law_neb` and the new parameter `dust_tau_neb` (Fixed at 1, `Uniform(0, 4)` when freed), on `two_component` and `age_binned`: the total nebular attenuation (CIGALE's `E(B−V)_lines` convention), with no diffuse cascade, no young/old mixture and no obscuration floor; its absorbed energy joins the dust budget like the other screens. `tau_neb` (and, on `age_binned`, `law_neb`) is refused with any other choice, naming `nebular_screen='own'`, and `age_binned` now refuses a `nebular_screen` of `'diffuse'` or `'none'` instead of ignoring it (Part of #2625).
+
 - `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).
 - `generate_mock(model, params, key, noise=sigma_obs)` draws each band from `N(flux_true, |sigma_obs|)` with the supplied per-band observed errors (CIGALE's `mock_flag` draw); `snr` is ignored when `noise` is given and the default is unchanged (#2628).
 
