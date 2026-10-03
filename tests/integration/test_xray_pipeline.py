@@ -102,7 +102,7 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
         stellar_mass=1e10,
         L_agn_bol=0.0,
         gamma_hmxb=2.0,
-        gamma_lmxb=1.6,
+        gamma_lmxb=1.56,
         gamma_agn=1.8,
         E_cut=300.0,
         alpha_ox=-1.4,

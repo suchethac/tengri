@@ -114,11 +114,12 @@ def _build_grid_modified_blackbody(
     Parameters
     ----------
     filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom].
+        Per-filter wavelength arrays [Angstrom], observed frame.
     filter_trans : list[ndarray]
         Per-filter transmission curves.
     redshift : float
-        Source redshift.
+        Source redshift. The band integral reads the rest-frame template at
+        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
     T_grid : ndarray, shape (n_T,)
         Temperature grid [K].
     beta_grid : ndarray, shape (n_beta,)
@@ -162,7 +163,7 @@ def _build_grid_modified_blackbody(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
@@ -184,11 +185,12 @@ def _build_grid_casey2012(
     Parameters
     ----------
     filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom].
+        Per-filter wavelength arrays [Angstrom], observed frame.
     filter_trans : list[ndarray]
         Per-filter transmission curves.
     redshift : float
-        Source redshift.
+        Source redshift. The band integral reads the rest-frame template at
+        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
     T_grid : ndarray, shape (n_T,)
         Temperature grid [K].
     beta_grid : ndarray, shape (n_beta,)
@@ -248,7 +250,7 @@ def _build_grid_casey2012(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid, alpha_mir_grid, lambda_0_um_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
@@ -269,11 +271,12 @@ def _build_grid_graybody(
     Parameters
     ----------
     filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom].
+        Per-filter wavelength arrays [Angstrom], observed frame.
     filter_trans : list[ndarray]
         Per-filter transmission curves.
     redshift : float
-        Source redshift.
+        Source redshift. The band integral reads the rest-frame template at
+        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
     T_grid : ndarray, shape (n_T,)
         Temperature grid [K].
     beta_grid : ndarray, shape (n_beta,)
@@ -324,7 +327,7 @@ def _build_grid_graybody(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(T_grid, beta_grid, lambda_0_um_grid),
-        redshift=0.0,  # redshift already baked into L_nu via CMB correction
+        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
         dl_cm=1.0,
         energy_normalize=False,  # already normalized to L_absorbed_ref per model
         units="lnu",
@@ -339,18 +342,19 @@ def _build_grid_pah_drude(
 ) -> PreintegratedGrid:
     """Preintegrate PAH Drude template through filters.
 
-    The PAH template is pure shape (no axes); runtime amplitude scales it.
-    Precomputes the filter-integrated template so the hybrid kernel can scale
-    by the user's PAH amplitude parameter at runtime.
+    The PAH template is pure shape (no axes); an amplitude scales it. The adapter is
+    registered in ``forward/precompute/registry.py``; no kernel consumes its lookups
+    today.
 
     Parameters
     ----------
     filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom].
+        Per-filter wavelength arrays [Angstrom], observed frame.
     filter_trans : list[ndarray]
         Per-filter transmission curves.
     redshift : float
-        Source redshift.
+        Source redshift. The band integral reads the rest-frame template at
+        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
     L_absorbed_ref : float
         Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
 
@@ -380,7 +384,7 @@ def _build_grid_pah_drude(
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
         axes=(),  # No axes: scalar template
-        redshift=0.0,  # redshift correction deferred to runtime
+        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
         dl_cm=1.0,
         energy_normalize=False,  # template already normalized to L_absorbed_ref
         units="lnu",
