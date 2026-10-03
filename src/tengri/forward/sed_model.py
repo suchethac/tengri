@@ -2877,6 +2877,7 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
+        self._validate_filter_coverage(spec)
 
         # ── The polar reference's integration range (R66) ─────────
         # Runs here and not beside the ``spec``-only guards in ``build``
@@ -4747,6 +4748,51 @@ class SEDModel:
                     envelope_hi=hi,
                     stacklevel=3,
                 )
+
+    def _validate_filter_coverage(self, spec) -> None:
+        """Refuse a photometric band the model wavelength axis does not cover (#2620).
+
+        The photometry integral zero-fills outside the rest-frame axis and
+        divides by the whole filter weight, so an uncovered band is 0 and a
+        partly covered one the covered fraction, with no warning. This runs
+        once every component has declared its axis extension
+        (``_init_multiwavelength``), at the fixed redshift, at both ends of
+        ``catalog_z_range`` for a catalog model, or at both finite ends of the
+        redshift prior's support, and raises ``ConfigError`` through
+        :func:`tengri.observation.photometry.validate_filter_coverage`.
+
+        Notes
+        -----
+        A prior with an infinite end (an untruncated ``Gaussian``) exposes no
+        support at that end, so only its finite ends and its default are
+        tested. The data mask is known only at fit time, so every filter of the
+        observation is checked.
+        """
+        photometry = getattr(self.observation, "photometry", None)
+        if photometry is None or not photometry.filters:
+            return
+        from tengri.observation.photometry import validate_filter_coverage
+
+        dist = spec.get_distribution("redshift")
+        if self._catalog_z_range is not None:
+            lo, hi = self._catalog_z_range
+            tests = [(lo, "lower end of catalog_z_range"), (hi, "upper end of catalog_z_range")]
+        elif dist.is_fixed:
+            tests = [(float(dist.default), "fixed redshift")]
+        else:
+            ends = zip(dist.bounds, ("lower", "upper"), strict=True)
+            tests = [
+                (float(b), f"{n} end of the redshift prior") for b, n in ends if np.isfinite(b)
+            ]
+            if not tests:
+                tests = [(float(dist.default), "default of the unbounded redshift prior")]
+        validate_filter_coverage(
+            photometry.filters,
+            photometry.convention,
+            float(self._rest_wavelength.min()),
+            float(self._rest_wavelength.max()),
+            tests,
+        )
 
     def _validate_dust_log_l_ir_override(self, spec) -> None:
         """Raise when a declared ``dust_log_L_ir`` coexists with a live ``dust_eta_balance``.

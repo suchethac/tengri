@@ -12,6 +12,7 @@ import functools
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 # FilterConvention + the bandpass weight live in a leaf module so the exact
 # kernel here and the build-time preintegration (utils.grid_interp) share one
@@ -22,6 +23,7 @@ from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
     FilterConvention,
     filter_weight as _filter_weight,
+    filter_weight_np,
     list_filter_conventions,
 )
 from tengri.utils.scale import representable_denominator
@@ -33,11 +35,13 @@ __all__ = [
     "compute_flux_density",
     "compute_flux_density_batch",
     "compute_photometry",
+    "filter_coverage_fraction",
     "list_filter_conventions",
     "lnu_filter_integral",
     "lnu_filter_integral_batch",
     "pad_filters",
     "project_photometry",
+    "validate_filter_coverage",
 ]
 
 
@@ -162,6 +166,143 @@ def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
     """
     pos = jnp.arange(fw_padded.shape[0], dtype=fw_padded.dtype)
     return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
+
+
+# Photometric filter coverage validation (#2620)
+#: Largest tolerated fraction of a band's bandpass-weighted transmission that may
+#: lie outside the model's redshifted rest-frame axis before the build is refused.
+#: The runtime integral zero-fills the uncovered part, so an accepted band is
+#: under-estimated by at most this fraction of its flux for a flat spectrum.
+FILTER_COVERAGE_TOLERANCE = 1e-3
+
+
+def filter_coverage_fraction(
+    filter_wave,
+    filter_trans,
+    model_wave_min: float,
+    model_wave_max: float,
+    redshift: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> float:
+    r"""Fraction of a filter's bandpass-weighted transmission outside the model axis.
+
+    A band flux is :math:`\int F T w\,d\lambda / \int T w\,d\lambda`. Where the
+    model has no nodes the numerator is unknown, not zero, yet
+    :func:`lnu_filter_integral` zero-fills there and divides by the whole
+    filter weight, so an uncovered band returns 0 and a partly covered one the
+    covered fraction (#2620). This helper measures how much of the denominator
+    lies outside the model axis, after the model is redshifted:
+
+    .. math::
+
+        f_{\rm unc} = \frac{\int_{\lambda < \lambda_{\min}(1+z)\ \mathrm{or}\
+                                  \lambda > \lambda_{\max}(1+z)} T\,w\,d\lambda}
+                           {\int T\,w\,d\lambda},
+
+    with :math:`w` the bandpass weight of ``convention`` (:math:`1/\lambda`
+    photon counting for ``BESSELL``, :math:`1/\lambda^2` for ``ENERGY``) and
+    :math:`T` interpolated linearly between the filter nodes, the same
+    quadrature as the runtime integral. Leading and trailing zero-transmission
+    nodes carry no weight and never count as uncovered.
+
+    Parameters
+    ----------
+    filter_wave : array_like, shape (n_filt,)
+        Filter wavelength nodes [Angstrom], observed frame. Sorted internally.
+    filter_trans : array_like, shape (n_filt,)
+        Filter transmission at the nodes (dimensionless).
+    model_wave_min, model_wave_max : float
+        First and last node of the model's rest-frame wavelength axis [Angstrom].
+    redshift : float
+        Source redshift; the axis maps to ``[min, max] * (1 + z)`` in the
+        observed frame.
+    convention : FilterConvention, optional
+        Bandpass weight; default ``BESSELL``.
+
+    Returns
+    -------
+    float
+        Uncovered fraction in [0, 1]: exactly 0 for a filter wholly inside the
+        axis, exactly 1 for a filter wholly outside it, 0 for a filter with
+        fewer than two nodes or no positive weight (it has no integral to
+        lose).
+
+    Notes
+    -----
+    Pure numpy, build-time only. The filter table is not assumed monotonic.
+    """
+    w = np.asarray(filter_wave, dtype=np.float64).ravel()
+    t = np.asarray(filter_trans, dtype=np.float64).ravel()
+    order = np.argsort(w, kind="stable")
+    w, t = w[order], t[order]
+    if w.size < 2:
+        return 0.0
+    lo = float(model_wave_min) * (1.0 + float(redshift))
+    hi = float(model_wave_max) * (1.0 + float(redshift))
+    # Cut the quadrature at the axis edges so the split is exact for a
+    # piecewise-linear transmission, wherever the edge falls between nodes.
+    grid = np.unique(np.concatenate([w, np.clip([lo, hi], w[0], w[-1])]))
+    f = np.interp(grid, w, t, left=0.0, right=0.0) * filter_weight_np(grid, convention)
+    seg = 0.5 * (f[1:] + f[:-1]) * np.diff(grid)
+    mid = 0.5 * (grid[1:] + grid[:-1])
+    uncovered = seg[(mid < lo) | (mid > hi)].sum()
+    total = seg.sum()
+    if total <= 0.0:
+        return 0.0
+    return float(np.clip(uncovered / total, 0.0, 1.0))
+
+
+def validate_filter_coverage(
+    filters,
+    convention: FilterConvention,
+    model_wave_min: float,
+    model_wave_max: float,
+    redshifts,
+) -> None:
+    """Refuse a photometric band that the model axis does not cover (#2620).
+
+    The single build-time coverage check, called from ``SEDModel.__init__``
+    (which every build path reaches: ``SEDModel.build``, ``with_fixed_redshift``,
+    ``with_approx``, ``WavePrecomp`` catalog models) once every component has
+    declared its wavelength extension.
+
+    Parameters
+    ----------
+    filters : sequence of FilterCurve
+        The observation's photometric filters.
+    convention : FilterConvention
+        The observation's bandpass weight, used for every filter.
+    model_wave_min, model_wave_max : float
+        Ends of the model's rest-frame axis [Angstrom].
+    redshifts : sequence of (float, str)
+        Redshifts to test, each with the label naming where it comes from (the
+        fixed value, an end of the prior support, an end of ``catalog_z_range``).
+
+    Raises
+    ------
+    tengri.config.exceptions.ConfigError
+        If any band's :func:`filter_coverage_fraction` exceeds
+        :data:`FILTER_COVERAGE_TOLERANCE` at any listed redshift. The message
+        names the band, the fraction, the axis range [um] and the redshift.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    for filt in filters:
+        for z, label in redshifts:
+            frac = filter_coverage_fraction(
+                filt.wave, filt.trans, model_wave_min, model_wave_max, z, convention
+            )
+            if frac > FILTER_COVERAGE_TOLERANCE:
+                raise ConfigError(
+                    f"Photometric band {filt.name!r}: a fraction {frac:.4g} of its "
+                    f"bandpass-weighted transmission lies outside the model's "
+                    f"rest-frame wavelength axis [{model_wave_min * 1e-4:.4g}, "
+                    f"{model_wave_max * 1e-4:.4g}] um at z = {z:.4g} ({label}); the "
+                    f"band flux there is unknown, not zero, so the limit is "
+                    f"{FILTER_COVERAGE_TOLERANCE:g}. Drop the band from the filter "
+                    f"set, or compose a component that extends the axis (dust "
+                    f"emission, AGN torus, radio, X-ray). (#2620)"
+                )
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))
