@@ -15,6 +15,7 @@ import chex
 import jax
 import jax.numpy as jnp
 import pytest
+from astropy.cosmology import Planck18
 from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
@@ -40,12 +41,16 @@ from tests._jit_parity import assert_jit_matches_eager
 
 # Shared test fixtures
 AGE_YR = jnp.geomspace(1e6, 13.7e9, 200)
+# Age of the universe at z = 0 in tengri's default cosmology (Planck 2018),
+# from astropy rather than from tengri's own cosmology module.
+_AGE_UNIVERSE_YR = float(Planck18.age(0.0).to_value("yr"))
 DEFAULT_KW = {
     "log_total_mass": 10.0,
     "log_sfr_inst": 0.0,
     "tx_frac_0": 0.3,
     "tx_frac_1": 0.55,
     "tx_frac_2": 0.8,
+    "age_universe_yr": _AGE_UNIVERSE_YR,
 }
 
 
@@ -162,7 +167,7 @@ class TestBuildQuantilePoints:
             n_param=3,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
-            age_universe_yr=13.47e9,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         # n_param+2 (endpoints) + 1 (BB) + 3 (SFR constraints) = 9
         chex.assert_shape(time_q, (9,))
@@ -176,7 +181,7 @@ class TestBuildQuantilePoints:
             n_param=3,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
-            age_universe_yr=13.47e9,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         # First point is t=0, M=0
         assert jnp.isclose(time_q[0], 0.0)
@@ -202,7 +207,7 @@ class TestGPCumulativeMassAccuracy:
             n_param=3,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
-            age_universe_yr=13.47e9,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         m_pred = gp_interpolate(time_q, mass_q, yerr, tx)
         # Should match 25%, 50%, 75% mass fractions
@@ -236,6 +241,7 @@ class TestDenseBasisSFH:
             "tx_frac_0": 0.3,
             "tx_frac_1": 0.55,
             "tx_frac_2": 0.8,
+            "age_universe_yr": _AGE_UNIVERSE_YR,
         }
         # Scale both mass and SFR together (they're coupled via
         # the SFR constraint points)
@@ -272,6 +278,7 @@ class TestDenseBasisSFH:
                     tx_frac_0=0.3,
                     tx_frac_1=0.55,
                     tx_frac_2=0.8,
+                    age_universe_yr=_AGE_UNIVERSE_YR,
                 )
             )
 
@@ -297,6 +304,7 @@ class TestDenseBasisSFH:
                     tx_frac_0=t0,
                     tx_frac_1=0.55,
                     tx_frac_2=0.8,
+                    age_universe_yr=_AGE_UNIVERSE_YR,
                 )
             )
 
@@ -372,6 +380,7 @@ class TestDenseBasisSFH:
             tx_frac_0=0.8,
             tx_frac_1=0.3,
             tx_frac_2=0.55,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         assert_non_negative(sfr, name="sfr")
         chex.assert_equal_shape([sfr, AGE_YR])
@@ -389,6 +398,7 @@ def _sfh_for_tx(t0: float, t1: float, t2: float) -> jnp.ndarray:
         tx_frac_0=t0,
         tx_frac_1=t1,
         tx_frac_2=t2,
+        age_universe_yr=_AGE_UNIVERSE_YR,
     )
 
 
@@ -467,7 +477,9 @@ class TestDenseBasisRegistry:
     def test_settings_contain_nparam(self) -> None:
         _, _, _, settings = resolve_sfh("dense_basis")
         assert settings["sfh_db_nparam"] == 3
-        assert settings["sfh_db_age_universe_gyr"] == 13.47
+        # The age of the universe is derived from the redshift and cosmology at
+        # build time; the registry declares no setting for it.
+        assert "sfh_db_age_universe_gyr" not in settings
 
 
 # ── Edge case tests ───────────────────────────────────────────────
@@ -486,6 +498,7 @@ class TestDenseBasisEdgeCases:
                 log_total_mass=10.0,
                 tx_frac_0=0.3,
                 tx_frac_2=0.8,  # missing tx_frac_1
+                age_universe_yr=_AGE_UNIVERSE_YR,
             )
 
     def test_no_tx_params_raises(self) -> None:
@@ -493,7 +506,7 @@ class TestDenseBasisEdgeCases:
         import pytest
 
         with pytest.raises(ValueError, match="at least one"):
-            dense_basis(AGE_YR, log_total_mass=10.0)
+            dense_basis(AGE_YR, log_total_mass=10.0, age_universe_yr=_AGE_UNIVERSE_YR)
 
     def test_extreme_tx_near_zero(self) -> None:
         """Very early mass assembly (all tx near 0)."""
@@ -516,6 +529,7 @@ class TestDenseBasisEdgeCases:
             tx_frac_0=0.3,
             tx_frac_1=0.55,
             tx_frac_2=0.8,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         mass = jnp.trapezoid(sfr, AGE_YR)
         assert 0.5e8 < mass < 1.5e8
@@ -529,6 +543,7 @@ class TestDenseBasisEdgeCases:
             tx_frac_0=0.15,
             tx_frac_1=0.3,
             tx_frac_2=0.5,
+            age_universe_yr=_AGE_UNIVERSE_YR,
         )
         mass = jnp.trapezoid(sfr, AGE_YR)
         assert 0.7e12 < mass < 1.3e12
@@ -569,6 +584,7 @@ class TestJITNaNRegression:
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.408,
                 tx_frac_1=0.610,
+                age_universe_yr=_AGE_UNIVERSE_YR,
             ),
             2.93,
         )
@@ -583,6 +599,7 @@ class TestJITNaNRegression:
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
+                age_universe_yr=_AGE_UNIVERSE_YR,
             ),
             3.0,
         )
@@ -598,6 +615,7 @@ class TestJITNaNRegression:
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
                 tx_frac_2=0.85,
+                age_universe_yr=_AGE_UNIVERSE_YR,
             ),
             -2.0,
         )
@@ -614,6 +632,7 @@ class TestJITNaNRegression:
                 tx_frac_0=t0,
                 tx_frac_1=t1,
                 tx_frac_2=t2,
+                age_universe_yr=_AGE_UNIVERSE_YR,
             )
         )
         n_nan = 0
