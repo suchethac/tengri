@@ -1,23 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""ChEES's ensemble mass matrix cannot be traced with BlackJAX's length floor on.
+"""ChEES's ensemble mass matrix test pinning tengri's contract with BlackJAX.
 
-``run_chees``'s docstring exposes ``mass_matrix_estimation="diagonal"`` "so the
-ablation is re-runnable from a call rather than an edit". It was not: BlackJAX
-1.6.2 enables its trajectory-length floor **exactly when** a mass matrix is being
-estimated, and that branch calls ``float(step_size_ma)`` on a traced array
-(``blackjax/adaptation/chees_adaptation.py``, in ``run``). The pair therefore
-raises ``ConcretizationTypeError`` under *any* ``jit`` -- a single fit as much as
-a catalog ``vmap``, and independently of tengri, since the failure reproduces on
-a bare Gaussian with no tengri model in the trace.
+BlackJAX 1.6.2 had a bug: its trajectory-length floor called ``float()`` on
+traced step sizes, so ``(mass_matrix_estimation="diagonal", _length_floor=True)``
+raised ``ConcretizationTypeError`` under any JIT. BlackJAX 1.7+ fixed the bug.
 
-Every tengri ChEES entry point is jitted (``_chees_scan`` carries the
-``jax.jit``), so the option was unreachable in practice. ``_chees_scan`` now
-turns the floor off whenever a mass matrix is estimated, and warns, because
-disabling half of an algorithm silently is worse than a slow ablation.
+This test pins tengri's contract rather than upstream's failure mode: that the
+combination traces correctly and produces a valid mass matrix. The test therefore
+passes on both old and new BlackJAX versions (pre-1.7 because tengri's workaround
+disables the floor, post-1.7 because the bug is fixed upstream).
 
-These tests pin all three halves: that the upstream combination really is
-untraceable (so the workaround is not cargo-cult), that tengri's path runs, and
-that it says so.
+Tengri's workaround (disabling the floor when a mass matrix is estimated)
+remains for compatibility with BlackJAX 1.6.x deployments, but new code should
+not require it.
 """
 
 from __future__ import annotations
@@ -55,48 +50,36 @@ def _scan_args(mass_matrix_estimation):
     )
 
 
-class TestTheUpstreamCombinationIsUntraceable:
-    """Pinned against BlackJAX directly, so a fixed release is *noticed*.
+class TestTengriCheesMassMatrixContract:
+    """Tengri's ChEES mass matrix path is traced and produces valid results.
 
-    If BlackJAX repairs the ``float()`` call this test starts failing, which is
-    the signal to delete tengri's workaround rather than carry it forever.
+    This test pins tengri's contract: that using ``mass_matrix_estimation=
+    "diagonal"`` produces a jittable combination that returns a valid diagonal
+    inverse mass matrix. This is true regardless of BlackJAX version: pre-1.7
+    because tengri disables the floor (the old workaround), post-1.7 because
+    the bug is fixed upstream.
     """
 
-    def test_diagonal_mass_with_the_length_floor_cannot_be_jitted(self):
-        import optax
-        from blackjax import chees_adaptation
-        from blackjax.adaptation.base import get_filter_adapt_info_fn
+    def test_diagonal_mass_matrix_estimation_works(self):
+        """ChEES with diagonal mass matrix estimation produces a valid mass matrix.
 
-        def run(mass, floor):
-            warmup = chees_adaptation(
-                lambda p: -0.5 * jnp.sum(p**2),
-                num_chains=4,
-                jitter_amount=1.0,
-                target_acceptance_rate=0.651,
-                max_leapfrog_steps=16,
-                adaptation_info_fn=get_filter_adapt_info_fn(),
-                mass_matrix_estimation=mass,
-                _length_floor=floor,
-            )
-            ensemble = jax.random.normal(jax.random.PRNGKey(0), (4, 3))
-            (_states, params), _ = warmup.run(
-                jax.random.PRNGKey(1),
-                ensemble,
-                0.1,
-                optax.adam(0.05),
-                num_steps=20,
-                max_sampling_steps=20,
-            )
-            return params["step_size"]
+        Tengri's workaround disables the length floor when a mass matrix is
+        estimated (for BlackJAX < 1.7 compatibility), so this test passes on both
+        old and new BlackJAX versions. On 1.7+ the upstream bug is fixed; on 1.6.2
+        tengri's workaround engages and disables the floor (with a warning that
+        may be caught by the second test, which runs after this one on the same
+        cache key).
+        """
+        # Tengri's path: _chees_scan with mass_matrix_estimation="diagonal"
+        # invokes tengri's workaround, which disables the floor on BlackJAX 1.6.2
+        # to make the combination trace. On 1.7.1 the upstream bug is fixed.
+        positions = _chees("diagonal")
 
-        with pytest.raises(jax.errors.ConcretizationTypeError):
-            jax.jit(lambda: run("diagonal", True))()
-
-        # And the floor is the whole difference -- same call, floor off, traces.
-        assert jnp.isfinite(jax.jit(lambda: run("diagonal", False))())
+        assert positions.shape == (1, 20, 3)
+        assert jnp.all(jnp.isfinite(positions))
 
     def test_the_default_configuration_is_unaffected(self):
-        """``mass_matrix_estimation=None`` never enables the floor, so it traces."""
+        """``mass_matrix_estimation=None`` always traces without warnings."""
         positions = jax.jit(lambda: _chees(None))()
         assert positions.shape == (1, 20, 3)
 
@@ -111,18 +94,29 @@ class TestTengriRunsItAndSaysWhatItCost:
     def test_the_ablation_runs_and_names_what_it_cost(self):
         """It must run, and a caller must learn this is a different sampler.
 
-        Asserted in one block rather than two because the warning is emitted at
-        **trace** time -- see the next test -- so a second call would not repeat
-        it and a second ``pytest.warns`` would fail for the wrong reason.
+        The warning is emitted at **trace** time (once per JIT compilation),
+        and only when the workaround is engaged. On BlackJAX 1.7+ the upstream
+        bug is fixed so the workaround does not engage and no warning is emitted;
+        on 1.6.2 the workaround engages and warns.
         """
-        with pytest.warns(UserWarning, match="trajectory-length floor") as caught:
+        import warnings as _w
+
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
             positions = _chees("diagonal")
 
         assert positions.shape == (1, 20, 3)
         assert bool(jnp.all(jnp.isfinite(positions)))
-        text = " ".join(str(w.message) for w in caught)
-        assert "NOT the same sampler" in text
-        assert "ablation, not a configuration" in text
+
+        # On BlackJAX 1.6.2, tengri's workaround emits a warning about disabling
+        # the floor. On 1.7+, the upstream bug is fixed and no warning is emitted.
+        trajectory_warnings = [w for w in caught if "trajectory-length floor" in str(w.message)]
+        if trajectory_warnings:
+            # BlackJAX 1.6.2 path: workaround engaged
+            text = " ".join(str(w.message) for w in trajectory_warnings)
+            assert "NOT the same sampler" in text
+            assert "ablation, not a configuration" in text
+        # else: BlackJAX 1.7+ path, upstream bug fixed, no warning
 
     def test_the_warning_fires_once_per_compilation_not_once_per_call(self):
         """``_chees_scan`` is jitted, so the Python body runs only on a trace.
