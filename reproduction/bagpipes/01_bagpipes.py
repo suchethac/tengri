@@ -260,11 +260,9 @@ RESULTS["Setup BAGPIPES sampling"] = ("band average, 2x vs 1x sampling", max(abs
 from astropy.io import fits as _fits
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-# BAGPIPES hard-codes its own solar luminosity, so its grid must be scaled by
-# that value and tengri's by tengri's. Using one for both is what the first
-# version of this cell did: the 0.05% offset cancels in the ratio below and is
-# therefore invisible here, but it is wrong the moment anything absolute is
-# reported. docs-const: intentional — upstream constant, not tengri's.
+# BAGPIPES hard-codes its own solar luminosity, so its grid is scaled by that
+# value and tengri's by tengri's. The 0.05% difference cancels in the ratio
+# below. docs-const: intentional — upstream constant, not tengri's.
 L_SUN_BAGPIPES = 3.826e33  # docs-const: intentional — BAGPIPES' own L_sun, not tengri's
 
 _grid_path = Path(B.__file__).resolve().parent / "data"  # not used directly
@@ -464,6 +462,33 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # shapes, $T = \mathrm{age} - t_{\rm lookback}$, and tengri takes BAGPIPES's age of the universe and, for the
 # lognormal, BAGPIPES's solved width (both printed). The ladders give band ratios with the SEDs
 # integrated on their own nodes; the worst band of each case is named.
+
+# %% [markdown]
+# Ratio panels with the nebular block on omit the pixels within 500 km/s of a BAGPIPES emission line, where
+# BAGPIPES places each line in one model pixel and tengri gives it a 100 km/s width; the spectrum panels are
+# unchanged and line strengths are compared in §9.
+
+# %%
+def air_to_vacuum(w_air):
+    """Vacuum wavelength [Å] of an air wavelength [Å] (Morton / IAU standard-air relation)."""
+    s2 = (1.0e4 / np.asarray(w_air, float)) ** 2
+    return w_air * (1.0 + 8.336624212083e-5 + 2.408926869968e-2 / (130.1065924522 - s2)
+                    + 1.599740894897e-4 / (38.92568793293 - s2))
+
+
+assert abs(float(air_to_vacuum(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
+
+
+_mg_lines = B._build_model(
+    {
+        "redshift": 0.0,
+        "constant": {"metallicity": 1.0, "age_min": 0.0, "age_max": 0.01, "massformed": 9.0},
+        "nebular": {"logU": -2.0, "metallicity": 1.0},
+    }
+)
+_wl_air, _ = B.line_table(_mg_lines)
+# BAGPIPES labels the lines below 2000 A in vacuum and above in air.
+LINE_MASK_AA = np.where(_wl_air > 2000.0, air_to_vacuum(_wl_air), _wl_air)
 
 # %%
 # The double power-law and lognormal forms are functions of cosmic time T = age - lookback.
@@ -681,6 +706,7 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_style="line",
     fixed_ratio_ylim=True,
     annotate_median=True,
+    mask_lines_aa=LINE_MASK_AA,
 )
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 ax.get_legend().remove()
@@ -996,7 +1022,7 @@ caveat(
 #
 # The raw BAGPIPES SSP file convolved with each history on a 40001-node lookback grid, with linear weights
 # in $\log t$ onto the SSP age nodes, gives a reference for both codes. BAGPIPES bins the age axis
-# in 0.1-dex bins (`config.age_bins`). Histories narrower than a bin are smeared across it.
+# in 0.1-dex bins (`config.age_bins`) and integrates the history on that grid.
 
 # %%
 C_L = U.C_ANGSTROM_PER_S
@@ -1086,16 +1112,16 @@ _tau03 = REF_RATIOS["delayed tau = 0.3 Gyr"][1][_lab_idx["GALEX NUV"]]
 _lnorm = REF_RATIOS["lognormal"][1][_lab_idx["GALEX FUV"]]
 _f2 = lambda form, band: {r[0]: r[4] for r in SFH_FORM_ROWS[form]}[band]
 caveat(
-    "BAGPIPES bins the age axis in 0.1 dex bins and averages the SSP over each bin, so a history narrower than a "
-    "bin is smeared across it. Against the reference convolution the worst band of tengri deviates by "
+    "Against the reference convolution (a fine-grid convolution of the same SSP file with the exact history) the worst "
+    "band of tengri deviates by "
     + ", ".join(f"{_dev_t[k]:.4f} ({k})" for k in REF_CASES)
     + ", and that of BAGPIPES by "
     + ", ".join(f"{_dev_b[k]:.4f}" for k in REF_CASES)
-    + f". The BAGPIPES offsets are the band ratios of §2: BAGPIPES/reference is {_tau03:.4f} in GALEX NUV for "
-    f"$\\tau = 0.3$ Gyr and {_lnorm:.4f} in GALEX FUV for the lognormal, against tengri/BAGPIPES of "
-    f"{_f2('delayed τ=0.3 Gyr', 'GALEX NUV'):.3f} and {_f2('lognormal tmax=4 Gyr FWHM=2 Gyr', 'GALEX FUV'):.3f}. "
-    f"A fit to a burst or a quenching history narrower than 0.1 dex in age inherits this from BAGPIPES, not from "
-    f"tengri."
+    + f". BAGPIPES integrates the history on its 0.1-dex age grid (`config.age_bins`), which contributes to its offsets; "
+    f"this cell does not isolate it as the whole cause. The BAGPIPES offsets are the band ratios of §2: "
+    f"BAGPIPES/reference is {_tau03:.4f} in GALEX NUV for $\\tau = 0.3$ Gyr and {_lnorm:.4f} in GALEX FUV for the "
+    f"lognormal, against tengri/BAGPIPES of {_f2('delayed τ=0.3 Gyr', 'GALEX NUV'):.3f} and "
+    f"{_f2('lognormal tmax=4 Gyr FWHM=2 Gyr', 'GALEX FUV'):.3f}."
 )
 
 
@@ -1215,11 +1241,12 @@ wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
 
 def _norm_AV(wave, A):
-    """A(λ) normalized to A_V at 5500 Å."""
-    return A / A[np.argmin(np.abs(wave - 5500.0))]
+    """A(λ) normalized to its own value interpolated at exactly 5500 Å."""
+    return A / np.interp(5500.0, wave, A)
 
 
 cases_laws = []
+_raw_laws = {}
 for dust_block, tengri_law, label in _law_pairs:
     try:
         w_b, A_b = B.attenuation_curve(dust_block)
@@ -1231,6 +1258,7 @@ for dust_block, tengri_law, label in _law_pairs:
     A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
     A_t_norm = _norm_AV(wave_law, A_t)
     cases_laws.append((label, w_b, A_b_norm, wave_law, A_t_norm))
+    _raw_laws[label] = (w_b, A_b, wave_law, A_t)
 
 fig, (ax, ax_r), ratios_laws = V.sweep_fig(
     cases_laws,
@@ -1250,7 +1278,15 @@ fig.tight_layout()
 save_fig("bagpipes_07_attenuation_curves.png")
 
 _lab_c, _wb_c, _Ab_c, _wt_c, _At_c = cases_laws[0]
-_calz = {lam: np.interp(lam, _wt_c, _At_c) / np.interp(lam, _wb_c, _Ab_c) for lam in (1500.0, 2175.0, 3000.0, 5500.0)}
+# Both curves as returned at A_V = 1, interpolated to exactly the quoted wavelengths.
+_w_b_raw, _A_b_raw, _w_t_raw, _A_t_raw = _raw_laws[_lab_c]
+_A5500_b = float(np.interp(5500.0, _w_b_raw, _A_b_raw))
+_A5500_t = float(np.interp(5500.0, _w_t_raw, _A_t_raw))
+print(f"§6 Calzetti A(5500 Å)/A_V as returned: BAGPIPES {_A5500_b:.5f}, tengri {_A5500_t:.5f}")
+_calz = {
+    lam: float(np.interp(lam, _w_t_raw, _A_t_raw) / np.interp(lam, _w_b_raw, _A_b_raw))
+    for lam in (1500.0, 2175.0, 3000.0, 5500.0)
+}
 _law_dev = {
     lab: float(np.max(np.abs(np.interp(np.geomspace(1300.0, 1.2e4, 400), wt, At) / np.interp(np.geomspace(1300.0, 1.2e4, 400), wb, Ab) - 1.0)))
     for lab, wb, Ab, wt, At in cases_laws
@@ -1267,10 +1303,12 @@ print("§6 wavelength of that maximum [Å]: " + ", ".join(f"{k} {v:.0f}" for k, 
 RESULTS["§6 attenuation curves"] = ("Calzetti A/A_V at 1500 A", abs(_calz[1500.0] - 1.0))
 caveat(
     f"BAGPIPES's Calzetti curve uses the coefficient 2.695 on the 0.12-0.63 µm branch "
-    f"(`dust_attenuation_model.py`, lines 171-175), where Calzetti et al. (2000) give 2.659, which tengri uses. "
+    f"(`dust_attenuation_model.py`, lines 175-179), where Calzetti et al. (2000) give 2.659, which tengri uses. "
     f"The tengri/BAGPIPES ratio of $A(\\lambda)/A_V$ is {_calz[1500.0]:.4f} at 1500 Å and {_calz[3000.0]:.4f} at "
     f"3000 Å, so BAGPIPES attenuates the UV more strongly at fixed $A_V$; the effect enters the §7 band ratios in "
-    f"the near-UV bands and vanishes at 5500 Å by construction."
+    f"the near-UV bands. Both curves are evaluated at exactly the quoted wavelengths at $A_V = 1$; BAGPIPES's own "
+    f"curve is {_A5500_b:.5f} $A_V$ at 5500 Å and tengri's {_A5500_t:.5f}, so the ratio at 5500 Å is "
+    f"{_calz[5500.0]:.4f}. The plotted curves are each divided by their own value at 5500 Å."
 )
 # %% [markdown]
 # ## §7 Attenuated SED and the `eta` mapping
@@ -1456,6 +1494,7 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_style="line",
     fixed_ratio_ylim=True,
     annotate_median=True,
+    mask_lines_aa=LINE_MASK_AA,
 )
 fig.tight_layout()
 save_fig("bagpipes_08_dust_av_slope.png")
@@ -1586,6 +1625,7 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_style="line",
     fixed_ratio_ylim=True,
     annotate_median=True,
+    mask_lines_aa=LINE_MASK_AA,
 )
 fig.tight_layout()
 save_fig("bagpipes_09_dust_laws.png")
@@ -1598,7 +1638,7 @@ for _lab, _wb, _Lb, _wt, _Lt in cases_av + cases_laws:
         _dust_rows[_lab], ref_name="BAGPIPES", title=f"§7 {_lab}", compact=True, show_worst_band=True
     )
 # FUV ratio expected from the Calzetti coefficient alone: BAGPIPES's A(1500 Å) = A_V k_B, tengri's = r k_B A_V.
-_k1500 = float(np.interp(1500.0, _wb_c, _Ab_c))
+_k1500 = float(np.interp(1500.0, _w_b_raw, _A_b_raw))
 _stellar_fuv = _by_band["GALEX FUV"][0]
 print("§7 Calzetti, GALEX FUV tengri/BAGPIPES: measured / predicted from the A(1500 Å)/A_V ratio of §6 times the stellar-only ratio")
 _calz_pred = {}
@@ -1823,6 +1863,7 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     ref_style="line",
     fixed_ratio_ylim=True,
     annotate_median=True,
+    mask_lines_aa=LINE_MASK_AA,
 )
 fig.tight_layout()
 save_fig("bagpipes_11_dl07_grid.png")
@@ -2180,14 +2221,6 @@ caveat(
 
 
 # %%
-def air_to_vacuum(w_air):
-    """Vacuum wavelength [Å] of an air wavelength [Å] (Morton / IAU standard-air relation)."""
-    s2 = (1.0e4 / np.asarray(w_air, float)) ** 2
-    return w_air * (1.0 + 8.336624212083e-5 + 2.408926869968e-2 / (130.1065924522 - s2)
-                    + 1.599740894897e-4 / (38.92568793293 - s2))
-
-
-assert abs(float(air_to_vacuum(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
 
 
 def paired_line_table(mg_b, state_t):
@@ -2336,13 +2369,13 @@ for _z, _hb, _ht in zip(Z_FIGURE, ha_per_q["BAGPIPES"], ha_per_q["tengri"]):
 _i2 = Z_FIGURE.index(2.0)
 _i25 = Z_FIGURE.index(2.5)
 RESULTS["§9 H-alpha per photon (Z = 2.5 Z☉)"] = ("BAGPIPES vs case B", abs(ha_per_q["BAGPIPES"][_i25] - 1.0))
+_hq = lambda code, z: ha_per_q[code][Z_FIGURE.index(z)]
 caveat(
-    f"BAGPIPES's Cloudy grid does not conserve photons at its Z = 2.5 Z☉ node: H$\\alpha$ is "
-    f"{ha_per_q['BAGPIPES'][_i25]:.3f} of the case-B value there (tengri {ha_per_q['tengri'][_i25]:.3f}), and "
-    f"{ha_per_q['BAGPIPES'][_i2]:.3f} at 2 Z☉ (tengri {ha_per_q['tengri'][_i2]:.3f}), where BAGPIPES mixes the "
-    f"1 and 2.5 Z☉ nodes; at 1 Z☉ the two codes give {ha_per_q['BAGPIPES'][Z_FIGURE.index(1.0)]:.3f} and "
-    f"{ha_per_q['tengri'][Z_FIGURE.index(1.0)]:.3f}. Compare the two codes at $Z \\le Z_\\odot$, or treat BAGPIPES's "
-    f"line strengths above that as set by the reference grid."
+    f"H$\\alpha$ per case-B ionizing photon, as a fraction of the case-B value: BAGPIPES {_hq('BAGPIPES', 1.0):.3f} at 1 Z☉, "
+    f"{_hq('BAGPIPES', 2.0):.3f} at 2 Z☉ and {_hq('BAGPIPES', 2.5):.3f} at its 2.5 Z☉ node; tengri "
+    f"{_hq('tengri', 1.0):.3f}, {_hq('tengri', 2.0):.3f} and {_hq('tengri', 2.5):.3f}. The cell does not isolate a "
+    f"cause for the BAGPIPES drop, so the line ratios at Z = 2 Z☉ in the cases above follow BAGPIPES's H$\\alpha$-per-photon "
+    f"drop and are listed as printed."
 )
 # %% [markdown]
 # ## §10 Line widths
@@ -3089,13 +3122,13 @@ ax.text(
 ax_r.axhspan(p16 - 1.0, p84 - 1.0, color="0.85", zorder=0)
 ax_r.axhline(0.0, color="0.5", linewidth=0.8)
 ax_r.axhline(norm - 1.0, color="C1", linestyle=":", linewidth=0.9)
-ax_r.plot(w_ext, resid, "C1-", linewidth=1.0)
+ax_r.plot(w_ext, np.where(V.line_window_mask(w_ext, LINE_MASK_AA), np.nan, resid), "C1-", linewidth=1.0)
 ax_r.set_xscale("log")
 ax_r.set_xlim(1e2, 1e7)
 ax_r.set_ylim(-0.1, 0.1)
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"tengri/BAGPIPES $-1$")
-ax_r.set_title("shaded: 16-84 % of the optical continuum; emission lines fall outside the panel", fontsize=8)
+ax_r.set_title("shaded: 16-84 % of the optical continuum; pixels within 500 km/s of an emission line are omitted", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("bagpipes_19_headtohead.png")
@@ -3128,7 +3161,7 @@ CLASSES = {
     "§9 nebular lines ([O II] 3727, logU = -2)": "open",
     "§9 [N II] 6584 (Z = 0.3 Z☉, matched [N/O])": "open",
     "§9 escape fraction (f_esc = 0.5)": "convention",
-    "§9 H-alpha per photon (Z = 2.5 Z☉)": "reference code",
+    "§9 H-alpha per photon (Z = 2.5 Z☉)": "open",
     "§10 line widths": "numerical",
     "§11 IGM vs BAGPIPES generator": "numerical",
     "§11 IGM vs BAGPIPES table": "reference code",
@@ -3190,6 +3223,6 @@ save_fig("bagpipes_20_agreement_ladder.png")
 # * Charlot & Fall 2000, ApJ 539, 718: two-component dust
 # * Salim, Boquien & Lee 2018, ApJ 859, 11: attenuation modification
 # * Draine & Li 2007, ApJ 657, 810: dust IR emission
-# * Dopita et al. 2000, ApJS 126, 331: solar abundances and depletion
+# * Dopita, Kewley, Heisler & Sutherland 2000, ApJ 542, 224, "A Theoretical Recalibration of the Extragalactic H II Region Sequence": solar abundances and depletion
 # * Inoue et al. 2014, MNRAS 442, 1805: IGM absorption
 # * Li et al. 2025, ApJ 986, 9 (arXiv:2405.04598): Cue nebular emulator

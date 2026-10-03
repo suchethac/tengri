@@ -60,6 +60,7 @@ line luminosities [erg/s].
 
 from pathlib import Path
 
+import matplotlib.legend as mpl_legend
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1100,6 +1101,41 @@ _RAMP_LOG_SPAN = 5.0
 # The ratio panel ignores points where the reference is below this fraction of
 # its own peak, and never opens wider than these bounds.
 _RATIO_SIGNAL_FLOOR = 1e-3
+_C_KMS = 299792.458
+
+
+def line_window_mask(wave, line_waves, half_width_kms=500.0):
+    """Boolean mask, True where ``wave`` lies within ``half_width_kms`` of a listed line.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Wavelengths [Angstrom] in the same frame as ``line_waves``.
+    line_waves : array_like, shape (n_line,)
+        Line wavelengths [Angstrom].
+    half_width_kms : float, optional
+        Half-width of the excluded window [km/s]; widened to the local pixel pitch where the
+        grid is coarser than that.
+
+    Returns
+    -------
+    ndarray of bool, shape (n_wave,)
+    """
+    wave = np.asarray(wave, float)
+    lines = np.sort(np.asarray(line_waves, float).ravel())
+    if lines.size == 0:
+        return np.zeros(wave.shape, bool)
+    half = half_width_kms / _C_KMS
+    idx = np.clip(np.searchsorted(lines, wave), 1, lines.size) if lines.size > 1 else np.zeros(wave.shape, int)
+    near = np.minimum(
+        np.abs(wave - lines[np.clip(idx - 1, 0, lines.size - 1)]),
+        np.abs(wave - lines[np.clip(idx, 0, lines.size - 1)]),
+    )
+    # The window is never narrower than the local pixel pitch: a line deposited in one model pixel
+    # on a coarse grid occupies that whole pixel.
+    pitch = np.abs(np.gradient(wave)) if wave.size > 1 else np.zeros(wave.shape)
+    return near <= np.maximum(half * wave, pitch)
+
 _RATIO_YLIM_BOUND = (0.05, 20.0)
 
 def _marker_subsample(x, n=26, window=None):
@@ -1215,6 +1251,8 @@ def sweep_fig(
     ref_style: str = "markers",
     fixed_ratio_ylim: bool = False,
     annotate_median: bool = False,
+    mask_lines_aa=None,
+    mask_half_width_kms: float = 500.0,
 ) -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes], dict[str, np.ndarray]]:
     """Overlay multiple SED comparisons with a ratio panel, one figure.
 
@@ -1292,6 +1330,13 @@ def sweep_fig(
     fixed_ratio_ylim : bool, optional
         If True the ratio panel uses ``ratio_ylim`` exactly instead of widening to hold
         the signal-region spread. Default False.
+    mask_lines_aa : array_like or None, optional
+        Rest-frame line wavelengths [Angstrom]. In the ratio panel only, pixels within
+        ``mask_half_width_kms`` of a listed line are left blank (not interpolated across),
+        and the median annotation uses the remaining pixels. The returned ratios and the
+        spectrum panel are unchanged. ``None`` keeps every pixel.
+    mask_half_width_kms : float, optional
+        Half-width of the masked window [km/s].
     annotate_median : bool, optional
         If True each case's median tengri/reference ratio over the plotted window
         is printed in the ratio panel. Default False.
@@ -1367,7 +1412,10 @@ def sweep_fig(
         # division by noise. Those points stay in the returned array (the tables
         # window them themselves) but must not set the panel's scale.
         _sig = L_ref > (L_ref.max() * _RATIO_SIGNAL_FLOOR) if L_ref.size else np.zeros(0, bool)
-        _r_sig.append(ratio[_sig & np.isfinite(ratio)])
+        _ratio_shown = ratio
+        if mask_lines_aa is not None:
+            _ratio_shown = np.where(line_window_mask(w_ref, mask_lines_aa, mask_half_width_kms), np.nan, ratio)
+        _r_sig.append(_ratio_shown[_sig & np.isfinite(_ratio_shown)])
 
         # Check that both arms have overlapping positive region
         pos_ref = L_ref > 0
@@ -1433,7 +1481,7 @@ def sweep_fig(
         # signal. At an emission-line pixel where the reference is a fraction of
         # its own peak the quotient is division by noise, and those spikes bury
         # the few-percent structure the panel exists to show.
-        _r_plot = np.where(overlap_positive & _sig, ratio, np.nan)
+        _r_plot = np.where(overlap_positive & _sig, _ratio_shown, np.nan)
         if annotate_median:
             _in = np.isfinite(_r_plot)
             if xlim is not None:
@@ -1501,16 +1549,20 @@ def sweep_fig(
             _case_leg = ax.legend(handles, labels, fontsize=9, loc="upper left")
             ax.add_artist(_case_leg)
 
-    fig.legend(
-        handles=_code_style_handles(ref_label, ref_style),
+    _code_h = _code_style_handles(ref_label, ref_style)
+    _code_leg = mpl_legend.Legend(
+        ax,
+        _code_h,
+        [h.get_label() for h in _code_h],
         fontsize=8,
-        loc="upper right",
-        bbox_to_anchor=(0.995, 0.998),
-        ncol=2,
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1.0),
+        ncol=1,
         frameon=False,
         handletextpad=0.4,
-        columnspacing=1.2,
+        borderaxespad=0.0,
     )
+    ax.add_artist(_code_leg)
 
     # Configure ratio panel
     ax_r.axhspan(*band, color="0.85", zorder=0)
@@ -1532,10 +1584,11 @@ def sweep_fig(
     ax_r.set_xlabel(xlabel)
     ax_r.set_ylabel("tengri / ref", fontsize=9)
     ax_r.grid(True, alpha=0.3)
+    _med_step = min(0.2, 0.9 / max(len(_medians), 1))
     for _k, (_c, _l, _m) in enumerate(_medians):
         ax_r.text(
             1.01,
-            0.98 - 0.2 * _k,
+            0.98 - _med_step * _k,
             f"{_l}: median {_m:.4f}",
             transform=ax_r.transAxes,
             color=_c,
@@ -1791,6 +1844,8 @@ def overlay_ratio_fig(
     figsize: tuple[float, float] = (9.0, 6.5),
     ref_style: str = "markers",
     annotate_median: bool = False,
+    mask_lines_aa=None,
+    mask_half_width_kms: float = 500.0,
 ) -> tuple[plt.Figure, plt.Axes, plt.Axes, np.ndarray]:
     r"""Overlay two SEDs on ONE shared axis with a ratio panel.
 
@@ -1835,6 +1890,13 @@ def overlay_ratio_fig(
     ref_style : {"markers", "line"}, optional
         ``"markers"`` (default) draws the reference as a sparse open-circle overlay;
         ``"line"`` draws it as a wide translucent solid line under tengri's line.
+    mask_lines_aa : array_like or None, optional
+        Rest-frame line wavelengths [Angstrom]. In the ratio panel only, pixels within
+        ``mask_half_width_kms`` of a listed line are left blank (not interpolated across),
+        and the median annotation uses the remaining pixels. The returned ratios and the
+        spectrum panel are unchanged. ``None`` keeps every pixel.
+    mask_half_width_kms : float, optional
+        Half-width of the masked window [km/s].
     annotate_median : bool, optional
         If True the median tengri/reference ratio over ``xlim`` is printed in the
         ratio panel. Default False.
@@ -1960,21 +2022,24 @@ def overlay_ratio_fig(
     # Ratio panel: shaded band, line at 1.0, ratio curve
     ax_r.axhspan(*band, color="0.85", zorder=0)
     ax_r.axhline(1.0, color="0.5", linewidth=0.8)
-    ax_r.plot(x[pos_ref], ratio[pos_ref], "C1-", linewidth=1.0)
+    _ratio_shown = ratio
+    if mask_lines_aa is not None:
+        _ratio_shown = np.where(line_window_mask(wave_ref, mask_lines_aa, mask_half_width_kms), np.nan, ratio)
+    ax_r.plot(x[pos_ref], _ratio_shown[pos_ref], "C1-", linewidth=1.0)
     ax_r.set_xscale("log")
     ax_r.set_ylim(*ratio_ylim)
     ax_r.set_xlabel(xlabel)
     ax_r.set_ylabel(f"tengri / {ref_label}", fontsize=9)
     ax_r.grid(True, alpha=0.3)
     if annotate_median:
-        _in = pos_ref & pos_t
+        _in = pos_ref & pos_t & np.isfinite(_ratio_shown)
         if xlim is not None:
             _in &= (x >= xlim[0]) & (x <= xlim[1])
         if _in.any():
             ax_r.text(
                 0.01,
                 0.94,
-                f"median {float(np.median(ratio[_in])):.4f}",
+                f"median {float(np.median(_ratio_shown[_in])):.4f}",
                 transform=ax_r.transAxes,
                 fontsize=8,
                 va="top",

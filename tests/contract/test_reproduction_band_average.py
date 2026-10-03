@@ -146,3 +146,40 @@ def test_integrate_threads_through_the_row_builders():
         explicit = builder(integrate="filter")
         assert default == explicit
         assert sed[0][4] != default[0][4]
+
+
+def test_line_window_mask_removes_only_the_window_and_keeps_a_flat_median():
+    wave = np.linspace(4000.0, 6000.0, 4001)
+    lines = np.array([5000.0])
+    mask = V.line_window_mask(wave, lines, 500.0)
+    half = 500.0 / 299792.458 * wave
+    assert np.array_equal(mask, np.abs(wave - 5000.0) <= np.maximum(half, 0.5))
+    assert 0 < mask.sum() < wave.size
+
+    ratio = np.full_like(wave, 1.02)
+    ratio[mask] = 5.0  # a line spike inside the window
+    shown = np.where(mask, np.nan, ratio)
+    assert np.isnan(shown[mask]).all() and np.isfinite(shown[~mask]).all()
+    assert np.median(shown[~mask]) == pytest.approx(1.02)
+    # No line list: nothing to mask
+    assert not V.line_window_mask(wave, np.array([])).any()
+
+
+def test_sweep_fig_mask_keyword_leaves_returned_ratios_untouched():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    wave = np.linspace(4000.0, 6000.0, 2001)
+    ref = np.ones_like(wave)
+    ref[1000] = 50.0
+    tengri = np.full_like(wave, 1.02)
+    cases = [("a", wave, ref, wave, tengri)]
+    kw = dict(ref_label="ref", title="t", logy=False, annotate_median=True)
+    _, _, r0 = V.sweep_fig(cases, **kw)
+    _, (_, ax_r), r1 = V.sweep_fig(cases, mask_lines_aa=[5000.0], **kw)
+    plt.close("all")
+    assert np.array_equal(r0["a"], r1["a"], equal_nan=True)
+    shown = [ln.get_ydata() for ln in ax_r.lines if len(ln.get_ydata()) == wave.size]
+    assert shown and np.isnan(shown[-1][1000])
