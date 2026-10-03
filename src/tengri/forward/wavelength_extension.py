@@ -139,7 +139,7 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "relagn": (("relagn_disc_grid.h5", "wavelength_aa", 1.0),),
     # KD18 (Kubota & Done 2018) discs reach 0.062 A (200 keV) to 12.4 um; 28 per
     # cent of the bolometric energy lies below the SSP edge (91 A). Without the
-    # native axis the block normalises its energy over the SSP window only and
+    # native axis the block normalizes its energy over the SSP window only and
     # inflates the UV/optical disc by 1/0.72 (measured #2564).
     "kd18_agnfitter": (("kd18_agnfitter_disc_grid.h5", "kd18_agnfitter/wavelength", 1.0),),
     "kd18_agnfitter_warmindex": (
@@ -148,14 +148,14 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 }
 
 # Analytic AGN disc blocks (#2564). These blocks evaluate on whatever grid they
-# are handed and normalise their energy to ``L_bol`` by a trapezoid over that
-# grid, so a grid that stops at the SSP edges (91 A, 160 um) renormalises the
+# are handed and normalize their energy to ``L_bol`` by a trapezoid over that
+# grid, so a grid that stops at the SSP edges (91 A, 160 um) renormalizes the
 # disc over the truncated window and inflates its UV/optical level. Each range
 # [lo, hi] Angstrom is chosen so that < 1e-3 of the block's energy (default
 # parameters, measured on a 1e-3 A - 1e10 A grid) lies outside it, and is
 # justified by the emission physics:
-#   kubota_done: hot Comptonising corona to ~0.01 A (1 MeV) through the
-#     colour-corrected disc to the outer-edge Rayleigh-Jeans tail at 100 um.
+#   kubota_done: hot Comptonizing corona to ~0.01 A (1 MeV) through the
+#     color-corrected disc to the outer-edge Rayleigh-Jeans tail at 100 um.
 #   multicolor: bare Shakura-Sunyaev disc plus the CIGALE-like EUV power-law
 #     tail (starts at 8 A) to the outer-edge Rayleigh-Jeans tail at 100 um.
 #   skirtor / schartmann2005*: CIGALE piecewise power laws with breakpoints
@@ -175,7 +175,7 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 # 200000-point evaluation, and the disc level at every node stays within 7e-4
 # of it (20 per decade leaves 2.5e-3 for the ADAF blocks).
 _DISC_PTS_PER_DECADE = 200
-# Tabulated discs whose template axis is too coarse for that normalisation
+# Tabulated discs whose template axis is too coarse for that normalization
 # accuracy (KD18: 100 nodes over 6.3 decades, 1.6e-3): the declared grid is
 # the axis plus a log grid at the same density as the analytic discs.
 _DISC_DENSIFIED = frozenset({"kd18_agnfitter", "kd18_agnfitter_warmindex"})

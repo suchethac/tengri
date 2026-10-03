@@ -177,7 +177,7 @@ def node_parity(w_m, l_m, w_n, l_n, lo_um, hi_um):
     """Shape deviation at the native nodes inside the band.
 
     ``r = L_model(node) / L_native(node)``; returns ``max |r / median(r) - 1|``.
-    The blocks normalise their SED to the AGN / absorbed-energy budget by a
+    The blocks normalize their SED to the AGN / absorbed-energy budget by a
     trapezoid over the grid they are handed, so a coarse native grid carries a
     constant quadrature offset in scale (~0.4 per cent for the 105-136 point
     grids); the *shape* at the nodes must match exactly. The absolute scale is
@@ -311,9 +311,9 @@ def test_dust_sedmodel_matches_native_grid(ssp, name, kw):
 
 
 # ---------------------------------------------------------------------------
-# AGN discs. The disc blocks normalise their energy to L_bol by a trapezoid over
+# AGN discs. The disc blocks normalize their energy to L_bol by a trapezoid over
 # the grid they are handed, so a master grid that stops at the SSP window
-# (91 A - 160 um) renormalises a disc that emits outside it and inflates its
+# (91 A - 160 um) renormalizes a disc that emits outside it and inflates its
 # UV/optical level. Checked per disc: (a) the SEDModel disc integrates to L_bol
 # (1e-3; not for the attenuated variant, whose atten factor removes energy by
 # design); (b) the master grid covers >= 1 - 1e-3 of the block's energy on a

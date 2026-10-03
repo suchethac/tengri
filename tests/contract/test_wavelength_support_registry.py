@@ -5,7 +5,7 @@ The master rest-frame grid is the union of the SSP grid and each attached
 component's *declared* native grid (``tengri.forward.wavelength_extension``).
 A block that emits outside, or finer than, the SSP grid but declares nothing is
 silently sampled on the SSP grid: the IR peak moves, the submm tail is cut and
-energy-normalised blocks are renormalised over the truncated window. So every
+energy-normalized blocks are renormalized over the truncated window. So every
 registered dust-emission model and AGN torus block must be in exactly one of
 
 * a tabulated declaration (template axis),
