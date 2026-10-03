@@ -917,7 +917,7 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
     mask : ndarray, shape (n_data,), optional
         Censoring flags (0 detected, 1 upper limit, -1 lower limit). Given,
         the energy scores limit bands with the Gaussian CDF
-        (:func:`tengri.inference._censoring.data_energy`) while the metric
+        (``tengri.inference._censoring.data_energy``) while the metric
         keeps the detection form. ``None`` (default) scores every datum as a
         detection.
 
@@ -1070,7 +1070,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
     mask : ndarray, shape (n_data,), optional
         Censoring flags (0 detected, 1 upper limit, -1 lower limit). Given,
         the energy scores limit bands with the Gaussian CDF
-        (:func:`tengri.inference._censoring.data_energy`) while the metric
+        (``tengri.inference._censoring.data_energy``) while the metric
         keeps the detection form. ``None`` (default) scores every datum as a
         detection.
 

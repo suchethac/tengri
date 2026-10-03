@@ -356,7 +356,7 @@ def _build_nifty_likelihood(fitter):
     energy, detection metric); otherwise ``jft.Gaussian``. A free noise model
     gives ``jft.VariableCovarianceGaussian`` / ``VariableCovarianceStudentT``
     and refuses ``data_mask`` limits (see
-    :func:`tengri.inference._censoring.refuse_unsupported_censoring`).
+    ``tengri.inference._censoring.refuse_unsupported_censoring``).
     """
     import nifty8.re as jft
 

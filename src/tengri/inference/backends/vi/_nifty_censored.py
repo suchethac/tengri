@@ -25,7 +25,7 @@ class CensoredGaussian(jft.Gaussian):
     ``-ln Phi((F - m)/sigma)``, lower limit ``-ln Phi((m - F)/sigma)``).
     ``metric``, ``left_sqrt_metric`` and ``transformation`` are inherited
     unchanged, so a limit band enters the geoVI/MGVI metric as a detection at
-    its limit value (see :mod:`tengri.inference._censoring` for why).
+    its limit value (see ``tengri.inference._censoring`` for why).
 
     Parameters
     ----------
