@@ -10,7 +10,8 @@ dust. The loader converts them with
 
     L_\nu = L_\lambda \, \lambda^2 / c
 
-and normalizes :math:`\int L_\nu \, d\nu` to the requested luminosity, so the
+and normalizes :math:`\int L_\nu \, d\nu` over the template's own wavelength grid
+to the requested luminosity (never over the caller's grid), so the
 torus power is the template's own and the energy sits at the library's
 wavelengths. Reading the array as :math:`L_\nu` instead multiplies the SED by
 :math:`\lambda^{-2}`: the 1-3 micron band then holds 76 % of the power in place
@@ -132,6 +133,28 @@ def _power_nu(lnu: np.ndarray, wave_aa: np.ndarray) -> float:
     return float(-np.trapezoid(lnu, nu))
 
 
+def _loglog_integral(x: np.ndarray, y: np.ndarray) -> float:
+    """Integral of ``y`` over ``x`` with a power law between nodes (linear where a node is 0)."""
+    x0, x1, y0, y1 = x[:-1], x[1:], y[:-1], y[1:]
+    pos = (y0 > 0.0) & (y1 > 0.0)
+    y0s, y1s = np.where(pos, y0, 1.0), np.where(pos, y1, 1.0)
+    a = np.log(x1 / x0)
+    u = a + np.log(y1s) - np.log(y0s)
+    ratio = np.where(np.abs(u) < 1e-7, 1.0 + 0.5 * u, np.expm1(u) / np.where(u == 0.0, 1.0, u))
+    return float(np.sum(np.where(pos, x0 * y0s * a * ratio, 0.5 * (y0 + y1) * (x1 - x0))))
+
+
+def _native_power_nu(lnu: np.ndarray, wave_aa: np.ndarray) -> float:
+    """Power of ``lnu`` read at the template nodes: L_nu dnu = L_nu (c / lambda^2) dlambda."""
+    return _loglog_integral(wave_aa, lnu * C_AA / wave_aa**2)
+
+
+def _native_wave_aa() -> np.ndarray:
+    """The template's own wavelength nodes [Angstrom]."""
+    with h5py.File(_GRID, "r") as f:
+        return np.asarray(f["fritz2006/wavelength_aa"][:])
+
+
 def _band_fractions(l_lam: np.ndarray, wave_nm: np.ndarray) -> np.ndarray:
     total = np.trapezoid(l_lam, wave_nm)
     out = []
@@ -201,10 +224,10 @@ def _loader_on_one_template(raw, wave_grid, axes, wave_out):
 
 
 def _expected_lnu(raw, wave_grid, wave_out):
-    """numpy ``raw * lambda^2 / c`` on ``wave_out``, unit integral over nu."""
+    """numpy ``raw * lambda^2 / c`` on ``wave_out``, unit power over the template's native grid."""
     l_lam = _resample(wave_out, wave_grid, raw)
     lnu = l_lam * wave_out**2 / C_AA
-    return lnu / _power_nu(lnu, wave_out)
+    return lnu / _loglog_integral(wave_grid, raw)
 
 
 # -- a. exact conversion ---------------------------------------------------
@@ -213,7 +236,7 @@ def _expected_lnu(raw, wave_grid, wave_out):
 @pytest.mark.parametrize("key", ["dust", "disk"])
 @pytest.mark.parametrize("node", _NODES, ids=_NODE_IDS)
 def test_raw_template_converted_as_l_lambda_exactly(node, key):
-    """``_interpolate_and_normalize`` returns ``raw * lambda^2 / c`` at unit power.
+    """``_interpolate_and_normalize`` returns ``raw * lambda^2 / c`` at unit native power.
 
     ``_interpolate_and_normalize`` converts the dust array (the torus, used by
     ``fritz_sed``) and the disc array (used by ``fritz_components``, which calls
@@ -226,13 +249,15 @@ def test_raw_template_converted_as_l_lambda_exactly(node, key):
     want = _expected_lnu(raw, wave_grid, wave_out)
     peak = np.max(want)
     np.testing.assert_allclose(got, want, rtol=1e-6, atol=1e-9 * peak)
-    assert _power_nu(got, wave_out) == pytest.approx(1.0, rel=1e-6)
+    # unit power is the template's own: read it off at the template's nodes
+    at_nodes = _loader_on_one_template(raw, wave_grid, axes, wave_grid)
+    assert _native_power_nu(at_nodes, wave_grid) == pytest.approx(1.0, rel=1e-6)
 
 
 def test_fritz_components_disc_and_dust_share_the_conversion():
     """Both ``fritz_components`` arrays carry unit power and ``dust`` is ``fritz_sed``."""
     _require_grid()
-    wave = np.logspace(2.0, 6.9, 3000)
+    wave = _native_wave_aa()
     kw = {
         "agn_log_lbol": 0.0,
         "agn_torus_frac": 1.0,
@@ -245,7 +270,7 @@ def test_fritz_components_disc_and_dust_share_the_conversion():
     }
     comp = FR.fritz_components(jnp.asarray(wave), **kw)
     for arr in (comp.disk, comp.dust):
-        assert _power_nu(np.asarray(arr), wave) == pytest.approx(L_SUN, rel=1e-6)
+        assert _native_power_nu(np.asarray(arr), wave) == pytest.approx(L_SUN, rel=1e-6)
     np.testing.assert_allclose(
         np.asarray(comp.dust), np.asarray(FR.fritz_sed(jnp.asarray(wave), **kw)), rtol=1e-12
     )
@@ -488,13 +513,13 @@ def test_lookup_residual_is_the_triweight_weighting(point, band_dev, median_dev)
 def test_torus_power_equals_l_scale(node):
     """``integral of L_nu d(nu)`` equals ``10**log_lbol * L_sun * frac`` to 1e-6.
 
-    The loader normalizes on the wavelength grid it is called with, so the
-    integral on that grid is the requested luminosity to rounding (about
-    1e-15), for any grid inside the template range.
+    The loader normalizes on the template's own native grid, so the integral
+    read at those nodes is the requested luminosity to rounding, whatever grid
+    the caller evaluates on.
     """
     _require_grid()
     r, tau, beta, gamma, theta, psy = node
-    wave = np.logspace(2.0, 6.9, 3000)
+    wave = _native_wave_aa()
     lnu = FR.fritz_sed(
         jnp.asarray(wave),
         agn_log_lbol=1.5,
@@ -506,7 +531,9 @@ def test_torus_power_equals_l_scale(node):
         agn_fritz_oa=_half_angle(theta),
         agn_fritz_psy=psy,
     )
-    assert _power_nu(np.asarray(lnu), wave) == pytest.approx(10.0**1.5 * L_SUN * 0.4, rel=1e-6)
+    assert _native_power_nu(np.asarray(lnu), wave) == pytest.approx(
+        10.0**1.5 * L_SUN * 0.4, rel=1e-6
+    )
 
 
 # -- float32 and gradient ------------------------------------------------
