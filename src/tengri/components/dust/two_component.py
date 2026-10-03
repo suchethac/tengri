@@ -1269,6 +1269,24 @@ class DustSEDComponent(TemplateThreading):
             tau_diff=_tau_diff,
             f_obsc=_f_obsc,
         )
+        # AGN line-only light (#2565): when the AGN ran before this component
+        # (``agn_screen != "none"``) it takes the same screen as ``sed_agn``;
+        # when it runs after, nothing reaches here and its own publication
+        # stands. Re-published under the AGN's key, as ``sed_nebular`` is.
+        sed_agn_lines_unatt = state.derived.get("sed_agn_lines_attenuated")
+        sed_agn_lines_attenuated = (
+            None
+            if sed_agn_lines_unatt is None
+            else jnp.asarray(sed_agn_lines_unatt)
+            * _screen_transmission(
+                self.config.agn_screen,
+                k_bc=k_bc_neb,
+                k_diff=k_diff_neb,
+                tau_bc=_tau_bc,
+                tau_diff=_tau_diff,
+                f_obsc=_f_obsc,
+            )
+        )
 
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
@@ -1494,6 +1512,8 @@ class DustSEDComponent(TemplateThreading):
             # the true observed total. Unattenuated when dust is off / zero-τ.
             sed_nebular=sed_neb_attenuated,
         )
+        if sed_agn_lines_attenuated is not None:
+            derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_attenuated
         # Discrete emission-line catalog, reddened in 2c with the same screen
         # as the nebular continuum above (#1867). Absent when no photoionized
         # backend published a catalog; consumers then fall back to the
