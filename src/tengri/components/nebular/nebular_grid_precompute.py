@@ -70,7 +70,7 @@ from tengri.utils.scale import apply_log10_scale, pow10
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
-#: conditions. ``neb_fesc`` and ``neb_fdust`` are applied at reconstruction
+#: conditions. ``neb_fesc`` and ``neb_fdust_frac`` are applied at reconstruction
 #: (table built at zero for both, every channel scaled by ``lyc_dust_escape_factor``),
 #: and the ionizing-spectrum params are SSP-derived. ``neb_logU`` also joins the
 #: axes whenever DIG mixing could be active, even when it is itself Fixed (#2222):
@@ -79,7 +79,7 @@ _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 
 #: Nebular parameters applied at reconstruction as one scalar on every channel
 #: (``lyc_dust_escape_factor``). The table is built at zero for both.
-_RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust")
+_RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust_frac")
 #: Nebular parameters applied at reconstruction by mixing two lookups (#2222).
 _RECONSTRUCTION_MIXED = ("neb_dig_frac", "neb_dig_delta_logU")
 #: Prefixes of the parameters the nebular component owns.
@@ -785,7 +785,7 @@ def _preserve_spacing_n(base_n, own_lo, own_hi, ext_lo, ext_hi):
 
 
 def reconstruction_escape_factor(params) -> jnp.ndarray:
-    """``lyc_dust_escape_factor`` at the evaluation's ``neb_fesc`` and ``neb_fdust``.
+    """``lyc_dust_escape_factor`` at the evaluation's ``neb_fesc`` and ``neb_fdust_frac``.
 
     This is the single place the grid reads the escape and dust-destruction
     fractions; every other reference to them in the reconstruction path is
@@ -794,18 +794,20 @@ def reconstruction_escape_factor(params) -> jnp.ndarray:
     Parameters
     ----------
     params : Mapping
-        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust_frac`` default to 0.
 
     Returns
     -------
     ndarray, shape ()
         The escape factor [dimensionless].
     """
+    from tengri.components.lyc import lyc_shares
     from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 
-    return lyc_dust_escape_factor(
-        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust", 0.0))
+    f_esc, f_dust, _ = lyc_shares(
+        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust_frac", 0.0))
     )
+    return lyc_dust_escape_factor(f_esc, f_dust)
 
 
 def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
@@ -825,7 +827,7 @@ def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
     log_nion : ndarray, shape ()
         :math:`\log_{10} Q_H` [dex re photon/s].
     params : Mapping
-        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust_frac`` default to 0.
 
     Returns
     -------

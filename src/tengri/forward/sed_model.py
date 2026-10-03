@@ -7405,7 +7405,7 @@ class SEDModel:
           shape, WG00, or a free redshift with a redshift-reading law) cannot take
           the nebular from the grid; the grid serves line fluxes only while photometry
           takes the exact nebular path.
-        * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
+        * The grid applies ``neb_fesc`` and ``neb_fdust_frac`` at reconstruction
           (computed per-galaxy from parameters), not at table build (which uses
           zero for both); every other free nebular parameter held at the build
           value (``neb_fesc_lya``, ``ionspec_*``, ``gas_*``, ``neb_eline_sigma_kms``,
