@@ -677,3 +677,37 @@ class TestDustyFreeRedshift:
         rel = _rel(_phot(fast, p), _phot(exact, p))
         print(f"dusty z={z}: fast vs WavePrecomp max rel {rel:.2e}")
         assert rel < DUSTY_BUDGET
+
+
+# ── float32: a line that misses every band must not poison the gradient ──────────────
+
+
+def test_float32_gradient_is_finite_for_lines_outside_the_bands():
+    """The discarded branch of the line term exponentiates ``log_nion + log l`` (~41), which
+    overflows float32 (max exponent 38.5); the masked product ``0 * inf`` was a NaN gradient."""
+    from tengri.components.nebular.nebular_grid_precompute import (
+        NebularGridTable,
+        reconstruct_nebular_phot,
+    )
+
+    with jax.enable_x64(False):
+        f32 = jnp.float32
+        table = NebularGridTable(
+            axis_names=(),
+            axes=(),
+            log_line_per_qh=jnp.zeros((1,), f32),
+            wavelengths=jnp.asarray([5000.0], f32),
+            log_phot_per_qh=jnp.zeros((2,), f32),
+            log_restband_per_qh=jnp.zeros((2,), f32),
+            sed_line_waves=jnp.asarray([4000.0, 5000.0], f32),
+            log_sed_lines_per_qh=jnp.asarray([-12.0, -12.0], f32),
+            line_band_kernel_fixed=jnp.asarray([[0.0, 0.0], [1e-15, 0.0]], f32),
+            cont_lnz=jnp.zeros((1,), f32),
+            log_cont_ztable_per_qh=jnp.full((1, 2), -25.0, f32),
+            cont_keep=jnp.asarray([[True, False]]),
+        )
+        value, grad = jax.value_and_grad(
+            lambda ln: jnp.sum(reconstruct_nebular_phot(ln, {}, table, 0.1))
+        )(jnp.asarray(53.0, f32))
+        assert np.isfinite(float(value)) and float(value) != 0.0
+        assert np.isfinite(float(grad)) and float(grad) != 0.0

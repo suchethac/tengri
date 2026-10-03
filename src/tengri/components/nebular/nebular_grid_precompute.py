@@ -320,6 +320,12 @@ class NebularGridTable:
         [Angstrom]. For Cue these are the raw network wavelengths, which are
         AIR wavelengths (H-beta at 4861.3); the published catalog
         (``wavelengths`` above is a subset of it) is the vacuum conversion.
+    sed_line_node_waves : ndarray, shape (n_sed_lines, 5) or None
+        The five SED-grid wavelengths nearest each line [Angstrom]; the SED renderer puts
+        a line's flux on grid nodes, and a screen that steps across a line (the IGM at
+        Lyman-alpha) must be evaluated where the flux is.
+    sed_line_node_weights : ndarray, shape (n_sed_lines, 5) or None
+        Share of each line's rendered flux on those nodes (rows sum to 1).
     log_sed_lines_per_qh : ndarray, shape ``(*grid_dims, n_sed_lines)`` or None
         ``log10`` of every SED line's luminosity per unit ``nion`` [erg/s per
         (photons/s)], floored at -300 for a dark line.
@@ -381,6 +387,8 @@ class NebularGridTable:
     log_restband_per_qh: jnp.ndarray | None = None
     reference_redshift: float | None = None
     sed_line_waves: jnp.ndarray | None = None
+    sed_line_node_waves: jnp.ndarray | None = None
+    sed_line_node_weights: jnp.ndarray | None = None
     log_sed_lines_per_qh: jnp.ndarray | None = None
     line_band_kernel_fixed: jnp.ndarray | None = None
     cont_lnz: jnp.ndarray | None = None
@@ -1707,8 +1715,23 @@ def _split_band_fields(
             "cont_subband_frac": jnp.asarray(frac),
             "cont_subband_waves_rest": jnp.asarray(lam),
         }
+    sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", 100.0))
+    unit = jax.vmap(
+        lambda e: render_nebular_lines(
+            jnp.asarray(sed_line_waves), e, jnp.asarray(wave_np), 0.0, sigma
+        )
+    )(jnp.eye(n_lines))  # (n_lines, n_wave): each line's rendered profile [1/Hz]
+    unit = np.asarray(unit)
+    dlam = np.gradient(wave_np)
+    centre = np.clip(np.searchsorted(wave_np, np.asarray(sed_line_waves)), 2, wave_np.size - 3)
+    idx = centre[:, None] + np.arange(-2, 3)[None, :]
+    mass = np.take_along_axis(unit, idx, axis=1) * dlam[idx]
+    tot = mass.sum(axis=1, keepdims=True)
+    weights = np.where(tot > 0.0, mass / np.where(tot > 0.0, tot, 1.0), 0.2)
     return {
         **sub,
+        "sed_line_node_waves": jnp.asarray(wave_np[idx]),
+        "sed_line_node_weights": jnp.asarray(weights),
         "sed_line_waves": jnp.asarray(sed_line_waves),
         "log_sed_lines_per_qh": jnp.asarray(log_sed_lines).reshape(*grid_shape, n_lines),
         "line_band_kernel_fixed": None if kernel is None else jnp.asarray(kernel),
@@ -1961,7 +1984,11 @@ def reconstruct_nebular_phot(
         )
     lit = kernel > 0.0
     safe = jnp.where(lit, kernel, 1.0)
-    lines = jnp.where(lit, pow10(jnp.asarray(log_nion) + log_lum[:, None] + jnp.log10(safe)), 0.0)
+    # Safe-where on the EXPONENT: where the line misses the band the exponent is set to
+    # a value whose pow10 is finite in float32 (the unmasked ``log_nion + log l`` is ~41,
+    # past float32's 38.5 and overflows), so the discarded branch has a finite gradient.
+    expo = jnp.where(lit, jnp.asarray(log_nion) + log_lum[:, None] + jnp.log10(safe), 0.0)
+    lines = jnp.where(lit, pow10(expo), 0.0)
     continuum = continuum_band_from_slab(log_nion, log_bands, table.cont_keep, lower, weight)
     if packed:
         return jnp.concatenate([lines, continuum[None, :]], axis=0)
@@ -1987,9 +2014,9 @@ def nebular_subband_decomposition(packed, redshift, table):
 
     Returns
     -------
-    phi : ndarray, shape (n_filter, n_sed_lines + K)
+    phi : ndarray, shape (n_filter, 5 n_sed_lines + K)
         Band ``L_nu`` of each chunk [erg/s/Hz]; sums over the last axis to the band.
-    lam : ndarray, shape (n_filter, n_sed_lines + K)
+    lam : ndarray, shape (n_filter, 5 n_sed_lines + K)
         Rest wavelength of each chunk [Angstrom].
 
     Notes
@@ -2007,10 +2034,14 @@ def nebular_subband_decomposition(packed, redshift, table):
         frac = (1.0 - w) * f2[0] + w * f2[1]
         lam_c = (1.0 - w) * l2[0] + w * l2[1]
     n_filt = cont.shape[0]
-    line_lam = jnp.broadcast_to(
-        jnp.asarray(table.sed_line_waves)[None, :], (n_filt, lines.shape[0])
-    )
-    phi = jnp.concatenate([lines.T, cont[:, None] * frac], axis=-1)
+    # Each line is spread over its rendered profile: a few points weighted by the
+    # triweight kernel, so a screen that steps across the line (IGM at Lyman-alpha)
+    # is averaged over the profile rather than sampled at its centre.
+    line_lam = jnp.asarray(table.sed_line_node_waves).reshape(-1)  # (n_lines*m,)
+    w_u = jnp.asarray(table.sed_line_node_weights)  # (n_lines, m)
+    phi_lines = (lines[:, None, :] * w_u[:, :, None]).reshape(-1, n_filt)
+    line_lam = jnp.broadcast_to(line_lam[None, :], (n_filt, line_lam.shape[0]))
+    phi = jnp.concatenate([phi_lines.T, cont[:, None] * frac], axis=-1)
     lam = jnp.concatenate([line_lam, lam_c], axis=-1)
     return phi, lam
 
