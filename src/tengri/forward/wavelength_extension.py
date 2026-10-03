@@ -169,12 +169,18 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 #     energy fraction beyond a wavelength is set by where the grid ends. It
 #     takes the same 1 cm end as the analytic dust and torus support grids, and
 #     starts where the T_max = 1e5 K exponential cut-off has removed the energy.
-# 200 points per decade resolves the multicolor EUV peak: the model-grid
-# trapezoid of the bolometric disc SED is within 1.3e-4 of L_bol (40 per decade
-# leaves 1.2e-3; the error falls as ~1/density), kubota_done 7.8e-6 of a
-# 200000-point evaluation, and the disc level at every node stays within 7e-4
-# of it (20 per decade leaves 2.5e-3 for the ADAF blocks).
-_DISC_PTS_PER_DECADE = 200
+# 40 points per decade keeps the disc level at every node within 7e-4 of a 200000-point
+# evaluation (20 per decade leaves 2.5e-3 for the ADAF blocks). Shortward of
+# ``_DISC_EUV_BELOW_AA`` the grid carries 200 points per decade instead: the multicolor
+# disc peaks in the EUV, and there the model-grid trapezoid of the bolometric SED is within
+# 1.3e-4 of L_bol (40 per decade leaves 1.2e-3; the error falls as ~1/density). The cut
+# sits below Lyman-alpha (1216 A): a denser grid across the IGM break re-resolves the
+# transmission step for every other component of the model and moves the exact-path band
+# fluxes of z > 7 models by up to 0.7 % against a fixed-quadrature LUT, so the extra
+# nodes are spent only where the disc needs them.
+_DISC_PTS_PER_DECADE = 40
+_DISC_PTS_PER_DECADE_EUV = 200
+_DISC_EUV_BELOW_AA = 1000.0
 # Tabulated discs whose template axis is too coarse for that normalization
 # accuracy (KD18: 100 nodes over 6.3 decades, 1.6e-3): the declared grid is
 # the axis plus a log grid at the same density as the analytic discs.
@@ -415,6 +421,19 @@ def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
     return wave[keep]
 
 
+def _disc_log_grid(lo: float, hi: float) -> np.ndarray:
+    """Log grid over ``[lo, hi]`` [A]: 200 points per decade below 1000 A, 40 above."""
+    cut = min(max(lo, _DISC_EUV_BELOW_AA), hi)
+    parts = []
+    if lo < cut:
+        parts.append(
+            np.geomspace(lo, cut, round(np.log10(cut / lo) * _DISC_PTS_PER_DECADE_EUV) + 1)
+        )
+    if hi > cut:
+        parts.append(np.geomspace(cut, hi, round(np.log10(hi / cut) * _DISC_PTS_PER_DECADE) + 1))
+    return np.unique(np.concatenate(parts))
+
+
 def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
     """Native wavelength grid [Å] for an AGN disc block selection.
 
@@ -425,15 +444,13 @@ def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
         return None
     if block in _ANALYTIC_DISC_RANGE_AA:
         lo, hi = _ANALYTIC_DISC_RANGE_AA[block]
-        n = round(np.log10(hi / lo) * _DISC_PTS_PER_DECADE) + 1
-        return np.geomspace(lo, hi, n)
+        return _disc_log_grid(lo, hi)
     candidates = _AGN_DISC_TEMPLATES.get(block)
     if candidates is None:
         return None
     wave = _first_present(candidates)
     if wave is not None and block in _DISC_DENSIFIED:
-        n = round(np.log10(wave.max() / wave.min()) * _DISC_PTS_PER_DECADE) + 1
-        wave = np.unique(np.concatenate([wave, np.geomspace(wave.min(), wave.max(), n)]))
+        wave = np.unique(np.concatenate([wave, _disc_log_grid(wave.min(), wave.max())]))
     return wave
 
 
