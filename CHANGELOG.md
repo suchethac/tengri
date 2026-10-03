@@ -2,14 +2,17 @@
 
 ### Fixed
 
-- The power-law AGN radio jet now honors `radio_log_nu_cut` (#2689): the cutoff
-  frequency of the synchrotron-aging exponential was hard-wired at 10¹³ Hz
-  because the parameter was accepted by the builder but never threaded through
-  to the `radio_agn` function. The default (13.0 → 1e13 Hz) is bit-identical.
-  Additionally, dpl-only parameters (`radio_alpha_thin`, `radio_alpha_thick`,
-  `radio_log_nu_t`) are now refused on the power-law model with `ConfigError`
-  naming the model that reads them, fixing the silent-failure pattern where
-  they were accepted and ignored.
+- `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
+  radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
+  with the default 13.0 (10 THz) as before. The key is a parameter of both AGN
+  radio models, so `radio={'agn': {'all_params': FREE}}` on the default
+  power-law jet frees it (`Uniform(12, 14)`) along with `radio_loudness` and
+  `radio_alpha_agn`. The cutoff exponent is formed as `nu * 10^-cut`, so the
+  value and the gradient are finite in float32 for any `cut` (10^cut overflows
+  there from about 38.5). The DPL-only keys `radio_alpha_thin`,
+  `radio_alpha_thick` and `radio_log_nu_t` are refused on the power-law jet with
+  an error naming the model that reads them; a misspelt key gets the ordinary
+  unknown-key error.
 
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without

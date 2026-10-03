@@ -11,9 +11,9 @@ AGN-radio model selection
 The AGN radio component is selected via
 :attr:`RadioSEDComponentConfig.agn_radio_model`:
 
-- ``"powerlaw"`` (default): single power-law (:func:`radio_total`).
-  Backwards-compatible default; behavior bit-identical to pre-aging
-  releases.
+- ``"powerlaw"`` (default): single power law with an ``exp(-nu/nu_cut)``
+  aging cutoff (:func:`radio_total`). Uses ``radio_loudness``,
+  ``radio_alpha_agn``, ``radio_log_nu_cut``.
 - ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. (2)). Uses ``radio_alpha_thin``,

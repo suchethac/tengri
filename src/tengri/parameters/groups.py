@@ -5130,43 +5130,6 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             valid_agn = frozenset(AGN_RADIO_MODELS)
             if agn_variant not in valid_agn:
                 raise _unknown_name_error("radio agn type", agn_variant, valid_agn, keyword="type")
-
-            # Validate model-specific keys are only used with the model that reads them
-            # (#2689: dpl-only keys were accepted and ignored on powerlaw)
-            if agn_variant in _RADIO_AGN_PARAMS_BY_MODEL:
-                allowed_params = _RADIO_AGN_PARAMS_BY_MODEL[agn_variant]
-                # Skip structural keys ('type', '*', 'all_params', 'other_params')
-                structural_keys = {"type", "*", "all_params", "other_params"}
-                provided_keys = {k for k in agn_dict if k not in structural_keys}
-                # Normalize to radio_* prefixed keys (strip potential short names)
-                provided_radio_keys = {
-                    (f"radio_{k}" if not k.startswith("radio_") else k) for k in provided_keys
-                }
-                # Find keys not in the allowed set for this model
-                disallowed = provided_radio_keys - allowed_params
-                if disallowed:
-                    # Find which model reads the disallowed keys
-                    model_readers = {
-                        model
-                        for model, params in _RADIO_AGN_PARAMS_BY_MODEL.items()
-                        if disallowed & params
-                    }
-                    reader_names = ", ".join(sorted(model_readers))
-                    many = len(disallowed) > 1
-                    noun = "keys" if many else "key"
-                    offending = ", ".join(
-                        sorted(repr(k.replace("radio_", "")) for k in disallowed)
-                    )
-                    verb = "are" if many else "is"
-                    pronoun = "them" if many else "it"
-                    adj = "These" if many else "This"
-                    raise ConfigError(
-                        f"radio.agn: {offending} {verb} not read by {agn_variant!r} "
-                        f"(selected for radio_agn_model), so writing {pronoun} here "
-                        f"would be silently ignored. {adj} {noun} {verb} read by: "
-                        f"{reader_names}. Drop {pronoun} or select a radio_agn_model "
-                        f"that reads {pronoun}."
-                    )
         else:
             raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
 
@@ -5997,6 +5960,8 @@ def _variant_selection_text(group: str, structural_params: Parameters) -> str:
         e.g. ``"type 'casey2012'"`` or
         ``"type 'two_component' with law_bc='calzetti', law_diff='power_law'"``.
     """
+    if group == "radio.agn":
+        return f"type {structural_params.radio_agn_model!r}"
     if group == "dust_emission":
         return f"type {structural_params.dust_emission!r}"
     model = getattr(structural_params, "dust_model", None)
@@ -6070,12 +6035,13 @@ def _reject_foreign_variant_keys(
 
 
 def _laws_reading_hint(group: str, foreign: list[str]) -> str:
-    """Name the attenuation laws that read a key the selected law does not.
+    """Name the laws (or radio AGN models) that read a key the selected one does not.
 
     Parameters
     ----------
     group : str
-        Group being validated; only ``"dust_attenuation"`` gets a hint.
+        Group being validated; only ``"dust_attenuation"`` and ``"radio.agn"``
+        get a hint.
     foreign : list of str
         Rejected keys, in either spelling.
 
@@ -6093,6 +6059,11 @@ def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     median curve at z and reads no slope or bump at all, and the answer a user
     wants is the name of the law that does, which is ``kriek_conroy``.
     """
+    if group == "radio.agn":
+        wanted = {k if k.startswith("radio_") else f"radio_{k}" for k in foreign}
+        models = sorted(m for m, names in _RADIO_AGN_PARAMS_BY_MODEL.items() if wanted & names)
+        noun = "keys" if len(foreign) > 1 else "key"
+        return f" Models that do read the {noun}: {', '.join(models)}." if models else ""
     if group != "dust_attenuation":
         return ""
     from tengri.components.dust.laws._registry import DUST_LAWS
@@ -6370,6 +6341,21 @@ def _validate_user_keys(
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
                 sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                if sub_name == "agn":
+                    # A key some AGN radio model reads but the selected one does not
+                    # (#2689): refused by name instead of silently ignored.
+                    read = _RADIO_AGN_PARAMS_BY_MODEL.get(
+                        getattr(structural_params, "radio_agn_model", None)
+                    )
+                    if read is not None:
+                        _reject_foreign_variant_keys(
+                            sub_group,
+                            sub,
+                            _name_spellings(read),
+                            read,
+                            sub_params,
+                            structural_params,
+                        )
                 _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
@@ -8108,6 +8094,11 @@ def parameters_to_groups(spec: Parameters) -> dict:
             )
             if emittable is not None:
                 param_names = [name for name in param_names if name in emittable]
+        elif group_name == "radio.agn":
+            # Same rule for the radio AGN jet: emit only what its model reads.
+            read = _RADIO_AGN_PARAMS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
+            if read is not None:
+                param_names = [name for name in param_names if name in read]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:

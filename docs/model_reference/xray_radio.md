@@ -126,14 +126,14 @@ Passing `freefree: True` explicitly keeps the term over its whole range on a neb
 
 ### AGN Radio Jets
 
-For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) normalized via the radio-loudness parameter $R = L_{\nu}(5\,{\rm GHz})/L_{\nu}(2500\,\text{\AA})$ is sufficient.
+For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) normalized via the radio-loudness parameter $R = L_{\nu}(5\,{\rm GHz})/L_{\nu}(2500\,\text{\AA})$ is sufficient. The power law carries the same synchrotron-aging cutoff as the DPL model below, $\exp(-\nu/\nu_{\rm cut})$ with $\nu_{\rm cut} = 10^{\texttt{radio\_log\_nu\_cut}}\,$Hz (default $10^{13}\,$Hz); `radio_log_nu_cut` is a parameter of the power-law jet and can be fixed, set or fitted.
 
 For radio-loud AGN with spectral curvature, the double power-law (DPL) model from AGNfitter-rx (Martı́nez-Ramı́rez et al. 2024) captures the optically thick/thin transition: $$L_\nu = L_{5{\rm GHz}} \left(\frac{\nu}{\nu_t}\right)^{\!\alpha_1}\!
   \left[1 - \exp\!\left(-\!\left(\frac{\nu_t}{\nu}\right)^{\!\alpha_1-\alpha_2}\right)\right]
   \exp\!\left(-\frac{\nu}{\nu_{\rm cut}}\right),
 
 $$ (eq-dpl-radio)
- where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{13}\,$Hz is the synchrotron aging cutoff.
+ where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{\texttt{radio\_log\_nu\_cut}}\,$Hz (default $10^{13}\,$Hz) is the synchrotron aging cutoff.
 
 ## References
 
