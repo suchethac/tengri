@@ -357,10 +357,15 @@ def measure_line_fluxes_from_window_lut(
     # ``(total_mass * L_sun) * ...`` was ``inf * finite`` in float32, and the
     # ``feat - cont`` below then read ``inf - inf`` -> ``nan`` on every line (#1859).
     scale = total_mass * _LSUN_MANTISSA
+    # ``scale`` enters through the weights, not as a multiply on the means: see
+    # :func:`window_means_with_dust` (the backward of ``(scale * m) * 2**112`` is
+    # reassociated by XLA into an ``inf`` constant in float32).
     window_means = (
-        scale
-        * window_means_with_dust(joint_weights, transmission, precomp.points, precomp.window_norms)
-    ) * _LSUN_POW2
+        window_means_with_dust(
+            joint_weights, transmission, precomp.points, precomp.window_norms, scale
+        )
+        * _LSUN_POW2
+    )
     centers = precomp.window_centers
     out = []
     for _name, b, r, f, lam_c, width in precomp.line_slots:

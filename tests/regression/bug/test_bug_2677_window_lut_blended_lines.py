@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.line_measurement import DESI_LINES, LineDef, default_line_defs
 from tengri.observation.spectral_indices import STANDARD_INDICES
@@ -105,3 +105,57 @@ def test_faint_line_is_really_blended(model):
     base = float(np.asarray(model.measure_line_fluxes({}, (nii,), approx=False))[0])
     shifted = float(np.asarray(model.measure_line_fluxes({}, (moved,), approx=False))[0])
     assert abs(shifted / base - 1.0) > 0.05
+
+
+def test_line_lut_gradient_is_finite_and_nonzero_in_float32():
+    """The per-point contraction must not overflow the float32 backward pass.
+
+    ``window_means * 2**112`` restores ``L_sun`` after the ~1e10 mass scale. When the
+    mass scale multiplied the returned means, XLA reassociated the two adjacent
+    scalar multiplies in the backward pass to ``ct * (scale * 2**112)``, ~1e44 and
+    ``inf`` in float32: every cotangent into the window means was ``inf`` and the
+    parameter gradient ``nan``, with every forward value finite. The mass scale now
+    enters through the SFH weights.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    if not _SSP_PATH.is_file():
+        pytest.skip("wNE SSP grid not available")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with jax.enable_x64(False):
+            m32 = SEDModel.build(
+                ssp_data=load_ssp_data(str(_SSP_PATH)),
+                sfh={
+                    "type": "delayed",
+                    "all_params": Fixed(DEFAULT),
+                    "log_total_mass": Uniform(9.0, 11.0),
+                    "tau_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(5.0),
+                },
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                    "tau_diff": Uniform(0.1, 1.5),
+                    "tau_bc": Fixed(0.0),
+                },
+                neb={"type": "none"},
+                redshift=Fixed(0.1),
+            )
+            params = {"log_total_mass": jnp.float32(10.0), "dust_tau_diff": jnp.float32(0.5)}
+            f0 = m32.measure_line_fluxes(params, DESI_LINES, approx=True)
+
+            @jax.jit
+            def grads(p, obs, sig):
+                def chi2(q):
+                    f = m32.measure_line_fluxes(q, DESI_LINES, approx=True)
+                    return 0.5 * jnp.sum(((f - obs) / sig) ** 2)
+
+                return jax.grad(chi2)(p)
+
+            g = {k: np.asarray(v) for k, v in grads(params, 0.9 * f0, 0.1 * f0).items()}
+    assert f0.dtype == jnp.float32 and np.all(np.isfinite(np.asarray(f0)))
+    assert all(v.dtype == np.float32 and np.isfinite(v) for v in g.values()), g
+    assert g["dust_tau_diff"] != 0.0, g

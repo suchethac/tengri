@@ -684,7 +684,9 @@ def stack_window_points(waves: list, integrands: list, n_met: int, n_age: int, d
     )
 
 
-def window_means_with_dust(joint_weights, transmission_at_points, points: WindowPoints, norms):
+def window_means_with_dust(
+    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0
+):
     """SFH-weighted window means with the dust screen applied inside each window.
 
     :math:`\\langle F\\rangle_w = \\sum_p T(a,\\lambda_p) \\sum_{m,a} w_{ma}\\,
@@ -698,13 +700,21 @@ def window_means_with_dust(joint_weights, transmission_at_points, points: Window
         Two-component transmission at ``points.waves`` per SSP age.
     points : WindowPoints
     norms : ndarray, shape (n_window,)
+    scale : float or ndarray, shape (), default 1.0
+        Multiplies the SFH weights before they meet the integrands. A caller that
+        restores a large constant afterwards (``_LSUN_POW2`` on the line path)
+        passes its small factor here rather than multiplying the returned means:
+        ``(scale * mean) * 2**112`` is two adjacent scalar multiplies, which XLA
+        reassociates in the backward pass into ``ct * (scale * 2**112)``, and that
+        product (~1e44) overflows float32 although every true value is in range
+        (#2677). Entering through the weights puts the contraction between them.
 
     Returns
     -------
     ndarray, shape (n_window,)
-        Unscaled window means [erg/s/Hz per unit weight].
+        Window means, per unit weight times ``scale`` [erg/s/Hz].
     """
-    wint = jnp.einsum("ma,map->ap", joint_weights, points.integrands)
+    wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
     per_point = jnp.sum(transmission_at_points * wint, axis=0)
     integral = jax.ops.segment_sum(per_point, points.window, num_segments=norms.shape[0])
     return integral / norms
