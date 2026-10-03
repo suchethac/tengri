@@ -184,6 +184,47 @@ def test_subband_band_request_all_fields_change_digest():
         assert baseline_digest != perturbed_digest, f"Field {field.name} did not change the digest"
 
 
+def test_exact_fold_request_all_fields_change_digest():
+    """ExactFoldRequest: every field in dataclasses.fields changes the digest."""
+    from tengri._cache_keys import array_key, frozen_dataclass_key
+    from tengri.components.igm._subband_cache import ExactFoldRequest
+
+    baseline = ExactFoldRequest(
+        version=3,
+        ssp_wave=array_key(np.arange(4.0)),
+        ssp_flux=array_key(np.arange(4.0)),
+        filters=((array_key(np.arange(3.0)), array_key(np.arange(3.0))),),
+        z_grid=array_key(np.arange(5.0)),
+        igm_model="inoue",
+        n_subbands=3,
+        lyc_gate=False,
+        convention="bessell",
+        x64=False,
+        backend="cpu",
+    )
+    perturbations = {
+        "version": 4,
+        "ssp_wave": array_key(np.arange(5.0)),
+        "ssp_flux": array_key(np.arange(5.0)),
+        "filters": ((array_key(np.arange(4.0)), array_key(np.arange(3.0))),),
+        "z_grid": array_key(np.arange(6.0)),
+        "igm_model": "madau",
+        "n_subbands": 4,
+        "lyc_gate": True,
+        "convention": "energy",
+        "x64": True,
+        "backend": "gpu",
+    }
+    baseline_digest = frozen_dataclass_key(baseline)
+    for field in dataclasses.fields(ExactFoldRequest):
+        if field.name not in perturbations:
+            pytest.fail(f"Unknown field: {field.name}")
+        perturbed = dataclasses.replace(baseline, **{field.name: perturbations[field.name]})
+        assert frozen_dataclass_key(perturbed) != baseline_digest, (
+            f"Field {field.name} did not change the digest"
+        )
+
+
 def test_ztable_cache_key_no_schema_literal():
     """_ztable_cache_key source has no 'schema=' literal."""
     from tengri.components.stellar.sps.precompute import _ztable_cache_key

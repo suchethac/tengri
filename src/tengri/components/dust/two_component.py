@@ -989,12 +989,23 @@ class DustSEDComponent(TemplateThreading):
         integral of each sub-band chunk and its rest wavelength. The screen is
         the one :meth:`nebular_screen_transmission` evaluates.
         """
+        return jnp.sum(
+            self._screened_subband_chunks(
+                params, phi_sub, lam_sub, neb_law, neb_bc_params, diff_law_kw, neb_weights
+            ),
+            axis=-1,
+        )
+
+    def _screened_subband_chunks(
+        self, params, phi_sub, lam_sub, neb_law, neb_bc_params, diff_law_kw, neb_weights
+    ) -> jnp.ndarray:
+        """``Phi_k T(lambda_k)`` per filter and chunk, shape ``(n_filter, K)``."""
         phi = jnp.asarray(phi_sub)
         lam = jnp.asarray(lam_sub)
         t_sub = self._line_transmission(
             params, lam.reshape(-1), neb_law, neb_bc_params, diff_law_kw, neb_weights
         ).reshape(lam.shape)
-        return jnp.sum(phi * t_sub, axis=-1)
+        return phi * t_sub
 
     def attenuate_line_catalog(
         self,
@@ -1867,17 +1878,20 @@ class DustSEDComponent(TemplateThreading):
                 # the chunk's flux-weighted rest wavelength, and the screen is
                 # applied at those nodes, ``sum_k Phi_k T(lambda_k)``, the same
                 # K-point form the stellar continuum uses (#1122).
-                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
-                    self._screened_subband_sum(
-                        params,
-                        state.derived["nebular_phot_lnu_subband_precomp"],
-                        state.derived["nebular_subband_waves_rest_precomp"],
-                        neb_law,
-                        neb_bc_params,
-                        diff_law_kw,
-                        neb_weights,
-                    )
+                _chunks = self._screened_subband_chunks(
+                    params,
+                    state.derived["nebular_phot_lnu_subband_precomp"],
+                    state.derived["nebular_subband_waves_rest_precomp"],
+                    neb_law,
+                    neb_bc_params,
+                    diff_law_kw,
+                    neb_weights,
                 )
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = jnp.sum(
+                    _chunks, axis=-1
+                )
+                # Per chunk, for the IGM at each chunk's node (#2679).
+                derived_overrides["nebular_phot_lnu_subband_screened_precomp"] = _chunks
             elif _neb_phot is not None and _sed_neb is not None:
                 from tengri.components._band_projection import (
                     project_additive_onto_photometry,
@@ -1900,6 +1914,8 @@ class DustSEDComponent(TemplateThreading):
                         z_neb,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_nebular_attenuated_precomp"] = sed_neb_attenuated
             # Shock photometry attenuation (#1434): publish the attenuated form so both
             # exact and precomp paths read the same value, not two independent
             # multiplications that can drift. Dust attenuates shock the same way as
@@ -1929,6 +1945,8 @@ class DustSEDComponent(TemplateThreading):
                         z_shock,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_shock_attenuated_precomp"] = sed_shock_attenuated
             # AGN photometry attenuated by dust (PR-D2): parallel to shock.
             # sed_agn_unatt and sed_agn_attenuated are computed in §2e above.
             # Gate on agn_screen != "none" and presence of intrinsic AGN.
@@ -1954,6 +1972,8 @@ class DustSEDComponent(TemplateThreading):
                         z_agn,
                     )
                 )
+                # The spectrum inside the band, for the IGM weighting in predict_via_precomp.
+                derived_overrides["sed_agn_attenuated_precomp"] = sed_agn_attenuated
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
             # division by A) so the two-component Taylor projection (#617) is
             # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
@@ -1984,6 +2004,15 @@ class DustSEDComponent(TemplateThreading):
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+                # The same screens where the IGM-surviving light sits (exact fold).
+                igm_waves = state.derived.get("stellar_subband_waves_rest_igm_precomp")
+                if igm_waves is not None:
+                    derived_overrides["dust_bc_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_bc * law_bc_fn(igm_waves, **bc_kw)
+                    )
+                    derived_overrides["dust_diff_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_diff * law_diff_fn(igm_waves, **diff_kw)
+                    )
 
                 # #2529 hole geometry, exact-node equivalent of the λ_eff
                 # publish above. Presence of this key is the signal
