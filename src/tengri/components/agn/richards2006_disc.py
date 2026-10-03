@@ -73,6 +73,12 @@ _RICHARDS2006_BOL_INTEGRAL = float(
 # L_sun in erg/s (IAU 2015)
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG_S
+from tengri.utils.scale import pow10
+
+#: ``log10(L_sun / integral)`` [dex]: the template is scaled by ``10**(log_lbol + this)``.
+_RICHARDS2006_LOG10_NORM_OFFSET = float(
+    np.log10(_L_SUN_ERG_S) - np.log10(_RICHARDS2006_BOL_INTEGRAL)
+)
 
 
 def richards2006_disc(
@@ -122,9 +128,11 @@ def richards2006_disc(
         left=0.0,
         right=0.0,
     )
-    # Rescale to L_bol target (template integral is constant, computed at load)
-    target_bol_erg_s = (10.0**log_lbol) * _L_SUN_ERG_S
-    norm = target_bol_erg_s / _RICHARDS2006_BOL_INTEGRAL
+    # Rescale to the L_bol target: ``norm = 10**log_lbol * L_sun / integral`` formed in
+    # log10, so neither the erg/s-scale target (1e44) nor the template's bolometric
+    # integral (1e46) is ever a linear float32 intermediate; only the net factor
+    # (about 1e-2 to 1e-4 here) is exponentiated.
+    norm = pow10(log_lbol + _RICHARDS2006_LOG10_NORM_OFFSET)
     return lnu_shape * norm
 
 
