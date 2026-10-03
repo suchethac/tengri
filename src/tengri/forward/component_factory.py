@@ -41,6 +41,7 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 # seam (single dispatch, #844), only their config dataclasses are imported here.
 from tengri.components.dust.age_binned import (
     AgeBinnedDustComponentConfig,
+    age_binned_nebular_mode,
 )
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
@@ -616,6 +617,8 @@ def build_components(
             atten_type = "age_binned"
             atten_config = AgeBinnedDustComponentConfig(
                 screens=tuple(dust_screens),
+                nebular_screen=age_binned_nebular_mode(dust_nebular_screen),
+                law_neb=dust_law_neb if dust_nebular_screen == "own" else None,
                 transition_width_dex=dust_transition_width_dex,
                 lyc_reprocessed_by=dust_lyc_reprocessed_by,
                 lyc_in_energy_balance=dust_lyc_in_energy_balance,

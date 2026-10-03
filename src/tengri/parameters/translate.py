@@ -279,7 +279,13 @@ _SINGLE_COMPONENT_DUST_PARAM_MAP = {
 }
 
 
-def _build_param_map(mean_sfh_type, dust_model="two_component", dust_screens=()):
+def _build_param_map(
+    mean_sfh_type,
+    dust_model="two_component",
+    dust_screens=(),
+    dust_nebular_screen="birth_cloud",
+    dust_law_neb=None,
+):
     """Build complete param map from SFH registry + non-SFH params + auto-derived components.
 
     Parameters
@@ -292,6 +298,9 @@ def _build_param_map(mean_sfh_type, dust_model="two_component", dust_screens=())
     dust_screens : tuple of (str, float or None, float or None), optional
         age_binned's validated screen tuple; only consulted when
         ``dust_model == "age_binned"``.
+    dust_nebular_screen, dust_law_neb : str, optional
+        The nebular screen choice and age_binned's own-screen law; only
+        consulted when ``dust_model == "age_binned"``.
 
     Returns
     -------
@@ -336,10 +345,15 @@ def _build_param_map(mean_sfh_type, dust_model="two_component", dust_screens=())
         from tengri.components.dust.age_binned import (
             AgeBinnedDustComponent,
             AgeBinnedDustComponentConfig,
+            age_binned_nebular_mode,
         )
 
         decls = AgeBinnedDustComponent(
-            config=AgeBinnedDustComponentConfig(screens=tuple(dust_screens or ()))
+            config=AgeBinnedDustComponentConfig(
+                screens=tuple(dust_screens or ()),
+                nebular_screen=age_binned_nebular_mode(dust_nebular_screen),
+                law_neb=dust_law_neb,
+            )
         ).declared_parameters()
         for decl in decls:
             result[decl.name] = (decl.name, 1.0, 0.0)

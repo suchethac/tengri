@@ -198,6 +198,8 @@ def _build_param_registry(
     nebular=False,
     dust_model="two_component",
     dust_screens=(),
+    dust_nebular_screen="birth_cloud",
+    dust_law_neb=None,
     dust_emission=None,
     agn_model=None,
     radio=False,
@@ -224,6 +226,11 @@ def _build_param_registry(
     dust_model : str
         Dust geometry model: ``"two_component"`` (Charlot & Fall) or
         ``"single_component"`` (uniform screen).
+    dust_nebular_screen : str
+        The nebular screen choice; ``"own"`` registers ``dust_tau_neb`` (and
+        age_binned's own-law shape parameters).
+    dust_law_neb : str or None
+        age_binned's own-screen law; ``None`` reads the youngest screen's law.
     evolving_metallicity : bool
         If True, replace met_logzsol with met_logzsol_0 and met_logzsol_final.
     chem_evol : bool
@@ -277,10 +284,15 @@ def _build_param_registry(
         from tengri.components.dust.age_binned import (
             AgeBinnedDustComponent,
             AgeBinnedDustComponentConfig,
+            age_binned_nebular_mode,
         )
 
         decls = AgeBinnedDustComponent(
-            config=AgeBinnedDustComponentConfig(screens=tuple(dust_screens or ()))
+            config=AgeBinnedDustComponentConfig(
+                screens=tuple(dust_screens or ()),
+                nebular_screen=age_binned_nebular_mode(dust_nebular_screen),
+                law_neb=dust_law_neb,
+            )
         ).declared_parameters()
         for decl in decls:
             check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
@@ -290,6 +302,8 @@ def _build_param_registry(
         for decl in ATTENUATION_PARAMS:
             if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
                 continue
+            if decl.name == "dust_tau_neb" and dust_nebular_screen != "own":
+                continue  # read only under nebular_screen='own' (#2625)
             check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
             registry[decl.name] = (decl.description, check, decl.bound_error)
             defaults[decl.name] = decl.prior
