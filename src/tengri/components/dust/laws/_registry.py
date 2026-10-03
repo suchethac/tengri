@@ -217,6 +217,31 @@ def law_kwarg_names(law: str | Callable) -> frozenset[str]:
     )
 
 
+def law_redshift_breakpoints(law: str | Callable) -> tuple[float, ...]:
+    """Redshifts at which a redshift-reading law's curve changes slope.
+
+    Parameters
+    ----------
+    law : str or callable
+        Registry key or law function.
+
+    Returns
+    -------
+    tuple of float
+        The law's ``redshift_breakpoints`` attribute, ``()`` when it declares
+        none. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time metadata. A law that interpolates a
+    table in redshift (``narayanan_z``) is piecewise smooth, with kinks at its
+    table nodes. A table over redshift built from this law (the energy-balance
+    LUT) carries a node on each breakpoint inside its range, because linear
+    interpolation across a kink is a first-order error.
+    """
+    return tuple(getattr(_law_callable(law), "redshift_breakpoints", ()))
+
+
 def select_law_kwargs(law: str | Callable, law_params: Mapping) -> dict:
     """Narrow a shared law-parameter dict to what one law reads.
 
