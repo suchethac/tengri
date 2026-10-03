@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.dust.attenuation import precompute_dust_age_weights
+from tengri.components.stellar.age_boundary import cic_cell_edges, survival_cell_mean
 from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
 
@@ -80,7 +80,9 @@ def eff_waves_rest(n_filt):
 
 @pytest.fixture
 def dust_age_weights(ssp_ages_yr):
-    return precompute_dust_age_weights(ssp_ages_yr)
+    """Per-node younger-than-10-Myr fraction of a constant-SFR history (hard step)."""
+    lo, hi = cic_cell_edges(ssp_ages_yr)
+    return survival_cell_mean(lo, hi, 1e7, 0.0)
 
 
 @pytest.fixture
@@ -126,8 +128,10 @@ def _make_kernel(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale, ss
         ssp_at_z = (1.0 - frac) * sp[idx] + frac * sp[idx + 1]
 
         wave_ratio = (ewr / 5500.0) ** dn
-        tau_v_eff = daw * tv1 + tv2
-        dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+        # Two populations per node: young sees both screens, old the diffuse one.
+        t_young = jnp.exp(-((tv1 + tv2) * wave_ratio)[None, :])
+        t_old = jnp.exp(-(tv2 * wave_ratio)[None, :])
+        dust = daw[:, None] * t_young + (1.0 - daw)[:, None] * t_old
 
         flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
         return (fs * flux_lsun * ls).astype(jnp.float64)
