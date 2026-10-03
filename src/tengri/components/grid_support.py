@@ -610,7 +610,7 @@ def check_grid_support(
                 if detail is not None:
                     detail = (
                         f"the effective range (offset [{active[0]:g}, {active[1]:g}] plus the "
-                        f"the N/O-O/H relation [{shift[0]:g}, {shift[1]:g}]): {detail}"
+                        f"N/O-O/H relation [{shift[0]:g}, {shift[1]:g}]): {detail}"
                     )
             else:
                 detail = describe_clipping(active, extent, extrapolates=extrapolates)
