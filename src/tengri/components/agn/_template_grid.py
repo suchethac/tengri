@@ -34,6 +34,7 @@ __all__ = [
     "TorusTemplateGrid",
     "analytic_bolometric_nu",
     "native_bolometric_nu",
+    "native_bolometric_nu_np",
     "scale_to_lbol_native",
     "torus_lnu_from_grid",
 ]
@@ -116,6 +117,44 @@ def native_bolometric_nu(
     wave = jnp.asarray(wave_native)
     integrand = jnp.asarray(lnu_native) * (_C_AA / wave**2)
     return jnp.maximum(jnp.abs(loglog_integral(wave, integrand)), floor)
+
+
+def native_bolometric_nu_np(
+    lnu_native: np.ndarray, wave_native: np.ndarray, *, floor: float = 1e-100
+) -> float:
+    r"""NumPy twin of :func:`native_bolometric_nu`, for build-time precompute tables.
+
+    Same integral (a power law in wavelength between nodes, closed form), in
+    float64 whatever the JAX precision mode, so a precomputed table and the
+    runtime path normalize a template identically.
+
+    Parameters
+    ----------
+    lnu_native : array_like, shape (n_native,)
+        Template :math:`L_\nu` on ``wave_native`` [arbitrary units per Hz].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom], ascending.
+    floor : float, optional
+        Lower bound on the returned magnitude.
+
+    Returns
+    -------
+    float
+        :math:`\max(|\int L_\nu\,d\nu|, \text{floor})`.
+    """
+    x = np.asarray(wave_native, dtype=np.float64)
+    y = np.asarray(lnu_native, dtype=np.float64) * (_C_AA / x**2)
+    x0, x1, y0, y1 = x[:-1], x[1:], y[:-1], y[1:]
+    positive = (y0 > 0.0) & (y1 > 0.0)
+    y0_safe = np.where(positive, y0, 1.0)
+    y1_safe = np.where(positive, y1, 1.0)
+    a = np.log(x1 / x0)
+    u = a + np.log(y1_safe) - np.log(y0_safe)
+    small = np.abs(u) < 1e-7
+    ratio = np.where(small, 1.0 + 0.5 * u, np.expm1(u) / np.where(small, 1.0, u))
+    power_law = x0 * y0_safe * a * ratio
+    chord = 0.5 * (y0 + y1) * (x1 - x0)
+    return max(abs(float(np.sum(np.where(positive, power_law, chord)))), floor)
 
 
 def scale_to_lbol_native(

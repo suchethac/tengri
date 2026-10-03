@@ -119,7 +119,7 @@ def _renormalize(
     Notes
     -----
     **JIT-compatible**: yes. The float32 two-trap factorization lives in
-    :func:`~tengri.components.agn._template_grid.scale_to_lbol_native`.
+    ``scale_to_lbol_native`` in ``_template_grid``.
     """
     return scale_to_lbol_native(template, wave_native, sed, 10.0**agn_log_lbol * _LSUN_ERG)
 
