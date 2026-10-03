@@ -59,23 +59,24 @@ from reproduction._validation import (
     print_line_table,
 )
 from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
+from reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps import Z_SUN_BAGPIPES
 
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
-L_SUN = 3.828e33
-C_AA = 2.998e18
+from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 HERE = Path(__file__).resolve().parent
 FIGS = HERE / "_figs"
 FIGS.mkdir(exist_ok=True)
 
 # Matched parameters (01_bagpipes.py setup).
-MET_LOGZSOL = 0.0  # BAGPIPES metallicity = 1.0 Z/Zsun
+# tengri's `met_logzsol` for BAGPIPES's Z = 0.02 node: log10(0.02 / 0.0142).
+MET_LOGZSOL = np.log10(Z_SUN_BAGPIPES) - LOG10_ZSUN
 LOG_MASS = 10.0
 TAU_GYR, AGE_GYR = 1.0, 5.0
 A_V = 1.0
-TAU_DIFF = A_V / 1.086  # single Calzetti screen
+# BAGPIPES applies optical depth tau_V = A_V * ln(10) / 2.5 to the continuum.
+TAU_DIFF = A_V * np.log(10.0) / 2.5
 
 
 def bagpipes_stellar_dust():
@@ -228,14 +229,17 @@ def main():
 
     w_b, L_b = bagpipes_stellar_dust()
 
-    # The wrong mapping: a birth-cloud/diffuse split of the same A_V.
+    # Control with eta=2 mapping: tengri's two-component dust model with a birth-cloud
+    # optical depth tau_bc on top of diffuse tau_diff. With eta=2 the birth-cloud
+    # contribution is (eta-1)*tau_diff = tau_diff, matching this split. BAGPIPES here
+    # runs with its default eta=1 (no extra birth-cloud attenuation).
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=TAU_DIFF)
-    print("\n  Control (wrong in a known way):")
+    print("\n  Control (the eta = 2 mapping; BAGPIPES here runs eta = 1):")
     report(
         w_b,
         U.regrid(w_t, L_t, w_b),
         L_b,
-        "tau_bc + tau_diff split (NOT BAGPIPES-equivalent)",
+        "tau_bc = tau_diff (matches BAGPIPES only for eta = 2)",
         compact=True,
     )
 
