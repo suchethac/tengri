@@ -26,6 +26,7 @@ Lopez+2024), implemented in JAX for gradient-based inference.
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.utils.host_array import device_table, host_array
@@ -36,7 +37,11 @@ from tengri.utils.physics_constants import (
     KEV_TO_HZ as _KEV_TO_HZ,
     Z_SUN as _Z_SUN,
 )
-from tengri.utils.scale import pow10 as _pow10
+from tengri.utils.scale import (
+    log10_magnitude as _log10_magnitude,
+    pow10 as _pow10,
+    representable_floor,
+)
 
 # Yang+2020 reference inclination for the AGN corona. The α_ox(L_2500)
 # relations predict the L_2keV seen at 30°; ``xray_anisotropy`` satisfies
@@ -483,6 +488,58 @@ def _cutoff_powerlaw_band_norm(
     return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
 
 
+_LOG10_KEV_TO_HZ = float(np.log10(_KEV_TO_HZ))
+"""log10 of the keV -> Hz conversion; python float so float32 never forms a large linear."""
+
+
+def _log10_cutoff_powerlaw_band_norm(
+    gamma: float,
+    E_cut: float,
+    E_ref: float,
+    E_lo: float,
+    E_hi: float,
+    n_grid: int = 200,
+) -> jnp.ndarray:
+    r"""log10 of :func:`_cutoff_powerlaw_band_norm` [dex re Hz], formed from the energy axis.
+
+    The trapezoid runs over the keV grid (an O(1) integral) and the keV -> Hz
+    factor is added in log space, so a caller dividing a ~1e44 erg/s luminosity
+    by the band integral never forms the 1e17 linear in float32. Agrees with
+    :func:`_cutoff_powerlaw_band_norm` to round-off (the trapezoid is linear in
+    its abscissa).
+
+    Parameters
+    ----------
+    gamma, E_cut, E_ref, E_lo, E_hi, n_grid
+        As in :func:`_cutoff_powerlaw_band_norm`.
+
+    Returns
+    -------
+    jnp.ndarray
+        ``log10`` of the band integral in frequency [dex re Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    E_fine = jnp.linspace(E_lo, E_hi, n_grid)  # keV
+    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
+    band_keV = jnp.maximum(jnp.trapezoid(spec_fine, E_fine), representable_floor(1e-60))
+    return jnp.log10(band_keV) + _LOG10_KEV_TO_HZ
+
+
+def _band_wavelengths_and_frequencies(E_lo: float, E_hi: float, n_grid: int = 200):
+    """Rest wavelengths [Angstrom] and frequencies [Hz] of a uniform keV grid.
+
+    Wavelengths are built with the same constants the emitters use to recover
+    ``E_keV`` from ``wavelength``, so an emitter evaluated on them sees exactly
+    ``linspace(E_lo, E_hi, n_grid)`` keV.
+    """
+    E_fine = jnp.linspace(E_lo, E_hi, n_grid)  # keV
+    lam = _C_AA * _H_PLANCK / (E_fine * _KEV_TO_ERG)
+    return lam, _C_AA / lam
+
+
 def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     """Present-day absolute Z from a published ``log_metallicity_history``.
 
@@ -531,6 +588,33 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     return jnp.power(10.0, arr[0])
 
 
+_LOG_L_HOTGAS_PER_SFR = float(np.log10(8.3e38))
+"""log10 of the hot-gas 0.5-2 keV luminosity per unit SFR [dex re erg/s/(Msun/yr)].
+
+``L_0.5-2keV = 8.3e31 W * SFR`` (X-CIGALE yang20.py:204; the Mineo et al. 2012
+hot-gas normalization), i.e. 8.3e38 erg/s, log10 = 38.919078.
+Kept as a log10 constant: ``8.3e38`` is past the float32 ceiling.
+"""
+
+
+def _log_lehmer_hmxb_per_sfr(metallicity_z: Any) -> Any:
+    """log10 HMXB 2-10 keV luminosity per unit SFR, Lehmer+2016 Z quartic [dex re erg/s]."""
+    # In W units the leading constant is 33.28; +7.0 converts to erg/s (40.28).
+    return (
+        40.28
+        - 62.12 * metallicity_z
+        + 569.44 * metallicity_z**2
+        - 1833.80 * metallicity_z**3
+        + 1968.33 * metallicity_z**4
+    )
+
+
+def _log_lehmer_lmxb_per_1e10(stellar_age_gyr: Any) -> Any:
+    """log10 LMXB 2-10 keV luminosity per 1e10 Msun, Lehmer+2016 age quartic [dex re erg/s]."""
+    log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
+    return 40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
+
+
 def xray_xrb_terms(
     wavelength: jnp.ndarray,
     sfr: float,
@@ -538,7 +622,7 @@ def xray_xrb_terms(
     metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     E_cut: float = 100.0,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
@@ -546,7 +630,7 @@ def xray_xrb_terms(
     r"""Predict unsummed X-ray SED terms from accretion-powered binaries.
 
     Computes HMXB and LMXB X-ray emission as separate terms with different
-    photon indices (Γ_HMXB = 2.0, Γ_LMXB = 1.6). Unlike :func:`xray_xrb`,
+    photon indices (Γ_HMXB = 2.0, Γ_LMXB = 1.56). Unlike :func:`xray_xrb`,
     returns the unsummed contributions so each can be precomputed independently
     at build time through broadband filters.
 
@@ -569,7 +653,7 @@ def xray_xrb_terms(
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
     log_L_hmxb_offset : float, optional
@@ -590,7 +674,7 @@ def xray_xrb_terms(
     **JIT-compatible**: yes, all operations use ``jnp`` primitives.
 
     **Why separate terms**: Each binary population carries a distinct photon
-    index (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is **not** a single
+    index (Γ_HMXB = 2.0, Γ_LMXB = 1.56), so their sum is **not** a single
     amplitude-times-fixed-shape product. Each term separately *is* rank-1 in
     wavelength. Precomputation at build time can therefore integrate each
     through the filters independently, then sum at evaluation time. The
@@ -663,32 +747,15 @@ def xray_xrb_terms(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
-    # Lehmer+2016 metallicity quartic for HMXB (yang20.py:207–214)
-    # log(L_HMXB / SFR) = 33.28 - 62.12*Z + 569.44*Z^2 - 1833.80*Z^3 + 1968.33*Z^4
-    # in W units. Convert to erg/s: +7.0 (log10 conversion)
-    # Leading constant 40.28 = 33.28 + 7.0 makes the unit conversion explicit.
-    log_l_hmxb_per_sfr = (
-        40.28
-        - 62.12 * metallicity_z
-        + 569.44 * metallicity_z**2
-        - 1833.80 * metallicity_z**3
-        + 1968.33 * metallicity_z**4
-    )
-
-    # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216–224).
-    # Yang+22 normalizes *per 1e10 M_sun*, not per M_sun:
-    #   log( L_LMXB(2-10) / (M_star/1e10 Msun) ) [W]
-    #       = 33.276 - 1.503·logT - 0.423·logT² + 0.425·logT³ + 0.136·logT⁴
-    # So in erg/s per Msun:
+    # Lehmer+2016 metallicity quartic for HMXB (yang20.py:207-214), and the
+    # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216-224).
+    # Yang+22 normalizes the LMXB *per 1e10 M_sun*, not per M_sun:
     #   L_LMXB = (M_star / 1e10) · 10^(quartic + 7)
-    #          = (M_star / 1e10) · 10^40.276 · 10^(quartic_terms)
     # NOT  10^(40.276 + ...) · M_star, which was off by 10^10 (the original
     # bug surfaced by the salvaged regression tests, see
     # tests/physics/test_xray_yang22_scalings.py).
-    log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
-    log_l_lmxb_per_1e10 = (
-        40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
-    )
+    log_l_hmxb_per_sfr = _log_lehmer_hmxb_per_sfr(metallicity_z)
+    log_l_lmxb_per_1e10 = _log_lehmer_lmxb_per_1e10(stellar_age_gyr)
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalize by integrating the spectral shape over the 2-10 keV reference band
@@ -742,7 +809,7 @@ def xray_xrb(
     metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     E_cut: float = 100.0,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
@@ -774,7 +841,7 @@ def xray_xrb(
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
     log_L_hmxb_offset : float, optional
@@ -1065,7 +1132,7 @@ def xray_hotgas(
     # Hot gas luminosity scaling (yang20.py:204)
     # L_0.5-2keV = 8.3e31 W * SFR. In erg/s: 8.3e38 = 10^38.919.
     # (yang20.py:204 shows L_hotgas_0p5to2keV = 8.3e31 * sfr)
-    log_l_hotgas_per_sfr = 38.919
+    log_l_hotgas_per_sfr = _LOG_L_HOTGAS_PER_SFR
 
     # Thermal bremsstrahlung spectrum with exponential cutoff
     E_ref = 1.0  # keV (characteristic hot-gas energy)
@@ -1228,9 +1295,9 @@ def xray_agn_corona_from_disc(
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / 1.6022e-9  # convert to keV
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
     E_ref = 2.0  # keV
-    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-(E_keV - E_ref) / E_cut)
 
     # Normalize at 2 keV. ``l_2kev_erg_hz`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
@@ -1441,7 +1508,7 @@ def _xray_agn_corona_bolometric(
         Spectral luminosity density [erg/s/Hz].
     """
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / (1.6022e-9)
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
 
     # Monochromatic luminosity density at 2500 A in erg/s/Hz.
     # L_bol = BC_2500 * nu_2500 * L_nu(2500) => L_nu = L_bol / (BC * nu)
@@ -1456,11 +1523,12 @@ def _xray_agn_corona_bolometric(
 
     # Power-law spectrum
     E_ref = 2.0  # keV
-    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-(E_keV - E_ref) / E_cut)
 
     # Normalize at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
-    # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
+    # multiplying by the dimensionless ``spec`` (= 1 at E = E_ref, cutoff included)
+    # gives L_nu(E).
     L_intr = L_2keV * spec
 
     # Ricci+2017 / Matsumoto+2026 Eq. B6:
@@ -1484,7 +1552,7 @@ def xray_total_terms(
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
@@ -1528,7 +1596,7 @@ def xray_total_terms(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
@@ -1568,7 +1636,7 @@ def xray_total_terms(
     **JIT-compatible**: yes, pure JAX function.
 
     **Why separate terms**: HMXB and LMXB carry distinct photon indices
-    (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is not a single
+    (Γ_HMXB = 2.0, Γ_LMXB = 1.56), so their sum is not a single
     amplitude-times-fixed-shape product. Hot gas and AGN have different
     dependencies on physical parameters and spectral shapes. By returning
     unsummed terms, precompute mechanisms can integrate each through filters
@@ -1632,7 +1700,7 @@ def xray_total(
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
@@ -1676,7 +1744,7 @@ def xray_total(
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
@@ -1813,7 +1881,7 @@ def xray_bolometric_correction_duras(l_bol_erg: float) -> float:
 
 def xray_agn_corona_lopez24(
     wavelength: jnp.ndarray,
-    l_12um_erg_hz: float,
+    log_l_12um_erg: float,
     alpha_irx: float = 0.3,
     gamma: float = 1.8,
     E_cut: float = 300.0,
@@ -1834,8 +1902,10 @@ def xray_agn_corona_lopez24(
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength grid in Angstrom (rest-frame). [Å]
-    l_12um_erg_hz : float
-        Nuclear monochromatic luminosity density at 12 μm. [erg/s/Hz]
+    log_l_12um_erg : float
+        ``log10`` of the nuclear νL_ν(12 μm) [dex re erg/s]; ``-inf`` means no
+        AGN and the corona is exactly zero. Carried in log space because
+        νL_ν(12 μm) ~ 1e45 erg/s is past the float32 ceiling.
     alpha_irx : float
         Log ratio of νL_ν(12μm) to 2–10 keV luminosity (Asmus+2015 convention,
         matching CIGALE ``lopez24``):
@@ -1883,6 +1953,10 @@ def xray_agn_corona_lopez24(
 
         L_X^{2\text{--}10\,\rm keV} = \frac{\nu L_\nu(12\mu\rm m)}{10^{\alpha_{\rm IRX}}}
 
+    The line-of-sight absorber and the 1 % scattered fraction then act on this
+    intrinsic spectrum, so at :math:`\log N_H = 0` the emitted 2–10 keV
+    luminosity is 1.01 times the expression above.
+
     The advantage over α_ox: 12μm emission is dominated by the torus and
     is relatively unaffected by obscuration (scatter ≈ 0.33 dex vs UV
     which can be absorbed by orders of magnitude). This makes α_IRX
@@ -1907,28 +1981,24 @@ def xray_agn_corona_lopez24(
        https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / 1.6022e-9
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
 
-    # Derive L_X(2-10 keV) from α_IRX and νL_ν(12μm).
-    # L_12μm as νL_ν in erg/s: convert from erg/s/Hz via the 12 μm frequency.
-    # Asmus+2015 / Lopez+2024 (matching CIGALE lopez24.py:200): α_IRX =
-    # log10(νL_ν(12μm) / L_X(2-10 keV)), i.e. the X-ray sits *below* the 12 μm
-    # (L_X = 0.5·νL_ν at the α_IRX = 0.3 default), so L_X = νL_ν(12μm) / 10^α_IRX.
-    nu_12um = _C_AA / 1.2e5  # 12 μm = 120000 Å
-    l_12um_erg = l_12um_erg_hz * nu_12um
-    l_x_2_10 = l_12um_erg / 10.0**alpha_irx
+    # L_X(2-10 keV) = νL_ν(12μm) / 10^α_IRX (Asmus+2015 / Lopez+2024, matching
+    # CIGALE lopez24.py:200: α_IRX = log10(νL_ν(12μm) / L_X(2-10 keV)), so the
+    # X-ray sits *below* the 12 μm, at 0.5·νL_ν for the α_IRX = 0.3 default).
+    # Everything stays in log10 until the per-Hz amplitude, which is ~1e26:
+    # νL_ν ~ 1e45 erg/s and the band integral ~ 1e18 Hz are each fine in
+    # float32 but their linear product and quotient are not.
+    has_agn = ~jnp.isneginf(log_l_12um_erg)
+    safe_log_l_12um = jnp.where(has_agn, log_l_12um_erg, 0.0)
+    log_l_x_2_10 = safe_log_l_12um - alpha_irx
 
-    # Build power-law spectrum with exponential cutoff
+    # Power-law with exponential cutoff, normalized over 2-10 keV.
     E_ref = 5.0  # keV (mid-band reference)
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+    log_band_integral = _log10_cutoff_powerlaw_band_norm(gamma, E_cut, E_ref, 2.0, 10.0)
 
-    # Normalize by integrating spectral shape over 2-10 keV
-    E_fine = jnp.linspace(2.0, 10.0, 200)
-    nu_fine = E_fine * _KEV_TO_HZ
-    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
-    band_integral = jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
-
-    l_nu = l_x_2_10 / band_integral * spec
+    l_nu = _pow10(log_l_x_2_10 - log_band_integral) * spec
 
     # Ricci+2017 / Matsumoto+2026 Eq. B6: photoelectric + Compton
     # scattering + 1 % scattered.
@@ -1938,8 +2008,8 @@ def xray_agn_corona_lopez24(
         + 0.01 * l_intr
     )
 
-    # X-ray mask (E > 0.1 keV => λ < 124 Å)
-    l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
+    # X-ray mask (E > 0.1 keV => λ < 124 Å) and no corona without an AGN.
+    l_nu = jnp.where((wavelength < 124.0) & has_agn, l_nu, 0.0)
 
     # Optional anisotropy correction (Yang+2022)
     if apply_anisotropy:
@@ -1954,10 +2024,10 @@ def xray_total_lopez24_terms(
     stellar_mass: float = 1e10,
     stellar_age_gyr: float = 1.0,
     metallicity_z: float = _Z_SUN,
-    l_12um_erg_hz: float = 0.0,
+    log_l_12um_erg: float = -jnp.inf,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
@@ -1988,16 +2058,16 @@ def xray_total_lopez24_terms(
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    l_12um_erg_hz : float
-        Nuclear 12μm luminosity density. [erg/s/Hz]
-        Default: 0.0 (no AGN X-ray contribution).
+    log_l_12um_erg : float
+        ``log10`` of the nuclear νL_ν(12 μm) [dex re erg/s]. Default: ``-inf``
+        (no AGN: the corona term is exactly zero).
     alpha_irx : float
         Log ratio of L_X to L_12μm. [dimensionless]
         Default: 0.3.
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
@@ -2045,7 +2115,7 @@ def xray_total_lopez24_terms(
     hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
     agn = xray_agn_corona_lopez24(
         wavelength,
-        l_12um_erg_hz,
+        log_l_12um_erg,
         alpha_irx,
         gamma_agn,
         E_cut,
@@ -2066,10 +2136,10 @@ def xray_total_lopez24(
     stellar_mass: float = 1e10,
     stellar_age_gyr: float = 1.0,
     metallicity_z: float = _Z_SUN,
-    l_12um_erg_hz: float = 0.0,
+    log_l_12um_erg: float = -jnp.inf,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
+    gamma_lmxb: float = 1.56,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
@@ -2096,16 +2166,16 @@ def xray_total_lopez24(
         solar (Asplund 2009). A *fallback* only: on the model path the X-ray
         component passes the galaxy's own present-day Z, read from the
         stellar-published ``log_metallicity_history`` (#1755). []
-    l_12um_erg_hz : float
-        Nuclear 12μm luminosity density. [erg/s/Hz]
-        Default: 0.0 (no AGN X-ray contribution).
+    log_l_12um_erg : float
+        ``log10`` of the nuclear νL_ν(12 μm) [dex re erg/s]. Default: ``-inf``
+        (no AGN: the corona term is exactly zero).
     alpha_irx : float
         Log ratio of L_X to L_12μm. [dimensionless]
         Default: 0.3.
     gamma_hmxb : float
         HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default: 1.6.
+        LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
@@ -2136,7 +2206,7 @@ def xray_total_lopez24(
         stellar_mass=stellar_mass,
         stellar_age_gyr=stellar_age_gyr,
         metallicity_z=metallicity_z,
-        l_12um_erg_hz=l_12um_erg_hz,
+        log_l_12um_erg=log_l_12um_erg,
         alpha_irx=alpha_irx,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
@@ -2145,6 +2215,234 @@ def xray_total_lopez24(
         log_nh=log_nh,
     )
     return t["hmxb"] + t["lmxb"] + t["hotgas"] + t["agn"]
+
+
+# ── Band luminosities of the emitted terms ──
+
+
+def _xrb_hotgas_log_band_luminosities(
+    sfr: float,
+    stellar_mass: float,
+    metallicity_z: float,
+    stellar_age_gyr: float,
+    log_L_hmxb_offset: float,
+    log_L_lmxb_offset: float,
+) -> dict[str, jnp.ndarray]:
+    r"""``log10`` band luminosities of the HMXB, LMXB and hot-gas terms [dex re erg/s].
+
+    The emitters (:func:`xray_xrb_terms`, :func:`xray_hotgas`) form each amplitude
+    as ``L_band / band_integral`` with ``L_band`` the Lehmer+2016 / Yang+2020
+    relation evaluated below, and ``band_integral`` the shape's integral over the
+    same band (:func:`_cutoff_powerlaw_band_norm`). The band integral of the
+    emitted spectrum is therefore ``L_band`` itself, and this returns it directly
+    from the shared relation helpers, so the number cannot drift from the emitted
+    spectrum.
+
+    Returns
+    -------
+    dict of ndarray, scalar
+        ``"hmxb"`` and ``"lmxb"`` over 2-10 keV, ``"hotgas"`` over 0.5-2 keV.
+        ``-inf`` where the driver is exactly zero.
+    """
+    log_sfr = _log10_magnitude(jnp.asarray(sfr))
+    log_mass_1e10 = _log10_magnitude(jnp.asarray(stellar_mass) / 1.0e10)
+    return {
+        "hmxb": _log_lehmer_hmxb_per_sfr(metallicity_z) + log_L_hmxb_offset + log_sfr,
+        "lmxb": _log_lehmer_lmxb_per_1e10(stellar_age_gyr) + log_L_lmxb_offset + log_mass_1e10,
+        "hotgas": _LOG_L_HOTGAS_PER_SFR + log_sfr,
+    }
+
+
+def _corona_log_band_luminosity(
+    emit,
+    log_anchor: jnp.ndarray,
+    has_agn: jnp.ndarray,
+    *,
+    E_lo: float = 2.0,
+    E_hi: float = 10.0,
+) -> jnp.ndarray:
+    r"""``log10`` of an emitted corona's band luminosity, from the emitter itself.
+
+    Evaluates the emitter ``emit(wavelength)`` on a uniform keV grid, divides out
+    its amplitude ``10**log_anchor`` (so the integrand is O(1) and float32 never
+    forms the ~1e44 erg/s product) and integrates over frequency. The corona's
+    absorber, scattered fraction, reflection and anisotropy are inside ``emit``,
+    so the result is the band integral of exactly what the SED carries.
+
+    Parameters
+    ----------
+    emit : callable
+        ``emit(wavelength) -> L_nu`` [erg/s/Hz], linear in ``10**log_anchor``.
+    log_anchor : array_like, scalar
+        ``log10`` of the amplitude that scales ``emit``'s output [dex].
+    has_agn : array_like, scalar bool
+        False where the corona is identically zero.
+    E_lo, E_hi : float
+        Band edges [keV].
+
+    Returns
+    -------
+    ndarray, scalar
+        ``log10`` band luminosity [dex re erg/s]; ``-inf`` without an AGN.
+    """
+    lam, nu = _band_wavelengths_and_frequencies(E_lo, E_hi)
+    shape = emit(lam) / _pow10(log_anchor)
+    integral = jnp.maximum(jnp.trapezoid(shape, nu), representable_floor(1e-60))
+    return jnp.where(has_agn, log_anchor + jnp.log10(integral), -jnp.inf)
+
+
+def xray_total_log_band_luminosities(
+    sfr: float = 1.0,
+    stellar_mass: float = 1e10,
+    metallicity_z: float = _Z_SUN,
+    stellar_age_gyr: float = 1.0,
+    l_2500_30deg: float = 0.0,
+    gamma_agn: float = 1.8,
+    E_cut: float = 300.0,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = COS_INC_REF_30DEG,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+    log_nh: float = 20.0,
+    alpha_ox_relation: str = "just2007",
+    pexrav_R: float = 0.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    r"""``log10`` band luminosities of the terms :func:`xray_total_terms` emits.
+
+    One definition of what each emitted term integrates to: HMXB and LMXB over
+    2-10 keV, hot gas over 0.5-2 keV and the AGN corona over 2-10 keV. The
+    arguments are those of :func:`xray_total_terms`; the registered X-ray
+    properties are read from this, so they cannot describe a different galaxy
+    from the emitted spectrum.
+
+    Parameters
+    ----------
+    sfr : float
+        SFR averaged over the last 100 Myr [Msun/yr] (Lehmer+2016; Yang+2022,
+        Sect. 3.3).
+    stellar_mass : float
+        Surviving stellar mass [Msun].
+    metallicity_z : float
+        Present-day metallicity (mass fraction). []
+    stellar_age_gyr : float
+        Mass-weighted stellar age [Gyr].
+    l_2500_30deg : float
+        Disc L_nu at 2500 Å seen at 30 degrees [erg/s/Hz]; 0 means no AGN.
+    gamma_agn, E_cut, delta_alpha_ox, cos_inc, apply_anisotropy, a1, a2, log_nh
+    alpha_ox_relation, pexrav_R
+        Corona shape and amplitude controls, as in :func:`xray_agn_corona`.
+    log_L_hmxb_offset, log_L_lmxb_offset : float
+        Departures from the Lehmer+2016 relations [dex].
+
+    Returns
+    -------
+    dict of ndarray, scalar
+        ``{"hmxb", "lmxb", "hotgas", "agn"}`` [dex re erg/s]; ``-inf`` for a
+        term whose driver is exactly zero.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**; float32-safe (no linear erg/s intermediate). The
+    corona is integrated on a 200-point keV grid, the resolution the XRB band
+    norms use, through :func:`xray_agn_corona` itself.
+    """
+    out = _xrb_hotgas_log_band_luminosities(
+        sfr, stellar_mass, metallicity_z, stellar_age_gyr, log_L_hmxb_offset, log_L_lmxb_offset
+    )
+    l_2500 = jnp.asarray(l_2500_30deg)
+    has_agn = l_2500 > 0.0
+    safe_l_2500 = jnp.where(has_agn, l_2500, 1.0)
+    alpha_ox = alpha_ox_from_l2500(safe_l_2500, relation=alpha_ox_relation) + delta_alpha_ox
+    log_l_2kev = jnp.log10(safe_l_2500) + alpha_ox / 0.3838
+
+    def emit(lam):
+        return xray_agn_corona(
+            lam,
+            safe_l_2500,
+            gamma=gamma_agn,
+            E_cut=E_cut,
+            delta_alpha_ox=delta_alpha_ox,
+            cos_inc=cos_inc,
+            apply_anisotropy=apply_anisotropy,
+            a1=a1,
+            a2=a2,
+            log_nh=log_nh,
+            alpha_ox_relation=alpha_ox_relation,
+            pexrav_R=pexrav_R,
+        )
+
+    return {**out, "agn": _corona_log_band_luminosity(emit, log_l_2kev, has_agn)}
+
+
+def xray_total_lopez24_log_band_luminosities(
+    sfr: float = 1.0,
+    stellar_mass: float = 1e10,
+    stellar_age_gyr: float = 1.0,
+    metallicity_z: float = _Z_SUN,
+    log_l_12um_erg: float = -jnp.inf,
+    alpha_irx: float = 0.3,
+    gamma_agn: float = 1.8,
+    E_cut: float = 300.0,
+    log_nh: float = 20.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    r"""``log10`` band luminosities of the terms :func:`xray_total_lopez24_terms` emits.
+
+    The ``lopez24`` counterpart of :func:`xray_total_log_band_luminosities`: the
+    corona is integrated through :func:`xray_agn_corona_lopez24` (no anisotropy,
+    as on the emitted path), so at :math:`\log N_H = 0` it is
+    :math:`1.01\,\nu L_\nu(12\,\mu{\rm m}) / 10^{\alpha_{\rm IRX}}`.
+
+    Parameters
+    ----------
+    sfr, stellar_mass, stellar_age_gyr, metallicity_z
+        As in :func:`xray_total_log_band_luminosities`.
+    log_l_12um_erg : float
+        ``log10`` of the nuclear νL_ν(12 μm) [dex re erg/s]; ``-inf`` for no AGN.
+    alpha_irx, gamma_agn, E_cut, log_nh
+        As in :func:`xray_agn_corona_lopez24`.
+    log_L_hmxb_offset, log_L_lmxb_offset : float
+        Departures from the Lehmer+2016 relations [dex].
+
+    Returns
+    -------
+    dict of ndarray, scalar
+        ``{"hmxb", "lmxb", "hotgas", "agn"}`` [dex re erg/s].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**; float32-safe.
+    """
+    out = _xrb_hotgas_log_band_luminosities(
+        sfr, stellar_mass, metallicity_z, stellar_age_gyr, log_L_hmxb_offset, log_L_lmxb_offset
+    )
+    log_l_12um = jnp.asarray(log_l_12um_erg)
+    has_agn = ~jnp.isneginf(log_l_12um)
+    safe_log_l_12um = jnp.where(has_agn, log_l_12um, 0.0)
+    log_amplitude = (
+        safe_log_l_12um
+        - alpha_irx
+        - _log10_cutoff_powerlaw_band_norm(gamma_agn, E_cut, 5.0, 2.0, 10.0)
+    )
+
+    def emit(lam):
+        return xray_agn_corona_lopez24(
+            lam,
+            safe_log_l_12um,
+            alpha_irx,
+            gamma_agn,
+            E_cut,
+            apply_anisotropy=False,
+            log_nh=log_nh,
+        )
+
+    return {**out, "agn": _corona_log_band_luminosity(emit, log_amplitude, has_agn)}
 
 
 # ── Deprecation shims ──

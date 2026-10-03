@@ -28,7 +28,7 @@ from tengri.components.igm._params import (
     DEFAULT_IGM_BUBBLE_MPC,
     DEFAULT_IGM_X_HI,
 )
-from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
+from tengri.components.igm.dla import _A_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import C_CGS
@@ -375,7 +375,7 @@ def _cgm_damping_wing_tau(
 
     At z > 5, neutral hydrogen in the circumgalactic medium produces a redward
     Lyα damping wing on top of the Inoue+2014 mean IGM. The cross-section is the
-    Totani et al. (2006) Eq. 4 frequency-dependent form, and the column-density
+    Miralda-Escudé (1998) Eq. 1 frequency-dependent form (Totani et al. 2006), and the column-density
     evolution defaults to the Asada+2025 paper sigmoid (Eq. 2). Closes #502.
 
     Parameters
@@ -403,21 +403,43 @@ def _cgm_damping_wing_tau(
 
         \log_{10} N_{\rm HI}(z) = \frac{3.592}{1 + e^{-1.841(z - 6)}} + 18.001
 
-    and the Lyα cross-section (Totani et al. 2006, Eq. 4) is
+    and the Lyα damping-wing cross-section (Miralda-Escudé 1998, Eq. 1) is
 
     .. math::
 
-        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 f_{12} \Lambda}{8\pi}
+        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 \Lambda}{8\pi}
             \frac{\Lambda (\nu/\nu_\alpha)^4}
                  {4\pi^2 (\nu - \nu_\alpha)^2 + \Lambda^2 (\nu/\nu_\alpha)^6/4}
 
-    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient) and
-    :math:`f_{12} = 0.4162` (Morton 2003). Constants come from
-    :mod:`tengri.components.igm.dla`. The previous implementation used a flat
-    Lorentzian with a numerical constant that was ~10⁹ too small.
+    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient, in s⁻¹).
+    The prefactor equals the oscillator-strength sum rule :math:`\pi e^2 f_{12} / (m_e c)`.
+    Asada et al. (2025) and Totani et al. (2006) print the prefactor as
+    :math:`3\lambda_\alpha^2 f_{12} \Lambda_{\rm cl}/(8\pi)` with the classical damping
+    constant; the two forms are identical:
 
-    **Upstream**: Asada et al. (2025), ApJL 983, L2, column-density evolution;
-    Totani et al. (2006), PASJ 58, 485; Lyα cross-section.
+    .. math::
+
+        \Lambda_{\rm cl} = \frac{8\pi^2 e^2}{3 m_e c \lambda_\alpha^2}
+            = 1.5045\times10^{9}\ {\rm s^{-1}}, \qquad
+        A_{21} = 3\,\frac{g_l}{g_u}\, f_{12} \Lambda_{\rm cl} = f_{12} \Lambda_{\rm cl}
+            = 6.26\times10^{8}\ {\rm s^{-1}}
+
+    (:math:`g_l/g_u = 1/3` for Lyα; :math:`e` electron charge [esu], :math:`m_e` electron mass
+    [g], :math:`c` speed of light [cm/s], :math:`\lambda_\alpha` rest wavelength [cm]), so
+    :math:`3\lambda_\alpha^2 f_{12} \Lambda_{\rm cl}/(8\pi) = 3\lambda_\alpha^2 A_{21}/(8\pi)`
+    and no separate :math:`f_{12}` appears when :math:`\Lambda = A_{21}`.
+    Constants come from :mod:`tengri.components.igm.dla`.
+
+    **Upstream**: Asada et al. (2025) [1]_ for column-density evolution;
+    Miralda-Escudé (1998) [2]_ for the Lyα damping-wing cross-section; Totani et al. (2006) [3]_
+    for the damping-wing profile form.
+
+    .. [1] Asada, Y., Desprez, G., Willott, C. J., et al. 2025. Improving Photometric
+       Redshifts of Epoch of Reionization Galaxies: A New Empirical Transmission Curve with
+       Neutral Hydrogen Damping Wing Lyα Absorption. The Astrophysical Journal Letters,
+       983(1), L2. doi:10.3847/2041-8213/adc388.
+    .. [2] Miralda-Escudé, J. 1998. The Astrophysical Journal, 501, 15.
+    .. [3] Totani, T., et al. 2006. Publications of the Astronomical Society of Japan, 58, 485.
     """
     # Column-density evolution N_HI(z): paper sigmoid by default; legacy form
     # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
@@ -437,16 +459,20 @@ def _cgm_damping_wing_tau(
     lya_obs = _WL_LYA * (1.0 + z_source)
     wave_rest = wave_obs / (1.0 + z_source)
     nu_rest = C_CGS / (wave_rest * 1e-8)
-    delta_nu = nu_rest - _NU_LYA
     nu_ratio = nu_rest / _NU_LYA  # = ν / ν_α
 
-    # Totani+06 Eq. 4. The (ν/ν_α)^4 factor is what curves the cross-section
-    # away from a flat Lorentzian in the far wing.
+    # Miralda-Escudé (1998) Eq. 1 form: the prefactor 3 λ_α² A/(8π) already
+    # equals the sum rule π e² f/(m_e c), so f must not be multiplied in again.
+    # The (ν/ν_α)^4 factor curves the cross-section away from a flat Lorentzian.
     lam_cm = _WL_LYA * 1e-8
-    prefactor = 3.0 * lam_cm**2 * _F_LYA * _A_LYA / (8.0 * jnp.pi)
-    numerator = _A_LYA * nu_ratio**4
-    denominator = 4.0 * jnp.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4.0
-    sigma_dw = prefactor * numerator / denominator
+    prefactor = 3.0 * lam_cm**2 * _A_LYA / (8.0 * jnp.pi)
+    # Same expression in the scaled offset x = (ν − ν_α)/ν_α, a = A/ν_α: no term near
+    # 1e27 is squared (4π²Δν² ~ 1e27 would overflow float32 in the backward pass).
+    x_off = nu_ratio - 1.0
+    a_ratio = _A_LYA / _NU_LYA
+    numerator = a_ratio * nu_ratio**4
+    denominator = 4.0 * jnp.pi**2 * x_off**2 + a_ratio**2 * nu_ratio**6 / 4.0
+    sigma_dw = prefactor / _NU_LYA * numerator / denominator
 
     # Damping wing is redward of Lyα-at-source and only matters at z > 5
     # (below this the CGM is essentially ionized).
@@ -491,7 +517,7 @@ def igm_transmission(
         Redshift width of the sigmoid transition. [dimensionless] Default: 0.5.
     cgm_log_nhi : float, optional
         log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. Canonical Asada+2025 value (21.0)
-        produces τ ≈ 0.15 (15% absorption) redward of Lyα at z=7; log_nhi ≤ 19 is invisible. [dimensionless]
+        produces τ ≈ 0.10 at z=7 and rest 1230 Å (about 3500 km/s redward of Lyα) and τ ≈ 1.1 at 1220 Å; log_nhi ≤ 19 is invisible. [dimensionless]
         Default: 21.0.
 
     Returns

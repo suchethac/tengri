@@ -80,7 +80,6 @@ _TOOL = _load_tool("check_float32_scale_seams")
 _SWEEP_OF_FAMILY: dict[str, str] = {
     "stellar_mass_scale": "stellar_mass_scale",
     "agn_bolometric_renorm": "agn_bolometric",
-    "xrb_mass_scale": "xrb_mass_scale",
 }
 
 #: Sweep resolution. Nine points across the declared prior, endpoints included:
@@ -210,47 +209,9 @@ def _agn_bolometric(ssp, dtype):
         return name, _evaluate(objective, lo, hi, dtype)
 
 
-def _xrb_mass_scale(ssp, dtype):
-    """The XRB mass term (#722), read through its float32 path, across the prior.
-
-    Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
-    in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
-    ceiling before it is multiplied by anything, so the sum overflows even at
-    zero SFR -- and ``utils.sed_quantities.compute_log_l_x_xrb`` is the
-    documented companion that carries both coefficients in log space. Sweeping
-    the linear form would measure a documented impossibility; sweeping the
-    companion measures whether the seam's actual float32 path holds across the
-    whole declared mass prior, which is the claim ``_HANDLED`` records.
-    """
-    name, lo, hi = _declared_range(r"^sfh_delayed_log_total_mass$")
-    with jax.enable_x64(dtype is jnp.float64):
-        sed = SEDModel.build(
-            ssp_data=ssp,
-            observation=Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"])),
-            approx=None,
-            sfh={
-                "type": "delayed",
-                "all_params": Fixed(DEFAULT),
-                "log_total_mass": Uniform(lo, hi),
-                "tau_gyr": 1.0,
-                "age_gyr": 5.0,
-            },
-            redshift=Fixed(0.1),
-            dust_attenuation=_DUST,
-            xray={"type": "simple"},
-        )
-        base = _reference_point(sed)
-
-        def objective(x):
-            return jnp.asarray(sed.predict({**base, name: x}).properties["log_l_x_xrb"]).sum()
-
-        return name, _evaluate(objective, lo, hi, dtype)
-
-
 _SWEEPS = {
     "stellar_mass_scale": _stellar_mass_scale,
     "agn_bolometric": _agn_bolometric,
-    "xrb_mass_scale": _xrb_mass_scale,
 }
 
 

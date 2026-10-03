@@ -85,12 +85,26 @@ class TestTailShims:
             "predict_luminosity",
             "predict_ionizing_quantities",
             "predict_radio_quantities",
-            "predict_xray_quantities",
         ],
     )
     def test_tail_method_warns(self, model, method):
         with pytest.warns(DeprecationWarning, match="model.predict"):
             getattr(model, method)({})
+
+    def test_xray_quantities_shim_warns_on_a_model_with_an_xray_block(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """predict_xray_quantities needs the X-ray component, so it gets a model with one."""
+        xray_model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl"},
+            neb={"type": "none"},
+            xray={"type": "yang20"},
+            redshift=Fixed(0.1),
+        )
+        with pytest.warns(DeprecationWarning, match="model.predict"):
+            xray_model.predict_xray_quantities({})
 
     def test_emission_lines_warns_before_backend_error(self, model):
         """The shim warns even when the no-nebular model then raises."""

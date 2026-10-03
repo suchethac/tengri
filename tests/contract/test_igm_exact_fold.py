@@ -121,9 +121,14 @@ def test_an_unknown_fold_is_refused_by_name():
     assert "'node'" in message and "'exact'" in message
 
 
-def test_a_free_redshift_refuses_the_exact_fold(ssp, observation):
-    """Refuse, rather than return the node answer under the exact label."""
-    with pytest.raises(NotImplementedError) as excinfo:
+def test_a_free_redshift_builds_the_exact_fold(ssp, observation):
+    """A free redshift gets the exact fold it asked for, not the node answer under its label.
+
+    Accuracy on a free redshift is measured in ``test_igm_exact_fold_free_z.py``;
+    this pins that the request reaches the z-table at all.
+    """
+
+    def _igm_table(fold):
         model = SEDModel.build(
             ssp_data=ssp,
             observation=observation,
@@ -134,10 +139,14 @@ def test_a_free_redshift_refuses_the_exact_fold(ssp, observation):
             },
             redshift=tengri.Uniform(0.5, 1.5),
             igm={"type": "inoue"},
-            approx=WavePrecomp(igm_fold="exact", n_z=FREE_Z_NODES),
+            approx=WavePrecomp(igm_fold=fold, n_z=FREE_Z_NODES),
         )
-        model.predict_photometry({"redshift": PROBE_Z})
-    assert "node" in str(excinfo.value)
+        ztable = model._build_component_chain()[0]._state.ssp_phot_ztable
+        return np.asarray(ztable.ssp_subband_phot_igm_table)
+
+    exact, node = _igm_table("exact"), _igm_table("node")
+    assert exact.shape == node.shape
+    assert not np.array_equal(exact, node)
 
 
 @pytest.mark.parametrize("fold", ["node", "exact"])
@@ -307,16 +316,11 @@ def _free_z_photometry(ssp, observation, fold):
     return np.asarray(model.predict_photometry({"redshift": PROBE_Z}), dtype=np.float64)
 
 
-def test_auto_falls_back_to_the_node_fold_for_a_free_redshift(ssp, observation):
-    """The precondition that makes "exact" unusable as a default.
-
-    ``test_a_free_redshift_refuses_the_exact_fold`` pins that ``"exact"``
-    raises here. ``"auto"`` must build the same model and return the node
-    answer: not raise, and not quietly return a third thing.
-    """
+def test_auto_resolves_to_exact_for_a_free_redshift(ssp, observation):
+    """``"auto"`` takes the exact fold on a free redshift, where it can be built."""
     np.testing.assert_array_equal(
         _free_z_photometry(ssp, observation, "auto"),
-        _free_z_photometry(ssp, observation, "node"),
+        _free_z_photometry(ssp, observation, "exact"),
     )
 
 

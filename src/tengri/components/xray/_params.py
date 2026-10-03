@@ -41,7 +41,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         ),
     ),
     # The two X-ray-binary photon indices deliberately get NO free_prior. They
-    # are not per-galaxy quantities: Gamma = 2.0 (HMXB) and 1.6 (LMXB) are the
+    # are not per-galaxy quantities: Gamma = 2.0 (HMXB) and 1.56 (LMXB) are the
     # fixed spectral assumptions of the Lehmer+2016-style population scalings
     # these components implement, and each description states a single value
     # rather than a range because there is no per-object range to state. The
@@ -59,8 +59,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "xray_gamma_lmxb",
-        Fixed(1.6),
-        "LMXB photon index (typical 1.6)",
+        Fixed(1.56),
+        "LMXB photon index (Yang et al. 2020 Sect. 2.2.2: 1.56)",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
