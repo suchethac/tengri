@@ -161,7 +161,7 @@ def interval_optical_depth(
     return jnp.stack(rows)
 
 
-def interval_transmission(tau_int: jnp.ndarray, f_obscuration=0.0) -> jnp.ndarray:
+def interval_transmission(tau_int: jnp.ndarray, f_obscuration) -> jnp.ndarray:
     r"""Per-interval transmission :math:`f_{\rm obs} + (1 - f_{\rm obs})\,e^{-\tau}`.
 
     Parameters
