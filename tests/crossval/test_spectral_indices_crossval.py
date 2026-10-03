@@ -6,13 +6,25 @@ soft-sigmoid JAX measurement and Bagpipes' hard-mask numpy measurement.
 Agreement is expected to ~1% on dense grids (soft sigmoid edges converge
 to hard masks as pixel spacing → 0).
 
+Bagpipes' ``single_index`` is not the Lick definition: it takes a constant
+continuum, the mean of the two sideband means, on the array it is given.
+Tengri's default is the Lick definition (Trager et al. 1998, ApJS 116, 1,
+Eqs. 1-3: F_λ, straight line through the sideband means); the Bagpipes
+comparison therefore uses ``pseudo_continuum="mean"``, and the equivalent
+widths of the default are checked on sloped SSP spectra against a numpy
+implementation of the definition (#2690).
+
 Invoke with:  pytest -m crossval tests/crossval/test_spectral_indices_crossval.py
 """
+
+import dataclasses
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+
+from tengri import load_ssp_data
 
 pytestmark = pytest.mark.crossval
 
@@ -23,6 +35,11 @@ from tengri.observation.spectral_indices import (
     SpectralIndexData,
     measure_index_jax,
 )
+
+
+def _mean_def(name: str):
+    """The registry index with Bagpipes' constant-continuum arithmetic."""
+    return dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
 
 
 def _bp_index_dict(name: str) -> dict:
@@ -86,7 +103,7 @@ class TestDn4000CrossVal:
 
 
 class TestHdACrossVal:
-    """HdA equivalent width: Tengri vs Bagpipes on synthetic spectra."""
+    """HdA equivalent width: Tengri (``"mean"`` option) vs Bagpipes on synthetic F_λ spectra."""
 
     def _make_spectrum(self, n: int = 5000):
         wave = np.linspace(3900.0, 4300.0, n)
@@ -99,7 +116,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), atol=0.15)
         assert_allclose(float(tengri_val), 0.0, atol=0.15)
@@ -114,7 +131,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), rtol=0.05)
         assert float(tengri_val) > 0.0
@@ -129,7 +146,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), rtol=0.05)
         assert float(tengri_val) < 0.0
@@ -177,3 +194,70 @@ class TestSpectralIndexDataConvenience:
             jnp.sum(-0.5 * residual**2 - jnp.log(sid.errors) - 0.5 * jnp.log(2.0 * jnp.pi))
         )
         assert_allclose(float(sid.log_likelihood(model)), manual, rtol=1e-10)
+
+
+# ── Lick definition vs Bagpipes on sloped SSP spectra (#2690) ───────
+
+C_AA = 2.99792458e18  # speed of light [Å/s]
+_SSP_CASES = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0), ("Hbeta", 3.0)]
+#: |Tengri "mean" - Bagpipes| <= 0.157 Å on these cases (1 Å soft edges and trapezoid
+#: means against hard masks and per-pixel means); tolerance 1.25 x, rounded up.
+_BAGPIPES_MEAN_TOL_AA = 0.2
+#: Largest soft-window - hard-window difference of the default over three ages [Å],
+#: 1.25 x, rounded up: HgA 0.050, Fe4383 0.050, Hbeta 0.130.
+_EDGE_TOL_AA = {"HgA": 0.050, "Fe4383": 0.050, "Hbeta": 0.130}
+
+
+def _ssp_flam(age_gyr: float):
+    """Optical solar-metallicity SSP: wave, L_ν, and F_λ (up to a constant)."""
+    ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    wave = np.asarray(ssp.ssp_wave, dtype=float)
+    sel = (wave > 3600.0) & (wave < 5600.0)
+    i_met = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) + 1.848)))
+    i_age = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr) - np.log10(age_gyr))))
+    lnu = np.asarray(ssp.ssp_flux, dtype=float)[i_met, i_age][sel]
+    return wave[sel], lnu, lnu * C_AA / wave[sel] ** 2
+
+
+def _lick_hard(wave, flam, idx) -> float:
+    """Trager et al. 1998 Eqs. 1-2 with hard windows, flux interpolated at the bounds."""
+
+    def seg(lo, hi):
+        x = np.concatenate(([lo], wave[(wave > lo) & (wave < hi)], [hi]))
+        return x, np.interp(x, wave, flam)
+
+    def mean(lo, hi):
+        x, v = seg(lo, hi)
+        return np.trapezoid(v, x) / (hi - lo)
+
+    (b0, b1), (r0, r1) = idx.continuum
+    f_b, f_r = mean(b0, b1), mean(r0, r1)
+    x, v = seg(*idx.feature)
+    line = f_b + (f_r - f_b) * (x - 0.5 * (b0 + b1)) / (0.5 * (r0 + r1) - 0.5 * (b0 + b1))
+    return float(np.trapezoid(1.0 - v / line, x))
+
+
+class TestLickDefinitionVsBagpipes:
+    """The split: ``"mean"`` is Bagpipes; the default is the published definition."""
+
+    @pytest.mark.parametrize("name,age", _SSP_CASES)
+    def test_mean_option_reproduces_bagpipes_on_f_lambda(self, name, age):
+        wave, _, flam = _ssp_flam(age)
+        bp_val = bp_indices.single_index(_bp_index_dict(name), np.column_stack([wave, flam]), 0.0)
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flam), _mean_def(name))
+        assert_allclose(float(tengri_val), float(bp_val), atol=_BAGPIPES_MEAN_TOL_AA)
+
+    @pytest.mark.parametrize("name,age", _SSP_CASES)
+    def test_default_is_the_published_definition_not_bagpipes(self, name, age):
+        """Default (from L_ν) agrees with a numpy Lick definition, to the soft-edge effect."""
+        wave, lnu, flam = _ssp_flam(age)
+        idx = STANDARD_INDICES[name]
+        tengri_val = float(measure_index_jax(jnp.array(wave), jnp.array(lnu), idx))
+        assert abs(tengri_val - _lick_hard(wave, flam, idx)) < _EDGE_TOL_AA[name]
+
+    @pytest.mark.parametrize("name,min_gap", [("HgA", 0.5), ("Fe4383", 0.1)])
+    def test_bagpipes_misses_the_published_definition_on_an_old_population(self, name, min_gap):
+        """Constant continuum vs sideband line: 0.69 Å (HgA) and 0.17 Å (Fe4383) at 10 Gyr."""
+        wave, _, flam = _ssp_flam(10.0)
+        bp_val = bp_indices.single_index(_bp_index_dict(name), np.column_stack([wave, flam]), 0.0)
+        assert abs(float(bp_val) - _lick_hard(wave, flam, STANDARD_INDICES[name])) > min_gap

@@ -106,7 +106,6 @@ src/tengri/observation/eline_priors.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/observation/eline_priors.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/observation/line_ratio_data.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/observation/spectral_indices.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
-src/tengri/observation/spectral_indices.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/observation/spectral_indices.py | jnp.maximum with floor 1e-50 < 1e-20 -> 1
 src/tengri/observation/spectrum.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
 src/tengri/observation/spectrum.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
