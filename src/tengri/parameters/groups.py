@@ -3703,26 +3703,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
             raise ValueError(
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
-                f"(or None to auto-select). 'cic' is the accuracy default; "
-                f"'dsps' selects DSPS's histogram kernel for cross-code "
-                f"comparison (biases the optical CSP +1.2 %, #964)."
-            )
-        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
-        # the type list, so the incompatible pair is knowable HERE; at
-        # ``SEDModel.build``; rather than at the first prediction, which for a
-        # fit means after warmup has already started. The component-level
-        # ``_resolve_age_kernel`` still guards direct construction.
-        _types = sfh_dict.get("type") or []
-        if age_kernel == "cic" and "field" in (
-            _types if isinstance(_types, (list, tuple)) else [_types]
-        ):
-            raise NotImplementedError(
-                "sfh age_kernel='cic' is not supported with a GP-field SFH; "
-                "the field draw is defined on its own coarse lookback grid, so "
-                "there is no dense integrand to cloud-in-cell (#964). Drop the "
-                "field modulator to use the CIC kernel, or set "
-                "age_kernel='dsps' explicitly to acknowledge the field path's "
-                "kernel."
+                f"(or None to auto-select). 'cic' is the first-order default; "
+                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
+                f"table (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
