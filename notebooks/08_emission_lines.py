@@ -165,11 +165,12 @@ spec_sf = Parameters(
 
 model_sf = SEDModel(spec_sf, ssp_data, observation=obs)
 params_sf = spec_sf.sample(jax.random.PRNGKey(100))
+fixed_sf = spec_sf.get_fixed_values()
 
 print("\n=== STAR-FORMING GALAXY ===")
-print(f"  Peak SFR at {float(params_sf['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
-print(f"  Metallicity [Zsol]: {float(params_sf['met_logzsol']):.2f}")
-print(f"  Dust (birth cloud): τ={float(params_sf['dust_tau_bc']):.2f}")
+print(f"  Peak SFR at {float(fixed_sf['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
+print(f"  Metallicity [Zsol]: {float(fixed_sf['met_logzsol']):.2f}")
+print(f"  Dust (birth cloud): τ={float(fixed_sf['dust_tau_bc']):.2f}")
 
 # Composite/older: slower SFH, some dust (moderates ionizing photons)
 spec_comp = Parameters(
@@ -189,11 +190,12 @@ spec_comp = Parameters(
 
 model_comp = SEDModel(spec_comp, ssp_data, observation=obs)
 params_comp = spec_comp.sample(jax.random.PRNGKey(101))
+fixed_comp = spec_comp.get_fixed_values()
 
 print("\n=== COMPOSITE GALAXY ===")
-print(f"  Peak SFR at {float(params_comp['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
-print(f"  Metallicity [Zsol]: {float(params_comp['met_logzsol']):.2f}")
-print(f"  Dust (birth cloud): τ={float(params_comp['dust_tau_bc']):.2f}")
+print(f"  Peak SFR at {float(fixed_comp['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
+print(f"  Metallicity [Zsol]: {float(fixed_comp['met_logzsol']):.2f}")
+print(f"  Dust (birth cloud): τ={float(fixed_comp['dust_tau_bc']):.2f}")
 
 # Older/passive-like: very old SFH, high metallicity, high dust
 spec_old = Parameters(
@@ -213,11 +215,12 @@ spec_old = Parameters(
 
 model_old = SEDModel(spec_old, ssp_data, observation=obs)
 params_old = spec_old.sample(jax.random.PRNGKey(102))
+fixed_old = spec_old.get_fixed_values()
 
 print("\n=== OLDER GALAXY ===")
-print(f"  Peak SFR at {float(params_old['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
-print(f"  Metallicity [Zsol]: {float(params_old['met_logzsol']):.2f}")
-print(f"  Dust (birth cloud): τ={float(params_old['dust_tau_bc']):.2f}")
+print(f"  Peak SFR at {float(fixed_old['sfh_tsnorm_peak_lbt_gyr']):.2f} Gyr ago")
+print(f"  Metallicity [Zsol]: {float(fixed_old['met_logzsol']):.2f}")
+print(f"  Dust (birth cloud): τ={float(fixed_old['dust_tau_bc']):.2f}")
 
 # %% [markdown]
 # ## SFR and emission-line fluxes
@@ -348,14 +351,13 @@ fig.savefig(FIG_DIR / "08_bpt_diagram.pdf", bbox_inches="tight")
 # Predict spectra in the red optical (rest-frame)
 wave_rest = np.linspace(6400, 6800, 1600)  # rest-frame Å (6400-6480 is line-free)
 
-params_dict = {"SF": params_sf, "Composite": params_comp, "Older": params_old}
 spec_dict = {}
 for galaxy_type, model, params in [
     ("SF", model_sf, params_sf),
     ("Composite", model_comp, params_comp),
     ("Older", model_old, params_old),
 ]:
-    z = float(params["redshift"])
+    z = z_ref
     wave_obs = wave_rest * (1.0 + z)
     try:
         sed_obs = model.predict_spectrum(params, wave_obs)
@@ -373,7 +375,7 @@ fig, ax = plt.subplots(figsize=(8.6, 4.0))
 # not amplitude.
 for galaxy_type in ["SF", "Composite", "Older"]:
     sed = spec_dict[galaxy_type]
-    z = float(params_dict[galaxy_type]["redshift"])
+    z = z_ref
     wave_obs_plot = wave_rest * (1.0 + z)
     cont_mask = (wave_rest >= 6420) & (wave_rest <= 6480)
     cont_pix = sed[cont_mask & np.isfinite(sed) & (sed > 0)]
