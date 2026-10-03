@@ -189,6 +189,10 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
     ssp_phot_lyc: "jnp.ndarray | None" = None
+    #: Rest-frame centroid of each chunk WITH the IGM inside [A], same shape as
+    #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
+    #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
+    ssp_subband_waves_rest_igm: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -658,6 +662,10 @@ class PhotometricZTable(NamedTuple):
     #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
     #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
     ssp_phot_lyc_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame centroid of each chunk
+    #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
+    #: itself, so not part of the on-disk z-table.
+    subband_waves_rest_igm_table: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)

@@ -588,6 +588,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 jnp.asarray(log_mass_scale),
                 jnp.asarray(0.0),  # tau_bc = 0.0 (degenerate)
                 jnp.asarray(params["dust_tau_v"]),  # tau_diff = tau_v
+                redshift=params.get("redshift")
+                if getattr(eb_lut, "ln1pz", None) is not None
+                else None,
             )
 
             # The nebular continuum is absorbed by the SAME screen, so its
@@ -689,6 +692,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # Published only when an upstream component (stellar) has put
         # ``filter_eff_waves`` into ``state.derived``: i.e. only when
         # ``approx=WavePrecomp()`` is set on SEDModel.
+
+        # AGN line-only light, when the AGN ran before this screen: it is part of
+        # ``sed_intrinsic`` and so takes the same transmission (#2565). When the
+        # AGN runs after the screen (the canonical order) it is never screened
+        # here and the AGN's own publication stands.
+        sed_agn_lines_unatt = state.derived.get("sed_agn_lines_attenuated")
+
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             dust_diff_transmission=attenuation,
@@ -698,6 +708,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
             log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
+        if sed_agn_lines_unatt is not None:
+            derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_unatt * attenuation
 
         # Discrete emission-line catalog, reddened with this component's single
         # screen (#1867, #2223). The two-component component does the same in
@@ -745,6 +757,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
             if sub_waves is not None:
                 k_sub = curve(sub_waves)
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
+                # The same screen where the IGM-surviving light sits (exact fold).
+                igm_waves = state.derived.get("stellar_subband_waves_rest_igm_precomp")
+                if igm_waves is not None:
+                    derived_overrides["dust_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_v * curve(igm_waves)
+                    )
 
             # The nebular continuum is not materialized when the per-Q_H grid
             # serves it: its band integral is the K-point sum over sub-band
@@ -768,9 +786,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     _t = self.nebular_screen_transmission(params, _lam.reshape(-1)).reshape(
                         _lam.shape
                     )
-                    derived_overrides[_out_key] = jnp.sum(
-                        jnp.asarray(state.derived[_phi_key]) * _t, axis=-1
-                    )
+                    _chunks = jnp.asarray(state.derived[_phi_key]) * _t
+                    derived_overrides[_out_key] = jnp.sum(_chunks, axis=-1)
+                    if _out_key == "nebular_phot_lnu_attenuated_precomp":
+                        # Per chunk, for the IGM at each chunk's node (#2679).
+                        derived_overrides["nebular_phot_lnu_subband_screened_precomp"] = _chunks
             elif _neb_phot is not None and _sed_neb is not None:
                 # The reddened continuum integrated through each band: the screen is
                 # applied where the emission is. ``A(lambda_eff) * Phi_neb`` is only

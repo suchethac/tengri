@@ -18,11 +18,15 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Physical constants — must match what bagpipes itself uses internally.
-# Bagpipes hard-codes 3.826e33 (line 492 of model_galaxy.py); we use the
-# same value to make the round-trip exact at machine precision.
-C_ANGSTROM_PER_S: float = 2.998e18
+from tengri.utils.physics_constants import C_AA
+
+# Physical constants.
+# L_SUN_ERG_PER_S is BAGPIPES's own value (model_galaxy.py:492), used to match
+# the raw HDU outputs exactly at machine precision.
+# C_ANGSTROM_PER_S is tengri's speed of light (2.99792458e18 Å/s).
+# The L_λ↔L_ν conversion is tengri-side bookkeeping and uses tengri's c.
 L_SUN_ERG_PER_S: float = 3.826e33
+C_ANGSTROM_PER_S: float = C_AA
 
 
 def ergs_per_aa_to_erg_per_hz(

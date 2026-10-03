@@ -85,7 +85,7 @@ spec_sf = Parameters(
     sfh_tsnorm_trunc=Fixed(3.0),
     met_logzsol=Fixed(-0.3),
     dust_tau_bc=Fixed(0.5),
-    dust_tau_diff=Fixed(0.3),
+    dust_tau_diff=Uniform(0.0, 3.0),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
 )
@@ -359,7 +359,7 @@ spec_agn = Parameters(
     dust_tau_diff=Fixed(0.3),
     dust_slope=Fixed(-0.7),
     agn_model="multicolor_agn",
-    agn_log_lbol=Fixed(10.0),
+    agn_log_lbol=Uniform(9.0, 13.0),
     redshift=Fixed(0.05),
 )
 model_agn = SEDModel(spec_agn, ssp)

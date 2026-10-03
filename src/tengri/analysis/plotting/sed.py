@@ -305,7 +305,8 @@ def sweep_parameter(
     model : tengri.SEDModel
         Model instance with a ``predict`` or ``sed`` callable.
     param_name : str
-        Full parameter name (e.g. ``"dust_tau_bc"``).
+        Full parameter name (e.g. ``"dust_tau_bc"``). The parameter must be free
+        in ``model.spec`` (a call-time override of a Fixed parameter is refused).
     values : sequence of float
         Parameter values to sweep.
     ax : Axes, optional
