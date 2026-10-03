@@ -241,3 +241,39 @@ def test_signature_default_matches_declaration():
         assert inspect.signature(fn).parameters["log_nu_cut"].default == declared_default(
             PARAMS, "radio_log_nu_cut"
         )
+
+
+# ── round trip: spec -> groups -> spec ────────────────────────────────────────────────
+
+_STRUCTURAL = {"type", "all_params", "other_params", "*"}
+
+
+def _agn_keys(groups):
+    return {k.removeprefix("radio_") for k in groups["radio"]["agn"]} - _STRUCTURAL
+
+
+@pytest.mark.parametrize("model", [m for m in AGN_RADIO_MODELS if m != "none"])
+def test_agn_radio_group_round_trips(ssp, model):
+    """to_groups emits exactly the keys the jet model reads, and rebuilding restores the spec."""
+    wave = jnp.asarray(np.geomspace(3e5, 3e8, 40))
+    reads = _read_set(model, wave)
+    # Mixed dispositions (one pinned off-default, the rest free) leave no single
+    # wildcard to collapse to, so every parameter the emitter lists is listed by name.
+    names = sorted(reads)
+    agn = {"type": model, names[0]: Fixed(_perturbed(names[0]))}
+    agn.update({name: FREE for name in names[1:]})
+    m = _build(ssp, agn)
+    groups = m.spec.to_groups()
+
+    assert _agn_keys(groups) == {n.removeprefix("radio_") for n in reads}
+
+    rebuilt = SEDModel.build(ssp_data=ssp, **{**groups, "redshift": Fixed(0.0)})
+    for name in sorted(m.spec.all_params):
+        assert repr(rebuilt.spec.get_distribution(name)) == repr(m.spec.get_distribution(name))
+    assert set(rebuilt.spec.free_params) == set(m.spec.free_params)
+    # The star-formation half of the radio group is emitted unchanged.
+    again = rebuilt.spec.to_groups()["radio"]
+    assert again.get("sf") == groups["radio"].get("sf")
+    assert {k: v for k, v in again.items() if k != "agn"} == {
+        k: v for k, v in groups["radio"].items() if k != "agn"
+    }
