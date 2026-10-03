@@ -283,7 +283,7 @@ def _build_grid(
         ``phot`` has shape ``(*[len(ax) for ax in axes], n_filters)``.
     ndarray, float64
         ln(band flux) at the nodes, same shape as ``phot``, taken in float64 and floored at
-        ``_FLUX_FLOOR`` so a band that underflows float32 still has a finite log.
+        the float64 smallest normal so a band that underflows float32 still has a finite log.
     """
     axes = tuple(np.asarray(ax, dtype=np.float64) for ax in axes)
     wave_rest_base = _continuum_wave_rest()
@@ -320,7 +320,7 @@ def _build_grid(
         axes=axes_jax,
         edges=tuple(edges_for_grid(ax) for ax in axes_jax),
     )
-    return grid, np.log(np.maximum(shaped.astype(np.float64), _FLUX_FLOOR))
+    return grid, np.log(np.maximum(shaped.astype(np.float64), _FLOAT64_TINY))
 
 
 def _build_grid_modified_blackbody(
@@ -451,11 +451,11 @@ _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
+# The ln of a band flux is taken in float64 at build, so its floor is the float64 smallest normal.
+_FLOAT64_TINY = np.finfo(np.float64).tiny
+
 # Axes whose interpolation coordinate is the natural log of the parameter.
 _LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
-
-# Floor of a band flux before its log is taken [1/Hz].
-_FLUX_FLOOR = 1e-300
 
 
 def _default_axis(param_name: str, n_nodes: int) -> np.ndarray:
@@ -550,7 +550,7 @@ def precompute(
     """
     if model == "pah_drude":
         preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift)
-        ln_phot = np.log(np.maximum(np.asarray(preint.phot, dtype=np.float64), _FLUX_FLOOR))
+        ln_phot = np.log(np.maximum(np.asarray(preint.phot, dtype=np.float64), _FLOAT64_TINY))
         result = {"grid_phot": preint.phot, "axes": (), "_preint": preint, "_ln_phot": ln_phot}
         axis_params = AXIS_PARAMS_PAH
     elif model in _CONTINUUM_BUILDERS:

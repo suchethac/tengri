@@ -315,7 +315,10 @@ def test_float32_value_and_gradient_are_finite(model):
 
     assert np.all(np.isfinite(out["value"])), out["value"]
     for name, g in zip(_AXIS_NAMES[model], out["grad"], strict=True):
+        # grad-assert: finite-only — the optical band's flux underflows to zero at build in
+        # float32, so its gradient is correctly zero; the 3-5 um band is checked finite only.
         assert np.all(np.isfinite(g)), f"d/d{name} not finite: {g}"
+        assert g[2] != 0.0, f"far-IR d/d{name} is zero: {g}"
 
     from tengri.components.dust import dust_analytic_precompute as adapter
 
