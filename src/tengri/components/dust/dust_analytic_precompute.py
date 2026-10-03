@@ -20,8 +20,19 @@ four analytic dust-emission models:
    No free axes (pure template; runtime amplitudes scale the combined PAH profile).
 
 Each model is preintegrated through filter curves at model-initialization time.
+The band integral is a Gauss-Legendre quadrature of the closed-form spectrum read at
+the filter's own wavelengths, ``lambda_obs / (1 + z)`` in the rest frame, sub-divided
+until the Wien-side slope is resolved (``tengri.components.dust._analytic_band_quadrature``),
+so a filter outside the 0.01 um - 10 mm normalization grid, or on the Wien tail of a
+cold spectrum, reads the true band flux. The table is carried as ``ln(flux)`` on
+nodes spanning the declared prior range of each parameter and read with a tensor-product
+cubic spline (``tengri.components.dust._analytic_table_interp``): node-exact, C2 in the
+parameters, and accurate to :data:`TABLE_RTOL` off-node wherever the flux exceeds
+:data:`TABLE_FLUX_FLOOR` per unit absorbed luminosity.
+
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters``: e.g., a user who pins ``dust_T`` gets a 1D grid.
+``Parameters``: e.g., a user who pins ``dust_T`` gets a 1D grid. The collapsed table is
+the spline evaluated at the fixed value, so it reproduces the full lookup there.
 
 References
 ----------
@@ -44,19 +55,32 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.dust.drude_profiles import compute_pah_template as _compute_pah
+from tengri.components.dust._analytic_band_quadrature import band_quadrature
+from tengri.components.dust._analytic_table_interp import (
+    AXIS_TRANSFORMS,
+    LogSplineTable,
+    build_log_spline_table,
+    evaluate_log_spline,
+    slice_log_spline,
+)
+from tengri.components.dust._params import PARAMS
+from tengri.components.dust.drude_profiles import SMITH2007_PAH_FEATURES
 from tengri.components.dust.emission import (
     casey2012 as _casey2012,
     graybody as _graybody,
     modified_blackbody as _modified_blackbody,
+    pah_drude as _pah_drude,
 )
-from tengri.forward.precompute.templates import (
-    build_template_photometry_lookup,
-    collapse_fixed_axes,
-    precompute_template_photometry,
-)
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import PreintegratedGrid
-from tengri.utils.physics_constants import C_CGS as _C_CGS
+from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import (
+    AA_TO_CM as _AA_TO_CM,
+    C_CGS as _C_CGS,
+    H_PLANCK as _H_PLANCK,
+    K_BOLTZ as _K_BOLTZ,
+)
+from tengri.utils.scale import log10_flux_scale as _log10_flux_scale
 
 # ── Axis definitions per model ──────────────────────────────────
 
@@ -80,19 +104,69 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "pah_drude": AXIS_PARAMS_PAH,
 }
 
+#: The thermal-continuum closures: their spectra are normalized to ``L_absorbed`` by
+#: the frequency integral over the rest grid they are handed, and carry the
+#: da Cunha et al. (2013) CMB terms at the redshift they are built for.
+_CONTINUUM_CLOSURES = {
+    "modified_blackbody": _modified_blackbody,
+    "casey2012": _casey2012,
+    "graybody": _graybody,
+}
 
-# Rest-frame integration grid of the thermal-continuum models (modified_blackbody,
+#: Spline coordinate of each axis parameter (key of ``AXIS_TRANSFORMS``) and its node
+#: count over the declared prior range. Node counts are set by the off-node accuracy
+#: of the log flux in each coordinate, :data:`TABLE_RTOL`.
+AXIS_TRANSFORM_KEYS: dict[str, str] = {
+    "dust_T": "neg_inverse",
+    "dust_beta_ir": "identity",
+    "dust_alpha_mir": "log_shift_half",
+    "dust_lambda_0_um": "log",
+}
+DEFAULT_AXIS_NODES: dict[str, int] = {
+    "dust_T": 25,
+    "dust_beta_ir": 6,
+    "dust_alpha_mir": 11,
+    "dust_lambda_0_um": 15,
+}
+
+#: Relative accuracy of an off-node lookup against the exact band integral over the
+#: declared parameter ranges and ``0 <= z <= 6``, for fluxes above
+#: :data:`TABLE_FLUX_FLOOR`.
+TABLE_RTOL: float = 1.0e-3
+
+#: Band flux per unit absorbed luminosity [1/Hz] below which the closures themselves
+#: saturate (they clip ``h nu / k T`` at 500, a flux of ~1e-217): the lookup is
+#: accurate to :data:`TABLE_RTOL` above this value and positive below it.
+TABLE_FLUX_FLOOR: float = 1.0e-150
+
+
+# Rest-frame normalization grid of the thermal-continuum models (modified_blackbody,
 # casey2012, graybody): 0.01 um to 10 mm, log-spaced. The closures normalize their SED
-# to L_absorbed by integrating over the grid they are given, and the far-IR/sub-mm
-# filters they feed (Herschel, SCUBA-2, ALMA) sit at 70 um - 3 mm, so the grid has to
-# contain the whole thermal bump and the bands.
+# to L_absorbed by integrating over the grid they are given, so the grid has to contain
+# the whole thermal bump; the band integrals read the spectrum at the filter's own
+# wavelengths and do not depend on this grid's resolution. 3000 points hold the
+# normalization trapezoid to ~1e-6.
 _CONTINUUM_LOG10_WAVE_AA_MIN = 2.0
 _CONTINUUM_LOG10_WAVE_AA_MAX = 8.0
-_CONTINUUM_N_WAVE = 1500
+_CONTINUUM_N_WAVE = 3000
+
+# h c / k_B [K Angstrom]: the Wien exponent is x = _WIEN_K_AA / (lambda_AA * T).
+_WIEN_K_AA = _H_PLANCK * _C_CGS / (_K_BOLTZ * _AA_TO_CM)
+# The closures clip h nu / k T at 500 (the spectrum is flat beyond it), so the log slope
+# of the spectrum never exceeds that exponent plus the margin below.
+_WIEN_X_CAP = 500.0
+# Added to the Wien exponent to bound the log slope of the spectrum prefactors
+# (nu**(3 + beta), opacity, CMB contrast, mid-IR power law).
+_SLOPE_MARGIN = 8.0
+# |d ln D / d ln lambda| of a Drude profile of fractional width gamma peaks at 2 / gamma.
+_PAH_LOG_SLOPE = 2.0 / min(f.gamma for f in SMITH2007_PAH_FEATURES) + _SLOPE_MARGIN
+
+# Largest block of (table nodes x wavelength points) evaluated per jitted call.
+_CHUNK_POINTS = 4_000_000
 
 
 def _continuum_wave_rest() -> np.ndarray:
-    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
+    """Rest-frame normalization grid [Angstrom] of the thermal-continuum builders."""
     return np.logspace(
         _CONTINUUM_LOG10_WAVE_AA_MIN,
         _CONTINUUM_LOG10_WAVE_AA_MAX,
@@ -101,294 +175,211 @@ def _continuum_wave_rest() -> np.ndarray:
     )
 
 
-def _build_grid_modified_blackbody(
-    filter_waves: list,
-    filter_trans: list,
-    redshift: float,
-    T_grid: np.ndarray,
-    beta_grid: np.ndarray,
-    L_absorbed_ref: float = 1.0,
-) -> PreintegratedGrid:
-    """Preintegrate modified blackbody over a 2D grid of (T, beta) values.
+def declared_range(name: str) -> tuple[float, float]:
+    """Declared free-prior range ``(lo, hi)`` of an axis parameter.
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Per-filter transmission curves.
-    redshift : float
-        Source redshift. The band integral reads the rest-frame template at
-        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
-    T_grid : ndarray, shape (n_T,)
-        Temperature grid [K].
-    beta_grid : ndarray, shape (n_beta,)
-        Emissivity-index grid [dimensionless].
-    L_absorbed_ref : float
-        Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
+    name : str
+        Parameter name, one of the continuum models' axis parameters.
 
     Returns
     -------
-    PreintegratedGrid
-        Preintegrated photometry with shape (n_T, n_beta, n_filters).
+    tuple of float
+        Lower and upper bound of the parameter's declared free prior.
     """
-    T_grid = np.asarray(T_grid, dtype=np.float64)
-    beta_grid = np.asarray(beta_grid, dtype=np.float64)
-
-    wave_rest = _continuum_wave_rest()
-
-    # Precompute L_nu for each (T, beta) grid point
-    phot_grid = []
-    for T in T_grid:
-        phot_beta = []
-        for beta in beta_grid:
-            l_nu = np.asarray(
-                _modified_blackbody(
-                    jnp.asarray(wave_rest),
-                    L_absorbed=L_absorbed_ref,
-                    dust_T=float(T),
-                    dust_beta_ir=float(beta),
-                    redshift=float(redshift),
-                )
-            )
-            phot_beta.append(l_nu)
-        phot_grid.append(phot_beta)
-
-    templates = np.array(phot_grid, dtype=np.float64)  # (n_T, n_beta, n_wave)
-
-    # Preintegrate through filters using template helper
-    return precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
-        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(T_grid, beta_grid),
-        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
-        dl_cm=1.0,
-        energy_normalize=False,  # already normalized to L_absorbed_ref per model
-        units="lnu",
-    )
+    decl = next(p for p in PARAMS if p.name == name)
+    lo, hi = decl.free_prior.bounds
+    return float(lo), float(hi)
 
 
-def _build_grid_casey2012(
-    filter_waves: list,
-    filter_trans: list,
-    redshift: float,
-    T_grid: np.ndarray,
-    beta_grid: np.ndarray,
-    alpha_mir_grid: np.ndarray,
-    lambda_0_um_grid: np.ndarray,
-    L_absorbed_ref: float = 1.0,
-) -> PreintegratedGrid:
-    """Preintegrate casey2012 over a 4D grid of (T, beta, alpha_mir, lambda_0_um).
+def default_axis(name: str) -> np.ndarray:
+    """Default node values of an axis: uniform in its spline coordinate over its declared range.
 
     Parameters
     ----------
-    filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Per-filter transmission curves.
-    redshift : float
-        Source redshift. The band integral reads the rest-frame template at
-        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
-    T_grid : ndarray, shape (n_T,)
-        Temperature grid [K].
-    beta_grid : ndarray, shape (n_beta,)
-        Emissivity-index grid [dimensionless].
-    alpha_mir_grid : ndarray, shape (n_alpha,)
-        Mid-IR power-law slope grid [dimensionless].
-    lambda_0_um_grid : ndarray, shape (n_lambda_0,)
-        Opacity pivot wavelength grid [micron].
-    L_absorbed_ref : float
-        Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
+    name : str
+        Axis parameter name.
 
     Returns
     -------
-    PreintegratedGrid
-        Preintegrated photometry with shape
-        (n_T, n_beta, n_alpha, n_lambda_0, n_filters).
+    ndarray
+        ``DEFAULT_AXIS_NODES[name]`` ascending nodes spanning :func:`declared_range`.
     """
-    T_grid = np.asarray(T_grid, dtype=np.float64)
-    beta_grid = np.asarray(beta_grid, dtype=np.float64)
-    alpha_mir_grid = np.asarray(alpha_mir_grid, dtype=np.float64)
-    lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
-
-    wave_rest = _continuum_wave_rest()
-
-    # Precompute L_nu for each (T, beta, alpha_mir, lambda_0_um) grid point
-    phot_grid = []
-    for T in T_grid:
-        phot_beta = []
-        for beta in beta_grid:
-            phot_alpha = []
-            for alpha_mir in alpha_mir_grid:
-                phot_lambda_0 = []
-                for lambda_0_um in lambda_0_um_grid:
-                    l_nu = np.asarray(
-                        _casey2012(
-                            jnp.asarray(wave_rest),
-                            L_absorbed=L_absorbed_ref,
-                            dust_T=float(T),
-                            dust_beta_ir=float(beta),
-                            dust_alpha_mir=float(alpha_mir),
-                            dust_lambda_0_um=float(lambda_0_um),
-                            redshift=float(redshift),
-                        )
-                    )
-                    phot_lambda_0.append(l_nu)
-                phot_alpha.append(phot_lambda_0)
-            phot_beta.append(phot_alpha)
-        phot_grid.append(phot_beta)
-
-    # (n_T, n_beta, n_alpha, n_lambda_0, n_wave)
-    templates = np.array(phot_grid, dtype=np.float64)
-
-    # Preintegrate through filters using template helper
-    return precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
-        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(T_grid, beta_grid, alpha_mir_grid, lambda_0_um_grid),
-        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
-        dl_cm=1.0,
-        energy_normalize=False,  # already normalized to L_absorbed_ref per model
-        units="lnu",
-    )
+    fwd, inv = AXIS_TRANSFORMS[AXIS_TRANSFORM_KEYS[name]]
+    lo, hi = declared_range(name)
+    return inv(np.linspace(fwd(lo), fwd(hi), DEFAULT_AXIS_NODES[name]))
 
 
-def _build_grid_graybody(
+def _resolve_axes(model: str, user_axes: dict[str, np.ndarray | None]) -> tuple[np.ndarray, ...]:
+    """Axis nodes of ``model``: the caller's grid where given, else the declared-range default."""
+    axes = []
+    for name in AXIS_PARAMS[model]:
+        given = user_axes.get(name)
+        axes.append(default_axis(name) if given is None else np.asarray(given, dtype=np.float64))
+    return tuple(axes)
+
+
+def _evaluate_table_nodes(spectrum, axes, wave, pos, weights, owner, n_filters, norm=None):
+    """Band flux at every node of the Cartesian product of ``axes`` (float64, host).
+
+    ``norm`` is ``(norm_wave, norm_pos)`` for the normalized closures: the spectrum is also
+    evaluated on ``norm_wave`` alone and the band flux rescaled by the ratio of the two
+    normalizations, so the normalization integral is over the rest grid whatever the filters
+    are (a filter node beyond the grid would otherwise extend the integral).
+    """
+    mesh = np.meshgrid(*axes, indexing="ij") if axes else []
+    params = np.stack([m.ravel() for m in mesh], axis=-1) if axes else np.zeros((1, 0))
+    chunk = max(1, min(_CHUNK_POINTS // wave.size, params.shape[0]))
+    with jax.enable_x64(True):
+        wave_j = jnp.asarray(wave)
+        pos_j, w_j, own_j = jnp.asarray(pos), jnp.asarray(weights), jnp.asarray(owner)
+        if norm is not None:
+            norm_wave_j, norm_pos_j = jnp.asarray(norm[0]), jnp.asarray(norm[1])
+
+        @jax.jit
+        def block(p_block):
+            def one(p):
+                s = spectrum(wave_j, p)
+                band = jax.ops.segment_sum(s[pos_j] * w_j, own_j, num_segments=n_filters)
+                if norm is None:
+                    return band
+                s_norm = spectrum(norm_wave_j, p)
+                ref = jnp.argmax(s_norm)
+                return band * (s_norm[ref] / s[norm_pos_j[ref]])
+
+            return jax.vmap(one)(p_block)
+
+        out = []
+        for start in range(0, params.shape[0], chunk):
+            blk = params[start : start + chunk]
+            pad = chunk - blk.shape[0]
+            if pad:
+                blk = np.concatenate([blk, np.repeat(blk[-1:], pad, axis=0)])
+            out.append(np.asarray(block(jnp.asarray(blk)))[: chunk - pad])
+    phot = np.concatenate(out)
+    return phot.reshape((*(a.size for a in axes), n_filters))
+
+
+def _build_continuum_phot(
+    model: str,
+    axes: tuple[np.ndarray, ...],
     filter_waves: list,
     filter_trans: list,
     redshift: float,
-    T_grid: np.ndarray,
-    beta_grid: np.ndarray,
-    lambda_0_um_grid: np.ndarray,
-    L_absorbed_ref: float = 1.0,
-) -> PreintegratedGrid:
-    """Preintegrate graybody over a 3D grid of (T, beta, lambda_0_um) values.
+    L_absorbed_ref: float,
+) -> np.ndarray:
+    """Band flux table of a thermal-continuum model, shape ``(*axis_lengths, n_filters)``.
 
-    Parameters
-    ----------
-    filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Per-filter transmission curves.
-    redshift : float
-        Source redshift. The band integral reads the rest-frame template at
-        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
-    T_grid : ndarray, shape (n_T,)
-        Temperature grid [K].
-    beta_grid : ndarray, shape (n_beta,)
-        Emissivity-index grid [dimensionless].
-    lambda_0_um_grid : ndarray, shape (n_lambda_0,)
-        Opacity pivot wavelength grid [micron].
-    L_absorbed_ref : float
-        Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
-
-    Returns
-    -------
-    PreintegratedGrid
-        Preintegrated photometry with shape (n_T, n_beta, n_lambda_0, n_filters).
+    The closure is evaluated once per table node on the union of the normalization grid
+    and the filters' quadrature nodes, so its trapezoid normalization sees the whole
+    thermal bump and the bands read the spectrum itself, not an interpolation of it. The
+    union grid's normalization is rescaled to that of the rest grid alone.
     """
-    T_grid = np.asarray(T_grid, dtype=np.float64)
-    beta_grid = np.asarray(beta_grid, dtype=np.float64)
-    lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
+    closure = _CONTINUUM_CLOSURES[model]
+    names = AXIS_PARAMS[model]
+    t_min = float(np.min(axes[0]))
+    quad = band_quadrature(
+        filter_waves,
+        filter_trans,
+        redshift,
+        lambda w_aa: np.minimum(_WIEN_K_AA / (w_aa * t_min), _WIEN_X_CAP) + _SLOPE_MARGIN,
+    )
+    norm_grid = _continuum_wave_rest()
+    wave, inverse = np.unique(np.concatenate([norm_grid, quad.wave_rest]), return_inverse=True)
+    pos = inverse[norm_grid.size :]
+    norm_pos = inverse[: norm_grid.size]
 
-    wave_rest = _continuum_wave_rest()
+    def spectrum(wave_j, p):
+        kw = {name: p[i] for i, name in enumerate(names)}
+        return closure(wave_j, L_absorbed_ref, redshift=float(redshift), **kw)
 
-    # Precompute L_nu for each (T, beta, lambda_0_um) grid point
-    phot_grid = []
-    for T in T_grid:
-        phot_beta = []
-        for beta in beta_grid:
-            phot_lambda = []
-            for lambda_0_um in lambda_0_um_grid:
-                l_nu = np.asarray(
-                    _graybody(
-                        jnp.asarray(wave_rest),
-                        L_absorbed=L_absorbed_ref,
-                        dust_T=float(T),
-                        dust_beta_ir=float(beta),
-                        dust_lambda_0_um=float(lambda_0_um),
-                        redshift=float(redshift),
-                    )
-                )
-                phot_lambda.append(l_nu)
-            phot_beta.append(phot_lambda)
-        phot_grid.append(phot_beta)
-
-    templates = np.array(phot_grid, dtype=np.float64)  # (n_T, n_beta, n_lambda_0, n_wave)
-
-    # Preintegrate through filters using template helper
-    return precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
-        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(T_grid, beta_grid, lambda_0_um_grid),
-        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
-        dl_cm=1.0,
-        energy_normalize=False,  # already normalized to L_absorbed_ref per model
-        units="lnu",
+    return _evaluate_table_nodes(
+        spectrum,
+        axes,
+        wave,
+        pos,
+        quad.weights,
+        quad.owner,
+        quad.n_filters,
+        norm=(norm_grid, norm_pos),
     )
 
 
-def _build_grid_pah_drude(
-    filter_waves: list,
-    filter_trans: list,
+def _build_pah_phot(
+    filter_waves: list, filter_trans: list, redshift: float, L_absorbed_ref: float
+) -> np.ndarray:
+    """Band flux of the PAH Drude template, shape ``(1, n_filters)``."""
+    quad = band_quadrature(
+        filter_waves, filter_trans, redshift, lambda w_aa: np.full_like(w_aa, _PAH_LOG_SLOPE)
+    )
+    pos = np.arange(quad.wave_rest.size)
+
+    def spectrum(wave_j, p):
+        return _pah_drude(wave_j, L_absorbed_ref, redshift=float(redshift))
+
+    phot = _evaluate_table_nodes(
+        spectrum, (), quad.wave_rest, pos, quad.weights, quad.owner, quad.n_filters
+    )
+    return phot.reshape(1, quad.n_filters)
+
+
+def _effective_wavelengths(filter_waves: list, filter_trans: list) -> np.ndarray:
+    """Photon-weighted effective wavelength of each filter, observed frame [Angstrom]."""
+    out = []
+    for fw, ft in zip(filter_waves, filter_trans, strict=True):
+        fw_np, ft_np = np.asarray(fw, dtype=np.float64), np.asarray(ft, dtype=np.float64)
+        tw = ft_np / fw_np
+        out.append(np.trapezoid(tw * fw_np, fw_np) / np.trapezoid(tw, fw_np))
+    return np.asarray(out)
+
+
+def _assemble_preint(
+    log_phot: np.ndarray,
+    axes: tuple[np.ndarray, ...],
+    eff_obs: np.ndarray,
     redshift: float,
-    L_absorbed_ref: float = 1.0,
 ) -> PreintegratedGrid:
-    """Preintegrate PAH Drude template through filters.
-
-    The PAH template is pure shape (no axes); an amplitude scales it. The adapter is
-    registered in ``forward/precompute/registry.py``; no kernel consumes its lookups
-    today.
-
-    Parameters
-    ----------
-    filter_waves : list[ndarray]
-        Per-filter wavelength arrays [Angstrom], observed frame.
-    filter_trans : list[ndarray]
-        Per-filter transmission curves.
-    redshift : float
-        Source redshift. The band integral reads the rest-frame template at
-        ``lambda_obs / (1 + z)``; no ``(1 + z)`` or distance factor is applied.
-    L_absorbed_ref : float
-        Reference absorbed luminosity for normalization [L_sun]. Default 1.0.
-
-    Returns
-    -------
-    PreintegratedGrid
-        Preintegrated photometry with shape (1, n_filters) (scalar template).
-    """
-    # Standard rest-frame wavelength grid for integration
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
-
-    # Compute PAH template using Smith+2007 SINGS median strengths
-    pah_llam = np.asarray(_compute_pah(jnp.asarray(wave_rest * 1e-4)))  # Å -> μm
-
-    # L_nu = L_lambda * lambda^2 / c. PAH template is dimensionless (relative);
-    # scale to L_absorbed_ref.
-    wave_cm = wave_rest * 1e-8
-    lnu = L_absorbed_ref * pah_llam * (wave_cm**2) / _C_CGS
-
-    # Wrap in shape (1, n_wave) for template compatibility
-    templates = np.array([lnu], dtype=np.float64)
-
-    # No grid axes for PAH: preintegrate as a single template
-    return precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
-        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(),  # No axes: scalar template
-        redshift=redshift,  # observed-frame filters: template read at lambda_obs/(1+z)
-        dl_cm=1.0,
-        energy_normalize=False,  # template already normalized to L_absorbed_ref
-        units="lnu",
+    """Wrap a log table as the typed :class:`PreintegratedGrid` (``phot`` = ``exp(log_phot)``)."""
+    axes_j = tuple(jnp.asarray(a) for a in axes)
+    return PreintegratedGrid(
+        phot=jnp.asarray(np.exp(log_phot)),
+        moment=None,
+        axes=axes_j,
+        edges=tuple(edges_for_grid(a) for a in axes_j),
+        effective_wavelengths=jnp.asarray(eff_obs),
+        effective_wavelengths_rest=jnp.asarray(eff_obs / (1.0 + redshift)),
+        log10_flux_scale=_log10_flux_scale(redshift, 1.0),
+        n_filters=int(eff_obs.size),
     )
+
+
+def _fixed_axis_values(
+    axis_params: tuple[str, ...], parameters: Any, model: str
+) -> dict[int, float]:
+    """Axis index -> value for every axis whose parameter is ``Fixed``.
+
+    Decided by :func:`collapse_fixed_axes` on a two-node stand-in grid, so the
+    Fixed-name matching, the dead-axis warning and the alignment checks are the shared
+    ones; only the contraction differs (the spline, not the triweight kernel).
+    """
+    if parameters is None or not axis_params:
+        return {}
+    stub_axes = tuple(jnp.asarray([0.0, 1.0]) for _ in axis_params)
+    stub = PreintegratedGrid(
+        phot=jnp.zeros((2,) * len(axis_params) + (1,)),
+        moment=None,
+        axes=stub_axes,
+        edges=tuple(edges_for_grid(a) for a in stub_axes),
+        effective_wavelengths=jnp.ones(1),
+        effective_wavelengths_rest=jnp.ones(1),
+        log10_flux_scale=0.0,
+        n_filters=1,
+    )
+    _, _, fixed = collapse_fixed_axes(
+        stub, axis_params, parameters, origin=f"dust_analytic_precompute[{model}]"
+    )
+    return fixed
 
 
 # ── Protocol-shaped entry points ──────────────────────────────────
@@ -416,31 +407,43 @@ def precompute(
     filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
     filter_trans : list[ndarray]
-        Transmission per filter (0–1).
+        Transmission per filter (0-1).
     redshift : float
-        Source redshift. [dimensionless]
+        Source redshift. The band integral reads the rest-frame spectrum at
+        ``lambda_obs / (1 + z)``; the closures carry the CMB terms at this redshift. No
+        ``(1 + z)`` or distance factor is applied. [dimensionless]
     parameters : Parameters | None
         Parameters spec, used to detect Fixed-axis parameters.
     model : str, keyword-only
         One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature grid for modified_blackbody/casey2012/graybody [K]. If None, uses a
-        default range [20, 60] with 9 points.
+        Temperature nodes for modified_blackbody/casey2012/graybody [K]. If None,
+        :data:`DEFAULT_AXIS_NODES` nodes spanning the declared range of ``dust_T``,
+        uniform in ``-1/T``.
     beta_grid : ndarray, optional
-        Emissivity-index grid [dimensionless]. If None, uses [1.5, 1.8, 2.0].
+        Emissivity-index nodes [dimensionless]. If None, uniform over the declared
+        range of ``dust_beta_ir``.
     alpha_mir_grid : ndarray, optional
-        Mid-IR power-law slope grid for casey2012 [dimensionless]. If None,
-        uses [1.5, 2.0, 2.5].
+        Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, uniform in
+        ``ln(alpha - 1/2)`` over the declared range of ``dust_alpha_mir``.
     lambda_0_um_grid : ndarray, optional
-        Opacity pivot wavelength grid for graybody and casey2012 [micron].
-        If None, uses [100.0, 150.0, 200.0].
+        Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None,
+        uniform in ``ln(lambda_0)`` over the declared range of ``dust_lambda_0_um``.
 
     Returns
     -------
     dict
-        Keys: "grid_phot" (photometry array), "axes" (free axes), "_preint"
-        (PreintegratedGrid), optionally "_collapsed_axes" (if any axes fixed).
+        Keys: "grid_phot" (photometry array, linear flux per unit absorbed luminosity),
+        "axes" (free axes), "_preint" (PreintegratedGrid), "_table" (the
+        ``LogSplineTable`` that
+        :func:`build_lookup` reads), optionally "_collapsed_axes" (if any axes fixed).
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``model``, a filter without positive transmission, a node grid
+        that is not strictly ascending, or a band flux that is not positive and finite.
 
     References
     ----------
@@ -452,100 +455,50 @@ def precompute(
     Notes
     -----
     **JIT-compatible**: no, this is a build-time function using NumPy.
+
+    The table is built in float64 whatever the session's JAX precision.
     """
-    if model == "modified_blackbody":
-        if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
-        if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
-        result = {
-            "grid_phot": _build_grid_modified_blackbody(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid
-            ).phot,
-            "axes": (jnp.asarray(T_grid), jnp.asarray(beta_grid)),
-            "_preint": _build_grid_modified_blackbody(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid
-            ),
-        }
-        axis_params = AXIS_PARAMS_MBB
-
-    elif model == "casey2012":
-        if T_grid is None:
-            T_grid = np.linspace(25.0, 60.0, 8, dtype=np.float64)
-        if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
-        if alpha_mir_grid is None:
-            alpha_mir_grid = np.array([1.5, 2.0, 2.5], dtype=np.float64)
-        if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
-        casey_preint = _build_grid_casey2012(
-            filter_waves,
-            filter_trans,
-            redshift,
-            T_grid,
-            beta_grid,
-            alpha_mir_grid,
-            lambda_0_um_grid,
-        )
-        result = {
-            "grid_phot": casey_preint.phot,
-            "axes": (
-                jnp.asarray(T_grid),
-                jnp.asarray(beta_grid),
-                jnp.asarray(alpha_mir_grid),
-                jnp.asarray(lambda_0_um_grid),
-            ),
-            "_preint": casey_preint,
-        }
-        axis_params = AXIS_PARAMS_CASEY
-
-    elif model == "graybody":
-        if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
-        if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
-        if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
-        result = {
-            "grid_phot": _build_grid_graybody(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
-            ).phot,
-            "axes": (
-                jnp.asarray(T_grid),
-                jnp.asarray(beta_grid),
-                jnp.asarray(lambda_0_um_grid),
-            ),
-            "_preint": _build_grid_graybody(
-                filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
-            ),
-        }
-        axis_params = AXIS_PARAMS_GRAYBODY
-
-    elif model == "pah_drude":
-        result = {
-            "grid_phot": _build_grid_pah_drude(filter_waves, filter_trans, redshift).phot,
-            "axes": (),
-            "_preint": _build_grid_pah_drude(filter_waves, filter_trans, redshift),
-        }
-        axis_params = AXIS_PARAMS_PAH
-
-    else:
+    if model not in AXIS_PARAMS:
         raise ValueError(f"Unknown analytic dust model: {model}")
-
-    # Auto-collapse any Fixed axes
-    preint: PreintegratedGrid = result["_preint"]
-    collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, axis_params, parameters, origin=f"dust_analytic_precompute[{model}]"
-    )
-    if not fixed:
-        return result
-
-    return {
-        "grid_phot": collapsed.phot,
-        "axes": remaining_axes,
-        "_preint": collapsed,
-        "_collapsed_axes": fixed,
+    user_axes = {
+        "dust_T": T_grid,
+        "dust_beta_ir": beta_grid,
+        "dust_alpha_mir": alpha_mir_grid,
+        "dust_lambda_0_um": lambda_0_um_grid,
     }
+    axes = _resolve_axes(model, user_axes)
+    axis_params = AXIS_PARAMS[model]
+    fw = [np.asarray(f, dtype=np.float64) for f in filter_waves]
+    ft = [np.asarray(t, dtype=np.float64) for t in filter_trans]
+
+    if model == "pah_drude":
+        phot = _build_pah_phot(fw, ft, redshift, 1.0)
+    else:
+        phot = _build_continuum_phot(model, axes, fw, ft, redshift, 1.0)
+    if not (np.all(np.isfinite(phot)) and np.all(phot > 0.0)):
+        raise ValueError(
+            f"dust_analytic_precompute[{model}]: band flux is not positive and finite at "
+            f"every node (min {np.min(phot):.3e}); the log-carried table cannot represent it."
+        )
+
+    table = build_log_spline_table(
+        np.log(phot), axes, tuple(AXIS_TRANSFORM_KEYS[n] for n in axis_params)
+    )
+    eff_obs = _effective_wavelengths(fw, ft)
+    fixed = _fixed_axis_values(axis_params, parameters, model)
+    table = slice_log_spline(table, fixed)
+    remaining = tuple(table.axes)
+    preint = _assemble_preint(np.asarray(table.log_phot), remaining, eff_obs, redshift)
+
+    result = {
+        "grid_phot": preint.phot,
+        "axes": tuple(jnp.asarray(a) for a in remaining),
+        "_preint": preint,
+        "_table": table,
+    }
+    if fixed:
+        result["_collapsed_axes"] = fixed
+    return result
 
 
 def build_lookup(
@@ -556,18 +509,16 @@ def build_lookup(
 ):
     """Build the runtime analytic dust photometry lookup from a preintegrated dict.
 
-    Delegates to the template helper for triweight interpolation.
+    Reads the log-carried band table with a tensor-product cubic spline.
 
     Parameters
     ----------
     preint : dict
-        Preintegrated data dict with keys "grid_phot", "axes", optionally
-        "_collapsed_axes".
+        Output of :func:`precompute`.
     model : str, keyword-only
         Analytic dust model name (for documentation; not used in lookup logic).
     free_param_names : tuple of str, optional
-        Names of remaining free axes in the collapsed case.
-        Not used in the default (no-collapse) case.
+        Names of remaining free axes in the collapsed case. Not used.
 
     Returns
     -------
@@ -576,7 +527,10 @@ def build_lookup(
 
             fn(L_absorbed, *free_axis_values) -> ndarray, shape (n_filters,)
 
-        Returns dust emission L_ν [erg/s/Hz]. Caller applies flux scaling.
+        Returns dust emission L_nu [erg/s/Hz]. Caller applies flux scaling. The
+        ``pah_drude`` lookup, which has no axes, returns shape ``(1, n_filters)``.
+        Values are the exponential of the spline of ``ln(flux)``; query values outside
+        the node range are clipped to it.
 
     References
     ----------
@@ -585,35 +539,18 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
-    interpolation.
+    **JIT-compatible**: yes.
 
-    **Gradient-safe**: yes, triweight kernel is fully differentiable.
+    **Gradient-safe**: yes; the interpolant is C2 in each query value (zero gradient
+    where the query is clipped), and a query made only of float32 values is evaluated
+    in float32, where the log carrier keeps cold-dust fluxes representable down to the
+    float32 range of ``exp``.
     """
-    if not preint.get("_collapsed_axes"):
-        # No axes collapsed: use template helper directly
-        return build_template_photometry_lookup(preint["_preint"])
-
-    # Collapsed case: return a wrapped lookup that takes remaining free params
-    from tengri.components._collapsed_lookup import interp_collapsed
-    from tengri.utils.interpolation import edges_for_grid
-
-    grid_phot = preint["grid_phot"]
-    axes = preint["axes"]
-    if axes:
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    else:
-        edges = ()
+    table: LogSplineTable = preint["_table"]
 
     @jax.jit
-    def dust_phot_collapsed(L_absorbed, *free_axis_values):
-        """Compute dust photometry with some axes collapsed (fixed).
+    def dust_phot(L_absorbed, *free_axis_values):
+        """Dust photometry [erg/s/Hz]: ``L_absorbed * exp(spline of ln flux)``."""
+        return L_absorbed * jnp.exp(evaluate_log_spline(table, free_axis_values))
 
-        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
-        """
-        normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
-        return L_absorbed * normed
-
-    return dust_phot_collapsed
+    return dust_phot
