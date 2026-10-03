@@ -58,7 +58,10 @@ Cue differs in the following ways:
 - **C/O and N/O as free parameters**: BEAGLE/Gutkin+2016 has C/O as a discrete
   grid axis (9 values) but fixes N/O to scaled-solar.  Cue accepts continuous
   ``gas_logco`` and ``gas_logno`` offset parameters, enabling smooth gradient-
-  based inference over abundance ratios.
+  based inference over abundance ratios. The default [N/O] follows
+  the Nicholls+2017 N/O--O/H relation (``_default_nitrogen.default_nitrogen_offset``)
+  evaluated at ``gas_logz``; ``gas_logno`` is an offset from that relation
+  (0 = the relation), the same meaning as ``neb_dno`` in the grid backends.
 
 - **Differentiable by design**: as a neural network, Cue is smooth and
   differentiable through JAX, enabling VI (ELBO gradients) and HMC
@@ -114,6 +117,7 @@ from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
+from tengri.components.nebular._default_nitrogen import default_nitrogen_offset
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -195,6 +199,11 @@ CUE_TRAINED_LOG_Z_GAS: tuple[float, float] = (-2.2, 0.5)
 #: ``gas_logco``/``gas_logno`` (``CUE_GAS_EXTRA_PARAMS``) are ``log10`` of
 #: that same ratio ("[C/O]"/"[N/O]" abundance ratio, dex), so the range is
 #: converted: log10(0.1) = -1.0, log10(5.4) ~= 0.7324.
+#:
+#: These bounds are ABSOLUTE [C/O] and [N/O]. Since #2693 ``gas_logno`` is an
+#: OFFSET from the default N/O--O/H relation, so the range it is checked
+#: against is ``gas_logno + default_nitrogen_offset(neb_logZ_gas)``
+#: (``grid_support.SUPPORT_SHIFT``); ``gas_logco`` is still absolute.
 CUE_TRAINED_LOG_CO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 CUE_TRAINED_LOG_NO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 
@@ -656,6 +665,13 @@ def _speculator_log_spectrum(
 
 
 # ── Parameter conversion: user-facing -> network input ────────────
+
+
+def _effective_gas_logno(p: dict) -> jnp.ndarray:
+    """[N/O] fed to the network: the default N/O--O/H relation plus ``gas_logno`` (#2693)."""
+    gas_logz = jnp.asarray(p["gas_logz"], dtype=jnp.float32)
+    offset = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
+    return default_nitrogen_offset(gas_logz).astype(jnp.float32) + offset
 
 
 def _logq_from_logu(
@@ -1397,7 +1413,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            _effective_gas_logno(p),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1494,7 +1510,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            _effective_gas_logno(p),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1538,7 +1554,9 @@ class CueBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         gas_logn, gas_logno, gas_logco : float
-            Cue gas properties (defaults match Cue paper).
+            Cue gas properties (defaults match Cue paper). ``gas_logno`` is
+            the [N/O] offset from the default N/O--O/H relation at the gas
+            metallicity (0 = the relation; #2693).
 
         Returns
         -------

@@ -68,6 +68,10 @@
 
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
 
+### Changed
+
+- Cue's default [N/O] now follows the nitrogen--oxygen relation of Nicholls+2017 (a primary floor plus a secondary term in O/H, `_default_nitrogen.py`) evaluated at the gas metallicity, as the grid backends' built-in N/O tie does; before, it stayed solar at every `neb_logZ_gas`, so [N II] 6584 / H-beta at 0.3 Z_sun was 2.2x the CloudyGrid value (now 0.88x; 1.06x at Z_sun). **Breaking:** `gas_logno` is now the offset from that relation (0 = the relation), like `neb_dno`, not an absolute [N/O]; Cue output at Z_sun is bit-identical. Migration: old absolute value `v` -> new offset `v - default_nitrogen_offset(gas_logz)` (`v` unchanged at Z_sun) (#2693).
+
 ### Added
 
 - `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).

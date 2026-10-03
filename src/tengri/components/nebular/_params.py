@@ -368,7 +368,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "gas_logno",
         Uniform(-2.0, 2.0, default=0.0),
-        "Cue [N/O] abundance ratio [dex]",
+        "Cue [N/O] offset from the default N/O-O/H relation [dex]",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
         units="dex",

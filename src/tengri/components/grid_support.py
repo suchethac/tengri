@@ -524,6 +524,37 @@ def describe_clipping(
     )
 
 
+def _cue_logno_shift(param_support: Mapping[str, tuple[float, float]]) -> tuple[float, float]:
+    """Range of the default N/O--O/H relation over the reachable ``neb_logZ_gas``.
+
+    ``gas_logno`` is an offset from that relation (#2693), while Cue's trained
+    [N/O] range is absolute, so the effective [N/O] a draw reaches is
+    ``gas_logno + relation(neb_logZ_gas)``. The relation increases with
+    metallicity, so its extremes sit at the metallicity bounds.
+    """
+    from tengri.components.nebular._default_nitrogen import default_nitrogen_offset
+
+    z_lo, z_hi = param_support.get("neb_logZ_gas", (0.0, 0.0))
+    return (float(default_nitrogen_offset(z_lo)), float(default_nitrogen_offset(z_hi)))
+
+
+#: ``(selector, name, param)`` -> function mapping the reachable parameter
+#: ranges to the ``(lo, hi)`` that is ADDED to this parameter's own range to
+#: obtain the quantity the registered support bounds. Used where the declared
+#: parameter is an offset but the support is absolute.
+SUPPORT_SHIFT: dict[tuple[str, str, str], Callable[..., tuple[float, float]]] = {
+    ("neb", "cue", "gas_logno"): _cue_logno_shift,
+}
+
+
+def support_shift(
+    selector: str, name: str, pname: str, param_support: Mapping[str, tuple[float, float]]
+) -> tuple[float, float]:
+    """The ``(lo, hi)`` added to ``pname``'s range to get the bounded quantity (0 if none)."""
+    fn = SUPPORT_SHIFT.get((selector, name, pname))
+    return (0.0, 0.0) if fn is None else fn(param_support)
+
+
 def check_grid_support(
     selected: Iterable[tuple[str, str]],
     param_support: Mapping[str, tuple[float, float]],
@@ -558,7 +589,17 @@ def check_grid_support(
             active = param_support.get(pname)
             if active is None:
                 continue
-            detail = describe_clipping(active, extent, extrapolates=extrapolates)
+            shift = support_shift(selector, name, pname, param_support)
+            if shift != (0.0, 0.0):
+                eff = (active[0] + shift[0], active[1] + shift[1])
+                detail = describe_clipping(eff, extent, extrapolates=extrapolates)
+                if detail is not None:
+                    detail = (
+                        f"the effective range (offset [{active[0]:g}, {active[1]:g}] plus the "
+                        f"default relation [{shift[0]:g}, {shift[1]:g}]): {detail}"
+                    )
+            else:
+                detail = describe_clipping(active, extent, extrapolates=extrapolates)
             if detail is not None:
                 findings.append((selector, name, pname, detail, extent))
     return findings
@@ -567,10 +608,12 @@ def check_grid_support(
 __all__ = [
     "EXTRAPOLATING_SUPPORT",
     "GRID_SUPPORT",
+    "SUPPORT_SHIFT",
     "GridSupportFn",
     "check_grid_support",
     "describe_clipping",
     "grid_support",
     "is_contained",
     "live_fraction",
+    "support_shift",
 ]

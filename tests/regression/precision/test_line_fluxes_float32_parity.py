@@ -80,8 +80,12 @@ _DUST_FREE = {
 #: 1e4, and both operators pinned here return observed-frame fluxes carrying the
 #: ``(1+z)/(4 pi d_L^2)`` dimming factor (max relative movement 2.27e-4, matching the
 #: luminosity-distance shift). 17 significant digits.
+#:
+#: Re-taken for #2693: the default ``neb_logZ_gas = -0.3`` now carries the
+#: metallicity-tied default [N/O] (-0.25 dex below solar) instead of solar N/O, which
+#: lowers the nitrogen lines (last entry -42 %) and shifts the others by <= 5 %.
 _CUE_F64_REF = np.array(
-    [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15, 5.3145048745591e-16]
+    [4.811025091779484e-16, 6.20859997887152e-16, 1.6973306406052117e-15, 3.087170876340019e-16]
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT

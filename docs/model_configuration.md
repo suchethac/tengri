@@ -387,6 +387,7 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 - Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
+- Cue's default nitrogen abundance [N/O] follows the Nicholls+2017 N/O--O/H relation at `neb_logZ_gas`, and `gas_logno` is an offset from it, not an absolute value. The grid backends embody their own (unrecorded) relation and `neb_dno` is an offset from that; the two agree at the N/[O II] level (Cue/grid 0.78-0.99 over `neb_logZ_gas` -1 to 0) (#2693).
 
 
 ### Shock emission: `shock`

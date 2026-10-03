@@ -1583,7 +1583,11 @@ class Parameters:
         """
         import warnings
 
-        from tengri.components.grid_support import EXTRAPOLATING_SUPPORT, check_grid_support
+        from tengri.components.grid_support import (
+            EXTRAPOLATING_SUPPORT,
+            check_grid_support,
+            support_shift,
+        )
         from tengri.config.exceptions import GridSupportWarning
 
         findings = check_grid_support(self._selected_grid_components(), param_support)
@@ -1597,7 +1601,8 @@ class Parameters:
                     "The prediction there is live but untrustworthy -- it is "
                     "extrapolating past where the model was validated."
                 )
-                remedy = f"Narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+                s_lo, s_hi = support_shift(selector, name, pname, param_support)
+                remedy = f"Narrow {pname} to [{g_lo - s_lo:g}, {g_hi - s_hi:g}]."
             else:
                 consequence = (
                     "The SED there is bit-identical to the edge node and the "

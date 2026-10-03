@@ -1731,7 +1731,7 @@ def _narrow_free_priors_to_grid(
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
     from tengri.parameters.priors import Uniform
 
     # Drive off the registry itself, so registering a component is the only
@@ -1747,7 +1747,12 @@ def _narrow_free_priors_to_grid(
             if not isinstance(dist, Uniform):
                 continue
             lo, hi = dist.bounds
-            new_lo, new_hi = max(lo, g_lo), min(hi, g_hi)
+            # An offset parameter (gas_logno, #2693) is bounded through its shift:
+            # the offset keeps the absolute quantity inside the support for every
+            # reachable value of the parameters the shift depends on.
+            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            s_lo, s_hi = support_shift(selector, name, pname, reach)
+            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
             if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
                 # Disjoint (nothing sensible to narrow to; let the warning
                 # say so) or already contained.
