@@ -340,6 +340,12 @@ def build_components(
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
+    # AGB circumstellar dust-shell weighting (#2534). Only set for a FREE
+    # agb_dust_weight: the ratio template resampled onto ``ssp_data``'s own
+    # (Z, age, wave) axes (see components/stellar/agb_dust_shell.py). A
+    # Fixed weight is baked directly into ``ssp_data`` by the caller
+    # (``SEDModel.__init__``) instead, so this stays None in that case.
+    agb_dust_ratio: Any | None = None,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -576,6 +582,7 @@ def build_components(
                 met_bin_edges_log_yr=met_bin_edges_log_yr,
             ),
             ssp_data=ssp_data,
+            agb_dust_ratio=agb_dust_ratio,
         )
     )
 
@@ -1327,6 +1334,11 @@ def state_to_sed_components(state: Any) -> dict:
           when the AGN component is absent OR uses a non-composable
           (monolithic) model, which has no separate sub-blocks to
           decompose.
+        - ``sed_agn_lines_attenuated``: the AGN line light as it enters the
+          SED (after the AGN's own screen and any host ``agn_screen``),
+          the part of ``sed_agn`` the spectrum projection broadens with the
+          instrument kernel alone (#2565); present for every AGN variant
+          (zeros without lines), zeros when no AGN component is present.
 
     Notes
     -----
@@ -1361,6 +1373,7 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
         "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
         "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_lines_attenuated": jnp.asarray(derived.get("sed_agn_lines_attenuated", zeros)),
         "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),

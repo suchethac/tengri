@@ -14,6 +14,7 @@ each node's absolute log10 Z:
 - ``ssp_lgmet``          (n_met,)               absolute :math:`\\log_{10}(Z)`
 - ``ssp_wave``           (n_wave,)              rest-frame wavelength [Å]
 - ``ssp_flux``           (n_met, n_age, n_wave) :math:`L_\\nu` [Lsun/Hz/Msun]
+  (``lsun_erg_per_s`` attribute: BAGPIPES's :math:`L_\\odot = 3.826\\times10^{33}` erg/s)
 - ``ssp_mass_remaining`` (n_met, n_age)         surviving stellar mass fraction
 
 References
@@ -36,7 +37,7 @@ import h5py
 import numpy as np
 from astropy.io import fits
 
-from .units import C_ANGSTROM_PER_S
+from .units import C_ANGSTROM_PER_S, L_SUN_ERG_PER_S
 
 # Bagpipes ships seven metallicity HDUs named ``ZMET_<x>ZSOL``. We hard-code
 # the numeric values so the script's output is reproducible without parsing
@@ -192,6 +193,9 @@ def repackage_bc03_miles(out_path: str | Path) -> Path:
         h.create_dataset("ssp_mass_remaining", data=mass_remaining.astype(np.float32))
 
         h.attrs["flux_units"] = "Lsun/Hz/Msun"
+        # The grid is in BAGPIPES's solar luminosity (3.826e33 erg/s), not the IAU 2015
+        # value tengri converts with; load_ssp_data reads this attribute and rescales.
+        h.attrs["lsun_erg_per_s"] = L_SUN_ERG_PER_S
         h.attrs["wave_units"] = "Angstrom"
         h.attrs["source"] = "bagpipes bc03_miles_stellar_grids.fits (repackaged)"
         h.attrs["imf"] = "Kroupa 2001"

@@ -660,6 +660,14 @@ class Parameters:
         self.shock_abundance = kwargs.pop("shock_abundance", "solar")
         self.shock_component = kwargs.pop("shock_component", "combined")
 
+        # AGB circumstellar dust-shell weighting (#2534). A tunable lever on
+        # the Villaume, Conroy & Johnson (2015) shell reprocessing FSPS bakes
+        # into MIST SSP grids at its own default weight (agb_dust=1.0). A
+        # static structural on/off flag (like ``shock`` above), not a traced
+        # free param; the one free param it gates in is ``agb_dust_weight``.
+        self.agb_dust = kwargs.pop("agb_dust", False)
+        self.agb_dust_model = kwargs.pop("agb_dust_model", "fsps_shell")
+
         # ── Metallicity ───────────────────────────────────────────
         self._init_metallicity_config(kwargs)
 
@@ -725,6 +733,7 @@ class Parameters:
             radio=self.radio,
             xray=self.xray,
             shock=self.shock,
+            agb_dust=self.agb_dust,
             igm_patchy=self.igm_patchy,
             dla=self.dla,
             met_mode=self.met_mode,
@@ -2608,6 +2617,8 @@ class Parameters:
             modules.append("xray")
         if getattr(self, "shock", False):
             modules.append("shock")
+        if getattr(self, "agb_dust", False):
+            modules.append(f"agb_dust={getattr(self, 'agb_dust_model', 'fsps_shell')}")
         dust_mdl = getattr(self, "dust_model", "two_component")
         if dust_mdl == "single_component":
             dust_law = getattr(self, "dust_law_bc", "power_law")
@@ -2765,6 +2776,8 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_nebular_mappings": content("nebular backend selection determines parameters"),
     "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
     "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),
+    "agb_dust": content("AGB dust-shell component flag determines parameters"),
+    "agb_dust_model": content("AGB dust-shell model determines parameters"),
     "agn_attenuation_block": content("AGN attenuation type determines parameters"),
     "agn_axis_grids": content("AGN axis grids determine parameters"),
     "agn_blr_block": content("AGN BLR type determines parameters"),

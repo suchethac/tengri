@@ -42,7 +42,13 @@ skip_no_db = pytest.mark.skipif(
     reason="dense_basis package not installed (pip install dense_basis)",
 )
 
+from astropy.cosmology import FlatLambdaCDM
+
 from tengri.components.stellar.sfh.dense_basis import dense_basis as dense_basis
+
+# The dense_basis package evaluates its tutorial shapes at zval=0 in
+# FlatLambdaCDM(H0=70, Om0=0.3); the comparison uses that same z = 0 universe.
+_PACKAGE_AGE_UNIVERSE_YR = float(FlatLambdaCDM(H0=70, Om0=0.3).age(0.0).to_value("yr"))
 
 # ── Test data: 6 canonical tutorial shapes (Iyer+2019) ────────────
 # Format: [log_M*, log_SFR_inst, Nparam, tx0, tx1, tx2]
@@ -95,6 +101,7 @@ def _compute_tengri_cumulative_mass(tx: tuple[float, ...], n_points: int = 500) 
         tx_frac_0=tx[0],
         tx_frac_1=tx[1],
         tx_frac_2=tx[2],
+        age_universe_yr=_PACKAGE_AGE_UNIVERSE_YR,
     )
     # age_yr is ascending in lookback time (young → old).
     # We want cumulative mass from oldest to youngest (cosmic time order).
@@ -209,6 +216,7 @@ class TestDenseBasisCrossval:
             tx_frac_0=tx[0],
             tx_frac_1=tx[1],
             tx_frac_2=tx[2],
+            age_universe_yr=_PACKAGE_AGE_UNIVERSE_YR,
         )
         peak_tengri_gyr = float(age_yr[jnp.argmax(sfr_tengri)] / 1e9)
 
