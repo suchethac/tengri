@@ -71,6 +71,58 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return y0 + (y1 - y0) * t
 
 
+def subband_edges(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    n_subbands: int,
+    lyc_edge_obs: float | None = None,
+) -> np.ndarray:
+    """Edges of the K equal-filter-mass sub-bands, observed frame [Angstrom].
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid, observed frame [Angstrom].
+    tw_grid : ndarray, shape (m,)
+        Transmission x filter weight on ``grid`` [dimensionless].
+    n_subbands : int
+        Number of sub-bands K.
+    lyc_edge_obs : float or None, optional
+        Observed-frame Lyman-limit wavelength forced in as an extra edge
+        (see :func:`subband_quadrature`).
+
+    Returns
+    -------
+    ndarray, shape (K+1,) or (K+2,)
+        Sub-band edges, ``K+2`` wide when ``lyc_edge_obs`` is given.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time numpy precompute.
+    """
+    K = int(n_subbands)
+    cum_w = _cumtrapz_rows(tw_grid, grid)
+    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
+    if lyc_edge_obs is not None:
+        # Clamp into [grid[0], grid[-1]] before inserting: ``_interp_rows``
+        # (used by ``subband_quadrature``) is NOT a clip-at-the-boundary
+        # interpolator like ``np.interp`` (its docstring only covers in-domain
+        # queries) -- for xq outside [x[0], x[-1]] it LINEARLY EXTRAPOLATES
+        # using the nearest segment's slope, clamping only the segment INDEX,
+        # not the query itself. An un-clamped forced edge outside the filter's own support (any
+        # filter the Lyman limit does not straddle at this redshift, e.g.
+        # every far-IR band) would then get a genuinely extrapolated
+        # (wrong, generally nonzero) cumulative value at that edge instead
+        # of the boundary's own value, breaking the "one zero-integral
+        # chunk instead" guarantee below and, with it, flux conservation
+        # (measured: up to 1.3e-3 relative on a 100 um filter). Clamping
+        # here, not fixing ``_interp_rows`` itself, keeps every OTHER
+        # caller of that helper (unrelated to this fix) untouched.
+        clamped_edge = float(np.clip(lyc_edge_obs, grid[0], grid[-1]))
+        edges = np.sort(np.concatenate([edges, [clamped_edge]]))
+    return edges
+
+
 def subband_quadrature(
     grid: np.ndarray,
     tw_grid: np.ndarray,
@@ -156,27 +208,7 @@ def subband_quadrature(
     fractional interval at every edge: the sub-integrals stop summing to the
     whole and the quadrature error then GROWS with K. Conservation is asserted.
     """
-    K = int(n_subbands)
-    cum_w = _cumtrapz_rows(tw_grid, grid)
-    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
-    if lyc_edge_obs is not None:
-        # Clamp into [grid[0], grid[-1]] before inserting: ``_interp_rows``
-        # below is NOT a clip-at-the-boundary interpolator like ``np.interp``
-        # (its docstring only covers in-domain queries) -- for xq outside
-        # [x[0], x[-1]] it LINEARLY EXTRAPOLATES using the nearest segment's
-        # slope, clamping only the segment INDEX, not the query itself. An
-        # un-clamped forced edge outside the filter's own support (any
-        # filter the Lyman limit does not straddle at this redshift, e.g.
-        # every far-IR band) would then get a genuinely extrapolated
-        # (wrong, generally nonzero) cumulative value at that edge instead
-        # of the boundary's own value, breaking the "one zero-integral
-        # chunk instead" guarantee below and, with it, flux conservation
-        # (measured: up to 1.3e-3 relative on a 100 um filter). Clamping
-        # here, not fixing ``_interp_rows`` itself, keeps every OTHER
-        # caller of that helper (unrelated to this fix) untouched.
-        clamped_edge = float(np.clip(lyc_edge_obs, grid[0], grid[-1]))
-        edges = np.sort(np.concatenate([edges, [clamped_edge]]))
-
+    edges = subband_edges(grid, tw_grid, n_subbands, lyc_edge_obs)
     cum_sw = _cumtrapz_rows(integrand, grid)
     cum_lsw = _cumtrapz_rows(integrand * grid, grid)
     i_k = np.diff(_interp_rows(edges, grid, cum_sw), axis=-1)

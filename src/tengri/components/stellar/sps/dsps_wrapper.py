@@ -527,6 +527,14 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
     path: it walks every ancestor for a ``data/`` directory, honors
     ``$TENGRI_DATA_DIR``, and so does not depend on the working directory.
 
+    **Surviving-mass fraction resolution** (ssp_mass_remaining): The function
+    resolves ``ssp_mass_remaining`` in three steps: (1) use the file's own table
+    if present; (2) use the packaged Z-dependent table when the grid is FSPS
+    MIST + Chabrier with matching age and metallicity nodes; (3) synthesize
+    the Z-independent DSPS sigmoid approximation. The table (step 2) provides
+    metallicity dependence for FSPS MIST grids; all other grids get the
+    metallicity-independent sigmoid.
+
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
 
@@ -666,13 +674,29 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         if "ssp_mass_remaining" in f:
             mass_remaining = _load_float(f["ssp_mass_remaining"], dtype=dtype)
         else:
-            mass_remaining = _synthesize_mass_remaining(
-                filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
+            # Try the reference table first (FSPS MIST + Chabrier)
+            mass_remaining = _reference_mass_remaining(
+                fp.stem,
+                imf,
+                ssp_lg_age_gyr,
+                ssp_lgmet,
+                has_alpha_axis="ssp_alpha_fe" in f,
             )
-            # The synthesizer works at default precision; honor the request so
-            # every array in the returned grid shares one dtype.
-            if dtype is not None and mass_remaining is not None:
-                mass_remaining = jnp.asarray(mass_remaining, dtype=dtype)
+            if mass_remaining is not None:
+                # Convert reference table to JAX array with proper dtype handling
+                mass_remaining = jnp.asarray(
+                    mass_remaining,
+                    dtype=dtype if dtype is not None else jnp.result_type(float),
+                )
+            else:
+                # Fall back to DSPS sigmoid (metallicity-independent)
+                mass_remaining = _synthesize_mass_remaining(
+                    filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
+                )
+                # The synthesizer works at default precision; honor the request so
+                # every array in the returned grid shares one dtype.
+                if dtype is not None and mass_remaining is not None:
+                    mass_remaining = jnp.asarray(mass_remaining, dtype=dtype)
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
@@ -913,6 +937,130 @@ def _wave_matches_reference(query_wave: np.ndarray, ref_wave: np.ndarray) -> boo
     )
 
 
+#: SSP mass-remaining (surviving-fraction) reference tables (#2614): maps the
+#: (isochrone, IMF) pair to the package-data file holding the per-age,
+#: per-metallicity surviving-mass fractions. FSPS MIST + Chabrier only.
+#: ``load_ssp_data`` uses this table when available and the grid's age and
+#: metallicity nodes match it exactly; grids without a matching table get the
+#: metallicity-independent DSPS sigmoid approximation instead.
+_MASS_REMAINING_DATA_FILES: dict[tuple[str, str], str] = {
+    ("mist", "chabrier"): "fsps_mist_chabrier.dat",
+}
+
+
+@cache
+def _load_mass_remaining_reference(
+    key: tuple[str, str],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Load a mass-remaining reference table from package data.
+
+    Parameters
+    ----------
+    key : tuple of str
+        Tuple of (isochrone, IMF) into :data:`_MASS_REMAINING_DATA_FILES`.
+
+    Returns
+    -------
+    log_age_yr : ndarray, shape (n_age,)
+        Logarithm of age in years [log10(yr)].
+    lgmet_absolute : ndarray, shape (n_met,)
+        Logarithm of absolute metallicity [log10(Z)].
+    table : ndarray, shape (n_met, n_age)
+        Surviving stellar-mass fraction at each (metallicity, age) node.
+    """
+    from importlib.resources import files
+
+    path = files("tengri.data.ssp_mass_remaining") / _MASS_REMAINING_DATA_FILES[key]
+    with path.open("r") as fh:
+        lines = fh.readlines()
+
+    # Skip comment lines (starting with #)
+    data_lines = [line for line in lines if not line.strip().startswith("#")]
+
+    # Parse header rows and data rows
+    data = [np.fromstring(line, sep=" ") for line in data_lines]
+    log_age_yr = data[0]
+    z_absolute = data[1]
+    table = np.array(data[2:])
+
+    lgmet_absolute = np.log10(z_absolute)
+    for arr in (log_age_yr, lgmet_absolute, table):
+        arr.flags.writeable = False
+    return log_age_yr, lgmet_absolute, table
+
+
+def _reference_mass_remaining(
+    filename_stem: str,
+    imf: str,
+    ssp_lg_age_gyr: np.ndarray,
+    ssp_lgmet: np.ndarray,
+    has_alpha_axis: bool = False,
+) -> np.ndarray | None:
+    """Return the table-supplied mass-remaining data when all conditions match.
+
+    Checks whether the filename's first token (pre-first-underscore) is
+    ``"fsps"`` or ``"ssp"`` (python-fsps products only; never ``"pgny"``,
+    ``"bpss"``, ``"bc03"``), the isochrone token matches a key in
+    :data:`_MASS_REMAINING_DATA_FILES`, the IMF matches, and the age and
+    metallicity grids match the table's nodes exactly (``rtol=0``, ``atol=1e-6``
+    in log-space). Age-0 anchors (``-inf`` log age) or any mismatch returns
+    ``None``, falling back to the DSPS sigmoid. A grid with an [alpha/Fe] axis
+    also returns ``None``: the table is (n_met, n_age), not (n_met, n_alpha, n_age).
+
+    Parameters
+    ----------
+    filename_stem : str
+        SSP HDF5 filename without the ``.h5`` extension.
+    imf : str
+        IMF token from filename or HDF5 attribute.
+    ssp_lg_age_gyr : ndarray, shape (n_age,)
+        Log10 SSP ages [Gyr].
+    ssp_lgmet : ndarray, shape (n_met,)
+        Log10 absolute SSP metallicity [Z, dimensionless].
+    has_alpha_axis : bool, optional
+        Whether the grid carries an [alpha/Fe] axis (``ssp_alpha_fe``).
+
+    Returns
+    -------
+    table : ndarray, shape (n_met, n_age) or None
+        Surviving-mass fraction table, or ``None`` if any condition fails.
+    """
+    first_token = filename_stem.split("_")[0].lower()
+    if first_token not in ("fsps", "ssp") or has_alpha_axis:
+        return None
+
+    isochrones = {iso for iso, _ in _MASS_REMAINING_DATA_FILES}
+    tokens = filename_stem.split("_")
+    isochrone = next((t.lower() for t in tokens if t.lower() in isochrones), None)
+    if isochrone is None:
+        return None
+
+    # "Chabrier (2003)" -> "chabrier"
+    imf_normalized = (imf.lower().split() or ["unknown"])[0] if isinstance(imf, str) else "unknown"
+
+    key = (isochrone, imf_normalized)
+    if key not in _MASS_REMAINING_DATA_FILES:
+        return None
+
+    log_age_yr_ref, lgmet_ref, table_ref = _load_mass_remaining_reference(key)
+
+    lg_age_yr = ssp_lg_age_gyr + 9.0
+
+    if not np.isfinite(lg_age_yr).all():
+        return None
+
+    age_match = lg_age_yr.shape == log_age_yr_ref.shape and np.allclose(
+        lg_age_yr, log_age_yr_ref, rtol=0.0, atol=1e-6
+    )
+    met_match = ssp_lgmet.shape == lgmet_ref.shape and np.allclose(
+        ssp_lgmet, lgmet_ref, rtol=0.0, atol=1e-6
+    )
+
+    if age_match and met_match:
+        return table_ref
+    return None
+
+
 def _resolve_ssp_resolution(
     ssp_wave: jnp.ndarray, library_key: str
 ) -> tuple[jnp.ndarray, np.ndarray]:
@@ -1009,9 +1157,9 @@ def _synthesize_mass_remaining(
     Returns
     -------
     array, shape (n_met, n_age)
-        Surviving mass fraction broadcast over the metallicity axis (Z
-        dependence is dropped here by design; the table-supplied version,
-        when present, is what carries it).
+        Surviving mass fraction broadcast over the metallicity axis (metallicity
+        dependence is dropped here by design; the packaged table-supplied
+        version, when present, is what carries Z dependence).
     """
     import warnings
 
