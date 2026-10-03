@@ -263,16 +263,19 @@ class TestMixedMask:
 class TestCensoredWithFcal:
     """Tests for censored likelihood with calibration floor."""
 
-    def test_fcal_increases_sigma_reduces_upper_limit_penalty(self):
-        """Larger σ_eff → z-score lower → less penalty for upper limit."""
+    def test_fcal_does_not_change_upper_limit_penalty(self):
+        """A limit is scored at sigma_obs, so its term does not depend on f_cal."""
+        import math
+
         data = jnp.array([5.0])
         noise = jnp.array([1.0])
         predicted = jnp.array([8.0])  # above limit
         mask = jnp.array([UPPER_LIMIT])
+        expected = -math.log(0.5 * (1.0 + math.erf((5.0 - 8.0) / (1.0 * math.sqrt(2.0)))))
 
-        e_no_cal = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
-        e_with_cal = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.5)
-        assert float(e_with_cal) < float(e_no_cal)
+        for f_cal in (0.0, 0.5):
+            e = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=f_cal)
+            npt.assert_allclose(float(e), expected, rtol=1e-12)
 
     def test_fcal_zero_matches_no_fcal(self):
         data = jnp.array([5.0, 3.0])
