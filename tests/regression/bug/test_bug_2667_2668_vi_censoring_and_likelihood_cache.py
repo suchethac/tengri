@@ -289,6 +289,7 @@ def map_means(ssp, truth):
     }
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("method", sorted(_MAIN_DETECTION_MEAN))
 def test_vi_with_a_satisfied_limit_matches_map_and_not_the_detection_fit(
     ssp, truth, map_means, method
@@ -307,6 +308,7 @@ def test_vi_with_a_satisfied_limit_matches_map_and_not_the_detection_fit(
     assert abs(mean - map_means["detection"]) > 0.1
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("method", sorted(_MAIN_DETECTION_MEAN))
 def test_vi_without_a_mask_is_unchanged_from_main(ssp, truth, method):
     """No ``data_mask``: the posterior mean is the value main returns.
@@ -348,6 +350,7 @@ def test_a_free_noise_model_with_an_all_detected_mask_is_not_refused(ssp, truth)
 _REUSE_TOL = 1e-3
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("free_noise", [False, True], ids=["fixed_noise", "free_noise"])
 @pytest.mark.parametrize("method", ["vi_nonlinear_fast", "vi_linear"])
 def test_two_fitters_on_one_model_each_fit_their_own_data(ssp, truth, method, free_noise):
@@ -424,6 +427,7 @@ def test_every_registered_backend_has_a_declared_data_mask_family():
     assert not stale, f"data_mask classification names unregistered backend(s): {stale}"
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", sorted(_BACKENDS))
 def test_each_registered_backend_honors_or_refuses_data_mask(ssp, truth, loss_seam_cases, name):
     """Loss-reading backends: loss energies equal the closed form. VI backends: refuse by name.
@@ -449,6 +453,7 @@ def test_each_registered_backend_honors_or_refuses_data_mask(ssp, truth, loss_se
 # ── #2668 sibling: the hmc_is evidence evaluation is cached on the model ─────
 
 
+@pytest.mark.slow
 def test_hmc_is_evidence_on_a_reused_model_scores_its_own_data(ssp, truth):
     """``hmc_is`` on one model object: the second data set's log Z equals a fresh model's.
 
