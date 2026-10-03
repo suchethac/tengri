@@ -392,7 +392,8 @@ def dense_basis(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     log_sfr_inst: float = 0.0,
-    age_universe_yr: float = 13.47e9,
+    *,
+    age_universe_yr: float,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
     """Non-parametric GP star formation history via mass-time quantiles (Iyer+2017, 2019).
@@ -413,9 +414,10 @@ def dense_basis(
         log10(instantaneous SFR at observation / Msun/yr). Default: 0.0 (1 Msun/yr).
         Used to add 3 constraint points near t=1 (today) that pin the recent SFH
         shape to be consistent with the observed instantaneous SFR.
-    age_universe_yr : float, optional
-        Age of the universe at observation epoch [yr].
-        Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
+    age_universe_yr : float
+        Age of the universe at the source redshift [yr]. Derived from the
+        source redshift and the configured cosmology by the caller
+        (component.py apply() and compute_joint_weights()).
     **tx_kwargs
         Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ..., ``tx_frac_{N-1}``
         containing cosmic time fractions at which the galaxy formed specified
@@ -452,8 +454,10 @@ def dense_basis(
        pin the recent SFH to be consistent with the instantaneous SFR at observation,
        via Equations 140-152 in dense_basis.py.
 
-    The default ``age_universe_yr=13.47e9`` is calibrated to FlatLambdaCDM with
-    H0=70 km/s/Mpc and Omega_m=0.3 at z=0. Override for other cosmologies or redshifts.
+    The caller passes ``age_universe_yr``, the age of the universe at the
+    galaxy's redshift in the configured cosmology. The tx quantiles are fractions
+    of that age (Iyer et al. 2019 [2]_), so the star formation history spans
+    :math:`[0, t_{\\mathrm{age}}(z)]` and the declared mass forms inside it.
 
     **Approximation**: The SFR is computed using discrete differences on the
     GP-interpolated mass curve, matching the original dense_basis implementation.
@@ -608,7 +612,8 @@ def _build_quantile_points_pure(
 def dense_basis_pure(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
-    age_universe_yr: float = 13.47e9,
+    *,
+    age_universe_yr: float,
     **tx_kwargs: float,
 ) -> jnp.ndarray:
     """Pure quantile-based SFH using monotone cubic Hermite interpolation (PCHIP).
@@ -625,9 +630,10 @@ def dense_basis_pure(
         Lookback time grid [yr].
     log_total_mass : float, optional
         log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
-    age_universe_yr : float, optional
-        Age of the universe at observation epoch [yr].
-        Default: 13.47e9 (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
+    age_universe_yr : float
+        Age of the universe at the source redshift [yr]. Derived from the
+        source redshift and the configured cosmology by the caller
+        (component.py apply() and compute_joint_weights()).
     **tx_kwargs
         Keyword arguments ``tx_frac_0``, ``tx_frac_1``, ..., ``tx_frac_{N-1}``
         containing cosmic time fractions [dimensionless, in (0,1)].
