@@ -6,7 +6,7 @@
   limit contributes ln Phi((F - m)/sigma) and a lower limit ln Phi((m - F)/sigma)
   (F the limit value, m the model flux, sigma the flux uncertainty), evaluated
   with a log-CDF with no floor, so a strongly violated limit keeps a finite value
-  and gradient. `LineFluxData.log_likelihood` honours `is_lower_limit`,
+  and gradient. `LineFluxData.log_likelihood` honors `is_lower_limit`,
   `LineFluxData.chi2` sums detections only, and the joint/spectroscopy loss scores
   the line-flux term through `censored_neg_log_likelihood` when the data carry
   limit flags (#2665, #2666).
@@ -1908,7 +1908,7 @@
   immediately. On unstamped grids (`ssp_data.nebular == "unknown"`), it emits
   `BakedInNebularGridWarning` naming `tools/stamp_ssp_nebular_attrs.py` for
   disambiguation. The grid-status warning is a `BakedInNebularWarning` subclass
-  and honours `suppress` and an explicit `neb` declaration; the bare-grid
+  and honors `suppress` and an explicit `neb` declaration; the bare-grid
   refusal does not fire when nebular emission is off (#2362).
 
 - Both unwired guards are wired and the class is closed (#2326):
