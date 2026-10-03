@@ -7,12 +7,26 @@ and redshift consistency against exact closures integrated on a wide fine grid.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.dust._params import PARAMS as _DUST_PARAMS
+
 pytestmark = pytest.mark.contract
+
+
+def _get_param_bounds(param_name: str) -> tuple[float, float]:
+    """Extract (lower, upper) bounds from a parameter's free_prior."""
+    for p in _DUST_PARAMS:
+        if (
+            p.name == param_name
+            and hasattr(p, "free_prior")
+            and p.free_prior is not None
+            and hasattr(p.free_prior, "lo")
+        ):
+            return float(p.free_prior.lo), float(p.free_prior.hi)
+    raise ValueError(f"Parameter {param_name} has no bounded free_prior in PARAMS")
 
 
 def tophat(lo_um, hi_um):
@@ -47,16 +61,22 @@ def test_off_node_accuracy_default_grids(model):
     """Off-node accuracy at default grids: issue query and 12 random points."""
     rng = np.random.RandomState(42)
 
-    # Axis parameter bounds (from prior registry)
+    # Axis parameter bounds from declared priors
     if model == "modified_blackbody":
-        axis_bounds = {"dust_T": (10.0, 100.0), "dust_beta_ir": (1.0, 2.5)}
+        T_lo, T_hi = _get_param_bounds("dust_T")
+        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+        axis_bounds = {"dust_T": (T_lo, T_hi), "dust_beta_ir": (beta_lo, beta_hi)}
         kw_issue = {"dust_T": 47.3, "dust_beta_ir": 1.65}
     elif model == "casey2012":
+        T_lo, T_hi = _get_param_bounds("dust_T")
+        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+        alpha_lo, alpha_hi = _get_param_bounds("dust_alpha_mir")
+        lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
         axis_bounds = {
-            "dust_T": (10.0, 100.0),
-            "dust_beta_ir": (1.0, 2.5),
-            "dust_alpha_mir": (0.5, 3.5),
-            "dust_lambda_0_um": (50.0, 300.0),
+            "dust_T": (T_lo, T_hi),
+            "dust_beta_ir": (beta_lo, beta_hi),
+            "dust_alpha_mir": (alpha_lo, alpha_hi),
+            "dust_lambda_0_um": (lambda_lo, lambda_hi),
         }
         kw_issue = {
             "dust_T": 47.3,
@@ -65,10 +85,13 @@ def test_off_node_accuracy_default_grids(model):
             "dust_lambda_0_um": 130.0,
         }
     elif model == "graybody":
+        T_lo, T_hi = _get_param_bounds("dust_T")
+        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+        lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
         axis_bounds = {
-            "dust_T": (10.0, 100.0),
-            "dust_beta_ir": (1.0, 2.5),
-            "dust_lambda_0_um": (50.0, 300.0),
+            "dust_T": (T_lo, T_hi),
+            "dust_beta_ir": (beta_lo, beta_hi),
+            "dust_lambda_0_um": (lambda_lo, lambda_hi),
         }
         kw_issue = {"dust_T": 47.3, "dust_beta_ir": 1.65, "dust_lambda_0_um": 130.0}
 
@@ -108,7 +131,12 @@ def test_on_node_exactness(model):
         beta_grid = np.array([1.5, 1.8, 2.0])
         grids = {"T_grid": T_grid, "beta_grid": beta_grid}
     elif model == "casey2012":
-        kw = {"dust_T": 25.0, "dust_beta_ir": 1.8, "dust_alpha_mir": 2.0, "dust_lambda_0_um": 150.0}
+        kw = {
+            "dust_T": 25.0,
+            "dust_beta_ir": 1.8,
+            "dust_alpha_mir": 2.0,
+            "dust_lambda_0_um": 150.0,
+        }
         T_grid = np.array([25.0, 35.0, 60.0])
         beta_grid = np.array([1.5, 1.8, 2.0])
         alpha_mir_grid = np.array([1.5, 2.0, 2.5])
@@ -167,7 +195,6 @@ def test_wien_tail_accuracy(model):
 
 def test_band_coverage_refusal():
     """Bands outside rest grid are refused with a ValueError naming band and range."""
-    from tengri.components.dust import dust_analytic_precompute as adapter
 
     # 12-20 mm is outside the default continuum grid (100 Å - 10 mm)
     kw = {"dust_T": 20.0, "dust_beta_ir": 1.5}
@@ -199,9 +226,7 @@ def test_pah_drude_coverage():
 
     WIDE = np.geomspace(1e2, 1e8, 40000)
     wide_pah = np.asarray(M["pah_drude"](jnp.asarray(WIDE), 1.0), dtype=float)
-    ex = np.trapezoid(np.interp(fw, WIDE, wide_pah) * ft / fw, fw) / np.trapezoid(
-        ft / fw, fw
-    )
+    ex = np.trapezoid(np.interp(fw, WIDE, wide_pah) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
 
     lkp = float(np.asarray(adapter.build_lookup(res, model="pah_drude")(1.0)).ravel()[0])
     ratio = lkp / ex
@@ -229,9 +254,7 @@ def test_redshift_off_node():
 
     # Lookup at redshift z
     res = adapter.precompute([fw], [ft], z, None, model="modified_blackbody")
-    lkp = float(
-        np.asarray(adapter.build_lookup(res, model="modified_blackbody")(1.0)).ravel()[0]
-    )
+    lkp = float(np.asarray(adapter.build_lookup(res, model="modified_blackbody")(1.0)).ravel()[0])
 
     ratio = lkp / ex
     assert abs(ratio - 1.0) < 1e-3, (

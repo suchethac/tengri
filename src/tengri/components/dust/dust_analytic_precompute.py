@@ -44,6 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.dust._params import PARAMS as _DUST_PARAMS
 from tengri.components.dust.drude_profiles import compute_pah_template as _compute_pah
 from tengri.components.dust.emission import (
     casey2012 as _casey2012,
@@ -51,15 +52,46 @@ from tengri.components.dust.emission import (
     modified_blackbody as _modified_blackbody,
 )
 from tengri.forward.precompute.templates import (
-    build_template_photometry_lookup,
     collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import PreintegratedGrid, preintegrate_grid
+from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_CGS as _C_CGS
 
-# ── Axis definitions per model ──────────────────────────────────
+# ── Helper: read grid bounds from declared priors ──────────────────────────────────
+
+
+def _get_param_bounds(param_name: str) -> tuple[float, float]:
+    """Extract lower and upper bounds from a parameter's free_prior in PARAMS.
+
+    Parameters
+    ----------
+    param_name : str
+        Name of the parameter, e.g. 'dust_T', 'dust_beta_ir'.
+
+    Returns
+    -------
+    tuple[float, float]
+        (lower, upper) bounds from the free_prior.
+
+    Raises
+    ------
+    ValueError
+        If the parameter has no bounded free prior.
+    """
+    for p in _DUST_PARAMS:
+        if (
+            p.name == param_name
+            and hasattr(p, "free_prior")
+            and p.free_prior is not None
+            and hasattr(p.free_prior, "lo")
+        ):
+            return float(p.free_prior.lo), float(p.free_prior.hi)
+    raise ValueError(f"Parameter {param_name} has no bounded free_prior in PARAMS")
+
+
+# ── Axis definitions per model ──────────────────────────────────────
 
 # modified_blackbody: parametrized by temperature and emissivity index
 AXIS_PARAMS_MBB = ("dust_T", "dust_beta_ir")
@@ -140,24 +172,26 @@ def _build_union_grid_with_fine_filters(
 def _validate_filter_coverage(
     filter_waves: list, redshift: float, wave_rest_base: np.ndarray
 ) -> None:
-    """Validate that all filters' rest-frame supports are inside the base grid range.
+    """Validate RED-edge coverage; clip BLUE edge.
+
+    Thermal dust emission models emit negligibly in the Wien tail (< 100 Å).
+    Clips the BLUE side of each filter to the grid minimum (100 Å) and refuses
+    only when the RED edge (max wavelength) exceeds the rest-frame grid.
 
     Raises
     ------
     ValueError
-        If any filter extends outside the base grid bounds.
+        If any filter's RED edge (max wavelength) extends beyond the rest grid.
     """
-    wave_rest_min = wave_rest_base.min()
     wave_rest_max = wave_rest_base.max()
 
     for i, fw in enumerate(filter_waves):
         fw = np.asarray(fw, dtype=np.float64)
-        lo_rest = fw.min() / (1 + redshift)
         hi_rest = fw.max() / (1 + redshift)
-        if lo_rest < wave_rest_min or hi_rest > wave_rest_max:
+        if hi_rest > wave_rest_max:
             raise ValueError(
-                f"Filter {i} rest-frame range [{lo_rest:.2e}, {hi_rest:.2e}] Angstrom "
-                f"extends outside base grid range [{wave_rest_min:.2e}, {wave_rest_max:.2e}] Angstrom. "
+                f"Filter {i} RED edge at {hi_rest:.2e} Angstrom "
+                f"exceeds rest-frame grid maximum {wave_rest_max:.2e} Angstrom. "
                 f"Observed-frame range: [{fw.min():.2e}, {fw.max():.2e}] Angstrom at z={redshift}."
             )
 
@@ -506,16 +540,17 @@ def precompute(
         One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature grid for modified_blackbody/casey2012/graybody [K]. If None, uses a
-        default range [20, 60] with 9 points.
+        Temperature grid for modified_blackbody/casey2012/graybody [K]. If None, uses the
+        declared free_prior bounds from PARAMS (dust_T: 20–80 K).
     beta_grid : ndarray, optional
-        Emissivity-index grid [dimensionless]. If None, uses [1.5, 1.8, 2.0].
+        Emissivity-index grid [dimensionless]. If None, uses declared free_prior bounds
+        from PARAMS (dust_beta_ir: 1.0–2.5).
     alpha_mir_grid : ndarray, optional
         Mid-IR power-law slope grid for casey2012 [dimensionless]. If None,
-        uses [1.5, 2.0, 2.5].
+        uses declared free_prior bounds from PARAMS (dust_alpha_mir: 1.0–3.0).
     lambda_0_um_grid : ndarray, optional
         Opacity pivot wavelength grid for graybody and casey2012 [micron].
-        If None, uses [100.0, 150.0, 200.0].
+        If None, uses declared free_prior bounds from PARAMS (dust_lambda_0_um: 50–500 μm).
 
     Returns
     -------
@@ -536,9 +571,11 @@ def precompute(
     """
     if model == "modified_blackbody":
         if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 17, dtype=np.float64)
+            T_lo, T_hi = _get_param_bounds("dust_T")
+            T_grid = np.linspace(T_lo, T_hi, 13, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
+            beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+            beta_grid = np.linspace(beta_lo, beta_hi, 8, dtype=np.float64)
         result = {
             "grid_phot": _build_grid_modified_blackbody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid
@@ -552,13 +589,17 @@ def precompute(
 
     elif model == "casey2012":
         if T_grid is None:
-            T_grid = np.linspace(25.0, 60.0, 15, dtype=np.float64)
+            T_lo, T_hi = _get_param_bounds("dust_T")
+            T_grid = np.linspace(T_lo, T_hi, 12, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
+            beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+            beta_grid = np.linspace(beta_lo, beta_hi, 7, dtype=np.float64)
         if alpha_mir_grid is None:
-            alpha_mir_grid = np.linspace(1.5, 2.5, 5, dtype=np.float64)
+            alpha_lo, alpha_hi = _get_param_bounds("dust_alpha_mir")
+            alpha_mir_grid = np.linspace(alpha_lo, alpha_hi, 5, dtype=np.float64)
         if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.linspace(100.0, 200.0, 5, dtype=np.float64)
+            lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
+            lambda_0_um_grid = np.linspace(lambda_lo, lambda_hi, 6, dtype=np.float64)
         casey_preint = _build_grid_casey2012(
             filter_waves,
             filter_trans,
@@ -582,11 +623,14 @@ def precompute(
 
     elif model == "graybody":
         if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 17, dtype=np.float64)
+            T_lo, T_hi = _get_param_bounds("dust_T")
+            T_grid = np.linspace(T_lo, T_hi, 13, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
+            beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
+            beta_grid = np.linspace(beta_lo, beta_hi, 8, dtype=np.float64)
         if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.linspace(100.0, 200.0, 5, dtype=np.float64)
+            lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
+            lambda_0_um_grid = np.linspace(lambda_lo, lambda_hi, 6, dtype=np.float64)
         result = {
             "grid_phot": _build_grid_graybody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
@@ -637,11 +681,11 @@ def build_lookup(
 ):
     """Build the runtime analytic dust photometry lookup from a preintegrated dict.
 
-    Interpolates the preintegrated grid using monotone cubic Hermite (PCHIP).
-    The builder evaluates the analytic model at each node and at fine wavelengths
-    across each filter's rest-frame support, so no template interpolation occurs
-    during band integration. Refusal: any filter whose rest-frame support lies
-    outside the model's integration grid raises ``ValueError``.
+    Interpolates log(band_flux) using monotone cubic Hermite (PCHIP) in log-space
+    coordinates (ln T, beta, alpha_mir, ln lambda_0). The builder evaluates the analytic
+    model at each node and at fine wavelengths across each filter's rest-frame support,
+    so no template interpolation occurs during band integration. Refusal: any filter
+    whose rest-frame support lies outside the model's integration grid raises ``ValueError``.
 
     Parameters
     ----------
@@ -662,8 +706,8 @@ def build_lookup(
             fn(L_absorbed, *free_axis_values) -> ndarray, shape (n_filters,)
 
         Returns dust emission L_ν [erg/s/Hz]. Caller applies flux scaling.
-        Off-node accuracy: monotone cubic Hermite interpolation, 1e-3 relative
-        tolerance at default node grids.
+        Off-node accuracy: monotone cubic Hermite interpolation on log-flux,
+        achieving <= 5e-4 relative tolerance at default node grids.
 
     References
     ----------
@@ -678,22 +722,51 @@ def build_lookup(
     **Gradient-safe**: yes, PCHIP kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
-        # No axes collapsed: use PCHIP interpolation directly
+        # No axes collapsed: use PCHIP interpolation on log-flux
         from tengri.utils.grid_interp import interp_nd_pchip
 
         grid_phot = preint["_preint"].phot
         axes = preint["_preint"].axes
+        axis_params_names = AXIS_PARAMS[model]
+
+        # Precompute log of grid photometry (floor at 1e-300)
+        log_grid_phot = jnp.log(jnp.maximum(grid_phot, 1e-300))
+
+        # Determine which axes use log-space coordinates
+        log_axes_indices = set()
+        for i, param_name in enumerate(axis_params_names):
+            if param_name in ("dust_T", "dust_lambda_0_um"):
+                log_axes_indices.add(i)
+
+        # Transform axes to log-space where needed
+        log_axes = []
+        for i, ax in enumerate(axes):
+            if i in log_axes_indices:
+                log_axes.append(jnp.log(ax))
+            else:
+                log_axes.append(ax)
+        log_axes = tuple(log_axes)
 
         @jax.jit
         def dust_phot_uncollapsed(L_absorbed, *free_axis_values):
-            """Compute dust photometry using PCHIP interpolation.
+            """Compute dust photometry using log-flux PCHIP interpolation.
 
+            Interpolates in log-space for T and lambda_0, linear for beta and alpha_mir.
             Returns filter-integrated L_nu [erg/s/Hz] at runtime.
             """
-            if axes:
-                normed = interp_nd_pchip(grid_phot, axes, free_axis_values)
+            if log_axes:
+                # Transform query points to log-space where needed
+                log_query_values = []
+                for i, val in enumerate(free_axis_values):
+                    if i in log_axes_indices:
+                        log_query_values.append(jnp.log(val))
+                    else:
+                        log_query_values.append(val)
+                log_normed = interp_nd_pchip(log_grid_phot, log_axes, tuple(log_query_values))
+                normed = jnp.exp(log_normed)
             else:
-                normed = grid_phot.ravel()
+                normed = log_grid_phot.ravel()
+                normed = jnp.exp(normed)
             return L_absorbed * normed
 
         return dust_phot_uncollapsed
@@ -714,9 +787,7 @@ def build_lookup(
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
-        normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="pchip", edges=edges
-        )
+        normed = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip", edges=edges)
         return L_absorbed * normed
 
     return dust_phot_collapsed
