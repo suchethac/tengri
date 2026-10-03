@@ -154,7 +154,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(13.0),
         "AGN radio log10(synchrotron aging exponential cutoff / Hz) for "
         "the power-law and DPL models; 40 removes the cutoff; typical 12-14",
-        free_prior=Uniform(12.0, 14.0, "DPL aging cutoff", units="log10(Hz)", default=13.0),
+        free_prior=Uniform(12.0, 14.0, "AGN radio aging cutoff", units="log10(Hz)", default=13.0),
     ),
     # ── FIR-radio correlation (FIRRC) evolution coefficients ──────────────
     # Mass- and redshift-dependent q_IR(M*, z) for the evolving SF-radio

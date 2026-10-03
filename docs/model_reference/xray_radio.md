@@ -139,7 +139,7 @@ For radio-loud AGN with spectral curvature, the double power-law (DPL) model fro
   \exp\!\left(-\frac{\nu}{\nu_{\rm cut}}\right),
 
 $$ (eq-dpl-radio)
- where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{13}\,$Hz is the synchrotron aging cutoff.
+ where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{13}\,$Hz is the synchrotron aging cutoff. The cutoff frequency is `radio_log_nu_cut`, shared with the power-law model.
 
 ## References
 

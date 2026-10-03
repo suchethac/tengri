@@ -178,7 +178,7 @@ def test_equivalent_width_on_steep_continuum_pinned_numbers(continuum_width):
     """Gaussian line (sigma=1.5 A, unit amplitude, at 6563 A) on L_lambda ~ lambda^-4.
 
     `equivalent_width` returns pinned numbers for different continuum windows
-    (standard: 50 A wide sidebands; also tested: 20, 100 A).
+    (standard: 25 A wide sidebands; also tested: 20, 100 A).
     """
     from tengri.analysis.diagnostics.spectral import equivalent_width
 
@@ -195,7 +195,7 @@ def test_spectral_index_def_on_l_nu_steep_continuum():
     """SpectralIndexDef on L_nu array gives negative value (Lick absorption convention).
 
     Same line as the EW tests, measured with SpectralIndexDef using the standard
-    windows (sidebands 50 A wide, centered 50 A from the line window center).
+    windows (sidebands 25 A wide, centered 50 A from the line window center).
     """
     from tengri.observation.spectral_indices import SpectralIndexDef, measure_index_jax
 
@@ -254,3 +254,32 @@ def test_equivalent_width_and_spectral_index_on_flat_continuum():
     assert pcigale_ew == pytest.approx(3.760, abs=5e-3)
     assert tengri_ew == pytest.approx(3.760, abs=5e-3)
     assert lick_llam == pytest.approx(-3.760, abs=5e-3)
+
+
+def test_equivalent_width_on_flat_lnu_and_llam_continua():
+    """equivalent_width on flat continua: L_nu gives 3.754, L_lambda gives 3.760.
+
+    Tests the Gaussian line (sigma=1.5 A, unit amplitude, at 6563 A) on
+    continua flat in L_nu and L_lambda, with sidebands 50 A wide.
+    No pcigale needed; no importorskip.
+    """
+    from tengri.analysis.diagnostics.spectral import equivalent_width
+
+    # Flat L_nu: slope = -2 in L_lambda (since L_nu = L_lambda * wl_nm^2)
+    wl_nm_lnu, llam_lnu = _gaussian_line_on_power_law(1.0, -2.0)
+    wave_aa_lnu = jnp.asarray(wl_nm_lnu * 10.0)
+    lnu_flat = llam_lnu * wl_nm_lnu**2 * 1e7 / _C_NM
+
+    # Flat L_lambda: slope = 0
+    wl_nm_llam, llam_flat = _gaussian_line_on_power_law(1.0, 0.0)
+    wave_aa_llam = jnp.asarray(wl_nm_llam * 10.0)
+    lnu_llam = llam_flat * wl_nm_llam**2 * 1e7 / _C_NM
+
+    # equivalent_width on L_nu flat continuum
+    ew_lnu = float(equivalent_width(wave_aa_lnu, jnp.asarray(lnu_flat), 6563.0, 20.0, 50.0))
+
+    # equivalent_width on L_lambda flat continuum
+    ew_llam = float(equivalent_width(wave_aa_llam, jnp.asarray(lnu_llam), 6563.0, 20.0, 50.0))
+
+    assert ew_lnu == pytest.approx(3.754, abs=5e-3)
+    assert ew_llam == pytest.approx(3.760, abs=5e-3)

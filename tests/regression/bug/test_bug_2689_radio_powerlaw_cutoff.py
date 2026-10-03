@@ -380,3 +380,134 @@ class TestRadioPowerlawCutoff:
             f"f32 vs f64 mismatch at log_nu_cut=40, nu=300 GHz: "
             f"f32={agn_f32:.6e}, f64={agn_f64:.6e}"
         )
+
+    @pytest.mark.parametrize("log_nu_cut", [11.0, 40.0])
+    def test_radio_total_honors_cutoff(self, log_nu_cut):
+        """radio_total honors the log_nu_cut parameter.
+
+        At nu = 300 GHz, with L_ir=0.0, L_agn_bol=0.0, radio_loudness=0.0,
+        alpha_agn=0.7, l_bband=1.0 and include_freefree=False, the returned
+        L_nu equals (nu/5e9)**(-0.7) * exp(-nu/10^log_nu_cut) to 1e-6 relative.
+        """
+        from tengri.components.radio.radio import radio_total
+
+        nu_hz = 300e9
+        wavelength = _C_AA_PER_S / nu_hz
+        wavelength_array = jnp.asarray([wavelength])
+
+        result = radio_total(
+            wavelength_array,
+            L_ir=0.0,
+            L_agn_bol=0.0,
+            radio_loudness=0.0,
+            alpha_agn=0.7,
+            l_bband=1.0,
+            log_nu_cut=log_nu_cut,
+            include_freefree=False,
+        )
+
+        lnu = float(result[0])
+
+        # Closed-form expectation: L_nu = (nu / 5e9)**(-0.7) * exp(-nu / 10^log_nu_cut)
+        nu_ref = 5e9
+        nu_cut = 10.0**log_nu_cut
+        expected = (nu_hz / nu_ref) ** (-0.7) * np.exp(-nu_hz / nu_cut)
+
+        assert np.allclose(lnu, expected, rtol=1e-6), (
+            f"log_nu_cut={log_nu_cut}, nu={nu_hz:.2e}: "
+            f"got {lnu:.6e}, expected {expected:.6e}, "
+            f"rel error {abs(lnu - expected) / expected:.6e}"
+        )
+
+    @pytest.mark.parametrize("log_nu_cut", [11.0, 40.0])
+    def test_compute_radio_components_honors_cutoff(self, log_nu_cut):
+        """compute_radio_components honors the log_nu_cut parameter.
+
+        Its AGN term for log_nu_cut in {11.0, 40.0} divided by its AGN term
+        at the default equals exp(-nu/10**c) / exp(-nu/1e13) to 1e-6 at
+        nu = 300e9 Hz. The default call equals the call with log_nu_cut=13.0
+        exactly (using l_bband=1.0).
+        """
+        from tengri.components.radio.radio import compute_radio_components
+
+        nu_hz = 300e9
+        wavelength = _C_AA_PER_S / nu_hz
+        wavelength_array = jnp.asarray([wavelength])
+
+        # Minimal valid call with l_bband to ensure AGN is non-zero
+        result_default = compute_radio_components(
+            wavelength_array,
+            L_ir=0.0,
+            L_agn_bol=0.0,
+            radio_loudness=0.0,
+            alpha_agn=0.7,
+            l_bband=1.0,
+        )
+
+        result_custom = compute_radio_components(
+            wavelength_array,
+            L_ir=0.0,
+            L_agn_bol=0.0,
+            radio_loudness=0.0,
+            alpha_agn=0.7,
+            l_bband=1.0,
+            log_nu_cut=log_nu_cut,
+        )
+
+        agn_default = float(result_default["agn"][0])
+        agn_custom = float(result_custom["agn"][0])
+
+        # Expected ratio: exp(-nu/10^c) / exp(-nu/1e13)
+        nu_cut_custom = 10.0**log_nu_cut
+        nu_cut_default = 1e13
+        expected_ratio = np.exp(-nu_hz / nu_cut_custom) / np.exp(-nu_hz / nu_cut_default)
+
+        ratio = agn_custom / agn_default
+        assert np.allclose(ratio, expected_ratio, rtol=1e-6), (
+            f"log_nu_cut={log_nu_cut}, nu={nu_hz:.2e}: "
+            f"got ratio {ratio:.6e}, expected {expected_ratio:.6e}, "
+            f"rel error {abs(ratio - expected_ratio) / expected_ratio:.6e}"
+        )
+
+    def test_compute_radio_components_default_is_13(self):
+        """compute_radio_components without log_nu_cut equals the call with
+        log_nu_cut=13.0 exactly.
+        """
+        from tengri.components.radio.radio import compute_radio_components
+
+        wavelength = jnp.linspace(1000, 30000, 50)
+
+        kwargs = {
+            "L_ir": 0.0,
+            "L_agn_bol": 0.0,
+            "radio_loudness": 0.0,
+            "alpha_agn": 0.7,
+        }
+
+        # Call without log_nu_cut (uses default)
+        result_default = compute_radio_components(wavelength, **kwargs)
+
+        # Call with explicit log_nu_cut=13.0
+        result_explicit = compute_radio_components(wavelength, log_nu_cut=13.0, **kwargs)
+
+        # All component terms must match bit-exactly
+        for key in ("synchrotron", "freefree", "agn", "total"):
+            assert np.array_equal(result_default[key], result_explicit[key]), (
+                f"Term '{key}' differs between default and explicit 13.0"
+            )
+
+    def test_wildcard_decision_pinned(self):
+        """The `*` wildcard on the power-law model frees the loudness and the
+        slope; the cutoff is read by both models and freed only when named.
+        """
+        from tengri.parameters.groups import _RADIO_AGN_PARAMS_BY_MODEL
+
+        # Power-law model has only loudness and slope freed by wildcard
+        assert _RADIO_AGN_PARAMS_BY_MODEL["powerlaw"] == frozenset(
+            {"radio_loudness", "radio_alpha_agn"}
+        ), "Power-law model wildcard should only free radio_loudness and radio_alpha_agn"
+
+        # DPL model includes the cutoff in its parameter set
+        assert "radio_log_nu_cut" in _RADIO_AGN_PARAMS_BY_MODEL["dpl"], (
+            "DPL model should have radio_log_nu_cut in its parameter set"
+        )

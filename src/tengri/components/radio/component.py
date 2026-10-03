@@ -13,11 +13,11 @@ The AGN radio component is selected via
 
 - ``"powerlaw"`` (default): single power-law (:func:`radio_total`).
   Backwards-compatible default; behavior bit-identical to pre-aging
-  releases.
+  releases. Reads ``radio_log_nu_cut`` (synchrotron-aging cutoff).
 - ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. (2)). Uses ``radio_alpha_thin``,
-  ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
+  ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut`` (shared with power-law).
 
 Physical synchrotron-aging kernels (Jaffe & Perola 1973;
 Kardashev/Pacholczyk; Tribble 1993), namely ``"JP"``, ``"KP"`` and ``"tribble"``,
