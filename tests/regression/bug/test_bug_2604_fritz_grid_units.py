@@ -419,9 +419,18 @@ _MODEL_TORUS_POWER_ERG_S = 3.828e44
 
 @pytest.mark.parametrize("node", _NODES, ids=_NODE_IDS)
 def test_model_torus_power_unchanged(node, _torus_states):
+    """The torus power is the target (a) on a dense grid, (b) on the model grid within its error.
+
+    (a) is the physics claim: the model's samples, log-log interpolated onto a grid 10x
+    denser, integrate to the target to 1e-6 (measured 2e-8 to 3.3e-8 at the four nodes).
+    (b) is the trapezoid on the SEDModel master grid, which carries a pure quadrature
+    error of 1.4e-5 to 3.0e-5 (measured); the bound is 3x the largest, 1e-4.
+    """
     wave_aa, lnu = _torus_states[node]
-    power = _power_nu(lnu, wave_aa)
-    assert power == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-5)
+    dense = np.geomspace(wave_aa.min(), wave_aa.max(), 10 * wave_aa.size)
+    lnu_dense = np.exp(np.interp(np.log(dense), np.log(wave_aa), np.log(np.maximum(lnu, 1e-300))))
+    assert _power_nu(lnu_dense, dense) == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-6)
+    assert _power_nu(lnu, wave_aa) == pytest.approx(_MODEL_TORUS_POWER_ERG_S, rel=1e-4)
 
 
 # -- e. the lookup residual ---------------------------------------------------
