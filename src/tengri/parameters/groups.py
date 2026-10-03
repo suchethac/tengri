@@ -378,6 +378,7 @@ _VALID_DUST_TYPES = {
     "two_component",
     "single_component",
     "wg00",
+    "age_binned",
 }
 
 #: Valid ``shock={'type': ...}`` values. Named here rather than built inline
@@ -4068,6 +4069,117 @@ def _normalize_off_switch(type_value: str | None) -> str | None:
     return type_value
 
 
+def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
+    """Translate ``dust_attenuation={'type': 'age_binned', ...}`` (#2528).
+
+    Validates ``screens`` (:func:`tengri.components.dust.age_binned.validate_screens`),
+    writes the structural ``dust_screens`` tuple, and resolves each screen's
+    ``tau_i`` / per-screen law-shape parameters into full flat
+    ``dust_<name>_<i>`` entries in ``result`` -- the dedicated counterpart of the
+    generic per-parameter resolution loop used by ``two_component``/
+    ``single_component``, which only knows the STATIC parameter tables in
+    ``components/dust/_params.py`` and cannot represent a per-build variable
+    screen count.
+
+    Resolution order per key (mirrors ``_resolve_value``'s contract): (1) an
+    explicit per-screen override in ``dust_atten_dict`` (either spelling,
+    ``tau_0`` or ``dust_tau_0``); (2) the ``all_params``/``other_params``/``*``
+    wildcard (exact synonyms); (3) the registry default from
+    :meth:`~tengri.components.dust.age_binned.AgeBinnedDustComponent.declared_parameters`,
+    which needs no entry here.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict, already key-normalized
+        (Pass 0d) and off-switch-checked by the caller.
+    result : dict
+        Shared structural-kwargs accumulator; mutated in place.
+
+    Raises
+    ------
+    ValueError
+        Naming the screen index: see :func:`~tengri.components.dust.age_binned.validate_screens`
+        for the ``screens`` list checks; plus a two-spellings collision for
+        any per-screen key, an unresolvable ``FREE`` (no declared
+        ``free_prior``), or more than one wildcard spelling given at once.
+    """
+    from tengri.components.dust.age_binned import (
+        AgeBinnedDustComponent,
+        AgeBinnedDustComponentConfig,
+        validate_screens,
+    )
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    screens = validate_screens(dust_atten_dict.get("screens"))
+    result["dust_screens"] = screens
+
+    declared = AgeBinnedDustComponent(
+        config=AgeBinnedDustComponentConfig(screens=screens)
+    ).declared_parameters()
+    declared_by_name = {d.name: d for d in declared}
+
+    wildcard_keys_given = [k for k in ("all_params", "other_params", "*") if k in dust_atten_dict]
+    if len(wildcard_keys_given) > 1:
+        raise ValueError(
+            "dust_attenuation: give only one of 'all_params'/'other_params'/'*' "
+            "(they are exact synonyms)."
+        )
+    wildcard = dust_atten_dict[wildcard_keys_given[0]] if wildcard_keys_given else None
+
+    for i, (law, _lo, _hi) in enumerate(screens):
+        pairs = [(f"tau_{i}", f"dust_tau_{i}")]
+        for law_kw in sorted(law_kwarg_names(law)):
+            if law_kw == "redshift":
+                continue
+            pairs.append((f"{full_to_short(law_kw)}_{i}", f"{law_kw}_{i}"))
+
+        for short_key, full_name in pairs:
+            decl = declared_by_name[full_name]
+            has_short = short_key in dust_atten_dict
+            has_full = full_name in dust_atten_dict
+            if has_short and has_full:
+                raise ValueError(
+                    f"dust_attenuation names both {short_key!r} and {full_name!r}, "
+                    f"two spellings of one key; keep one."
+                )
+            if has_short or has_full:
+                value = dust_atten_dict[short_key] if has_short else dust_atten_dict[full_name]
+                if value is DEFAULT:
+                    raise _bare_default_error(full_name)
+                if value is FREE:
+                    if decl.free_prior is None:
+                        raise ValueError(
+                            f"{full_name}=FREE has no declared free_prior (no "
+                            f"defensible admissible range); pass an explicit "
+                            f"Distribution instead."
+                        )
+                    result[full_name] = decl.free_prior
+                elif _is_default_fixed(value):
+                    result[full_name] = Fixed(_default_fixed_value(full_name, decl.prior))
+                elif isinstance(value, Distribution):
+                    result[full_name] = value
+                else:
+                    result[full_name] = Fixed(value)
+            elif wildcard is not None:
+                if wildcard is FREE:
+                    if decl.free_prior is not None:
+                        result[full_name] = decl.free_prior
+                    # else: explicit-only (no defensible range) -- leaves the
+                    # registry default (Fixed) in force, same as a FREE
+                    # wildcard over a Fixed-only two_component stem.
+                elif _is_default_fixed(wildcard):
+                    result[full_name] = Fixed(_default_fixed_value(full_name, decl.prior))
+                else:
+                    raise ValueError(
+                        f"dust_attenuation 'all_params'/'other_params'/'*' must be "
+                        f"FREE or Fixed(DEFAULT), got {wildcard!r}."
+                    )
+            # else: nothing given at all -> the registry default (decl.prior)
+            # stands; declared_parameters() already supplies it, no entry
+            # needed here.
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -4149,6 +4261,15 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         )
 
     result["dust_model"] = dust_type
+
+    # age_binned (#2528): N independent screens, each its own law and age
+    # window. Its parameter set is a per-build variable (one dust_tau_i per
+    # screen), so it has its own dedicated translation rather than the
+    # law-XOR-law_bc/law_diff machinery below, which is two_component/
+    # single_component-specific.
+    if dust_type == "age_binned":
+        _translate_age_binned(dust_atten_dict, result)
+        return
 
     # Reject nested dust_attenuation={'emission': ...}: emission is now a top-level group
     if "emission" in dust_atten_dict:
@@ -5262,6 +5383,12 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "law_bc",
             "law_diff",
             "law_neb",
+            # age_binned (#2528): the N-screen list. Per-screen parameter
+            # names (tau_i, <lawparam>_i) are injected dynamically from the
+            # validated screen count in _validate_user_keys's per-group loop
+            # (see _age_binned_param_names) -- this static set cannot
+            # enumerate them, since the count is a per-build choice.
+            "screens",
             # WG00 screen structural selectors (FSPS dust_type=3).
             "dust_curve",
             "geometry",
@@ -6118,10 +6245,25 @@ def _validate_user_keys(
                 )
                 param_names = accepted
 
+        # age_binned (#2528): the per-screen parameter set (dust_tau_i,
+        # dust_<lawparam>_i) is a per-build variable -- one entry per
+        # user-supplied screen -- which the static param_partition/
+        # _variant_scoped_param_names machinery above (built from the fixed
+        # ATTENUATION_PARAMS/SINGLE_COMPONENT_PARAMS tables) cannot represent.
+        # structural_params.dust_screens is already the VALIDATED tuple by
+        # this point (_translate_dust_attenuation / _translate_age_binned ran
+        # during _translate_structural, before this validation pass), so the
+        # accepted-key set below matches exactly what that translation wrote.
+        age_binned_param_names: frozenset[str] = frozenset()
+        if top_key == "dust_attenuation" and top_val.get("type") == "age_binned":
+            age_binned_param_names = _age_binned_param_names(
+                getattr(structural_params, "dust_screens", None) or ()
+            )
+
         _check_dict_keys(
             top_key,
             top_val,
-            group_allowed | param_names | neb_type_specific_keys,
+            group_allowed | param_names | neb_type_specific_keys | age_binned_param_names,
             param_partition,
             monolithic_agn_model=monolithic_agn_model,
             # neb's displayed list must show the resolved type's actual
@@ -7330,6 +7472,46 @@ def _dust_group_accepted_keys() -> frozenset[str]:
     return structural | param_short_forms
 
 
+def _age_binned_param_names(screens: tuple) -> frozenset[str]:
+    """Short + full per-screen key names for ``dust_attenuation={'type': 'age_binned'}``.
+
+    One ``tau_i``/``dust_tau_i`` pair per screen, plus one
+    ``<lawparam>_i``/``dust_<lawparam>_i`` pair for every shape parameter that
+    screen's own law declares (narrowed via
+    ``tengri.components.dust.laws._registry.law_kwarg_names``, excluding
+    ``redshift``, which is threaded automatically rather than being a
+    per-screen user key).
+
+    Parameters
+    ----------
+    screens : tuple of (str, float or None, float or None)
+        The validated screen tuple
+        (:func:`tengri.components.dust.age_binned.validate_screens`), e.g.
+        ``structural_params.dust_screens``.
+
+    Returns
+    -------
+    frozenset of str
+        Both spellings (short and ``dust_``-prefixed) of every per-screen key
+        this screen count declares. Empty if ``screens`` is empty (nothing to
+        validate yet -- :func:`_translate_age_binned` has already raised in
+        that case by the time this runs).
+    """
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    names: set[str] = set()
+    for i, (law, _lo, _hi) in enumerate(screens):
+        names.add(f"tau_{i}")
+        names.add(f"dust_tau_{i}")
+        for law_kw in law_kwarg_names(law):
+            if law_kw == "redshift":
+                continue
+            short_stem = full_to_short(law_kw)
+            names.add(f"{short_stem}_{i}")
+            names.add(f"{law_kw}_{i}")
+    return frozenset(names)
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -8130,6 +8312,8 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     the birth-cloud law when unset and so is emitted only when it was given, the
     per-screen law-parameter overrides are stored in one flattened dict, and
     ``lyman_cutoff`` persists as a float wavelength rather than the boolean the
+    grammar takes. ``screens`` (age_binned) is stored as ``(law, lo, hi)``
+    tuples and re-emitted as the ``{'law', 'window_log_yr'}`` dicts the
     grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
@@ -8168,6 +8352,12 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
                 if _base_provenance(_provenance.get(full_name, "")) == "user_fixed":
                     continue
                 group_output[f"{short}_{comp}"] = value
+        # age_binned: the spec stores each screen as a (law, lo, hi) tuple; the
+        # grammar takes {'law', 'window_log_yr'} dicts, so the emit rebuilds them.
+        if getattr(spec, "dust_screens", ()):
+            group_output["screens"] = [
+                {"law": law, "window_log_yr": (lo, hi)} for law, lo, hi in spec.dust_screens
+            ]
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True

@@ -33,8 +33,8 @@ The CIGALE ``fritz2006`` module exposes a ``SimpleDatabase`` API::
 
 Each model has:
 - ``.wl`` — wavelength array [nm]
-- ``.disk`` — accretion disk SED (direct + scattered) [erg/s/Hz]
-- ``.dust`` — torus thermal dust emission [erg/s/Hz]
+- ``.disk`` — accretion disk SED (direct + scattered) [W/nm, relative to ``.dust``]
+- ``.dust`` — torus thermal dust emission [W/nm, unit integral over wavelength]
 - ``.norm`` — overall normalization factor
 
 HDF5 schema
@@ -49,18 +49,19 @@ The output file is organized as::
       opening_angle_axis (3,)        — opening_angle values [20, 40, 60] (degrees)
       psy_axis           (10,)       — psy values [0.001, 10.1, ..., 89.99]
       wavelength_aa      (178,)      — common wavelength grid [Angstrom]
-      dust               (5,8,5,4,3,10,178)  — torus dust emission [erg/s/Hz]
-      disk               (5,8,5,4,3,10,178)  — accretion disk SED [erg/s/Hz]
+      dust               (5,8,5,4,3,10,178)  — torus dust emission [W/nm, unit integral]
+      disk               (5,8,5,4,3,10,178)  — accretion disk SED [W/nm, relative to dust]
 
 dtype: float64 (matching CIGALE precision)
 compression: gzip level 4 (balance speed vs. file size)
 
 Reference
 ---------
-.. [1] O. Fritz et al., "Dust tori around Type II active nuclei. I. Observational
-   constraints and allowed dust models," A&A, 470, 221 (2006).
-   arXiv:0606147. https://doi.org/10.1051/0004-6361:20066130
-.. [2] M. Boquien et al., "CIGALE: Code Investigating GALaxy Emission,"
+.. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+   infrared spectra of active galactic nuclei with a new torus emission
+   model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+   https://doi.org/10.1111/j.1365-2966.2006.09866.x
+.. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A, 622, A103 (2019). arXiv:1811.03094.
    https://doi.org/10.1051/0004-6361/201834156
 
@@ -255,8 +256,14 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
         g.attrs["title"] = "Fritz et al. (2006) AGN torus SED grid"
         g.attrs["source"] = "CIGALE pcigale.data.SimpleDatabase('fritz2006')"
         g.attrs["grid_shape"] = "[r_ratio, tau, beta, gamma, opening_angle, psy, wavelength]"
-        g.attrs["dust_unit"] = "erg/s/Hz (accretion-disk normalized, pre-interpolation)"
-        g.attrs["disk_unit"] = "erg/s/Hz (accretion-disk component, pre-interpolation)"
+        g.attrs["dust_unit"] = (
+            "W/nm per unit integral over wavelength (pcigale model.dust, "
+            "luminosity per unit wavelength)"
+        )
+        g.attrs["disk_unit"] = (
+            "W/nm, luminosity per unit wavelength, in the units of the "
+            "unit-integral dust (pcigale model.disk)"
+        )
         g.attrs["wavelength_unit"] = "Angstrom"
         g.attrs["opening_angle_unit"] = "degrees (half-opening angle, direct grid parameter)"
         g.attrs["psy_unit"] = "degrees (viewing angle from torus axis; 0=type2, 90=type1)"

@@ -57,6 +57,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
+from reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps import Z_SUN_BAGPIPES
 from reproduction import _validation as V
 
 import tengri
@@ -86,10 +87,13 @@ print(
     f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# Metallicity pin — BAGPIPES `metallicity=1.0` is Z/Z_⊙ = 1 against the same
-# Asplund+2009 Z_⊙ that `LOG10_ZSUN` carries, at HDU `ZMET_1.000ZSOL`.
-# tengri's `met_logzsol = log10(Z/Z_⊙) = 0` is the bit-aligned counterpart.
-MET_LOGZSOL = 0.0
+# Metallicity pin — BAGPIPES's `metallicity=1.0` is Z = 0.02 (BC03 solar);
+# tengri's `met_logzsol` is relative to Z_⊙ = 0.0142 (Asplund 2009).
+# To pin the comparison at the same absolute Z (0.02), tengri must request:
+#   met_logzsol = log10(Z_BAGPIPES) - LOG10_ZSUN = log10(0.02) - LOG10_ZSUN
+# This makes both codes operate on the same spectral template regardless of
+# their internal solar metallicity conventions.
+MET_LOGZSOL = np.log10(Z_SUN_BAGPIPES) - LOG10_ZSUN
 MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)}
 
 # Notebook-vs-script compatible: ``__file__`` is undefined when this is
@@ -748,16 +752,21 @@ if _ratios.size:
 # %% [markdown]
 # ## §5 Metallicity sensitivity (chemical enrichment, single-Z form)
 #
-# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block. Tengri carries
-# the same knob via `logzsol = log10(Z / Z☉)`. Both support time-varying Z
+# BAGPIPES exposes `metallicity` (Z / Z_⊙ BAGPIPES = 0.02) on every SFH block;
+# tengri's `logzsol = log10(Z / Z_⊙ tengri = 0.0142)`. Both support time-varying Z
 # (BAGPIPES `metallicity_bins`, tengri `chemical_enrichment_history`), but the
-# single-Z response is the reproducible test. Sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
-# the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum.
+# single-Z response is the reproducible test. This comparison is pinned at the
+# same absolute Z for each node, so the two codes operate on identical spectral
+# templates. The sweeps below use Z ∈ {0.2, 1.0, 2.5} × 0.02 (the absolute
+# metallicities), displayed via each code's own solar scale and converted to
+# the corresponding `logzsol` values. Overlay optical-NIR continuum over the
+# fiducial 5 Gyr delayed-τ SFH.
 #
 
 # %%
 _Z_VALUES = [0.2, 1.0, 2.5]
-_logzsol_values = [float(np.log10(z)) for z in _Z_VALUES]
+# Convert BAGPIPES metallicity fractions to tengri's absolute Z pins.
+_logzsol_values = [float(np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN) for z in _Z_VALUES]
 
 
 cases_z = []
@@ -801,7 +810,7 @@ fig, (ax, ax_r), ratios_z = V.sweep_fig(
     band=(0.99, 1.01),
     cmap="Blues",
     values=[0.2, 1.0, 2.5],
-    param_label="Z / Z_sun",
+    param_label="Z / Z_☉ (BAGPIPES)",
 )
 fig.tight_layout()
 save_fig("bagpipes_15_metallicity_sweep.png")
@@ -813,15 +822,30 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 # Extended Z/Z☉ ∈ {0.2, 0.5, 1, 1.5, 2.5} sweep with tengri/BAGPIPES ratio
 # panel and UV-to-NIR bandpass statistics. Fiducial SFH: 5 Gyr delayed-τ with
 # τ = 1 Gyr, all with nebular emission on (logU −2, matched gas metallicity).
-# UV-to-NIR bandpass ratio: median 1.002×, worst 1.371× (2 of 10 bands
-# outside 5%).
+# Stars are requested at the same absolute Z
+# (`met_logzsol = log10(z × 0.02) − log10(0.0142)`). That is the same BC03 grid node
+# for z ∈ {0.2, 1, 2.5}; for the other z it is a metallicity between two nodes, where
+# the codes interpolate differently (BAGPIPES linearly in Z between the two
+# straddling nodes, tengri with a triweight kernel in log Z). Gas is matched
+# solar-scaled, `neb_logZ_gas = log10(z)`, which is the same gas-phase oxygen
+# abundance in both codes: both take Dopita et al. (2000) solar abundances and
+# depletion (total solar log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase
+# 12 + log(O/H) = 8.71 at the solar value; Cue, Li et al. 2025 §2; BAGPIPES
+# `make_cloudy_models.py`). Both hold C/O at the Dopita et al. solar ratio; only
+# nitrogen differs: BAGPIPES scales nitrogen with metallicity
+# (`−4.57 + log z − 0.22 − log z` for log z ≤ −0.63, else
+# `−3.94 + 2 log z − 0.22 − log z`, the trailing `− log z` offsetting the `metals`
+# scaling), while Cue holds [N/O] at solar.
 
 # %%
 _Z_EXTENDED = [0.2, 0.5, 1.0, 1.5, 2.5]
-_logzsol_extended = [float(np.log10(z)) for z in _Z_EXTENDED]
+# Convert BAGPIPES metallicity fractions to tengri's absolute Z pins.
+_logzsol_extended = [float(np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN) for z in _Z_EXTENDED]
+# Gas metallicity is matched as each code's solar-scaled value: Z_gas / Z_gas,sun = z.
+_loggas_extended = [float(np.log10(z)) for z in _Z_EXTENDED]
 
 cases_z = []
-for z, logz in zip(_Z_EXTENDED, _logzsol_extended):
+for z, logz, loggas in zip(_Z_EXTENDED, _logzsol_extended, _loggas_extended):
     w_b_z, L_b_z = B.attenuated_lnu(
         dust_block={"type": "Calzetti", "Av": 0.0},
         nebular_block={"logU": -2.0, "metallicity": z},
@@ -852,7 +876,7 @@ for z, logz in zip(_Z_EXTENDED, _logzsol_extended):
         neb={
             "type": "cue",
             "neb_logU": Fixed(-2.0),
-            "neb_logZ_gas": Fixed(logz),
+            "neb_logZ_gas": Fixed(loggas),
             "all_params": Fixed(DEFAULT),
         },
         redshift=Fixed(0.0),
@@ -870,7 +894,7 @@ fig, (ax, ax_r), ratios = V.sweep_fig(
     xlim=(1e3, 1e5),
     cmap="Blues",
     values=[0.2, 0.5, 1.0, 1.5, 2.5],
-    param_label="Z / Z_sun",
+    param_label="Z / Z_☉ (BAGPIPES)",
 )
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 fig.tight_layout()
@@ -1050,9 +1074,9 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # Extended dust parameter space: Calzetti A_V ∈ {0.3, 1, 3}; CF00 power-law slope n ∈ {0.5, 0.7, 1.0} at fixed eta = 1; Salim (delta, B) pairs {(−0.3, 0), (0, 1), (0.3, 3)}; and Cardelli A_V=1. Two panels show A_V
 # and CF00 slope modulation on the left and dust-law families with their
 # A(2175)/A_V bump normalizations (Salim only) on the right. Fiducial SFH throughout,
-# nebular on. A(2175)/A_V for δ = −0.3/0/+0.3: BAGPIPES 2.807/2.363/2.091,
-# tengri 2.766/2.338/2.317. UV-to-NIR bandpass ratio across both panels:
-# median 1.009×, worst 1.404× (2 of 10 bands outside 5%).
+# nebular on. A(2175)/A_V for δ = −0.3/0/+0.3: BAGPIPES 2.786/2.349/2.082,
+# tengri 2.767/2.338/2.079. UV-to-NIR bandpass ratio for the dust-law sweep:
+# median 1.001×, worst 1.064× (1 of 10 bands outside 5%).
 
 # %%
 # Figure 1: A_V and eta variations with Calzetti + CF00
@@ -1413,7 +1437,7 @@ save_fig("bagpipes_06_dust_ir.png")
 # points use the same fiducial SFH (5 Gyr delayed-τ, τ=1 Gyr), Calzetti dust
 # (A_V=1), and nebular emission (logU −2). Energy balance holds in all 5
 # cases (L_IR/L_absorbed = 1.000, residual < 1e-15). IR-band (30–300 μm)
-# ratio: median 0.963×, worst 0.963× (0 of 13 bands outside 5%).
+# ratio: median 0.963×, worst 0.962× (0 of 13 bands outside 5%).
 
 # %%
 dl07_cases = [
@@ -1645,7 +1669,7 @@ ax.set_xscale("linear")
 # Cue broadens its lines (see §10) while BAGPIPES' grid places them at its
 # resolution, so a peak ratio is meaningless. §10 below addresses widths.
 _w_t_neb = np.asarray(s_neb_on.wave)
-print("§9 integrated line luminosity (tengri Cue v17 / BAGPIPES Cloudy v25):")
+print("§9 integrated line luminosity (tengri Cue, Cloudy 22.00 / BAGPIPES Cloudy v25):")
 for _c, _name in [(3727.0, "[O II]"), (4861.0, "Hβ"), (5007.0, "[O III]"), (6563.0, "Hα")]:
     _lb = U.line_lum(w_b_neb, L_b_neb_alone, _c)
     _lt = U.line_lum(_w_t_neb, L_t_neb_alone, _c)
@@ -1694,6 +1718,19 @@ save_fig("bagpipes_08_nebular.png")
 # f_esc ∈ {0, 0.5} (6 cases total). BAGPIPES uses `nebular: {logU, metallicity, fesc}`,
 # while tengri uses free `neb_logU`, `neb_logZ_gas`, `neb_fesc` in Cue. Per-case tengri/BAGPIPES
 # line-luminosity ratios (Hα, Hβ, [O III], [O II]) are shown for each case.
+# Stars are requested at the same absolute Z (`log10(z × 0.02) − log10(0.0142)`): the
+# same BC03 grid node for Z = 1 Z☉, and a metallicity between two nodes for the others,
+# where the codes interpolate differently (BAGPIPES linearly in Z, tengri with a
+# triweight kernel in log Z). Gas is matched solar-scaled, `neb_logZ_gas = log10(z)`,
+# against BAGPIPES's `metallicity = z`. That is the same gas-phase oxygen abundance in
+# both codes: both take Dopita et al. (2000) solar abundances and depletion (total
+# solar log(O/H) = −3.07, oxygen depletion −0.22 dex, gas-phase 12 + log(O/H) = 8.71
+# at the solar value; Cue, Li et al. 2025 §2; BAGPIPES `make_cloudy_models.py`). Both
+# hold C/O at the Dopita et al. solar ratio; only
+# nitrogen differs: BAGPIPES scales nitrogen with metallicity
+# (`−4.57 + log z − 0.22 − log z` for log z ≤ −0.63, else
+# `−3.94 + 2 log z − 0.22 − log z`, the trailing `− log z` offsetting the `metals`
+# scaling), while Cue holds [N/O] at solar.
 #
 # At logU=−2, Z=1 Z☉ (matching §9): Hα 0.98×, Hβ 0.98×, [O III] 1.01×,
 # [O II] 0.77×. The Z=2 Z☉ case is the outlier (Hα/Hβ rise to 1.86×/1.82×
@@ -1735,10 +1772,11 @@ for label, logu, z, fesc in neb_cases_list:
     L_b_neb_lines = np.clip(L_b_neb_full - L_b_stellar, 0.0, None)
 
     # tengri
+    logz_stellar = float(np.log10(z * Z_SUN_BAGPIPES) - LOG10_ZSUN)
     logz_neb = float(np.log10(z))
     m_neb_case = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(logz_neb), "all_params": Fixed(DEFAULT)},
+        met={"logzsol": Fixed(logz_stellar), "all_params": Fixed(DEFAULT)},
         sfh={
             "type": "const",
             "start_gyr": Fixed(NEB_AGE),
@@ -1786,12 +1824,17 @@ for label, logu, z, fesc in neb_cases_list:
 # (km/s), convolving in log-wavelength space. Tengri's `velocity_broaden`
 # JIT-compiles the same convolution.
 #
-# At matched `veldisp = 150 km/s` (a typical late-type-galaxy value),
-# the broadened Hα profile has FWHM `2.355 σ_v λ / c`. BAGPIPES' default
-# spectral grid has `R_spec = 1000` (σ ≈ 127 km/s), so the effective
-# Hα width at `veldisp = 150 km/s` is σ_eff = sqrt(127² + 150²) ≈ 197 km/s,
-# FWHM ≈ 10 Å. Tengri's `velocity_broaden` operates on unbinned input
-# and returns the pure-Gaussian profile at σ = 150 km/s (FWHM ≈ 7.7 Å).
+# At matched `veldisp = 150 km/s` (a typical late-type-galaxy value), the Gaussian
+# kernel alone has FWHM `2.355 σ_v λ / c` = 7.733 Å at Hα. The measured Hα line is
+# wider than the kernel because each code's nebular line has a width of its own before
+# the kernel is applied: tengri places each line with a triweight profile of
+# dispersion `neb_eline_sigma_kms` (declared default 100 km/s, `σ_λ = σ_v λ / c`),
+# and BAGPIPES puts each Cloudy line into a single pixel of its internal model grid,
+# sampled at R_spec = 1000 (Δλ = λ / 2R ≈ 3.3 Å at Hα), before the kernel is applied.
+# Because the two pre-broadening profiles differ in shape, the widths do not add in
+# quadrature with the kernel. After broadening, the measured FWHM is 9.420 Å for
+# tengri and 9.500 Å for BAGPIPES (0.8 % apart); the printed analytic 7.733 Å is the
+# kernel's contribution, not the expected total.
 #
 # **Verification Status:** CROSSVAL: Spectroscopy forward model
 
@@ -2203,7 +2246,7 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 # ### §13b Photometry without nebular — attributing the residual
 #
 # With the nebular block removed and the same convolution re-run, the
-# band-averaged residual drops from ⟨Δ⟩ = −0.023 mag to −0.009 mag, so the
+# band-averaged residual drops from ⟨Δ⟩ = −0.020 mag to −0.008 mag, so the
 # nebular block is indeed carrying the gap, but the mean over five bands
 # hides the structure, so the cell prints each band.
 #
@@ -2212,9 +2255,9 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 # attenuation-curve difference, and it is what tengri would agree to if the
 # nebular backends were identical.
 #
-# The **nebular-driven** part is u −0.05, g −0.05, r +0.04, z −0.01. The last
+# The **nebular-driven** part is u −0.05, g −0.05, r +0.04, z 0.00. The last
 # column shows why: for this 5 Gyr galaxy the two codes' nebular light differs
-# by 1.4–1.9× in u/g/z and by 0.4× in r, not a normalization offset but a
+# by 1.4–1.9× in u/g and by 0.4× in r, not a normalization offset but a
 # different *shape*. Cue is an emulator over a young-starburst ionizing
 # spectrum, and a 5 Gyr delayed-τ population sits at the soft, feeble end of
 # that domain, where its extrapolation and CLOUDY v25's tabulated grid diverge.
@@ -2479,7 +2522,7 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/BAGPIPES and
 # its robust 16–84% spread. The spread is a *continuum* metric — at ≈
-# 1.00–1.03× the stellar continuum matches BAGPIPES to a couple of percent.
+# 0.99–1.02× the stellar continuum matches BAGPIPES to a couple of percent.
 # The emission **lines are not in this band**: they are sparse points the
 # 16–84 percentile rejects as outliers, and the residual panel shows them
 # spiking to ±50–100 % — the Cue-vs-Cloudy line-strength difference (§9),
@@ -2566,8 +2609,10 @@ plt.show()
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy 22.00 for Cue (tengri,
 #   Li et al. 2025, ApJ 986, 9, arXiv:2405.04598): tengri Hα ≈ 0.98 × BAGPIPES
 #   Hα.
-# - **§10 LSF.** tengri's `velocity_broaden` matches the analytic
-#   Gaussian σ = 150 km/s FWHM to 0.8 %.
+# - **§10 LSF.** With σ_v = 150 km/s the measured Hα FWHM is 9.420 Å (tengri) and
+#   9.500 Å (BAGPIPES), 0.8 % apart; both exceed the 7.733 Å kernel width because
+#   tengri's line profile (`neb_eline_sigma_kms`) and BAGPIPES's one-pixel line
+#   (one internal-grid pixel, ≈ 3.3 Å at Hα) each carry a width before broadening.
 # - **§11 panchromatic.** The combined picture; per-section residuals
 #   stack.
 # - **§12 IGM.** Inoue14 vs Inoue14 agrees redward of the Lyman limit
@@ -2583,7 +2628,8 @@ plt.show()
 #   difference: the band-averaged residual drops from ⟨Δ⟩ −0.020 → −0.008 mag
 #   with the nebular block removed, leaving only the ≈ 0.01 mag §4 stellar
 #   color mismatch.
-# - **§14 timing.** Both codes finish a full SED in 80–120 ms.
+# - **§14 timing.** Both codes build one SED in of order 0.1 s (same performance
+#   class); the printed §14 timings give the run's values.
 # - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
 #   one axis with a fractional-residual panel and an optical normalization
 #   ratio + 16–84 % spread. With the dust corrected the continuum sits at

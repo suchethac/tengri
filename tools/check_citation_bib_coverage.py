@@ -155,7 +155,6 @@ UNCURATED_DOIS = frozenset(
         "10.1051/0004-6361/201936817",  # xray.py +1
         "10.1051/0004-6361/202449801",  # disc.py +2
         "10.1051/0004-6361:20042363",  # disc.py +1
-        "10.1051/0004-6361:20066130",  # fritz.py
         "10.1051/0004-6361:20078829",  # mean_sfh.py
         "10.1086/130714",  # _recombination_coeffs.py
         "10.1086/151796",  # disc.py +1
@@ -180,7 +179,6 @@ UNCURATED_DOIS = frozenset(
         "10.1086/519990",  # xray.py
         "10.1086/651008",  # desi.py +1
         "10.1088/0004-637x/708/1/58",  # attenuation.py
-        "10.1088/0004-637x/724/1/559",  # sed_quantities.py
         "10.1088/0004-637x/737/2/67",  # unified.py +2
         "10.1088/0004-637x/745/2/181",  # xray.py
         "10.1088/0004-637x/770/1/57",  # mean_sfh.py
@@ -201,6 +199,7 @@ UNCURATED_DOIS = frozenset(
         "10.1093/mnras/stw044",  # feltre_precompute.py
         "10.1103/revmodphys.81.969",  # dig.py
         "10.1111/j.1365-2966.2004.07473.x",  # xray.py +1
+        "10.1111/j.1365-2966.2006.09866.x",  # fritz.py
         "10.1111/j.1365-2966.2007.12256.x",  # attenuation.py (Wild+2007; DOI corrected in #2185)
         "10.1111/j.1365-2966.2008.13535.x",  # _closures.py
         "10.1111/j.1365-2966.2011.18906.x",  # _recombination_coeffs.py
@@ -251,7 +250,6 @@ UNCURATED_DOIS = frozenset(
 BIB_TITLE_DRIFT = frozenset(
     {
         "10.1051/0004-6361/200912497",  # bib: Analysis of galaxy spectral energy distributi
-        "10.1051/0004-6361/201834156",  # bib: CIGALE: a python Code Investigating GALaxy Em
         "10.1086/308197",  # bib: Multiple Scattering in Clumpy Media. II. Galactic Environm
         "10.1086/511055",  # bib: Infrared Emission from Interstellar Dust. IV. The Silicate
         "10.1086/589652",  # bib: The MAPPINGS III Library of Fast Radiative Shock Models
