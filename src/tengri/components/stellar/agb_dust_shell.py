@@ -541,6 +541,49 @@ def agb_dust_ratio(resampled: ResampledAGBDustShell, weight: jnp.ndarray) -> jnp
     return _lerp_along_weight_axis(jnp.asarray(weight), resampled.weights, resampled.ratio_planes)
 
 
+def align_ratio_to_cube(ratio: jnp.ndarray, ssp_flux: jnp.ndarray) -> jnp.ndarray:
+    """Broadcast the (n_met, n_age, n_wave) ratio onto an SSP flux cube.
+
+    A 3-D cube ``(n_met, n_age, n_wave)`` takes the ratio as is. An
+    alpha-enhanced 4-D cube ``(n_met, n_alpha, n_age, n_wave)`` gets an
+    explicit length-1 [alpha/Fe] axis, so the ratio is applied per metallicity
+    and age and is the same for every alpha slice (without the explicit axis,
+    NumPy would broadcast the ratio's metallicity axis against the alpha axis).
+
+    Parameters
+    ----------
+    ratio : array, shape (n_met, n_age, n_wave)
+        R(w) on the SSP grid's axes [dimensionless].
+    ssp_flux : array, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
+        The cube the ratio multiplies.
+
+    Returns
+    -------
+    array
+        ``ratio`` with a [alpha/Fe] axis inserted for a 4-D cube.
+
+    Raises
+    ------
+    ValueError
+        If the ratio does not match the cube's metallicity, age and wavelength axes.
+
+    Notes
+    -----
+    The template carries no [alpha/Fe] dependence: the ratio is taken
+    independent of [alpha/Fe]. That is an assumption of the template, which was
+    computed at FSPS's solar-scaled abundances, not a measurement.
+
+    **JIT-compatible**: yes (shape logic only).
+    """
+    cube_axes = (ssp_flux.shape[0], *ssp_flux.shape[-2:])
+    if tuple(ratio.shape) != cube_axes or ssp_flux.ndim not in (3, 4):
+        raise ValueError(
+            f"AGB dust-shell ratio of shape {tuple(ratio.shape)} does not match an SSP cube "
+            f"of shape {tuple(ssp_flux.shape)} (expected (n_met, [n_alpha,] n_age, n_wave))."
+        )
+    return ratio[:, None, :, :] if ssp_flux.ndim == 4 else ratio
+
+
 def bake_agb_dust_shell(ssp_data: SSPData, weight: float) -> SSPData:
     """Bake a Fixed AGB dust-shell weight into a new ``SSPData``.
 
@@ -571,6 +614,9 @@ def bake_agb_dust_shell(ssp_data: SSPData, weight: float) -> SSPData:
 
     Notes
     -----
+    For an alpha-enhanced 4-D cube the ratio is applied per metallicity and age
+    and is the same for every [alpha/Fe] slice (:func:`align_ratio_to_cube`).
+
     **JIT-compatible**: not applicable; eager, called once at
     :class:`tengri.SEDModel` construction, before any tracing.
     """
@@ -583,7 +629,8 @@ def bake_agb_dust_shell(ssp_data: SSPData, weight: float) -> SSPData:
         np.asarray(ssp_data.ssp_wave),
     )
     ratio = np.asarray(agb_dust_ratio(resampled, float(weight)))
-    new_flux = np.asarray(ssp_data.ssp_flux) * ratio
+    cube = np.asarray(ssp_data.ssp_flux)
+    new_flux = cube * np.asarray(align_ratio_to_cube(jnp.asarray(ratio), jnp.asarray(cube)))
     return ssp_data._replace(ssp_flux=jnp.asarray(new_flux, dtype=ssp_data.ssp_flux.dtype))
 
 
