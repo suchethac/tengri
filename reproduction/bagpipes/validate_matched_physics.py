@@ -72,6 +72,10 @@ FIGS.mkdir(exist_ok=True)
 # Matched parameters (01_bagpipes.py setup).
 # tengri's `met_logzsol` for BAGPIPES's Z = 0.02 node: log10(0.02 / 0.0142).
 MET_LOGZSOL = np.log10(Z_SUN_BAGPIPES) - LOG10_ZSUN
+# BAGPIPES's `metallicity` is a single Z; tengri's default 0.1 dex metallicity scatter has no
+# BAGPIPES counterpart, so every tengri model here requests a 0.001 dex width (the node alone).
+MET_SCATTER_DEX = 0.001
+MET_NODE = {"logzsol_scatter": Fixed(MET_SCATTER_DEX), "all_params": Fixed(DEFAULT)}
 LOG_MASS = 10.0
 TAU_GYR, AGE_GYR = 1.0, 5.0
 A_V = 1.0
@@ -114,7 +118,7 @@ def tengri_stellar_dust(ssp, tau_bc):
     """
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+        met={"logzsol": Fixed(MET_LOGZSOL), **MET_NODE},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR),
@@ -141,8 +145,7 @@ def tengri_stellar_dust(ssp, tau_bc):
 NEB_AGE = 0.01  # Gyr
 NEB_LOGU, NEB_LOGZ, NEB_LOGMASS = -2.0, 0.0, 9.0
 
-# BAGPIPES' default 747-point grid spans 1 A to 1e8 A and smears Cloudy v25's
-# lines into bumps; §9 hands it a dense optical grid instead.
+# The nebular spectra are compared on a 1 A optical grid, as in 01_bagpipes.py §9.
 _NEB_SPEC_WAVS = np.arange(900.0, 7000.0, 1.0)
 
 
@@ -161,7 +164,7 @@ def report(w_b, L_t, L_b, title, *, compact=False):
         One summary line instead of the full ladder.
     """
     print_filter_table(
-        filter_rows(w_b, L_t, L_b, filters=UV_TO_NIR),
+        filter_rows(w_b, L_t, L_b, filters=UV_TO_NIR, integrate="sed"),
         ref_name="BAGPIPES",
         title=title,
         compact=compact,
@@ -196,7 +199,7 @@ def nebular_only(ssp):
 
     m = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
+        met={"logzsol": Fixed(MET_LOGZSOL), **MET_NODE},
         sfh={
             "type": "const",
             "start_gyr": Fixed(NEB_AGE),
@@ -250,7 +253,7 @@ def main():
 
     print(
         f"\n  bandpass-convention sensitivity (photon vs energy weight): "
-        f"{convention_sensitivity(w_b, L_t_on_b, L_b, filters=UV_TO_NIR):.2e}"
+        f"{convention_sensitivity(w_b, L_t_on_b, L_b, filters=UV_TO_NIR, integrate="sed"):.2e}"
     )
     print(
         "  ladder stops at 2MASS Ks by design: BAGPIPES applies energy balance and\n"

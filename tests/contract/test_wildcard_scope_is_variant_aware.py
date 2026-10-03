@@ -373,6 +373,18 @@ CASES = [
 #: already owns the group, the entry names it — the point is that no group is
 #: unaccounted for, not that this file must own all of them.
 _EXCUSED: dict[str, str] = {
+    "agb_dust": (
+        "cannot be swept by this file's synthetic SSP fixtures: the component "
+        "refuses at build time on any grid whose source does not name the MIST "
+        "isochrone (FSPS's add_agb_dust_model is MIST-only), and every case "
+        "here builds a synthetic (5000/lambda)^2 SSP, not a real FSPS grid. "
+        "Liveness is measured instead on a real fsps_mist_* grid: "
+        "tests/physics/gradients/test_agb_dust_shell_gradient.py pins a "
+        "nonzero jax.grad of predict_photometry wrt agb_dust_weight, matching a "
+        "central finite difference to 1% at weights between the stored nodes, "
+        "and tests/components/stellar/test_agb_dust_shell.py shows the baked "
+        "and live weights agree and change the SED."
+    ),
     "dust_emission": (
         "owned by tests/contract/test_dust_emission_wildcard.py, the guard "
         "written for #1482 — it narrows the outcome to the selected engine's "
