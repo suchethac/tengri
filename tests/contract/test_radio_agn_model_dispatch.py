@@ -186,7 +186,8 @@ class TestDplDispatch:
         assert jnp.allclose(new_state.derived["sed_radio"], expected, rtol=1e-12)
 
     def test_dpl_differs_from_powerlaw(self, state):
-        """At high frequencies the cutoff makes DPL diverge from powerlaw."""
+        """Both power-law and DPL models carry exp(-nu/nu_cut); DPL additionally
+        includes a turnover term that makes them differ at high frequencies."""
         params = _all_radio_params()
         # Drive cutoff into the radio band so the two models must disagree.
         params["radio_log_nu_cut"] = 9.5  # 3 GHz cutoff

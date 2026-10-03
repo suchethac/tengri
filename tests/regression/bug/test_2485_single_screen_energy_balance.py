@@ -349,16 +349,29 @@ def test_free_redshift_is_fine_when_the_law_does_not_read_it(synthetic_ssp_wide,
     assert worst < NEB_NODE_RTOL, f"free redshift broke the LUT: {worst:.3e}"
 
 
-def test_free_redshift_with_a_redshift_dependent_law_is_refused(synthetic_ssp_wide):
-    """A refusal that is not a workaround: the curve genuinely cannot be baked.
+def test_free_redshift_with_a_redshift_dependent_law_is_tabulated(synthetic_ssp_wide):
+    """A law that reads z gets a LUT tabulated over z, not a refusal.
 
     ``narayanan_z`` reads redshift, so a free redshift means a different
-    attenuation curve per sample and no single build-time table can represent
-    it. Declining is correct; the exact integral still runs.
+    attenuation curve per sample. The LUT carries a redshift axis and the
+    contraction reads it at the sampled z; the photometry then tracks the
+    single-curve LUT built at that same fixed redshift.
     """
-    model = _with_neb(
+    free = _with_neb(
         synthetic_ssp_wide, neb=CUE_NEB, redshift=Uniform(0.05, 1.5), law="narayanan_z"
     )
-    assert model._energy_balance_lut_cache is None, (
-        "a redshift-dependent law with free redshift got a LUT baked at one redshift"
+    lut = free._energy_balance_lut_cache
+    assert lut is not None and lut.ln1pz is not None, (
+        "a redshift-dependent law with free redshift must get a LUT tabulated over redshift"
     )
+    pinned = _with_neb(synthetic_ssp_wide, neb=CUE_NEB, redshift=Fixed(1.0), law="narayanan_z")
+    assert pinned._energy_balance_lut_cache is not None
+    assert pinned._energy_balance_lut_cache.ln1pz is None
+    p = dict(free.spec.sample(jax.random.PRNGKey(0)))
+    p["dust_tau_v"] = np.float64(1.3)
+    q = {k: v for k, v in p.items() if k != "redshift"}
+    a = np.asarray(free.predict_photometry({**p, "redshift": np.float64(1.0)}))
+    b = np.asarray(pinned.predict_photometry(q))
+    # Band 0 is a rest-UV band carrying the free-z stellar z-table's own 1 % error,
+    # which is not the LUT under test; the rest follow the LUT.
+    np.testing.assert_allclose(a[1:], b[1:], rtol=5e-3)
