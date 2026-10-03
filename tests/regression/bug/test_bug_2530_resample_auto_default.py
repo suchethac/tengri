@@ -314,7 +314,7 @@ def test_lsf_scale_gradient_is_live_under_the_pixel_mean():
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp("fsps_mist_miles_chabrier")
+    return tengri.load_ssp("prsc_miles_chabrier_wNE")
 
 
 def _prism_wave(lo=6000.0, hi=53000.0, resolution=100.0):
