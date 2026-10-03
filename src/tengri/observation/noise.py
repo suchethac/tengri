@@ -331,9 +331,10 @@ def censored_neg_log_likelihood(
     """Negative log-likelihood with per-band censoring.
 
     For detected bands (mask=0), uses the standard Gaussian (or
-    Student-t) likelihood. For upper limits (mask=1), uses the normal
-    CDF: ``ln L_k = ln Phi((f_upper - m_k) / sigma_k)``. For lower
-    limits (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / sigma_k)``.
+    Student-t) likelihood with the calibration floor in its noise. For
+    upper limits (mask=1), uses the normal CDF at the observed uncertainty:
+    ``ln L_k = ln Phi((f_upper - m_k) / sigma_obs_k)``. For lower limits
+    (mask=-1): ``ln L_k = ln Phi((m_k - f_lower) / sigma_obs_k)``.
 
     All branches are computed via ``jnp.where`` for JIT compatibility
     (no Python control flow per band).
@@ -370,11 +371,36 @@ def censored_neg_log_likelihood(
 
     **Censoring model**:
 
-    - **Detected** (mask=0): Gaussian or Student-t likelihood of residual.
-    - **Upper limit** (mask=1): ln L = ln Phi((f_upper - m)/σ).
-    - **Lower limit** (mask=-1): ln L = ln Phi((m - f_lower)/σ).
+    - **Detected** (mask=0): Gaussian or Student-t likelihood with
+      ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``.
+    - **Upper limit** (mask=1): ``ln L = ln Phi((f_upper - m) / sigma_obs)``.
+    - **Lower limit** (mask=-1): ``ln L = ln Phi((m - f_lower) / sigma_obs)``.
 
-    where Phi is the standard normal CDF.
+    where ``Phi`` is the standard normal CDF. A limit is scored with the
+    Gaussian CDF at its own ``sigma_obs`` (Boquien et al. 2019 [1]_, Eq. 15,
+    which follows Sawicki 2012). The calibration floor enters detections
+    only, as in the CIGALE implementation (``pcigale`` ``_add_model_error``
+    floors only bands with a non-negative error; limits carry negative
+    errors); the paper itself states no such rule.
+
+    **Precondition**: ``noise_obs > 0`` for every band, limits included. A
+    zero ``sigma_obs`` on a limit band gives an infinite energy and a NaN
+    gradient. The fit entry points reject non-positive uncertainties for all
+    bands before the likelihood is built (``Data.validate_against``,
+    ``Fitter``); this function does not re-check.
+
+    **Floor convention**: the floor scales with the MODEL flux,
+    ``sigma_eff = hypot(sigma_obs, f_cal * |m|)``, so ``sigma_eff`` depends
+    on the parameters and the energy carries the term ``ln sigma_eff``.
+    CIGALE's ``additionalerror`` scales with the OBSERVED flux and adds no
+    ``ln sigma`` term; :func:`apply_zp_floor` is tengri's observed-scaled
+    form.
+
+    References
+    ----------
+    .. [1] Boquien, M. et al. 2019, A&A, 622, A103. CIGALE: a Python
+       Code Investigating GALaxy Emission. arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
 
@@ -385,12 +411,12 @@ def censored_neg_log_likelihood(
     else:
         e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
 
-    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma) ---
-    z_upper = (data - predicted) / sigma_eff
+    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_obs) ---
+    z_upper = (data - predicted) / noise_obs
     e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
 
-    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma) ---
-    z_lower = (predicted - data) / sigma_eff
+    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_obs) ---
+    z_lower = (predicted - data) / noise_obs
     e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
 
     # Apply the noise model band by band

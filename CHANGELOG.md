@@ -36,6 +36,8 @@
   agn-wildcard-liveness 0.15, crossval 0.05, notebooks 0.25 GiB). Contract and
   regression-a timeout budgets now cover a cold cache: 90 and 85 minutes respectively,
   without renaming the required checks (#2549).
+- Upper and lower limits are scored with the Gaussian CDF at their own σ_obs (Boquien et al. 2019, Eq. 15); the calibration floor `noise_frac_cal · |model|` enters detections only, as in the CIGALE implementation (#2619).
+
 - `psb_flex` and `psb_suess2022` now include the link ratio (`ratio_old_0`) between the oldest flexible bin and the youngest fixed bin, matching Suess et al. 2022's one-ratio-per-fixed-bin count (previously `n_fixed − 1` ratios, with that step silently pinned at 0) and enabling independent control of the post-starburst SFH amplitude across the quenching-to-old transition. **Breaking:** `ratio_old_*` indices shift: the new `ratio_old_0` is the link (default 0, reproducing today's SFHs bit-exactly); former `ratio_old_0` through `ratio_old_{n_fixed−2}` (the adjacent-step ratios) are now `ratio_old_1` through `ratio_old_{n_fixed−1}`. A caller that passes only `n_fixed − 1` values through the flat-kwarg path (e.g. `ratio_old_0=0.2, ratio_old_1=-0.3`) now leaves the link (`ratio_old_0`) at its default 0 and reads the adjacent steps one index higher than it meant to — there is no silent re-indexing to the old meaning, so update call sites to `ratio_old_1=0.2, ratio_old_2=-0.3` (plus an explicit `ratio_old_0` if a nonzero link is wanted) (#2612).
 - `psb_flex` and `psb_suess2022`'s fixed old bins now span `[tflex_gyr, age_at_z(z)]` instead of a redshift-independent `[tflex_gyr, 13.7 Gyr]`, through the same `age_universe_yr` injection `psb_wild2020`'s burst already receives. Previously the default model at z = 0.5 formed 33% of its stellar mass before the Big Bang (`SFHBeforeBigBangWarning`) and published star formation out to 13.3 Gyr lookback, 4.7 Gyr older than the universe; now no default-configuration psb build warns. At z = 0 the oldest edge shifts from 13.7 to `age_at_z(0)` = 13.7869 Gyr (#2645).
 
@@ -44,6 +46,8 @@
 - A `params_override` redshift on a non-catalog precompute model evaluated tables built at the model's own redshift (a 45% loss error on a `WavePrecomp` model moved from z=0.05 to 1.0): the fixed-z stellar LUT, IGM band factors, nebular grid reference, dust-IR band response, energy-balance LUT, radio/X-ray term responses and luminosity distance all stayed at the build redshift. The `Fitter` now evaluates a model built at the override redshift (`SEDModel.with_fixed_redshift`, cached per redshift), so the override is exactly a direct build; `fitter.model` is that rebuilt model. This is also the fix for catalog rows fitted with a per-galaxy `redshift_col` and no `catalog_z_range`. `catalog_z_range` models keep their runtime redshift route.
 
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
+
+- The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
 
 ### Added
 
@@ -119,6 +123,31 @@
   differ by 22-28%, so the thermal component steps by that much at the SSP edge. Validation
   against pcigale, whose radio module is synchrotron only and whose nebular module owns the
   thermal continuum, set the rule.
+
+- The X-ray corona shape `(E/E_ref)^(1-Γ) × exp(−(E−E_ref)/E_cut)` equals 1 at E_ref = 2 keV with
+  the exponential cutoff included, so `L_ν(2 keV)` is the monochromatic luminosity of
+  Yang et al. 2020 Eq. 2 for every `E_cut` and Γ. The LMXB photon index default is 1.56
+  (Fabbiano 2006; Yang et al. 2020 Sect. 2.2.2), as in pcigale (#2583).
+
+- The X-ray block's HMXB and hot-gas terms scale with the SFR averaged over the last
+  100 Myr (`sfr_100myr`), the quantity the Lehmer et al. 2016 relations are calibrated on
+  (Yang et al. 2022, Sect. 3.3); the instantaneous SFR stands in only for an SFH that
+  publishes no 100 Myr average. The registered properties `log_l_x_xrb` and `log_l_x_agn`
+  are the 2-10 keV luminosities of the emitted HMXB + LMXB terms and of the emitted AGN
+  corona (absorber, scattered fraction and anisotropy included), published by the X-ray
+  component as `log_L_x_xrb_2_10` / `log_L_x_agn_2_10` in log10 space, so they equal the
+  band integral of `sed_xray`'s terms in float64 and float32. `log_l_x_agn` is `-inf`
+  without an AGN. `compute_log_l_x_xrb`, `compute_log_l_x_agn`, `compute_l_x_xrb` and
+  `compute_l_x_agn` (the 2.6e39·SFR and Duras relations, none re-exported at a public
+  `__init__`) are removed (#2582).
+
+- The `lopez24` corona is anchored to the 12 um nu L_nu of the AGN model itself. The
+  AGN component publishes `log_L_12um` and `log_L_6um` (dex re erg/s; disc + torus + polar
+  dust of the composable model, the whole SED of a monolithic one), and
+  `L(2-10 keV) = nu L_nu(12 um) / 10^alpha_IRX` is formed in log10 space, so the X-ray
+  wing is finite in pure float32. A model with no AGN has a zero corona, and the 0.07 L_bol
+  bolometric-correction anchor is removed together with `compute_l_12um_from_lbol`. `xray_agn_corona_lopez24` and
+  `xray_total_lopez24*` take `log_l_12um_erg` (dex) in place of `l_12um_erg_hz` (#2581).
 
 - Meiksin (2006) IGM: every Lyman-series optical depth (n = 2–30) is evaluated
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward

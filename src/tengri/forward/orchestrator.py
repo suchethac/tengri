@@ -262,6 +262,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_absorbed": "erg/s",
     "L_2500_intrinsic": "erg/s/Hz",
     "L_4400_intrinsic": "erg/s/Hz",
+    "log_L_12um": "dex",
+    "log_L_6um": "dex",
     "sed_agn": "erg/s/Hz",
     # Per-sub-block AGN SEDs (task13): composable-runner only, sum to sed_agn.
     "sed_agn_disc": "erg/s/Hz",
@@ -322,6 +324,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
+    "log_L_x_xrb_2_10": "dex",
+    "log_L_x_agn_2_10": "dex",
     "igm_transmission": "",
     "igm_rest_transmission_precomp": "",
     "igm_reach_filters_precomp": "",
