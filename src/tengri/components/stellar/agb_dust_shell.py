@@ -54,8 +54,8 @@ the prior range: a weight near 0 carries a few-percent error in the shell's
 ratio. The
 interpolant has a kink at every stored weight, so the gradient with respect to
 ``agb_dust_weight`` is the slope of the bracketing segment and is
-discontinuous across a node (at w = 1, where R peaks, it changes sign at
-10 um).
+discontinuous across a node (for a 1 Gyr population the 10 um ratio peaks close
+to w = 1, so its slope changes sign around it).
 
 **Window and extremes.** R is stored exactly as FSPS gives it, with a flux
 guard (R = 1 where the w=1 spectrum is below 1e-6 of its own peak) and no

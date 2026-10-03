@@ -5,10 +5,9 @@
 between the template's stored weight nodes. The gradient is therefore the
 slope of the bracketing segment: it matches a central finite difference
 strictly inside a segment and is discontinuous at a stored node. At the
-reference weight ``w = 1`` the ratio peaks (it is 1 there by construction and
-below 1 on both sides at 10 um), so the gradient changes sign across that
-node; tests evaluate at weights between nodes, and the kink is asserted
-separately.
+reference weight ``w = 1`` the 10 um ratio of a 1 Gyr population peaks (it is 1
+there by construction), so the gradient of that ratio changes sign around it;
+tests evaluate at weights between nodes, and the kink is asserted separately.
 
 ``jax.grad`` through ``SEDModel.predict_photometry`` is finite and non-zero for
 a population with TP-AGB stars, and the ratio is exactly flat in ``w`` for a
@@ -22,7 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import Fixed, SEDModel, Uniform, load_ssp
+from tengri import Fixed, SEDModel, Uniform
 from tengri.components.stellar.agb_dust_shell import (
     agb_dust_ratio,
     load_agb_dust_shell_template,
@@ -30,10 +29,10 @@ from tengri.components.stellar.agb_dust_shell import (
 )
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
+from tests._agb_dust_synthetic import synthetic_mist_ssp
 
 pytestmark = pytest.mark.gradient
 
-_SSP = "fsps_mist_c3k_a_chabrier"
 _TEN_MICRON_BAND = 4
 
 
@@ -55,7 +54,7 @@ def _observation() -> Observation:
 @pytest.fixture(scope="module")
 def model_and_params():
     model = SEDModel.build(
-        ssp_data=load_ssp(_SSP),
+        ssp_data=synthetic_mist_ssp(),
         observation=_observation(),
         sfh={"type": "const"},
         redshift=Fixed(0.0),
@@ -66,7 +65,7 @@ def model_and_params():
 
 @pytest.fixture(scope="module")
 def resampled():
-    ssp = load_ssp(_SSP)
+    ssp = synthetic_mist_ssp()
     template = load_agb_dust_shell_template()
     return resample_agb_dust_shell(
         template,
@@ -98,14 +97,34 @@ def test_photometry_grad_matches_finite_difference_between_nodes(model_and_param
     assert abs(grad - fd) / abs(fd) < 1e-2, f"grad={grad}, finite-diff={fd}"
 
 
-def test_photometry_grad_changes_sign_across_the_reference_weight(model_and_params):
-    """The stored node at w=1 is a kink: R peaks at 1 there, so the 10 um flux
-    rises into it and falls away from it."""
+def test_photometry_grad_has_a_kink_at_a_stored_weight(model_and_params):
+    """The slope of the 10 um flux differs on the two sides of the stored node
+    at w=1: the gradient is the slope of the bracketing segment."""
     model, params = model_and_params
     flux = _ten_micron_flux(model, params)
     below = float(jax.grad(flux)(1.0 - 1e-4))
     above = float(jax.grad(flux)(1.0 + 1e-4))
-    assert below > 0.0 > above
+    assert jnp.isfinite(below)
+    assert below != 0.0
+    assert jnp.isfinite(above)
+    assert above != 0.0
+    assert abs(below - above) > 1e-3 * max(abs(below), abs(above))
+
+
+def test_ratio_grad_changes_sign_near_the_reference_weight(resampled):
+    """For a 1 Gyr, solar-metallicity population the 10 um ratio peaks close to
+    w=1 (it is 1 there by construction and 1.002 at w=13/16), so its slope is
+    positive at w=0.5 and negative at w=1.1."""
+    resampled_grid, ssp = resampled
+    met_idx = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - (-1.848))))
+    age_idx = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr))))
+    wave_idx = int(np.argmin(np.abs(np.asarray(ssp.ssp_wave) - 1.0e5)))
+
+    def ratio_at_10um(w):
+        return agb_dust_ratio(resampled_grid, w)[met_idx, age_idx, wave_idx]
+
+    assert float(jax.grad(ratio_at_10um)(0.5)) > 0.0
+    assert float(jax.grad(ratio_at_10um)(1.1)) < 0.0
 
 
 def test_grad_wrt_weight_is_zero_for_3myr_population(resampled):

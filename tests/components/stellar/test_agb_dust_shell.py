@@ -39,12 +39,13 @@ from tengri.inference.fitter import Fitter, _resolve_batch_fit_approx
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectral_indices import STANDARD_INDICES
+from tests._agb_dust_synthetic import synthetic_mist_ssp
 
 pytestmark = pytest.mark.bounds
 
 _MIST_C3K = "fsps_mist_c3k_a_chabrier"
 _MIST_MILES = "fsps_mist_miles_chabrier"
-_NON_MIST = "fsps_prsc_miles_chabrier"
+_SYN = "synthetic"
 _FREE_WEIGHT = {"type": "fsps_shell", "weight": Uniform(0.0, 3.0)}
 
 #: FSPS 0.4.7 / libfsps v3.2-61-g82a8735 output (MIST + MILES + Chabrier) at the
@@ -72,9 +73,19 @@ def _observation() -> Observation:
     return Observation(photometry=Photometry(filters=curves))
 
 
+def _ssp(name: str):
+    """The synthetic grid, or a real library (skipped when its file is absent)."""
+    if name == _SYN:
+        return synthetic_mist_ssp()
+    try:
+        return load_ssp(name)
+    except FileNotFoundError:
+        pytest.skip(f"SSP file {name}.h5 not found (data-gated: not shipped on CI runners)")
+
+
 def _build(ssp_name: str, *, agb_dust=None, age_kernel: str = "cic", approx=None, **extra):
     return SEDModel.build(
-        ssp_data=load_ssp(ssp_name),
+        ssp_data=_ssp(ssp_name) if isinstance(ssp_name, str) else ssp_name,
         observation=_observation(),
         sfh={"type": "const", "age_kernel": age_kernel},
         redshift=Fixed(0.0),
@@ -100,7 +111,7 @@ def _stellar(model) -> StellarSEDComponent:
 # ── 1. Identity at the default weight ───────────────────────────────────
 
 
-@pytest.mark.parametrize("ssp_name", [_MIST_C3K, _MIST_MILES])
+@pytest.mark.parametrize("ssp_name", [_SYN, _MIST_C3K, _MIST_MILES])
 @pytest.mark.parametrize("age_kernel", ["cic", "dsps"])
 def test_fixed_default_weight_is_bit_identical_to_omitted(ssp_name, age_kernel):
     """``Fixed(1.0)`` is bit-identical to omitting the group: R(w=1) is exactly
@@ -123,7 +134,7 @@ def test_fixed_default_weight_is_bit_identical_to_omitted(ssp_name, age_kernel):
     assert float(jnp.max(jnp.abs(phot_plain - phot_default))) == 0.0
 
 
-@pytest.mark.parametrize("ssp_name", [_MIST_C3K, _MIST_MILES])
+@pytest.mark.parametrize("ssp_name", [_SYN, _MIST_C3K, _MIST_MILES])
 def test_fixed_default_weight_is_bit_identical_under_wave_precomp(ssp_name):
     """Same identity through the WavePrecomp photometry table (the weight is
     baked into the SSP grid before the table is built)."""
@@ -162,7 +173,7 @@ class TestTemplate:
 
     def test_stored_planes_reproduce_the_pins(self):
         """The pins re-derived from the stored planes, not only the attrs."""
-        ssp = load_ssp(_MIST_C3K)
+        ssp = _ssp(_SYN)
         resampled = _resampled(ssp)
         z = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - (-1.8477))))
         a = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr))))
@@ -224,18 +235,19 @@ class TestTemplate:
 
 def test_ratio_is_exactly_one_outside_the_stored_window():
     template = load_agb_dust_shell_template()
-    ssp = load_ssp(_MIST_C3K)
-    wave = np.asarray(ssp.ssp_wave)
+    wave = np.geomspace(50.0, 1.0e9, 400)
     outside = (wave < template.wave_angstrom.min()) | (wave > template.wave_angstrom.max())
     assert np.count_nonzero(outside) > 0
-    resampled = _resampled(ssp)
+    resampled = resample_agb_dust_shell(
+        template, template.log_z[:3], template.log_age_yr[::10], wave
+    )
     for w in (0.0, 0.4, 3.0):
-        assert np.all(np.asarray(agb_dust_ratio(resampled, w))[:, :, outside] == 1.0)
+        assert np.all(np.asarray(agb_dust_ratio(resampled, w))[..., outside] == 1.0)
 
 
 def test_ratio_is_piecewise_linear_between_stored_weights():
     """Between nodes R(w) is the straight line through the bracketing planes."""
-    ssp = load_ssp(_MIST_C3K)
+    ssp = _ssp(_SYN)
     resampled = _resampled(ssp)
     weights = np.asarray(resampled.weights)
     planes = np.asarray(resampled.ratio_planes)
@@ -248,7 +260,7 @@ def test_ratio_is_piecewise_linear_between_stored_weights():
 def test_ratio_monotonic_in_weight_at_10um_for_intermediate_age():
     """At 10 um for 1 Gyr, solar, R rises into the reference weight w=1 and
     falls away from it: monotonic on each side of the stored node at w=1."""
-    ssp = load_ssp(_MIST_C3K)
+    ssp = _ssp(_SYN)
     resampled = _resampled(ssp)
     age_idx = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr))))
     met_idx = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - (-1.848))))
@@ -269,7 +281,7 @@ def test_ratio_monotonic_in_weight_at_10um_for_intermediate_age():
 def test_baked_cube_is_the_ssp_cube_times_the_ratio():
     """The cube a Fixed weight bakes is the SSP cube times R(w), cell by cell;
     for a single-metallicity single-age burst this is the whole prediction."""
-    ssp = load_ssp(_MIST_C3K)
+    ssp = _ssp(_SYN)
     ratio = np.asarray(agb_dust_ratio(_resampled(ssp), 2.0))
     baked = np.asarray(bake_agb_dust_shell(ssp, 2.0).ssp_flux)
     np.testing.assert_allclose(baked, np.asarray(ssp.ssp_flux) * ratio, rtol=1e-6)
@@ -285,8 +297,8 @@ def test_baked_cube_is_the_ssp_cube_times_the_ratio():
 def test_fixed_weight_equals_free_weight_live(weight):
     """A Fixed weight baked at build time and the same value fed live to a free
     weight give the same spectrum and photometry."""
-    baked = _build(_MIST_C3K, agb_dust={"type": "fsps_shell", "weight": Fixed(weight)})
-    free = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    baked = _build(_SYN, agb_dust={"type": "fsps_shell", "weight": Fixed(weight)})
+    free = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = baked.spec.sample(jax.random.PRNGKey(3))
     free_params = {**params, "agb_dust_weight": weight}
 
@@ -298,14 +310,14 @@ def test_fixed_weight_equals_free_weight_live(weight):
         np.asarray(baked.predict_photometry(params)),
         rtol=1e-5,
     )
-    default = np.asarray(_build(_MIST_C3K).predict(params).rest_sed())
+    default = np.asarray(_build(_SYN).predict(params).rest_sed())
     assert np.max(np.abs(sed_free / default - 1.0)) > 1e-3
 
 
 def test_prediction_at_a_non_node_weight_matches_a_hand_computation():
     """The model's rest-frame SED at w=0.4 (between the stored nodes 0.3125 and
     0.4375) is total_mass * sum(joint weights * SSP cube * R) * L_sun."""
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = {**model.spec.sample(jax.random.PRNGKey(4)), "agb_dust_weight": 0.4}
     ssp = model.ssp_data
     ratio = np.asarray(agb_dust_ratio(_resampled(ssp), 0.4))
@@ -325,7 +337,7 @@ def test_prediction_at_a_non_node_weight_matches_a_hand_computation():
 def test_compute_log_nion_applies_the_live_ratio():
     """The SED-free ionizing rate reads the corrected cube: with a ratio that
     doubles the flux shortward of the Lyman limit it rises by log10(2)."""
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = model._evaluation_params(
         {**model.spec.sample(jax.random.PRNGKey(5)), "agb_dust_weight": 2.0}, None
     )
@@ -343,7 +355,7 @@ def test_compute_log_nion_applies_the_live_ratio():
 
 
 def test_compute_log_nion_matches_the_published_log_nion_with_the_real_template():
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = {**model.spec.sample(jax.random.PRNGKey(6)), "agb_dust_weight": 0.0}
     full = model._evaluation_params(params, None)
     stellar = _stellar(model)
@@ -359,7 +371,7 @@ def test_nebular_ionizing_tables_are_unaffected_by_the_shell_weight():
     integrated rate changes by less than 1e-5."""
     from tengri.components.nebular.cloudy_grid import _compute_log_qh_grid
 
-    ssp = load_ssp(_MIST_C3K)
+    ssp = _ssp(_MIST_MILES)
     resampled = _resampled(ssp)
     age_yr = 10.0 ** (np.asarray(ssp.ssp_lg_age_gyr) + 9.0)
     base = np.asarray(_compute_log_qh_grid(ssp.ssp_wave, ssp.ssp_flux))
@@ -378,8 +390,9 @@ def test_nebular_ionizing_tables_are_unaffected_by_the_shell_weight():
 
 
 def test_non_mist_grid_refuses_naming_supported_grids():
+    parsec = synthetic_mist_ssp()._replace(source="fsps_prsc_miles_chabrier")
     with pytest.raises(ValueError, match="MIST") as exc:
-        _build(_NON_MIST, agb_dust={"type": "fsps_shell", "weight": Fixed(1.0)})
+        _build(parsec, agb_dust={"type": "fsps_shell", "weight": Fixed(1.0)})
     for name in SUPPORTED_GRIDS:
         assert name in str(exc.value)
 
@@ -390,7 +403,7 @@ def test_free_weight_refuses_the_precompute_tables_naming_the_exact_path(approx)
     refusal is deterministic, so leaving it to the build-time catch-warn-and-
     fall-back handling would give a model that builds and then always fails."""
     with pytest.raises(ValueError, match="exact path"):
-        _build(_MIST_C3K, agb_dust=_FREE_WEIGHT, approx=approx)
+        _build(_SYN, agb_dust=_FREE_WEIGHT, approx=approx)
 
 
 def test_free_weight_refuses_the_window_lut_fast_paths():
@@ -399,7 +412,7 @@ def test_free_weight_refuses_the_window_lut_fast_paths():
     Fixed weight, whose cube is baked."""
     from tengri.observation.line_measurement import default_line_defs
 
-    free = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    free = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = free.spec.sample(jax.random.PRNGKey(7))
     dn4000 = (STANDARD_INDICES["Dn4000"],)
     with pytest.raises(ValueError, match="free agb_dust_weight"):
@@ -408,7 +421,7 @@ def test_free_weight_refuses_the_window_lut_fast_paths():
     with pytest.raises(ValueError, match="free agb_dust_weight"):
         free.measure_line_fluxes(params, lines, approx=True)
 
-    fixed = _build(_MIST_C3K, agb_dust={"type": "fsps_shell", "weight": Fixed(2.0)})
+    fixed = _build(_SYN, agb_dust={"type": "fsps_shell", "weight": Fixed(2.0)})
     fixed_params = fixed.spec.sample(jax.random.PRNGKey(7))
     fast = np.asarray(fixed.predict_spectral_indices(fixed_params, dn4000, approx=True))
     exact = np.asarray(fixed.predict_spectral_indices(fixed_params, dn4000, approx=False))
@@ -417,7 +430,7 @@ def test_free_weight_refuses_the_window_lut_fast_paths():
 
 
 def test_auto_approx_resolves_to_exact_for_free_weight():
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     n_bands = len(model.observation.photometry.filters)
     fitted = Fitter(model, jnp.ones(n_bands), jnp.ones(n_bands), approx="auto").model
     assert not fitted._has_modern_approx()
@@ -428,14 +441,14 @@ def test_batch_fit_resolver_keeps_the_exact_model_for_free_weight(data_type):
     """Catalog and population fits resolve ``approx='auto'`` through
     ``_resolve_batch_fit_approx``: a free weight stays on the exact model,
     silently (no table is attempted, so there is nothing to warn about)."""
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         assert _resolve_batch_fit_approx(model, "auto", data_type) is model
 
 
 def test_batch_fit_resolver_warns_and_stays_exact_for_an_explicit_table():
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     with pytest.warns(UserWarning, match="exact path"):
         resolved = _resolve_batch_fit_approx(model, WavePrecomp(), "photometry")
     assert resolved is model
@@ -444,7 +457,7 @@ def test_batch_fit_resolver_warns_and_stays_exact_for_an_explicit_table():
 def test_exact_spectrum_applies_the_live_weight():
     """The exact spectroscopy path (the one a free weight uses) responds to the
     weight; precompute tables are refused above."""
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     params = model.spec.sample(jax.random.PRNGKey(8))
     wave = np.asarray(model.ssp_data.ssp_wave)
     at_10um = int(np.argmin(np.abs(wave - 1.0e5)))
@@ -457,8 +470,8 @@ def test_exact_spectrum_applies_the_live_weight():
 
 
 def test_none_and_omitted_are_bit_identical():
-    omitted = _build(_MIST_C3K, agb_dust=None)
-    none_type = _build(_MIST_C3K, agb_dust={"type": "none"})
+    omitted = _build(_SYN, agb_dust=None)
+    none_type = _build(_SYN, agb_dust={"type": "none"})
     key = jax.random.PRNGKey(2)
     params = omitted.spec.sample(key)
     sed_omitted = omitted.predict(params).rest_sed()
@@ -469,20 +482,20 @@ def test_none_and_omitted_are_bit_identical():
 
 
 def test_all_params_free_frees_exactly_agb_dust_weight():
-    model = _build(_MIST_C3K, agb_dust={"type": "fsps_shell", "all_params": FREE})
+    model = _build(_SYN, agb_dust={"type": "fsps_shell", "all_params": FREE})
     agb_free = {p for p in model.spec.free_params if p.startswith("agb_dust_")}
     assert agb_free == {"agb_dust_weight"}
 
 
 def test_summary_tags_agb_dust_module():
-    model = _build(_MIST_C3K, agb_dust={"type": "fsps_shell", "weight": Fixed(2.0)})
+    model = _build(_SYN, agb_dust={"type": "fsps_shell", "weight": Fixed(2.0)})
     assert "agb_dust" in model.spec.summary_str()
 
 
 def test_to_groups_round_trip():
     from tengri.parameters.groups import parse_groups
 
-    model = _build(_MIST_C3K, agb_dust=_FREE_WEIGHT)
+    model = _build(_SYN, agb_dust=_FREE_WEIGHT)
     groups = model.spec.to_groups()
     assert groups.get("agb_dust", {}).get("type") == "fsps_shell"
     roundtrip_spec = parse_groups(ssp_data=model.ssp_data, **groups)
