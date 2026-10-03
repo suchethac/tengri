@@ -195,7 +195,12 @@ def mix_intervals(fractions: jnp.ndarray, per_interval: jnp.ndarray) -> jnp.ndar
     ndarray, shape (n_age, ...)
         The mixture at every SSP node.
     """
-    return jnp.einsum("ja,j...->a...", fractions, per_interval)
+    per_interval = jnp.asarray(per_interval)
+    # Elementwise multiply-and-sum, not an einsum: the interval axis is 2-3 long, and
+    # a dot_general with a contraction that short, batched by vmap inside a larger
+    # jitted graph, miscompiles on XLA CPU (measured: a uniform 1e-4 scale error).
+    f = fractions.reshape(fractions.shape + (1,) * (per_interval.ndim - 1))
+    return jnp.sum(f * per_interval[:, None, ...], axis=0)
 
 
 def weighted_interval_transmission(weights: jnp.ndarray, per_interval: jnp.ndarray) -> jnp.ndarray:
