@@ -1,397 +1,420 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for #2620: a filter extending beyond the model axis returns 0 or
-a fraction silently.
+"""#2620: a photometric filter beyond the model wavelength axis is refused at build.
 
-When the SED model wavelength axis does not cover the full transmission profile of
-a photometric filter, tengri's photometry integral interpolates with left=0 and
-right=0 (zero-filling), returning 0 for a fully uncovered band and the covered
-fraction for a partially covered one. The physics is unknown (not zero or the covered
-part alone), and the silent return masks the problem in fits: a 1 mJy datum becomes
-a fixed penalty with no information.
+The photometry integral zero-fills outside the rest-frame axis and divides by
+the whole filter weight, so an uncovered band returned 0 and a partly covered
+one returned the covered fraction, with no warning. ``SEDModel`` now measures,
+at build time and after every component has declared its axis extension, the
+fraction of each band's bandpass-weighted transmission outside the redshifted
+axis, and raises ``ConfigError`` above ``FILTER_COVERAGE_TOLERANCE`` (1e-3).
 
-The fix:
-1. At build time, compute for every filter the fraction of its photon-weighted
-   transmission integral that lies outside the redshifted model axis. If > 0.1 %,
-   raise ConfigError.
-2. Bands whose datum is masked (missing data) are exempt.
-3. Adding a component that extends the model axis (e.g., dust emission, radio)
-   resolves the error.
+Top-hat filters are built here on a dense geometric grid, so the trapezoid
+quadrature of the helper reproduces the analytic integrals of ``1/lambda``
+(photon counting) and ``1/lambda**2`` (energy) to well below 1e-6.
+
+Masking is known only at fit time (``Fitter(presence=...)``,
+``CatalogFitter(missing='mask')``), so the build-time check covers every filter
+of the observation; there is no masked-band cell by design.
 """
 
-import warnings
+from __future__ import annotations
 
-import jax
+import functools
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
+import tengri
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.config.exceptions import ConfigError
 from tengri.observation import Observation
-from tengri.observation.filters import FilterCurve
-from tengri.observation.photometry import compute_flux_density
+from tengri.observation.photometry import (
+    FILTER_COVERAGE_TOLERANCE,
+    FilterConvention,
+    FilterCurve,
+    filter_coverage_fraction,
+)
 from tengri.observation.photometry_config import Photometry
+from tengri.parameters.priors import Gaussian
 from tengri.utils.cosmology import luminosity_distance
 
 pytestmark = pytest.mark.regression_bug
 
-# Physics constants
-C = 2.99792458e8  # speed of light, m/s
+UM = 1.0e4  # Angstrom per micron
+AXIS_END_UM = 160.0  # the truncated SSP's red edge (a BC03-type axis)
+AXIS_MIN_AA = 0.0091 * UM
+AXIS_MAX_AA = AXIS_END_UM * UM
 
 
-def _create_tophat_filter(wave_min_um, wave_max_um, name=""):
-    """Create a top-hat transmission filter.
-
-    Parameters
-    ----------
-    wave_min_um : float
-        Minimum wavelength [µm].
-    wave_max_um : float
-        Maximum wavelength [µm].
-    name : str
-        Filter name.
-
-    Returns
-    -------
-    FilterCurve
-        Top-hat filter with transmission=1 on [wave_min_um, wave_max_um] and 0 outside.
-    """
-    # Create a 5-point top-hat: edges at 1e-4 transmission, flat at 1.0 inside
-    # FilterCurve expects wavelengths in Angstrom: 1 µm = 1e4 Angstrom
-    wave_aa = np.array([
-        wave_min_um * 1e4 - 1e-3,  # Left edge, almost zero
-        wave_min_um * 1e4,  # Flat start
-        (wave_min_um + wave_max_um) * 1e4 / 2,  # Center
-        wave_max_um * 1e4,  # Flat end
-        wave_max_um * 1e4 + 1e-3,  # Right edge, almost zero
-    ])
-    trans = np.array([0.0, 1.0, 1.0, 1.0, 0.0])
-    return FilterCurve(wave=jnp.array(wave_aa), trans=jnp.array(trans), name=name)
-
-
-def _analytic_sed_powerlaw(wave_nm, amplitude=1e30, slope=-1.5):
-    """Analytic power-law SED L_lambda = amplitude * (wave / 500)^slope.
-
-    Parameters
-    ----------
-    wave_nm : array, shape (n,)
-        Wavelength [nm].
-    amplitude : float
-        Normalization amplitude.
-    slope : float
-        Power-law slope.
-
-    Returns
-    -------
-    array, shape (n,)
-        L_lambda [erg/s/Angstrom].
-    """
-    return amplitude * (wave_nm / 500.0) ** slope
-
-
-def _stp_compute_flux_density(L_nu_wave, wave_nm, filter_curve, z=0.0):
-    """Helper to compute flux density using the SED model's compute_flux_density.
-
-    Parameters
-    ----------
-    L_nu_wave : array
-        L_nu at each wavelength [erg/s/Hz].
-    wave_nm : array
-        Wavelength [nm].
-    filter_curve : FilterCurve
-        Filter transmission curve.
-    z : float
-        Redshift.
-
-    Returns
-    -------
-    float
-        Flux density [erg/s/cm^2/Hz].
-    """
-    dl_cm = luminosity_distance(z) * 3.086e24  # Mpc to cm
-    flux_cgs = float(compute_flux_density(
-        jnp.asarray(L_nu_wave),
-        jnp.asarray(wave_nm * 0.1),  # nm to Angstrom
-        filter_curve.wave,
-        filter_curve.trans,
-        z,
-        float(dl_cm),
-    ))
-    return flux_cgs / 1e-26  # erg/s/cm^2/Hz to mJy
-
-
-def test_analytic_sed_powerlaw_integrals():
-    """Test that the analytic SED and flux computation work correctly.
-
-    Create an SED ending at 160 µm and integrate top-hat filters over the union grid.
-    Compare to the same integral over an extended grid (1e6 nm) to verify the
-    fraction computation.
-    """
-    jax.config.update("jax_enable_x64", True)
-
-    # SED ending at 160 µm
-    wave_nm = np.geomspace(9.1, 1.6e5, 5000)  # 9.1 nm to 160 µm
-    wave_long_nm = np.geomspace(9.1, 1.0e6, 8000)  # Extended to 1e6 nm (truth)
-
-    # Power-law: L_lambda = amplitude * (w / 500)^-1.5
-    amplitude = 1e30  # erg/s/Angstrom at w=500 nm
-    L_lambda = _analytic_sed_powerlaw(wave_nm, amplitude=amplitude)
-    L_lambda_long = _analytic_sed_powerlaw(wave_long_nm, amplitude=amplitude)
-
-    # Convert L_lambda to L_nu: L_nu = L_lambda * (lambda^2 / c)
-    L_nu = L_lambda * 1e9 * (wave_nm * 1e-9) ** 2 / C * 1e7  # erg/s/Hz
-    L_nu_long = L_lambda_long * 1e9 * (wave_long_nm * 1e-9) ** 2 / C * 1e7
-
-    # Filters: top-hats covering different parts of the spectrum
-    # mips_160 should be ~60% covered (peaks at 160 µm)
-    # scuba2_850 should be 0% covered (850 µm >> 160 µm)
-    filters = {
-        "mips_160_100_160": _create_tophat_filter(100.0, 160.0, "mips_160"),  # 0%
-        "mips_160_140_180": _create_tophat_filter(140.0, 180.0, "mips_160_partial"),  # ~50%
-        "mips_160_200_300": _create_tophat_filter(200.0, 300.0, "mips_160_beyond"),  # ~100%
-        "scuba2_850": _create_tophat_filter(700.0, 1000.0, "scuba2_850"),  # 0%
-    }
-
-    # Test each filter
-    for fkey, filt in filters.items():
-        flux = _stp_compute_flux_density(L_nu, wave_nm, filt, z=0.0)
-        flux_long = _stp_compute_flux_density(L_nu_long, wave_long_nm, filt, z=0.0)
-
-        # Compute the fraction
-        if flux_long > 0:
-            frac = flux / flux_long
-        else:
-            frac = 0.0
-
-        # Check tolerances based on filter coverage
-        if "100_160" in fkey:
-            # Should be ~0% covered
-            assert frac < 1e-5, f"{fkey}: expected <1e-5, got {frac}"
-        elif "partial" in fkey:
-            # Should be ~0.5 covered
-            assert 0.4 < frac < 0.6, f"{fkey}: expected ~0.5, got {frac}"
-        elif "beyond" in fkey:
-            # Should be ~100% covered
-            assert frac > 0.99, f"{fkey}: expected >0.99, got {frac}"
-        elif "scuba2" in fkey:
-            # Should be 0% covered
-            assert frac < 1e-5, f"{fkey}: expected <1e-5, got {frac}"
-
-
-def test_sedmodel_build_raises_for_uncovered_band():
-    """Test that SEDModel.build raises ConfigError when a band is >0.1% uncovered.
-
-    Build a stellar-only model with axis ending at ~10,000 µm (default FSPS SSP).
-    A top-hat at 9,500–12,000 µm should raise because ~33% of the transmission
-    lies at 10,000–12,000 µm (outside the model).
-    """
-    jax.config.update("jax_enable_x64", True)
-
-    ssp = tengri.load_ssp()
-    F = lambda **k: {key: Fixed(v) for key, v in k.items()}
-
-    # Create a filter that straddles the model axis end
-    # Model axis ends at ~10,000 µm for stellar-only default SSP
-    straddling_filter = _create_tophat_filter(
-        9500.0, 12000.0, name="straddling_band"
+def _hat(a_um, b_um, name="hat", n=4001):
+    """Top-hat T = 1 on [a, b] um, geometric nodes, zero-transmission end nodes."""
+    a, b = a_um * UM, b_um * UM
+    wave = np.geomspace(a, b, n)
+    return FilterCurve(
+        wave=jnp.asarray(np.concatenate([[a * (1 - 1e-9)], wave, [b * (1 + 1e-9)]])),
+        trans=jnp.asarray(np.concatenate([[0.0], np.ones(n), [0.0]])),
+        name=name,
     )
 
-    # Should raise ConfigError
-    with pytest.raises(ConfigError) as exc_info:
-        SEDModel.build(
-            ssp,
-            sfh={"type": "delayed", **F(tau_gyr=1.0, age_gyr=3.0, log_total_mass=10.0)},
-            met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-            dust_attenuation={
-                "type": "two_component",
-                "law_bc": "calzetti",
-                "law_diff": "calzetti",
-                **F(tau_bc=0.0, tau_diff=0.3),
-                "all_params": Fixed(DEFAULT),
-            },
-            dust_emission=None,
-            neb={"type": "none"},
-            redshift=Fixed(0.0),
-            observation=Observation(photometry=Photometry(filters=(straddling_filter,))),
-        )
 
-    # Error message should mention the band name, uncovered fraction, and axis range
-    error_msg = str(exc_info.value)
-    assert "straddling_band" in error_msg or "uncovered" in error_msg.lower()
+def _uncovered_photon(a, b, x):
+    """Analytic uncovered fraction of a 1/lambda-weighted top-hat [a, b] above x."""
+    if x >= b:
+        return 0.0
+    if x <= a:
+        return 1.0
+    return float(np.log(b / x) / np.log(b / a))
 
 
-def test_sedmodel_build_fully_covered_bands_ok():
-    """Test that fully covered bands build and predict correctly.
+def _uncovered_energy(a, b, x):
+    """Analytic uncovered fraction of a 1/lambda**2-weighted top-hat above x."""
+    if x >= b:
+        return 0.0
+    if x <= a:
+        return 1.0
+    return float((1 / x - 1 / b) / (1 / a - 1 / b))
 
-    Build a stellar-only model and verify that bands fully covered by the model
-    axis (e.g., optical/NIR) build successfully and predict the correct flux
-    to 1e-6 relative tolerance.
-    """
-    jax.config.update("jax_enable_x64", True)
 
-    ssp = tengri.load_ssp()
-    F = lambda **k: {key: Fixed(v) for key, v in k.items()}
+def _frac(filt, z, convention=FilterConvention.BESSELL):
+    return filter_coverage_fraction(filt.wave, filt.trans, AXIS_MIN_AA, AXIS_MAX_AA, z, convention)
 
-    # Create fully covered filters (optical/NIR)
-    fully_covered = _create_tophat_filter(
-        0.4, 2.5, name="optical_nir"
+
+# ── (a) the helper against analytic top-hats ────────────────────────────────
+
+_BANDS = [
+    # (a_um, b_um, z): the model axis ends at 160 (1 + z) um in the observed frame
+    (100.0, 140.0, 0.0),
+    (140.0, 180.0, 0.0),
+    (200.0, 300.0, 0.0),
+    (200.0, 300.0, 1.0),
+    (280.0, 360.0, 1.0),
+    (400.0, 500.0, 1.0),
+]
+
+
+@pytest.mark.parametrize("a_um, b_um, z", _BANDS)
+@pytest.mark.parametrize(
+    "convention, analytic",
+    [(FilterConvention.BESSELL, _uncovered_photon), (FilterConvention.ENERGY, _uncovered_energy)],
+)
+def test_coverage_fraction_matches_analytic_tophat(a_um, b_um, z, convention, analytic):
+    expected = analytic(a_um, b_um, AXIS_END_UM * (1.0 + z))
+    got = _frac(_hat(a_um, b_um), z, convention)
+    assert got == pytest.approx(expected, abs=1e-6)
+
+
+def test_coverage_fraction_inside_is_exactly_zero_and_outside_exactly_one():
+    assert _frac(_hat(100.0, 140.0), 0.0) == 0.0
+    assert _frac(_hat(200.0, 300.0), 0.0) == 1.0
+    assert _frac(_hat(0.001, 0.005), 0.0) == 1.0  # wholly blueward of the axis
+
+
+def test_coverage_fraction_node_on_axis_edge():
+    edge, lo = AXIS_MAX_AA, AXIS_MIN_AA
+    flat = [1.0, 1.0, 1.0]
+    # a filter ending exactly on the red edge is covered; one starting there is not
+    assert filter_coverage_fraction([100 * UM, 130 * UM, edge], flat, lo, edge, 0.0) == 0.0
+    assert filter_coverage_fraction([edge, 180 * UM, 200 * UM], flat, lo, edge, 0.0) == 1.0
+    # the same at the blue edge
+    assert filter_coverage_fraction([lo, 2 * lo, 3 * lo], flat, lo, edge, 0.0) == 0.0
+    assert filter_coverage_fraction([lo / 3, lo / 2, lo], flat, lo, edge, 0.0) == 1.0
+
+
+def test_coverage_fraction_zero_transmission_tails_do_not_count():
+    # transmission lives on 100-140 um; zero-weight nodes run far past the axis end
+    wave = np.array([20.0, 99.0, 100.0, 140.0, 141.0, 900.0]) * UM
+    trans = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 0.0])
+    assert filter_coverage_fraction(wave, trans, AXIS_MIN_AA, AXIS_MAX_AA, 0.0) == 0.0
+
+
+def test_coverage_fraction_does_not_assume_a_monotonic_table():
+    filt = _hat(140.0, 180.0, n=401)
+    order = np.random.default_rng(0).permutation(filt.wave.shape[0])
+    shuffled = filter_coverage_fraction(
+        np.asarray(filt.wave)[order], np.asarray(filt.trans)[order], AXIS_MIN_AA, AXIS_MAX_AA, 0.0
     )
+    assert shuffled == _frac(filt, 0.0)
+    assert shuffled == pytest.approx(_uncovered_photon(140.0, 180.0, 160.0), abs=1e-6)
 
-    # Should build successfully
-    model = SEDModel.build(
-        ssp,
-        sfh={"type": "delayed", **F(tau_gyr=1.0, age_gyr=3.0, log_total_mass=10.0)},
-        met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
-            **F(tau_bc=0.0, tau_diff=0.3),
+
+@pytest.mark.parametrize(
+    "wave, trans",
+    [([200 * UM], [1.0]), ([100 * UM, 300 * UM], [0.0, 0.0])],
+    ids=["single_node", "zero_transmission"],
+)
+def test_coverage_fraction_filter_without_weight_has_nothing_to_lose(wave, trans):
+    assert filter_coverage_fraction(wave, trans, AXIS_MIN_AA, AXIS_MAX_AA, 0.0) == 0.0
+
+
+# ── model builders ──────────────────────────────────────────────────────────
+
+
+@functools.cache
+def _short_ssp():
+    """The tracked SSP cut at 160 um: the red edge of a BC03-type axis."""
+    ssp = tengri.load_ssp()
+    keep = np.asarray(ssp.ssp_wave) <= AXIS_MAX_AA
+    return ssp._replace(ssp_wave=ssp.ssp_wave[keep], ssp_flux=ssp.ssp_flux[..., keep])
+
+
+_DUST = {
+    "type": "two_component",
+    "law_bc": "calzetti",
+    "law_diff": "calzetti",
+    "tau_bc": Fixed(0.0),
+    "tau_diff": Fixed(0.3),
+    "all_params": Fixed(DEFAULT),
+}
+_RADIO = {"sf": {"type": "bell2003"}, "agn": {"type": "none"}, "all_params": Fixed(DEFAULT)}
+_TORUS = {
+    "type": "composable",
+    "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+    "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+    "blr": {"type": "none"},
+    "nlr": {"type": "none"},
+    "feii": {"type": "none"},
+    "atten": {"type": "none"},
+}
+_MBB = {"type": "modified_blackbody", "all_params": Fixed(DEFAULT)}
+_DL14 = {
+    "type": "draine_li2014",
+    "dust_qpah": Fixed(2.5),
+    "dust_umin": Fixed(1.0),
+    "dust_gamma_dl": Fixed(0.1),
+    "dust_alpha_dl14": Fixed(2.0),
+    "all_params": Fixed(DEFAULT),
+}
+
+
+def _build(filters, redshift=None, dust_attenuation=None, convention="bessell", **blocks):
+    redshift = Fixed(0.5) if redshift is None else redshift
+    return SEDModel.build(
+        _short_ssp(),
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission=None,
-        neb={"type": "none"},
-        redshift=Fixed(0.0),
-        observation=Observation(photometry=Photometry(filters=(fully_covered,))),
-    )
-
-    # Predict photometry (all parameters are Fixed, so pass empty dict)
-    params = {}
-    flux = model.predict_photometry(params)
-    assert not np.isnan(flux[0]), "Photometry should not be NaN for fully covered band"
-    assert float(flux[0]) > 0, "Photometry should be positive"
-
-
-def test_sedmodel_build_free_redshift_uncovered_at_edge():
-    """Test that free redshift raises if a band becomes uncovered at the edge of the prior.
-
-    Build with a uniform redshift prior [0, 1]. A band that is uncovered at z=1
-    but covered at z=0 should raise (or vice versa).
-    """
-    jax.config.update("jax_enable_x64", True)
-
-    ssp = tengri.load_ssp()
-    F = lambda **k: {key: Fixed(v) for key, v in k.items()}
-
-    # Filter uncovered at high z due to redshift: at z=0, rest wavelength is 20000 µm
-    # (beyond the model axis at 10000 µm). At z=1, rest wavelength is 10000 µm
-    # (at the edge of the model axis).
-    problematic_filter = _create_tophat_filter(
-        20000.0, 25000.0, name="uncovered_at_high_z"
-    )
-
-    with pytest.raises(ConfigError) as exc_info:
-        SEDModel.build(
-            ssp,
-            sfh={"type": "delayed", **F(tau_gyr=1.0, age_gyr=3.0, log_total_mass=10.0)},
-            met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-            dust_attenuation={
-                "type": "two_component",
-                "law_bc": "calzetti",
-                "law_diff": "calzetti",
-                **F(tau_bc=0.0, tau_diff=0.3),
-                "all_params": Fixed(DEFAULT),
-            },
-            dust_emission=None,
-            neb={"type": "none"},
-            redshift=Uniform(0.0, 1.0),
-            observation=Observation(photometry=Photometry(filters=(problematic_filter,))),
-        )
-
-    error_msg = str(exc_info.value)
-    assert "uncovered" in error_msg.lower() or "coverage" in error_msg.lower()
-
-
-def test_sedmodel_build_dust_emission_extends_axis():
-    """Test that adding dust emission component extends the model axis.
-
-    Build the same model from test_sedmodel_build_raises_for_uncovered_band,
-    but with dust emission (which extends the axis to at least 12000 µm). Should build successfully.
-    """
-    jax.config.update("jax_enable_x64", True)
-
-    ssp = tengri.load_ssp()
-    F = lambda **k: {key: Fixed(v) for key, v in k.items()}
-
-    # Same straddling filter (9500-12000 µm)
-    straddling_filter = _create_tophat_filter(
-        9500.0, 12000.0, name="straddling_band"
-    )
-
-    # With dust emission, should build successfully (dust extends to IR)
-    model = SEDModel.build(
-        ssp,
-        sfh={"type": "delayed", **F(tau_gyr=1.0, age_gyr=3.0, log_total_mass=10.0)},
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
-            **F(tau_bc=0.0, tau_diff=0.3),
-            "all_params": Fixed(DEFAULT),
-        },
-        dust_emission={"type": "draine_li2014", **F(dust_qpah=2.5, dust_umin=1.0, dust_gamma_dl=0.1, dust_alpha_dl14=2.0), "all_params": Fixed(DEFAULT)},
+        dust_attenuation=dust_attenuation or {"type": "none"},
         neb={"type": "none"},
-        redshift=Fixed(0.0),
-        observation=Observation(photometry=Photometry(filters=(straddling_filter,))),
+        redshift=redshift,
+        observation=Observation(
+            photometry=Photometry(filters=tuple(filters), convention=convention)
+        ),
+        **blocks,
     )
 
-    # Predict photometry (all parameters are Fixed, so pass empty dict)
-    params = {}
-    flux = model.predict_photometry(params)
-    assert not np.isnan(flux[0]), "Photometry should not be NaN with dust emission"
-    assert float(flux[0]) > 0, "Photometry should be positive with dust emission"
+
+def _straddle(z, uncovered, a_um=100.0):
+    """Top-hat from ``a_um (1+z)`` with ``uncovered`` of its 1/lambda weight beyond the axis."""
+    x = AXIS_END_UM * (1.0 + z)
+    a = a_um * (1.0 + z)
+    b = (x / a**uncovered) ** (1.0 / (1.0 - uncovered))
+    return _hat(a, b, name="straddling_band")
 
 
-def test_masked_band_uncovered_does_not_raise():
-    """Test that a masked (missing data) band with uncovered fraction does not raise.
+# ── (b) the build refuses; the message carries band, fraction, axis, redshift ─
 
-    Build a model with an uncovered band (> 10,000 µm) without providing data.
-    Since no data is provided, the band should not affect the fit.
-    For now, this is a placeholder - masking is handled at the Fitter level, not
-    at the Photometry configuration level.
+
+@pytest.mark.parametrize("z", [0.0, 0.5, 1.0])
+def test_build_refuses_a_band_straddling_the_axis_end(z):
+    filt = _straddle(z, 0.4)
+    with pytest.raises(ConfigError) as err:
+        _build([filt], redshift=Fixed(z))
+    msg = str(err.value)
+    assert "straddling_band" in msg
+    assert f"{_frac(filt, z):.4g}" in msg and f"{_frac(filt, z):.4g}".startswith("0.4")
+    assert f"[0.0091, {AXIS_END_UM:.4g}] um" in msg
+    assert f"z = {z:.4g}" in msg
+    assert "#2620" in msg
+
+
+# ── (c) control: covered bands build and match an independent integral ──────
+
+
+@pytest.mark.parametrize("z", [0.0, 0.5])
+@pytest.mark.parametrize("band_um", [(30.0, 100.0), (1.0, 3.0)])
+def test_covered_band_builds_and_matches_numpy_integral(z, band_um):
+    filt = _hat(*band_um, name="covered")
+    model = _build([filt], redshift=Fixed(z))
+    state = model.predict_state({})
+    assert _numpy_flux(state, filt, z) == pytest.approx(
+        float(model.predict_photometry({})[0]), rel=1e-6
+    )
+
+
+def _numpy_flux(state, filt, z):
+    """Independent numpy band flux: trapezoid of L_nu T / lambda on the union grid."""
+    wave = np.asarray(state.wave) * (1.0 + z)
+    lnu = np.asarray(state.sed_intrinsic)
+    fw, ft = np.asarray(filt.wave), np.asarray(filt.trans)
+    grid = np.unique(np.concatenate([wave, fw]))
+    weight = np.interp(grid, fw, ft, left=0.0, right=0.0) / grid
+    num = np.trapezoid(np.interp(grid, wave, lnu, left=0.0, right=0.0) * weight, grid)
+    mean_lnu = num / np.trapezoid(weight, grid)
+    return mean_lnu * (1.0 + z) / (4.0 * np.pi * float(luminosity_distance(z)) ** 2)
+
+
+# ── tolerance boundary: what an accepted band can lose ──────────────────────
+
+
+@pytest.mark.parametrize("uncovered", [5e-4, 9e-4])
+def test_band_just_inside_tolerance_builds_and_loses_exactly_its_fraction(uncovered):
+    """A band 0 < f <= 1e-3 uncovered is accepted; its flux is the zero-filled integral.
+
+    The zero-filled flux is ``A / W_tot`` and the covered-renormalized flux is
+    ``A / W_cov``; their ratio is ``1 - f``. So the tolerance admits an
+    under-estimate of at most 0.1 % (1.1 mmag), and the model equals the
+    independent numpy integral to 1e-6.
     """
-    jax.config.update("jax_enable_x64", True)
+    assert uncovered <= FILTER_COVERAGE_TOLERANCE
+    z = 0.0
+    filt = _straddle(z, uncovered)
+    assert _frac(filt, z) == pytest.approx(uncovered, rel=1e-3)
+    model = _build([filt], redshift=Fixed(z))
+    state = model.predict_state({})
+    flux = float(model.predict_photometry({})[0])
+    assert _numpy_flux(state, filt, z) == pytest.approx(flux, rel=1e-6)
+    renormalized = flux / (1.0 - _frac(filt, z))
+    assert 1.0 - flux / renormalized == pytest.approx(uncovered, rel=1e-3)
+    assert 1.0 - flux / renormalized <= FILTER_COVERAGE_TOLERANCE
 
-    ssp = tengri.load_ssp()
-    F = lambda **k: {key: Fixed(v) for key, v in k.items()}
 
-    # Uncovered filter beyond the model axis
-    uncovered_filter = _create_tophat_filter(
-        20000.0, 25000.0, name="uncovered_masked"
-    )
-
-    # Note: Masking is handled at the Fitter level (when data is provided as NaN),
-    # not at the Photometry configuration level. At SEDModel.build time, all bands
-    # are checked. If a band would be uncovered but has no data (or NaN data at fit time),
-    # the likelihood will ignore it anyway, so the zero prediction doesn't poison the fit.
-    # For now, this test is expected to RAISE (same as other uncovered bands).
-    # A future enhancement could allow specifying masked bands at the Photometry level.
-
-    phot = Photometry(
-        filters=(uncovered_filter,),
-    )
-
-    # This is expected to raise because the band is uncovered at build time,
-    # even though it might have no data at fit time
+def test_band_just_outside_tolerance_is_refused():
     with pytest.raises(ConfigError):
-        SEDModel.build(
-            ssp,
-            sfh={"type": "delayed", **F(tau_gyr=1.0, age_gyr=3.0, log_total_mass=10.0)},
-            met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-            dust_attenuation={
-                "type": "two_component",
-                "law_bc": "calzetti",
-                "law_diff": "calzetti",
-                **F(tau_bc=0.0, tau_diff=0.3),
-                "all_params": Fixed(DEFAULT),
-            },
-            dust_emission=None,
-            neb={"type": "none"},
-            redshift=Fixed(0.0),
-            observation=Observation(photometry=phot),
+        _build([_straddle(0.0, 1.5e-3)], redshift=Fixed(0.0))
+
+
+# ── (e) components that extend the axis turn the refusal into a build ───────
+
+_EXTENDS = [
+    # id, blocks, band [um], refused, axis max [um]
+    ("stellar", {}, (150.0, 250.0), True, 160.0),
+    (
+        "xray",
+        {"xray": {"type": "simple", "all_params": Fixed(DEFAULT)}},
+        (150.0, 250.0),
+        True,
+        160.0,
+    ),
+    ("torus_simple", {"agn": _TORUS}, (150.0, 250.0), True, 160.0),
+    ("modified_blackbody", {"dust_emission": _MBB}, (150.0, 250.0), False, 1.0e4),
+    ("draine_li2014", {"dust_emission": _DL14}, (150.0, 250.0), False, 1.0e4),
+    ("mbb_band_past_1cm", {"dust_emission": _MBB}, (2.0e4, 3.0e4), True, 1.0e4),
+    ("radio", {"radio": _RADIO}, (150.0, 250.0), False, 3.0e7),
+    ("radio_band_past_1cm", {"radio": _RADIO}, (2.0e4, 3.0e4), False, 3.0e7),
+]
+
+
+@pytest.mark.parametrize(
+    "blocks, band, refused, axis_max_um",
+    [c[1:] for c in _EXTENDS],
+    ids=[c[0] for c in _EXTENDS],
+)
+def test_axis_extension_by_component(blocks, band, refused, axis_max_um):
+    filt = _hat(*band, name="far_ir")
+    kwargs = {"dust_attenuation": _DUST, **blocks}
+    if refused:
+        with pytest.raises(ConfigError, match="far_ir"):
+            _build([filt], redshift=Fixed(0.0), **kwargs)
+        return
+    model = _build([filt], redshift=Fixed(0.0), **kwargs)
+    wave = np.asarray(model.predict_state({}).wave)
+    assert wave.max() / UM == pytest.approx(axis_max_um, rel=1e-6)
+    flux = float(model.predict_photometry({})[0])
+    assert np.isfinite(flux) and flux > 0.0
+
+
+@pytest.mark.parametrize(
+    "blocks, axis_min_um",
+    [({}, 0.0091), ({"xray": {"type": "simple", "all_params": Fixed(DEFAULT)}}, 4.13e-6)],
+    ids=["stellar", "xray"],
+)
+def test_axis_blue_end_by_component(blocks, axis_min_um):
+    model = _build([_hat(30.0, 100.0, name="covered")], redshift=Fixed(0.0), **blocks)
+    wave = np.asarray(model.predict_state({}).wave)
+    assert wave.min() / UM == pytest.approx(axis_min_um, rel=1e-3)
+
+
+# ── (d) free redshift: both ends of the prior support ───────────────────────
+
+
+@pytest.mark.parametrize(
+    "band, prior, failing_z, end",
+    [
+        ((150.0, 250.0), Uniform(0.0, 1.0), 0, "lower"),  # covered at z = 1 only
+        ((0.0100, 0.0120), Uniform(0.0, 1.0), 1, "upper"),  # covered at z = 0 only
+        ((150.0, 250.0), Gaussian(0.5, 0.2, lo=0.0, hi=1.0), 0, "lower"),
+        ((150.0, 250.0), Gaussian(0.5, 0.2, lo=0.0), 0, "lower"),
+    ],
+    ids=[
+        "red_band_fails_low_z",
+        "blue_band_fails_high_z",
+        "truncated_gaussian",
+        "half_open_gaussian",
+    ],
+)
+def test_free_redshift_checks_both_ends_and_names_the_failing_redshift(
+    band, prior, failing_z, end
+):
+    with pytest.raises(ConfigError) as err:
+        _build([_hat(*band, name="moving_band")], redshift=prior)
+    msg = str(err.value)
+    assert "moving_band" in msg
+    assert f"z = {failing_z} ({end} end of the redshift prior)" in msg
+
+
+def test_free_redshift_covered_at_both_ends_builds():
+    _build([_hat(100.0, 150.0, name="ok")], redshift=Uniform(0.0, 1.0))
+
+
+def test_unbounded_prior_end_exposes_no_support_and_is_not_tested():
+    # The half-open Gaussian has no upper bound, so only z = 0 is tested; the blue
+    # band that fails at z = 1 is therefore not seen. The spec gives no support there.
+    _build([_hat(0.0100, 0.0120, name="blue")], redshift=Gaussian(0.0, 0.2, lo=0.0))
+
+
+# ── catalog / z-table / rebuilt models reach the same check ─────────────────
+
+
+def test_catalog_z_range_checks_both_range_ends_even_for_a_fixed_redshift():
+    filt = _hat(150.0, 250.0, name="catalog_band")
+    _build([filt], redshift=Fixed(1.0))  # alone, the fixed z = 1 covers it
+    with pytest.raises(ConfigError, match=r"z = 0 \(lower end of catalog_z_range\)"):
+        _build([filt], redshift=Fixed(1.0), approx=WavePrecomp(catalog_z_range=(0.0, 1.5)))
+
+
+def test_catalog_z_range_covered_at_both_ends_builds():
+    _build([_hat(30.0, 100.0, name="ok")], approx=WavePrecomp(catalog_z_range=(0.0, 1.5)))
+
+
+def test_wave_precomp_fixed_redshift_refuses():
+    with pytest.raises(ConfigError, match="precomp_band"):
+        _build(
+            [_hat(150.0, 250.0, name="precomp_band")], redshift=Fixed(0.0), approx=WavePrecomp()
         )
 
 
-# Import tengri after the test functions are defined to ensure pytest discovers them
-import tengri
+def test_with_fixed_redshift_rebuild_hits_the_check():
+    model = _build([_hat(150.0, 250.0, name="rebuilt_band")], redshift=Fixed(1.0))
+    assert model.with_fixed_redshift(1.5) is not model
+    with pytest.raises(ConfigError, match="rebuilt_band"):
+        model.with_fixed_redshift(0.0)
+
+
+def test_energy_convention_uses_the_observation_weight():
+    """The check weights each band as the photometry does: 1/lambda**2 under ENERGY.
+
+    A wide band uncovered by 1.3e-3 in photon counting is under 1e-3 in
+    energy weighting (the energy weight favors the covered, bluer part).
+    """
+    filt = _straddle(0.0, 1.3e-3, a_um=10.0)
+    assert _frac(filt, 0.0, FilterConvention.BESSELL) > FILTER_COVERAGE_TOLERANCE
+    assert _frac(filt, 0.0, FilterConvention.ENERGY) < FILTER_COVERAGE_TOLERANCE
+    with pytest.raises(ConfigError, match="straddling_band"):
+        _build([filt], redshift=Fixed(0.0))
+    _build([filt], redshift=Fixed(0.0), convention=FilterConvention.ENERGY)
