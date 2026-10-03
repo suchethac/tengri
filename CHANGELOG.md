@@ -2,6 +2,17 @@
 
 ### Fixed
 
+- The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`) interpolates
+  ln(band flux) with a monotone cubic Hermite (PCHIP) on nodes that span each parameter's
+  declared prior (geometric in `dust_T` and `dust_lambda_0_um`). Nodes are band integrals of
+  the closed-form model on a rest grid of 0.01 um to 10 m, evaluated in batches, so a band
+  anywhere from the far infrared to the radio reads its flux rather than 0. A band whose
+  rest-frame red edge lies beyond 10 m raises `ValueError`. At the default nodes the lookup
+  agrees with the exact closure to <= 5e-4 at random points inside the declared priors
+  (bands 60-90, 250-500 and 750-950 um); the #2676 reproducer at T 47.3 K, beta 1.65,
+  lambda_0 130 um gives lookup/exact of 1.0000 in all three bands for all three models
+  (main: -4 % to +10 %), and 0.9999 / 0.9998 for 15 K dust in 8-24 um (main: +0.9 %
+  to +1 %) (#2676).
 - `fit_batch`'s shared vmap adaptation forwards the spec to the dense-mass
   gate (#2513). It was the one `resolve_dense_mass_gate` caller without
   `spec=`, and with `spec=None` the auto-policy's dense_basis exception

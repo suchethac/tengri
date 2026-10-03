@@ -15,6 +15,9 @@ from tengri.components.dust._params import PARAMS as _DUST_PARAMS
 
 pytestmark = pytest.mark.contract
 
+# Exact-closure reference grid [Angstrom]: 0.01 um to 10 m, finer than the builders' grid.
+WIDE = np.geomspace(1e2, 1e11, 72000)
+
 
 def _get_param_bounds(param_name: str) -> tuple[float, float]:
     """Extract (lower, upper) bounds from a parameter's free_prior."""
@@ -42,7 +45,6 @@ def exact(model, kw, fw, ft):
     """Exact closure: integrate model on ultra-fine grid."""
     from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
-    WIDE = np.geomspace(1e2, 1e8, 40000)
     s = np.asarray(M[model](jnp.asarray(WIDE), 1.0, **kw), dtype=float)
     return np.trapezoid(np.interp(fw, WIDE, s) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
 
@@ -56,69 +58,36 @@ def lookup(model, kw, fw, ft, **grids):
     return float(np.asarray(adapter.build_lookup(res, model=model)(1.0, *q)).ravel()[0])
 
 
+_BANDS_UM = ((60, 90), (250, 500), (750, 950))
+_ISSUE_QUERY = {
+    "dust_T": 47.3,
+    "dust_beta_ir": 1.65,
+    "dust_alpha_mir": 1.8,
+    "dust_lambda_0_um": 130.0,
+}
+
+
 @pytest.mark.parametrize("model", ["modified_blackbody", "casey2012", "graybody"])
 def test_off_node_accuracy_default_grids(model):
-    """Off-node accuracy at default grids: issue query and 12 random points."""
+    """Default node grids: the issue query and 12 seeded random points inside the priors."""
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    names = adapter.AXIS_PARAMS[model]
+    filters = [tophat(*b) for b in _BANDS_UM]
+    res = adapter.precompute(
+        [f[0] for f in filters], [f[1] for f in filters], 0.0, None, model=model
+    )
+    lookup_fn = adapter.build_lookup(res, model=model)
+
     rng = np.random.RandomState(42)
-
-    # Axis parameter bounds from declared priors
-    if model == "modified_blackbody":
-        T_lo, T_hi = _get_param_bounds("dust_T")
-        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
-        axis_bounds = {"dust_T": (T_lo, T_hi), "dust_beta_ir": (beta_lo, beta_hi)}
-        kw_issue = {"dust_T": 47.3, "dust_beta_ir": 1.65}
-    elif model == "casey2012":
-        T_lo, T_hi = _get_param_bounds("dust_T")
-        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
-        alpha_lo, alpha_hi = _get_param_bounds("dust_alpha_mir")
-        lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
-        axis_bounds = {
-            "dust_T": (T_lo, T_hi),
-            "dust_beta_ir": (beta_lo, beta_hi),
-            "dust_alpha_mir": (alpha_lo, alpha_hi),
-            "dust_lambda_0_um": (lambda_lo, lambda_hi),
-        }
-        kw_issue = {
-            "dust_T": 47.3,
-            "dust_beta_ir": 1.65,
-            "dust_alpha_mir": 1.8,
-            "dust_lambda_0_um": 130.0,
-        }
-    elif model == "graybody":
-        T_lo, T_hi = _get_param_bounds("dust_T")
-        beta_lo, beta_hi = _get_param_bounds("dust_beta_ir")
-        lambda_lo, lambda_hi = _get_param_bounds("dust_lambda_0_um")
-        axis_bounds = {
-            "dust_T": (T_lo, T_hi),
-            "dust_beta_ir": (beta_lo, beta_hi),
-            "dust_lambda_0_um": (lambda_lo, lambda_hi),
-        }
-        kw_issue = {"dust_T": 47.3, "dust_beta_ir": 1.65, "dust_lambda_0_um": 130.0}
-
-    bands = ((60, 90), (250, 500), (750, 950))
-
-    # Test issue query first
-    for b in bands:
-        fw, ft = tophat(*b)
-        lkp = lookup(model, kw_issue, fw, ft)
-        ex = exact(model, kw_issue, fw, ft)
-        ratio = lkp / ex
-        assert abs(ratio - 1.0) < 1e-3, (
-            f"{model} issue query band {b}: lookup/exact = {ratio:.6f}, "
-            f"error {abs(ratio - 1.0):.6f}"
-        )
-
-    # Test 12 random points within axis bounds
-    for _ in range(12):
-        kw = {k: rng.uniform(*v) for k, v in axis_bounds.items()}
-        for b in bands:
-            fw, ft = tophat(*b)
-            lkp = lookup(model, kw, fw, ft)
-            ex = exact(model, kw, fw, ft)
-            ratio = lkp / ex
+    points = [{n: _ISSUE_QUERY[n] for n in names}]
+    points += [{n: rng.uniform(*_get_param_bounds(n)) for n in names} for _ in range(12)]
+    for kw in points:
+        got = np.asarray(lookup_fn(1.0, *[kw[n] for n in names]))
+        for b, f, lkp in zip(_BANDS_UM, filters, got):
+            ratio = lkp / exact(model, kw, *f)
             assert abs(ratio - 1.0) < 1e-3, (
-                f"{model} random point {kw}, band {b}: "
-                f"lookup/exact = {ratio:.6f}, error {abs(ratio - 1.0):.6f}"
+                f"{model} point {kw}, band {b}: lookup/exact = {ratio:.6f}"
             )
 
 
@@ -193,26 +162,30 @@ def test_wien_tail_accuracy(model):
     )
 
 
-def test_band_coverage_refusal():
-    """Bands outside rest grid are refused with a ValueError naming band and range."""
+_MM_GRIDS = {
+    "T_grid": 20.0 * np.array([0.998, 1.0, 1.002]),
+    "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
+}
 
-    # 12-20 mm is outside the default continuum grid (100 Å - 10 mm)
+
+@pytest.mark.parametrize("band_um", [(12000, 20000), (8000, 12000)])
+def test_millimeter_bands_agree_with_exact_closure(band_um):
+    """Bands at 8-20 mm lie inside the rest grid and agree with the exact closure."""
     kw = {"dust_T": 20.0, "dust_beta_ir": 1.5}
-    grids = {
-        "T_grid": 20.0 * np.array([0.998, 1.0, 1.002]),
-        "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
-    }
-
-    fw, ft = tophat(120000, 200000)  # 12-20 mm (um in Angstrom)
-    with pytest.raises(ValueError) as excinfo:
-        lookup("modified_blackbody", kw, fw, ft, **grids)
-    err_msg = str(excinfo.value)
-    # Should name the band's rest-frame wavelength range
-    assert "12" in err_msg or "20" in err_msg or "Filter" in err_msg or "range" in err_msg, (
-        f"ValueError should name the band or its range; got: {err_msg}"
+    fw, ft = tophat(*band_um)
+    ratio = lookup("modified_blackbody", kw, fw, ft, **_MM_GRIDS) / exact(
+        "modified_blackbody", kw, fw, ft
     )
+    assert abs(ratio - 1.0) < 1e-3, f"{band_um} um: lookup/exact = {ratio:.6f}"
 
-    # pah_drude 40-70 um test removed: now covered by test_pah_drude_coverage
+
+def test_band_beyond_rest_grid_refused():
+    """A band whose red edge lies beyond 10 m raises ValueError naming the filter."""
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    fw, ft = tophat(15_000_000, 20_000_000)  # 15-20 m
+    with pytest.raises(ValueError, match="Filter 0 RED edge"):
+        adapter.precompute([fw], [ft], 0.0, None, model="modified_blackbody", **_MM_GRIDS)
 
 
 def test_pah_drude_coverage():
@@ -220,11 +193,9 @@ def test_pah_drude_coverage():
     from tengri.components.dust import dust_analytic_precompute as adapter
     from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
-    # The PAH grid must be widened to include 40-70 um; once it is, test it.
     fw, ft = tophat(40, 70)
     res = adapter.precompute([fw], [ft], 0.0, None, model="pah_drude")
 
-    WIDE = np.geomspace(1e2, 1e8, 40000)
     wide_pah = np.asarray(M["pah_drude"](jnp.asarray(WIDE), 1.0), dtype=float)
     ex = np.trapezoid(np.interp(fw, WIDE, wide_pah) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
 
@@ -245,7 +216,6 @@ def test_redshift_off_node():
     fw, ft = tophat(60, 90)  # observed frame
 
     # Exact: template evaluated on ultra-fine grid, then interpolated
-    WIDE = np.geomspace(1e2, 1e8, 40000)
     fw_rest = fw / (1 + z)  # convert to rest frame
     s = np.asarray(M["modified_blackbody"](jnp.asarray(WIDE), 1.0, **kw), dtype=float)
     ex = np.trapezoid(np.interp(fw_rest, WIDE, s) * ft / fw_rest, fw_rest) / np.trapezoid(
@@ -254,7 +224,11 @@ def test_redshift_off_node():
 
     # Lookup at redshift z
     res = adapter.precompute([fw], [ft], z, None, model="modified_blackbody")
-    lkp = float(np.asarray(adapter.build_lookup(res, model="modified_blackbody")(1.0)).ravel()[0])
+    lkp = float(
+        np.asarray(adapter.build_lookup(res, model="modified_blackbody")(1.0, 47.3, 1.65)).ravel()[
+            0
+        ]
+    )
 
     ratio = lkp / ex
     assert abs(ratio - 1.0) < 1e-3, (

@@ -37,7 +37,7 @@ pytestmark = pytest.mark.regression_bug
 
 # The builders' own rest range (0.01 um - 10 mm): the closures normalize to L_absorbed over the
 # grid they are given, so the exact reference must be evaluated on the same range.
-_WIDE_REST_AA = np.geomspace(1e2, 1e8, 40000)
+_WIDE_REST_AA = np.geomspace(1e2, 1e11, 72000)
 
 _T, _BETA, _ALPHA_MIR, _LAMBDA_0_UM = 60.0, 1.5, 2.0, 200.0
 _NODE_SPACING = 0.002
@@ -170,17 +170,12 @@ def test_pah_drude_lookup_equals_exact_closure(z, band_um):
 
 @pytest.mark.parametrize("model", _CONTINUUM_MODELS)
 def test_z0_grid_nodes_equal_exact_closure(model):
-    """At z = 0, each node's photometry equals the exact closure to rtol 1e-3.
-
-    The log-flux PCHIP interpolation achieves exact agreement with the closure
-    evaluated on the builders' reference wavelength grid.
-    """
+    """At z = 0, the lookup at the central node equals the exact closure to rtol 1e-3."""
     names = adapter.AXIS_PARAMS[model]
     grids = {_GRID_KEYWORD[n]: _nodes(_CENTRAL[n], 0.01) for n in names}
     filt_wave, filt_trans = _tophat(160.0, 500.0)
     result = adapter.precompute([filt_wave], [filt_trans], 0.0, None, model=model, **grids)
-    central = _CENTRAL
-    exact_val = _exact(model, 0.0, (160.0, 500.0), central)
+    exact_val = _exact(model, 0.0, (160.0, 500.0), _CENTRAL)
     lookup_val = _lookup_value(model, 0.0, (160.0, 500.0), 0.01, _CENTRAL["dust_T"])
     assert lookup_val / exact_val == pytest.approx(1.0, abs=1e-3), (
         f"{model} z=0: lookup/exact = {lookup_val / exact_val:.6f}"
