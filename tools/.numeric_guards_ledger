@@ -8,6 +8,9 @@
 # floors: they clamp log10(Q_H), so -30.0 dex is the same guard as the 1e-30
 # linear floor each replaced, not a new 30-orders-smaller one. The pattern
 # matcher reads the literal, not the space it lives in.
+# stellar/component.py's 6th jnp.maximum(..., 0.0) is _sliver_equivalent_sfr0's
+# non-negative clamp on the young-knot SFR (#2635); its over-count bound is
+# stated in that function's docstring and pinned by a test.
 src/tengri/analysis/diagnostics/lines.py | jnp.clip with floor 0.0 < 1e-20 -> 2
 src/tengri/analysis/diagnostics/spectral.py | jnp.maximum with floor 1e-40 < 1e-20 -> 4
 src/tengri/components/agn/_nthcomp.py | jnp.clip with floor 0.0 < 1e-20 -> 2
@@ -73,7 +76,7 @@ src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floo
 src/tengri/components/nebular/nebular_grid_precompute.py | jnp.maximum with floor 1e-300 < 1e-20 -> 1
 src/tengri/components/nebular/shock_model.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
 src/tengri/components/stellar/component.py | jnp.clip with floor 0.0 < 1e-20 -> 1
-src/tengri/components/stellar/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 5
+src/tengri/components/stellar/component.py | jnp.maximum with floor 0.0 < 1e-20 -> 6
 src/tengri/components/stellar/component.py | jnp.maximum with floor 1e-30 < 1e-20 -> 6
 src/tengri/components/stellar/sfh/chemical_evolution.py | jnp.clip with floor -4.0 < 1e-20 -> 2
 src/tengri/components/stellar/sfh/dense_basis.py | jnp.clip with floor 0.0 < 1e-20 -> 2

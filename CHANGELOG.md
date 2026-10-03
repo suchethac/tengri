@@ -3326,6 +3326,15 @@
   (`dust_attenuation`, `dust_emission`), but `agn`'s own validator took
   `'none'` only. `'off'` now normalizes onto `'none'` before the validator
   runs, so the two spellings parse and predict identically (#2214).
+- `sfh2exp` placed burst mass before the formation epoch when `burst_age >= age` (0.129 of the total at (500, 100, 0.2, 300, 400) Myr); the burst is bounded to `[0, min(burst_age, age)]` with `f_burst` exact, and `delayed_bq` accepts `r_sfr = 0` (full quench) (#2623).
+- An SFH with all its support younger than the youngest SSP template formed zero mass and flux on both age kernels; the `[0, age0]` sliver is now integrated from the SFH itself and assigned to the youngest template (declared mass formed, was 0) (#2635).
+- Every GP-field realization forms the declared mass exactly (standard deviation over 50 draws: 0); the declaration is the per-draw formed mass (part of #2622).
+
+### Changed
+
+- The published `sfr_history`, `predict_sfh` (native and linear grids) and the SFR averages now carry the formed mass and end at `age(z)` (a node sits exactly there; the area beyond it is 0, was 0.56 to 0.97 of the formed mass for `dpl` with onset beyond `age(z)`): the plain integral equals `10**log_mstar_formed` on the native grid and to 5e-4 on the 1000-node linear grid for smooth families (`dpl`, `delayed`, `continuity`; a bursty field draw on that grid is sampling-limited, 3e-2 at z = 6 for n = 1000, 2e-3 for n = 5000). In default models this moves `sfr_10myr`/`sfr_100myr` (continuity +1.75e-2 at z = 0, +4.5e-3 at z = 2.5, nearer the dense integral; `dpl` default +1e-5 at z = 0; `dpl`/`delayed` defaults whose onset exceeds `age(z)` now form the declared mass), `ugriz` photometry by at most 2e-6 (young-sliver change), stellar mass by 0 (#2640).
+- `sfh={'type': 'table'}` is zero outside its table instead of edge-clamped (a falling table normalized to 1 Msun formed 13.27 Msun, now 0.9993 = its own integral); optional `sfh_table_age_gyr` (zero the table beyond that lookback, keeping its recent part) and `sfh_table_log_total_mass` rescale (#2621).
+- A zero SFH forms zero mass on both age kernels (`dsps` published the declared 1e9) with a `ZeroSFHWarning`; the default `delayed_bq` `age_bq_gyr` prior is bounded to 0.5 Gyr so quench-before-formation is not drawn (explicit priors unchanged) (#2644).
 
 ## [0.1.0] - 2026-05-22
 

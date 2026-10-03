@@ -482,27 +482,31 @@ _AGN_MBH_DUST = {
 #: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
 #: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
 #: disc is multiplied by ``eta(30 deg) T``.
+#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
+#: integrated from the SFH instead of held at SFR(age0), which moves these
+#: references by up to 1.6e-6 relative (``rest_sed_0``, the most ill-conditioned
+#: key) and photometry by up to 9e-7.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.522087146372271e32,
-        "rest_sed_0": 2.7414641089992215e23,
-        "rest_sed_mid": 3.059759671014202e28,
-        "rest_sed_last": 8.775691573813786e21,
-        "photometry": (1.0990406680264032e-27, 1.571190125160936e-27, 1.7648209267569442e-27),
+        "rest_sed_sum": 1.5220869151907556e32,
+        "rest_sed_0": 2.7414599301514256e23,
+        "rest_sed_mid": 3.059759473819298e28,
+        "rest_sed_last": 8.775691511689354e21,
+        "photometry": (1.0990405822784014e-27, 1.5711890320936083e-27, 1.764819439378196e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5692038430133054e32,
-        "rest_sed_0": 3.32447947548655e24,
-        "rest_sed_mid": 3.170035763011865e28,
-        "rest_sed_last": 8.836905506469256e21,
-        "photometry": (1.1413516017138159e-27, 1.5731015599094376e-27, 1.7653901893068474e-27),
+        "rest_sed_sum": 1.5692035400112239e32,
+        "rest_sed_0": 3.324474407941189e24,
+        "rest_sed_mid": 3.1700353977217445e28,
+        "rest_sed_last": 8.836905351035666e21,
+        "photometry": (1.1413514514707368e-27, 1.5731004639284887e-27, 1.765388701060335e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5893067919899514e32,
-        "rest_sed_0": 2.546937562859289e24,
-        "rest_sed_mid": 3.2078590999342967e28,
-        "rest_sed_last": 9.086913093044805e21,
-        "photometry": (1.1542181906962566e-27, 1.5812750837422911e-27, 1.767532048985811e-27),
+        "rest_sed_sum": 1.5893064583446953e32,
+        "rest_sed_0": 2.5469336805307245e24,
+        "rest_sed_mid": 3.207858676989594e28,
+        "rest_sed_last": 9.086912556521545e21,
+        "photometry": (1.1542180208404769e-27, 1.5812739753023431e-27, 1.7675305574744464e-27),
     },
 }
 

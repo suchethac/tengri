@@ -80,8 +80,12 @@ _DUST_FREE = {
 #: 1e4, and both operators pinned here return observed-frame fluxes carrying the
 #: ``(1+z)/(4 pi d_L^2)`` dimming factor (max relative movement 2.27e-4, matching the
 #: luminosity-distance shift). 17 significant digits.
+#:
+#: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
+#: integrated from the SFH instead of held at SFR(age0); the ionizing stars sit
+#: in that sliver, so line fluxes move by up to 6e-5 relative (continuum <= 2e-6).
 _CUE_F64_REF = np.array(
-    [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15, 5.3145048745591e-16]
+    [4.812422818209422e-16, 5.883854251437421e-16, 1.6985543682447306e-15, 5.314457200689803e-16]
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
@@ -93,7 +97,12 @@ _CUE_F64_REF = np.array(
 #: (``approx=False``) on the same model is pinned against a numpy implementation of the
 #: integral definition in ``test_bug_2588_c94_beta_and_window_means.py``. 17 significant digits.
 _WNE_F64_REF = np.array(
-    [2.769677017926416e-16, 4.0859299683627216e-16, 1.347006515581867e-15, 3.2139484923289834e-18]
+    [
+        2.7696220064667116e-16,
+        4.0858581331167685e-16,
+        1.3469890145145336e-15,
+        3.2141211596098763e-18,
+    ]
 )
 
 #: Relative sigma for the synthetic chi-square target the gradient checks use: not a

@@ -110,14 +110,16 @@ class TestBinEdgesReachForwardPass:
                 continue
             assert np.allclose(inside, inside[0]), "SFR is not constant within a supplied bin"
 
-        # The default ladder has an edge at 6.0 Gyr that the custom one does not,
-        # and the custom ladder ends at ~4.28 Gyr, so nothing may step near 6 Gyr.
-        near_six = sfr[(lbt_gyr > 5.0) & (lbt_gyr < 7.0)]
-        assert near_six.size >= 2, "probe setup failed: fewer than two points near 6 Gyr"
-        assert np.allclose(near_six, near_six[0]), (
-            "SFR steps at 6.0 Gyr, an edge of the default ladder, so the "
-            "default edges are still in force (#1975)"
-        )
+        # The published history ends at age(z) (the custom ladder's last edge,
+        # ~4.28 Gyr), so a default-ladder edge at 6.0 Gyr cannot appear: no node
+        # lies beyond the age of the universe, and the SFR is piecewise constant
+        # between the supplied edges only (checked above), so the default
+        # edges are not in force (#1975).
+        from tengri.cosmology import age_at_z
+
+        t_univ = float(age_at_z(_Z))
+        assert lbt_gyr.max() <= t_univ * (1.0 + 1e-6), "published history extends beyond age(z)"
+        assert not np.any((lbt_gyr > 5.0) & (lbt_gyr < 7.0))
 
     def test_default_still_uses_default_ladder(self, synthetic_ssp_wide):
         """Not passing edges must keep the documented default behavior.

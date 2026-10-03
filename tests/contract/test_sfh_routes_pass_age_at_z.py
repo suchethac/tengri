@@ -78,6 +78,30 @@ def _age_yr(z: float) -> float:
     return float(Planck18.age(z).to_value("yr"))
 
 
+def _assert_grid_ends_at_age_of_universe(t_yr, sfr, z):
+    """The published history is bounded by cosmic time with a node AT age(z).
+
+    Nodes older than the universe collapse onto age(z) (zero-width cells carrying
+    the history's value there), so no node lies beyond age(z) and the trapezoid
+    area over cells starting at age(z) is exactly zero. The node sits at tengri's
+    own age(z), which agrees with the independent cosmology to ~1e-7, so the
+    bound is checked against tengri's value to rounding.
+    """
+    from tengri.cosmology import age_at_z
+
+    t_yr = np.asarray(t_yr, dtype=float)
+    sfr = np.asarray(sfr, dtype=float)
+    age_yr = float(age_at_z(z)) * 1e9
+    assert t_yr.max() <= age_yr * (1.0 + 1e-12), "a node lies beyond age(z)"
+    assert t_yr.max() >= age_yr * (1.0 - 1e-12), "the grid does not reach age(z)"
+    assert np.all(np.diff(t_yr) >= 0.0)
+    starts_at_age = t_yr[:-1] >= age_yr * (1.0 - 1e-12)
+    assert starts_at_age.any(), "no collapsed node at age(z)"
+    area = 0.5 * (sfr[1:] + sfr[:-1]) * np.diff(t_yr)
+    assert float(np.sum(area[starts_at_age])) == 0.0, "area beyond age(z)"
+    return age_yr
+
+
 def test_every_buildable_age_family_has_settings():
     """A family added to ``_AGE_FAMILIES`` must be given settings here, not skipped."""
     missing = [f for f in _BUILDABLE if f not in _FAMILY_SETTINGS]
@@ -132,29 +156,50 @@ def test_predict_sfh_native_equals_component_history(family, synthetic_ssp_wide)
 
 @pytest.mark.parametrize("family", _BUILDABLE)
 def test_predict_sfh_linear_grid_equals_component_history(family, synthetic_ssp_wide):
-    """The linear-time grid of ``predict_sfh`` is the component history, resampled alike."""
+    """The linear grid is the component's published history, resampled alike and cut at age(z).
+
+    The linear time axis is redshift-independent (so posterior draws at
+    different z stack on one axis) and the history is zero at every output node
+    older than the universe. A comparison with the uncut resampling of the
+    component history therefore cannot hold beyond age(z): there the published
+    grid is bounded by cosmic time and the resampler applies the same cut
+    (``age_at_z_gyr``). Inside the support, where both interpolations use model
+    nodes younger than age(z), the two agree to rounding.
+    """
+    from tengri.cosmology import age_at_z
+
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
     out = model.predict_sfh({})
-    _, ref = interpolate_to_linear_time(model.log_age_grid, _component_history(model, {}), 1000)
+    age_gyr = float(age_at_z(_Z))
+    t_lin, ref = interpolate_to_linear_time(
+        model.log_age_grid, _component_history(model, {}), 1000, age_at_z_gyr=age_gyr
+    )
+    sfr = np.asarray(out["sfr_mean"])
+    t_lin = np.asarray(t_lin)
+    np.testing.assert_allclose(np.asarray(out["t_gyr"]), t_lin, rtol=1e-12)
 
-    np.testing.assert_allclose(np.asarray(out["sfr_mean"]), np.asarray(ref), rtol=_RTOL, atol=0.0)
+    nodes_gyr = np.asarray(model.age_yr) / 1e9
+    last_inside = nodes_gyr[nodes_gyr <= age_gyr].max()
+    inside = t_lin <= last_inside
+    assert inside.sum() > 10
+    np.testing.assert_allclose(sfr[inside], np.asarray(ref)[inside], rtol=_RTOL, atol=0.0)
+    assert np.all(sfr[t_lin > age_gyr] == 0.0)
 
 
 @pytest.mark.parametrize("family", _BUILDABLE)
 def test_predict_sfh_vanishes_beyond_age_at_z(family, synthetic_ssp_wide):
-    """No star formation at lookback beyond age(z): the grid is bounded by cosmic time."""
+    """No star formation at lookback beyond age(z): the grid is bounded by cosmic time.
+
+    The native grid ends AT age(z) (older nodes collapse onto it with zero-width
+    cells), so the statement is: no node beyond age(z), and no SFR integrated
+    beyond it. ``psb`` carries a ~1e-19 truncated-exponential floor in its raw
+    SFR; the published history has none of it beyond the Big Bang.
+    """
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
-    lbt_yr = np.asarray(out["t_gyr"]) * 1e9
     sfr = np.asarray(out["sfr_mean"])
-    beyond = lbt_yr > _age_yr(_Z)
-
-    assert beyond.any()
-    # dense_basis is exactly zero there; psb carries a numerical floor ~1e-19
-    # Msun/yr from its truncated exponential, ~1e-19 of the peak.
-    assert float(np.max(np.abs(sfr[beyond]))) <= _BEYOND_AGE_FLOOR * float(np.max(sfr)), (
-        f"{family}: SFR beyond age(z={_Z}) = {_age_yr(_Z) / 1e9:.3f} Gyr"
-    )
+    _assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
+    assert np.any(sfr > 0.0)
 
 
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -195,14 +240,16 @@ def test_burst_composite_equals_component_history(synthetic_ssp_wide):
 
 
 def test_field_composite_mean_vanishes_beyond_age_at_z(synthetic_ssp_wide):
-    """The smooth part of a field composite is bounded by age(z), as the bare family is."""
+    """The smooth part of a field composite is bounded by cosmic time, as the bare family is.
+
+    The mean is published through the same bounded history as the full SFR: a
+    node at age(z), nodes beyond it collapsed onto it, zero area beyond.
+    """
     model = _build(synthetic_ssp_wide, ["dense_basis", "field"], Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
     sfr = np.asarray(out["sfr_mean"])
-    beyond = np.asarray(out["t_gyr"]) * 1e9 > _age_yr(_Z)
-
+    _assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
     assert np.any(sfr > 0.0)
-    assert float(np.max(np.abs(sfr[beyond]))) == 0.0
 
 
 @pytest.mark.parametrize("family", _AGE_FAMILIES)

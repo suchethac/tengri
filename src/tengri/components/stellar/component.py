@@ -100,6 +100,23 @@ class AgeKernelFieldWarning(UserWarning):
     """
 
 
+class ZeroSFHWarning(UserWarning):
+    """A declared mass was requested but the SFH forms none inside the support.
+
+    The star-formation history evaluates to (numerically) zero everywhere
+    inside ``[0, age(z)]`` for this parameter draw -- e.g. ``delayed_bq``
+    with ``age_bq_gyr >= age_main_gyr`` clips the main-sequence SFR negative,
+    hence zero, at every lookback time. A zero history cannot be rescaled to
+    carry a declared ``10**log_total_mass``: both age kernels publish the
+    honest answer (the representable-floor formed mass, not the declaration)
+    instead of silently asserting a phantom population with zero SFR and zero
+    flux. Bound the offending parameter (for ``delayed_bq``, keep
+    ``age_bq_gyr`` at or below ``age_main_gyr``) or the redshift. The check is
+    skipped under ``jax.jit`` / inference, where exploring such draws is
+    expected -- same pattern as :class:`SFHBeforeBigBangWarning`. See #2644.
+    """
+
+
 from tengri.components.stellar._params import ALPHA_FE_PARAMS
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
@@ -333,6 +350,18 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float 
     source of the field modulation; shared by :meth:`StellarSEDComponent.apply`
     (exact SED) and :meth:`StellarSEDComponent.compute_joint_weights` (fast
     line/nebular window LUT) so the two paths cannot diverge.
+
+    **Per-draw mass (#2622).** The modulation here is applied to the
+    AMPLITUDE (shape) only, after which ``_mass_conserving_total`` (#2521,
+    `component.py`'s ``apply``/``compute_joint_weights``) pins the realized
+    ``total_mass`` to the declared ``10**log_total_mass`` for EVERY draw --
+    not only in expectation. This is an explicit choice, overrulable by the
+    owner: the declaration states the formed mass of each realization (the
+    pcigale ``sfhstochastic_carvajal2025`` ``normalise=True`` convention),
+    not the ensemble mean of an unnormalized population. The published
+    ``sfr_history`` carries the same per-draw rescale (#2640), so its
+    support-restricted integral also equals the declaration exactly, on
+    every draw.
 
     Parameters
     ----------
@@ -644,6 +673,101 @@ def _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, tab_
     )
 
 
+#: Number of log-spaced samples used to resolve the [0, age0] sliver (#2635).
+_SLIVER_N_SAMPLES = 32
+
+
+def _sliver_equivalent_sfr0(ssp_ages_yr, sfh_fn, sfh_kwargs):
+    r"""Equivalent constant SFR at lookback 0 that reproduces the TRUE [0, age0] mass.
+
+    Both age kernels assign the ``[0, age0]`` sliver (``age0 = ssp_ages_yr[0]``,
+    younger than any SSP template) to the youngest node by holding SFR
+    constant at ``sfr(age0)`` over that whole span -- a single rectangle of
+    width ``age0``. That is only a good approximation when the SFH is smooth
+    across ``age0``; it is wrong whenever the SFH has structure strictly
+    INSIDE the sliver (zero for an SFH that has already ended there,
+    under-counted for a burst with a lower SFR at ``age0`` than at its
+    peak) -- #2635.
+
+    Densely sample the SFH itself inside the sliver and solve for the
+    constant value ``v0`` the trapezoid cell ``[0, age0]`` (endpoints
+    ``v0`` and ``sfr(age0)``) would need to reproduce that TRUE integral
+    exactly:
+
+    .. math::
+
+        v_0 = \frac{2 M_{\rm sliver}}{\mathrm{age0}} - \mathrm{SFR}(\mathrm{age0})
+
+    **Critical: the sliver samples and ``sfr(age0)`` are drawn from ONE call**
+    to ``sfh_fn`` on an array that also carries the family's full declared
+    domain (``ssp_ages_yr``), not a second, separate call restricted to the
+    sliver alone. Every parametric family renormalizes through
+    ``_renormalize_to_mass``, which integrates whatever array it is called
+    WITH -- a call given only the tiny ``[epsilon, age0]`` range would
+    renormalize as if that sliver were the galaxy's ENTIRE history, inflating
+    the returned SFR by orders of magnitude. Appending ``ssp_ages_yr`` keeps
+    the renormalization anchored to the one true domain while still
+    resolving the sliver with real samples (the dense-grid analog is
+    :func:`_cic_integrand`'s own sliver extension, which does the same thing
+    by prepending to the array ``sfh_fn`` is called on, once).
+
+    :func:`_build_dsps_sfh_table`'s young-knot callers for the "dsps" kernel
+    already prepend a single lookback-0 node and hold ITS value constant
+    over ``[0, age0]`` (the #538 knot); substituting ``v0`` there --
+    unchanged everywhere else -- makes that one trapezoid cell carry the
+    sliver's true mass instead of ``sfr(age0) * age0``, for any SFH shape.
+
+    Parameters
+    ----------
+    ssp_ages_yr : ndarray, shape (n_age,)
+        Ascending SSP template ages [yr]; ``ssp_ages_yr[0]`` is the sliver's
+        upper bound.
+    sfh_fn : callable
+        ``sfh_fn(age_yr, **sfh_kwargs) -> SFR [Msun/yr]``.
+    sfh_kwargs : dict
+        Keyword arguments for ``sfh_fn``.
+
+    Returns
+    -------
+    ndarray, shape ()
+        Non-negative equivalent SFR at lookback 0 [Msun/yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes, static-shape dense sampling + a closed-form
+    solve. ``age0_yr`` is a positive template age by construction
+    (:func:`_refine_sfh_table_ages` builds from the smallest positive age).
+
+    **Clamp and its bound.** ``jnp.maximum(v0, 0.0)`` is a real clamp: the
+    one-knot "dsps" cell cannot represent a negative SFR, so when
+    ``sfr(age0) > 2 M_sliver / age0`` (the SFH quenches inside the last
+    ``age0`` years) the cell carries ``sfr(age0) * age0 / 2`` instead of
+    ``M_sliver``. The over-count is at most ``sfr(age0) * age0 / 2`` (reached
+    as ``M_sliver -> 0``), half the rectangle over-count the held-constant
+    knot made before #2635; the "cic" kernel resolves the sliver with real
+    samples and has no such regime.
+    """
+    age0_yr = ssp_ages_yr[0]
+    floor_yr = 1.0  # yr; far below any registered SFH timescale, well above 0
+    sliver_ages_yr = (
+        10.0
+        ** jnp.linspace(
+            jnp.log10(jnp.maximum(floor_yr, age0_yr * 1e-6)),
+            jnp.log10(age0_yr),
+            _SLIVER_N_SAMPLES,
+        )[:-1]
+    )  # exclude age0 itself: ssp_ages_yr[0] already carries it below
+    extended_ages_yr = jnp.concatenate([sliver_ages_yr, ssp_ages_yr])
+    extended_sfr = sfh_fn(extended_ages_yr, **sfh_kwargs)
+    n_sliver = sliver_ages_yr.shape[0]
+    sliver_cell_ages = jnp.concatenate([sliver_ages_yr, age0_yr[None]])
+    sliver_cell_sfr = extended_sfr[: n_sliver + 1]
+    sliver_mass = jnp.trapezoid(sliver_cell_sfr, sliver_cell_ages)
+    sfr_at_age0 = extended_sfr[n_sliver]
+    v0 = 2.0 * sliver_mass / age0_yr - sfr_at_age0
+    return jnp.maximum(v0, 0.0)
+
+
 def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     """The dense (age, SFR) integrand every CIC weight kernel consumes.
 
@@ -695,6 +819,32 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     edges_yr = tab_lbt_yr if tab_lbt_yr is not None else _sfh_bin_edges_yr(sfh_spec_fn, sfh_kwargs)
     if edges_yr is not None:
         fine_age_yr = _inject_edge_knots(fine_age_yr, edges_yr, ssp_ages_yr[0], hi_yr)
+    # #2635: the [0, age0] sliver (``age0 = ssp_ages_yr[0]``, this grid's own
+    # minimum per :func:`_refine_sfh_table_ages`) is never sampled by the grid
+    # above; :func:`_cic_parcels`'s own lookback-0 prepend holds the grid's
+    # FIRST SFR value constant over that whole span, which is only exact for
+    # an SFH smooth across age0 (zero for an SFH that has already ended
+    # there; under-counted for a burst with a lower SFR at age0 than at its
+    # peak). Extend the grid itself down into the sliver with dense log-
+    # spaced samples -- BEFORE the one ``sfh_fn`` call below, not a second,
+    # separate one: every parametric family renormalizes through
+    # ``_renormalize_to_mass``, which integrates whatever array it is CALLED
+    # WITH, so a call restricted to the sliver alone would renormalize as if
+    # the sliver were the entire declared history (wildly wrong). Extending
+    # the grid keeps the renormalization over the family's one true domain
+    # while giving :func:`_cic_parcels`'s trapezoid real samples to integrate
+    # in the sliver instead of a single held-constant point. Parametric and
+    # non-parametric families only: a tabulated history already gets an
+    # exact representation near lookback 0 from its own injected knots
+    # (``edges_yr`` above, #765).
+    if tab_lbt_yr is None:
+        _age0_yr = fine_age_yr[0]
+        _epsilon_yr = jnp.maximum(_age0_yr * 1e-6, 1e-3)
+        _sliver_ages_yr = (
+            10.0
+            ** jnp.linspace(jnp.log10(_epsilon_yr), jnp.log10(_age0_yr), _SLIVER_N_SAMPLES)[:-1]
+        )
+        fine_age_yr = jnp.concatenate([_sliver_ages_yr, fine_age_yr])
     sfr = sfh_fn(fine_age_yr, **sfh_kwargs)
     _warn_if_history_exceeds_ssp_grid(fine_age_yr, sfr, ssp_ages_yr, tab_lbt_yr)
     return fine_age_yr, sfr
@@ -1005,6 +1155,109 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
         .add(contrib * f)
     )
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
+
+
+def collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr):
+    r"""Put a node exactly at ``age(z)``: every node beyond it collapses onto it.
+
+    ``t_pub = where(t <= age(z), t, age(z))`` (static shape). The SFR at a
+    collapsed node is the history linearly interpolated at ``age(z)`` between
+    its bracketing native nodes -- the same interpolant the plain trapezoid
+    assumes -- so the trapezoid over ``(t_pub, sfr_pub)`` is the exact
+    integral of that interpolant on ``[0, age(z)]``; collapsed cells have zero
+    width and contribute nothing. No partial weights, no zeroed node.
+
+    Parameters
+    ----------
+    sfr : array_like, shape (n_grid,)
+        SFR on the ascending lookback grid [Msun/yr].
+    lbt_grid_yr : array_like, shape (n_grid,)
+        Lookback grid [yr].
+    t_obs_gyr : float
+        Cosmic age at the redshift [Gyr].
+
+    Returns
+    -------
+    t_pub : ndarray, shape (n_grid,)
+        Non-decreasing grid ending at ``min(t_max, age(z))`` [yr].
+    sfr_pub : ndarray, shape (n_grid,)
+        SFR on ``t_pub`` [Msun/yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes, ``jnp.where`` + ``jnp.interp`` only.
+    """
+    t = jnp.asarray(lbt_grid_yr)
+    age_yr = t_obs_gyr * 1e9
+    inside = t <= age_yr
+    s_age = jnp.interp(age_yr, t, sfr)
+    return jnp.where(inside, t, age_yr), jnp.where(inside, sfr, s_age)
+
+
+def history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
+    """The one uniform factor that makes the published history carry ``target_mass``.
+
+    Measured by the plain trapezoid on the :func:`collapse_to_support` grid;
+    ``1`` when that integral is zero.
+    """
+    t_pub, s_pub = collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr)
+    mass = jnp.trapezoid(s_pub, t_pub)
+    ok = mass > representable_denominator(1e-30)
+    return jnp.where(ok, target_mass / jnp.where(ok, mass, 1.0), 1.0)
+
+
+def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
+    r"""Publish ``(t_pub, sfr_pub)``: bounded to ``[0, age(z)]``, integrating to ``target_mass``.
+
+    The single mechanism behind every published SFR history (the stellar
+    component's ``sfr_history`` and the ``SEDModel`` routes):
+    :func:`collapse_to_support`, then the one uniform
+    :func:`history_rescale_factor`.
+
+    Parameters
+    ----------
+    sfr : array_like, shape (n_grid,)
+        SFR on the lookback grid [Msun/yr].
+    lbt_grid_yr : array_like, shape (n_grid,)
+        Ascending lookback grid [yr].
+    t_obs_gyr : float
+        Cosmic age at the redshift [Gyr].
+    target_mass : float
+        Formed mass the history must integrate to [Msun].
+
+    Returns
+    -------
+    t_pub, sfr_pub : ndarray, shape (n_grid,)
+        ``trapezoid(sfr_pub, t_pub) == target_mass`` to round-off, no node and
+        no trapezoid area beyond ``age(z)``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+    """
+    t_pub, s_pub = collapse_to_support(sfr, lbt_grid_yr, t_obs_gyr)
+    return t_pub, s_pub * history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
+
+
+def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr):
+    """Pin a tabulated history's formed mass on EVERY age kernel (#2621).
+
+    The table family declares no ``log_total_mass`` in the SFH kwargs, so
+    :func:`_mass_conserving_total` leaves the kernel's own measurement (the
+    "dsps" histogram kernel mis-measures a bursty table by tens of percent).
+    The pinned mass is the declaration ``sfh_table_log_total_mass`` when one is
+    given, else the table's own integral over its support inside
+    ``[0, age(z)]`` (trapezoid of the table rows, plus the interpolated value at
+    ``age(z)``). Not applied when the kernel measured nothing.
+    """
+    if tab_lbt_yr is None:
+        return total_mass
+    if "sfh_table_log_total_mass" in params:
+        target = 10.0 ** jnp.asarray(params["sfh_table_log_total_mass"])
+    else:
+        t_pub, s_pub = collapse_to_support(sfh_fn(tab_lbt_yr), tab_lbt_yr, t_obs_gyr)
+        target = jnp.trapezoid(s_pub, t_pub)
+    return jnp.where(total_mass > representable_denominator(1e-30), target, total_mass)
 
 
 def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):
@@ -1351,15 +1604,35 @@ def _tabulated_sfh(params, t_obs_gyr):
     divergence #1395 was: there, the fast path never learned to read it at all
     and silently evaluated an all-zero placeholder; so both routes call this.
 
-    SFR is edge-clamped outside the table (the ``jnp.interp`` convention);
-    lookbacks older than ``t_obs`` are dropped later by the CIC ``t_obs`` cutoff.
-    Dict-key presence is static under jit while the array *values* stay traced,
-    so two calls with different same-length tables share one compile.
+    SFR is **zero outside the table's support** (``jnp.interp(..., left=0.0,
+    right=0.0)``, the BAGPIPES ``custom`` convention, #2621) -- NOT the old
+    edge-clamp, which silently extrapolated the boundary row all the way to
+    the SSP grid's ends (a falling table normalized to 1 Msun formed 13.27
+    Msun). Lookbacks older than ``t_obs`` are separately dropped by the CIC
+    ``t_obs`` cutoff, independent of this.
+
+    Two optional runtime scalars, read directly from ``params`` like
+    ``sfh_t_gyr``/``sfh_sfr`` (the table family has no declared registry
+    params: the table IS the SFH):
+
+    - ``sfh_table_age_gyr`` : an age cut in lookback time (#2621). When given,
+      rows with lookback > ``age_gyr`` are zeroed (not dropped -- the table's
+      own nodes stay the knot set for :func:`_inject_edge_knots`): the RECENT
+      ``age_gyr`` of the table is kept and "now" stays at the observation
+      time, so ``SFR(now)`` is the table's own value there.
+    - ``sfh_table_log_total_mass`` : when given, the (possibly age-cut)
+      table is rescaled by a single constant factor so its integral over its
+      own support equals ``10**log_total_mass`` exactly, matching the "one
+      declaration, one formed mass" convention every other family already
+      has. When absent, the formed mass is honestly the table's own
+      integral -- not silently 1:1 with any requested mass.
 
     Parameters
     ----------
     params : Mapping
         Must contain ``sfh_t_gyr`` (cosmic time [Gyr]) and ``sfh_sfr`` [Msun/yr].
+        May contain ``sfh_table_age_gyr`` [Gyr] and/or
+        ``sfh_table_log_total_mass`` [log10(Msun)].
     t_obs_gyr : ndarray, shape ()
         Cosmic time at the observed redshift [Gyr].
 
@@ -1385,7 +1658,9 @@ def _tabulated_sfh(params, t_obs_gyr):
 
     Notes
     -----
-    **JIT-compatible**: yes, ``argsort`` / ``interp`` on traced values.
+    **JIT-compatible**: yes, ``argsort`` / ``interp`` on traced values; the
+    optional scalars are read via dict-key presence (static under jit, #996),
+    only their VALUES are traced.
     """
     if "sfh_t_gyr" not in params or "sfh_sfr" not in params:
         raise ValueError(
@@ -1399,8 +1674,24 @@ def _tabulated_sfh(params, t_obs_gyr):
     lbt_yr = jnp.maximum((t_obs_gyr - jnp.asarray(params["sfh_t_gyr"])[order]) * 1e9, 0.0)
     sfr = jnp.asarray(params["sfh_sfr"])[order]
 
+    age_cut_gyr = params.get("sfh_table_age_gyr")
+    if age_cut_gyr is not None:
+        age_cut_yr = jnp.asarray(age_cut_gyr) * 1e9
+        sfr = jnp.where(lbt_yr <= age_cut_yr, sfr, 0.0)
+
+    log_total_mass = params.get("sfh_table_log_total_mass")
+    if log_total_mass is not None:
+        raw_mass = jnp.trapezoid(sfr, lbt_yr)
+        rescale = jnp.where(
+            raw_mass > representable_denominator(1e-30),
+            (10.0 ** jnp.asarray(log_total_mass)) / raw_mass,
+            1.0,
+        )
+    else:
+        rescale = 1.0
+
     def sfh_fn(t_lookback_yr, **_kw):
-        return jnp.interp(t_lookback_yr, lbt_yr, sfr)
+        return rescale * jnp.interp(t_lookback_yr, lbt_yr, sfr, left=0.0, right=0.0)
 
     return sfh_fn, lbt_yr, order
 
@@ -1507,7 +1798,7 @@ def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     return jnp.sort(jnp.concatenate([fine_age_yr, knots]))
 
 
-def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
+def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False, sliver_sfr0=None):
     """Ascending cosmic-time (t, SFR) table for DSPS, NaN-safe at the high-z edge.
 
     SSP ages older than the universe at the observation redshift imply negative
@@ -1525,6 +1816,13 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     add_young_knot : bool, optional
         Prepend a lookback-0 knot so DSPS integrates the youngest SSP bin down
         to the observation time (#538). Default ``False``.
+    sliver_sfr0 : ndarray, shape (), optional
+        Override for the young knot's SFR value (#2635). When ``None``
+        (default), the knot holds ``sfr[0]`` constant over ``[0, age0]`` --
+        exact only when the SFH is smooth across ``age0``. Pass
+        :func:`_sliver_equivalent_sfr0`'s result to make that one trapezoid
+        cell carry the TRUE ``[0, age0]`` mass for any SFH shape. Ignored
+        when ``add_young_knot`` is ``False``.
 
     Returns
     -------
@@ -1550,8 +1848,9 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     # table (mass guard + per-age-metallicity path, which aligns a length-n
     # metallicity table) is byte-unchanged.
     if add_young_knot:
+        knot_sfr = sfr[:1] if sliver_sfr0 is None else jnp.reshape(sliver_sfr0, (1,))
         age_yr = jnp.concatenate([jnp.zeros((1,), age_yr.dtype), age_yr])
-        sfr = jnp.concatenate([sfr[:1], sfr])
+        sfr = jnp.concatenate([knot_sfr, sfr])
     age_gyr = age_yr / 1e9
     n = age_yr.shape[0]
     t_cosmic_raw = t_obs_gyr - age_gyr
@@ -2885,8 +3184,19 @@ class StellarSEDComponent:
         # delta path with a dense integrand (#758), and both the parametric
         # delta and per-age-metallicity paths with the young-boundary knot
         # (#538). The knot's [0, age0] segment is excluded from this total, so it
-        # redistributes mass into the youngest bin without inflating it.
+        # redistributes mass into the youngest bin without inflating it -- EXCEPT
+        # here, where this coarse total (not the knot-table mass) is the only
+        # measurement the "dsps" branches below ever see (they do not
+        # recompute total_mass themselves, see "stays the conserved coarse
+        # value" there), so the #2635 sliver mass IS added back in for a plain
+        # callable (no field): otherwise an SFH whose ENTIRE support lies
+        # inside [0, age0) measures zero here regardless of the knot fix,
+        # which #2644's zero-SFH guard would then (wrongly) treat as
+        # genuinely degenerate.
         _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+        if not self.config.field and _tab_lbt_yr is None:
+            _sliver_sfr0_coarse = _sliver_equivalent_sfr0(ssp_ages_yr, sfh_fn, sfh_kwargs)
+            total_mass = total_mass + 0.5 * (_sliver_sfr0_coarse + sfr_on_ssp[0]) * ssp_ages_yr[0]
 
         # Eager physicality guard: the masking above truncates any SFH mass at
         # lookback ages older than the universe at this redshift. When that
@@ -2973,8 +3283,24 @@ class StellarSEDComponent:
                 _warn_if_dsps_kernel_truncates_history(
                     ssp_ages_yr, sfh_fn, sfh_kwargs, _tab_lbt_yr
                 )
+                # #2635: resample the sliver directly from ``sfh_fn`` when it is
+                # a plain deterministic callable (an explicit ``age_kernel=
+                # 'dsps'`` choice, no field). A GP-field draw has no closed form
+                # off its own coarse grid (the field modulation is only defined
+                # at ``sfh_lbt_grid``'s nodes, applied once in section 2b above),
+                # so ``sfh_fn`` there would resample the UNMODULATED shape --
+                # the existing sfr[0]-constant knot is left as is for that case.
+                _sliver_sfr0 = (
+                    None
+                    if self.config.field or _tab_lbt_yr is not None
+                    else _sliver_equivalent_sfr0(ssp_ages_yr, sfh_fn, sfh_kwargs)
+                )
                 gal_t_table, gal_sfr_table, _ = _build_dsps_sfh_table(
-                    ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                    ssp_ages_yr,
+                    sfr_on_ssp,
+                    t_obs_gyr,
+                    add_young_knot=True,
+                    sliver_sfr0=_sliver_sfr0,
                 )
                 dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                     **canonical_dsps_kwargs(
@@ -3016,8 +3342,19 @@ class StellarSEDComponent:
                 # kernel, with the young-boundary knot (#538). The knot is the
                 # last ascending element (t_cosmic = t_obs), so the per-age
                 # metallicity table is extended by the youngest-age value.
+                # #2635: same sliver resample as the delta-metallicity branch
+                # above, only for a plain callable (no field).
+                _sliver_sfr0 = (
+                    None
+                    if self.config.field or _tab_lbt_yr is not None
+                    else _sliver_equivalent_sfr0(ssp_ages_yr, sfh_fn, sfh_kwargs)
+                )
                 _t_k, _sfr_k, _ = _build_dsps_sfh_table(
-                    ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                    ssp_ages_yr,
+                    sfr_on_ssp,
+                    t_obs_gyr,
+                    add_young_knot=True,
+                    sliver_sfr0=_sliver_sfr0,
                 )
                 _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
                 dsps_result = calc_rest_sed_sfh_table_met_table(
@@ -3067,7 +3404,65 @@ class StellarSEDComponent:
         # (GP field, or an explicit ``age_kernel='dsps'`` choice) get the
         # identical correction here rather than a second copy in that
         # branch, so a future kernel cannot silently skip it.
+        measured_total_mass = total_mass
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
+        # #2644: an SFH that is identically zero inside the support cannot be
+        # rescaled to the declared mass -- on EITHER kernel. ``measured_total_mass``
+        # above is a genuine trapezoid of the (already support-bounded) SFR on
+        # every branch (CIC's ``_age_weights_cic`` / ``_joint_weights_cic_met_table``,
+        # and the DSPS branches' shared ``_build_dsps_sfh_table`` total_mass), so
+        # it is honestly zero when the history is. ``_mass_conserving_total``
+        # overrides it to the declaration unconditionally whenever
+        # ``log_total_mass`` is declared, which is right when some mass WAS
+        # measured (truncation correction) but wrong when NONE was: the DSPS
+        # histogram kernel's own SFR_MIN floor (see the "Guarded normalization"
+        # comment above) keeps its ``joint_weights`` nonzero even for an
+        # all-zero SFR, so without this guard DSPS alone would publish the
+        # declaration as a phantom formed mass with zero SFR/flux (CIC's own
+        # weights already go to zero in this case, since 0/representable_floor
+        # stays 0, giving ``log_mstar_formed`` the -30 dex floor already --
+        # this guard makes DSPS agree, not CIC). ``jnp.where`` on a safe,
+        # already-computed argument -- no new clamp.
+        total_mass = jnp.where(
+            measured_total_mass > representable_denominator(1e-30),
+            total_mass,
+            measured_total_mass,
+        )
+        # Eager loud-signal guard (#2644): a declared mass was requested
+        # (``log_total_mass`` present) but nothing formed. Same
+        # eager-only / ConcretizationTypeError-guarded pattern as the
+        # SFHBeforeBigBangWarning above -- skipped under jit/vmap, where
+        # exploring such draws during inference is expected.
+        _declares_mass = "log_total_mass" in sfh_kwargs or any(
+            k.endswith("_log_total_mass") for k in sfh_kwargs
+        )
+        if _declares_mass:
+            try:
+                _measured_val = float(measured_total_mass)
+            except jax.errors.ConcretizationTypeError:
+                _measured_val = None
+            if _measured_val is not None and _measured_val <= representable_denominator(1e-30):
+                warn_measured(
+                    "Star formation history forms no stellar mass inside the "
+                    "support [0, age(z)] for this parameter draw: a declared "
+                    "10**log_total_mass cannot be rescaled onto a history that "
+                    "is identically zero. Bound the offending parameter "
+                    "relation (e.g. for delayed_bq, keep age_bq_gyr at or "
+                    "below age_main_gyr) or the redshift.",
+                    ZeroSFHWarning,
+                    stacklevel=2,
+                )
+        # Published history (#2640): a node is put exactly at age(z) (nodes
+        # beyond collapse onto it, SFR from the same interpolant the
+        # trapezoid assumes) and one uniform factor, measured by the plain
+        # trapezoid on that grid, makes its integral equal the formed mass.
+        # The factor is measured on the history's own grid because the
+        # kernel's ``measured_total_mass`` comes from a different quadrature
+        # (dense CIC integrand / DSPS per-SSP-age table).
+        sfh_grid_pub, sfr_history = bounded_rescaled_history(
+            sfr_history, sfh_lbt_grid, t_obs_gyr, total_mass
+        )
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -3147,8 +3542,8 @@ class StellarSEDComponent:
 
         # ── 9. SFR averages on the SFH grid ─────────────────────────────
         sfr_now = sfr_history[0]
-        sfr_10myr = _time_weighted_sfr(sfr_history, sfh_lbt_grid, 1e7)
-        sfr_100myr = _time_weighted_sfr(sfr_history, sfh_lbt_grid, 1e8)
+        sfr_10myr = _time_weighted_sfr(sfr_history, sfh_grid_pub, 1e7)
+        sfr_100myr = _time_weighted_sfr(sfr_history, sfh_grid_pub, 1e8)
 
         # ── 10. Bolometric L per SSP age bin ────────────────────────────
         # ν = c/λ ⟹ |dν| = c/λ² dλ. Trapezoid in wavelength with the
@@ -3293,7 +3688,7 @@ class StellarSEDComponent:
             age_weights=age_weights,
             log_nion=log_nion,
             nion=nion,
-            sfh_grid_lbt_yr=sfh_lbt_grid,
+            sfh_grid_lbt_yr=sfh_grid_pub,
             sfr_history=sfr_history,
             log_metallicity_history=log_metallicity_history,
             # Published for downstream (dust two-component attenuation
@@ -3824,8 +4219,19 @@ class StellarSEDComponent:
                 sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
             _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, _tab_lbt_yr)
             _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+            # #2635: same sliver resample as apply()'s delta-metallicity
+            # branch (only for a plain callable, no field -- see there).
+            _sliver_sfr0 = (
+                None
+                if self.config.field or _tab_lbt_yr is not None
+                else _sliver_equivalent_sfr0(ssp_ages_yr, sfh_fn, sfh_kwargs)
+            )
             gal_t, gal_sfr, _ = _build_dsps_sfh_table(
-                ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                ssp_ages_yr,
+                sfr_on_ssp,
+                t_obs_gyr,
+                add_young_knot=True,
+                sliver_sfr0=_sliver_sfr0,
             )
             _dsps_args = canonical_dsps_kwargs(
                 gal_t=gal_t,
@@ -3898,6 +4304,7 @@ class StellarSEDComponent:
         # function never sees a composite (list) ``sfh_model``: indexing
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
         return joint_weights, total_mass, ssp_ages_yr
 
     def _agb_dust_cube_ratio(self, params, ssp_flux):
