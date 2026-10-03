@@ -55,7 +55,8 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import PreintegratedGrid
+from tengri.utils.grid_interp import PreintegratedGrid, preintegrate_grid
+from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_CGS as _C_CGS
 
 # ── Axis definitions per model ──────────────────────────────────
@@ -101,6 +102,66 @@ def _continuum_wave_rest() -> np.ndarray:
     )
 
 
+def _build_union_grid_with_fine_filters(
+    filter_waves: list, redshift: float, wave_rest_base: np.ndarray
+) -> np.ndarray:
+    """Build union of base wavelength grid and per-filter fine grids.
+
+    Each filter adds a fine logarithmic grid across its rest-frame support,
+    sufficient to integrate the model accurately without template interpolation.
+
+    Parameters
+    ----------
+    filter_waves : list[ndarray]
+        Wavelength grids per filter [Angstrom], observed frame.
+    redshift : float
+        Source redshift for observed-to-rest frame conversion.
+    wave_rest_base : ndarray
+        Base rest-frame wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray
+        Union grid, sorted, unique.
+    """
+    union = set(wave_rest_base)
+
+    for fw in filter_waves:
+        fw = np.asarray(fw, dtype=np.float64)
+        lo_rest = fw.min() / (1 + redshift)
+        hi_rest = fw.max() / (1 + redshift)
+        # Add fine grid across filter's rest-frame support
+        fine = np.geomspace(lo_rest, hi_rest, max(400, len(fw)))
+        union.update(fine)
+
+    return np.array(sorted(union), dtype=np.float64)
+
+
+def _validate_filter_coverage(
+    filter_waves: list, redshift: float, wave_rest_base: np.ndarray
+) -> None:
+    """Validate that all filters' rest-frame supports are inside the base grid range.
+
+    Raises
+    ------
+    ValueError
+        If any filter extends outside the base grid bounds.
+    """
+    wave_rest_min = wave_rest_base.min()
+    wave_rest_max = wave_rest_base.max()
+
+    for i, fw in enumerate(filter_waves):
+        fw = np.asarray(fw, dtype=np.float64)
+        lo_rest = fw.min() / (1 + redshift)
+        hi_rest = fw.max() / (1 + redshift)
+        if lo_rest < wave_rest_min or hi_rest > wave_rest_max:
+            raise ValueError(
+                f"Filter {i} rest-frame range [{lo_rest:.2e}, {hi_rest:.2e}] Angstrom "
+                f"extends outside base grid range [{wave_rest_min:.2e}, {wave_rest_max:.2e}] Angstrom. "
+                f"Observed-frame range: [{fw.min():.2e}, {fw.max():.2e}] Angstrom at z={redshift}."
+            )
+
+
 def _build_grid_modified_blackbody(
     filter_waves: list,
     filter_trans: list,
@@ -135,7 +196,12 @@ def _build_grid_modified_blackbody(
     T_grid = np.asarray(T_grid, dtype=np.float64)
     beta_grid = np.asarray(beta_grid, dtype=np.float64)
 
-    wave_rest = _continuum_wave_rest()
+    wave_rest_base = _continuum_wave_rest()
+
+    # Validate filters are within base grid bounds before building union grid
+    _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
+
+    wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
 
     # Precompute L_nu for each (T, beta) grid point
     phot_grid = []
@@ -213,7 +279,12 @@ def _build_grid_casey2012(
     alpha_mir_grid = np.asarray(alpha_mir_grid, dtype=np.float64)
     lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
 
-    wave_rest = _continuum_wave_rest()
+    wave_rest_base = _continuum_wave_rest()
+
+    # Validate filters are within base grid bounds before building union grid
+    _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
+
+    wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
 
     # Precompute L_nu for each (T, beta, alpha_mir, lambda_0_um) grid point
     phot_grid = []
@@ -295,7 +366,12 @@ def _build_grid_graybody(
     beta_grid = np.asarray(beta_grid, dtype=np.float64)
     lambda_0_um_grid = np.asarray(lambda_0_um_grid, dtype=np.float64)
 
-    wave_rest = _continuum_wave_rest()
+    wave_rest_base = _continuum_wave_rest()
+
+    # Validate filters are within base grid bounds before building union grid
+    _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
+
+    wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
 
     # Precompute L_nu for each (T, beta, lambda_0_um) grid point
     phot_grid = []
@@ -363,8 +439,13 @@ def _build_grid_pah_drude(
     PreintegratedGrid
         Preintegrated photometry with shape (1, n_filters) (scalar template).
     """
-    # Standard rest-frame wavelength grid for integration
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
+    # PAH grid uses the same rest range as the continuum builders
+    wave_rest_base = _continuum_wave_rest()
+
+    # Validate filters are within base grid bounds before building union grid
+    _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
+
+    wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
 
     # Compute PAH template using Smith+2007 SINGS median strengths
     pah_llam = np.asarray(_compute_pah(jnp.asarray(wave_rest * 1e-4)))  # Å -> μm
@@ -455,9 +536,9 @@ def precompute(
     """
     if model == "modified_blackbody":
         if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
+            T_grid = np.linspace(20.0, 60.0, 17, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
+            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
         result = {
             "grid_phot": _build_grid_modified_blackbody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid
@@ -471,13 +552,13 @@ def precompute(
 
     elif model == "casey2012":
         if T_grid is None:
-            T_grid = np.linspace(25.0, 60.0, 8, dtype=np.float64)
+            T_grid = np.linspace(25.0, 60.0, 15, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
+            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
         if alpha_mir_grid is None:
-            alpha_mir_grid = np.array([1.5, 2.0, 2.5], dtype=np.float64)
+            alpha_mir_grid = np.linspace(1.5, 2.5, 5, dtype=np.float64)
         if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
+            lambda_0_um_grid = np.linspace(100.0, 200.0, 5, dtype=np.float64)
         casey_preint = _build_grid_casey2012(
             filter_waves,
             filter_trans,
@@ -501,11 +582,11 @@ def precompute(
 
     elif model == "graybody":
         if T_grid is None:
-            T_grid = np.linspace(20.0, 60.0, 9, dtype=np.float64)
+            T_grid = np.linspace(20.0, 60.0, 17, dtype=np.float64)
         if beta_grid is None:
-            beta_grid = np.array([1.5, 1.8, 2.0], dtype=np.float64)
+            beta_grid = np.linspace(1.5, 2.0, 6, dtype=np.float64)
         if lambda_0_um_grid is None:
-            lambda_0_um_grid = np.array([100.0, 150.0, 200.0], dtype=np.float64)
+            lambda_0_um_grid = np.linspace(100.0, 200.0, 5, dtype=np.float64)
         result = {
             "grid_phot": _build_grid_graybody(
                 filter_waves, filter_trans, redshift, T_grid, beta_grid, lambda_0_um_grid
@@ -556,7 +637,11 @@ def build_lookup(
 ):
     """Build the runtime analytic dust photometry lookup from a preintegrated dict.
 
-    Delegates to the template helper for triweight interpolation.
+    Interpolates the preintegrated grid using monotone cubic Hermite (PCHIP).
+    The builder evaluates the analytic model at each node and at fine wavelengths
+    across each filter's rest-frame support, so no template interpolation occurs
+    during band integration. Refusal: any filter whose rest-frame support lies
+    outside the model's integration grid raises ``ValueError``.
 
     Parameters
     ----------
@@ -577,6 +662,8 @@ def build_lookup(
             fn(L_absorbed, *free_axis_values) -> ndarray, shape (n_filters,)
 
         Returns dust emission L_ν [erg/s/Hz]. Caller applies flux scaling.
+        Off-node accuracy: monotone cubic Hermite interpolation, 1e-3 relative
+        tolerance at default node grids.
 
     References
     ----------
@@ -585,18 +672,34 @@ def build_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and PCHIP
     interpolation.
 
-    **Gradient-safe**: yes, triweight kernel is fully differentiable.
+    **Gradient-safe**: yes, PCHIP kernel is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
-        # No axes collapsed: use template helper directly
-        return build_template_photometry_lookup(preint["_preint"])
+        # No axes collapsed: use PCHIP interpolation directly
+        from tengri.utils.grid_interp import interp_nd_pchip
+
+        grid_phot = preint["_preint"].phot
+        axes = preint["_preint"].axes
+
+        @jax.jit
+        def dust_phot_uncollapsed(L_absorbed, *free_axis_values):
+            """Compute dust photometry using PCHIP interpolation.
+
+            Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+            """
+            if axes:
+                normed = interp_nd_pchip(grid_phot, axes, free_axis_values)
+            else:
+                normed = grid_phot.ravel()
+            return L_absorbed * normed
+
+        return dust_phot_uncollapsed
 
     # Collapsed case: return a wrapped lookup that takes remaining free params
     from tengri.components._collapsed_lookup import interp_collapsed
-    from tengri.utils.interpolation import edges_for_grid
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
@@ -612,7 +715,7 @@ def build_lookup(
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
+            grid_phot, axes, free_axis_values, kernel="pchip", edges=edges
         )
         return L_absorbed * normed
 

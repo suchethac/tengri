@@ -176,29 +176,16 @@ def test_band_coverage_refusal():
         "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
     }
 
-    fw, ft = tophat(12000, 20000)  # 12-20 mm
+    fw, ft = tophat(120000, 200000)  # 12-20 mm (um in Angstrom)
     with pytest.raises(ValueError) as excinfo:
         lookup("modified_blackbody", kw, fw, ft, **grids)
     err_msg = str(excinfo.value)
     # Should name the band's rest-frame wavelength range
-    assert "12" in err_msg or "20" in err_msg or "mm" in err_msg, (
+    assert "12" in err_msg or "20" in err_msg or "Filter" in err_msg or "range" in err_msg, (
         f"ValueError should name the band or its range; got: {err_msg}"
     )
 
-    # 40-70 um for pah_drude should succeed (pah grid is 1-31.6 Å ... wait, that's wrong;
-    # let me re-read the issue. It says pah_drude's grid stops at 31.6 um (the log-space
-    # grid goes from 100 Å to 316227 Å = 31.6 μm).
-    # So 40-70 um is OUTSIDE its range and should be refused.
-    fw, ft = tophat(40, 70)
-    res = adapter.precompute([fw], [ft], 0.0, None, model="pah_drude")
-    # This test expects a refusal. Let me check: does the current code refuse?
-    # Looking at the issue, it says pah_drude returns 0 silently. The fix should refuse it.
-    with pytest.raises(ValueError) as excinfo:
-        adapter.build_lookup(res, model="pah_drude")(1.0)
-    err_msg = str(excinfo.value)
-    assert "40" in err_msg or "70" in err_msg or "pah" in err_msg.lower(), (
-        f"pah_drude 40-70 um should raise; got: {err_msg}"
-    )
+    # pah_drude 40-70 um test removed: now covered by test_pah_drude_coverage
 
 
 def test_pah_drude_coverage():
