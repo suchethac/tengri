@@ -5383,7 +5383,39 @@ class SEDModel:
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
-    def _compute_sfr(self, p):
+    def _sfh_call_kwargs(self, p, redshift=None):
+        """Keyword arguments for one call of the composed SFH function.
+
+        The SFH parameters in ``p`` plus, for an age-anchored family, the age
+        of the universe at the redshift of this evaluation, through the same
+        rule as the forward model (:func:`age_universe_kwargs`). Every route
+        of this class that calls ``self._sfh_fn`` builds its kwargs here.
+
+        Parameters
+        ----------
+        p : dict
+            Internal parameter dict from _get_internal_params().
+        redshift : float or array_like, optional
+            Redshift of this evaluation. Defaults to ``p["redshift"]`` and
+            then to the spec's fixed redshift.
+
+        Returns
+        -------
+        dict
+            A new dict; ``p`` is not modified.
+        """
+        from tengri.components.stellar.component import age_universe_kwargs
+
+        kw = {
+            k: v
+            for k, v in p.items()
+            if k in self._sfh_internal_names or k in self._sfh_public_names
+        }
+        if redshift is None:
+            redshift = p["redshift"] if "redshift" in p else self._get_redshift({})
+        return {**kw, **age_universe_kwargs(self.spec.mean_sfh_type, redshift)}
+
+    def _compute_sfr(self, p, redshift=None):
         """Compute SFR via the composed SFH function.
 
         Single dispatch point for all SFH computation, replaces
@@ -5393,6 +5425,9 @@ class SEDModel:
         ----------
         p : dict
             Internal parameter dict from _get_internal_params().
+        redshift : float or array_like, optional
+            Redshift of this evaluation, used by age-anchored families;
+            defaults as in :meth:`_sfh_call_kwargs`.
 
         Returns
         -------
@@ -5400,11 +5435,7 @@ class SEDModel:
             SFR(t) in Msun/yr on the log-age grid.
         """
         # Build kwargs for the composed SFH function
-        kw = {
-            k: v
-            for k, v in p.items()
-            if k in self._sfh_internal_names or k in self._sfh_public_names
-        }
+        kw = self._sfh_call_kwargs(p, redshift)
 
         # If field is present, compute GP and pass to composed fn
         if self._uses_stochastic_sfh and "xi" in p:
@@ -5423,10 +5454,18 @@ class SEDModel:
 
         return self._sfh_fn(self.age_yr, **kw)
 
-    def _compute_sfr_mean_and_full(self, p):
+    def _compute_sfr_mean_and_full(self, p, redshift=None):
         """Compute both mean (no GP) and full (with GP) SFR.
 
         Used by predict_sfh which needs to return both.
+
+        Parameters
+        ----------
+        p : dict
+            Internal parameter dict from _get_internal_params().
+        redshift : float or array_like, optional
+            Redshift of this evaluation, used by age-anchored families;
+            defaults as in :meth:`_sfh_call_kwargs`.
 
         Returns
         -------
@@ -5435,11 +5474,7 @@ class SEDModel:
         sfr_full : array
             SFR with GP modulation (same as sfr_mean if no field).
         """
-        kw = {
-            k: v
-            for k, v in p.items()
-            if k in self._sfh_internal_names or k in self._sfh_public_names
-        }
+        kw = self._sfh_call_kwargs(p, redshift)
         sfr_mean = self._sfh_fn(self.age_yr, **kw)
 
         if self._uses_stochastic_sfh and "xi" in p:
@@ -5746,7 +5781,7 @@ class SEDModel:
         # bug this issue closes.
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
-        sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+        sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
 
         if grid == "native":
             return {
@@ -8773,7 +8808,7 @@ class SEDModel:
         # silently accept and use a present-but-overridden Fixed value.
         refuse_fixed_overrides(self.spec, params)
         p = self._get_internal_params(params)
-        sfr = self._compute_sfr(p)
+        sfr = self._compute_sfr(p, self._get_redshift(params))
 
         # ONE definition of the age weights: the ones the SED was built from.
         #

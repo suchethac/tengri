@@ -153,6 +153,52 @@ DEFAULT_AGE_KERNEL = "cic"
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
 
+#: SFH families whose time axis is anchored to the age of the universe at the
+#: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
+#: quantiles on it (Iyer et al. 2019); ``psb`` and ``psb_wild2020`` anchor their
+#: burst to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex`` bound
+#: their fixed old bins to ``[tflex, age(z)]``.
+_AGE_FAMILIES = (
+    "dense_basis",
+    "dense_basis_pure",
+    "psb",
+    "psb_wild2020",
+    "psb_suess2022",
+    "psb_flex",
+)
+
+
+def age_universe_kwargs(sfh_model, redshift) -> dict:
+    """The ``age_universe_yr`` kwarg of an age-anchored SFH, at ``redshift``.
+
+    The one definition of the rule every route that evaluates the SFH
+    function follows: the exact forward, the SED-free precompute and the SED
+    model's own history routes. A model whose SFH family (or, for a composite,
+    any member) is in ``_AGE_FAMILIES`` receives ``age_universe_yr`` equal to
+    the age of the universe at ``redshift`` under the configured cosmology
+    [yr]; every other model receives nothing.
+
+    Parameters
+    ----------
+    sfh_model : str or sequence of str
+        The SFH family, or the members of a composite SFH. ``"field"`` (the GP
+        modulator) is not a family and is ignored.
+    redshift : float or array_like
+        Redshift of THIS evaluation, fixed or sampled; may be traced.
+
+    Returns
+    -------
+    dict
+        ``{"age_universe_yr": age(z) [yr]}`` for an age-anchored model, else
+        ``{}``. A new dict on every call.
+    """
+    members = (sfh_model,) if isinstance(sfh_model, str) else tuple(sfh_model)
+    if not any(m in _AGE_FAMILIES for m in members):
+        return {}
+    from tengri.cosmology import age_at_z
+
+    return {"age_universe_yr": jnp.asarray(age_at_z(redshift)).reshape(()) * 1e9}
+
 
 def _resolve_age_kernel(config) -> str:
     """Which age-weight kernel this config selects: ``"cic"`` or ``"dsps"``.
@@ -2473,7 +2519,7 @@ class StellarSEDComponent:
         sfh_model = self.config.sfh_model
         is_composite = isinstance(sfh_model, list)
         if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, sfh_spec_settings = resolve_sfh(
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
                 sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
             )
             # Bin-edge knot discovery (#765) inspects the first member's callable.
@@ -2483,7 +2529,6 @@ class StellarSEDComponent:
             sfh_fn_composed = None
             spec_params = sfh_spec.params
             internal_param_map = sfh_spec.internal_param_map
-            sfh_spec_settings = sfh_spec.settings
 
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in internal_param_map.items():
@@ -2507,30 +2552,17 @@ class StellarSEDComponent:
                 sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
-        # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
-        # from the configured cosmology; default of 13.47 Gyr matches
-        # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
-        if isinstance(sfh_model, str) and sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        # ``psb_wild2020`` (registry alias ``psb``) anchors its burst double
-        # power law at the age of the universe AT THIS MODEL'S REDSHIFT, not a
-        # static cosmology default: Wild et al. 2020 Eq. 5 and BAGPIPES
-        # star_formation_history.py:326-348 both measure the burst's cosmic
-        # time from "now" (the observation epoch), which is per-galaxy, so it
-        # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting. ``psb_suess2022``/``psb_flex`` (both
-        # ``psb_continuity_flex``, #2645) share the same injection: their
-        # fixed old bins are bounded to ``[tflex_gyr, age_universe_yr]`` the
-        # same way the burst is bounded to ``[0, age_universe_yr]``, so
-        # neither family's default fixed section extends past the Big Bang.
-        if isinstance(sfh_model, str) and sfh_model in (
-            "psb",
-            "psb_wild2020",
-            "psb_suess2022",
-            "psb_flex",
-        ):
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -3684,9 +3716,10 @@ class StellarSEDComponent:
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
         # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
-        # block below so psb_wild2020's age_universe_yr injection (mirroring
-        # apply()'s own ordering) can read it; also feeds the runtime
-        # tabulated SFH and the age-of-universe truncation further down.
+        # block below so the age_universe_yr injection for every family in
+        # ``_AGE_FAMILIES`` (mirroring apply()'s own ordering) can read it;
+        # also feeds the runtime tabulated SFH and the age-of-universe
+        # truncation further down.
         z = jnp.asarray(
             require_redshift(params, "components.stellar.component.compute_joint_weights")
         )
@@ -3704,14 +3737,10 @@ class StellarSEDComponent:
                     continue
                 raw = default_scalar
             sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
-        if self.config.sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020", "psb_suess2022", "psb_flex"):
-            # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this. The
-            # psb_suess2022/psb_flex share here is #2645.
-            sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
+        # Mirrors apply()'s injection (§2) so the two routes cannot diverge
+        # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
+        # of every ``_AGE_FAMILIES`` member to age(z).
+        sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
