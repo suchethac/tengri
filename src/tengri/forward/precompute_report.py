@@ -196,14 +196,6 @@ def _infer_lut_decline_reason(model: Any) -> str | None:
     if unsafe_free:
         return f"free dust parameters outside allowlist: {sorted(unsafe_free)}"
 
-    # Check for free redshift on a law that reads it
-    if "redshift" in free:
-        from tengri.components.dust.laws._registry import law_kwarg_names
-
-        laws_in_play = (dust.config.law_bc, dust.config.law_diff)
-        if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
-            return "free redshift with law that reads it"
-
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
         return "approx=WavePrecomp() not enabled"
@@ -239,10 +231,10 @@ def _infer_dust_response_decline_reason(model: Any) -> str | None:
     free_dust = {p for p in free if p.startswith("dust_")}
 
     # Check for free shape parameters
-    shape_free = bool(free_dust - model._EB_ATTEN_FREE_OK) or ("redshift" in free)
-    if shape_free:
-        extra_params = free_dust - model._EB_ATTEN_FREE_OK
-        return f"free shape parameters: {sorted(extra_params) if extra_params else 'redshift'}"
+    # A free redshift is not a reason: the response is tabulated over it.
+    extra_params = free_dust - model._EB_ATTEN_FREE_OK
+    if extra_params:
+        return f"free shape parameters: {sorted(extra_params)}"
 
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
@@ -277,10 +269,6 @@ def _infer_term_response_decline_reason(model: Any, emitter_name: str) -> str | 
     free_emitter = {p for p in free if p.startswith(prefix)}
     if free_emitter:
         return f"free {emitter_name} parameters: {sorted(free_emitter)}"
-
-    # Check for free redshift
-    if "redshift" in free:
-        return "free redshift"
 
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):

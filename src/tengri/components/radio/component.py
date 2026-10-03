@@ -11,13 +11,13 @@ AGN-radio model selection
 The AGN radio component is selected via
 :attr:`RadioSEDComponentConfig.agn_radio_model`:
 
-- ``"powerlaw"`` (default): single power law with an ``exp(-nu/nu_cut)``
-  aging cutoff (:func:`radio_total`). Uses ``radio_loudness``,
-  ``radio_alpha_agn``, ``radio_log_nu_cut``.
+- ``"powerlaw"`` (default): single power-law (:func:`radio_total`).
+  Backwards-compatible default; behavior bit-identical to pre-aging
+  releases. Reads ``radio_log_nu_cut`` (synchrotron-aging cutoff).
 - ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. (2)). Uses ``radio_alpha_thin``,
-  ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
+  ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut`` (shared with power-law).
 
 Physical synchrotron-aging kernels (Jaffe & Perola 1973;
 Kardashev/Pacholczyk; Tribble 1993), namely ``"JP"``, ``"KP"`` and ``"tribble"``,
@@ -280,12 +280,10 @@ class RadioSEDComponent(TemplateThreading):
         is derived from the same tuple, so the two registration paths
         are guaranteed to agree.
 
-        DPL-only parameters (``radio_alpha_thin``, ``radio_alpha_thick``,
-        ``radio_log_nu_t``) are declared in the parameter registry but are
-        refused when ``agn_radio_model="powerlaw"`` — they have no meaning on a
-        single power law. The power-law model reads ``radio_log_nu_cut``, which
-        is shared with the DPL model; it can be varied even on the power-law
-        model to move or remove the synchrotron-aging cutoff.
+        The power-law model reads ``radio_log_nu_cut`` (the synchrotron-aging
+        cutoff). The three turnover parameters (``radio_alpha_thin``,
+        ``radio_alpha_thick``, ``radio_log_nu_t``) are read by the ``dpl`` model
+        only and are ``Fixed`` by default.
         """
         return list(_RADIO_PARAMS)
 
@@ -520,7 +518,6 @@ class RadioSEDComponent(TemplateThreading):
                     alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
                     radio_loudness=jnp.asarray(params["radio_loudness"]),
                     alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
-                    log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                     sfr_mode=self.config.sfr_mode,
                     log_mstar=log_mstar,
                     redshift=z,
@@ -531,6 +528,7 @@ class RadioSEDComponent(TemplateThreading):
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                     l_bband=L_4400_intrinsic,
+                    log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
                     log_L_ir=_log_L_ir,
                     log_L_agn_bol=_log_L_agn,
                 ),
@@ -666,7 +664,7 @@ class RadioSEDComponent(TemplateThreading):
 
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
-            band = _term_band_response(template_data, "radio")
+            band = _term_band_response(template_data, "radio", params)
             fw_pad = state.derived.get("phot_filter_waves_padded")
             ft_pad = state.derived.get("phot_filter_trans_padded")
 

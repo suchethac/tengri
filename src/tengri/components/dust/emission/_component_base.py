@@ -21,6 +21,7 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components._z_response import interp_z_table
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.resolve import require_redshift
@@ -519,8 +520,20 @@ class EmissionComponent(SEDModelComponent):
 
         # Project emission onto filters
         if band_response is not None:
-            # Exact fast path: template is linear in L_ir, so integral = L_ir * R
-            phot_lnu = L_ir * band_response
+            # Exact fast path: template is linear in L_ir, so integral = L_ir * R,
+            # with R read at the redshift this evaluation runs at (the merged
+            # params' ``redshift``): the table spans the model's redshift range,
+            # and a one-node table (a single Fixed z) needs no redshift at all.
+            if band_response["ln1pz"].shape[0] == 1:
+                response = band_response["values"][0]
+            else:
+                response = interp_z_table(
+                    band_response,
+                    require_redshift(
+                        p, "components.dust.emission._component_base._apply_photometry_precomp"
+                    ),
+                )
+            phot_lnu = L_ir * response
         elif getattr(self, "fast_emission", False):
             # Approximate path: sample at effective wavelength
             phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
