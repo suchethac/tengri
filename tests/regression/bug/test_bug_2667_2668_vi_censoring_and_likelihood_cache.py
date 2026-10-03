@@ -324,9 +324,10 @@ def test_vi_without_a_mask_is_unchanged_from_main(ssp, truth, method):
 
 
 @pytest.mark.parametrize("method", sorted(VI_METHODS_HONORING_DATA_MASK))
-def test_a_free_noise_model_with_a_limit_is_refused_by_name(ssp, truth, method):
+@pytest.mark.parametrize("limit", [1, -1])
+def test_a_free_noise_model_with_a_limit_is_refused_by_name(ssp, truth, method, limit):
     """``noise_frac_cal`` free plus a limit is refused, naming ``data_mask``."""
-    fitter = _fitter(ssp, truth, scale=3.0, mask_value=1, free_noise=True)
+    fitter = _fitter(ssp, truth, scale=3.0, mask_value=limit, free_noise=True)
     with pytest.raises(ParameterError, match="data_mask") as exc:
         _run_mean(fitter, method)
     assert "vi_fullrank" in str(exc.value)

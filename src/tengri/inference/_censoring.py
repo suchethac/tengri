@@ -74,6 +74,10 @@ def data_energy(data, noise, predicted, mask=None):
     mask : array or None
         Censoring flags (0 detected, 1 upper limit, -1 lower limit). ``None``
         scores every band as a detection, :math:`\tfrac12\chi^2`.
+        With a mask the detected bands carry ``+ln sigma`` (the normalization of
+        ``censored_neg_log_likelihood``); without one the energy is ``0.5 * chi2``
+        only, so the two differ by the constant ``sum(ln sigma)`` over detected bands,
+        which does not depend on the parameters.
 
     Returns
     -------
