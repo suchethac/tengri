@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """
 Regression test for issue #2689: the power-law AGN radio jet honors radio_log_nu_cut.
 
@@ -146,15 +147,35 @@ def _kernel(fn, wave, cut):
     return fn(wave, 0.0, log_nu_cut=cut, log_L_agn_bol=jnp.asarray(45.0, wave.dtype))
 
 
-@pytest.mark.parametrize("fn", [radio.radio_agn, radio.radio_agn_dpl], ids=["powerlaw", "dpl"])
-def test_nu_cut_float32_value_and_gradient(fn):
-    """Float32: no overflow of 10^cut, value equals float64, gradient finite (0 at cut=40)."""
+@pytest.mark.parametrize(
+    ("fn", "nu_shift"),
+    [(radio.radio_agn, 0.0), (radio.radio_agn_dpl, _NU_REF)],
+    ids=["powerlaw", "dpl"],
+)
+def test_nu_cut_float32_value_and_gradient(fn, nu_shift):
+    """Float32: no overflow of 10^cut; value and gradient match the analytic float64 ones.
+
+    d L_nu / d cut = L_nu (nu - nu_shift) 10^-cut ln10, where ``nu_shift`` is the
+    reference frequency the DPL normalizes by (its cutoff factor also sits in the
+    normalization) and 0 for the power law.  Compared on ``sum(L_nu * _SCALE)``
+    to rtol 2e-4; at cut=40 the analytic gradient is ~0 and the float32 one must
+    be within 1e-6 of the cut=13 gradient's magnitude.
+    """
     wave64 = jnp.asarray(np.geomspace(3e5, 3e8, 40))  # 1 THz .. 1 GHz in Angstrom
-    ref = {c: np.asarray(_kernel(fn, wave64, jnp.asarray(c))) for c in (11.0, 13.0, 40.0)}
+    nu = C_AA / np.asarray(wave64)
+    cuts = (11.0, 13.0, 40.0)
+    ref = {c: np.asarray(_kernel(fn, wave64, jnp.asarray(c))) for c in cuts}
+    grad_ref = {
+        c: float(np.sum(ref[c] * _SCALE * (nu - nu_shift) * 10.0 ** (-c) * np.log(10.0)))
+        for c in cuts
+    }
+    assert all(np.isfinite(v) for v in grad_ref.values())
+    assert grad_ref[11.0] != 0.0 and grad_ref[13.0] != 0.0
     with jax.enable_x64(False):
         wave = jnp.asarray(np.geomspace(3e5, 3e8, 40), dtype=jnp.float32)
         assert wave.dtype == jnp.float32
-        for c in (11.0, 13.0, 40.0):
+        grad32 = {}
+        for c in cuts:
             cut = jnp.asarray(c, dtype=jnp.float32)
             val = _kernel(fn, wave, cut)
             assert val.dtype == jnp.float32
@@ -165,11 +186,15 @@ def test_nu_cut_float32_value_and_gradient(fn):
             g = jax.grad(lambda x: jnp.sum(_kernel(fn, wave, x) * _SCALE))(cut)
             assert g.dtype == jnp.float32
             assert np.isfinite(float(g))
-        g40 = jax.grad(lambda x: jnp.sum(_kernel(fn, wave, x) * _SCALE))(
-            jnp.asarray(40.0, jnp.float32)
-        )
-        scale = float(jnp.sum(_kernel(fn, wave, jnp.asarray(13.0, jnp.float32)) * _SCALE))
-        assert abs(float(g40)) < 1e-6 * scale
+            if c != 40.0:
+                assert float(g) != 0.0
+            grad32[c] = float(g)
+    for c in (11.0, 13.0):
+        assert grad32[c] != 0.0
+        np.testing.assert_allclose(grad32[c], grad_ref[c], rtol=2e-4)
+    np.testing.assert_allclose(
+        grad32[40.0], grad_ref[40.0], rtol=0.0, atol=1e-6 * abs(grad32[13.0])
+    )
 
 
 # ── the issue's sweep: every AGN radio key against every AGN radio model ──────────────
