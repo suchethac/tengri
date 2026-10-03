@@ -4,12 +4,14 @@ Regression test for issue #2689: power-law AGN radio model honors radio_log_nu_c
 Verifies the cutoff parameter is threaded through correctly, DPL-only keys are
 refused, default is unchanged, and the analytic gradient is correct.
 """
-import pytest
-import numpy as np
-import jax.numpy as jnp
-from tengri import DEFAULT, Fixed, SEDModel, load_ssp, FREE
-from tengri.config import ConfigError
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from tengri import DEFAULT, FREE, Fixed, SEDModel, load_ssp
+from tengri.config import ConfigError
 
 pytestmark = pytest.mark.regression_bug
 
@@ -29,9 +31,18 @@ def test_radio_powerlaw_nu_cut_factor_formula(ssp):
     m_sf = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-             "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "none"},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
@@ -49,9 +60,18 @@ def test_radio_powerlaw_nu_cut_factor_formula(ssp):
     m_base = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-             "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "none"},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
@@ -67,14 +87,25 @@ def test_radio_powerlaw_nu_cut_factor_formula(ssp):
         m_cut = SEDModel.build(
             ssp_data=ssp,
             met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-            sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-                 "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-            dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(3.0),
+                "log_total_mass": Fixed(10.0),
+                "all_params": Fixed(DEFAULT),
+            },
+            dust_attenuation={
+                "type": "single_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
             dust_emission={"type": "none"},
             neb={"type": "none"},
             agn={"type": "composable", "all_params": Fixed(DEFAULT)},
-            radio={"all_params": Fixed(DEFAULT),
-                   "agn": {"radio_log_nu_cut": Fixed(cut_val), "all_params": Fixed(DEFAULT)}},
+            radio={
+                "all_params": Fixed(DEFAULT),
+                "agn": {"radio_log_nu_cut": Fixed(cut_val), "all_params": Fixed(DEFAULT)},
+            },
             redshift=Fixed(0.0),
         )
 
@@ -97,9 +128,18 @@ def test_radio_powerlaw_default_unchanged(ssp):
     m = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-             "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "none"},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
@@ -116,41 +156,74 @@ def test_radio_powerlaw_default_unchanged(ssp):
     idx_100 = np.argmin(np.abs(nu - 100.0 * 1e9))
     L_100 = sed[idx_100]
 
-    np.testing.assert_allclose(L_100, 7.593923e+27, rtol=1e-3)
+    np.testing.assert_allclose(L_100, 7.593923e27, rtol=1e-3)
 
 
 def test_radio_powerlaw_dpl_keys_refused(ssp):
     """DPL-only keys raise ConfigError on powerlaw model."""
-    for key, val in [("radio_alpha_thin", 1.5), ("radio_alpha_thick", -1.0), ("radio_log_nu_t", 10.5)]:
+    for key, val in [
+        ("radio_alpha_thin", 1.5),
+        ("radio_alpha_thick", -1.0),
+        ("radio_log_nu_t", 10.5),
+    ]:
         with pytest.raises(ConfigError) as exc:
             SEDModel.build(
                 ssp_data=ssp,
                 met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-                sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-                     "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-                dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+                sfh={
+                    "type": "delayed",
+                    "tau_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(3.0),
+                    "log_total_mass": Fixed(10.0),
+                    "all_params": Fixed(DEFAULT),
+                },
+                dust_attenuation={
+                    "type": "single_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
                 dust_emission={"type": "none"},
                 neb={"type": "none"},
                 agn={"type": "composable", "all_params": Fixed(DEFAULT)},
-                radio={"all_params": Fixed(DEFAULT),
-                       "agn": {"all_params": Fixed(DEFAULT), key: Fixed(val)}},
+                radio={
+                    "all_params": Fixed(DEFAULT),
+                    "agn": {"all_params": Fixed(DEFAULT), key: Fixed(val)},
+                },
                 redshift=Fixed(0.0),
             )
 
         msg = str(exc.value).lower()
-        assert "dpl" in msg and (key in str(exc.value) or key.replace("radio_", "") in str(exc.value))
+        assert "dpl" in msg and (
+            key in str(exc.value) or key.replace("radio_", "") in str(exc.value)
+        )
 
 
 def test_radio_powerlaw_nu_cut_gradient(ssp):
     """
-    Gradient d(L_agn)/d(log_nu_cut) matches analytic: L_agn * (nu/nu_cut) * ln(10).
+    ``jax.grad`` w.r.t. a FREE ``radio_log_nu_cut`` of the 300 GHz AGN-jet L_nu
+    equals the analytic L * (nu / nu_cut) * ln(10).
+
+    The derivative is taken by autodiff through the public model path with the
+    cutoff traced, so a ``stop_gradient``, a Python-float conversion or an
+    untraced branch in the cutoff fails it.  A central finite difference
+    cannot see those: it only evaluates the forward model.  The finite
+    difference is kept as a secondary cross-check.
     """
     m_sf = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-             "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "none"},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
@@ -161,40 +234,56 @@ def test_radio_powerlaw_nu_cut_gradient(ssp):
     m = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(3.0),
-             "log_total_mass": Fixed(10.0), "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(3.0),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        dust_attenuation={
+            "type": "single_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
         dust_emission={"type": "none"},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
-        radio={"all_params": Fixed(DEFAULT),
-               "agn": {"radio_log_nu_cut": FREE, "all_params": Fixed(DEFAULT)}},
+        radio={
+            "all_params": Fixed(DEFAULT),
+            "agn": {"radio_log_nu_cut": FREE, "all_params": Fixed(DEFAULT)},
+        },
         redshift=Fixed(0.0),
     )
+    assert "radio_log_nu_cut" in m.spec.free_params
 
-    state = m.predict_state({"radio_log_nu_cut": 13.0})
-    wave = np.asarray(m.wave if hasattr(m, "wave") else state.wave)
+    wave = np.asarray(
+        m.wave if hasattr(m, "wave") else m.predict_state({"radio_log_nu_cut": 13.0}).wave
+    )
     C = 2.99792458e18
     nu = C / wave
-    sed_sf = np.asarray(m_sf.predict_state({}).derived["sed_radio"])
+    sed_sf = jnp.asarray(m_sf.predict_state({}).derived["sed_radio"])
 
-    idx_300 = np.argmin(np.abs(nu - 300.0 * 1e9))
-    nu_300 = nu[idx_300]
+    idx_300 = int(np.argmin(np.abs(nu - 300.0 * 1e9)))
+    nu_300 = float(nu[idx_300])
 
     def agn_flux_300(log_cut):
-        state_tmp = m.predict_state({"radio_log_nu_cut": log_cut})
-        sed_tmp = jnp.asarray(state_tmp.derived["sed_radio"])
-        return sed_tmp[idx_300] - sed_sf[idx_300]
+        state = m.predict_state({"radio_log_nu_cut": log_cut})
+        return state.derived["sed_radio"][idx_300] - sed_sf[idx_300]
 
-    # Numerical gradient
+    log_cut0 = 13.0
+    L_agn = float(agn_flux_300(jnp.asarray(log_cut0)))
+    grad_ana = L_agn * (nu_300 / 10.0**log_cut0) * np.log(10.0)
+    assert np.isfinite(grad_ana) and grad_ana != 0.0
+
+    # Primary: autodiff through the traced cutoff.
+    grad_ad = float(jax.grad(agn_flux_300)(jnp.asarray(log_cut0)))
+    np.testing.assert_allclose(grad_ad, grad_ana, rtol=1e-4)
+
+    # Secondary: central finite difference of the forward model.
     eps = 1e-4
-    flux_plus = float(agn_flux_300(13.0 + eps))
-    flux_minus = float(agn_flux_300(13.0 - eps))
-    grad_num = (flux_plus - flux_minus) / (2 * eps)
-
-    # Analytic gradient
-    L_agn = float(agn_flux_300(13.0))
-    nu_cut = 10.0**13.0
-    grad_ana = L_agn * (nu_300 / nu_cut) * np.log(10.0)
-
-    np.testing.assert_allclose(grad_num, grad_ana, rtol=1e-4)
+    grad_fd = (
+        float(agn_flux_300(jnp.asarray(log_cut0 + eps)))
+        - float(agn_flux_300(jnp.asarray(log_cut0 - eps)))
+    ) / (2 * eps)
+    np.testing.assert_allclose(grad_fd, grad_ana, rtol=1e-3)
