@@ -2,6 +2,14 @@
 
 ### Fixed
 
+- The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:
+  BAGPIPES is built on a converged wavelength grid (median λ/Δλ asserted),
+  band integrals run on each SED's own nodes through `band_average(...,
+  integrate="sed")` (the default `"filter"` is unchanged), the SSP file
+  carries BAGPIPES's L☉, tengri's metallicity scatter is set to a single
+  node, the continuity SFH takes explicit bin edges, and each code's own
+  photometry is compared at z = 0 and 0.5.
+- `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time; `predict_sfh`, `predict_sfh_quantities` and `sample_sfh_prior` (which takes a `redshift`) evaluate the age-anchored families at the age of the universe of the model's redshift, through the same rule as the forward model (#2592).
 - The power-law AGN radio jet reads `radio_log_nu_cut`: the cutoff $\exp(-\nu/\nu_{\rm cut})$ was fixed at $10^{13}$ Hz on the default model whatever the key said; `radio_log_nu_cut = 40` now removes it, and the default is unchanged. A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for the power-law model now needs `radio_log_nu_cut` (13.0 is the declared default). (#2689).
 
 - The model reference weights the band-averaged flux by `w = 1/λ` (photon counting, the default) instead of `λ`, states the AGN radio loudness as `log10(L_5GHz/L_4400)` instead of `L_5GHz/L_2500`, and gains the CIGALE convention differences it had not stated: equivalent-width sign and continuum, the star-forming radio normalization (q_IR and the anchor frequency), the AGN jet cutoff and loudness anchor, the nebular density axes and the emission-line profile (#2627, #2663, #2626).
@@ -67,6 +75,7 @@
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
 
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
+- AGN emission lines (composable NLR, BLR and FeII; GRAHSP's lines and FeII forest; QSOGen's line template) receive the instrument kernel alone in the spectrum projection, like nebular and shock emission: each line is painted at its own width and never passes through the stellar library, so the observed width is √(σ_line² + σ_inst²) and no longer grows with the stellar σ_v (a 500 km/s FWHM narrow line read 290 km/s at σ_v = 200 km/s against the true 218 km/s, +33 %). The AGN component publishes the line-only light `sed_agn_lines_attenuated`, as it enters the SED after the AGN's own screen, and the dust adapters apply the host `agn_screen` to it when the AGN runs first (#2565).
 
 ### Changed
 
