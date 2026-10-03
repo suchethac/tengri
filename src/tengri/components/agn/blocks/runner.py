@@ -55,7 +55,6 @@ import numpy as np
 from jax import Array
 
 from tengri.components.agn._lbol_reference import (
-    _LOG10_L_SUN,
     reference_evaluation,
     rescale,
 )
@@ -83,6 +82,7 @@ from tengri.components.agn.skirtor import (
     skirtor_disc_dust_wave,
 )
 from tengri.config.exceptions import AdvisoryWarning
+from tengri.utils.grid_interp import resample_template
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -913,6 +913,22 @@ agn_torus_block, agn_attenuation_block : str
             )
         return _ledger_cache["disc"]
 
+    def _torus_on_ledger():
+        """The torus block on the fixed budget grid, built once."""
+        if "torus" not in _ledger_cache:
+            _ledger_cache["torus"] = torus_fn(
+                _ledger_wave(),
+                agn_log_lbol=agn_log_lbol_eval,
+                l5100_disc=l5100_disc,
+                templates=_templates_for("torus", agn_torus_block),
+                **params,
+            )
+        return _ledger_cache["torus"]
+
+    def _torus_power_on_ledger():
+        """Torus bolometric power [erg/s] on the fixed budget grid (not the caller's)."""
+        return jnp.abs(jnp.trapezoid(_torus_on_ledger(), _ledger_wave()))
+
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
     nlr_aniso, nlr_iso = split_lines_result(
@@ -1027,21 +1043,33 @@ agn_torus_block, agn_attenuation_block : str
         # Every integral that defines the tie is taken on the SKIRTOR library's own
         # axis (``_tie_wave``), the grid CIGALE integrates on, and none on the
         # caller's:
-        #   * ``agn_power`` is the torus power. The torus template is normalized
-        #     on its native axis to ``agn_torus_frac x L_bol``, so that is its
-        #     value in closed form (log space, so float32 never forms the erg/s
-        #     scale);
-        #   * the disc's reweighted bolometric is ``int disc(lib) x disk(i)/disk(0)``
-        #     over the library axis, the disc evaluated there.
-        _agn_power = jnp.asarray(params.get("agn_torus_frac", 0.5)) * jnp.power(
-            10.0, agn_log_lbol_eval + _LOG10_L_SUN
-        )
+        #   * ``agn_power`` is the torus power, integrated on the fixed budget grid
+        #     (the template's own integral, as CIGALE's ``lumin_dust``; for SKIRTOR it
+        #     is 0.9963 of ``agn_torus_frac x L_bol``, so no closed form is assumed);
+        #   * the disc's reweighted bolometric is ``int disc x disk(i)/disk(0)`` over the
+        #     library's range, the disc evaluated there on a fixed fine grid.
+        _agn_power = _torus_power_on_ledger()
         # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
         # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
         # so the disc spectrum is inclination-correct, then renormalize the
         # reweighted shape to the agn_power-tied bolometric ``agn_power x R``.
         _disc_reweighted = L_lambda_disc * _disc_incl
-        _disc_int = jnp.maximum(jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave), 1e-30)
+        if _library_wave is None:
+            _disc_integral = jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave)
+        else:
+            # ``R`` is a ratio of trapezoids over the 136-node library axis, but the disc
+            # output is continuous, so its reweighted bolometric is the continuous
+            # integral over the library's range: the disc re-evaluated on a fixed fine grid
+            # spanning it (4000 points, ~3e-4 in ln lambda per node).
+            _fine = jnp.geomspace(_tie_wave[0], _tie_wave[-1], 4001)
+            _disc_fine = redden_disc(
+                _fine,
+                disc_fn(_fine, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params),
+                jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+            )
+            _incl_fine = resample_template(_fine, _tie_wave, _tie_incl_native, left=0.0, right=0.0)
+            _disc_integral = jnp.trapezoid(_disc_fine * _incl_fine, _fine)
+        _disc_int = jnp.maximum(_disc_integral, 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
         _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
@@ -1226,13 +1254,7 @@ agn_torus_block, agn_attenuation_block : str
             # caller's: the torus there, and the graybody re-evaluated there.
             _w_budget = _ledger_wave()
             _nu_budget = C_AA_PER_S / _w_budget
-            _torus_budget = torus_fn(
-                _w_budget,
-                agn_log_lbol=agn_log_lbol_eval,
-                l5100_disc=l5100_disc,
-                templates=_templates_for("torus", agn_torus_block),
-                **params,
-            )
+            _torus_budget = _torus_on_ledger()
             _agn_dust_budget = jnp.abs(
                 jnp.trapezoid(_torus_budget * _w_budget**2 / C_AA_PER_S, _nu_budget)
             )
