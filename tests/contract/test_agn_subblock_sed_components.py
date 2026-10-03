@@ -346,21 +346,21 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     ============  ==================  ==================
     torus block   floored denominator selected denominator
     ============  ==================  ==================
-    ``none``      ``nan``             ``6.734910e+33``
-    ``skirtor``   ``nan``             ``4.128727e+33``
+    ``none``      ``nan``             ``6.861931e+33``
+    ``skirtor``   ``nan``             ``4.206651e+33``
     ============  ==================  ==================
 
-    The values are the dust budget of the power-law disc as integrated on this
-    file's 500 A - 1e8 A, 400-node grid: that integral is 0.998721 of L_bol
-    (the disc is normalized in closed form, and the grid cuts the band at
-    500 A and carries trapezoid error), and the gradient scales with it.
-    The earlier pins (6.743538e+33, 4.134017e+33, 2.192167e+33) were taken
-    when the disc was rescaled so this grid's integral was exactly L_bol;
-    6.743538e+33 * 0.998721 = 6.734912e+33 and 4.134017e+33 * 0.998721 =
-    4.128730e+33 reproduce the new pins.
+    The values are the gradient of the node sum of the polar and torus
+    components on this file's 500 A - 1e8 A, 400-node grid. The polar absorbed
+    power is measured on the runner's fixed budget grid (1e-3 A - 1e10 A), so it
+    includes the disc energy shortward of this file's 500 A start (0.13 % of
+    L_bol), which the SMC screen absorbs; it adds 1.9 % to the
+    degenerate-point gradient (6.734910e+33 -> 6.861931e+33 for ``none``,
+    4.128727e+33 -> 4.206651e+33 for ``skirtor``) and 1.0 % to the live one at
+    ``ebv = 0.1`` (2.189596e+33 -> 2.211796e+33).
 
     Away from the degenerate point nothing moves: at ``ebv = 0.1`` both forms
-    give ``2.189596e+33``. A fit that starts a sampler at zero polar
+    give ``2.211796e+33``. A fit that starts a sampler at zero polar
     reddening -- the registry default -- took a NaN gradient on step one.
     """
 
@@ -410,8 +410,8 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
             "derivative everywhere would satisfy the assertion above while leaving "
             "the sampler exactly as stuck as the nan did. The class docstring pins "
-            "the selected-denominator answers: 6.734910e+33 (torus='none') and "
-            "4.128727e+33 (torus='skirtor')."
+            "the selected-denominator answers: 6.861931e+33 (torus='none') and "
+            "4.206651e+33 (torus='skirtor')."
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -434,7 +434,7 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         # non-zero value pinned exactly on the next line.
         assert np.isfinite(grad)
         if torus_block == "skirtor":
-            assert grad == pytest.approx(2.189596e33, rel=1e-5, abs=0.0), (
+            assert grad == pytest.approx(2.211796e33, rel=1e-5, abs=0.0), (
                 "the live E(B-V) gradient moved; the selection must only change the "
                 f"degenerate point, got {grad:.6e}"
             )
@@ -530,7 +530,7 @@ class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
 
         grad = float(jax.grad(_dust_total)(jnp.asarray(0.0)))
         assert np.isfinite(grad) and grad != 0.0
-        pinned = 6.734910e33 if torus_block == "none" else 4.128727e33
+        pinned = 6.861931e33 if torus_block == "none" else 4.206651e33
         assert grad == pytest.approx(pinned, rel=1e-5, abs=0.0), (
             f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
             f"(pinned {pinned:.6e}) -- the NaN-visibility fix must change only the "
