@@ -29,6 +29,11 @@ from tengri.components.agn.polar_dust import (
 )
 from tests._bounds import assert_non_negative
 
+#: A log grid over the discs' [8 nm, 1e6 nm] support, fine enough that the trapezoid
+#: area of a unit-area spectrum is 1 to 1e-2 (the closed-form normalization is exact;
+#: a coarse linear grid samples the 8-100 nm segments once or not at all).
+_RESOLVED_GRID = jnp.geomspace(8.0, 1e6, 4000)
+
 
 class TestPiecewisePowerlawDisk:
     """Test generic piecewise power-law disc spectrum construction."""
@@ -42,8 +47,8 @@ class TestPiecewisePowerlawDisk:
         chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization_unity(self):
-        """Spectrum integrates to approximately 1.0."""
-        wavelength = jnp.linspace(8.0, 1e6, 500)
+        """Spectrum integrates to 1.0 over a grid that resolves its breakpoints."""
+        wavelength = _RESOLVED_GRID
         limits = jnp.array([8.0, 10.0, 100.0, 5000.0, 1e6])
         coefs = jnp.array([0.2, -1.0, -1.5, -4.0])
         spectrum = piecewise_powerlaw_disk(wavelength, limits, coefs)
@@ -102,15 +107,15 @@ class TestSKIRTORDiskSpectrum:
         chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
-        """Spectrum integrates to ~1.0."""
-        wavelength = jnp.linspace(8.0, 1e6, 500)
+        """Spectrum integrates to 1.0 over a grid that resolves its breakpoints."""
+        wavelength = _RESOLVED_GRID
         spectrum = skirtor_disk_spectrum(wavelength, delta=0.0)
         integral = jnp.trapezoid(spectrum, wavelength)
         np.testing.assert_allclose(integral, 1.0, rtol=0.01)
 
     def test_delta_parameter_effect(self):
         """Delta parameter modulates the mid-IR slope."""
-        wavelength = jnp.linspace(8.0, 1e6, 500)
+        wavelength = _RESOLVED_GRID
         spec_delta0 = skirtor_disk_spectrum(wavelength, delta=0.0)
         spec_delta_pos = skirtor_disk_spectrum(wavelength, delta=0.5)
         spec_delta_neg = skirtor_disk_spectrum(wavelength, delta=-0.5)
@@ -141,8 +146,8 @@ class TestSchartmann2005DiskSpectrum:
         chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
-        """Spectrum integrates to ~1.0."""
-        wavelength = jnp.linspace(8.0, 1e6, 500)
+        """Spectrum integrates to 1.0 over a grid that resolves its breakpoints."""
+        wavelength = _RESOLVED_GRID
         spectrum = schartmann2005_disk_spectrum(wavelength, delta=0.0)
         integral = jnp.trapezoid(spectrum, wavelength)
         np.testing.assert_allclose(integral, 1.0, rtol=0.01)
@@ -167,15 +172,15 @@ class TestADAFDiskSpectrum:
         chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
-        """Spectrum integrates to ~1.0."""
-        wavelength = jnp.linspace(8.0, 1e6, 500)
+        """Spectrum integrates to 1.0 over a grid that resolves its breakpoints."""
+        wavelength = _RESOLVED_GRID
         spectrum = adaf_disk_spectrum(wavelength, delta=0.0)
         integral = jnp.trapezoid(spectrum, wavelength)
         np.testing.assert_allclose(integral, 1.0, rtol=0.01)
 
     def test_delta_blending(self):
         """Delta parameter interpolates between ADAF and thin disc."""
-        wavelength = jnp.linspace(8.0, 1e6, 300)
+        wavelength = _RESOLVED_GRID
         spec_delta0 = adaf_disk_spectrum(wavelength, delta=0.0)  # Pure ADAF
         spec_delta05 = adaf_disk_spectrum(wavelength, delta=0.5)  # Blend
         spec_delta1 = adaf_disk_spectrum(wavelength, delta=1.0)  # Pure thin disc

@@ -24,22 +24,37 @@ References
 
 """
 
-import jax
 import jax.numpy as jnp
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.sed_quantities import band_integral
 
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
+
+# Calzetti et al. 1994 Table 2: ten spectral windows for UV slope measurement.
+CALZETTI94_WINDOWS_AA = (
+    (1268.0, 1284.0),
+    (1309.0, 1316.0),
+    (1342.0, 1371.0),
+    (1407.0, 1515.0),
+    (1562.0, 1583.0),
+    (1677.0, 1740.0),
+    (1760.0, 1833.0),
+    (1866.0, 1890.0),
+    (1930.0, 1950.0),
+    (2400.0, 2580.0),
+)
 
 
 def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     r"""UV spectral slope β from Calzetti et al. (1994) 10-window method.
 
-    Computes the UV slope by fitting log(F_lambda) vs log(lambda) in 10 clean
-    spectral windows that avoid the 2175-Å dust bump and strong spectral
-    features.
+    Computes the UV slope by fitting log(F_lambda) vs log(lambda) over the
+    union of 10 clean spectral windows that avoid the 2175-Å dust bump and
+    strong spectral features. Implements Calzetti+1994 Eq. 3: ONE pooled
+    least-squares fit across all window pixels, not per-window slopes averaged.
 
     Parameters
     ----------
@@ -68,73 +83,42 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     3     1342–1371
     4     1407–1515
     5     1562–1583
-    6     1611–1711
+    6     1677–1740
     7     1760–1833
     8     1866–1890
     9     1930–1950
     10    2400–2580
     ===== ==================
 
-    Within each window, we extract F_λ values and perform a linear regression
-    of log(F_λ) vs log(λ) to measure the slope β. The final result is the
-    weighted mean across windows.
+    The slope is one ordinary least-squares fit of log F_λ against log λ over the
+    pixels with ``lo <= λ <= hi`` in any window. The window bounds are hard, as in
+    Eq. 3: they are constants, so the hard masks carry no derivative with respect
+    to the model, and the fit is linear in log F. The abscissa and ordinate are
+    centered on their window means before the sums of squares are formed, so
+    the fit is stable in float32 (log λ ≈ 7.4 with a spread of 0.5).
 
     References
     ----------
     .. [1] Calzetti, D., Kinney, A. L., Storchi-Bergmann, T., 1994,
-           ApJ, 429, 582.
+           ApJ, 429, 582. Equation 3 and Table 2.
            https://doi.org/10.1086/174330
     """
-    window_lo = jnp.array(
-        [
-            1268.0,
-            1309.0,
-            1342.0,
-            1407.0,
-            1562.0,
-            1611.0,
-            1760.0,
-            1866.0,
-            1930.0,
-            2400.0,
-        ]
-    )
-    window_hi = jnp.array(
-        [
-            1284.0,
-            1316.0,
-            1371.0,
-            1515.0,
-            1583.0,
-            1711.0,
-            1833.0,
-            1890.0,
-            1950.0,
-            2580.0,
-        ]
-    )
+    # log10 F_λ up to the constant log10(c): the F_λ product itself would
+    # overflow float32 for L_ν ~ 1e30.
+    log_w = jnp.log10(wavelength_aa)
+    log_f = jnp.log10(jnp.maximum(l_nu, representable_floor(1e-40))) - 2.0 * log_w
 
-    f_lambda = l_nu * (C_AA / (wavelength_aa**2))
+    in_window = jnp.zeros(wavelength_aa.shape, dtype=bool)
+    for lo, hi in CALZETTI94_WINDOWS_AA:
+        in_window = in_window | ((wavelength_aa >= lo) & (wavelength_aa <= hi))
+    w = in_window.astype(log_w.dtype)
 
-    log_w = jnp.log(wavelength_aa)
-    log_f = jnp.log(jnp.maximum(f_lambda, 1e-40))
-
-    def _window_slope(lo_hi):
-        """Compute slope and weight for a wavelength window."""
-        lo, hi = lo_hi
-        mask = ((wavelength_aa >= lo) & (wavelength_aa <= hi)).astype(jnp.float64)
-        n = jnp.sum(mask)
-        mean_x = jnp.sum(mask * log_w) / jnp.maximum(n, 1.0)
-        mean_y = jnp.sum(mask * log_f) / jnp.maximum(n, 1.0)
-        cov_xy = jnp.sum(mask * (log_w - mean_x) * (log_f - mean_y))
-        var_x = jnp.sum(mask * (log_w - mean_x) ** 2)
-        slope = jnp.where(var_x > 0.0, cov_xy / var_x, 0.0)
-        weight = jnp.where(n >= 2.0, 1.0, 0.0)
-        return slope, weight
-
-    slopes, weights = jax.vmap(_window_slope)(jnp.stack([window_lo, window_hi], axis=1))
-    total_weight = jnp.sum(weights)
-    beta = jnp.where(total_weight > 0.0, jnp.sum(slopes * weights) / total_weight, 0.0)
+    n_pix = jnp.maximum(jnp.sum(w), 1.0)
+    xc = log_w - jnp.sum(w * log_w) / n_pix
+    yc = log_f - jnp.sum(w * log_f) / n_pix
+    sxx = jnp.sum(w * xc**2)
+    sxy = jnp.sum(w * xc * yc)
+    beta = sxy / jnp.maximum(sxx, representable_denominator(1e-30))
 
     return beta
 
@@ -145,8 +129,10 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
 def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     r"""Dn4000 narrow-band break index (Balogh et al. 1999).
 
-    Computes the ratio of average rest-frame flux density in a red band
-    (4000–4100 Å) to a blue band (3850–3950 Å).
+    Computes the ratio of the wavelength-averaged flux density in a red
+    band (4000–4100 Å) to a blue band (3850–3950 Å): ⟨F⟩ = ∫F dλ / ∫dλ,
+    a trapezoid integral over exactly the band, with F interpolated linearly at
+    the band edges, so the value does not depend on the wavelength sampling.
 
     Parameters
     ----------
@@ -174,14 +160,15 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
            Ellingson, E., 1999, ApJ, 527, 54.
            https://doi.org/10.1086/308056
     """
-    blue_mask = (wavelength_aa >= 3850.0) & (wavelength_aa <= 3950.0)
-    red_mask = (wavelength_aa >= 4000.0) & (wavelength_aa <= 4100.0)
 
-    n_blue = jnp.sum(blue_mask)
-    n_red = jnp.sum(red_mask)
+    def _mean_flux_in_band(lam_lo: float, lam_hi: float) -> float:
+        """Wavelength-integrated mean flux over exactly [lam_lo, lam_hi]."""
+        num, den = band_integral(wavelength_aa, l_nu, lam_lo, lam_hi)
+        ok = den > 1e-20
+        return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
-    f_blue = jnp.sum(jnp.where(blue_mask, l_nu, 0.0)) / jnp.maximum(n_blue, 1.0)
-    f_red = jnp.sum(jnp.where(red_mask, l_nu, 0.0)) / jnp.maximum(n_red, 1.0)
+    f_blue = _mean_flux_in_band(3850.0, 3950.0)
+    f_red = _mean_flux_in_band(4000.0, 4100.0)
 
     return jnp.where(
         f_blue > 0.0,
@@ -289,8 +276,12 @@ def equivalent_width(
         \mathrm{EW} = \int_{\lambda_0 - w}^{\lambda_0 + w}
         \frac{F(\lambda) - F_{\mathrm{cont}}}{F_{\mathrm{cont}}} \, d\lambda
 
-    where :math:`F_{\mathrm{cont}}` is estimated as the mean flux in two
-    symmetric sidebands flanking the line window.
+    where :math:`F_{\mathrm{cont}}` is the wavelength-integrated mean over both
+    sidebands,
+    :math:`(\int_{\rm blue} F\,d\lambda + \int_{\rm red} F\,d\lambda)/
+    (\Delta\lambda_{\rm blue} + \Delta\lambda_{\rm red})`. Every integral is a
+    trapezoid integral over exactly its band with F interpolated at the band
+    edges, so the result does not depend on the wavelength sampling.
 
     References
     ----------
@@ -299,33 +290,21 @@ def equivalent_width(
     """
     f_lambda = l_nu * (C_AA / (wavelength_aa**2))
 
-    line_mask = (wavelength_aa >= line_center_aa - window_aa) & (
-        wavelength_aa <= line_center_aa + window_aa
-    )
-
     blue_lo = line_center_aa - window_aa - continuum_width_aa
     blue_hi = line_center_aa - window_aa
     red_lo = line_center_aa + window_aa
     red_hi = line_center_aa + window_aa + continuum_width_aa
 
-    blue_mask = (wavelength_aa >= blue_lo) & (wavelength_aa <= blue_hi)
-    red_mask = (wavelength_aa >= red_lo) & (wavelength_aa <= red_hi)
+    i_blue, w_blue = band_integral(wavelength_aa, f_lambda, blue_lo, blue_hi)
+    i_red, w_red = band_integral(wavelength_aa, f_lambda, red_lo, red_hi)
+    f_cont = (i_blue + i_red) / jnp.maximum(w_blue + w_red, representable_denominator(1e-30))
 
-    n_blue = jnp.sum(blue_mask)
-    n_red = jnp.sum(red_mask)
-    f_cont = (
-        jnp.sum(jnp.where(blue_mask, f_lambda, 0.0)) + jnp.sum(jnp.where(red_mask, f_lambda, 0.0))
-    ) / jnp.maximum(n_blue + n_red, 1.0)
-
-    integrand = jnp.where(
-        line_mask,
-        # Derivative-sized floor: f_cont is a denominator, so its VJP needs
-        # 1/floor**2 representable (#1860). 1e-40 squares to 0.0 in float32.
-        (f_lambda - f_cont) / jnp.maximum(f_cont, representable_denominator(1e-40)),
-        0.0,
+    i_line, w_line = band_integral(
+        wavelength_aa, f_lambda, line_center_aa - window_aa, line_center_aa + window_aa
     )
-
-    return jnp.trapezoid(integrand, wavelength_aa)
+    # Derivative-sized floor: f_cont is a denominator, so its VJP needs
+    # 1/floor**2 representable (#1860). 1e-40 squares to 0.0 in float32.
+    return i_line / jnp.maximum(f_cont, representable_denominator(1e-40)) - w_line
 
 
 # ── Rest-frame Photometry ──────────────────────────────────────────
