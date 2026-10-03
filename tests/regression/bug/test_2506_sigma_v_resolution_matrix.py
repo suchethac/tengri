@@ -58,16 +58,37 @@ def test_sigma_v_zero_is_identity_on_matrix_path():
 
 @pytest.mark.parametrize("sigma_v", [20.0, 60.0, 150.0])
 def test_matrix_path_sigma_v_matches_gaussian_path_linear_grid(sigma_v):
-    """A Gaussian-equivalent matrix at R must equal apply_lsf at R with the same sigma_v."""
+    """A Gaussian-equivalent matrix at R acts on the pixel-binned model, like apply_lsf on pixels.
+
+    The resolution matrix maps the model binned onto the pixels to the observed
+    pixels (Bolton & Schlegel 2010), so the matrix path bins first and
+    broadens second. It therefore equals ``apply_lsf`` run on the pixel-binned
+    model (same R and sigma_v) to the banded-kernel discretization, 1e-2.
+    The Gaussian-LSF path of ``project_spectrum`` under the pixel mean
+    broadens the model grid first (#2530); the two orders differ by the
+    pixel-binning error of the 0.1 Angstrom lines in 0.8 Angstrom pixels of
+    this fixture (measured 1.1e-2, 2.7e-3, 4.8e-4 for sigma_v = 20, 60, 150
+    km/s), bounded at 2e-2.
+    """
+    from tengri.observation.spectrum import apply_lsf, compute_spectrum_conserving
+
     wave, wave_rest, sed, z = _setup()
     bm = gaussian_resolution_bands(wave, 3500.0, n_diag=31)
-    m = _project(sed, wave_rest, wave, z, sigma_v, resolution_matrix=bm)
-    g = _project(sed, wave_rest, wave, z, sigma_v, resolution=3500.0, sigma_lib_kms=0.0)
-    core = slice(200, -200)  # avoid FFT/band edges
-    rel = np.max(np.abs(np.asarray(m)[core] - np.asarray(g)[core])) / np.max(
-        np.abs(np.asarray(g)[core])
+    m = np.asarray(_project(sed, wave_rest, wave, z, sigma_v, resolution_matrix=bm))
+    binned = compute_spectrum_conserving(sed, wave_rest, wave, z, 1e26)
+    pixel_order = np.asarray(
+        apply_lsf(binned, wave, 3500.0, sigma_lib_kms=0.0, sigma_v_kms=sigma_v)
     )
-    assert rel < 1e-2, rel
+    model_order = np.asarray(
+        _project(sed, wave_rest, wave, z, sigma_v, resolution=3500.0, sigma_lib_kms=0.0)
+    )
+    core = slice(200, -200)  # avoid FFT/band edges
+
+    def rel(a, b):
+        return np.max(np.abs(a[core] - b[core])) / np.max(np.abs(b[core]))
+
+    assert rel(m, pixel_order) < 1e-2, rel(m, pixel_order)
+    assert rel(m, model_order) < 2e-2, rel(m, model_order)
 
 
 def test_measured_line_width_blue_and_red(sigma_v=100.0):

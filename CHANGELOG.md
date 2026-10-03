@@ -77,6 +77,10 @@
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
 - AGN emission lines (composable NLR, BLR and FeII; GRAHSP's lines and FeII forest; QSOGen's line template) receive the instrument kernel alone in the spectrum projection, like nebular and shock emission: each line is painted at its own width and never passes through the stellar library, so the observed width is √(σ_line² + σ_inst²) and no longer grows with the stellar σ_v (a 500 km/s FWHM narrow line read 290 km/s at σ_v = 200 km/s against the true 218 km/s, +33 %). The AGN component publishes the line-only light `sed_agn_lines_attenuated`, as it enters the SED after the AGN's own screen, and the dust adapters apply the host `agn_screen` to it when the AGN runs first (#2565).
 
+### Changed
+
+- Breaking: `Spectroscopy.resample` defaults to `"auto"` (was `"point"`), decided in the model's rest frame at the fixed (or lowest prior) redshift by one function that every spectrum path calls, including `spectrum_from_sfh`. Pixels wider than the model grid now return the pixel mean of the light after the line-spread function (the Gaussian LSF acts on the model grid, then the bin integral; a DESI resolution matrix still acts on the pixels): a sigma = 1 Å line in 2 Å pixels read +14 % at its centre when point-sampled. `Spectroscopy(resample="point")` restores the old values. `SpectrumPrecomp` raises on pixels wider than the model grid instead of warning; pixel-integral gradients in redshift are continuous (#2530).
+
 ### Added
 
 - `ingest_catalog(default_relative_error=f)` and `read_catalog(default_relative_error=f)` keep a flux column that has no error column with `error = f * |flux|` (CIGALE's `defaulterror`), and `ingest_catalog(lim_flag=...)` reads CIGALE's error-column encoding of limits: `"none"` drops a band with `err <= 0`, `"noscaling"` and `"full"` take `err < 0` as an upper limit at the flux with sigma `|err|`; both options default to the previous behavior (#2628).

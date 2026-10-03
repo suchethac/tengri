@@ -57,7 +57,7 @@ def joint_model():
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = Observation(
         photometry=Photometry.from_names(FILTERS),
-        spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=1000.0),
+        spectroscopy=Spectroscopy(resample="point", wave_obs=WAVE_OBS, resolution=1000.0),
     )
     sed = SEDModel.build(
         ssp_data=ssp,
