@@ -428,7 +428,11 @@ def test_precompute_index_windows_matches_exact_means(name):
     for lo, hi in windows:
         k = int(np.argmin(np.abs(centers - 0.5 * (lo + hi))))
         lut = float(pre.window_integrals[0, 0, k] / pre.window_norms[k])
-        exact = float(_window_mean_flux(jnp.asarray(wave), jnp.asarray(flux[0, 0]), lo, hi))
+        # A window of a Lick EW holds F_lambda (F_nu x (5000 A / lambda)^2); a break window F_nu.
+        spectrum = jnp.asarray(flux[0, 0])
+        if pre.window_frames[k] == "lambda":
+            spectrum = spectrum * (5000.0 / jnp.asarray(wave)) ** 2
+        exact = float(_window_mean_flux(jnp.asarray(wave), spectrum, lo, hi))
         assert abs(lut / exact - 1.0) < 1e-6, f"{name} [{lo},{hi}]: {lut} vs {exact}"
 
 

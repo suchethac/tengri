@@ -68,8 +68,13 @@ def test_index_lut_bit_exact_vs_measure_index_jax(seed):
     window_means = jnp.tensordot(w, pc.window_integrals, axes=([0, 1], [0, 1])) / pc.window_norms
     lut = np.asarray(measure_indices_from_windows(window_means, pc))
 
-    # bit-exact up to float64 round-off (window mean commutes with the weight sum)
-    np.testing.assert_allclose(lut, exact, rtol=1e-9, atol=0)
+    # A break is a ratio of window means: exact up to float64 round-off (the window mean
+    # commutes with the weight sum). A Lick EW integrates F_lambda / F_C over the window in
+    # the exact path and sums its moment series to second order in the LUT: within 5e-4 Å on these
+    # strongly tilted mock spectra (measured 2.1e-4, #2690).
+    is_ew = np.array([d.index_type == "EW" for d in defs])
+    np.testing.assert_allclose(lut[~is_ew], exact[~is_ew], rtol=1e-9, atol=0)
+    np.testing.assert_allclose(lut[is_ew], exact[is_ew], rtol=0, atol=5e-4)
     assert not pc.has_slope
 
 

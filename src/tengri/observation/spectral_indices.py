@@ -1,16 +1,28 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Spectral index definitions and observed data for direct fitting.
+r"""Spectral index definitions and observed data for direct fitting.
 
 Supports two index types:
 
 - **EW** (equivalent width): measures absorption or emission strength
-  relative to a pseudo-continuum defined by sideband windows.
+  relative to a pseudo-continuum defined by sideband windows. The default
+  follows the Lick definition (Trager et al. 1998): the pseudo-continuum is
+  the straight line through the mean flux of the two sidebands, placed at the
+  sideband mid-wavelengths, and the flux is :math:`F_\lambda`. The additive
+  offsets of Trager et al. (1998) Sect. 5 that place indices on the IDS system
+  are not applied.
 - **break** (flux ratio): ratio of mean fluxes in two continuum windows
   (e.g., Dn4000).
 
 Index values are measured on rest-frame spectra. The forward model generates
 a spectrum covering the required wavelength range, measures indices on it,
 and compares against observed values via a chi2 likelihood term.
+
+The ``flux`` argument of every measuring function is a flux density per unit
+frequency (:math:`L_\nu` or :math:`F_\nu`; any consistent units). EW and
+magnitude indices convert it to :math:`F_\lambda \propto F_\nu/\lambda^2`
+internally; break indices are ratios of :math:`F_\nu` window means (Balogh et
+al. 1999). A spectrum in :math:`F_\lambda` is passed as ``flux_lambda *
+wave_rest**2``.
 
 Usage::
 
@@ -32,14 +44,32 @@ import jax
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
-from tengri.utils.scale import representable_denominator
+from tengri.utils.scale import representable_denominator, representable_floor
+
+#: Reference wavelength [Å] of the F_λ conversion ``F_λ ∝ F_ν (λ_ref/λ)²``. The
+#: proportionality constant cancels in every EW and magnitude index; the
+#: dimensionless ratio keeps the converted flux at the scale of the input
+#: (``F_ν/λ²`` is smaller by 1/λ² ~ 4e-8, which puts an SSP-scale flux under the
+#: float32 floor of the continuum denominator).
+_LAMBDA_REF_AA = 5000.0
+
+#: Distance from the feature window [Å] beyond which the 1 Å sigmoid window weight is
+#: below 1e-17 (40 edge widths).
+_EDGE_REACH_AA = 40.0
+
+#: Order of the moment series with which the window LUT evaluates the integral of
+#: ``F_λ/F_C`` over a Lick feature window (see :func:`measure_indices_from_windows`).
+_LINE_MOMENT_ORDER = 2
+
+#: Allowed values of :attr:`SpectralIndexDef.pseudo_continuum`.
+_PSEUDO_CONTINUUM_MODES = ("linear", "mean")
 
 # ── Index definition ──────────────────────────────────────────────
 
 
 @dataclasses.dataclass(frozen=True)
 class SpectralIndexDef:
-    """Definition of a single spectral index.
+    r"""Definition of a single spectral index.
 
     Parameters
     ----------
@@ -61,6 +91,26 @@ class SpectralIndexDef:
         for break indices.
     units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
+    pseudo_continuum : {"linear", "mean"}
+        How an EW index builds its pseudo-continuum (ignored by break and slope
+        indices). ``"linear"`` (default) is the Lick definition [1]_: the
+        straight line through the mean :math:`F_\lambda` of the two sidebands
+        placed at the sideband mid-wavelengths, with
+        :math:`\mathrm{EW} = \int (1 - F_\lambda/F_{C\lambda})\,d\lambda`
+        over the feature window (magnitude indices: :math:`-2.5\log_{10}` of
+        the feature-window mean of :math:`F_\lambda/F_{C\lambda}`), measured
+        on :math:`F_\lambda` obtained from the ``flux`` argument
+        (:math:`F_\lambda \propto F_\nu/\lambda^2`). ``"mean"`` is
+        BAGPIPES' arithmetic (``bagpipes.input.spectral_indices.single_index``)
+        and not the Lick definition: a constant continuum equal to the mean of
+        the sideband means, ``W (C - <F>)/C``, on the ``flux`` array exactly as
+        given (no frame conversion). It exists to compare with BAGPIPES.
+        ``"linear"`` needs exactly two continuum windows.
+
+    References
+    ----------
+    .. [1] Trager, S. C., Worthey, G., Faber, S. M., Burstein, D., Gonzalez,
+           J. J., 1998, ApJS, 116, 1 (Sect. 2.2, Eqs. 1-3).
 
     Examples
     --------
@@ -87,6 +137,7 @@ class SpectralIndexDef:
     continuum: tuple[tuple[float, float], ...]
     feature: tuple[float, float] | None = None
     units: str = "AA"
+    pseudo_continuum: str = "linear"
 
     def __post_init__(self):
         if self.index_type not in ("EW", "break", "slope"):
@@ -99,6 +150,23 @@ class SpectralIndexDef:
             raise ValueError("Break indices require exactly 2 continuum windows.")
         if self.index_type == "slope" and self.feature is None:
             raise ValueError("Slope indices require a feature window (the fit range).")
+        if self.pseudo_continuum not in _PSEUDO_CONTINUUM_MODES:
+            raise ValueError(
+                f"pseudo_continuum must be one of {_PSEUDO_CONTINUUM_MODES}, "
+                f"got {self.pseudo_continuum!r}"
+            )
+        if self.index_type == "EW" and self.pseudo_continuum == "linear":
+            if len(self.continuum) != 2:
+                raise ValueError(
+                    "EW indices with pseudo_continuum='linear' require exactly 2 "
+                    f"continuum windows (blue, red), got {len(self.continuum)}."
+                )
+            (b_lo, b_hi), (r_lo, r_hi) = self.continuum
+            if not 0.5 * (r_lo + r_hi) > 0.5 * (b_lo + b_hi):
+                raise ValueError(
+                    "The red sideband of a linear pseudo-continuum must lie at a longer "
+                    "mid-wavelength than the blue one."
+                )
 
     @property
     def wave_min(self) -> float:
@@ -149,7 +217,9 @@ class SpectralIndexDef:
 #: index name. Three kinds are represented: ``break`` ratios (``Dn4000``,
 #: ``D4000``), Lick-style equivalent widths (``HdA``, ``HdF``, ``HgA``,
 #: ``HgF``, ``Hbeta``, ``Mgb``, ``Fe4383``, ``Fe5270``, ``Fe5335``,
-#: ``Ca4227``), and one continuum ``slope`` (``uv_slope_beta``). Values are
+#: ``Ca4227``), and one continuum ``slope`` (``uv_slope_beta``). The Lick
+#: equivalent widths use the Lick pseudo-continuum (see
+#: :attr:`SpectralIndexDef.pseudo_continuum`). Values are
 #: :class:`SpectralIndexDef` records carrying the passband definitions in
 #: rest-frame vacuum Angstrom. Pass a key to
 #: :func:`tengri.measure.spectral_index` or :func:`tengri.measure_index_jax`.
@@ -339,7 +409,7 @@ def measure_index_jax(
     flux: jnp.ndarray,
     index_def: SpectralIndexDef | CompositeIndexDef,
 ) -> jnp.ndarray:
-    """Measure a spectral index on a rest-frame spectrum.
+    r"""Measure a spectral index on a rest-frame spectrum.
 
     Parameters
     ----------
@@ -347,7 +417,14 @@ def measure_index_jax(
         Rest-frame wavelengths [Angstrom]. Must cover all windows defined
         in ``index_def``.
     flux : ndarray, shape (n_pix,)
-        Flux density (any consistent units, only ratios matter).
+        Flux density **per unit frequency**, :math:`L_\nu` or :math:`F_\nu`
+        (any consistent units; only ratios matter, so no distance is needed).
+        EW and magnitude indices convert it to :math:`F_\lambda \propto
+        F_\nu/\lambda^2` internally (Lick definition); break indices use it as
+        given (ratio of :math:`F_\nu` window means); a slope index fits it as
+        :math:`F_\nu`. A spectrum in :math:`F_\lambda` is passed as
+        ``flux_lambda * wave_rest**2``. An index defined with
+        ``pseudo_continuum="mean"`` measures ``flux`` as given, in any frame.
     index_def : SpectralIndexDef or CompositeIndexDef
         Atomic index (EW or break) or a composite that combines several
         atomic measurements via a user-provided function.
@@ -365,6 +442,10 @@ def measure_index_jax(
 
     **Gradient-safe**: yes, fully differentiable w.r.t. flux.
 
+    An EW index integrates :math:`1 - F_\lambda/F_{C\lambda}` over the soft
+    feature window (weights :math:`w`, normalized so :math:`\int w\,d\lambda`
+    stands for the window width :math:`W`): ``W (1 - <F/F_C>_w)``.
+
     """
     if isinstance(index_def, CompositeIndexDef):
         atomic_values = tuple(measure_index_jax(wave_rest, flux, c) for c in index_def.components)
@@ -375,6 +456,20 @@ def measure_index_jax(
         return _measure_slope(wave_rest, flux, index_def)
     else:
         return _measure_ew(wave_rest, flux, index_def)
+
+
+def _soft_window(wave: jnp.ndarray, lo: float, hi: float, edge_width: float = 1.0) -> jnp.ndarray:
+    """Soft top-hat weights with sigmoid edges (differentiable window boundaries)."""
+    return jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+
+
+def _to_flam(wave: jnp.ndarray, flux_nu: jnp.ndarray) -> jnp.ndarray:
+    """Convert a per-frequency flux density to F_λ up to a constant factor.
+
+    ``F_λ ∝ F_ν/λ²``; the returned ``F_ν (λ_ref/λ)²`` differs from F_λ by the
+    constant ``λ_ref²/c`` only, which cancels in an EW or magnitude index.
+    """
+    return flux_nu * (_LAMBDA_REF_AA / wave) ** 2
 
 
 def _window_mean_flux(
@@ -402,10 +497,7 @@ def _window_mean_flux(
     float
         Mean flux: ∫(flux·w·dλ) / ∫(w·dλ), where w is the sigmoid edge product.
     """
-    # Soft window function with sigmoid edges for smooth differentiability
-    w_lo = jax.nn.sigmoid((wave - lo) / edge_width)
-    w_hi = jax.nn.sigmoid((hi - wave) / edge_width)
-    weights = w_lo * w_hi
+    weights = _soft_window(wave, lo, hi, edge_width)
 
     # Trapezoid mean: ∫(flux·w·dλ) / ∫(w·dλ), the same on any grid
     num = jnp.trapezoid(flux * weights, wave)
@@ -438,26 +530,63 @@ def _break_from_means(f_blue: jnp.ndarray, f_red: jnp.ndarray) -> jnp.ndarray:
     return f_red / jnp.maximum(f_blue, representable_denominator(1e-30))
 
 
+def _linear_continuum(x, x_blue, x_red, f_blue, f_red):
+    """Straight line through ``(x_blue, f_blue)`` and ``(x_red, f_red)``, evaluated at ``x``."""
+    return f_blue + (f_red - f_blue) * (x - x_blue) / (x_red - x_blue)
+
+
+def _index_from_ratio(ratio: jnp.ndarray, feat_width: float, units: str) -> jnp.ndarray:
+    """EW ``W (1 - ratio)`` or magnitude ``-2.5 log10(ratio)`` from the mean ``F/F_C``."""
+    if units == "mag":
+        return -2.5 * jnp.log10(jnp.maximum(ratio, representable_floor(1e-30)))
+    return feat_width * (1.0 - ratio)
+
+
 def _ew_from_means(
-    cont_means: jnp.ndarray, feat_flux: jnp.ndarray, feat_width: float, units: str
+    cont_means: jnp.ndarray,
+    feat_flux: jnp.ndarray,
+    feat_width: float,
+    units: str,
+    *,
+    x_cont=None,
+    x_feat=None,
+    moments=(),
 ) -> jnp.ndarray:
     """Equivalent width from continuum + feature mean fluxes.
 
-    Averages the continuum-window means, forms the continuum-to-feature ratio
-    scaled by the feature width, and (for ``units == "mag"``) converts to a
-    magnitude index. The single EW primitive, shared by :func:`_measure_ew`
-    and :func:`measure_indices_from_windows` so the EW arithmetic (and its
-    ``mag`` variant) is single-sourced.
+    The single EW primitive for window means, shared by the window-LUT path
+    (:func:`measure_indices_from_windows`) and the ``"mean"`` exact path.
+
+    With ``x_cont=(x_blue, x_red)`` and ``x_feat`` (mid-wavelengths [Å]) the
+    pseudo-continuum is the straight line through the two sideband means,
+    evaluated at the feature mid-wavelength (``pseudo_continuum="linear"``,
+    on F_λ means). Without them it is the constant mean of the sideband means
+    (``pseudo_continuum="mean"``, BAGPIPES' arithmetic). For
+    ``units == "mag"`` the result is the magnitude index.
     """
-    cont_flux = jnp.mean(jnp.asarray(cont_means))
-    ew = (
-        feat_width
-        * (cont_flux - feat_flux)
-        / jnp.maximum(cont_flux, representable_denominator(1e-30))
+    if x_cont is None:
+        cont_flux = jnp.mean(jnp.asarray(cont_means))
+        ew = (
+            feat_width
+            * (cont_flux - feat_flux)
+            / jnp.maximum(cont_flux, representable_denominator(1e-30))
+        )
+        if units == "mag":
+            return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, representable_floor(1e-30)))
+        return ew
+    f_c = jnp.maximum(
+        _linear_continuum(x_feat, x_cont[0], x_cont[1], cont_means[0], cont_means[1]),
+        representable_denominator(1e-30),
     )
-    if units == "mag":
-        return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
-    return ew
+    # ⟨F/F_C⟩ = (1/F_C(x_f)) Σ_k (-σ)^k m_k, with 1/(1 + σu) expanded in the
+    # normalized abscissa u = (λ - x_f)/W, σ = W (dF_C/dλ)/F_C(x_f), and
+    # m_k = ⟨F u^k⟩ the window moments (linear in the spectrum). ``moments`` holds
+    # m_1 ... m_K; empty gives the ratio of means.
+    sigma = feat_width * (cont_means[1] - cont_means[0]) / (x_cont[1] - x_cont[0]) / f_c
+    series = feat_flux
+    for k, m_k in enumerate(moments, start=1):
+        series = series + (-sigma) ** k * m_k
+    return _index_from_ratio(series / f_c, feat_width, units)
 
 
 def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
@@ -470,12 +599,40 @@ def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 
 
 def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
-    """Compute equivalent width from continuum-to-feature flux ratio and feature window width."""
-    cont_fluxes = [_window_mean_flux(wave, flux, lo, hi) for lo, hi in idx.continuum]
+    """Equivalent (or magnitude) index on the reconstructed spectrum.
+
+    ``pseudo_continuum="linear"``: Lick definition on F_λ; the feature-window
+    mean of ``F_λ/F_C`` is integrated on the grid with the soft window weights.
+    ``"mean"``: BAGPIPES' constant-continuum arithmetic on ``flux`` as given.
+    """
     feat_lo, feat_hi = idx.feature
-    feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi)
     feat_width = feat_hi - feat_lo
-    return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
+    if idx.pseudo_continuum == "mean":
+        cont_fluxes = [_window_mean_flux(wave, flux, lo, hi) for lo, hi in idx.continuum]
+        feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi)
+        return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
+    flam = _to_flam(wave, flux)
+    (b_lo, b_hi), (r_lo, r_hi) = idx.continuum
+    # The sideband line is evaluated within _EDGE_REACH_AA of the feature only: beyond
+    # that the window weight is < 1e-17, and an extrapolated zero crossing far away
+    # would floor F_C on pixels the index cannot see, where the VJP's flux / floor**2
+    # overflows float32.
+    x_eval = jnp.clip(wave, feat_lo - _EDGE_REACH_AA, feat_hi + _EDGE_REACH_AA)
+    f_c = jnp.maximum(
+        _linear_continuum(
+            x_eval,
+            0.5 * (b_lo + b_hi),
+            0.5 * (r_lo + r_hi),
+            _window_mean_flux(wave, flam, b_lo, b_hi),
+            _window_mean_flux(wave, flam, r_lo, r_hi),
+        ),
+        representable_denominator(1e-30),
+    )
+    weights = _soft_window(wave, feat_lo, feat_hi)
+    den = jnp.trapezoid(weights, wave)
+    ok = den > 1e-20
+    ratio = jnp.where(ok, jnp.trapezoid(weights * flam / f_c, wave) / jnp.where(ok, den, 1.0), 0.0)
+    return _index_from_ratio(ratio, feat_width, idx.units)
 
 
 def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
@@ -538,7 +695,19 @@ class IndexWindowPrecomputation:
     window_integrals : ndarray, shape (n_met, n_age, n_window)
         :math:`\\int \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)\\,d\\lambda`, the
         soft-window trapezoid integral of each SSP spectrum
-        [erg/s/Hz/Msun · Å] on the SSP wave grid.
+        [erg/s/Hz/Msun · Å] on the SSP wave grid. For a window of frame
+        ``"lambda"`` the integrand is the SSP converted to :math:`F_\\lambda`
+        (``SSP (λ_ref/λ)²``, same units, constant factor dropped); see
+        ``window_frames``.
+    window_frames : tuple of str, length n_window
+        ``"nu"`` (SSP as given, :math:`L_\\nu`) or ``"lambda"``
+        (:math:`F_\\lambda`-converted). Windows of linear-continuum EW indices
+        are ``"lambda"``; break and ``pseudo_continuum="mean"`` windows are
+        ``"nu"``. A window shared by both kinds appears once per frame.
+    window_orders : tuple of int, length n_window
+        0 for a window mean; ``k >= 1`` for the window moment
+        :math:`\\int \\mathrm{SSP}\\,u^k W_w\\,d\\lambda` with
+        :math:`u = (\\lambda - \\lambda_f)/W` (feature windows of linear EWs only).
     window_norms : ndarray, shape (n_window,)
         :math:`\\int W_w(\\lambda)\\,d\\lambda`, window width, so
         ``mean = integral / norm`` matches :func:`_window_mean_flux`.
@@ -549,7 +718,11 @@ class IndexWindowPrecomputation:
         index consumes and how to combine them, see
         :func:`measure_indices_from_windows`. ``kind`` is ``"break"``,
         ``"EW"``, or ``"slope"`` (the last carries ``payload=None`` and is a
-        sentinel that the caller must measure exactly).
+        sentinel that the caller must measure exactly). The EW ``meta`` is
+        ``(feature_width, units, x_cont, x_feat, moment_slots)``: the sideband and
+        feature mid-wavelengths [Å] and the window slots of the moments
+        ``m_1 ... m_K`` of the feature window for a linear pseudo-continuum, and
+        ``None, None, ()`` for ``pseudo_continuum="mean"``.
     names : tuple of str
         Index names in order, for diagnostics / alignment with observed data.
     """
@@ -559,6 +732,8 @@ class IndexWindowPrecomputation:
     window_centers: jnp.ndarray
     index_slots: tuple
     names: tuple
+    window_frames: tuple = ()
+    window_orders: tuple = ()
 
     @property
     def has_slope(self) -> bool:
@@ -608,6 +783,7 @@ def precompute_index_windows(
     ssp_flux: jnp.ndarray,
     index_defs,
     edge_width: float = 1.0,
+    moment_order: int = _LINE_MOMENT_ORDER,
 ) -> IndexWindowPrecomputation:
     """Precompute SSP window integrals for break / EW indices.
 
@@ -623,6 +799,9 @@ def precompute_index_windows(
     edge_width : float, default 1.0
         Sigmoid edge width [Å], MUST match :func:`_window_mean_flux` so the
         LUT and exact paths agree.
+    moment_order : int, default 2
+        Order ``K`` of the feature-window moment series of a linear-continuum EW
+        (see :func:`measure_indices_from_windows`); 0 is the ratio of means.
 
     Returns
     -------
@@ -637,20 +816,34 @@ def precompute_index_windows(
     """
     ssp_wave = jnp.asarray(ssp_wave)
     ssp_flux = jnp.asarray(ssp_flux)
+    ssp_flam = (
+        _to_flam(ssp_wave, ssp_flux)
+        if any(d.index_type == "EW" and d.pseudo_continuum == "linear" for d in index_defs)
+        else None
+    )
 
-    unique: dict[tuple[float, float], int] = {}
+    unique: dict[tuple[float, float, str], int] = {}
     integrals: list[jnp.ndarray] = []
     norms: list[jnp.ndarray] = []
     centers: list[float] = []
+    frames: list[str] = []
+    orders: list[int] = []
 
-    def _slot(lo, hi) -> int:
-        key = _round_window(lo, hi)
+    def _slot(lo, hi, frame="nu", order=0) -> int:
+        key = (*_round_window(lo, hi), frame, order)
         if key in unique:
             return unique[key]
-        integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        spectra = ssp_flam if frame == "lambda" else ssp_flux
+        if order:
+            # k-th moment about the feature mid-wavelength, abscissa in units of W
+            u = (ssp_wave - 0.5 * (lo + hi)) / (hi - lo)
+            spectra = spectra * u**order
+        integral, norm = soft_window_ssp_integral(ssp_wave, spectra, lo, hi, edge_width)
         integrals.append(integral)  # (n_met, n_age)
         norms.append(norm)
         centers.append(0.5 * (float(lo) + float(hi)))
+        frames.append(frame)
+        orders.append(order)
         unique[key] = len(integrals) - 1
         return unique[key]
 
@@ -663,10 +856,21 @@ def precompute_index_windows(
             r = _slot(*idx.continuum[1])
             slots.append(("break", (b, r), None))
         elif idx.index_type == "EW":
-            cont = tuple(_slot(lo, hi) for lo, hi in idx.continuum)
-            feat = _slot(*idx.feature)
+            linear = idx.pseudo_continuum == "linear"
+            frame = "lambda" if linear else "nu"
+            cont = tuple(_slot(lo, hi, frame) for lo, hi in idx.continuum)
+            feat = _slot(*idx.feature, frame)
             feat_width = idx.feature[1] - idx.feature[0]
-            slots.append(("EW", (cont, feat), (feat_width, idx.units)))
+            x_cont = tuple(0.5 * (lo + hi) for lo, hi in idx.continuum) if linear else None
+            x_feat = 0.5 * (idx.feature[0] + idx.feature[1]) if linear else None
+            moment_slots = (
+                tuple(_slot(*idx.feature, frame, k) for k in range(1, moment_order + 1))
+                if linear
+                else ()
+            )
+            slots.append(
+                ("EW", (cont, feat), (feat_width, idx.units, x_cont, x_feat, moment_slots))
+            )
         else:  # slope, not expressible from a single window integral
             slots.append(("slope", None, None))
 
@@ -684,6 +888,8 @@ def precompute_index_windows(
         window_centers=jnp.asarray(centers),
         index_slots=tuple(slots),
         names=tuple(names),
+        window_frames=tuple(frames),
+        window_orders=tuple(orders),
     )
 
 
@@ -696,7 +902,8 @@ def measure_indices_from_windows(
     ----------
     window_means : ndarray, shape (n_window,)
         SFH-weighted (and optionally dust-attenuated) mean flux in each unique
-        window: ``Σ_ij w_ij window_integrals_ijw / window_norm_w``.
+        window: ``Σ_ij w_ij window_integrals_ijw / window_norm_w``, in the frame
+        of the window (``precomp.window_frames``).
     precomp : IndexWindowPrecomputation
         The build-time window recipe.
 
@@ -712,6 +919,18 @@ def measure_indices_from_windows(
     :func:`_ew_from_means` primitives as the exact path, only the window-mean
     source differs (precomputed LUT here vs integrated SED there), so there is no
     duplicated index arithmetic to keep in sync.
+
+    A linear-continuum EW needs ``<F_λ/F_C>`` over the feature window, where the
+    exact path integrates the ratio on the grid. With ``F_C = C_0 (1 + σ u)``,
+    ``u = (λ - λ_f)/W`` the abscissa normalized to the feature width and ``C_0``
+    the line at the feature mid-wavelength, ``1/(1 + σ u) = Σ (-σ u)^k`` gives
+    ``<F_λ/F_C> = (1/C_0) Σ_k (-σ)^k m_k`` with ``m_k = <F_λ u^k>`` the window
+    moments. Each ``m_k`` is linear in the SED, so the LUT stores them per SSP
+    like the window mean (``m_0``) and sums the series to order
+    ``moment_order`` (default 2, two extra window slots per index). On the 15 x 93
+    SSP spectra of the shipped grid the result is within 1e-4 Å of the exact
+    path (3e-2 Å, ``1.6e-5`` of the value, for the deepest Hα emission of the
+    wNE grid); order 0, the ratio of means, is within 0.035 Å.
     """
     out = []
     for kind, payload, meta in precomp.index_slots:
@@ -720,9 +939,20 @@ def measure_indices_from_windows(
             out.append(_break_from_means(window_means[b], window_means[r]))
         elif kind == "EW":
             cont_slots, feat = payload
-            feat_width, units = meta
+            feat_width, units, x_cont, x_feat, moment_slots = meta
             cont_means = [window_means[c] for c in cont_slots]
-            out.append(_ew_from_means(cont_means, window_means[feat], feat_width, units))
+            moments = tuple(window_means[m] for m in moment_slots)
+            out.append(
+                _ew_from_means(
+                    cont_means,
+                    window_means[feat],
+                    feat_width,
+                    units,
+                    x_cont=x_cont,
+                    x_feat=x_feat,
+                    moments=moments,
+                )
+            )
         else:  # slope
             out.append(jnp.asarray(jnp.nan))
     return jnp.stack(out)
@@ -780,7 +1010,9 @@ def measure_indices_from_window_lut(
     ndarray, shape (n_index,)
         Index / emission-EW values, matching a full-SED measurement to < 4e-4
         (the residual is the intra-window transmission variation across the
-        narrow feature windows).
+        narrow feature windows) for a break index; a Lick equivalent width
+        additionally carries the series truncation of
+        :func:`measure_indices_from_windows` (1e-4 Å on the shipped SSP grid).
 
     Notes
     -----
