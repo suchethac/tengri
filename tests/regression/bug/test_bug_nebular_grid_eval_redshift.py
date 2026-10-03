@@ -536,6 +536,9 @@ class TestDeltaLines:
         grad = jax.grad(band)
         zs = np.linspace(-0.02, 0.45, 83)
         assert all(np.isfinite(float(grad(z))) for z in zs)
+        # grad-assert: nonzero-only — the 5000 A line sits on the 5500-5700 A filter edge
+        # at z = 0.12, so d(band)/dz cannot vanish
+        assert abs(float(grad(0.12))) > 0.0
         eps = 1e-6
         # away from the table nodes (5500, 5700, 6300, 6500 -> z = 0.10, 0.14, 0.26, 0.30 for
         # the 5000 A line) the band is linear in z and the gradient is exact
