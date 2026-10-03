@@ -288,14 +288,21 @@ Two parameters control the line-spread function convolution:
 
 ### Which kernel each SED component gets
 
-The stellar continuum and the nebular/shock emission lines are convolved
-with different kernels (#2519), because only the stellar continuum was
-drawn from the SSP template library and shares the galaxy's stellar
-velocity dispersion:
+The stellar continuum and the emission painted by the gas and the AGN are
+convolved with different kernels (#2519, #2565), because only the stellar
+continuum was drawn from the SSP template library and shares the galaxy's
+stellar velocity dispersion:
 
-- **Stellar continuum** (dust-attenuated, plus AGN/dust-IR/radio/X-ray,
-  which are bundled with it): the full kernel,
+- **Stellar continuum** (dust-attenuated, plus the AGN continuum and the
+  dust-IR/radio/X-ray terms, which are bundled with it): the full kernel,
   `sigma_eff = sqrt(sigma_v_kms^2 + sigma_inst(lambda)^2 - sigma_lib(lambda)^2)`.
+- **AGN emission lines** (composable NLR, BLR and FeII; GRAHSP's lines and
+  FeII forest; QSOGen's line template; published as
+  `sed_agn_lines_attenuated`, after the AGN's own screen and the host
+  `agn_screen`): the instrument kernel only. Each line carries its own
+  width (`agn_nlr_fwhm_kms`, the BLR FWHM, `agn_grahsp_linewidth_kms`) and
+  never passes through the stellar library, so the observed width is
+  `sqrt(sigma_line^2 + sigma_inst^2)` and does not move with `sigma_v_kms`.
 - **Nebular and shock emission lines** (continuum and lines together):
   the instrument kernel only, `sigma_eff = sigma_inst(lambda)`. Lines are
   painted at their own intrinsic width (`neb_eline_sigma_kms`) when the
@@ -320,11 +327,11 @@ instead of one combined convolution:
    dispersion cannot broaden a line-of-sight absorption feature imprinted
    after the light has left the galaxy.
 2. **IGM transmission**: multiplies the already-kinematically-broadened
-   stellar piece and the nebular/shock piece alike (observed-frame, on the
+   stellar piece and the instrument-only piece alike (observed-frame, on the
    model grid).
 3. **Instrument stage**: the stellar piece gets
    `sqrt(sigma_inst(lambda)^2 * lsf_scale^2 - sigma_lib(lambda)^2)` (no
-   `sigma_v_kms` term -- already applied in stage 1); nebular/shock get
+   `sigma_v_kms` term -- already applied in stage 1); nebular, shock and AGN lines get
    `sigma_inst(lambda) * lsf_scale` as before.
 
 The library deconvolution therefore lands on the instrument stage alone,
