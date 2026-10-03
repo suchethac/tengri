@@ -461,7 +461,11 @@ def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
         p["dust_tau_bc"] = jnp.asarray(1.5 * tau)
         exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=False))
         fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
-        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9))
+        # Relative error, with the denominator floored at one index unit (1 Angstrom
+        # for an equivalent width, 1 for a break ratio): an index whose value passes
+        # through zero (this draw's Hbeta EW is -0.10 A) has no meaningful relative
+        # error, and the window LUT's intra-window error is absolute (~3e-4 here).
+        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1.0))
         assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e} >= {tol}"
 
 
