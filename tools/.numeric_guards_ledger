@@ -94,7 +94,7 @@ src/tengri/components/xray/xray.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
 src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-100 < 1e-20 -> 1
 src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-300 < 1e-20 -> 2
-src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-60 < 1e-20 -> 2
+src/tengri/components/xray/xray.py | jnp.maximum with floor 1e-60 < 1e-20 -> 1
 src/tengri/forward/component_factory.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/forward/emission_helpers.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/forward/prediction.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
