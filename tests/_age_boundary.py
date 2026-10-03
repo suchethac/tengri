@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 """Hand-built stellar publications for tests that drive a dust component directly.
 
 ``DustSEDComponent.apply`` / ``AgeBinnedDustComponent.apply`` read the stellar

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 r"""The one young/old mixture of age-windowed dust screens (any number of screens).
 
 Every attenuator that splits a stellar population by age (the Charlot & Fall

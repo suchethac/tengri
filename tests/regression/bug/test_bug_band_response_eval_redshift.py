@@ -504,7 +504,6 @@ def test_the_z_tabulated_lut_agrees_with_the_single_curve_builder_at_a_node(uv_s
     tabulated = build_energy_balance_lut_over_z(
         uv_ssp.ssp_flux,
         uv_ssp.ssp_wave,
-        ages,
         ln1pz=jnp.log1p(zs),
         params_at_z=lambda z: ({"redshift": z}, {"redshift": z}),
         tau_bc_grid=tau_bc,
@@ -515,7 +514,6 @@ def test_the_z_tabulated_lut_agrees_with_the_single_curve_builder_at_a_node(uv_s
         single = build_energy_balance_lut(
             uv_ssp.ssp_flux,
             uv_ssp.ssp_wave,
-            ages,
             bc_params={"redshift": float(z)},
             diff_params={"redshift": float(z)},
             tau_bc_grid=tau_bc,
@@ -575,7 +573,6 @@ def test_the_z_tabulated_lut_holds_its_budget_across_the_whole_redshift_range(
     truth = build_energy_balance_lut_over_z(
         uv_ssp.ssp_flux,
         uv_ssp.ssp_wave,
-        ages,
         ln1pz=jnp.log1p(jnp.asarray(zs)),
         params_at_z=lambda z: ({"redshift": z}, {"redshift": z}),
         law_bc="narayanan_z",
@@ -588,7 +585,9 @@ def test_the_z_tabulated_lut_holds_its_budget_across_the_whole_redshift_range(
     worst = 0.0
     for i, z in enumerate(zs):
         exact = float(jnp.sum(weights * (truth.B - truth.G[i, :, :, 0, 0])))
-        got = float(_lut_contract(lut, weights, jnp.asarray(tb), jnp.asarray(td), jnp.asarray(z)))
+        got = float(
+            _lut_contract(lut, weights, jnp.asarray(tb), jnp.asarray(td), redshift=jnp.asarray(z))
+        )
         worst = max(worst, abs(got / exact - 1.0))
     assert worst < _SWEEP_BUDGET, (
         f"L_abs error {worst:.3e} over the sweep (budget {_SWEEP_BUDGET})"

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Exact per-SSP-node formed-mass fractions younger than an age boundary.
 
 Everything in tengri that splits a stellar population by age (the birth-cloud
