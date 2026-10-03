@@ -411,8 +411,9 @@ def compute_grahsp_sed(
     disc_a: str = _DEFAULT_DISC_A,
     disc_mdot: str = _DEFAULT_DISC_MDOT,
     templates: GRAHSPTemplates | None = None,
+    return_components: bool = False,
     **_kwargs,
-) -> Array:
+) -> Array | tuple[Array, dict[str, Array]]:
     r"""GRAHSP AGN SED: registered tengri AGN model entry point.
 
     Mirrors the signature contract of other registered AGN models
@@ -470,6 +471,11 @@ agn_grahsp_hot_fcov
         do not pass as a traced JAX value.
     templates : GRAHSPTemplates, optional
         Pre-loaded HDF5 template bundle.
+    return_components : bool, optional
+        When True, return ``(L_nu, {"lines": L_nu_lines})`` where
+        ``L_nu_lines`` is the broad + narrow Gaussian lines and the FeII
+        forest alone, after the AGN screen and on the same normalization
+        as ``L_nu`` [erg/s/Hz]. Default False. **Static** under JIT.
     **_kwargs
         Non-``agn_grahsp_*`` entries are ignored, accepted for
         compatibility with the AGN_MODELS registry signature (extra
@@ -484,6 +490,9 @@ agn_grahsp_hot_fcov
     -------
     L_nu : ndarray, shape (n_wave,)
         Specific luminosity :math:`L_\nu` [erg/s/Hz].
+    components : dict, optional
+        ``{"lines": ndarray, shape (n_wave,)}`` [erg/s/Hz]; only when
+        ``return_components=True``.
 
     Notes
     -----
@@ -572,4 +581,14 @@ agn_grahsp_hot_fcov
     # gives the correctly-normalized SED without a second evaluation.
     L_lambda_nm = (sed_unit.bbb_attenuated + sed_unit.torus_attenuated) * l5100
     # Convert L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c.
-    return L_lambda_nm * wave_nm**2 / _C_NM_PER_S
+    L_nu = L_lambda_nm * wave_nm**2 / _C_NM_PER_S
+    if not return_components:
+        return L_nu
+    # Line-only light on the same normalization and AGN screen as ``L_nu``
+    # (#2565): the Gaussian lines and the FeII forest, which carry their own
+    # width and never the stellar library's.
+    _, factor_agn = attenuation_factors(
+        wave_nm=sed_unit.wave_nm, ebv=agn_grahsp_ebv, ebv_agn=agn_grahsp_ebv_agn
+    )
+    lines_lambda = (sed_unit.broad_lines + sed_unit.narrow_lines + sed_unit.feii) * factor_agn
+    return L_nu, {"lines": lines_lambda * l5100 * wave_nm**2 / _C_NM_PER_S}
