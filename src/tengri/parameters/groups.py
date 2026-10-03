@@ -3386,6 +3386,12 @@ def _translate_structural(groups: dict) -> dict:
                 "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
             )
 
+        # The age of the universe behind the dense_basis tx quantiles follows
+        # from the redshift and the cosmology (#2592): the per-family settings
+        # keys are refused as a flat kwarg and inside a ``settings`` dict, with
+        # the one message the registry also raises.
+        _refuse_age_universe_settings(group_name, group_dict)
+
         if group_name not in valid_groups:
             # keyword=None: a group key is the kwarg name itself, not a value
             # assigned via ``keyword=`` (#2429 opus review M3).
@@ -6484,6 +6490,37 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+def _refuse_age_universe_settings(group_name: str, group_dict: object) -> None:
+    """Raise the age-of-universe message when a retired settings key is written.
+
+    Parameters
+    ----------
+    group_name : str
+        A top-level kwarg of the grammar (a group, or the key itself when it
+        was written flat).
+    group_dict : object
+        The value written under ``group_name``; a ``settings`` dict is searched
+        for the retired keys.
+
+    Raises
+    ------
+    ConfigError
+        With the message built once in
+        :func:`tengri.components.stellar.sfh.registry.age_universe_setting_error`.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        _AGE_UNIVERSE_SETTING_KEYS,
+        age_universe_setting_error,
+    )
+
+    if group_name in _AGE_UNIVERSE_SETTING_KEYS:
+        raise age_universe_setting_error(group_name)
+    if group_name == "settings" and isinstance(group_dict, dict):
+        for key in group_dict:
+            if key in _AGE_UNIVERSE_SETTING_KEYS:
+                raise age_universe_setting_error(key)
+
+
 #: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
 #: declaration and the short form the sub-block grammar would have resolved it
 #: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
@@ -6577,6 +6614,10 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+
+        # #2592: the retired age-of-universe settings keys get the one message
+        # the registry raises, whichever dict they were written in.
+        _refuse_age_universe_settings(str(key), None)
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
