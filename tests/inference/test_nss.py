@@ -394,3 +394,54 @@ class TestFitterNSSGuards:
 
         with pytest.raises(ValueError, match="stochastic"):
             fitter.run("nss")
+
+
+# ── Evidence error calibration (#2443) ───────────────────────────────
+
+
+class TestNSSEvidenceErrorCalibration:
+    """The reported sqrt(H / n_eff) describes the run-to-run scatter of log Z."""
+
+    @pytest.mark.slow
+    def test_error_matches_scatter_of_logz_across_seeds(self):
+        """std(log Z) over independent runs / mean reported error is in [0.5, 2].
+
+        Unit Gaussian in D = 3 under a uniform box prior, with the analytic
+        log Z. The band is wide because 10 runs determine the standard deviation
+        to about 25 %; the tight calibration is in
+        tests/regression/bug/test_bug_2443_nss_evidence_error_is_information_based.py.
+        """
+        from tengri.inference.backends.evidence import _nss_information_and_error
+        from tengri.inference.backends.nested.base import NSInfo
+        from tengri.inference.backends.nested.utils import log_weights
+
+        D, n_live, num_delete, n_runs = 3, 100, 20, 10
+        algo, names, w = _make_gaussian_nss(D, n_live, num_delete)
+        true_logZ = _analytic_logZ_gaussian(D)
+
+        log_zs, errs, infos = [], [], []
+        for seed in range(n_runs):
+            key = jax.random.PRNGKey(100 + seed)
+            logZ, _, live, dead = _run_nss_to_convergence(
+                algo, names, w, n_live, num_delete, key, tol=-6.0, max_iter=400
+            )
+            particles = jax.tree_util.tree_map(
+                lambda *xs: jnp.concatenate(xs, axis=0),
+                *([d.particles for d in dead] + [live.particles]),
+            )
+            log_w = np.asarray(log_weights(jax.random.PRNGKey(seed), NSInfo(particles, None), 100))
+            info, err, _ = _nss_information_and_error(
+                log_w, np.asarray(particles.loglikelihood), n_live, num_delete
+            )
+            log_zs.append(logZ)
+            errs.append(err)
+            infos.append(info)
+
+        std_logz = float(np.std(log_zs, ddof=1))
+        ratio = std_logz / float(np.mean(errs))
+        print(
+            f"\nD={D}: true log Z={true_logZ:.4f}, mean log Z={np.mean(log_zs):.4f}, "
+            f"std={std_logz:.4f}, mean H={np.mean(infos):.3f}, mean err={np.mean(errs):.4f}, "
+            f"ratio={ratio:.2f}"
+        )
+        assert 0.5 <= ratio <= 2.0, f"std(log Z)/mean(err) = {ratio:.2f}"

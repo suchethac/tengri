@@ -664,7 +664,7 @@ class RadioSEDComponent(TemplateThreading):
 
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
-            band = _term_band_response(template_data, "radio")
+            band = _term_band_response(template_data, "radio", params)
             fw_pad = state.derived.get("phot_filter_waves_padded")
             ft_pad = state.derived.get("phot_filter_trans_padded")
 
