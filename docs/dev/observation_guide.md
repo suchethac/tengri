@@ -278,7 +278,9 @@ spectrum (`predict_spectrum`, `Prediction.spectrum`, the fit kernel,
 `spectrum_from_sfh`) uses it. In the pixel-mean mode the Gaussian line-spread function and the
 velocity dispersion act on the model grid and the pixel mean is taken last, as the detector does;
 a banded resolution matrix (DESI) acts on the pixels by construction. The point mode keeps
-its order (resample, then broaden). The broadened pixel mean costs more per gradient than the
+its order (resample, then broaden), and on pixels wider than the model grid it stays
+wrong by 3-13 % of the line peak for 2 Å pixels (up to 40 % for narrow lines),
+17-100 % for a prism, and 2-33 % in line flux. The broadened pixel mean costs more per gradient than the
 point sample because the convolution runs on the model grid. A Gaussian line of sigma = 1 Å in 2 Å pixels reads
 13.7 % high at its center when point-sampled. `SpectrumPrecomp` samples at the
 pixel centers and raises for pixels wider than the model grid: use `approx=None`

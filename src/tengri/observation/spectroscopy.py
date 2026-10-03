@@ -154,7 +154,10 @@ class Spectroscopy:
     its nodes and is continuous, with a continuous derivative in redshift.
     In the pixel-mean modes the kinematic and Gaussian instrument broadening
     act on the model grid and the mean over the pixel is taken last; a banded
-    resolution matrix acts on the pixels. The point mode resamples first.
+    resolution matrix acts on the pixels. The point mode resamples first. What a point
+    sample leaves wrong on pixels wider than the model grid, as a fraction of
+    the line peak: 3-13 % for 2 Angstrom pixels (up to 40 % for narrow lines),
+    17-100 % for a prism (R = 100), and 2-33 % in integrated line flux.
 
     **Other codes.** BAGPIPES resamples its model spectrum onto the observed
     pixels with SpectRes, a flux-conserving bin integral

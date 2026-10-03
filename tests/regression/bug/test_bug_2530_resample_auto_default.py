@@ -277,6 +277,38 @@ def test_pixel_integral_follows_the_line_spread_function(pix_grid, mu, sigma_int
     assert np.max(np.abs(got - truth)[near]) / truth.max() < tol
 
 
+def test_lsf_scale_gradient_is_live_under_the_pixel_mean():
+    """The pixel mean responds to ``lsf_scale`` and its gradient matches finite differences.
+
+    R = 800 gives sigma_inst = 159 km/s, above the 70 km/s MILES library width,
+    so the kernel width sqrt(sigma_inst^2 - sigma_lib^2) is nonzero; at an R
+    where sigma_inst < sigma_lib the clamp makes the gradient identically zero.
+    """
+    from tengri.observation.spectrum import project_spectrum
+
+    wr = np.arange(5900.0, 6100.0, 0.2)
+    sed = jnp.asarray(np.exp(-0.5 * ((wr - 6000.0) / 1.5) ** 2) + 0.2)
+    wave = jnp.asarray(np.arange(5950.0, 6050.0, 2.0))
+
+    def peak(scale):
+        flux = project_spectrum(
+            sed,
+            jnp.asarray(wr),
+            wave,
+            0.0,
+            DL,
+            resolution=800.0 / scale,
+            sigma_lib_kms=70.0,
+            conserving=True,
+        )
+        return jnp.max(flux) / lnu_to_fnu(1.0, DL, 0.0)
+
+    g = float(jax.grad(peak)(1.0))
+    fd = float((peak(1.0 + 1e-4) - peak(1.0 - 1e-4)) / 2e-4)
+    assert np.isfinite(g) and g != 0.0
+    np.testing.assert_allclose(g, fd, rtol=1e-3)
+
+
 # ── 3. every path reaches the same decision, and the same spectrum ─────────────
 
 

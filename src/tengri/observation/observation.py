@@ -1269,6 +1269,10 @@ class Observation:
 
         Notes
         -----
+        Takes one pre-combined array and applies a single kernel to it, so
+        with ``sigma_v_kms > 0`` or nebular lines it does not reproduce the
+        model path (:meth:`predict`) to rounding.
+
         Requires spectroscopy to be configured. Applies LSF convolution
         if a resolution profile is specified. Applies flux-calibration
         polynomial if ``cal_coeffs`` is provided. Returns data ready for
