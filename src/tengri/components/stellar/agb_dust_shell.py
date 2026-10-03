@@ -41,7 +41,7 @@ stores 13 planes (w = 0, 1/1024, 1/128, 1/8, 7/32, 5/16, 7/16, 9/16, 13/16,
 5/4, 13/8, 2, 3; w = 1 is the exact identity) and interpolates linearly
 between them. Error of that interpolation against direct FSPS at the midpoint
 of every interval (max over 2-30 um, Z_sun, 0.3/1/3 Gyr):
-``[0, 1/1024]`` 3.6 %, ``[1/1024, 1/128]`` 0.06 %, ``[1/128, 1/8]`` 1.6 %,
+``[0, 1/1024]`` 3.6 % over 2-30 um (4.0 % over 0.3-100 um), ``[1/1024, 1/128]`` 0.06 %, ``[1/128, 1/8]`` 1.6 %,
 ``[1/8, 7/32]`` 1.1 %, ``[7/32, 5/16]`` 0.7 %, ``[5/16, 7/16]`` 0.7 %,
 ``[7/16, 9/16]`` 0.7 %, ``[9/16, 13/16]`` 1.0 %, ``[13/16, 1]`` 0.6 %,
 ``[1, 5/4]`` 0.5 %, ``[5/4, 13/8]`` 0.8 %, ``[13/8, 2]`` 0.4 %,
@@ -49,7 +49,8 @@ of every interval (max over 2-30 um, Z_sun, 0.3/1/3 Gyr):
 w = 0 (FSPS switches the shell model off there): the midpoint error of
 ``[0, h]`` falls only slowly with ``h`` (6.2 % at 1/256, 5.4 % at 1/512,
 3.6 % at 1/1024), so no plane spacing resolves it and it affects 0.03 % of
-the prior range. The
+the prior range: a weight near 0 carries a few-percent error in the shell's
+ratio. The
 interpolant has a kink at every stored weight, so the gradient with respect to
 ``agb_dust_weight`` is the slope of the bracketing segment and is
 discontinuous across a node (at w = 1, where R peaks, it changes sign at
