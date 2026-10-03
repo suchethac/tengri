@@ -185,6 +185,12 @@ For stellar grids, the line luminosity is: $$L_{\rm line} = \sum_i w_i \cdot Q_{
 
 : MAPPINGS V photoionization parameters.
 
+## Differences from CIGALE's Nebular Module
+
+- **Density.** CIGALE's `ne` selects one of three tabulated electron densities (10, 100 and 1000 cm$^{-3}$). tengri's density axes are hydrogen densities: `gas_logn` ($\log_{10}n_{\rm H}$; the Cue gas parameters above give its range) for the `cue` backend and `neb_log_nH` (grid range 1 to 4) for `cb19`. The `cloudy` grid backend carries no density axis.
+
+- **Emission-line profile.** The default tengri profile is a compact-support triweight kernel of velocity dispersion `neb_eline_sigma_kms` $= 100$ km s$^{-1}$, whose FWHM is $2\,(3\sigma)\sqrt{1 - 2^{-1/3}} \approx 272$ km s$^{-1}$. CIGALE broadens each line with a Gaussian of FWHM `lines_width` $= 300$ km s$^{-1}$ by default.
+
 ## References
 
 Alarie, A., and C. Morisset. 2019. "Extensive Online Shock Model Database." 55 (October): 377--94. <https://doi.org/10.22201/ia.01851101p.2019.55.02.21>.

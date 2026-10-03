@@ -380,12 +380,40 @@ def measure_index_jax(
 def _window_mean_flux(
     wave: jnp.ndarray, flux: jnp.ndarray, lo: float, hi: float, edge_width: float = 1.0
 ) -> jnp.ndarray:
-    """Mean flux in a wavelength window, using soft sigmoid edges for differentiability."""
+    """Wavelength-averaged flux in a window: ∫(flux·dλ) / ∫dλ.
+
+    Uses soft sigmoid edges for differentiability. The weight function is the
+    edge sigmoid product, which is integrated with dλ to give the correct
+    wavelength mean on any grid (uniform or clustered).
+
+    Parameters
+    ----------
+    wave : ndarray
+        Wavelength grid [Å]
+    flux : ndarray
+        Flux density array (any consistent units)
+    lo, hi : float
+        Window edges [Å]
+    edge_width : float
+        Sigmoid edge width [Å]. Default 1.0.
+
+    Returns
+    -------
+    float
+        Mean flux: ∫(flux·w·dλ) / ∫(w·dλ), where w is the sigmoid edge product.
+    """
+    # Soft window function with sigmoid edges for smooth differentiability
     w_lo = jax.nn.sigmoid((wave - lo) / edge_width)
     w_hi = jax.nn.sigmoid((hi - wave) / edge_width)
     weights = w_lo * w_hi
-    n = jnp.maximum(jnp.sum(weights), 1e-10)
-    return jnp.sum(flux * weights) / n
+
+    # Trapezoid mean: ∫(flux·w·dλ) / ∫(w·dλ), the same on any grid
+    num = jnp.trapezoid(flux * weights, wave)
+    den = jnp.trapezoid(weights, wave)
+
+    # Avoid division by zero; use a safe denominator
+    ok = den > 1e-20
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
 
 # ── Single-sourced index arithmetic ───────────────────────────────
@@ -487,8 +515,8 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 # SED. Parity is EXACT (up to floating point) when the SED carries no dust,
 # because the window mean commutes with the SFH weight sum:
 #
-#     <SED>_win = Σ_λ (Σ_ij w_ij SSP_ij(λ)) W(λ) / Σ_λ W(λ)
-#               = Σ_ij w_ij · [Σ_λ SSP_ij(λ) W(λ)] / Σ_λ W(λ)
+#     <SED>_win = ∫ (Σ_ij w_ij SSP_ij(λ)) W(λ) dλ / ∫ W(λ) dλ
+#               = Σ_ij w_ij · [∫ SSP_ij(λ) W(λ) dλ] / ∫ W(λ) dλ
 #               = Σ_ij w_ij · ssp_window_integral_ij / window_norm .
 #
 # Slope indices are NOT expressible this way (they need the SED shape within the
@@ -508,11 +536,11 @@ class IndexWindowPrecomputation:
     Attributes
     ----------
     window_integrals : ndarray, shape (n_met, n_age, n_window)
-        :math:`\\sum_\\lambda \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)`, the
-        soft-window integral of each SSP spectrum, in the SSP flux units
-        [erg/s/Hz/Msun · Å] summed on the SSP wave grid.
+        :math:`\\int \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)\\,d\\lambda`, the
+        soft-window trapezoid integral of each SSP spectrum
+        [erg/s/Hz/Msun · Å] on the SSP wave grid.
     window_norms : ndarray, shape (n_window,)
-        :math:`\\sum_\\lambda W_w(\\lambda)`, window normalization, so
+        :math:`\\int W_w(\\lambda)\\,d\\lambda`, window width, so
         ``mean = integral / norm`` matches :func:`_window_mean_flux`.
     window_centers : ndarray, shape (n_window,)
         Window mid-wavelength ``0.5*(lo+hi)`` [Å], for per-window dust.
@@ -565,13 +593,14 @@ def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0
     Returns
     -------
     integral : ndarray, shape (n_met, n_age)
-        :math:`\\sum_\\lambda \\mathrm{SSP}(\\lambda)\\,W(\\lambda)`.
+        :math:`\\int \\mathrm{SSP}(\\lambda)\\,W(\\lambda)\\,d\\lambda` (trapezoid).
     norm : ndarray, shape ()
-        :math:`\\sum_\\lambda W(\\lambda)`.
+        :math:`\\int W(\\lambda)\\,d\\lambda` (trapezoid).
     """
     w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid((hi - ssp_wave) / edge_width)
-    integral = jnp.tensordot(ssp_flux, w, axes=([2], [0]))  # (n_met, n_age)
-    return integral, jnp.maximum(jnp.sum(w), 1e-10)
+    # Δλ-weighted, as in _window_mean_flux: mean = integral / norm on any grid.
+    integral = jnp.trapezoid(ssp_flux * w, ssp_wave, axis=-1)  # (n_met, n_age)
+    return integral, jnp.maximum(jnp.trapezoid(w, ssp_wave), 1e-10)
 
 
 def precompute_index_windows(

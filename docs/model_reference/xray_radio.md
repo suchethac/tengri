@@ -81,6 +81,10 @@ $$ (eq-fir-radio)
 
 The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters in all mass/redshift-dependent modes, enabling hierarchical inference over galaxy populations.
 
+#### Normalization relative to CIGALE.
+
+CIGALE's `radio` module normalizes the star-forming synchrotron at the 21 cm wavelength ($\nu = 1.42758\,$GHz) with a default $q_{\rm IR} = 2.58$. tengri anchors at $1.4\,$GHz, the frequency at which Bell (2003) defines $q_{\rm IR}$, and its default is $q_{\rm IR} = 2.64$. At equal $L_{\rm IR}$ and $\alpha_{\rm SF}$ the tengri luminosity is the CIGALE one times the frequency-independent factor $10^{\,q_{\rm CIGALE} - q_{\rm IR}}\,(1.4/1.42758)^{\alpha_{\rm SF}}$, which is 0.857 at the defaults ($\alpha_{\rm SF} = 0.8$). Setting `radio_q_ir = 2.58` leaves the anchor factor alone: 0.985 at $\alpha_{\rm SF} = 0.8$, 0.988 at 0.6 and 0.981 at 1.0. The anchor frequency is not a model-grammar parameter.
+
 #### Synchrotron suppression at low SFR.
 
 At low star-formation rates, cosmic-ray electrons lose energy through inverse Compton scattering off the CMB and infrared radiation field before producing significant synchrotron emission (Klein et al. 1984; Price and Duric 1992; Bell 2003). Bell (2003) parameterizes this as a luminosity-dependent non-thermal fraction (Eq. 3): $$n = \begin{cases}
@@ -126,14 +130,16 @@ Passing `freefree: True` explicitly keeps the term over its whole range on a neb
 
 ### AGN Radio Jets
 
-For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) normalized via the radio-loudness parameter $R = L_{\nu}(5\,{\rm GHz})/L_{\nu}(2500\,\text{\AA})$ is sufficient.
+For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) is sufficient. It is normalized through the radio loudness `radio_loudness` $= \log_{10}[L_\nu(5\,{\rm GHz})/L_\nu(4400\,\text{\AA})]$, the B-band ratio. $L_\nu(4400\,\text{\AA})$ is the intrinsic accretion-disc luminosity that a composable AGN model publishes at its 30° reference inclination; the other AGN models publish no disc luminosity, and the radio block then uses $L_{\rm bol}/(5.15\,\nu_B)$, a bolometric correction of 5.15 at 4400 Å. The power law is multiplied by $\exp(-\nu/\nu_{\rm cut})$ with `radio_log_nu_cut` $= \log_{10}(\nu_{\rm cut}/{\rm Hz}) = 13$ by default, the synchrotron-aging cutoff of AGNfitter-rX; `radio_log_nu_cut = 40` removes it. At the default the cutoff lowers the jet by the factors 0.997, 0.990 and 0.970 at 30, 100 and 300 GHz, and by 0.9995 at the 5 GHz anchor of the loudness.
+
+CIGALE defines the loudness on the 2500 Å anchor, linearly, as $R = L_\nu(5\,{\rm GHz})/L_\nu(2500\,\text{\AA})$ with the intrinsic disc luminosity at the same 30° inclination, and applies no cutoff. A CIGALE value $R$ corresponds to `radio_loudness` $= \log_{10}R + \log_{10}[L_\nu(2500\,\text{\AA})/L_\nu(4400\,\text{\AA})]$; the last term is the logarithm of the disc color and depends on the disc model.
 
 For radio-loud AGN with spectral curvature, the double power-law (DPL) model from AGNfitter-rx (Martı́nez-Ramı́rez et al. 2024) captures the optically thick/thin transition: $$L_\nu = L_{5{\rm GHz}} \left(\frac{\nu}{\nu_t}\right)^{\!\alpha_1}\!
   \left[1 - \exp\!\left(-\!\left(\frac{\nu_t}{\nu}\right)^{\!\alpha_1-\alpha_2}\right)\right]
   \exp\!\left(-\frac{\nu}{\nu_{\rm cut}}\right),
 
 $$ (eq-dpl-radio)
- where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{13}\,$Hz is the synchrotron aging cutoff.
+ where $\alpha_1$ is the steep (optically thin) slope (default $-0.75$), $\alpha_2$ is the flat (optically thick) slope (default $-0.1$), $\nu_t = 10^{\log\nu_t}$ is the transition frequency, and $\nu_{\rm cut} = 10^{13}\,$Hz is the synchrotron aging cutoff. The cutoff frequency is `radio_log_nu_cut`, shared with the power-law model.
 
 ## References
 

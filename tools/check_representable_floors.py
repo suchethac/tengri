@@ -79,7 +79,11 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # ``jnp.maximum(band_integral, 1e-60)`` for the log-space band norm
 # (``_log10_cutoff_powerlaw_band_norm``, floored through ``representable_floor``);
 # a migration of one site (``xray.py``, ``xray_agn_corona_lopez24``).
-_PINNED = 25
+# 25 -> 24: the closed-form normalization of ``disc_cigale.piecewise_powerlaw_disk``
+# (#2601) deleted its ``jnp.maximum(jnp.abs(integral), 1e-100)`` floor outright;
+# the normalization is a log-space subtraction with no divisor. A deletion, not a
+# migration.
+_PINNED = 24
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

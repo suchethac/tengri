@@ -40,16 +40,40 @@ def test_block_registered(name: str) -> None:
     assert name in AGN_BLOCKS["disc"]
 
 
+def _fraction_above(name: str, lo_nm: float) -> float:
+    """Fraction of CIGALE's unit-area disc at wavelengths >= ``lo_nm``.
+
+    Evaluated from ``pcigale.sed_modules.skirtor2016`` on a 2e5-node log grid
+    over its [8 nm, 1e6 nm] support (trapezoid error below 1e-6).
+    """
+    ps = pytest.importorskip("pcigale.sed_modules.skirtor2016")
+    func = {"skirtor": ps.skirtor_disk, "schartmann2005": ps.schartmann2005_disk}.get(
+        name, getattr(ps, "adaf_disk", None)
+    )
+    wl = np.logspace(np.log10(8.0), 6.0, 200_001)
+    spectrum = func(wl, delta=0.0)
+    keep = wl >= lo_nm
+    return float(np.trapezoid(spectrum[keep], wl[keep]) / np.trapezoid(spectrum, wl))
+
+
 @pytest.mark.conservation
 @pytest.mark.parametrize("name", _CIGALE_BLOCKS)
-def test_energy_conservation(name: str) -> None:
-    """\\int L_lambda dlambda must equal L_bol (Lsun -> erg/s)."""
+@pytest.mark.parametrize("lo_aa", [80.0, 100.0])
+def test_energy_conservation(name: str, lo_aa: float) -> None:
+    """\\int L_lambda dlambda over the grid = L_bol x (disc fraction inside the grid).
+
+    The discs are zero below 8 nm (80 A) and from 1e6 nm up. A grid from 80 A holds
+    the whole disc, so the integral is L_bol; a grid from 100 A (10 nm) omits the
+    8-10 nm part, whose share (4.6 % for ``skirtor``) is derived from CIGALE's own
+    formula.
+    """
     block = resolve_agn_block("disc", name)
-    wave_aa = jnp.geomspace(100.0, 1.0e7, 600)  # 10 nm -> 1 mm
+    wave_aa = jnp.geomspace(lo_aa, 1.0e7, 600)
     log_lbol = 10.0
     L_lambda = block(wave_aa, log_lbol)
     L_int = float(jnp.trapezoid(L_lambda, wave_aa))
-    L_expected = (10.0**log_lbol) * _L_SUN_ERG
+    fraction = 1.0 if lo_aa == 80.0 else _fraction_above(name, lo_aa / 10.0)
+    L_expected = fraction * (10.0**log_lbol) * _L_SUN_ERG
     np.testing.assert_allclose(L_int, L_expected, rtol=0.01)
 
 
