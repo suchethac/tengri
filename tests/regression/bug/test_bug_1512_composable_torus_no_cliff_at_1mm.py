@@ -113,21 +113,14 @@ def test_composable_torus_no_collapse_at_1mm_vs_monolithic(ssp_data):
     comp_state = composable.predict_state({})
     comp_components = comp_state.derived
 
-    # Get wavelength grid
-    wave = np.asarray(comp_pred.wave_rest)
-
-    # Find the 1e7 Å node in the monolithic grid
-    idx_1e7 = int(np.argmin(np.abs(wave - 1e7)))
-
-    # Get the neighboring nodes
-    idx_prev = idx_1e7 - 1
-    while idx_prev >= 0 and wave[idx_prev] > 1e8 - 1:
-        # Skip any overflow wavelengths
-        idx_prev -= 1
-
-    # Measure the ratio in both models at 1e7 Å
-    mono_ratio = mono_sed[idx_1e7] / mono_sed[idx_prev]
-    comp_ratio = comp_sed[idx_1e7] / comp_sed[idx_prev]
+    # Each model carries its own wavelength axis (the composable one the disc's native grid),
+    # so the SED is read off each axis at the same two wavelengths: the 1 mm node and the
+    # point 0.9 % below it.
+    mono_wave = np.asarray(mono_pred.wave_rest)
+    comp_wave = np.asarray(comp_pred.wave_rest)
+    lam_1mm, lam_prev = 1.0e7, 9.908e6
+    mono_ratio = np.interp(lam_1mm, mono_wave, mono_sed) / np.interp(lam_prev, mono_wave, mono_sed)
+    comp_ratio = np.interp(lam_1mm, comp_wave, comp_sed) / np.interp(lam_prev, comp_wave, comp_sed)
 
     # The ratio should be approximately the same (within 0.5%)
     # Before the fix: comp_ratio would be ~3e-6 (catastrophic collapse)
