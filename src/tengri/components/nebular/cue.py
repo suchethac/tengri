@@ -58,10 +58,10 @@ Cue differs in the following ways:
 - **C/O and N/O as free parameters**: BEAGLE/Gutkin+2016 has C/O as a discrete
   grid axis (9 values) but fixes N/O to scaled-solar.  Cue accepts continuous
   ``gas_logco`` and ``gas_logno`` offset parameters, enabling smooth gradient-
-  based inference over abundance ratios. The default [N/O] follows
-  the Nicholls+2017 N/O--O/H relation (``_default_nitrogen.default_nitrogen_offset``)
-  evaluated at ``gas_logz``; ``gas_logno`` is an offset from that relation
-  (0 = the relation), the same meaning as ``neb_dno`` in the grid backends.
+  based inference over abundance ratios. ``gas_logno`` is Cue's absolute
+  [N/O] by default; ``nitrogen='nicholls17'`` (``_default_nitrogen``) makes it
+  the offset from that N/O--O/H relation at ``gas_logz``, the convention of
+  ``neb_dno`` in the grid backends.
 
 - **Differentiable by design**: as a neural network, Cue is smooth and
   differentiable through JAX, enabling VI (ELBO gradients) and HMC
@@ -117,7 +117,7 @@ from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.nebular._constants import _LOG10_ZSUN
-from tengri.components.nebular._default_nitrogen import default_nitrogen_offset
+from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -200,10 +200,10 @@ CUE_TRAINED_LOG_Z_GAS: tuple[float, float] = (-2.2, 0.5)
 #: that same ratio ("[C/O]"/"[N/O]" abundance ratio, dex), so the range is
 #: converted: log10(0.1) = -1.0, log10(5.4) ~= 0.7324.
 #:
-#: These bounds are ABSOLUTE [C/O] and [N/O]. Since #2693 ``gas_logno`` is an
-#: OFFSET from the default N/O--O/H relation, so the range it is checked
-#: against is ``gas_logno + default_nitrogen_offset(neb_logZ_gas)``
-#: (``grid_support.SUPPORT_SHIFT``); ``gas_logco`` is still absolute.
+#: These bounds are ABSOLUTE [C/O] and [N/O]. Under ``nitrogen=<relation>``
+#: (#2693) ``gas_logno`` is an OFFSET from that N/O--O/H relation, so the
+#: range it is checked against is ``gas_logno + relation(neb_logZ_gas)``
+#: (``grid_support.SUPPORT_SHIFT``); ``gas_logco`` is always absolute.
 CUE_TRAINED_LOG_CO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 CUE_TRAINED_LOG_NO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 
@@ -667,11 +667,22 @@ def _speculator_log_spectrum(
 # ── Parameter conversion: user-facing -> network input ────────────
 
 
-def _effective_gas_logno(p: dict) -> jnp.ndarray:
-    """[N/O] fed to the network: the default N/O--O/H relation plus ``gas_logno`` (#2693)."""
+#: Meanings of ``gas_logno`` (the ``nitrogen`` structural key, #2693): Cue's
+#: absolute [N/O] input (default), or the offset from a named N/O--O/H relation.
+CUE_NITROGEN_MODES: tuple[str, ...] = NITROGEN_MODES
+
+
+def _effective_gas_logno(p: dict, nitrogen: str = "absolute") -> jnp.ndarray:
+    """The absolute [N/O] fed to the network (#2693).
+
+    ``"absolute"``: ``gas_logno`` itself, untouched (Li+2025's parameterization).
+    A relation name: that relation at ``gas_logz`` plus ``gas_logno``.
+    """
+    gas_logno = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
+    if nitrogen == "absolute":
+        return gas_logno
     gas_logz = jnp.asarray(p["gas_logz"], dtype=jnp.float32)
-    offset = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
-    return default_nitrogen_offset(gas_logz).astype(jnp.float32) + offset
+    return relation_offset(nitrogen, gas_logz).astype(jnp.float32) + gas_logno
 
 
 def _logq_from_logu(
@@ -1099,7 +1110,13 @@ class CueBackend:
         weights_path: str,
         ssp_data=None,
         default_gas_logqion: float = 49.1,
+        nitrogen: str = "absolute",
     ) -> None:
+        if nitrogen not in CUE_NITROGEN_MODES:
+            raise ValueError(
+                f"CueBackend nitrogen={nitrogen!r}: expected one of {CUE_NITROGEN_MODES}."
+            )
+        self.nitrogen = nitrogen
         self.name = "cue"
         self.has_free_params = True
         self.has_continuum = True
@@ -1388,6 +1405,15 @@ class CueBackend:
             ionspec_logLratio3=_pick("ionspec_logLratio3", ionspec_logLratio3, 0.2),
         )
 
+    def effective_log_no(self, **kwargs) -> jnp.ndarray:
+        """The absolute [N/O] the network is fed for these inputs (#2693).
+
+        Takes the same keyword arguments as the prediction methods and equals
+        ``gas_logno`` under ``nitrogen='absolute'``, else ``relation(gas_logz)
+        + gas_logno``.
+        """
+        return _effective_gas_logno(self._resolve_cue_params(**kwargs), self.nitrogen)
+
     def _forward_lines(
         self,
         p: dict,
@@ -1413,7 +1439,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            _effective_gas_logno(p),
+            _effective_gas_logno(p, self.nitrogen),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1510,7 +1536,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            _effective_gas_logno(p),
+            _effective_gas_logno(p, self.nitrogen),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1555,8 +1581,8 @@ class CueBackend:
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         gas_logn, gas_logno, gas_logco : float
             Cue gas properties (defaults match Cue paper). ``gas_logno`` is
-            the [N/O] offset from the default N/O--O/H relation at the gas
-            metallicity (0 = the relation; #2693).
+            Cue's absolute [N/O], or under a ``nitrogen`` relation the offset
+            from that relation at the gas metallicity (0 = the relation; #2693).
 
         Returns
         -------

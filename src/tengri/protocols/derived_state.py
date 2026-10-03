@@ -583,6 +583,8 @@ class DerivedState:
     # transmissions are both exactly one and the projector skips it.
     igm_reach_filters_precomp: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
+    # Absolute [N/O] (dex) the Cue backend is fed: gas_logno, or relation + offset (#2693).
+    neb_log_no: jnp.ndarray | None = None
 
     # Spatial: 2D surface-brightness profile and the (x, y) kpc grid that
     # underlies it. Published by spatial components (Sersic, Exponential,

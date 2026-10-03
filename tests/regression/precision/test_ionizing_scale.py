@@ -45,9 +45,7 @@ pytestmark = pytest.mark.regression_bug
 CASE_B_INTRINSIC = 2.86
 
 #: The decrement this fixture returns with both dust screens at tau = 0 —
-#: i.e. the intrinsic ratio the model actually produces. Measured 2.787641
-#: (2.788907 before #2693, when the default 0.5 Z_sun gas carried solar N/O;
-#: the lower default [N/O] there changes the Halpha/Hbeta ratio by 4.5e-4).
+#: i.e. the intrinsic ratio the model actually produces. Measured 2.788907.
 #:
 #: This number is also what the two decrement tests below *used* to see with
 #: dust switched ON, which is how #1833 hid: the fixture draws
@@ -58,7 +56,7 @@ CASE_B_INTRINSIC = 2.86
 #: failed — because they asserted the *intrinsic* range on an *observed*
 #: quantity. Asserting "above intrinsic" instead is both correct physics and
 #: strictly stronger: it goes red if dust ever stops reddening the lines again.
-INTRINSIC_DECREMENT_TAU_ZERO = 2.787641
+INTRINSIC_DECREMENT_TAU_ZERO = 2.788907
 
 #: Generous ceiling. The fixture's tau implies ~6.8; anything past this is a
 #: runaway rather than a dusty draw.

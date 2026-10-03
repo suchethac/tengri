@@ -524,18 +524,25 @@ def describe_clipping(
     )
 
 
-def _cue_logno_shift(param_support: Mapping[str, tuple[float, float]]) -> tuple[float, float]:
+def _cue_logno_shift(
+    param_support: Mapping[str, tuple[float, float]],
+    settings: Mapping[str, object] | None = None,
+) -> tuple[float, float]:
     """Range of the default N/O--O/H relation over the reachable ``neb_logZ_gas``.
 
-    ``gas_logno`` is an offset from that relation (#2693), while Cue's trained
-    [N/O] range is absolute, so the effective [N/O] a draw reaches is
-    ``gas_logno + relation(neb_logZ_gas)``. The relation increases with
-    metallicity, so its extremes sit at the metallicity bounds.
+    Under a ``nitrogen`` relation ``gas_logno`` is an offset from it (#2693),
+    while Cue's trained [N/O] range is absolute, so the effective [N/O] a draw
+    reaches is ``gas_logno + relation(neb_logZ_gas)``. The relation increases
+    with metallicity, so its extremes sit at the metallicity bounds. Zero under
+    the default ``'absolute'`` mode.
     """
-    from tengri.components.nebular._default_nitrogen import default_nitrogen_offset
+    from tengri.components.nebular._default_nitrogen import relation_offset
 
+    mode = (settings or {}).get("cue_nitrogen", "absolute")
+    if mode == "absolute":
+        return (0.0, 0.0)  # gas_logno is Cue's absolute [N/O]: compared directly
     z_lo, z_hi = param_support.get("neb_logZ_gas", (0.0, 0.0))
-    return (float(default_nitrogen_offset(z_lo)), float(default_nitrogen_offset(z_hi)))
+    return (float(relation_offset(mode, z_lo)), float(relation_offset(mode, z_hi)))
 
 
 #: ``(selector, name, param)`` -> function mapping the reachable parameter
@@ -548,16 +555,21 @@ SUPPORT_SHIFT: dict[tuple[str, str, str], Callable[..., tuple[float, float]]] = 
 
 
 def support_shift(
-    selector: str, name: str, pname: str, param_support: Mapping[str, tuple[float, float]]
+    selector: str,
+    name: str,
+    pname: str,
+    param_support: Mapping[str, tuple[float, float]],
+    settings: Mapping[str, object] | None = None,
 ) -> tuple[float, float]:
     """The ``(lo, hi)`` added to ``pname``'s range to get the bounded quantity (0 if none)."""
     fn = SUPPORT_SHIFT.get((selector, name, pname))
-    return (0.0, 0.0) if fn is None else fn(param_support)
+    return (0.0, 0.0) if fn is None else fn(param_support, settings)
 
 
 def check_grid_support(
     selected: Iterable[tuple[str, str]],
     param_support: Mapping[str, tuple[float, float]],
+    settings: Mapping[str, object] | None = None,
 ) -> list[tuple[str, str, str, str, tuple[float, float]]]:
     """Find every selected component whose grid cannot cover an active support.
 
@@ -569,6 +581,8 @@ def check_grid_support(
     param_support : mapping of str to (float, float)
         ``{param_name: (lo, hi)}`` the range each parameter can actually take
         -- a prior's bounds, or ``(v, v)`` for a fixed value.
+    settings : mapping, optional
+        Structural settings a support depends on (``cue_nitrogen``).
 
     Returns
     -------
@@ -589,14 +603,14 @@ def check_grid_support(
             active = param_support.get(pname)
             if active is None:
                 continue
-            shift = support_shift(selector, name, pname, param_support)
+            shift = support_shift(selector, name, pname, param_support, settings)
             if shift != (0.0, 0.0):
                 eff = (active[0] + shift[0], active[1] + shift[1])
                 detail = describe_clipping(eff, extent, extrapolates=extrapolates)
                 if detail is not None:
                     detail = (
                         f"the effective range (offset [{active[0]:g}, {active[1]:g}] plus the "
-                        f"default relation [{shift[0]:g}, {shift[1]:g}]): {detail}"
+                        f"the N/O-O/H relation [{shift[0]:g}, {shift[1]:g}]): {detail}"
                     )
             else:
                 detail = describe_clipping(active, extent, extrapolates=extrapolates)

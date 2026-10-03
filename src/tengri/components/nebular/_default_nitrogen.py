@@ -1,22 +1,30 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Default N/O--O/H abundance relation for the nebular backends (#2693).
+"""Named N/O--O/H abundance relations for Cue's nitrogen input (#2693).
 
 Photoionization-grid backends (CB_19, CloudyGrid, MAPPINGS) bake a nitrogen
 abundance that rises with oxygen into their CLOUDY grids, and ``neb_dno`` is
-an offset *from* it. Cue takes [N/O] as a free input, so its default has to
-supply the same metallicity dependence explicitly: :func:`default_nitrogen_offset`
-is that default, and ``gas_logno`` is an offset from it.
+an offset *from* it. Cue takes [N/O] as a free input. By default
+(``nitrogen='absolute'``) ``gas_logno`` is that absolute [N/O]; selecting a
+relation by name (``neb={'type': 'cue', 'nitrogen': 'nicholls17'}``) makes
+``gas_logno`` the offset from the relation evaluated at the gas metallicity,
+which is the grid backends' convention.
 
 The shipped grids store only their axes (no N/H or O/H table) and the
 converters in ``scripts/`` carry no N/O formula, so the relation they embody
-is not recoverable from the files; the form adopted is the empirical
+is not recoverable from the files; ``'nicholls17'`` is the empirical
 two-regime relation of Nicholls et al. (2017), with the grids' agreement
 checked at the line-ratio level (see the regression test).
+
+Adding a relation is one :data:`NITROGEN_RELATIONS` entry: a function of
+``log10(O/H)`` (absolute number ratio) returning ``log10(N/O)``, the solar
+``log10(O/H)`` anchor it is referenced to, and its citation.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -38,8 +46,35 @@ def _log_no_absolute(log_oh):
     )
 
 
+class NitrogenRelation(NamedTuple):
+    """One N/O--O/H relation: ``log_no(log_oh)``, its solar anchor and citation."""
+
+    log_no: Callable
+    solar_log_oh: float
+    citation: str
+
+
+#: Selectable relations, keyed by the ``nitrogen`` structural key's value.
+NITROGEN_RELATIONS: dict[str, NitrogenRelation] = {
+    "nicholls17": NitrogenRelation(
+        _log_no_absolute, _LOG_OH_SOLAR, "Nicholls et al. 2017, MNRAS 466, 4403"
+    ),
+}
+
+#: Every legal value of the ``nitrogen`` key: the default plus the relations.
+NITROGEN_MODES: tuple[str, ...] = ("absolute", *NITROGEN_RELATIONS)
+
+
+def relation_offset(name, gas_logz):
+    """[N/O] (dex relative to solar) of relation ``name`` at ``gas_logz``; see
+    :func:`default_nitrogen_offset` for the shape of the computation."""
+    rel = NITROGEN_RELATIONS[name]
+    gas_logz = jnp.asarray(gas_logz, dtype=jnp.result_type(float))
+    return rel.log_no(rel.solar_log_oh + gas_logz) - rel.log_no(rel.solar_log_oh + gas_logz * 0.0)
+
+
 @jax.jit
-def default_nitrogen_offset(gas_logz):
+def default_nitrogen_offset(gas_logz):  # the ``nicholls17`` relation
     r"""Default [N/O] (dex relative to solar) at gas metallicity ``gas_logz``.
 
     The N/O fit of Nicholls et al. (2017, MNRAS 466, 4403) gives the nitrogen-to-oxygen

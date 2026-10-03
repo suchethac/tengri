@@ -36,8 +36,6 @@ def cue_backend():
 
 
 # Standard test inputs (must match generate_cue_reference.py)
-from tengri.components.nebular._default_nitrogen import default_nitrogen_offset
-
 _TEST_PARAMS = [
     dict(
         ionspec_index1=-1.5,
@@ -50,9 +48,7 @@ _TEST_PARAMS = [
         gas_logu=-2.5,
         gas_logn=2.0,
         gas_logz=-0.5,
-        # The TF reference takes an absolute [N/O] = -0.5; ``gas_logno`` is an
-        # offset from the default N/O-O/H relation (#2693), so restate it.
-        gas_logno=-0.5 - float(default_nitrogen_offset(-0.5)),
+        gas_logno=-0.5,
         gas_logco=0.0,
     ),
     dict(
