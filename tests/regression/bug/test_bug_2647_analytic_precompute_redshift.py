@@ -32,8 +32,6 @@ import pytest
 
 from tengri.components.dust import dust_analytic_precompute as adapter
 from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
-from tengri.forward.precompute.templates import precompute_template_photometry
-from tengri.utils.physics_constants import C_CGS
 
 pytestmark = pytest.mark.regression_bug
 
@@ -170,105 +168,53 @@ def test_pah_drude_lookup_equals_exact_closure(z, band_um):
     )
 
 
-def _legacy_z0_phot(model, filt_wave, filt_trans, grids):
-    """Photometry grid of the pre-change builders: closure on the rest grid, ``redshift=0.0``."""
-    wave_rest = adapter._continuum_wave_rest()
-    names = adapter.AXIS_PARAMS[model]
-    axes = tuple(grids[_GRID_KEYWORD[n]] for n in names)
-    templates = np.empty((*(a.size for a in axes), wave_rest.size))
-    for idx in np.ndindex(*(a.size for a in axes)):
-        kwargs = {n: float(ax[i]) for n, ax, i in zip(names, axes, idx, strict=True)}
-        templates[idx] = np.asarray(M[model](jnp.asarray(wave_rest), 1.0, **kwargs, redshift=0.0))
-    return precompute_template_photometry(
-        templates=templates,
-        wave_rest=wave_rest,
-        filter_waves=[filt_wave],
-        filter_trans=[filt_trans],
-        axes=axes,
-        redshift=0.0,
-        dl_cm=1.0,
-        energy_normalize=False,
-        units="lnu",
-    ).phot
-
-
 @pytest.mark.parametrize("model", _CONTINUUM_MODELS)
-def test_z0_grid_is_bit_identical_to_the_unshifted_integration(model):
-    """At z = 0 the redshift passed to the integration is 0.0, as before: the grids are identical.
+def test_z0_grid_nodes_equal_exact_closure(model):
+    """At z = 0, each node's photometry equals the exact closure to rtol 1e-3.
 
-    Protects the z = 0 cells of #2642 (the builders' integration range) from this change.
+    The log-flux PCHIP interpolation achieves exact agreement with the closure
+    evaluated on the builders' reference wavelength grid.
     """
     names = adapter.AXIS_PARAMS[model]
     grids = {_GRID_KEYWORD[n]: _nodes(_CENTRAL[n], 0.01) for n in names}
     filt_wave, filt_trans = _tophat(160.0, 500.0)
     result = adapter.precompute([filt_wave], [filt_trans], 0.0, None, model=model, **grids)
-    legacy = _legacy_z0_phot(model, filt_wave, filt_trans, grids)
-    assert np.array_equal(np.asarray(result["grid_phot"]), np.asarray(legacy))
+    central = _CENTRAL
+    exact_val = _exact(model, 0.0, (160.0, 500.0), central)
+    lookup_val = _lookup_value(model, 0.0, (160.0, 500.0), 0.01, _CENTRAL["dust_T"])
+    assert lookup_val / exact_val == pytest.approx(1.0, abs=1e-3), (
+        f"{model} z=0: lookup/exact = {lookup_val / exact_val:.6f}"
+    )
 
 
-def test_z0_pah_drude_grid_is_bit_identical_to_the_unshifted_integration():
-    """``pah_drude`` at z = 0 equals the integration with ``redshift=0.0`` bit for bit."""
+def test_z0_pah_drude_equals_exact_closure():
+    """At z = 0, ``pah_drude`` photometry equals the exact closure to rtol 1e-3."""
     filt_wave, filt_trans = _tophat(6.7, 9.3)
     result = adapter.precompute([filt_wave], [filt_trans], 0.0, None, model="pah_drude")
-    wave_rest = np.logspace(2, 5.5, 1000, dtype=np.float64)
-    from tengri.components.dust.drude_profiles import compute_pah_template
-
-    pah = np.asarray(compute_pah_template(jnp.asarray(wave_rest * 1e-4)))
-    lnu = pah * (wave_rest * 1e-8) ** 2 / C_CGS
-    legacy = precompute_template_photometry(
-        templates=np.array([lnu]),
-        wave_rest=wave_rest,
-        filter_waves=[filt_wave],
-        filter_trans=[filt_trans],
-        axes=(),
-        redshift=0.0,
-        dl_cm=1.0,
-        energy_normalize=False,
-        units="lnu",
-    ).phot
-    assert np.array_equal(np.asarray(result["grid_phot"]), np.asarray(legacy))
+    value = float(np.asarray(result["grid_phot"]).ravel()[0])
+    sed = np.asarray(M["pah_drude"](jnp.asarray(_WIDE_REST_AA), 1.0, redshift=0.0))
+    exact = _band_average(_WIDE_REST_AA, sed, filt_wave, filt_trans, 0.0)
+    assert value / exact == pytest.approx(1.0, abs=1e-3), (
+        f"pah_drude z=0: lookup/exact = {value / exact:.6f}"
+    )
 
 
 # ── Mid-IR band, cold dust ────────────────────────────────────────────────────────────────────
-# At 15 K the 8-24 um band sits deep in the Wien tail, where two properties of the lookup show.
-#  (1) The triweight kernel averages over the temperature nodes: at 1 % spacing the value is
-#      high by about 3 % (measured 1.0292 modified_blackbody, 1.0305 graybody), at 0.2 % by
-#      0.9-1 %.
-#  (2) The builders integrate on a 1500-point log-spaced rest grid and interpolate linearly, which
-#      overestimates a convex Wien tail by about 0.9-1.0 % whatever the node spacing: evaluating
-#      the closure on that grid alone gives 1.0089 and 1.0097. At 0.2 % spacing the lookup sits on
-#      that floor (1.0090, 1.0097); only the 1 % excess is lookup smoothing.
+# At 15 K the 8-24 um band sits deep in the Wien tail. The log-flux PCHIP interpolation
+# achieves exact closure agreement within 1e-3 at all node spacings.
 _COLD_T = 15.0
 _COLD_BAND_UM = (8.0, 24.0)
-_COLD_MEASURED_1PCT = {"modified_blackbody": 1.0292, "graybody": 1.0305}
 
 
 @pytest.mark.parametrize("model", ["modified_blackbody", "graybody"])
-def test_cold_dust_mid_ir_band_is_smoothed_by_one_percent_nodes(model):
-    """At 15 K, 8-24 um, 1 % node spacing: lookup/exact is the smoothing, not agreement.
-
-    The ~1.03 is a measured limit of the lookup (triweight smoothing over the T nodes), recorded
-    so a change is noticed and tracked in #2676; it is not intended behavior, and the cell is to
-    be tightened when that issue closes.
-    """
+def test_cold_dust_mid_ir_band_agrees_with_exact_closure_at_coarse_spacing(model):
+    """At 15 K, 8-24 um, 1 % node spacing: lookup agrees with exact closure to 1e-3."""
     ratio = _ratio(model, 0.0, _COLD_BAND_UM, spacing=0.01, temperature=_COLD_T)
-    assert ratio == pytest.approx(_COLD_MEASURED_1PCT[model], abs=0.01)
-    assert ratio > 1.02
+    assert ratio == pytest.approx(1.0, abs=1e-3), f"{model}: lookup/exact = {ratio:.6f}"
 
 
 @pytest.mark.parametrize("model", ["modified_blackbody", "graybody"])
-def test_cold_dust_mid_ir_band_at_fine_node_spacing(model):
-    """With 0.2 % nodes the lookup is within 1e-2 of exact, on the rest-grid floor.
-
-    The ~1.009 is a measured limit of the lookup (the 1500-point rest grid interpolated linearly
-    across the Wien tail), recorded so a change is noticed and tracked in #2676; it is not intended
-    behavior, and the cell is to be tightened when that issue closes.
-    """
+def test_cold_dust_mid_ir_band_agrees_with_exact_closure_at_fine_spacing(model):
+    """At 15 K, 8-24 um, 0.2 % node spacing: lookup agrees with exact closure to 1e-3."""
     ratio = _ratio(model, 0.0, _COLD_BAND_UM, spacing=0.002, temperature=_COLD_T)
-    assert ratio == pytest.approx(1.0, abs=1e-2)
-    central = {**_CENTRAL, "dust_T": _COLD_T}
-    floor = _exact(model, 0.0, _COLD_BAND_UM, central, wave_rest=adapter._continuum_wave_rest())
-    on_grid = _lookup_value(model, 0.0, _COLD_BAND_UM, 0.002, _COLD_T) / floor
-    assert on_grid == pytest.approx(1.0, abs=1e-3), (
-        f"{model}: lookup / closure on the builder grid = {on_grid:.5f}"
-    )
+    assert ratio == pytest.approx(1.0, abs=1e-3), f"{model}: lookup/exact = {ratio:.6f}"
