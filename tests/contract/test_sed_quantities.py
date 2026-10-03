@@ -32,8 +32,6 @@ from tengri.utils.sed_quantities import (
     compute_l_radio_1p4ghz_from_sfr,
     compute_l_radio_thermal,
     compute_l_tir,
-    compute_l_x_agn,
-    compute_l_x_xrb,
     compute_luminosity_weighted_age,
     compute_luminosity_weighted_metallicity,
     compute_m_uv,
@@ -334,18 +332,17 @@ class TestRadio:
 
 class TestXRay:
     def test_xrb_positive(self):
-        l_x = compute_l_x_xrb(1.0, 1e10)
-        assert l_x > 0
+        from tengri.components.xray.xray import xray_total_log_band_luminosities
+
+        logs = xray_total_log_band_luminosities(sfr=1.0, stellar_mass=1e10)
+        assert float(logs["hmxb"]) > 0 and float(logs["lmxb"]) > 0
 
     def test_xrb_dominated_by_hmxb_for_sfg(self):
         """For star-forming galaxies, HMXBs should dominate."""
-        l_x = compute_l_x_xrb(10.0, 1e9)  # high SFR, low mass
-        l_hmxb = 2.6e39 * 10.0
-        assert float(l_x) > 0.5 * l_hmxb
+        from tengri.components.xray.xray import xray_total_log_band_luminosities
 
-    def test_agn_positive(self):
-        l_x = compute_l_x_agn(1e44)
-        assert l_x > 0
+        logs = xray_total_log_band_luminosities(sfr=10.0, stellar_mass=1e9)  # high SFR, low mass
+        assert float(logs["hmxb"]) > float(logs["lmxb"])
 
 
 # ── Ionizing efficiency ───────────────────────────────────────────
