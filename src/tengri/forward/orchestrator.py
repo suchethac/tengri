@@ -943,6 +943,67 @@ def _name_missing_parameter(
     )
 
 
+def wire_age_boundaries(components: Iterable[SEDComponent]) -> list[SEDComponent]:
+    """Give the stellar component the age boundaries its attenuator reads.
+
+    An attenuator with a young/old split declares ``config.age_boundaries_yr``
+    and ``config.age_boundary_width_dex``; the stellar component publishes the
+    per-node younger-than-boundary mass fractions only for boundaries its own
+    config names. This is the one place a component list is reconciled, so a
+    chain built by hand gets the same stellar configuration as one built by
+    ``SEDModel``. Returns a new list; a stellar component whose boundaries
+    already match is passed through unchanged.
+
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        Ordered component list.
+
+    Returns
+    -------
+    list of SEDComponent
+        The same components, with the stellar one replaced by a copy carrying
+        the attenuator's boundaries when they differ.
+
+    Raises
+    ------
+    ValueError
+        If two attenuators in the chain request different boundaries.
+    """
+    from dataclasses import replace
+
+    from tengri.components.stellar.component import StellarSEDComponent
+
+    components = list(components)
+    requests = {
+        (tuple(c.config.age_boundaries_yr), float(c.config.age_boundary_width_dex))
+        for c in components
+        if not isinstance(c, StellarSEDComponent)
+        and hasattr(getattr(c, "config", None), "age_boundaries_yr")
+    }
+    if not requests:
+        return components
+    if len(requests) > 1:
+        raise ValueError(
+            f"attenuators in one chain request different age boundaries: {sorted(requests)}"
+        )
+    ((boundaries, width),) = requests
+    wired = []
+    for c in components:
+        if isinstance(c, StellarSEDComponent) and (
+            tuple(c.config.age_boundaries_yr) != boundaries
+            or float(c.config.age_boundary_width_dex) != width
+        ):
+            c = replace(
+                c,
+                config=replace(
+                    c.config, age_boundaries_yr=boundaries, age_boundary_width_dex=width
+                ),
+            )
+        wired.append(c)
+    return wired
+
+
 def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
@@ -1008,7 +1069,7 @@ def run_components(
     """
     import os as _os
 
-    for component in components:
+    for component in wire_age_boundaries(components):
         sliced = slice_params_for_component(component, params)
         try:
             state = component.apply(

@@ -513,6 +513,7 @@ def _lut_contract(
     joint_weights: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    *,
     younger_fraction: jnp.ndarray | None = None,
     redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
@@ -610,7 +611,9 @@ def lut_l_absorbed_stellar_log10(
     """
     from tengri.utils.scale import _not_computable, log10_magnitude
 
-    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction, redshift)
+    contracted = _lut_contract(
+        lut, joint_weights, tau_bc, tau_diff, younger_fraction=younger_fraction, redshift=redshift
+    )
     if fesc is not None and lut.B_fesc is not None and lut.G_fesc is not None:
         contracted_fesc = _population_contract(
             lut.B_fesc,
@@ -673,7 +676,7 @@ def lut_l_absorbed_stellar(
     :func:`lut_l_absorbed_stellar_log10` on a pure-float32 path (#1206).
     """
     return mass_scale * _lut_contract(
-        lut, joint_weights, tau_bc, tau_diff, younger_fraction, redshift
+        lut, joint_weights, tau_bc, tau_diff, younger_fraction=younger_fraction, redshift=redshift
     )
 
 
