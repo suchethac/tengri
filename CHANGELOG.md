@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- The fold that `WavePrecomp(igm_fold="auto")` resolved to ("exact", "node", or `None` when no fold was built) is reported beside the declared mode in `precompute_engagement_report(model).observed_facts["igm_fold"]` and in `summary_text()`. (#2445).
+
 ### Fixed
 
 - The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:

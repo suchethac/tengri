@@ -1945,6 +1945,10 @@ class StellarSEDComponentState(SEDComponentState):
     #: ``sed_intrinsic``; that lets the WavePrecomp LUT path prune the full
     #: stellar SED einsum instead of forcing it just to publish Q_H (#950).
     n_ion_bins: int | None = None
+    #: The IGM fold actually folded into the sub-band tensors at build time
+    #: (``"exact"`` or ``"node"``), or ``None`` when no fold was built. Records
+    #: what ``WavePrecomp(igm_fold="auto")`` resolved to (#2445).
+    igm_fold_resolved: str | None = None
 
 
 @dataclass(frozen=True)
