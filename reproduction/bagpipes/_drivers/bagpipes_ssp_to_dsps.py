@@ -4,12 +4,14 @@ Bagpipes ships ``bc03_miles_stellar_grids.fits`` (BC03 stellar templates
 stitched into the MILES extended-wavelength library, Kroupa 2001 IMF).
 The FITS layout differs from DSPS: one HDU per metallicity, age grid
 shared, wavelength grid in Angstroms, flux in :math:`L_\\odot/\\textrm{Å}/M_\\odot`.
+Bagpipes labels each HDU as a fraction of its own solar metallicity (Z☉ = 0.02).
 
 This script reads all 7 metallicity HDUs and writes a single HDF5 file
-with the DSPS layout that ``tengri.load_ssp_data`` expects:
+with the DSPS layout that ``tengri.load_ssp_data`` expects, storing
+each node's absolute log10 Z:
 
 - ``ssp_lg_age_gyr``     (n_age,)               :math:`\\log_{10}(\\text{age}/\\text{Gyr})`
-- ``ssp_lgmet``          (n_met,)               :math:`\\log_{10}(Z)` absolute
+- ``ssp_lgmet``          (n_met,)               absolute :math:`\\log_{10}(Z)`
 - ``ssp_wave``           (n_wave,)              rest-frame wavelength [Å]
 - ``ssp_flux``           (n_met, n_age, n_wave) :math:`L_\\nu` [Lsun/Hz/Msun]
 - ``ssp_mass_remaining`` (n_met, n_age)         surviving stellar mass fraction
@@ -41,8 +43,26 @@ from .units import C_ANGSTROM_PER_S
 # floating-point strings out of HDU names.
 ZSOL_FRACTIONS: tuple[float, ...] = (0.005, 0.020, 0.200, 0.400, 1.000, 2.500, 5.000)
 
-# Z_sun absolute (Asplund+2009; same value DSPS uses for log10(Z_sun) = -1.848).
-Z_SUN_ABSOLUTE: float = 10.0**-1.848
+# BAGPIPES's solar metallicity: the grid is in fractions of Z☉ = 0.02.
+# These fractions × 0.02 equal BC03's metallicities 1e-4, 4e-4, 4e-3, 8e-3, 0.02, 0.05, 0.1.
+# The absolute log10(Z) values match tengri's native BC03+MILES grid nodes.
+Z_SUN_BAGPIPES: float = 0.02
+
+
+def absolute_lgmet(zsol_fractions: tuple[float, ...] = ZSOL_FRACTIONS) -> np.ndarray:
+    """Compute absolute log10(Z) for BAGPIPES metallicity fractions.
+
+    Parameters
+    ----------
+    zsol_fractions : tuple of float, optional
+        Metallicity fractions of BAGPIPES Z☉ = 0.02. Default is BAGPIPES's grid.
+
+    Returns
+    -------
+    ndarray, shape (n_met,)
+        log10(Z) absolute for each fraction.
+    """
+    return np.log10(np.asarray(zsol_fractions) * Z_SUN_BAGPIPES)
 
 
 def _grid_dir() -> Path:
@@ -156,8 +176,7 @@ def repackage_bc03_miles(out_path: str | Path) -> Path:
     wave_aa = raw["wave_aa"]
     flux_lsun_hz_msun = convert_to_lnu_per_msun(wave_aa, flux_raw).astype(np.float64)
 
-    # log10(Z) absolute; bagpipes labels are fractions of Z_sun.
-    lgmet = np.log10(raw["zsol_fractions"] * Z_SUN_ABSOLUTE)
+    lgmet = absolute_lgmet(tuple(raw["zsol_fractions"]))
     lg_age_gyr = np.log10(age_yr / 1.0e9)
 
     print(f"Writing {out_path}…")

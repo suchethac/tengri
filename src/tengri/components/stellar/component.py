@@ -822,6 +822,29 @@ def _mass_scale_lnu_jvp(primals, tangents):
     return primal_out, tangent_out
 
 
+def _publish_igm_nodes(derived_overrides, joint_weights, phot_igm, waves_igm):
+    """Publish the flux-weighted sub-band node of the IGM-folded tensor.
+
+    The dust screen multiplying ``stellar_phot_lnu_per_age_subband_igm_precomp``
+    belongs at the centroid of the light the IGM lets through, not of the light
+    before it: where Ly-alpha cuts a sub-band the two differ by a large part of
+    the sub-band, and a dusty model at z = 7 read sdss_z 8.7 % off the exact
+    path with the bare node. Where the IGM leaves no weight the bare node is
+    kept, finite for the same reason as there (#1397). No-op without the exact
+    fold's nodes (node fold, patchy IGM).
+    """
+    if waves_igm is None:
+        return
+    phi = jnp.einsum("ma,mafk->afk", joint_weights, phot_igm)
+    num = jnp.einsum("ma,mafk->afk", joint_weights, waves_igm * phot_igm)
+    live = jnp.abs(phi) > _subband_live_floor()
+    derived_overrides["stellar_subband_waves_rest_igm_precomp"] = jnp.where(
+        live,
+        _flux_weighted_node(num, jnp.where(live, phi, 1.0)),
+        derived_overrides["stellar_subband_waves_rest_precomp"],
+    )
+
+
 @jax.custom_jvp
 def _flux_weighted_node(num, den):
     r"""``num / den`` (a flux-weighted mean wavelength) with a float32-safe VJP (#1206).
@@ -2464,8 +2487,17 @@ class StellarSEDComponent:
         # star_formation_history.py:326-348 both measure the burst's cosmic
         # time from "now" (the observation epoch), which is per-galaxy, so it
         # is injected from the already-computed ``t_obs_gyr`` rather than a
-        # registry setting.
-        if isinstance(sfh_model, str) and sfh_model in ("psb", "psb_wild2020"):
+        # registry setting. ``psb_suess2022``/``psb_flex`` (both
+        # ``psb_continuity_flex``, #2645) share the same injection: their
+        # fixed old bins are bounded to ``[tflex_gyr, age_universe_yr]`` the
+        # same way the burst is bounded to ``[0, age_universe_yr]``, so
+        # neither family's default fixed section extends past the Big Bang.
+        if isinstance(sfh_model, str) and sfh_model in (
+            "psb",
+            "psb_wild2020",
+            "psb_suess2022",
+            "psb_flex",
+        ):
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
@@ -3282,6 +3314,12 @@ class StellarSEDComponent:
                             jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
                         )
                     )
+                    _publish_igm_nodes(
+                        derived_overrides,
+                        joint_weights,
+                        ssp_sub_phot_igm,
+                        self._state.ssp_phot_lut.ssp_subband_waves_rest_igm,
+                    )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
@@ -3410,6 +3448,13 @@ class StellarSEDComponent:
                             total_mass,
                         )
                     )
+                    if ztable.subband_waves_rest_igm_table is not None:
+                        _publish_igm_nodes(
+                            derived_overrides,
+                            joint_weights,
+                            sub_phot_igm_at_z,
+                            _interp(ztable.subband_waves_rest_igm_table),
+                        )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
@@ -3618,9 +3663,10 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
-        if self.config.sfh_model in ("psb", "psb_wild2020"):
+        if self.config.sfh_model in ("psb", "psb_wild2020", "psb_suess2022", "psb_flex"):
             # Mirrors apply()'s injection (§2) so the two routes cannot
-            # diverge (#982); t_obs_gyr was hoisted above for this.
+            # diverge (#982); t_obs_gyr was hoisted above for this. The
+            # psb_suess2022/psb_flex share here is #2645.
             sfh_kwargs["age_universe_yr"] = t_obs_gyr * 1e9
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 

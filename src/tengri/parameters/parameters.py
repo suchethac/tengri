@@ -719,6 +719,7 @@ class Parameters:
             mean_sfh_type,
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
+            dust_screens=self.dust_screens,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1099,11 +1100,25 @@ class Parameters:
         # forward model reads as use_dust=False (a dust-free model).
         if self.dust_model == "none":
             self.dust_model = "off"
-        if self.dust_model not in ("two_component", "single_component", "wg00", "off"):
+        if self.dust_model not in (
+            "two_component",
+            "single_component",
+            "wg00",
+            "age_binned",
+            "off",
+        ):
             raise ValueError(
                 f"dust_model must be 'two_component', 'single_component', 'wg00', "
-                f"or 'off'/'none' (no dust), got '{self.dust_model}'"
+                f"'age_binned', or 'off'/'none' (no dust), got '{self.dust_model}'"
             )
+
+        # age_binned (#2528): N independent screens, each (law, lo, hi) in
+        # log10(age/yr), already validated by the grammar
+        # (_translate_age_binned) or supplied directly on this flat-kwarg
+        # "expert escape hatch" surface as a pre-validated tuple. Structural,
+        # non-fittable; enters compile_signature via component_factory's
+        # dust_screens kwarg.
+        self.dust_screens: tuple = tuple(kwargs.pop("dust_screens", ()) or ())
 
         # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
         # static structural selectors. Always stored so the forward model and
@@ -2249,6 +2264,82 @@ class Parameters:
         object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
+    def with_fixed_value(self, name: str, value: float) -> Parameters:
+        """Return a copy in which the Fixed parameter ``name`` is pinned to ``value``.
+
+        Parameters
+        ----------
+        name : str
+            Name of a parameter that is currently Fixed.
+        value : float
+            The new constant.
+
+        Returns
+        -------
+        Parameters
+            New instance; the original is not modified. Unchanged (``self``)
+            when ``value`` already equals the current constant.
+
+        Raises
+        ------
+        ParameterError
+            If ``name`` is unknown or is a free parameter (a free parameter
+            has a prior, not a constant, so there is nothing to re-pin).
+
+        Notes
+        -----
+        The seam a model rebuild uses to answer "the same model at a different
+        constant" without touching the caller's spec (e.g. the ``Fitter``'s
+        ``params_override={"redshift": z}``). **JIT-compatible**: build-time only.
+        """
+        if name not in self._distributions:
+            raise ParameterError(f"Unknown parameter {name!r}.")
+        current = self._distributions[name]
+        if not current.is_fixed:
+            raise ParameterError(
+                f"Parameter {name!r} is free; with_fixed_value re-pins a Fixed parameter only."
+            )
+        if current.bounds[0] is not None and float(current.bounds[0]) == float(value):
+            return self
+        if name == "redshift" and getattr(self, "_parse_inputs", None) is not None:
+            return self._reparsed_at_fixed_redshift(float(value))
+        new_spec = copy.copy(self)
+        new_distributions = {**self._distributions, name: Fixed(float(value))}
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        return new_spec
+
+    def _reparsed_at_fixed_redshift(self, value: float) -> Parameters:
+        """Re-run the spec construction at ``redshift=Fixed(value)``.
+
+        ``parse_groups`` derives quantities from the declared redshift at parse
+        time (onset/age prior ceilings at ``age_at_z(z)``, nonparametric bin
+        edges scaled to ``age(z)``), so re-pinning the constant alone would keep
+        the first build's parameter space. The same inputs are re-parsed at the
+        new redshift instead. Anything this spec carries that a fresh parse does
+        not reproduce (parameters merged in after the parse, or priors replaced
+        after it) is detected by re-parsing at the CURRENT redshift and carried
+        over unchanged.
+        """
+        import warnings
+
+        from tengri.parameters.groups import parse_groups
+
+        inputs = dict(self._parse_inputs)
+        cur = self._distributions["redshift"].bounds[0]
+        # Warnings (free-redshift advisories, silently-fixed notices) were
+        # already raised when the model was first built.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            at_cur = parse_groups(**{**inputs, "redshift": Fixed(float(cur))})
+            fresh = parse_groups(**{**inputs, "redshift": Fixed(value)})
+        carried = {
+            n: d
+            for n, d in self._distributions.items()
+            if n != "redshift"
+            and (n not in at_cur._distributions or repr(at_cur._distributions[n]) != repr(d))
+        }
+        return fresh.merge_observation_params(**carried) if carried else fresh
+
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
         """Draw one random sample from free parameter prior distributions.
 
@@ -2712,6 +2803,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
+    "dust_screens": content(
+        "age_binned (#2528) screen list (law, log-age window per screen) "
+        "determines the indexed per-screen parameters"
+    ),
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
     "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
     "dust_wg00_structure": content("WG00 dust structure determines parameters"),
@@ -2760,6 +2855,11 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "z_interp": content("redshift interpolation method determines model behavior"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
+    "_parse_inputs": exclude(
+        "the raw parse_groups inputs, kept only so a rebuild at another Fixed redshift can "
+        "re-derive z-dependent bounds; everything they determine is already in the keyed "
+        "distributions, structure and provenance"
+    ),
     "_flat_provenance": content("parameter provenance (name, group origin) determines structure"),
     "_group_provenance": content(
         "grammar builds attach it via parse_groups; it decides which shape parameters reach "

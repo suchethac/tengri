@@ -167,6 +167,11 @@ class DerivedState:
     # exact rather than approximate.
     stellar_phot_lnu_per_age_subband_precomp: jnp.ndarray | None = None
     stellar_subband_waves_rest_precomp: jnp.ndarray | None = None
+    #: The same node for the IGM-folded tensor: the centroid of the light the
+    #: IGM lets through [Angstrom], shape (n_age, n_filter, n_subbands). The dust
+    #: screen on ``stellar_phot_lnu_per_age_subband_igm_precomp`` is evaluated
+    #: here. Published only with the exact IGM fold.
+    stellar_subband_waves_rest_igm_precomp: jnp.ndarray | None = None
 
     # Per-chunk Lyman-continuum multiplicative factor at the sub-band
     # quadrature nodes above, shape ``(n_age, n_filter, n_subbands)``,
@@ -311,6 +316,12 @@ class DerivedState:
     dust_diff_attenuation_subband_precomp: jnp.ndarray | None = None
     #: Single-screen counterpart, shape ``(n_age, n_filter, n_subbands)``.
     dust_attenuation_subband_precomp: jnp.ndarray | None = None
+    # The three screens above evaluated at ``stellar_subband_waves_rest_igm_precomp``
+    # instead, for the IGM-folded stellar contraction. Published only when those
+    # nodes are.
+    dust_bc_attenuation_subband_igm_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_subband_igm_precomp: jnp.ndarray | None = None
+    dust_attenuation_subband_igm_precomp: jnp.ndarray | None = None
     # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so
     # the two-component first-order Taylor projection (#617) can be written
     # T_a' = T_a·(logslope_diff + y·logslope_bc): NaN-safe where A → 0 (avoids
@@ -357,6 +368,12 @@ class DerivedState:
     # Intrinsic (un-reddened) disc monochromatic L_nu at 4400 A [erg/s/Hz];
     # drives radio loudness normalization (B-band). Published by composable AGN.
     L_4400_intrinsic: jnp.ndarray | None = None
+    # log10 nu L_nu at 12 and 6 um [dex re erg/s] of the AGN's own emission
+    # (disc + torus + polar dust). The lopez24 X-ray corona is anchored to the
+    # 12 um value; carried in log space because nu L_nu ~ 1e45 erg/s overflows
+    # float32.
+    log_L_12um: jnp.ndarray | None = None
+    log_L_6um: jnp.ndarray | None = None
     # AGN cos(i) [dimensionless]. The X-ray corona tilts its Yang+2022
     # anisotropy to the same sightline as the disc/torus, exactly as
     # X-CIGALE forwards cos i from the AGN module into yang20 (#980).
@@ -438,6 +455,27 @@ class DerivedState:
     # all: shipping only the observed one is #1665, which left every rest-frame
     # consumer on the λ_eff screen and moved 13/13 spectral indices silently.
     nebular_restband_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # Nebular sub-band channels from the per-Q_H grid, published by the nebular
+    # component when the grid serves a dust screen (the continuum is then not
+    # materialized). ``*_lnu_subband_precomp`` is the INTRINSIC band integral of each
+    # of K sub-band chunks per filter, ``(n_filter, K)`` [erg/s/Hz]; the matching
+    # ``*_waves_*`` arrays hold each chunk's rest wavelength [Angstrom]. The dust
+    # component screens them at those nodes, ``sum_k Phi_k T(lambda_k)``, and
+    # publishes the ``_attenuated_`` keys above. The ``_subband_precomp`` suffix keeps
+    # them out of the ``*_phot_lnu_precomp`` / ``*_restband_lnu_precomp`` sweeps in
+    # ``predict_via_precomp``, which would otherwise add the bucket unscreened.
+    nebular_phot_lnu_subband_precomp: jnp.ndarray | None = None
+    nebular_subband_waves_rest_precomp: jnp.ndarray | None = None
+    # The same chunks after the dust screen, shape (n_filter, n_subbands)
+    # [erg/s/Hz]: summed over chunks they are ``nebular_phot_lnu_attenuated_precomp``.
+    # Kept per chunk so the IGM can be evaluated at each chunk's node (#2679).
+    nebular_phot_lnu_subband_screened_precomp: jnp.ndarray | None = None
+    nebular_restband_lnu_subband_precomp: jnp.ndarray | None = None
+    nebular_restband_subband_waves_precomp: jnp.ndarray | None = None
+    # Absorbed nebular power per unit Q_H on the stellar energy-balance LUT's
+    # ``(tau_bc, tau_diff)`` grid, ``(n_tau_a, n_tau_b)`` [erg/s per (photon/s)],
+    # through the nebular screen.
+    nebular_eb_absorbed_per_qh_grid_precomp: jnp.ndarray | None = None
     # Shock (MAPPINGS V) per filter: rest-frame Lν, erg/s/Hz, intrinsic (no
     # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
     # additive component from the photoionized backend (#851), so it carries its
@@ -472,6 +510,16 @@ class DerivedState:
     # Published by the two-component dust component under WavePrecomp when AGN
     # is present and screened. Observed by predict_via_precomp.
     agn_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # The dense rest-grid SEDs whose band integrals ARE the three attenuated keys
+    # above, shape (n_wave,) [erg/s/Hz], published beside them by the
+    # two-component dust component. The IGM needs the spectrum inside the band,
+    # not just its integral: ``predict_via_precomp`` weights ``T`` by these to get
+    # each component's own band transmission. Already live wherever the band keys
+    # are (they are integrated from these very arrays), so publishing them gives
+    # up no dead-code elimination. Not ``*_phot_lnu_precomp``: never summed.
+    sed_nebular_attenuated_precomp: jnp.ndarray | None = None
+    sed_shock_attenuated_precomp: jnp.ndarray | None = None
+    sed_agn_attenuated_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component
@@ -507,6 +555,12 @@ class DerivedState:
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None
     sed_xray: jnp.ndarray | None = None
+    # log10 2-10 keV luminosities [dex re erg/s] of the emitted HMXB + LMXB terms
+    # and of the emitted AGN corona (-inf without an AGN): the band integrals of
+    # the terms in ``sed_xray``, read by the ``log_l_x_xrb`` / ``log_l_x_agn``
+    # properties.
+    log_L_x_xrb_2_10: jnp.ndarray | None = None
+    log_L_x_agn_2_10: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
     # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
     # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
@@ -522,6 +576,18 @@ class DerivedState:
     # sampling one at the other collapses to T at the fixed observed instrument
     # grid: a function of (z, pixel) alone, tabulated at build time.
     igm_spec_factor: jnp.ndarray | None = None
+    # IGM transmission on the model's REST grid at the runtime redshift, shape
+    # (n_wave,), dimensionless: T(wave_rest * (1 + z), z). Tabulated at build time
+    # over the absorbed (blue) end of the grid and interpolated in z, ones redward.
+    # ``predict_via_precomp`` weights it by each non-stellar component's own
+    # spectrum, where ``igm_phot_factor`` averages ``T`` alone. Published only for
+    # a mean-IGM model that some band can meet (``igm_reach_filters_precomp``).
+    igm_rest_transmission_precomp: jnp.ndarray | None = None
+    # Indices of the filters whose support can reach an absorbed wavelength
+    # anywhere in the model's redshift range, shape (n_reach,), int. Every other
+    # band has T = 1 across it at every z, so its weighted and unweighted
+    # transmissions are both exactly one and the projector skips it.
+    igm_reach_filters_precomp: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
 
     # Spatial: 2D surface-brightness profile and the (x, y) kpc grid that

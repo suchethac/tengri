@@ -487,6 +487,66 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+# Redshift-override clones, memoized per (source model, override z).
+#
+# ``params_override={"redshift": z}`` on a model without ``catalog_z_range`` is
+# evaluated on a model rebuilt at ``z`` (see ``_model_at_override_redshift``).
+# Same rationale as ``_APPROX_CLONE_CACHE``: the compile caches key on model
+# identity, so the same (source, z) must return the same object or every fit at
+# that z recompiles. Distinct z values get distinct models, hence distinct
+# programs; a program compiled against another z's tables can never be reused.
+_REDSHIFT_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _model_at_override_redshift(model, params_override):
+    """The model to evaluate under a ``params_override`` redshift.
+
+    On a model without ``catalog_z_range`` the redshift is a compile constant,
+    and so is every table built from it at construction (fixed-z stellar LUT,
+    IGM band factors, nebular grid reference, dust-IR band response,
+    energy-balance LUT, radio/X-ray term responses, ``_dl_cm_fixed``,
+    ``_z_fixed``, line-catalog snapping). Merging the override into the loss's
+    fixed values alone leaves all of them at the model's own redshift. The
+    override is therefore made exactly equivalent to building the model at that
+    redshift: the model is rebuilt there once per (source, z) and reused.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The fit model (after ``approx`` resolution). Never mutated.
+    params_override : dict or None
+        The fit's per-fit overrides.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        ``model`` itself when there is nothing to rebuild (no redshift
+        override, a ``catalog_z_range`` model whose redshift is a runtime
+        input, a free redshift which the Fitter refuses, an override equal to
+        the model's own redshift, or a model type without the rebuild seam);
+        otherwise the model built at the override redshift.
+    """
+    if not params_override or "redshift" not in params_override:
+        return model
+    if _model_catalog_z_range(model) is not None:
+        return model
+    rebuild = getattr(model, "with_fixed_redshift", None)
+    spec = getattr(model, "spec", None)
+    if not callable(rebuild) or spec is None or not spec.is_fixed("redshift"):
+        return model
+    z = float(params_override["redshift"])
+    try:
+        bucket = _REDSHIFT_CLONE_CACHE.setdefault(model, {})
+    except TypeError:
+        return rebuild(z)
+    key = round(z, 12)
+    clone = bucket.get(key)
+    if clone is None:
+        clone = rebuild(z)
+        bucket[key] = clone
+    return clone
+
+
 def _component_chains(model) -> tuple:
     """Every component chain ``model`` owns, or ``()`` if none can be inspected.
 
@@ -542,11 +602,13 @@ def fast_nebular_can_engage(model) -> bool:
     4.77x (#1770): this answers one of ``FeaturePrecomp``'s two jobs, not both.
 
     * **Photometry**: served from a per-Q_H grid, which requires zeroing
-      ``sed_nebular``. Since #1281 that is only permitted when nothing downstream
-      reads the continuum, and ``DustSEDComponent`` declares it as an input, so
-      **any model with dust disarms this shortcut entirely**. That is what this
-      predicate reports, and why #1748 stopped attaching the config for a
-      photometry-only fit.
+      ``sed_nebular``. That is only permitted when nothing downstream reads the
+      continuum. A dust component that takes the nebular from the grid does not
+      count as a continuum consumer and is excluded before this; one that cannot
+      (no stellar energy-balance LUT: a free attenuation-curve shape, WG00, a free
+      redshift with a redshift-reading law) sets ``must_materialize_sed`` and the
+      grid serves line fluxes only. That is what this predicate reports, and why
+      #1748 stopped attaching the config for a photometry-only fit on such a model.
     * **A line channel**: served by supplying the line fluxes from the table, so
       ``loss_functions`` need not set ``needs_state=True`` and rebuild the
       full-grid SED through ``predict_state`` on every likelihood evaluation.
@@ -561,8 +623,8 @@ def fast_nebular_can_engage(model) -> bool:
     ``WavePrecomp`` alone against 405,825 with the LUT added, beside a dust-free
     control identical to the digit either way.
 
-    Measured on main, one run, dust-free control in the same run, gradient FLOPs off
-    the compiled HLO:
+    History, measured when any dust component disarmed the shortcut, one run,
+    dust-free control in the same run, gradient FLOPs off the compiled HLO:
 
     ==========  ==============  ==============  ========
     model       ``WavePrecomp`` ``+Feature``    ratio
@@ -574,11 +636,12 @@ def fast_nebular_can_engage(model) -> bool:
     Exact FLOP equality is the signature of a config that never reaches the graph,
     not of a lever with little left to pull (#1748).
 
-    This is not a regression to undo. On the pre-#1281 tree the fast pair's photometry
+    The 1.00x row is the signature of a disarmed shortcut, not a result to
+    restore. On the pre-#1281 tree the fast pair's photometry
     for a dusty model differed from exact by **0.41 %**, against 0.0115 % for a
     dust-free control, the shortcut was buying a biased answer, and a constant
     forward bias enters the gradient multiplied by SNR (#1671). What was wrong was
-    advertising a speedup that no longer existed.
+    advertising a speedup the graph did not contain.
 
     Parameters
     ----------
@@ -589,16 +652,26 @@ def fast_nebular_can_engage(model) -> bool:
     -------
     bool
         ``True`` when the grid could serve photometry. ``False`` for any model whose
-        chain reads ``sed_nebular``.
+        chain reads ``sed_nebular`` after dust that can take the nebular from the
+        grid is excluded.
 
     Notes
     -----
-    Delegates to ``tengri.forward.sed_model._nebular_continuum_consumers``, the
-    same expression ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so
-    the advice and the behavior cannot drift apart.
+    Delegates to ``SEDModel.nebular_grid_can_serve_photometry``, which applies the
+    same census (``_nebular_continuum_consumers``) and the same dust exclusion
+    ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so the advice and
+    the behavior cannot drift apart.
     """
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
+    fn = getattr(model, "nebular_grid_can_serve_photometry", None)
+    if callable(fn):
+        return bool(fn())
+    populations = getattr(model, "populations", None) or ()
+    seds = [getattr(pop, "sed", None) for pop in populations]
+    if seds and all(sed is not None for sed in seds):
+        # A wrapper (ForwardModel): every population's SED must be clear.
+        return all(fast_nebular_can_engage(sed) for sed in seds)
     chains = _component_chains(model)
     if not chains:
         # Deliberately permissive, and deliberately NOT changed with #1790.
@@ -648,8 +721,9 @@ def _feature_precomp_can_pay(model, *, serves_line_channel: bool) -> bool:
       line-flux fit (#1770). Available only where
       :func:`~tengri.forward.sed_model.feature_lut_serves_line_channel` is True.
     * The **per-Q_H grid** stands in for a Cue-like emulator in the photometry
-      channel, which requires that nothing downstream read ``sed_nebular``; any
-      dust component disarms it (#1281/#1748).
+      channel, which requires that nothing downstream read ``sed_nebular``; a dust
+      component whose stellar energy-balance LUT is absent (shape-free attenuation,
+      WG00, free redshift with a redshift-reading law) disarms it (#1281/#1748).
 
     A Cue model therefore has exactly one lever, the photometry one, whatever
     channels the fit carries. Treating its line channel as a second lever attached
@@ -1093,6 +1167,12 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             )
         from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
 
+        # age_binned (#2528): no WavePrecomp/SpectrumPrecomp LUT, mirroring
+        # Fitter._auto_approx_config's same-named guard -- "auto" stays exact
+        # rather than attempting a clone that raises at construction.
+        if getattr(getattr(model, "spec", None), "dust_model", None) == "age_binned":
+            return model
+
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             has_wave = state is not None and state.wave_precomp
@@ -1124,22 +1204,26 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
             #
-            # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
-            # that reads ``sed_nebular`` (anything with dust) disarms the grid's
-            # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
-            # while still changing ``compile_signature()``. Batch surfaces pay that
-            # per resolved clone, so skipping it here is the larger of the two wins.
-            # The "dominant lever" numbers above were measured on the pre-gate tree
-            # and hold only for a model with no ``sed_nebular`` consumer.
+            # #1748: and only when the fast path can ENGAGE. Since #1281 a dust
+            # component that cannot take the nebular from the grid (no stellar
+            # energy-balance LUT: a free attenuation-curve shape, WG00, a free
+            # redshift with a redshift-reading law) sets ``must_materialize_sed`` and
+            # disarms the grid's photometry shortcut. A dust component that CAN take
+            # the nebular from the grid does not count as a continuum consumer and is
+            # excluded before this check. The top-up is bit-identical in compiled
+            # FLOPs while still changing ``compile_signature()``. Batch surfaces pay
+            # that per resolved clone, so skipping it here is the larger of the two
+            # wins. The "dominant lever" numbers above were measured on a model with
+            # no dust at all.
             #
-            # ...unless a LINE channel is present, which is the other thing the LUT
-            # serves and which dust does not disarm. #1775 drew that distinction on
-            # the single-galaxy resolver and left this one gated, so the two
-            # surfaces disagreed on exactly one cell of the channel matrix, a
-            # dusty catalog fit that carries line fluxes kept refusing the LUT that
-            # the same model got as a single-galaxy fit. ``data_type`` names the
-            # primary data array here, not the channel set, so "photometry" does
-            # not mean "no lines" (#1770). (#2377)
+            # ...unless a LINE channel is present, which the LUT serves even when
+            # dust with a stellar energy-balance LUT takes the nebular from the grid.
+            # #1775 drew that distinction on the single-galaxy resolver and left this
+            # one gated, so the two surfaces disagreed on exactly one cell of the
+            # channel matrix, a dusty catalog fit that carries line fluxes kept
+            # refusing the LUT that the same model got as a single-galaxy fit.
+            # ``data_type`` names the primary data array here, not the channel set,
+            # so "photometry" does not mean "no lines" (#1770). (#2377)
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
@@ -1702,6 +1786,15 @@ class Fitter:
         # run() so that merely constructing a fitter stays cheap: the probe
         # costs one exact forward, and only an executed fit should pay it.
         self._pre_approx_model = model if self.model is not model else None
+        # A redshift override on a fixed-z model evaluates a model BUILT at that
+        # redshift (not the caller's), so every redshift-dependent build-time
+        # table is at the override z. ``fitter.model`` (and the returned
+        # posterior's model) is this rebuilt model; ``model`` is untouched.
+        self.model = _model_at_override_redshift(self.model, params_override)
+        if self._pre_approx_model is not None:
+            self._pre_approx_model = _model_at_override_redshift(
+                self._pre_approx_model, params_override
+            )
         self._lut_bias_checked = False
         self.spec = self.model.spec
 
@@ -1798,8 +1891,14 @@ class Fitter:
         # loss because the ``data_args`` injection always overrides it.
         # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
         # a shared loss closure can never silently run at another fit's baked z.
-        # Overrides on models without a ztable keep #1331's bake, there the
-        # redshift genuinely is a compile constant.
+        # Overrides on models without a ztable are a compile constant, and so
+        # is every table built from that constant at model construction. They
+        # are handled by rebuilding the model at the override redshift
+        # (``_model_at_override_redshift``, applied to ``self.model`` above), so
+        # the bake into ``_fixed_values`` here agrees with every table the
+        # compiled program reads; the override stays in the engine cache key
+        # and the rebuilt model is a distinct object per z, so a program
+        # compiled against another z's tables is never reused.
         self._runtime_redshift = None
         if (
             self._params_override is not None
@@ -1809,7 +1908,7 @@ class Fitter:
             self._runtime_redshift = float(self._params_override["redshift"])
 
         # ── Data arguments ─────────────────────────────────────────
-        self._data_args = self._build_data_args(model)
+        self._data_args = self._build_data_args(self.model)
 
         # ── Auto-build Protocol likelihood (option β default) ──────
         # When the user didn't pass a custom likelihood AND none of the
@@ -2007,6 +2106,13 @@ class Fitter:
             WavePrecomp,
         )
 
+        # age_binned (#2528) has no WavePrecomp/SpectrumPrecomp LUT (a build
+        # with either explicit raises at construction, see SEDModel.__init__);
+        # "auto" must still resolve to a model that fits, so it stays exact
+        # here rather than attempting a clone that would raise.
+        if getattr(getattr(model, "spec", None), "dust_model", None) == "age_binned":
+            return None
+
         if self.data_type in ("spectroscopy", "joint"):
             base = SpectrumPrecomp()
         elif self.data_type == "photometry":
@@ -2022,11 +2128,14 @@ class Fitter:
         #
         # No ``fast_nebular_can_engage`` gate here, deliberately (#1770). That
         # predicate answers whether the grid may serve PHOTOMETRY without
-        # materializing ``sed_nebular``, which dust disarms (#1748/#1281). This
-        # branch serves a LINE channel, where the LUT's value is that the line
-        # fluxes come from the table instead of ``needs_state=True`` forcing a
-        # full-grid ``predict_state`` per likelihood, dust does not touch that.
-        # Gating it here cost a measured 4.77x on every dusty line-flux fit.
+        # materializing ``sed_nebular``: a dust component that cannot take the
+        # nebular from the grid (no stellar energy-balance LUT) sets
+        # ``must_materialize_sed`` (#1748/#1281). This branch serves a LINE channel,
+        # where the LUT's value is that the line fluxes come from the table instead
+        # of ``needs_state=True`` forcing a full-grid ``predict_state`` per
+        # likelihood. A dust component that CAN take the nebular from the grid does
+        # not touch that line service. Gating it on photometry-engagement cost a
+        # measured 4.77x on every dusty line-flux fit.
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
@@ -2190,9 +2299,10 @@ class Fitter:
                 and not self._fits_lines(model)
                 and not _has_line_adjacent_channel(model)
                 # #1748: and only when the grid can actually serve photometry. A
-                # chain that reads ``sed_nebular`` (anything with dust) disarms
-                # the shortcut since #1281, making this append bit-identical in
-                # compiled FLOPs while still changing ``compile_signature()``.
+                # dust component that cannot take the nebular from the grid (no
+                # stellar energy-balance LUT) sets ``must_materialize_sed`` and
+                # disarms the shortcut since #1281, making this append bit-identical
+                # in compiled FLOPs while still changing ``compile_signature()``.
                 # This branch appends the config directly rather than through
                 # ``_add_feature_precomp``, so it needs the predicate of its own;
                 # guarding only the helper left this path attaching it anyway.
@@ -4786,9 +4896,17 @@ class Fitter:
 
         # One adaptation is shared across the whole batch here, so a mass
         # matrix silently downgraded on this seam is downgraded for every
-        # galaxy at once.
+        # galaxy at once. Forward the spec: without it the auto-policy's
+        # dense_basis exception cannot fire, and a dense_basis spec at
+        # n_dim <= 12 would be GRANTED the dense mass the policy exists to
+        # refuse (the 22.78 GB shape of #319) — on this seam, for every
+        # galaxy in the batch at once.
         use_dense = resolve_dense_mass_gate(
-            dense_mass_matrix, n_dim, method="fit_batch", verbose=verbose
+            dense_mass_matrix,
+            n_dim,
+            method="fit_batch",
+            verbose=verbose,
+            spec=getattr(self, "spec", None),
         )
 
         # Adaptation on the first galaxy, shared across the batch. Wrapped in a

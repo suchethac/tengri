@@ -107,7 +107,6 @@ _JOURNAL = re.compile(
 KNOWN_TITLE_DRIFT = frozenset(
     {
         ("a&a", "132", "389"),
-        ("a&a", "470", "221"),
         ("a&a", "622", "A103"),
         ("apj", "528", "799"),
         ("apj", "539", "718"),

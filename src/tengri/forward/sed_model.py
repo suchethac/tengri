@@ -191,8 +191,11 @@ def _nebular_continuum_consumers(chain):
     **The single expression that decides whether the fast nebular grid may serve
     photometry.** Serving photometry from the per-Q_H grid requires zeroing
     ``sed_nebular``, so it is available only when nothing downstream reads the
-    continuum. A non-empty result sets ``must_materialize_sed`` and disarms the
-    shortcut.
+    continuum. A dust component that takes the nebular from the grid does not
+    count as a continuum consumer and is excluded before this; one that cannot
+    (no stellar energy-balance LUT: a free attenuation-curve shape, WG00, a free
+    redshift with a redshift-reading law) sets ``must_materialize_sed`` and the
+    grid serves line fluxes only.
 
     Extracted so that the code which *acts* on it
     (:meth:`SEDModel.enable_fast_nebular`) and the code which *advises about it*
@@ -386,17 +389,18 @@ class WavePrecomp:
             Integrate transmission inside the bandpass integral:
             ∫ S·T_IGM·T_b·w dλ. Slower build (recomputes sub-band integrals
             per redshift node), cost amortized over inference. Exact when
-            T_IGM(λ, z) is tabulated. Fails loudly if free parameters
-            (patchy reionization, DLAs) make transmission non-tabulated.
+            T_IGM(λ, z) is tabulated. Works with both fixed and free redshifts.
+            Fails loudly if free parameters (patchy reionization, DLAs) make
+            transmission non-tabulated.
 
         ``"auto"``
             ``"exact"`` wherever it can be built, ``"node"`` everywhere else.
-            The exact fold refuses a free redshift and a transmission carrying
-            free parameters, so ``"exact"`` cannot simply be asked for on a
-            model whose redshift is being fit. ``"auto"`` asks for it and takes
-            the node fold where it is unavailable, without raising. An explicit
-            ``"exact"`` still raises in those cases: a mode named by the caller
-            is never silently downgraded.
+            The exact fold refuses a transmission carrying free parameters
+            (patchy reionization, DLAs), but supports free redshift. ``"auto"``
+            asks for the exact fold and takes the node fold where it is
+            unavailable, without raising. An explicit ``"exact"`` still raises
+            in those cases: a mode named by the caller is never silently
+            downgraded.
 
     Examples
     --------
@@ -1820,7 +1824,16 @@ def _state_has_content(state) -> bool:
     return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
 
 
-def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, redshift_spec):
+def _fold_igm_exact_into_subbands(
+    igm_comp,
+    stellar_state,
+    ssp_data,
+    filters,
+    redshift_spec,
+    *,
+    lyc_gate=False,
+    convention=FilterConvention.BESSELL,
+):
     r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
 
     The node fold of :func:`_fold_igm_into_subbands` evaluates the transmission
@@ -1854,13 +1867,20 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     igm_comp : IGMSEDComponent
         Supplies the transmission and the fixed-function gate.
     stellar_state : StellarSEDComponentState
-        Carrying the fixed-z photometry LUT.
+        Carrying either the fixed-z photometry LUT or the free-z z-table.
     ssp_data : SSPData
         Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
     filters : sequence of (wave, trans) pairs
         Filter curves [Angstrom], [dimensionless].
     redshift_spec : dict or None
-        Redshift specification; only a fixed redshift is supported.
+        Redshift specification; supplies the redshift of a fixed-z LUT. A free
+        redshift is folded on every node of the z-table's own grid.
+    lyc_gate : bool, optional
+        Whether the sub-band tensors were built with the forced Lyman-limit edge
+        (``K + 1`` chunks). Must match the build, or the ratio is taken over a
+        different partition from the tensor it multiplies.
+    convention : FilterConvention, optional
+        Bandpass weight the tensors were built with; same reason.
 
     Returns
     -------
@@ -1882,9 +1902,6 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
 
     import numpy as np
 
-    from tengri.components.igm import igm_absorption
-    from tengri.utils.grid_interp import preintegrate_grid
-
     if stellar_state is None or ssp_data is None or not filters:
         return stellar_state
 
@@ -1892,72 +1909,55 @@ def _fold_igm_exact_into_subbands(igm_comp, stellar_state, ssp_data, filters, re
     if blocker is not None:
         raise blocker
 
+    from tengri.components.igm import exact_fold
+
+    def _partition(tensor):
+        n_chunks = int(np.shape(tensor)[-1])
+        return {
+            "igm_model": getattr(getattr(igm_comp, "config", None), "igm_model", None),
+            "n_subbands": n_chunks - 1 if lyc_gate else n_chunks,
+            "lyc_gate": lyc_gate,
+            "convention": convention,
+        }
+
     lut = getattr(stellar_state, "ssp_phot_lut", None)
-    if lut is None or lut.ssp_subband_phot is None:
-        return stellar_state
-
-    subband = np.asarray(lut.ssp_subband_phot)
-    n_subbands = int(subband.shape[-1])
-    if n_subbands <= 0:
-        return stellar_state
-
-    z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
-
-    wave_rest = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
-    templates = np.asarray(ssp_data.ssp_flux, dtype=np.float64)
-
-    # The one frame conversion. T_IGM takes observed-frame wavelength; the SSP
-    # grid is rest-frame. Everything downstream stays in the rest frame, which
-    # is what preintegrate_grid expects, so this must not be applied again.
-    transmission = np.asarray(
-        igm_absorption(
-            wave_rest * (1.0 + z),
-            z,
-            igm_patchy=False,
-            igm_model=getattr(getattr(igm_comp, "config", None), "igm_model", None),
-            use_dla=False,
-        ),
-        dtype=np.float64,
-    )
-
-    filter_waves = [np.asarray(fw, dtype=np.float64) for fw, _ in filters]
-    filter_trans = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
-    axes = (
-        np.asarray(ssp_data.ssp_lgmet),
-        np.asarray(ssp_data.ssp_lg_age_gyr),
-    )
-
-    def _quadrature(templates_in):
-        # dl_cm is arbitrary and identical across the pair: it is a constant
-        # factor of the integral and cancels in the ratio below.
-        return np.asarray(
-            preintegrate_grid(
-                templates=templates_in,
-                wave_rest=wave_rest,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-                redshift=z,
-                dl_cm=1.0,
-                axes=axes,
-                taylor=False,
-                n_subbands=n_subbands,
-            ).subband_phot,
-            dtype=np.float64,
+    if lut is not None and lut.ssp_subband_phot is not None:
+        subband = np.asarray(lut.ssp_subband_phot)
+        if subband.shape[-1] <= 0:
+            return stellar_state
+        z = float(redshift_spec.get("value", 0.0)) if redshift_spec else float(lut.redshift)
+        fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
+        bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
+        return _replace(
+            stellar_state,
+            ssp_phot_lut=lut._replace(
+                ssp_subband_phot_igm=subband * fold.ratio,
+                ssp_subband_waves_rest_igm=np.where(
+                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
+                ),
+            ),
         )
 
-    without_igm = _quadrature(templates)
-    with_igm = _quadrature(templates * transmission)
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        table = np.asarray(ztable.ssp_subband_phot_table)
+        if table.shape[-1] <= 0:
+            return stellar_state
+        fold = exact_fold.subband_fold_table(
+            ssp_data, filters, np.asarray(ztable.z_grid), **_partition(table)
+        )
+        bare_nodes = np.asarray(ztable.subband_waves_rest_table)
+        return _replace(
+            stellar_state,
+            ssp_phot_ztable=ztable._replace(
+                ssp_subband_phot_igm_table=table * fold.ratio,
+                subband_waves_rest_igm_table=np.where(
+                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
+                ),
+            ),
+        )
 
-    # Where the bare quadrature is zero the band carries no flux and the ratio
-    # is undefined; the folded tensor is zero there either way.
-    ratio = np.where(
-        without_igm != 0.0, with_igm / np.where(without_igm != 0.0, without_igm, 1.0), 0.0
-    )
-
-    return _replace(
-        stellar_state,
-        ssp_phot_lut=lut._replace(ssp_subband_phot_igm=subband * ratio),
-    )
+    return stellar_state
 
 
 def _exact_fold_blocker(igm_comp, stellar_state):
@@ -2000,25 +2000,16 @@ def _exact_fold_blocker(igm_comp, stellar_state):
             "or igm_fold='auto' to take that fall-back automatically."
         )
 
-    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
-    if ztable is not None and ztable.ssp_subband_phot_table is not None:
-        return NotImplementedError(
-            "igm_fold='exact' is implemented for a fixed redshift only. A free "
-            "redshift would need the sub-band tensor rebuilt at every node of "
-            "the z table. Use igm_fold='node' or fix the redshift, or "
-            "igm_fold='auto' to take that fall-back automatically."
-        )
-
     return None
 
 
 def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
-    ``"exact"`` cannot be the default: it raises for a free redshift and for a
-    transmission carrying free parameters, so flipping the default would break
-    those fits rather than speed them up. ``"auto"`` is the mode that can be
-    proposed as one -- it asks for the exact fold and takes the node fold
+    ``"exact"`` cannot be the default: it raises for a transmission carrying
+    free parameters (patchy reionization, DLAs), so flipping the default would
+    break those fits rather than speed them up. ``"auto"`` is the mode that can
+    be proposed as one -- it asks for the exact fold and takes the node fold
     wherever the exact fold is unavailable.
 
     Parameters
@@ -2062,7 +2053,15 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
 
 
 def _fold_igm_into_subbands(
-    igm_comp, stellar_state, igm_fold="node", ssp_data=None, filters=None, redshift_spec=None
+    igm_comp,
+    stellar_state,
+    igm_fold="node",
+    ssp_data=None,
+    filters=None,
+    redshift_spec=None,
+    *,
+    lyc_gate=False,
+    convention=FilterConvention.BESSELL,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -2101,6 +2100,9 @@ def _fold_igm_into_subbands(
         Filter data, required for "exact" fold.
     redshift_spec : dict, optional
         Redshift specification, required for "exact" fold.
+    lyc_gate, convention : optional
+        The sub-band partition the tensors were built with; passed to the exact
+        fold (see :func:`_fold_igm_exact_into_subbands`).
 
     Returns
     -------
@@ -2127,7 +2129,13 @@ def _fold_igm_into_subbands(
     # Dispatch to node or exact fold
     if igm_fold == "exact":
         return _fold_igm_exact_into_subbands(
-            igm_comp, stellar_state, ssp_data, filters, redshift_spec
+            igm_comp,
+            stellar_state,
+            ssp_data,
+            filters,
+            redshift_spec,
+            lyc_gate=lyc_gate,
+            convention=convention,
         )
 
     # Default: node fold (fast, exact for smooth transmission)
@@ -2276,22 +2284,12 @@ def feature_lut_serves_line_channel(model) -> bool:
 
     Notes
     -----
-    A Cue-like backend returns **False**. Its ``FeaturePrecomp`` builds the per-Q_H
-    grid, whose only consumer is the photometry shortcut; the line fluxes still go
-    through ``predict_line_fluxes``, which rebuilds the state either way. Callers
-    that want to know whether a Cue model gains anything must ask
-    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead. Measured on a
-    dusty Cue model with 4 bands and 3 line fluxes: appending ``FeaturePrecomp``
-    leaves the objective's gradient at 58,497,272 FLOPs either way -- and the two
-    lowerings are *byte-identical*, the same SHA-256 over 4,206,172 characters of
-    StableHLO and again over the optimized HLO, so this is not FLOP-count
-    coincidence but the same program. It is not free: the attachment costs a 7.2 s
-    ``enable_fast_nebular`` build, and :meth:`SEDModel.compile_signature` differs on
-    ``_approx_config_feature`` and ``_nebular_grid_table`` where the graph does not,
-    forcing an in-process re-trace. The on-disk JAX cache keys on the HLO, so it
-    dedupes rather than storing a second entry. Measured 1.565 s -> 4.276 s of
-    ``fit()`` wall clock on a 60-step MAP fit, for an identical 0.019 s compiled
-    step.
+    A Cue-like backend returns **False** because its line-flux service comes through
+    a different route: the per-Q_H grid, which serves line fluxes whether or not the
+    dust component takes the continuum from it (#1770), and which does not set the
+    ``_fast_line_measurement`` flag this predicate screens for. Callers that want to
+    know whether a Cue model's photometry gains leverage must ask
+    :func:`~tengri.inference.fitter.fast_nebular_can_engage` instead.
     """
     backend = getattr(model, "_nebular_backend", None)
     if _is_q_h_linear_backend(backend):
@@ -2720,6 +2718,24 @@ class SEDModel:
             wave_cfgs = [c for c in configs if isinstance(c, WavePrecomp)]
             spec_cfgs = [c for c in configs if isinstance(c, SpectrumPrecomp)]
             feat_cfgs = [c for c in configs if isinstance(c, FeaturePrecomp)]
+            # age_binned (#2528): no WavePrecomp/SpectrumPrecomp LUT support --
+            # the per-screen age-window weights are not published to the
+            # precompute path. Refuse loudly here rather than silently
+            # mis-attenuating (or crashing deep inside predict_photometry on a
+            # missing LUT key). FeaturePrecomp alone is unaffected: dust
+            # attenuation never branches on filter_eff/spec_eff presence, so
+            # the dense SED is always computed the same way either way.
+            if (wave_cfgs or spec_cfgs) and getattr(spec, "dust_model", None) == "age_binned":
+                raise NotImplementedError(
+                    "dust_attenuation={'type': 'age_binned'} has no WavePrecomp/"
+                    "SpectrumPrecomp LUT support (#2528): the per-screen age-window "
+                    "weights are not published to the precompute path. Use the "
+                    "exact wave-grid path instead -- approx=None (the default), or "
+                    "drop WavePrecomp()/SpectrumPrecomp() from a composite approx=. "
+                    "A Fitter's approx='auto' policy already resolves to the exact "
+                    "path for this dust type, so a fit still runs without naming "
+                    "approx= explicitly."
+                )
             known = (WavePrecomp, SpectrumPrecomp, FeaturePrecomp)
             unknown = [c for c in configs if not isinstance(c, known)]
             if (
@@ -3631,6 +3647,7 @@ class SEDModel:
         return _build_param_map(
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
+            dust_screens=getattr(spec, "dust_screens", ()),
         )
 
     def _init_metallicity(self, spec):
@@ -3871,6 +3888,9 @@ class SEDModel:
 
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
+        # age_binned (#2528): N independent screens, each (law, lo, hi) in
+        # log10(age/yr). Empty for every other dust_model.
+        self._dust_screens = getattr(spec, "dust_screens", ()) or ()
         # Nebular birth-cloud law (None -> inherit the stellar birth cloud).
         # Decouples HII-region reddening from the stars while sharing the
         # diffuse ISM screen; consumed by ``DustSEDComponent`` via
@@ -5507,6 +5527,63 @@ class SEDModel:
             approx=approx,
         )
 
+    def with_fixed_redshift(self, redshift):
+        """Return a copy of this model built at a different Fixed redshift.
+
+        Every build-time table that captures the redshift (the fixed-z stellar
+        photometry LUT, IGM band factors, the nebular grid reference, the
+        dust-IR band response, the energy-balance LUT, the radio/X-ray term
+        responses, the precomputed luminosity distance, the line-catalog
+        snapping) is rebuilt by construction, so the clone is exactly the model
+        a user would have built with ``redshift=Fixed(redshift)``.
+
+        Parameters
+        ----------
+        redshift : float
+            The new constant redshift.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing ``ssp_data``, ``observation`` and build
+            settings, on the same ``approx`` policy. ``self`` when the
+            redshift already equals this model's.
+
+        Raises
+        ------
+        tengri.config.exceptions.ParameterError
+            If redshift is free in this model's spec.
+        NotImplementedError
+            If this model carries a ``catalog_z_range``: its tables are
+            z-tabulated and the redshift is a runtime input, so no rebuild is
+            needed (or meaningful).
+
+        Notes
+        -----
+        Costs one model construction, the same as :meth:`with_approx` (the
+        precompute LUT is re-run; the ``tengri_precomp`` cache persists it per
+        z-grid). **JIT-compatible**: build-time only.
+        """
+        if self._catalog_z_range is not None:
+            raise NotImplementedError(
+                "with_fixed_redshift is for fixed-z models; a catalog_z_range model "
+                "takes the redshift as a runtime input."
+            )
+        new_spec = self.spec.with_fixed_value("redshift", float(redshift))
+        if new_spec is self.spec:
+            return self
+        return SEDModel(
+            new_spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=self.approx_configs or None,
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
@@ -6940,6 +7017,7 @@ class SEDModel:
                 _dig_may_be_active,
                 _log_nion_of_state,
                 reconstruct_nebular_line_log_lums,
+                reconstruction_amplitude_log10,
             )
 
             # Q_H is ~1e53 photons/s and the table value ~1e-13, so the linear
@@ -6951,6 +7029,7 @@ class SEDModel:
             else:
                 log_nion = self._compute_log_nion(params, fixed_values=fixed_values)
                 log_nion = jnp.squeeze(log_nion) if jnp.ndim(log_nion) else log_nion
+            log_nion = reconstruction_amplitude_log10(log_nion, full_params)
             all_waves = jnp.asarray(grid.wavelengths)
             # Both lookups (HII and DIG) go through the log10 form: the
             # linear sibling ``reconstruct_nebular_line_lums`` is ~1e40
@@ -7068,11 +7147,13 @@ class SEDModel:
                 # Which is why it went unnoticed on the default ``approx='auto'``
                 # path for every dusty fit with a discrete-catalog backend.
                 #
-                # Only a dusty chain reaches here with a grid: dust sets
-                # ``must_materialize_sed``, which disarms ``use_grid`` and so leaves
-                # the nebular component publishing the attenuated catalog (#1281).
-                # A dust-free model publishes none, takes the fallback screen above,
-                # and was never affected.
+                # Only a dusty chain reaches here with a grid: dust that cannot take
+                # the nebular from the grid (no stellar energy-balance LUT: a free
+                # attenuation-curve shape, WG00, a free redshift with a redshift-reading
+                # law) sets ``must_materialize_sed``, preventing the grid from serving
+                # photometry and leaving the nebular component to publish the attenuated
+                # catalog (#1281). A dust-free model publishes none, takes the fallback
+                # screen above, and was never affected.
                 # The attenuated catalog is published in log10 (#1859). Powering it
                 # back to ~1e40 erg/s here was the overflow: it is ``inf`` in
                 # float32 before the distance division ever runs. Carry the log.
@@ -7273,13 +7354,43 @@ class SEDModel:
         filter-integrated nebular ``L_nu``); without it only the line channel is
         reconstructed and photometry stays on the exact path.
 
+        With a free redshift (``redshift=Uniform(...)``) or a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), the grid serves line fluxes only
+        and band fluxes stay on the exact nebular path. The per-Q_H grid integrates
+        through observed bands at the build redshift; a runtime redshift shifts
+        which filter wavelengths the grid tabulates, introducing worst-case band
+        errors of 7.35e-2 if applied. Constrain redshift to a fixed value to
+        enable grid-served photometry.
+
+        **Known limitations.**
+
+        * When a dust component takes the nebular emission from the grid (has a
+          stellar energy-balance LUT), its dust-channel fields are published:
+          observed and rest-frame sub-band nebular photometry, flux-weighted
+          wavelength, and dust-absorbed nebular luminosity per unit Q_H. Dust
+          components without a stellar energy-balance LUT (free attenuation-curve
+          shape, WG00, or a free redshift with a redshift-reading law) cannot take
+          the nebular from the grid; the grid serves line fluxes only while photometry
+          takes the exact nebular path.
+        * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
+          (computed per-galaxy from parameters), not at table build (which uses
+          zero for both); every other free nebular parameter held at the build
+          value (``neb_fesc_lya``, ``ionspec_*``, ``gas_*``, ``neb_eline_sigma_kms``,
+          ``neb_log_nH``, ``neb_co``, ``neb_dno``, ``neb_hbfrac``) is refused by
+          enumeration of the namespace.
+        * The grid holds the ionizing spectrum shape at the reference star
+          formation history. For a population with no recent star formation and
+          zero birth-cloud optical depth the u bands were off by 3.3e-2 on one
+          prior draw of configuration I; over 32 prior draws as drawn the worst
+          band is 3.9e-3 (I) and 1.1e-2 (II); posterior draws are within 7.2e-4
+          (I) and 1.3e-3 (II).
+
         **JIT-compatible**: the resulting :meth:`predict_photometry` /
         :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid
         build is eager.
         """
-        import dataclasses
-
-        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
 
         if self._nebular_backend is None or not hasattr(
@@ -7306,7 +7417,24 @@ class SEDModel:
         # at two different points on the dust attenuation curve. See
         # ``_snap_to_nebular_catalog``.
         target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
-        table = precompute_nebular_grid(self, target_wavelengths, n_grid=n_grid, ranges=ranges)
+        chain0 = self._build_component_chain()
+        dust = next(
+            (c for c in chain0 if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
+            None,
+        )
+        eb_lut = self._energy_balance_lut(chain0)
+        with_dust = (
+            dust is not None and eb_lut is not None and self._redshift_is_a_build_constant()
+        )
+        table = precompute_nebular_grid(
+            self,
+            target_wavelengths,
+            n_grid=n_grid,
+            ranges=ranges,
+            dust_component=dust if with_dust else None,
+            eb_tau_grids=(eb_lut.tau_bc_grid, eb_lut.tau_diff_grid) if with_dust else None,
+            n_subbands=self._approx.get("n_subbands"),
+        )
         self._nebular_grid_table = table
         # Rebuild the chain from scratch (exact, no grid) and swap in the
         # grid-carrying nebular component so ``apply`` takes the fast branch.
@@ -7326,13 +7454,9 @@ class SEDModel:
         # input is invisible to it, ``state_to_sed_components`` does exactly
         # that, so ``sed_components()`` on a dust-free Cue model still reports
         # a zero nebular continuum (#1673).
-        sed_consumers = _nebular_continuum_consumers(chain)
-        self._cached_component_chain = [
-            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
-            if isinstance(c, NebularSEDComponent)
-            else c
-            for c in chain
-        ]
+        # Dust that takes the nebular from the grid is flagged inside the helper
+        # before the census, so it does not count as a consumer.
+        self._cached_component_chain = self._chain_with_nebular_grid(chain, table)
         # _nebular_grid_table is structural (#2163): a fast-nebular model is a
         # different compiled graph. Invalidate the memoized signature so the
         # next compile_signature() call sees it.
@@ -10074,6 +10198,148 @@ class SEDModel:
                     return state.ssp_phot_ztable
         return None
 
+    def _dust_can_take_nebular_from_grid(self, chain) -> bool:
+        """Whether the chain's dust can read the nebular from the per-Q_H grid.
+
+        Holds exactly when the stellar energy-balance LUT exists for ``chain``:
+        two-component or single-screen dust, ``WavePrecomp`` on, shape-fixed
+        attenuation, and IR emission or an ``L_ir`` consumer. The grid's
+        absorbed-energy channel is tabulated on that LUT's optical-depth grids,
+        so the two exist together.
+        """
+        return self._energy_balance_lut(chain) is not None
+
+    def _redshift_is_a_build_constant(self) -> bool:
+        """Whether every evaluation of this model runs at the redshift it was built at.
+
+        False for a free ``redshift`` and for a runtime redshift
+        (``WavePrecomp(catalog_z_range=...)``), where a precompute integrated
+        through observed bands at the build redshift describes another galaxy.
+
+        Returns
+        -------
+        bool
+        """
+        return (
+            "redshift" not in self.spec.free_params
+            and getattr(self, "_catalog_z_range", None) is None
+        )
+
+    def nebular_grid_can_serve_photometry(self) -> bool:
+        """Whether the per-Q_H nebular grid can serve this model's photometry.
+
+        Serving photometry from the grid zeroes ``sed_nebular``, so it requires
+        that no component read the continuum. A dust component reads it, unless
+        it can take the nebular from the grid instead
+        (:meth:`_dust_can_take_nebular_from_grid`); then it does not count.
+
+        Returns
+        -------
+        bool
+            True when no continuum consumer remains after that exclusion, and
+            the redshift is a build-time constant (neither free nor runtime).
+        """
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import (
+            grid_baked_free_params,
+        )
+
+        if not self._redshift_is_a_build_constant():
+            return False
+
+        if grid_baked_free_params(self.spec):
+            return False
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._build_component_chain()
+        eligible = self._dust_can_take_nebular_from_grid(chain)
+        remaining = [
+            c
+            for c in _nebular_continuum_consumers(chain)
+            if not (eligible and isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent)))
+        ]
+        return not remaining
+
+    def _chain_with_nebular_grid(self, chain, table):
+        """``chain`` with the nebular grid attached and the dust flagged to read it.
+
+        The dust component is flagged (``nebular_from_grid``) and its tau grids are set
+        BEFORE the continuum census, but only when the redshift is a build-time constant
+        and no other component consumes the continuum, so the census sees a dust component
+        that does not read ``sed_nebular`` and ``must_materialize_sed`` follows from it.
+        Both happen here so the flag and the census cannot drift between call sites.
+
+        The grid serves band fluxes only at the build redshift. With a free or runtime
+        redshift the nebular component materializes its continuum and the dust component
+        reads it.
+        """
+        from tengri.components.dust.component import DustAttenuationSEDComponent
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
+
+        dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
+        serves_bands = self._redshift_is_a_build_constant()
+        chain = list(chain)
+        if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+            eb_lut = self._energy_balance_lut(chain)
+            dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
+            for name_table, name_lut, grid_lut in (
+                ("eb_tau_a_grid", "tau_bc_grid", eb_lut.tau_bc_grid),
+                ("eb_tau_b_grid", "tau_diff_grid", eb_lut.tau_diff_grid),
+            ):
+                grid_tab = getattr(table, name_table)
+                if grid_tab is None or not jnp.array_equal(grid_tab, grid_lut):
+                    raise RuntimeError(
+                        f"Nebular grid {name_table} does not match the stellar "
+                        f"energy-balance LUT {name_lut}: shapes "
+                        f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
+                        f"{jnp.shape(grid_lut)}."
+                    )
+            if bool(table.eb_include_lyc) != (_lyc_cutoff_for(dust_c) is None):
+                table_lyc = bool(table.eb_include_lyc)
+                dust_lyc = _lyc_cutoff_for(dust_c) is None
+                raise RuntimeError(
+                    f"nebular grid table was built with eb_include_lyc={table_lyc} "
+                    f"but the dust component has eb_include_lyc={dust_lyc}; "
+                    f"rebuild the table with enable_fast_nebular()"
+                )
+            # Build flagged chain with both fields set
+            flagged = [
+                dataclasses.replace(
+                    c,
+                    nebular_from_grid=True,
+                    nebular_eb_tau_grids=(
+                        tuple(float(x) for x in np.asarray(table.eb_tau_a_grid)),
+                        tuple(float(x) for x in np.asarray(table.eb_tau_b_grid)),
+                    ),
+                )
+                if isinstance(c, dust_types)
+                else c
+                for c in chain
+            ]
+            # Check if any other component consumes the continuum
+            sed_consumers = _nebular_continuum_consumers(flagged)
+            # If another component consumes continuum, nebular will materialize it
+            # and not publish grid keys, so use unflagged chain instead
+            if sed_consumers:
+                chain = list(chain)
+                sed_consumers = _nebular_continuum_consumers(chain)
+            else:
+                chain = flagged
+        else:
+            sed_consumers = _nebular_continuum_consumers(chain)
+        return [
+            dataclasses.replace(
+                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or not serves_bands
+            )
+            if isinstance(c, NebularSEDComponent)
+            else c
+            for c in chain
+        ]
+
     def _energy_balance_lut(self, chain):
         """Build (and memoize) the two-component energy-balance LUT, or ``None``.
 
@@ -10815,6 +11081,7 @@ class SEDModel:
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
+            dust_screens=getattr(self, "_dust_screens", ()),
             dust_nebular_screen=getattr(self, "_dust_nebular_screen", "birth_cloud"),
             dust_shock_screen=getattr(self, "_dust_shock_screen", "diffuse"),
             dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
@@ -11081,6 +11348,12 @@ class SEDModel:
                                 ssp_data=chain[0].ssp_data,
                                 filters=filters,
                                 redshift_spec=redshift_spec,
+                                lyc_gate=lyc_mask_live,
+                                convention=getattr(
+                                    self.observation.photometry,
+                                    "convention",
+                                    FilterConvention.BESSELL,
+                                ),
                             ),
                         )
 

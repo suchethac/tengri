@@ -193,6 +193,7 @@ def _build_param_registry(
     mean_sfh_type,
     nebular=False,
     dust_model="two_component",
+    dust_screens=(),
     dust_emission=None,
     agn_model=None,
     radio=False,
@@ -258,20 +259,41 @@ def _build_param_registry(
     # FSPS dust_type=3); ``dust_tau_v`` from ``_SINGLE_COMPONENT_DUST_PARAMS``
     # takes their place there.
     _is_single = dust_model in ("single_component", "wg00")
+    _is_age_binned = dust_model == "age_binned"
     from tengri.components.dust._params import ATTENUATION_PARAMS
 
-    for decl in ATTENUATION_PARAMS:
-        if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
-            continue
-        check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
-        registry[decl.name] = (decl.description, check, decl.bound_error)
-        defaults[decl.name] = decl.prior
+    if _is_age_binned:
+        # age_binned (#2528): N independent screens, one dust_tau_i / per-
+        # screen law-param declaration each -- a per-build variable that the
+        # static ATTENUATION_PARAMS table below cannot represent. Reuses
+        # AgeBinnedDustComponent.declared_parameters() directly (the single
+        # source of truth this grammar's _translate_age_binned also builds
+        # on), rather than restating the indexed-declaration logic here.
+        from tengri.components.dust.age_binned import (
+            AgeBinnedDustComponent,
+            AgeBinnedDustComponentConfig,
+        )
 
-    if _is_single:
-        single_comp_bucket = _resolve_lazy_bucket("_SINGLE_COMPONENT_DUST_PARAMS")
-        for pname, (desc, check, err, default) in single_comp_bucket.items():
-            registry[pname] = (desc, check, err)
-            defaults[pname] = default
+        decls = AgeBinnedDustComponent(
+            config=AgeBinnedDustComponentConfig(screens=tuple(dust_screens or ()))
+        ).declared_parameters()
+        for decl in decls:
+            check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+            registry[decl.name] = (decl.description, check, decl.bound_error)
+            defaults[decl.name] = decl.prior
+    else:
+        for decl in ATTENUATION_PARAMS:
+            if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
+                continue
+            check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+            registry[decl.name] = (decl.description, check, decl.bound_error)
+            defaults[decl.name] = decl.prior
+
+        if _is_single:
+            single_comp_bucket = _resolve_lazy_bucket("_SINGLE_COMPONENT_DUST_PARAMS")
+            for pname, (desc, check, err, default) in single_comp_bucket.items():
+                registry[pname] = (desc, check, err)
+                defaults[pname] = default
 
     # Metallicity params from registry (replaces ad-hoc evolving_metallicity/chem_evol)
     _, met_params, _, _ = resolve_met(met_mode)
