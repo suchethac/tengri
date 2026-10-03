@@ -10334,9 +10334,7 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(
-                c, grid_table=table, must_materialize_sed=bool(sed_consumers)
-            )
+            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain
