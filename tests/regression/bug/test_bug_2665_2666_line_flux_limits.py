@@ -44,7 +44,7 @@ _KIND_FLAGS = {
 
 
 def _detection_norm(sigma):
-    """Normalisation -ln sigma - 0.5 ln 2 pi of a detection with zero residual."""
+    """Normalization -ln sigma - 0.5 ln 2 pi of a detection with zero residual."""
     return -np.log(sigma) - 0.5 * np.log(2.0 * np.pi)
 
 
