@@ -61,6 +61,7 @@ _TYPE2 = (70, 90)
 _COS = {i: float(np.cos(np.radians(i))) for i in _INCLINATIONS}
 _ETA = lambda i: np.cos(np.radians(i)) * (1 + 2 * np.cos(np.radians(i))) / 3  # noqa: E731
 _WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 3000))  # [A] covers the library axis
+_DENSE_WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 40000))  # [A] dense covering
 _RUNNER = dict(
     agn_disc_block="schartmann2005",
     agn_nlr_block="none",
@@ -448,11 +449,16 @@ def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
     normalization 1/int(dust + polar), so with polar dust on its disc is lower than tengri's
     by that factor; the difference is tracked in #2602 and is not pinned here.
     """
-    _, off = _run(i_deg)
-    _, on = _run(i_deg, **_POLAR, agn_polar_ebv=ebv)
-    budget = (_power(on["torus"]) + _power(on["polar"])) / _power(off["torus"])
+    # The budget closes exactly on the runner's fixed grids and is independent of the
+    # caller's; it is summed here on a dense covering grid, since the quadrature error
+    # of the 3000-node ``_WAVE`` alone is ~1e-6.
+    _, off = _run(i_deg, wave=_DENSE_WAVE)
+    _, on = _run(i_deg, wave=_DENSE_WAVE, **_POLAR, agn_polar_ebv=ebv)
+    budget = (_power(on["torus"], _DENSE_WAVE) + _power(on["polar"], _DENSE_WAVE)) / _power(
+        off["torus"], _DENSE_WAVE
+    )
     assert budget == pytest.approx(1.0, abs=1e-6)
-    ratio = _power(on["disc"]) / _power(off["disc"])
+    ratio = _power(on["disc"], _DENSE_WAVE) / _power(off["disc"], _DENSE_WAVE)
     if ebv == 0.0 or i_deg in _TYPE2:
         assert ratio == pytest.approx(1.0, abs=1e-3)
     else:

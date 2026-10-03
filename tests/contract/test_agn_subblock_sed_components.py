@@ -25,6 +25,7 @@ from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConf
 from tengri.protocols.component import ForwardState
 
 _WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 400)
+_DENSE_WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 20000)
 
 _SUBBLOCK_KEYS = ("sed_agn_disc", "sed_agn_torus", "sed_agn_lines", "sed_agn_polar")
 
@@ -222,12 +223,17 @@ class TestPolarDustSharesTheAgnDustBudget:
         from tengri.components.agn.blocks.runner import compose_l_nu
         from tengri.utils.physics_constants import C_AA
 
-        nu = C_AA / _WAVE
+        # Integrated on a dense covering grid: the budgets are measured on the
+        # runner's fixed grids and are independent of the caller's, so the sum of
+        # torus and polar closes to the quadrature error of the grid it is summed on,
+        # and the 400-node ``_WAVE`` (about 60 per decade) carries ~1e-5 of that.
+        wave = _DENSE_WAVE
+        nu = C_AA / wave
         order = jnp.argsort(nu)
         out = []
         for ebv in self._EBVS:
             _sed, comps = compose_l_nu(
-                _WAVE,
+                wave,
                 12.0,
                 agn_disc_block="schartmann2005",
                 agn_nlr_block="none",
