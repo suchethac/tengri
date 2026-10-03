@@ -1960,8 +1960,18 @@ class Observation:
                     t_sub = t_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes, only the weights carry T (#1135).
-                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub, axis=(0, 2))
+                    # The weights carry T (#1135). Under the exact fold the screen is
+                    # also re-evaluated where the IGM-surviving light sits.
+                    a_bc_igm = state.derived.get("dust_bc_attenuation_subband_igm_precomp")
+                    t_sub_igm = t_sub
+                    if a_bc_igm is not None:
+                        t_sub_igm = (
+                            state.derived["dust_diff_attenuation_subband_igm_precomp"]
+                            * a_bc_igm ** y_age[:, None, None]
+                        )
+                        if lyc_factor_sub is not None:
+                            t_sub_igm = t_sub_igm * lyc_factor_sub
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub_igm, axis=(0, 2))
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
                 t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
@@ -2068,8 +2078,15 @@ class Observation:
                 a_sub_lyc = a_sub if lyc_factor_sub is None else a_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * a_sub_lyc, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes, only the weights carry T (#1135).
-                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_lyc, axis=(0, 2))
+                    # The weights carry T (#1135); under the exact fold, so does the node.
+                    a_sub_igm = state.derived.get("dust_attenuation_subband_igm_precomp")
+                    if a_sub_igm is None:
+                        a_sub_igm_lyc = a_sub_lyc
+                    elif lyc_factor_sub is None:
+                        a_sub_igm_lyc = a_sub_igm
+                    else:
+                        a_sub_igm_lyc = a_sub_igm * lyc_factor_sub
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_igm_lyc, axis=(0, 2))
                 # Nebular (if any) is screened at the emission, not at λ_eff.
                 dust_attenuated = stellar_attenuated + nebular_term
             else:
@@ -2155,6 +2172,8 @@ class Observation:
         igm_factor = state.derived.get("igm_phot_factor")
         igm_trans = state.derived.get("igm_transmission")
         eff_waves = state.derived.get("filter_eff_waves")
+        fw_pad = ft_pad = None
+        from_dense_curve = igm_factor is None
         if igm_factor is None and igm_trans is not None and eff_waves is not None:
             # Fallback: patchy reionization / DLA read free parameters, so <T>_f
             # is not a function of redshift alone and cannot be tabulated.
@@ -2174,19 +2193,63 @@ class Observation:
             else:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         if igm_factor is not None:
+            # Non-stellar light gets ⟨T⟩_f, then each component with a dense
+            # spectrum is moved onto its OWN band transmission ∫S·T/∫S
+            # (``_igm_weighting``): ⟨T⟩_f alone formed ⟨S⟩·⟨T⟩, 5-28 % off near
+            # Ly-alpha for a nebular line on the break. The table is published only
+            # for bands the IGM can reach; the patchy/DLA fallback has already paid
+            # for the dense curve, so it is reused over every band.
+            rest_t = state.derived.get("igm_rest_transmission_precomp")
+            reach = state.derived.get("igm_reach_filters_precomp")
+            if rest_t is None and from_dense_curve and fw_pad is not None:
+                rest_t, reach = igm_trans, jnp.arange(igm_factor.shape[0])
+            correction = 0.0
+            if rest_t is not None and reach is not None:
+                from tengri.observation._igm_weighting import (
+                    igm_weighted_parts,
+                    spectral_igm_correction,
+                    subband_igm_correction,
+                )
+
+                if a_bc_lut is not None and (_have_subband or per_age is not None):
+                    dust_mode = "two_component"
+                elif a_lut is not None:
+                    dust_mode = "single"
+                else:
+                    dust_mode = "none"
+                correction = spectral_igm_correction(
+                    igm_weighted_parts(state.derived, dust_mode),
+                    rest_t,
+                    reach,
+                    state.wave,
+                    state.derived.get("phot_filter_waves_padded"),
+                    state.derived.get("phot_filter_trans_padded"),
+                    z,
+                    igm_factor,
+                    convention=self.photometry.convention,
+                )
+                neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
+                if neb_chunks is not None:
+                    correction = correction + subband_igm_correction(
+                        neb_chunks,
+                        state.derived["nebular_subband_waves_rest_precomp"],
+                        rest_t,
+                        state.wave,
+                        reach,
+                        igm_factor,
+                    )
             if stellar_attenuated_igm is not None:
                 # Stellar already carries T evaluated AT the quadrature nodes
                 # (#1135), so the band factor must not touch it; that would apply
-                # the IGM twice. Everything the quadrature cannot reach (nebular
-                # lines, AGN, dust emission) keeps ⟨T⟩_f, which is what it had
-                # before; the stellar continuum dominates the broadband and is now
-                # the accurate term.
+                # the IGM twice.
                 other_lnu = total_lnu - stellar_attenuated
                 phot_fnu = apply_log10_scale(
-                    other_lnu * igm_factor + stellar_attenuated_igm, log10_cos
+                    other_lnu * igm_factor + correction + stellar_attenuated_igm, log10_cos
                 )
             else:
                 phot_fnu = phot_fnu * igm_factor
+                if rest_t is not None and reach is not None:
+                    phot_fnu = phot_fnu + apply_log10_scale(correction, log10_cos)
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
 

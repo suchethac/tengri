@@ -49,7 +49,7 @@ Z_FIXED = 0.5
 FREE_PARAMS = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}
 
 
-def _build_model(ssp_data, obs, redshift):
+def _build_model(ssp_data, obs, redshift, **extra_groups):
     """Build the fixture model at a given Fixed redshift.
 
     Factored out so :func:`test_the_sweep_is_not_vacuous` can build a second,
@@ -69,7 +69,20 @@ def _build_model(ssp_data, obs, redshift):
         },
         neb={"type": "none"},
         redshift=Fixed(redshift),
+        **extra_groups,
     )
+
+
+@pytest.fixture(scope="module")
+def xray_model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """The fixture model plus an X-ray block, for the entry point that needs one."""
+    return _build_model(synthetic_ssp_wide, synthetic_tophat_obs, Z_FIXED, xray={"type": "yang20"})
+
+
+#: Entry points defined only for a model that carries the named component: a model
+#: without it has no such quantities and the method refuses. Each is swept on a
+#: model that has the component instead of being exempted.
+NEEDS_COMPONENT = {"predict_xray_quantities": "xray_model"}
 
 
 @pytest.fixture(scope="module")
@@ -119,7 +132,7 @@ RAISES_ON_BARE_PARAMS = {
 
 
 @pytest.mark.parametrize("name", ENTRY_POINTS)
-def test_entry_point_refuses_an_explicit_fixed_redshift(model, name):
+def test_entry_point_refuses_an_explicit_fixed_redshift(request, model, name):
     """Omitting a Fixed redshift works; naming it explicitly is refused (#2296).
 
     Every value the caller could pass for a Fixed key is refused alike --
@@ -130,7 +143,8 @@ def test_entry_point_refuses_an_explicit_fixed_redshift(model, name):
     if name in NEEDS_EXTRA_ARGS:
         pytest.skip(f"{name} needs arguments beyond params")
 
-    fn = getattr(model, name)
+    target = request.getfixturevalue(NEEDS_COMPONENT[name]) if name in NEEDS_COMPONENT else model
+    fn = getattr(target, name)
     omitted = dict(FREE_PARAMS)
     explicit = {**FREE_PARAMS, "redshift": jnp.asarray(Z_FIXED)}
 
