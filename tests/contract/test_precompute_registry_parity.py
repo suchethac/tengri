@@ -44,9 +44,9 @@ redshift is chosen, not incidental: ``asada25`` is identical to ``inoue14`` at z
 construction (it modifies only the reionization era), so a z = 3 check would run the
 ``inoue14`` code twice. At z = 7 the four models are distinct, which
 ``test_igm_models_are_distinct`` asserts rather than assumes. The exact fold agrees with
-the integrator to ~1e-14. The default ``igm_fold="node"`` is deliberately not held to
+the integrator to ~1e-14. The explicit ``igm_fold="node"`` is deliberately not held to
 parity here: it is a documented approximation, off by 85-107 % in these bands at z = 7,
-and choosing that default is #2445.
+which is why the default became ``"auto"`` (#2445).
 
 **Covered elsewhere, so not repeated here.**
 

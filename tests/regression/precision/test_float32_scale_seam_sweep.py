@@ -475,42 +475,34 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
-# Re-captured for #2572, deliberately: the kubota_done hot-flow zone is now solved from
-# one shared L_hot and a corrected Eq. 2 integral (R_hot moves), so the forward SED moved
-# (rest_sed_sum within 1%; rest_sed_0 by -0.3%, -38%, +33% at mbh 6, 8, 10 against the
-# pre-#2572 literals). Round 3 (#2572) then removed the invented L_bol/2 corona cap, which
-# moved mbh 8 and 10 again (lambda_Edd 0.03 and 3e-4). Round 4 (#2572) re-captured once
-# more for the Page-Thorne (relativistic) emissivity of the K&D disc (rest_sed_sum +0.05%,
-# +0.28%, +0.13% against round 3 at mbh 6, 8, 10; rest_sed_0 -26%, +44%, -3%). Round 5
-# (#2572) corrected the Laor & Netzer self-gravity radius (alpha^{2/9}, not (alpha/0.1)^{2/9}:
-# R_out 1.67x smaller), which moved mbh 6 and 8 again (rest_sed_sum -0.02%, -0.19%;
-# rest_sed_0 +0.4%, +2.4%; mbh 10 sits on the 10 r_isco floor and is unchanged).
-# Round 7 (#2572) made the disc normalizations closed-form (ring blackbody power, EUV tail),
-# independent of the caller's grid: rest_sed_sum +1.3e-6 at mbh 6 and <1e-7 at 8 and 10;
-# rest_sed_0 -0.29% at mbh 6, +6e-6 at 8, -2e-7 at 10. The
-# 2210-regrouping claim below is unaffected: the regrouping changes nothing relative to
-# the tree it is captured on.
+#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
+#: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
+#: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
+#: ``test_tied_disc_reference_of_the_seam_sweep`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
+#: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
+#: disc is multiplied by ``eta(30 deg) T``.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5220218591116609e32,
-        "rest_sed_0": 1.5903783799081077e23,
-        "rest_sed_mid": 3.059488539745631e28,
-        "rest_sed_last": 8.775344956875398e21,
-        "photometry": (1.0989664300276457e-27, 1.5711790531026397e-27, 1.7648176670707843e-27),
+        "rest_sed_sum": 1.522087146372271e32,
+        "rest_sed_0": 2.7414641089992215e23,
+        "rest_sed_mid": 3.059759671014202e28,
+        "rest_sed_last": 8.775691573813786e21,
+        "photometry": (1.0990406680264032e-27, 1.571190125160936e-27, 1.7648209267569442e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5576834947559201e32,
-        "rest_sed_0": 2.383241900361217e24,
-        "rest_sed_mid": 3.140293400772146e28,
-        "rest_sed_last": 8.793894646155111e21,
-        "photometry": (1.1317063002281215e-27, 1.5717910477614792e-27, 1.764994820348198e-27),
+        "rest_sed_sum": 1.5692038430133054e32,
+        "rest_sed_0": 3.32447947548655e24,
+        "rest_sed_mid": 3.170035763011865e28,
+        "rest_sed_last": 8.836905506469256e21,
+        "photometry": (1.1413516017138159e-27, 1.5731015599094376e-27, 1.7653901893068474e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5580908762814158e32,
-        "rest_sed_0": 2.5942028439031613e24,
-        "rest_sed_mid": 3.1372103913087018e28,
-        "rest_sed_last": 8.925752647249021e21,
-        "photometry": (1.1281169892638984e-27, 1.5777076796192765e-27, 1.7661948809241624e-27),
+        "rest_sed_sum": 1.5893067919899514e32,
+        "rest_sed_0": 2.546937562859289e24,
+        "rest_sed_mid": 3.2078590999342967e28,
+        "rest_sed_last": 9.086913093044805e21,
+        "photometry": (1.1542181906962566e-27, 1.5812750837422911e-27, 1.767532048985811e-27),
     },
 }
 

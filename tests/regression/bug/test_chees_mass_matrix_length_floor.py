@@ -22,11 +22,15 @@ that it says so.
 
 from __future__ import annotations
 
+import blackjax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.regression_bug
+
+_BLACKJAX_REPAIRED = tuple(int(x) for x in blackjax.__version__.split(".")[:2]) >= (1, 7)
 
 
 def _gaussian(pos, data_args):
@@ -58,11 +62,11 @@ def _scan_args(mass_matrix_estimation):
 class TestTheUpstreamCombinationIsUntraceable:
     """Pinned against BlackJAX directly, so a fixed release is *noticed*.
 
-    If BlackJAX repairs the ``float()`` call this test starts failing, which is
-    the signal to delete tengri's workaround rather than carry it forever.
+    Below 1.7 the diagonal-mass + length-floor combination raises under ``jit``;
+    from 1.7 it traces, and tengri's workaround is then unnecessary (#2695).
     """
 
-    def test_diagonal_mass_with_the_length_floor_cannot_be_jitted(self):
+    def test_diagonal_mass_with_the_length_floor_traces_only_from_blackjax_1_7(self):
         import optax
         from blackjax import chees_adaptation
         from blackjax.adaptation.base import get_filter_adapt_info_fn
@@ -89,8 +93,12 @@ class TestTheUpstreamCombinationIsUntraceable:
             )
             return params["step_size"]
 
-        with pytest.raises(jax.errors.ConcretizationTypeError):
-            jax.jit(lambda: run("diagonal", True))()
+        if not _BLACKJAX_REPAIRED:
+            with pytest.raises(jax.errors.ConcretizationTypeError):
+                jax.jit(lambda: run("diagonal", True))()
+        else:
+            step = jax.jit(lambda: run("diagonal", True))()
+            assert np.isfinite(float(step)) and float(step) > 0.0
 
         # And the floor is the whole difference -- same call, floor off, traces.
         assert jnp.isfinite(jax.jit(lambda: run("diagonal", False))())
