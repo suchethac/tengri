@@ -390,6 +390,12 @@ class DerivedState:
     sed_agn_disc: jnp.ndarray | None = None
     sed_agn_torus: jnp.ndarray | None = None
     sed_agn_lines: jnp.ndarray | None = None
+    # The AGN line SED (NLR, BLR, Fe II, GRAHSP lines) after the AGN's own
+    # attenuation block and, when the AGN runs before dust (agn_screen other
+    # than "none"), after the host screen it was routed through; under the
+    # default order it is unscreened by host dust. Carries its intrinsic
+    # width and is broadened by the instrument only (#2565).
+    sed_agn_lines_attenuated: jnp.ndarray | None = None
     sed_agn_polar: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
     # AGN: filter-integrated LUT. Rest-frame Lν of

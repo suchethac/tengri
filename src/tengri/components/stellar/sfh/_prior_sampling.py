@@ -93,6 +93,8 @@ def sample_sfh_prior(
     key: jax.Array,
     n: int = 20,
     age_grid_yr: jnp.ndarray | None = None,
+    *,
+    redshift: float | None = None,
     **prior_overrides: Distribution,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Draw `n` SFH realizations from a registered family's default prior.
@@ -110,6 +112,12 @@ def sample_sfh_prior(
     age_grid_yr : array_like, shape (n_age,), optional
         Lookback time grid [yr]. Defaults to a 256-point log grid spanning
         1 Myr to ~13.8 Gyr (matches :func:`make_log_age_grid`).
+    redshift : float, optional
+        Redshift at which the draws are evaluated. Required for the
+        age-anchored families (``dense_basis``, ``dense_basis_pure``, ``psb``,
+        and composites containing one), whose time axis is set by the age of
+        the universe at the galaxy's redshift; there is no default, because
+        no single age is right for every use. Ignored by every other family.
     **prior_overrides : Distribution
         Per-parameter prior overrides keyed by the *public* parameter name
         (e.g. ``sfh_dpl_alpha=Uniform(0.5, 2.0)``). Anything not overridden
@@ -126,6 +134,8 @@ def sample_sfh_prior(
     ------
     KeyError
         If `family` is not a registered SFH model.
+    ValueError
+        If `family` is age-anchored and `redshift` is not given.
     NotImplementedError
         If `family` includes the ``"field"`` GP modulator.
 
@@ -133,6 +143,17 @@ def sample_sfh_prior(
     -----
     **JIT-compatible**: yes for the inner evaluation; the outer Python loop
     over draws is intentional (one-shot helper, not a hot path).
+
+    For an age-anchored family the age of the universe at `redshift` comes
+    from :func:`~tengri.components.stellar.component.age_universe_kwargs`, the
+    rule the forward model uses. The default grid reaches 13.8 Gyr, so at
+    ``redshift > 0`` it extends past age(z); the history there is zero for
+    ``dense_basis`` and ``dense_basis_pure`` (no star formation before the
+    Big Bang). For ``psb`` the age parameter is drawn from its prior
+    independently of the redshift, so a draw can place star formation at
+    lookback times beyond age(z). This helper evaluates the bare SFH function
+    and does not apply the age-of-universe truncation that the stellar
+    component applies to the model's history.
 
     The returned curves are not mass-normalized: they are raw SFR(t) at the
     sampled parameter point. Use :math:`\\int \\mathrm{SFR}\\,\\mathrm{d}t`
@@ -171,8 +192,20 @@ def sample_sfh_prior(
     # families we currently support, it is empty and can be ignored.
     del family_list, settings
 
+    from tengri.components.stellar.component import age_universe_kwargs
+
+    if redshift is None:
+        if age_universe_kwargs(family, 0.0):
+            raise ValueError(
+                f"sample_sfh_prior({family!r}) needs redshift=: the family's time axis is "
+                "anchored to the age of the universe at the galaxy's redshift."
+            )
+        age_kwargs = {}
+    else:
+        age_kwargs = age_universe_kwargs(family, redshift)
+
     def _one(kw_i: dict) -> jnp.ndarray:
-        return composed_fn(age_grid_yr, **kw_i)
+        return composed_fn(age_grid_yr, **kw_i, **age_kwargs)
 
     # vmap over the leading "draws" axis of every internal kwarg.
     sfr_curves = jax.vmap(_one)(internal_kwargs)

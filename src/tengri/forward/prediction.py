@@ -769,7 +769,10 @@ class SEDProperties(_CachedBase):
             (nlr + blr + feii), ``sed_agn_polar``: the composable AGN
             runner's per-sub-block rest-frame SEDs (summing exactly to
             ``sed_agn``); zeros for a non-composable (monolithic) AGN
-            model or no AGN component at all.
+            model or no AGN component at all. ``sed_agn_lines_attenuated``,
+            the AGN line light after the AGN's own and the host screen
+            (instrument-kernel-only in the spectrum projection), is zeros
+            for an AGN without lines or no AGN component.
 
         Examples
         --------
