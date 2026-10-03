@@ -402,6 +402,10 @@ class WavePrecomp:
             in those cases: a mode named by the caller is never silently
             downgraded.
 
+        ``"auto"`` resolves at build time; the fold actually built is reported
+        under ``precompute_engagement_report(model).observed_facts["igm_fold"]``
+        (``None`` when no fold was built).
+
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
@@ -2128,7 +2132,7 @@ def _fold_igm_into_subbands(
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
-        return _fold_igm_exact_into_subbands(
+        result = _fold_igm_exact_into_subbands(
             igm_comp,
             stellar_state,
             ssp_data,
@@ -2137,31 +2141,39 @@ def _fold_igm_into_subbands(
             lyc_gate=lyc_gate,
             convention=convention,
         )
+        built = result is not stellar_state
+        return _replace(result, igm_fold_resolved=igm_fold if built else None)
 
     # Default: node fold (fast, exact for smooth transmission)
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+            igm_fold_resolved=igm_fold,
         )
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
     if ztable is not None and ztable.ssp_subband_phot_table is not None:
         trans = igm_comp.subband_node_transmission(ztable.subband_waves_rest_table, ztable.z_grid)
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_ztable=ztable._replace(
                 ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
             ),
+            igm_fold_resolved=igm_fold,
         )
 
-    return stellar_state
+    return _replace(stellar_state, igm_fold_resolved=None)
 
 
 #: Accepted ``csp_integration`` values. All are equivalent (#1500): the stellar
