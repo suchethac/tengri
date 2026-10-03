@@ -221,7 +221,10 @@ class TestAGNCrossval:
         """Disc L_bol integral should match input L_bol."""
         from tengri.components.agn.disc import powerlaw_disc
 
-        wave = jnp.linspace(100, 100000, 5000)
+        # The power-law disc is normalized over 10 A - 1e8 A (flat per dex between its
+        # 1440 A cutoff and 1e8 A), so the grid must cover that band: 100 A - 1e5 A holds
+        # ln(1e5/1440)/ln(1e8/1440) = 0.35 of it.
+        wave = jnp.geomspace(10.0, 1.0e8, 20000)
         l_nu = np.asarray(powerlaw_disc(wave, agn_log_lbol=11.0))
 
         c_cgs = 2.998e10
@@ -230,9 +233,8 @@ class TestAGNCrossval:
 
         lsun = 3.828e33
         expected = 10**11.0 * lsun  # erg/s (L_nu is in erg/s/Hz after CGS standardization)
-        # Should be within factor 2 (numerical integration over finite grid)
         ratio = l_bol / expected
-        assert 0.5 < ratio < 2.0, f"Disc L_bol ratio = {ratio:.2f}"
+        assert 0.95 < ratio < 1.05, f"Disc L_bol ratio = {ratio:.4f}"
 
     def test_torus_peaks_in_mir(self):
         """Silva+04 torus should peak in the mid-IR (1-100 um)."""
