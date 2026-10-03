@@ -12,6 +12,7 @@ Validates:
 """
 
 import chex
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -25,6 +26,11 @@ from tengri.components.xray.xray import (
 from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
+
+#: log10 nu L_nu(12 um) [dex re erg/s] of a nuclear L_nu(12 um) = 1e30 erg/s/Hz.
+LOG_L12 = float(np.log10(1e30 * 2.99792458e18 / 1.2e5))
+#: ... and of 1e28 erg/s/Hz.
+LOG_L12_LOW = LOG_L12 - 2.0
 
 
 @pytest.fixture()
@@ -56,32 +62,32 @@ class TestBolometricCorrectionDuras:
 
 class TestLopez24Corona:
     def test_output_shape(self, xray_wavelength):
-        result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
+        result = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12)
         chex.assert_equal_shape([result, xray_wavelength])
 
     def test_nonnegative(self, xray_wavelength):
-        result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
+        result = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12)
         assert_non_negative(result, name="result")
 
     def test_zero_outside_xray(self, xray_wavelength):
-        result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
+        result = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12)
         optical_mask = xray_wavelength >= 124.0
         assert jnp.all(result[optical_mask] == 0.0)
 
     def test_nonzero_in_xray_band(self, xray_wavelength):
-        result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
+        result = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12)
         xray_mask = xray_wavelength < 124.0
         assert jnp.any(result[xray_mask] > 0.0)
 
     def test_alpha_irx_scaling(self, xray_wavelength):
         low = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             alpha_irx=0.0,
         )
         high = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             alpha_irx=0.6,
         )
         # α_IRX = log10(νLν(12µm) / L_X): higher α_IRX -> fainter X-ray
@@ -89,23 +95,23 @@ class TestLopez24Corona:
         assert jnp.sum(high) < jnp.sum(low)
 
     def test_l12um_scaling(self, xray_wavelength):
-        low = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e28)
-        high = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
+        low = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12_LOW)
+        high = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=LOG_L12)
         assert jnp.sum(high) > jnp.sum(low)
 
     def test_zero_luminosity_gives_zero(self, xray_wavelength):
-        result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=0.0)
+        result = xray_agn_corona_lopez24(xray_wavelength, log_l_12um_erg=-np.inf)
         assert jnp.allclose(result, 0.0, atol=1e-50)
 
     def test_gamma_affects_slope(self, xray_wavelength):
         soft = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             gamma=1.4,
         )
         steep = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             gamma=3.0,
         )
         xray_mask = xray_wavelength < 50.0
@@ -124,13 +130,13 @@ class TestLopez24Corona:
     def test_anisotropy_reduces_edge_on(self, xray_wavelength):
         face_on = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             cos_inc=1.0,
             apply_anisotropy=True,
         )
         edge_on = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             cos_inc=0.0,
             apply_anisotropy=True,
         )
@@ -139,13 +145,13 @@ class TestLopez24Corona:
     def test_no_anisotropy_flag(self, xray_wavelength):
         with_aniso = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             cos_inc=0.3,
             apply_anisotropy=True,
         )
         without_aniso = xray_agn_corona_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
             cos_inc=0.3,
             apply_anisotropy=False,
         )
@@ -153,7 +159,7 @@ class TestLopez24Corona:
 
     def test_jit(self, xray_wavelength):
         result = assert_jit_matches_eager(
-            lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+            lambda w: xray_agn_corona_lopez24(w, log_l_12um_erg=LOG_L12), xray_wavelength
         )
         chex.assert_tree_all_finite(result)
 
@@ -162,7 +168,7 @@ class TestLopez24Corona:
             return jnp.sum(
                 xray_agn_corona_lopez24(
                     xray_wavelength,
-                    l_12um_erg_hz=1e30,
+                    log_l_12um_erg=LOG_L12,
                     alpha_irx=a,
                     apply_anisotropy=False,
                 )
@@ -182,12 +188,12 @@ class TestLopez24Corona:
             return jnp.sum(
                 xray_agn_corona_lopez24(
                     xray_wavelength,
-                    l_12um_erg_hz=l12,
+                    log_l_12um_erg=l12,
                     apply_anisotropy=False,
                 )
             )
 
-        grad = assert_grad_matches_fd(loss, 1e30)
+        grad = assert_grad_matches_fd(loss, LOG_L12)
         assert jnp.isfinite(grad)
         assert grad > 0.0
 
@@ -198,7 +204,7 @@ class TestTotalLopez24:
         chex.assert_equal_shape([result, xray_wavelength])
 
     def test_galaxy_only_when_no_agn(self, xray_wavelength):
-        # With no AGN (l_12um = 0) the corona vanishes, leaving the galaxy
+        # With no AGN (log_l_12um_erg = -inf) the corona vanishes, leaving the galaxy
         # channels: XRBs + hot gas (CIGALE lopez24 includes the 8.3e31·SFR
         # hot-gas term, shared with yang20).
         from tengri.components.xray.xray import xray_hotgas, xray_xrb
@@ -207,7 +213,7 @@ class TestTotalLopez24:
             xray_wavelength,
             sfr=1.0,
             stellar_mass=1e10,
-            l_12um_erg_hz=0.0,
+            log_l_12um_erg=-np.inf,
         )
         xrb = xray_xrb(xray_wavelength, sfr=1.0, stellar_mass=1e10, E_cut=300.0)
         hotgas = xray_hotgas(xray_wavelength, 1.0, gamma=1.0, E_cut=1.0)
@@ -216,16 +222,16 @@ class TestTotalLopez24:
     def test_agn_adds_flux(self, xray_wavelength):
         no_agn = xray_total_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=0.0,
+            log_l_12um_erg=-np.inf,
         )
         with_agn = xray_total_lopez24(
             xray_wavelength,
-            l_12um_erg_hz=1e30,
+            log_l_12um_erg=LOG_L12,
         )
         assert jnp.sum(with_agn) > jnp.sum(no_agn)
 
     def test_jit(self, xray_wavelength):
         result = assert_jit_matches_eager(
-            lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+            lambda w: xray_total_lopez24(w, log_l_12um_erg=LOG_L12), xray_wavelength
         )
         chex.assert_tree_all_finite(result)

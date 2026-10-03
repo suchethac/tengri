@@ -75,7 +75,11 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # (which only sees a literal argument) no longer sees them either. The
 # underlying guards did not disappear, only the source shape their old
 # ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
-_PINNED = 26
+# 26 -> 25: the #2581 lopez24 corona amplitude left its linear
+# ``jnp.maximum(band_integral, 1e-60)`` for the log-space band norm
+# (``_log10_cutoff_powerlaw_band_norm``, floored through ``representable_floor``);
+# a migration of one site (``xray.py``, ``xray_agn_corona_lopez24``).
+_PINNED = 25
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

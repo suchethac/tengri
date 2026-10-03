@@ -130,6 +130,39 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     corona-carrying disc, or an X-ray-emission-free disc
     (`'richards2006'`/`'multicolor'`/`'slone_netzer'`/...) with an `xray`
     selection.
+- **`dust_attenuation={'type': 'age_binned', 'screens': [...]}`** generalizes
+  the two-component birth-cloud/diffuse screen to N independent screens, each
+  its own registered law and a `log10(age/yr)` window (`None` = unbounded;
+  windows need not partition the age axis):
+
+  ```python
+  dust_attenuation={
+      'type': 'age_binned',
+      'screens': [
+          {'law': 'calzetti', 'window_log_yr': (None, 7.0)},   # young
+          {'law': 'power_law', 'window_log_yr': (7.0, 8.5)},   # intermediate
+          {'law': 'cardelli', 'window_log_yr': (8.5, None)},   # old
+      ],
+      'tau_0': Uniform(0, 2), 'tau_1': Uniform(0, 2), 'tau_2': Uniform(0, 2),
+      'other_params': Fixed(DEFAULT),
+  }
+  ```
+
+  Per-screen parameters are indexed from the screen count (`dust_tau_0`,
+  `dust_tau_1`, ...; `dust_<lawparam>_i` for every shape parameter that
+  screen's own law declares, defaulting to that law's own published value).
+  The two-screen case with the `two_component` windows reproduces
+  `two_component` bit-identically. Not yet supported under
+  `approx=WavePrecomp()`/`SpectrumPrecomp()` (both raise, naming the exact
+  path); a fit's `approx="auto"` policy resolves to the exact path instead of
+  raising (#2528). Nebular continuum and the line catalog are attenuated only
+  by screens whose window is unbounded below (the `t -> 0` limit -- the same
+  convention `two_component`, Prospector's `dust1`/`dust2`, and BAGPIPES's
+  `dust_birth_cloud`/`eta*A_V` apply to lines), so a screen's finite lower
+  edge must sit at least five transition widths above the loaded SSP grid's
+  youngest node; a closer edge raises `ConfigError` at build time, naming the
+  screen, the edge, the grid's youngest node, and the two fixes (make the
+  edge unbounded, or raise it).
 - **Sentinels** `FREE` / `DEFAULT` are singletons exported from `tengri`.
   `FREE` defers a parameter to the registry's default prior; `DEFAULT` is
   legal only as `Fixed(DEFAULT)`, pinning a parameter at the registry default

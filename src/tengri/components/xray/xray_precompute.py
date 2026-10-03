@@ -63,6 +63,7 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.host_array import device_table, host_array
+from tengri.utils.physics_constants import C_AA as _C_AA
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
 AXIS_PARAMS_CORONA = ("xray_gamma_agn", "xray_delta_alpha_ox")
@@ -82,7 +83,7 @@ _WAVE_REST = host_array(np.logspace(-1.0, 4.0, 1024, dtype=np.float64))  # 0.1 t
 _SFR_REF = 1.0  # Msun/yr
 _MSTAR_REF = 1.0e10  # Msun
 _LBOL_REF = 1.0e44  # erg/s
-_L12_REF = 1.0e30  # erg/s/Hz
+_LOG_L12_REF = float(np.log10(1.0e30 * _C_AA / 1.2e5))  # log10 nu L_nu(12 um) [dex re erg/s]
 
 
 def _build_grid_xrb(
@@ -184,7 +185,7 @@ def _build_grid_corona_lopez24(
             templates[i, j] = np.asarray(
                 _xray_corona_lopez24(
                     device_table(_WAVE_REST),
-                    l_12um_erg_hz=_L12_REF,
+                    log_l_12um_erg=_LOG_L12_REF,
                     gamma=float(g),
                     alpha_irx=float(ai),
                     apply_anisotropy=False,  # 30°-anchored, like _build_grid_corona (#980)
