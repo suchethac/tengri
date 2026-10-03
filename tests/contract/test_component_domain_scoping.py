@@ -13,6 +13,11 @@ import difflib
 
 import pytest
 
+# ``fsps_shell`` registers on import of its module, which the build path reaches
+# lazily (the stellar component imports it only when an ``agb_dust`` group is
+# configured). Import it here so the registry census below is the same whether
+# or not an earlier test in this worker built such a model.
+import tengri.components.stellar.agb_dust_shell  # noqa: F401
 from tengri.components.sed_model_component import _REGISTRY
 from tengri.forward.component_factory import (
     _DOMAIN_MEMBERSHIP,
