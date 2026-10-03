@@ -245,6 +245,7 @@ def read_catalog(
     id_col: str = "id",
     missing_value: float = MISSING_VALUE,
     delimiter: str = ",",
+    default_relative_error: float | None = None,
 ) -> Catalog:
     """Read a photometric catalog from a CSV file.
 
@@ -271,6 +272,12 @@ def read_catalog(
         Value indicating missing data. Default ``-9999``.
     delimiter : str, optional
         CSV delimiter. Default ``","``.
+    default_relative_error : float, optional
+        CIGALE's ``defaulterror`` (Boquien et al. 2019, A&A 622, A103): a filter
+        column without a ``<filter>_err`` column is kept with
+        ``error = default_relative_error * |flux|`` and one ``UserWarning`` per
+        column (pcigale ``ObservationsManagerPassbands._check_errors``).
+        Must be >= 0. Default ``None``: such a column is skipped.
 
     Returns
     -------
@@ -301,8 +308,14 @@ def read_catalog(
       (negative flux with positive error represents a faint detection, not a limit)
 
     Filter columns must have corresponding ``_err`` columns. Columns without
-    an ``_err`` counterpart are silently skipped.
+    an ``_err`` counterpart are silently skipped, unless
+    ``default_relative_error`` is given.
     """
+    if default_relative_error is not None and not default_relative_error >= 0.0:
+        raise ValueError(
+            f"default_relative_error must be >= 0 (CIGALE: 'The relative default "
+            f"error must be positive'); got {default_relative_error!r}."
+        )
     path = Path(filepath)
     if not path.exists():
         raise FileNotFoundError(f"Catalog file not found: {filepath}")
@@ -321,16 +334,25 @@ def read_catalog(
 
     mapping = filter_mapping or {}
 
-    filter_cols: list[tuple[str, str, str]] = []
+    filter_cols: list[tuple[str, str | None, str]] = []
     for col in headers:
         if col.endswith("_err") or col in (id_col, redshift_col):
             continue
 
         err_col = f"{col}_err"
+        tengri_name = mapping.get(col, col)
         if err_col not in headers:
+            # CIGALE ``defaulterror``: keep the band with error = fraction * |flux|.
+            if default_relative_error is not None and tengri_name in FILTER_REGISTRY:
+                warnings.warn(
+                    f"{default_relative_error * 100}% of {col} taken as errors "
+                    f"(no '{err_col}' column; default_relative_error).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                filter_cols.append((col, None, tengri_name))
             continue
 
-        tengri_name = mapping.get(col, col)
         if tengri_name in FILTER_REGISTRY:
             filter_cols.append((col, err_col, tengri_name))
 
@@ -358,7 +380,10 @@ def read_catalog(
 
         for i, row in enumerate(rows):
             f_val = float(row[flux_col])
-            e_val = float(row[err_col])
+            if err_col is None:
+                e_val = abs(f_val) * default_relative_error
+            else:
+                e_val = float(row[err_col])
 
             # Sentinel detection: abs(value - missing_value) < SENTINEL_MARGIN OR
             # more extreme on the sentinel's own side (missing_value<0 and val<missing_value)
