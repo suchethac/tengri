@@ -2,6 +2,21 @@
 
 ### Fixed
 
+- The composable AGN runner's energy budgets no longer depend on the caller's wavelength
+  grid. The CIGALE-joint disc tie (`agn_power x R`) took the torus power and the disc's
+  reweighted bolometric as trapezoids over the caller's array, so the SED of a
+  `kubota_done` + SKIRTOR model moved by 4e-3 between a grid starting at 10 A and one
+  starting at 0.01 A (the corona carries 0.5 % of the disc energy below 10 A). The torus
+  power is now its closed form (`agn_torus_frac x L_bol`, the native-grid normalization of
+  the template), the disc is evaluated on the SKIRTOR library's own axis for `R` and the
+  reweighted bolometric, the conserving line debit measures disc and line energy on fixed
+  grids (by 3e-2 on the disc between two grids before), and the polar-dust ledger (the
+  graybody's normalization, the absorbed power of the bolometric disc, the torus and
+  graybody budgets) is measured on fixed grids. `l5100_disc` and the 2500/4400 A anchors
+  are evaluated at their wavelengths instead of interpolated from the caller's nodes.
+  On a grid covering the library the values agree with the former ones to the
+  trapezoid error of that grid (about 1e-3).
+
 - AGN template and analytic components no longer normalize over the caller's wavelength
   grid. `torus_lnu_from_grid` (skirtor/nenkova AGNfitter 1p/2p/3p, `cat3d_wind`,
   `cat3d_wind_lowfwd`), the CLUMPY closure, `silva04`, `fritz`, `kd18_agnfitter` (+
