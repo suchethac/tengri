@@ -138,12 +138,13 @@ class TestPrecomputeEngagementCensus:
             f"Reason: {report.energy_balance_lut.reason}"
         )
 
-    def test_free_redshift_disengages_mechanisms(self, synthetic_tophat_obs, ssp_data_wne):
-        """Free redshift should disengage precompute mechanisms (when law reads it).
+    def test_free_redshift_keeps_mechanisms_engaged(self, synthetic_tophat_obs, ssp_data_wne):
+        """Free redshift keeps the precompute mechanisms engaged, tabulated over z.
 
         The narayanan_z dust attenuation law reads redshift to adjust the dust curve.
-        When redshift is free, mechanisms that bake one curve at build time decline
-        because the shape changes across the parameter space.
+        The mechanisms that depend on the evaluation redshift (the energy-balance
+        LUT and the dust-IR band response) are tabulated over the model's redshift
+        range and read at each sample's redshift, rather than declining.
         """
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
@@ -164,14 +165,12 @@ class TestPrecomputeEngagementCensus:
 
         report = precompute_engagement_report(model)
 
-        # Free redshift with narayanan_z (which reads redshift) should disengage
-        # both LUT and dust response because the curve shape varies with redshift.
-        assert report.energy_balance_lut.state == "declined", (
-            f"Expected energy-balance LUT to decline with free redshift on narayanan_z. "
+        assert report.energy_balance_lut.state == "engaged", (
+            f"Expected the energy-balance LUT to engage with free redshift on narayanan_z. "
             f"Reason: {report.energy_balance_lut.reason}"
         )
-        assert report.dust_band_response.state == "declined", (
-            f"Expected dust band response to decline with free redshift. "
+        assert report.dust_band_response.state == "engaged", (
+            f"Expected the dust band response to engage with free redshift. "
             f"Reason: {report.dust_band_response.reason}"
         )
 
@@ -209,7 +208,7 @@ class TestPrecomputeEngagementCensus:
         )
 
     def test_emitter_term_responses_with_free_redshift(self, synthetic_tophat_obs, ssp_data_wne):
-        """Radio/xray term responses should disengage with free redshift."""
+        """Radio/xray term responses stay engaged with free redshift."""
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
@@ -226,11 +225,12 @@ class TestPrecomputeEngagementCensus:
 
         report = precompute_engagement_report(model)
 
-        # Free redshift prevents term-response engagement
+        # A free redshift does not prevent term-response engagement: the response
+        # is tabulated over the redshift range.
         if "radio" in report.emitter_term_responses:
             radio_state = report.emitter_term_responses["radio"].state
-            assert radio_state in ("never_attempted", "declined"), (
-                f"Radio term response should not engage with free redshift. State: {radio_state}"
+            assert radio_state in ("never_attempted", "engaged"), (
+                f"Radio term response should not decline on a free redshift. State: {radio_state}"
             )
 
 

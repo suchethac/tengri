@@ -329,6 +329,63 @@ def apply_lyman_cutoff(
     return jnp.where(wavelength >= cutoff_aa, k, 0.0)
 
 
+def two_component_curves(
+    wavelength: jnp.ndarray,
+    law_bc: str,
+    law_diff: str,
+    bc_params: dict | None = None,
+    diff_params: dict | None = None,
+    lyman_cutoff_aa: float = 0.0,
+    **law_params,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """The birth-cloud and diffuse attenuation curves :func:`two_component_dust` applies.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+    law_bc, law_diff : str
+        Attenuation-law registry keys.
+    bc_params, diff_params : dict, optional
+        Per-screen law-parameter overlays on ``law_params``.
+    lyman_cutoff_aa : float, optional
+        Zero both curves below this wavelength. [Å] ``0.0`` disables.
+    **law_params
+        Shared law keyword arguments.
+
+    Returns
+    -------
+    k_bc, k_diff : ndarray, shape (n_wave,)
+        Curves normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Shared by :func:`two_component_dust` and the
+    energy-balance LUT builders, so a LUT cannot resolve a different curve from
+    the one the direct path applies.
+    """
+    # Per-component law parameters: shared ``law_params`` with optional
+    # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
+    # keys it names, so callers can steepen the birth cloud (FSPS
+    # ``dust1_index=-1.0``) without touching the diffuse ISM.
+    bc_kw = {**law_params, **(bc_params or {})}
+    diff_kw = {**law_params, **(diff_params or {})}
+    # The two screens can carry different laws, so a key that belongs to one is
+    # foreign to the other. Offer each law only what it declares -- and refuse a
+    # key NEITHER declares, which used to vanish into the laws' `**kwargs`
+    # (#2185).
+    reject_unread_law_kwargs({**bc_kw, **diff_kw}, (law_bc, law_diff), "two_component_dust")
+    k_bc = resolve_dust_law(law_bc)(wavelength, **select_law_kwargs(law_bc, bc_kw))
+    k_diff = resolve_dust_law(law_diff)(wavelength, **select_law_kwargs(law_diff, diff_kw))
+    # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
+    # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
+    # extrapolation in place.
+    return (
+        apply_lyman_cutoff(k_bc, wavelength, lyman_cutoff_aa),
+        apply_lyman_cutoff(k_diff, wavelength, lyman_cutoff_aa),
+    )
+
+
 def two_component_dust(
     wavelength: jnp.ndarray,
     younger_fraction: jnp.ndarray,
@@ -493,20 +550,9 @@ def two_component_interval_transmission(
     # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
     # keys it names, so callers can steepen the birth cloud (FSPS
     # ``dust1_index=-1.0``) without touching the diffuse ISM.
-    bc_kw = {**law_params, **(bc_params or {})}
-    diff_kw = {**law_params, **(diff_params or {})}
-    # The two screens can carry different laws, so a key that belongs to one is
-    # foreign to the other. Offer each law only what it declares -- and refuse a
-    # key NEITHER declares, which used to vanish into the laws' `**kwargs`
-    # (#2185).
-    reject_unread_law_kwargs({**bc_kw, **diff_kw}, (law_bc, law_diff), "two_component_dust")
-    k_bc = resolve_dust_law(law_bc)(wavelength, **select_law_kwargs(law_bc, bc_kw))
-    k_diff = resolve_dust_law(law_diff)(wavelength, **select_law_kwargs(law_diff, diff_kw))
-    # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
-    # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
-    # extrapolation in place.
-    k_bc = apply_lyman_cutoff(k_bc, wavelength, lyman_cutoff_aa)
-    k_diff = apply_lyman_cutoff(k_diff, wavelength, lyman_cutoff_aa)
+    k_bc, k_diff = two_component_curves(
+        wavelength, law_bc, law_diff, bc_params, diff_params, lyman_cutoff_aa, **law_params
+    )
     return nested_two_screen_intervals(tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration)
 
 

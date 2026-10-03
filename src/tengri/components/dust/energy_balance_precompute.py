@@ -68,6 +68,7 @@ from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
 __all__ = [
     "EnergyBalanceLUT",
     "build_energy_balance_lut",
+    "build_energy_balance_lut_over_z",
     "lut_l_absorbed_stellar",
     "lut_l_absorbed_stellar_log10",
     "nebular_grid_absorbed_log10",
@@ -123,6 +124,13 @@ class EnergyBalanceLUT(NamedTuple):
     G_old: jnp.ndarray | None = None
     B_fesc_old: jnp.ndarray | None = None
     G_fesc_old: jnp.ndarray | None = None
+    #: ``ln(1+z)`` axis of every ``G`` family for an attenuation law that reads
+    #: the model redshift, else ``None``. When set, each ``G`` (``G``, ``G_fesc``,
+    #: ``G_old``, ``G_fesc_old``) carries a leading redshift axis, e.g.
+    #: ``(n_z, n_met, n_age, n_tau_bc, n_tau_diff)``, and the contraction needs
+    #: the evaluation redshift. The ``B`` families are intrinsic, so they have no
+    #: z axis.
+    ln1pz: jnp.ndarray | None = None
 
 
 def build_energy_balance_lut(
@@ -295,6 +303,69 @@ def build_energy_balance_lut(
     )
 
 
+def build_energy_balance_lut_over_z(
+    ssp_flux: jnp.ndarray,
+    ssp_wave: jnp.ndarray,
+    *,
+    ln1pz: jnp.ndarray,
+    params_at_z,
+    **kwargs,
+) -> EnergyBalanceLUT:
+    r"""Energy-balance LUT for a law whose curve moves with the evaluation redshift.
+
+    The same families as :func:`build_energy_balance_lut`, with every ``G`` built
+    on each ``ln(1+z)`` node so the absorbed luminosity follows the curve at the
+    redshift the model is *evaluated* at (a free redshift, or a per-galaxy
+    runtime redshift under ``WavePrecomp(catalog_z_range=...)``), not the one the
+    spec carried when the table was built.
+
+    Parameters
+    ----------
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
+        SSP specific luminosity per unit mass. [Lsun/Hz/Msun]
+    ssp_wave : ndarray, shape (n_wave,)
+        Rest-frame SSP wavelength grid, ascending. [Angstrom]
+    ln1pz : ndarray, shape (n_z,)
+        Ascending redshift nodes, :math:`\ln(1+z)`. [dimensionless]
+    params_at_z : callable
+        ``params_at_z(z) -> (bc_params, diff_params)`` of jit-safe scalars: the
+        resolved law parameters at redshift ``z``.
+    **kwargs
+        Every other argument of :func:`build_energy_balance_lut` except
+        ``bc_params`` / ``diff_params``.
+
+    Returns
+    -------
+    EnergyBalanceLUT
+        With ``ln1pz`` set and every ``G`` family of shape
+        ``(n_z, n_met, n_age, n_tau_bc, n_tau_diff)``.
+
+    Notes
+    -----
+    Build time, not JIT-compatible. Each node is the table
+    :func:`build_energy_balance_lut` returns at that redshift, so the two agree
+    at a node to round-off by construction.
+    """
+    nodes = [
+        build_energy_balance_lut(ssp_flux, ssp_wave, bc_params=bc, diff_params=diff, **kwargs)
+        for bc, diff in (params_at_z(z) for z in jnp.expm1(jnp.asarray(ln1pz)))
+    ]
+    first = nodes[0]
+
+    def stack(name):
+        if getattr(first, name) is None:
+            return None
+        return jnp.stack([getattr(n, name) for n in nodes])
+
+    return first._replace(
+        G=stack("G"),
+        G_fesc=stack("G_fesc"),
+        G_old=stack("G_old"),
+        G_fesc_old=stack("G_fesc_old"),
+        ln1pz=jnp.asarray(ln1pz),
+    )
+
+
 def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Lower bracketing node index and the two linear weights for ``x``.
 
@@ -346,6 +417,8 @@ def _contract_bg(
     joint_weights: jnp.ndarray,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    ln1pz: jnp.ndarray | None = None,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Per-unit-mass signed absorbed luminosity, :math:`\sum_{m,a} w(B - G)`.
 
@@ -369,12 +442,32 @@ def _contract_bg(
     # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
     # it dominated the whole WavePrecomp forward pass.
     n_met, n_age = B.shape
-    g_sub = jax.lax.dynamic_slice(
-        G,
-        (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
-        (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
-    )
-    g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
+    zero = jnp.zeros((), jnp.int32)
+    if ln1pz is None:
+        g_sub = jax.lax.dynamic_slice(
+            G,
+            (zero, zero, i0, j0),
+            (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+        )
+        g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
+    else:
+        # The curve moves with redshift: G carries a leading ln(1+z) axis and the
+        # contraction reads it at the EVALUATION redshift, linear in ln(1+z).
+        if redshift is None:
+            raise ValueError(
+                "this energy-balance LUT is tabulated over redshift (its attenuation "
+                "law reads the model redshift), so the contraction needs the "
+                "evaluation redshift; none was passed."
+            )
+        from tengri.components._z_response import z_bracket
+
+        k0, w_z = z_bracket(ln1pz, redshift)  # (), (2,)
+        g_sub = jax.lax.dynamic_slice(
+            G,
+            (k0, zero, zero, i0, j0),
+            (w_z.shape[0], n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+        )
+        g_interp = jnp.einsum("zmaij,z,i,j->ma", g_sub, w_z, w_bc, w_diff)
     return jnp.sum(joint_weights * (B - g_interp))
 
 
@@ -388,6 +481,7 @@ def _population_contract(
     younger_fraction: jnp.ndarray | None,
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Per-unit-mass signed absorbed luminosity of one family, young and old mixed.
 
@@ -396,22 +490,20 @@ def _population_contract(
     so the weights ``w * y`` and ``w * (1 - y)`` contract the two families.
     A single-population table (no old family) contracts the young one alone.
     """
+    grids = (lut.tau_bc_grid, lut.tau_diff_grid)
     if G_old is None or younger_fraction is None:
-        return _contract_bg(
-            B, G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights, tau_bc, tau_diff
-        )
+        return _contract_bg(B, G, *grids, joint_weights, tau_bc, tau_diff, lut.ln1pz, redshift)
     y = jnp.asarray(younger_fraction)[None, :]
-    young = _contract_bg(
-        B, G, lut.tau_bc_grid, lut.tau_diff_grid, joint_weights * y, tau_bc, tau_diff
-    )
+    young = _contract_bg(B, G, *grids, joint_weights * y, tau_bc, tau_diff, lut.ln1pz, redshift)
     old = _contract_bg(
         B_old,
         G_old,
-        lut.tau_bc_grid,
-        lut.tau_diff_grid,
+        *grids,
         joint_weights * (1.0 - y),
         tau_bc,
         tau_diff,
+        lut.ln1pz,
+        redshift,
     )
     return young + old
 
@@ -422,10 +514,20 @@ def _lut_contract(
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
     younger_fraction: jnp.ndarray | None = None,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     """Per-unit-mass signed absorbed luminosity of the ``A_0`` (or the only) family."""
     return _population_contract(
-        lut.B, lut.G, lut.B_old, lut.G_old, lut, joint_weights, younger_fraction, tau_bc, tau_diff
+        lut.B,
+        lut.G,
+        lut.B_old,
+        lut.G_old,
+        lut,
+        joint_weights,
+        younger_fraction,
+        tau_bc,
+        tau_diff,
+        redshift,
     )
 
 
@@ -437,6 +539,7 @@ def lut_l_absorbed_stellar_log10(
     tau_diff: jnp.ndarray,
     fesc: jnp.ndarray | None = None,
     younger_fraction: jnp.ndarray | None = None,
+    redshift: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""log10 magnitude and sign of the stellar absorbed luminosity.
 
@@ -475,6 +578,9 @@ def lut_l_absorbed_stellar_log10(
         (row 0 of the stellar component's ``age_boundary_younger_fraction``).
         Mixes the young and old population families of a two-population LUT;
         ignored by a single-population one.
+    redshift : ndarray, shape (), optional
+        Evaluation redshift. Required when ``lut`` is tabulated over redshift
+        (``lut.ln1pz`` is set); ignored otherwise. [dimensionless]
 
     Returns
     -------
@@ -504,7 +610,7 @@ def lut_l_absorbed_stellar_log10(
     """
     from tengri.utils.scale import _not_computable, log10_magnitude
 
-    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction)
+    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction, redshift)
     if fesc is not None and lut.B_fesc is not None and lut.G_fesc is not None:
         contracted_fesc = _population_contract(
             lut.B_fesc,
@@ -516,6 +622,7 @@ def lut_l_absorbed_stellar_log10(
             younger_fraction,
             tau_bc,
             tau_diff,
+            redshift,
         )
         contracted = contracted + jnp.asarray(fesc) * contracted_fesc
     log_relative = log10_magnitude(contracted)
@@ -531,6 +638,7 @@ def lut_l_absorbed_stellar(
     tau_bc: jnp.ndarray,
     tau_diff: jnp.ndarray,
     younger_fraction: jnp.ndarray | None = None,
+    redshift: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Signed stellar bolometric absorbed luminosity from the LUT.
 
@@ -551,6 +659,8 @@ def lut_l_absorbed_stellar(
         Runtime optical depths.
     younger_fraction : ndarray, shape (n_age,), optional
         Per-node young fraction mixing the two population families.
+    redshift : float, optional
+        Evaluation redshift, required when the LUT is tabulated over redshift.
 
     Returns
     -------
@@ -562,7 +672,9 @@ def lut_l_absorbed_stellar(
     ``mass_scale`` is ~1e43, so this product overflows float32. Use
     :func:`lut_l_absorbed_stellar_log10` on a pure-float32 path (#1206).
     """
-    return mass_scale * _lut_contract(lut, joint_weights, tau_bc, tau_diff, younger_fraction)
+    return mass_scale * _lut_contract(
+        lut, joint_weights, tau_bc, tau_diff, younger_fraction, redshift
+    )
 
 
 def nebular_grid_absorbed_log10(

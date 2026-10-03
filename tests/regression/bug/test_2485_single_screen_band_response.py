@@ -84,7 +84,7 @@ def test_the_single_screen_model_builds_its_band_response(synthetic_ssp, synthet
         "the band response was not built, so this model pays the dense per-call "
         "filter integral on every gradient evaluation"
     )
-    assert np.all(np.isfinite(response))
+    assert np.all(np.isfinite(response["values"]))
 
 
 def test_the_band_response_does_not_change_the_photometry(

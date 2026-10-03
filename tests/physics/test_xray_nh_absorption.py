@@ -87,7 +87,8 @@ def test_unabsorbed_limit_matches_intrinsic_power_law() -> None:
     # difference shows up here because we recompute the expected spectrum
     # analytically — use the same divisor so the test pins the active code.
     L_2keV = L_2500 * 10.0 ** (-1.4 / 0.3838)
-    spec = (E_keV / 2.0) ** (-1.8 + 1) * jnp.exp(-E_keV / 300.0)
+    # Yang+2020 Eq. 2: the shape is unity at 2 keV after the cutoff.
+    spec = (E_keV / 2.0) ** (-1.8 + 1) * jnp.exp(-(E_keV - 2.0) / 300.0)
     expected = jnp.where(wave < 124.0, L_2keV * spec, 0.0)
 
     chex.assert_equal_shape([l_unabs, expected])

@@ -19,6 +19,10 @@ Cross-component publications
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
+- ``state.derived["log_L_12um"]``, ``["log_L_6um"]`` (dex re erg/s):
+  :math:`\\log_{10}\\nu L_\\nu` at 12 and 6 µm of the AGN's own emission (disc +
+  torus + polar dust for the composable model, the whole SED for a monolithic
+  one). The ``lopez24`` X-ray corona is anchored to ``log_L_12um``.
 - ``state.derived["sed_agn"]``: the AGN SED contribution
   (erg/s/Hz, shape n_wave) for diagnostics.
 - ``state.derived["sed_agn_disc"]``, ``["sed_agn_torus"]``,
@@ -53,8 +57,12 @@ from tengri.components.agn._lbol_reference import (
     rescale,
 )
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
-from tengri.components.agn.unified import resolve_agn_model
+from tengri.components.agn.unified import (
+    monolithic_models_with_line_components,
+    resolve_agn_model,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
 from tengri.parameters.resolve import require_redshift
@@ -215,6 +223,14 @@ class AGNSEDComponent(TemplateThreading):
                 "(absent for monolithic AGN models)",
             ),
             DerivedKey(
+                "sed_agn_lines_attenuated",
+                "erg/s/Hz",
+                "AGN line-only rest-frame SED (NLR+BLR+FeII; GRAHSP lines+FeII) as it "
+                "enters the pipeline SED, after the AGN's own screen and the host "
+                "agn_screen; zeros for models without lines. Routed to the "
+                "instrument-only kernel in the spectrum projection (#2565)",
+            ),
+            DerivedKey(
                 "sed_agn_polar",
                 "erg/s/Hz",
                 "AGN polar-dust re-emission rest-frame SED (CIGALE "
@@ -231,6 +247,18 @@ class AGNSEDComponent(TemplateThreading):
                 "L_4400_intrinsic",
                 "erg/s/Hz",
                 "AGN intrinsic disc L_nu at 4400 A (un-reddened); drives radio loudness",
+            ),
+            DerivedKey(
+                "log_L_12um",
+                "dex",
+                "log10 nu L_nu at 12 um [dex re erg/s] of disc + torus + polar dust "
+                "(the whole SED for monolithic models); drives the lopez24 alpha_IRX corona",
+            ),
+            DerivedKey(
+                "log_L_6um",
+                "dex",
+                "log10 nu L_nu at 6 um [dex re erg/s] of disc + torus + polar dust "
+                "(the whole SED for monolithic models)",
             ),
             DerivedKey(
                 "agn_cos_inc",
@@ -543,6 +571,12 @@ class AGNSEDComponent(TemplateThreading):
                 return_components=True,
                 **agn_kwargs,
             )
+            agn_lines_for_kernel = agn_components["lines"]
+            # nu L_nu at 12 and 6 um of the AGN's own emission: disc + torus +
+            # polar dust of the runner's rescaled components (erg/s/Hz ~1e30,
+            # representable in float32); the nu multiply is added in log space.
+            mir_sed = agn_components["disc"] + agn_components["torus"] + agn_components["polar"]
+            mir_log_scale = 0.0
         else:
             lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
             if use_ref:
@@ -553,11 +587,29 @@ class AGNSEDComponent(TemplateThreading):
                 # the reference so the L_lambda arithmetic stays in float32
                 # range; shape-invariant blocks ignore the kwarg. (#1206)
                 agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": jnp.asarray(agn_log_lbol)}
-            L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
+            if self.config.model in monolithic_models_with_line_components():
+                # Line-only light for the instrument-only kernel (#2565); the
+                # total ``L_agn`` is unchanged.
+                L_agn_unit, line_components = agn_fn(
+                    wave, agn_log_lbol=lbol_eval, return_components=True, **agn_kwargs
+                )
+                lines_unit = line_components["lines"]
+            else:
+                L_agn_unit = agn_fn(wave, agn_log_lbol=lbol_eval, **agn_kwargs)
+                lines_unit = jnp.zeros_like(L_agn_unit)
             L_agn = rescale(L_agn_unit, offset) if use_ref else L_agn_unit
+            agn_lines_monolithic = rescale(lines_unit, offset) if use_ref else lines_unit
             L_2500_intrinsic = jnp.asarray(0.0)
             L_4400_intrinsic = jnp.asarray(0.0)
             agn_components = None
+            agn_lines_for_kernel = agn_lines_monolithic
+            # A monolithic model has no sub-blocks: nu L_nu comes from the whole
+            # SED, measured on the reference-scale spectrum with the true scale
+            # added in log space.
+            mir_sed, mir_log_scale = L_agn_unit, offset
+
+        log_L_12um = log10_nu_lnu_at(wave, mir_sed, 1.2e5, mir_log_scale)
+        log_L_6um = log10_nu_lnu_at(wave, mir_sed, 6.0e4, mir_log_scale)
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
@@ -568,6 +620,8 @@ class AGNSEDComponent(TemplateThreading):
             sed_agn=L_agn,
             L_2500_intrinsic=L_2500_intrinsic,
             L_4400_intrinsic=L_4400_intrinsic,
+            log_L_12um=log_L_12um,
+            log_L_6um=log_L_6um,
             # X-CIGALE tilts the corona with the AGN viewing angle
             # (yang20.py: cosi = cos(agn.i) for SKIRTOR, sin(psy) for
             # Fritz); publish cos(i) so the X-ray block shares this
@@ -593,6 +647,16 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_torus"] = agn_components["torus"]
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
+        # The line-only light exactly as it enters the pipeline SED (#2565): the
+        # AGN's own screen is already applied (``agn_components["lines"]``, the
+        # monolithic ``return_components`` lines), the host dust screen is not.
+        # The two-component / single-screen dust adapters multiply this by the
+        # transmission they apply to ``sed_agn`` when the AGN runs before them
+        # (``agn_screen != "none"``); when it runs after them nothing else
+        # touches it. The spectrum projection broadens this array with the
+        # instrument kernel alone: AGN lines are painted at their own width and
+        # never pass through the stellar library.
+        derived_overrides["sed_agn_lines_attenuated"] = agn_lines_for_kernel
         if (
             self._state is not None
             and self._state.filter_waves is not None
