@@ -331,7 +331,7 @@ def build_components(
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
-    # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
+    # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
     # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
     sfh_bin_edges_gyr: Any = None,
