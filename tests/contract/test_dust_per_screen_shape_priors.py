@@ -13,6 +13,7 @@ from tengri.components.dust.two_component import DustSEDComponent, DustSEDCompon
 from tengri.config.exceptions import ParameterError
 from tengri.parameters.groups import parse_groups
 from tengri.protocols.component import ForwardState
+from tests._age_boundary import hand_age_derived
 
 pytestmark = pytest.mark.contract
 
@@ -47,10 +48,12 @@ class TestPerScreenDustShapePriors:
 
         A young, dusty birth cloud (small ``age_gyr``/``tau_gyr``, large
         ``tau_bc``) is where the birth-cloud screen actually matters: the
-        default DPL SFH used before leaves almost no stellar mass under
-        10 Myr, so a "some nonzero difference exists" assertion there passed
-        on a vacuous ~5e-4 effect regardless of whether the per-screen value
-        was really threaded through. This configuration measures ~11%.
+        birth-cloud screen acts on the mass formed less than 10 Myr ago
+        (an exact share of every SSP node's mass), so an SFH that leaves
+        almost no mass under 10 Myr (age 0.3 Gyr, tau 0.1 Gyr measures ~0.1%)
+        makes a "some nonzero difference exists" assertion vacuous regardless of
+        whether the per-screen value was really threaded through. An SFH 15 Myr
+        old with a 5 Myr timescale measures ~11%.
         """
 
         def build(slope_bc, slope_diff):
@@ -59,8 +62,8 @@ class TestPerScreenDustShapePriors:
                 observation=synthetic_tophat_obs,
                 sfh={
                     "type": "dpl",
-                    "age_gyr": Fixed(0.3),
-                    "tau_gyr": Fixed(0.1),
+                    "age_gyr": Fixed(0.015),
+                    "tau_gyr": Fixed(0.005),
                     "other_params": Fixed(DEFAULT),
                 },
                 dust_attenuation={
@@ -595,10 +598,16 @@ class TestNebularScreenLiveOverrides:
         params = dict(dust_tau_bc=1.0, dust_tau_diff=0.3, dust_Rv=3.1, redshift=0.1)
 
         out_low = comp.attenuate_line_catalog(
-            {**params, "dust_Rv_neb": 2.0}, self.LINE_WAVE, self.LOG_LINE_LUMS
+            {**params, "dust_Rv_neb": 2.0},
+            self.LINE_WAVE,
+            self.LOG_LINE_LUMS,
+            jnp.asarray([1.0, 0.0]),
         )
         out_high = comp.attenuate_line_catalog(
-            {**params, "dust_Rv_neb": 6.0}, self.LINE_WAVE, self.LOG_LINE_LUMS
+            {**params, "dust_Rv_neb": 6.0},
+            self.LINE_WAVE,
+            self.LOG_LINE_LUMS,
+            jnp.asarray([1.0, 0.0]),
         )
         assert not np.allclose(np.asarray(out_low), np.asarray(out_high))
 
@@ -609,14 +618,19 @@ class TestNebularScreenLiveOverrides:
 
         comp_live = self._line_component(live=True)
         out_live = comp_live.attenuate_line_catalog(
-            {**params, "dust_Rv_neb": 5.0}, self.LINE_WAVE, self.LOG_LINE_LUMS
+            {**params, "dust_Rv_neb": 5.0},
+            self.LINE_WAVE,
+            self.LOG_LINE_LUMS,
+            jnp.asarray([1.0, 0.0]),
         )
 
         config_static = DustSEDComponentConfig(
             law_bc="cardelli", law_diff="cardelli", neb_law_overrides=(("dust_Rv", 5.0),)
         )
         comp_static = DustSEDComponent(config=config_static)
-        out_static = comp_static.attenuate_line_catalog(params, self.LINE_WAVE, self.LOG_LINE_LUMS)
+        out_static = comp_static.attenuate_line_catalog(
+            params, self.LINE_WAVE, self.LOG_LINE_LUMS, jnp.asarray([1.0, 0.0])
+        )
 
         np.testing.assert_array_equal(np.asarray(out_live), np.asarray(out_static))
 
@@ -629,7 +643,12 @@ class TestNebularScreenLiveOverrides:
         sed_nebular = jnp.ones(n_wave) * 5e29
         return ForwardState(
             wave=wave,
-            derived={"lnu_age": lnu_age, "ssp_ages_yr": ages_yr, "sed_nebular": sed_nebular},
+            derived={
+                "lnu_age": lnu_age,
+                "ssp_ages_yr": ages_yr,
+                **hand_age_derived(ages_yr),
+                "sed_nebular": sed_nebular,
+            },
         )
 
     def test_continuum_rv_neb_sweep_moves_the_sed(self):

@@ -20,6 +20,10 @@ References
 Notes
 -----
 All functions are JIT-compatible and differentiable through JAX.
+
+The #2436 additive ionizing-photon-budget split, ``lyc_shares``, moved to
+:mod:`tengri.components.lyc` (the one Lyman-continuum module) — import it
+from there.
 """
 
 from __future__ import annotations
@@ -95,6 +99,48 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     .. [2] Inoue, A. K. 2011, MNRAS, 415, 2920.
     .. [3] CIGALE nebular module: ``pcigale/sed_modules/nebular.py``, lines
         156-162.
+
+    Per-photon LyC budget (#2539 item 1)
+    -------------------------------------
+    The ionizing-photon budget of the population this factor is applied to
+    splits into exactly THREE **additive**, non-overlapping shares, not a
+    sequential/product form:
+
+    - ``f_esc``: escapes the HII region unattenuated (observed as-is).
+    - ``f_dust``: absorbed by dust grains mixed into the HII region, heating
+      dust (never reaches an H atom).
+    - ``1 - f_esc - f_dust``: photoionizes hydrogen, ultimately re-emerging
+      as the nebular line + continuum spectrum this function's ``k`` scales.
+
+    This is read directly off this function's own structure: ``f_esc`` and
+    ``f_dust`` are combined as ``f_total = f_esc + f_dust`` *before* anything
+    else happens (one clamp, one combined quantity), not as
+    ``f_dust * (1 - f_esc)`` (dust getting a second, sequential pass at
+    whatever ``f_esc`` left behind) or any other product form. CIGALE's own
+    call sites confirm the same reading: ``nebular.py`` masks the emergent
+    stellar LyC by ``(1 - f_esc)`` alone (``self.absorbed_old/young``, lines
+    ~165-169) and separately credits dust with ``f_dust`` of the *raw*
+    ionizing luminosity (``dust.luminosity = (lum_ly_young + lum_ly_old) *
+    f_dust``, lines 191-193) -- two independent, parallel shares of the same
+    original budget, never ``f_dust`` of a fesc-depleted remainder.
+
+    The ``alpha_1 / alpha_B`` term is a SEPARATE correction, internal to the
+    ``1 - f_total`` share alone: it accounts for the fraction of case-B
+    recombinations that land directly on the ground state (rate
+    :data:`ALPHA_1`) and re-emit a further ionizing photon that is reabsorbed
+    on the spot (the standard case-B/on-the-spot approximation), rather than
+    contributing to the externally observable recombination-line spectrum
+    (rate :data:`ALPHA_B`). It does not reach ``f_esc`` or ``f_dust``: those
+    are macroscopic (HII-region-boundary) processes that already happened to
+    the photon *before* it had a chance to ionize anything, so they are not
+    revisited by the on-the-spot cascade internal to the ionized share.
+    #2539's dust-IR-budget credit accordingly multiplies the *raw* per-photon
+    ``f_dust`` directly against the credited population's LyC luminosity
+    (:func:`tengri.forward.energy_balance.log10_fdust_lyc_credit`), the same
+    additive share CIGALE's own ``dust.luminosity`` uses -- not a
+    ``k``-style, recombination-corrected quantity, because dust absorption at
+    the HII-region boundary is a one-shot process this function's internal
+    cascade never revisits.
 
     Examples
     --------

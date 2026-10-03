@@ -41,7 +41,6 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 # seam (single dispatch, #844), only their config dataclasses are imported here.
 from tengri.components.dust.age_binned import (
     AgeBinnedDustComponentConfig,
-    validate_screens_against_grid,
 )
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
@@ -398,8 +397,13 @@ def build_components(
     dust_agn_screen: str = "none",
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
-    dust_lyc_absorb_all: bool = False,
-    dust_eb_include_lyc: bool = False,
+    dust_lyc_reprocessed_by: str = "young",
+    dust_lyc_in_energy_balance: bool = False,
+    dust_lyc_escape_geometry: str = "screened",
+    # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
+    # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
+    dust_t_birth_yr: float = 1e7,
+    dust_transition_width_dex: float = 0.0,
     dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
@@ -430,6 +434,16 @@ def build_components(
     # budget) is unaffected either way. False (default) is today's strict/
     # relaxed energy balance, unchanged.
     dust_log_l_ir_requested: bool = False,
+    # Whether the HII-region dust-heating credit (#2539 item 3,
+    # energy_balance.log10_add_fdust_credit) can ever be nonzero, resolved
+    # from spec provenance by ``SEDModel._fdust_credit_active``: True when
+    # ``neb_fdust_frac`` is FREE or Fixed at a nonzero value, False when it
+    # is Fixed at exactly 0 or not declared at all (BakedIn backend, or no
+    # nebular component built). False lets each attenuator's ``apply()``
+    # skip forming the credit outright (one decision point, not per-
+    # consumer guessing); True (default, including a component built
+    # directly with no spec to ask) keeps the smooth combine, unchanged.
+    dust_fdust_credit_active: bool = True,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -560,35 +574,13 @@ def build_components(
     """
     components: list[SEDComponent] = []
 
-    # 1. Stellar (always required, it publishes the cross-component
-    #    inputs that every later adapter reads).
-    components.append(
-        StellarSEDComponent(
-            config=StellarSEDComponentConfig(
-                sfh_model=sfh_model,
-                field=field,
-                metallicity_model=metallicity_model,
-                n_grid=n_grid,
-                lgmet_scatter=lgmet_scatter,
-                age_kernel=age_kernel,
-                field_centering=field_centering,
-                sfh_bin_edges_gyr=sfh_bin_edges_gyr,
-                met_bin_edges_log_yr=met_bin_edges_log_yr,
-            ),
-            ssp_data=ssp_data,
-        )
-    )
-
-    # 2. Dust (optional), runs BEFORE AGN so the AGN component can
-    # read ``state.derived["L_absorbed"]`` for the CIGALE-style
-    # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
-    # coupling (see ``agn/component.py`` and ``agn/_params.py:
-    # agn_ir_frac``). Note: although appended here, the topological sort
-    # places dust AFTER the nebular component (DustSEDComponent declares
-    # ``sed_nebular`` an optional input) so the nebular continuum is
-    # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
-    # AGN/radio/xray SEDs are still passed through unattenuated by stellar
-    # dust (they are added after dust runs).
+    # The attenuator's config is built FIRST: it is the ONE place that decides
+    # which age boundaries the stellar component must publish exact
+    # younger-than-boundary mass fractions for (and with what dispersal
+    # width), so the stellar config below can carry them. Single-screen and
+    # dust-free models request none and pay nothing.
+    atten_type = None
+    atten_config = None
     if use_dust:
         # Build the per-model attenuator config (parameterization). Class
         # SELECTION is single-dispatch: _resolve_registry_component looks the
@@ -601,6 +593,8 @@ def build_components(
                 geometry=wg00_geometry,
                 structure=wg00_structure,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
@@ -609,17 +603,18 @@ def build_components(
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "age_binned":
             atten_type = "age_binned"
-            atten_config = AgeBinnedDustComponentConfig(screens=tuple(dust_screens))
-            # #2528: a finite lower window edge too close to
-            # the loaded grid's youngest SSP node silently mismatches the
-            # stellar path (nonzero weight) against the line/nebular path
-            # (the t -> 0 rule gives it exactly 0). Refuse at build time.
-            validate_screens_against_grid(
-                atten_config.screens, ssp_data, atten_config.transition_width_dex
+            atten_config = AgeBinnedDustComponentConfig(
+                screens=tuple(dust_screens),
+                transition_width_dex=dust_transition_width_dex,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         else:
             atten_type = "two_component"
@@ -640,11 +635,47 @@ def build_components(
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                lyc_absorb_all=dust_lyc_absorb_all,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
+                t_birth_yr=dust_t_birth_yr,
+                transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                fdust_credit_active=dust_fdust_credit_active,
             )
 
+    # 1. Stellar (always required, it publishes the cross-component
+    #    inputs that every later adapter reads).
+    components.append(
+        StellarSEDComponent(
+            config=StellarSEDComponentConfig(
+                sfh_model=sfh_model,
+                field=field,
+                metallicity_model=metallicity_model,
+                n_grid=n_grid,
+                lgmet_scatter=lgmet_scatter,
+                age_kernel=age_kernel,
+                field_centering=field_centering,
+                sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+                met_bin_edges_log_yr=met_bin_edges_log_yr,
+                age_boundaries_yr=tuple(getattr(atten_config, "age_boundaries_yr", ())),
+                age_boundary_width_dex=float(getattr(atten_config, "age_boundary_width_dex", 0.0)),
+            ),
+            ssp_data=ssp_data,
+        )
+    )
+
+    # 2. Dust (optional), runs BEFORE AGN so the AGN component can
+    # read ``state.derived["L_absorbed"]`` for the CIGALE-style
+    # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
+    # coupling (see ``agn/component.py`` and ``agn/_params.py:
+    # agn_ir_frac``). Note: although appended here, the topological sort
+    # places dust AFTER the nebular component (DustSEDComponent declares
+    # ``sed_nebular`` an optional input) so the nebular continuum is
+    # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
+    # AGN/radio/xray SEDs are still passed through unattenuated by stellar
+    # dust (they are added after dust runs).
+    if use_dust:
         components.append(
             _resolve_registry_component("dust_attenuation", atten_type, config=atten_config)
         )

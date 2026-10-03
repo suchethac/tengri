@@ -475,6 +475,14 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: Re-taken for the Lyman-edge convention of the dust energy balance (the cell that
+#: straddles 911.76 A is integrated with the step model, not zeroed-and-trapezoided
+#: from 912 A). Measured: ``L_absorbed`` drops by 1.357e-3 on this model; an independent
+#: numpy step-model integral of the same SEDs reproduces the new ``L_ir`` to 3e-9 and the
+#: old hard-912 construction reproduces the old one to 1.4e-3. The AGN components scale
+#: with the stellar dust luminosity (``fracAGN``), so ``rest_sed`` below 912 A (AGN only)
+#: moves by exactly -1.357e-3 and the dust-emission bands (WISE) by -7.5e-4; the
+#: stellar optical is unchanged to 5e-5. rest_sed_sum moved -7.2e-5 / -1.1e-4 / -1.3e-4.
 #: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
 #: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
 #: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
@@ -484,25 +492,25 @@ _AGN_MBH_DUST = {
 #: disc is multiplied by ``eta(30 deg) T``.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.522087146372271e32,
-        "rest_sed_0": 2.7414641089992215e23,
-        "rest_sed_mid": 3.059759671014202e28,
-        "rest_sed_last": 8.775691573813786e21,
-        "photometry": (1.0990406680264032e-27, 1.571190125160936e-27, 1.7648209267569442e-27),
+        "rest_sed_sum": 1.5219770944672467e32,
+        "rest_sed_0": 2.7377447956282348e23,
+        "rest_sed_mid": 3.059752909666647e28,
+        "rest_sed_last": 8.775649813705561e21,
+        "photometry": (1.0990378624384915e-27, 1.5702174057371188e-27, 1.763496468976801e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5692038430133054e32,
-        "rest_sed_0": 3.32447947548655e24,
-        "rest_sed_mid": 3.170035763011865e28,
-        "rest_sed_last": 8.836905506469256e21,
-        "photometry": (1.1413516017138159e-27, 1.5731015599094376e-27, 1.7653901893068474e-27),
+        "rest_sed_sum": 1.5690298684184893e32,
+        "rest_sed_0": 3.319969191757445e24,
+        "rest_sed_mid": 3.169879391336704e28,
+        "rest_sed_last": 8.836780698110473e21,
+        "photometry": (1.1412913933603808e-27, 1.5721262472637014e-27, 1.7640649592146205e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5893067919899514e32,
-        "rest_sed_0": 2.546937562859289e24,
-        "rest_sed_mid": 3.2078590999342967e28,
-        "rest_sed_last": 9.086913093044805e21,
-        "photometry": (1.1542181906962566e-27, 1.5812750837422911e-27, 1.767532048985811e-27),
+        "rest_sed_sum": 1.589105543951475e32,
+        "rest_sed_0": 2.5434821614547935e24,
+        "rest_sed_mid": 3.2076514137654355e28,
+        "rest_sed_last": 9.086449102219053e21,
+        "photometry": (1.1541405263869853e-27, 1.580288682169155e-27, 1.766203913056776e-27),
     },
 }
 

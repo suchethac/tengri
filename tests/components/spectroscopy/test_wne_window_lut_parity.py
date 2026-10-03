@@ -215,7 +215,7 @@ def _window_lut_indices(m, ssp, p, defs):
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
     trans = two_component_dust(
         wavelength=pc.window_centers,
-        age_grid=ages,
+        younger_fraction=jnp.asarray(st.derived["age_boundary_younger_fraction"])[0],
         tau_v1=jnp.asarray(p["dust_tau_bc"]),
         tau_v2=jnp.asarray(p["dust_tau_diff"]),
         law_bc="calzetti",
@@ -366,10 +366,10 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
         # (redshift) it reads directly. Safe under jit: a static membership
         # test plus filling in compile-time-constant Fixed values.
         full_params = merge_fixed_params(m.spec, params)
-        jw, tm, ages = stellar.compute_joint_weights(full_params)
+        jw, tm, _ages = stellar.compute_joint_weights(full_params)
         trans = two_component_dust(
             wavelength=pc.window_centers,
-            age_grid=ages,
+            younger_fraction=stellar.compute_age_boundary_fractions(full_params)[0],
             tau_v1=full_params["dust_tau_bc"],
             tau_v2=full_params["dust_tau_diff"],
             law_bc="calzetti",
@@ -461,7 +461,11 @@ def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
         p["dust_tau_bc"] = jnp.asarray(1.5 * tau)
         exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=False))
         fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
-        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9))
+        # Relative error, with the denominator floored at one index unit (1 Angstrom
+        # for an equivalent width, 1 for a break ratio): an index whose value passes
+        # through zero (this draw's Hbeta EW is -0.10 A) has no meaningful relative
+        # error, and the window LUT's intra-window error is absolute (~3e-4 here).
+        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1.0))
         assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e} >= {tol}"
 
 

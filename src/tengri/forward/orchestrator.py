@@ -204,6 +204,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",
+    "log_L_lyc_age": "dex",
+    "lnu_age_ion": "erg/s/Hz/Msun",
+    "ssp_wave_ion": "Angstrom",
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
@@ -244,6 +247,11 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_diff_attenuation_precomp": "",
     "dust_diff_attenuation_slope_precomp": "1/Angstrom",
     "dust_young_indicator": "",
+    "dust_young_lyc_gate_subband_precomp": "",
+    "dust_spec_neb_transmission_precomp": "",
+    # Stellar: per-node formed-mass fraction younger than each requested age
+    # boundary, shape (n_boundary, n_age) (components/stellar/age_boundary.py).
+    "age_boundary_younger_fraction": "",
     "dust_diff_transmission": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
@@ -251,6 +259,10 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_ir": "dex",
     "log_L_absorbed": "dex",
     "log_L_ir_emergent": "dex",
+    "log_L_lyc_dust": "dex",
+    "log_L_lyc": "dex",
+    "lyc_fdust": "",
+    "lyc_fesc": "",
     "log_L_agn_bol": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",

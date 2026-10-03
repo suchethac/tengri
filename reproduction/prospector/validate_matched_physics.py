@@ -41,8 +41,8 @@ absorbed energy at this fiducial (#961, #922).
 
 Measured here, both screens correct, MIR / FIR median ratio:
 
-    eb_include_lyc = False    0.900x / 0.894x
-    eb_include_lyc = True     0.999x / 0.999x
+    lyc_in_energy_balance = False    0.900x / 0.894x
+    lyc_in_energy_balance = True     0.999x / 0.999x
 
 So the deficit is a convention, not a defect, and the opt-in closes it to
 floating point. Worth stating plainly because the first version of this script
@@ -200,7 +200,7 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust["eb_include_lyc"] = True
+        dust["lyc_in_energy_balance"] = True
     m = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(MET_LOGZSOL), "all_params": Fixed(DEFAULT)},
@@ -334,7 +334,7 @@ def main():
     # Both conventions matched: single screen AND LyC in the budget.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0, include_lyc=True)
     L_t_on_f = U.regrid(w_t, L_t, w_f)
-    report(w_f, L_t_on_f, L_f, "tau_bc = 0 + eb_include_lyc (fully FSPS-equivalent)")
+    report(w_f, L_t_on_f, L_f, "tau_bc = 0 + lyc_in_energy_balance (fully FSPS-equivalent)")
 
     # The ratios above are read without knowing which bandpass weight FSPS
     # uses internally; this is the evidence that that is safe.
