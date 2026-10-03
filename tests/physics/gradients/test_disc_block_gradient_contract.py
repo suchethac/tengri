@@ -66,7 +66,18 @@ _POINT = {
 # h ~ 1e-3 (measured at 0.1166:
 # FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
 # step is far below that.
-_STEP = {"agn_kt_warm": 2e-3, "agn_gamma_warm": 1e-3, "agn_a_spin": 3e-3}
+# ``agn_f_hard`` is stepped at 1e-5, not the default 1e-4: the SED responds to it as ~log(f_hard)
+# (d sum(log10 L)/d f_hard = -6.2e4 at 0.005), so the central difference carries a truncation
+# error of relative size (h / f_hard)^2 / 3, which is 1.3e-4 at h = 1e-4 (2% of the value) and
+# 1.3e-8 at h = 1e-5. Measured at the r_hot_unclipped point, float64-interpolated template:
+# AD -62035.3458; FD h = 1e-4, 1e-5, 1e-6: -62026.019, -62035.253, -62035.3457. With the
+# float32 production template: AD -62035.3481; FD -62026.019, -62035.357, -62035.984.
+_STEP = {
+    "agn_kt_warm": 2e-3,
+    "agn_gamma_warm": 1e-3,
+    "agn_a_spin": 3e-3,
+    "agn_f_hard": 1e-5,
+}
 # ``agn_kt_warm`` and ``agn_a_spin`` are held to 1e-3, not 1e-4: through 50 warm rings the
 # float32-quantized, piecewise-linear template makes the central difference itself scatter by
 # ~5e-4 of its value across steps. agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033, -5.035
