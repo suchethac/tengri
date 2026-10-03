@@ -116,6 +116,14 @@ _CONTROLS: dict[str, tuple[str, float, float]] = {
 #: a parameter that genuinely does nothing.
 _MIN_RESPONSE = 1e-9
 
+#: Parameters whose response is swept from a shifted base point. ``agn_r_warm_ratio`` sets the
+#: warm-zone radius relative to ``R_hot``; at the fixture's sampled draw (``agn_log_lbol`` 9.0,
+#: ``log M_BH`` 7.59, ``f_hard`` 0.096, so lambda_Edd = 7.8e-4) the hot flow fills the disc and
+#: ``R_hot`` and ``R_warm`` both clip to ``R_out`` for ratio 1 and 5 alike, where the parameter
+#: has no effect by physics. At ``agn_log_lbol`` 11.5 the zones are separate (``R_warm`` 17.1 vs
+#: 77.8 r_g, response 0.145; at 12.9 it is 0.60).
+_SWEPT_AT: dict[str, dict[str, float]] = {"agn_r_warm_ratio": {"agn_log_lbol": 11.5}}
+
 
 # ── Measurement ───────────────────────────────────────────────────
 def _published(state) -> dict[str, np.ndarray]:
@@ -302,7 +310,8 @@ def responses(synthetic_tophat_obs):
         for name, fam, lo, hi in _FORWARDED:
             if fam != family or name not in base:
                 continue
-            measured[name] = _response(model, base, name, lo, hi)
+            shifted = {k: jnp.array(v) for k, v in _SWEPT_AT.get(name, {}).items()}
+            measured[name] = _response(model, {**base, **shifted}, name, lo, hi)
 
     return {"measured": measured, "controls": controls, "free": free_params}
 
