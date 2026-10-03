@@ -239,6 +239,52 @@ def run_nifty_fast_vi(
     )
 
 
+NIFTY_METHODS: tuple[str, ...] = (
+    "vi",
+    "vi_nonlinear",
+    "vi_nonlinear_fast",
+    "vi_linear",
+    "vi_linear_fast",
+)
+#: Methods whose objective is the shared loss or tengri's own JAX energies and
+#: therefore score censored data.
+MASK_HONORING_METHODS: tuple[str, ...] = (
+    "map",
+    "mcmc_nuts",
+    "mcmc_nuts_fast",
+    "vi_fullrank",
+    "vi_meanfield",
+    "native_vi_linear",
+    "native_vi_nonlinear",
+)
+
+
+def check_nifty_supports_data_mask(data_mask) -> None:
+    """Refuse censored data on the NIFTy engines.
+
+    NIFTy's ``Gaussian`` and ``VariableCovarianceGaussian`` likelihoods cannot
+    represent an upper or lower limit, so a fit with a non-zero ``data_mask``
+    entry would score the limit value as a detection.
+
+    Parameters
+    ----------
+    data_mask : array_like or None
+        Per-datum censoring flags (0 detected, 1 upper, -1 lower).
+
+    Raises
+    ------
+    ValueError
+        If any entry of ``data_mask`` is non-zero.
+    """
+    if data_mask is None or not bool(jnp.any(jnp.asarray(data_mask) != 0)):
+        return
+    raise ValueError(
+        "The NIFTy VI methods (" + ", ".join(NIFTY_METHODS) + ") cannot score "
+        "censored data: data_mask has non-zero entries (upper/lower limits). "
+        "Methods that honor data_mask: " + ", ".join(MASK_HONORING_METHODS) + "."
+    )
+
+
 def _get_or_build_nifty_likelihood(fitter):
     """Return cached NIFTy likelihood, building on first call.
 
@@ -246,7 +292,10 @@ def _get_or_build_nifty_likelihood(fitter):
     (physics-only, data-free) so the physics stack compiles once per model
     structure regardless of galaxy count.  Variable-noise models build their
     own per-Fitter model because ``signal_response`` captures ``noise`` data.
+
     """
+    check_nifty_supports_data_mask(fitter.data_mask)
+
     cached = _model_cache_owner.get_or_compile_model(fitter.model).get("nifty_lh")
     if cached is not None:
         return cached

@@ -169,6 +169,10 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
         )
 
 
+#: Canonical registry names of the NIFTy-backed VI engines (no censoring support, #2667).
+_NIFTY_VI_BACKENDS = frozenset({"vi", "vi_nonlinear_fast", "vi_linear", "vi_linear_fast"})
+
+
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
     # --- Variational inference: 6 canonical names ---
@@ -4192,6 +4196,13 @@ class Fitter:
             entry = get_backend(chosen)
         else:
             entry = get_backend(method)
+
+        # NIFTy's Gaussian likelihoods cannot represent censoring: refuse before
+        # anything compiles rather than score a limit as a detection (#2667).
+        if entry.name in _NIFTY_VI_BACKENDS:
+            from tengri.inference.backends.vi.nifty import check_nifty_supports_data_mask
+
+            check_nifty_supports_data_mask(self.data_mask)
 
         # Pre-flight speed guard: steer many-evaluation samplers off the slow
         # exact forward path onto the WavePrecomp LUT (see helper above).

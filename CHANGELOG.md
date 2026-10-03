@@ -48,6 +48,9 @@
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
 
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
+- `LineFluxData.log_likelihood` and `.chi2` score an upper or lower line-flux limit as ln Φ(z) through the shared censored term (Boquien et al. 2019, Eq. 15). The 1e-30 probability clamp is gone, so a strongly violated limit keeps its gradient (z = −15 and −30 give ln Φ(z) ≈ −z²/2 and a non-zero slope). Lower limits were scored as detections, and `chi2` dropped upper limits. A detection-only `log_likelihood` is unchanged to the bit (#2665).
+- The `data_mask` spectroscopy/joint loss branch now reads `line_flux_limit_mask` and scores line-flux limits with the same censored term as the photometry path (#2666).
+- The native VI energies (`jit_engine` hamiltonian and the `native_vi_*` seed ranking) now honor `data_mask`. The NIFTy methods (`vi`, `vi_nonlinear`, `vi_nonlinear_fast`, `vi_linear`, `vi_linear_fast`) cannot represent censoring and raise `ValueError` from `Fitter.run`, before anything compiles, when `data_mask` has a non-zero entry; the message names `map`, `mcmc_nuts`, `vi_fullrank` and the other methods that honor it (#2667).
 
 ### Added
 

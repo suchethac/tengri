@@ -26,10 +26,11 @@ from __future__ import annotations
 import dataclasses
 
 import jax.numpy as jnp
-import jax.scipy.special as jsp
+from jax.scipy.stats import norm
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
+from tengri.observation.noise import DETECTED, censored_neg_log_likelihood
 
 _NAME_TO_WAVELENGTH: dict[str, float] = {t[0]: t[1] for t in _DEFAULT_OPTICAL_LINES}
 
@@ -80,7 +81,9 @@ class LineFluxData:
     non-detections (typically <2-3σ); ``fluxes`` carries the limit value.
     In the fit these enter as censored data points:
     ``ln L = ln Φ((F_lim − F_model)/σ)``, zero penalty when the model sits
-    safely below the limit, smoothly rising as it crosses.
+    safely below the limit, smoothly rising as it crosses. The term is
+    ``log_ndtr``-based, with finite gradients even for strongly violated
+    limits (z < -15).
 
     **Lower limits**: ``is_lower_limit`` mirrors this for saturated or
     blended measurements that only bound the flux from below:
@@ -203,7 +206,7 @@ class LineFluxData:
         return len(self.names)
 
     def chi2(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
-        """Chi-squared statistic for detected lines (excludes upper limits).
+        """Chi-squared statistic: Gaussian for detections, ``-2 ln Phi(z)`` for limits.
 
         Parameters
         ----------
@@ -213,8 +216,8 @@ class LineFluxData:
         Returns
         -------
         ndarray, shape ()
-            Sum of ((obs - model) / error)^2 over detected lines
-            [dimensionless].
+            Sum over lines of ``((obs - model) / error)^2`` for detections and
+            ``-2 ln Phi(z)`` for limits [dimensionless].
 
         Notes
         -----
@@ -222,25 +225,37 @@ class LineFluxData:
 
         **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
 
-        Upper limit lines (where ``is_upper_limit`` is True) are excluded
-        from the sum.
+        **Convention**: a limit line contributes twice its censored energy,
+        ``2 * [-ln Phi(z)]`` with ``z = (limit - model) / error`` (upper) or
+        ``z = (model - limit) / error`` (lower). This is the same per-datum
+        number the photometry path (``CensoredLikelihood``) scores for a
+        limit, so ``chi2 = 2 * E`` for the shared censored energy ``E``
+        (detections: ``E = 0.5 r^2`` plus a model-independent ``ln error``
+        that ``chi2`` does not carry). A limit is not dropped and not scored
+        as a detection.
 
         """
-        residual = (self.fluxes - model_fluxes) / self.errors
-        chi2_per_line = residual**2
-        if self.is_upper_limit is not None:
-            detected = ~self.is_upper_limit
-            chi2_per_line = jnp.where(detected, chi2_per_line, 0.0)
-        return jnp.sum(chi2_per_line)
+        mask = self.limit_mask
+        if mask is None:
+            mask = jnp.zeros(self.n_lines)
+        z_up = (self.fluxes - model_fluxes) / self.errors
+        z_lo = -z_up
+        chi2_limit = -2.0 * jnp.where(mask > 0, norm.logcdf(z_up), norm.logcdf(z_lo))
+        return jnp.sum(jnp.where(mask == DETECTED, z_up**2, chi2_limit))
 
     def log_likelihood(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
-        """Log-likelihood: Gaussian for detections, survival function for upper limits.
+        """Log-likelihood: normalized Gaussian for detections, ``ln Phi(z)`` for limits.
 
         For detected lines:
             ln L = -0.5 * ((obs - model) / error)^2 - ln(error) - 0.5*ln(2π)
 
-        For upper limits (non-detections reported as N-sigma limits):
-            ln L = ln(0.5 * erfc((model - obs_limit) / (error * sqrt(2))))
+        For upper limits:
+            ln L = ln Phi((F_limit - F_model) / error)
+
+        For lower limits:
+            ln L = ln Phi((F_model - F_limit) / error)
+
+        where Phi is the standard normal CDF.
 
         Parameters
         ----------
@@ -250,30 +265,31 @@ class LineFluxData:
         Returns
         -------
         ndarray, shape ()
-            Total log-likelihood summed over all lines [dimensionless].
+            Total log-likelihood [dimensionless].
 
         Notes
         -----
         **JIT-compatible**: yes, uses only jnp primitives.
 
-        **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
+        **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``, with
+        finite gradients for strongly violated limits (no probability clamp).
 
-        Handles both detections and upper limits (marked via ``is_upper_limit``).
-        Upper limit lines use the complementary error function (erfc) to
-        compute the probability that the true flux exceeds the model prediction.
+        **Normalization**: this is a log-likelihood that can enter an
+        evidence, so detections keep their full Gaussian normalization. The
+        per-line shape is :func:`~tengri.observation.noise.censored_neg_log_likelihood`
+        (``0.5 r^2 + ln error`` for detections, ``-ln Phi(z)`` for limits),
+        which omits the model-independent ``0.5 ln(2π)`` per detection; that
+        constant is restored here. A limit's term is ``ln Phi(z)`` exactly,
+        with no constant.
 
         """
-        residual = (self.fluxes - model_fluxes) / self.errors
-        ll_gaussian = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
-
-        if self.is_upper_limit is None:
-            return jnp.sum(ll_gaussian)
-
-        x_ul = (model_fluxes - self.fluxes) / (self.errors * jnp.sqrt(2.0))
-        ll_upper = jnp.log(jnp.maximum(0.5 * jsp.erfc(x_ul), 1e-30))
-
-        ll_per_line = jnp.where(self.is_upper_limit, ll_upper, ll_gaussian)
-        return jnp.sum(ll_per_line)
+        mask = self.limit_mask
+        if mask is None:
+            residual = (self.fluxes - model_fluxes) / self.errors
+            return jnp.sum(-0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi))
+        energy = censored_neg_log_likelihood(self.fluxes, self.errors, model_fluxes, mask)
+        n_detected = jnp.sum(mask == DETECTED)
+        return -energy - 0.5 * n_detected * jnp.log(2.0 * jnp.pi)
 
     @classmethod
     def from_dict(

@@ -712,6 +712,7 @@ def build_jit_engine(fitter, pos_dict):
         draw_samples, draw_nonlinear_samples, flatten, unflatten, etc.
     """
     from tengri.observation.noise import (
+        censored_neg_log_likelihood,
         compute_std_inv,
         get_noise_dof,
         has_noise_model,
@@ -853,9 +854,17 @@ def build_jit_engine(fitter, pos_dict):
             # compatibility (#1303).
             if noise.ndim == 2 and jnp.ndim(f_cal) == 1:
                 f_cal = f_cal[:, None]
-            return variable_noise_hamiltonian(
-                data, noise, pred, f_cal, dof=noise_dof
-            ) + 0.5 * jnp.sum(xi**2)
+
+            # Use censored likelihood if data_mask is present
+            if "data_mask" in data_args:
+                mask = data_args["data_mask"]
+                e_lh = censored_neg_log_likelihood(
+                    data, noise, pred, mask, f_cal=f_cal, dof=noise_dof
+                )
+            else:
+                e_lh = variable_noise_hamiltonian(data, noise, pred, f_cal, dof=noise_dof)
+
+            return e_lh + 0.5 * jnp.sum(xi**2)
 
     else:
 
@@ -880,7 +889,16 @@ def build_jit_engine(fitter, pos_dict):
             data = data_args["data"]
             noise = data_args["noise"]
             pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
+
+            # Use censored likelihood if data_mask is present
+            if "data_mask" in data_args:
+                mask = data_args["data_mask"]
+                chi2 = 2.0 * censored_neg_log_likelihood(
+                    data, noise, pred, mask, f_cal=0.0, dof=None
+                )
+            else:
+                chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
+
             return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def H_vg(xi, data_args):

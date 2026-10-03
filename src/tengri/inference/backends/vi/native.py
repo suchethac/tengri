@@ -21,6 +21,31 @@ from tengri.inference.likelihoods.gaussian import (
 )
 
 
+def _seed_data_energy(fitter, pred):
+    """Data energy used to rank converged seeds: censored when ``data_mask`` is set.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        Supplies ``data``, ``noise`` and the optional ``data_mask``.
+    pred : array
+        Model prediction on the data grid.
+
+    Returns
+    -------
+    scalar
+        ``0.5 * chi2`` without a mask; the censored energy
+        (:func:`~tengri.observation.noise.censored_neg_log_likelihood`)
+        with one, so an upper or lower limit is scored as ``-ln Phi(z)``
+        and not as a detection at the limit value.
+    """
+    if fitter.data_mask is None:
+        return 0.5 * jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
+    from tengri.observation.noise import censored_neg_log_likelihood
+
+    return censored_neg_log_likelihood(fitter.data, fitter.noise, pred, fitter.data_mask)
+
+
 def _cg_eps() -> float:
     """CG relative-tolerance floor, ``6 * eps`` of the **working** dtype.
 
@@ -663,9 +688,9 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
+                e_lh = _seed_data_energy(fitter, pred)
                 prior = jnp.sum(converged_flat**2)
-                return 0.5 * chi2 + 0.5 * prior
+                return e_lh + 0.5 * prior
 
             seed_losses_arr = jax.vmap(_eval_hamiltonian_linear)(all_converged)
         best_idx = jnp.argmin(seed_losses_arr)
@@ -722,9 +747,9 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = float(jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2))
+                e_lh = float(_seed_data_energy(fitter, pred))
                 prior = float(jnp.sum(converged_flat**2))
-                loss = 0.5 * chi2 + 0.5 * prior
+                loss = e_lh + 0.5 * prior
             seed_losses.append(loss)
 
             if loss < best_loss:

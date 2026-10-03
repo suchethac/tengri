@@ -518,13 +518,27 @@ def _build_data_neg_log_likelihood_fn(fitter):
             # line-flux DATA channel, applied to the array compared against
             # the data, never inside ``predict_line_fluxes`` itself.
             model_lf = model_lf * params.get("line_flux_scaling", 1.0)
-            chi2_lines = jnp.sum(
-                standardized_residual(
-                    data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+
+            # Score line fluxes with the censored term if a limit mask is present
+            if "line_flux_limit_mask" in data_args:
+                line_flux_mask = data_args["line_flux_limit_mask"]
+                e_line = censored_neg_log_likelihood(
+                    data_args["line_flux_obs"],
+                    data_args["line_flux_err"],
+                    model_lf,
+                    line_flux_mask,
+                    f_cal=0.0,
+                    dof=None,
                 )
-                ** 2
-            )
-            e_lh = e_lh + 0.5 * chi2_lines
+                e_lh = e_lh + e_line
+            else:
+                chi2_lines = jnp.sum(
+                    standardized_residual(
+                        data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+                    )
+                    ** 2
+                )
+                e_lh = e_lh + 0.5 * chi2_lines
         if has_line_ratios:
             model_lr = model.predict_line_ratios(_free_params, model.observation.line_ratios)
             chi2_ratios = jnp.sum(
