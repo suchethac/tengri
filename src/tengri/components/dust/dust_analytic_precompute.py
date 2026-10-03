@@ -173,11 +173,11 @@ def _build_union_grid_with_fine_filters(
 def _validate_filter_coverage(
     filter_waves: list, redshift: float, wave_rest_base: np.ndarray
 ) -> None:
-    """Validate RED-edge coverage; clip BLUE edge.
+    """Refuse a filter whose rest-frame RED edge lies beyond the rest grid.
 
-    Thermal dust emission models emit negligibly in the Wien tail (< 100 Å).
-    Clips the BLUE side of each filter to the grid minimum (100 Å) and refuses
-    only when the RED edge (max wavelength) exceeds the rest-frame grid.
+    Only the red edge is checked. The blue side needs no check: the template is taken as
+    zero below the grid minimum (100 Å), and the fine per-filter grid starts at that
+    minimum at the earliest.
 
     Raises
     ------
@@ -270,7 +270,7 @@ def _build_grid(
     filter_trans: list,
     redshift: float,
     closure_kwargs: dict[str, float] | None = None,
-) -> PreintegratedGrid:
+) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate a continuum closure over the Cartesian product of ``axes``.
 
     The closure is evaluated on the union of the base rest grid and a fine grid
@@ -281,6 +281,9 @@ def _build_grid(
     -------
     PreintegratedGrid
         ``phot`` has shape ``(*[len(ax) for ax in axes], n_filters)``.
+    ndarray, float64
+        ln(band flux) at the nodes, same shape as ``phot``, taken in float64 and floored at
+        ``_FLUX_FLOOR`` so a band that underflows float32 still has a finite log.
     """
     axes = tuple(np.asarray(ax, dtype=np.float64) for ax in axes)
     wave_rest_base = _continuum_wave_rest()
@@ -310,12 +313,14 @@ def _build_grid(
         units="lnu",
     )
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)
-    return dataclasses.replace(
+    shaped = flat.reshape(*(len(ax) for ax in axes), len(filter_waves))
+    grid = dataclasses.replace(
         probe,
-        phot=jnp.asarray(flat.reshape(*(len(ax) for ax in axes), len(filter_waves))),
+        phot=jnp.asarray(shaped),
         axes=axes_jax,
         edges=tuple(edges_for_grid(ax) for ax in axes_jax),
     )
+    return grid, np.log(np.maximum(shaped.astype(np.float64), _FLUX_FLOOR))
 
 
 def _build_grid_modified_blackbody(
@@ -324,7 +329,7 @@ def _build_grid_modified_blackbody(
     redshift: float,
     T_grid: np.ndarray,
     beta_grid: np.ndarray,
-) -> PreintegratedGrid:
+) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate the modified blackbody over (T, beta); shape (n_T, n_beta, n_filters)."""
     return _build_grid(
         _modified_blackbody,
@@ -344,7 +349,7 @@ def _build_grid_casey2012(
     beta_grid: np.ndarray,
     alpha_mir_grid: np.ndarray,
     lambda_0_um_grid: np.ndarray,
-) -> PreintegratedGrid:
+) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate Casey (2012) over (T, beta, alpha_mir, lambda_0); 4 axes + filters."""
     return _build_grid(
         _casey2012,
@@ -363,7 +368,7 @@ def _build_grid_graybody(
     T_grid: np.ndarray,
     beta_grid: np.ndarray,
     lambda_0_um_grid: np.ndarray,
-) -> PreintegratedGrid:
+) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate the graybody over (T, beta, lambda_0); axes (n_T, n_beta, n_lambda_0)."""
     return _build_grid(
         _graybody,
@@ -439,7 +444,7 @@ def _build_grid_pah_drude(
 
 # Default node counts per axis. Measured over 200 seeded random points inside the declared
 # priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
-# PCHIP agrees with the exact closure to <= 5e-4 at these counts.
+# PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
     "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
@@ -490,10 +495,15 @@ def precompute(
     the rest grid (0.01 um to 10 m, 250 points per decade) and a fine grid across each
     filter, in batches, then reduced to band integrals; no template interpolation enters
     the band integral. A filter whose rest-frame red edge lies beyond 10 m raises
-    ``ValueError`` naming the filter; the blue side is clipped at 0.01 um, where thermal
-    dust emission is negligible. At the default nodes the lookup of
-    :func:`build_lookup` agrees with the exact closure to <= 5e-4 over the declared
-    priors in the 60-90, 250-500 and 750-950 um bands.
+    ``ValueError`` naming the filter; below 100 A (0.01 um) the template is taken as
+    zero: exact to double precision for the thermal models, and for ``pah_drude`` the Drude
+    wings there are below 1.7e-14 of the peak (measured). Accuracy of :func:`build_lookup` at
+    the default nodes against the exact closure, maximum over 200 seeded random points inside
+    the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
+    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 5.3e-4. ``casey2012`` at 8-24 um is 2.7e-3 at
+    z = 0, and at z = 3 (observed bands) 3.6e-3 in 60-90 um and 6.8e-3 in 8-24 um, because
+    ln(band flux) bends sharply in ``dust_alpha_mir`` toward 1 (the normalization of the mid-IR
+    power law); its 250-500 um band is 4.1e-4 at z = 3.
 
     Parameters
     ----------
@@ -540,7 +550,8 @@ def precompute(
     """
     if model == "pah_drude":
         preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift)
-        result = {"grid_phot": preint.phot, "axes": (), "_preint": preint}
+        ln_phot = np.log(np.maximum(np.asarray(preint.phot, dtype=np.float64), _FLUX_FLOOR))
+        result = {"grid_phot": preint.phot, "axes": (), "_preint": preint, "_ln_phot": ln_phot}
         axis_params = AXIS_PARAMS_PAH
     elif model in _CONTINUUM_BUILDERS:
         axis_params = AXIS_PARAMS[model]
@@ -556,11 +567,12 @@ def precompute(
             else supplied[name]
             for name in axis_params
         )
-        preint = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
+        preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
         result = {
             "grid_phot": preint.phot,
             "axes": tuple(jnp.asarray(ax) for ax in axes),
             "_preint": preint,
+            "_ln_phot": ln_phot,
         }
     else:
         raise ValueError(f"Unknown analytic dust model: {model}")
@@ -574,11 +586,12 @@ def precompute(
     if not fixed:
         return result
 
-    collapsed = _pin_axes(preint, axis_params, fixed)
+    collapsed, ln_collapsed = _pin_axes(preint, result["_ln_phot"], axis_params, fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
         "_preint": collapsed,
+        "_ln_phot": ln_collapsed,
         "_collapsed_axes": fixed,
     }
 
@@ -589,23 +602,26 @@ def _axis_coordinate(param_name: str, values):
 
 
 def _pin_axes(
-    preint: PreintegratedGrid, axis_params: tuple[str, ...], fixed: dict[int, float]
-) -> PreintegratedGrid:
+    preint: PreintegratedGrid,
+    ln_phot: np.ndarray,
+    axis_params: tuple[str, ...],
+    fixed: dict[int, float],
+) -> tuple[PreintegratedGrid, jnp.ndarray]:
     """Remove the pinned axes by PCHIP interpolation of ln(band flux) at the pinned values."""
     keep = [i for i in range(len(axis_params)) if i not in fixed]
     pinned = sorted(fixed)
-    log_phot = jnp.log(jnp.maximum(preint.phot, _FLUX_FLOOR))
-    moved = jnp.transpose(log_phot, (*pinned, *keep, log_phot.ndim - 1))
+    ln_grid = jnp.asarray(ln_phot)
+    moved = jnp.transpose(ln_grid, (*pinned, *keep, ln_grid.ndim - 1))
     pinned_axes = tuple(_axis_coordinate(axis_params[i], preint.axes[i]) for i in pinned)
     point = tuple(_axis_coordinate(axis_params[i], jnp.asarray(fixed[i])) for i in pinned)
     reduced = interp_nd_pchip(moved, pinned_axes, point)
-    kept_axes = tuple(preint.axes[i] for i in keep)
-    return dataclasses.replace(
+    pinned_grid = dataclasses.replace(
         preint,
         phot=jnp.exp(reduced),
-        axes=kept_axes,
+        axes=tuple(preint.axes[i] for i in keep),
         edges=tuple(preint.edges[i] for i in keep),
     )
+    return pinned_grid, reduced
 
 
 def build_lookup(
@@ -617,13 +633,15 @@ def build_lookup(
     """Build the runtime analytic dust photometry lookup from a preintegrated dict.
 
     Interpolates ln(band flux) with monotone cubic Hermite (PCHIP) in the coordinates
-    (ln T, beta, alpha_mir, ln lambda_0) of the axes the model has. Tested accuracy: at
-    the default node grids, <= 5e-4 relative to the exact closure at random points inside
-    the declared priors (60-90, 250-500 and 750-950 um bands); the contract tests assert
-    1e-3. The nodes are band integrals of the closed-form model on a rest grid of 0.01 um
+    (ln T, beta, alpha_mir, ln lambda_0) of the axes the model has. The contract
+    tests assert 1e-3 against the exact closure at random points inside the declared priors.
+    The nodes are band integrals of the closed-form model on a rest grid of 0.01 um
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
-    the blue side is clipped at 0.01 um.
+    below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
+    (far-IR 3e-4 to 5.3e-4; ``casey2012`` mid-IR 8-24 um 2.7e-3 at z = 0). A query outside
+    the node span is clamped to the edge node: the value is constant and the gradient zero
+    beyond it.
 
     Parameters
     ----------
@@ -645,7 +663,7 @@ def build_lookup(
 
         Returns dust emission L_ν [erg/s/Hz]. Caller applies flux scaling.
         Off-node accuracy: monotone cubic Hermite interpolation on log-flux,
-        achieving <= 5e-4 relative tolerance at default node grids.
+        Accuracy at the default node grids is stated in :func:`precompute`.
 
     References
     ----------
@@ -664,11 +682,10 @@ def build_lookup(
         for i, name in enumerate(AXIS_PARAMS[model])
         if i not in preint.get("_collapsed_axes", {})
     )
-    grid_phot = preint["_preint"].phot
     axes = tuple(
         _axis_coordinate(name, ax) for name, ax in zip(axis_params_names, preint["_preint"].axes)
     )
-    log_grid_phot = jnp.log(jnp.maximum(grid_phot, _FLUX_FLOOR))
+    log_grid_phot = jnp.asarray(preint["_ln_phot"])
 
     @jax.jit
     def dust_phot(L_absorbed, *free_axis_values):

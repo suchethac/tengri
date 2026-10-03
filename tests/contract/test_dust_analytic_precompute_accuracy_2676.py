@@ -41,12 +41,12 @@ def tophat(lo_um, hi_um):
     )
 
 
-def exact(model, kw, fw, ft):
-    """Exact closure: integrate model on ultra-fine grid."""
+def exact(model, kw, fw, ft, z=0.0):
+    """Exact closure at redshift ``z``: integrate the model on an ultra-fine rest grid."""
     from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
-    s = np.asarray(M[model](jnp.asarray(WIDE), 1.0, **kw), dtype=float)
-    return np.trapezoid(np.interp(fw, WIDE, s) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
+    s = np.asarray(M[model](jnp.asarray(WIDE), 1.0, redshift=z, **kw), dtype=float)
+    return np.trapezoid(np.interp(fw / (1 + z), WIDE, s) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
 
 
 def lookup(model, kw, fw, ft, **grids):
@@ -217,7 +217,7 @@ def test_redshift_off_node():
 
     # Exact: template evaluated on ultra-fine grid, then interpolated
     fw_rest = fw / (1 + z)  # convert to rest frame
-    s = np.asarray(M["modified_blackbody"](jnp.asarray(WIDE), 1.0, **kw), dtype=float)
+    s = np.asarray(M["modified_blackbody"](jnp.asarray(WIDE), 1.0, redshift=z, **kw), dtype=float)
     ex = np.trapezoid(np.interp(fw_rest, WIDE, s) * ft / fw_rest, fw_rest) / np.trapezoid(
         ft / fw_rest, fw_rest
     )
@@ -234,3 +234,127 @@ def test_redshift_off_node():
     assert abs(ratio - 1.0) < 1e-3, (
         f"modified_blackbody z=2: lookup/exact = {ratio:.6f}, error {abs(ratio - 1.0):.6f}"
     )
+
+
+_FLOAT32_SCRIPT = """
+import json, sys
+import numpy as np
+import jax, jax.numpy as jnp
+from tengri.components.dust import dust_analytic_precompute as adapter
+
+assert not jax.config.jax_enable_x64
+spec = json.loads(sys.argv[1])
+filters = [(np.asarray(w), np.asarray(t)) for w, t in spec["filters"]]
+res = adapter.precompute(
+    [f[0] for f in filters], [f[1] for f in filters], 0.0, None, model=spec["model"],
+    **{k: np.asarray(v) for k, v in spec["grids"].items()},
+)
+fn = adapter.build_lookup(res, model=spec["model"])
+q = [jnp.float32(x) for x in spec["query"]]
+value = np.asarray(fn(jnp.float32(1.0), *q))
+grad = jax.jacfwd(lambda *a: fn(jnp.float32(1.0), *a), argnums=tuple(range(len(q))))(*q)
+print(json.dumps({"value": value.tolist(), "grad": [np.asarray(g).tolist() for g in grad]}))
+"""
+
+_FLOAT32_CASES = {
+    "modified_blackbody": (
+        {"T_grid": [30.0, 45.0, 60.0], "beta_grid": [1.2, 1.8, 2.4]},
+        [47.3, 1.65],
+    ),
+    "graybody": (
+        {
+            "T_grid": [30.0, 45.0, 60.0],
+            "beta_grid": [1.2, 1.8, 2.4],
+            "lambda_0_um_grid": [80.0, 160.0, 320.0],
+        },
+        [47.3, 1.65, 130.0],
+    ),
+    "casey2012": (
+        {
+            "T_grid": [30.0, 45.0, 60.0],
+            "beta_grid": [1.2, 1.8, 2.4],
+            "alpha_mir_grid": [1.5, 2.0, 2.5],
+            "lambda_0_um_grid": [80.0, 160.0, 320.0],
+        },
+        [47.3, 1.65, 1.8, 130.0],
+    ),
+}
+
+
+@pytest.mark.parametrize("model", sorted(_FLOAT32_CASES))
+def test_float32_value_and_gradient_are_finite(model):
+    """With x64 off, bands that underflow float32 keep a finite value and gradient.
+
+    The optical band's flux is below float32's smallest normal, so the grid is stored as
+    ln(band flux) computed in float64; the far-IR band agrees with float64 to rtol 1e-4.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    grids, query = _FLOAT32_CASES[model]
+    bands = ((0.4, 0.6), (3, 5), (250, 500))
+    filters = [tophat(*b) for b in bands]
+    spec = {
+        "model": model,
+        "grids": grids,
+        "query": query,
+        "filters": [(w.tolist(), t.tolist()) for w, t in filters],
+    }
+    env = {**os.environ, "JAX_ENABLE_X64": "0", "JAX_PLATFORMS": "cpu"}
+    proc = subprocess.run(
+        [sys.executable, "-c", _FLOAT32_SCRIPT, json.dumps(spec)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+
+    assert np.all(np.isfinite(out["value"])), out["value"]
+    for name, g in zip(_AXIS_NAMES[model], out["grad"], strict=True):
+        assert np.all(np.isfinite(g)), f"d/d{name} not finite: {g}"
+
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    res = adapter.precompute(
+        [f[0] for f in filters],
+        [f[1] for f in filters],
+        0.0,
+        None,
+        model=model,
+        **{k: np.asarray(v) for k, v in grids.items()},
+    )
+    ref = np.asarray(adapter.build_lookup(res, model=model)(1.0, *query))
+    assert out["value"][2] == pytest.approx(ref[2], rel=1e-4)
+
+
+_AXIS_NAMES = {
+    "modified_blackbody": ("dust_T", "dust_beta_ir"),
+    "graybody": ("dust_T", "dust_beta_ir", "dust_lambda_0_um"),
+    "casey2012": ("dust_T", "dust_beta_ir", "dust_alpha_mir", "dust_lambda_0_um"),
+}
+
+
+@pytest.mark.parametrize("model", ["modified_blackbody", "casey2012", "graybody"])
+def test_off_node_accuracy_far_ir_at_z3(model):
+    """Default node grids at z = 3: 8 seeded random points in the 250-500 and 750-950 um bands."""
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    z = 3.0
+    names = adapter.AXIS_PARAMS[model]
+    bands = ((250, 500), (750, 950))
+    filters = [tophat(*b) for b in bands]
+    res = adapter.precompute(
+        [f[0] for f in filters], [f[1] for f in filters], z, None, model=model
+    )
+    lookup_fn = adapter.build_lookup(res, model=model)
+    rng = np.random.RandomState(7)
+    for _ in range(8):
+        kw = {n: rng.uniform(*_get_param_bounds(n)) for n in names}
+        got = np.asarray(lookup_fn(1.0, *[kw[n] for n in names]))
+        for b, f, lkp in zip(bands, filters, got):
+            ratio = lkp / exact(model, kw, *f, z)
+            assert abs(ratio - 1.0) < 1e-3, f"{model} z=3 point {kw}, band {b}: ratio {ratio:.6f}"

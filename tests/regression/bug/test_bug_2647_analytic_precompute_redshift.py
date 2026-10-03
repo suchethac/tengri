@@ -18,10 +18,10 @@ average of the rest-frame L_nu at the rest wavelength lambda_obs / (1 + z) with 
 
 with no (1 + z) factor and no distance factor (``dl_cm = 1``).
 
-The nodes carry 0.2 % spacing around the query point: the lookup is a triweight average over the
-nodes, and in the Wien tail a 1 % spacing smooths the value by more than the 1e-3 tolerance (the
-15 K cells below measure it). The 1e-3 pinned by the 27 continuum cells is the accuracy at
-closely spaced nodes only: the default node grids give 4-10 % off-node error (#2676).
+The nodes carry 0.2 % spacing around the query point. The lookup interpolates ln(band flux)
+with a monotone cubic Hermite (PCHIP), so the 27 continuum cells and the 15 K cells below pin
+agreement with the exact closure to 1e-3; accuracy at the default node grids is pinned in
+``tests/contract/test_dust_analytic_precompute_accuracy_2676.py``.
 """
 
 import functools
@@ -35,7 +35,7 @@ from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
 pytestmark = pytest.mark.regression_bug
 
-# The builders' own rest range (0.01 um - 10 mm): the closures normalize to L_absorbed over the
+# The builders' own rest range (0.01 um - 10 m): the closures normalize to L_absorbed over the
 # grid they are given, so the exact reference must be evaluated on the same range.
 _WIDE_REST_AA = np.geomspace(1e2, 1e11, 72000)
 
@@ -171,10 +171,6 @@ def test_pah_drude_lookup_equals_exact_closure(z, band_um):
 @pytest.mark.parametrize("model", _CONTINUUM_MODELS)
 def test_z0_grid_nodes_equal_exact_closure(model):
     """At z = 0, the lookup at the central node equals the exact closure to rtol 1e-3."""
-    names = adapter.AXIS_PARAMS[model]
-    grids = {_GRID_KEYWORD[n]: _nodes(_CENTRAL[n], 0.01) for n in names}
-    filt_wave, filt_trans = _tophat(160.0, 500.0)
-    result = adapter.precompute([filt_wave], [filt_trans], 0.0, None, model=model, **grids)
     exact_val = _exact(model, 0.0, (160.0, 500.0), _CENTRAL)
     lookup_val = _lookup_value(model, 0.0, (160.0, 500.0), 0.01, _CENTRAL["dust_T"])
     assert lookup_val / exact_val == pytest.approx(1.0, abs=1e-3), (
