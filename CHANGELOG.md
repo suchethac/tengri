@@ -746,6 +746,7 @@
 
 ### Changed
 
+- `WavePrecomp(igm_fold=...)` now defaults to `"auto"`: the exact IGM fold wherever it can be built (fixed and free redshift), the node fold only where the transmission carries free parameters (patchy reionization, DLAs). The node fold was off `approx=None` by 85-107 % at z = 7 in bands straddling Ly-alpha and ~10 % in GALEX FUV at z = 1.5; the exact fold is ~1e-14 at fixed z and 0.42 % on a free z grid of 32 nodes. WavePrecomp photometry of any band the IGM reaches moves; pass `igm_fold="node"` for the old behavior (#2445).
 - `agn_attenuation_ebv` is retired; every AGN attenuation block (`smc_prevot`,
   `qsogen`) reads `agn_ebv`, the precompute-axis name; the retired spelling —
   flat or under `agn={'atten': {...}}` — is refused with a rename hint (#2325).
