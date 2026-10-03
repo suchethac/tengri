@@ -13,6 +13,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri.config.exceptions import warn_measured
+from tengri.inference._censoring import (
+    data_energy,
+    detected_chi2_dof,
+    refuse_unsupported_censoring,
+)
 from tengri.inference._sample_utils import _mean_params
 from tengri.inference.likelihoods.gaussian import (
     inv_noise_std,
@@ -448,6 +453,7 @@ def run_native_vi(
     # the Fitter (long-lived across ``run()`` calls). Reach through
     # ``context.fitter``, these caches must not be re-created.
     fitter = context.fitter
+    refuse_unsupported_censoring(fitter, f"native_vi (sample_mode={sample_mode!r})")
 
     # --- Parameter validation ---
     if n_samples > 12:
@@ -510,7 +516,12 @@ def run_native_vi(
 
         _sr, _ = get_or_build_signal_response(fitter)
         fitter._native_vi_nonlinear_engine = build_native_vi_nonlinear_engine(
-            _sr, jnp.asarray(fitter.data), jnp.asarray(fitter.noise), flatten, unflatten
+            _sr,
+            jnp.asarray(fitter.data),
+            jnp.asarray(fitter.noise),
+            flatten,
+            unflatten,
+            mask=fitter.data_mask,
         )
     _nonlinear_run_fn, _nonlinear_draw_fn, _nonlinear_hamiltonian = (
         fitter._native_vi_nonlinear_engine
@@ -663,9 +674,9 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
+                e_data = data_energy(fitter.data, fitter.noise, pred, fitter.data_mask)
                 prior = jnp.sum(converged_flat**2)
-                return 0.5 * chi2 + 0.5 * prior
+                return e_data + 0.5 * prior
 
             seed_losses_arr = jax.vmap(_eval_hamiltonian_linear)(all_converged)
         best_idx = jnp.argmin(seed_losses_arr)
@@ -722,9 +733,9 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = float(jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2))
+                e_data = float(data_energy(fitter.data, fitter.noise, pred, fitter.data_mask))
                 prior = float(jnp.sum(converged_flat**2))
-                loss = 0.5 * chi2 + 0.5 * prior
+                loss = e_data + 0.5 * prior
             seed_losses.append(loss)
 
             if loss < best_loss:
@@ -825,9 +836,7 @@ def run_native_vi(
     # Check chi2/dof
     if fitter.data_type == "photometry":
         pred = fitter.model.predict_photometry(best_params)
-        chi2_dof = float(
-            jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
-        ) / len(fitter.data)
+        chi2_dof = detected_chi2_dof(fitter.data, fitter.noise, pred, fitter.data_mask)
         if chi2_dof > 5.0:
             diag_warnings.append(f"Poor fit: chi2/dof={chi2_dof:.1f} (expected ~1)")
         elif chi2_dof < 0.1:
@@ -885,7 +894,7 @@ def run_native_vi(
     )
 
 
-def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatten):
+def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatten, mask=None):
     """Build JIT-compiled native_vi_linear primitives for a fixed signal_response.
 
     Shared backend used by both Fitter (via jit_engine) and PopulationFitter
@@ -905,6 +914,12 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
         ``pytree -> 1D ndarray``.
     unflatten : callable
         ``1D ndarray -> pytree``.
+    mask : ndarray, shape (n_data,), optional
+        Censoring flags (0 detected, 1 upper limit, -1 lower limit). Given,
+        the energy scores limit bands with the Gaussian CDF
+        (:func:`tengri.inference._censoring.data_energy`) while the metric
+        keeps the detection form. ``None`` (default) scores every datum as a
+        detection.
 
     Returns
     -------
@@ -937,8 +952,7 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
-        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+        return data_energy(data, noise, pred, mask) + 0.5 * jnp.sum(xi**2)
 
     H_vg = jax.value_and_grad(hamiltonian)
 
@@ -1024,7 +1038,7 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
     return run_native_vi_linear_jit, draw_residuals_jit, hamiltonian
 
 
-def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unflatten):
+def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unflatten, mask=None):
     """Build JIT-compiled native_vi_nonlinear (geoVI) primitives.
 
     Pure-JAX implementation of geometric variational inference (geoVI /
@@ -1053,6 +1067,12 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
         ``pytree -> 1D ndarray``.
     unflatten : callable
         ``1D ndarray -> pytree``.
+    mask : ndarray, shape (n_data,), optional
+        Censoring flags (0 detected, 1 upper limit, -1 lower limit). Given,
+        the energy scores limit bands with the Gaussian CDF
+        (:func:`tengri.inference._censoring.data_energy`) while the metric
+        keeps the detection form. ``None`` (default) scores every datum as a
+        detection.
 
     Returns
     -------
@@ -1100,6 +1120,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     data = jnp.ravel(jnp.asarray(data))
     noise = jnp.ravel(jnp.asarray(noise))
+    mask = None if mask is None else jnp.ravel(jnp.asarray(mask))
     sqrt_noise_inv = inv_noise_std(noise)
 
     def metric_vec(xi, v):
@@ -1112,8 +1133,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
-        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+        return data_energy(data, noise, pred, mask) + 0.5 * jnp.sum(xi**2)
 
     H_vg = jax.value_and_grad(hamiltonian)
 
