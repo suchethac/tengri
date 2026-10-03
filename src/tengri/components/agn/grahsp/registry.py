@@ -84,8 +84,9 @@ def grahsp(
     disc_m: str = _DEFAULT_DISC_M,
     disc_a: str = _DEFAULT_DISC_A,
     disc_mdot: str = _DEFAULT_DISC_MDOT,
+    return_components: bool = False,
     **_kwargs,
-) -> jnp.ndarray:
+) -> jnp.ndarray | tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     r"""GRAHSP AGN SED (Buchner+ 2024): registered AGN_MODELS entry point.
 
     Thin wrapper around :func:`compute_grahsp_sed` matching the
@@ -138,6 +139,9 @@ def grahsp(
     agn_type : int, optional
         ``1`` (BL/QSO), ``2`` (Sy2), ``3`` (LINER). Default ``1``.
         **Static** under JIT.
+    return_components : bool, optional
+        When True, return ``(L_nu, {"lines": L_nu_lines})`` (see
+        :func:`compute_grahsp_sed`). Default False. **Static** under JIT.
     **_kwargs
         Ignored. Accepted so the registry can pass through unrelated
         ``agn_*`` parameters from sibling AGN models.
@@ -187,4 +191,5 @@ def grahsp(
         disc_m=disc_m,
         disc_a=disc_a,
         disc_mdot=disc_mdot,
+        return_components=return_components,
     )

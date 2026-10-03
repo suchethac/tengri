@@ -355,6 +355,27 @@ def monolithic_agn_model_names() -> frozenset[str]:
     return frozenset(_AGN_PRESETS) | frozenset(_SELF_CONTAINED_AGN_MODELS)
 
 
+def monolithic_models_with_line_components() -> frozenset[str]:
+    """Monolithic AGN model names whose forward function returns a line-only array.
+
+    Every deprecated preset routes through the composable runner and the
+    self-contained ``grahsp`` model separates its Gaussian lines and FeII
+    forest; both accept ``return_components=True`` and return
+    ``(L_nu, {"lines": ...})``. The other self-contained models
+    (``skirtor_stalevski``) paint no emission lines.
+
+    Returns
+    -------
+    frozenset of str
+        Model names, a subset of :func:`monolithic_agn_model_names`.
+
+    Notes
+    -----
+    **JIT-compatible**: no, reads module-level registries at call time.
+    """
+    return frozenset(_AGN_PRESETS) | frozenset({"grahsp"})
+
+
 def _resolve_monolithic_model(name: str) -> Callable | None:
     """Return the monolithic forward function for a self-contained model.
 
