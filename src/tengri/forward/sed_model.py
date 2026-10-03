@@ -375,10 +375,10 @@ class WavePrecomp:
         instead of one compile per row. Compile time amortizes across
         the catalog; runtime cost per fit is the ztable interpolation
         (~µs).
-    igm_fold : str, default "node"
+    igm_fold : str, default "auto"
         How to integrate IGM transmission into sub-band photometry.
 
-        ``"node"`` (default)
+        ``"node"``
             Evaluate the transmission at the sub-band quadrature node
             and multiply. Fast and exact for smooth transmission, but
             forms <S><T> when transmission varies inside a band (GALEX FUV
@@ -393,7 +393,7 @@ class WavePrecomp:
             Fails loudly if free parameters (patchy reionization, DLAs) make
             transmission non-tabulated.
 
-        ``"auto"``
+        ``"auto"`` (default)
             ``"exact"`` wherever it can be built, ``"node"`` everywhere else.
             The exact fold refuses a transmission carrying free parameters
             (patchy reionization, DLAs), but supports free redshift. ``"auto"``
@@ -449,7 +449,7 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
-    igm_fold: str = "node"
+    igm_fold: str = "auto"
 
     band_integration: str | None = None
     """How the multiplicative dust screen is integrated through each bandpass.
@@ -11371,9 +11371,13 @@ class SEDModel:
                     # Fold IGM transmission into stellar subbands
                     if isinstance(chain[0], StellarSEDComponent):
                         # Get igm_fold mode and filter data from WavePrecomp
-                        igm_fold_mode = "node"
-                        if self._approx_config_wave is not None:
-                            igm_fold_mode = self._approx_config_wave.igm_fold
+                        # A WavePrecomp built without a config object (fit-time
+                        # "auto" resolution) folds as the class default does.
+                        igm_fold_mode = (
+                            self._approx_config_wave.igm_fold
+                            if self._approx_config_wave is not None
+                            else WavePrecomp.igm_fold
+                        )
                         chain[0] = replace(
                             chain[0],
                             _state=_fold_igm_into_subbands(

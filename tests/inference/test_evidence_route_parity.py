@@ -165,15 +165,31 @@ class TestEvidenceFiniteness:
 class TestEvidenceDiagnostics:
     """NSS and HMC+IS expose error diagnostics; Laplace documents validity."""
 
+    @staticmethod
+    def _check_error_diagnostics(result, n_live, num_delete):
+        """log_evidence_err = sqrt(H / n_eff) with n_eff for batch deletion (#2443)."""
+        diag = result.diagnostics
+        removal = n_live - np.arange(num_delete, dtype=float)
+        n_eff = np.sum(1.0 / removal) / np.sum(1.0 / removal**2)
+        print(
+            f"\nNSS n_live={n_live}, k={num_delete}: H={diag['information_nats']:.4f} nats, "
+            f"n_eff={diag['n_live_effective']:.4f}, err={diag['log_evidence_err']:.4f}, "
+            f"ESS={diag['ess']:.1f}"
+        )
+        assert diag["n_live_effective"] == pytest.approx(n_eff, rel=1e-12)
+        assert diag["information_nats"] >= 0.0
+        assert diag["log_evidence_err"] == pytest.approx(
+            np.sqrt(diag["information_nats"] / diag["n_live_effective"]), rel=1e-10
+        )
+        assert 0.0 < diag["log_evidence_err"] < 1.0
+
     def test_nss_ref_has_error(self, nss_ref):
-        """NSS should report log_evidence_err in diagnostics."""
-        assert "log_evidence_err" in nss_ref.diagnostics
-        assert nss_ref.diagnostics["log_evidence_err"] > 0
+        """NSS reports sqrt(information / n_eff) as the evidence error."""
+        self._check_error_diagnostics(nss_ref, n_live=100, num_delete=10)
 
     def test_nss_fast_has_error(self, nss_fast):
-        """Fast NSS should also report error."""
-        assert "log_evidence_err" in nss_fast.diagnostics
-        assert nss_fast.diagnostics["log_evidence_err"] > 0
+        """Fast-preset NSS (n_live=100, k=20) reports the same relation."""
+        self._check_error_diagnostics(nss_fast, n_live=100, num_delete=20)
 
     def test_laplace_has_newton_decrement(self, laplace_result):
         """Laplace should report newton_decrement for validity check."""
