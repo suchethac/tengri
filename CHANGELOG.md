@@ -7,9 +7,9 @@
   reweighted bolometric as trapezoids over the caller's array, so the SED of a
   `kubota_done` + SKIRTOR model moved by 4e-3 between a grid starting at 10 A and one
   starting at 0.01 A (the corona carries 0.5 % of the disc energy below 10 A). The torus
-  power is now its closed form (`agn_torus_frac x L_bol`, the native-grid normalization of
-  the template), the disc is evaluated on the SKIRTOR library's own axis for `R` and the
-  reweighted bolometric, the conserving line debit measures disc and line energy on fixed
+  power is now the torus's own integral on a fixed budget grid, the disc is evaluated on
+  the SKIRTOR library's own axis for `R` and, on a fine fixed grid, for the reweighted
+  bolometric, the conserving line debit measures disc and line energy on fixed
   grids (by 3e-2 on the disc between two grids before), and the polar-dust ledger (the
   graybody's normalization, the absorbed power of the bolometric disc, the torus and
   graybody budgets) is measured on fixed grids. `l5100_disc` and the 2500/4400 A anchors
