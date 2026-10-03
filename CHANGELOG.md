@@ -79,6 +79,7 @@
 - The analytic dust precompute (`modified_blackbody`, `casey2012`, `graybody`, `pah_drude`) integrates observed-frame filters at rest wavelengths λ_obs/(1+z); the source redshift reached only the CMB heating term, so at z > 0 the lookup returned the band average at λ_obs instead (#2647).
 
 - The ChEES upstream-limitation test asserts the BlackJAX behaviour per version: below 1.7 the diagonal-mass + length-floor combination raises under `jit`, from 1.7 it traces; CI (BlackJAX 1.7.1) was failing on the old assumption (#2695).
+- AGN emission lines (composable NLR, BLR and FeII; GRAHSP's lines and FeII forest; QSOGen's line template) receive the instrument kernel alone in the spectrum projection, like nebular and shock emission: each line is painted at its own width and never passes through the stellar library, so the observed width is √(σ_line² + σ_inst²) and no longer grows with the stellar σ_v (a 500 km/s FWHM narrow line read 290 km/s at σ_v = 200 km/s against the true 218 km/s, +33 %). The AGN component publishes the line-only light `sed_agn_lines_attenuated`, as it enters the SED after the AGN's own screen, and the dust adapters apply the host `agn_screen` to it when the AGN runs first (#2565).
 
 ### Added
 
