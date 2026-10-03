@@ -11,7 +11,7 @@ below the Lyman limit, where this dusty wNE model has an IGM-free LUT floor of
 -0.90 %; the #2447 Lyman-limit residual). Under the exact IGM fold (the default
 since #2445) the free-z worst is 1.10 % (z = 0.956), i.e. that floor plus the
 z interpolation. The 0.69 % the node fold read was the node fold's own IGM error
-(-1.35 % at fixed z) partly cancelling the floor across the grid, not accuracy.
+(-1.35 % at fixed z) partly canceling the floor across the grid, not accuracy.
 """
 
 import time
