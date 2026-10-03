@@ -1328,6 +1328,12 @@ class DustSEDComponent(TemplateThreading):
                 jnp.asarray(log_mass_scale),
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
+                # A LUT tabulated over redshift (a law that reads z) is read at
+                # the redshift this evaluation runs at, the same params value
+                # the exact path hands the law.
+                redshift=params.get("redshift")
+                if getattr(eb_lut, "ln1pz", None) is not None
+                else None,
             )
             # Nebular + shock + AGN combined into ONE integral (rather than
             # multiple log10_add terms) so no intermediate sign has to be

@@ -67,6 +67,7 @@ def _full_params() -> dict:
         "radio_alpha_sf": 0.8,
         "radio_loudness": 0.0,
         "radio_alpha_agn": 0.7,
+        "radio_log_nu_cut": 13.0,
         "radio_T_e": 1e4,
         "radio_alpha_ff": -0.1,
         "igm_z_mid": 7.0,

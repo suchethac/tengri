@@ -264,7 +264,14 @@ class Posterior:
         - **NUTS**: ``{"n_divergent": int, "accept_rate": float}``, etc.
         - **Ray Tracing**: ``{"accept_rate": float, "step_size": float}``, etc.
         - **MAP**: ``{"final_loss": float, "n_steps": int}``, etc.
-        - **NSS**: ``{"n_live": int, "log_evidence_err": float}``, etc.
+        - **NSS**: ``{"n_live": int, "log_evidence_err": float,
+          "information_nats": float, "n_live_effective": float}``, etc.
+          ``log_evidence_err`` is the standard deviation of log Z [nats],
+          sqrt(H / n_eff); ``information_nats`` is the information H [nats]
+          (Kullback-Leibler divergence of the posterior from the prior);
+          ``n_live_effective`` is n_eff [dimensionless], the live count corrected
+          for batch deletion (n_eff = n_live when one point is deleted per
+          iteration).
 
     loss_history : ndarray or None
         Optimization loss values over iterations (MAP/Laplace/Pathfinder only).
