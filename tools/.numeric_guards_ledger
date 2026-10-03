@@ -44,6 +44,7 @@ src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-100 < 1e-20 -> 
 src/tengri/components/agn/skirtor.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
 src/tengri/components/agn/unified.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/_z_response.py | jnp.clip with floor 0.0 < 1e-20 -> 2
+src/tengri/components/dust/_analytic_table_interp.py | jnp.clip with floor 0.0 < 1e-20 -> 1
 src/tengri/components/dust/attenuation.py | jnp.clip with floor 0.0 < 1e-20 -> 10
 src/tengri/components/dust/attenuation.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/dust/dust_emission_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 1
