@@ -85,7 +85,9 @@ _CUE_F64_REF = np.array(
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
-#: operator with each window mean defined as the wavelength integral
+#: operator, with the dust screen applied across each window as the exact path applies
+#: it (re-pinned for #2677; the earlier values took the screen at the window center and
+#: moved [N II] 6584 by +13 %), and each window mean defined as the wavelength integral
 #: ``∫F W dλ / ∫W dλ`` (trapezoid on the wavelength differences, 1 Å sigmoid edges).
 #: Relative to the pixel-count mean (Hβ 2.769656969949378e-16, [O III] 5007
 #: 4.085943225429073e-16, Hα 1.3469922014700263e-15, [N II] 6584 3.219346394066372e-18)
@@ -93,7 +95,12 @@ _CUE_F64_REF = np.array(
 #: (``approx=False``) on the same model is pinned against a numpy implementation of the
 #: integral definition in ``test_bug_2588_c94_beta_and_window_means.py``. 17 significant digits.
 _WNE_F64_REF = np.array(
-    [2.769677017926416e-16, 4.0859299683627216e-16, 1.347006515581867e-15, 3.2139484923289834e-18]
+    [
+        2.7696700808956426e-16,
+        4.0860874645452656e-16,
+        1.3471942582848376e-15,
+        2.8340925261498777e-18,
+    ]
 )
 
 #: Relative sigma for the synthetic chi-square target the gradient checks use: not a

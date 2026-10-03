@@ -8017,13 +8017,13 @@ class SEDModel:
 
         pc = self._index_window_precomp(index_defs)
 
-        # per-age transmission at the window centers, from the model's own dust
+        # per-age transmission at every window grid point, from the model's own dust
         # (single-sourced with the forward), or unity when there is no dust.
         dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
         if dust is None:
-            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
         else:
-            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(full_params, pc.points.waves, ssp_ages_yr)
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
@@ -8298,11 +8298,9 @@ class SEDModel:
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
-                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
             else:
-                transmission = dust.compute_transmission(
-                    full_params, pc.window_centers, ssp_ages_yr
-                )
+                transmission = dust.compute_transmission(full_params, pc.points.waves, ssp_ages_yr)
             fluxes = measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
