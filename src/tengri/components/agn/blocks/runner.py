@@ -557,6 +557,27 @@ def _agn_sed_components(
     }
 
 
+def _los_budget_wave(compact: bool, dtype) -> Array:
+    """The disc's fixed budget grid [A], built in the trace from scalar end points.
+
+    Reproduces ``_KUBOTA_LEDGER_WAVE`` (``compact``: three geometric pieces, the shared end
+    points kept once) or ``_LEDGER_WAVE`` without an array literal entering the graph.
+    """
+
+    def piece(lo: float, hi: float, n: int) -> Array:
+        return jnp.exp(jnp.linspace(jnp.log(lo), jnp.log(hi), n, dtype=dtype))
+
+    if compact:
+        return jnp.concatenate(
+            [
+                piece(1.0e-3, 1.0e-2, 101),
+                piece(1.0e-2, 1.0e6, 8001)[1:],
+                piece(1.0e6, 1.0e10, 401)[1:],
+            ]
+        )
+    return piece(float(_LEDGER_WAVE[0]), float(_LEDGER_WAVE[-1]), _LEDGER_WAVE.size)
+
+
 def compose_l_nu(
     wavelength: Array,
     agn_log_lbol: float,
@@ -1454,13 +1475,14 @@ agn_torus_block, agn_attenuation_block : str
     # ``agn_log_lbol`` is the angle-integrated accretion power. Held in log10 (an erg/s scalar
     # overflows float32) and not scaled by ``agn_lum_ratio``, like ``L_agn_bol``.
     if return_components:
+        _los_wave = _los_budget_wave(agn_disc_block == "kubota_done", wave.dtype)
         _direct_lambda = disc_fn(
-            _disc_ledger_wave(),
+            _los_wave,
             agn_log_lbol=agn_log_lbol_eval,
             templates=disc_templates,
             **params,
         )
-        _direct_power = jnp.abs(jnp.trapezoid(_direct_lambda, _disc_ledger_wave()))
+        _direct_power = jnp.abs(jnp.trapezoid(_direct_lambda, _los_wave))
         _log_direct = jnp.log10(jnp.maximum(_direct_power, representable_floor(1e-100)))
         components_final = {
             **components_final,
