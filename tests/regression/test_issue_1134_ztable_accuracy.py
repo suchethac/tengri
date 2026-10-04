@@ -23,7 +23,16 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "des_i"]
-Z_GRID = np.linspace(0.05, 1.5, 25)
+# Extend grid with refined sampling around known Lyman-break edges (#1134).
+# GALEX FUV red edge crosses Lyman limit near z~0.47, z~0.85, z~1.14, z~1.96.
+# Sample densely there to catch interpolation errors on the exact path.
+_base_grid = np.linspace(0.05, 1.5, 25)
+_lyman_edge_zones = [
+    np.linspace(0.46, 0.50, 9),   # z ~ 0.47
+    np.linspace(0.84, 0.88, 9),   # z ~ 0.85
+    np.linspace(1.12, 1.18, 13),  # z ~ 1.14 (wide zone, largest effect)
+]
+Z_GRID = np.sort(np.concatenate([_base_grid] + _lyman_edge_zones))
 RTOL = 0.01
 #: Per-band override: FUV's IGM-free Lyman-limit floor (0.91 %) plus z interpolation.
 BAND_RTOL = {"galex_fuv": 0.015}
