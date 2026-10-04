@@ -17,9 +17,62 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_UMIN,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
+from tengri.components.dust.emission_templates import (
+    _DL07_UMAX_POWERLAW,
+    _DL14_UMAX_POWERLAW,
+    _pdr_luminosity_weight,
+)
 from tengri.parameters.priors import Fixed
 
 __all__ = ["DraineLi2007IRSEDComponent", "DraineLi2014IRSEDComponent"]
+
+
+def _dl_umean(umin, gamma, umax, alpha):
+    r"""Mean starlight intensity :math:`\langle U\rangle` of a Draine & Li model.
+
+    The dust mass fraction :math:`1-\gamma` sits at :math:`U_{\min}` and
+    :math:`\gamma` follows :math:`dM/dU \propto U^{-\alpha}` on
+    :math:`[U_{\min}, U_{\max}]` (the Draine & Li 2007 mass distribution whose
+    luminosity weight is ``_pdr_luminosity_weight``, Eq. 33), so
+
+    .. math::
+
+        \langle U\rangle = (1-\gamma)\,U_{\min}
+            + \gamma\,\frac{1-\alpha}{2-\alpha}\,
+              \frac{U_{\max}^{2-\alpha} - U_{\min}^{2-\alpha}}
+                   {U_{\max}^{1-\alpha} - U_{\min}^{1-\alpha}}
+            = U_{\min}\,[(1-\gamma) + \gamma R],
+
+    with :math:`R` the power-law to single-:math:`U` luminosity ratio of
+    ``_pdr_luminosity_weight`` (limits :math:`\alpha = 1, 2` included). This is
+    CIGALE's ``dust.umean`` (Boquien et al. 2019, A&A 622, A103; ``dl2007.py``:
+    :math:`\alpha = 2`; ``dl2014.py``: general :math:`\alpha`,
+    :math:`U_{\max} = 10^7`).
+
+    Parameters
+    ----------
+    umin : float
+        Minimum radiation field :math:`U_{\min}`. [dimensionless]
+    gamma : float
+        Dust mass fraction in the power-law component. [dimensionless]
+    umax : float
+        Upper bound :math:`U_{\max}` of the power law. [dimensionless]
+    alpha : float
+        Power-law slope :math:`\alpha`. [dimensionless]
+
+    Returns
+    -------
+    ndarray
+        :math:`\langle U\rangle`. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes (pole-safe ``R``).
+
+    ``umin`` enters as given; the emitted SED clamps :math:`U_{\min}` to the
+    template grid edge, which the declared free priors never exceed.
+    """
+    return umin * ((1.0 - gamma) + gamma * _pdr_luminosity_weight(umin, umax, alpha))
 
 
 class DraineLi2007IRSEDComponent(EmissionComponent):
@@ -67,6 +120,9 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
     qpah = Fixed(DEFAULT_DUST_QPAH)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2007",)
+
+    #: ``dust_umean``: the model's mean radiation field <U> (CIGALE ``dust.umean``).
+    outputs: ClassVar = {"dust_umean": ""}
 
     accepts_threaded_templates: ClassVar[bool] = True
 
@@ -120,7 +176,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where sed_out is the updated SED and published
-            contains {"sed_dust_ir": emission SED in erg/s/Hz}.
+            contains {"sed_dust_ir": emission SED in erg/s/Hz, "dust_umean": <U> (dimensionless)}.
 
         """
         kwargs = dict(
@@ -136,7 +192,8 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
             from tengri.components.dust.emission import draine_li2007 as dl07_fn
 
             sed = dl07_fn(wave, L_ir, **kwargs)
-        return sed_in + sed, {"sed_dust_ir": sed}
+        umean = _dl_umean(p["umin"], p["gamma_dl"], _DL07_UMAX_POWERLAW, 2.0)
+        return sed_in + sed, {"sed_dust_ir": sed, "dust_umean": umean}
 
 
 class DraineLi2014IRSEDComponent(EmissionComponent):
@@ -177,6 +234,9 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
     alpha_dl14 = Fixed(DEFAULT_DUST_ALPHA_DL14)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine2014",)
+
+    #: ``dust_umean``: the model's mean radiation field <U> (CIGALE ``dust.umean``).
+    outputs: ClassVar = {"dust_umean": ""}
 
     accepts_threaded_templates: ClassVar[bool] = True
 
@@ -231,7 +291,7 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where sed_out is the updated SED and published
-            contains {"sed_dust_ir": emission SED in erg/s/Hz}.
+            contains {"sed_dust_ir": emission SED in erg/s/Hz, "dust_umean": <U> (dimensionless)}.
 
         """
         kwargs = dict(
@@ -249,4 +309,5 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
             from tengri.components.dust.emission import draine_li2014 as dl14_fn
 
             sed = dl14_fn(wave, L_ir, **kwargs)
-        return sed_in + sed, {"sed_dust_ir": sed}
+        umean = _dl_umean(p["umin"], p["gamma_dl"], _DL14_UMAX_POWERLAW, p["alpha_dl14"])
+        return sed_in + sed, {"sed_dust_ir": sed, "dust_umean": umean}

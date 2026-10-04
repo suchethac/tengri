@@ -4,6 +4,8 @@
 
 - The fold that `WavePrecomp(igm_fold="auto")` resolved to ("exact", "node", or `None` when no fold was built) is reported beside the declared mode in `precompute_engagement_report(model).observed_facts["igm_fold"]` and in `summary_text()`. (#2445).
 
+- `draine_li2007` and `draine_li2014` publish the derived key `dust_umean`, the mean starlight intensity `U_min [(1 - gamma) + gamma R]` of the model (CIGALE's `dust.umean`), with `R` the power-law to single-U luminosity ratio at `U_max = 1e6` (alpha = 2) for DL07 and `1e7` (free alpha) for DL14 (#2599).
+
 ### Fixed
 
 - The NIFTy (`vi*`) and native (`native_vi_*`) variational engines score a photometric upper or lower limit (`data_mask` 1 / -1) as -ln Φ((F − m)/σ) or -ln Φ((m − F)/σ) like `map`, the samplers and `vi_fullrank`, with the limit bands entering the geoVI/MGVI metric as detections at their limit value; a free noise model together with a limit raises `ParameterError`. The NIFTy likelihood is built per `Fitter` and only the data-free physics is cached on the model, so a second `Fitter` on one model object fits its own data; the `hmc_is` evidence evaluation takes the data at call time, and the NIFTy free-noise likelihood passes free parameters only to the forward model (#2667, #2668).
