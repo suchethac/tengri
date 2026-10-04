@@ -50,8 +50,11 @@ _NONE = dict(
     agn_attenuation_block="none",
 )
 #: Measured deviation of the trapezoid of the returned spectrum on ``_WIDE`` from the
-#: closed-form bolometric normalization (kubota_done 7.1e-4, multicolor 2.1e-5); the energy
-#: checks assert at three times these.
+#: closed-form bolometric normalization: multicolor 2.1e-5 (quadrature); kubota_done 7.1e-4,
+#: which is grid-converged, not quadrature -- the hot-corona template integrates to 0.963 of
+#: the f_hard L_Edd the normalizer counts it at, and the disc + warm shapes to 0.99954 of
+#: theirs (#2733). The energy checks assert at three times these; the tolerance names that
+#: leak, it does not hide the inclination law under test.
 _ENERGY_TOL = {"kubota_done": 3 * 7.1e-4, "multicolor": 3 * 2.1e-5}
 
 
