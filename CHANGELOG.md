@@ -4,10 +4,10 @@
 
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
-  with the default 13.0 (10 THz) as before. The key is a parameter of both AGN
-  radio models, so `radio={'agn': {'all_params': FREE}}` on the default
-  power-law jet frees it (`Uniform(12, 14)`) along with `radio_loudness` and
-  `radio_alpha_agn`. The cutoff exponent is formed as `nu * 10^-cut`, so the
+  with the default 13.0 (10 THz) as before. The key is read by both AGN radio
+  models; on the power-law jet the `all_params: FREE` wildcard frees only
+  `radio_loudness` and `radio_alpha_agn`, and the cutoff is freed when named
+  (`radio={'agn': {'radio_log_nu_cut': FREE}}`, prior `Uniform(12, 14)`). The cutoff exponent is formed as `nu * 10^-cut`, so the
   value and the gradient are finite in float32 for any `cut` (10^cut overflows
   there from about 38.5). The DPL-only keys `radio_alpha_thin`,
   `radio_alpha_thick` and `radio_log_nu_t` are refused on the power-law jet with

@@ -10,7 +10,7 @@ AGNfitter-rx SPL jet).  Covered here:
 * the default is bit-identical to an explicit 13.0;
 * the cutoff has a correct autodiff gradient, in float64 and in float32;
 * every AGN radio key is accepted by a model iff that model reads it;
-* ``all_params: FREE`` on the power-law jet frees the cutoff.
+* the power-law ``all_params: FREE`` wildcard leaves the cutoff to be named.
 """
 
 import inspect
@@ -115,12 +115,20 @@ def test_default_is_bit_identical_to_cut_13(ssp):
     assert declared_default(PARAMS, "radio_log_nu_cut") == 13.0
 
 
-def test_wildcard_frees_cutoff_on_powerlaw(ssp):
-    """``all_params: FREE`` on the default (power-law) jet frees the cutoff, not DPL knobs."""
-    m = _build(ssp, {"all_params": FREE})
-    free = set(m.spec.free_params)
-    assert "radio_log_nu_cut" in free
-    assert not free & {"radio_alpha_thin", "radio_alpha_thick", "radio_log_nu_t"}
+def test_cutoff_on_powerlaw_is_freed_only_when_named(ssp):
+    """The power-law ``*`` wildcard leaves the cutoff alone; naming it is accepted."""
+    free = set(_build(ssp, {"all_params": FREE}).spec.free_params)
+    assert {"radio_loudness", "radio_alpha_agn"} <= free
+    assert not free & {
+        "radio_log_nu_cut",
+        "radio_alpha_thin",
+        "radio_alpha_thick",
+        "radio_log_nu_t",
+    }
+    named = _build(ssp, {"radio_log_nu_cut": FREE, "all_params": Fixed(DEFAULT)})
+    assert "radio_log_nu_cut" in named.spec.free_params
+    pinned = _build(ssp, {"radio_log_nu_cut": Fixed(12.0), "all_params": Fixed(DEFAULT)})
+    assert "radio_log_nu_cut" not in pinned.spec.free_params
 
 
 def test_nu_cut_gradient_float64(ssp, sed_sf):

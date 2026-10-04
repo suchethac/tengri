@@ -5154,7 +5154,7 @@ _RADIO_SF_PARAMS_BY_MODE: dict[str, frozenset[str]] = {
     "mccheyne2022": frozenset({"radio_mcch_q0", "radio_mcch_mass_slope", "radio_mcch_z_slope"}),
 }
 _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
-    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn", "radio_log_nu_cut"}),
+    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn"}),
     "dpl": frozenset(
         {
             "radio_loudness",
@@ -5164,6 +5164,14 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
             "radio_log_nu_cut",
         }
     ),
+}
+#: What each AGN radio model READS, as opposed to what its ``*`` wildcard frees
+#: (:data:`_RADIO_AGN_PARAMS_BY_MODEL`). The cutoff ``radio_log_nu_cut`` is read
+#: by both models but the power-law wildcard leaves it alone: it is freed only
+#: when named. This set decides which keys a model accepts and which the
+#: round-trip emits.
+_RADIO_AGN_READS_BY_MODEL: dict[str, frozenset[str]] = {
+    model: names | {"radio_log_nu_cut"} for model, names in _RADIO_AGN_PARAMS_BY_MODEL.items()
 }
 #: X-ray corona params that only *some* models read. ``XRaySEDComponent`` picks
 #: one of two argument lists on ``config.model``: the ``lopez24`` corona passes
@@ -5254,7 +5262,7 @@ _XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset()
 #: Union of every param owned by each radio sub-group, used by the partition
 #: to route names away from the flat ``radio`` group.
 _RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())
-_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY_MODEL.values())
+_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_MODEL.values())
 
 
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
@@ -6061,7 +6069,7 @@ def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     """
     if group == "radio.agn":
         wanted = {k if k.startswith("radio_") else f"radio_{k}" for k in foreign}
-        models = sorted(m for m, names in _RADIO_AGN_PARAMS_BY_MODEL.items() if wanted & names)
+        models = sorted(m for m, names in _RADIO_AGN_READS_BY_MODEL.items() if wanted & names)
         noun = "keys" if len(foreign) > 1 else "key"
         return f" Models that do read the {noun}: {', '.join(models)}." if models else ""
     if group != "dust_attenuation":
@@ -6344,7 +6352,7 @@ def _validate_user_keys(
                 if sub_name == "agn":
                     # A key some AGN radio model reads but the selected one does not
                     # (#2689): refused by name instead of silently ignored.
-                    read = _RADIO_AGN_PARAMS_BY_MODEL.get(
+                    read = _RADIO_AGN_READS_BY_MODEL.get(
                         getattr(structural_params, "radio_agn_model", None)
                     )
                     if read is not None:
@@ -8096,7 +8104,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 param_names = [name for name in param_names if name in emittable]
         elif group_name == "radio.agn":
             # Same rule for the radio AGN jet: emit only what its model reads.
-            read = _RADIO_AGN_PARAMS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
+            read = _RADIO_AGN_READS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
             if read is not None:
                 param_names = [name for name in param_names if name in read]
 
