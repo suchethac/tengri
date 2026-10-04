@@ -10,14 +10,16 @@
 
 ### Fixed
 
-- The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`)
-  read the grid's black-hole-mass and Eddington-ratio axes from `agn_log_mbh` and
-  `agn_log_ledd`: both blocks called the grid backend without them, so the axes sat at the
-  backend's hard-coded node (8.0, -0.3) and the two parameters were inert (the
-  [O III] 5007 light moves by about 20% between `agn_log_ledd` = -0.3 and -1.0). Both
-  blocks now forward the registry defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when
-  the model leaves them unset, so a model that never set them sees the (7.0, -1.0) grid
-  node instead of (8.0, -0.3) (#2634).
+- The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
+  and `{'type': 'synthesizer'}`) read the grid's black-hole-mass and Eddington-ratio axes
+  from `agn_log_mbh` and `agn_log_ledd`: all four blocks called the grid backend without
+  them, so the axes sat at the backend's hard-coded node (8.0, -0.3) and the two
+  parameters were inert (the [O III] 5007 light of the `synthesizer_spectra` NLR moves by
+  about 18% between `agn_log_ledd` = -0.3 and -1.0). The blocks now forward the registry
+  defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
+  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3); the
+  AGN component's own fallback for an absent `agn_log_mbh` reads the same default
+  instead of a bare 8.0 (#2634)..
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
   with the default 13.0 (10 THz) as before. The key is read by both AGN radio

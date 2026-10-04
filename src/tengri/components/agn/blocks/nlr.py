@@ -284,6 +284,8 @@ def nlr_synthesizer_block(
     agn_nlr_fwhm_kms: float = 500.0,
     agn_nlr_logU: float = -2.0,
     agn_nlr_logZ: float = -1.8477,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR lines from the Synthesizer Cloudy ``/lines`` grid.
@@ -298,6 +300,14 @@ def nlr_synthesizer_block(
     and are drivable through ``SEDModel.build``: otherwise they were frozen at
     their defaults (a silent no-op, #931). They translate to the grid's
     ``neb_*`` axes internally.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol: ``agn_log_lbol`` does).
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -308,6 +318,8 @@ def nlr_synthesizer_block(
         covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("nlr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_nlr_logU,
         neb_logZ_gas=agn_nlr_logZ,
     )

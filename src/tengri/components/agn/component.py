@@ -56,7 +56,11 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
-from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+    PARAMS as _AGN_PARAMS,
+)
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.unified import (
@@ -504,8 +508,8 @@ class AGNSEDComponent(TemplateThreading):
         agn_kwargs = {
             "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
             "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH)),
+            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", DEFAULT_AGN_LOG_LEDD)),
             "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
             # CIGALE-coupled override: see ``agn_torus_frac_effective``
             # block above. When ``agn_ir_frac > 0`` this carries the

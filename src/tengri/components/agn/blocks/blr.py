@@ -152,6 +152,8 @@ def blr_synthesizer_block(
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
     agn_blr_logU: float = -1.0,
     agn_blr_logZ: float = -1.8477,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR lines from the Synthesizer Cloudy grid (grid-backed blr block).
@@ -177,6 +179,11 @@ def blr_synthesizer_block(
             Covering fraction, broad-line FWHM [km/s], and bolometric correction.
     agn_blr_logU, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter.
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol: ``agn_log_lbol`` does).
 
     Returns
     -------
@@ -192,6 +199,8 @@ def blr_synthesizer_block(
         covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("blr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_blr_logU,
         neb_logZ_gas=agn_blr_logZ,
     )
