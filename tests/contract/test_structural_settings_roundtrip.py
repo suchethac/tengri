@@ -299,8 +299,12 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "law_diff",
         "law_neb",
         "lyman_cutoff",
-        "lyc_absorb_all",
-        "eb_include_lyc",
+        "lyc_reprocessed_by",
+        "lyc_in_energy_balance",
+        "lyc_escape_geometry",
+        # young/old split: static settings emitted back by the dust round-trip rule
+        "t_birth_yr",
+        "transition_width_dex",
         # age_binned screens: stored as (law, lo, hi) tuples, emitted back as the
         # {'law', 'window_log_yr'} dicts the grammar takes.
         "screens",

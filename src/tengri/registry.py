@@ -957,7 +957,7 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
     "age_binned": {
         "status": "production",
         "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
-        "short_doc": "N independent screens, each its own law and log-age window (#2528)",
+        "short_doc": "N screens, each its own law and exact young/old age window (#2528)",
         # The bare {'type': 'age_binned'} is refused (the screen list is the
         # structural content), so the row carries the minimal runnable form: the
         # two_component birth-cloud/diffuse split, legal on any SSP grid.

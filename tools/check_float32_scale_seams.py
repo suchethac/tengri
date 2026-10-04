@@ -200,7 +200,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.kd_precompute:_compute_bh_and_radii",
             "tengri.components.agn.kd_precompute:kubota_done_disc_preintegrated",
             "tengri.components.agn.qsogen:_qsogen_components",
-            "tengri.components.agn.richards2006_disc:richards2006_disc",
             "tengri.components.agn.silva04:silva04_sed_from_grid",
             "tengri.components.agn.skirtor:_skirtor_grid_sed",
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",

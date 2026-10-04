@@ -1381,7 +1381,7 @@ save_fig("prospector_05b_dust_av_bc.png")
 # including LyC. Tengri's canonical balance excludes λ < 912 Å (those photons
 # re-emerge as nebular, the CIGALE convention). At this fiducial, LyC
 # carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
-# Both ratios are printed. Opt-in `dust={'eb_include_lyc': True}` closes the gap.
+# Both ratios are printed. Opt-in `dust_attenuation={'lyc_in_energy_balance': True}` closes the gap.
 
 # %% [markdown]
 # **Verification Status:** CROSSVAL: Dust IR emission physics (MBB, Casey12, CMB)
@@ -1469,7 +1469,7 @@ print(f"§6 FSPS far-IR peak at {_peak_p / 1e4:.0f} µm")
 
 # FIR amplitude vs FSPS — quantifies the LyC energy-balance convention
 # (#961). The default (LyC-masked, #922) sits ~11 % low; the opt-in
-# `eb_include_lyc` FSPS-parity mode re-emits the full absorbed luminosity
+# `lyc_in_energy_balance` FSPS-parity mode re-emits the full absorbed luminosity
 # like FSPS and closes the gap.
 _fir_win = (w_p_ir > 3e5) & (w_p_ir < 1e7)  # 30–1000 µm
 _t_on_p_ir = U.regrid(np.asarray(s_ir.wave), sed_full_t, w_p_ir)
@@ -1491,7 +1491,7 @@ m_ir_fsps = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "eb_include_lyc": True,  # FSPS parity: LyC heats dust too (#961)
+        "lyc_in_energy_balance": True,  # FSPS parity: LyC heats dust too
         "all_params": Fixed(DEFAULT),
     },
     dust_emission={
@@ -1513,7 +1513,7 @@ _fir_ratio_fsps = float(np.median(_t_fsps_on_p[_fir_win] / L_p_ir[_fir_win]))
 print(
     f"§6 FIR amplitude tengri/FSPS (30–1000 µm): "
     f"{_fir_ratio:.3f} (canonical LyC-masked) → "
-    f"{_fir_ratio_fsps:.3f} with eb_include_lyc=True (FSPS parity)"
+    f"{_fir_ratio_fsps:.3f} with lyc_in_energy_balance=True (FSPS parity)"
 )
 
 
@@ -2241,7 +2241,7 @@ plt.show()
 # 1. **Far-IR amplitude**: tengri's canonical energy balance excludes the
 #    Lyman continuum from dust heating, while FSPS re-emits all of it.
 #    At this fiducial the difference is ~11 % in every FIR band. Opt into
-#    the FSPS convention with `dust={'eb_include_lyc': True}` (§6).
+#    the FSPS convention with `dust_attenuation={'lyc_in_energy_balance': True}` (§6).
 # 2. **IGM**: `SEDModel.build` defaults the IGM **on** (Inoue+2014).
 #    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
 #    moves a GALEX FUV band by ~18 % (rest-frame Lyman continuum). Match

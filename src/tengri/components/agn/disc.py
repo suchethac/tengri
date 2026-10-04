@@ -313,7 +313,8 @@ def _nt_l_diss_analytic(x_hot: float, r_isco_cm: float, t_in: float, a_spin: flo
         L_diss [erg s^-1].
     """
     l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
-    return l0 * jnp.maximum(_nt_h(jnp.log(x_hot), a_spin), 0.0)
+    h_hot = _nt_h(jnp.log(x_hot), a_spin)  # a dissipated power: >= 0 up to round-off
+    return l0 * jnp.where(h_hot > 0.0, h_hot, 0.0)
 
 
 def _nt_l0(r_isco_cm: float, t_in: float, float32: bool = False) -> float:
@@ -358,6 +359,7 @@ def _r_hot_bisect(
 
 
 _X_LO = 1.001
+_R_HOT_POLISH_STEPS = 3
 
 
 def _bisect_log_x(l_hot_target, l0, a_spin, n_iter):
@@ -377,7 +379,16 @@ def _bisect_log_x(l_hot_target, l0, a_spin, n_iter):
     (lo_f, hi_f), _ = jax.lax.scan(
         _step, (jnp.log(_X_LO), jnp.log(_NT_X_MAX)), None, length=n_iter
     )
-    return (lo_f + hi_f) * 0.5
+    # The bracket is 9.2 / 2^n_iter wide (8e-12 at 40), and the SED is steep enough in R_hot
+    # that this quantizes the root into steps of ~1e-6 in the parameters. Newton steps on
+    # F(u) = l0 h(u) - l_target, kept inside the bracket (which holds the root), converge
+    # to the residual of the quadrature itself; a flat or pinned end leaves the midpoint.
+    u = (lo_f + hi_f) * 0.5
+    for _ in range(_R_HOT_POLISH_STEPS):
+        slope = l0 * _nt_dh_dlogx(u, a_spin)
+        step = (l0 * _nt_h(u, a_spin) - l_target) / jnp.where(slope > 0.0, slope, 1.0)
+        u = jnp.clip(u - jnp.where(slope > 0.0, step, 0.0), lo_f, hi_f)
+    return u
 
 
 @functools.partial(jax.custom_jvp, nondiff_argnums=(3,))
@@ -928,7 +939,8 @@ def multicolor_disc(
             )(r_grid, t_profile, dr),
             axis=0,
         )
-        return disc_u + jnp.trapezoid(jnp.maximum(_tail_u - _wien_u, 0.0), _nu_b)
+        _excess_u = _tail_u - _wien_u  # the tail's excess over the Wien form; >= 0 by definition
+        return disc_u + jnp.trapezoid(jnp.where(_excess_u > 0.0, _excess_u, 0.0), _nu_b)
 
     # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
     # ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
@@ -1210,7 +1222,7 @@ def _compute_bh_params(
     References
     ----------
     .. [1] D. N. Page and K. S. Thorne, "Disk-Accretion onto a Black Hole.
-       Time-Averaged Structure of the Inner Accretion Disk," ApJ, 191, 499 (1974).
+       Time-Averaged Structure of Accretion Disk," ApJ, 191, 499 (1974).
     """
     r_g = _gravitational_radius(agn_log_mbh)
     r_isco_rg = _isco_radius(agn_a_spin)

@@ -611,12 +611,12 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: grid. Against a shape that weights the corona four times higher relative to the disc
 #: (``(cos i / 2) D_nu + H_nu``), the disc-dominated bins sit higher by
 #: ``[2c/(2c + h)] / [(c/2)/(c/2 + h)] - 1`` with ``c = cos 30`` and ``h`` the corona's share
-#: of the in-grid disc power: +4.0e-6 at log M_BH = 6 (lambda_Edd = 3, h ~ 1e-6) and +2.1 % at
+#: of the in-grid disc power: +4.0e-6 at log M_BH = 6 (lambda_Edd = 3, h ~ 1e-6) and +2.2 % at
 #: log M_BH = 8 and 10 (lambda_Edd = 0.03 and 3e-4, h = 0.012).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5587753443373833e32, 0.0, 2.9724106000499967e28, 8.775345908542517e21),
-    8.0: (1.6233890962333792e32, 0.0, 3.1182806471358848e28, 8.810608591038717e21),
-    10.0: (1.6374247328925108e32, 0.0, 3.1414766299784605e28, 9.2874515829745e21),
+    6.0: (1.5586818994930873e32, 0.0, 2.890144051307899e28, 8.775296224915539e21),
+    8.0: (1.6231783393908302e32, 0.0, 3.0357717681217046e28, 8.81050134328935e21),
+    10.0: (1.6371879037133235e32, 0.0, 3.055844001572324e28, 9.286565918882074e21),
 }
 
 

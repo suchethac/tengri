@@ -13,7 +13,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.dust.attenuation import precompute_dust_age_weights, two_component_dust_fast
+from tengri.components.dust.attenuation import two_component_dust_fast
+from tengri.components.stellar.age_boundary import cic_cell_edges, survival_cell_mean
 from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
 from tengri.components.stellar.sps.precompute import (
     fast_photometry,
@@ -101,7 +102,9 @@ def wave_rest_pixels(n_pix):
 
 @pytest.fixture
 def dust_age_weights(ssp_ages_yr):
-    return precompute_dust_age_weights(ssp_ages_yr)
+    """Per-node younger-than-10-Myr fraction of a constant-SFR history (hard step)."""
+    lo, hi = cic_cell_edges(ssp_ages_yr)
+    return survival_cell_mean(lo, hi, 1e7, 0.0)
 
 
 @pytest.fixture
@@ -132,8 +135,10 @@ def _make_fused_phot(
         frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
         ssp_at_z = (1.0 - frac) * ssp_phot[idx] + frac * ssp_phot[idx + 1]
         wave_ratio = (eff_waves_rest / 5500.0) ** dust_n
-        tau_v_eff = dust_age_w * tau_v1 + tau_v2
-        dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+        # Two populations per node: young sees both screens, old the diffuse one.
+        t_young = jnp.exp(-((tau_v1 + tau_v2) * wave_ratio)[None, :])
+        t_old = jnp.exp(-(tau_v2 * wave_ratio)[None, :])
+        dust = dust_age_w[:, None] * t_young + (1.0 - dust_age_w)[:, None] * t_old
         flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
         return apply_log10_scale(flux_lsun * LSUN_ERG_PER_S, log10_flux_scale)
 
@@ -158,8 +163,10 @@ def _make_fused_spec(
         frac = (log_z_c - ssp_lgmet[idx]) / (ssp_lgmet[idx + 1] - ssp_lgmet[idx])
         ssp_at_z = (1.0 - frac) * ssp_on_pixels[idx] + frac * ssp_on_pixels[idx + 1]
         wave_ratio = (wave_rest_pixels / 5500.0) ** dust_n
-        tau_v_eff = dust_age_w * tau_v1 + tau_v2
-        dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
+        # Two populations per node: young sees both screens, old the diffuse one.
+        t_young = jnp.exp(-((tau_v1 + tau_v2) * wave_ratio)[None, :])
+        t_old = jnp.exp(-(tau_v2 * wave_ratio)[None, :])
+        dust = dust_age_w[:, None] * t_young + (1.0 - dust_age_w)[:, None] * t_old
         flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
         return apply_log10_scale(flux, log10_flux_scale) * LSUN_ERG_PER_S
 

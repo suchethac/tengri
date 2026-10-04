@@ -27,7 +27,8 @@ from tengri.forward.energy_balance import bolometric_absorbed
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ForwardState
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
+from tests._age_boundary import hand_age_derived
 
 pytestmark = pytest.mark.contract
 
@@ -100,6 +101,7 @@ def _state_with_agn(sed_agn) -> ForwardState:
         derived={
             "lnu_age": lnu_age,
             "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
             "sed_agn": sed_agn,
         },
     )
@@ -238,7 +240,7 @@ def test_agn_screen_does_not_affect_stellar(screen_choice):
     state = ForwardState(
         wave=_WAVE,
         sed_intrinsic=stellar,
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES},
+        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, **hand_age_derived(_AGES)},
     )
 
     out_screened = comp_screened.apply(state, _PARAMS)
@@ -383,8 +385,8 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     ``'diffuse'`` it is attenuated by the diffuse screen before dust's energy
     balance integral runs. That delta must equal the independent
     :func:`tengri.forward.energy_balance.bolometric_absorbed` integral of
-    (intrinsic AGN, screened AGN), LyC-masked the same way (912 Angstrom,
-    the ``dust_eb_include_lyc=False`` default).
+    (intrinsic AGN, screened AGN), LyC-masked the same way (the step at ``LYMAN_LIMIT_AA``,
+    the ``dust_lyc_in_energy_balance=False`` default).
     """
     m_screen = _build_agn_dust_model(synthetic_ssp_wide, screen="diffuse", approx=approx)
     m_none = _build_agn_dust_model(synthetic_ssp_wide, screen="none", approx=approx)
@@ -431,7 +433,7 @@ def test_energy_balance_screened_agn(synthetic_ssp_wide, branch, approx):
     expected = abs(
         float(
             bolometric_absorbed(
-                sed_agn, sed_agn * transmission, nu, wave=wave, lyman_cutoff_aa=912.0
+                sed_agn, sed_agn * transmission, nu, wave=wave, lyman_cutoff_aa=LYMAN_LIMIT_AA
             )
         )
     )

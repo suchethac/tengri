@@ -251,5 +251,6 @@ def test_fwhm_gradient_is_finite_and_matches_finite_differences():
     g = float(jax.grad(f)(3000.0))
     h = 1.0
     fd = (float(f(3000.0 + h)) - float(f(3000.0 - h))) / (2.0 * h)
-    assert np.isfinite(g)
+    assert np.isfinite(g), "a non-finite FWHM gradient"
+    assert g != 0.0, "an identically zero FWHM gradient"
     assert g == pytest.approx(fd, rel=1e-3)

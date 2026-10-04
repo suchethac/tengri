@@ -477,6 +477,14 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: Re-taken for the Lyman-edge convention of the dust energy balance (the cell that
+#: straddles 911.76 A is integrated with the step model, not zeroed-and-trapezoided
+#: from 912 A). Measured: ``L_absorbed`` drops by 1.357e-3 on this model; an independent
+#: numpy step-model integral of the same SEDs reproduces the new ``L_ir`` to 3e-9 and the
+#: old hard-912 construction reproduces the old one to 1.4e-3. The AGN components scale
+#: with the stellar dust luminosity (``fracAGN``), so ``rest_sed`` below 912 A (AGN only)
+#: moves by exactly -1.357e-3 and the dust-emission bands (WISE) by -7.5e-4; the
+#: stellar optical is unchanged to 5e-5. rest_sed_sum moved -7.2e-5 / -1.1e-4 / -1.3e-4.
 #: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
 #: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
 #: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
@@ -485,41 +493,41 @@ _AGN_MBH_DUST = {
 #: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
 #: disc is multiplied by ``eta(30 deg) T``.
 #: Re-captured on the native kubota_done wavelength axis: the model's master grid now
-#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade; 6436 nodes), so the
-#: node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
+#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade, 75 below 1000 A; 6604
+#: nodes), so the node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
 #: (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The composable runner's
 #: budgets no longer depend on the caller's grid, which is what makes the entries a property
 #: of the model: the photometry agrees with the variant that carries 200 points per decade
-#: shortward of 1000 A to 1.8e-4 (the stellar dust-energy balance is integrated on the master
-#: grid).
+#: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
+#: dust-energy balance is integrated on the master grid).
 #: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
 #: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
 #: where the corona now weighs four times less relative to the disc than under
-#: ``(cos i / 2) D_nu + H_nu``. ``rest_sed_sum`` moves by +5.1e-6 / +2.27 % / +2.35 %
+#: ``(cos i / 2) D_nu + H_nu``. ``rest_sed_sum`` moves by +5.1e-6 / +2.26 % / +2.35 %
 #: (mbh 6/8/10; lambda_Edd = 3 / 0.03 / 3e-4 at ``log_lbol = 11``, so the corona's share of
 #: the in-grid disc power is ~1e-6 / 0.012 / 0.012), the r-band photometry by
 #: +5.6e-6 / +2.9 % / +2.7 %; the derivation is beside ``_DISC_TIMES_ETA_T_REFERENCE``.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5594548995446925e32,
+        "rest_sed_sum": 1.559368999510649e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.9736266287980323e28,
-        "rest_sed_last": 8.775478995953827e21,
-        "photometry": (1.0994893677333497e-27, 1.5711827999606203e-27, 1.764818284965551e-27),
+        "rest_sed_mid": 2.8913720251154028e28,
+        "rest_sed_last": 8.775429095069979e21,
+        "photometry": (1.0994852594319436e-27, 1.5700123860297097e-27, 1.7632246337486667e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6414603080745045e32,
+        "rest_sed_sum": 1.6412255052044134e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 3.1587369375835607e28,
-        "rest_sed_last": 8.820190285761585e21,
-        "photometry": (1.1742858310779199e-27, 1.5726589132375256e-27, 1.7652454354035826e-27),
+        "rest_sed_mid": 3.076177633431483e28,
+        "rest_sed_last": 8.820067396495217e21,
+        "photometry": (1.1741596222309563e-27, 1.5714860896440464e-27, 1.763651086890311e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.6592588760896937e32,
+        "rest_sed_sum": 1.658990989478862e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 3.188172833659229e28,
-        "rest_sed_last": 9.424802972488873e21,
-        "photometry": (1.1798665486248044e-27, 1.5891814983660147e-27, 1.770359902326059e-27),
+        "rest_sed_mid": 3.101649853928127e28,
+        "rest_sed_last": 9.423693090848645e21,
+        "photometry": (1.1797312296056812e-27, 1.587981702686331e-27, 1.76875720476564e-27),
     },
 }
 
