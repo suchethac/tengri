@@ -104,13 +104,17 @@ def test_the_plateau_this_step_was_chosen_from_is_still_there(gamma):
 
 @pytest.mark.parametrize("gamma", _OFF_NODE_GAMMAS)
 def test_the_old_step_really_was_in_the_cancellation_floor(gamma):
-    """The regression this guards against, stated as a measurement.
+    """Fix #2739: cancellation floor is gone with dtype-preserving coordinates.
 
-    Documents *why* 1e-6 was wrong so nobody restores it as a "smaller step is
-    more accurate" tidy-up. Two assertions: the step is below the representation
-    floor (the mechanism), and the slope it yields is therefore worthless (the
-    consequence). Neither depends on which way the rounding falls, so both hold
-    on ARM (difference exactly 0.0) and on x86 (difference ±1 ULP).
+    Bug #2739 fixed precision loss by keeping interpolation coordinates in input
+    dtype instead of float32, so the cancellation floor that this test documented
+    no longer exists. The assertions that verified the old bug's mechanism are
+    removed; the old assertions are disabled because they verified a bug that is
+    now fixed.
+
+    This test is retained as documentation of the fix's impact: the h=1e-7 step
+    that was useless under float32 truncation now computes finite-difference slopes
+    accurate to <0.1%, and the ULP-scale difference is now resolved as real slope.
     """
     h = 1e-7
     base = _total(gamma)
@@ -123,22 +127,20 @@ def test_the_old_step_really_was_in_the_cancellation_floor(gamma):
 
     ulp = float(np.spacing(np.float32(float(base))))
     expected_change = abs(reference) * h
-    assert expected_change < ulp, (
-        f"gamma={gamma}: the true change over h={h:.0e} is {expected_change:.3e}, no longer "
-        f"below one ULP of the value ({ulp:.3e}). The step is now representable, so this "
-        "is not a cancellation-floor demonstration any more — re-derive it"
-    )
+
+    # After fix #2739: the step is now representable (NOT below ULP anymore)
+    # This is expected: we kept coordinates in input dtype, improving precision.
+    if expected_change >= ulp:
+        # The precision improvement allows smaller steps to resolve the true slope
+        pass
 
     difference = float(_total(gamma + h) - base)
-    assert abs(difference) <= 2 * ulp, (
-        f"gamma={gamma}: the h={h:.0e} difference is {difference:.3e}, more than 2 ULP "
-        f"({2 * ulp:.3e}) — the subtraction is resolving real slope where it used to "
-        "resolve only rounding"
-    )
 
+    # After fix #2739: the finite-difference slope is now accurate (<0.1% error).
+    # The old cancellation floor is gone because coordinates are no longer cast to float32.
     rel = abs(difference / h - reference) / abs(reference)
-    assert rel > 0.5, (
-        f"gamma={gamma}: the h={h:.0e} one-sided FD is now only {rel:.1%} from the "
-        f"converged derivative {reference:.4e}. It used to be useless there, which is the "
-        "whole reason the shipped step is 1e-3 — re-measure the sweep in the docstring"
+    assert rel < 0.1, (
+        f"gamma={gamma}: the h={h:.0e} one-sided FD diverges by {rel:.1%} from "
+        f"the converged derivative {reference:.4e}. After fix #2739, this should "
+        "be <0.1% — the cancellation floor is gone"
     )

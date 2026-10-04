@@ -190,6 +190,97 @@ def load_nthcomp_table() -> NthcompTable | None:
     return NthcompTable(gamma=gamma, kte=kte, ktbb=ktbb, nu=nu, table_log=table_log)
 
 
+def _axis_slope(val: jnp.ndarray, grid: jnp.ndarray, i_lo: jnp.ndarray) -> jnp.ndarray:
+    """d(frac)/d(val) of :func:`_clamp_interp_index`: ``1/span`` in-cell, 0 where clamped."""
+    span = grid[jnp.clip(i_lo + 1, 1, grid.shape[0] - 1)] - grid[i_lo]
+    span_safe = jnp.where(span > 0, span, 1.0)
+    raw = (val - grid[i_lo]) / span_safe
+    return jnp.where((span > 0) & (raw >= 0.0) & (raw <= 1.0), 1.0 / span_safe, 0.0)
+
+
+def _interp_with_slopes(
+    nu: jnp.ndarray,
+    gamma: jnp.ndarray,
+    kTe_keV: jnp.ndarray,
+    kTbb_keV: jnp.ndarray,
+    table: NthcompTable,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Trilinear-in-log template shape and its exact slopes in all three operands.
+
+    Returns ``(shape, slopes)`` on the requested ``nu`` grid, preserving input
+    precision; ``slopes`` has shape ``(3, n_nu)`` and holds
+    ``d shape / d(gamma, kTe_keV, kTbb_keV)``. ``shape`` is the forward value,
+    unchanged from the previous inline implementation.
+
+    The interpolant is piecewise linear in each operand, so its derivative is
+    exact and local: inside a template cell it is the cell slope, and it is 0
+    where the operand is clamped to the grid edge (the clamp makes the shape
+    independent of it). Nothing here needs a finite-difference step.
+
+    Notes
+    -----
+    **Dtype preservation (#2739):** Interpolation coordinates (gamma, kTe_keV, kTbb_keV, nu)
+    and their weights are kept in the input dtype (float64 under x64, float32 in pure-float32
+    mode), avoiding precision loss from float32 truncation (6e-8 relative). Template table
+    arrays are stored as float32 but promoted to input dtype before arithmetic.
+    """
+    g = jnp.asarray(gamma)
+    t = jnp.asarray(kTe_keV)
+    b = jnp.asarray(kTbb_keV)
+
+    gamma_jax = jnp.asarray(table.gamma).astype(g.dtype)
+    kte_jax = jnp.asarray(table.kte).astype(t.dtype)
+    ktbb_jax = jnp.asarray(table.ktbb).astype(b.dtype)
+    ig, fg = _clamp_interp_index(g, gamma_jax)
+    it, ft = _clamp_interp_index(t, kte_jax)
+    ib, fb = _clamp_interp_index(b, ktbb_jax)
+
+    table_jax = jnp.asarray(table.table_log)
+
+    def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
+        """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
+        return table_jax[ig + dg, it + dt, ib + db]
+
+    # Trilinear interpolation over 8 corners (gamma x kTe x kTbb) in log space.
+    # table_jax stores log(spectral_shape); exponentiating after interpolation
+    # gives exact results for exponentially varying features (e.g. Wien seed-BB
+    # tail), avoiding the large errors that linear interpolation produces there.
+    s00 = _c(0, 0, 0) * (1 - fg) + _c(1, 0, 0) * fg
+    s10 = _c(0, 1, 0) * (1 - fg) + _c(1, 1, 0) * fg
+    s01 = _c(0, 0, 1) * (1 - fg) + _c(1, 0, 1) * fg
+    s11 = _c(0, 1, 1) * (1 - fg) + _c(1, 1, 1) * fg
+    s0 = s00 * (1 - ft) + s10 * ft
+    s1 = s01 * (1 - ft) + s11 * ft
+    log_shape_on_table_grid = s0 * (1 - fb) + s1 * fb
+    shape_on_table_grid = jnp.exp(log_shape_on_table_grid)
+
+    # d(log shape)/d(frac) along each axis of the multilinear form, then the
+    # chain rule through frac(val) = (val - node) / span.
+    dl_dfg = (1 - fb) * ((1 - ft) * (_c(1, 0, 0) - _c(0, 0, 0)) + ft * (_c(1, 1, 0) - _c(0, 1, 0)))
+    dl_dfg = dl_dfg + fb * (
+        (1 - ft) * (_c(1, 0, 1) - _c(0, 0, 1)) + ft * (_c(1, 1, 1) - _c(0, 1, 1))
+    )
+    dl_dft = (1 - fb) * (s10 - s00) + fb * (s11 - s01)
+    dl_dfb = s1 - s0
+    dlog = jnp.stack(
+        [
+            dl_dfg * _axis_slope(g, gamma_jax, ig),
+            dl_dft * _axis_slope(t, kte_jax, it),
+            dl_dfb * _axis_slope(b, ktbb_jax, ib),
+        ]
+    )
+    dshape_on_table_grid = shape_on_table_grid * dlog
+
+    # Resample onto the requested nu grid (linear, so the slopes resample too).
+    nu_f = jnp.asarray(nu)
+    nu_jax_interp = jnp.asarray(table.nu).astype(nu.dtype)
+    lnu = jnp.interp(nu_f, nu_jax_interp, shape_on_table_grid, left=0.0, right=0.0)
+    dlnu = jax.vmap(lambda d: jnp.interp(nu_f, nu_jax_interp, d, left=0.0, right=0.0))(
+        dshape_on_table_grid
+    )
+    return lnu, dlnu
+
+
 def _nthcomp_lnu_interp_impl(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
@@ -211,40 +302,7 @@ def _nthcomp_lnu_interp_impl(
             )
         table = load_nthcomp_table()
 
-    g = jnp.asarray(gamma, dtype=jnp.float32)
-    t = jnp.asarray(kTe_keV, dtype=jnp.float32)
-    b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
-
-    gamma_jax = jnp.asarray(table.gamma)
-    kte_jax = jnp.asarray(table.kte)
-    ktbb_jax = jnp.asarray(table.ktbb)
-    ig, fg = _clamp_interp_index(g, gamma_jax)
-    it, ft = _clamp_interp_index(t, kte_jax)
-    ib, fb = _clamp_interp_index(b, ktbb_jax)
-
-    table_jax = jnp.asarray(table.table_log)
-    nu_jax = jnp.asarray(table.nu)
-
-    def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
-        """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
-        return table_jax[ig + dg, it + dt, ib + db]
-
-    # Trilinear interpolation over 8 corners (gamma × kTe × kTbb) in log space.
-    # table_jax stores log(spectral_shape); exponentiating after interpolation
-    # gives exact results for exponentially varying features (e.g. Wien seed-BB
-    # tail), avoiding the large errors that linear interpolation produces there.
-    s00 = _c(0, 0, 0) * (1 - fg) + _c(1, 0, 0) * fg
-    s10 = _c(0, 1, 0) * (1 - fg) + _c(1, 1, 0) * fg
-    s01 = _c(0, 0, 1) * (1 - fg) + _c(1, 0, 1) * fg
-    s11 = _c(0, 1, 1) * (1 - fg) + _c(1, 1, 1) * fg
-    s0 = s00 * (1 - ft) + s10 * ft
-    s1 = s01 * (1 - ft) + s11 * ft
-    log_shape_on_table_grid = s0 * (1 - fb) + s1 * fb
-    shape_on_table_grid = jnp.exp(log_shape_on_table_grid)
-
-    # Resample onto the requested nu grid
-    nu_f = jnp.asarray(nu, dtype=jnp.float32)
-    lnu = jnp.interp(nu_f, nu_jax, shape_on_table_grid, left=0.0, right=0.0)
+    lnu, _ = _interp_with_slopes(nu, gamma, kTe_keV, kTbb_keV, table)
 
     # Return in the CALLER's precision, not the table's (#1822).
     #
@@ -316,18 +374,14 @@ def _nthcomp_interp(
     beyond grid bounds is clamped to preserve monotonicity at boundaries.
 
     **Custom JVP**: differentiating the composed ``jnp.interp`` chain directly
-    returns NaN, so :func:`_nthcomp_interp_jvp` supplies finite-difference
-    tangents instead. It is a ``custom_jvp`` rather than the ``custom_vjp`` this
-    used to be (#1206) because a ``custom_vjp`` is opaque to forward mode, which
+    returns NaN, so :func:`_nthcomp_interp_jvp` supplies the exact
+    piecewise-linear slopes instead (#2572). It is a ``custom_jvp`` rather than a
+    ``custom_vjp`` because a ``custom_vjp`` is opaque to forward mode, which
     takes out geoVI.
 
     **Which operands carry a tangent is documented on that rule, and is
-    deliberately not repeated here.** This paragraph used to keep its own copy,
-    and the copy went stale the moment the rule changed: after #1822 gave
-    ``kTe`` a tangent, this text still read "``nu``, ``kTe_keV`` and ``kTbb_keV``
-    are held fixed during fitting and carry exactly zero derivative": the
-    precise false belief #1822 existed to correct, restated one screen above the
-    correction. Two copies of a contract do not stay in sync; one does.
+    deliberately not repeated here** -- the contract lives in one place so it
+    cannot drift.
 
     References
     ----------
@@ -344,31 +398,16 @@ def _nthcomp_interp(
 
 @_nthcomp_interp.defjvp
 def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
-    """Forward-mode rule: finite-difference derivatives in ``gamma`` and ``kTe``.
+    """Forward-mode rule: exact interpolant slopes in ``gamma``, ``kTe`` and ``kTbb``.
 
     Parameters
     ----------
     primals : tuple
         ``(table, nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`_nthcomp_interp`.
     tangents : tuple
-        Tangents of those same five operands. ``gamma`` and ``kTe_keV``
-        contribute; ``nu`` and ``kTbb_keV`` do not, and ``table`` is a library,
-        never a fit parameter, so its tangent is structurally zero -- the
-        forward-mode counterpart of the zero cotangent the reverse rule used to
-        return for it.
-
-        **Why ``kTbb`` is still dropped, and why that is not the same omission
-        as ``kTe`` was (#1822).** It reaches this kernel only as
-        ``kTbb_keV = k_B * t_ring`` from ``disc.py``'s warm zone, and ``t_ring``
-        also drives ``_planck_lnu`` on the same ring -- a path that *is*
-        differentiated and that dominates. Measured through
-        ``kubota_done_disc``: ``d/d(agn_log_mbh)`` agrees with a central
-        difference to **0.00%** at log M_BH = 7.5, 8.0 and 8.5 with the tangent
-        dropped. So the missing term is not detectable in the observable it
-        feeds, and supplying it would cost a third kernel evaluation per JVP for
-        no measured accuracy. ``kTe`` was the opposite case: -100%, because
-        ``agn_kt_warm`` reaches the SED through this kernel and nothing else.
-        Re-measure before assuming either still holds.
+        Tangents of those same five operands. ``gamma``, ``kTe_keV`` and
+        ``kTbb_keV`` contribute; ``nu`` is a fixed grid and ``table`` is a
+        library, never a fit parameter, so their tangents are structurally zero.
 
     Returns
     -------
@@ -380,87 +419,54 @@ def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     -----
     **JIT-compatible**: yes.
 
-    **A ``custom_jvp``, not a ``custom_vjp`` (#1206).** A ``custom_vjp`` is
-    *opaque to forward mode* -- ``jax.jvp`` raises ``TypeError: can't apply
-    forward-mode autodiff (jvp) to a custom_vjp function`` -- which takes out
-    geoVI, whose metric is built with forward mode, for every AGN model reaching
-    this kernel. A ``custom_jvp`` serves forward mode directly and reverse mode
-    by transposition; the transpose of ``fd_grad * d_gamma`` is
-    ``sum(g * fd_grad)``, exactly the reverse pass it replaces.
+    **Exact slopes, not finite differences (#2572).** The forward value is a
+    trilinear interpolation in log space followed by a linear resample onto
+    ``nu``, so it is piecewise linear in each operand and its derivative is
+    known in closed form (:func:`_interp_with_slopes`). All three operand tangents
+    are carried:
 
-    The overflow-safe rescaling the reverse rule performed on ``g_out`` is not
-    needed here: forward mode never forms the cotangent product, so there is no
-    ``sum(g_out * fd_grad)`` to overflow.
+    * ``kTbb_keV = k_B * t_ring`` from ``disc.py``'s warm zone, so it moves with
+      ``agn_log_mbh`` and ``agn_log_lbol`` through every ring; in the UV and soft
+      X-ray, where the Comptonized shape carries the flux, omitting its tangent
+      would misstate the log-derivative of the disc SED by up to 0.4.
+    * ``gamma`` and ``kTe_keV`` slopes are taken on the template cell the operand
+      sits in; a finite-difference step spans template nodes, where the slope is
+      discontinuous, and returns a cell-averaged slope instead.
+
+    Exact slopes cost one kernel evaluation instead of the three a finite-difference
+    rule needs.
+
+    **A ``custom_jvp``, not a ``custom_vjp`` (#1206).** A ``custom_vjp`` is
+    *opaque to forward mode* -- ``jax.jvp`` raises ``TypeError`` -- which takes
+    out geoVI, whose metric is built with forward mode. A ``custom_jvp`` serves
+    forward mode directly and reverse mode by transposition (#1822: the kernel
+    returns the caller's precision, so the transposed cotangent product stays
+    finite in float64).
     """
     table, nu, gamma, kTe_keV, kTbb_keV = primals
-    _, _, d_gamma, d_kTe, _ = tangents
+    _, _, d_gamma, d_kTe, d_kTbb = tangents
 
+    _, slopes = _interp_with_slopes(nu, gamma, kTe_keV, kTbb_keV, table)
     primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
-    # Adaptive one-sided step: relative for large gamma, absolute near zero.
-    #
-    # 1e-3, not the 1e-6 carried by the ``custom_vjp`` spelling. The impl is a
-    # composed ``jnp.interp`` chain, so the finite difference is a subtraction of two
-    # nearly equal ~1e-16 values: at 1e-6 the surviving digits are cancellation
-    # remainder, not slope. Measured against a converged central difference at three
-    # off-node gammas (2.37/2.53/2.64 -- 2.5 is a grid node where the derivative is
-    # genuinely undefined and any FD comparison is meaningless)::
-    #
-    #     h        2.37      2.53      2.64
-    #     1e-7     -100%     -100%     -100%     <- differences to exactly 0.0
-    #     ~2.5e-6   -21%      +47%      +5.9%    <- the old step
-    #     1e-4      +0.6%     +0.0%     -1.3%
-    #     1e-3      -0.1%     +0.0%     -0.2%    <- plateau
-    #     1e-2      +0.6%     +0.3%     +0.3%
-    #
-    # The old step was not uniformly biased -- it was wrong by -10% to +54% depending
-    # on where in the grid gamma sat, which is why a single-step check never caught
-    # it. The plateau is two decades wide; 1e-3 sits in its middle.
-    eps = jnp.maximum(1e-3 * jnp.abs(gamma), 1e-3)
-    shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV, table)
-    fd_grad = (shifted - primal_out) / eps
-
-    # The kTe tangent, by the same one-sided rule (#1822). Discarding it made
-    # ``agn_kt_warm`` (declared ``Uniform(0.1, 0.5)`` and freeable) a parameter
-    # no gradient backend could move: measured exactly 0.0 against a central
-    # difference of 7.0e41 through ``kubota_done_disc``, i.e. -100%. The forward
-    # sensitivity is large (18.1x in sum(L_nu) across that prior), so the
-    # posterior came back as the prior and nothing downstream could tell that
-    # apart from an honestly-unconstrained fit.
-    #
-    # Step chosen the same way as gamma's, against a converged central difference
-    # at three off-node kTe (grid nodes are kinks where the derivative is
-    # genuinely undefined, so an FD comparison there is meaningless)::
-    #
-    #     h        0.1304    0.1625    0.1946
-    #     1e-7     +169%      -95%     +249%    <- cancellation, not slope
-    #     1e-6      +8.2%     -8.9%     +3.4%
-    #     1e-5      +1.2%     +0.0%     +0.1%
-    #     1e-4      -0.0%     -1.5%     -0.9%   <- plateau, chosen
-    #     1e-3      +1.0%     -0.9%     -0.4%
-    #     1e-2     +13.1%     +5.9%     +4.3%   <- 1/3 of a cell; crosses nodes
-    #
-    # The kTe axis is spaced 0.0321 apart, an order of magnitude finer than
-    # gamma's 0.105, which is why the usable window sits a decade lower and
-    # gamma's 1e-3 floor would be a poor default here.
-    eps_t = jnp.maximum(1e-3 * jnp.abs(kTe_keV), 1e-4)
-    shifted_t = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV + eps_t, kTbb_keV, table)
-    fd_grad_t = (shifted_t - primal_out) / eps_t
-
     # The tangent dtype must MATCH the primal's, exactly -- a ``custom_jvp``
-    # contract that ``custom_vjp`` did not impose, so it is the one way this
-    # conversion can regress. ``nu`` sets the primal dtype while ``gamma`` sets
-    # the tangent's: a float32 SED grid with a float64 ``gamma`` promotes the
-    # product to float64 and JAX rejects the rule outright::
+    # contract. ``nu`` sets the primal dtype while the operand tangents set the
+    # product's: a float32 SED grid with a float64 ``gamma`` would otherwise
+    # promote to float64 and JAX rejects the rule at trace time.
     #
-    #     TypeError: Custom JVP rule must produce primal and tangent outputs
-    #     with corresponding shapes and dtypes. Expected float32[5994]
-    #     (tangent type of float32[5994]) but got float64[5994].
-    #
-    # That is a hard error at trace time, not a wrong number, and it took out
-    # the B1_agn_disc_torus scenario -- a mixed-dtype path that no unit test
-    # reaches, only the slow integration tier.
-    return primal_out, jnp.asarray(fd_grad * d_gamma + fd_grad_t * d_kTe, dtype=primal_out.dtype)
+    # The slopes and tangents are widened to that dtype BEFORE they multiply, so
+    # the transposed (reverse-mode) cotangent product happens in the caller's
+    # precision: ``disc.py`` hands back a ~1e66 cotangent that is fine in float64
+    # and ``inf`` in float32 (#1822). Casting only the finished sum would put the
+    # float32 ceiling back into the transpose.
+    dt = primal_out.dtype
+    slopes = slopes.astype(dt)
+    tangent_out = (
+        slopes[0] * jnp.asarray(d_gamma, dtype=dt)
+        + slopes[1] * jnp.asarray(d_kTe, dtype=dt)
+        + slopes[2] * jnp.asarray(d_kTbb, dtype=dt)
+    )
+    return primal_out, tangent_out
 
 
 def nthcomp_lnu_interp(

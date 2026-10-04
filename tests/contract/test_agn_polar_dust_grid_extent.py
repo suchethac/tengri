@@ -128,6 +128,18 @@ def union_loses_the_skirtor_axis(monkeypatch):
         if key != "skirtor"
     }
     monkeypatch.setattr(wavelength_extension, "_AGN_TORUS_TEMPLATES", patched)
+    # The build's schartmann2005 disc now declares its own 1 A - 1e7 A support
+    # (#2564), which would also cover the low end; drop it so the torus axis is
+    # again the only thing that could have kept the grid covered.
+    monkeypatch.setattr(
+        wavelength_extension,
+        "_ANALYTIC_DISC_RANGE_AA",
+        {
+            k: v
+            for k, v in wavelength_extension._ANALYTIC_DISC_RANGE_AA.items()
+            if k != "schartmann2005"
+        },
+    )
     return patched
 
 

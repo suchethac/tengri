@@ -31,6 +31,7 @@ from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.radio.component import RadioSEDComponentConfig
 from tengri.config.exceptions import ConfigError
 from tengri.observation import Photometry
+from tengri.parameters.registry import registry
 from tengri.radio import radio_freefree, radio_sfr_bell2003, radio_sfr_bell2003_split
 
 pytestmark = pytest.mark.contract
@@ -41,6 +42,12 @@ pytestmark = pytest.mark.contract
 #: mismatch in the non-radio wavelength range where BOTH sides are already
 #: (correctly) zero for an unrelated reason.
 _RADIO_WAVE_MIN_AA = 1.0e7
+
+#: Declared default for radio_q_ir from the registry (Bell 2003: 2.64).
+_Q_IR = registry().get("radio_q_ir").prior.value
+
+#: Declared default for radio_alpha_sf from the registry (typical 0.8).
+_ALPHA_SF = registry().get("radio_alpha_sf").prior.value
 
 
 def _build(ssp_data, sf_type: str):
@@ -67,6 +74,8 @@ def _build(ssp_data, sf_type: str):
             radio={
                 "sf": {"type": sf_type},
                 "agn": {"type": "none"},
+                "radio_q_ir": Fixed(_Q_IR),
+                "radio_alpha_sf": Fixed(_ALPHA_SF),
                 "all_params": Fixed(DEFAULT),
             },
             redshift=Fixed(0.0),
@@ -85,10 +94,9 @@ def test_bell2003_split_component_equals_direct_function_no_extra_term(ssp_data_
     state = model.predict_state(params)
 
     L_ir = float(state.derived["L_ir"])
-    q_ir = float(params["radio_q_ir"])
     wave = np.asarray(state.wave)
     sed_radio = np.asarray(state.derived["sed_radio"])
-    direct = np.asarray(radio_sfr_bell2003_split(wave, L_ir=L_ir, q_ir=q_ir))
+    direct = np.asarray(radio_sfr_bell2003_split(wave, L_ir=L_ir, q_ir=_Q_IR))
 
     radio_mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
@@ -107,15 +115,15 @@ def test_bell2003_still_adds_freefree(ssp_data_bc03):
     state = model.predict_state(params)
 
     L_ir = float(state.derived["L_ir"])
-    q_ir = float(params["radio_q_ir"])
-    alpha_sf = float(params["radio_alpha_sf"])
     wave = np.asarray(state.wave)
     sed_radio = np.asarray(state.derived["sed_radio"])
 
-    sf_only = np.asarray(radio_sfr_bell2003(wave, L_ir, q_ir, alpha_sf))
-    ff_only = np.asarray(
-        radio_freefree(wave, L_ir, float(params["radio_T_e"]), float(params["radio_alpha_ff"]))
-    )
+    # Use the declared defaults for radio_T_e and radio_alpha_ff from the registry.
+    T_e = registry().get("radio_T_e").prior.value
+    alpha_ff = registry().get("radio_alpha_ff").prior.value
+
+    sf_only = np.asarray(radio_sfr_bell2003(wave, L_ir, _Q_IR, _ALPHA_SF))
+    ff_only = np.asarray(radio_freefree(wave, L_ir, T_e, alpha_ff))
 
     radio_mask = wave > _RADIO_WAVE_MIN_AA
     ff_over_sf = float(np.sum(ff_only[radio_mask]) / np.sum(sf_only[radio_mask]))
