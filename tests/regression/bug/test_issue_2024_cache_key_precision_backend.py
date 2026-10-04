@@ -247,9 +247,11 @@ def test_schema_version_bumps_prevent_collisions():
     the request dataclasses replaced the hand-written keys (#2163); ztable's own
     3→4 for #2439/#2427's ``lyc_gate`` field (a warm cache built one day earlier
     would otherwise have satisfied an unversioned key and silently served a
-    table with no Lyman-continuum split).
+    table with no Lyman-continuum split); and 4→5 when the Lyman-continuum tables
+    moved onto the 911.76 Å step-model edge (same request fields, different values,
+    so only the version separates a warm cache from the new content).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 4, (
+    assert pc._ZTABLE_CACHE_VERSION == 5, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 3, (

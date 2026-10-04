@@ -50,7 +50,12 @@ def _model(ssp):
             "all_params": Fixed(DEFAULT),
             "log_total_mass": Uniform(9.0, 11.0),
             "tau_gyr": Uniform(0.5, 3.0),
-            "age_gyr": Fixed(5.0),
+            # A 1 Gyr galaxy still forms young stars, so the birth-cloud screen gives the
+            # three bands different sensitivities to tau_gyr and the (mass, tau) FIM is
+            # identifiable (cond 1.2e8). At 5 Gyr nothing is young, the bands respond
+            # identically (cond 3.9e9) and an error bar is 1e-6 of FIM round-off times
+            # that condition number: no float32 FIM could pass, whatever the code.
+            "age_gyr": Fixed(1.0),
         },
         dust_attenuation={
             "law": "power_law",

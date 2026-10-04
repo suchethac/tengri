@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``dust={'lyc_absorb_all': True}`` threads end-to-end through the builder.
+"""``dust_attenuation={'lyc_reprocessed_by': 'all'}`` threads end-to-end through the builder.
 
 The stellar-LyC absorption mode (young-only default vs absorb-all) must land on
 the ``Parameters`` spec, round-trip through ``to_groups``, and enter the kernel
@@ -33,26 +33,26 @@ def _build(ssp, obs, **dust_extra):
     )
 
 
-def test_lyc_absorb_all_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
-    assert _build(synthetic_ssp_wide, synthetic_tophat_obs).spec.dust_lyc_absorb_all is False
-    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_absorb_all=True)
-    assert m.spec.dust_lyc_absorb_all is True
+def test_lyc_reprocessed_by_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
+    assert _build(synthetic_ssp_wide, synthetic_tophat_obs).spec.dust_lyc_reprocessed_by == "young"
+    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_reprocessed_by="all")
+    assert m.spec.dust_lyc_reprocessed_by == "all"
 
 
-def test_lyc_absorb_all_round_trips(synthetic_ssp_wide, synthetic_tophat_obs):
-    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_absorb_all=True)
+def test_lyc_reprocessed_by_round_trips(synthetic_ssp_wide, synthetic_tophat_obs):
+    m = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_reprocessed_by="all")
     groups = m.spec.to_groups()
-    assert groups["dust_attenuation"]["lyc_absorb_all"] is True
+    assert groups["dust_attenuation"]["lyc_reprocessed_by"] == "all"
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
-    assert m2.spec.dust_lyc_absorb_all is True
+    assert m2.spec.dust_lyc_reprocessed_by == "all"
     # Default doesn't emit the key.
     base = _build(synthetic_ssp_wide, synthetic_tophat_obs)
-    assert "lyc_absorb_all" not in base.spec.to_groups().get("dust_attenuation", {})
+    assert "lyc_reprocessed_by" not in base.spec.to_groups().get("dust_attenuation", {})
 
 
-def test_lyc_absorb_all_changes_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs):
+def test_lyc_reprocessed_by_changes_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs):
     base = _build(synthetic_ssp_wide, synthetic_tophat_obs).compile_signature()
     allabs = _build(
-        synthetic_ssp_wide, synthetic_tophat_obs, lyc_absorb_all=True
+        synthetic_ssp_wide, synthetic_tophat_obs, lyc_reprocessed_by="all"
     ).compile_signature()
     assert base != allabs

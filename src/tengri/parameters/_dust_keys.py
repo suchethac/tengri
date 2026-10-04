@@ -61,6 +61,16 @@ SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
 #: ``screen_keys()`` returns and the per-source default in
 #: :data:`_SCREEN_DEFAULTS`.
 SCREEN_SOURCES: tuple[str, ...] = ("nebular", "shock", "agn")
+#: CAPABILITY set (#2529), not a type-name alias list: ``dust_attenuation``
+#: types that declare a birth-cloud screen distinct from the diffuse-ISM
+#: screen, the one thing a ``lyc_escape_geometry`` hole needs to be IN.
+#: ``single_component`` and ``wg00`` attenuate with one screen and have no
+#: birth-cloud/diffuse split at all. ``age_binned`` (its screens with a
+#: finite upper edge are the birth-cloud ones) joined with the age-split
+#: unification.
+DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = frozenset({"two_component", "age_binned"})
+#: Types whose young/old split can be configured (``transition_width_dex``).
+DUST_TYPES_WITH_AGE_SPLIT: frozenset[str] = DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
 #: Per-source default, read by both the grammar translator and the flat-kwarg
 #: resolver so the two surfaces cannot drift. ``agn`` defaults to ``"none"``:
 #: the AGN component runs after dust in the pipeline, unattenuated, and
