@@ -357,6 +357,7 @@ def _r_hot_bisect(
 
 
 _X_LO = 1.001
+_R_HOT_POLISH_STEPS = 3
 
 
 def _bisect_log_x(l_hot_target, l0, a_spin, n_iter):
@@ -376,7 +377,16 @@ def _bisect_log_x(l_hot_target, l0, a_spin, n_iter):
     (lo_f, hi_f), _ = jax.lax.scan(
         _step, (jnp.log(_X_LO), jnp.log(_NT_X_MAX)), None, length=n_iter
     )
-    return (lo_f + hi_f) * 0.5
+    # The bracket is 9.2 / 2^n_iter wide (8e-12 at 40), and the SED is steep enough in R_hot
+    # that this quantizes the root into steps of ~1e-6 in the parameters. Newton steps on
+    # F(u) = l0 h(u) - l_target, kept inside the bracket (which holds the root), converge
+    # to the residual of the quadrature itself; a flat or pinned end leaves the midpoint.
+    u = (lo_f + hi_f) * 0.5
+    for _ in range(_R_HOT_POLISH_STEPS):
+        slope = l0 * _nt_dh_dlogx(u, a_spin)
+        step = (l0 * _nt_h(u, a_spin) - l_target) / jnp.where(slope > 0.0, slope, 1.0)
+        u = jnp.clip(u - jnp.where(slope > 0.0, step, 0.0), lo_f, hi_f)
+    return u
 
 
 @functools.partial(jax.custom_jvp, nondiff_argnums=(3,))
