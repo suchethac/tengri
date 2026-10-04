@@ -93,6 +93,12 @@ Corona dissipates $L_{\rm diss} \approx 0.02\,L_{\rm Edd}$; hard X-ray photon in
 
 $$ (eq-beloborodov-text)
 
+#### Inclination and the meaning of `agn_log_lbol`.
+
+`agn_log_lbol` is the accretion power $L_{\rm acc}$ radiated into all directions, $\log_{10}(L_{\rm acc}/L_\odot)$; it does not depend on the inclination, and neither do $\dot{m} = L_{\rm acc}/L_{\rm Edd}$, $T(r)$, $R_{\rm hot}$ or $R_{\rm warm}$. The outer disc and the warm Comptonization region are optically thick and radiate $\propto\cos i$; the hot corona is optically thin and isotropic (Kubota and Done 2018, Sects. 2.1 and 2.2). With $D_\nu$ the angle-integrated spectrum of the disc and warm zones (both faces), $H_\nu$ that of the corona and $L_{\rm acc} = \int (D_\nu + H_\nu)\,d\nu$, the observed spectrum is $$L_\nu(i) = 2\cos i\,D_\nu + H_\nu,$$ the luminosity density an observer at inclination $i$ assigns assuming isotropy. At $\cos i = 0.5$ the line-of-sight power equals $L_{\rm acc}$, face-on the disc is twice as luminous, and the mean of $\int L_\nu(i)\,d\nu$ over $\cos i \in [0, 1]$ is $L_{\rm acc}$. The `multicolor` and `relagn` discs follow the same law, $L_\nu(i) = 2\cos i\,D_\nu$.
+
+The AGN publishes the line-of-sight isotropic-equivalent bolometric luminosity of its direct emission (before the torus screen and the polar dust) as `log_L_agn_los`, $\log_{10}\int L_\nu(i)\,d\nu$ in dex re erg s$^{-1}$. This is the key to compare with a catalog $L_{\rm bol}$ obtained from a bolometric correction; `L_agn_bol` is $L_{\rm acc}$.
+
 
 Translating this model into a fully differentiable JAX pipeline requires replacing several non-differentiable operations with smooth approximations. Table {ref}`1 <tab-kd-approximations>` summarizes the key choices and their accuracy relative to the reference qsosed implementation (Kubota and Done 2019).
 

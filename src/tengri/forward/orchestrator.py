@@ -252,6 +252,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_absorbed": "dex",
     "log_L_ir_emergent": "dex",
     "log_L_agn_bol": "dex",
+    "log_L_agn_los": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",
