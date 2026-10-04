@@ -66,8 +66,9 @@ _CACHE_VERSION = 3
 #: Version of the exact-fold ratio table (:class:`ExactFoldRequest`), separate
 #: from :data:`_CACHE_VERSION` because the two tables change for different
 #: reasons. Bump when :mod:`tengri.components.igm.exact_fold` changes what it stores.
-_EXACT_FOLD_CACHE_VERSION = 2
+_EXACT_FOLD_CACHE_VERSION = 3
 #: 1 -> 2: the entry stores (ratio, with-IGM nodes) stacked, not the ratio alone.
+#: 2 -> 3: the cached with-IGM stellar nodes are weighted by the exact young/old split.
 
 #: File prefix of the exact-fold ratio tables; the node tables use the default.
 EXACT_FOLD_PREFIX = "igm_exact_fold"

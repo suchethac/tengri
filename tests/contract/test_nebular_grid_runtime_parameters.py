@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract: the per-Q_H nebular grid applies the escape and dust-destruction
-fractions at reconstruction, so a free neb_fesc or neb_fdust moves the
+fractions at reconstruction, so a free neb_fesc or neb_fdust_frac moves the
 grid-served emission exactly as the exact path does. Every other free
 nebular parameter that the grid bakes in is refused. Six tests marked slow
 run nightly; the remaining tests run in the PR tier.
 
 Pinned:
   * neb_fesc ~ Uniform(0, 0.8): -2.95e-2 (fesc = 0) ... +4.73e-2 (fesc = 0.8)
-  * neb_fdust ~ Uniform(0, 0.5): -2.2e-3 ... +5.27e-2
+  * neb_fdust_frac ~ Uniform(0, 0.5): -2.2e-3 ... +5.27e-2
 """
 
 from __future__ import annotations
@@ -211,23 +211,23 @@ def test_free_escape_fraction_moves_the_grid_served_emission(ssp, dusty):
 @pytest.mark.slow
 @pytest.mark.parametrize("dusty", [False, True])
 def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
-    m, fast, p = _views(dusty, "fdust", 0.0, 0.5)
+    m, fast, p = _views(dusty, "fdust_frac", 0.0, 0.5)
 
     assert fast._nebular_grid_table is not None
     assert fast_nebular_can_engage(m)
 
     measured_worst = 0.0
     for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = fast.predict_photometry({**p, "neb_fdust": fdust})
-        phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
+        phot_fast = fast.predict_photometry({**p, "neb_fdust_frac": fdust})
+        phot_exact = m.predict_photometry({**p, "neb_fdust_frac": fdust})
         rel_diff = jnp.abs((phot_fast - phot_exact) / jnp.maximum(jnp.abs(phot_exact), 1e-30))
         measured_worst = jnp.maximum(measured_worst, jnp.max(rel_diff))
 
     print(f"test_free_dust_fraction[dusty={dusty}]: measured worst={float(measured_worst):.2e}")
 
     for fdust in (0.0, 0.1, 0.25, 0.4, 0.5):
-        phot_fast = fast.predict_photometry({**p, "neb_fdust": fdust})
-        phot_exact = m.predict_photometry({**p, "neb_fdust": fdust})
+        phot_fast = fast.predict_photometry({**p, "neb_fdust_frac": fdust})
+        phot_exact = m.predict_photometry({**p, "neb_fdust_frac": fdust})
         np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
 
     sensitivities = [
@@ -235,10 +235,12 @@ def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
             jnp.max(
                 jnp.abs(
                     (
-                        m.predict_photometry({**p, "neb_fdust": 0.5})
-                        - m.predict_photometry({**p, "neb_fdust": 0.0})
+                        m.predict_photometry({**p, "neb_fdust_frac": 0.5})
+                        - m.predict_photometry({**p, "neb_fdust_frac": 0.0})
                     )
-                    / jnp.maximum(jnp.abs(m.predict_photometry({**p, "neb_fdust": 0.0})), 1e-30)
+                    / jnp.maximum(
+                        jnp.abs(m.predict_photometry({**p, "neb_fdust_frac": 0.0})), 1e-30
+                    )
                 )
             )
         )
@@ -248,7 +250,7 @@ def test_free_dust_fraction_moves_the_grid_served_emission(ssp, dusty):
 
 @pytest.mark.slow
 def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp):
-    m = _model(True, {"fesc": Fixed(0.3), "fdust": Fixed(0.1)})
+    m = _model(True, {"fesc": Fixed(0.3), "fdust_frac": Fixed(0.1)})
     p = _point(m)
     flux = np.asarray(m.predict_photometry(p))
     with warnings.catch_warnings():
@@ -261,7 +263,7 @@ def test_a_fixed_escape_fraction_is_applied_at_reconstruction(ssp):
     phot_exact = m.predict_photometry(p)
     np.testing.assert_allclose(phot_fast, phot_exact, rtol=_RTOL_PHOT)
 
-    m_zero = _model(True, {"fesc": Fixed(0.0), "fdust": Fixed(0.0)})
+    m_zero = _model(True, {"fesc": Fixed(0.0), "fdust_frac": Fixed(0.0)})
     p_zero = _point(m_zero)
     flux_zero = np.asarray(m_zero.predict_photometry(p_zero))
     with warnings.catch_warnings():
@@ -416,7 +418,7 @@ def test_every_nebular_parameter_has_exactly_one_disposition(ssp):
     print(f"nebular params: {nebular_params}")
 
     assert "neb_fesc" in nebular_params
-    assert "neb_fdust" in nebular_params
+    assert "neb_fdust_frac" in nebular_params
     assert "neb_fesc_lya" in nebular_params
     assert "neb_logU" in nebular_params
     assert "neb_dig_frac" in nebular_params

@@ -118,8 +118,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # absorb calibration error into a quantity physics fixes. Override
         # explicitly if you specifically want that slack.
     ),
-    # AGNfitter-rx double power-law AGN radio model parameters. Activated by
-    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
+    # AGNfitter-rx double power-law AGN radio model parameters. The DPL-only
+    # ones (alpha_thin, alpha_thick, log_nu_t) are read when
+    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ``radio_log_nu_cut`` is
+    # read by both AGN radio models.
     # Martinez-Ramirez, L. N. et al. 2024, "AGNfitter-rx: Modelling the
     # radio-to-X-ray SEDs of AGNs," A&A, 688, A46,
     # doi:10.1051/0004-6361/202449329, arXiv:2405.12111 -- Table 1 gives

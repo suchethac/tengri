@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- One exact young/old split serves every attenuator. The stellar component publishes, per SSP age node, the share of its formed mass younger than each boundary age (`age_boundary_younger_fraction`), computed through the same SFH kernel as the node weights, instead of each screen evaluating a step or logistic at the node ages. `two_component` defaults to a hard step at `t_birth_yr=1e7`; `transition_width_dex > 0` opts into the smooth law, and `age_binned` windows use the same machinery. A node's transmission is the mixture of its populations' transmissions (not of their optical depths). Nebular and line screens are weighted by ionizing luminosity, the energy-balance lookup table carries young and old populations and mixes them at runtime, `age_binned` gains the `lyc_` key family, and the refusal of age windows narrower than five node spacings is gone. Golden: `two_component` `L_absorbed` 5.932047709369588e59 -> 5.93036676326139e59 erg/s (-0.0283%), matching an independent dense-parcel step reference to 5.6e-9.
+
 ### Added
 
 - The fold that `WavePrecomp(igm_fold="auto")` resolved to ("exact", "node", or `None` when no fold was built) is reported beside the declared mode in `precompute_engagement_report(model).observed_facts["igm_fold"]` and in `summary_text()`. (#2445).
@@ -7,6 +11,20 @@
 ### Fixed
 
 - Lick equivalent widths and magnitude indices follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3). The index operator converts its per-frequency input (`L_ν` or `F_ν`) to `F_λ ∝ F_ν/λ²` and builds the pseudo-continuum as the straight line through the two sideband means placed at the sideband mid-wavelengths, integrating `1 − F_λ/F_C` over the feature window (the window-LUT path, `predict_spectral_indices(approx=True)`, evaluates the same definition at the window grid points, as the line path of #2677 does, and agrees with the exact path to round-off, also under a strong dust screen). A constant mean-of-sidebands continuum is the continuum at the wrong wavelength for asymmetric sidebands (Fe4383: 12 Å from the feature center): on solar SSP spectra it differs from the Lick definition by up to 1.0 Å (HγA, 10 Gyr), 0.4 Å (Fe4383) and 0.5 Å (HγF). Break indices (`Dn4000`, `D4000`, `F_ν` ratios) and `uv_slope_beta` are unchanged. `measure.spectral_index` documents its flux argument as a per-frequency flux density (pass `F_λ` as `flux_lambda * wave_rest**2`); `SpectralIndexDef(pseudo_continuum="mean")` keeps the constant continuum of `bagpipes.input.spectral_indices.single_index`, measured on the array as given, for comparison with BAGPIPES. An EW or magnitude index must declare exactly two continuum windows under the default definition. (#2690).
+- `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
+  radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
+  with the default 13.0 (10 THz) as before. The key is read by both AGN radio
+  models; on the power-law jet the `all_params: FREE` wildcard frees only
+  `radio_loudness` and `radio_alpha_agn`, and the cutoff is freed when named
+  (`radio={'agn': {'radio_log_nu_cut': FREE}}`, prior `Uniform(12, 14)`). The cutoff exponent is formed as `nu * 10^-cut`, so the
+  value and the gradient are finite in float32 for any `cut` (10^cut overflows
+  there from about 38.5). The DPL-only keys `radio_alpha_thin`,
+  `radio_alpha_thick` and `radio_log_nu_t` are refused on the power-law jet with
+  an error naming the model that reads them; a misspelt key gets the ordinary
+  unknown-key error.
+  A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for
+  the power-law model needs `radio_log_nu_cut` (13.0 is the declared default).
+
 - The NIFTy (`vi*`) and native (`native_vi_*`) variational engines score a photometric upper or lower limit (`data_mask` 1 / -1) as -ln Φ((F − m)/σ) or -ln Φ((m − F)/σ) like `map`, the samplers and `vi_fullrank`, with the limit bands entering the geoVI/MGVI metric as detections at their limit value; a free noise model together with a limit raises `ParameterError`. The NIFTy likelihood is built per `Fitter` and only the data-free physics is cached on the model, so a second `Fitter` on one model object fits its own data; the `hmc_is` evidence evaluation takes the data at call time, and the NIFTy free-noise likelihood passes free parameters only to the forward model (#2667, #2668).
 
 - The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:
@@ -17,7 +35,6 @@
   node, the continuity SFH takes explicit bin edges, and each code's own
   photometry is compared at z = 0 and 0.5.
 - `dense_basis` and `dense_basis_pure` place their tx quantiles on, and normalize their mass over, the age of the universe at the galaxy's redshift, so the declared mass forms inside [0, age(z)] at every redshift (Iyer et al. 2019); that age comes from the redshift and the cosmology — `sfh_db_age_universe_gyr` / `sfh_dbp_age_universe_gyr` are not settings, and writing either raises at build time; `predict_sfh`, `predict_sfh_quantities` and `sample_sfh_prior` (which takes a `redshift`) evaluate the age-anchored families at the age of the universe of the model's redshift, through the same rule as the forward model (#2592).
-- The power-law AGN radio jet reads `radio_log_nu_cut`: the cutoff $\exp(-\nu/\nu_{\rm cut})$ was fixed at $10^{13}$ Hz on the default model whatever the key said; `radio_log_nu_cut = 40` now removes it, and the default is unchanged. A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for the power-law model now needs `radio_log_nu_cut` (13.0 is the declared default). (#2689).
 
 - The model reference weights the band-averaged flux by `w = 1/λ` (photon counting, the default) instead of `λ`, states the AGN radio loudness as `log10(L_5GHz/L_4400)` instead of `L_5GHz/L_2500`, and gains the CIGALE convention differences it had not stated: equivalent-width sign and continuum, the star-forming radio normalization (q_IR and the anchor frequency), the AGN jet cutoff and loudness anchor, the nebular density axes and the emission-line profile (#2627, #2663, #2626).
 
@@ -247,6 +264,11 @@
   since formation (T = age − t_lookback) and take a required keyword-only `age`;
   both previously treated lookback time as cosmic time and returned mirror-imaged
   histories (#2524).
+- The exact (non-precomputed) forward path's Lyman-continuum mask now steps at
+  the physical 912 A edge instead of at whichever SSP grid node sits just
+  below it: a photometric band whose rest-frame coverage straddles 912 A no
+  longer carries an edge-placement bias of up to a few percent when
+  `neb_fesc < 1` (#2447).
 - `profile_mass` now reaches six backends it had been silently skipping:
   `nss`, `mcmc_raytrace`, `mcmc_ess`, `pathfinder`, `vi_fullrank` and
   `vi_meanfield` were absent from `PROFILE_MASS_BACKENDS`, so
@@ -823,6 +845,117 @@
   `cue.py` cite Cloudy 22.00 (Li et al. 2025) instead of "c17+"; three
   code-cell labels and the rendered `docs/reproduction` copies refresh with the
   next executing re-render (part of #2555).
+
+- The Lyman-continuum energy HII-region dust absorbs now enters the dust IR
+  budget (`L_absorbed`), as in CIGALE
+  (`dust.luminosity = (lum_ly_young + lum_ly_old) * fdust`,
+  `pcigale/sed_modules/nebular.py:191-193`), for the population the nebular
+  component reprocesses: the whole stellar SED for `single_component`, `wg00`,
+  and `two_component` with `lyc_reprocessed_by='all'`, and only the young/birth-cloud
+  population for `two_component` with `lyc_reprocessed_by='young'` (the population its
+  own `neb_fesc`/dust screen actually applies to). Previously this energy
+  only suppressed nebular emission and vanished from the energy balance. The
+  combine (`energy_balance.log10_add_fdust_credit`, a fused `log1p` form) is
+  bit-identical to the pre-credit value at `f_dust == 0` and has a FINITE,
+  NONZERO gradient there too (`L_LyC / (L_absorbed * ln 10)`), since
+  `L_absorbed` is exactly linear in `f_dust`; a first version log-added an
+  already `fdust`-multiplied credit term whose own double-where derivative was
+  deliberately zero at the boundary, which zeroed the combined gradient as
+  well. Also threads the `lyc_in_energy_balance` (FSPS/Prospector-parity) toggle to
+  `wg00` (`dust_type=3`), which the grammar already accepted but
+  `component_factory.py` silently dropped (#2539). A sibling defect in the same
+  budget is fixed alongside it: `two_component`'s own `lyc_in_energy_balance=True`
+  screen-absorption integral for `lyc_reprocessed_by='young'` now reads the same
+  per-age, fesc-aware population `sed_attenuated` itself attenuates rather
+  than a uniform all-ages bookkeeping value, in both the exact and WavePrecomp
+  LUT paths, bit-identical at the `lyc_in_energy_balance=False` default;
+  `single_component` and `wg00` already integrated the same SED they
+  attenuate. The WavePrecomp energy-balance LUT is now EXACT in a live
+  `neb_fesc` rather than declining to the exact integral whenever
+  `lyc_in_energy_balance=True` met a live photoionized nebular component: the
+  stellar absorbed integral is affine in `fesc`
+  (`A(fesc) = A_0 + fesc * A_1`, `A_1` the young/birth-cloud-weighted -- or,
+  under `lyc_reprocessed_by='all'`, unweighted -- Lyman-continuum-only term), so
+  `build_energy_balance_lut` now bakes both the `fesc`-independent `A_0`
+  family and the `fesc`-linear `A_1` family, and
+  `lut_l_absorbed_stellar_log10` combines them with the runtime `fesc` at
+  evaluation time -- an exact, O(1) linear combine (no interpolation, no
+  approximation), not a fallback.
+
+  **One Lyman edge (#2447)**: every Lyman-continuum consumer -- the nebular
+  LyC mask, the dust energy-balance mask and its WavePrecomp LUT, the
+  HII-dust credit, the Q_H integral and the photometric filter integral --
+  now steps at the physical hydrogen limit, `LYMAN_LIMIT_AA = 911.76` A,
+  through one module, `tengri.components.lyc` (`ionizing_mask`,
+  `edge_trapezoid`, `edge_interp`, `lyc_shares`, `log10_lyc_luminosity`).
+  Previously the exact path's mask stepped at whichever SSP node sits just
+  below 912 A (MIST/C3K brackets the edge at 911.5716/913.3967 A) and each
+  consumer placed the edge its own way, biasing a band whose rest-frame
+  coverage straddles the edge by up to a few percent at `neb_fesc < 1`
+  (-2.0651% MIST/C3K, +11.3813% MILES on GALEX NUV at z=2). In the bracketing
+  cell the ionizing side holds the bluer node's value up to the edge and the
+  non-ionizing side the redder node's, so the two pieces partition the
+  integral exactly and a per-node mask is exact under this model; the
+  per-node `lyman_edge_transmission` reweighting is retired. The filter
+  integral inserts the observed-frame edge `LYMAN_LIMIT_AA * (1 + z)` as a
+  node pair, closing the band residual to round-off. Q_H moves by about
+  1e-5 dex, and the ionizing-spectrum cache version is bumped so cached
+  tables rebuild. The stellar component publishes per-age ionizing
+  luminosities (`log_L_lyc_age`) from the ionizing slice of the SSP grid,
+  so `two_component`'s young-only credit integrates once rather than once
+  per age, and the credit is formed only when a photoionized nebular
+  backend publishes its HII-dust share and `neb_fdust_frac` is not
+  `Fixed(0.0)`.
+
+  **Breaking: one `lyc_` key family on `dust_attenuation`**: the structural
+  keys deciding what happens to ionizing photons are renamed to read as one
+  family. `lyc_absorb_all` (bool) becomes `lyc_reprocessed_by`, `'young'`
+  (default) or `'all'` (`False` -> `'young'`, `True` -> `'all'`);
+  `eb_include_lyc` becomes `lyc_in_energy_balance` (same bool, default
+  `False`). Writing an old key raises naming the new key and the value
+  mapping, as do the flat `Parameters` kwargs `dust_lyc_absorb_all` and
+  `dust_eb_include_lyc`. `lyman_cutoff` (the attenuation-curve clip) is not
+  part of the family and is unchanged.
+
+  **Breaking (#2436)**: `neb_fdust`, the absolute HII-region
+  dust-absorption fraction, is retired: declaring it independently of
+  `neb_fesc` let `neb_fesc + neb_fdust` exceed 1, an impossible >100% of the
+  ionizing-photon budget that only `lyc_dust_escape_factor`'s internal clamp
+  caught. `neb_fdust_frac` (default `Fixed(0.0)`, same `Uniform(0, 1)` prior
+  range) replaces it: the fraction of the NON-escaping budget
+  (`1 - neb_fesc`) HII-region dust absorbs, so the three per-photon shares
+  (escape, HII-region dust, photoionization) sum to exactly 1 for any
+  `(neb_fesc, neb_fdust_frac)` in `[0, 1]^2` -- the whole prior box is
+  physical, with no clamp needed downstream. The one absolute-share helper,
+  `lyc_shares(neb_fesc, neb_fdust_frac) -> (f_esc, f_dust, f_gas)`
+  (`components/nebular/_recombination_coeffs.py`), is now the single place
+  every consumer of the absolute `f_dust`/`f_gas` shares reads through:
+  `lyc_dust_escape_factor`'s callers in Cue, CloudyGrid and CB19, and the
+  #2539 HII-dust LyC credit above. Convert an old absolute value with
+  `neb_fdust_frac = neb_fdust / (1 - neb_fesc)`; writing the retired
+  `neb_fdust` anywhere in the `neb` group now raises naming the replacement
+  and the conversion formula.
+
+  **Added (#2529): age-selective LyC escape geometry.** A fourth
+  `dust_attenuation` structural key joins the `lyc_` family,
+  `lyc_escape_geometry`: whether the escaping fraction (`neb_fesc`)
+  bypasses the birth-cloud screen through a geometric hole, instead of
+  only skipping nebular reprocessing (the pre-#2529 behavior, still the
+  default). `'screened'` (default, unchanged): `neb_fesc` never touches
+  the dust screen. `'birth_cloud_holes'`: a covering fraction `neb_fesc`
+  of the young population's light bypasses the birth-cloud screen but
+  still crosses the diffuse ISM (FSPS `frac_obrun`-like). `'clear'`: that
+  same fraction sees no dust at all (Synthesizer `fesc`-like). Applies at
+  every wavelength, not only below the Lyman limit -- a hole in a birth
+  cloud is geometric, not wavelength-selective. One shared formula,
+  `tengri.components.lyc.escape_geometry_transmission`, used by both the
+  exact path and the `WavePrecomp()` energy-balance LUT and photometry
+  LUT (both agree with the exact path to the existing quadrature
+  tolerance). Two-component only (a birth-cloud screen distinct from the
+  diffuse screen is the one thing a hole needs to be in); refused
+  together with `lyc_reprocessed_by='all'` (both would reduce the young
+  population's escaping light from the same `neb_fesc`, double-counting
+  it).
 
 ### Fixed
 

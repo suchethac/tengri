@@ -296,3 +296,49 @@ def test_nion_decoupling_is_bit_exact_with_full_sed():
     assert abs(nion_published - nion_full) <= 1e-6 * abs(nion_full), (
         f"sliced nion {nion_published:.6e} != full-SED nion {nion_full:.6e}"
     )
+
+
+def test_log_l_lyc_age_slice_includes_first_nonionizing_node():
+    """The n_ion slice (``wave < 2 * LYMAN_LIMIT_AA``) that ``log_L_lyc_age``
+    (#2539 G1/G2) is integrated over must include the first non-ionizing node
+    (``wave >= 911.76`` A): the step model (module docstring of
+    ``tengri.components.lyc``) needs that node's value to form the
+    bracket-cell rectangle on the non-ionizing side of the edge. A slice that
+    stopped short of it would silently drop the partial-bin correction for
+    whichever SSP grid broke the ``2x`` margin."""
+    from tengri.components.lyc import LYMAN_LIMIT_AA
+
+    _require()
+    ssp = load_ssp_data(_BARE)
+    wave = np.asarray(ssp.ssp_wave)
+    n_ion = int(np.count_nonzero(wave < 2.0 * LYMAN_LIMIT_AA))
+    assert n_ion > 0, "setup: no ionizing grid points below 2x the Lyman limit"
+    sliced = wave[:n_ion]
+    assert np.any(sliced >= LYMAN_LIMIT_AA), (
+        f"the n_ion={n_ion} slice has no node >= {LYMAN_LIMIT_AA} A -- the step "
+        "model's non-ionizing bracket endpoint would be missing"
+    )
+
+
+def test_log_l_lyc_age_is_bit_exact_with_full_sed():
+    """predict_state's log_L_lyc_age (per-age, integrated over the ionizing
+    SLICE) is bit-exact (log-space) with a full-grid reference once summed
+    over ages. Independent check of the #2539 G1/G2 per-age LyC-LUMINOSITY
+    credit (not the Q_H photon RATE), mirroring
+    test_nion_decoupling_is_bit_exact_with_full_sed above."""
+    from tengri.components.lyc import log10_age_sum_lyc, log10_lyc_luminosity
+
+    # no dust, no nebular add -> the final sed_intrinsic IS the stellar SED, so
+    # a full-grid integral is a clean independent reference for the published
+    # per-age values, summed.
+    m = _build({"type": "none"}, dust_on=False, precomp=False)
+    p = dict(m.spec.sample(jax.random.PRNGKey(5)))
+    st = m.predict_state(p)
+    log_l_lyc_age = st.derived["log_L_lyc_age"]
+    assert log_l_lyc_age is not None, "StellarSEDComponent did not publish log_L_lyc_age"
+    published = float(log10_age_sum_lyc(jnp.asarray(log_l_lyc_age)))
+    full = float(log10_lyc_luminosity(jnp.asarray(st.sed_intrinsic), jnp.asarray(st.wave)))
+    assert np.isfinite(published) and np.isfinite(full)
+    assert abs(published - full) <= 1e-9, (
+        f"sliced+summed log_L_lyc_age {published:.9e} != full-SED {full:.9e}"
+    )
