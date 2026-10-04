@@ -31,10 +31,10 @@ import numpy as np
 __all__ = ["dust_energy_balance", "integrate_lnu_over_band"]
 
 # Speed of light, Å/s.
-from tengri.utils.physics_constants import C_AA as _C_AA_S
+from tengri.utils.physics_constants import C_AA as _C_AA_S, LYMAN_LIMIT_AA
 
 # Default integration bands (rest-frame Å).
-_UV_NIR_LO = 912.0  # Lyman limit
+_UV_NIR_LO = LYMAN_LIMIT_AA
 _UV_NIR_HI = 3.0e4  # ~3 μm
 _IR_LO = 3.0e4  # ~3 μm (paired with UV-NIR upper edge)
 _IR_HI = 3.0e7  # ~3 mm
@@ -116,7 +116,7 @@ def dust_energy_balance(
         Fractional tolerance on the absorbed/emitted ratio for the
         ``balanced`` flag. Default 0.05 (5%).
     uv_nir_band_aa : tuple of (float, float), optional
-        Band over which absorption is integrated. Default (912, 3e4) Å.
+        Band over which absorption is integrated. Default (``LYMAN_LIMIT_AA``, 3e4) Å.
     ir_band_aa : tuple of (float, float), optional
         Band over which re-emission is integrated. Default (3e4, 3e7) Å.
 

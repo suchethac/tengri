@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.forward.energy_balance import bolometric_absorbed, bolometric_absorbed_log10
 from tengri.utils.physics_constants import C_AA
 
@@ -31,8 +32,17 @@ pytestmark = pytest.mark.regression_bug
 
 
 def _grid(n=800):
-    """Wavelength grid spanning the Lyman continuum to the far-IR [Angstrom]."""
-    return jnp.asarray(np.logspace(np.log10(500.0), np.log10(5.0e6), n))
+    """Wavelength grid spanning the Lyman continuum to the far-IR [Angstrom].
+
+    Carries a node exactly at the Lyman edge: the energy balance integrates the
+    cell that straddles the edge with the step model (a stellar SED has a break
+    there), which a smooth test SED does not. With a node on the edge no cell
+    straddles it, so the plain trapezoid and the step model are one integral and
+    these tests compare the reformulation's arithmetic, not the edge convention.
+    """
+    return jnp.asarray(
+        np.union1d(np.logspace(np.log10(500.0), np.log10(5.0e6), n), [LYMAN_LIMIT_AA])
+    )
 
 
 def _seds(wave, scale=1.0e28, transmission=0.35):
@@ -42,11 +52,19 @@ def _seds(wave, scale=1.0e28, transmission=0.35):
     return intrinsic, transmission * intrinsic
 
 
-def _frozen_bolometric_absorbed(sed_intrinsic, sed_attenuated, nu, *, wave, lyman_cutoff_aa=912.0):
-    """FROZEN pre-#1206 ``bolometric_absorbed`` (verbatim arithmetic)."""
+def _frozen_bolometric_absorbed(
+    sed_intrinsic, sed_attenuated, nu, *, wave, lyman_cutoff_aa=LYMAN_LIMIT_AA
+):
+    """FROZEN pre-#1206 ``bolometric_absorbed`` (verbatim arithmetic).
+
+    The integral runs over the nodes at or above the cutoff only (the ionizing
+    side is excluded, not zeroed): a zeroed node would add half of the cell
+    below the edge, which the edge-aware quadrature does not.
+    """
     absorbed_lnu = sed_intrinsic - sed_attenuated
     if lyman_cutoff_aa is not None:
-        absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
+        keep = wave >= lyman_cutoff_aa
+        absorbed_lnu, nu = absorbed_lnu[keep], nu[keep]
     signed = jnp.trapezoid(absorbed_lnu, nu)
     return jnp.where(jnp.isfinite(signed), signed, 0.0)
 
@@ -60,7 +78,39 @@ def test_energy_balance_f64_exact_vs_frozen():
             sed_i, sed_a = _seds(wave, scale, transmission)
             frozen = np.float64(_frozen_bolometric_absorbed(sed_i, sed_a, nu, wave=wave))
             got = np.float64(bolometric_absorbed(sed_i, sed_a, nu, wave=wave))
-            assert_allclose(got, frozen, rtol=1e-12)
+            # The signed magnitude follows the sign of intrinsic - attenuated, the
+            # frozen one the (descending) grid orientation: compare the magnitudes.
+            assert_allclose(abs(got), abs(frozen), rtol=1e-12)
+
+
+def _hard_912_integral(sed_intrinsic, sed_attenuated, nu, wave):
+    """The pre-edge-model integral: zero the nodes below 912 A, trapezoid the rest."""
+    absorbed_lnu = jnp.where(wave >= 912.0, sed_intrinsic - sed_attenuated, 0.0)
+    return jnp.trapezoid(absorbed_lnu, nu)
+
+
+def test_energy_balance_edge_cell_follows_the_step_model():
+    """On a grid with no node at the edge, the integral is the one above 911.76 A.
+
+    The reference is a dense quadrature of the same smooth SED over
+    ``lambda >= LYMAN_LIMIT_AA``. Measured on this 800-node grid: the energy
+    balance is within 2.4e-5 of it, a hard 912 A mask 3.0e-3 below it (the
+    mask drops the half cell at the edge, which holds ~0.3% of a UV-dominated
+    bolometric).
+    """
+    wave = jnp.asarray(np.logspace(np.log10(500.0), np.log10(5.0e6), 800))
+    assert not np.any(np.asarray(wave) == LYMAN_LIMIT_AA)
+    nu = C_AA / wave
+    sed_i, sed_a = _seds(wave, 1.0e28, 0.35)
+    got = abs(float(bolometric_absorbed(sed_i, sed_a, nu, wave=wave)))
+    hard_912 = abs(float(_hard_912_integral(sed_i, sed_a, nu, wave)))
+
+    lam = np.logspace(np.log10(LYMAN_LIMIT_AA), np.log10(5.0e6), 2_000_001)
+    intr = 1.0e28 * np.exp(-(((np.log10(lam) - 4.0) / 1.2) ** 2))
+    truth = float(np.trapezoid((1.0 - 0.35) * intr[::-1], (C_AA / lam)[::-1]))
+
+    assert abs(got - truth) / truth < 1e-4
+    assert abs(hard_912 - truth) / truth > 10 * abs(got - truth) / truth
 
 
 def test_energy_balance_log_matches_linear_in_f64():
@@ -168,12 +218,12 @@ def test_energy_balance_non_finite_input_clamps_linearly_but_not_in_log():
 
 
 def test_energy_balance_non_finite_below_lyman_cutoff_is_masked():
-    """A non-finite value below 912 A is masked, not clamped — the result stays exact."""
+    """A non-finite value on the ionizing side is masked, not clamped — the result stays exact."""
     wave = _grid(200)
     nu = C_AA / wave
     sed_i, sed_a = _seds(wave)
-    below_lyc = int(np.argmax(np.asarray(wave) >= 912.0)) - 1
-    assert float(wave[below_lyc]) < 912.0  # precondition: inside the LyC mask
+    below_lyc = int(np.argmax(np.asarray(wave) >= LYMAN_LIMIT_AA)) - 1
+    assert float(wave[below_lyc]) < LYMAN_LIMIT_AA  # precondition: inside the LyC mask
 
     clean = np.float64(bolometric_absorbed(sed_i, sed_a, nu, wave=wave))
     poisoned = sed_i.at[below_lyc].set(jnp.inf)

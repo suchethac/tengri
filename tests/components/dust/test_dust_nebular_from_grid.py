@@ -36,6 +36,7 @@ from tengri.forward.energy_balance import bolometric_absorbed_log10
 from tengri.protocols.component import ForwardState
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import log10_add
+from tests._age_boundary import hand_age_derived
 
 pytestmark = pytest.mark.conservation
 
@@ -67,10 +68,15 @@ _ONE = "one"
 
 
 def _orientation(wave) -> float:
-    """Sign of a frequency integral on ``wave``: -1 on an ascending wavelength grid."""
+    """Sign of the absorbed-energy integral on ``wave`` (positively oriented: +1 on any grid)."""
     wave = jnp.asarray(wave)
     one = jnp.ones(wave.shape)
     return float(bolometric_absorbed_log10(one, 0.5 * one, C_AA / wave, wave=wave)[1])
+
+
+def _young_limit_weights(kind: str) -> tuple:
+    """Weights for ``nebular_screen_transmission``: young-limit for two_component, none for one."""
+    return (jnp.asarray([1.0, 0.0]),) if kind == _TWO else ()
 
 
 def _component(kind: str, *, flagged: bool):
@@ -127,8 +133,15 @@ def _grid_channels(kind: str) -> dict:
         "nebular_restband_lnu_subband_precomp": jnp.asarray(_PHI_REST),
         "nebular_restband_subband_waves_precomp": jnp.asarray(_LAM_REST),
         # per unit Q_H, bilinear-exact for the bracket; includes frequency integral orientation
+        # one channel per pure nebular screen (young, old for two_component; the one
+        # screen otherwise); the old channel equals the young one here, so the
+        # young-limit weights the hand-built state publishes read it back unchanged
         "nebular_eb_absorbed_per_qh_grid_precomp": jnp.asarray(
-            orientation * np.outer(tau_a + 1.0, _TAU_B_GRID) * 1.0e-11
+            orientation
+            * np.broadcast_to(
+                np.outer(tau_a + 1.0, _TAU_B_GRID) * 1.0e-11,
+                ((2 if kind == _TWO else 1), tau_a.size, _TAU_B_GRID.size),
+            )
         ),
     }
 
@@ -144,6 +157,7 @@ def _state(wave, *, derived=None, nebular=None) -> ForwardState:
     base = {
         "lnu_age": lnu_age,
         "ssp_ages_yr": jnp.asarray([1.0e6, 1.0e7, 1.0e8, 1.0e10]),
+        **hand_age_derived(jnp.asarray([1.0e6, 1.0e7, 1.0e8, 1.0e10])),
         "log_nion": jnp.asarray(_LOG_NION),
     }
     base.update(derived or {})
@@ -212,7 +226,7 @@ def test_screen_method_is_the_screen_apply_puts_on_the_continuum(kind):
     wave = np.logspace(np.log10(700.0), np.log10(25000.0), 64)
     got = np.asarray(
         _component(kind, flagged=False).nebular_screen_transmission(
-            _PARAMS | {"redshift": 0.5}, jnp.asarray(wave)
+            _PARAMS | {"redshift": 0.5}, jnp.asarray(wave), *_young_limit_weights(kind)
         )
     )
     np.testing.assert_allclose(got, _exact_screen(kind, wave), rtol=0.0, atol=1e-15)
@@ -285,7 +299,7 @@ def test_tau_zero_leaves_the_stellar_term_alone(kind):
 
 
 def test_synthetic_lut_has_the_orientation_of_the_frequency_integral():
-    assert _orientation(_WAVE) == -1.0
+    assert _orientation(_WAVE) == 1.0
     for kind in [_TWO, _ONE]:
         lut = _lut(kind)
         tau_a = _TAU_A_GRID if kind == _TWO else np.zeros(1)
@@ -296,7 +310,7 @@ def test_synthetic_lut_has_the_orientation_of_the_frequency_integral():
             jnp.asarray(tau_a[0]),
             jnp.asarray(_TAU_B_GRID[0]),
         )
-        assert float(sign) == -1.0
+        assert float(sign) == _orientation(_WAVE)
 
 
 def _nebular_sed(wave) -> np.ndarray:
@@ -356,7 +370,7 @@ def test_single_screen_full_integral_counts_the_nebular_once(flagged):
     plain = _component(_ONE, flagged=False)
     stellar = np.asarray(jnp.sum(jnp.ones((_N_AGE, _WAVE.shape[0])) * 1.0e27, axis=0))
     wave = jnp.asarray(_WAVE)
-    screen = np.asarray(plain.nebular_screen_transmission(params, wave))
+    screen = np.asarray(plain.nebular_screen_transmission(params, wave))  # single screen
     total = jnp.asarray(stellar + sed)
     want = float(bolometric_absorbed_log10(total, total * screen, C_AA / wave, wave=wave)[0])
     if flagged:

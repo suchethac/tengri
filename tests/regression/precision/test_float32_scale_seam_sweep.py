@@ -477,6 +477,14 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: Re-taken for the Lyman-edge convention of the dust energy balance (the cell that
+#: straddles 911.76 A is integrated with the step model, not zeroed-and-trapezoided
+#: from 912 A). Measured: ``L_absorbed`` drops by 1.357e-3 on this model; an independent
+#: numpy step-model integral of the same SEDs reproduces the new ``L_ir`` to 3e-9 and the
+#: old hard-912 construction reproduces the old one to 1.4e-3. The AGN components scale
+#: with the stellar dust luminosity (``fracAGN``), so ``rest_sed`` below 912 A (AGN only)
+#: moves by exactly -1.357e-3 and the dust-emission bands (WISE) by -7.5e-4; the
+#: stellar optical is unchanged to 5e-5. rest_sed_sum moved -7.2e-5 / -1.1e-4 / -1.3e-4.
 #: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
 #: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
 #: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through

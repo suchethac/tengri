@@ -91,7 +91,7 @@ class TestTwoComponentIntegration:
         ages = jnp.array([1e6, 5e6, 1e7, 5e7, 1e8, 1e9])
         trans = two_component_dust(
             wave,
-            ages,
+            (ages < 1e7).astype(float),
             tau_v1=1.0,
             tau_v2=0.5,
             law_bc="vw07_bc",
@@ -108,7 +108,7 @@ class TestTwoComponentIntegration:
         ages = jnp.array([1e6, 1e9])
         trans = two_component_dust(
             wave,
-            ages,
+            (ages < 1e7).astype(float),
             tau_v1=1.0,
             tau_v2=0.5,
             law_bc="vw07_bc",

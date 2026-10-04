@@ -26,6 +26,7 @@ from tengri.components.dust.two_component import (
     DustSEDComponentConfig,
 )
 from tengri.protocols.component import ForwardState
+from tests._age_boundary import hand_age_derived
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -44,6 +45,7 @@ def _state_with_nebular(sed_neb: jnp.ndarray) -> ForwardState:
         derived={
             "lnu_age": lnu_age,
             "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
             "sed_nebular": sed_neb,
         },
     )
@@ -106,7 +108,7 @@ def test_zero_nebular_is_noop():
     bare = ForwardState(
         wave=_WAVE,
         sed_intrinsic=jnp.sum(lnu_age, axis=0),
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES},
+        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, **hand_age_derived(_AGES)},
     )
     without = comp.apply(bare, params)
     np.testing.assert_allclose(
