@@ -984,7 +984,7 @@ def galaxy_template(
         Wavelength [Angstrom], ascending, AGNfitter-rX's native BC03 grid
         (or its every-third subsample, see ``subsample3``).
     L_nu : ndarray, shape (1221,) or (407,)
-        Stellar luminosity density of a template normalised to 1 M_sun of
+        Stellar luminosity density of a template normalized to 1 M_sun of
         PRESENT stellar mass (stars plus remnants alive at ``age``)
         [erg/s/Hz per M_sun]. Multiply by the present stellar mass to get the
         physical luminosity density.
@@ -1077,7 +1077,7 @@ def galaxy_redden_calzetti(
     L_nu : ndarray, shape (n,)
         Unreddened luminosity density, any units.
     ebv : float
-        Galaxy colour excess E(B-V)_gal [mag].
+        Galaxy color excess E(B-V)_gal [mag].
 
     Returns
     -------
@@ -1222,7 +1222,7 @@ def torus_bolometric(name: str, **node) -> float:
     """Integral of one upstream torus template, ``int L_nu d(nu)``, in driver units.
 
     Upstream stores its torus templates with an inclination-dependent
-    bolometric (only the shape is normalised per template library); the
+    bolometric (only the shape is normalized per template library); the
     number returned is in the driver's ``1e40``-rescaled units and is only
     meaningful as a ratio between nodes of the same library.
 
@@ -1295,7 +1295,7 @@ def log_mstar_present_from_ga(ga: float, dlum_cm: float, z: float) -> float:
     """Present stellar mass implied by an upstream galaxy amplitude ``GA``.
 
     ``MODEL_AGNfitter.stellar_info``: ``M* = 10**GA * 4 pi d_L^2 / (L_sun (1+z)) / 1e18``.
-    The stored BC03 templates are normalised to 1 M_sun of PRESENT stellar
+    The stored BC03 templates are normalized to 1 M_sun of PRESENT stellar
     mass (stars plus remnants alive at the template age), so ``M*`` is a
     present mass, not the mass formed.
 

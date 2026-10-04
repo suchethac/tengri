@@ -615,8 +615,9 @@ def _adaf_mdot_from_lbol(
 
 
 #: Nodes of the fixed internal frequency grid that normalizes the spectrum.
-#: 8193 log nodes over <= ~1e6 in frequency: d ln(nu) ~ 2e-3, so the trapezoid
-#: error on the continuous broken power law (a slope kink at nu_p) is ~1e-6.
+#: 8193 log nodes over [0.02 nu_min, 100 kT_e / h] ~ 1e7 - 1e22 Hz (15 decades, 35 in ln):
+#: d ln(nu) ~ 4e-3, so the trapezoid error on the continuous broken power law (a slope
+#: kink at nu_p) is ~1e-6.
 _NORM_N_NODES = 8193
 
 

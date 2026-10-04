@@ -52,9 +52,17 @@ X_MAX = 1.0e4
 
 
 def isco_radius(a_spin):
-    """Innermost stable circular orbit in units of R_g = GM/c^2.
+    r"""Innermost stable circular orbit in units of R_g = GM/c^2.
 
-    Bardeen, Press & Teukolsky (1972) formula for prograde orbits.
+    Prograde orbits of a Kerr black hole [1]_:
+
+    .. math::
+
+        r_{\rm isco} = 3 + Z_2 - \sqrt{(3 - Z_1)(3 + Z_1 + 2 Z_2)},
+        \quad Z_1 = 1 + (1 - a^2)^{1/3}\left[(1 + a)^{1/3} + (1 - a)^{1/3}\right],
+        \quad Z_2 = \sqrt{3 a^2 + Z_1^2},
+
+    with ``a`` the dimensionless spin and ``r_isco`` in units of ``R_g = G M / c^2``.
 
     Parameters
     ----------
@@ -68,11 +76,19 @@ def isco_radius(a_spin):
 
     Notes
     -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in ``a`` (see below).
+
     To ensure finite gradients at the Schwarzschild limit (a=0), the argument of the final
     square root is clamped to a small positive value (1e-20). The BPT72 formula has a
     gradient singularity at a=0 where (3-z1)->0, which makes
     sqrt((3-z1)*(3+z1+2*z2)) undefined in AD. The physical limit is correct (r_isco=6 for
     a=0), but the gradient path must be stabilized for JAX autodiff to work.
+
+    References
+    ----------
+    .. [1] J. M. Bardeen, W. H. Press and S. A. Teukolsky, "Rotating Black Holes: Locally
+       Nonrotating Frames, Energy Extraction, and Scalar Synchrotron Radiation," ApJ, 178,
+       347 (1972). https://doi.org/10.1086/151796
     """
     a = jnp.clip(a_spin, 0.0, A_MAX)
     z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
@@ -82,10 +98,17 @@ def isco_radius(a_spin):
 
 
 def nt_rt(x, a_spin):
-    """Page-Thorne dimensionless flux factor ``Rt(r)`` at ``x = r / r_isco``.
+    r"""Page-Thorne dimensionless flux factor ``Rt(r)`` at ``x = r / r_isco``.
 
-    ``sigma T^4 = 3 G M Mdot / (8 pi r^3) * Rt``; see the module docstring for the
-    equations. ``Rt = 0`` at ``x = 1`` and ``-> 1`` as ``x -> inf``.
+    The flux of a thin, radiatively efficient disc around a Kerr black hole [1]_:
+
+    .. math::
+
+        \sigma T^4(r) = \frac{3 G M \dot M}{8 \pi r^3}\,R_t(r), \qquad R_t = C / B,
+
+    with ``B`` and ``C`` the relativistic correction factors of the module docstring
+    (``r`` in units of ``R_g``, ``y = sqrt(r)``). ``Rt = 0`` at ``x = 1`` (zero torque) and
+    ``-> 1`` as ``x -> inf``, where the Newtonian ``3 G M Mdot / 8 pi sigma r^3`` is recovered.
 
     Parameters
     ----------
@@ -101,7 +124,13 @@ def nt_rt(x, a_spin):
 
     Notes
     -----
-    **JIT-compatible**: yes, pure ``jnp``.
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in ``x`` and ``a``
+    (spin floored at ``1e-9`` so the ``y_2 = 0`` root of ``a = 0`` stays finite).
+
+    References
+    ----------
+    .. [1] D. N. Page and K. S. Thorne, "Disk-Accretion onto a Black Hole. Time-Averaged
+       Structure of Accretion Disk," ApJ, 191, 499 (1974). https://doi.org/10.1086/152990
     """
     a = jnp.clip(a_spin, _A_FLOOR, A_MAX)
     r_isco = isco_radius(a)
@@ -129,12 +158,19 @@ def nt_rt(x, a_spin):
 
 
 def nt_h(log_x, a_spin):
-    """Normalized hot-flow dissipation ``h(x) = int_1^x x'^-2 Rt(x') dx'``.
+    r"""Normalized hot-flow dissipation ``h(x) = int_1^x x'^-2 Rt(x') dx'``.
 
-    K&D 2018 Eq. 2, ``L_diss,hot = 2 int_{R_isco}^{R_hot} sigma T_NT^4 2 pi R dR``, equals
-    ``L_0 * h(x_hot)`` with ``L_0 = 4 pi R_isco^2 sigma T_in^4`` and
-    ``T_in^4 = 3 G M Mdot / (8 pi sigma R_isco^3)``. For ``Rt = 1 - x^-1/2`` (Newtonian,
-    zero torque) ``h = 1/3 - 1/x + 2/(3 x^{3/2})``; here ``Rt`` is the Page-Thorne factor.
+    Eq. 2 of Kubota & Done (2018) [1]_,
+
+    .. math::
+
+        L_{\rm diss,hot} = 2\int_{R_{\rm isco}}^{R_{\rm hot}} \sigma T_{\rm NT}^4\,
+        2\pi R\,dR = L_0\,h(x_{\rm hot}),
+
+    with ``L_0 = 4 pi R_isco^2 sigma T_in^4``, ``T_in^4 = 3 G M Mdot / (8 pi sigma
+    R_isco^3)`` and ``x = R / R_isco``; the integrand carries the ``R dR`` area element
+    (``x'^-3 Rt x'``). For ``Rt = 1 - x^-1/2`` (Newtonian, zero torque) ``h = 1/3 - 1/x +
+    2/(3 x^{3/2})``; here ``Rt`` is the Page-Thorne factor of :func:`nt_rt` [2]_.
 
     Parameters
     ----------
@@ -148,6 +184,19 @@ def nt_h(log_x, a_spin):
     float
         ``h`` by 128-node Gauss-Legendre quadrature in ``ln x`` (integrand
         ``Rt(e^u) e^-u``).
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp`` with a fixed quadrature rule; differentiable in
+    ``log_x`` and ``a_spin`` by automatic differentiation.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum of AGN and
+       its implications for the UV/X relation and optical variability," MNRAS, 480, 1247
+       (2018). arXiv:1804.00171. https://doi.org/10.1093/mnras/sty1890
+    .. [2] D. N. Page and K. S. Thorne, ApJ, 191, 499 (1974).
+       https://doi.org/10.1086/152990
     """
     u = 0.5 * log_x * (jnp.asarray(_GL_T) + 1.0)
     g = nt_rt(jnp.exp(u), a_spin) * jnp.exp(-u)

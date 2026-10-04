@@ -138,9 +138,9 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "relagn": (("relagn_disc_grid.h5", "wavelength_aa", 1.0),),
     # KD18 (Kubota & Done 2018) discs reach 0.062 A (200 keV) to 12.4 um; 28 per
-    # cent of the bolometric energy lies below the SSP edge (91 A). Without the
-    # native axis the block normalizes its energy over the SSP window only and
-    # inflates the UV/optical disc by 1/0.72 (measured #2564).
+    # cent of the bolometric energy lies below the SSP edge (91 A). The native axis
+    # keeps that energy on the master grid, so a band integral or a bolometric
+    # quadrature of the SED sees all of it.
     "kd18_agnfitter": (("kd18_agnfitter_disc_grid.h5", "kd18_agnfitter/wavelength", 1.0),),
     "kd18_agnfitter_warmindex": (
         ("kd18_agnfitter_warmindex_disc_grid.h5", "kd18_agnfitter_warmindex/wavelength", 1.0),
@@ -148,9 +148,10 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 }
 
 # Analytic AGN disc blocks (#2564). These blocks evaluate on whatever grid they
-# are handed and normalize their energy to ``L_bol`` by a trapezoid over that
-# grid, so a grid that stops at the SSP edges (91 A, 160 um) renormalizes the
-# disc over the truncated window and inflates its UV/optical level. Each range
+# are handed and normalize their energy to ``L_bol`` in closed form (or on a fixed
+# internal grid), independent of that grid. A master grid that stops at the SSP edges
+# (91 A, 160 um) would still drop the energy outside it from every downstream quadrature
+# of the SED (band fluxes, bolometric checks, the energy ledgers). Each range
 # [lo, hi] Angstrom is chosen so that < 1e-3 of the block's energy (default
 # parameters, measured on a 1e-3 A - 1e10 A grid) lies outside it, and is
 # justified by the emission physics:

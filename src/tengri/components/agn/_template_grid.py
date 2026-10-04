@@ -111,8 +111,10 @@ def native_bolometric_nu(
     in closed form by :func:`~tengri.utils.grid_interp.loglog_integral`.
 
     **JIT-compatible**: yes. **Gradient-safe**: yes. The resampling kernels used
-    after this are linear in the template values, so dividing the resampled
-    template by this integral equals resampling the normalized template.
+    after this are homogeneous of degree one in the template values (log-flux
+    interpolation is not linear, but scaling the template scales the result by the
+    same factor), so dividing the resampled template by this integral equals
+    resampling the normalized template.
     """
     wave = jnp.asarray(wave_native)
     integrand = jnp.asarray(lnu_native) * (_C_AA / wave**2)
