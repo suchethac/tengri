@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- The Synthesizer-grid NLR and BLR blocks (`nlr/blr={'type': 'synthesizer_spectra'}`) now forward `agn_log_mbh` and `agn_log_ledd` parameters to the grid backend, so the grid's mass and accretion-rate axes respond to model parameters. Previously they were frozen at the backend's hardcoded defaults (8.0 and −0.3), making the parameters inert on the composable block path (#2634).
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
   with the default 13.0 (10 THz) as before. The key is read by both AGN radio

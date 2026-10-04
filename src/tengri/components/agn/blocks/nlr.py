@@ -331,6 +331,8 @@ def nlr_synthesizer_spectra_block(
     # Left as-is rather than unified; NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = 4.0,
     agn_nlr_logZ: float = -2.0,
+    agn_log_mbh: float = 7.0,
+    agn_log_ledd: float = -1.0,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -344,6 +346,14 @@ def nlr_synthesizer_spectra_block(
     ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
     and are drivable through ``SEDModel.build`` (#931); they translate to the
     grid's ``neb_*`` axes internally.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol — ``agn_log_lbol`` does).
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -353,6 +363,8 @@ def nlr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_nlr_cf,
         grid_path=_resolve_synthesizer_grid("nlr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_nlr_logU,
         neb_logn=agn_nlr_logn,
         neb_logZ_gas=agn_nlr_logZ,
