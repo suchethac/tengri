@@ -1,45 +1,43 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for issue #2727: `_pdr_luminosity_weight` without pole window.
+"""#2727: ``_pdr_luminosity_weight`` is the Draine & Li (2007) Eq. 33 ratio at every α.
 
-Bug: The power-law to single-U luminosity ratio R(α) had 1e-3-width windows at
-α = 1, 2 selecting exact limit forms. Inside those windows R is constant in α,
-yielding R(α=1±δ) = R(α=1) and R(α=2±δ) = R(α=2), with zero gradient and
-discontinuous jumps at the window edges (±5-8e-3). This creates likelihood
-plateaus and gradient discontinuities for free α parameters, making HMC
-trajectories diverge and causing optimizers to stall.
-
-Fix: Implement the closed form without any window:
-    L = ln(umax / umin);  t = 1 − alpha;  s = 2 − alpha
-    R = g(s*L) / g(t*L),   g(u) = expm1(u) / u,  g(0) = 1
-
-Use a Taylor series for |u| < 1e-3 to avoid division by zero in gradients.
+R(α) = g((2 − α)L) / g((1 − α)L) with g(u) = expm1(u)/u, L = ln(U_max/U_min):
+one closed form, continuous with a continuous gradient through α = 1 and 2.
+The cells pin the value against a 50-digit reference, the gradient against a
+central difference of that reference, continuity across α = 1 ± 1e-3 and
+2 ± 1e-3, float32 agreement, and the two SED-mix calls (DL07 at α = 2, DL14).
 """
 
+import jax
+import mpmath
 import numpy as np
 import pytest
 
-try:
-    import jax
-    import jax.numpy as jnp
-    from tengri.components.dust.emission_templates import _pdr_luminosity_weight as R
-except ImportError:
-    R = None
+from tengri.components.dust.emission_templates import _pdr_luminosity_weight as R
 
 pytestmark = pytest.mark.regression_bug
 
 
 def _exact_formula(umin, umax, alpha):
-    """Reference formula using numpy float64."""
-    x = float(umax) / float(umin)
-    a = float(alpha)
-    if abs(a - 1.0) < 1e-10:
-        return (x - 1.0) / np.log(x)
-    if abs(a - 2.0) < 1e-10:
-        return x * np.log(x) / (x - 1.0)
-    return ((1.0 - a) / (2.0 - a)) * ((x ** (2.0 - a)) - 1.0) / ((x ** (1.0 - a)) - 1.0)
+    """Draine & Li (2007) Eq. 33 ratio at 50 significant digits.
+
+    The textbook form ``(1-a)/(2-a) (x^(2-a)-1)/(x^(1-a)-1)`` cancels
+    catastrophically within 1e-6 of either pole in float64 (``x^(1-a) - 1`` is
+    ~1e-6 there), so the reference is evaluated in ``mpmath`` at 50 digits and
+    rounded once; the limit forms are taken only at the exact poles.
+    """
+    with mpmath.workdps(50):
+        x = mpmath.mpf(umax) / mpmath.mpf(umin)
+        a = mpmath.mpf(alpha)
+        if a == 1:
+            value = (x - 1) / mpmath.log(x)
+        elif a == 2:
+            value = x * mpmath.log(x) / (x - 1)
+        else:
+            value = ((1 - a) / (2 - a)) * (x ** (2 - a) - 1) / (x ** (1 - a) - 1)
+        return float(value)
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_value_dense_grid():
     """Test R(umin, umax, alpha) against exact formula on dense α grid."""
     alpha_grid = np.arange(0.5, 3.01, 0.01)
@@ -62,7 +60,6 @@ def test_pdr_weight_value_dense_grid():
             )
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_value_near_poles():
     """Test R at pole ± small offsets (exact limit forms)."""
     pole_offsets = [1e-7, 1e-5, 1e-4, 5e-4, 1e-3, 2e-3, 1e-2]
@@ -80,8 +77,7 @@ def test_pdr_weight_value_near_poles():
             computed = float(R(umin, umax, alpha))
             expected = _exact_formula(umin, umax, alpha)
             rel_err = abs(computed - expected) / abs(expected)
-            # Tolerance 1e-10 accounts for float64 rounding in log/expm1/division chain
-            assert rel_err < 1e-10, (
+            assert rel_err < 1e-12, (
                 f"R(pole α=1): α={alpha} gives {computed}, expected {expected}, "
                 f"rel_err {rel_err:.2e}"
             )
@@ -91,7 +87,7 @@ def test_pdr_weight_value_near_poles():
             computed = float(R(umin, umax, alpha))
             expected = _exact_formula(umin, umax, alpha)
             rel_err = abs(computed - expected) / abs(expected)
-            assert rel_err < 1e-10, (
+            assert rel_err < 1e-12, (
                 f"R(pole α=1−): α={alpha} gives {computed}, expected {expected}, "
                 f"rel_err {rel_err:.2e}"
             )
@@ -102,7 +98,7 @@ def test_pdr_weight_value_near_poles():
             computed = float(R(umin, umax, alpha))
             expected = _exact_formula(umin, umax, alpha)
             rel_err = abs(computed - expected) / abs(expected)
-            assert rel_err < 1e-10, (
+            assert rel_err < 1e-12, (
                 f"R(pole α=2): α={alpha} gives {computed}, expected {expected}, "
                 f"rel_err {rel_err:.2e}"
             )
@@ -112,13 +108,12 @@ def test_pdr_weight_value_near_poles():
             computed = float(R(umin, umax, alpha))
             expected = _exact_formula(umin, umax, alpha)
             rel_err = abs(computed - expected) / abs(expected)
-            assert rel_err < 1e-10, (
+            assert rel_err < 1e-12, (
                 f"R(pole α=2−): α={alpha} gives {computed}, expected {expected}, "
                 f"rel_err {rel_err:.2e}"
             )
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_gradient():
     """Test jax.grad(R) against central difference at α sampling points."""
     umin, umax = 1.0, 1e7
@@ -134,17 +129,18 @@ def test_pdr_weight_gradient():
         bwd = _exact_formula(umin, umax, alpha - h)
         central_diff = (fwd - bwd) / (2.0 * h)
 
-        rel_err = abs(jax_grad_val - central_diff) / abs(central_diff) if central_diff != 0 else 0
+        assert np.isfinite(jax_grad_val), f"∂R/∂α at α={alpha} is not finite: {jax_grad_val}"
+        assert central_diff != 0, f"reference ∂R/∂α at α={alpha} is zero: vacuous cell"
+        rel_err = abs(jax_grad_val - central_diff) / abs(central_diff)
         assert rel_err < 1e-6, (
             f"∂R/∂α at α={alpha}: jax.grad={jax_grad_val:.6e}, "
             f"central_diff={central_diff:.6e}, rel_err={rel_err:.2e}"
         )
         assert jax_grad_val != 0, (
-            f"∂R/∂α at α={alpha} is zero: gradient is discontinuous or undefined"
+            f"∂R/∂α at α={alpha} is zero: the pole window of #2727 would hold R flat here"
         )
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_continuity_across_old_windows():
     """Test continuity across the old 1e-3 window edges."""
     test_cases = [
@@ -161,8 +157,7 @@ def test_pdr_weight_continuity_across_old_windows():
         val_right = float(R(umin, umax, alpha_edge + 1e-9))
         rel_jump = abs(val_left - val_right) / abs(val_right)
         assert rel_jump < 1e-7, (
-            f"Jump at α=1−1e-3 edge: left={val_left}, right={val_right}, "
-            f"relative={rel_jump:.2e}"
+            f"Jump at α=1−1e-3 edge: left={val_left}, right={val_right}, relative={rel_jump:.2e}"
         )
 
         # Window edges at α = 2 ± 1e-3
@@ -171,12 +166,10 @@ def test_pdr_weight_continuity_across_old_windows():
         val_right = float(R(umin, umax, alpha_edge + 1e-9))
         rel_jump = abs(val_left - val_right) / abs(val_right)
         assert rel_jump < 1e-7, (
-            f"Jump at α=2−1e-3 edge: left={val_left}, right={val_right}, "
-            f"relative={rel_jump:.2e}"
+            f"Jump at α=2−1e-3 edge: left={val_left}, right={val_right}, relative={rel_jump:.2e}"
         )
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_float32():
     """Test float32 precision: values within 4 ulp, gradient non-zero and finite."""
     alpha_test = [1.0, 2.0, 1.0005]
@@ -200,14 +193,13 @@ def test_pdr_weight_float32():
 
         # Gradient must be finite and non-zero in float32
         with jax.enable_x64(False):
-            grad_f32 = float(jax.grad(lambda a: R(np.float32(umin), np.float32(umax), a))(
-                np.float32(alpha)
-            ))
+            grad_f32 = float(
+                jax.grad(lambda a: R(np.float32(umin), np.float32(umax), a))(np.float32(alpha))
+            )
         assert np.isfinite(grad_f32), f"float32 gradient at α={alpha} is not finite"
         assert grad_f32 != 0, f"float32 gradient at α={alpha} is zero"
 
 
-@pytest.mark.skipif(R is None, reason="tengri not installed")
 def test_pdr_weight_sed_mix_outside_windows():
     """Test that SED mix does not move outside the old window regions."""
     # DL07 call at α = 2 exactly (emission_templates.py:242)
