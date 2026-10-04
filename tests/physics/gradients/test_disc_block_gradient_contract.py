@@ -42,7 +42,14 @@ import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.agn.blocks import AGN_BLOCKS
 
-_SSP = DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
+# The disc block never reads the stellar grid (AGN-only build, ``sed_agn`` is the disc), so
+# any bare-stellar SSP will do. CI has no BC03 download, but ``tests/conftest.py`` writes a
+# schema-faithful synthetic bare grid at the second path before collection.
+_SSP_CANDIDATES = (
+    DATA_DIR / "bc03_pdva_stelib_chabrier.h5",
+    DATA_DIR / "ssp_prsc_bc03_chabrier.h5",
+)
+_SSP = next((p for p in _SSP_CANDIDATES if p.is_file()), _SSP_CANDIDATES[-1])
 _NONE = {"type": "none"}
 _REL_TOL = 1e-4
 _H = 1e-4
@@ -88,13 +95,13 @@ _DISC_BLOCKS = sorted(name for name in AGN_BLOCKS["disc"] if name != "none")
 
 pytestmark = [
     pytest.mark.gradient,
-    pytest.mark.skipif(not _SSP.is_file(), reason=f"BC03 SSP not found at {_SSP}"),
+    pytest.mark.skipif(not _SSP.is_file(), reason=f"no bare-stellar SSP found at {_SSP}"),
 ]
 
 
 @pytest.fixture(scope="module")
 def ssp():
-    """The bare BC03 SSP the AGN-only build needs."""
+    """The bare-stellar SSP the AGN-only build needs (its content does not enter ``sed_agn``)."""
     return tengri.load_ssp(str(_SSP))
 
 
@@ -112,7 +119,7 @@ def _build_agn_only(ssp, disc_spec: dict):
         "norm": "independent",
     }
     sfh = {"type": "const", "log_total_mass": -10.0, "all_params": Fixed(DEFAULT)}
-    return SEDModel.build(ssp, sfh=sfh, agn=agn, redshift=Fixed(0.5))
+    return SEDModel.build(ssp, sfh=sfh, agn=agn, neb={"type": "none"}, redshift=Fixed(0.5))
 
 
 def _grad_and_fd(model, overrides=None):

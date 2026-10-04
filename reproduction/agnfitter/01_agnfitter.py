@@ -1438,7 +1438,7 @@ print(
 # near-infrared excess that equatorial tori miss.
 
 # %% [markdown]
-# #### Inclination-dependent torus power
+# ### Inclination-dependent torus power
 #
 # Upstream's torus templates do not share a bolometric luminosity: the template integral changes
 # with inclination (the table prints the trend for each library), so at fixed `TO` the torus
