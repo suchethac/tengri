@@ -482,7 +482,6 @@ def casey2012(
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
     wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm  # Hz, descending
 
     # Convert dust_lambda_0_um to cm
     lambda_0_cm = dust_lambda_0_um * 1.0e-4  # um to cm
@@ -508,7 +507,9 @@ def casey2012(
     norm_nu = _C_CGS / norm_wave_cm  # Hz, descending
 
     # Evaluate shape on internal grid
-    norm_graybody = _casey_graybody_nu(norm_wave_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm)
+    norm_graybody = _casey_graybody_nu(
+        norm_wave_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm
+    )
     norm_power_law = (
         n_pl
         * (norm_wave_cm / lambda_c_cm) ** dust_alpha_mir

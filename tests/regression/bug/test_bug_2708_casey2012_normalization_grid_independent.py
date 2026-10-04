@@ -38,7 +38,9 @@ UPPER_LIMIT_AA = 1e8  # 10 cm
 N_GRID_POINTS = 4000
 
 
-def _create_grid_with_probes(lower_aa: float, upper_aa: float, n_points: int, probes_aa: np.ndarray) -> np.ndarray:
+def _create_grid_with_probes(
+    lower_aa: float, upper_aa: float, n_points: int, probes_aa: np.ndarray
+) -> np.ndarray:
     """Create a logarithmic wavelength grid with probes inserted exactly.
 
     Parameters
@@ -82,7 +84,9 @@ def test_casey2012_grid_independence_pointwise():
     results_by_grid = {}
 
     for lower_aa in LOWER_LIMITS_AA:
-        grid = _create_grid_with_probes(lower_aa, UPPER_LIMIT_AA, N_GRID_POINTS, PROBE_WAVELENGTHS_AA)
+        grid = _create_grid_with_probes(
+            lower_aa, UPPER_LIMIT_AA, N_GRID_POINTS, PROBE_WAVELENGTHS_AA
+        )
 
         for alpha in ALPHAS_TEST:
             L_nu = casey2012(
@@ -107,12 +111,13 @@ def test_casey2012_grid_independence_pointwise():
         reference = probe_values_list[0]
 
         for i, probe_values in enumerate(probe_values_list[1:], 1):
+            msg = (
+                f"Grid independence failed for alpha={alpha}, "
+                f"origin[0]={LOWER_LIMITS_AA[0]:.0e} "
+                f"vs origin[{i}]={LOWER_LIMITS_AA[i]:.0e}"
+            )
             np.testing.assert_allclose(
-                probe_values,
-                reference,
-                rtol=1e-6,
-                err_msg=f"Grid independence failed for alpha={alpha}, "
-                        f"origin[0]={LOWER_LIMITS_AA[0]:.0e} vs origin[{i}]={LOWER_LIMITS_AA[i]:.0e}",
+                probe_values, reference, rtol=1e-6, err_msg=msg
             )
 
 
@@ -222,8 +227,10 @@ def test_casey2012_gradients_finite_and_nonzero():
         grad_lambda0 = jax.grad(L_nu_single, argnums=3)(
             40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM
         )
-        assert np.isfinite(grad_lambda0), f"Gradient w.r.t. lambda_0 is not finite for alpha={alpha}"
-        assert grad_lambda0 != 0.0, f"Gradient w.r.t. lambda_0 is zero for alpha={alpha}"
+        msg = f"Gradient w.r.t. lambda_0 is not finite for alpha={alpha}"
+        assert np.isfinite(grad_lambda0), msg
+        msg = f"Gradient w.r.t. lambda_0 is zero for alpha={alpha}"
+        assert grad_lambda0 != 0.0, msg
 
 
 def test_casey2012_float32_finite():
