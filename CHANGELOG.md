@@ -17,9 +17,8 @@
   parameters were inert (the [O III] 5007 light of the `synthesizer_spectra` NLR moves by
   about 18% between `agn_log_ledd` = -0.3 and -1.0). The blocks now forward the registry
   defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
-  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3); the
-  AGN component's own fallback for an absent `agn_log_mbh` reads the same default
-  instead of a bare 8.0 (#2634)..
+  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3)
+  (#2634).
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
   with the default 13.0 (10 THz) as before. The key is read by both AGN radio
