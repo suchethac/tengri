@@ -35,6 +35,7 @@ from tengri.utils.scale import log10_flux_scale as _log10_flux_scale, representa
 __all__ = [
     "PreintegratedGrid",
     "PreintegratedLines",
+    "edge_split",
     "interp_nd_pchip",
     "interp_nd_triweight",
     "pchip_interp_1d",
@@ -69,6 +70,48 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     t = np.where(span > 0, (xq - x0) / np.where(span > 0, span, 1.0), 0.0)
     y0, y1 = y[..., idx], y[..., idx + 1]
     return y0 + (y1 - y0) * t
+
+
+def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
+    """Split a quadrature at a wavelength: the part below it and the part above it.
+
+    Both halves come from ONE cumulative trapezoid, so ``below + above`` is the
+    whole integral and a template that does not reach across ``edge`` has
+    EXACTLY zero in the half it does not touch. The caller therefore never has
+    to recover a half as ``whole - other_half``: in a band wholly on one side of
+    the edge that difference is two equal numbers and returns rounding noise,
+    which is not zero and not the same in every compiled graph.
+
+    Parameters
+    ----------
+    integrand : ndarray, shape (..., m)
+        Integrand on ``grid`` [any units].
+    grid : ndarray, shape (m,)
+        Ascending quadrature nodes [Angstrom].
+    edge : float
+        Split wavelength, same frame as ``grid`` [Angstrom].
+
+    Returns
+    -------
+    below, above : ndarray, shape (...)
+        Integrals over ``grid <= edge`` and ``grid >= edge`` [integrand units x Angstrom].
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time numpy.
+    """
+    lead = integrand.shape[:-1]
+    if grid.size < 2:
+        return np.zeros(lead), np.zeros(lead)
+    if not np.any(grid < edge):
+        return np.zeros(lead), _np_trapezoid(integrand, grid, axis=-1)
+    cum = _cumtrapz_rows(integrand, grid)
+    total = cum[..., -1]
+    idx = int(np.searchsorted(grid, edge))
+    if idx >= grid.size:
+        return total, np.zeros(lead)
+    below = _interp_rows(np.array([edge]), grid, cum)[..., 0]
+    return below, total - below
 
 
 def subband_edges(
@@ -272,6 +315,17 @@ class PreintegratedGrid:
         apply the ``neb_fesc`` escape-fraction mask to the stellar
         photometric LUT the same way the dense path masks
         ``state.sed_intrinsic``.
+    nolyc_phot : jnp.ndarray or None
+        (*grid_dims, n_filters) [erg/s/Hz]. The other half of the same split:
+        the integral over rest-frame λ >= 912 Ångström, taken from the same
+        cumulative integral as ``lyc_phot`` so that ``lyc_phot + nolyc_phot`` is
+        the band integral and a band wholly on one side of the edge has
+        EXACTLY zero in the other half. The escape-fraction mask is then
+        ``nolyc_phot + fesc * lyc_phot``: an addition, where the equivalent
+        ``phot - (1 - fesc) * lyc_phot`` cancels two equal numbers in a band
+        wholly below the edge and leaves rounding noise (~1e-16 of the band, and
+        different noise in each compiled graph). ``None`` exactly when
+        ``lyc_phot`` is.
     axes : tuple[jnp.ndarray, ...]
         One array per grid dimension, giving node coordinates.
     edges : tuple[jnp.ndarray, ...]
@@ -302,6 +356,7 @@ class PreintegratedGrid:
     subband_waves: jnp.ndarray | None = None
     subband_waves_rest: jnp.ndarray | None = None
     lyc_phot: jnp.ndarray | None = None
+    nolyc_phot: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -529,6 +584,7 @@ def preintegrate_grid(
     eff_waves_obs = np.zeros(n_filters)
     phot_flat = np.zeros((n_grid_points, n_filters))
     lyc_phot_flat = np.zeros((n_grid_points, n_filters)) if lyc_gate else None
+    nolyc_phot_flat = np.zeros((n_grid_points, n_filters)) if lyc_gate else None
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
     K = int(n_subbands)
     K_sub = K + 1 if (K > 0 and lyc_gate) else K
@@ -573,24 +629,10 @@ def preintegrate_grid(
         # (state.sed_intrinsic * lyc_transmission where wave < 912).
         lyc_wave_obs = 912.0 * (1.0 + redshift)
         if lyc_gate:
-            if np.any(grid < lyc_wave_obs):
-                cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
-                lyc_idx = np.searchsorted(grid, lyc_wave_obs)
-                if lyc_idx > 0 and lyc_idx < len(grid):
-                    cum_at_lyc = _interp_rows(np.array([lyc_wave_obs]), grid, cum_integrand)
-                    lyc_num = cum_at_lyc[:, 0]
-                elif lyc_idx >= len(grid):
-                    # Lyman limit is beyond all grid points; take everything below 912
-                    lyc_num = cum_integrand[:, -1]
-                else:
-                    # Lyman limit is before all grid points; zero LyC
-                    lyc_num = 0.0
-                lyc_phot_flat[:, f_idx] = lyc_num / np.maximum(
-                    denom, representable_denominator(1e-30)
-                )
-            else:
-                # No grid points below the Lyman limit; zero LyC photometry
-                lyc_phot_flat[:, f_idx] = 0.0
+            lyc_num, above_num = edge_split(integrand, grid, lyc_wave_obs)
+            norm = np.maximum(denom, representable_denominator(1e-30))
+            lyc_phot_flat[:, f_idx] = lyc_num / norm
+            nolyc_phot_flat[:, f_idx] = above_num / norm
 
         # Compute Taylor moment if requested
         if taylor:
@@ -620,6 +662,7 @@ def preintegrate_grid(
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
     lyc_phot = jnp.array(lyc_phot_flat.reshape(*grid_dims, n_filters)) if lyc_gate else None
+    nolyc_phot = jnp.array(nolyc_phot_flat.reshape(*grid_dims, n_filters)) if lyc_gate else None
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
     if K > 0:
         sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K_sub))
@@ -653,6 +696,7 @@ def preintegrate_grid(
         subband_waves=sub_waves_j,
         subband_waves_rest=sub_waves_rest_j,
         lyc_phot=lyc_phot,
+        nolyc_phot=nolyc_phot,
     )
 
 
@@ -1415,6 +1459,7 @@ def slice_fixed_axes(
         phot = preint.phot
         moment = preint.moment
         lyc_phot = preint.lyc_phot
+        nolyc_phot = preint.nolyc_phot
         sub_phot = preint.subband_phot
         sub_waves = preint.subband_waves
         sub_waves_rest = preint.subband_waves_rest
@@ -1452,6 +1497,9 @@ def slice_fixed_axes(
             if lyc_phot is not None:
                 lyc_phot = jnp.tensordot(w, lyc_phot, axes=([0], [axis_idx]))
 
+            if nolyc_phot is not None:
+                nolyc_phot = jnp.tensordot(w, nolyc_phot, axes=([0], [axis_idx]))
+
             if sub_phot is not None:
                 sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
                 sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
@@ -1488,6 +1536,7 @@ def slice_fixed_axes(
             subband_waves=sub_waves,
             subband_waves_rest=sub_waves_rest,
             lyc_phot=lyc_phot,
+            nolyc_phot=nolyc_phot,
         )
 
     # Handle PreintegratedLines (has line_filter_weights)

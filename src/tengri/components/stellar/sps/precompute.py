@@ -41,8 +41,7 @@ from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_di
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
-    _cumtrapz_rows,
-    _interp_rows,
+    edge_split,
     preintegrate_grid,
     subband_quadrature,
 )
@@ -169,6 +168,14 @@ class PhotometricPrecomputation(NamedTuple):
         Lyman-continuum mask (a photoionized backend whose ``neb_fesc`` is not
         pinned at exactly ``1.0``, #2439, #2427). A model without one never
         computes or caches this.
+    ssp_phot_nolyc : array or None, shape (n_met, n_age, n_filters)
+        The other half of that split: the band flux from rest-frame
+        λ >= 912 Ångström, from the same cumulative integral, so a band wholly
+        below the edge has exactly zero here. The escape-fraction mask is
+        ``ssp_phot_nolyc + neb_fesc * ssp_phot_lyc`` (an addition) rather than
+        ``ssp_phot - (1 - neb_fesc) * ssp_phot_lyc``, which cancels two equal
+        numbers in that band and returns rounding noise. ``None`` exactly when
+        ``ssp_phot_lyc`` is.
 
     Notes
     -----
@@ -189,6 +196,7 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
     ssp_phot_lyc: "jnp.ndarray | None" = None
+    ssp_phot_nolyc: "jnp.ndarray | None" = None
     #: Rest-frame centroid of each chunk WITH the IGM inside [A], same shape as
     #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
     #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
@@ -343,6 +351,7 @@ def precompute_photometry(
         ssp_subband_phot=preint.subband_phot,
         ssp_subband_waves_rest=preint.subband_waves_rest,
         ssp_phot_lyc=preint.lyc_phot,
+        ssp_phot_nolyc=preint.nolyc_phot,
     )
 
 
@@ -662,6 +671,10 @@ class PhotometricZTable(NamedTuple):
     #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
     #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
     ssp_phot_lyc_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters) photometry from rest λ >= 912 Å: the other
+    #: half of the Lyman-limit split, exactly zero in a band wholly below the edge.
+    #: Present exactly when ``ssp_phot_lyc_table`` is.
+    ssp_phot_nolyc_table: jnp.ndarray | None = None
     #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame centroid of each chunk
     #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
     #: itself, so not part of the on-disk z-table.
@@ -718,7 +731,13 @@ class ZTableRequest:
 # with no warning. ``lyc_gate`` is now also its own field in
 # :class:`ZTableRequest`, so a lyc_gate=True request can never collide with
 # a lyc_gate=False (or pre-#2439) entry even if the version were not bumped.
-_ZTABLE_CACHE_VERSION = 4
+#
+# 4 -> 5: the npz payload gained ``ssp_phot_nolyc_table``, the above-edge half of
+# the Lyman-limit split computed from the same cumulative integral as the
+# below-edge half. A version-4 entry has no such table and would be served to a
+# ``lyc_gate`` request that now needs it (the load path below also rebuilds on
+# the missing key).
+_ZTABLE_CACHE_VERSION = 5
 
 
 def _ztable_cache_dir():
@@ -857,7 +876,7 @@ def precompute_photometry_ztable(
                 # (that is the exact shape of the original bug: a warm cache
                 # serving a table with no Lyman-continuum split, no warning).
                 # Fall through and rebuild instead.
-                has_lyc = "ssp_phot_lyc_table" in d.files
+                has_lyc = "ssp_phot_lyc_table" in d.files and "ssp_phot_nolyc_table" in d.files
                 if not (lyc_gate and not has_lyc):
                     return PhotometricZTable(
                         ssp_phot_table=jnp.array(d["ssp_phot_table"]),
@@ -883,6 +902,9 @@ def precompute_photometry_ztable(
                         ),
                         ssp_phot_lyc_table=(
                             jnp.array(d["ssp_phot_lyc_table"]) if has_lyc else None
+                        ),
+                        ssp_phot_nolyc_table=(
+                            jnp.array(d["ssp_phot_nolyc_table"]) if has_lyc else None
                         ),
                     )
 
@@ -918,6 +940,7 @@ def precompute_photometry_ztable(
             payload["subband_waves_rest_table"] = np.asarray(table.subband_waves_rest_table)
         if table.ssp_phot_lyc_table is not None:
             payload["ssp_phot_lyc_table"] = np.asarray(table.ssp_phot_lyc_table)
+            payload["ssp_phot_nolyc_table"] = np.asarray(table.ssp_phot_nolyc_table)
         # Atomic publish: concurrent builds of the same key race benignly.
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
         try:
@@ -1032,6 +1055,7 @@ def _compute_photometry_ztable(
     # lyc_gate (a live nebular Lyman-continuum mask): a model without one
     # never pays this compute or the extra table size.
     ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
+    ssp_phot_nolyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -1097,34 +1121,14 @@ def _compute_photometry_ztable(
             num = _np_trapezoid(integrand, grid, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
-            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427).
-            # Gated on lyc_gate. Use cumulative trapezoid to extract the
-            # integral over [grid_min, 912*(1+z)] on the observed-frame grid.
+            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427), and the
+            # λ >= 912 Å half of the same split from the same cumulative
+            # integral. Gated on lyc_gate.
             lyc_wave_obs = 912.0 * (1.0 + z_val)
             if lyc_gate:
-                if np.any(grid < lyc_wave_obs):
-                    # (n_met*n_age, len(grid))
-                    cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
-                    # Reshape to (n_met, n_age, len(grid)) for later use
-                    cum_integrand_reshaped = cum_integrand.reshape(n_met, n_age, -1)
-                    # Interpolate cumulative integral at the Lyman limit
-                    lyc_idx = np.searchsorted(grid, lyc_wave_obs)
-                    if lyc_idx > 0 and lyc_idx < len(grid):
-                        # Interpolate the cumulative integral at lyc_wave_obs
-                        cum_at_lyc = _interp_rows(
-                            np.array([lyc_wave_obs]), grid, cum_integrand_reshaped
-                        )  # (n_met, n_age, 1)
-                        lyc_num = cum_at_lyc[:, :, 0]
-                    elif lyc_idx >= len(grid):
-                        # Lyman limit is beyond all grid points; take everything
-                        lyc_num = cum_integrand_reshaped[:, :, -1]
-                    else:
-                        # Lyman limit is before all grid points; zero LyC
-                        lyc_num = 0.0
-                    ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
-                else:
-                    # No grid points below the Lyman limit; zero LyC photometry
-                    ssp_phot_lyc_all[zi, :, :, f_idx] = 0.0
+                lyc_num, above_num = edge_split(integrand, grid, lyc_wave_obs)
+                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
+                ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
@@ -1180,6 +1184,9 @@ def _compute_photometry_ztable(
             jnp.array(subband_waves_all) if subband_waves_all is not None else None
         ),
         ssp_phot_lyc_table=(jnp.array(ssp_phot_lyc_all) if ssp_phot_lyc_all is not None else None),
+        ssp_phot_nolyc_table=(
+            jnp.array(ssp_phot_nolyc_all) if ssp_phot_nolyc_all is not None else None
+        ),
     )
 
 

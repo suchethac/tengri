@@ -83,6 +83,27 @@ class _Models:
         return self.get(redshift, WavePrecomp(), **kw)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _shared_stellar_ztables(tmp_path_factory):
+    """Build each stellar redshift table once for the module, in a private cache.
+
+    Every fast nebular model re-integrates the SSP through the filters at ~250
+    redshifts (about a minute) for a table that depends only on the SSP, the
+    filters, the z grid and the quadrature flags, and this file builds a dozen
+    models that share a handful of those. The suite turns the persistent on-disk
+    cache off (``TENGRI_DISABLE_PRECOMP_CACHE``); this module turns the same
+    cache back on, but in a throwaway directory, so the tables are shared between
+    its models and never with another run. The cache key is a content hash of
+    everything the table depends on, so a model gets the table it would have
+    built itself.
+    """
+    mp = pytest.MonkeyPatch()
+    mp.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
+    mp.setenv("TENGRI_PRECOMP_CACHE_DIR", str(tmp_path_factory.mktemp("ztables")))
+    yield
+    mp.undo()
+
+
 @pytest.fixture(scope="module")
 def models(ssp_data_fsps):
     return _Models(ssp_data_fsps)
@@ -187,6 +208,115 @@ class TestFreeRedshiftFollowsEvaluationRedshift:
             neb_f = _neb_band(fast, p)
             neb_e = _neb_band(exact, p)
             assert np.max(np.abs(neb_f / neb_e - 1.0)) < 3e-2, z
+
+
+def _dark_bands(z):
+    """Bands whose whole support lies blueward of the observed Lyman limit at ``z``."""
+    return np.array(
+        [float(np.max(f.wave[f.trans > 0])) < 912.0 * (1.0 + z) for f in _FILTER_CURVES]
+    )
+
+
+_FILTER_CURVES = tuple(_filter(n) for n in _FILTERS)
+
+
+class TestBandsBlueOfTheLymanLimitAreDark:
+    """A band wholly below the observed Lyman limit holds no flux, and holds none EXACTLY.
+
+    At ``neb_fesc = 0`` the stellar light below 912 A is absorbed by the gas, so the
+    stellar bucket of such a band is zero. It used to be built as the whole-band
+    integral minus ``(1 - fesc)`` times the Lyman-continuum integral, two equal
+    numbers: the difference is rounding noise (2e14 of 3.7e30 in SDSS g at z = 6),
+    and not the same noise in the free-z, fixed-z, fast and exact graphs, so the
+    fast build "drifted" 22 % from the fixed-z build in a band the physics leaves
+    dark. The stellar component now publishes the lambda >= 912 half of the split
+    from the same cumulative integral, and the mask adds ``fesc`` times the other
+    half to it.
+    """
+
+    # Each z sits about one redshift past the crossing of its darkest band (g at 5.14,
+    # r at 6.67, i at 8.3): the z-table kernel spans five nodes, so closer in, the table's
+    # smear of the edge is real flux (1e-7 of the lit bands), not rounding.
+    @pytest.mark.parametrize("z", [6.0, 7.5, 9.5])
+    @pytest.mark.parametrize("kind", ["fast", "exact"])
+    def test_free_redshift_bands_blue_of_the_limit_are_exactly_zero(self, models, kind, z):
+        """LOAD-BEARING: the jitted free-z photometry, stellar bucket included.
+
+        Neuter: build the stellar bucket as ``whole - (1 - fesc) * lyc`` again (the
+        pre-fix mask in ``NebularSEDComponent.apply``) and band g carries ~1e-45.
+        """
+        model = getattr(models, kind)(FREE)
+        dark = _dark_bands(z)
+        assert dark.any() and not dark.all(), "the case must have dark and lit bands"
+        p = _point(model, redshift=z)
+        phot = _phot(model, p)
+        assert np.all(phot[dark] == 0.0), f"flux in a band below the Lyman limit: {phot[dark]}"
+        assert np.all(phot[~dark] > 0.0)
+        stellar = np.asarray(
+            jax.jit(
+                lambda q: model.predict_state(
+                    q, fixed_values=model.spec.get_fixed_values(), observables_only=True
+                ).derived["stellar_phot_lnu_precomp"]
+            )(p)
+        )
+        assert np.all(stellar[dark] == 0.0), f"stellar bucket below the limit: {stellar[dark]}"
+        assert np.all(stellar[~dark] > 0.0)
+
+    @pytest.mark.parametrize("z", [6.0, 7.0])
+    @pytest.mark.parametrize("kind", ["fast", "exact"])
+    def test_fixed_redshift_bands_blue_of_the_limit_are_exactly_zero(self, models, kind, z):
+        model = getattr(models, kind)(z)
+        dark = _dark_bands(z)
+        p = {k: v for k, v in _point(model).items() if k != "redshift"}
+        phot = _phot(model, p)
+        assert dark.any() and np.all(phot[dark] == 0.0), phot
+        assert np.all(phot[~dark] > 0.0)
+
+
+class TestEdgeSplit:
+    """The two halves of the Lyman-limit split are exact complements, built without subtracting."""
+
+    GRID = np.linspace(4000.0, 6000.0, 401)
+    INTEGRAND = 1.0 + 0.3 * np.sin(GRID / 90.0)
+
+    def test_halves_sum_to_the_whole_and_match_the_analytic_integral(self):
+        from tengri.utils.grid_interp import edge_split
+
+        below, above = edge_split(self.INTEGRAND, self.GRID, 5000.0)
+        whole = np.trapezoid(self.INTEGRAND, self.GRID)
+        assert below + above == pytest.approx(whole, rel=1e-13)
+        # the edge sits on a grid node here, so each half is its own trapezoid sum
+        k = int(np.searchsorted(self.GRID, 5000.0))
+        assert below == pytest.approx(
+            np.trapezoid(self.INTEGRAND[: k + 1], self.GRID[: k + 1]), rel=1e-13
+        )
+        assert above == pytest.approx(np.trapezoid(self.INTEGRAND[k:], self.GRID[k:]), rel=1e-13)
+
+    def test_an_edge_between_nodes_splits_the_straddling_segment_linearly(self):
+        from tengri.utils.grid_interp import edge_split
+
+        edge = 5002.3
+        below, above = edge_split(self.INTEGRAND, self.GRID, edge)
+        assert below + above == pytest.approx(np.trapezoid(self.INTEGRAND, self.GRID), rel=1e-13)
+        dense = np.linspace(4000.0, edge, 4001)
+        ref = np.trapezoid(np.interp(dense, self.GRID, self.INTEGRAND), dense)
+        # the half-segment is the cumulative integral interpolated linearly across the
+        # straddling segment: second order in the segment width (here 5e-6)
+        assert below == pytest.approx(ref, rel=2e-5)
+
+    @pytest.mark.parametrize(("edge", "dark_half"), [(7000.0, "above"), (3000.0, "below")])
+    def test_a_template_wholly_on_one_side_has_exactly_zero_in_the_other_half(
+        self, edge, dark_half
+    ):
+        """Not ``whole - other``: that difference is rounding noise, not zero."""
+        from tengri.utils.grid_interp import edge_split
+
+        rows = np.stack([self.INTEGRAND, 3.0 * self.INTEGRAND**2])
+        below, above = edge_split(rows, self.GRID, edge)
+        dark, lit = (above, below) if dark_half == "above" else (below, above)
+        assert np.all(dark == 0.0)
+        assert np.all(lit > 0.0)
+        np.testing.assert_allclose(lit, np.trapezoid(rows, self.GRID, axis=-1), rtol=1e-13)
 
 
 def _neb_band(model, p, fixed_values=None):

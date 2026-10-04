@@ -145,12 +145,16 @@ class DerivedState:
     # #2439, #2427) -- a model without a live mask never computes or caches
     # either. NebularSEDComponent.apply uses them to apply the escape-fraction
     # mask the exact path applies to ``sed_intrinsic``:
-    # ``stellar_phot_lnu_precomp - (1 - neb_fesc) * stellar_phot_lnu_precomp_lyc``
-    # and the per-age analog, so that ``sum(stellar_phot_lnu_per_age_precomp,
+    # ``stellar_phot_lnu_precomp_nolyc + neb_fesc * stellar_phot_lnu_precomp_lyc``
+    # (the lambda >= 912 half, from the same cumulative integral, plus the escaped
+    # lambda < 912 half: an addition, so a band wholly below the edge is exactly
+    # zero at fesc = 0) and the per-age analog, so that ``sum(stellar_phot_lnu_per_age_precomp,
     # axis=age) == stellar_phot_lnu_precomp`` still holds after the
     # correction. Shape (n_filter,) / (n_age, n_filter), units erg/s/Hz.
     stellar_phot_lnu_precomp_lyc: jnp.ndarray | None = None
     stellar_phot_lnu_per_age_precomp_lyc: jnp.ndarray | None = None
+    stellar_phot_lnu_precomp_nolyc: jnp.ndarray | None = None
+    stellar_phot_lnu_per_age_precomp_nolyc: jnp.ndarray | None = None
 
     # Sub-band quadrature for the multiplicative dust screen (#1122), shape
     # ``(n_age, n_filter, n_subbands)``. ``..._subband_precomp`` is the filter

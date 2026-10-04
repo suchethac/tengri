@@ -1305,24 +1305,29 @@ class NebularSEDComponent(TemplateThreading):
         # hold after the correction, and the Taylor/no-subband two_component
         # path reads the per-age bucket directly.
         # A fully-Lyman-continuum band (the whole filter support is rest λ <
-        # 912 Å, e.g. GALEX NUV at z=3) has ``full ≈ lyc``, so at fesc≈0 the
-        # true answer is ≈0 and the subtraction is a catastrophic
-        # cancellation: measured ~-1e-47 [erg/s/Hz] (floating-point noise,
-        # not physics). A physical L_ν bucket cannot be negative, and
-        # ``ab_mag_from_flux`` (log of the flux) would raise/NaN on it
-        # downstream, so clamp at zero (item 10).
+        # 912 Å, e.g. GALEX NUV at z=3) is all ``lyc``: at fesc = 0 the answer
+        # is exactly 0. It is built as the sum of the published λ >= 912 half and
+        # ``fesc`` times the λ < 912 half, so it IS exactly 0 there, and can
+        # never be negative (``ab_mag_from_flux`` takes a log of it).
         stellar_phot_lyc = state.derived.get("stellar_phot_lnu_precomp_lyc")
         if stellar_phot_lyc is not None:
-            stellar_phot = state.derived.get("stellar_phot_lnu_precomp")
-            if stellar_phot is not None:
-                derived_overrides["stellar_phot_lnu_precomp"] = jnp.maximum(
-                    stellar_phot - (1.0 - neb_fesc) * stellar_phot_lyc, 0.0
+            # ``above + fesc * lyc``, never ``whole - (1 - fesc) * lyc``: the
+            # stellar component publishes the lambda >= 912 half of the split
+            # from the same cumulative integral as the lambda < 912 half, so a
+            # band wholly below the edge is EXACTLY zero at fesc = 0. The
+            # subtraction returned two equal ~1e30 numbers' rounding residue there
+            # (2e14, a different value in every compiled graph), which is a flux
+            # in a band the physics leaves dark.
+            stellar_phot_above = state.derived.get("stellar_phot_lnu_precomp_nolyc")
+            if stellar_phot_above is not None:
+                derived_overrides["stellar_phot_lnu_precomp"] = (
+                    stellar_phot_above + neb_fesc * stellar_phot_lyc
                 )
             per_age_lyc = state.derived.get("stellar_phot_lnu_per_age_precomp_lyc")
-            per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
-            if per_age_lyc is not None and per_age is not None:
-                derived_overrides["stellar_phot_lnu_per_age_precomp"] = jnp.maximum(
-                    per_age - (1.0 - neb_fesc) * per_age_lyc, 0.0
+            per_age_above = state.derived.get("stellar_phot_lnu_per_age_precomp_nolyc")
+            if per_age_lyc is not None and per_age_above is not None:
+                derived_overrides["stellar_phot_lnu_per_age_precomp"] = (
+                    per_age_above + neb_fesc * per_age_lyc
                 )
 
         # ── Sub-band Lyman-continuum factor (#2439, #2427, R1/R2) ──────────

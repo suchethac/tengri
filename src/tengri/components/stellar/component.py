@@ -3319,6 +3319,15 @@ class StellarSEDComponent:
                     jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
                 )
                 derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
+                # The other half of the split, built from the same cumulative
+                # integral: the escape-fraction mask adds to it rather than
+                # subtracting from the whole (see ``PhotometricPrecomputation``).
+                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum(
+                        "ma,maf->f", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
+                    ),
+                    total_mass,
+                )
             # Age-resolved per-filter LUT for two-component
             # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
@@ -3342,6 +3351,12 @@ class StellarSEDComponent:
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
                     stellar_phot_lnu_per_age_lyc
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum(
+                        "ma,maf->af", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
+                    ),
+                    total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
@@ -3472,6 +3487,13 @@ class StellarSEDComponent:
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
                     stellar_phot_lnu_per_age_lyc
+                )
+                ssp_nolyc_at_z = _interp(ztable.ssp_phot_nolyc_table)
+                derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_nolyc_at_z), total_mass
+                )
+                derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_nolyc_at_z), total_mass
                 )
             # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.

@@ -222,6 +222,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     # quantity restricted to a sub-band of the filter.
     "stellar_phot_lnu_precomp_lyc": "erg/s/Hz",
     "stellar_phot_lnu_per_age_precomp_lyc": "erg/s/Hz",
+    "stellar_phot_lnu_precomp_nolyc": "erg/s/Hz",
+    "stellar_phot_lnu_per_age_precomp_nolyc": "erg/s/Hz",
     # Per-chunk Lyman-continuum multiplicative factor at the K-node
     # sub-band quadrature nodes (#2439, #2427): dimensionless, like
     # dust_young_indicator below.
