@@ -599,15 +599,23 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # ----------------------------------------------------------------------------------
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
-#: ``(sum, first bin, middle bin, last bin)``.
+#: ``(sum, first bin, middle bin, last bin)``. These are the ``rest_sed_*`` literals of
+#: ``_REF_F64_AGN_BLACK_HOLE_MASS`` in ``test_float32_scale_seam_sweep.py`` (precision/)
+#: and must agree with them. Re-captured for the young-sliver integral (#2635), which
+#: moves the continuum by at most 2e-6 (here up to 1.5e-6 relative).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5215528515600546e32, 2.1618471431580417e23, 3.05875473371805e28, 8.775513568033312e21),
-    8.0: (1.558679481783208e32, 2.621597865262484e24, 3.1456552202309087e28, 8.823791474594601e21),
+    6.0: (1.5215526212343478e32, 2.1618438478305343e23, 3.05875453805499e28, 8.775513506180217e21),
+    8.0: (
+        1.5586791978745043e32,
+        2.6215938693952546e24,
+        3.145654892113582e28,
+        8.823791339150894e21,
+    ),
     10.0: (
-        1.5745233941627343e32,
-        2.0084485779608986e24,
-        3.175461013264611e28,
-        9.02096624152618e21,
+        1.5745230983865813e32,
+        2.0084455174887774e24,
+        3.1754606397665404e28,
+        9.020965805526526e21,
     ),
 }
 

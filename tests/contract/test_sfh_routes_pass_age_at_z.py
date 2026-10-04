@@ -39,6 +39,7 @@ from tengri.components.stellar.component import (
 from tengri.components.stellar.sfh import sample_sfh_prior
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
 from tengri.utils.grid import interpolate_to_linear_time
+from tests._cosmic_time import assert_grid_ends_at_age_of_universe
 
 pytestmark = pytest.mark.contract
 
@@ -76,30 +77,6 @@ _FAMILY_SETTINGS = {
 def _age_yr(z: float) -> float:
     """Age of the universe at ``z`` [yr], independently of tengri's cosmology module."""
     return float(Planck18.age(z).to_value("yr"))
-
-
-def _assert_grid_ends_at_age_of_universe(t_yr, sfr, z):
-    """The published history is bounded by cosmic time with a node AT age(z).
-
-    Nodes older than the universe collapse onto age(z) (zero-width cells carrying
-    the history's value there), so no node lies beyond age(z) and the trapezoid
-    area over cells starting at age(z) is exactly zero. The node sits at tengri's
-    own age(z), which agrees with the independent cosmology to ~1e-7, so the
-    bound is checked against tengri's value to rounding.
-    """
-    from tengri.cosmology import age_at_z
-
-    t_yr = np.asarray(t_yr, dtype=float)
-    sfr = np.asarray(sfr, dtype=float)
-    age_yr = float(age_at_z(z)) * 1e9
-    assert t_yr.max() <= age_yr * (1.0 + 1e-12), "a node lies beyond age(z)"
-    assert t_yr.max() >= age_yr * (1.0 - 1e-12), "the grid does not reach age(z)"
-    assert np.all(np.diff(t_yr) >= 0.0)
-    starts_at_age = t_yr[:-1] >= age_yr * (1.0 - 1e-12)
-    assert starts_at_age.any(), "no collapsed node at age(z)"
-    area = 0.5 * (sfr[1:] + sfr[:-1]) * np.diff(t_yr)
-    assert float(np.sum(area[starts_at_age])) == 0.0, "area beyond age(z)"
-    return age_yr
 
 
 def test_every_buildable_age_family_has_settings():
@@ -198,7 +175,7 @@ def test_predict_sfh_vanishes_beyond_age_at_z(family, synthetic_ssp_wide):
     model = _build(synthetic_ssp_wide, family, Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
     sfr = np.asarray(out["sfr_mean"])
-    _assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
+    assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
     assert np.any(sfr > 0.0)
 
 
@@ -248,7 +225,7 @@ def test_field_composite_mean_vanishes_beyond_age_at_z(synthetic_ssp_wide):
     model = _build(synthetic_ssp_wide, ["dense_basis", "field"], Fixed(_Z))
     out = model.predict_sfh({}, grid="native")
     sfr = np.asarray(out["sfr_mean"])
-    _assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
+    assert_grid_ends_at_age_of_universe(np.asarray(out["t_gyr"]) * 1e9, sfr, _Z)
     assert np.any(sfr > 0.0)
 
 
