@@ -599,15 +599,23 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # ----------------------------------------------------------------------------------
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
-#: ``(sum, first bin, middle bin, last bin)``.
+#: ``(sum, first bin, middle bin, last bin)``. Re-taken after #2724: the Lyman-limit
+#: edge at 911.76 A and the LyC budget it closes lower this model's ``L_absorbed`` by
+#: 0.136 %, and the ``cigale_joint`` tie scales the disc by exactly that ratio
+#: (0.998643 in ``L_absorbed``, the disc's first bin and the reference's first bin).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5215528515600546e32, 2.1618471431580417e23, 3.05875473371805e28, 8.775513568033312e21),
-    8.0: (1.558679481783208e32, 2.621597865262484e24, 3.1456552202309087e28, 8.823791474594601e21),
+    6.0: (
+        1.5214435245680832e32,
+        2.1589141895763736e23,
+        3.0587493357575715e28,
+        8.775472049423519e21,
+    ),
+    8.0: (1.558519788517149e32, 2.618041173336176e24, 3.145531925371792e28, 8.823684457894641e21),
     10.0: (
-        1.5745233941627343e32,
-        2.0084485779608986e24,
-        3.175461013264611e28,
-        9.02096624152618e21,
+        1.5743422179068045e32,
+        2.0057237395054835e24,
+        3.1752972812754944e28,
+        9.020591720048514e21,
     ),
 }
 
