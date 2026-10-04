@@ -253,36 +253,37 @@ def build_energy_balance_lut(
             return jnp.ones_like(ion), jnp.zeros_like(ion)
         return 1.0 - ion, ion
 
-    def integrate(ssp, weight):
-        integrand = ssp * (mask * weight)[None, None, :]
-        return edge_trapezoid(integrand, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+    # edge_trapezoid is linear in its integrand for a fixed grid, so every integral
+    # below is the SSP cube contracted with one quadrature-weight vector; the
+    # weights are read off the rule itself (its gradient), so they cannot drift
+    # from it. ``quad`` folds in the LyC mask.
+    quad = mask * jax.grad(
+        lambda y: edge_trapezoid(y, ssp_wave, side="all", edge_aa=LYMAN_LIMIT_AA, axis=-1)
+    )(jnp.ones_like(ssp_wave))
+
+    def integrate(weights):
+        """``∫ ssp · mask · w`` for weights of shape (..., n_wave) -> (n_met, n_age, ...)."""
+        return jnp.tensordot(ssp_flux, weights * quad, axes=([-1], [-1]))
 
     def family(population):
         i0, i1 = intrinsic(population)
-        b0 = integrate(ssp_flux, i0)
-        b1 = None if i1 is None else integrate(ssp_flux, i1)
+        b0 = integrate(i0)
+        b1 = None if i1 is None else integrate(i1)
 
-        # Build-time Python loop over the (small) optical-depth grid. Eagerly,
-        # the node loop spends its time in per-op Python dispatch inside the
-        # attenuation law, not math: jit once and reuse. The SSP cube is threaded
-        # as an argument so it enters the graph as a runtime input, not a
-        # constant to fold.
-        def g_at(ssp, tb, td):
+        # The observed weights at every (tau_bc, tau_diff) node in one jitted
+        # vmap, then one contraction with the SSP cube per weight family.
+        def weights_at(tb, td):
             o0, o1 = observed(population, tb, td)
-            g0 = integrate(ssp, o0)
-            return g0 if o1 is None else jnp.stack([g0, integrate(ssp, o1)])
+            return o0 if o1 is None else jnp.stack([o0, o1])
 
-        g_jit = jax.jit(g_at)
-        rows = jnp.stack(
-            [
-                jnp.stack([g_jit(ssp_flux, tb, td) for td in tau_diff_grid], axis=-1)
-                for tb in tau_bc_grid
-            ],
-            axis=-2,
-        )  # (n_met, n_age, ntb, ntd), or (2, n_met, n_age, ntb, ntd) with an fesc family
+        tb_nodes, td_nodes = jnp.meshgrid(
+            jnp.asarray(tau_bc_grid), jnp.asarray(tau_diff_grid), indexing="ij"
+        )
+        w = jax.jit(jax.vmap(jax.vmap(weights_at)))(tb_nodes, td_nodes)
+        # w: (ntb, ntd, n_wave), or (ntb, ntd, 2, n_wave) with an fesc family
         if b1 is None:
-            return b0, rows, None, None
-        return b0, rows[0], b1, rows[1]
+            return b0, integrate(w), None, None
+        return b0, integrate(w[:, :, 0]), b1, integrate(w[:, :, 1])
 
     B, G, B_fesc, G_fesc = family(0)
     if single_population:
