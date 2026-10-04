@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- The power-law to single-U dust luminosity ratio `_pdr_luminosity_weight(umin, umax, alpha)` (Draine & Li 2007 Eq. 33) had 1e-3-width windows at α = 1, 2 that selected exact limit forms, creating 5–8 mV discontinuous jumps at the window edges and zero gradients inside them. This caused likelihood plateaus and optimizer stalls for free α parameters in DL14 and other models. The closed-form evaluation now uses the pole-free logarithmic reduction R = g(sL) / g(tL) with g(u) = expm1(u)/u everywhere, evaluated stably via Taylor series for |u| < 1e-3, eliminating the windows, discontinuities and gradient zeros (#2727).
+
 - The NIFTy (`vi*`) and native (`native_vi_*`) variational engines score a photometric upper or lower limit (`data_mask` 1 / -1) as -ln Φ((F − m)/σ) or -ln Φ((m − F)/σ) like `map`, the samplers and `vi_fullrank`, with the limit bands entering the geoVI/MGVI metric as detections at their limit value; a free noise model together with a limit raises `ParameterError`. The NIFTy likelihood is built per `Fitter` and only the data-free physics is cached on the model, so a second `Fitter` on one model object fits its own data; the `hmc_is` evidence evaluation takes the data at call time, and the NIFTy free-noise likelihood passes free parameters only to the forward model (#2667, #2668).
 
 - The BAGPIPES reproduction compares tengri and BAGPIPES on matched inputs:
