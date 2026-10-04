@@ -58,6 +58,10 @@ _X_MAX: float = 500.0
 # carried; this one clipped at 0.0 and could reach the pole (#1439).
 _X_MIN: float = 1e-10
 
+# casey2012 emission lower bound. Dust above sublimation temperature does not
+# exist, and CIGALE's casey2012 template starts at 1 um.
+_CASEY_LAMBDA_MIN_UM: float = 1.0
+
 
 def modified_blackbody(
     wavelength_aa: jnp.ndarray,
@@ -413,13 +417,18 @@ def casey2012(
     :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every
     variable: :math:`T` = dust temperature [K], :math:`\beta` = emissivity
     index, :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
-    :math:`\lambda` = wavelength. The total frequency integral is
-    normalized to ``L_absorbed``.
+    :math:`\lambda` = wavelength.
+
+    Emission range: 1 µm to 10 cm rest-frame. The result is normalized
+    over a fixed model-internal rest-frame grid (log-spaced from 1 µm to
+    10 cm) so that the frequency integral equals ``L_absorbed``, making the
+    emission independent of the caller's wavelength grid.
 
     This matches CIGALE's ``casey2012`` module term by term (parity
     verified against pcigale 2025.1; #1004: the previous closure carried
     a spurious Wien factor that annihilated the power law, an inverted
-    power-law slope, and an optically-thin-only graybody).
+    power-law slope, and an optically-thin-only graybody). CIGALE normalizes
+    on a fixed 1 µm–1 mm grid; Synthesizer normalizes on the supplied grid.
 
     When ``redshift > 0``, the dust temperature is corrected for CMB
     heating (da Cunha et al. 2013 [2]_) and the observed flux is reduced
@@ -491,12 +500,32 @@ def casey2012(
     )
     shape = graybody + power_law
 
+    # Normalize over internal grid from 1 um to 10 cm (rest-frame), not caller's grid.
+    # This ensures the result is independent of where the caller's grid starts.
+    # The internal grid is log-spaced and dense enough to capture the integral.
+    norm_wave_aa_internal = jnp.geomspace(1e4, 1e8, 16384)  # 1 um to 10 cm in AA
+    norm_wave_cm = norm_wave_aa_internal * _AA_TO_CM
+    norm_nu = _C_CGS / norm_wave_cm  # Hz, descending
+
+    # Evaluate shape on internal grid
+    norm_graybody = _casey_graybody_nu(norm_wave_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm)
+    norm_power_law = (
+        n_pl
+        * (norm_wave_cm / lambda_c_cm) ** dust_alpha_mir
+        * jnp.exp(-((norm_wave_cm / lambda_c_cm) ** 2))
+    )
+    norm_shape = norm_graybody + norm_power_law
+
     # Normalize so integral over frequency = L_absorbed
     # nu is descending (wave ascending), negate for positive integral
-    integral = -jnp.trapezoid(shape, nu)
+    integral = -jnp.trapezoid(norm_shape, norm_nu)
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
     result = norm * shape
+
+    # Mask emission below 1 um (dust does not exist at sublimation temperature)
+    lambda_min_aa = _CASEY_LAMBDA_MIN_UM * 1e4
+    result = jnp.where(wavelength_aa >= lambda_min_aa, result, 0.0)
 
     # CMB contrast suppression
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
