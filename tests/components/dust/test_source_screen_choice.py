@@ -36,6 +36,7 @@ from tengri.parameters.groups import parameters_to_groups, parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ForwardState
+from tests._age_boundary import hand_age_derived
 
 pytestmark = pytest.mark.contract
 
@@ -108,7 +109,12 @@ def _state_nebular_only(sed_neb) -> ForwardState:
     return ForwardState(
         wave=_WAVE,
         sed_intrinsic=stellar + sed_neb,
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, "sed_nebular": sed_neb},
+        derived={
+            "lnu_age": lnu_age,
+            "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
+            "sed_nebular": sed_neb,
+        },
     )
 
 
@@ -118,7 +124,12 @@ def _state_shock_only(sed_shock) -> ForwardState:
     return ForwardState(
         wave=_WAVE,
         sed_intrinsic=stellar + sed_shock,
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, "sed_shock": sed_shock},
+        derived={
+            "lnu_age": lnu_age,
+            "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
+            "sed_shock": sed_shock,
+        },
     )
 
 
@@ -151,7 +162,9 @@ def test_line_catalog_matches_hand_computed_factor(choice):
     line_wave = jnp.array([1216.0, 4862.71, 6564.61])
     log_line_lums = jnp.log10(jnp.array([1.0e41, 5.0e40, 1.5e41]))
 
-    log_attenuated = comp.attenuate_line_catalog(_PARAMS, line_wave, log_line_lums)
+    log_attenuated = comp.attenuate_line_catalog(
+        _PARAMS, line_wave, log_line_lums, jnp.asarray([1.0, 0.0])
+    )
     transmission = np.asarray(10.0 ** (np.asarray(log_attenuated) - np.asarray(log_line_lums)))
 
     expected = _oracle_transmission(comp, _PARAMS, line_wave, choice)
@@ -236,6 +249,7 @@ def test_none_is_bit_identical_to_unattenuated():
         derived={
             "lnu_age": lnu_age,
             "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
             "sed_nebular": sed_neb,
             "sed_shock": sed_shock,
         },
@@ -482,12 +496,17 @@ def test_energy_balance_gains_exactly_the_shock_absorbed_power():
     state_with_shock = ForwardState(
         wave=_WAVE,
         sed_intrinsic=stellar + sed_shock,
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, "sed_shock": sed_shock},
+        derived={
+            "lnu_age": lnu_age,
+            "ssp_ages_yr": _AGES,
+            **hand_age_derived(_AGES),
+            "sed_shock": sed_shock,
+        },
     )
     state_without_shock = ForwardState(
         wave=_WAVE,
         sed_intrinsic=stellar,
-        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES},
+        derived={"lnu_age": lnu_age, "ssp_ages_yr": _AGES, **hand_age_derived(_AGES)},
     )
 
     out_with = comp.apply(state_with_shock, _PARAMS)

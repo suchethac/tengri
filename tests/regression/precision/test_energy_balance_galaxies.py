@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
-from tengri.utils.physics_constants import C_AA
+from tengri.components.lyc import edge_trapezoid
 
 pytestmark = pytest.mark.regression_bug
 
@@ -32,7 +32,9 @@ SFHS = {
 }
 
 
-def _build(ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emission=True):
+def _build(
+    ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emission=True, lyc=False
+):
     """Two-component dust model at a given optical depth and galaxy config."""
     sfh = dict(sfh)
     sfh["log_total_mass"] = Fixed(log_mass)
@@ -43,6 +45,7 @@ def _build(ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emi
         "law_diff": "calzetti",
         "tau_bc": Fixed(tau_bc),
         "tau_diff": Fixed(tau_diff),
+        "lyc_in_energy_balance": lyc,
         "all_params": Fixed(DEFAULT),
     }
     kwargs = {
@@ -87,17 +90,28 @@ def test_absorbed_luminosity_grows_with_optical_depth(synthetic_ssp_wide, name):
     assert values[-1] > values[1] > 0.0, f"no growth with tau: {values}"
 
 
+@pytest.mark.parametrize("lyc", [False, True])
 @pytest.mark.parametrize("name", sorted(SFHS))
 @pytest.mark.parametrize("tau", [0.5, 2.0, 8.0])
-def test_absorbed_never_exceeds_intrinsic_bolometric(synthetic_ssp_wide, name, tau):
-    """Energy conservation: dust cannot absorb more than the stars emit."""
+def test_absorbed_never_exceeds_intrinsic_bolometric(synthetic_ssp_wide, name, tau, lyc):
+    """Energy conservation: dust cannot absorb more than the stars emit.
+
+    The budget, per unit frequency:
+    ``L_ir = int_{band} S (1 - T) d(nu) <= int_{band} S d(nu)``, with the band
+    the one the energy balance integrates -- the non-ionizing side of the
+    Lyman edge, or the whole spectrum when ``lyc_in_energy_balance`` unmasks the
+    ionizing side.  The reference integral is the library's own step-exact
+    edge quadrature, so the two sides share one convention at the edge cell.
+    """
     free = _build(synthetic_ssp_wide, SFHS[name], 0.0, 0.0, emission=False).predict_state({})
     wave = np.asarray(free.wave, dtype=np.float64)
     sed_intrinsic = np.asarray(free.sed_intrinsic, dtype=np.float64)
-    # Same LyC convention as the energy balance itself (#922).
-    l_bol = abs(np.trapezoid(np.where(wave >= 912.0, sed_intrinsic, 0.0), C_AA / wave))
+    side = "all" if lyc else "nonionizing"
+    l_bol = abs(float(edge_trapezoid(sed_intrinsic, wave, variable="nu", side=side)))
 
-    state = _build(synthetic_ssp_wide, SFHS[name], tau, tau, emission=False).predict_state({})
+    state = _build(
+        synthetic_ssp_wide, SFHS[name], tau, tau, emission=False, lyc=lyc
+    ).predict_state({})
     l_ir = float(np.asarray(state.derived["L_ir"]))
     assert 0.0 <= l_ir <= l_bol * (1.0 + 1e-9), f"L_ir={l_ir:.6e} exceeds L_bol={l_bol:.6e}"
 

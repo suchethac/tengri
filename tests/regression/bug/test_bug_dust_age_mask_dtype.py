@@ -1,31 +1,36 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for precompute_dust_age_mask dtype preservation bug.
+"""Regression test for the age-split dtype preservation bug.
 
-Bug: attenuation.py:836 — hardcoded jnp.float64 defeats mixed-precision support.
+Bug: the birth-cloud age mask hardcoded ``jnp.float64``, defeating mixed
+precision. The split is now the per-node younger fraction; it must follow the
+dtype of the parcel masses it is built from.
 """
 
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.stellar.age_boundary import (
+    age_boundary_younger_fraction_cic,
+    survival_cell_mean,
+)
+
 pytestmark = pytest.mark.regression_bug
 
 
-class TestDustAgeMaskDtype:
-    """Bug: attenuation.py:836 — hardcoded jnp.float64."""
+@pytest.mark.parametrize("dtype", [jnp.float32, jnp.float64])
+@pytest.mark.parametrize("width", [0.0, 0.3])
+class TestAgeSplitDtype:
+    """Bug: hardcoded jnp.float64 in the age mask."""
 
-    def test_float32_input_gives_float32_mask(self):
-        """float32 age grid should produce float32 masks, not float64."""
-        from tengri.components.dust.attenuation import precompute_dust_age_mask
+    def test_cell_mean_follows_the_input_dtype(self, dtype, width):
+        lo = jnp.linspace(0.0, 1e10, 100, dtype=dtype)
+        hi = lo + jnp.asarray(1e8, dtype=dtype)
+        assert survival_cell_mean(lo, hi, 3e8, width).dtype == dtype
 
-        age_grid_f32 = jnp.linspace(0.0, 1e10, 100, dtype=jnp.float32)
-        young, old = precompute_dust_age_mask(age_grid_f32, t_birth=3e8)
-        assert young.dtype == jnp.float32, f"young mask is {young.dtype}, expected float32"
-        assert old.dtype == jnp.float32, f"old mask is {old.dtype}, expected float32"
-
-    def test_float64_input_gives_float64_mask(self):
-        """float64 age grid should produce float64 masks."""
-        from tengri.components.dust.attenuation import precompute_dust_age_mask
-
-        age_grid_f64 = jnp.linspace(0.0, 1e10, 100, dtype=jnp.float64)
-        young, _old = precompute_dust_age_mask(age_grid_f64, t_birth=3e8)
-        assert young.dtype == jnp.float64, f"young mask is {young.dtype}, expected float64"
+    def test_fraction_follows_the_input_dtype(self, dtype, width):
+        age = jnp.linspace(0.0, 1e10, 50, dtype=dtype)
+        contrib = jnp.ones(50, dtype=dtype)
+        idx = jnp.minimum(jnp.arange(50) // 5, 8)
+        f = jnp.full(50, 0.5, dtype=dtype)
+        out = age_boundary_younger_fraction_cic(contrib, idx, f, age, 10, (3e8,), width)
+        assert out.dtype == dtype

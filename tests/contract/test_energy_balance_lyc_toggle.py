@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract: the FSPS-parity ``eb_include_lyc`` toggle changes L_absorbed (#961).
+"""Contract: the FSPS-parity ``lyc_in_energy_balance`` toggle changes L_absorbed (#961).
 
 The canonical energy balance masks the Lyman continuum out of ``L_absorbed``
 (#922: LyC photons ionize H, they don't heat dust). FSPS/Prospector re-emit
 the *full* absorbed luminosity, which left tengri's far-IR ~10 % low at the
-Prospector reproduction fiducial. ``dust={'eb_include_lyc': True}`` opts in
+Prospector reproduction fiducial. ``dust={'lyc_in_energy_balance': True}`` opts in
 to the FSPS convention; these tests pin that the toggle (a) reaches the
 forward pass (not a silent no-op), (b) reproduces the manual masked/unmasked
 integrals against a dust-free twin's intrinsic SED, (c) round-trips through
@@ -36,7 +36,7 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust["eb_include_lyc"] = True
+        dust["lyc_in_energy_balance"] = True
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": Fixed(DEFAULT)},
@@ -53,11 +53,45 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
 
 
 def _manual_absorbed(sed_intrinsic, sed_attenuated, wave, *, mask_lyc: bool) -> float:
-    nu = np.asarray(C_AA) / np.asarray(wave)
-    absorbed = np.asarray(sed_intrinsic) - np.asarray(sed_attenuated)
+    """Independent step-model integral (numpy, not calling ``tengri.components.lyc``).
+
+    The grid cell straddling the Lyman edge (``LYMAN_LIMIT_AA`` = 911.76 A,
+    not the retired bare 912.0 literal) is held at the step model's
+    rectangles rather than ramped linearly across, matching what
+    ``bolometric_absorbed_log10`` now computes via ``edge_trapezoid``:
+
+    - ``mask_lyc=True`` (``side="nonionizing"``): ordinary trapezoid over
+      every panel entirely on the non-ionizing side, plus the bracket
+      panel's non-ionizing rectangle (first non-ionizing node's value times
+      the non-ionizing portion of that panel's width).
+    - ``mask_lyc=False`` (``side="all"``): every panel is ordinary EXCEPT
+      the bracket panel, which is the SUM of both rectangles (ionizing +
+      non-ionizing) -- not the same as its ordinary trapezoid area unless
+      the two bracketing values happen to be equal, since the step model
+      never assumes the true function is linear across that one cell.
+    """
+    wave64 = np.asarray(wave, dtype=np.float64)
+    y = np.asarray(sed_intrinsic, dtype=np.float64) - np.asarray(sed_attenuated, dtype=np.float64)
+    nu64 = np.asarray(C_AA, dtype=np.float64) / wave64
+    edge = 911.76
+    nu_edge = float(np.asarray(C_AA, dtype=np.float64)) / edge
+
+    w_lo, w_hi = wave64[:-1], wave64[1:]
+    y_lo, y_hi = y[:-1], y[1:]
+    nu_lo, nu_hi = nu64[:-1], nu64[1:]
+    is_bracket = (w_lo < edge) & (w_hi >= edge)
+    fully_nonionizing = w_lo >= edge
+
+    ordinary = 0.5 * (y_lo + y_hi) * np.abs(nu_hi - nu_lo)
+    bracket_nonionizing = y_hi * np.abs(nu_hi - nu_edge)
+    bracket_ionizing = y_lo * np.abs(nu_edge - nu_lo)
+
     if mask_lyc:
-        absorbed = np.where(np.asarray(wave) >= 912.0, absorbed, 0.0)
-    return float(abs(np.trapezoid(absorbed, nu)))
+        nonion_bracket = np.where(is_bracket, bracket_nonionizing, 0.0)
+        panel = np.where(fully_nonionizing, ordinary, nonion_bracket)
+    else:
+        panel = np.where(is_bracket, bracket_ionizing + bracket_nonionizing, ordinary)
+    return float(abs(np.sum(panel)))
 
 
 class TestEnergyBalanceLycToggle:
@@ -69,7 +103,7 @@ class TestEnergyBalanceLycToggle:
         L_full = float(jnp.asarray(s_full.derived["L_absorbed"]))
         # The synthetic SSP is LyC-bright, so including the LyC must add energy.
         assert L_full > L_masked * 1.0001, (
-            f"eb_include_lyc is a no-op: L_absorbed {L_masked:.6e} -> {L_full:.6e}"
+            f"lyc_in_energy_balance is a no-op: L_absorbed {L_masked:.6e} -> {L_full:.6e}"
         )
 
     def test_matches_manual_integrals(self, synthetic_ssp_wide):
@@ -101,9 +135,9 @@ class TestEnergyBalanceLycToggle:
     def test_grammar_round_trip(self, synthetic_ssp_wide):
         m = _build(synthetic_ssp_wide, True)
         groups = m.spec.to_groups()
-        assert groups["dust_attenuation"].get("eb_include_lyc") is True
+        assert groups["dust_attenuation"].get("lyc_in_energy_balance") is True
         m_default = _build(synthetic_ssp_wide, False)
-        assert "eb_include_lyc" not in m_default.spec.to_groups()["dust_attenuation"]
+        assert "lyc_in_energy_balance" not in m_default.spec.to_groups()["dust_attenuation"]
 
 
 def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
@@ -122,7 +156,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust["eb_include_lyc"] = True
+        dust["lyc_in_energy_balance"] = True
     centers = (3500.0, 6200.0, 1.0e6)
     obs = Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
     return SEDModel.build(

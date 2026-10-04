@@ -827,7 +827,7 @@ def test_reinsertion_chunk_size_never_exceeds_ceiling(ssp_data_fsps):
     assert 1 <= chunk <= mass_profile._REINSERT_CHUNK_MAX
 
 
-def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, monkeypatch):
+def test_chunking_changes_reinserted_draws_by_reduction_noise_only(ssp_data_fsps, monkeypatch):
     """Chunk width must not change the answer beyond reduction-reordering noise.
 
     Two claims, both measured. With the width at or above ``n_draws`` the map

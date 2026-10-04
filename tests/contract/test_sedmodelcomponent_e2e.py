@@ -402,6 +402,7 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
         "radio_alpha_sf": jnp.asarray(0.8),
         "radio_loudness": jnp.asarray(0.0),
         "radio_alpha_agn": jnp.asarray(0.7),
+        "radio_log_nu_cut": jnp.asarray(13.0),
         "radio_T_e": jnp.asarray(1e4),
         "radio_alpha_ff": jnp.asarray(-0.1),
     }

@@ -207,17 +207,19 @@ def test_fesc_gradient_matches_kfactor_wiring(cue_backend, cue_default_params):
     HMC) will see flat posteriors for ``neb_fesc`` (zero gradient signal).
 
     The Cue backend reddens nebular emission by the CIGALE ionizing-budget
-    k-factor ``k = lyc_dust_escape_factor(neb_fesc, neb_fdust)`` (Ferland 1980;
-    not the simpler ``1 − neb_fesc`` linear form). It is a JAX-traced
-    multiplication, so the continuum sum is ``S_intrinsic · k(fesc)`` and
+    k-factor ``k = lyc_dust_escape_factor(f_esc, f_dust)`` (Ferland 1980; not
+    the simpler ``1 − neb_fesc`` linear form), with the absolute ``f_dust``
+    share derived from ``neb_fdust_frac`` via ``lyc_shares`` (#2436). It is a
+    JAX-traced multiplication, so the continuum sum is ``S_intrinsic ·
+    k(fesc)`` and
 
         ∂(Σ L_neb) / ∂(neb_fesc) = S_intrinsic · k'(fesc) = (Σ L_neb|_{fesc=0}) · k'(fesc)
 
-    (since ``k(0) = 1`` for ``neb_fdust = 0``). We assert the actual gradient
+    (since ``k(0) = 1`` for ``f_dust = 0``). We assert the actual gradient
     equals this to one part in 1e-4 — decisively distinct from the P-9 unwired
     case, where the gradient would be exactly 0.
     """
-    fdust = float(cue_default_params.get("neb_fdust", 0.0))
+    fdust = float(cue_default_params.get("neb_fdust_frac", 0.0))
 
     def loss_fn(fesc_traced):
         _, lum = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=fesc_traced)

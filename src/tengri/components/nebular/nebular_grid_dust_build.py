@@ -34,7 +34,7 @@ from tengri.utils.grid_interp import (
     _vectorized_interp,
     subband_quadrature,
 )
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import representable_denominator, representable_floor
 
 __all__ = [
@@ -44,18 +44,17 @@ __all__ = [
     "_nebular_subband_channels",
 ]
 
-_LYMAN_CUTOFF_AA = 912.0
-
 
 def _lyc_cutoff_for(dust) -> float | None:
     """The short-wavelength edge of the dust component's energy-balance integral [Angstrom].
 
     ``None`` when the component counts the Lyman continuum in the absorbed
-    luminosity (``dust.config.eb_include_lyc``), the Lyman edge otherwise. The
-    grid's absorbed-energy channel and the table's record of the choice both
-    read it here, so the configuration key is spelled in one place.
+    luminosity (``dust.config.lyc_in_energy_balance``), the Lyman edge
+    (:data:`tengri.components.lyc.LYMAN_LIMIT_AA`) otherwise. The grid's
+    absorbed-energy channel and the table's record of the choice both read it
+    here, so the configuration key is spelled in one place.
     """
-    return None if dust.config.eb_include_lyc else _LYMAN_CUTOFF_AA
+    return None if dust.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
 
 
 def _nebular_subband_channels(
@@ -124,7 +123,12 @@ def _nebular_subband_channels(
     return phi, lam_rest
 
 
-def _nebular_screen_for(dust, params: Mapping[str, jnp.ndarray], wave: jnp.ndarray) -> jnp.ndarray:
+def _nebular_screen_for(
+    dust,
+    params: Mapping[str, jnp.ndarray],
+    wave: jnp.ndarray,
+    neb_weights: Sequence[float] | None = None,
+) -> jnp.ndarray:
     """Nebular-screen transmission of ``dust`` at ``wave``, as ``apply`` resolves it.
 
     Uses the component's ``nebular_screen_transmission`` when it declares one;
@@ -140,6 +144,10 @@ def _nebular_screen_for(dust, params: Mapping[str, jnp.ndarray], wave: jnp.ndarr
         Fully resolved parameters, including the dust optical depths.
     wave : ndarray, shape (n_wave,)
         Rest-frame wavelengths [Angstrom].
+    neb_weights : sequence of float, optional
+        Age-interval weights of an age-split attenuator's nebular screen (the
+        table bakes the pure screens, ``(1, 0)`` and ``(0, 1)``, and the runtime
+        mixes them); ignored by a single screen.
 
     Returns
     -------
@@ -152,7 +160,9 @@ def _nebular_screen_for(dust, params: Mapping[str, jnp.ndarray], wave: jnp.ndarr
     """
     method = getattr(dust, "nebular_screen_transmission", None)
     if method is not None:
-        return method(params, wave)
+        if neb_weights is None:
+            return method(params, wave)  # a single screen has no age intervals to weigh
+        return method(params, wave, jnp.asarray(neb_weights))
 
     from tengri.components.dust.component import DustAttenuationSEDComponent
 
@@ -185,7 +195,9 @@ def _nebular_screen_for(dust, params: Mapping[str, jnp.ndarray], wave: jnp.ndarr
         for k, v in select_law_kwargs(neb_law, {**bc_law_params, **neb_overrides}).items()
     }
     diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
-    return dust._line_transmission(params, jnp.asarray(wave), neb_law, neb_bc_params, diff_kw)
+    return dust._line_transmission(
+        params, jnp.asarray(wave), neb_law, neb_bc_params, diff_kw, jnp.asarray(neb_weights)
+    )
 
 
 def _tau_params(dust, ref_params: Mapping, tau_a: float, tau_b: float) -> dict:
@@ -227,10 +239,12 @@ def _nebular_eb_channel(
 
     Returns
     -------
-    ndarray, shape (n_points, n_tau_a, n_tau_b)
-        SIGNED absorbed luminosity per unit nion [erg/s per (photon/s)], in the
-        orientation of the frequency integral (negative on an ascending wavelength
-        grid); exactly 0 where the screen is unity.
+    ndarray, shape (n_points, K, n_tau_a, n_tau_b)
+        SIGNED absorbed luminosity per unit nion [erg/s per (photon/s)], one
+        channel ``K`` per pure nebular screen (1 for a single screen, 2 for an
+        age-split attenuator: the young and the old screen),
+        positively oriented (+1 for a net absorber); exactly 0 where the screen
+        is unity.
 
     Notes
     -----
@@ -242,15 +256,22 @@ def _nebular_eb_channel(
     wave = jnp.asarray(wave_rest)
     nu = C_AA / wave
     cutoff = _lyc_cutoff_for(dust)
-    t_stack = jnp.stack(
-        [
-            _nebular_screen_for(dust, _tau_params(dust, ref_params, ta, tb), wave)
-            for ta, tb in itertools.product(tau_a, tau_b)
-        ]
-    )  # (n_a * n_b, n_wave)
+    # One channel per pure screen of an age-split attenuator (the absorbed energy
+    # is linear in the nebular screen, so the runtime mixes the channels by the
+    # ionizing-luminosity weights); a single screen has the one.
+    channels = getattr(dust, "nebular_weight_channels", None) or (None,)
+    t_stacks = [
+        jnp.stack(
+            [
+                _nebular_screen_for(dust, _tau_params(dust, ref_params, ta, tb), wave, weights)
+                for ta, tb in itertools.product(tau_a, tau_b)
+            ]
+        )
+        for weights in channels
+    ]  # each (n_a * n_b, n_wave)
 
     @jax.jit
-    def _node(sed):
+    def _node(sed, t_stack):
         def one(t):
             log_abs, sign = bolometric_absorbed_log10(
                 sed, sed * t, nu, wave=wave, lyman_cutoff_aa=cutoff
@@ -259,18 +280,23 @@ def _nebular_eb_channel(
 
         return jax.lax.map(one, t_stack)
 
-    results = np.stack(
-        [
-            np.asarray(_node(jnp.asarray(row)), dtype=np.float64)
-            for row in np.asarray(sed_nodes_rest)
-        ]
-    )  # (n_points, 2, n_a * n_b)
-    log_abs = results[:, 0, :]
-    sign = results[:, 1, :]
-    finite = np.isfinite(log_abs)
-    exponent = np.where(finite, log_abs + np.asarray(neg_log_qh, dtype=np.float64)[:, None], 0.0)
-    eb = np.where(finite, sign * 10.0**exponent, 0.0)
-    return eb.reshape(eb.shape[0], tau_a.size, tau_b.size)
+    channel_tables = []
+    for t_stack in t_stacks:
+        results = np.stack(
+            [
+                np.asarray(_node(jnp.asarray(row), t_stack), dtype=np.float64)
+                for row in np.asarray(sed_nodes_rest)
+            ]
+        )  # (n_points, 2, n_a * n_b)
+        log_abs = results[:, 0, :]
+        sign = results[:, 1, :]
+        finite = np.isfinite(log_abs)
+        exponent = np.where(
+            finite, log_abs + np.asarray(neg_log_qh, dtype=np.float64)[:, None], 0.0
+        )
+        eb = np.where(finite, sign * 10.0**exponent, 0.0)
+        channel_tables.append(eb.reshape(eb.shape[0], tau_a.size, tau_b.size))
+    return np.stack(channel_tables, axis=1)  # (n_points, K, n_a, n_b)
 
 
 _SUBBAND_NODE_CHUNK = 128
@@ -281,7 +307,7 @@ def _nebular_filters(model) -> tuple | None:
     """Observed-frame ``(wave, trans)`` tables the nebular component cached, or None."""
     from tengri.components.nebular.component import NebularSEDComponent
 
-    chain = model._cached_component_chain or model._build_component_chain()
+    chain = getattr(model, "_cached_component_chain", None) or model._build_component_chain()
     for comp in chain:
         if isinstance(comp, NebularSEDComponent):
             state = comp._state
@@ -418,6 +444,6 @@ def _build_dust_channels(
             eb_absorbed_per_qh=jnp.asarray(eb.reshape(*grid_shape, *eb.shape[1:])),
             eb_tau_a_grid=jnp.asarray(eb_tau_grids[0]),
             eb_tau_b_grid=jnp.asarray(eb_tau_grids[1]),
-            eb_include_lyc=_lyc_cutoff_for(dust_component) is None,
+            lyc_in_energy_balance=_lyc_cutoff_for(dust_component) is None,
         )
     return out

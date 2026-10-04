@@ -599,21 +599,27 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # ----------------------------------------------------------------------------------
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
-#: ``(sum, first bin, middle bin, last bin)``. Re-captured for the young-sliver integral
-#: (#2635), which moves the continuum by at most 2e-6 (here up to 1.5e-6 relative).
+#: ``(sum, first bin, middle bin, last bin)``. Re-captured for the Lyman-limit edge
+#: treatment of the LyC module (first bin -1.4e-3, sum ~-1e-4) and for the young-sliver
+#: integral (#2635), which moves the continuum by at most 2e-6.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5215526212343478e32, 2.1618438478305343e23, 3.05875453805499e28, 8.775513506180217e21),
+    6.0: (
+        1.5214432946711191e32,
+        2.1589109068579697e23,
+        3.058749140117718e28,
+        8.775471987748958e21,
+    ),
     8.0: (
-        1.5586791978745043e32,
-        2.6215938693952546e24,
-        3.145654892113582e28,
-        8.823791339150894e21,
+        1.5585195022441907e32,
+        2.618037192496185e24,
+        3.1455315977754186e28,
+        8.823684322911118e21,
     ),
     10.0: (
-        1.5745230983865813e32,
-        2.0084455174887774e24,
-        3.1754606397665404e28,
-        9.020965805526526e21,
+        1.574341907575187e32,
+        2.0057206897195013e24,
+        3.1752969084196643e28,
+        9.020591285659345e21,
     ),
 }
 
