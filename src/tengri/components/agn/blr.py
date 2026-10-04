@@ -302,7 +302,9 @@ def _fe2_pseudo_continuum(
     ``L_nu = L_lambda * lambda**2 / c`` (``compute_blr_sed`` does); the
     composable FeII block returns L_lambda directly. Template nodes are
     clipped at zero (see :func:`_load_fe2_templates`) and resampled linearly
-    in wavelength.
+    in wavelength. A concrete zero ``fe2_strength`` (a Python or NumPy scalar)
+    returns zeros without broadening the template; an array or traced zero runs
+    it, because the strength can be gradient-carrying.
 
     Parameters
     ----------
@@ -337,6 +339,10 @@ def _fe2_pseudo_continuum(
             "fe_optical_pyqsofit.txt exist in src/tengri/data/agn_fe2/."
         )
 
+    if _fe2_is_off(fe2_strength):
+        # Absent by construction (a concrete zero): skip the template broadening.
+        return jnp.zeros_like(jnp.asarray(wavelength))
+
     grid_wave, _, window_weights, _ = _fe2_internal_grid()
     broadened = _fe2_broadened_on_grid(fwhm_kms)
 
@@ -351,6 +357,51 @@ def _fe2_pseudo_continuum(
     # the internal grid's support.
     on_caller = jnp.interp(wavelength, grid_wave, broadened, left=0.0, right=0.0)
     return fe2_strength * on_caller / window_flux
+
+
+def _fe2_is_off(fe2_strength) -> bool:
+    """Whether ``fe2_strength`` is a concrete zero (a Python or NumPy scalar), so FeII is absent.
+
+    A traced or array-valued strength is never "off" here: it can be gradient-carrying or
+    nonzero at run time, and the template broadening (one 2^18-point FFT) must then run.
+    """
+    return isinstance(fe2_strength, (int, float, np.number)) and float(fe2_strength) == 0.0
+
+
+def _fe2_total_power(fwhm_kms, fe2_strength):
+    """Integral of :func:`_fe2_pseudo_continuum` over all wavelengths [dimensionless].
+
+    The broadened template of the internal grid, integrated by the trapezoid rule on
+    that grid and divided by the same R_Fe window flux that normalizes the spectrum,
+    so ``l_hbeta * _fe2_total_power(...)`` is the FeII power [erg/s]. The caller's
+    wavelength grid does not enter.
+
+    Parameters
+    ----------
+    fwhm_kms : float
+        BLR velocity broadening FWHM [km/s].
+    fe2_strength : float
+        R_Fe = F(Fe II 4434-4684) / F(H-beta).
+
+    Returns
+    -------
+    float
+        ``int L_lambda d lambda`` per unit H-beta luminosity.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; shares the broadened array with
+    :func:`_fe2_pseudo_continuum` (one FFT per trace).
+    """
+    if _fe2_is_off(fe2_strength):
+        return 0.0
+    grid_wave, _, window_weights, _ = _fe2_internal_grid()
+    broadened = _fe2_broadened_on_grid(fwhm_kms)
+    window_flux = jnp.maximum(
+        jnp.sum(window_weights * broadened), representable_denominator(1e-30)
+    )
+    total = jnp.trapezoid(broadened, grid_wave)
+    return fe2_strength * total / window_flux
 
 
 def _blr_l_hbeta(

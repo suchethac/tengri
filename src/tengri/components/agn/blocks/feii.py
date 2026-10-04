@@ -11,11 +11,12 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
+from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum, _fe2_total_power
 
 __all__ = [
     "boroson_green_feii_block",
+    "boroson_green_feii_line_power",
 ]
 
 DEFAULT_F_BOL_5100: float = 9.0
@@ -111,3 +112,44 @@ def boroson_green_feii_block(
 
     # Scale to absolute luminosity: L_lambda [erg/s/A] = L(H-beta) * spectrum.
     return l_hbeta * fe2_spectrum
+
+
+@register_line_energy("feii", "boroson_green")
+def boroson_green_feii_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_fe2_strength: float = 0.0,
+    agn_blr_fwhm_kms: float = 5000.0,
+    agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
+    agn_blr_cf: float = 0.1,
+    agn_blr_line_efficiency: float = 0.08,
+    **_params,
+) -> Array:
+    r"""Bolometric power of :func:`boroson_green_feii_block` [erg/s].
+
+    ``L_Hbeta`` times the integral of the broadened, R_Fe-normalized template, taken on
+    the template's own internal grid, so no wavelength grid is involved.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        Unused (the normalization is ``l5100_disc``).
+    l5100_disc : array_like
+        ``lambda L_lambda(5100 A)`` of the disc [erg/s].
+    agn_fe2_strength, agn_blr_fwhm_kms, agn_blr_f_bol, agn_blr_cf, agn_blr_line_efficiency
+        As for :func:`boroson_green_feii_block`.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del agn_log_lbol
+    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
+    l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
+    return l_hbeta * _fe2_total_power(agn_blr_fwhm_kms, agn_fe2_strength)

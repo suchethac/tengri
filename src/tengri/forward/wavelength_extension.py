@@ -171,8 +171,9 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 #     takes the same 1 cm end as the analytic dust and torus support grids, and
 #     starts where the T_max = 1e5 K exponential cut-off has removed the energy.
 # 40 points per decade keeps the disc level at every node within 7e-4 of a 200000-point
-# evaluation (20 per decade leaves 2.5e-3 for the ADAF blocks). Shortward of
-# ``_DISC_EUV_BELOW_AA`` the grid carries 200 points per decade instead: the multicolor
+# evaluation (20 per decade leaves 2.5e-3 for the ADAF blocks). For every disc but
+# ``_DISC_EUV_COARSE``, shortward of ``_DISC_EUV_BELOW_AA`` the grid carries 200 points
+# per decade instead: the multicolor
 # disc peaks in the EUV, and there the model-grid trapezoid of the bolometric SED is within
 # 1.3e-4 of L_bol (40 per decade leaves 1.2e-3; the error falls as ~1/density). The cut
 # sits below Lyman-alpha (1216 A): a denser grid across the IGM break re-resolves the
@@ -182,6 +183,11 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 _DISC_PTS_PER_DECADE = 40
 _DISC_PTS_PER_DECADE_EUV = 200
 _DISC_EUV_BELOW_AA = 1000.0
+# Every analytic or densified disc takes the dense EUV nodes except the Kubota & Done
+# disc, which integrates to within 7e-5 of a dense evaluation at 40 per decade (the
+# multicolor, ADAF and Schartmann discs need them: +1.2e-3 at 40). Its grid stays at 40,
+# so the model carries ~1000 fewer nodes.
+_DISC_EUV_COARSE = frozenset({"kubota_done"})
 # Tabulated discs whose template axis is too coarse for that normalization
 # accuracy (KD18: 100 nodes over 6.3 decades, 1.6e-3): the declared grid is
 # the axis plus a log grid at the same density as the analytic discs.
@@ -422,9 +428,9 @@ def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
     return wave[keep]
 
 
-def _disc_log_grid(lo: float, hi: float) -> np.ndarray:
-    """Log grid over ``[lo, hi]`` [A]: 200 points per decade below 1000 A, 40 above."""
-    cut = min(max(lo, _DISC_EUV_BELOW_AA), hi)
+def _disc_log_grid(lo: float, hi: float, *, euv_dense: bool = True) -> np.ndarray:
+    """Log grid over ``[lo, hi]`` [A]: 40 points per decade, 200 below 1000 A if ``euv_dense``."""
+    cut = min(max(lo, _DISC_EUV_BELOW_AA), hi) if euv_dense else lo
     parts = []
     if lo < cut:
         parts.append(
@@ -445,7 +451,7 @@ def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
         return None
     if block in _ANALYTIC_DISC_RANGE_AA:
         lo, hi = _ANALYTIC_DISC_RANGE_AA[block]
-        return _disc_log_grid(lo, hi)
+        return _disc_log_grid(lo, hi, euv_dense=block not in _DISC_EUV_COARSE)
     candidates = _AGN_DISC_TEMPLATES.get(block)
     if candidates is None:
         return None

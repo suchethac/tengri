@@ -183,6 +183,7 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
             "tengri.components.agn.blocks.nlr:nlr_analytic_block",
+            "tengri.components.agn.blocks.nlr:nlr_analytic_line_power",
             "tengri.components.agn.blocks.nlr:nlr_feltre_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_spectra_block",

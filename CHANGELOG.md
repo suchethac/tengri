@@ -27,6 +27,26 @@
   On a grid covering the library the values agree with the former ones to the
   trapezoid error of that grid (about 1e-3).
 
+- The fixed budget grids of the composable AGN runner cost a fraction of what they did.
+  The conserving line debit takes the power of the analytic NLR, BLR and Fe II blocks in
+  closed form (their lines are unit-integral Gaussians and the Fe II template conserves
+  flux) instead of evaluating them on a 30 001-node grid, and skips the disc energy
+  altogether when no line block is selected. The SKIRTOR torus power is the exact integral
+  of its log-log interpolant on the library's own nodes, the polar-dust budget is the
+  absorbed power the graybody is normalized to (no second graybody evaluation on the budget
+  grid), and the face-on and bolometric polar references are chosen with `lax.cond` instead
+  of both being evaluated. The Kubota & Done disc is integrated on 8501 nodes (1000 per
+  decade over 1e-2 - 1e6 A, 100 per decade outside, 8.9e-7 against a dense reference, the
+  error of the former 13 001), and its model-grid EUV stays at 40 points per decade (6436
+  instead of 7219 nodes). A concrete `agn_fe2_strength = 0` skips the template broadening.
+  `jit(grad)` with respect to `agn_log_lbol`, `kubota_done` + SKIRTOR, FLOP from the
+  compiled HLO: conserving with analytic NLR/BLR 1.5e8 to 3.7e7 on 12 nodes (1.6e8 to 4.3e7
+  on 1500), CIGALE-joint with polar dust 1.6e8 to 1.4e8, the delayed + Calzetti + conserving
+  model 1.55e8 to 9.5e7. The AGN components move by at most 2e-6; the node sum and the
+  photometry of a model carrying a `kubota_done` disc move by up to 1.8e-4 through the
+  master grid, and the gradient of the node-summed torus component with respect to the
+  polar `E(B-V)` at `E(B-V) = 0` now has the sign of the live gradient.
+
 - AGN template and analytic components no longer normalize over the caller's wavelength
   grid. `torus_lnu_from_grid` (skirtor/nenkova AGNfitter 1p/2p/3p, `cat3d_wind`,
   `cat3d_wind_lowfwd`), the CLUMPY closure, `silva04`, `fritz`, `kd18_agnfitter` (+
