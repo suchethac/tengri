@@ -56,3 +56,7 @@ component goldens `astrodust.npy` (0.99%) and `draine2021_pah_ir.npy`
 ## Regenerated 2026-10-01 (#2596)
 
 `graybody.npy` — the closure no longer carries the optically-thin `(nu/nu_ref)^beta` factor on top of the general-opacity term; every other node of every other template unchanged.
+
+## Regenerated 2026-10-04 (#2708)
+
+`casey2012.npy` — emission is zero below 1 um and the shape is normalized on the evaluation grid after that mask. Nodes at 1 um and longer are scaled by one constant, 1.0002297314, relative to the previous file; the node below 1 um (1000 A) is zero. Every other template unchanged.
