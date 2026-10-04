@@ -41,7 +41,7 @@ from tengri.parameters.parameters import Parameters
 # ── Naming contract regex ───────────────────────────────────────────────────
 
 ALLOWED_PREFIXES = re.compile(
-    r"^(sfh_|met_|dust_|neb_|agn_|eline_|noise_|radio_|xray_|shock_|chem_|igm_|dla_|spatial_).*$"
+    r"^(sfh_|met_|dust_|neb_|agn_|eline_|noise_|radio_|xray_|shock_|chem_|igm_|dla_|spatial_|agb_dust_).*$"
 )
 EXACT_MATCHES = {"redshift"}
 

@@ -10,8 +10,7 @@ guarantees:
    change for existing models);
 2. ``'dsps'`` genuinely selects the other kernel — end-to-end through
    ``predict_photometry``, not merely in ``predict_state``;
-3. the combination the implementation cannot serve raises instead of silently
-   returning the other kernel's answer;
+3. an unknown kernel name raises, and both kernels serve a field SFH (#2684);
 4. the two kernels get **distinct compile signatures**, so the shared kernel
    cache cannot hand one model the other's photometry.
 
@@ -178,15 +177,21 @@ class TestAgeKernelRejectsBadInput:
         with pytest.raises(ValueError, match=r"Unknown sfh age_kernel"):
             _build(synthetic_ssp_wide, age_kernel="cci")
 
-    def test_cic_with_field_raises_rather_than_silently_using_dsps(self, synthetic_ssp_wide):
-        """An explicit request the implementation cannot serve must not no-op."""
-        with pytest.raises(NotImplementedError, match=r"age_kernel='cic'.*GP-field"):
+    def test_cic_with_field_builds(self, synthetic_ssp_wide):
+        """Both kernels integrate a field draw (#2684): an explicit 'cic' is served."""
+        w = _age_marginal(
             _build(synthetic_ssp_wide, age_kernel="cic", field={"all_params": Fixed(DEFAULT)})
+        )
+        assert np.all(np.isfinite(w))
 
     def test_field_default_still_builds(self, synthetic_ssp_wide):
-        """Auto-select on the field path keeps resolving to DSPS silently."""
+        """Auto-select on the field path resolves to the default 'cic' kernel (#2684)."""
         w = _age_marginal(_build(synthetic_ssp_wide, field={"all_params": Fixed(DEFAULT)}))
+        w_cic = _age_marginal(
+            _build(synthetic_ssp_wide, age_kernel="cic", field={"all_params": Fixed(DEFAULT)})
+        )
         assert np.all(np.isfinite(w))
+        np.testing.assert_array_equal(w, w_cic)
 
 
 class TestNonFieldDspsRouteIsSound:

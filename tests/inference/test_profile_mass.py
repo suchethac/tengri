@@ -833,8 +833,13 @@ def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, mon
     Two claims, both measured. With the width at or above ``n_draws`` the map
     degenerates to a single vmap and the draws are *bit-identical*, so a model
     that does not need chunking pays nothing at all. With the width biting, the
-    draws agree to about one ulp -- the chunk boundary reorders reductions but
-    the per-draw PRNG keys are untouched.
+    draws agree to a few ulp -- the chunk boundary reorders reductions but the
+    per-draw PRNG keys are untouched. Measured worst case over widths 16 / 7 / 1:
+    0.9 / 0.9 / 1.7 ulp before the zero-SFH guard (#2644) and the young-sliver
+    integral (#2635), 5.5 / 5.5 / 4.6 ulp with them: the guard makes the
+    measured-mass reduction live code in the compiled forward and the sliver
+    adds 31 integrand samples to the summed history, and each chunk width fuses
+    those reductions differently. The bound is sized to that measurement.
     """
     from tengri.inference import mass_profile
     from tengri.inference._model_cache import _default_owner
@@ -875,7 +880,9 @@ def test_chunking_changes_reinserted_draws_by_at_most_one_ulp(ssp_data_fsps, mon
     for width in (16, 7, 1):
         chunked = draws_at(width)
         rel = np.max(np.abs((chunked - reference) / reference))
-        assert rel < 1e-15, f"chunk width {width} moved draws by {rel:.3e} relative"
+        assert rel < 8 * np.finfo(float).eps, (
+            f"chunk width {width} moved draws by {rel:.3e} relative"
+        )
 
 
 def test_reinsertion_logs_the_chunk_width_and_whether_chunking_engaged(

@@ -82,7 +82,7 @@ def _sfh_dust_neb():
 def test_spectrum_precomp_nebular_line_matches_exact(ssp, tau):
     """The Cue Hα line flux under SpectrumPrecomp matches the exact path."""
     wave = jnp.linspace(6400.0, 6700.0, 300)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave))
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave, resample="point"))
     build = lambda approx: SEDModel.build(  # noqa: E731
         ssp_data=ssp,
         observation=obs,

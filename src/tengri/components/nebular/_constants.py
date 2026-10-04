@@ -26,10 +26,10 @@ from tengri.utils.physics_constants import (
 # Hydrogen Lyman limit [Angstrom]
 _LYMAN_LIMIT: float = 911.76
 
-# Oxygen abundance offset for CB19 CLOUDY c17.01 solar scale
+# Oxygen abundance offset for the CB19 / Gutkin+2016 CLOUDY solar scale
 # Derived as: log10(O/H)_solar − log10(Z_sun)
-#   log10(O/H)_solar = −3.07  (Asplund+2009 Table 1, 12+log(O/H)=8.69
-#                              → log(O/H)=−3.31+0.24 for Z/X scaling)
+#   log10(O/H)_solar = −3.07  (12+log(O/H) = 8.93, the CB19 grid convention;
+#                              NOT Asplund+2009's 8.69, which would be −3.31)
 #   offset = −3.07 − (−1.848) = −1.222
 _LOG_OH_SOLAR: float = -3.07
 _LOG_OH_OFFSET: float = _LOG_OH_SOLAR - _LOG10_ZSUN  # ≈ -1.222

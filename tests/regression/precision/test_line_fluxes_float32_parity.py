@@ -89,19 +89,23 @@ _CUE_F64_REF = np.array(
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
-#: operator with each window mean defined as the wavelength integral
+#: operator, with the dust screen applied across each window as the exact path applies
+#: it (re-pinned for #2677; the earlier values took the screen at the window center and
+#: moved [N II] 6584 by +13 %), and each window mean defined as the wavelength integral
 #: ``∫F W dλ / ∫W dλ`` (trapezoid on the wavelength differences, 1 Å sigmoid edges).
 #: Relative to the pixel-count mean (Hβ 2.769656969949378e-16, [O III] 5007
 #: 4.085943225429073e-16, Hα 1.3469922014700263e-15, [N II] 6584 3.219346394066372e-18)
 #: the values move by +7.2e-6, -3.2e-6, +1.1e-5 and -1.7e-3. The exact path
 #: (``approx=False``) on the same model is pinned against a numpy implementation of the
 #: integral definition in ``test_bug_2588_c94_beta_and_window_means.py``. 17 significant digits.
+#: Re-captured for the young-sliver integral (#2635) on top of the #2677/#2720 window-LUT
+#: values: relative to those the lines move by up to 6e-5 (continuum <= 2e-6).
 _WNE_F64_REF = np.array(
     [
-        2.7696220064667116e-16,
-        4.0858581331167685e-16,
-        1.3469890145145336e-15,
-        3.2141211596098763e-18,
+        2.769615068651963e-16,
+        4.086015628418593e-16,
+        1.347176754973041e-15,
+        2.834270007857723e-18,
     ]
 )
 
