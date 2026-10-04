@@ -2,6 +2,12 @@
 
 ### Fixed
 
+- The radio wing of the master wavelength grid is sampled at 100 points per decade from at
+  most 1e8 A (was 20 per decade from the end of the longest template), so a 10 %-wide radio
+  band (1.4 GHz, 3 GHz, 150 MHz) holds about four nodes at every redshift instead of one: with
+  a template that reaches into the radio (a CIGALE Dale grid ends at 2.2e9 A) the free-z LUT
+  radio band read -1.03 % against the exact path at z = 0.5; it now reads -7.8e-4.
+
 - The composable AGN runner's energy budgets no longer depend on the caller's wavelength
   grid. The CIGALE-joint disc tie (`agn_power x R`) took the torus power and the disc's
   reweighted bolometric as trapezoids over the caller's array, so the SED of a
