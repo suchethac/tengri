@@ -47,7 +47,23 @@ _MSUN = 1.989e33
 _LSUN = 3.828e33
 
 
-def _analytic_nu_lnu_peak_aa(log_mbh: float, log_lbol: float, a_spin: float = 0.0) -> float:
+def _t_max_over_t_in(a_spin: float, relativistic: bool) -> float:
+    """``max_x x^-3/4 Rt(x)^1/4``: the hottest annulus in units of ``T_in``.
+
+    Newtonian zero-torque ``Rt = 1 - x^-1/2`` (the Shakura-Sunyaev disc) peaks at 0.488. The
+    Page & Thorne (1974) factor used by the K&D 2018 / QSOSED disc (#2572) has a lower
+    maximum, because the flux vanishes at the ISCO more sharply.
+    """
+    from tengri.components.agn._nt_emissivity import nt_rt
+
+    x = np.linspace(1.0001, 12.0, 200001)
+    rt = np.asarray(nt_rt(x, a_spin)) if relativistic else 1.0 - x**-0.5
+    return float(np.max(x**-0.75 * rt**0.25))
+
+
+def _analytic_nu_lnu_peak_aa(
+    log_mbh: float, log_lbol: float, a_spin: float = 0.0, relativistic: bool = False
+) -> float:
     """Novikov-Thorne νLν peak wavelength [Å] for the hottest disc annulus."""
     # ISCO radius (Bardeen+1972); a=0 -> 6 r_g.
     z1 = 1 + (1 - a_spin**2) ** (1 / 3) * ((1 + a_spin) ** (1 / 3) + (1 - a_spin) ** (1 / 3))
@@ -59,7 +75,7 @@ def _analytic_nu_lnu_peak_aa(log_mbh: float, log_lbol: float, a_spin: float = 0.
     r_in = r_isco * r_g
     mdot = 10**log_lbol * _LSUN / (eta * _C**2)
     t_in = (3 * _G * m_g * mdot / (8 * np.pi * _SIGMA * r_in**3)) ** 0.25
-    t_max = 0.488 * t_in
+    t_max = _t_max_over_t_in(a_spin, relativistic) * t_in
     return 5.10e7 / t_max  # Wien peak of B_nu [Å·K] / T
 
 
@@ -96,7 +112,7 @@ def test_kubota_done_disc_peak_matches_novikov_thorne():
     re-assigned to the warm/hot Comptonizing zones — a physical, not numerical,
     shift — so the upper bound is a touch wider.
     """
-    pred = _analytic_nu_lnu_peak_aa(log_mbh=8.0, log_lbol=12.215)
+    pred = _analytic_nu_lnu_peak_aa(log_mbh=8.0, log_lbol=12.215, relativistic=True)
     got = _nu_lnu_peak(kubota_done_disc, 8.0, 12.215)
     assert 0.8 < got / pred < 1.6, (
         f"kubota_done disc νLν peak {got:.0f} Å vs Novikov-Thorne {pred:.0f} Å "
