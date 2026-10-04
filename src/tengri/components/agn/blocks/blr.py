@@ -17,6 +17,10 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+)
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.nlr_cloudy import (
@@ -210,8 +214,8 @@ def blr_synthesizer_spectra_block(
     agn_blr_logU: float = -1.0,
     agn_blr_logn: float = 4.0,
     agn_blr_logZ: float = -2.0,
-    agn_log_mbh: float = 7.0,
-    agn_log_ledd: float = -1.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.

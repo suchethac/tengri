@@ -9,7 +9,10 @@ Grid-gated: skips cleanly where the Synthesizer AGN grids are absent.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
+
+pytestmark = pytest.mark.contract
 
 
 def _synth_grid_available() -> bool:
@@ -30,50 +33,61 @@ def _skip_if_no_grid():
         pytest.skip("Synthesizer AGN grids absent (data-gated)", allow_module_level=True)
 
 
-pytestmark = pytest.mark.contract
+@pytest.mark.parametrize("region", ["nlr", "blr"])
+def test_block_equals_backend_call(region):
+    """Test (a): Block output equals backend call with explicit params.
 
-
-def _build_model(ssp, block_type):
-    """Build a minimal composable AGN model with Synthesizer-grid block."""
-    from tengri import DEFAULT, Fixed, SEDModel
-
-    return SEDModel.build(
-        ssp,
-        sfh={
-            "type": "delayed",
-            "tau_gyr": Fixed(1.0),
-            "age_gyr": Fixed(5.0),
-            "log_total_mass": Fixed(0.0),
-            "all_params": Fixed(DEFAULT),
-        },
-        dust_attenuation={
-            "law": "power_law",
-            "type": "two_component",
-            "tau_bc": Fixed(0.0),
-            "tau_diff": Fixed(0.0),
-            "all_params": Fixed(DEFAULT),
-        },
-        agn={
-            "type": "composable",
-            "all_params": Fixed(DEFAULT),
-            "log_lbol": 13.0,
-            "disc": {"type": "multicolor", "all_params": Fixed(DEFAULT)},
-            block_type: {"type": "synthesizer_spectra", "all_params": Fixed(DEFAULT)},
-        },
-        redshift=Fixed(0.0),
+    RED on main: block uses hardcoded defaults (8.0, -0.3) ignoring parameters.
+    """
+    from tengri.components.agn.blocks.nlr import (
+        _resolve_synthesizer_grid,
+        nlr_synthesizer_spectra_block,
     )
+    from tengri.components.agn.blocks.blr import blr_synthesizer_spectra_block
+    from tengri.components.agn.nlr_cloudy import compute_nlr_sed_synthesizer_spectra
+    from tengri.utils.physics_constants import L_SUN as L_SUN_ERG, C_AA as C_AA_PER_S
 
+    wave = np.linspace(1000, 10000, 100)
+    l_bol_erg = 10.0 ** 13.0 * L_SUN_ERG
+    grid_path = _resolve_synthesizer_grid(region)
+    cf = 0.1
+    logU = -2.0 if region == "nlr" else -1.0
+    logn = 4.0
+    logZ = -2.0
 
-@pytest.mark.parametrize("block_type", ["nlr", "blr"])
-def test_blocks_accept_new_parameters(synthetic_ssp_wide, block_type):
-    """Test that the NLR/BLR blocks accept agn_log_mbh and agn_log_ledd."""
-    # The fix is that the blocks now have these parameters in their signature
-    # and forward them to the backend. This test verifies they're accepted.
-    model = _build_model(synthetic_ssp_wide, block_type)
+    # Call block with explicit parameters
+    block_fn = nlr_synthesizer_spectra_block if region == "nlr" else blr_synthesizer_spectra_block
+    kwargs = {
+        "wavelength": wave,
+        "agn_log_lbol": 13.0,
+        "l5100_disc": np.zeros(1),
+        "agn_log_mbh": 8.0,
+        "agn_log_ledd": -1.0,
+    }
+    if region == "nlr":
+        kwargs.update({"agn_nlr_cf": cf, "agn_nlr_logU": logU, "agn_nlr_logn": logn, "agn_nlr_logZ": logZ})
+    else:
+        kwargs.update({"agn_blr_cf": cf, "agn_blr_logU": logU, "agn_blr_logn": logn, "agn_blr_logZ": logZ})
 
-    # Just verify the model builds and produces output
-    state = model.predict_state({})
-    sed_agn = state.derived.get("sed_agn")
+    L_lambda_block, _ = block_fn(**kwargs)
+    L_lambda_block = np.asarray(L_lambda_block)
 
-    assert sed_agn is not None, f"{block_type}_synthesizer_spectra: no sed_agn output"
-    assert len(sed_agn) > 0, f"{block_type}_synthesizer_spectra: empty sed_agn"
+    # Backend call at same parameters
+    L_nu_backend = compute_nlr_sed_synthesizer_spectra(
+        wave,
+        l_disc_bol_erg=l_bol_erg,
+        covering_fraction=cf,
+        grid_path=grid_path,
+        log_bh_mass=8.0,
+        log_eddington=-1.0,
+        neb_logU=logU,
+        neb_logn=logn,
+        neb_logZ_gas=logZ,
+        region=region,
+    )
+    L_lambda_backend = L_nu_backend * C_AA_PER_S / wave**2
+
+    np.testing.assert_allclose(
+        L_lambda_block, L_lambda_backend, rtol=1e-12, atol=0,
+        err_msg=f"{region}: block does not forward params to backend"
+    )

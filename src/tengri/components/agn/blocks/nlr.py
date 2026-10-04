@@ -31,6 +31,10 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+)
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.nlr_cloudy import (
@@ -331,8 +335,8 @@ def nlr_synthesizer_spectra_block(
     # Left as-is rather than unified; NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = 4.0,
     agn_nlr_logZ: float = -2.0,
-    agn_log_mbh: float = 7.0,
-    agn_log_ledd: float = -1.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.

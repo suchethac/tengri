@@ -937,6 +937,9 @@ DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 #: so a *fit* on that model can also clip: tracked separately.)
 DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
 
+#: Default AGN Eddington ratio, sub-Eddington. Used by Synthesizer grid blocks.
+DEFAULT_AGN_LOG_LEDD = declared_default(PARAMS, "agn_log_ledd")
+
 #: Default disc inclination, ``cos(30 deg)``. Matches CIGALE's skirtor2016
 #: ``i=30`` face-on type-1 convention; the older 0.5 (``i=60``) was found by the
 #: §9 reproduction audit to be the dominant residual at the SKIRTOR torus peak,
@@ -1224,6 +1227,7 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
 __all__ = [
     "DEFAULT_AGN_COS_INC",
     "DEFAULT_AGN_LOG_LBOL",
+    "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
     "GRID_EXTENT_SOURCES",
