@@ -7526,7 +7526,17 @@ class SEDModel:
         # at two different points on the dust attenuation curve. See
         # ``_snap_to_nebular_catalog``.
         target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
-        chain0 = self._build_component_chain()
+        # The pristine (exact, no grid) chain. Building it runs every component's
+        # ``precompute``, which for a fast model re-integrates the stellar redshift
+        # table (about a minute without the disk cache), and it depends only on the
+        # model's settings, not on the grid built below, so the cached chain of a
+        # model that has no grid yet is the same chain and is reused.
+        pristine = (
+            getattr(self, "_cached_component_chain", None)
+            if getattr(self, "_nebular_grid_table", None) is None
+            else None
+        )
+        chain0 = pristine if pristine is not None else self._build_component_chain()
         dust = next(
             (c for c in chain0 if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
             None,
@@ -7543,12 +7553,11 @@ class SEDModel:
             n_subbands=self._approx.get("n_subbands"),
         )
         self._nebular_grid_table = table
-        # Rebuild the chain from scratch (exact, no grid) and swap in the
-        # grid-carrying nebular component so ``apply`` takes the fast branch.
-        # compile_signature() now differs (the _nebular_grid_table row,
-        # invalidated below), so the next predict_* builds a fresh kernel
-        # over this chain, no stale reuse.
-        chain = self._build_component_chain()
+        # Swap the grid-carrying nebular component into the pristine chain (exact,
+        # no grid) so ``apply`` takes the fast branch. compile_signature() now
+        # differs (the _nebular_grid_table row, invalidated below), so the next
+        # predict_* builds a fresh kernel over this chain, no stale reuse.
+        chain = chain0
         # Whether the grid may also serve the photometry channel. It may only
         # when nothing downstream reads the continuum, because serving
         # photometry from the grid requires zeroing ``sed_nebular``, and the
