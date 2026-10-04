@@ -66,19 +66,8 @@ def _tophat(lo_um, hi_um):
     return wave, trans
 
 
-def _nodes(param_name, center, spacing):
-    """Create a grid with nodes centered around ``center``, covering the full declared range.
-
-    The declared ranges are: T [20, 80], beta [1, 2.5], alpha [1, 3], lambda [50, 500].
-    We include the center point and its neighbors, plus the declared bounds.
-    """
-    from tengri.components.dust.dust_analytic_precompute import _get_param_bounds
-
-    lo, hi = _get_param_bounds(param_name)
-    near_center = np.array([center * (1 - spacing), center, center * (1 + spacing)])
-    # Combine with the declared bounds to ensure coverage
-    combined = np.concatenate([[lo], near_center, [hi]])
-    return np.unique(np.sort(combined))
+def _nodes(center, spacing):
+    return np.array([center * (1 - spacing), center, center * (1 + spacing)])
 
 
 def _band_average(wave_rest, sed, filt_wave, filt_trans, z):
@@ -106,7 +95,7 @@ def _lookup_value(model, z, band_um, spacing, temperature):
     """Public path (``precompute`` + ``build_lookup``) for one band, at the middle node."""
     central = {**_CENTRAL, "dust_T": temperature}
     names = adapter.AXIS_PARAMS[model]
-    grids = {_GRID_KEYWORD[n]: _nodes(n, central[n], spacing) for n in names}
+    grids = {_GRID_KEYWORD[n]: _nodes(central[n], spacing) for n in names}
     filt_wave, filt_trans = _tophat(*band_um)
     result = adapter.precompute([filt_wave], [filt_trans], z, None, model=model, **grids)
     lookup = adapter.build_lookup(result, model=model)

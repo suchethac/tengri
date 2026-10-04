@@ -10,13 +10,18 @@
 
 ### Fixed
 
-- Analytic dust-emission precompute now builds grid node axes over the parameter's
-  **active support** (what the model can reach given the parameter's prior), not just the
-  declared prior bounds. A user who widens a prior or pins a value outside the declared
-  range gets a non-flat likelihood and non-zero gradients over the entire active support.
-  User-supplied axes must explicitly cover the active support or raise `ValueError`; node
-  density is preserved per interpolation coordinate (log or linear) when the support expands.
-  With default priors, axes are bit-identical to before (#2722).
+- The analytic dust-emission precompute (`WavePrecomp` on `modified_blackbody`, `casey2012`,
+  `graybody`) built its node axes over the declared free prior (dust_T 20-80 K, dust_beta_ir
+  1-2.5, dust_alpha_mir 1-3, dust_lambda_0_um 50-500 um), and the lookup holds the edge value
+  with exactly zero gradient beyond the nodes. A widened prior (`dust_T: Uniform(10, 120)`) or a
+  `Fixed` value outside the declared range therefore gave a flat likelihood and no gradient over
+  the part the nodes did not reach, with nothing raised. The default axes now span the declared
+  range extended to what the model can reach, at the declared node density in the interpolation
+  coordinate (ln for dust_T and dust_lambda_0_um), so the #2676 accuracy carries over; with
+  default priors they are unchanged bit for bit. A supplied axis that does not cover that reach
+  raises `ValueError`, a supplied axis of fewer than 4 nodes warns (PCHIP degrades to a parabola
+  or a chord), and an unbounded prior (which cannot be spanned) emits one `GridSupportWarning`
+  (#2722).
 
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
