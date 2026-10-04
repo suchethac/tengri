@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The runner's fixed budget integrals equal dense integrals of the same functions.
 
 The composable AGN runner measures its bolometric budgets on fixed grids so they do not

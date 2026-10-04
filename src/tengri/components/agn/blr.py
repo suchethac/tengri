@@ -264,7 +264,7 @@ def _fe2_broadened_on_grid(fwhm_kms):
     spec = jnp.fft.rfft(template, n=n_fft)
     out = jnp.fft.irfft(spec * transfer, n=n_fft)[: template.shape[0]]
     # FFT round-off can leave ~1e-16 negatives on a non-negative function
-    return jnp.maximum(out, 0.0)
+    return jnp.where(out > 0.0, out, 0.0)
 
 
 def _fe2_pseudo_continuum(

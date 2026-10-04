@@ -26,7 +26,7 @@ from tengri.components.agn import (
     disc as D,
 )
 
-pytestmark = pytest.mark.gradient
+pytestmark = pytest.mark.conservation
 
 _X_LO_CLIP = 1.01  # the inner zone clip of ``_compute_zone_radii`` (R_hot >= 1.01 R_isco)
 
@@ -49,38 +49,56 @@ def _setup(log_mbh, lambda_edd, a_spin):
     return r_g, r_isco_rg, r_isco_cm, t_in, log10_l_edd, log_lbol
 
 
+def _corona_luminosity(monkeypatch, log_mbh, log_lbol, f_hard, a_spin):
+    """The ``l_hot_erg`` that ``kubota_done_disc`` hands to its corona, read where it is used."""
+    seen = []
+    original = D._hot_corona_lnu
+
+    def spy(nu, l_hot_erg, *args, **kwargs):
+        seen.append(float(l_hot_erg))
+        return original(nu, l_hot_erg, *args, **kwargs)
+
+    monkeypatch.setattr(D, "_hot_corona_lnu", spy)
+    with jax.disable_jit():
+        D.kubota_done_disc(
+            jnp.geomspace(1.0, 1.0e5, 8),
+            agn_log_lbol=log_lbol,
+            agn_log_mbh=log_mbh,
+            agn_a_spin=a_spin,
+            agn_f_hard=f_hard,
+        )
+    assert len(seen) == 1, "the corona must be formed exactly once"
+    return seen[0]
+
+
 @pytest.mark.parametrize("a_spin", [0.0, 0.7])
 @pytest.mark.parametrize("f_hard", [0.02, 0.05, 0.1])
 @pytest.mark.parametrize(
     ("log_mbh", "lambda_edd"),
     [(7.0, 0.015), (8.0, 0.02), (9.0, 0.015), (9.0, 0.03), (9.0, 0.05), (8.5, 0.3), (9.0, 1.0)],
 )
-def test_corona_radiates_what_the_hot_flow_dissipates(log_mbh, lambda_edd, f_hard, a_spin):
+def test_corona_radiates_what_the_hot_flow_dissipates(
+    monkeypatch, log_mbh, lambda_edd, f_hard, a_spin
+):
     """``L_diss(R_hot) / L_hot = 1`` to 1e-6 wherever ``R_hot`` is not at its inner clip.
 
-    Saturated (``R_hot`` at ``0.5 R_out``) or interior alike; at the inner clip
-    (``1.01 R_isco``) the annuli inside ``R_hot`` dissipate at least ``L_hot``.
+    ``L_hot`` is the luminosity the disc passes to its corona. Saturated (``R_hot`` at
+    ``0.5 R_out``) or interior alike; at the inner clip (``1.01 R_isco``) the annuli inside
+    ``R_hot`` dissipate at least ``L_hot``.
     """
     r_g, r_isco_rg, r_isco_cm, t_in, log10_l_edd, log_lbol = _setup(log_mbh, lambda_edd, a_spin)
-    r_hot, _r_warm, r_out = D._compute_zone_radii(
+    r_hot, _r_warm, _r_out = D._compute_zone_radii(
         r_g, r_isco_rg, r_isco_cm, t_in, log_mbh, log_lbol, f_hard, 2.0, log10_l_edd,
         False, a_spin,
     )  # fmt: skip
-    l0 = D._nt_l0(r_isco_cm, t_in, False)
-    l_hot = D._hot_flow_luminosity(
-        f_hard,
-        log10_l_edd,
-        l0,
-        a_spin,
-        x_hot_max=0.5 * r_out / r_isco_cm,
-    )
+    l_hot = _corona_luminosity(monkeypatch, log_mbh, log_lbol, f_hard, a_spin)
+    l0 = float(D._nt_l0(r_isco_cm, t_in, False))
     x_hot = float(r_hot / r_isco_cm)
-    ratio = float(l0 * N.nt_h(jnp.log(x_hot), a_spin) / l_hot)
+    ratio = l0 * float(N.nt_h(jnp.log(x_hot), a_spin)) / l_hot
     if x_hot > _X_LO_CLIP * (1.0 + 1e-9):
         assert abs(ratio - 1.0) < 1e-6, (
             f"log M={log_mbh}, lambda_Edd={lambda_edd}, f_hard={f_hard}, a={a_spin}: "
-            f"x_hot={x_hot:.4f} (0.5 x_out={0.5 * float(r_out / r_isco_cm):.4f}), "
-            f"L_diss(R_hot)/L_hot = {ratio:.6f}"
+            f"x_hot={x_hot:.4f}, L_diss(R_hot)/L_hot = {ratio:.6f}"
         )
     else:
         assert ratio >= 1.0 - 1e-6, f"inner clip: L_diss(R_hot)/L_hot = {ratio:.6f}"

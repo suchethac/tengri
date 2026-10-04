@@ -90,7 +90,8 @@ def isco_radius(a_spin):
        Nonrotating Frames, Energy Extraction, and Scalar Synchrotron Radiation," ApJ, 178,
        347 (1972). https://doi.org/10.1086/151796
     """
-    a = jnp.clip(a_spin, 0.0, A_MAX)
+    # Prograde spin domain 0 <= a <= A_MAX (a physical boundary, not a denominator floor).
+    a = jnp.minimum(jnp.where(a_spin > 0.0, a_spin, 0.0), A_MAX)
     z1 = 1.0 + (1.0 - a**2) ** (1.0 / 3.0) * ((1.0 + a) ** (1.0 / 3.0) + (1.0 - a) ** (1.0 / 3.0))
     z2 = jnp.sqrt(3.0 * a**2 + z1**2)
     sqrt_arg = jnp.maximum((3.0 - z1) * (3.0 + z1 + 2.0 * z2), 1e-20)
@@ -154,7 +155,9 @@ def nt_rt(x, a_spin):
         )
 
     c2 = _term(y1, y2, y3) + _term(y2, y1, y3) + _term(y3, y1, y2)
-    return jnp.maximum((c1 - c2) / b, 0.0)
+    # R_t >= 0 by construction; the gate removes round-off negatives at the ISCO, where it is 0.
+    r_t = (c1 - c2) / b
+    return jnp.where(r_t > 0.0, r_t, 0.0)
 
 
 def nt_h(log_x, a_spin):

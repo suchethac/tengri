@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The closed-form line power of the analytic NLR/BLR/FeII blocks equals their grid integral.
 
 The conserving ledger debits the line power from the disc. The analytic blocks sum

@@ -1386,12 +1386,6 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # on the model grid; the printed point counts show how coarse that grid is
 # longward of 10 µm for some blocks.
 #
-# **Caveat:** tengri's torus blocks are evaluated on the model's rest-frame
-# wavelength grid (the SSP grid joined with each block's own template axis, which
-# reaches 1 mm for the averaged NK08/SKIRTOR reductions), so the averaged
-# reductions are sampled at their template nodes and nowhere else. Residuals larger
-# than the reference floor in the tables below reflect that sampling, not the
-# template physics.
 # A case is called node-exact only when `max|tengri/AGNfitter-rX − 1|` is below
 # the tolerance printed under each table.
 #
