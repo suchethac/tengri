@@ -1340,7 +1340,7 @@ def ga_from_log_mstar_present(log_mstar_present: float, dlum_cm: float, z: float
     )
 
 
-def galaxy_formed_per_present(tau: float, age: float) -> float:
+def galaxy_formed_per_present(tau: float, age: float, metal: float | None = None) -> float:
     """Mass formed per unit PRESENT stellar mass of the stored unit template.
 
     The pickle tabulates the instantaneous SFR at ``age`` for a template that
@@ -1354,16 +1354,19 @@ def galaxy_formed_per_present(tau: float, age: float) -> float:
         e-folding time [Gyr] (nearest grid node).
     age : float
         Template age [yr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node); reads ``bc03_metal`` when
+        given, else the single-metallicity ``bc03_840`` group.
 
     Returns
     -------
     float
         ``M_formed / M_present`` of the unit template [dimensionless].
     """
-    axes = galaxy_axes()
+    axes = galaxy_axes(metal=metal is not None)
     t = _nearest(axes["tau"], tau)
     a = _nearest(axes["age"], age)
     tau_yr = float(axes["tau"][t]) * 1e9
     age_yr = float(axes["age"][a])
-    _, sfr = galaxy_sfr(tau)
+    _, sfr = galaxy_sfr(tau, metal)
     return float(sfr[a] * tau_yr * np.expm1(age_yr / tau_yr))

@@ -192,8 +192,9 @@ def test_reverse_mode_survives_a_realistic_ring_luminosity(param):
 def test_kernel_returns_the_callers_precision():
     """The mechanism, pinned directly.
 
-    The table is float32 and is interpolated there on purpose. Returning
-    float32 is what forced the caller's precision and broke reverse mode.
+    The template values are float32; the coordinates are interpolated in the
+    caller's dtype. Returning float32 is what forced the caller's precision and
+    broke reverse mode.
     """
     from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
@@ -212,7 +213,12 @@ def test_kernel_returns_the_callers_precision():
         jnp.asarray(0.05, jnp.float32),
     )
     assert out32.dtype == jnp.float32, "an all-float32 caller must still get float32 back"
-    np.testing.assert_allclose(np.asarray(out64), np.asarray(out32), rtol=1e-6)
+    # rtol 1e-5, not 1e-6: the float64 caller now keeps its coordinates in float64, so
+    # the float32 caller's interpolation weight carries its own 6e-8 rounding, amplified
+    # by the ~100 e-folds the log shape spans across a template cell. Measured max
+    # relative difference 4.6e-6 (was below 1e-6 only because both sides rounded the
+    # coordinates to float32).
+    np.testing.assert_allclose(np.asarray(out64), np.asarray(out32), rtol=1e-5)
 
 
 # ── 3. The warning must not outlive the defect ────────────────────

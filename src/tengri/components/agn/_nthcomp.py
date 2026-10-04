@@ -207,33 +207,47 @@ def _interp_with_slopes(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Trilinear-in-log template shape and its exact slopes in all three operands.
 
-    Returns ``(shape, slopes)`` on the requested ``nu`` grid, in the table's
-    float32 precision; ``slopes`` has shape ``(3, n_nu)`` and holds
-    ``d shape / d(gamma, kTe_keV, kTbb_keV)``. ``shape`` is the forward value,
-    unchanged from the previous inline implementation.
+    Returns ``(shape, slopes)`` on the requested ``nu`` grid; ``slopes`` has shape
+    ``(3, n_nu)`` and holds ``d shape / d(gamma, kTe_keV, kTbb_keV)``. ``shape`` is
+    the forward value, unchanged from the previous inline implementation.
 
     The interpolant is piecewise linear in each operand, so its derivative is
     exact and local: inside a template cell it is the cell slope, and it is 0
     where the operand is clamped to the grid edge (the clamp makes the shape
     independent of it). Nothing here needs a finite-difference step.
-    """
-    g = jnp.asarray(gamma, dtype=jnp.float32)
-    t = jnp.asarray(kTe_keV, dtype=jnp.float32)
-    b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
 
-    gamma_jax = jnp.asarray(table.gamma)
-    kte_jax = jnp.asarray(table.kte)
-    ktbb_jax = jnp.asarray(table.ktbb)
+    Notes
+    -----
+    **Dtype contract:** the interpolation coordinates (``gamma``, ``kTe_keV``,
+    ``kTbb_keV``, ``nu``), the template axes they are located on and the
+    interpolation weights all live in one floating dtype, the promotion of the
+    four inputs (at least float32): float64 under x64, float32 in pure-float32
+    mode. The template values are stored as float32 and are promoted to that
+    dtype where they are gathered, before any arithmetic, so a float32 library
+    never truncates a float64 coordinate. A coordinate rounded to float32 moves
+    by a relative 6e-8, which on a steep template cell is a 1e-6 step in the
+    shape, so a rounding flipped by a different evaluation order (``jax.jit``
+    against eager) shows up as a visible difference in the disc SED.
+    """
+    nu_f = jnp.asarray(nu)
+    cdt = jnp.promote_types(jnp.result_type(nu_f, gamma, kTe_keV, kTbb_keV), jnp.float32)
+    nu_f = nu_f.astype(cdt)
+    g = jnp.asarray(gamma, dtype=cdt)
+    t = jnp.asarray(kTe_keV, dtype=cdt)
+    b = jnp.asarray(kTbb_keV, dtype=cdt)
+
+    gamma_jax = jnp.asarray(table.gamma, dtype=cdt)
+    kte_jax = jnp.asarray(table.kte, dtype=cdt)
+    ktbb_jax = jnp.asarray(table.ktbb, dtype=cdt)
     ig, fg = _clamp_interp_index(g, gamma_jax)
     it, ft = _clamp_interp_index(t, kte_jax)
     ib, fb = _clamp_interp_index(b, ktbb_jax)
 
     table_jax = jnp.asarray(table.table_log)
-    nu_jax = jnp.asarray(table.nu)
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
         """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
-        return table_jax[ig + dg, it + dt, ib + db]
+        return table_jax[ig + dg, it + dt, ib + db].astype(cdt)
 
     # Trilinear interpolation over 8 corners (gamma x kTe x kTbb) in log space.
     # table_jax stores log(spectral_shape); exponentiating after interpolation
@@ -266,9 +280,9 @@ def _interp_with_slopes(
     dshape_on_table_grid = shape_on_table_grid * dlog
 
     # Resample onto the requested nu grid (linear, so the slopes resample too).
-    nu_f = jnp.asarray(nu, dtype=jnp.float32)
-    lnu = jnp.interp(nu_f, nu_jax, shape_on_table_grid, left=0.0, right=0.0)
-    dlnu = jax.vmap(lambda d: jnp.interp(nu_f, nu_jax, d, left=0.0, right=0.0))(
+    nu_jax_interp = jnp.asarray(table.nu, dtype=cdt)
+    lnu = jnp.interp(nu_f, nu_jax_interp, shape_on_table_grid, left=0.0, right=0.0)
+    dlnu = jax.vmap(lambda d: jnp.interp(nu_f, nu_jax_interp, d, left=0.0, right=0.0))(
         dshape_on_table_grid
     )
     return lnu, dlnu
@@ -299,9 +313,10 @@ def _nthcomp_lnu_interp_impl(
 
     # Return in the CALLER's precision, not the table's (#1822).
     #
-    # The table is float32 and the interpolation is done there, which is right;
-    # promoting a float32 library to float64 buys no accuracy. But *returning*
-    # float32 forced the caller's precision too, and that is what broke reverse
+    # The template values are float32, but the interpolation runs in the
+    # coordinates' dtype (see ``_interp_with_slopes``), so ``lnu`` already has the
+    # caller's precision. *Returning* float32 would force the caller's precision
+    # down, and that is what broke reverse
     # mode: ``custom_jvp`` takes the cotangent in the primal's dtype, and this
     # kernel's output gets multiplied by a ring luminosity in ``disc.py``, so the
     # cotangent handed back is ~1e66: fine in float64, **inf in float32**, whose

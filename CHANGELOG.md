@@ -12,6 +12,15 @@
 
 ### Fixed
 
+- **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
+  float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
+  (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a
+  rounding on a steep template cell and moved the disc SED by 1e-6 (measured 1.5e-6 to
+  3.2e-6 at log M_BH 7 to 8). Coordinates, template axes and weights now keep the caller's
+  dtype (float64 under x64, float32 in pure-float32 mode); the float32 template values are
+  promoted where they are gathered. JIT against eager now agrees to 2e-13, and AD against a
+  central difference of `agn_gamma_warm` and `agn_kt_warm` agrees to 1e-5 (was 3e-5).
+
 - The radio wing of the master wavelength grid is sampled at 100 points per decade from at
   most 1e8 A (was 20 per decade from the end of the longest template), so a 10 %-wide radio
   band (1.4 GHz, 3 GHz, 150 MHz) holds about four nodes at every redshift instead of one: with
