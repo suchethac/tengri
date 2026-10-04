@@ -61,11 +61,10 @@ _POINT = {
 # node 0.00044122 keV at a = 0.48916 (d sum(log10 L)/da drops 13.22 -> 13.06 across it, while
 # AD = FD = 12.9466 for h <= 1e-3 with the template interpolated in float64). At 0.5 no ring
 # crosses a template node anywhere in a +- 0.006.
-# The nthcomp kernel quantizes kTe to float32 (relative 6e-8) on the forward pass, so a
-# central difference in ``agn_kt_warm`` (likewise ``agn_gamma_warm``) is noise below
-# h ~ 1e-3 (measured at 0.1166:
-# FD = -5.84 at h=1e-5, -12.2 at 1e-6, -6.52 at 1e-3 against AD -6.52). The default
-# step is far below that.
+# The nthcomp kernel keeps its interpolation coordinates in the caller's dtype, so the central
+# difference in ``agn_kt_warm`` and ``agn_gamma_warm`` is not limited by coordinate rounding.
+# The piecewise-linear template still makes it scatter across cell boundaries, which is why
+# both are stepped at 1e-3..2e-3 rather than at the default ``_H``.
 # ``agn_f_hard`` is stepped at 1e-5, not the default 1e-4: the SED responds to it as ~log(f_hard)
 # (d sum(log10 L)/d f_hard = -6.2e4 at 0.005), so the central difference carries a truncation
 # error of relative size (h / f_hard)^2 / 3, which is 1.3e-4 at h = 1e-4 (2% of the value) and
@@ -79,7 +78,7 @@ _STEP = {
     "agn_f_hard": 1e-5,
 }
 # ``agn_kt_warm`` and ``agn_a_spin`` are held to 1e-3, not 1e-4: through 50 warm rings the
-# float32-quantized, piecewise-linear template makes the central difference itself scatter by
+# piecewise-linear template makes the central difference itself scatter by
 # ~5e-4 of its value across steps. agn_kt_warm, h = 1e-3..5e-3: -5.029, -5.032, -5.033, -5.035
 # against AD -5.0323. agn_a_spin at the Page-Thorne point, h = 1e-5..3e-3: 4.96, 5.07, 5.02,
 # 4.82, 4.92, 4.91 against AD 4.915, so it is stepped at 3e-3 on the plateau. The kernel-level
