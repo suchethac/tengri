@@ -55,7 +55,9 @@ def _build_forward_and_data(noise_seed):
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     wave_obs = jnp.linspace(3800.0, 9200.0, 260)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=2000))
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=2000, resample="point")
+    )
     sed_model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,

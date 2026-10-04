@@ -42,6 +42,7 @@ from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     SpectralIndexDef,
     measure_index_jax,
+    measure_indices_from_point_terms,
     measure_indices_from_windows,
     precompute_index_windows,
 )
@@ -89,19 +90,17 @@ EDGE_TOL_MAG = {
     "Ca4227": 0.0035,
 }
 
-#: Bound on |window-LUT - exact path| for an EW index [Å]. The exact path integrates
-#: ``F_λ/F_C`` over the feature window; the LUT sums the moment series
-#: ``(1/C_0) Σ_k (-σ)^k m_k`` of that integral to second order. Largest value over all
-#: 15 x 93 SSP spectra of the shipped grid, native and non-uniform grids, float64 and
-#: float32: 1.0e-4 Å (HγA). Bound = 5 x that. Truncated after m_0 (the ratio of means)
-#: the same maximum is 0.033 Å, after m_1 0.083 Å (the series alternates), after m_3
-#: 2.4e-4 Å.
-LUT_BOUND_AA = 5e-4
+#: Bound on |window-LUT - exact path| for an EW index [Å]. The LUT evaluates the Lick
+#: definition at the window grid points, with the continuum of the exact path
+#: (``_lick_continuum``); the two sum the same terms, so they agree to round-off in
+#: float64 (the 15 x 93 SSP spectra of the shipped grid, native and non-uniform grids:
+#: below 1e-12 Å). In float32 the F_λ sideband means and the feature sum carry the
+#: working-precision rounding of the two summation orders: 3.1e-5 Å at most, bound 5 x that.
+LUT_BOUND_AA = {jnp.float64: 1e-9, jnp.float32: 1.5e-4}
 
-#: Same comparison for a deep emission feature, relative to |EW|: 2.6e-8 over the
-#: synthetic Hα cells below (EW -135 to -678 Å); bound 40 x that. (The deepest Hα
-#: emission of the wNE SSP grid, EW down to -1676 Å, is within 1.6e-5 of its value.)
-LUT_BOUND_EMISSION_REL = 1e-6
+#: Same comparison for a deep emission feature, relative to |EW| (synthetic Hα cells
+#: below, EW -135 to -678 Å).
+LUT_BOUND_EMISSION_REL = 1e-9
 
 #: Added to the bounds in float32 [Å]: |float32 - float64| of an index was <= 2.3e-3 Å
 #: on the cells below.
@@ -423,9 +422,9 @@ def _lut_and_exact(wave, flux, idx, dtype):
     w = jnp.asarray(wave, dtype=dtype)
     f = jnp.asarray(flux, dtype=dtype)
     pc = precompute_index_windows(w, f, [idx])
-    means = pc.window_integrals / pc.window_norms
-    flat = means.reshape(-1, means.shape[-1])
-    lut = jax.vmap(lambda m: measure_indices_from_windows(m, pc)[0])(flat)
+    # The point terms of a single (metallicity, age) spectrum are its own integrand.
+    terms = pc.points.integrands.reshape(-1, pc.points.integrands.shape[-1])
+    lut = jax.vmap(lambda t: measure_indices_from_point_terms(t, pc)[0])(terms)
     exact = jax.vmap(lambda s: measure_index_jax(w, s, idx))(f.reshape(-1, f.shape[-1]))
     return np.asarray(lut, dtype=float), np.asarray(exact, dtype=float)
 
@@ -433,7 +432,7 @@ def _lut_and_exact(wave, flux, idx, dtype):
 @pytest.mark.parametrize("dtype", [jnp.float64, jnp.float32], ids=["f64", "f32"])
 @pytest.mark.parametrize("grid_name", ["native", "nonuniform"])
 @pytest.mark.parametrize("name", EW_NAMES)
-def test_window_lut_equals_the_exact_path_to_the_measured_bound(ssp, grid, name, grid_name, dtype):
+def test_window_lut_equals_the_exact_path_point_by_point(ssp, grid, name, grid_name, dtype):
     wave, flux = grid
     if grid_name == "nonuniform":
         wave, flux = _nonuniform_copy(wave, flux)
@@ -442,21 +441,30 @@ def test_window_lut_equals_the_exact_path_to_the_measured_bound(ssp, grid, name,
     with jax.enable_x64(dtype == jnp.float64):
         lut, exact = _lut_and_exact(wave, flux, STANDARD_INDICES[name], dtype)
     assert np.all(np.isfinite(lut)) and np.all(np.isfinite(exact))
-    assert np.max(np.abs(lut - exact)) < LUT_BOUND_AA
+    assert np.max(np.abs(lut - exact)) < LUT_BOUND_AA[dtype]
 
 
-def test_the_moment_series_is_what_brings_the_lut_to_the_bound(grid):
-    """Without the moments (ratio of means, order 0) HγF misses the bound by > 50x."""
+def test_point_terms_sum_to_the_window_integrals_and_means_cannot_form_a_lick_ew(grid):
+    """The per-point terms are the window integrals resolved by grid point.
+
+    A Lick EW is not a function of window means (its feature term is a sum of
+    ``F_λ/F_C`` over points), so the means-only entry point refuses it.
+    """
     wave, flux = grid
     idx = STANDARD_INDICES["HgF"]
-    pc = precompute_index_windows(wave, flux, [idx], moment_order=0)
-    assert set(pc.window_orders) == {0}
-    means = (pc.window_integrals / pc.window_norms).reshape(-1, pc.window_integrals.shape[-1])
-    lut = jax.vmap(lambda m: measure_indices_from_windows(m, pc)[0])(means)
-    exact = jax.vmap(lambda f: measure_index_jax(jnp.asarray(wave), f, idx))(
-        jnp.asarray(flux).reshape(-1, flux.shape[-1])
+    pc = precompute_index_windows(wave, flux, [idx])
+    summed = jax.vmap(
+        lambda t: jax.ops.segment_sum(t, pc.points.window, num_segments=pc.window_norms.shape[0]),
+        in_axes=(0,),
+    )(pc.points.integrands.reshape(-1, pc.points.integrands.shape[-1]))
+    np.testing.assert_allclose(
+        np.asarray(summed),
+        np.asarray(pc.window_integrals).reshape(summed.shape),
+        rtol=1e-12,
     )
-    assert np.max(np.abs(np.asarray(lut) - np.asarray(exact))) > 50 * LUT_BOUND_AA
+    means = (pc.window_integrals / pc.window_norms)[0, 0]
+    with pytest.raises(ValueError, match="measure_indices_from_point_terms"):
+        measure_indices_from_windows(means, pc)
 
 
 @pytest.mark.parametrize("amplitude", [20.0, 100.0])
@@ -488,29 +496,27 @@ def test_window_lut_with_the_mean_option_is_the_exact_arithmetic(ssp, grid, name
     np.testing.assert_allclose(lut, exact, rtol=1e-9, atol=1e-9)
 
 
-def test_window_frames_follow_the_index_kind(grid):
+def test_windows_are_shared_between_the_continuum_options(grid):
+    """One window per band serves the Lick, mean and break indices; the geometry is in meta."""
     wave, flux = grid
     lin = STANDARD_INDICES["HgA"]
     mean = dataclasses.replace(lin, pseudo_continuum="mean")
     brk = STANDARD_INDICES["Dn4000"]
     pc = precompute_index_windows(wave, flux, [lin, mean, brk])
-    assert set(pc.window_frames) == {"lambda", "nu"}
-    kinds = {kind: meta for kind, _, meta in pc.index_slots}
-    assert kinds["EW"] is not None
-    # blue, red, feature and the two feature moments of the linear HgA
-    assert pc.window_frames.count("lambda") == 3 + 2
-    assert pc.window_orders.count(1) == 1 and pc.window_orders.count(2) == 1
-    assert pc.window_frames.count("nu") == 3 + 2  # mean-HgA windows + Dn4000 windows
+    assert pc.window_integrals.shape[-1] == 3 + 2  # HgA blue, red, feature + Dn4000 bands
+    assert pc.index_slots[1][2][2] is None
+    assert pc.index_slots[0][2][2] == (
+        0.5 * sum(lin.continuum[0]),
+        0.5 * sum(lin.continuum[1]),
+        *lin.feature,
+    )
 
 
 # ── (d') the model-level LUT under dust and a free redshift ────────
 
-#: Model-level LUT vs exact path [Å]. Without dust the series truncation is 7e-7 at the
-#: cells below (bound 2e-5). With the age-dependent two-component screen, which the LUT
-#: evaluates at the window centers, the difference is the transmission variation across
-#: the windows: 1.8e-3 at tau_diff 0.8 (2.3e-3 for the constant-continuum option, which
-#: has no series), bound 5e-3.
-MODEL_LUT_BOUND_AA = {0.0: 2e-5, 0.8: 5e-3}
+#: Model-level LUT vs exact path [Å]. Both paths apply the age-dependent two-component
+#: screen at the window grid points and sum the same terms: float64 round-off.
+MODEL_LUT_BOUND_AA = 1e-9
 
 
 @pytest.fixture(scope="module")
@@ -538,7 +544,7 @@ def dusty_model(ssp):
 
 @pytest.mark.parametrize("pseudo_continuum", ["linear", "mean"])
 @pytest.mark.parametrize("redshift", [0.1, 0.8])
-@pytest.mark.parametrize("tau", [0.0, 0.8])
+@pytest.mark.parametrize("tau", [0.0, 0.8, 2.0])
 def test_model_window_lut_follows_the_exact_path_under_dust_and_a_free_redshift(
     dusty_model, tau, redshift, pseudo_continuum
 ):
@@ -553,7 +559,7 @@ def test_model_window_lut_follows_the_exact_path_under_dust_and_a_free_redshift(
     exact = np.asarray(dusty_model.predict_spectral_indices(params, defs, approx=False))
     fast = np.asarray(dusty_model.predict_spectral_indices(params, defs, approx=True))
     assert np.all(np.isfinite(exact)) and np.all(np.isfinite(fast))
-    bound = MODEL_LUT_BOUND_AA[tau]
+    bound = MODEL_LUT_BOUND_AA
     assert np.max(np.abs(fast - exact)) < bound, dict(zip(EW_NAMES, np.abs(fast - exact)))
 
 

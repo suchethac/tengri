@@ -41,8 +41,8 @@ from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     SpectralIndexDef,
     measure_index_jax,
+    measure_indices_from_point_terms,
     measure_indices_from_window_lut,
-    measure_indices_from_windows,
     precompute_index_windows,
 )
 from tengri.parameters.resolve import merge_fixed_params
@@ -77,10 +77,6 @@ def _bare_ssp():
         pytest.skip("No bare-stellar SSP grid under data/.")
     return load_ssp_data(path)
 
-
-# Bound on |window-LUT - exact| for a Lick EW without dust [Å]: the truncation of the
-# moment series of the integral of F_lambda / F_C, measured 4e-7 here (#2690).
-_EW_LUT_ATOL = 2e-6
 
 # Hα emission-line equivalent width (measured off the baked SSP spectrum).
 _HALPHA_EW = SpectralIndexDef(
@@ -143,20 +139,13 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
     ]
     rest = m.predict_rest_sed(p)
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
-    wmeans = (
-        sms
-        * jnp.tensordot(jnp.asarray(jw), pc.window_integrals, axes=([0, 1], [0, 1]))
-        / pc.window_norms
-    )
-    lut = np.asarray(measure_indices_from_windows(wmeans, pc))
+    # per-point terms: a Lick EW (HdA, Hbeta, Halpha_EW) is evaluated at the grid points (#2690)
+    terms = sms * jnp.einsum("ma,map->p", jnp.asarray(jw), pc.points.integrands)
+    lut = np.asarray(measure_indices_from_point_terms(terms, pc))
     for d, l in zip(defs, lut):
         exact = float(measure_index_jax(rest.wavelength, rest.sed, d))
-        # break: exact to round-off; Lick EW: moment-series truncation, 2e-6 Å + 1e-7 of
-        # the value (measured 2.3e-6 Å at EW -206 Å, #2690).
-        tol = 1e-6 * abs(exact) if d.index_type == "break" else _EW_LUT_ATOL + 1e-7 * abs(exact)
-        assert abs(exact - l) < max(tol, 1e-12), (
-            f"{d.name}: window LUT {l:.4f} vs exact {exact:.4f}"
-        )
+        rel = abs(exact - l) / max(abs(exact), 1e-9)
+        assert rel < 1e-6, f"{d.name}: window LUT {l:.4f} vs exact {exact:.4f} (rel {rel:.2e})"
 
 
 def test_bakedin_has_no_direct_line_fluxes():
@@ -222,7 +211,7 @@ def _window_lut_indices(m, ssp, p, defs):
     ages = jnp.asarray(st.derived["ssp_ages_yr"])
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
     trans = two_component_dust(
-        wavelength=pc.window_centers,
+        wavelength=pc.points.waves,
         age_grid=ages,
         tau_v1=jnp.asarray(p["dust_tau_bc"]),
         tau_v2=jnp.asarray(p["dust_tau_diff"]),
@@ -376,7 +365,7 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
         full_params = merge_fixed_params(m.spec, params)
         jw, tm, ages = stellar.compute_joint_weights(full_params)
         trans = two_component_dust(
-            wavelength=pc.window_centers,
+            wavelength=pc.points.waves,
             age_grid=ages,
             tau_v1=full_params["dust_tau_bc"],
             tau_v2=full_params["dust_tau_diff"],
@@ -461,22 +450,16 @@ def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
     The public surface must route through the window LUT and land on the same
     values as the full-grid path: bit-exact with no dust, <1e-3 with the
     age-dependent two-component screen (intra-window transmission variation).
-    A Lick equivalent width carries, besides the screen, the 2e-6 Å truncation of the
-    moment series of its integral (#2690).
     """
     m, _ssp = _dust_model()
-    is_ew = np.array([d.index_type == "EW" for d in _INDEX_SET])
     for tau, tol in ((0.0, 1e-9), (0.8, 1e-3)):
         p = dict(m.spec.sample(jax.random.PRNGKey(1)))
         p["dust_tau_diff"] = jnp.asarray(tau)
         p["dust_tau_bc"] = jnp.asarray(1.5 * tau)
         exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=False))
         fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
-        rel = np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9)
-        assert np.max(rel[~is_ew]) < tol, f"tau={tau}: fast vs exact worst rel {np.max(rel):.2e}"
-        # Lick EW: series truncation plus the same relative screen error as the breaks.
-        bound = _EW_LUT_ATOL + tol * np.abs(exact[is_ew])
-        assert np.all(np.abs(exact - fast)[is_ew] < bound), f"tau={tau}: EW fast vs exact"
+        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9))
+        assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e} >= {tol}"
 
 
 def test_predict_spectral_indices_fast_is_jittable():

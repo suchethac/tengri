@@ -23,8 +23,9 @@ from typing import Any, Literal
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._censoring import data_energy
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
-from tengri.inference.likelihoods.gaussian import standardized_residual, whiten
+from tengri.inference.likelihoods.gaussian import whiten
 
 __all__ = [
     "CompileCache",
@@ -876,12 +877,17 @@ def build_jit_engine(fitter, pos_dict):
             return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
         def hamiltonian(xi, data_args):
-            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
+            """H(xi) = E_data + 0.5 ||xi||^2, censored where ``data_mask`` flags a limit.
+
+            ``E_data`` is ``0.5 chi2`` without a ``data_mask`` and the censored
+            negative log-likelihood with one (:func:`data_energy`);
+            ``metric_vec`` keeps the detection form for limit bands.
+            """
             data = data_args["data"]
             noise = data_args["noise"]
             pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
-            return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+            e_data = data_energy(data, noise, pred, data_args.get("data_mask"))
+            return e_data + 0.5 * jnp.sum(xi**2)
 
     def H_vg(xi, data_args):
         """Hamiltonian value and gradient w.r.t. xi only."""

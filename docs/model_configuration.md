@@ -227,8 +227,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 
 **Gotchas:**
 - `'age_kernel': 'dsps'` is **not** a performance knob. It is 13% slower than the default. Use `'cic'` unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
-- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`. When you set `type='field'` without an explicit `age_kernel`, an advisory warns you that the field path forces 'dsps'.
-- Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
+- A field SFH accepts both kernels (#2684): the draw is the linear interpolation of its own lookback nodes, integrated by `'cic'` with the nodes as knots and by `'dsps'` on a table refined 8-fold between SSP nodes. Without an explicit `age_kernel` a field SFH uses `'cic'`, the accurate kernel for field and rough histories; `'dsps'` differs there by up to 16 % in the FUV and 9 % in r-band flux.
+- Default `age_kernel` is `'cic'` for every SFH type.
 
 
 ### Metallicity: `met`
@@ -396,6 +396,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 - `'type'`: Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'`: `cue` only: bool, default `True` (#2239). Publishes the full ~138-line Cue-trained catalog. Set to `False` to narrow to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
+- `'nitrogen'`: `cue` only: `'absolute'` (default) or a relation name (`'nicholls17'`) (#2693). Selects the meaning of `gas_logno`; see the nebular notes below. Raises on other backends.
 - `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
 - `'model'`: MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
 - `'density'`: MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
@@ -411,6 +412,7 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 - Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
+- Cue's `gas_logno` is its absolute [N/O] input by default; `neb={'type': 'cue', 'nitrogen': 'nicholls17'}` makes it the offset from the Nicholls+2017 N/O--O/H relation at `neb_logZ_gas`, the convention of `neb_dno` in the grid backends (which embody their own, unrecorded, relation; the two agree at the N/[O II] level, Cue/grid 0.78-0.99 over `neb_logZ_gas` -1 to 0). The [N/O] Cue is actually fed is the `log_no` property in both modes (#2693).
 
 
 ### Shock emission: `shock`

@@ -1742,7 +1742,7 @@ def _narrow_free_priors_to_grid(
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
     from tengri.parameters.priors import Uniform
 
     # Drive off the registry itself, so registering a component is the only
@@ -1758,7 +1758,18 @@ def _narrow_free_priors_to_grid(
             if not isinstance(dist, Uniform):
                 continue
             lo, hi = dist.bounds
-            new_lo, new_hi = max(lo, g_lo), min(hi, g_hi)
+            # An offset parameter (gas_logno, #2693) is bounded through its shift:
+            # the offset keeps the absolute quantity inside the support for every
+            # reachable value of the parameters the shift depends on.
+            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            s_lo, s_hi = support_shift(
+                selector,
+                name,
+                pname,
+                reach,
+                {"cue_nitrogen": getattr(structural, "cue_nitrogen", "absolute")},
+            )
+            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
             if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
                 # Disjoint (nothing sensible to narrow to; let the warning
                 # say so) or already contained.
@@ -3722,26 +3733,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
             raise ValueError(
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
-                f"(or None to auto-select). 'cic' is the accuracy default; "
-                f"'dsps' selects DSPS's histogram kernel for cross-code "
-                f"comparison (biases the optical CSP +1.2 %, #964)."
-            )
-        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
-        # the type list, so the incompatible pair is knowable HERE; at
-        # ``SEDModel.build``; rather than at the first prediction, which for a
-        # fit means after warmup has already started. The component-level
-        # ``_resolve_age_kernel`` still guards direct construction.
-        _types = sfh_dict.get("type") or []
-        if age_kernel == "cic" and "field" in (
-            _types if isinstance(_types, (list, tuple)) else [_types]
-        ):
-            raise NotImplementedError(
-                "sfh age_kernel='cic' is not supported with a GP-field SFH; "
-                "the field draw is defined on its own coarse lookback grid, so "
-                "there is no dense integrand to cloud-in-cell (#964). Drop the "
-                "field modulator to use the CIC kernel, or set "
-                "age_kernel='dsps' explicitly to acknowledge the field path's "
-                "kernel."
+                f"(or None to auto-select). 'cic' is the first-order default; "
+                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
+                f"table (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
@@ -4853,6 +4847,16 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         # added by #303) for cross-code comparisons.
         if "full_catalog" in neb_dict:
             result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
+        # #2693: 'absolute' (default) = gas_logno is Cue's [N/O] input; a
+        # relation name (e.g. 'nicholls17') = gas_logno is the offset from it.
+        if "nitrogen" in neb_dict:
+            from tengri.components.nebular._default_nitrogen import NITROGEN_MODES
+
+            if neb_dict["nitrogen"] not in NITROGEN_MODES:
+                raise ConfigError(
+                    f"neb nitrogen={neb_dict['nitrogen']!r}: expected one of {NITROGEN_MODES}."
+                )
+            result["cue_nitrogen"] = neb_dict["nitrogen"]
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -5537,6 +5541,7 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
+    "cue": frozenset({"nitrogen"}),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -5668,6 +5673,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural(
             "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
         ),
+        _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
@@ -6257,6 +6263,13 @@ def _validate_user_keys(
                 if isinstance(neb_type, str)
                 else frozenset()
             )
+
+            if "nitrogen" in top_val and "nitrogen" not in neb_type_specific_keys:
+                raise ConfigError(
+                    f"neb 'nitrogen' is only available for type 'cue' (got {neb_type!r}): "
+                    "Cue takes [N/O] as an input, while the grid backends have no "
+                    "absolute N/O knob (neb_dno is an offset from the grid's own relation)."
+                )
 
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
                 raise ValueError(

@@ -1258,7 +1258,14 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         elif data_type in ("spectroscopy", "joint"):
             if state is not None and getattr(state, "spectrum_precomp", False):
                 return model
-            cfg = SpectrumPrecomp()
+            if _spectrum_lut_refused(model):
+                # Pixels wider than the model grid need the pixel integral,
+                # which the spectrum LUT cannot carry: stay exact (#2530).
+                if data_type == "spectroscopy":
+                    return model
+                cfg = WavePrecomp()
+            else:
+                cfg = SpectrumPrecomp()
         else:
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
@@ -1279,6 +1286,13 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             stacklevel=3,
         )
         return model
+
+
+def _spectrum_lut_refused(model) -> bool:
+    """Whether the model's pixels need the pixel integral the spectrum LUT cannot carry (#2530)."""
+    check = getattr(model, "_spectrum_lut_needs_pixel_integral", None)
+    observation = getattr(model, "observation", None)
+    return bool(check(observation)) if check is not None and observation is not None else False
 
 
 # Jitted predict wrappers, memoized per (model, method name).
@@ -2136,7 +2150,14 @@ class Fitter:
             return None
 
         if self.data_type in ("spectroscopy", "joint"):
-            base = SpectrumPrecomp()
+            if _spectrum_lut_refused(model):
+                # The spectrum LUT cannot carry the pixel integral that
+                # pixels wider than the model grid need: exact spectrum (#2530).
+                if self.data_type == "spectroscopy":
+                    return None
+                base = WavePrecomp()
+            else:
+                base = SpectrumPrecomp()
         elif self.data_type == "photometry":
             base = WavePrecomp()
         else:

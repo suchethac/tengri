@@ -290,7 +290,9 @@ def test_spectrum_uses_the_instrument_grid(ssp):
     from tengri import Spectroscopy
 
     wave_obs = jnp.linspace(4000.0, 9000.0, 200)
-    model = _model(ssp, spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=1000.0))
+    model = _model(
+        ssp, spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, resolution=1000.0)
+    )
     params = _params(model)
     spec = np.asarray(model.predict(params).spectrum())
     assert spec.shape == (200,)
@@ -312,7 +314,9 @@ def test_missing_blocks_raise_naming_the_block(ssp):
     spec_only = _model(
         ssp,
         filters=None,
-        spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0),
+        spectroscopy=Spectroscopy(
+            resample="point", wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0
+        ),
     )
     with pytest.raises(ValueError, match="photometry"):
         spec_only.predict(_params(spec_only)).photometry()
@@ -366,7 +370,7 @@ def test_spectrum_default_stays_exact_on_a_spectrumprecomp_model(ssp):
         return _model(
             ssp,
             filters=None,
-            spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=1000.0),
+            spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, resolution=1000.0),
             **kw,
         )
 
@@ -388,7 +392,9 @@ def test_spectrum_fast_without_spectrum_precomp_raises(ssp):
     model = _model(
         ssp,
         filters=None,
-        spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0),
+        spectroscopy=Spectroscopy(
+            resample="point", wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0
+        ),
     )
     with pytest.raises(ValueError, match="SpectrumPrecomp"):
         model.predict(_params(model)).spectrum(approx=True)

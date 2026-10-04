@@ -506,15 +506,18 @@ def run_hmc_is(
     # comparison toward higher-D models.
     log_prior_norm = -0.5 * D * jnp.log(2.0 * jnp.pi)
 
-    def _log_target_xi_scalar(xi_flat):
-        """Evaluate log_target for a single ξ sample."""
+    def _log_target_xi_scalar(xi_flat, data_args):
+        """Evaluate log_target for a single ξ sample against ``data_args``."""
         params_xi = _unflatten_xi(xi_flat)
         ll = log_likelihood_fn(params_xi, data_args)
         lp = log_prior_fn(params_xi)
         return ll + lp + log_prior_norm
 
-    # Vectorize for batches
-    log_target_batched = jax.vmap(_log_target_xi_scalar)
+    # Vectorize over samples; ``data_args`` is an argument, not a closure
+    # constant, so the cached compiled evaluation below serves every Fitter on
+    # this model whatever its data (the engine key carries the data's shape
+    # only).
+    log_target_batched = jax.vmap(_log_target_xi_scalar, in_axes=(0, None))
 
     # Cache the evaluation via model cache
     cache_key = (
@@ -531,8 +534,8 @@ def run_hmc_is(
     log_target_jitted = eval_cache[cache_key]
 
     def log_target_fn_wrapped(x_samples):
-        """Wrap to use cached JIT."""
-        return log_target_jitted(x_samples)
+        """Wrap to use cached JIT, binding this Fitter's data."""
+        return log_target_jitted(x_samples, data_args)
 
     # ── Compute log-evidence via importance sampling ────────────────────
     key, is_key = jax.random.split(key)

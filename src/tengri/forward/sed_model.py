@@ -402,6 +402,10 @@ class WavePrecomp:
             in those cases: a mode named by the caller is never silently
             downgraded.
 
+        ``"auto"`` resolves at build time; the fold actually built is reported
+        under ``precompute_engagement_report(model).observed_facts["igm_fold"]``
+        (``None`` when no fold was built).
+
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
@@ -2128,7 +2132,7 @@ def _fold_igm_into_subbands(
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
-        return _fold_igm_exact_into_subbands(
+        result = _fold_igm_exact_into_subbands(
             igm_comp,
             stellar_state,
             ssp_data,
@@ -2137,31 +2141,39 @@ def _fold_igm_into_subbands(
             lyc_gate=lyc_gate,
             convention=convention,
         )
+        built = result is not stellar_state
+        return _replace(result, igm_fold_resolved=igm_fold if built else None)
 
     # Default: node fold (fast, exact for smooth transmission)
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+            igm_fold_resolved=igm_fold,
         )
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
     if ztable is not None and ztable.ssp_subband_phot_table is not None:
         trans = igm_comp.subband_node_transmission(ztable.subband_waves_rest_table, ztable.z_grid)
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_ztable=ztable._replace(
                 ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
             ),
+            igm_fold_resolved=igm_fold,
         )
 
-    return stellar_state
+    return _replace(stellar_state, igm_fold_resolved=None)
 
 
 #: Accepted ``csp_integration`` values. All are equivalent (#1500): the stellar
@@ -2608,24 +2620,45 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
-            # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
-            # pixel grid at build time, so it does NOT honor a flux-conserving
-            # resample. Warn rather than silently ignore the request, the exact
-            # path (approx=None) carries the conserving low-resolution fix.
-            spectro = getattr(observation, "spectroscopy", None)
-            if spectro is not None and getattr(spectro, "resample", "point") != "point":
-                import numpy as _np
+            if self._spectrum_lut_needs_pixel_integral(observation):
+                raise ValueError(
+                    f"approx=SpectrumPrecomp() samples the model at the pixel "
+                    f"centers, but resample="
+                    f"{observation.spectroscopy.resample!r} resolves to the "
+                    f"flux-conserving pixel integral for this model grid and "
+                    f"pixel grid (pixels wider than the model grid), which the LUT "
+                    f"cannot carry (#2530). Use approx=None for the exact "
+                    f"spectrum, or Spectroscopy(resample='point') to accept point "
+                    f"sampling."
+                )
 
-                if spectro.resolve_conserving(_np.asarray(self.ssp_data.ssp_wave)):
-                    import warnings
+    def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
+        """Whether the spectrum channel resolves to the pixel integral (#2530).
 
-                    warnings.warn(
-                        f"resample={spectro.resample!r} requests a flux-conserving "
-                        f"resample, but approx=SpectrumPrecomp() point-interpolates the "
-                        f"SSP onto the pixel grid and does not apply it. Use approx=None "
-                        f"for the flux-conserving low-resolution spectrum (#1166).",
-                        stacklevel=3,
-                    )
+        The spectrum LUT evaluates every component (attenuation, nebular lines,
+        AGN) at the pixel center, so it cannot carry a pixel integral; when the
+        resample decision is the bin integral the LUT would return point
+        samples.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the LUT must not serve this spectrum channel.
+        """
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None:
+            return False
+        import numpy as _np
+
+        grid = getattr(self, "_rest_wavelength", None)
+        if grid is None:
+            grid = self.ssp_data.ssp_wave
+        return bool(spectro.resolve_conserving(_np.asarray(grid), self._resample_z_ref()))
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -2828,7 +2861,11 @@ class SEDModel:
             and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
         ):
             self._approx = self._approx.replace(wave_precomp=True)
-            self._approx = self._approx.replace(spectrum_precomp=True)
+            # The spectrum channel is promoted onto its LUT only when that LUT
+            # can serve it: pixels wider than the model grid stay on the exact
+            # path (#2530).
+            if not self._spectrum_lut_needs_pixel_integral(observation):
+                self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
@@ -4111,7 +4148,11 @@ class SEDModel:
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
                     delta[name] = (name, 1.0, 0.0)
-            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+            self._nebular_backend = CueBackend(
+                spec.cue_weights_path,
+                ssp_data=ssp_data,
+                nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+            )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
 
@@ -5379,7 +5420,54 @@ class SEDModel:
             "lsf_sigma_lib_curve": self._sigma_lib_curve_for(self.ssp_data),
             "lsf_n_bins": self._lsf_n_bins,
             "lsf_scale": self._get_lsf_scale(params),
+            "resample_z_ref": self._resample_z_ref(),
         }
+
+    def _spectrum_resample_decision(self) -> bool | None:
+        """The static point-vs-pixel-integral decision of the spectrum channel (#2530).
+
+        ``resample="auto"`` depends on the redshift and the model grid as well as
+        on the pixels, so the resolved flag (not just the mode string) must key
+        the compiled kernel: two models with identical pixels but different
+        redshifts may resolve differently.
+
+        Returns
+        -------
+        bool or None
+            ``True`` for the bin integral, ``False`` for point sampling,
+            ``None`` when there is no spectroscopy channel.
+        """
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is None:
+            return None
+        return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
+
+    def _resample_z_ref(self) -> float:
+        """Redshift at which ``resample="auto"`` is decided (#2530).
+
+        The fixed redshift when redshift is fixed; the lowest redshift of the
+        prior when it is free (the coarsest rest-frame pixels, where a point
+        sample is worst). Every path that turns the model into pixels passes
+        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
+        same decision.
+
+        Returns
+        -------
+        float
+            Reference redshift (>= 0).
+        """
+        try:
+            d = self.spec.get_distribution("redshift")
+        except (AttributeError, KeyError):
+            d = None
+        if d is None:
+            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+        if getattr(d, "is_fixed", False):
+            return max(0.0, float(d.value))
+        lo = getattr(d, "lo", None)
+        return max(0.0, float(lo)) if lo is not None else 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -6267,6 +6355,7 @@ class SEDModel:
             tail=(
                 ("x64", bool(jax.config.jax_enable_x64)),
                 ("backend", jax.default_backend()),
+                ("spec_resample_conserving", self._spectrum_resample_decision()),
             ),
         )
         self._signature_memo = signature
@@ -6648,7 +6737,7 @@ class SEDModel:
         # grid is fixed, so this is a Python bool baked into the trace, not a
         # branch on the sampled redshift.
         conserving = (
-            spectroscopy.resolve_conserving(self.wavelengths)
+            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
             if spectroscopy is not None
             else False
         )
@@ -7745,11 +7834,9 @@ class SEDModel:
             (:meth:`_feature_fast_indices`): contract precomputed SSP window
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
-            per evaluation (measured, wNE grid) and equal to the exact path for the
-            supported configuration (break indices to round-off without dust; a
-            Lick equivalent width within 5e-4 Å: the window LUT sums the moment
-            series of the integral of F_λ/F_C that the exact path integrates on the
-            grid), **stellar + two-component (or no) dust +
+            per evaluation (measured, wNE grid) and bit-exact for the supported
+            configuration (a Lick equivalent width is evaluated at the window
+            grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
             baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
@@ -8024,13 +8111,13 @@ class SEDModel:
 
         pc = self._index_window_precomp(index_defs)
 
-        # per-age transmission at the window centers, from the model's own dust
+        # per-age transmission at every window grid point, from the model's own dust
         # (single-sourced with the forward), or unity when there is no dust.
         dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
         if dust is None:
-            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
         else:
-            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(full_params, pc.points.waves, ssp_ages_yr)
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
@@ -8305,11 +8392,9 @@ class SEDModel:
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
-                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
             else:
-                transmission = dust.compute_transmission(
-                    full_params, pc.window_centers, ssp_ages_yr
-                )
+                transmission = dust.compute_transmission(full_params, pc.points.waves, ssp_ages_yr)
             fluxes = measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
             )
@@ -9903,6 +9988,7 @@ class SEDModel:
         lsf_resolution = self._lsf_resolution
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
+        resample_z_ref = self._resample_z_ref()
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -9989,6 +10075,7 @@ class SEDModel:
                     lsf_sigma_lib_curve=sigma_lib_curve,
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
+                    resample_z_ref=resample_z_ref,
                     observables_type=observables_type,
                 )
             if use_lut:
