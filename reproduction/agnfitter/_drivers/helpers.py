@@ -75,6 +75,33 @@ def band_power(wave_aa, L_nu, lo_aa, hi_aa) -> float:
     return float(np.trapezoid(L_nu[sel][order], nu[order]))
 
 
+def halpha_line(
+    wave_aa,
+    L_nu,
+    *,
+    lam_norm=2500.0,
+    window=(6350.0, 6800.0),
+    bands=((6150.0, 6300.0), (6900.0, 7050.0)),
+):
+    """Continuum-subtracted H-alpha + [N II] bump of a disc SED, on the SED's own grid.
+
+    The continuum is the straight line (in wavelength) through the medians of two side bands.
+    Returns ``(power_ratio, ew_aa)``: the line integral ``int (L_nu - C_nu) d nu`` over ``window``
+    relative to ``nu L_nu`` at ``lam_norm``, and the equivalent width [Angstrom].
+    """
+    w = np.asarray(wave_aa, dtype=np.float64)
+    L = np.asarray(L_nu, dtype=np.float64)
+    o = np.argsort(w)
+    w, L = w[o], L[o]
+    side = [(0.5 * (lo + hi), float(np.median(L[(w >= lo) & (w <= hi)]))) for lo, hi in bands]
+    sel = (w >= window[0]) & (w <= window[1])
+    cont = np.interp(w[sel], [side[0][0], side[1][0]], [side[0][1], side[1][1]])
+    ew = float(np.trapezoid(L[sel] / cont - 1.0, w[sel]))
+    line_nu = float(np.trapezoid((L[sel] - cont) * U.C_ANGSTROM_PER_S / w[sel] ** 2, w[sel]))
+    ref = (U.C_ANGSTROM_PER_S / lam_norm) * float(np.interp(lam_norm, w, L))
+    return line_nu / ref, ew
+
+
 def node_exact_verdict(rows, title) -> None:
     """One line: how many cases of a window table meet the node-exact tolerance, and the worst."""
     devs = {r["label"]: float(r["max_abs_dev"]) for r in rows}
@@ -88,8 +115,18 @@ def node_exact_verdict(rows, title) -> None:
 
 
 def resolved_params(m) -> None:
-    """Print the model's resolved parameter table, so no parameter rests on a silent default."""
-    m.spec.summary()
+    """Print a model's header and the parameters its build call set by hand (``[user]`` rows)."""
+    keep = ("Parameters", "  Dimensions", "  Modules")
+    lines = m.spec.summary_str().splitlines()
+    print("\n".join(line for line in lines if "[user]" in line or line.startswith(keep)))
+
+
+def ssp_file_has_mass_remaining(path) -> bool:
+    """Whether an SSP HDF5 file carries its own surviving-mass table."""
+    import h5py
+
+    with h5py.File(str(path), "r") as f:
+        return "ssp_mass_remaining" in f
 
 
 def make_agn_builders(ssp, sfh, no_dust):
@@ -97,8 +134,7 @@ def make_agn_builders(ssp, sfh, no_dust):
 
     Every build states ``'norm': 'independent'`` (the disc scales on ``agn_log_lbol`` and the
     torus on its own amplitude, AGNfitter-style bookkeeping) and ``atten={'type': 'none'}``.
-    Each returns ``(wave_aa, L_nu)`` read from ``model.predict(params).sed.components`` and
-    keeps its last model on ``.last_model``.
+    Each returns ``(wave_aa, L_nu)`` read from ``model.predict(params).sed.components``.
     """
 
     def _build(agn, **kw):
@@ -137,7 +173,6 @@ def make_agn_builders(ssp, sfh, no_dust):
         if ebv_disc is not None:
             spec["agn_ebv_disc"] = Fixed(ebv_disc)
         m = _build(_agn(spec, {"type": "none"}, log_lbol))
-        disc.last_model = m
         return _read(m, "sed_agn_disc")
 
     def torus(torus_type, *, log_lbol=11.0, **torus_params):
@@ -145,7 +180,6 @@ def make_agn_builders(ssp, sfh, no_dust):
         spec = {"type": torus_type, "all_params": Fixed(DEFAULT)}
         spec.update({k: Fixed(v) for k, v in torus_params.items()})
         m = _build(_agn({"type": "none"}, spec, log_lbol))
-        torus.last_model = m
         return _read(m, "sed_agn_torus")
 
     def qsogen_full(*, log_lbol=11.0):
@@ -163,7 +197,6 @@ def make_agn_builders(ssp, sfh, no_dust):
             feii={"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
         )
         m = _build(agn)
-        qsogen_full.last_model = m
         return _read(m, "sed_agn")
 
     def disc_atten(disc_type, atten_type, ebv, **atten_params):
@@ -173,7 +206,6 @@ def make_agn_builders(ssp, sfh, no_dust):
         agn = _agn({"type": disc_type, "all_params": Fixed(DEFAULT)}, {"type": "none"}, 11.0)
         agn["atten"] = atten
         m = _build(agn)
-        disc_atten.last_model = m
         return _read(m, "sed_agn_disc")
 
     return SimpleNamespace(disc=disc, torus=torus, qsogen_full=qsogen_full, disc_atten=disc_atten)
