@@ -227,8 +227,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 
 **Gotchas:**
 - `'age_kernel': 'dsps'` is **not** a performance knob. It is 13% slower than the default. Use `'cic'` unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
-- A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`. When you set `type='field'` without an explicit `age_kernel`, an advisory warns you that the field path forces 'dsps'.
-- Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
+- A field SFH accepts both kernels (#2684): the draw is the linear interpolation of its own lookback nodes, integrated by `'cic'` with the nodes as knots and by `'dsps'` on a table refined 8-fold between SSP nodes. Without an explicit `age_kernel` a field SFH uses `'cic'`, the accurate kernel for field and rough histories; `'dsps'` differs there by up to 16 % in the FUV and 9 % in r-band flux.
+- Default `age_kernel` is `'cic'` for every SFH type.
 
 
 ### Metallicity: `met`
@@ -249,6 +249,30 @@ met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0,
 - Metallicity is **separate from star formation**. `met=` selects SSP templates; `neb={'logZ_gas': ...}` drives nebular emission independently.
 - Default `met_logzsol = 0.0` (solar). The SSP grid uses absolute `log10(Z)` internally, with a Zsun offset (Asplund 2009).
 - A tabulated (per-SSP-age) `met=` beside a non-tabulated `sfh` warns but does not raise.
+
+
+### AGB circumstellar dust shell: `agb_dust`
+
+**Structural keys:**
+- `'type'`: AGB dust-shell model: `'fsps_shell'` (the only supported type). Omitting the group, or `agb_dust={'type': 'none'}`, leaves the SSP grid untouched.
+- `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
+
+**Minimal example:**
+```python
+agb_dust={'type': 'fsps_shell'}  # weight fixed at 1.0 (bit-identical to omitting the group)
+agb_dust={'type': 'fsps_shell', 'weight': Uniform(0, 3)}  # free
+agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default strength
+```
+
+**Gotchas:**
+- `'weight'` is the short-form override for `agb_dust_weight`, the dimensionless scale on FSPS's Villaume, Conroy & Johnson (2015) circumstellar AGB dust-shell reprocessing. Default `Fixed(1.0)` (the grid as shipped, FSPS's own `agb_dust` default). Free prior `Uniform(0, 3)`.
+- MIST-isochrone SSP libraries only (`fsps_mist_*`): FSPS's `add_agb_dust_model` routine is MIST-only. Any other grid raises at build time, naming the supported grids.
+- The ratio was computed with FSPS 0.4.7 using MIST isochrones, the MILES spectral library and a Chabrier IMF, and is reused for the `c3k_a` grids and the Kroupa and Salpeter IMFs. The IMF dependence was measured only at solar metallicity (ages 0.3, 1, 3 Gyr; weights 0 and 3): at most 0.004 (Kroupa) and 0.019 (Salpeter) in the ratio. The spectral-library dependence could not be measured.
+- The ratio is stored on a ladder of weights and interpolated linearly between them: between stored weights it matches direct FSPS to better than 2% over 2-30 um (0.4-1.6% per interval, measured at solar metallicity for 0.3, 1 and 3 Gyr). Below w = 1/1024 the error reaches 4% (3.6% over 2-30 um), because the ratio is nearly discontinuous at w = 0 (FSPS switches the shell off); a weight near 0 carries a few-percent error. A free weight reaches the exact spectrum, the photometry and `compute_log_nion`; the nebular Q_H tables built once at model construction read the unweighted cube (measured effect below 1e-4 dex up to 10 Myr, at most 0.107 dex in single 45-100 Myr cells where Q_H is negligible).
+- The gradient with respect to the weight is the slope of the bracketing segment, so it has a kink at every stored weight (1/1024, 1/128, 1/8, 7/32, 5/16, 7/16, 9/16, 13/16, 1, 5/4, 13/8, 2, 3). For a 1 Gyr population the 10 um ratio peaks close to w = 1, so its slope changes sign around it.
+- The ratio spans 0.055 (far-infrared, w = 0) to 236 (old, metal-poor populations at 1200-1500 A) and is not clamped. It is exactly 1 outside 284 A to 3.4e7 A; the lower edge comes from a few 45-100 Myr low-metallicity populations at the 1e-4 threshold, not from shell absorption.
+- A **fixed** weight is baked into the SSP tensor at `SEDModel.build` time, so the exact path and every precompute table (`WavePrecomp`, `SpectrumPrecomp`, `FeaturePrecomp`) stay bit-exact.
+- A **free** weight cannot be baked (its value is only known per sample). Exact photometry, spectra and the ionizing rate apply it live. Everything built once from the SSP cube refuses, naming the exact path: `WavePrecomp`, `SpectrumPrecomp`, the `FeaturePrecomp` window table for baked-in lines, and `approx=True` on `predict_spectral_indices` / `measure_line_fluxes`. The `FeaturePrecomp` Cue grid reads the live ionizing rate and works. `approx='auto'` resolves to the exact path for single, catalog and population fits.
 
 
 ### Dust attenuation: `dust_attenuation`
@@ -372,6 +396,7 @@ dust_emission={'type': 'dale2014', 'eta_balance': Fixed(1.0), 'other_params': Fi
 - `'type'`: Backend: `'cue'` (Cue, default), `'cloudy'` (CLOUDY, slower, higher fidelity), `'cb19'` (Charlot & Bruzual 2019), `'mappings'` or `'mappings_agn'` (MAPPINGS V stellar and AGN; **both backends are registered as experimental; both refuse loudly pending data rehabilitation** (#2082): stellar grid is 51.2% NaN, AGN backend lacks protocol surface), or `'none'` (off). Menu: `tengri.list_nebular_backends()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'full_catalog'`: `cue` only: bool, default `True` (#2239). Publishes the full ~138-line Cue-trained catalog. Set to `False` to narrow to the legacy 128-line CLOUDY/FSPS-matched subset, kept for cross-code comparisons. No-op on other backends.
+- `'nitrogen'`: `cue` only: `'absolute'` (default) or a relation name (`'nicholls17'`) (#2693). Selects the meaning of `gas_logno`; see the nebular notes below. Raises on other backends.
 - `'grid'`: Path to the backend's own HDF5 grid file. Accepted only for `'cloudy'`, `'cb19'`, `'mappings'`, and `'mappings_agn'`; `None` (the default) resolves each backend's own packaged grid (#2220).
 - `'model'`: MAPPINGS V stellar model (`'mappings'` type only): `'sb99'` (Starburst99) or `'bpass'` (BPASS v2.2).
 - `'density'`: MAPPINGS V density structure (`'mappings'`/`'mappings_agn'`): `'cpr'` (isobaric, recommended) or `'cdn'` (isochoric).
@@ -387,6 +412,7 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 - Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
+- Cue's `gas_logno` is its absolute [N/O] input by default; `neb={'type': 'cue', 'nitrogen': 'nicholls17'}` makes it the offset from the Nicholls+2017 N/O--O/H relation at `neb_logZ_gas`, the convention of `neb_dno` in the grid backends (which embody their own, unrecorded, relation; the two agree at the N/[O II] level, Cue/grid 0.78-0.99 over `neb_logZ_gas` -1 to 0). The [N/O] Cue is actually fed is the `log_no` property in both modes (#2693).
 
 
 ### Shock emission: `shock`

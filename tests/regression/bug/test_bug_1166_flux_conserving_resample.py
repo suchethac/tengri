@@ -12,8 +12,8 @@ systematic, not noise. `SpectrumPrecomp` inherits the same bias (its build-time
 The fix is the flux-conserving bin integral of SpectRes (Carnall 2017), selected via
 `Spectroscopy(resample="conserving")` or `"auto"` (which turns it on only when the
 observed pixels actually under-sample the model grid). At DESI/SDSS resolution
-(R≳2000) point sampling is already unbiased, so the default stays `"point"` and
-those results do not move.
+(R≳2000) point sampling is already unbiased and `"auto"` leaves it in place. `"auto"`
+is the default (#2530).
 
 The evaluation that motivated this (see the issue thread) found: SpectRes buys **no
 speed** here (SpectrumPrecomp already runs the CSP at pixel centers; the model grid
@@ -160,10 +160,10 @@ def test_auto_selects_conserving_only_for_coarse_pixels(rest_sed):
 
 
 def test_explicit_modes_override_the_grid_ratio(rest_sed):
-    """Explicit modes are honored regardless of grid ratio; default is point."""
+    """Explicit modes are honored regardless of grid ratio; the default is auto (#2530)."""
     wave_rest, _ = rest_sed
     wo = jnp.asarray(np.arange(4000.0, 8500.0, 0.8))
-    assert Spectroscopy(wave_obs=wo).resample == "point"
+    assert Spectroscopy(wave_obs=wo).resample == "auto"
     assert Spectroscopy(wave_obs=wo, resample="conserving").resolve_conserving(wave_rest) is True
     assert Spectroscopy(wave_obs=wo, resample="point").resolve_conserving(wave_rest) is False
 
@@ -232,13 +232,13 @@ def test_conserving_models_do_not_collide_in_the_compile_cache(ssp):
     assert sig_point != sig_cons, "point and conserving models share a compile signature"
 
 
-def test_spectrum_precomp_warns_that_it_ignores_conserving(ssp):
-    """SpectrumPrecomp point-interpolates its LUT, so pairing it with a conserving
-    resample must warn rather than silently drop the request (#1166)."""
+def test_spectrum_precomp_refuses_a_conserving_resample(ssp):
+    """SpectrumPrecomp samples every component at the pixel centers, so pairing it with a
+    pixel integral must raise rather than silently point-sample (#1166, #2530)."""
     from tengri import SpectrumPrecomp
 
     wo = np.geomspace(4000.0, 8500.0, 250)  # coarse → auto/conserving would apply
-    with pytest.warns(UserWarning, match="does not apply it"):
+    with pytest.raises(ValueError, match="approx=None"):
         SEDModel.build(
             ssp_data=ssp,
             observation=Observation(

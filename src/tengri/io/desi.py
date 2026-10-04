@@ -391,8 +391,8 @@ def desi_spectroscopy(cameras: tuple[DesiCamera, ...], **kwargs):
     from tengri.observation.spectroscopy import Spectroscopy
 
     wave = np.concatenate([np.asarray(cam.wave) for cam in cameras])
-    resample = kwargs.get("resample", "point")
-    if resample != "point" and np.any(np.diff(wave) <= 0.0):
+    resample = kwargs.get("resample", "auto")
+    if resample == "conserving" and np.any(np.diff(wave) <= 0.0):
         seams = [cam.name for cam in cameras]
         raise ValueError(
             f"resample={resample!r} needs a strictly increasing grid, but the "

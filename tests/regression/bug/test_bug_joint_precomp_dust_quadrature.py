@@ -83,7 +83,7 @@ def _joint_obs():
     )
     return Observation(
         photometry=Photometry(filters=curves),
-        spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 64)),
+        spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64)),
     )
 
 
