@@ -220,7 +220,9 @@ def _fe2_internal_grid():
     dln = _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
     lo, hi = np.log(_FE2_GRID_LAMBDA_RANGE[0]), np.log(_FE2_GRID_LAMBDA_RANGE[1])
     n_grid = int(np.ceil((hi - lo) / dln)) + 1
-    wave = jnp.exp(lo + dln * jnp.arange(n_grid, dtype=jnp.float64))
+    # The lattice is generated in the trace in the default float dtype: float64 when x64 is
+    # enabled, float32 otherwise (an explicit float64 here warns on every trace without x64).
+    wave = jnp.exp(lo + dln * jnp.arange(n_grid))
 
     uv = jnp.interp(
         wave, device_table(_FE2_UV_WAVE), device_table(_FE2_UV_FLUX), left=0.0, right=0.0

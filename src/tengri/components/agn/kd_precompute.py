@@ -804,6 +804,7 @@ def _compute_bh_and_radii(
     from tengri.components.agn.disc import (
         _gravitational_radius,
         _hot_flow_luminosity,
+        _hot_zone_x_max,
         _isco_radius,
         _nt_l0,
         _r_hot_bisect,
@@ -833,17 +834,21 @@ def _compute_bh_and_radii(
     ) ** 0.25
 
     # Zone radii
+    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
+    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+
     # Same L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
     l_hot_target = _hot_flow_luminosity(
-        agn_f_hard, log10_l_edd, _nt_l0(r_isco_cm, t_in), agn_a_spin
+        agn_f_hard,
+        log10_l_edd,
+        _nt_l0(r_isco_cm, t_in),
+        agn_a_spin,
+        x_hot_max=_hot_zone_x_max(r_isco_rg, r_sg_rg),
     )
     r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, a_spin=agn_a_spin)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
-
-    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
 
     r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
     r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
@@ -1147,7 +1152,13 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 3: Hot corona ──
-    l_hot_erg = _hot_flow_luminosity(agn_f_hard, log10_l_edd, _nt_l0(r_isco_cm, t_in), agn_a_spin)
+    l_hot_erg = _hot_flow_luminosity(
+        agn_f_hard,
+        log10_l_edd,
+        _nt_l0(r_isco_cm, t_in),
+        agn_a_spin,
+        x_hot_max=0.5 * r_out_cm / r_isco_cm,
+    )
 
     # Self-consistent Gamma (same as full-wavelength path)
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, a_spin=agn_a_spin)

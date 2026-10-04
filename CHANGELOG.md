@@ -282,9 +282,9 @@
   at its absorber redshift z_n = λ_obs/λ_n − 1, so the transmission blueward
   of Lyβ follows the paper's Table 2 (#2585).
 
-- The FeII pseudo-continuum (`agn.feii` `boroson_green`, and the FeII term of the analytic `compute_blr_sed`) treated the PyQSOFit template's F_lambda column as L_nu and then multiplied by c/lambda^2, imprinting a spurious lambda^-2 tilt (fitted log-slope error -2.05; 0.39 and 1.99 slope offsets against the template over 4000-6000 and 2200-3000 A in the regression test). The template shape is now carried as L_lambda, normalised so the 4434-4684 A energy equals `agn_fe2_strength` x L(H-beta) (window edges honoured exactly, grid independent), negative template nodes are clipped before resampling and broadening, and the resampling is linear in wavelength (log-log resampling of the sign-changing template was off by up to 1.3 dex). `data/agn_fe2/PROVENANCE.md` recorded SHA256 values that differed from the shipped files by one character each; corrected and now tested.
+- The FeII pseudo-continuum (`agn.feii` `boroson_green`, and the FeII term of the analytic `compute_blr_sed`) treated the PyQSOFit template's F_lambda column as L_nu and then multiplied by c/lambda^2, imprinting a spurious lambda^-2 tilt (fitted log-slope error -2.05; 0.39 and 1.99 slope offsets against the template over 4000-6000 and 2200-3000 A in the regression test). The template shape is now carried as L_lambda, normalized so the 4434-4684 A energy equals `agn_fe2_strength` x L(H-beta) (window edges honored exactly, grid independent), negative template nodes are clipped before resampling and broadening, and the resampling is linear in wavelength (log-log resampling of the sign-changing template was off by up to 1.3 dex). `data/agn_fe2/PROVENANCE.md` recorded SHA256 values that differed from the shipped files by one character each; corrected and now tested.
 
-- The QSOGen Balmer continuum optical depth ran the wrong way: `tau = tau_BE (lambda_BE/lambda)^3` rose toward the blue, the inverse of the photoionisation cross-section scaling sigma_bf ~ nu^-3 (Grandi 1982) and of upstream QSOGen's `taube * (nuzero/nu)**3`, which is `(lambda/lambda_BE)^3`. It also disagreed with the component's own 3000 A normalisation, so `agn_bcnorm=1` produced a Balmer continuum 1.95x the power law at 3000 A instead of 1x. Default spectra (`agn_bcnorm=0`) are unchanged.
+- The QSOGen Balmer continuum optical depth ran the wrong way: `tau = tau_BE (lambda_BE/lambda)^3` rose toward the blue, the inverse of the photoionization cross-section scaling sigma_bf ~ nu^-3 (Grandi 1982) and of upstream QSOGen's `taube * (nuzero/nu)**3`, which is `(lambda/lambda_BE)^3`. It also disagreed with the component's own 3000 A normalisation, so `agn_bcnorm=1` produced a Balmer continuum 1.95x the power law at 3000 A instead of 1x. Default spectra (`agn_bcnorm=0`) are unchanged.
 
 - The BAGPIPES reproduction stores each BC03+MILES node's absolute log10 Z (BAGPIPES's
   metallicity grid is in units of Z☉ = 0.02) and pins the cross-code comparison at one
@@ -316,29 +316,17 @@
   same misreading; a units contract now pins the L_nu reading against Richards et al. 2006
   Table 3 and guards against future regression (#2563).
 
-- All AGN torus blocks (nenkova, nenkova_agnfitter variants, skirtor_agnfitter
-  variants, fritz, cat3d_wind_lowfwd) and dust-emission models (schreiber2018,
-  dh02_ce01) now declare their native wavelength-grid support. Before the fix,
-  these models' SEDs truncated at the SSP edge (160 µm for BC03) and submm
-  photometry was silently zero, while energy balance re-normalized on the
-  truncated grid — a sampling defect that shifted IR peak wavelengths by up to
-  7%. Contract test ensures newly registered blocks cannot regress (#2564).
-
 - Every registered AGN torus block and dust-emission model now declares its
   wavelength support, so `SEDModel.build` samples it on its own grid instead of
   the SSP grid. The AGNfitter-lineage torus blocks (`nenkova_agnfitter*`,
   `skirtor_agnfitter*`), `cat3d_wind_lowfwd`, `fritz`, `nenkova`, the analytic
   tori, `schreiber2018` and `dh02_ce01` had none: their IR peak sat on an
   SSP node (20 or 40 µm; native 19-31 µm), and the two tabulated dust models were cut at
-  160 µm and renormalised there (3-1000 µm band mean up to 1.9x, 160-1000 µm
-  fraction 2.2-3.6x). AGN disc blocks were cut
-  the same way: on the SSP grid each renormalised its energy to `L_bol` over
-  91 Å - 160 µm although it emits outside it (energy outside before / after:
-  `kd18_agnfitter*` 28 % / < 1e-3, `kubota_done` 21 % / < 1e-3, `skirtor` 15 % /
-  7e-4, `multicolor` 2.5 % / < 1e-3, `adaf` 99 % / < 1e-3, `adaf_lopez2024`
-  1.2 % / 1e-6, `schartmann2005*` 0.3 % / < 1e-3), inflating their UV/optical
-  level by up to 1/0.72; each now declares its template axis or an analytic
-  support range (the coronal/X-ray end and the outer Rayleigh-Jeans tail), at
+  160 µm and renormalized there (3-1000 µm band mean up to 1.9x, 160-1000 µm
+  fraction 2.2-3.6x). AGN disc blocks emit outside the SSP window as well (energy
+  outside 91 Å - 160 µm: `kd18_agnfitter*` 28 %, `kubota_done` 21 %, `skirtor` 15 %,
+  `multicolor` 2.5 %, `adaf` 99 %, `adaf_lopez2024` 1.2 %, `schartmann2005*` 0.3 %);
+  each now declares its template axis or an analytic support range (the coronal/X-ray end and the outer Rayleigh-Jeans tail), at
   200 points per decade shortward of 1000 A and 40 above. The deprecated `powerlaw` disc has no
   low-frequency cut-off and takes the 1 cm end used by the analytic
   dust and torus grids. `nenkova_agnfitter`'s 4096-point axis is declared at
