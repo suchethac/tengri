@@ -607,10 +607,16 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
 #: ``(sum, first bin, middle bin, last bin)``, on the model's master grid (the disc's
 #: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, where the disc has no flux).
+#: The tie normalizes the 30 deg shape ``2 cos i D_nu + H_nu`` (#2678) on the SKIRTOR native
+#: grid. Against a shape that weights the corona four times higher relative to the disc
+#: (``(cos i / 2) D_nu + H_nu``), the disc-dominated bins sit higher by
+#: ``[2c/(2c + h)] / [(c/2)/(c/2 + h)] - 1`` with ``c = cos 30`` and ``h`` the corona's share
+#: of the in-grid disc power: +4.0e-6 at log M_BH = 6 (lambda_Edd = 3, h ~ 1e-6) and +2.1 % at
+#: log M_BH = 8 and 10 (lambda_Edd = 0.03 and 3e-4, h = 0.012).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5590306819331405e32, 0.0, 2.733387509843308e28, 8.775354965942364e21),
-    8.0: (1.5949640394062e32, 0.0, 2.8143754678968626e28, 8.793939207986074e21),
-    10.0: (1.6075849742207185e32, 0.0, 2.8286700527529524e28, 9.029188614737028e21),
+    6.0: (1.5587753443373833e32, 0.0, 2.9724106000499967e28, 8.775345908542517e21),
+    8.0: (1.6233890962333792e32, 0.0, 3.1182806471358848e28, 8.810608591038717e21),
+    10.0: (1.6374247328925108e32, 0.0, 3.1414766299784605e28, 9.2874515829745e21),
 }
 
 

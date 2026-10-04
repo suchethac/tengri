@@ -485,33 +485,41 @@ _AGN_MBH_DUST = {
 #: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
 #: disc is multiplied by ``eta(30 deg) T``.
 #: Re-captured on the native kubota_done wavelength axis: the model's master grid now
-#: carries the disc's own 0.01 A - 1e8 A axis (200 points per decade shortward of 1000 A,
-#: 40 above; 7439 nodes), so the node-sum ``rest_sed_sum`` and the node-wise entries are
-#: values on that axis (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The
-#: composable runner's budgets no longer depend on the caller's grid, which is what makes the
-#: entries a property of the model: the photometry agrees with the 40-points-per-decade
-#: model to 1.5e-4 and with the denser variants to 1e-6.
+#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade; 6436 nodes), so the
+#: node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
+#: (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The composable runner's
+#: budgets no longer depend on the caller's grid, which is what makes the entries a property
+#: of the model: the photometry agrees with the variant that carries 200 points per decade
+#: shortward of 1000 A to 1.8e-4 (the stellar dust-energy balance is integrated on the master
+#: grid).
+#: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
+#: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
+#: where the corona now weighs four times less relative to the disc than under
+#: ``(cos i / 2) D_nu + H_nu``. ``rest_sed_sum`` moves by +5.1e-6 / +2.27 % / +2.35 %
+#: (mbh 6/8/10; lambda_Edd = 3 / 0.03 / 3e-4 at ``log_lbol = 11``, so the corona's share of
+#: the in-grid disc power is ~1e-6 / 0.012 / 0.012), the r-band photometry by
+#: +5.6e-6 / +2.9 % / +2.7 %; the derivation is beside ``_DISC_TIMES_ETA_T_REFERENCE``.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5597499418738415e32,
+        "rest_sed_sum": 1.5594548995446925e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.734666999454276e28,
-        "rest_sed_last": 8.775487501495838e21,
-        "photometry": (1.0994840523120948e-27, 1.5714193195038361e-27, 1.7651403919090352e-27),
+        "rest_sed_mid": 2.9736266287980323e28,
+        "rest_sed_last": 8.775478995953827e21,
+        "photometry": (1.0994893677333497e-27, 1.5711827999606203e-27, 1.764818284965551e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6053553947226513e32,
+        "rest_sed_sum": 1.6414603080745045e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.8374490059879115e28,
-        "rest_sed_last": 8.799051708015064e21,
-        "photometry": (1.1411148951511739e-27, 1.5721968496941247e-27, 1.7653654539357945e-27),
+        "rest_sed_mid": 3.1587369375835607e28,
+        "rest_sed_last": 8.820190285761585e21,
+        "photometry": (1.1742858310779199e-27, 1.5726589132375256e-27, 1.7652454354035826e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.6213640686686332e32,
+        "rest_sed_sum": 1.6592588760896937e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.855590296982095e28,
-        "rest_sed_last": 9.097336003416537e21,
-        "photometry": (1.1489176850007133e-27, 1.5824839773573476e-27, 1.7679722616364943e-27),
+        "rest_sed_mid": 3.188172833659229e28,
+        "rest_sed_last": 9.424802972488873e21,
+        "photometry": (1.1798665486248044e-27, 1.5891814983660147e-27, 1.770359902326059e-27),
     },
 }
 
