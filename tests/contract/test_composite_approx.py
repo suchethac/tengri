@@ -42,7 +42,7 @@ def joint_obs():
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
     return Observation(
         photometry=Photometry(filters=tuple(_tophat(c) for c in (3500.0, 4800.0, 6200.0))),
-        spectroscopy=Spectroscopy(wave_obs=wave_obs),
+        spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs),
     )
 
 

@@ -153,7 +153,9 @@ def _stellar_mass_scale(ssp, dtype):
 
         sed = SEDModel.build(
             ssp_data=ssp,
-            observation=Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE))),
+            observation=Observation(
+                spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+            ),
             approx=SpectrumPrecomp(n_z=16, z_min=0.05, z_max=1.0),
             sfh={
                 "type": "delayed",

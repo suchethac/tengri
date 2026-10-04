@@ -756,6 +756,16 @@ class NebularSEDComponent(TemplateThreading):
             and not self.must_materialize_sed
         )
 
+        # #2693: the absolute [N/O] Cue is actually fed (== gas_logno under the
+        # default 'absolute' mode), published for every Cue evaluation path.
+        cue_log_no = None
+        if self.config.backend == "cue":
+            cue_log_no = self.backend.effective_log_no(
+                neb_logZ_gas=common_kwargs["neb_logZ_gas"],
+                gas_logno=jnp.asarray(params.get("gas_logno", 0.0)),
+                **({"gas_logz": jnp.asarray(params["gas_logz"])} if "gas_logz" in params else {}),
+            )
+
         if use_grid:
             nebular_sed = zeros
         elif self.config.backend == "cue":
@@ -958,6 +968,8 @@ class NebularSEDComponent(TemplateThreading):
         # Filter-integrate the nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
+        if cue_log_no is not None:
+            derived_overrides["neb_log_no"] = cue_log_no
         grid = self.grid_table
         # ``use_grid``, not a second re-derivation of it: when a downstream
         # consumer forces the exact continuum above, photometry must come from
@@ -1606,7 +1618,24 @@ def _balmer_decrement_fn(state, params):
 
 from tengri.forward.properties import Property, register_properties
 
+
+def _cue_log_no_fn(state, params):
+    """Absolute [N/O] Cue is fed [dex]; NaN for a non-Cue backend."""
+    value = state.derived.get("neb_log_no")
+    return jnp.asarray(jnp.nan) if value is None else jnp.asarray(value)
+
+
 _LINES_PROPERTIES = {
+    "log_no": Property(
+        units="dex",
+        group="lines",
+        doc=(
+            "Absolute [N/O] = log10((N/O)/(N/O)_sun) the Cue backend is fed: gas_logno under "
+            "nitrogen='absolute', else the named N/O-O/H relation at the gas metallicity plus "
+            "gas_logno. NaN for other backends."
+        ),
+        fn=_cue_log_no_fn,
+    ),
     "lya": Property(
         units="Lsun",
         group="lines",

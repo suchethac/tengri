@@ -795,7 +795,7 @@ def _spec_build(ssp, z, approx, fesc=0.0, n_pix=40):
     wave_obs = jnp.linspace(LYC_LIMIT * (1.0 + z) * 0.5, LYC_LIMIT * (1.0 + z) * 1.5, n_pix)
     return SEDModel.build(
         ssp_data=ssp,
-        observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+        observation=Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs)),
         sfh={
             "type": "delayed",
             "log_total_mass": 10.0,

@@ -62,7 +62,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ConfigError, ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -661,6 +661,14 @@ class Parameters:
         self.shock_abundance = kwargs.pop("shock_abundance", "solar")
         self.shock_component = kwargs.pop("shock_component", "combined")
 
+        # AGB circumstellar dust-shell weighting (#2534). A tunable lever on
+        # the Villaume, Conroy & Johnson (2015) shell reprocessing FSPS bakes
+        # into MIST SSP grids at its own default weight (agb_dust=1.0). A
+        # static structural on/off flag (like ``shock`` above), not a traced
+        # free param; the one free param it gates in is ``agb_dust_weight``.
+        self.agb_dust = kwargs.pop("agb_dust", False)
+        self.agb_dust_model = kwargs.pop("agb_dust_model", "fsps_shell")
+
         # ── Metallicity ───────────────────────────────────────────
         self._init_metallicity_config(kwargs)
 
@@ -726,6 +734,7 @@ class Parameters:
             radio=self.radio,
             xray=self.xray,
             shock=self.shock,
+            agb_dust=self.agb_dust,
             igm_patchy=self.igm_patchy,
             dla=self.dla,
             met_mode=self.met_mode,
@@ -969,6 +978,15 @@ class Parameters:
         # (the sole default before #2239, added by #303), kept for cross-code
         # comparisons.
         self.cue_full_catalog = kwargs.pop("cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+        # Meaning of Cue's ``gas_logno`` (#2693): 'absolute' (default) = Cue's
+        # [N/O] input; a relation name = offset from that N/O-O/H relation.
+        from tengri.components.nebular._default_nitrogen import NITROGEN_MODES
+
+        self.cue_nitrogen = kwargs.pop("cue_nitrogen", "absolute")
+        if self.cue_nitrogen not in NITROGEN_MODES:
+            raise ConfigError(
+                f"neb nitrogen={self.cue_nitrogen!r}: expected one of {NITROGEN_MODES}."
+            )
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -1642,10 +1660,15 @@ class Parameters:
         """
         import warnings
 
-        from tengri.components.grid_support import EXTRAPOLATING_SUPPORT, check_grid_support
+        from tengri.components.grid_support import (
+            EXTRAPOLATING_SUPPORT,
+            check_grid_support,
+            support_shift,
+        )
         from tengri.config.exceptions import GridSupportWarning
 
-        findings = check_grid_support(self._selected_grid_components(), param_support)
+        settings = {"cue_nitrogen": self.cue_nitrogen}
+        findings = check_grid_support(self._selected_grid_components(), param_support, settings)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
             if (selector, name) in EXTRAPOLATING_SUPPORT:
                 # No jnp.clip here (a smooth emulator, not a grid): the SED is
@@ -1656,7 +1679,8 @@ class Parameters:
                     "The prediction there is live but untrustworthy -- it is "
                     "extrapolating past where the model was validated."
                 )
-                remedy = f"Narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+                s_lo, s_hi = support_shift(selector, name, pname, param_support, settings)
+                remedy = f"Narrow {pname} to [{g_lo - s_lo:g}, {g_hi - s_hi:g}]."
             else:
                 consequence = (
                     "The SED there is bit-identical to the edge node and the "
@@ -2667,6 +2691,8 @@ class Parameters:
             modules.append("xray")
         if getattr(self, "shock", False):
             modules.append("shock")
+        if getattr(self, "agb_dust", False):
+            modules.append(f"agb_dust={getattr(self, 'agb_dust_model', 'fsps_shell')}")
         dust_mdl = getattr(self, "dust_model", "two_component")
         if dust_mdl == "single_component":
             dust_law = getattr(self, "dust_law_bc", "power_law")
@@ -2824,6 +2850,8 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_nebular_mappings": content("nebular backend selection determines parameters"),
     "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
     "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),
+    "agb_dust": content("AGB dust-shell component flag determines parameters"),
+    "agb_dust_model": content("AGB dust-shell model determines parameters"),
     "agn_attenuation_block": content("AGN attenuation type determines parameters"),
     "agn_axis_grids": content("AGN axis grids determine parameters"),
     "agn_blr_block": content("AGN BLR type determines parameters"),
@@ -2842,6 +2870,9 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "chem_evol": content("chemical evolution model determines parameters"),
     "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
+    "cue_nitrogen": content(
+        "CUE gas_logno meaning (relation offset or absolute) changes the forward"
+    ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),
     "dl07_grid_path": content("DL07 grid path determines available parameters"),

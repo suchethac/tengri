@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression tests for #2368: age_kernel accuracy bound visibility + field=True advisory.
-
-Issue #2368: the accuracy bound of age_kernel='dsps' was stated in a dev doc but
-not on the discovery surface (registry, public docs), and field=True silently
-forces 'dsps' without warning. This suite verifies:
+"""Regression tests for #2368 / #2684: age_kernel accuracy bound visibility, field kernel default.
 
 1. Every age_kernel registry row's short_doc contains the bound statement.
-2. field=True with the default kernel warns, naming the forced kernel and bound.
-3. field=True with explicit age_kernel='dsps' does NOT warn (user chose it).
-4. field=True with age_kernel='cic' still raises NotImplementedError.
+2. field=True resolves to the default 'cic' kernel (accurate for field and rough
+   histories) without an advisory.
+3. field=True with explicit 'dsps' or 'cic' builds.
 """
 
 from __future__ import annotations
@@ -19,10 +15,7 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel
-from tengri.components.stellar.component import (
-    AGE_KERNEL_ACCURACY_BOUND,
-    AgeKernelFieldWarning,
-)
+from tengri.components.stellar.component import _resolve_age_kernel
 from tengri.observation import Observation, Photometry
 
 pytestmark = [pytest.mark.regression_bug]
@@ -55,106 +48,35 @@ def test_age_kernel_registry_rows_include_bound_sentence() -> None:
             )
 
 
-def test_field_true_with_default_kernel_warns_advisory(synthetic_ssp) -> None:
-    """field=True with the default kernel warns naming the forced kernel and bound.
-
-    When a user leaves age_kernel unset (None) and field=True forces 'dsps',
-    an advisory warns what happened. Explicit age_kernel='dsps' does NOT warn
-    because the user chose it.
-    """
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_g", "sdss_i"]),
-    )
-
-    # field=True with NO explicit age_kernel should warn.
+def _build_field(ssp, kernel):
+    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_i"]))
+    sfh = {"type": ["dpl", "field"], "all_params": Fixed(DEFAULT)}
+    if kernel is not None:
+        sfh["age_kernel"] = kernel
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-
         model = SEDModel.build(
-            ssp_data=synthetic_ssp,
+            ssp_data=ssp,
             observation=obs,
             redshift=Fixed(0.1),
-            sfh={
-                "type": ["dpl", "field"],
-                "all_params": Fixed(DEFAULT),
-            },  # No age_kernel; triggers advisory.
+            sfh=sfh,
             met={"type": "table"},
             neb={"type": "ssp"},
         )
-
-        # One AgeKernelFieldWarning should have been raised.
-        age_kernel_warns = [x for x in w if issubclass(x.category, AgeKernelFieldWarning)]
-        assert len(age_kernel_warns) >= 1, (
-            f"Expected at least one AgeKernelFieldWarning when field=True "
-            f"with default kernel. Got {len(age_kernel_warns)} warnings. "
-            f"All warnings: {[str(x.message) for x in w]}"
-        )
-
-        msg = str(age_kernel_warns[0].message)
-        # Message must name the kernel and the bound.
-        assert "dsps" in msg.lower(), f"Warning message must name the 'dsps' kernel. Got: {msg}"
-        # Check for the bound using the same format as the constant.
-        bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
-        assert bound_str in msg, (
-            f"Warning message must include the bound ({bound_str}). Got: {msg}"
-        )
+    return model, w
 
 
-def test_field_true_with_explicit_dsps_does_not_warn(synthetic_ssp) -> None:
-    """field=True with explicit age_kernel='dsps' does NOT warn.
-
-    The user explicitly chose 'dsps', so there is nothing to warn about.
-    """
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_g", "sdss_i"]),
+def test_field_default_kernel_is_cic_without_advisory(synthetic_ssp) -> None:
+    model, w = _build_field(synthetic_ssp, None)
+    assert not [x for x in w if "age_kernel" in str(x.message)], [str(x.message) for x in w]
+    stellar = next(
+        c for c in model._build_component_chain() if type(c).__name__.startswith("Stellar")
     )
-
-    # field=True with explicit age_kernel='dsps' should NOT warn.
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-
-        model = SEDModel.build(
-            ssp_data=synthetic_ssp,
-            observation=obs,
-            redshift=Fixed(0.1),
-            sfh={
-                "type": ["dpl", "field"],
-                "age_kernel": "dsps",
-                "all_params": Fixed(DEFAULT),
-            },  # Explicit 'dsps'.
-            met={"type": "table"},
-            neb={"type": "ssp"},
-        )
-
-        # No AgeKernelFieldWarning should be raised.
-        age_kernel_warns = [x for x in w if issubclass(x.category, AgeKernelFieldWarning)]
-        assert len(age_kernel_warns) == 0, (
-            f"Expected NO AgeKernelFieldWarning when user explicitly chose 'dsps'. "
-            f"Got {len(age_kernel_warns)} warning(s): "
-            f"{[str(x.message) for x in age_kernel_warns]}"
-        )
+    assert _resolve_age_kernel(stellar.config) == "cic"
 
 
-def test_field_true_with_cic_still_raises(synthetic_ssp) -> None:
-    """field=True with age_kernel='cic' still raises NotImplementedError.
-
-    The CIC kernel is not supported on the field path. This refusal is unchanged.
-    """
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_g", "sdss_i"]),
-    )
-
-    # field=True + explicit age_kernel='cic' must raise.
-    with pytest.raises(NotImplementedError, match=r"age_kernel.*cic"):
-        SEDModel.build(
-            ssp_data=synthetic_ssp,
-            observation=obs,
-            redshift=Fixed(0.1),
-            sfh={
-                "type": ["dpl", "field"],
-                "age_kernel": "cic",
-                "all_params": Fixed(DEFAULT),
-            },  # Explicit 'cic': error.
-            met={"type": "table"},
-            neb={"type": "ssp"},
-        )
+@pytest.mark.parametrize("kernel", ["cic", "dsps"])
+def test_field_true_builds_with_either_kernel(synthetic_ssp, kernel) -> None:
+    model, w = _build_field(synthetic_ssp, kernel)
+    assert not [x for x in w if "age_kernel" in str(x.message)]
+    assert model is not None

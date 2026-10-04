@@ -22,9 +22,10 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.inference._censoring import detected_chi2_dof, refuse_unsupported_censoring
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params
-from tengri.inference.likelihoods.gaussian import diag_noise_operators, standardized_residual
+from tengri.inference.likelihoods.gaussian import diag_noise_operators
 
 
 def run_nifty_fast_vi(
@@ -79,6 +80,7 @@ def run_nifty_fast_vi(
     # on the Fitter and reach through ``context.fitter`` until they
     # migrate in a follow-up.
     fitter = context.fitter
+    refuse_unsupported_censoring(fitter, f"vi (sample_mode={sample_mode!r})")
 
     try:
         import nifty8.re as jft
@@ -133,7 +135,7 @@ def run_nifty_fast_vi(
     t0 = time.time()
     key, opt_key = jax.random.split(key)
 
-    likelihood = _get_or_build_nifty_likelihood(fitter)
+    likelihood = _build_nifty_likelihood(fitter)
     init_pos = jft.Vector(init_params)
 
     # Use jft.optimize_kl with odir=None (no pickling/logging overhead).
@@ -175,9 +177,8 @@ def run_nifty_fast_vi(
                 verbose=verbose,
             )
         elif posterior_method == "blackjax":
-            lh = _get_or_build_nifty_likelihood(fitter)
             all_sample_dicts = fitter._draw_blackjax_samples(
-                lh,
+                likelihood,
                 converged_dict,
                 draw_key,
                 n_posterior_samples,
@@ -210,9 +211,7 @@ def run_nifty_fast_vi(
     chi2_dof = None
     if fitter.data_type == "photometry" and best_params:
         pred = fitter.model.predict_photometry(best_params)
-        chi2_dof = float(
-            jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
-        ) / len(fitter.data)
+        chi2_dof = detected_chi2_dof(fitter.data, fitter.noise, pred, fitter.data_mask)
 
     if verbose:
         print(
@@ -239,37 +238,48 @@ def run_nifty_fast_vi(
     )
 
 
-def _get_or_build_nifty_likelihood(fitter):
-    """Return cached NIFTy likelihood, building on first call.
+def _fixed_values_digest(fixed_values):
+    """Content digest of the fixed-parameter dict a physics closure bakes in."""
+    import numpy as np
 
-    For the non-variable-noise case, uses the shared ``engine["nifty_model"]``
-    (physics-only, data-free) so the physics stack compiles once per model
-    structure regardless of galaxy count.  Variable-noise models build their
-    own per-Fitter model because ``signal_response`` captures ``noise`` data.
+    from tengri._cache_keys import stable_digest
+
+    items = []
+    for name, value in sorted(fixed_values.items()):
+        try:
+            items.append((name, np.asarray(value, dtype=float).tobytes()))
+        except (TypeError, ValueError):
+            items.append((name, repr(value)))
+    return stable_digest(repr(items).encode())
+
+
+def _get_or_build_nifty_physics(fitter):
+    """Return the data-free half of the NIFTy likelihood, cached per structure.
+
+    Fixed noise: the ``jft.Model`` mapping primals to the predicted data (the
+    shared jitted ``signal_response``). Free noise model: a jitted
+    ``primals -> (predicted, f_cal)``. Neither closure holds the data, the
+    noise or the censoring mask, so one cache entry serves every ``Fitter`` on
+    this model whose structure (``compile_signature``) agrees, and the physics
+    kernel compiles once per structure regardless of how many datasets are fit.
     """
-    cached = _model_cache_owner.get_or_compile_model(fitter.model).get("nifty_lh")
-    if cached is not None:
-        return cached
-
     import nifty8.re as jft
 
-    from tengri.observation.noise import (
-        compute_effective_noise,
-        compute_std_inv,
-        has_noise_model,
-        uses_student_t,
-    )
+    from tengri.observation.noise import has_noise_model
 
-    data = fitter.data
-    noise = fitter.noise
     spec = fitter.spec
     stochastic = spec.stochastic
     use_variable_noise = has_noise_model(spec)
-    use_student_t = uses_student_t(spec)
+
+    cache_key = fitter.compile_signature()
+    if use_variable_noise:
+        cache_key = (cache_key, _fixed_values_digest(fitter._fixed_values))
+    cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("nifty_physics", {})
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     if use_variable_noise:
-        # Variable-noise: signal_response returns (predicted, noise_scale)
-        # and captures per-Fitter noise array, cannot be shared.
         model = fitter.model
         data_type = fitter.data_type
         free_names = fitter._free_names
@@ -300,70 +310,106 @@ def _get_or_build_nifty_likelihood(fitter):
             params = spec.resolve_mirrors(params)
             return params
 
-        if use_student_t:
+        def physics(primals):
+            """Map primals to ``(predicted, f_cal)``; holds no data or noise."""
+            params = _build_params(primals)
+            # The public predict_* surfaces refuse a key the spec pins as Fixed
+            # (#2296), so hand them the free names only; ``params`` keeps the
+            # fixed values for ``resolve_mirrors`` and the ``noise_frac_cal`` read.
+            free_params = {k: v for k, v in params.items() if k in model.spec.free_params}
+            return _predict(free_params), params.get("noise_frac_cal", 0.0)
 
-            def signal_response(primals):
-                """Map primals to (predicted, effective_noise) for the Student-t likelihood."""
-                params = _build_params(primals)
-                predicted = _predict(params)
-                f_cal = params.get("noise_frac_cal", 0.0)
-                return predicted, compute_effective_noise(noise, predicted, f_cal)
-
-        else:
-
-            def signal_response(primals):
-                """Map primals to (predicted, std_inv) for the Gaussian likelihood."""
-                params = _build_params(primals)
-                predicted = _predict(params)
-                f_cal = params.get("noise_frac_cal", 0.0)
-                return predicted, compute_std_inv(noise, predicted, f_cal)
-
-        domain = {}
-        for name in fitter._free_names:
-            domain[name] = jft.ShapeWithDtype(())
-        if stochastic:
-            domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
-
-        nifty_model = jft.Model(jax.jit(signal_response), domain=domain)
-
-        if use_student_t:
-            dof = float(spec.get_distribution("noise_dof").value)
-            likelihood = jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
-        else:
-            likelihood = jft.VariableCovarianceGaussian(data).amend(nifty_model)
-
+        physics = jax.jit(physics)
     else:
-        # Non-variable-noise: compile only the physics kernel, not the full
-        # native-VI engine (run_evi_geovi_jit etc.).  The full engine can be
-        # ~2 GB of compiled XLA; signal_response_jit is ~100 MB.  Only build
-        # the full engine if it is already in cache (built by a prior run() call).
-        from tengri.inference.jit_engine import get_or_build_signal_response
-
-        # Prefer the nifty_model already in the engine cache if available,
-        # avoids creating a second jft.Model object for the same physics.
-        nifty_model = None
+        # Compile only the physics kernel, not the full native-VI engine
+        # (run_evi_geovi_jit etc.), which can be ~2 GB of compiled XLA against
+        # ~100 MB for signal_response_jit. Prefer the nifty_model already in the
+        # engine cache (built by a prior run() call): it avoids a second
+        # jft.Model for the same physics.
+        physics = None
         if fitter._jit_sampler is not None:
-            nifty_model = fitter._jit_sampler.get("nifty_model")
+            physics = fitter._jit_sampler.get("nifty_model")
+        if physics is None:
+            from tengri.inference.jit_engine import get_or_build_signal_response
 
-        if nifty_model is None:
             _, sr_jit = get_or_build_signal_response(fitter)
             domain = {}
             for name in fitter._free_names:
                 domain[name] = jft.ShapeWithDtype(())
             if stochastic:
                 domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
-            nifty_model = jft.Model(sr_jit, domain=domain)
+            physics = jft.Model(sr_jit, domain=domain)
 
-        # Operators, not arrays: NIFTy derives whichever of (cov_inv, std_inv)
-        # it is not given from the other, so an array for either reintroduces
-        # the 1/sigma**2 overflow in float32 (#1206).
-        cov_inv, std_inv = diag_noise_operators(noise)
-        likelihood = jft.Gaussian(data, noise_cov_inv=cov_inv, noise_std_inv=std_inv).amend(
-            nifty_model
+    cache[cache_key] = physics
+    return physics
+
+
+def _build_nifty_likelihood(fitter):
+    """Build the NIFTy likelihood for this Fitter's data.
+
+    Not cached: the likelihood holds the data, the noise and the censoring
+    mask, which belong to the ``Fitter`` and not to the model, so a second
+    ``Fitter`` on the same model object must never receive this one's. The
+    expensive, data-free physics comes from :func:`_get_or_build_nifty_physics`.
+
+    A ``data_mask`` with limits gives :class:`CensoredGaussian` (exact censored
+    energy, detection metric); otherwise ``jft.Gaussian``. A free noise model
+    gives ``jft.VariableCovarianceGaussian`` / ``VariableCovarianceStudentT``
+    and refuses ``data_mask`` limits (see
+    ``tengri.inference._censoring.refuse_unsupported_censoring``).
+    """
+    import nifty8.re as jft
+
+    from tengri.observation.noise import (
+        compute_effective_noise,
+        compute_std_inv,
+        has_noise_model,
+        uses_student_t,
+    )
+
+    data = fitter.data
+    noise = fitter.noise
+    spec = fitter.spec
+    physics = _get_or_build_nifty_physics(fitter)
+
+    if has_noise_model(spec):
+        # Variable noise: the model returns (predicted, noise_scale) and holds
+        # this Fitter's noise array.
+        use_student_t = uses_student_t(spec)
+
+        def signal_response(primals):
+            """Map primals to (predicted, noise_scale) for the variable-noise likelihood."""
+            predicted, f_cal = physics(primals)
+            if use_student_t:
+                return predicted, compute_effective_noise(noise, predicted, f_cal)
+            return predicted, compute_std_inv(noise, predicted, f_cal)
+
+        domain = {}
+        for name in fitter._free_names:
+            domain[name] = jft.ShapeWithDtype(())
+        if spec.stochastic:
+            domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
+
+        nifty_model = jft.Model(signal_response, domain=domain)
+
+        if use_student_t:
+            dof = float(spec.get_distribution("noise_dof").value)
+            return jft.VariableCovarianceStudentT(data, dof).amend(nifty_model)
+        return jft.VariableCovarianceGaussian(data).amend(nifty_model)
+
+    # Operators, not arrays: NIFTy derives whichever of (cov_inv, std_inv) it is
+    # not given from the other, so an array for either reintroduces the
+    # 1/sigma**2 overflow in float32 (#1206).
+    cov_inv, std_inv = diag_noise_operators(noise)
+    if fitter.data_mask is not None:
+        from tengri.inference.backends.vi._nifty_censored import CensoredGaussian
+
+        likelihood = CensoredGaussian(
+            data, noise, fitter.data_mask, noise_cov_inv=cov_inv, noise_std_inv=std_inv
         )
-
-    _model_cache_owner.get_or_compile_model(fitter.model)["nifty_lh"] = likelihood
-    return likelihood
+    else:
+        likelihood = jft.Gaussian(data, noise_cov_inv=cov_inv, noise_std_inv=std_inv)
+    return likelihood.amend(physics)
 
 
 def run_nifty_vi(
@@ -431,10 +477,11 @@ def run_nifty_vi(
     # See ``run_nifty_fast_vi``, the JIT sampler cache and friends
     # live on the Fitter; we reach through ``context.fitter``.
     fitter = context.fitter
+    refuse_unsupported_censoring(fitter, f"vi (sample_mode={sample_mode!r})")
 
     cfg = vi_config or VIConfig()
 
-    likelihood = _get_or_build_nifty_likelihood(fitter)
+    likelihood = _build_nifty_likelihood(fitter)
 
     data = fitter.data
     free_names = fitter._free_names

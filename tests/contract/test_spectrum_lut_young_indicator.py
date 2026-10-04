@@ -48,7 +48,7 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
         Dust attenuation law name from list_dust_laws().
     """
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+    obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -137,7 +137,7 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
     """
     # Build observation with 80-point log grid 3300–8000 Å.
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+    obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
     # LUT and exact models with the same config.
     model_lut = SEDModel.build(

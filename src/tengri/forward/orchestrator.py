@@ -344,6 +344,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "igm_reach_filters_precomp": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
+    "neb_log_no": "dex",
     # Spatial, 2D surface-brightness profile + the (x, y) kpc grid
     # underlying it. Published by spatial components (Sersic, Exponential,
     # FlatSlab, …). See architecture spec §3.3.
