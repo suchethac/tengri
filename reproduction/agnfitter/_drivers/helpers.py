@@ -66,13 +66,23 @@ def val_at(w, L, lam):
 
 
 def band_power(wave_aa, L_nu, lo_aa, hi_aa) -> float:
-    """Power ``|int L_nu d(nu)|`` between two wavelengths [erg/s for L_nu in erg/s/Hz]."""
-    wave_aa = np.asarray(wave_aa, dtype=np.float64)
-    L_nu = np.asarray(L_nu, dtype=np.float64)
-    sel = (wave_aa >= lo_aa) & (wave_aa <= hi_aa)
-    nu = U.C_ANGSTROM_PER_S / wave_aa[sel]
-    order = np.argsort(nu)
-    return float(np.trapezoid(L_nu[sel][order], nu[order]))
+    """Power ``|int L_nu d(nu)|`` over the full band ``[lo_aa, hi_aa]`` [erg/s, L_nu in erg/s/Hz].
+
+    The integral runs over the nodes inside the band plus the two band edges, where the curve is
+    interpolated linearly in ``log10(wavelength)``; an edge outside the tabulated range is skipped.
+    """
+    w = np.asarray(wave_aa, dtype=np.float64)
+    L = np.asarray(L_nu, dtype=np.float64)
+    order = np.argsort(w)
+    w, L = w[order], L[order]
+    inside = (w >= lo_aa) & (w <= hi_aa)
+    edges = [e for e in (lo_aa, hi_aa) if w[0] < e < w[-1] and not np.any(w == e)]
+    w_all = np.concatenate([w[inside], np.asarray(edges, dtype=np.float64)])
+    L_edges = np.interp(np.log10(edges), np.log10(w), L) if edges else np.empty(0)
+    L_all = np.concatenate([L[inside], L_edges])
+    nu = U.C_ANGSTROM_PER_S / w_all
+    o = np.argsort(nu)
+    return float(np.trapezoid(L_all[o], nu[o]))
 
 
 def halpha_line(

@@ -154,6 +154,7 @@ print(
 )
 
 import tengri.cosmology as cosmo
+from tengri import units
 
 AF_H0, AF_OM0 = 67.4, 0.315  # AGNfitter-rX cosmology (paper p. 2; z2Dlum)
 _dl_af = cosmo.luminosity_distance(1.0, h0=AF_H0, om0=AF_OM0)
@@ -824,9 +825,9 @@ for _lab, _lo, _hi, _why in [
 
 # %% [markdown]
 # **Result.** The total infrared power is matched by construction. The stellar bands, which test the
-# formed-mass mapping of §1.3 and the Calzetti curve together, agree to 0.8% (0.1-1 µm) and 0.2%
-# (1-3 µm). The infrared sub-band rows test the S17 shape at fixed $L_{\rm IR}$: 0.979 at 8-30 µm,
-# where the model grid has 220 points, and 0.997 at 30-1000 µm.
+# formed-mass mapping of §1.3 and the Calzetti curve together, agree to 0.3% (0.1-1 µm) and 0.1%
+# (1-3 µm). The infrared sub-band rows test the S17 shape at fixed $L_{\rm IR}$: 0.994 at 8-30 µm,
+# where the model grid has 220 points, and 1.000 at 30-1000 µm.
 
 # %% [markdown]
 # ## 2 Accretion disc
@@ -1246,13 +1247,11 @@ print(
 # %% [markdown]
 # **Reading the sampling tables.** Each block ends at its own template limit (S04 at 948 µm, NK08
 # at 1000 µm, SKIRTOR at $10^4$ µm, CAT3D at $3.6\times10^4$ µm); the model holds no torus flux beyond
-# it, which is outside every band fitted here. The sampling matters more than the range. Integrated
-# over its own nodes, S04, NK08 and CAT3D reproduce the full reference band power to 5% or better
-# (0.996-1.048). SKIRTOR, with 68 points above 10 µm, does so at 3-10 and 100-300 µm (1.013, 1.029)
-# but not at 10-30, 30-100 and 300-1000 µm (0.943, 0.891, 0.622). Broadband photometry on the
-# SKIRTOR block should therefore be trusted to about 10% between 10 and 100 µm and not beyond 300 µm.
-# The floor set by the reference sampling is 1-2% (the reference at half its sampling against
-# itself), and bounds how closely any case can agree.
+# it, which is outside every band fitted here. Integrated over the full band from its own nodes
+# (plus the band edges), every block reproduces the reference band power to 0.6% or better, SKIRTOR
+# included (0.994-1.000) despite its 68 points above 10 µm. The sampling therefore costs no
+# broadband flux at these bands. The floor set by the reference sampling is 1-2% (the reference at half
+# its sampling against itself), and bounds how closely any peak-normalized case can agree.
 
 # %% [markdown]
 # The averaged reductions, the S04 column-density axis, the NK08 inclination axis, the SKIRTOR
@@ -1432,7 +1431,7 @@ print(
 # median of 1.4e-4 and a maximum of 0.104 at 1.45 µm. §8.3 shows that this is interpolation between
 # sparse reference nodes (the reference spaces its nodes 0.085 dex apart there, tengri 0.0015 dex),
 # where the reference is at 0.014 of its peak: at each reference node tengri equals the reference to
-# four digits, and the 1-5 µm band power agrees to 0.06%. The full unaveraged SKIRTOR grid differs
+# four digits, and the 1-5 µm band power agrees to 1.7%. The full unaveraged SKIRTOR grid differs
 # from the averaged reference by construction: it carries the clumpiness and radial structure that
 # the average removes, which shifts the IR peak (printed). The union of the two tengri CAT3D blocks
 # covers the one upstream library, and the polar wind that CAT3D-Wind is for supplies the
@@ -1830,10 +1829,26 @@ _H_sec = 70.0 / 3.0857e19
 _t_up_age = quad(lambda _z: _a_age / np.sqrt(_E_age), _Z_AGE, 1089)[0] / _H_sec / 31556926 / 1e9 - 1.0
 _t_cosmic = float(cosmo.age_at_z(_Z_AGE, h0=70.0, om0=0.266)) - 1.0
 
-# Corona anchor: tengri's corona follows the disc continuum, upstream's amplitude is set from disc + lines.
-_wq_d, _Lq_d = B.disc("qsogen")
-_wq_f, _Lq_f = B.qsogen_full()
-_l2500_disc, _l2500_full = val_at(_wq_d, _Lq_d, 2500.0), val_at(_wq_f, _Lq_f, 2500.0)
+# Corona anchor: tengri's corona follows the disc continuum, upstream's amplitude is set from
+# disc + lines. Read on the winning model's AGN (face-on, as in section 9).
+_m_anchor = SEDModel.build(
+    ssp_data=ssp, sfh=SFH_FIDUCIAL, met=MET_BC03_SOLAR, dust_attenuation=NO_DUST,
+    agn={
+        "type": "composable",
+        "disc": {"type": "qsogen", "agn_ebv_disc": Fixed(0.0), "all_params": Fixed(DEFAULT)},
+        "nlr": {"type": "none"}, "blr": {"type": "qsogen", "all_params": Fixed(DEFAULT)},
+        "feii": {"type": "qsogen_balmer", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": "cat3d_wind", "cos_inc": Fixed(1.0), "a_cat3d": Fixed(-2.0),
+                  "fwd_cat3d": Fixed(1.75), "all_params": Fixed(DEFAULT)},
+        "atten": {"type": "none"}, "agn_log_lbol": Fixed(11.0),
+        "all_params": Fixed(DEFAULT), "norm": "independent",
+    },
+    neb={"type": "none"}, redshift=Fixed(0.0),
+)
+_c_anchor = _m_anchor.predict({}).sed.components
+_w_anchor = np.asarray(_c_anchor["wavelength"])
+_l2500_disc = val_at(_w_anchor, _c_anchor["sed_agn_disc"], 2500.0)
+_l2500_full = val_at(_w_anchor, np.asarray(_c_anchor["sed_agn"]) - np.asarray(_c_anchor["sed_agn_torus"]), 2500.0)
 _wave_x6 = jnp.geomspace(1e-2, 1e2, 600)
 _cor = lambda l2500: float(np.interp(6.199, np.asarray(_wave_x6), np.asarray(
     xray_agn_corona_from_disc(_wave_x6, l2500, delta_alpha_ox=0.0, gamma=1.8, apply_anisotropy=False, log_nh=0.0))))
@@ -1869,7 +1884,7 @@ _CONVENTIONS = [
      "qsogen blr at default line strengths; the template's were generated with unrecorded parameters",
      "free `agn_blr_line_efficiency` (and `agn_blr_cf`) to absorb the offset in a fit"),
     ("CAT3D low-wind union half: max abs(t/a - 1)", f"{_worst_low[4]:.3f} at {_worst_low[5] / 1e4:.2f} um",
-     "between sparse reference nodes (section 8.3); exact at the nodes", "no photometric consequence: band power agrees"),
+     "between sparse reference nodes (section 8.3); exact at the nodes", "band power over 1-5 um agrees to 1.7% (section 8.3)"),
     ("Corona anchor: tengri 2 keV corona / corona anchored on disc + lines", f"x{_anchor_factor:.3f}",
      "corona follows the disc continuum L(2500), upstream's amplitude is set from disc + lines",
      "expect this offset in a capstone-style comparison"),
@@ -1893,10 +1908,10 @@ for _group, _rows in (("upstream behavior tengri does not reproduce", _UPSTREAM)
 # **Reading the table.** The first group is upstream behavior that tengri does not reproduce:
 # tengri implements the intended version, and a posterior moved from AGNfitter-rX should be
 # re-derived under it. The second is conventions and library differences, the ones a translation
-# must carry: the surviving mass fraction (the largest, 12%), the qsogen reddening law, the
+# must carry: the surviving mass fraction (12%), the qsogen reddening law, the
 # Hα + [N II] line strength of the THB21 template, the corona anchor and its face-on anisotropy,
-# and the torus amplitude. The CAT3D low-wind entry is an interpolation excursion with no
-# photometric consequence. The terms AGNfitter-rX does not model at all (host nebular emission,
+# and the torus amplitude. The CAT3D low-wind entry is an interpolation excursion that moves the
+# 1-5 µm band power by under 2%. The terms AGNfitter-rX does not model at all (host nebular emission,
 # IGM) are switched off on this page, so the comparison is like for like.
 
 # %% [markdown]
@@ -1947,6 +1962,10 @@ def winning_model(radio):
 m_cap = winning_model({"radio_q_ir": Fixed(Q_IR_PARITY), "sf": {"type": "bell2003_split"}, "agn": _AGN_RADIO})
 resolved_params(m_cap)
 
+from tengri.utils.physics_constants import L_SUN
+
+_cm = m_cap.predict({}).sed.components
+_frac_meas = band_power(np.asarray(_cm["wavelength"]), _cm["sed_agn_torus"], 1e3, 1e9) / (10**_LOG_LBOL_CAP * L_SUN)
 _wq11, _Lq11 = B.qsogen_full(log_lbol=11.0)
 _wq115, _Lq115 = B.qsogen_full(log_lbol=11.5)
 _dlog_l2500 = float(np.log10(val_at(_wq115, _Lq115, 2500.0) / val_at(_wq11, _Lq11, 2500.0)) / 0.5)
@@ -1971,10 +1990,12 @@ _MAP = [
     ("BB (disc amplitude)", ["agn_log_lbol"],
      "agn_log_lbol = 11 + log10[L_nu,AF(2500 A) / L_nu,tengri(2500 A; agn_log_lbol = 11)] "
      f"(L_2500 scales as the luminosity to the power {_dlog_l2500:.3f}); section 9 sets BB the other way round"),
-    ("TO (torus amplitude), inclination, oa, tau", ["agn_cos_inc", "agn_a_cat3d", "agn_fwd_cat3d"],
-     "agn_cos_inc = cos(incl_AF [deg]) (tengri takes a cosine, upstream degrees); agn_a_cat3d, agn_fwd_cat3d direct. "
-     "The torus power follows the AGN luminosity; to impose an upstream TO multiply by the template-integral "
-     f"ratio of section 3 (CAT3D: x{_cat_up_lo:.2f} to x{_cat_up_hi:.2f} over inclination)"),
+    ("TO (torus amplitude), inclination, a, f_wd", ["agn_torus_frac", "agn_cos_inc", "agn_a_cat3d", "agn_fwd_cat3d"],
+     "agn_torus_frac = P_TO / (10^agn_log_lbol L_sun) with P_TO = 10^TO x (integral of the unit template T_TO at the "
+     "fitted inclination, nu in Hz), so the inclination dependence of the template integral enters through P_TO "
+     f"(CAT3D: x{_cat_up_lo:.2f} to x{_cat_up_hi:.2f} over inclination, section 3); agn_cos_inc = cos(incl_AF [deg]) "
+     "(tengri takes a cosine, upstream degrees); agn_a_cat3d, agn_fwd_cat3d direct. "
+     f"Measured on this model: torus power / (10^lbol L_sun) = {_frac_meas:.4f}"),
     ("scatter on alpha_ox, Gamma, N_H", ["xray_delta_alpha_ox", "xray_gamma_agn", "xray_log_nh"],
      "direct, with xray_log_nh = 0 for the unabsorbed upstream corona. The corona anisotropy follows agn_cos_inc "
      f"(shared with the torus; x{_aniso_faceon:.3f} face-on, 1 at 30 deg)"),
@@ -2045,12 +2066,11 @@ m13 = SEDModel.build(
 pred13 = m13.predict({})
 w13 = np.asarray(pred13.sed.components["wavelength"])
 _o13 = np.argsort(w13)
-_dim13 = (1.0 + _z13) / (4.0 * np.pi * _dL13**2)  # L_nu -> F_nu conversion
 
 
 def _flux_at(key, lam_rest):
     L = np.asarray(pred13.sed.components[key])
-    return float(np.interp(lam_rest, w13[_o13], L[_o13])) * _dim13
+    return float(units.lnu_to_fnu(np.interp(lam_rest, w13[_o13], L[_o13]), _dL13, _z13))
 
 
 _flux_1500 = _flux_at("sed_intrinsic", 1500.0)
@@ -2167,7 +2187,6 @@ _BETA_JR16, _GAMMA_JR16 = 0.643, 6.8734  # Lusso & Risaliti (2016) L_2500-L_2keV
 _log_l2kev_mismatched = (_log_l2500_truth + 3.0) * _BETA_JR16 + _GAMMA_JR16  # +3 dex brighter than truth
 
 
-# The hook receives the resolved parameter vector; `model.predict` takes the free parameters only.
 _pinned13 = {
     name
     for name in m13_obs.spec.all_params
@@ -2503,13 +2522,14 @@ print(f"    model-grid points in 0.5-10 keV: {_n_xgrid} (a band power there is a
 # %%
 # Where the 2 keV offset comes from: the anchor of the corona, then its anisotropy.
 _l2500_disc_cap = val_at(w_te, s_cap.sed.components["sed_agn_disc"], 2500.0)
+assert abs(_l2500_disc_cap / _l2500_disc - 1.0) < 1e-6, "the winning model's disc differs from the section 6 anchor build"
 _wx_cap = np.asarray(_wave_x6)
 _cor_cap = lambda l2500: np.asarray(
     xray_agn_corona_from_disc(_wave_x6, l2500, delta_alpha_ox=0.0, gamma=1.8, apply_anisotropy=False, log_nh=0.0)
 )
 _at2 = lambda arr: float(np.interp(6.199, _wx_cap, arr))
 _r_bare = _at2(_cor_cap(_L2500_te)) / val_at(w_bb_c, L_bb_c, 6.199)
-_r_anchor = _at2(_cor_cap(_l2500_disc_cap)) / _at2(_cor_cap(_L2500_te))
+_r_anchor = _anchor_factor  # section 6 value, same AGN build
 _r_aniso = float(xray_anisotropy(1.0, 1.0))
 print("Capstone  2 keV corona, tengri / AGNfitter-rX, step by step")
 print("    | quantity                                                                   |  value |")
@@ -2530,9 +2550,9 @@ print(
 
 # %% [markdown]
 # **Result.** The translated model reproduces the AGNfitter-rX sum component by component. The host
-# at the matched formed mass closes to 0.9% (GA 1.009 at 0.3-1 µm, 1.001 at 1-3 µm), the cold dust to
-# 0.4% (SB 1.000 and 1.004), the torus to 0.1% (TO 1.000 and 1.001), the jet to 0.4% (RAD 1.004), and
-# the disc shape at 0.1-1 µm to 2% (BB 1.020). Over 4e14-8e14 Hz the optical normalization ratio has a
+# at the matched formed mass closes to 0.1% (GA 1.001 at 0.3-1 µm, 0.999 at 1-3 µm), the cold dust to
+# 0.1% (SB 1.000 and 0.999), the torus to 0.1% (TO 1.000 and 1.000), the jet to 0.3% (RAD 1.003), and
+# the disc shape at 0.1-1 µm to 2% (BB 1.016). Over 4e14-8e14 Hz the optical normalization ratio has a
 # median of 1.024 (16-84%: 0.996-1.046), and from radio to UV the fractional residual has a median of
 # +0.003 (-0.009 to +0.021). The corona is the one component that does not close, 0.915 at 2 keV,
 # and the step-by-step table accounts for it: tengri anchors its corona on the disc continuum, which
@@ -2593,9 +2613,9 @@ for _blk, _sec, _n, _w, _met in _SUMMARY:
 #   line power 1.34 times the template's. The Prevot disc screen is the same law one constant factor
 #   (1.1020) apart; qsogen's own curve is a different law.
 # - **§3 Torus.** The tabulated blocks reproduce their reference nodes to 1% at worst. The low-wind
-#   half of the CAT3D union reaches 10% between sparse reference nodes and agrees at them. The SKIRTOR
-#   block's 68 far-infrared points limit broadband photometry to about 10% at 10-100 µm. The
-#   inclination-dependent torus power differs by design.
+#   half of the CAT3D union reaches 10% between sparse reference nodes and agrees at them. Every
+#   block reproduces the reference band power from 3 to 1000 µm to 0.6%, SKIRTOR's 68 far-infrared
+#   points included. The inclination-dependent torus power differs by design.
 # - **§4 X-ray corona.** Power law, cutoff and 2 keV anchor agree to 0.9% with anisotropy and
 #   absorption off; tengri's defaults add both.
 # - **§5 Radio.** SPL and DPL agree to 1e-4; the star-formation radio follows the template to 0.09%
