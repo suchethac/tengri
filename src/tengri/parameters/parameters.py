@@ -74,6 +74,7 @@ from tengri.parameters._builders import (
     _resolve_lazy_bucket,
 )
 from tengri.parameters._dust_keys import (
+    DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
@@ -1289,12 +1290,70 @@ class Parameters:
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young/birth-cloud
-        # only (default; bagpipes). See DustSEDComponent.lyc_absorb_all.
-        self.dust_lyc_absorb_all = bool(kwargs.pop("dust_lyc_absorb_all", False))
+        # only (default; bagpipes). See DustSEDComponent.lyc_reprocessed_by.
+        # #2529 ("one lyc_ key family"): the retired bare bool is intercepted
+        # here too -- the expert flat-kwarg Parameters(...) escape hatch
+        # bypasses groups.py's grammar-level rename hint entirely.
+        if "dust_lyc_absorb_all" in kwargs:
+            _old_value = kwargs.pop("dust_lyc_absorb_all")
+            raise ValueError(
+                f"dust_lyc_absorb_all={_old_value!r} was renamed 'dust_lyc_reprocessed_by' "
+                f"(owner ruling #2529, 'one lyc_ key family'): False -> 'young' (default), "
+                f"True -> 'all'. Pass "
+                f"dust_lyc_reprocessed_by={'all' if _old_value else 'young'!r} instead."
+            )
+        self.dust_lyc_reprocessed_by = str(kwargs.pop("dust_lyc_reprocessed_by", "young"))
         # Include the LyC (λ < 912 Å) in the dust energy-balance integral
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
-        self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
+        if "dust_eb_include_lyc" in kwargs:
+            _old_value = kwargs.pop("dust_eb_include_lyc")
+            raise ValueError(
+                f"dust_eb_include_lyc={_old_value!r} was renamed 'dust_lyc_in_energy_balance' "
+                f"(owner ruling #2529, 'one lyc_ key family'): same bool, same default False. "
+                f"Pass dust_lyc_in_energy_balance={_old_value!r} instead."
+            )
+        self.dust_lyc_in_energy_balance = bool(kwargs.pop("dust_lyc_in_energy_balance", False))
+        # Young/old split (static, never fittable): the birth-cloud dispersal age
+        # [yr] and the dispersal width [dex] of every age edge (0 = hard step).
+        # Same validation the grammar layer runs, repeated for the flat surface.
+        self.dust_t_birth_yr = float(kwargs.pop("dust_t_birth_yr", 1e7))
+        self.dust_transition_width_dex = float(kwargs.pop("dust_transition_width_dex", 0.0))
+        if not 0.0 < self.dust_t_birth_yr < float("inf"):
+            raise ValueError(
+                f"dust_t_birth_yr must be finite and > 0 yr, got {self.dust_t_birth_yr!r}"
+            )
+        if not 0.0 <= self.dust_transition_width_dex < float("inf"):
+            raise ValueError(
+                f"dust_transition_width_dex must be finite and >= 0, got "
+                f"{self.dust_transition_width_dex!r}"
+            )
+        # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
+        # the birth-cloud screen through a hole. Same validation the grammar
+        # layer (groups.py's _translate_dust_attenuation) runs, repeated here
+        # because this flat-kwarg surface bypasses that layer entirely.
+        self.dust_lyc_escape_geometry = str(kwargs.pop("dust_lyc_escape_geometry", "screened"))
+        if self.dust_lyc_escape_geometry not in ("screened", "birth_cloud_holes", "clear"):
+            raise ValueError(
+                f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} must be one of "
+                f"('screened', 'birth_cloud_holes', 'clear')."
+            )
+        if self.dust_lyc_escape_geometry != "screened":
+            if self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} needs a "
+                    f"birth-cloud screen distinct from the diffuse-ISM screen (got "
+                    f"dust_model={self.dust_model!r}, which has none to put a hole in). "
+                    f"Supported: {sorted(DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}."
+                )
+            if self.dust_lyc_reprocessed_by == "all":
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} with "
+                    f"dust_lyc_reprocessed_by='all' is refused: both drive their reduction "
+                    f"from the SAME neb_fesc for the young population, and composing them "
+                    f"double-counts its escaping photons. 'lyc_escape_geometry' only "
+                    f"composes with dust_lyc_reprocessed_by='young' (the default)."
+                )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
@@ -2818,7 +2877,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dla": content("DLA model determines parameters"),
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
     "dust_approx": content("dust approximation type determines parameters"),
-    "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_lyc_in_energy_balance": content("dust LyC treatment determines parameters"),
     "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
@@ -2831,7 +2890,10 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
         "in the component chain when != 'none' (#2260)"
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
-    "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
+    "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
+    "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
     "dust_screens": content(

@@ -399,13 +399,15 @@ def compute_l_dust_absorbed(
     energy balance).
 
     Physics convention (#922): Lyman-continuum photons
-    (:math:`\lambda < 912` Å) ionize hydrogen rather than heat dust, so by
-    default they are excluded from the integral -- the same
-    :data:`~tengri.forward.energy_balance.LYMAN_CUTOFF_AA` mask applied by
+    (ionizing side of :data:`~tengri.components.lyc.LYMAN_LIMIT_AA`) ionize
+    hydrogen rather than heat dust, so by default they are excluded from the
+    integral -- the same edge applied by
     :func:`tengri.forward.energy_balance.bolometric_absorbed_log10`, the
     canonical single source of truth for this quantity, matching CIGALE.
     Both functions share :func:`tengri.forward.energy_balance.
-    absorbed_integrand` so the mask cannot silently drift between the two
+    absorbed_integrand` for the per-node mask AND
+    :func:`tengri.components.lyc.edge_trapezoid` for the edge-aware
+    reduction, so the mask/quadrature cannot silently drift between the two
     public spellings.
 
     Parameters
@@ -428,12 +430,32 @@ def compute_l_dust_absorbed(
     -------
     float
         Dust-absorbed luminosity in Lsun.
-    """
-    from tengri.forward.energy_balance import LYMAN_CUTOFF_AA, absorbed_integrand
 
-    lyman_cutoff_aa = None if include_lyc else LYMAN_CUTOFF_AA
+    Notes
+    -----
+    Peak-factored the same way as :func:`_trapz_to_lsun` (float32-safe,
+    #1206), but reduced through :func:`tengri.components.lyc.edge_trapezoid`
+    instead of a plain ``jnp.trapezoid``: the grid cell straddling
+    ``LYMAN_LIMIT_AA`` gets the step-model rectangle split rather than a
+    linear ramp across it (one Lyman edge, module docstring of
+    ``tengri.components.lyc``). ``edge_trapezoid`` is positively oriented
+    (follows the sign of ``absorbed`` itself, not the grid orientation of
+    ``nu``), so unlike :func:`_trapz_to_lsun`'s ``-jnp.trapezoid`` the sign
+    here is NOT flipped before the final ``jnp.maximum(..., 0.0)`` clamp.
+    """
+    from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid
+    from tengri.forward.energy_balance import absorbed_integrand
+
+    lyman_cutoff_aa = None if include_lyc else LYMAN_LIMIT_AA
     absorbed = absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
-    return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
+    side = "all" if lyman_cutoff_aa is None else "nonionizing"
+    edge_aa = LYMAN_LIMIT_AA if lyman_cutoff_aa is None else lyman_cutoff_aa
+    # stop_gradient: pure factorization constant, mirrors _trapz_to_lsun.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(absorbed), initial=0.0))
+    safe_peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    norm = edge_trapezoid(absorbed / safe_peak, wave, side=side, edge_aa=edge_aa)
+    result = norm * pow10(jnp.log10(safe_peak) - LOG10_L_SUN)
+    return jnp.maximum(result, 0.0)
 
 
 def band_integral(wave, y, lam_lo, lam_hi):

@@ -80,8 +80,35 @@ _DUST_FREE = {
 #: 1e4, and both operators pinned here return observed-frame fluxes carrying the
 #: ``(1+z)/(4 pi d_L^2)`` dimming factor (max relative movement 2.27e-4, matching the
 #: luminosity-distance shift). 17 significant digits.
+#:
+#: Re-taken again (one-Lyman-edge L2 brief, 2026-10): ``fit_ionizing_spectrum``'s
+#: ``gas_logqion`` integral (``components/nebular/ionizing_spectrum.py``) now
+#: routes through ``tengri.components.lyc.edge_trapezoid(side="ionizing")``
+#: instead of a hard ``wave <= HI_LIMIT`` mask + plain trapezoid, picking up the
+#: #537 partial-bin Lyman correction it never had. This model's Cue backend
+#: reads ``gas_logqion`` per (metallicity, age) bin from the resulting
+#: ``logqion_table`` (the ``ssp_weights``/``ssp_log_ages_yr`` high-level path in
+#: ``nebular/component.py``, active whenever ``StellarSEDComponent`` publishes
+#: ``age_weights`` -- true here), not from the bit-identical
+#: ``_integrate_nion_log10`` scalar fallback, so this reference moves even
+#: though that other Q_H computation does not.
+#:
+#: Decomposition (isolated by monkeypatching ``CueBackend._logqion_table`` alone
+#: on ``data/fsps_prsc_miles_chabrier.h5``, keeping ``_ionspec_table`` --
+#: the 7 power-law SHAPE parameters -- untouched): patching only
+#: ``_logqion_table`` back to the pre-fix formula reproduces the OLD reference
+#: below to EXACT bit-identity (max relative diff 0.0), so 100% of the shift is
+#: ``logqion_table`` (max abs diff 0.054 dex, mean 0.016 dex over valid
+#: (metallicity, age) bins) and 0% is the shape parameters -- consistent with
+#: the source diff, which touches only the ``Q_total``/``log_qion`` block and
+#: leaves the (earlier, independent) segment power-law fit untouched. Old ->
+#: new (max relative movement across the 4 lines 1.737e-2, i.e. the reason for
+#: this re-take, not an unrelated regression):
+#: [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15,
+#: 5.3145048745591e-16] -> [4.896033417598987e-16, 5.986139354661126e-16,
+#: 1.7280648661285269e-15, 5.40679142534215e-16]. 17 significant digits.
 _CUE_F64_REF = np.array(
-    [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15, 5.3145048745591e-16]
+    [4.896033417598987e-16, 5.986139354661126e-16, 1.7280648661285269e-15, 5.40679142534215e-16]
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT
@@ -199,9 +226,11 @@ def test_predict_line_fluxes_cue_float32_tracks_float64(ssp_bare):
     capture and adds a numeric accuracy bar (rtol <= 3e-3), the same class of bound
     ``test_float32_fitting_path_seams.py`` uses elsewhere in this tree.
 
-    Measured on this tree: componentwise relative error
-    ``[3.53e-05 2.39e-05 1.06e-05 9.82e-06]``, worst case 3.53e-05, two orders of
-    magnitude inside the 3e-3 bar.
+    Measured on this tree (re-taken alongside the ``_CUE_F64_REF`` re-take
+    above; the physics change there shifts float64 and float32 together, so
+    the ratio barely moves): componentwise relative error
+    ``[2.93e-05 2.99e-05 1.66e-05 7.41e-08]``, worst case 2.99e-05, two orders
+    of magnitude inside the 3e-3 bar.
     """
     jax.clear_caches()
     gc.collect()

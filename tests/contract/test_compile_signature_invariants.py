@@ -136,8 +136,11 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_law_overrides = {}
             self._dust_screens = ()  # always set by _init_dust; empty unless age_binned
             self._dust_lyman_cutoff_aa = 912.0
-            self._dust_lyc_absorb_all = False
-            self._dust_eb_include_lyc = False
+            self._dust_lyc_reprocessed_by = "young"
+            self._dust_lyc_in_energy_balance = False
+            self._dust_lyc_escape_geometry = "screened"
+            self._dust_t_birth_yr = 1e7
+            self._dust_transition_width_dex = 0.0
             self._dust_ir_diffuse_screen = False
             self._astrodust_spinning_dust = False
             self._astrodust_f_cnm = 0.5
