@@ -96,8 +96,8 @@ def test_on_node_exactness(model):
     """On-node query agrees to 1e-3."""
     if model == "modified_blackbody":
         kw = {"dust_T": 30.0, "dust_beta_ir": 1.5}
-        T_grid = np.array([20.0, 30.0, 60.0])
-        beta_grid = np.array([1.5, 1.8, 2.0])
+        T_grid = np.array([20.0, 30.0, 60.0, 80.0])  # Extend to cover [20, 80]
+        beta_grid = np.array([1.0, 1.5, 1.8, 2.0, 2.5])  # Extend to cover [1.0, 2.5]
         grids = {"T_grid": T_grid, "beta_grid": beta_grid}
     elif model == "casey2012":
         kw = {
@@ -106,10 +106,12 @@ def test_on_node_exactness(model):
             "dust_alpha_mir": 2.0,
             "dust_lambda_0_um": 150.0,
         }
-        T_grid = np.array([25.0, 35.0, 60.0])
-        beta_grid = np.array([1.5, 1.8, 2.0])
-        alpha_mir_grid = np.array([1.5, 2.0, 2.5])
-        lambda_0_um_grid = np.array([100.0, 150.0, 200.0])
+        T_grid = np.array([20.0, 25.0, 35.0, 60.0, 80.0])  # Extend to cover [20, 80]
+        beta_grid = np.array([1.0, 1.5, 1.8, 2.0, 2.5])  # Extend to cover [1.0, 2.5]
+        alpha_mir_grid = np.array([1.0, 1.5, 2.0, 2.5, 3.0])  # Extend to cover [1.0, 3.0]
+        lambda_0_um_grid = np.array(
+            [50.0, 100.0, 150.0, 200.0, 500.0]
+        )  # Extend to cover [50, 500]
         grids = {
             "T_grid": T_grid,
             "beta_grid": beta_grid,
@@ -118,9 +120,11 @@ def test_on_node_exactness(model):
         }
     elif model == "graybody":
         kw = {"dust_T": 20.0, "dust_beta_ir": 1.8, "dust_lambda_0_um": 100.0}
-        T_grid = np.array([20.0, 40.0, 60.0])
-        beta_grid = np.array([1.5, 1.8, 2.0])
-        lambda_0_um_grid = np.array([100.0, 150.0, 200.0])
+        T_grid = np.array([20.0, 40.0, 60.0, 80.0])  # Extend to cover [20, 80]
+        beta_grid = np.array([1.0, 1.5, 1.8, 2.0, 2.5])  # Extend to cover [1.0, 2.5]
+        lambda_0_um_grid = np.array(
+            [50.0, 100.0, 150.0, 200.0, 500.0]
+        )  # Extend to cover [50, 500]
         grids = {
             "T_grid": T_grid,
             "beta_grid": beta_grid,
@@ -142,15 +146,15 @@ def test_wien_tail_accuracy(model):
     if model == "modified_blackbody":
         kw = {"dust_T": 15.0, "dust_beta_ir": 1.5}
         grids = {
-            "T_grid": 15.0 * np.array([0.998, 1.0, 1.002]),
-            "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
+            "T_grid": np.array([15.0, 20.0, 30.0, 50.0, 80.0]),  # Cover [20, 80] with node at 15
+            "beta_grid": np.array([1.0, 1.5, 2.0, 2.5]),
         }
     elif model == "graybody":
         kw = {"dust_T": 15.0, "dust_beta_ir": 1.5, "dust_lambda_0_um": 200.0}
         grids = {
-            "T_grid": 15.0 * np.array([0.998, 1.0, 1.002]),
-            "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
-            "lambda_0_um_grid": 200.0 * np.array([0.998, 1.0, 1.002]),
+            "T_grid": np.array([15.0, 20.0, 30.0, 50.0, 80.0]),  # Cover [20, 80] with node at 15
+            "beta_grid": np.array([1.0, 1.5, 2.0, 2.5]),
+            "lambda_0_um_grid": np.array([50.0, 100.0, 200.0, 300.0, 500.0]),
         }
 
     fw, ft = tophat(8, 24)
@@ -163,8 +167,8 @@ def test_wien_tail_accuracy(model):
 
 
 _MM_GRIDS = {
-    "T_grid": 20.0 * np.array([0.998, 1.0, 1.002]),
-    "beta_grid": 1.5 * np.array([0.998, 1.0, 1.002]),
+    "T_grid": np.array([20.0, 40.0, 60.0, 80.0]),
+    "beta_grid": np.array([1.0, 1.5, 2.0, 2.5]),
 }
 
 
@@ -258,23 +262,23 @@ print(json.dumps({"value": value.tolist(), "grad": [np.asarray(g).tolist() for g
 
 _FLOAT32_CASES = {
     "modified_blackbody": (
-        {"T_grid": [30.0, 45.0, 60.0], "beta_grid": [1.2, 1.8, 2.4]},
+        {"T_grid": [20.0, 30.0, 45.0, 60.0, 80.0], "beta_grid": [1.0, 1.2, 1.8, 2.4, 2.5]},
         [47.3, 1.65],
     ),
     "graybody": (
         {
-            "T_grid": [30.0, 45.0, 60.0],
-            "beta_grid": [1.2, 1.8, 2.4],
-            "lambda_0_um_grid": [80.0, 160.0, 320.0],
+            "T_grid": [20.0, 30.0, 45.0, 60.0, 80.0],
+            "beta_grid": [1.0, 1.2, 1.8, 2.4, 2.5],
+            "lambda_0_um_grid": [50.0, 80.0, 160.0, 320.0, 500.0],
         },
         [47.3, 1.65, 130.0],
     ),
     "casey2012": (
         {
-            "T_grid": [30.0, 45.0, 60.0],
-            "beta_grid": [1.2, 1.8, 2.4],
-            "alpha_mir_grid": [1.5, 2.0, 2.5],
-            "lambda_0_um_grid": [80.0, 160.0, 320.0],
+            "T_grid": [20.0, 30.0, 45.0, 60.0, 80.0],
+            "beta_grid": [1.0, 1.2, 1.8, 2.4, 2.5],
+            "alpha_mir_grid": [1.0, 1.5, 2.0, 2.5, 3.0],
+            "lambda_0_um_grid": [50.0, 80.0, 160.0, 320.0, 500.0],
         },
         [47.3, 1.65, 1.8, 130.0],
     ),

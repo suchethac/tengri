@@ -458,12 +458,145 @@ _FLOAT64_TINY = np.finfo(np.float64).tiny
 _LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
 
 
-def _default_axis(param_name: str, n_nodes: int) -> np.ndarray:
-    """Node grid spanning the parameter's declared free prior: geometric for log axes."""
-    lo, hi = _get_param_bounds(param_name)
+def _get_active_support(param_name: str, parameters: Any) -> tuple[float, float]:
+    """Compute the active support of a parameter given the model's Parameters.
+
+    The active support is what the model can actually reach, not just the declared prior.
+    It spans:
+    - For free parameters with finite bounds: [min(declared_lo, lo), max(declared_hi, hi)]
+    - For Fixed values: the single value (pinned), extended to include in declared range
+    - For unbounded parameters (Normal, etc.): the declared range (with a warning)
+
+    Parameters
+    ----------
+    param_name : str
+        Name of the parameter (e.g., 'dust_T').
+    parameters : Parameters or None
+        The model's parameter specification. If None, returns declared bounds.
+
+    Returns
+    -------
+    tuple[float, float]
+        (lower, upper) bounds of the active support.
+
+    Warns
+    -----
+    UserWarning
+        If the parameter has an unbounded prior (Normal, etc.).
+    """
+    import warnings
+
+    declared_lo, declared_hi = _get_param_bounds(param_name)
+
+    if parameters is None:
+        return declared_lo, declared_hi
+
+    try:
+        fixed_values = parameters.get_fixed_values()
+    except (AttributeError, TypeError):
+        return declared_lo, declared_hi
+
+    # If the parameter is Fixed, its value is the support
+    if param_name in fixed_values:
+        v = float(fixed_values[param_name])
+        # Extend to include in the declared range
+        return min(declared_lo, v), max(declared_hi, v)
+
+    # If the parameter is free, get its actual bounds
+    try:
+        dist = parameters.get_distribution(param_name)
+        lo, hi = dist.bounds
+
+        # Check for unbounded (lo or hi is None or infinite)
+        if lo is None or hi is None or np.isinf(lo) or np.isinf(hi):
+            warnings.warn(
+                f"Parameter '{param_name}' has unbounded prior; node grid spans declared "
+                f"range [{declared_lo:.4g}, {declared_hi:.4g}]. Lookup clamps values outside "
+                f"this span to the edge node with exactly zero gradient.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return declared_lo, declared_hi
+
+        # Finite bounds: extend to cover both declared and actual
+        lo, hi = float(lo), float(hi)
+        return min(declared_lo, lo), max(declared_hi, hi)
+    except (AttributeError, ValueError, KeyError):
+        # Parameter not in this Parameters spec; use declared bounds
+        return declared_lo, declared_hi
+
+
+def _compute_node_count(
+    param_name: str, n_default: int, span_active: float, span_declared: float
+) -> int:
+    """Compute the number of nodes to maintain constant density.
+
+    When the active support exceeds the declared range, scale the node count to preserve
+    the density per unit in the interpolation coordinate (ln for log axes, linear otherwise).
+
+    Parameters
+    ----------
+    param_name : str
+        Name of the parameter.
+    n_default : int
+        Default node count (measured for the declared span).
+    span_active : float
+        Span of active support (declared_hi - declared_lo or ln-ratio).
+    span_declared : float
+        Span of declared range (declared_hi - declared_lo or ln-ratio).
+
+    Returns
+    -------
+    int
+        New node count, at least n_default.
+    """
+    if span_declared <= 0 or span_active <= 0:
+        return n_default
+    density_ratio = span_active / span_declared
+    return max(n_default, int(np.ceil(n_default * density_ratio)))
+
+
+def _default_axis(param_name: str, n_nodes: int, parameters: Any = None) -> np.ndarray:
+    """Node grid spanning the parameter's active support: geometric for log axes.
+
+    The active support is computed from the Parameters spec if provided, otherwise
+    falls back to declared bounds. Node density is preserved when the active support
+    exceeds the declared range.
+
+    Parameters
+    ----------
+    param_name : str
+        Name of the parameter.
+    n_nodes : int
+        Default node count.
+    parameters : Parameters or None, optional
+        The model's parameter specification.
+
+    Returns
+    -------
+    ndarray
+        Node positions, dtype float64.
+    """
+    declared_lo, declared_hi = _get_param_bounds(param_name)
+    active_lo, active_hi = _get_active_support(param_name, parameters)
+
+    # Compute new node count based on active support span
     if param_name in _LOG_AXIS_PARAMS:
-        return np.geomspace(lo, hi, n_nodes, dtype=np.float64)
-    return np.linspace(lo, hi, n_nodes, dtype=np.float64)
+        if active_hi > 0 and active_lo > 0:
+            span_active = np.log(active_hi / active_lo)
+        else:
+            span_active = 1.0
+        if declared_hi > 0 and declared_lo > 0:
+            span_declared = np.log(declared_hi / declared_lo)
+        else:
+            span_declared = 1.0
+        n_actual = _compute_node_count(param_name, n_nodes, span_active, span_declared)
+        return np.geomspace(active_lo, active_hi, n_actual, dtype=np.float64)
+    else:
+        span_active = active_hi - active_lo
+        span_declared = declared_hi - declared_lo
+        n_actual = _compute_node_count(param_name, n_nodes, span_active, span_declared)
+        return np.linspace(active_lo, active_hi, n_actual, dtype=np.float64)
 
 
 _CONTINUUM_BUILDERS = {
@@ -505,6 +638,16 @@ def precompute(
     ln(band flux) bends sharply in ``dust_alpha_mir`` toward 1 (the normalization of the mid-IR
     power law); its 250-500 um band is 4.1e-4 at z = 3.
 
+    **Axis support (issue #2722)**: Default axes span the parameter's **active support**
+    — what the model can actually reach given the parameter's prior — not just the declared
+    prior bounds in the registry. A user who widens a prior or pins a value outside the
+    declared range gets a flat likelihood and zero gradient in that region only if the prior
+    is unbounded (Normal, etc.); for finite priors the grid expands to cover it. User-supplied
+    axes must explicitly cover the active support or ``ValueError`` is raised. Node density
+    is preserved: when the active support expands, the node count increases proportionally
+    in the interpolation coordinate (ln for log axes, linear otherwise), never fewer than the
+    default. With default priors, axes are bit-identical to the declared span.
+
     Parameters
     ----------
     filter_waves : list[ndarray]
@@ -514,22 +657,26 @@ def precompute(
     redshift : float
         Source redshift. [dimensionless]
     parameters : Parameters | None
-        Parameters spec, used to detect Fixed-axis parameters.
+        Parameters spec, used to detect Free and Fixed axis parameters; determines the
+        active support of each axis. If None, all axes use declared bounds.
     model : str, keyword-only
         One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature nodes [K]. If None, ``_DEFAULT_NODES`` geometric nodes spanning the
-        declared free prior (dust_T: 20-80 K).
+        Temperature nodes [K]. If None, geometric nodes spanning the active support of
+        dust_T (declared prior if parameters is None, else extended to include Free bounds
+        or Fixed value). Density is preserved per log-unit.
     beta_grid : ndarray, optional
-        Emissivity-index nodes [dimensionless]. If None, linear nodes spanning the declared
-        free prior (dust_beta_ir: 1.0-2.5).
+        Emissivity-index nodes [dimensionless]. If None, linear nodes spanning the active
+        support of dust_beta_ir.
     alpha_mir_grid : ndarray, optional
         Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, linear nodes
-        spanning the declared free prior (dust_alpha_mir: 1.0-3.0).
+        spanning the active support of dust_alpha_mir.
     lambda_0_um_grid : ndarray, optional
         Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None,
-        geometric nodes spanning the declared free prior (dust_lambda_0_um: 50-500 um).
+        geometric nodes spanning the active support of dust_lambda_0_um (preserved per log-unit).
+        User-supplied grids must include the full active support or raise ``ValueError``; below
+        4 nodes, PCHIP degradation is warned.
 
     Returns
     -------
@@ -561,12 +708,42 @@ def precompute(
             "dust_alpha_mir": alpha_mir_grid,
             "dust_lambda_0_um": lambda_0_um_grid,
         }
-        axes = tuple(
-            _default_axis(name, _DEFAULT_NODES[model][name])
-            if supplied[name] is None
-            else supplied[name]
-            for name in axis_params
-        )
+
+        # Build or validate axes
+        axes = []
+        for name in axis_params:
+            if supplied[name] is None:
+                # Use default axis, which respects active support
+                ax = _default_axis(name, _DEFAULT_NODES[model][name], parameters)
+            else:
+                # Validate user-supplied axis covers active support
+                ax = np.asarray(supplied[name], dtype=np.float64)
+
+                # Check coverage of active support
+                active_lo, active_hi = _get_active_support(name, parameters)
+                ax_lo, ax_hi = float(ax.min()), float(ax.max())
+
+                if ax_lo > active_lo or ax_hi < active_hi:
+                    raise ValueError(
+                        f"User-supplied {name}_grid=[{ax_lo:.4g}, {ax_hi:.4g}] does not cover "
+                        f"the active parameter support [{active_lo:.4g}, {active_hi:.4g}]. "
+                        f"Extend the grid to include the full range that the parameter can reach."
+                    )
+
+                # Warn if fewer than 4 nodes (PCHIP degrades)
+                if len(ax) < 4:
+                    import warnings
+
+                    msg = (
+                        f"User-supplied {name}_grid has {len(ax)} nodes; PCHIP "
+                        "interpolation degrades below 4 nodes (parabola / chord). "
+                        "Consider using at least 4 nodes."
+                    )
+                    warnings.warn(msg, UserWarning, stacklevel=2)
+
+            axes.append(ax)
+
+        axes = tuple(axes)
         preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
         result = {
             "grid_phot": preint.phot,

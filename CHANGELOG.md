@@ -10,6 +10,14 @@
 
 ### Fixed
 
+- Analytic dust-emission precompute now builds grid node axes over the parameter's
+  **active support** (what the model can reach given the parameter's prior), not just the
+  declared prior bounds. A user who widens a prior or pins a value outside the declared
+  range gets a non-flat likelihood and non-zero gradients over the entire active support.
+  User-supplied axes must explicitly cover the active support or raise `ValueError`; node
+  density is preserved per interpolation coordinate (log or linear) when the support expands.
+  With default priors, axes are bit-identical to before (#2722).
+
 - `radio_log_nu_cut` sets the synchrotron-aging cutoff of the power-law AGN
   radio jet (#2689): `L_nu = L_5GHz (nu / 5 GHz)^-alpha exp(-nu / 10^cut)`,
   with the default 13.0 (10 THz) as before. The key is read by both AGN radio
