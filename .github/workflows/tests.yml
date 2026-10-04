@@ -999,21 +999,25 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # bug/ has no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
           # on whichever side a frozen glob happens to match.
+          # 2026-10-04: half 2 measured 51m17s wall at the step kill (run
+          # 37144178297, every test passing, pytest terminated as an orphan) and
+          # 49:57 on its last green — the tree outgrew the 50-min budget, so both
+          # halves get 60.
           - shard: regression-b1
             paths: ""
             bug_half: "1"
             nproc: 1
-            budget: 50
+            budget: 60
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
-            budget: 50
+            budget: 60
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
@@ -1394,23 +1398,26 @@ jobs:
             nproc: 1
             budget: 50
             coverage_budget: 105
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # bug/ has no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
           # on whichever side a frozen glob happens to match.
+          # 2026-10-04: half 2 measured 51m17s wall without coverage (run
+          # 37144178297, step kill with every test passing), so 50/75 are
+          # outgrown; both halves get 60/90.
           - shard: regression-b1
             paths: ""
             bug_half: "1"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 60
+            coverage_budget: 90
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 60
+            coverage_budget: 90
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
