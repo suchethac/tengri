@@ -8,8 +8,9 @@ central difference of that reference, continuity across α = 1 ± 1e-3 and
 2 ± 1e-3, float32 agreement, and the two SED-mix calls (DL07 at α = 2, DL14).
 """
 
+from decimal import Decimal, localcontext
+
 import jax
-import mpmath
 import numpy as np
 import pytest
 
@@ -23,18 +24,24 @@ def _exact_formula(umin, umax, alpha):
 
     The textbook form ``(1-a)/(2-a) (x^(2-a)-1)/(x^(1-a)-1)`` cancels
     catastrophically within 1e-6 of either pole in float64 (``x^(1-a) - 1`` is
-    ~1e-6 there), so the reference is evaluated in ``mpmath`` at 50 digits and
-    rounded once; the limit forms are taken only at the exact poles.
+    ~1e-6 there), so the reference is evaluated with the standard library's
+    ``decimal`` at 50 digits (``x**p = exp(p ln x)``) from the exact binary
+    values of the float inputs and rounded once; the limit forms are taken only
+    at the exact poles.
     """
-    with mpmath.workdps(50):
-        x = mpmath.mpf(umax) / mpmath.mpf(umin)
-        a = mpmath.mpf(alpha)
+    with localcontext() as ctx:
+        ctx.prec = 50
+        x = Decimal(umax) / Decimal(umin)
+        a = Decimal(alpha)
+        ln_x = x.ln()
         if a == 1:
-            value = (x - 1) / mpmath.log(x)
+            value = (x - 1) / ln_x
         elif a == 2:
-            value = x * mpmath.log(x) / (x - 1)
+            value = x * ln_x / (x - 1)
         else:
-            value = ((1 - a) / (2 - a)) * (x ** (2 - a) - 1) / (x ** (1 - a) - 1)
+            x_2a = ((2 - a) * ln_x).exp()
+            x_1a = ((1 - a) * ln_x).exp()
+            value = ((1 - a) / (2 - a)) * (x_2a - 1) / (x_1a - 1)
         return float(value)
 
 
