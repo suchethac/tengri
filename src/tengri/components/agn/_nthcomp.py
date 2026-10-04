@@ -207,8 +207,8 @@ def _interp_with_slopes(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Trilinear-in-log template shape and its exact slopes in all three operands.
 
-    Returns ``(shape, slopes)`` on the requested ``nu`` grid, in the table's
-    float32 precision; ``slopes`` has shape ``(3, n_nu)`` and holds
+    Returns ``(shape, slopes)`` on the requested ``nu`` grid, preserving input
+    precision; ``slopes`` has shape ``(3, n_nu)`` and holds
     ``d shape / d(gamma, kTe_keV, kTbb_keV)``. ``shape`` is the forward value,
     unchanged from the previous inline implementation.
 
@@ -217,19 +217,18 @@ def _interp_with_slopes(
     where the operand is clamped to the grid edge (the clamp makes the shape
     independent of it). Nothing here needs a finite-difference step.
     """
-    g = jnp.asarray(gamma, dtype=jnp.float32)
-    t = jnp.asarray(kTe_keV, dtype=jnp.float32)
-    b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
+    g = jnp.asarray(gamma)
+    t = jnp.asarray(kTe_keV)
+    b = jnp.asarray(kTbb_keV)
 
-    gamma_jax = jnp.asarray(table.gamma)
-    kte_jax = jnp.asarray(table.kte)
-    ktbb_jax = jnp.asarray(table.ktbb)
+    gamma_jax = jnp.asarray(table.gamma).astype(g.dtype)
+    kte_jax = jnp.asarray(table.kte).astype(t.dtype)
+    ktbb_jax = jnp.asarray(table.ktbb).astype(b.dtype)
     ig, fg = _clamp_interp_index(g, gamma_jax)
     it, ft = _clamp_interp_index(t, kte_jax)
     ib, fb = _clamp_interp_index(b, ktbb_jax)
 
     table_jax = jnp.asarray(table.table_log)
-    nu_jax = jnp.asarray(table.nu)
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
         """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
@@ -266,9 +265,10 @@ def _interp_with_slopes(
     dshape_on_table_grid = shape_on_table_grid * dlog
 
     # Resample onto the requested nu grid (linear, so the slopes resample too).
-    nu_f = jnp.asarray(nu, dtype=jnp.float32)
-    lnu = jnp.interp(nu_f, nu_jax, shape_on_table_grid, left=0.0, right=0.0)
-    dlnu = jax.vmap(lambda d: jnp.interp(nu_f, nu_jax, d, left=0.0, right=0.0))(
+    nu_f = jnp.asarray(nu)
+    nu_jax_interp = jnp.asarray(table.nu).astype(nu.dtype)
+    lnu = jnp.interp(nu_f, nu_jax_interp, shape_on_table_grid, left=0.0, right=0.0)
+    dlnu = jax.vmap(lambda d: jnp.interp(nu_f, nu_jax_interp, d, left=0.0, right=0.0))(
         dshape_on_table_grid
     )
     return lnu, dlnu
