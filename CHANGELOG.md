@@ -12,6 +12,13 @@
 
 ### Fixed
 
+- **Kubota-Done warm Comptonization (nthcomp) JIT vs eager precision (#2739):** Interpolation
+  coordinates were cast to float32 (precision 6e-8), causing 1e-6 SED differences between JIT
+  and eager evaluation at the 3-zone disc interface. Coordinates and interpolation weights now
+  preserve input dtype (float64 under x64, float32 in pure-float32 mode). Template table values
+  stay float32 but are promoted before arithmetic. AD and FD gradients now agree to 1e-5
+  relative.
+
 - The radio wing of the master wavelength grid is sampled at 100 points per decade from at
   most 1e8 A (was 20 per decade from the end of the longest template), so a 10 %-wide radio
   band (1.4 GHz, 3 GHz, 150 MHz) holds about four nodes at every redshift instead of one: with

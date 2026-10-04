@@ -216,6 +216,13 @@ def _interp_with_slopes(
     exact and local: inside a template cell it is the cell slope, and it is 0
     where the operand is clamped to the grid edge (the clamp makes the shape
     independent of it). Nothing here needs a finite-difference step.
+
+    Notes
+    -----
+    **Dtype preservation (#2739):** Interpolation coordinates (gamma, kTe_keV, kTbb_keV, nu)
+    and their weights are kept in the input dtype (float64 under x64, float32 in pure-float32
+    mode), avoiding precision loss from float32 truncation (6e-8 relative). Template table
+    arrays are stored as float32 but promoted to input dtype before arithmetic.
     """
     g = jnp.asarray(gamma)
     t = jnp.asarray(kTe_keV)
