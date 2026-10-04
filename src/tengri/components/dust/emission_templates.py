@@ -66,7 +66,7 @@ _DL14_UMAX_POWERLAW = 1.0e7
 def _expm1_over_u(u):
     r"""Numerically stable evaluation of expm1(u) / u.
 
-    For |u| < 1e-3, use Taylor series to 4th order: 1 + u/2 + u²/6 + u³/24.
+    For |u| < 1e-3, use the Taylor series through u³: 1 + u/2 + u²/6 + u³/24.
     For |u| >= 1e-3, use jnp.expm1(u) / u directly, avoiding the pole at u = 0.
 
     The series truncation error is <= 1e-14 at |u| = 1e-3, and the switch

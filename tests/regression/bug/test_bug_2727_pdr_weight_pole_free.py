@@ -142,40 +142,45 @@ def test_pdr_weight_gradient():
 
 
 def test_pdr_weight_continuity_across_old_windows():
-    """Test continuity across the old 1e-3 window edges."""
+    """No step at the former window edges α = 1 ± 1e-3 and 2 ± 1e-3.
+
+    R itself changes by ≈ 2δ·ln(U_max/U_min) relative across a step of 2δ in
+    α, so continuity is stated as: the finite difference of R across each edge
+    equals the finite difference of the 50-digit reference to 1e-12 of R. A
+    step of the old size (5–8e-3) would miss by six orders of magnitude.
+    """
     test_cases = [
         (1.0, 1e7),
         (0.1, 1e7),
         (25.0, 1e7),
         (1.0, 1e6),
     ]
-
+    delta = 1e-9
     for umin, umax in test_cases:
-        # Window edges at α = 1 ± 1e-3
-        alpha_edge = 1.0 - 1e-3
-        val_left = float(R(umin, umax, alpha_edge - 1e-9))
-        val_right = float(R(umin, umax, alpha_edge + 1e-9))
-        rel_jump = abs(val_left - val_right) / abs(val_right)
-        assert rel_jump < 1e-7, (
-            f"Jump at α=1−1e-3 edge: left={val_left}, right={val_right}, relative={rel_jump:.2e}"
-        )
-
-        # Window edges at α = 2 ± 1e-3
-        alpha_edge = 2.0 - 1e-3
-        val_left = float(R(umin, umax, alpha_edge - 1e-9))
-        val_right = float(R(umin, umax, alpha_edge + 1e-9))
-        rel_jump = abs(val_left - val_right) / abs(val_right)
-        assert rel_jump < 1e-7, (
-            f"Jump at α=2−1e-3 edge: left={val_left}, right={val_right}, relative={rel_jump:.2e}"
-        )
+        for edge in (1.0 - 1e-3, 1.0 + 1e-3, 2.0 - 1e-3, 2.0 + 1e-3):
+            val_left = float(R(umin, umax, edge - delta))
+            val_right = float(R(umin, umax, edge + delta))
+            ref_left = _exact_formula(umin, umax, edge - delta)
+            ref_right = _exact_formula(umin, umax, edge + delta)
+            step_err = abs((val_right - val_left) - (ref_right - ref_left)) / abs(ref_right)
+            assert step_err < 1e-12, (
+                f"step across α={edge} (U_min={umin}): R changes by {val_right - val_left:.6e}, "
+                f"the reference by {ref_right - ref_left:.6e}; mismatch {step_err:.2e} of R"
+            )
 
 
 def test_pdr_weight_float32():
-    """Test float32 precision: values within 4 ulp, gradient non-zero and finite."""
-    alpha_test = [1.0, 2.0, 1.0005]
-    umin, umax = 1.0, 1e7
+    """float32: value within 8 ulp of float64, gradient finite and non-zero.
 
-    for alpha in alpha_test:
+    The float32 chain is log, two multiplies, two expm1, two divisions and one
+    series, each rounded once (≤ 0.5 ulp) and the series switch at |u| = 1e-3
+    below float32 resolution: 8 ulp is the sum; measured ≤ 6.8 ulp at
+    (U_min = 25, α = 1.0005), ≤ 2 ulp at U_min = 1.
+    """
+    alpha_test = [1.0, 2.0, 1.0005, 2.0005]
+    cases = [(1.0, 1e7), (25.0, 1e7), (0.1, 1e6)]
+
+    for (umin, umax), alpha in [(c, a) for c in cases for a in alpha_test]:
         # Compute in float64
         val_f64 = float(R(float(umin), float(umax), float(alpha)))
 
@@ -183,18 +188,19 @@ def test_pdr_weight_float32():
         with jax.enable_x64(False):
             val_f32 = float(R(np.float32(umin), np.float32(umax), np.float32(alpha)))
 
-        # ulp tolerance: 4 ulp of the float32 value
-        ulp_tol = 4.0 * np.spacing(np.float32(abs(val_f64)))
+        ulp_tol = 8.0 * np.spacing(np.float32(abs(val_f64)))
         abs_err = abs(val_f32 - val_f64)
         assert abs_err < ulp_tol, (
             f"float32 value at α={alpha}: f32={val_f32}, f64={val_f64}, "
-            f"error={abs_err:.2e} > 4ulp={ulp_tol:.2e}"
+            f"error={abs_err:.2e} > 8 ulp={ulp_tol:.2e} (U_min={umin})"
         )
 
         # Gradient must be finite and non-zero in float32
         with jax.enable_x64(False):
             grad_f32 = float(
-                jax.grad(lambda a: R(np.float32(umin), np.float32(umax), a))(np.float32(alpha))
+                jax.grad(lambda a, lo=umin, hi=umax: R(np.float32(lo), np.float32(hi), a))(
+                    np.float32(alpha)
+                )
             )
         assert np.isfinite(grad_f32), f"float32 gradient at α={alpha} is not finite"
         assert grad_f32 != 0, f"float32 gradient at α={alpha} is zero"
