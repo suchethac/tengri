@@ -52,6 +52,9 @@ from tengri.components.dust.emission import (
     graybody as _graybody,
     modified_blackbody as _modified_blackbody,
 )
+from tengri.components.dust.emission.analytic._closures import (
+    _CASEY_LAMBDA_MIN_UM,
+)
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -270,8 +273,12 @@ def _build_grid(
     filter_trans: list,
     redshift: float,
     closure_kwargs: dict[str, float] | None = None,
+    exact_nodes_aa: tuple[float, ...] = (),
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate a continuum closure over the Cartesian product of ``axes``.
+
+    ``exact_nodes_aa`` are rest wavelengths [Angstrom] added as nodes of the rest
+    grid, so that a hard bound of the closure falls on a node.
 
     The closure is evaluated on the union of the base rest grid and a fine grid
     across each filter, in batches, so no template interpolation enters the band
@@ -289,6 +296,9 @@ def _build_grid(
     wave_rest_base = _continuum_wave_rest()
     _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
     wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
+    wave_rest = np.unique(
+        np.concatenate([wave_rest, np.asarray(exact_nodes_aa, dtype=np.float64)])
+    )
 
     mesh = np.meshgrid(*axes, indexing="ij")
     node_kwargs = {name: m.ravel() for name, m in zip(param_names, mesh)}
@@ -358,6 +368,7 @@ def _build_grid_casey2012(
         filter_waves,
         filter_trans,
         redshift,
+        exact_nodes_aa=(_CASEY_LAMBDA_MIN_UM * 1e4,),
     )
 
 
@@ -500,10 +511,11 @@ def precompute(
     wings there are below 1.7e-14 of the peak (measured). Accuracy of :func:`build_lookup` at
     the default nodes against the exact closure, maximum over 200 seeded random points inside
     the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
-    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 5.3e-4. ``casey2012`` at 8-24 um is 2.7e-3 at
-    z = 0, and at z = 3 (observed bands) 3.6e-3 in 60-90 um and 6.8e-3 in 8-24 um, because
-    ln(band flux) bends sharply in ``dust_alpha_mir`` toward 1 (the normalization of the mid-IR
-    power law); its 250-500 um band is 4.1e-4 at z = 3.
+    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 8.0e-4 (60-90 um), 6.7e-4 (250-500 um), 7.0e-4
+    (750-950 um). ``casey2012`` at 8-24 um is 1.6e-3 at z = 0; at z = 3 (observed bands) it is
+    2.0e-3 in 60-90 um, 7.0e-4 in 250-500 um, 6.8e-4 in 750-950 um and 7.6e-4 in 8-24 um. The
+    1 um lower bound of ``casey2012`` is a node of the rest grid, so its normalization has
+    no cell straddling the bound.
 
     Parameters
     ----------
@@ -639,7 +651,7 @@ def build_lookup(
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
     below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 3e-4 to 5.3e-4; ``casey2012`` mid-IR 8-24 um 2.7e-3 at z = 0). A query outside
+    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 8-24 um 1.6e-3 at z = 0). A query outside
     the node span is clamped to the edge node: the value is constant and the gradient zero
     beyond it.
 

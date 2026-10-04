@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """#2708: casey2012 emits from 1 um and conserves L_absorbed on the supplied grid.
 
-The power law in Casey (2012) has no finite blue limit as alpha -> 1, so
-normalization over the caller's wavelength grid introduces grid dependence:
-a 250-500 um band flux changes by x0.81 / x1.29 / x1.86 depending on whether
-the grid starts at 10 A / 912 A / 1 um (relative to 100 A). Masking emission
-below 1 um (dust sublimation) removes the divergence. Normalization on the
-supplied grid (not an internal grid) keeps energy conservation exact.
+The energy integral of the Casey (2012) mid-IR power law has no finite blue
+limit as alpha -> 1, so the share of L_absorbed assigned to the blue side
+depends on where the caller's grid starts: a 250-500 um band flux changes by
+x0.81 / x1.29 / x1.86 on grids starting at 10 A / 912 A / 1 um (relative to
+100 A). Setting emission below 1 um to zero, a bound that follows the range of
+CIGALE's casey2012 template, removes the divergence. Normalizing on the
+supplied grid keeps energy conservation exact.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ L_ABSORBED_TEST = 1e12  # arbitrary luminosity
 PROBE_WAVELENGTHS_UM = np.array([10.0, 30.0, 100.0, 350.0, 850.0])
 PROBE_WAVELENGTHS_AA = PROBE_WAVELENGTHS_UM * 1e4
 
-# Wavelength limits in Angstrom (four grids covering 1 um to 10 cm)
+# Wavelength limits in Angstrom (four grids to 10 cm, starting at or below 1 um)
 LOWER_LIMITS_AA = np.array([1e1, 1e2, 912.0, 1e4])  # 10 A, 100 A, 912 A, 1 um
 UPPER_LIMIT_AA = 1e8  # 10 cm
 N_GRID_POINTS = 20000
@@ -160,6 +161,26 @@ def test_casey2012_energy_conservation():
                 )
 
 
+@pytest.mark.parametrize("alpha", [1.0, 2.0])
+def test_casey2012_coarse_grid_matches_fine_reference(alpha):
+    """A 512-point grid with a node at 1 um agrees with a fine grid at the probes (rtol 1e-3)."""
+    fine = _create_grid_with_probes(1e1, UPPER_LIMIT_AA, 200000, PROBE_WAVELENGTHS_AA)
+    coarse = np.unique(np.concatenate([np.geomspace(1e4, 1e8, 512), PROBE_WAVELENGTHS_AA]))
+    kwargs = {
+        "dust_T": 40.0,
+        "dust_beta_ir": DUST_BETA_IR,
+        "dust_alpha_mir": alpha,
+        "dust_lambda_0_um": DUST_LAMBDA_0_UM,
+    }
+    got = np.asarray(casey2012(coarse, L_ABSORBED_TEST, **kwargs))
+    ref = np.asarray(casey2012(fine, L_ABSORBED_TEST, **kwargs))
+    np.testing.assert_allclose(
+        got[np.searchsorted(coarse, PROBE_WAVELENGTHS_AA)],
+        ref[np.searchsorted(fine, PROBE_WAVELENGTHS_AA)],
+        rtol=1e-3,
+    )
+
+
 def test_casey2012_no_emission_below_1um():
     """L_nu is exactly 0 for lambda < 1 um and finite, non-negative elsewhere."""
     wave_aa = np.geomspace(10.0, 1e8, 5000)
@@ -202,7 +223,7 @@ def test_casey2012_gradients_finite_and_nonzero(alpha, argnum):
 
 
 def test_casey2012_float32_finite():
-    """float32 values at alpha = 1.0 are finite."""
+    """float32 values at alpha = 1.0 are finite, and non-zero from 1 um."""
     code = textwrap.dedent(
         """
         import numpy as np
@@ -216,6 +237,7 @@ def test_casey2012_float32_finite():
                         dust_lambda_0_um=jnp.float32(200.0))
         assert out.dtype == jnp.float32, out.dtype
         assert bool(jnp.all(jnp.isfinite(out)))
+        assert bool(jnp.all(out[wave >= 1e4] > 0.0))
         """
     )
     proc = subprocess.run(
