@@ -1194,7 +1194,7 @@ def kubota_done_disc_preintegrated(
     #   L_bol = sum_rings(sigma * T^4 * dA) for disc zones + L_hot for corona.
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
-    # one face of every disc annulus carries no cos i; D is both faces (``_TWO_FACES``).
+    # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
     l_bol_unnorm = _TWO_FACES * (outer_bol + warm_bol) + l_hot_erg
     l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
     scale = l_bol_requested / jnp.maximum(l_bol_unnorm, representable_denominator(1e-100))

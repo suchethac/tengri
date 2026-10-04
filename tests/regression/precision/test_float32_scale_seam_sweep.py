@@ -503,10 +503,12 @@ _AGN_MBH_DUST = {
 #: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
 #: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
 #: where the corona now weighs four times less relative to the disc than under
-#: ``(cos i / 2) D_nu + H_nu``. ``rest_sed_sum`` moves by +5.1e-6 / +2.26 % / +2.35 %
-#: (mbh 6/8/10; lambda_Edd = 3 / 0.03 / 3e-4 at ``log_lbol = 11``, so the corona's share of
-#: the in-grid disc power is ~1e-6 / 0.012 / 0.012), the r-band photometry by
-#: +5.6e-6 / +2.9 % / +2.7 %; the derivation is beside ``_DISC_TIMES_ETA_T_REFERENCE``.
+#: ``(cos i / 2) D_nu + H_nu``, so the disc part of the tied shape rises by +0.25 % / +88 % /
+#: +102 % (mbh 6/8/10; the formula and the measured in-grid corona-to-disc ratios are beside
+#: ``_DISC_TIMES_ETA_T_REFERENCE``). The disc is 0.21 % / 5.2 % / 6.2 % of ``rest_sed_sum``,
+#: which moves by +5.1e-6 / +2.26 % / +2.35 % (at mbh 6 the product closes, 0.25 % x 0.0021;
+#: at 8 and 10 the corona's own bins mix in); the r-band photometry moves by +5.6e-6 /
+#: +2.9 % / +2.7 %.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.559368999510649e32,
