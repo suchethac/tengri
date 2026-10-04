@@ -11,12 +11,18 @@ supplied grid (not an internal grid) keeps energy conservation exact.
 
 from __future__ import annotations
 
+import subprocess
+import sys
+import textwrap
+
 import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
-from scipy import integrate
 
+from tengri.components.dust.emission._physics import (
+    cmb_contrast_factor,
+    cmb_corrected_temperature,
+)
 from tengri.components.dust.emission.analytic._closures import casey2012
 
 pytestmark = pytest.mark.regression_bug
@@ -116,154 +122,103 @@ def test_casey2012_grid_independence_pointwise():
                 f"origin[0]={LOWER_LIMITS_AA[0]:.0e} "
                 f"vs origin[{i}]={LOWER_LIMITS_AA[i]:.0e}"
             )
-            np.testing.assert_allclose(
-                probe_values, reference, rtol=1e-3, err_msg=msg
-            )
+            np.testing.assert_allclose(probe_values, reference, rtol=1e-3, err_msg=msg)
 
 
 def test_casey2012_energy_conservation():
-    """Energy conservation: ∫ L_nu d nu = L_absorbed on each supplied grid.
+    """On each grid, the normalized shape integrates to L_absorbed to rtol 1e-9.
 
-    On each of the four grid origins (10 A, 100 A, 912 A, 1 um to 10 cm,
-    20000 points), the frequency integral of L_nu computed on that grid
-    must equal L_absorbed to rtol 1e-9, for all alphas and T in (20, 40, 80).
+    The CMB contrast at z = 0 removes a physical fraction of the emitted
+    energy after normalization; it is divided out here so the check isolates
+    the normalization.
     """
     for lower_aa in LOWER_LIMITS_AA:
-        wave_aa = _create_grid_with_probes(
-            lower_aa, UPPER_LIMIT_AA, N_GRID_POINTS, np.array([])
-        )
-
+        wave_aa = _create_grid_with_probes(lower_aa, UPPER_LIMIT_AA, N_GRID_POINTS, np.array([]))
+        nu_hz = 2.99792458e18 / wave_aa
         for T in TEMPS_TEST:
             for alpha in ALPHAS_TEST:
-                L_nu = casey2012(
-                    wave_aa,
-                    L_ABSORBED_TEST,
-                    dust_T=T,
-                    dust_beta_ir=DUST_BETA_IR,
-                    dust_alpha_mir=alpha,
-                    dust_lambda_0_um=DUST_LAMBDA_0_UM,
+                L_nu = np.asarray(
+                    casey2012(
+                        wave_aa,
+                        L_ABSORBED_TEST,
+                        dust_T=T,
+                        dust_beta_ir=DUST_BETA_IR,
+                        dust_alpha_mir=alpha,
+                        dust_lambda_0_um=DUST_LAMBDA_0_UM,
+                    )
                 )
-
-                # Convert wavelength to frequency and integrate on the supplied grid
-                wave_cm = wave_aa * 1e-8
-                nu_hz = 3e10 / wave_cm  # c in cm/s
-
-                # Frequency integral (nu descending, so negate)
-                integral = -integrate.trapezoid(L_nu, nu_hz)
-
-                msg = (
-                    f"Energy conservation failed for lower_aa={lower_aa:.0e}, "
-                    f"T={T}, alpha={alpha}"
+                contrast = np.asarray(
+                    cmb_contrast_factor(
+                        wave_aa, cmb_corrected_temperature(T, 0.0, DUST_BETA_IR), 0.0
+                    )
                 )
                 np.testing.assert_allclose(
-                    integral, L_ABSORBED_TEST, rtol=1e-3, err_msg=msg
+                    -np.trapezoid(L_nu / contrast, nu_hz),
+                    L_ABSORBED_TEST,
+                    rtol=1e-9,
+                    err_msg=f"lower_aa={lower_aa:.0e}, T={T}, alpha={alpha}",
                 )
 
 
 def test_casey2012_no_emission_below_1um():
-    """Dust does not emit below 1 um: L_nu is exactly 0 for lambda < 1 um.
-
-    Dust sublimation temperature bounds emission from below; CIGALE starts at 1 um.
-    """
-    # Create grid spanning UV to far-IR
+    """L_nu is exactly 0 for lambda < 1 um and finite, non-negative elsewhere."""
     wave_aa = np.geomspace(10.0, 1e8, 5000)
-
-    L_nu = casey2012(
-        wave_aa,
-        L_ABSORBED_TEST,
-        dust_T=40.0,
-        dust_beta_ir=DUST_BETA_IR,
-        dust_alpha_mir=1.5,
-        dust_lambda_0_um=DUST_LAMBDA_0_UM,
+    L_nu = np.asarray(
+        casey2012(
+            wave_aa,
+            L_ABSORBED_TEST,
+            dust_T=40.0,
+            dust_beta_ir=DUST_BETA_IR,
+            dust_alpha_mir=1.5,
+            dust_lambda_0_um=DUST_LAMBDA_0_UM,
+        )
     )
-
-    # Check that emission is zero below 1 um and finite elsewhere
-    below_1um = wave_aa < 1e4  # 1 um in Angstrom
-
-    assert np.all(L_nu[below_1um] == 0.0), "Emission should be zero below 1 um"
-    assert np.all(np.isfinite(L_nu[~below_1um])), "Emission should be finite above 1 um"
-    assert np.all(L_nu[~below_1um] >= 0.0), "Emission should be non-negative"
+    below_1um = wave_aa < 1e4
+    assert np.all(L_nu[below_1um] == 0.0)
+    assert np.all(np.isfinite(L_nu[~below_1um]))
+    assert np.all(L_nu[~below_1um] >= 0.0)
 
 
-def test_casey2012_gradients_finite_and_nonzero():
-    """Gradients are finite and non-zero for T and dust parameters.
+@pytest.mark.parametrize("alpha", [1.0, 2.0])
+@pytest.mark.parametrize("argnum", [0, 1, 2, 3], ids=["T", "beta", "alpha", "lambda_0"])
+def test_casey2012_gradients_finite_and_nonzero(alpha, argnum):
+    """d L_nu(350 um) / d {T, beta, alpha_mir, lambda_0} is finite and non-zero."""
+    wave_aa = _create_grid_with_probes(1e3, UPPER_LIMIT_AA, 2000, PROBE_WAVELENGTHS_AA)
+    probe_index = int(np.searchsorted(wave_aa, 350.0e4))
 
-    Test jax.grad of L_nu at 350 um w.r.t. dust_T, dust_beta_ir, dust_alpha_mir,
-    dust_lambda_0_um for alpha = 1.0 (prior edge) and alpha = 2.0.
-    """
-    wave_aa = np.array([350.0 * 1e4])  # 350 um in Angstrom
-
-    def L_nu_single(T, beta, alpha, lambda0):
-        """Return L_nu at the single wavelength."""
-        result = casey2012(
+    def L_nu_single(T, beta, a, lambda0):
+        return casey2012(
             wave_aa,
             L_ABSORBED_TEST,
             dust_T=T,
             dust_beta_ir=beta,
-            dust_alpha_mir=alpha,
+            dust_alpha_mir=a,
             dust_lambda_0_um=lambda0,
-        )
-        return result[0]
+        )[probe_index]
 
-    for alpha in (1.0, 2.0):
-        # Test gradient w.r.t. T
-        grad_T = jax.grad(L_nu_single, argnums=0)(
-            40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM
-        )
-        assert np.isfinite(grad_T), f"Gradient w.r.t. T is not finite for alpha={alpha}"
-        if alpha > 1.0:
-            msg = f"Gradient w.r.t. T is zero for alpha={alpha}"
-            assert grad_T != 0.0, msg
-
-        # Test gradient w.r.t. beta
-        grad_beta = jax.grad(L_nu_single, argnums=1)(
-            40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM
-        )
-        assert np.isfinite(grad_beta), f"Gradient w.r.t. beta is not finite for alpha={alpha}"
-        if alpha > 1.0:
-            msg = f"Gradient w.r.t. beta is zero for alpha={alpha}"
-            assert grad_beta != 0.0, msg
-
-        # Test gradient w.r.t. alpha
-        grad_alpha = jax.grad(L_nu_single, argnums=2)(
-            40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM
-        )
-        assert np.isfinite(grad_alpha), f"Gradient w.r.t. alpha is not finite for alpha={alpha}"
-        if alpha > 1.0:
-            msg = f"Gradient w.r.t. alpha is zero for alpha={alpha}"
-            assert grad_alpha != 0.0, msg
-
-        # Test gradient w.r.t. lambda_0
-        grad_lambda0 = jax.grad(L_nu_single, argnums=3)(
-            40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM
-        )
-        msg = f"Gradient w.r.t. lambda_0 is not finite for alpha={alpha}"
-        assert np.isfinite(grad_lambda0), msg
-        if alpha > 1.0:
-            msg = f"Gradient w.r.t. lambda_0 is zero for alpha={alpha}"
-            assert grad_lambda0 != 0.0, msg
+    grad = jax.grad(L_nu_single, argnums=argnum)(40.0, DUST_BETA_IR, alpha, DUST_LAMBDA_0_UM)
+    assert np.isfinite(grad)
+    assert grad != 0.0
 
 
 def test_casey2012_float32_finite():
-    """float32 mode: values at probes are finite at alpha = 1.0.
-
-    This test runs with x64 disabled.
-    """
-    # Disable x64 for this test using the config API
-    old_x64 = jax.config.jax_enable_x64
-    try:
+    """float32 values at alpha = 1.0 are finite."""
+    code = textwrap.dedent(
+        """
+        import numpy as np
+        import jax
         jax.config.update("jax_enable_x64", False)
-        wave_aa = (PROBE_WAVELENGTHS_UM * 1e4).astype(jnp.float32)
-
-        L_nu = casey2012(
-            wave_aa,
-            jnp.array(L_ABSORBED_TEST, dtype=jnp.float32),
-            dust_T=jnp.array(40.0, dtype=jnp.float32),
-            dust_beta_ir=jnp.array(DUST_BETA_IR, dtype=jnp.float32),
-            dust_alpha_mir=jnp.array(1.0, dtype=jnp.float32),
-            dust_lambda_0_um=jnp.array(DUST_LAMBDA_0_UM, dtype=jnp.float32),
-        )
-
-        assert np.all(np.isfinite(L_nu)), "float32: L_nu at probes should be finite for alpha=1.0"
-    finally:
-        jax.config.update("jax_enable_x64", old_x64)
+        import jax.numpy as jnp
+        from tengri.components.dust.emission.analytic._closures import casey2012
+        wave = jnp.asarray(np.geomspace(10.0, 1e8, 4000), dtype=jnp.float32)
+        out = casey2012(wave, jnp.float32(1e12), dust_T=jnp.float32(40.0),
+                        dust_beta_ir=jnp.float32(1.5), dust_alpha_mir=jnp.float32(1.0),
+                        dust_lambda_0_um=jnp.float32(200.0))
+        assert out.dtype == jnp.float32, out.dtype
+        assert bool(jnp.all(jnp.isfinite(out)))
+        """
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=300, check=False
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]

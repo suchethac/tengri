@@ -27,9 +27,10 @@
 - Casey (2012) dust emission emits from 1 µm rest-frame and longer, normalized
   to L_absorbed on the supplied wavelength grid. The result is the same on any
   grid that covers the emission range from 1 µm, to that grid's quadrature
-  accuracy. With the power law extending to the grid's blue edge, the
-  250–500 µm band flux at α = 1.0 was 0.81, 1.29 and 1.86 times its 100 Å-grid
-  value on grids starting at 10 Å, 912 Å and 1 µm. (#2708).
+  accuracy. The mid-IR power law has no finite blue limit as α → 1, so
+  emission below 1 µm is set to zero; without that bound the 250–500 µm band
+  flux at α = 1.0 on grids starting at 10 Å, 912 Å and 1 µm is 0.81, 1.29 and
+  1.86 times its value on a grid starting at 100 Å (#2708).
 
 - The NIFTy (`vi*`) and native (`native_vi_*`) variational engines score a photometric upper or lower limit (`data_mask` 1 / -1) as -ln Φ((F − m)/σ) or -ln Φ((m − F)/σ) like `map`, the samplers and `vi_fullrank`, with the limit bands entering the geoVI/MGVI metric as detections at their limit value; a free noise model together with a limit raises `ParameterError`. The NIFTy likelihood is built per `Fitter` and only the data-free physics is cached on the model, so a second `Fitter` on one model object fits its own data; the `hmc_is` evidence evaluation takes the data at call time, and the NIFTy free-noise likelihood passes free parameters only to the forward model (#2667, #2668).
 
