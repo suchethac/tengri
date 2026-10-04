@@ -1223,6 +1223,7 @@ def _hot_flow_luminosity(
     a_spin: float = 0.0,
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    x_hot_max: float | None = None,
 ) -> float:
     """Hot-flow dissipation ``L_hot = f_hard L_Edd``, limited by what the disc can supply (#2572).
 
@@ -1237,11 +1238,20 @@ def _hot_flow_luminosity(
     L_bol / 2)`` cap would weaken it by 21% at ``log lambda_Edd = -1.5``).
 
     tengri cannot drop zones (static shapes), so the unreachable case is represented by
-    saturating: ``L_hot`` is limited to ``L0 * h_ceiling(a)``, the ceiling of the R_hot
-    solve (99% of the Page-Thorne disc's total dissipation ``L0 h(inf)``), which places
-    R_hot at the ceiling root, at most ``0.5 R_out`` by the zone clip. Where the disc can
-    supply ``f_hard L_Edd`` -- the paper's grid is ``mdot = 0.03 - 1`` -- ``L_diss,hot(R_hot)
-    = L_hot = f_hard L_Edd`` exactly.
+    saturating: ``L_hot`` is limited to what the annuli inside the largest admissible
+    ``R_hot`` dissipate, ``L0 h(x_hot_max)`` with ``x_hot_max = 0.5 R_out / R_isco`` (the zone
+    clip of :func:`_compute_zone_radii`), and never above ``L0 h_ceiling(a)`` (99% of the
+    disc's total dissipation ``L0 h(inf)``, the bisection's own ceiling). The corona then
+    radiates exactly the power the hot flow dissipates inside ``R_hot``:
+    ``L_diss,hot(R_hot) = L_hot`` holds by construction, saturated or not. Where the disc can
+    supply ``f_hard L_Edd`` -- the paper's grid is ``mdot = 0.03 - 1`` -- ``L_hot = f_hard
+    L_Edd`` exactly.
+
+    Parameters
+    ----------
+    x_hot_max : float, optional
+        ``0.5 R_out / R_isco``, the largest ``R_hot / R_isco`` the zone clip allows
+        [dimensionless]. Omitted, only the bisection's ceiling applies.
 
     Both ``R_hot`` (the zone radii) and the corona normalization (the SED) use THIS
     value. ``l0`` is ``4 pi R_isco^2 sigma T_in^4`` (:func:`_nt_l0`).
@@ -1253,7 +1263,18 @@ def _hot_flow_luminosity(
         l_hot = f_hard_safe * (_L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh)
     else:
         l_hot = f_hard_safe * _pow10(log10_l_edd)
-    return jnp.minimum(l_hot, l0 * _nt_h_ceiling(a_spin))
+    ceiling = l0 * _nt_h_ceiling(a_spin)
+    if x_hot_max is not None:
+        ceiling = jnp.minimum(ceiling, l0 * _nt_h(jnp.log(x_hot_max), a_spin))
+    return jnp.minimum(l_hot, ceiling)
+
+
+def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
+    """Largest admissible ``R_hot / R_isco``: the zone clip ``0.5 R_out`` in units of ``R_isco``.
+
+    ``R_out = max(r_sg, 10 R_isco)`` (both in ``R_g``), so the ratio needs no physical constants.
+    """
+    return 0.5 * jnp.maximum(r_sg_rg, r_isco_rg * 10.0) / r_isco_rg
 
 
 def _compute_zone_radii(
@@ -1327,7 +1348,21 @@ def _compute_zone_radii(
     # needs only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd =
     # L_bol / L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay
     # representable.
-    # R_hot is solved from the SAME L_hot the corona radiates (#2572).
+    if float32:
+        l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
+        l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
+    else:
+        # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value
+        # rather than as a standalone linear constant, so the removed
+        # ``_eddington_luminosity`` product never reappears here.
+        # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
+        # agn_log_lbol (not the now-derived agn_log_ledd).
+        l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
+    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
+    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+
+    # R_hot is solved from the SAME L_hot the corona radiates (#2572), limited to what the
+    # annuli inside the zone clip (0.5 R_out) dissipate.
     l_hot_target = _hot_flow_luminosity(
         agn_f_hard,
         log10_l_edd,
@@ -1335,24 +1370,15 @@ def _compute_zone_radii(
         agn_a_spin,
         float32=float32,
         agn_log_mbh=agn_log_mbh,
+        x_hot_max=_hot_zone_x_max(r_isco_rg, r_sg_rg),
     )
     if float32:
-        l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True, a_spin=agn_a_spin)
-        l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
     else:
-        # L_Edd (#2210) is formed via a single ``pow10`` of the log10 value
-        # rather than as a standalone linear constant, so the removed
-        # ``_eddington_luminosity`` product never reappears here.
         r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, a_spin=agn_a_spin)
-        # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
-        # agn_log_lbol (not the now-derived agn_log_ledd).
-        l_edd_ratio = jnp.clip(_pow10(agn_log_lbol + _LOG10_LSUN_ERG - log10_l_edd), 1e-10, 1.0)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
-    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
 
     r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
     r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
@@ -1520,6 +1546,7 @@ def _compute_zone_luminosities(
         agn_a_spin,
         float32=float32,
         agn_log_mbh=agn_log_mbh,
+        x_hot_max=0.5 * r_out_cm / r_isco_cm,
     )
     if float32:
         l_seed_geom = _l_seed_geometric(
