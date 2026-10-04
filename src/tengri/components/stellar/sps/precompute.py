@@ -798,6 +798,63 @@ def _ztable_cache_key(
     return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
+#: Largest change in a filter's peak-normalized transmission between two
+#: consecutive edge-crossing z nodes (:func:`ztable_z_grid`).
+_EDGE_NODE_DT = 0.05
+
+
+def ztable_z_grid(filter_waves, filter_trans, z_min, z_max, n_z, *, edge_aa=LYMAN_LIMIT_AA):
+    r"""Default ztable redshift grid: uniform nodes plus the Lyman-edge crossings.
+
+    The SED steps at the Lyman limit, so a band's flux :math:`F(z)` has slope
+    proportional to the transmission at the edge's observed wavelength,
+    :math:`F'(z) \propto T(\lambda_e(1+z))`, and curvature :math:`F'' \propto
+    dT/d\lambda`. Across a filter's steep cutoff that curvature defeats a
+    uniform grid at any spacing (#1134: FUV error 11.6 / 1.5 / 0.66 / 1.2 % at
+    ``n_z`` = 100 / 200 / 400 / 800). The grid therefore adds, for every filter,
+    the redshifts at which :math:`\lambda_e(1+z)` meets a point of the curve
+    where the peak-normalized transmission has changed by
+    :data:`_EDGE_NODE_DT` since the previous added node, so :math:`F'` changes
+    by at most that fraction of its peak between neighbors and linear
+    interpolation in :math:`z` follows the crossing. A flat-topped band adds a
+    handful of nodes; only the cutoffs add many.
+
+    Parameters
+    ----------
+    filter_waves : list of array_like
+        Per-filter observed-frame wavelength nodes [Angstrom].
+    filter_trans : list of array_like
+        Per-filter transmission on those nodes [dimensionless].
+    z_min, z_max : float
+        Grid range [dimensionless].
+    n_z : int
+        Number of uniform nodes.
+    edge_aa : float, optional
+        Rest-frame wavelength of the step [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Strictly ascending redshift nodes in ``[z_min, z_max]``, ``n >= n_z``.
+    """
+    nodes = [np.linspace(z_min, z_max, n_z)]
+    for fw, ft in zip(filter_waves, filter_trans):
+        w = np.asarray(fw, dtype=float)
+        t = np.asarray(ft, dtype=float)
+        peak = t.max()
+        if peak <= 0.0:
+            continue
+        # cumulative total variation of T/peak along the curve; one node per step
+        tv = np.concatenate([[0.0], np.cumsum(np.abs(np.diff(t / peak)))])
+        step = np.floor(tv / _EDGE_NODE_DT)
+        keep = np.concatenate([[True], step[1:] != step[:-1]])
+        z = w[keep] / edge_aa - 1.0
+        nodes.append(z[(z > z_min) & (z < z_max)])
+    grid = np.unique(np.concatenate(nodes))
+    # drop nodes closer than round-off to a neighbor (keeps the bracket width finite)
+    return grid[np.concatenate([[True], np.diff(grid) > 1e-9 * max(1.0, abs(z_max))])]
+
+
 def precompute_photometry_ztable(
     ssp_data,
     filter_waves,
@@ -839,7 +896,7 @@ def precompute_photometry_ztable(
     **JIT-compatible**: no, data precomputation with file I/O.
     """
     if z_grid is None:
-        z_grid = jnp.linspace(z_min, z_max, n_z)
+        z_grid = jnp.asarray(ztable_z_grid(filter_waves, filter_trans, z_min, z_max, n_z))
     else:
         z_grid = jnp.asarray(z_grid)
 
@@ -974,7 +1031,8 @@ def _compute_photometry_ztable(
         Transmission curve per filter (dimensionless, in [0, 1]).
     z_grid : array, optional
         Custom redshift grid (dimensionless). If None, uses
-        linspace(z_min, z_max, n_z).
+        :func:`ztable_z_grid` (``n_z`` uniform nodes plus the Lyman-edge
+        crossings of each filter).
     z_min : float
         Minimum redshift (dimensionless, default 0.001).
     z_max : float
@@ -1010,7 +1068,7 @@ def _compute_photometry_ztable(
     from tengri.cosmology import luminosity_distance
 
     if z_grid is None:
-        z_grid = jnp.linspace(z_min, z_max, n_z)
+        z_grid = jnp.asarray(ztable_z_grid(filter_waves, filter_trans, z_min, z_max, n_z))
     else:
         z_grid = jnp.asarray(z_grid)
 

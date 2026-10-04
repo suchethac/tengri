@@ -3664,7 +3664,14 @@ class StellarSEDComponent:
             # back to the closure (for non-JIT paths).
             ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
-            z_grid = ztable.z_grid
+            # The kernel runs in node-index space: u(z) is the piecewise-linear
+            # fractional index of z on the table's grid, so the window is a
+            # uniform-grid construction for ANY ascending grid. The default grid
+            # is not uniform (Lyman-edge crossings are added, see
+            # ztable_z_grid); on a uniform grid u = (z - z_0)/dz and nothing changes.
+            n_z_nodes = ztable.z_grid.shape[0]
+            z_grid = jnp.arange(n_z_nodes, dtype=jnp.result_type(float))
+            z_index = jnp.interp(z, ztable.z_grid, z_grid)
             z_edges = edges_for_grid(z_grid)
             # Match grid-cell width for the kernel bandwidth (Hearin 2023
             # convention): smooth across one neighbor on each side. Given in
@@ -3677,7 +3684,7 @@ class StellarSEDComponent:
             # zeros. That was 87% of the free-redshift gradient arithmetic;
             # 128 MFLOP at n_z=250 against 2.7 MFLOP at fixed z. Identical
             # values and gradients; the cost simply stops tracking n_z.
-            z_start, w_z = compute_grid_window(z, z_grid, bandwidth_cells=0.5, edges=z_edges)
+            z_start, w_z = compute_grid_window(z_index, z_grid, bandwidth_cells=0.5, edges=z_edges)
 
             def _interp(table):
                 # table: (n_z, ...). Contract the supported window of axis 0.
