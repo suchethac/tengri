@@ -113,10 +113,9 @@ def _pdr_luminosity_weight(umin, umax, alpha):
         t = 1 - \alpha,  s = 2 - \alpha
         R = g(sL) / g(tL),  \quad g(u) = \frac{\exp(u) - 1}{u}
 
-    At ``alpha = 1`` and ``alpha = 2`` the formula is exact (the poles are
-    integrable and cancel in the ratio); at all other α the general form
-    is used everywhere. The function g(u) is evaluated via Taylor series
-    for |u| < 1e-3 to avoid numerical pole singularities in JIT and gradients.
+    ``g`` has no pole, so the same expression holds at ``alpha = 1`` and
+    ``alpha = 2`` as everywhere else: no limit form is selected, and the value
+    and its α-gradient are continuous to floating-point precision.
 
     Notes
     -----
