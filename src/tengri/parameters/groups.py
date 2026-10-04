@@ -882,7 +882,18 @@ _AGN_ATTEN_LAW_TYPES: dict[str, str] = {"smc_prevot": "prevot_smc"}
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
 #: the emitter instead of retyped beside it.
 _TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
-    {"sfh", "dust_attenuation", "dust_emission", "neb", "shock", "igm", "radio", "xray", "agn"}
+    {
+        "sfh",
+        "dust_attenuation",
+        "dust_emission",
+        "neb",
+        "shock",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "agb_dust",
+    }
 )
 
 #: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
@@ -1731,7 +1742,7 @@ def _narrow_free_priors_to_grid(
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
     from tengri.parameters.priors import Uniform
 
     # Drive off the registry itself, so registering a component is the only
@@ -1747,7 +1758,18 @@ def _narrow_free_priors_to_grid(
             if not isinstance(dist, Uniform):
                 continue
             lo, hi = dist.bounds
-            new_lo, new_hi = max(lo, g_lo), min(hi, g_hi)
+            # An offset parameter (gas_logno, #2693) is bounded through its shift:
+            # the offset keeps the absolute quantity inside the support for every
+            # reachable value of the parameters the shift depends on.
+            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            s_lo, s_hi = support_shift(
+                selector,
+                name,
+                pname,
+                reach,
+                {"cue_nitrogen": getattr(structural, "cue_nitrogen", "absolute")},
+            )
+            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
             if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
                 # Disjoint (nothing sensible to narrow to; let the warning
                 # say so) or already contained.
@@ -3386,6 +3408,12 @@ def _translate_structural(groups: dict) -> dict:
                 "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
             )
 
+        # The age of the universe behind the dense_basis tx quantiles follows
+        # from the redshift and the cosmology (#2592): the per-family settings
+        # keys are refused as a flat kwarg and inside a ``settings`` dict, with
+        # the one message the registry also raises.
+        _refuse_age_universe_settings(group_name, group_dict)
+
         if group_name not in valid_groups:
             # keyword=None: a group key is the kwarg name itself, not a value
             # assigned via ``keyword=`` (#2429 opus review M3).
@@ -3460,6 +3488,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_neb(group_dict, result)
         elif group_name == "shock":
             _translate_shock(group_dict, result)
+        elif group_name == "agb_dust":
+            _translate_agb_dust(group_dict, result)
         elif group_name == "igm":
             _translate_igm(group_dict, result)
         elif group_name == "radio":
@@ -3703,26 +3733,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
             raise ValueError(
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
-                f"(or None to auto-select). 'cic' is the accuracy default; "
-                f"'dsps' selects DSPS's histogram kernel for cross-code "
-                f"comparison (biases the optical CSP +1.2 %, #964)."
-            )
-        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
-        # the type list, so the incompatible pair is knowable HERE; at
-        # ``SEDModel.build``; rather than at the first prediction, which for a
-        # fit means after warmup has already started. The component-level
-        # ``_resolve_age_kernel`` still guards direct construction.
-        _types = sfh_dict.get("type") or []
-        if age_kernel == "cic" and "field" in (
-            _types if isinstance(_types, (list, tuple)) else [_types]
-        ):
-            raise NotImplementedError(
-                "sfh age_kernel='cic' is not supported with a GP-field SFH; "
-                "the field draw is defined on its own coarse lookback grid, so "
-                "there is no dense integrand to cloud-in-cell (#964). Drop the "
-                "field modulator to use the CIC kernel, or set "
-                "age_kernel='dsps' explicitly to acknowledge the field path's "
-                "kernel."
+                f"(or None to auto-select). 'cic' is the first-order default; "
+                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
+                f"table (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
@@ -4834,6 +4847,16 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         # added by #303) for cross-code comparisons.
         if "full_catalog" in neb_dict:
             result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
+        # #2693: 'absolute' (default) = gas_logno is Cue's [N/O] input; a
+        # relation name (e.g. 'nicholls17') = gas_logno is the offset from it.
+        if "nitrogen" in neb_dict:
+            from tengri.components.nebular._default_nitrogen import NITROGEN_MODES
+
+            if neb_dict["nitrogen"] not in NITROGEN_MODES:
+                raise ConfigError(
+                    f"neb nitrogen={neb_dict['nitrogen']!r}: expected one of {NITROGEN_MODES}."
+                )
+            result["cue_nitrogen"] = neb_dict["nitrogen"]
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -5325,6 +5348,25 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     result["foreground_rv"] = float(rv)
 
 
+def _translate_agb_dust(agb_dust_dict: dict, result: dict) -> None:
+    """Translate the ``agb_dust`` group to ``agb_dust=True/False``.
+
+    Mirrors :func:`_translate_xray`: a single active type (``'fsps_shell'``)
+    plus the universal ``'none'`` off-switch, no structural sub-keys.
+    """
+    agb_dust_type = _normalize_off_switch(agb_dust_dict.get("type", "none"))
+
+    valid_agb_dust = ("fsps_shell", "none")
+    if agb_dust_type not in valid_agb_dust:
+        raise _unknown_name_error(
+            "AGB dust-shell type", agb_dust_type, valid_agb_dust, keyword="type"
+        )
+
+    result["agb_dust"] = agb_dust_type != "none"
+    if agb_dust_type != "none":
+        result["agb_dust_model"] = agb_dust_type
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = _normalize_off_switch(xray_dict.get("type", "none"))
@@ -5449,6 +5491,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # raises instead of silently dropping the path.
     "neb": frozenset({"type", "*", "all_params", "full_catalog"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
+    # AGB circumstellar dust-shell weighting (#2534): a one-parameter group,
+    # no structural sub-keys beyond the universal 'type'/'*'/'all_params'.
+    "agb_dust": frozenset({"type", "*", "all_params"}),
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
@@ -5504,6 +5549,7 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
+    "cue": frozenset({"nitrogen"}),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -5635,6 +5681,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural(
             "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
         ),
+        _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
@@ -6233,6 +6280,13 @@ def _validate_user_keys(
                 else frozenset()
             )
 
+            if "nitrogen" in top_val and "nitrogen" not in neb_type_specific_keys:
+                raise ConfigError(
+                    f"neb 'nitrogen' is only available for type 'cue' (got {neb_type!r}): "
+                    "Cue takes [N/O] as an input, while the grid backends have no "
+                    "absolute N/O knob (neb_dno is an offset from the grid's own relation)."
+                )
+
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
                 raise ValueError(
                     f"Unknown key 'grid' in group 'neb': type {neb_type!r} does not "
@@ -6532,6 +6586,37 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+def _refuse_age_universe_settings(group_name: str, group_dict: object) -> None:
+    """Raise the age-of-universe message when a retired settings key is written.
+
+    Parameters
+    ----------
+    group_name : str
+        A top-level kwarg of the grammar (a group, or the key itself when it
+        was written flat).
+    group_dict : object
+        The value written under ``group_name``; a ``settings`` dict is searched
+        for the retired keys.
+
+    Raises
+    ------
+    ConfigError
+        With the message built once in
+        :func:`tengri.components.stellar.sfh.registry.age_universe_setting_error`.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        _AGE_UNIVERSE_SETTING_KEYS,
+        age_universe_setting_error,
+    )
+
+    if group_name in _AGE_UNIVERSE_SETTING_KEYS:
+        raise age_universe_setting_error(group_name)
+    if group_name == "settings" and isinstance(group_dict, dict):
+        for key in group_dict:
+            if key in _AGE_UNIVERSE_SETTING_KEYS:
+                raise age_universe_setting_error(key)
+
+
 #: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
 #: declaration and the short form the sub-block grammar would have resolved it
 #: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
@@ -6625,6 +6710,10 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+
+        # #2592: the retired age-of-universe settings keys get the one message
+        # the registry raises, whichever dict they were written in.
+        _refuse_age_universe_settings(str(key), None)
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
@@ -7411,6 +7500,8 @@ def _partition_by_group(
             partition[name] = "neb"
         elif name.startswith("shock_"):
             partition[name] = "shock"
+        elif name.startswith("agb_dust_"):
+            partition[name] = "agb_dust"
         elif dust_emission_active and name in _DUST_EMISSION_PARAM_NAMES:
             partition[name] = "dust_emission"
         elif name.startswith("dust_"):
@@ -7910,6 +8001,8 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
         return full_param_name[4:]
     elif full_param_name.startswith("shock_"):
         return full_param_name[6:]
+    elif full_param_name.startswith("agb_dust_"):
+        return full_param_name[9:]
     elif full_param_name.startswith("ionspec_"):
         return full_param_name[8:]
     elif full_param_name.startswith("gas_log"):
@@ -8292,6 +8385,15 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``shock`` is a boolean toggle on Parameters; the grammar type is
         # ``"mappings"`` when active and ``"none"`` when off (#851).
         return "mappings" if getattr(spec, "shock", False) else "none"
+    elif group_name == "agb_dust":
+        # ``agb_dust`` is a boolean toggle on Parameters, like ``shock``
+        # above; the grammar type is the stored ``agb_dust_model`` when
+        # active and ``"none"`` when off (#2534).
+        return (
+            getattr(spec, "agb_dust_model", "fsps_shell")
+            if getattr(spec, "agb_dust", False)
+            else "none"
+        )
     elif group_name == "igm":
         # ``apply_igm`` is the on/off switch; ``igm_model`` stores the
         # internal spelling (e.g. ``"inoue"``), which is also a registered

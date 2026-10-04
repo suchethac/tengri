@@ -214,7 +214,7 @@ def _window_lut_indices(m, ssp, p, defs):
     ages = jnp.asarray(st.derived["ssp_ages_yr"])
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
     trans = two_component_dust(
-        wavelength=pc.window_centers,
+        wavelength=pc.points.waves,
         age_grid=ages,
         tau_v1=jnp.asarray(p["dust_tau_bc"]),
         tau_v2=jnp.asarray(p["dust_tau_diff"]),
@@ -368,7 +368,7 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
         full_params = merge_fixed_params(m.spec, params)
         jw, tm, ages = stellar.compute_joint_weights(full_params)
         trans = two_component_dust(
-            wavelength=pc.window_centers,
+            wavelength=pc.points.waves,
             age_grid=ages,
             tau_v1=full_params["dust_tau_bc"],
             tau_v2=full_params["dust_tau_diff"],

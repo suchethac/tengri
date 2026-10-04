@@ -331,7 +331,7 @@ def build_components(
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
-    # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
+    # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
     # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
     sfh_bin_edges_gyr: Any = None,
@@ -340,6 +340,12 @@ def build_components(
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
+    # AGB circumstellar dust-shell weighting (#2534). Only set for a FREE
+    # agb_dust_weight: the ratio template resampled onto ``ssp_data``'s own
+    # (Z, age, wave) axes (see components/stellar/agb_dust_shell.py). A
+    # Fixed weight is baked directly into ``ssp_data`` by the caller
+    # (``SEDModel.__init__``) instead, so this stays None in that case.
+    agb_dust_ratio: Any | None = None,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -576,6 +582,7 @@ def build_components(
                 met_bin_edges_log_yr=met_bin_edges_log_yr,
             ),
             ssp_data=ssp_data,
+            agb_dust_ratio=agb_dust_ratio,
         )
     )
 

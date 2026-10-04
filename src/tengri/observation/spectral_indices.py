@@ -30,6 +30,7 @@ from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.utils.scale import representable_denominator
@@ -524,6 +525,40 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 # ``measure_index_jax`` path for them.
 
 
+#: Sigmoid edge widths either side of a window beyond which its soft weight is
+#: below 1e-13 of unity, smaller than a float64 trapezoid sum resolves.
+WINDOW_SUPPORT_EDGES: float = 30.0
+
+
+@dataclasses.dataclass(frozen=True)
+class WindowPoints:
+    """SSP window integrals resolved by grid point, for an in-window dust screen.
+
+    The exact path multiplies the SED by the dust transmission :math:`T(\\lambda)`
+    *before* it takes the window mean, so the mean is
+    :math:`\\int F T W\\,d\\lambda`, not :math:`T(\\lambda_c)\\int F W\\,d\\lambda`.
+    The two differ by the variation of :math:`T` across the window, which is a
+    fraction of a percent of a window mean but a large fraction of a faint line
+    that is a small difference of two large means beside a strong neighbor
+    (13 % for [N II] 6584 next to Halpha, #2677). Holding the SSP integrand per
+    grid point lets the LUT apply :math:`T` where the exact path does.
+
+    Attributes
+    ----------
+    waves : ndarray, shape (n_point,)
+        SSP wavelength of each point [Å] (the dust screen is evaluated here).
+    integrands : ndarray, shape (n_met, n_age, n_point)
+        :math:`\\mathrm{SSP}\\,W\\,\\Delta\\lambda_{\\rm trapz}` per point, so a
+        window's integral is the sum over its points.
+    window : ndarray of int, shape (n_point,)
+        Window slot each point belongs to.
+    """
+
+    waves: jnp.ndarray
+    integrands: jnp.ndarray
+    window: jnp.ndarray
+
+
 @dataclasses.dataclass(frozen=True)
 class IndexWindowPrecomputation:
     """Precomputed SSP window integrals for break / EW spectral indices.
@@ -552,6 +587,9 @@ class IndexWindowPrecomputation:
         sentinel that the caller must measure exactly).
     names : tuple of str
         Index names in order, for diagnostics / alignment with observed data.
+    points : WindowPoints
+        The same window integrals resolved by SSP grid point, so the dust screen
+        is applied inside each window as the exact path applies it (#2677).
     """
 
     window_integrals: jnp.ndarray
@@ -559,6 +597,7 @@ class IndexWindowPrecomputation:
     window_centers: jnp.ndarray
     index_slots: tuple
     names: tuple
+    points: WindowPoints
 
     @property
     def has_slope(self) -> bool:
@@ -603,6 +642,84 @@ def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0
     return integral, jnp.maximum(jnp.trapezoid(w, ssp_wave), 1e-10)
 
 
+def soft_window_ssp_points(
+    ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0, support: float = WINDOW_SUPPORT_EDGES
+):
+    """Per-grid-point SSP integrand of a soft window, trapezoid-weighted.
+
+    Summing the returned integrand over points reproduces
+    :func:`soft_window_ssp_integral` (to the ``support`` truncation, below float64
+    resolution at the default). Keeping the points separate lets the caller
+    multiply the dust transmission in at each wavelength, as the exact path does.
+
+    Returns
+    -------
+    waves : ndarray, shape (n_point,)
+    integrand : ndarray, shape (n_met, n_age, n_point)
+    """
+    wave_np = np.asarray(ssp_wave, dtype=float)
+    keep = np.nonzero(
+        (wave_np >= lo - support * edge_width) & (wave_np <= hi + support * edge_width)
+    )[0]
+    dl = np.diff(wave_np)
+    trapz_w = np.zeros_like(wave_np)
+    trapz_w[:-1] += 0.5 * dl
+    trapz_w[1:] += 0.5 * dl
+    wave_k = jnp.asarray(ssp_wave)[keep]
+    w = jax.nn.sigmoid((wave_k - lo) / edge_width) * jax.nn.sigmoid((hi - wave_k) / edge_width)
+    return wave_k, jnp.asarray(ssp_flux)[..., keep] * (w * jnp.asarray(trapz_w)[keep])
+
+
+def stack_window_points(waves: list, integrands: list, n_met: int, n_age: int, dtype):
+    """Concatenate per-window point sets into one :class:`WindowPoints`."""
+    if not waves:
+        return WindowPoints(
+            jnp.zeros((0,), dtype), jnp.zeros((n_met, n_age, 0), dtype), jnp.zeros((0,), int)
+        )
+    window = np.concatenate([np.full(len(w), k, dtype=int) for k, w in enumerate(waves)])
+    return WindowPoints(
+        waves=jnp.concatenate(waves),
+        integrands=jnp.concatenate(integrands, axis=-1),
+        window=jnp.asarray(window),
+    )
+
+
+def window_means_with_dust(
+    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0
+):
+    """SFH-weighted window means with the dust screen applied inside each window.
+
+    :math:`\\langle F\\rangle_w = \\sum_p T(a,\\lambda_p) \\sum_{m,a} w_{ma}\\,
+    \\mathrm{SSP}_{ma}(\\lambda_p) W_w(\\lambda_p)\\Delta\\lambda_p / \\mathcal N_w`,
+    the same sum the exact path takes over the dust-attenuated SED.
+
+    Parameters
+    ----------
+    joint_weights : ndarray, shape (n_met, n_age)
+    transmission_at_points : ndarray, shape (n_age, n_point)
+        Two-component transmission at ``points.waves`` per SSP age.
+    points : WindowPoints
+    norms : ndarray, shape (n_window,)
+    scale : float or ndarray, shape (), default 1.0
+        Multiplies the SFH weights before they meet the integrands. A caller that
+        restores a large constant afterwards (``_LSUN_POW2`` on the line path)
+        passes its small factor here rather than multiplying the returned means:
+        ``(scale * mean) * 2**112`` is two adjacent scalar multiplies, which XLA
+        reassociates in the backward pass into ``ct * (scale * 2**112)``, and that
+        product (~1e44) overflows float32 although every true value is in range
+        (#2677). Entering through the weights puts the contraction between them.
+
+    Returns
+    -------
+    ndarray, shape (n_window,)
+        Window means, per unit weight times ``scale`` [erg/s/Hz].
+    """
+    wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
+    per_point = jnp.sum(transmission_at_points * wint, axis=0)
+    integral = jax.ops.segment_sum(per_point, points.window, num_segments=norms.shape[0])
+    return integral / norms
+
+
 def precompute_index_windows(
     ssp_wave: jnp.ndarray,
     ssp_flux: jnp.ndarray,
@@ -642,12 +759,17 @@ def precompute_index_windows(
     integrals: list[jnp.ndarray] = []
     norms: list[jnp.ndarray] = []
     centers: list[float] = []
+    pt_waves: list[jnp.ndarray] = []
+    pt_integrands: list[jnp.ndarray] = []
 
     def _slot(lo, hi) -> int:
         key = _round_window(lo, hi)
         if key in unique:
             return unique[key]
         integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pw, pi = soft_window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pt_waves.append(pw)
+        pt_integrands.append(pi)
         integrals.append(integral)  # (n_met, n_age)
         norms.append(norm)
         centers.append(0.5 * (float(lo) + float(hi)))
@@ -684,6 +806,9 @@ def precompute_index_windows(
         window_centers=jnp.asarray(centers),
         index_slots=tuple(slots),
         names=tuple(names),
+        points=stack_window_points(
+            pt_waves, pt_integrands, ssp_flux.shape[0], ssp_flux.shape[1], ssp_flux.dtype
+        ),
     )
 
 
@@ -731,7 +856,7 @@ def measure_indices_from_windows(
 def measure_indices_from_window_lut(
     joint_weights: jnp.ndarray,
     scale: jnp.ndarray,
-    transmission_at_centers: jnp.ndarray,
+    transmission_at_points: jnp.ndarray,
     precomp: IndexWindowPrecomputation,
 ) -> jnp.ndarray:
     """Measure break/EW features from the per-(met,age) window LUT with dust.
@@ -741,17 +866,17 @@ def measure_indices_from_window_lut(
     the spectrum (no direct line output). Instead of reconstructing the full-grid
     SED (~1.0 ms) and measuring on it, contract the precomputed SSP window
     integrals with the published SFH+metallicity weights and apply the
-    age-dependent two-component screen at each window center (~18 µs for this
+    age-dependent two-component screen at each window grid point (~18 µs for this
     contraction; ~58x the full-grid measurement):
 
     .. math::
 
-        \\langle F\\rangle_w = \\mathrm{scale}\\cdot \\sum_a
-            T(a, \\lambda_c^w)\\,
-            \\frac{\\sum_m w_{ma}\\,\\Phi_{maw}}{\\mathcal{N}_w}
+        \\langle F\\rangle_w = \\frac{\\mathrm{scale}}{\\mathcal{N}_w}
+            \\sum_{a,p \\in w} T(a, \\lambda_p)\\,\\sum_m w_{ma}\\,\\phi_{map}
 
-    where :math:`\\Phi_{maw}` is ``precomp.window_integrals`` and :math:`T(a,
-    \\lambda)` is the two-component transmission per SSP age.
+    where :math:`\\phi_{map}` is ``precomp.points.integrands`` (the SSP window
+    integrand at grid point :math:`p`) and :math:`T(a, \\lambda)` is the
+    two-component transmission per SSP age.
 
     **Nebular emission through the birth cloud.** The two-component screen gives
     the youngest SSP age bins (age < ``t_birth``) the FULL birth-cloud + diffuse
@@ -769,18 +894,19 @@ def measure_indices_from_window_lut(
     scale : float
         ``stellar_mass_scale`` = total_mass · L_sun [erg/s per (Msun weight)];
         cancels for break/EW ratios but keeps the window means physical.
-    transmission_at_centers : ndarray, shape (n_age, n_window)
-        Two-component transmission evaluated at each window center per SSP age
-        (``two_component_dust(window_centers, ssp_ages, tau_bc, tau_diff, ...)``).
+    transmission_at_points : ndarray, shape (n_age, n_point)
+        Two-component transmission per SSP age at every window grid point
+        ``precomp.points.waves``, so the screen acts inside each window as in the
+        exact path (#2677).
     precomp : IndexWindowPrecomputation
         Per-(met, age) window integrals from :func:`precompute_index_windows`.
 
     Returns
     -------
     ndarray, shape (n_index,)
-        Index / emission-EW values, matching a full-SED measurement to < 4e-4
-        (the residual is the intra-window transmission variation across the
-        narrow feature windows).
+        Index / emission-EW values, equal to a full-SED measurement to float
+        rounding: the dust screen is applied at every window grid point, as the
+        exact path applies it (#2677).
 
     Notes
     -----
@@ -793,10 +919,8 @@ def measure_indices_from_window_lut(
     ~17x per-evaluation win end-to-end (~58x for the measurement step in
     isolation).
     """
-    # marginalize metallicity, keep age: (n_age, n_window)
-    wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
-    window_means = (
-        scale * jnp.sum(transmission_at_centers * wint_age, axis=0) / precomp.window_norms
+    window_means = scale * window_means_with_dust(
+        joint_weights, transmission_at_points, precomp.points, precomp.window_norms
     )
     return measure_indices_from_windows(window_means, precomp)
 

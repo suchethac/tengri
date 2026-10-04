@@ -48,6 +48,7 @@ def ssp():
 
 def _model(ssp, calibration_order: int, **spec_kw) -> SEDModel:
     spectroscopy = Spectroscopy(
+        resample="point",
         wave_obs=_WAVE_OBS,
         resolution=1000.0,
         calibration_order=calibration_order,
@@ -97,7 +98,7 @@ def test_calibration_order_zero_model_survives_a_warm_kernel_cache(ssp):
 @pytest.mark.parametrize("order", [0, 1, 2, 3, 4])
 def test_calibration_coeffs_reads_exactly_the_declared_keys(order):
     """The assembler consumes precisely the names the declaration registers."""
-    spectroscopy = Spectroscopy(wave_obs=_WAVE_OBS, calibration_order=order)
+    spectroscopy = Spectroscopy(resample="point", wave_obs=_WAVE_OBS, calibration_order=order)
     declared = list(spectroscopy.get_calibration_params())
 
     assert declared == [f"cal_c{i + 1}" for i in range(order)]
@@ -116,7 +117,7 @@ def test_calibration_coeffs_reads_exactly_the_declared_keys(order):
 
 def test_calibration_wave_range_is_the_configured_instrument_grid():
     """The polynomial is anchored to wave_obs, so a coefficient keeps its meaning."""
-    spectroscopy = Spectroscopy(wave_obs=_WAVE_OBS, calibration_order=2)
+    spectroscopy = Spectroscopy(resample="point", wave_obs=_WAVE_OBS, calibration_order=2)
     lo, hi = spectroscopy.calibration_wave_range
     assert float(lo) == pytest.approx(4000.0)
     assert float(hi) == pytest.approx(9000.0)

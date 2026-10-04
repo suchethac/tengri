@@ -40,7 +40,9 @@ def _build(approx, wave_lo=3500.0):
     if ssp_path is None:
         pytest.skip("No SSP grid available under data/.")
     ssp = load_ssp_data(ssp_path)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.linspace(wave_lo, 7500.0, 300)))
+    obs = Observation(
+        spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(wave_lo, 7500.0, 300))
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(

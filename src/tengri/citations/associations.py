@@ -162,8 +162,14 @@ SSP_CODE_CITATIONS: dict[str, list[str]] = {
     # FSPS (Conroy, Gunn & White 2009 + Conroy & Gunn 2010) generated via the
     # python-fsps interface (Foreman-Mackey et al. 2014). Aringer+2009 (carbon-star
     # library extending TP-AGB stars redward of K) and Villaume+2015 (circumstellar
-    # AGB dust, ``add_agb_dust_model``: on by default) are baked into every
-    # FSPS-generated grid, so they fire for any ``fsps_*`` source. See #560.
+    # AGB dust, ``add_agb_dust_model``) are baked into every FSPS-generated grid
+    # at FSPS's own default weight, so they fire for any ``fsps_*`` source. See
+    # #560. On a ``fsps_mist_*`` grid that baked-in weight is a runtime lever,
+    # not fixed: ``agb_dust={'type': 'fsps_shell', 'weight': ...}`` (default
+    # Fixed(1.0) = this grid as shipped) rescales it via a ratio template
+    # measured from FSPS and repackaged as ``data/agb_dust_shell_ratios_mist.h5``
+    # (#2534); ``villaume2015`` still credits the underlying shell model at any
+    # weight.
     "fsps": ["fsps2009", "fsps", "pythonfsps", "aringer2009", "villaume2015"],
     "bc03": ["bc03"],
     "bpss": ["bpass"],
