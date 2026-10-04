@@ -12,6 +12,12 @@ level.
 
 Equation: the multilinear interpolant of ``log(shape)`` over (gamma, kTe, kTbb) in
 Kubota & Done 2018 (arXiv:1804.00171, Section 2.2), evaluated in the input dtype.
+
+The tangent is compared with the Richardson-extrapolated central difference
+``(4 FD(h/2) - FD(h)) / 3``. The plain central difference at the gradient contract's step
+carries an O(h^2) term that reaches 5.7e-5 of the error scale for ``agn_kt_warm`` at the
+``r_hot_unclipped`` point (``FD(h) - AD`` and ``FD(h/2) - AD`` in the ratio 4.00); the
+extrapolated value agrees with the tangent to 3e-9 there.
 """
 
 from __future__ import annotations
@@ -31,6 +37,12 @@ pytestmark = pytest.mark.regression_bug
 
 _JIT_EAGER_RTOL = 1e-9
 _AD_FD_RTOL = 1e-5
+#: A central difference is second order, so ``FD(h) - AD`` is four times ``FD(h/2) - AD``.
+_TRUNCATION_RATIO = 4.0
+_TRUNCATION_RATIO_RTOL = 0.10
+#: Fraction of the error scale below which an FD error is rounding, where the ratio of two
+#: such errors carries no information.
+_FD_NOISE_FLOOR = 1e-7
 _MBH_GRID = (7.0, 7.5, 8.0)
 _SPIN_GRID = (0.0, 0.7)
 
@@ -79,13 +91,22 @@ _POINTS = [
 
 @pytest.mark.gradient
 @pytest.mark.parametrize("overrides", _POINTS)
-def test_warm_comptonization_ad_matches_central_fd(kubota_model, overrides, monkeypatch):
-    """AD and central FD of ``sum(log10 sed_agn)`` agree to 1e-5 for the warm-zone knobs.
+def test_warm_comptonization_ad_matches_richardson_central_fd(
+    kubota_model, overrides, monkeypatch
+):
+    """AD equals the Richardson central FD of ``sum(log10 sed_agn)`` to 1e-5 (warm-zone knobs).
 
     Measured with the contract's own entry, point and error metric (error over the larger
-    of ``|FD|`` and 1e-3 of the largest FD derivative of the disc). The comparison is made
-    at two FD steps, h and h/2, which also agree with each other: the central difference
-    is in its truncation-balanced regime, so the residual is not step noise.
+    of ``|FD|`` and 1e-3 of the largest FD derivative of the disc). The central difference
+    at the contract's step h has an O(h^2) truncation term, which the reference
+    ``(4 FD(h/2) - FD(h)) / 3`` cancels. That the residual of the plain differences is
+    truncation and not step noise is asserted: where ``FD(h) - AD`` and ``FD(h/2) - AD``
+    both exceed 1e-7 of the error scale they stand in the ratio 4 within 10 %; where one
+    of them does not, both plain differences agree with AD to 1e-5.
+
+    At the ``r_hot_unclipped`` point ``agn_kt_warm`` has ``FD(h) - AD`` = 1.187e-3 and
+    ``FD(h/2) - AD`` = 2.97e-4 (ratio 4.00; 5.7e-5 and 1.4e-5 of the error scale), and the
+    Richardson value agrees with AD to 3e-9.
     """
     full = _contract._grad_and_fd(kubota_model, overrides)
     scale = max(abs(fd) for _, fd in full.values())
@@ -100,15 +121,23 @@ def test_warm_comptonization_ad_matches_central_fd(kubota_model, overrides, monk
         assert np.isclose(ad, ad_half, rtol=1e-12), f"{name}: AD depends on the FD step"
         den = max(abs(fd), _contract._ZERO_FLOOR * scale)
         assert abs(fd) > 0.0, f"vacuous: {name} has no response"
-        errors = {
-            "AD vs FD(h)": abs(ad - fd) / den,
-            "AD vs FD(h/2)": abs(ad - fd_half) / den,
-            "FD(h) vs FD(h/2)": abs(fd - fd_half) / den,
-        }
-        for label, err in errors.items():
-            assert err < _AD_FD_RTOL, (
-                f"{name} ({label}): {err:.2e} >= {_AD_FD_RTOL:.0e}; "
-                f"AD={ad:.8e} FD(h)={fd:.8e} FD(h/2)={fd_half:.8e}"
+        detail = f"AD={ad:.8e} FD(h)={fd:.8e} FD(h/2)={fd_half:.8e}"
+
+        richardson = (4.0 * fd_half - fd) / 3.0
+        err = abs(ad - richardson) / den
+        assert err < _AD_FD_RTOL, (
+            f"{name} (AD vs Richardson FD): {err:.2e} >= {_AD_FD_RTOL:.0e}; {detail}"
+        )
+
+        err_h, err_half = (fd - ad) / den, (fd_half - ad) / den
+        if min(abs(err_h), abs(err_half)) > _FD_NOISE_FLOOR:
+            assert err_h / err_half == pytest.approx(
+                _TRUNCATION_RATIO, rel=_TRUNCATION_RATIO_RTOL
+            ), f"{name}: FD errors {err_h:.2e}, {err_half:.2e} are not second order; {detail}"
+        else:
+            assert max(abs(err_h), abs(err_half)) < _AD_FD_RTOL, (
+                f"{name}: an FD error at the noise floor beside one above "
+                f"{_AD_FD_RTOL:.0e} ({err_h:.2e}, {err_half:.2e}); {detail}"
             )
 
 
