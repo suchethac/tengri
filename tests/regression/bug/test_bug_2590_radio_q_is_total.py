@@ -5,7 +5,7 @@ Bell (2003, ApJ 586, 794) Eq. 1 defines q on the *total* 1.4 GHz luminosity and
 Sect. 4 parameterises that total as (n + 0.1) eta psi: about 90 % non-thermal and
 10 % thermal at 1.4 GHz (Condon 1992). The default ``bell2003`` block put the whole
 calibrated total in the synchrotron term and then added the independently
-normalised Murphy et al. (2011) free-free term, counting the thermal emission twice
+normalized Murphy et al. (2011) free-free term, counting the thermal emission twice
 (+13.4 % at 1.4 GHz, +265 % at 100 GHz).
 
 Every expectation below is written out here from the literature, never read back
@@ -27,12 +27,12 @@ import numpy as np
 import pytest
 
 import tengri
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.component import (
     SF_RADIO_MODELS,
     RadioSEDComponent,
     RadioSEDComponentConfig,
 )
-from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.protocols.component import declared_default
 
 pytestmark = pytest.mark.regression_bug
@@ -206,7 +206,7 @@ def test_float32_finite_with_overflowing_linear_l_ir(sf):
     t = _terms(
         sf,
         True,
-        list(_FREQS) + [1.5e8],
+        [*_FREQS, 1.5e8],
         dtype=jnp.float32,
         L_ir=jnp.asarray(jnp.inf, jnp.float32),
         log_L_ir=jnp.asarray(np.log10(_L_IR), jnp.float32),
@@ -308,7 +308,9 @@ def test_public_path_radio_total_is_the_bell_total(ssp_data_fsps, neb, sf_type):
     synchrotron carries total - thermal and the Murphy term the rest.  L_IR is read from
     the model's own dust state.
     """
-    state = _model(ssp_data_fsps, {"type": sf_type, "all_params": tengri.Fixed(tengri.DEFAULT)}, _NEB[neb]).predict_state({})
+    state = _model(
+        ssp_data_fsps, {"type": sf_type, "all_params": tengri.Fixed(tengri.DEFAULT)}, _NEB[neb]
+    ).predict_state({})
     l_ir = float(np.asarray(state.derived["L_ir"]))
     got = _l_nu_at(state, 1.4e9)
     assert got == pytest.approx(_bell_total_ref(2.64, l_ir), rel=2e-3)
@@ -325,7 +327,11 @@ def test_public_path_explicit_freefree_pin_subtracts_the_thermal_share(ssp_data_
 
 def test_public_path_on_off_ratio_matches_the_issue_table_rederived(ssp_data_fsps):
     """The issue's reproducer: ratio on/off at 1.4, 5, 30, 100 GHz, expected from the shapes."""
-    on = _model(ssp_data_fsps, {"type": "bell2003", "all_params": tengri.Fixed(tengri.DEFAULT)}, _NEB["none"]).predict_state({})
+    on = _model(
+        ssp_data_fsps,
+        {"type": "bell2003", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        _NEB["none"],
+    ).predict_state({})
     off = _model(
         ssp_data_fsps,
         {"type": "bell2003", "freefree": False, "all_params": tengri.Fixed(tengri.DEFAULT)},
@@ -334,6 +340,8 @@ def test_public_path_on_off_ratio_matches_the_issue_table_rederived(ssp_data_fsp
     l_ir = float(np.asarray(on.derived["L_ir"]))
     nu = np.asarray(_FREQS)
     f_th = float(_murphy_ff(1.4e9, l_ir)) / _bell_total_ref(2.64, l_ir)
-    want = (1.0 - f_th) + _murphy_ff(nu, l_ir) / (_bell_total_ref(2.64, l_ir) * (nu / 1.4e9) ** -0.8)
+    want = (1.0 - f_th) + _murphy_ff(nu, l_ir) / (
+        _bell_total_ref(2.64, l_ir) * (nu / 1.4e9) ** -0.8
+    )
     got = np.array([_l_nu_at(on, f) / _l_nu_at(off, f) for f in _FREQS])
     np.testing.assert_allclose(got, want, rtol=3e-3)

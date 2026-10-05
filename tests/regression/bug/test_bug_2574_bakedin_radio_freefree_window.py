@@ -215,7 +215,9 @@ def test_above_the_edge_the_term_is_the_unwindowed_one(ssp_data_wne):
     below = (wave > _RADIO_WAVE_MIN_AA) & (wave < edge)
     share = 1.0 - _thermal_share()
     assert np.all((sed_radio_true - share * sed_radio_false)[below] > 0.0)
-    np.testing.assert_allclose(sed_radio_default[below], (share * sed_radio_false)[below], rtol=1e-12)
+    np.testing.assert_allclose(
+        sed_radio_default[below], (share * sed_radio_false)[below], rtol=1e-12
+    )
 
 
 def test_one_thermal_term_in_the_total_sed_below_the_edge(ssp_data_wne):

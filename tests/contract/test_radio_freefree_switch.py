@@ -196,7 +196,7 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
 
 # ── Errors ────────────────────────────────────────────────────────
 def test_freefree_true_with_split_is_accepted(synthetic_radio_ssp, synthetic_tophat_obs):
-    """``bell2003_split`` is the same model as ``bell2003``: an explicit ``freefree=True`` builds."""
+    """``bell2003_split`` is the same model as ``bell2003``: ``freefree=True`` builds."""
     model = _build_radio_model(
         synthetic_radio_ssp, synthetic_tophat_obs, freefree=True, sf_type="bell2003_split"
     )

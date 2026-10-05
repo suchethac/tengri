@@ -720,9 +720,7 @@ def _thermal_at_nu_ref(
     log_L_ir: float | None,
 ) -> jnp.ndarray:
     """Murphy+2011 free-free luminosity density at ``nu_ref`` [erg/s/Hz]."""
-    return radio_freefree(
-        jnp.asarray(_C_AA / nu_ref), L_ir, T_e, alpha_ff, log_L_ir=log_L_ir
-    )
+    return radio_freefree(jnp.asarray(_C_AA / nu_ref), L_ir, T_e, alpha_ff, log_L_ir=log_L_ir)
 
 
 def _dispatch_sfr(
