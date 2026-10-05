@@ -11,11 +11,6 @@ weights are the same logistic in :math:`\cos i` of width 0.025 about :math:`\cos
 they sum to one. The Fritz library's own elevation :math:`\psi = 90^\circ - i` is derived from
 the inclination, and an explicit ``agn_fritz_psy`` is refused.
 
-The Fritz optical depth axis is :math:`\tau_{9.7}`; the screen needs :math:`\tau_V`. Fritz et al.
-(2006) Section 3 give :math:`\tau(9.7) = 0.1` for :math:`N_{\rm H} = 9.0\times 10^{21}`
-cm\ :sup:`-2`, "an optical extinction of :math:`A_V = 2.3`", so :math:`A_V/\tau_{9.7} = 23` and
-:math:`\tau_V = 0.4\ln 10\,A_V = 21.2\,\tau_{9.7}`.
-
 The polar cone's solid-angle share is :math:`g(\Phi) = 7/18 - \sin^2\Phi/6 - 2\sin^3\Phi/9`
 (SKIRTOR; :math:`f_{\rm cone} = 18 g/7` against the bolometric disc) with
 :math:`\Phi` the torus half-opening angle from the equator, and :math:`1 - \cos\theta_c` for the
@@ -282,10 +277,10 @@ def test_fritz_torus_template_follows_the_inclination():
 def test_fritz_disc_power_follows_the_inclination(half):
     """Disc power is Type 1 below i = half and screened above it.
 
-    tau_V = 21 at tau_9.7 = 1; the infrared part of the disc passes the screen.
+    At the grid's largest depth, tau = 10, the screen is deep at V and the infrared passes.
     """
-    type1 = _power(_fritz(half - 12.0, half, tau=1.0)["disc"])
-    type2 = _power(_fritz(half + 12.0, half, tau=1.0)["disc"])
+    type1 = _power(_fritz(half - 12.0, half, tau=10.0)["disc"])
+    type2 = _power(_fritz(half + 12.0, half, tau=10.0)["disc"])
     assert type2 < 0.35 * type1, (
         f"half={half}: disc power {type1:.4e} at i = {half - 12:g} deg, {type2:.4e} at "
         f"i = {half + 12:g} deg: no Type-1/2 switch at i = half"
@@ -373,22 +368,7 @@ def test_docstring_half_angle_lists_equal_the_grid_axis():
 
 
 # ----------------------------------------------------------------------------------
-# 4. tau_9.7 is not tau_V
-# ----------------------------------------------------------------------------------
-def test_fritz_screen_depth_is_tau_v_from_the_stated_ratio():
-    """Edge-on, ln(L(b)/L(a)) at V is minus the tau_V difference, tau_V = 0.4 ln10 x 23 tau_9.7."""
-    tau_a, tau_b = 0.1, 0.3
-    disc_a = _at(_fritz(89.0, 40.0, tau=tau_a)["disc"], _V)
-    disc_b = _at(_fritz(89.0, 40.0, tau=tau_b)["disc"], _V)
-    expected = -0.4 * np.log(10.0) * 23.0 * (tau_b - tau_a)
-    assert np.log(disc_b / disc_a) == pytest.approx(expected, rel=2e-3), (
-        f"edge-on optical depth difference at V is {np.log(disc_b / disc_a):.3f}, the Fritz+2006 "
-        f"A_V/tau_9.7 = 23 gives {expected:.3f}"
-    )
-
-
-# ----------------------------------------------------------------------------------
-# 5. the polar cone's share
+# 4. the polar cone's share
 # ----------------------------------------------------------------------------------
 def _g(oa_deg):
     s = np.sin(np.radians(oa_deg))

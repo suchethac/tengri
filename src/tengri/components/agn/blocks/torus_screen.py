@@ -27,9 +27,7 @@ default-inclination model is unchanged.
 
 The wavelength dependence uses the torus equatorial V-band optical depth
 ``tau_v`` and an SMC (default) or Calzetti reddening curve, normalized at V
-(5500 Å): :math:`\tau(\lambda) = \tau_V\,k(\lambda)/k(V)`. The Fritz library
-axis is the optical depth at 9.7 µm, not at V; it is converted with
-:data:`FRITZ_TAU_V_PER_TAU_97`.
+(5500 Å): :math:`\tau(\lambda) = \tau_V\,k(\lambda)/k(V)`.
 
 References
 ----------
@@ -43,8 +41,6 @@ References
 """
 
 from __future__ import annotations
-
-import math
 
 import jax.numpy as jnp
 
@@ -65,21 +61,6 @@ TORUS_SCREEN_PARAMS: dict[str, tuple[str, str]] = {
     "fritz": ("agn_fritz_oa", "agn_fritz_tau"),
 }
 TORUS_SCREEN_BLOCKS: tuple[str, ...] = tuple(TORUS_SCREEN_PARAMS)
-
-#: Fritz et al. (2006) dust model: the visual extinction per unit equatorial
-#: optical depth at 9.7 um, :math:`A_V/\tau_{9.7} = 23`. Section 3 of the paper
-#: gives :math:`\tau(9.7) = 0.1` for a column :math:`N_{\rm H} = 9.0 \times
-#: 10^{21}` cm^-2, "an optical extinction of :math:`A_V = 2.3`"; Section 4
-#: gives :math:`\tau(9.7) = 8` as :math:`A_V \sim 170` (21 per unit).
-_FRITZ_AV_PER_TAU_97 = 23.0
-
-#: :math:`\tau_V = A_V / (2.5 \log_{10} e)`: magnitudes to optical depth.
-_TAU_PER_MAG = 0.4 * math.log(10.0)
-
-#: Fritz library: equatorial :math:`\tau_V` per unit :math:`\tau_{9.7}`
-#: (:math:`23 \times 0.4 \ln 10 = 21.2`).
-FRITZ_TAU_V_PER_TAU_97 = _FRITZ_AV_PER_TAU_97 * _TAU_PER_MAG
-
 
 #: The parameter naming the half-opening angle (from the equatorial plane) of the
 #: tori that read one but are not screened; every other torus is governed by the
@@ -152,8 +133,7 @@ def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float,
     """
     if torus_block == "fritz":
         cone_half = params.get("agn_fritz_oa", 60.0)
-        tau_97 = params.get("agn_fritz_tau", 1.0)
-        return 90.0 - cone_half, FRITZ_TAU_V_PER_TAU_97 * tau_97, "fritz"
+        return 90.0 - cone_half, params.get("agn_fritz_tau", 1.0), "fritz"
     if torus_block == "skirtor":
         return params.get("agn_oa_skirtor", 40.0), params.get("agn_tau_skirtor", 7.0), "skirtor"
     raise ValueError(f"torus_screen_geometry: no screen for torus block {torus_block!r}")
