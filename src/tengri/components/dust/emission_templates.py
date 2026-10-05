@@ -1259,7 +1259,7 @@ def load_schreiber2016_templates(filepath: str) -> dict:
     ``scripts/regenerate_schreiber2016_from_cigale.py``) holds the library's two
     components for one kilogram of dust, per dust-temperature node: the dust
     continuum (big and small grains plus silicates, no PAH) and the PAH
-    emission. The two are *not* normalised separately here: their relative
+    emission. The two are *not* normalized separately here: their relative
     amplitude is what makes the declared PAH fraction a **mass** fraction
     (Schreiber et al. 2018, Sect. 3.2).
 
@@ -1333,7 +1333,7 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
 
         S_\nu \propto (1 - f_{\rm PAH})\,S_\nu^{\rm cont} + f_{\rm PAH}\,S_\nu^{\rm PAH},
 
-    and the mixture is then renormalised so that its frequency integral is
+    and the mixture is then renormalized so that its frequency integral is
     ``L_absorbed`` (Schreiber et al. 2018, Sect. 3.2, eq. 14; the same
     construction as CIGALE's ``schreiber2016`` module). The PAH *power* share is
     therefore :math:`f R/(1 - f + f R)` with :math:`R = \int S^{\rm PAH} /
@@ -1415,12 +1415,12 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
         pah_t = (1.0 - ft) * pah[i] + ft * pah[i + 1]
 
         # Per-kg mixture: f is the PAH mass fraction, so the amplitudes of the
-        # two library components (not unit-normalised ones) are what mix.
+        # two library components (not unit-normalized ones) are what mix.
         f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
         mixed_t = (1.0 - f_pah) * cont_t + f_pah * pah_t
         mixed = resample_template(wavelength_aa, tmpl_wave, mixed_t, left=0.0, right=0.0)
 
-        # Renormalise the frequency integral to L_absorbed (nu descending for
+        # Renormalize the frequency integral to L_absorbed (nu descending for
         # ascending wavelength, so negate for a positive integral).
         nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
         integral = -jnp.trapezoid(mixed, nu)

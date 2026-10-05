@@ -4,14 +4,14 @@
 ``dust_emission={'type': 'schreiber2016'}`` used to evaluate an analytic
 modified-blackbody (beta = 1.5) plus six Drude profiles, whose band powers sit
 0.000-8.4x from the library CIGALE ships under that module name, while the
-tabulated component that did carry the library mixed unit-normalised templates
+tabulated component that did carry the library mixed unit-normalized templates
 (a PAH *power* fraction) and had no public spelling.
 
 The library (Schreiber et al. 2018, A&A 609, A30, arXiv:1710.10276) tabulates
 one kilogram of dust per temperature node as a dust continuum and a PAH
 template; the paper defines ``f_PAH`` as the PAH *mass* fraction (Sect. 3.2,
 eq. 14), so the two per-kg templates mix as ``(1 - f) cont + f pah`` and the
-mixture is renormalised to the absorbed luminosity.
+mixture is renormalized to the absorbed luminosity.
 
 Every expected value below is mixed in the test from the arrays of
 ``data/schreiber2016_templates.h5`` (per-kg templates, ``L_lambda`` times
@@ -103,7 +103,7 @@ def test_f_pah_is_the_mass_fraction_not_the_power_fraction(T, f):
     i = int(np.searchsorted(a["tdust_grid"], T))
     wave = a["wavelength_aa"]
     to_lnu = wave**2 / _C_AA
-    # R over the whole tabulated range: that is what the model renormalises on.
+    # R over the whole tabulated range: that is what the model renormalizes on.
     r = _power(wave, a["pah"][i] * to_lnu, 0.0, 1e6) / _power(
         wave, a["continuum"][i] * to_lnu, 0.0, 1e6
     )

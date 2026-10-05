@@ -4,7 +4,7 @@
 CIGALE ships the Schreiber et al. (2018, A&A 609, A30) dust library under the
 module name ``schreiber2016``: per dust temperature, a dust-continuum and a PAH
 template for one kilogram of dust, mixed ``(1 - fpah) dust + fpah pah`` and
-renormalised to the absorbed power. tengri's ``schreiber2016`` is the same
+renormalized to the absorbed power. tengri's ``schreiber2016`` is the same
 library repackaged (``data/schreiber2016_templates.h5``), so its SED must
 reproduce the installed module's, band by band, at every (T, f_PAH).
 

@@ -12,8 +12,8 @@ Faithful to ``pcigale.sed_modules.schreiber2016._init_code``:
 - ``continuum[t, :]`` = ``db.get(type=0, tdust=t)``  (dust continuum, per kg)
 - ``pah[t, :]``       = ``db.get(type=1, tdust=t)``  (PAH template, per kg)
 - Mixing at predict time: ``(1 - fpah) * continuum + fpah * pah`` with the
-  per-kg templates **un-normalised** (so ``fpah`` is the PAH *mass* fraction,
-  Schreiber et al. 2018 Sect. 3.2), then renormalised so that
+  per-kg templates **un-normalized** (so ``fpah`` is the PAH *mass* fraction,
+  Schreiber et al. 2018 Sect. 3.2), then renormalized so that
   ``\int spec dlambda = 1`` (= L_absorbed).
 
 Requirements: pcigale installed (tengri's main ``.venv`` has it).
@@ -88,10 +88,12 @@ def main() -> int:
         f.attrs["doi"] = "10.1051/0004-6361/201731506"
         f.attrs["upstream"] = "pcigale.data.SimpleDatabase('schreiber2016')"
         f.attrs["axes"] = "(tdust, wavelength)"
-        f.attrs["spectra_unit"] = "L_lambda per kg of dust (raw W/nm/kg divided by 10 -> per Angstrom)"
+        f.attrs["spectra_unit"] = (
+            "L_lambda per kg of dust (raw W/nm/kg divided by 10 -> per Angstrom)"
+        )
         f.attrs["mixing"] = (
-            "(1-fpah)*continuum + fpah*pah on the un-normalised per-kg templates "
-            "(fpah = PAH mass fraction), then renormalised to L_absorbed"
+            "(1-fpah)*continuum + fpah*pah on the un-normalized per-kg templates "
+            "(fpah = PAH mass fraction), then renormalized to L_absorbed"
         )
         f.attrs["generated_by"] = "scripts/regenerate_schreiber2016_from_cigale.py"
     print(f"Wrote {out_path} ({out_path.stat().st_size / 1024 / 1024:.2f} MB)")

@@ -605,7 +605,7 @@ DUST_EMISSION_MODELS["dale2014_cigale"] = _make_lazy_loader(
 
 # Schreiber et al. (2018) dust library as packaged by CIGALE (``schreiber2016``):
 # per-kg dust continuum and PAH templates on 85 temperature nodes, mixed by PAH
-# mass fraction and renormalised (scripts/regenerate_schreiber2016_from_cigale.py).
+# mass fraction and renormalized (scripts/regenerate_schreiber2016_from_cigale.py).
 # There is no analytic fallback: a missing file raises (#2597).
 DUST_EMISSION_MODELS["schreiber2016"] = _make_lazy_loader(
     "schreiber2016",

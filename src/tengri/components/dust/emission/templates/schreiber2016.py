@@ -23,7 +23,7 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     The library tabulates, for each dust temperature between 15 and 99 K in 1 K
     steps, the spectrum of one kilogram of dust as a dust continuum and a PAH
     component. The PAH **mass** fraction :math:`f_{\rm PAH}` mixes them per
-    kilogram and the mixture is renormalised to the absorbed luminosity,
+    kilogram and the mixture is renormalized to the absorbed luminosity,
 
     .. math::
 
@@ -48,7 +48,7 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     required; there is no analytic fallback, and a missing file raises with the
     path and how to regenerate it.
 
-    **Not modelled**: the CMB heating and contrast corrections of the
+    **Not modeled**: the CMB heating and contrast corrections of the
     analytic emission models are not applied (the library is a local-universe
     template; the same holds for the other tabulated dust emission models).
 

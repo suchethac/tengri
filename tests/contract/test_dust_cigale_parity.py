@@ -458,7 +458,7 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
         )
         # The live one-sided slope is the slope just inside the bound. Reading
         # it at 0.5 instead assumes the objective is linear in the knob, which a
-        # luminosity-renormalised mixture (schreiber2016) is not.
+        # luminosity-renormalized mixture (schreiber2016) is not.
         live = float(grad(bound + (1e-6 if bound == lo else -1e-6)))
         assert float(grad(bound)) == pytest.approx(0.5 * live, rel=1e-2), (
             f"{knob} gradient at the bound {bound} is {float(grad(bound)):.6e}, "
