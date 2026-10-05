@@ -61,13 +61,28 @@ class TestZTablePrecomputation:
     """Z-table creation and structure."""
 
     def test_output_shapes(self, ssp_data, filters):
-        """Output arrays have correct shapes."""
+        """Output arrays have correct shapes.
+
+        The z_grid may include edge-aware nodes added at band crossings of
+        spectral features (e.g., Lyman limit), so the actual grid has n >= n_z
+        points. The uniform n_z nodes are a subset of z_grid, and every table's
+        leading dimension equals len(z_grid).
+        """
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
-        assert zt.ssp_phot_table.shape == (10, 3, 20, 3)  # (n_z, n_met, n_age, n_filt)
-        chex.assert_shape(zt.eff_waves_rest_table, (10, 3))
-        chex.assert_shape(zt.log10_flux_scale_table, (10,))
-        chex.assert_shape(zt.z_grid, (10,))
+        n_z_uniform = 10
+        n_z_actual = len(zt.z_grid)
+
+        assert n_z_actual >= n_z_uniform, (
+            f"z_grid has fewer points ({n_z_actual}) than requested uniform nodes ({n_z_uniform})"
+        )
+        assert zt.ssp_phot_table.shape == (n_z_actual, 3, 20, 3), (
+            f"(n_z, n_met, n_age, n_filt) = ({n_z_actual}, 3, 20, 3), "
+            f"got {zt.ssp_phot_table.shape}"
+        )
+        chex.assert_shape(zt.eff_waves_rest_table, (n_z_actual, 3))
+        chex.assert_shape(zt.log10_flux_scale_table, (n_z_actual,))
+        chex.assert_shape(zt.z_grid, (n_z_actual,))
         assert zt.n_filters == 3
 
     def test_custom_z_grid(self, ssp_data, filters):

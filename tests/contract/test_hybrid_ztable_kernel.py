@@ -70,11 +70,25 @@ class TestZTableBasic:
     """Basic z-table functionality for photometry."""
 
     def test_ztable_creation(self, ssp_data, filters):
-        """Z-table can be created with synthetic SSP data."""
+        """Z-table can be created with synthetic SSP data.
+
+        The z_grid may include edge-aware nodes added at band crossings of
+        spectral features (e.g., Lyman limit), so the actual grid has n >= n_z
+        points. The uniform n_z nodes are a subset of z_grid, and the table's
+        leading dimension equals len(z_grid).
+        """
         fw, ft = filters
         ztable = precompute_photometry_ztable(ssp_data, fw, ft, n_z=15)
 
-        assert ztable.ssp_phot_table.shape == (15, 5, 15, 3)  # (n_z, n_met, n_age, n_filt)
+        n_z_uniform = 15
+        n_z_actual = len(ztable.z_grid)
+        assert n_z_actual >= n_z_uniform, (
+            f"z_grid has fewer points ({n_z_actual}) than requested uniform nodes ({n_z_uniform})"
+        )
+        assert ztable.ssp_phot_table.shape == (n_z_actual, 5, 15, 3), (
+            f"(n_z, n_met, n_age, n_filt) = ({n_z_actual}, 5, 15, 3), "
+            f"got {ztable.ssp_phot_table.shape}"
+        )
         chex.assert_tree_all_finite(ztable.ssp_phot_table)
         chex.assert_tree_all_finite(ztable.log10_flux_scale_table)
 
