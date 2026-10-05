@@ -39,8 +39,23 @@ _GRAYBODY_NORM_WAVE = np.geomspace(1.0e3, 1.0e9, 6001)
 # SMC R_V from Pei (1992)
 _RV_SMC = 2.93
 
-# Default sigmoid sharpness for Type 1/2 boundary
-_SIGMOID_SHARPNESS = 20.0
+#: The one width of the Type-1/2 transition, in :math:`\cos i` units, shared by
+#: the polar-dust mask and the torus screen: both weights are the same logistic
+#: in :math:`\cos i` about the same midpoint, so they sum to one at every
+#: inclination. Narrow enough that a clearly face-on sightline is unscreened
+#: even at a large torus optical depth, wide enough that the weight stays
+#: differentiable across the boundary.
+TYPE_TRANSITION_WIDTH = 0.025
+
+#: Sigmoid steepness in :math:`\cos i`, the reciprocal of
+#: :data:`TYPE_TRANSITION_WIDTH`.
+_SIGMOID_SHARPNESS = 1.0 / TYPE_TRANSITION_WIDTH
+
+#: Polar-cone geometries. ``"skirtor"``: the cone share is the integral of the
+#: anisotropic disc law over the escape cone (Stalevski et al. 2012). ``"fritz"``:
+#: the solid-angle fraction of the cone, :math:`1 - \cos\theta_c`, with
+#: :math:`\theta_c` the dust-free half-angle (the Fritz et al. 2006 torus).
+_POLAR_GEOMETRIES = ("skirtor", "fritz")
 
 
 def _type1_mask(
@@ -48,7 +63,12 @@ def _type1_mask(
     opening_angle_deg: float,
     sharpness: float = _SIGMOID_SHARPNESS,
 ) -> jnp.ndarray:
-    """Smooth sigmoid mask: 1 for Type 1 (face-on), 0 for Type 2 (edge-on).
+    r"""Smooth sigmoid mask: 1 for Type 1 (face-on), 0 for Type 2 (edge-on).
+
+    The sightline is Type 1 when it lies inside the dust-free polar cone, the
+    cone of half-angle :math:`90^\circ - \Phi` about the axis, that is
+    :math:`i < 90^\circ - \Phi`, :math:`\cos i > \sin\Phi`, with
+    :math:`\Phi` the torus half-opening angle from the equatorial plane.
 
     Parameters
     ----------
@@ -57,7 +77,8 @@ def _type1_mask(
     opening_angle_deg : float
         Torus half-opening angle in degrees (measured from equator).
     sharpness : float
-        Sigmoid steepness. Higher = sharper transition. Default 20.
+        Sigmoid steepness in :math:`\cos i`. Default is the reciprocal of
+        :data:`TYPE_TRANSITION_WIDTH`, the width the torus screen uses.
 
     Returns
     -------
@@ -66,6 +87,33 @@ def _type1_mask(
     """
     cos_threshold = jnp.cos(jnp.radians(90.0 - opening_angle_deg))
     return jax.nn.sigmoid((cos_inc - cos_threshold) * sharpness)
+
+
+def resolve_polar_opening_angle(agn_polar_oa: float, torus_opening_angle: float) -> jnp.ndarray:
+    """The polar cone's opening angle: the explicit override, else the torus's own.
+
+    Parameters
+    ----------
+    agn_polar_oa : float
+        The ``agn_polar_oa`` override [deg]. A value ``<= 0`` (the declared
+        default, ``0``) means "follow the torus".
+    torus_opening_angle : float
+        The selected torus's own opening angle, in the convention of
+        ``agn_polar_oa`` (half-opening angle from the equatorial plane) [deg].
+
+    Returns
+    -------
+    ndarray, scalar
+        The angle the polar mask, the cone share and the torus screen all read.
+        [deg]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes, both branches are smooth
+    and the select carries no gradient to the unselected one.
+    """
+    override = jnp.asarray(agn_polar_oa)
+    return jnp.where(override > 0.0, override, jnp.asarray(torus_opening_angle))
 
 
 def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -216,6 +264,49 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     return k_lambda
 
 
+def bongiorno2012_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
+    r"""Bongiorno et al. (2012) power-law extinction curve for AGN polar dust.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength. [Angstrom]
+
+    Returns
+    -------
+    k_lambda : ndarray, shape (n_wave,)
+        :math:`k(\lambda) = A(\lambda)/E(B-V)`. [dimensionless]
+
+    Notes
+    -----
+    .. math::
+
+        k(\lambda) = 1.39\,\lambda_{\mu{\rm m}}^{-1.2},
+
+    the SMC-like power law of Bongiorno et al. (2012) [1]_, the default
+    extinction law of CIGALE's ``skirtor2016`` module. Below 100 nm that
+    module splices a tabulated SMC shape onto the power law; this function
+    continues the power law, an approximation that matters only for the
+    sub-100 nm tail of the disc.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+
+    References
+    ----------
+    .. [1] A. Bongiorno et al., MNRAS, 427, 3103 (2012); the
+       :math:`1.39\,\lambda_{\mu{\rm m}}^{-1.2}` form as used by CIGALE
+       ``skirtor2016`` (Boquien et al., A&A, 622, A103, 2019,
+       arXiv:1811.03094).
+    """
+    wave_um = jnp.asarray(wavelength) * 1.0e-4
+    return 1.39 * wave_um ** (-1.2)
+
+
+#: Extinction laws the polar dust accepts. ``smc`` is :math:`A/A_V` (Pei 1992)
+#: and is scaled by :math:`R_V`; the others are already per unit :math:`E(B-V)`.
+POLAR_LAWS = ("smc", "calzetti", "gaskell", "bongiorno")
+
+
 def polar_cone_covering_fraction(opening_angle_deg: float) -> jnp.ndarray:
     r"""Fraction of the disc's bolometric luminosity within the polar cone.
 
@@ -311,7 +402,7 @@ _POLAR_CONE_REFERENCES = ("bolometric", "face_on")
 
 
 def polar_cone_covering_factor(
-    opening_angle_deg: float, *, reference: str = "bolometric"
+    opening_angle_deg: float, *, reference: str = "bolometric", geometry: str = "skirtor"
 ) -> jnp.ndarray:
     r"""Polar-cone factor against a named disc reference luminosity (R60).
 
@@ -361,6 +452,14 @@ def polar_cone_covering_factor(
     reference : {'bolometric', 'face_on'}, optional
         The disc reference luminosity the factor will multiply. Default
         ``'bolometric'``.
+    geometry : {'skirtor', 'fritz'}, optional
+        The torus whose cone this is. ``'skirtor'`` (default) is the form above.
+        ``'fritz'`` is the solid-angle fraction of the dust-free cone of
+        half-angle :math:`\theta_c = 90^\circ - \Phi`,
+        :math:`1 - \cos\theta_c = 1 - \sin\Phi`, the form CIGALE's
+        ``fritz2006`` uses (``l_ext = (1 - cos(half)) * int disk (1 - ext)``);
+        it has no flux-table bookkeeping, so only ``reference='bolometric'``
+        applies.
 
     Returns
     -------
@@ -398,9 +497,45 @@ def polar_cone_covering_factor(
             f"the SKIRTOR torus), 'bolometric' for the hemisphere-integrated "
             f"10**agn_log_lbol ('independent'/'conserving')."
         )
+    if geometry not in _POLAR_GEOMETRIES:
+        raise ValueError(
+            f"polar_cone_covering_factor: geometry={geometry!r} is not one of {_POLAR_GEOMETRIES}."
+        )
     sin_phi = jnp.sin(jnp.radians(jnp.asarray(opening_angle_deg)))
+    if geometry == "fritz":
+        if reference != "bolometric":
+            raise ValueError(
+                "polar_cone_covering_factor: the Fritz cone share is referenced to the "
+                "disc's own luminosity (reference='bolometric'); the 'face_on' frame is a "
+                "SKIRTOR flux-table convention."
+            )
+        return 1.0 - sin_phi
     f_cone = 1.0 - (3.0 / 7.0) * sin_phi**2 - (4.0 / 7.0) * sin_phi**3
     return f_cone if reference == "bolometric" else (7.0 / 18.0) * f_cone
+
+
+def _polar_law_curve(law: str, wavelength: jnp.ndarray) -> tuple[jnp.ndarray, float]:
+    """The extinction curve and its :math:`R` for a named polar-dust law.
+
+    Raises
+    ------
+    ValueError
+        On a name outside :data:`POLAR_LAWS`; there is no fallback law.
+    """
+    if law == "smc":
+        return smc_extinction_curve(wavelength), _RV_SMC
+    if law == "calzetti":
+        return calzetti2000_extinction_curve(wavelength), 1.0
+    if law == "gaskell":
+        return gaskell2004_extinction_curve(wavelength), 1.0
+    if law == "bongiorno":
+        return bongiorno2012_extinction_curve(wavelength), 1.0
+    raise ValueError(
+        f"agn_polar_law={law!r} is not a known polar-dust extinction law; "
+        f"choose one of {POLAR_LAWS}. 'smc' is Pei (1992) SMC Bar scaled by "
+        f"R_V = 2.93, 'bongiorno' the 1.39 lambda_um^-1.2 power law CIGALE "
+        f"skirtor2016 uses by default."
+    )
 
 
 def polar_dust_extinction(
@@ -433,8 +568,9 @@ def polar_dust_extinction(
         [dimensionless, mag]
     law : str
         Extinction law name: ``"smc"`` (Pei 1992), ``"calzetti"`` (Calzetti
-        et al. 2000), or ``"gaskell"`` (Gaskell et al. 2004).
-        Default: ``"smc"``.
+        et al. 2000), ``"gaskell"`` (Gaskell et al. 2004) or ``"bongiorno"``
+        (Bongiorno et al. 2012). Default: ``"smc"``. Any other name raises
+        :class:`ValueError`.
     sharpness : float
         Sigmoid steepness at the Type 1/2 boundary. [dimensionless]
 
@@ -462,20 +598,7 @@ def polar_dust_extinction(
 
     **JIT-compatible**: yes, uses ``jnp`` primitives and smooth sigmoid.
     """
-    # Select extinction law
-    if law == "smc":
-        k_lambda = smc_extinction_curve(wavelength)
-        r_v = _RV_SMC
-    elif law == "calzetti":
-        k_lambda = calzetti2000_extinction_curve(wavelength)
-        r_v = 1.0  # Calzetti normalized to E(B-V) directly
-    elif law == "gaskell":
-        k_lambda = gaskell2004_extinction_curve(wavelength)
-        r_v = 1.0  # Gaskell normalized to E(B-V) directly
-    else:
-        # Fallback to SMC
-        k_lambda = smc_extinction_curve(wavelength)
-        r_v = _RV_SMC
+    k_lambda, r_v = _polar_law_curve(law, wavelength)
 
     # A(lambda) = E(B-V) * R_V * k(lambda)
     # Transmission: 10^{-0.4 * A(lambda)} = exp(-0.921 * A(lambda))
@@ -485,8 +608,12 @@ def polar_dust_extinction(
     # Polar-dust absorption is geometry-independent: the bi-conical dust always
     # intercepts the same disc-photon fraction (set by E(B-V)) regardless of
     # observer viewing angle. Re-emission is isotropic, so observers at any
-    # inclination see the FIR bump.
-    l_absorbed = jnp.maximum(l_nu * (1.0 - extinction_factor), 0.0)
+    # inclination see the FIR bump. No floor: for E(B-V) >= 0 and a curve
+    # k >= 0, tau >= 0 and 1 - exp(-tau) >= 0, so the absorbed power is
+    # non-negative by construction. A ``maximum(., 0)`` here ties its two
+    # arguments at E(B-V) = 0, the lower edge of the prior, and JAX splits the
+    # derivative evenly between them, halving the gradient at the edge.
+    l_absorbed = l_nu * (-jnp.expm1(-tau_lambda))
 
     # Type 1 mask: 1 for face-on (extinct), 0 for edge-on (no effect)
     mask = _type1_mask(cos_inc, opening_angle_deg, sharpness)

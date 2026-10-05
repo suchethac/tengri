@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Fritz et al. (2006) smooth-dust AGN torus model.
+r"""Fritz et al. (2006) smooth-dust AGN torus model.
 
 Loads the full Fritz SED library (``create_fritz_from_grid``) and performs
 6D triweight kernel interpolation in JAX. Provides C²-continuous gradients for
@@ -12,8 +12,16 @@ dust torus SEDs parameterized by six dimensions:
 - tau: optical depth at 9.7 µm
 - beta: radial dust density power-law index
 - gamma: polar dust density gradient
-- opening_angle: dust torus half-opening angle [degrees]
-- psy: viewing angle from torus axis [degrees]; 0° = type-2, 90° = type-1 AGN
+- opening_angle: half-angle :math:`\theta_c` of the dust-free polar cone
+  [degrees], 20, 40 or 60; the torus's full opening angle is
+  :math:`\Theta = 180^\circ - 2\theta_c` (140, 100, 60 degrees)
+- psy: viewing elevation :math:`\psi` above the equatorial plane [degrees],
+  0.001 ... 89.99; the sightline reaches the nucleus directly (type 1) when
+  :math:`\psi > 90^\circ - \theta_c`
+
+In the composable AGN the library's ``psy`` is not a free parameter: the model
+has one inclination, ``agn_cos_inc`` (:math:`\cos i`, :math:`i` from the polar
+axis), and :func:`fritz_psy_from_cos_inc` derives :math:`\psi = 90^\circ - i`.
 
 All functions are pure JAX and JIT-compilable.
 
@@ -108,6 +116,71 @@ def _load_grid_arrays(grid_path: str):
     return result
 
 
+#: The library's ``psy`` axis extent [deg]: the grid stops at these values, and
+#: the exact endpoints 0 and 90 extrapolate.
+FRITZ_PSY_MIN = 0.001
+FRITZ_PSY_MAX = 89.99
+
+#: Largest :math:`\cos i` handed to ``arccos``: :math:`1 - 10^{-6}`, 0.08 degrees
+#: from the pole. At :math:`\cos i = 1` the slope of ``arccos`` is infinite and
+#: the clip's zero turns it into NaN in the backward pass; this cap is well
+#: inside the type-1 plateau of every library node.
+_COS_INC_FACE_ON_CAP = 1.0 - 1.0e-6
+
+
+def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
+    r"""The Fritz library's viewing elevation for the model's one inclination.
+
+    Parameters
+    ----------
+    cos_inc : float
+        :math:`\cos i`, with :math:`i` the inclination from the polar axis
+        (1 = face-on). [dimensionless]
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`\psi = 90^\circ - i`, the elevation above the equatorial plane
+        that keys the library, held to the grid's extent
+        [:data:`FRITZ_PSY_MIN`, :data:`FRITZ_PSY_MAX`]. [deg]
+
+    Notes
+    -----
+    :math:`\cos i = \sin\psi`. The library is type 1 at
+    :math:`\psi > 90^\circ - \theta_c` (:math:`i < \theta_c`), where
+    :math:`\theta_c` is ``agn_fritz_oa`` [1]_.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes; the gradient is zero
+    beyond the grid extent, where the library is constant.
+
+    References
+    ----------
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, MNRAS, 366, 767
+       (2006). arXiv:astro-ph/0511428.
+    """
+    c = jnp.minimum(jnp.asarray(cos_inc), _COS_INC_FACE_ON_CAP)
+    psy = 90.0 - jnp.degrees(jnp.arccos(c))
+    return jnp.clip(psy, FRITZ_PSY_MIN, FRITZ_PSY_MAX)
+
+
+def _refuse_off_grid(name: str, value, axis) -> None:
+    """Raise if a concrete ``value`` lies outside the grid ``axis``.
+
+    Traced values cannot be checked here (the builder's declared bounds refuse
+    them at build time); concrete ones would otherwise be clamped to the edge
+    template without a word.
+    """
+    if isinstance(value, jax.core.Tracer):
+        return
+    lo, hi = float(axis[0]), float(axis[-1])
+    v = float(value)
+    if not lo <= v <= hi:
+        raise ValueError(
+            f"{name}={v:g} is outside the Fritz2006 grid [{lo:g}, {hi:g}]; the "
+            f"interpolator would return the edge template unchanged."
+        )
+
+
 def _interpolate_and_normalize(
     grid_jax: jnp.ndarray,
     wave_grid: jnp.ndarray,
@@ -184,6 +257,8 @@ def _interpolate_and_normalize(
     """
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
+    _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
+    _refuse_off_grid("agn_fritz_psy", point[5], axes[5])
     template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
     # Normalize on the template's native grid, before resampling, so the
     # result does not depend on the caller's wavelength sampling or range.
@@ -285,10 +360,12 @@ def fritz_sed_from_grid(
     agn_fritz_gamma : float
         Polar dust density gradient. Allowed: 0, 2, 4, 6.
     agn_fritz_oa : float
-        Dust torus half-opening angle [degrees]. Allowed: 60, 100, 140.
+        Half-angle of the dust-free polar cone [degrees]. Allowed: 20, 40, 60
+        (full torus opening angle 180 - 2 x half = 140, 100, 60).
     agn_fritz_psy : float
-        Viewing angle from torus axis [degrees]; 0 = type-2 (edge-on),
-        90 = type-1 (face-on).
+        Library viewing elevation above the equatorial plane [degrees], 0.001
+        to 89.99; type 1 when it exceeds 90 - ``agn_fritz_oa``. The composable
+        torus block derives it from ``agn_cos_inc`` (:func:`fritz_psy_from_cos_inc`).
 
     Returns
     -------
@@ -401,12 +478,13 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
             Polar dust density gradient. [dimensionless]
             Allowed values: 0, 2, 4, 6.
         agn_fritz_oa : float
-            Dust torus half-opening angle. [degrees]
-            Allowed values: 60, 100, 140.
+            Half-angle of the dust-free polar cone. [degrees]
+            Allowed values: 20, 40, 60 (full opening angle 180 - 2 x half).
+            Outside [20, 60] raises ``ValueError``.
         agn_fritz_psy : float
-            Viewing angle from torus axis. [degrees]
-            0° = type-2 AGN (edge-on), 90° = type-1 AGN (face-on).
-            Allowed values: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
+            Library viewing elevation above the equatorial plane. [degrees]
+            Grid nodes: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1,
+            89.99; type 1 when it exceeds 90 - ``agn_fritz_oa``.
 
         Returns
         -------
@@ -632,11 +710,14 @@ def fritz_sed(*args, **kwargs):
         Polar dust density gradient [dimensionless]. Default: 4.0.
         Allowed: 0, 2, 4, 6.
     agn_fritz_oa : float, optional
-        Dust torus half-opening angle [degrees]. Default: 60.0.
-        Allowed: 60, 100, 140.
+        Half-angle of the dust-free polar cone [degrees]. Default: 60.0.
+        Allowed: 20, 40, 60 (full opening angle 180 - 2 x half = 140, 100,
+        60); outside [20, 60] raises ``ValueError``.
     agn_fritz_psy : float, optional
-        Viewing angle from torus axis [degrees]. Default: 0.001 (type-2).
-        Allowed: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
+        Library viewing elevation above the equatorial plane [degrees].
+        Default: 0.001 (type-2). Grid nodes: 0.001, 10.1, 20.1, 30.1, 40.1,
+        50.1, 60.1, 70.1, 80.1, 89.99; type 1 when it exceeds
+        90 - ``agn_fritz_oa``.
     _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.

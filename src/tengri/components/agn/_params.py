@@ -343,10 +343,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # match the fritz_torus_block; allowed values are the SimpleDatabase grid
     # nodes (triweight-interpolated). See scripts/build_fritz2006_grid.py.
     # Every range below is the axis extent measured from
-    # data/fritz2006_torus_grid.h5, following ``agn_fritz_psy`` beneath: the
-    # tabulation is what the interpolator can serve, so a wider prior would clip
-    # to an edge template and carry exactly zero gradient there (#1586). The
-    # grids quoted in these descriptions were checked against the file and agree.
+    # data/fritz2006_torus_grid.h5: the tabulation is what the interpolator can
+    # serve, so a wider prior would clip to an edge template and carry exactly
+    # zero gradient there (#1586). The grids quoted in these descriptions were
+    # checked against the file and agree. The library's viewing elevation psy
+    # (0.001 ... 89.99 deg) is not a parameter: the model has one inclination,
+    # ``agn_cos_inc``, and psy = 90 - i is derived from it (#2605).
     ParamDeclaration(
         "agn_fritz_r_ratio",
         Fixed(60.0),
@@ -384,25 +386,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_fritz_oa",
         Fixed(60.0),
-        "Fritz2006 torus half-opening angle [degrees], CIGALE database key (grid: 20, 40, 60)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
+        "Fritz2006 half-angle of the dust-free polar cone [degrees] (grid: 20, 40, 60; "
+        "full torus opening angle = 180 - 2 x half; type 1 when inclination < half)",
+        lambda lo, hi: lo >= 20.0 and hi <= 60.0,
+        "must be within the Fritz2006 grid extent [20, 60] (half-angles 20, 40, 60)",
         units="deg",
         # opening_angle_axis: 3 nodes, [20, 60]. Note the default sits on the
         # grid's upper edge, so this range opens the parameter downward only.
         free_prior=Uniform(20.0, 60.0, "Fritz2006 half-opening angle", units="deg", default=60.0),
-    ),
-    ParamDeclaration(
-        "agn_fritz_psy",
-        Fixed(0.001),
-        "Fritz2006 viewing angle from torus axis [degrees]; 0=edge-on (type 2), "
-        "90=face-on (type 1) (grid: 0.001 ... 89.99)",
-        lambda lo, hi: lo >= 0 and hi <= 90,
-        "must be in [0, 90]",
-        # Grid endpoints, not the [0, 90] bound: the Fritz2006 tabulation stops
-        # at 0.001/89.99 and the exact endpoints extrapolate.
-        free_prior=Uniform(0.001, 89.99, "Fritz2006 viewing angle", units="deg", default=0.001),
-        units="deg",
     ),
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
@@ -512,11 +503,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_polar_oa",
-        Uniform(10.0, 80.0, default=45.0),
-        "Polar dust half-opening angle [degrees]: sets covering fraction",
-        lambda lo, hi: lo > 0 and hi <= 90,
-        "must be in (0, 90]",
+        # Default 0 is the sentinel "follow the selected torus's own opening
+        # angle" (agn_oa_skirtor for SKIRTOR, 90 - agn_fritz_oa for Fritz): one
+        # geometry for the torus, the screen and the cone (#2602). A positive
+        # value overrides it.
+        Fixed(0.0),
+        "Polar dust half-opening angle override [degrees, from the equatorial plane]: "
+        "sets the cone and its Type-1/2 boundary; 0 (default) follows the torus's own "
+        "opening angle",
+        lambda lo, hi: lo >= 0 and hi <= 90,
+        "must be in [0, 90]",
         units="deg",
+        free_prior=Uniform(10.0, 80.0, "Polar dust half-opening angle", units="deg", default=40.0),
     ),
     # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Covering fractions and
     # efficiencies use their physical [0, 1] extent (defaults sit in the

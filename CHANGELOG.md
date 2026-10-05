@@ -2,6 +2,9 @@
 
 ### Changed
 
+- The AGN torus has one inclination and one opening angle. `agn_cos_inc` is the inclination of every torus; the Fritz et al. (2006) library's viewing elevation is derived from it, psi = 90 deg - i (`cos i = sin psi`), so the torus SED, the disc screen and the polar-dust mask see one sightline, and `agn_fritz_psy` is retired: passing it (`agn_fritz_psy`, `fritz_psy`, `psy` in the torus dict) raises a `ValueError` naming `agn_cos_inc` and the mapping. The sightline is Type 1 when `i` is inside the dust-free polar cone, `i < agn_fritz_oa` for Fritz (the cone half-angle, full opening 180 - 2 x half) and `i < 90 - agn_oa_skirtor` for SKIRTOR, for the disc screen and the polar mask alike: the screen's Type-1 limit for half-angles 20 / 40 / 60 deg was i = 70 / 50 / 30 deg. The polar cone follows the selected torus's own opening angle by default (`agn_polar_oa` now defaults to 0, "follow the torus"; a positive value overrides it), the polar mask and the screen share one sigmoid width of 0.025 in cos i (the mask's was 0.05 with a different midpoint), and `agn_fritz_oa` outside the grid [20, 60] is refused at build time instead of clamped to the edge template (#2605, #2602)
+- The Fritz screen's optical depth is tau_V, not tau_9.7: the library axis `agn_fritz_tau` enters the disc screen as tau_V = 0.4 ln 10 x 23 tau_9.7 (Fritz et al. 2006: tau_9.7 = 0.1 corresponds to A_V = 2.3); it was used as tau_V directly (#2605)
+
 - One exact young/old split serves every attenuator. The stellar component publishes, per SSP age node, the share of its formed mass younger than each boundary age (`age_boundary_younger_fraction`), computed through the same SFH kernel as the node weights, instead of each screen evaluating a step or logistic at the node ages. `two_component` defaults to a hard step at `t_birth_yr=1e7`; `transition_width_dex > 0` opts into the smooth law, and `age_binned` windows use the same machinery. A node's transmission is the mixture of its populations' transmissions (not of their optical depths). Nebular and line screens are weighted by ionizing luminosity, the energy-balance lookup table carries young and old populations and mixes them at runtime, `age_binned` gains the `lyc_` key family, and the refusal of age windows narrower than five node spacings is gone. Golden: `two_component` `L_absorbed` 5.932047709369588e59 -> 5.93036676326139e59 erg/s (-0.0283%), matching an independent dense-parcel step reference to 5.6e-9.
 
 ### Added
@@ -11,6 +14,10 @@
 - `draine_li2007` and `draine_li2014` publish the derived key `dust_umean`, the mean starlight intensity `U_min [(1 - gamma) + gamma R]` of the model (CIGALE's `dust.umean`), with `R` the power-law to single-U luminosity ratio at `U_max = 1e6` (alpha = 2) for DL07 and `1e7` (free alpha) for DL14 (#2599).
 
 ### Fixed
+
+- The polar-dust cone share of a Fritz torus follows its opening angle, `1 - cos(half)` of the disc luminosity (CIGALE `fritz2006`); it was the SKIRTOR form at a separate angle, identical for `agn_fritz_oa` = 20 and 60 deg. On the CIGALE-tied SKIRTOR path the polar graybody now sits inside the unit-integral normalization, so the disc is divided by `1 + l_ext` with the torus (disc / `agn_power` at E(B-V) = 0.1 and 0.5, i = 0: 1.59x and 2.01x CIGALE before, 1.02x and 1.05x after); `polar_dust_extinction` raises on an unknown law instead of falling back to the SMC curve, and the `bongiorno` law (1.39 lambda_um^-1.2) is available beside `smc`, `calzetti` and `gaskell` (#2602)
+- The polar absorbed power is formed as `L_nu (1 - exp(-tau))` rather than clipped with `maximum(., 0)`: the clip tied its two arguments at E(B-V) = 0, the lower edge of the prior, and halved the polar and torus gradients there (#2744)
+- The Fritz docstrings list the grid half-angles 20 / 40 / 60 deg (they said 60 / 100 / 140, the full angles of another convention) (#2605)
 
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32

@@ -16,6 +16,7 @@ from tengri.components.agn.polar_dust import (
     polar_cone_covering_factor,
     polar_dust_emission,
     polar_dust_extinction,
+    resolve_polar_opening_angle,
 )
 from tengri.protocols.component import declared_default
 
@@ -24,6 +25,9 @@ from tengri.protocols.component import declared_default
 _DEFAULT_AGN_POLAR_T = declared_default(_AGN_PARAMS, "agn_polar_T")
 _DEFAULT_AGN_POLAR_BETA = declared_default(_AGN_PARAMS, "agn_polar_beta")
 _DEFAULT_AGN_POLAR_OA = declared_default(_AGN_PARAMS, "agn_polar_oa")
+#: The torus angle a stand-alone call follows when ``agn_polar_oa`` is the
+#: "follow the torus" sentinel and no torus block resolved it first.
+_DEFAULT_AGN_OA_SKIRTOR = declared_default(_AGN_PARAMS, "agn_oa_skirtor")
 
 __all__ = [
     "polar_dust_attenuation_block",
@@ -46,7 +50,7 @@ def polar_dust_attenuation_block(
     # selects the block without asking for reddening gets none.
     agn_polar_ebv: float = 0.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_polar_oa: float = 45.0,
+    agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
     agn_polar_law: str = "smc",
     **_params,
 ) -> Array:
@@ -66,11 +70,15 @@ def polar_dust_attenuation_block(
         :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
-        Torus half-opening angle [deg, measured from equator]. Default
-        ``45``.
-    agn_polar_law : {"smc", "calzetti", "gaskell"}, optional
+        Opening angle of the polar cone [deg, half-opening angle from the
+        equatorial plane]. The declared default ``0`` follows the selected
+        torus's own angle (the composable runner resolves it); a stand-alone
+        call with ``0`` follows ``agn_oa_skirtor`` (default 40). A positive
+        value is an explicit override.
+    agn_polar_law : {"smc", "calzetti", "gaskell", "bongiorno"}, optional
         Extinction law (passes to upstream). Default ``"smc"`` (Pei 1992).
-        **Static** under JIT (Python string).
+        Any other name raises :class:`ValueError`. **Static** under JIT
+        (Python string).
 
     Returns
     -------
@@ -89,7 +97,9 @@ def polar_dust_attenuation_block(
         unit_l_nu,
         wave_aa,
         cos_inc=agn_cos_inc,
-        opening_angle_deg=agn_polar_oa,
+        opening_angle_deg=resolve_polar_opening_angle(
+            agn_polar_oa, _params.get("agn_oa_skirtor", _DEFAULT_AGN_OA_SKIRTOR)
+        ),
         ebv=agn_polar_ebv,
         law=agn_polar_law,
     )
@@ -112,6 +122,7 @@ def polar_dust_reemission_lnu(
     agn_polar_beta: float = _DEFAULT_AGN_POLAR_BETA,
     agn_polar_law: str = "smc",
     agn_polar_reference: str = "bolometric",
+    agn_polar_geometry: str = "skirtor",
     **_params,
 ) -> Array:
     r"""Compute polar-dust graybody reemission in L_ν units.
@@ -187,9 +198,10 @@ def polar_dust_reemission_lnu(
         :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
         ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
-        Torus half-opening angle [deg, measured from equator]. Defaults to
-        the declared ``agn_polar_oa`` default (``45``). Sets the polar
-        cone's covering fraction (task13 fix-round-1): see
+        Opening angle of the polar cone [deg, half-opening angle from the
+        equatorial plane]; the declared default ``0`` follows the torus (a
+        stand-alone call then reads ``agn_oa_skirtor``). Sets the polar cone's
+        covering fraction and its Type-1/2 boundary: see
         :func:`tengri.components.agn.polar_dust.polar_cone_covering_fraction`.
     agn_polar_T : float, optional
         Dust temperature [K]. Defaults to the declared ``agn_polar_T``
@@ -205,8 +217,12 @@ def polar_dust_reemission_lnu(
         Dust emissivity index [dimensionless]. Defaults to the declared
         ``agn_polar_beta`` default (``1.6``).
     agn_polar_law : str, optional
-        Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"``).
+        Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"`` /
+        ``"bongiorno"``); any other name raises :class:`ValueError`.
         Default ``"smc"``.
+    agn_polar_geometry : {'skirtor', 'fritz'}, optional
+        The cone-share form of the selected torus, forwarded to
+        :func:`~tengri.components.agn.polar_dust.polar_cone_covering_factor`.
     agn_polar_reference : {'bolometric', 'face_on'}, optional
         Which disc reference luminosity ``l_in`` represents, forwarded to
         :func:`~tengri.components.agn.polar_dust.polar_cone_covering_factor`
@@ -252,6 +268,9 @@ def polar_dust_reemission_lnu(
     ref_wave_aa = wave_aa if l_in_wavelength is None else jnp.asarray(l_in_wavelength)
 
     # l_absorbed_per_bin is the per-bin absorbed luminosity, geometry-independent.
+    agn_polar_oa = resolve_polar_opening_angle(
+        agn_polar_oa, _params.get("agn_oa_skirtor", _DEFAULT_AGN_OA_SKIRTOR)
+    )
     _l_nu_atten, l_absorbed_per_bin = polar_dust_extinction(
         l_lambda_in,
         ref_wave_aa,
@@ -274,7 +293,10 @@ def polar_dust_reemission_lnu(
     # reference frame ``l_in`` is expressed in (R60): the same geometry, 18/7
     # apart between the bolometric and face-on disc conventions.
     l_absorbed_total = (
-        polar_cone_covering_factor(agn_polar_oa, reference=agn_polar_reference) * l_absorbed_total
+        polar_cone_covering_factor(
+            agn_polar_oa, reference=agn_polar_reference, geometry=agn_polar_geometry
+        )
+        * l_absorbed_total
     )
 
     # Returns L_ν in erg/s/Hz.

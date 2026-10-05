@@ -1590,9 +1590,9 @@ m_fritz = SEDModel.build(
     agn={
         "torus": {
             "type": "fritz",
-            "agn_fritz_oa": Uniform(10.0, 80.0, default=60.0),
+            "agn_fritz_oa": Uniform(20.0, 60.0, default=60.0),
             "agn_fritz_r_ratio": Fixed(60.0),  # ProSpect AGNrm default
-            "agn_fritz_psy": Uniform(0.0, 90.0, default=30.0),
+            "agn_cos_inc": Uniform(0.0, 1.0, default=0.5),
             "agn_fritz_tau": Uniform(0.1, 10.0, default=1.0),
             "agn_fritz_gamma": Uniform(0.0, 6.0, default=4.0),
             "agn_fritz_beta": Uniform(-1.0, 0.0, default=-0.5),
@@ -1619,7 +1619,8 @@ for _ct, _an, _ta, _al, _be in FRITZ_NODES:
         {
             "agn_log_lbol": _log_lbol,
             "agn_fritz_oa": float(_ct),
-            "agn_fritz_psy": float(_an),
+            # Viewing elevation an = psi: cos i = sin psi.
+            "agn_cos_inc": float(np.sin(np.radians(_an))),
             "agn_fritz_tau": float(_ta),
             "agn_fritz_gamma": float(_al),
             "agn_fritz_beta": float(_be),

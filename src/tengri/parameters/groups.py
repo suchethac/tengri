@@ -6932,6 +6932,41 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: The retired Fritz viewing-elevation parameter (owner ruling, #2605): the model
+#: has one inclination for every torus, ``agn_cos_inc``, and the Fritz library's
+#: elevation above the equatorial plane is derived from it. A second,
+#: independent angle left a Fritz model type 2 by its library axis and type 1 by
+#: its disc screen at once.
+_AGN_FRITZ_PSY_KEYS: frozenset[str] = frozenset({"agn_fritz_psy", "fritz_psy"})
+
+
+def _agn_fritz_psy_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_fritz_psy`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.torus'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement parameter and the mapping.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) is retired (#2605): the model has one "
+        f"inclination for every torus, 'agn_cos_inc' (cos i, i from the polar axis), and "
+        f"the Fritz library's viewing elevation above the equatorial plane is derived "
+        f"from it, psy = 90 deg - i (cos i = sin psy). The sightline is type 1 when "
+        f"i < agn_fritz_oa (the half-angle of the dust-free polar cone; full opening "
+        f"angle = 180 - 2 x agn_fritz_oa). Translate psy to an inclination:\n"
+        f"  agn={{'type': 'composable', ..., 'agn_cos_inc': Fixed(sin(psy))}}  "
+        f"# e.g. psy = 60 deg -> agn_cos_inc = 0.866"
+    )
+
+
 #: The retired absolute Lyman-continuum dust-absorption fraction (owner
 #: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
 #: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
@@ -7100,6 +7135,10 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+        # #2605 (owner ruling): the retired Fritz viewing elevation is
+        # intercepted in every group; the one inclination is agn_cos_inc.
+        if key in _AGN_FRITZ_PSY_KEYS or (key == "psy" and str(group).endswith("torus")):
+            raise _agn_fritz_psy_retired_error(group, str(key))
         # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
         # before the generic resolver reaches it -- it was always written
         # under the 'neb' group, so no cross-group form is needed here.
