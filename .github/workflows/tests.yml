@@ -485,7 +485,7 @@ jobs:
       # A paired notebook declares in its own metadata that its .ipynb and .py
       # are one document. Nothing enforced that, and three drifted for months:
       # 01_quickstart.ipynb kept teaching `Fitter(...)` after #1341 migrated the
-      # mirror to `ForwardModel`; 05_prior_predictive and hst_proposal still
+      # mirror to `ForwardModel`; 05_prior_predictive and a figure notebook still
       # declared `sfh_tsnorm_log_peak_sfr`, a parameter #369 renamed; and
       # 02_the_api imported `Model`/`ParamSpec`, which tengri no longer exports,
       # so it died at its first cell with no mirror at all.
