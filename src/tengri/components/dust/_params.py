@@ -455,7 +455,7 @@ DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 # for the same no-cross-drift reason as the T constants.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
+SCHREIBER_T_K_DEFAULT = 20.0  # schreiber2016 tabulated library (CIGALE's declared default)
 SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
 ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
 

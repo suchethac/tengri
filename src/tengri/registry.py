@@ -1131,12 +1131,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "schreiber2018": {
         "status": "experimental",
         "citation": "Schreiber et al. 2018 (A&A 609, A30)",
-        "short_doc": "Tabulated IR template library (T_dust, f_PAH)",
+        "short_doc": "Tabulated Schreiber+2018 library, AGNfitter-rX packaging; (T_dust, f_PAH)",
     },
     "schreiber2016": {
         "status": "production",
-        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
-        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+        "citation": "Schreiber et al. 2018 (A&A 609, A30)",
+        "short_doc": "Tabulated Schreiber+2018 dust library, CIGALE packaging; (T_dust, PAH mass fraction)",
     },
     "pah_drude": {
         "status": "unvalidated",

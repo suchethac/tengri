@@ -98,7 +98,7 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     "dl14": ["draine2014"],
     "themis": ["jones2013", "jones2017"],
     "astrodust": ["hensley_draine2023"],
-    "schreiber2016": ["schreiber2016"],
+    "schreiber2016": ["schreiber2018"],
     "pah_drude": ["smith2007"],
     "bosa": ["cigale"],
     None: [],

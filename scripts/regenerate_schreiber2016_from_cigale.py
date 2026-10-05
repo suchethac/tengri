@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 r"""Build ``data/schreiber2016_templates.h5`` from CIGALE's database.
 
-tengri previously approximated the Schreiber et al. (2016) dust IR SED with
-an analytic modified-blackbody + Drude-profile PAH construct. CIGALE ships
-the *tabulated* Schreiber+2016 templates (a dust continuum and a PAH template
-per dust temperature). This script repacks them so tengri can reproduce
-CIGALE's Schreiber2016 SED bit-for-bit.
+CIGALE ships the *tabulated* Schreiber et al. (2018, A&A 609, A30;
+arXiv:1710.10276) dust library under the module name ``schreiber2016`` (the
+2016 preprint year of the library paper): a dust-continuum template and a PAH
+template per dust temperature, for one kilogram of dust. This script repacks
+them so tengri reproduces CIGALE's ``schreiber2016`` SED.
 
 Faithful to ``pcigale.sed_modules.schreiber2016._init_code``:
 
-- ``continuum[t, :]`` = ``db.get(type=0, tdust=t)``  (dust continuum)
-- ``pah[t, :]``       = ``db.get(type=1, tdust=t)``  (PAH template)
-- Mixing at predict time: ``(1 - fpah) * continuum + fpah * pah``,
-  energy-balance normalized so ``\int spec dlambda = 1`` (= L_absorbed).
+- ``continuum[t, :]`` = ``db.get(type=0, tdust=t)``  (dust continuum, per kg)
+- ``pah[t, :]``       = ``db.get(type=1, tdust=t)``  (PAH template, per kg)
+- Mixing at predict time: ``(1 - fpah) * continuum + fpah * pah`` with the
+  per-kg templates **un-normalised** (so ``fpah`` is the PAH *mass* fraction,
+  Schreiber et al. 2018 Sect. 3.2), then renormalised so that
+  ``\int spec dlambda = 1`` (= L_absorbed).
 
 Requirements: pcigale installed (tengri's main ``.venv`` has it).
 Output: ``data/schreiber2016_templates.h5``.
@@ -76,13 +78,21 @@ def main() -> int:
         f.create_dataset("tdust_grid", data=tdust_grid, dtype=np.float64)
         f.create_dataset("continuum", data=continuum_aa, dtype=np.float64, compression="gzip")
         f.create_dataset("pah", data=pah_aa, dtype=np.float64, compression="gzip")
-        f.attrs["model"] = "Schreiber et al. 2016 via CIGALE SimpleDatabase"
-        f.attrs["paper"] = "Schreiber, Elbaz, Pannella et al. 2016 A&A 609 A30"
-        f.attrs["arxiv"] = "1606.00841"
+        f.attrs["model"] = "Schreiber et al. 2018 dust library via CIGALE SimpleDatabase"
+        f.attrs["paper"] = (
+            "Schreiber, Elbaz, Pannella, Ciesla, Wang & Franco 2018, A&A 609, A30, "
+            "Dust temperature and mid-to-total infrared color distributions for "
+            "star-forming galaxies at 0<z<4"
+        )
+        f.attrs["arxiv"] = "1710.10276"
+        f.attrs["doi"] = "10.1051/0004-6361/201731506"
         f.attrs["upstream"] = "pcigale.data.SimpleDatabase('schreiber2016')"
         f.attrs["axes"] = "(tdust, wavelength)"
-        f.attrs["spectra_unit"] = "L_lambda per W input (raw W/nm/kg; loader normalizes)"
-        f.attrs["mixing"] = "(1-fpah)*continuum + fpah*pah, energy-balance to L_absorbed"
+        f.attrs["spectra_unit"] = "L_lambda per kg of dust (raw W/nm/kg divided by 10 -> per Angstrom)"
+        f.attrs["mixing"] = (
+            "(1-fpah)*continuum + fpah*pah on the un-normalised per-kg templates "
+            "(fpah = PAH mass fraction), then renormalised to L_absorbed"
+        )
         f.attrs["generated_by"] = "scripts/regenerate_schreiber2016_from_cigale.py"
     print(f"Wrote {out_path} ({out_path.stat().st_size / 1024 / 1024:.2f} MB)")
     return 0

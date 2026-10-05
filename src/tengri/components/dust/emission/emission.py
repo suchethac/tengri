@@ -17,14 +17,15 @@ Available Emission Models
 - **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
 - **astrodust**: Hensley & Draine (2023) Astrodust+PAH model (tabulated)
 - **bosa**: Boquien & Salim (2021) (L_TIR, sSFR)-parameterized model (tabulated)
-- **schreiber2018**: Schreiber et al. (2018) cold-dust template library (tabulated)
+- **schreiber2016**: Schreiber et al. (2018) dust library, CIGALE packaging (tabulated)
+- **schreiber2018**: Schreiber et al. (2018) cold-dust library, AGNfitter-rX packaging (tabulated)
 - **dh02_ce01**: Dale & Helou (2002) + Chary & Elbaz (2001) cold-dust model (tabulated)
 - **themis**: Jones et al. (2017) THEMIS/DustEM model (tabulated)
 
 Template Auto-Loading
 ---------------------
 The ``"draine_li2007"``, ``"dale2014"``, ``"draine_li2014"``,
-``"astrodust"``, ``"bosa"``, ``"schreiber2018"``, ``"dh02_ce01"``,
+``"astrodust"``, ``"bosa"``, ``"schreiber2016"``, ``"schreiber2018"``, ``"dh02_ce01"``,
 and ``"themis"`` models auto-load tabulated templates from the ``data/``
 directory on first use.  If templates are not found, they raise
 ``FileNotFoundError`` (no analytic fallback available).
@@ -191,7 +192,6 @@ from tengri.components.dust.emission.analytic._closures import (
     graybody as graybody,
     modified_blackbody as modified_blackbody,
     pah_drude as pah_drude,
-    schreiber2016 as schreiber2016,
 )
 
 # Register the grammar-dispatchable analytic closures (defined in
@@ -204,7 +204,6 @@ DUST_EMISSION_MODELS["casey2012"] = casey2012
 DUST_EMISSION_MODELS["pah_drude"] = pah_drude
 # Deprecated alias: draine2021_pah resolves to the canonical pah_drude (#693).
 DUST_EMISSION_MODELS["draine2021_pah"] = pah_drude
-DUST_EMISSION_MODELS["schreiber2016"] = schreiber2016
 
 
 def draine_li2007(*args, **kwargs):
@@ -556,6 +555,7 @@ from tengri.components.dust.emission_templates import (
     create_dh02_ce01_from_grid as create_dh02_ce01_from_grid,
     create_dl07_from_grid as create_dl07_from_grid,
     create_dl14_from_grid as create_dl14_from_grid,
+    create_schreiber2016_from_grid as create_schreiber2016_from_grid,
     create_schreiber2018_from_grid as create_schreiber2018_from_grid,
     create_themis_from_grid as create_themis_from_grid,
     load_astrodust_templates as load_astrodust_templates,
@@ -563,6 +563,7 @@ from tengri.components.dust.emission_templates import (
     load_dale2014_templates as load_dale2014_templates,
     load_dl14_templates as load_dl14_templates,
     load_draine_li_templates as load_draine_li_templates,
+    load_schreiber2016_templates as load_schreiber2016_templates,
     load_schreiber2018_templates as load_schreiber2018_templates,
     load_themis_templates as load_themis_templates,
     register_astrodust_tabulated as register_astrodust_tabulated,
@@ -602,10 +603,19 @@ DUST_EMISSION_MODELS["dale2014_cigale"] = _make_lazy_loader(
     "create_dale2014_from_grid",
 )
 
-# Schreiber et al. (2018) "S17" cold-dust library: the tabulated, real-PAH
-# counterpart of the analytic ``schreiber2016`` model. Same
-# (dust_T, dust_f_pah) interface; grid data published with AGNfitter-rX
-# (scripts/build_schreiber2018_grid.py).
+# Schreiber et al. (2018) dust library as packaged by CIGALE (``schreiber2016``):
+# per-kg dust continuum and PAH templates on 85 temperature nodes, mixed by PAH
+# mass fraction and renormalised (scripts/regenerate_schreiber2016_from_cigale.py).
+# There is no analytic fallback: a missing file raises (#2597).
+DUST_EMISSION_MODELS["schreiber2016"] = _make_lazy_loader(
+    "schreiber2016",
+    "schreiber2016_templates.h5",
+    "create_schreiber2016_from_grid",
+)
+
+# Schreiber et al. (2018) "S17" cold-dust library as packaged with AGNfitter-rX:
+# the same (dust_T, dust_f_pah) interface, native-mixed rather than per-kg
+# (grid data: scripts/build_schreiber2018_grid.py).
 DUST_EMISSION_MODELS["schreiber2018"] = _make_lazy_loader(
     "schreiber2018",
     "schreiber2018_templates.h5",
