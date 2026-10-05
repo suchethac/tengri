@@ -164,6 +164,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_feii_block = None
             self._agn_attenuation_block = None
             self._agn_norm = "independent"
+            self._agn_polar_law = "smc"
             self._agn_config = None
             self._agn_ir_frac_dist = None
             self._agn_lbol_dist = None
