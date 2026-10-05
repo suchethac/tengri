@@ -1107,6 +1107,29 @@ def load_dale2014_templates(filepath: str) -> dict:
     return result
 
 
+def _unit_fraction(fraction):
+    """Bound a mixing fraction to its declared prior support [0, 1].
+
+    Shared by the two Schreiber template closures so the bound is written once.
+
+    Parameters
+    ----------
+    fraction : float or array_like
+        PAH fraction, dimensionless.
+
+    Returns
+    -------
+    ndarray
+        ``fraction`` clipped to [0, 1]; its gradient is half the live one-sided
+        slope at either bound and zero outside.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    return jnp.clip(fraction, 0.0, 1.0)
+
+
 def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
 
@@ -1207,7 +1230,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
         pah_on_grid = resample_template(
             wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0
         )
-        f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
+        f_pah = _unit_fraction(dust_f_pah)
         mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
 
         # Renormalize the frequency integral to L_absorbed (nu descending for
@@ -1416,7 +1439,7 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
 
         # Per-kg mixture: f is the PAH mass fraction, so the amplitudes of the
         # two library components (not unit-normalized ones) are what mix.
-        f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
+        f_pah = _unit_fraction(dust_f_pah)
         mixed_t = (1.0 - f_pah) * cont_t + f_pah * pah_t
         mixed = resample_template(wavelength_aa, tmpl_wave, mixed_t, left=0.0, right=0.0)
 
