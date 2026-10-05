@@ -13,18 +13,16 @@ All functions are pure JAX, JIT-compatible, and fully differentiable.
 **SFR→radio conversion modes** (select via sfr_mode parameter):
 
 - ``"bell2003"``: Fixed FIRRC q_IR = 2.64 (Bell 2003). Default, no evolution.
-- ``"bell2003_split"``: AGNFITTER-RX parity mode (Martinez-Ramirez+2024, Sec 3):
-  the same Bell (2003) total L(1.4 GHz), but split 90%/10% into a
-  non-thermal (alpha=0.75, Baan & Klockner 2006) / thermal (alpha=0.10,
-  Dale & Helou 2002; Condon 1992) pair via :func:`radio_sfr_bell2003_split`,
-  in place of this module's default architecture -- one
-  ``radio_sfr_bell2003`` term (100% synchrotron-shaped) plus a SEPARATE,
-  independently-normalized ``radio_freefree`` term (Murphy+2011). The two
-  constructions are NOT the same convention: the default treats
-  ``q_ir=2.64`` as calibrating the non-thermal emission alone and adds
-  free-free on top; AGNFITTER-RX treats it as calibrating the COMBINED
-  (synchrotron + thermal) total and splits that total 90/10. Use
-  ``"bell2003_split"`` only when reproducing AGNFITTER-RX's construction.
+  ``q_ir`` is Bell's **total** 1.4 GHz calibration (Eq. 1: synchrotron plus
+  thermal, about 10 % of it thermal at 1.4 GHz). With the free-free term on, the
+  synchrotron term carries the calibrated total minus the Murphy+2011 thermal
+  luminosity at 1.4 GHz, so synchrotron plus thermal equals the calibration;
+  with it off, the synchrotron term carries the whole total.
+- ``"bell2003_split"``: the same code path as ``"bell2003"``; the spelling stays
+  accepted. The stand-alone function :func:`radio_sfr_bell2003_split` keeps the
+  AGNFITTER-RX construction (Martinez-Ramirez+2024, Sec 3): the Bell total split
+  90 %/10 % into a non-thermal (alpha = 0.75, Baan & Klockner 2006) and a thermal
+  (alpha = 0.10, Dale & Helou 2002; Condon 1992) power law.
 - ``"delvecchio2021"``: Mass + redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021).
   Correlation params exposed as arguments for hierarchical priors.
 - ``"mccheyne2022"``: Mass + redshift-dependent FIRRC at 150 MHz (McCheyne+2022).
@@ -97,8 +95,7 @@ _NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
 # thermal pair. Declared once, cited, and reused by
 # :func:`radio_sfr_bell2003_split` -- NOT the same numbers as this module's
 # default ``_ALPHA_SF_DEFAULT`` (0.8, Condon 1992) or ``radio_freefree``'s
-# independent free-free normalization; see the module docstring's
-# "bell2003_split" entry for why the two constructions differ.
+# Murphy+2011 normalization (thermal share 13.3 % of the Bell total at q = 2.64).
 _F_THERMAL_AGNFITTER: float = 0.10  # thermal fraction of the Bell(2003) total
 _ALPHA_NONTHERMAL_AGNFITTER: float = 0.75  # Baan & Klockner (2006)
 _ALPHA_THERMAL_AGNFITTER: float = 0.10  # Dale & Helou (2002); Condon (1992)
@@ -303,12 +300,11 @@ def radio_sfr_bell2003_split(
     Reproduces AGNFITTER-RX's host-galaxy radio construction (Martinez-
     Ramirez+2024, Sec 3, p.3): the Bell (2003) IR-radio correlation gives
     the TOTAL (synchrotron + thermal) L(1.4 GHz), which is then split into
-    a 90% non-thermal / 10% thermal pair with the paper's own slopes,
-    rather than tengri's default architecture of one 100%-synchrotron
-    :func:`radio_sfr_bell2003` term plus a separately-normalized
-    :func:`radio_freefree` term (see the module docstring's
-    ``"bell2003_split"`` entry -- the two are different conventions for
-    what ``q_ir`` calibrates, not two names for the same physics).
+    a 90% non-thermal / 10% thermal pair with the paper's own slopes.
+    This stand-alone function keeps that construction with its own fixed
+    thermal fraction and slopes; the pipeline's ``sfr_mode="bell2003_split"``
+    now takes the same code path as ``"bell2003"`` (one convention: ``q_ir``
+    calibrates the total, the thermal share is the Murphy+2011 term).
 
     .. math::
 
@@ -325,7 +321,7 @@ def radio_sfr_bell2003_split(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 um) [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
     q_ir : float
         FIR-radio correlation parameter for the COMBINED total. Default 2.64
         (Bell 2003, z=0).
@@ -486,7 +482,7 @@ def radio_sfr_delvecchio2021(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
     log_mstar : float
         log10(M★ / M⊙). Typical range [8, 12].
     redshift : float
@@ -579,7 +575,7 @@ def radio_sfr_mccheyne2022(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
     log_mstar : float
         log10(M★ / M⊙). Typical range [10.05, 11.4] per McCheyne+2022.
     redshift : float
@@ -674,7 +670,7 @@ def radio_freefree(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
     T_e : float
         Electron temperature [K]. Default 1e4.
         Prior suggestion: LogUniform(5e3, 2e4).
@@ -1090,7 +1086,7 @@ def radio_total_terms(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s] for star-forming and
         free-free components.
     L_agn_bol : float
         AGN bolometric luminosity [erg/s] for AGN component.
@@ -1227,7 +1223,7 @@ def radio_total(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total IR luminosity (erg/s) for SF component.
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s] for SF component.
     L_agn_bol : float
         AGN bolometric luminosity (erg/s) for AGN component.
     q_ir : float
@@ -1345,7 +1341,7 @@ def radio_total_dpl_terms(
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s] for star-forming and
         free-free components.
     L_agn_bol : float
         AGN bolometric luminosity [erg/s] for AGN component.
@@ -1494,7 +1490,7 @@ def radio_total_dpl(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        Total IR luminosity (erg/s) for SF component.
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s] for SF component.
     L_agn_bol : float
         AGN bolometric luminosity (erg/s) for AGN component.
     q_ir : float
@@ -1604,7 +1600,7 @@ def compute_radio_components(
     wavelength : array (n_wave,)
         Wavelength in Angstrom.
     L_ir : float
-        IR luminosity (erg/s).
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
     L_agn_bol : float
         AGN bolometric luminosity (erg/s).
     q_ir : float
