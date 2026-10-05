@@ -1014,13 +1014,12 @@ def _step_minus_ramp(wave_rest, sed_rest, x, edge_aa):
     lam_a, h = wave_rest[ia], wave_rest[ia + 1] - wave_rest[ia]
     y_a, y_b = sed_rest[ia], sed_rest[ia + 1]
     d = edge_aa - lam_a
-    t = jnp.clip(x - lam_a, 0.0, h)
-    delta = (
-        y_a * jnp.minimum(t, d)
-        + y_b * jnp.maximum(t - d, 0.0)
-        - y_a * t
-        - 0.5 * (y_b - y_a) / h * t * t
-    )
+    # Position of ``x`` within the cell: 0 below it, h above it.
+    t = jnp.where(x < lam_a, 0.0, jnp.where(x > lam_a + h, h, x - lam_a))
+    # y_a min(t, d) + y_b (t - d)_+ - [y_a t + (y_b - y_a) t^2 / 2h]: only the jump
+    # y_b - y_a survives, times the step's ramp minus the linear ramp's.
+    past_edge = jnp.where(t > d, t - d, 0.0)
+    delta = (y_b - y_a) * (past_edge - 0.5 * t * t / h)
     return jnp.where(has_bracket, delta, 0.0)
 
 
