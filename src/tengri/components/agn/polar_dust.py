@@ -25,6 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import planck_lnu, wavelength_to_nu
+from tengri.components.agn._polar_smc_opacity import SMC_OPACITY_EXT, SMC_OPACITY_WAVE_UM
 from tengri.components.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
@@ -58,7 +59,7 @@ _SIGMOID_SHARPNESS = 1.0 / TYPE_TRANSITION_WIDTH
 _POLAR_GEOMETRIES = ("skirtor", "fritz")
 
 
-def _type1_mask(
+def type1_weight(
     cos_inc: float,
     opening_angle_deg: float,
     sharpness: float = _SIGMOID_SHARPNESS,
@@ -89,6 +90,10 @@ def _type1_mask(
     return jax.nn.sigmoid((cos_inc - cos_threshold) * sharpness)
 
 
+#: Name the polar mask has carried; the screens and the generic tori call :func:`type1_weight`.
+_type1_mask = type1_weight
+
+
 def resolve_polar_opening_angle(agn_polar_oa: float, torus_opening_angle: float) -> jnp.ndarray:
     """The polar cone's opening angle: the explicit override, else the torus's own.
 
@@ -114,6 +119,11 @@ def resolve_polar_opening_angle(agn_polar_oa: float, torus_opening_angle: float)
     """
     override = jnp.asarray(agn_polar_oa)
     return jnp.where(override > 0.0, override, jnp.asarray(torus_opening_angle))
+
+
+#: Wavelength [nm] where the Calzetti et al. (2000) long-wavelength polynomial
+#: ``2.659 (-1.857 + 1040/lambda_nm) + 4.05`` crosses zero (3115 nm).
+_CALZETTI_ZERO_NM = 1040.0 / (1.857 - 4.05 / 2.659)
 
 
 def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -151,7 +161,13 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
         k(\\lambda) = 2.659 \\times (-1.857 + 1040/\\lambda_{\\rm nm}) + 4.05
 
-    where :math:`\\lambda_{\\rm nm}` is wavelength in nanometers.
+    where :math:`\\lambda_{\\rm nm}` is wavelength in nanometers. The fit is published for
+    0.12 to 2.2 um; past the zero of the second polynomial (3115 nm) the curve is held at zero
+    rather than going negative (CIGALE's ``skirtor2016`` law 1 leaves it unfloored, so the two
+    differ beyond 3.1 um, where the disc carries no power). The dust-attenuation Calzetti
+    (:func:`tengri.components.dust.attenuation.calzetti`) is the same polynomial normalized
+    to :math:`k(V) = 1` and is not reused here because that normalization moves ``k`` by
+    5e-4.
 
     **JIT-compatible**: yes, uses ``jnp`` primitives.
 
@@ -186,7 +202,10 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     # Select based on wavelength
     k_lambda = jnp.where(wave_nm < 630.0, short_part, long_part)
 
-    return k_lambda
+    # Beyond the zero crossing of the long-wavelength polynomial the curve is held at zero:
+    # the fit is published for 0.12-2.2 um and goes negative past 3.1 um (min -0.80 at
+    # 30 um), which would make the absorbed power negative there.
+    return jnp.where(wave_nm < _CALZETTI_ZERO_NM, k_lambda, 0.0)
 
 
 def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -283,11 +302,14 @@ def bongiorno2012_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
         k(\lambda) = 1.39\,\lambda_{\mu{\rm m}}^{-1.2},
 
-    the SMC-like power law of Bongiorno et al. (2012) [1]_, the default
-    extinction law of CIGALE's ``skirtor2016`` module. Below 100 nm that
-    module splices a tabulated SMC shape onto the power law; this function
-    continues the power law, an approximation that matters only for the
-    sub-100 nm tail of the disc.
+    the SMC-like power law of Bongiorno et al. (2012) [1]_ for
+    :math:`\lambda \ge 100` nm. Below 100 nm the curve is the shape of the tabulated SMC
+    dust-mixture opacity of CIGALE's ``skirtor2016`` (repackaged in
+    :mod:`tengri.components.agn._polar_smc_opacity`, with its provenance), rescaled to equal
+    the power law at 100 nm and interpolated linearly in wavelength, so ``bongiorno`` is
+    CIGALE's ``extinction_law = 0``. CIGALE rescales at the last grid point below 100 nm
+    rather than at 100 nm itself; for a dense grid the two differ by less than the opacity's
+    change across one grid step. Wavelengths below the table's 10 A edge take its edge value.
 
     **JIT-compatible**: yes. **Gradient-safe**: yes.
 
@@ -299,7 +321,13 @@ def bongiorno2012_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
        arXiv:1811.03094).
     """
     wave_um = jnp.asarray(wavelength) * 1.0e-4
-    return 1.39 * wave_um ** (-1.2)
+    k_power = 1.39 * wave_um ** (-1.2)
+    table_wave = jnp.asarray(SMC_OPACITY_WAVE_UM, dtype=wave_um.dtype)
+    table_ext = jnp.asarray(SMC_OPACITY_EXT, dtype=wave_um.dtype)
+    shape = jnp.interp(wave_um, table_wave, table_ext)
+    shape_at_100nm = jnp.interp(0.1, table_wave, table_ext)
+    k_at_100nm = 1.39 * 0.1 ** (-1.2)
+    return jnp.where(wave_um < 0.1, shape * (k_at_100nm / shape_at_100nm), k_power)
 
 
 #: Extinction laws the polar dust accepts. ``smc`` is :math:`A/A_V` (Pei 1992)

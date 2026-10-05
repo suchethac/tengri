@@ -2790,6 +2790,16 @@ class Parameters:
                 if provenance:
                     tag = _TAGS.get(provenance.get(name, "registry_default"), "")
                     val_str = f"{val:.4g}"
+                    if name == "agn_polar_oa" and val == 0.0:
+                        from tengri.components.agn.blocks.torus_screen import (
+                            polar_follow_parameter,
+                        )
+
+                        val_str = "follows torus"
+                        tag = (
+                            f"{tag} polar cone = torus opening angle, "
+                            f"{polar_follow_parameter(self.agn_torus_block)}"
+                        )
                     lines.append(f"  {name:<32s} {'Fixed':<26s} {val_str:<22s} {tag}")
                 else:
                     lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")

@@ -461,8 +461,12 @@ def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
     if ebv == 0.0:
         assert ratio == pytest.approx(1.0, abs=1e-3)
     elif i_deg in _TYPE2:
-        torus_ratio = _power(on["torus"], _DENSE_WAVE) / _power(off["torus"], _DENSE_WAVE)
-        assert ratio == pytest.approx(torus_ratio, rel=2e-3)
+        # CIGALE's ``norm = 1/int(dust + polar)`` divides the disc by 1 + l_ext, with
+        # l_ext = polar/torus read off this run's own components.
+        expected = 1.0 / (
+            1.0 + _power(on["polar"], _DENSE_WAVE) / _power(on["torus"], _DENSE_WAVE)
+        )
+        assert ratio == pytest.approx(expected, rel=1e-6)
     else:
         assert 0.0 < ratio < 1.0 - 1e-3  # Type-1 sightline is reddened by the cone dust
 

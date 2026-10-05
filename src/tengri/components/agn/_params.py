@@ -511,8 +511,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Polar dust half-opening angle override [degrees, from the equatorial plane]: "
         "sets the cone and its Type-1/2 boundary; 0 (default) follows the torus's own "
         "opening angle",
-        lambda lo, hi: lo >= 0 and hi <= 90,
-        "must be in [0, 90]",
+        lambda lo, hi: (lo == 0 and hi == 0) or (lo > 0 and hi <= 90),
+        "an explicit polar-cone angle must be in (0, 90] degrees; the single value 0 is the "
+        "default's way of following the torus, so leave agn_polar_oa unset (or Fixed(DEFAULT)) "
+        "to follow agn_oa_skirtor / 90 - agn_fritz_oa / agn_theta_torus, and a prior that "
+        "reaches 0 is refused",
         units="deg",
         free_prior=Uniform(10.0, 80.0, "Polar dust half-opening angle", units="deg", default=40.0),
     ),

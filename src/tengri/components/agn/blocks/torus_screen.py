@@ -75,6 +75,26 @@ _TORUS_OPENING_ANGLE_PARAM: dict[str, str] = {
 }
 
 
+def polar_follow_parameter(torus_block: str) -> str:
+    """The parameter (or expression) whose angle the polar cone follows for a torus.
+
+    Parameters
+    ----------
+    torus_block : str
+        The torus block name.
+
+    Returns
+    -------
+    str
+        ``"90 - agn_fritz_oa"`` for the Fritz library, ``"agn_oa_skirtor"`` /
+        ``"agn_oa_nenkova"`` for the families that read them, else
+        ``"agn_theta_torus"``: the quantity :func:`polar_follow_opening_angle` returns.
+    """
+    if torus_block == "fritz":
+        return "90 - agn_fritz_oa"
+    return _TORUS_OPENING_ANGLE_PARAM.get(torus_block, "agn_theta_torus")
+
+
 def polar_follow_opening_angle(torus_block: str, params: dict) -> float:
     """The selected torus's own opening angle, which the polar cone follows.
 

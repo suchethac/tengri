@@ -38,7 +38,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.agn.blocks.atten import (
     polar_dust_attenuation_block,
     polar_dust_reemission_lnu,
@@ -519,8 +519,10 @@ def test_polar_law_k_matches_the_published_curve(law):
     ebv = 0.05
     ones = jnp.ones(_LAW_WAVES.size)
     _, absorbed = polar_dust_extinction(ones, jnp.asarray(_LAW_WAVES), 1.0, 40.0, ebv, law=law)
-    k = -np.log1p(-np.asarray(absorbed)) / (0.921 * ebv)
-    np.testing.assert_allclose(k, _published_k(law, _LAW_WAVES), rtol=2e-3)
+    # A(lambda) = E(B-V) k(lambda) mag, transmission 10^(-0.4 A) = exp(-0.4 ln10 A): the
+    # coefficient is written here, not read back from the code under test.
+    k = -np.log1p(-np.asarray(absorbed)) / (0.4 * np.log(10.0) * ebv)
+    np.testing.assert_allclose(k, _published_k(law, _LAW_WAVES), rtol=1e-4)
 
 
 @pytest.mark.parametrize("name", ("bogus", "Calzetti", ""))
@@ -751,3 +753,219 @@ def test_unknown_polar_law_is_refused_at_build_with_the_menu(_model_inputs):
     for kwargs in ({"polar_law": "bogus"}, {"atten_extra": {"polar_law": "bogus"}}):
         with pytest.raises(ValueError, match=r"polar_law.*bongiorno"):
             _agn_builder_model(_model_inputs, **kwargs)
+
+
+# ----------------------------------------------------------------------------------
+# 9. the polar law is CIGALE's: Bongiorno above 100 nm, the tabulated SMC shape below
+# ----------------------------------------------------------------------------------
+# Rows of CIGALE's ``pcigale/sed_modules/curves/extFun_SMC.dat`` (total mass extinction
+# coefficient, m^2/kg): the first row, rows 17, 34, 51 and 62, and the two rows that bracket
+# 100 nm, written out here.
+_SMC_TABLE = (
+    (1.000000e-03, 6.777918e02),
+    (3.255089e-03, 2.099654e03),
+    (1.059560e-02, 5.313827e03),
+    (3.448962e-02, 8.367591e03),
+    (7.401960e-02, 1.855779e04),
+    (9.771242e-02, 1.512779e04),
+    (1.047371e-01, 1.385008e04),
+)
+
+
+def test_bongiorno_below_100nm_is_the_cigale_table_shape():
+    """k(lambda < 100 nm) = table(lambda) x k_power(100 nm)/table(100 nm), from the nodes above."""
+    (w_lo, e_lo), (w_hi, e_hi) = _SMC_TABLE[-2:]
+    table_100nm = e_lo + (e_hi - e_lo) * (0.1 - w_lo) / (w_hi - w_lo)
+    k_100nm = 1.39 * 0.1**-1.2
+    nodes = np.array(_SMC_TABLE[:5])  # five nodes below 100 nm
+    expected = nodes[:, 1] * k_100nm / table_100nm
+    wave = jnp.asarray(nodes[:, 0] * 1.0e4)  # [A]
+    _, absorbed = polar_dust_extinction(jnp.ones(5), wave, 1.0, 40.0, 0.01, law="bongiorno")
+    k = -np.log1p(-np.asarray(absorbed)) / (0.4 * np.log(10.0) * 0.01)
+    np.testing.assert_allclose(k, expected, rtol=1e-4)
+    # continuous at 100 nm, and the power law just above it
+    above = jnp.asarray([1000.0 * 1.0001, 1500.0, 2000.0, 5500.0])
+    _, abs_above = polar_dust_extinction(jnp.ones(4), above, 1.0, 40.0, 0.01, law="bongiorno")
+    k_above = -np.log1p(-np.asarray(abs_above)) / (0.4 * np.log(10.0) * 0.01)
+    np.testing.assert_allclose(k_above, 1.39 * (np.asarray(above) * 1e-4) ** -1.2, rtol=1e-4)
+    assert k_above[0] == pytest.approx(k_100nm, rel=1e-3)
+
+
+# pcigale ``skirtor2016`` (SKIRTOR, t = 7, p = q = 1, R = 20, i = 0, schartmann2005 disc,
+# extinction_law = 0, fracAGN = 0.3), measured with the installed pcigale 2025.1:
+# (oa [deg], E(B-V), polar graybody / agn_power, disc / agn_power).
+_PCIGALE_SHARES = (
+    (10.0, 0.03, 0.85875, None),
+    (40.0, 0.03, 0.20499, 2.7390),
+    (70.0, 0.03, 0.02330, None),
+    (40.0, 0.1, 0.36310, 1.4323),
+    (40.0, 0.5, 0.47706, 0.4904),
+)
+
+#: The residual is the curve's match point and the quadrature grid, both measured on
+#: pcigale's own 948-node grid: CIGALE rescales the sub-100 nm table at the last grid node
+#: below 100 nm (95.5 nm) and tengri at 100 nm, which moves the absorbed power by -0.41 %,
+#: -0.18 % and -0.004 % at E(B-V) 0.03, 0.1 and 0.5; integrating on 948 nodes rather than a
+#: dense grid moves it by a further 0.10 %, 0.08 % and 0.04 %. Measured agreement: polar
+#: 0.9993 / 0.9952 / 0.9936 / 0.9976 / 0.9990, disc 1.0008 / 1.0019 / 1.0006.
+_POLAR_REL = 1.0e-2
+_DISC_REL = 3.0e-3
+
+
+def _tied_shares(oa, ebv, law="bongiorno"):
+    """(polar, disc) / agn_power on the CIGALE-tied SKIRTOR path at i = 0."""
+    kwargs = {**_TIE, "agn_oa_skirtor": oa, "agn_polar_law": law}
+
+    def run(e):
+        _, comps = compose_l_nu(
+            _WAVE_TIE,
+            _LOG_LBOL,
+            agn_ir_frac=0.3,
+            agn_cos_inc=1.0,
+            agn_polar_ebv=e,
+            return_components=True,
+            **kwargs,
+        )
+        return {k: np.asarray(v) for k, v in comps.items()}
+
+    on, off = run(ebv), run(0.0)
+    budget = _power(off["torus"], _WAVE_TIE)
+    return _power(on["polar"], _WAVE_TIE) / budget, _power(on["disc"], _WAVE_TIE) / budget
+
+
+@pytest.mark.parametrize(("oa", "ebv", "polar", "disc"), _PCIGALE_SHARES)
+def test_polar_share_and_disc_match_pcigale_with_the_bongiorno_law(oa, ebv, polar, disc):
+    got_polar, got_disc = _tied_shares(oa, ebv)
+    assert got_polar == pytest.approx(polar, rel=_POLAR_REL), (
+        f"oa={oa}, E(B-V)={ebv}: polar/agn_power {got_polar:.5f}, pcigale {polar}"
+    )
+    if disc is not None:
+        assert got_disc == pytest.approx(disc, rel=_DISC_REL), (
+            f"oa={oa}, E(B-V)={ebv}: disc/agn_power {got_disc:.4f}, pcigale {disc}"
+        )
+
+
+@pytest.mark.parametrize(
+    ("oa", "ebv", "polar", "disc"), _PCIGALE_SHARES[:2] + _PCIGALE_SHARES[3:4]
+)
+def test_polar_share_matches_the_installed_pcigale(oa, ebv, polar, disc):
+    """The same comparison against a live pcigale ``skirtor2016`` run (skipped without it)."""
+    pytest.importorskip("pcigale")
+    from pcigale.sed import SED
+    from pcigale.sed_modules import skirtor2016 as PS
+
+    sed = SED()
+    sed.add_info("dust.luminosity", 1.0, True, unit="W")
+    PS.SKIRTOR2016(
+        name="skirtor2016", t=7, pl=1.0, q=1.0, oa=int(oa), R=20, Mcl=0.97, i=0, disk_type=1,
+        delta=0, fracAGN=0.3, lambda_fracAGN="0/0", law=0, EBV=ebv, temperature=100.0,
+        emissivity=1.6,
+    ).process(sed)  # fmt: skip
+    power = 0.3 / 0.7
+    pc_polar = sed.info["agn.polar_dust_luminosity"] / power
+    pc_disc = sed.info["agn.disk_luminosity"] / power
+    got_polar, got_disc = _tied_shares(oa, ebv)
+    assert pc_polar == pytest.approx(polar, rel=1e-4)
+    assert got_polar == pytest.approx(pc_polar, rel=_POLAR_REL)
+    if disc is not None:
+        assert got_disc == pytest.approx(pc_disc, rel=_DISC_REL)
+
+
+def _unit_disc():
+    wave = jnp.asarray(np.geomspace(1.0e3, 3.0e4, 1500))  # [A], above 100 nm
+    return wave, jnp.exp(-((jnp.log(wave) - jnp.log(3000.0)) ** 2) / 2.0)
+
+
+@pytest.mark.parametrize("half", _HALVES)
+def test_fritz_cone_absorbed_power_matches_the_cigale_formula(half):
+    """l_ext = (1 - cos half) int disk (1 - 10^(-0.4 k E)) dlambda (CIGALE fritz2006.py:309)."""
+    wave, disc = _unit_disc()
+    ebv = 0.1
+    _, absorbed = polar_dust_reemission_lnu(
+        wave,
+        disc,
+        agn_polar_ebv=ebv,
+        agn_polar_oa=90.0 - half,
+        agn_polar_geometry="fritz",
+        agn_polar_law="bongiorno",
+        return_absorbed=True,
+    )
+    k = 1.39 * (np.asarray(wave) * 1.0e-4) ** -1.2
+    integrand = np.asarray(disc) * (1.0 - 10.0 ** (-0.4 * k * ebv))
+    expected = (1.0 - np.cos(np.radians(half))) * np.trapezoid(integrand, np.asarray(wave))
+    assert float(absorbed) == pytest.approx(expected, rel=1e-4)
+
+
+@pytest.mark.parametrize("oa", (10.0, 40.0, 70.0))
+def test_skirtor_cone_absorbed_power_matches_the_cigale_formula(oa):
+    """l_ext = g(oa) int disk (1 - 10^(-0.4 k E)) dlambda (CIGALE skirtor2016.py:366-368)."""
+    wave, disc = _unit_disc()
+    ebv = 0.1
+    _, absorbed = polar_dust_reemission_lnu(
+        wave,
+        disc,
+        agn_polar_ebv=ebv,
+        agn_polar_oa=oa,
+        agn_polar_reference="face_on",
+        agn_polar_law="bongiorno",
+        return_absorbed=True,
+    )
+    k = 1.39 * (np.asarray(wave) * 1.0e-4) ** -1.2
+    integrand = np.asarray(disc) * (1.0 - 10.0 ** (-0.4 * k * ebv))
+    expected = _g(oa) * np.trapezoid(integrand, np.asarray(wave))
+    assert float(absorbed) == pytest.approx(expected, rel=1e-4)
+
+
+# ----------------------------------------------------------------------------------
+# 10. agn_polar_oa: 0 is the one sentinel for "follow the torus"
+# ----------------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "prior",
+    (Uniform(0.0, 80.0), Fixed(-5.0), Uniform(-1.0, 40.0), Fixed(120.0)),
+    ids=("reaches_zero", "negative", "negative_support", "above_90"),
+)
+def test_polar_oa_prior_reaching_zero_is_refused(_model_inputs, prior):
+    """A value or prior that reaches <= 0 (other than the default 0) names the way to follow."""
+    with pytest.raises(ValueError, match=r"agn_polar_oa.*leave agn_polar_oa unset"):
+        _agn_builder_model(_model_inputs, atten_extra={"polar_oa": prior})
+
+
+def test_polar_oa_default_and_explicit_angles_build(_model_inputs):
+    for prior in (Fixed(DEFAULT), Fixed(0.0), Fixed(40.0), Uniform(10.0, 80.0)):
+        _agn_builder_model(_model_inputs, atten_extra={"polar_oa": prior})
+
+
+def test_summary_says_the_cone_follows_the_torus(_model_inputs, capsys):
+    _agn_builder_model(_model_inputs).spec.summary()
+    row = next(ln for ln in capsys.readouterr().out.splitlines() if "agn_polar_oa" in ln)
+    assert "follows torus" in row and "agn_oa_skirtor" in row
+    _agn_builder_model(_model_inputs, atten_extra={"polar_oa": Fixed(40.0)}).spec.summary()
+    row = next(ln for ln in capsys.readouterr().out.splitlines() if "agn_polar_oa" in ln)
+    assert "follows torus" not in row
+
+
+# ----------------------------------------------------------------------------------
+# 11. absorbed power is non-negative for every law, 100 A to 1 mm
+# ----------------------------------------------------------------------------------
+@pytest.mark.parametrize("law", ("smc", "calzetti", "gaskell", "bongiorno"))
+@pytest.mark.parametrize("x64", (True, False), ids=("float64", "float32"))
+def test_absorbed_power_is_non_negative_for_every_law(law, x64):
+    """The Calzetti polynomial is negative beyond 3.1 um (min k = -0.80 at 30 um)."""
+    with jax.enable_x64(x64):
+        dtype = jnp.float64 if x64 else jnp.float32
+        wave = jnp.asarray(np.geomspace(100.0, 1.0e8, 4000), dtype=dtype)
+        for ebv in (0.0, 1.0e-6, 0.05, 0.5):
+            _, absorbed = polar_dust_extinction(
+                jnp.ones_like(wave), wave, 1.0, 40.0, jnp.asarray(ebv, dtype=dtype), law=law
+            )
+            assert float(jnp.min(absorbed)) >= 0.0, f"{law} E(B-V)={ebv}: negative absorption"
+            assert np.all(np.isfinite(np.asarray(absorbed)))
+
+
+def test_calzetti_is_zero_beyond_its_polynomial_zero_crossing():
+    wave_nm = np.array([400.0, 2000.0, 4000.0, 30000.0, 300000.0])  # zero crossing at 3115 nm
+    _, absorbed = polar_dust_extinction(
+        jnp.ones(5), jnp.asarray(wave_nm * 10.0), 1.0, 40.0, 0.1, law="calzetti"
+    )
+    np.testing.assert_array_equal(np.asarray(absorbed)[2:], 0.0)
+    assert np.all(np.asarray(absorbed)[:2] > 0.0)

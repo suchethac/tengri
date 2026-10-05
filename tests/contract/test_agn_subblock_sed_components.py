@@ -346,12 +346,16 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     ============  ==================  ==================
     torus block   floored denominator selected denominator
     ============  ==================  ==================
-    ``none``      ``nan``             ``1.372386e+34``
+    ``none``      ``nan``             ``0.0``
     ``skirtor``   ``nan``             ``5.310558e+33``
     ============  ==================  ==================
 
-    **Re-pin (#2744).** These values are twice the earlier ``6.861931e+33`` and
-    ``2.655277e+33``, which were half the derivative. The polar absorbed power was
+    **Re-pin (#2744).** The ``skirtor`` value is twice the earlier ``2.655277e+33``, which was
+    half the derivative. The ``none`` value was ``6.861931e+33`` and then ``1.372386e+34``;
+    both were a branch artefact, not a derivative: with no torus the component sum is
+    identically zero (finite difference 0.0), and the degenerate-case factor 1.0 handed the
+    graybody's own derivative to it. The factor is now 0 when the torus budget is empty, so
+    the gradient is 0.0. The polar absorbed power was
     ``maximum(L (1 - exp(-tau)), 0)``; at ``E(B-V) = 0`` both arguments are zero,
     JAX splits the derivative evenly between them, and the gradient came back at
     half the one-sided value. Absorbed power is now ``L (1 - exp(-tau))``, which is
@@ -425,13 +429,19 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             "must select its denominator, not floor it: a floored 1e-300 squares to "
             "zero in the division's VJP and the cotangent comes back nan."
         )
+        if torus_block == "none":
+            # grad-assert: finite-only -- with no torus the AGN dust budget is empty, the
+            # polar share of it is zero and the component sum is identically 0 for every
+            # E(B-V), so a correct derivative is exactly 0.0 (checked against the finite
+            # difference in test_the_degenerate_point_gradient_pin_is_unaffected).
+            assert grad == 0.0
+            return
         assert grad != 0.0, (
             f"torus={torus_block!r}: the cotangent at agn_polar_ebv=0 came back "
             f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
             "derivative everywhere would satisfy the assertion above while leaving "
             "the sampler exactly as stuck as the nan did. The class docstring pins "
-            "the selected-denominator answers: 1.372386e+34 (torus='none') and "
-            "5.310558e+33 (torus='skirtor')."
+            "the selected-denominator answer for torus='skirtor': 5.310558e+33."
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -571,10 +581,20 @@ class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
             return jnp.sum(jnp.asarray(comps["polar"])) + jnp.sum(jnp.asarray(comps["torus"]))
 
         grad = float(jax.grad(_dust_total)(jnp.asarray(0.0)))
+        # one-sided finite difference: the quantity the derivative at the lower prior edge is
+        h = 1.0e-6
+        fd = (float(_dust_total(jnp.asarray(h))) - float(_dust_total(jnp.asarray(0.0)))) / h
+        if torus_block == "none":
+            # grad-assert: finite-only -- the component sum is identically 0 (the AGN dust
+            # budget is empty), the finite difference is 0.0, and so is the gradient; it was
+            # 1.372386e+34, the graybody's own derivative leaking through a degenerate-case
+            # factor of 1.0 onto a sum that does not depend on E(B-V).
+            assert np.isfinite(grad) and grad == 0.0 and fd == 0.0
+            return
         assert np.isfinite(grad) and grad != 0.0
-        pinned = 1.372386e34 if torus_block == "none" else 5.310558e33
-        assert grad == pytest.approx(pinned, rel=1e-5, abs=0.0), (
+        assert grad == pytest.approx(5.310558e33, rel=1e-5, abs=0.0), (
             f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
-            f"(pinned {pinned:.6e}) -- the NaN-visibility fix must change only the "
+            "(pinned 5.310558e+33) -- the NaN-visibility fix must change only the "
             "NaN-input forward value, not this selected-denominator gradient."
         )
+        assert grad == pytest.approx(fd, rel=5e-3), "AD against the one-sided difference"

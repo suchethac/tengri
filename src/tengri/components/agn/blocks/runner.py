@@ -70,7 +70,6 @@ from tengri.components.agn.blocks._protocol import (
 )
 from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
-    sigmoid_visibility_mask,
     split_lines_result,
 )
 from tengri.components.agn.blocks.torus_screen import (
@@ -79,7 +78,7 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_geometry,
     torus_screen_transmission,
 )
-from tengri.components.agn.polar_dust import resolve_polar_opening_angle
+from tengri.components.agn.polar_dust import resolve_polar_opening_angle, type1_weight
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import (
     SKIRTORBundle,
@@ -1187,7 +1186,9 @@ agn_torus_block, agn_attenuation_block : str
         _lines_mask = _screen
         _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
-        _lines_mask = sigmoid_visibility_mask(
+        # The generic tori read the same Type-1/2 weight, one width in cos i, as the dusty-
+        # screen tori and the polar mask: Type 1 iff i < 90 - agn_theta_torus.
+        _lines_mask = type1_weight(
             params.get("agn_cos_inc", 0.86602540378443864),
             params.get("agn_theta_torus", 30.0),
         )
@@ -1395,10 +1396,13 @@ agn_torus_block, agn_attenuation_block : str
             # rescale is 0/0. Documented value: factor 1.0, which leaves the
             # zero re-emission exactly zero.
             _polar_live = _polar_power > 0.0
+            # With an empty torus budget (``torus='none'``) the polar share of the budget is
+            # zero at every E(B-V), so the factor is 0 there as well: 1.0 would hand the
+            # graybody's own derivative to a component sum that is identically zero.
             L_nu_reemit = L_nu_reemit * jnp.where(
                 _polar_live,
                 _agn_dust_budget * _share / jnp.where(_polar_live, _polar_power, 1.0),
-                1.0,
+                jnp.where(_agn_dust_budget > 0.0, 1.0, 0.0),
             )
             # CIGALE adds the polar graybody to the AGN dust BEFORE the unit-integral
             # normalization (skirtor2016.py ``norm = 1/int dust``) and the disc is
