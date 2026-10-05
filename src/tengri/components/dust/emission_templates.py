@@ -1353,7 +1353,7 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
     -------
     Callable
         Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_T=20.0, dust_f_pah=0.05, **kw) -> L_nu``.
+        ``(wavelength_aa, L_absorbed, dust_T=35.0, dust_f_pah=0.05, **kw) -> L_nu``.
 
     Notes
     -----

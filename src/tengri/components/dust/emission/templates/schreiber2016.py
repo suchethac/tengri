@@ -65,9 +65,9 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     name: str = "schreiber2016"
 
     # Free parameters (user-facing names, prefix-stripped). Both defaults are
-    # CIGALE's declared defaults for this library (tdust = 20 K, fpah = 0.05),
-    # read from the module constants the closure's own signature reads, so the
-    # two cannot drift apart (#2241, #2597).
+    # read from the declared registry defaults through the module constants the
+    # closure's own signature reads, so a direct call, a built model and the
+    # closure cannot disagree (#2241, #2597).
     T = Fixed(SCHREIBER_T_K_DEFAULT)
     f_pah = Fixed(DEFAULT_DUST_F_PAH)
 
