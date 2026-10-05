@@ -29,7 +29,7 @@ _WAVE = jnp.logspace(np.log10(3000.0), np.log10(50000.0), 200)  # optical → MI
 def _build(ssp, approx):
     return SEDModel.build(
         ssp_data=ssp,
-        observation=Observation(spectroscopy=Spectroscopy(wave_obs=_WAVE)),
+        observation=Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=_WAVE)),
         approx=approx,
         redshift=Fixed(0.5),
         igm={"type": "none"},

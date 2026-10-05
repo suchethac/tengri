@@ -36,10 +36,10 @@ import numpy as np
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
-    bolometric_integral_nu as _bolometric_integral_nu,
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
+from tengri.components.agn._template_grid import analytic_bolometric_nu, native_bolometric_nu
 from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
 
@@ -52,6 +52,19 @@ _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
 
 # ── Module-level warning guard ────────────────────────────────────
 _WARNED: set[str] = set()
+
+
+# Fixed integration span for the toy tori's normalization. The shape is a
+# Planck function times an opacity: Wien-suppressed below 1e3 A for any dust
+# temperature under ~3000 K (exp(-hc/(lambda k T)) < e^-48), and falling as
+# nu^(2+beta) toward long wavelengths, negligible by 1e8 A (1 cm).
+_TOY_WAVE_LO = 1.0e3  # Angstrom
+_TOY_WAVE_HI = 1.0e8  # Angstrom
+
+
+def _toy_integral(shape_fn: Callable) -> jnp.ndarray:
+    """Floored frequency integral of a toy-torus shape on the fixed internal span."""
+    return analytic_bolometric_nu(shape_fn, _TOY_WAVE_LO, _TOY_WAVE_HI, floor=1e-100)
 
 
 # ── Model 1: Simple hot blackbody torus ───────────────────────────
@@ -118,23 +131,19 @@ def simple_torus(
         )
         _WARNED.add("simple_torus")
     l_bol_erg = 10.0**agn_log_lbol * _L_SUN
-    nu = _wavelength_to_nu(wavelength)
 
-    # Blackbody emission
-    b_nu = _planck_lnu(nu, agn_T_torus)
+    def _shape(wave):
+        # Modified blackbody with silicate opacity
+        # tau(lambda) = tau_torus * (9.7um / lambda)^beta.
+        opacity = 1.0 - jnp.exp(
+            -agn_tau_torus * (_LAMBDA_SI / jnp.maximum(wave, 1.0)) ** agn_tau_beta
+        )
+        return _planck_lnu(_wavelength_to_nu(wave), agn_T_torus) * opacity
 
-    # Silicate opacity: tau(lambda) = tau_torus * (9.7um / lambda)^beta
-    opacity = 1.0 - jnp.exp(
-        -agn_tau_torus * (_LAMBDA_SI / jnp.maximum(wavelength, 1.0)) ** agn_tau_beta
-    )
+    # Normalize to L_bol * f_torus on a fixed internal grid, never on the caller's.
+    integral_safe = _toy_integral(_shape)
 
-    # Modified blackbody shape
-    shape = b_nu * opacity
-
-    # Normalize to L_bol * f_torus
-    integral_safe = _bolometric_integral_nu(shape, nu, floor=1e-100)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
+    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
     return l_nu_erg
 
 
@@ -210,24 +219,22 @@ def two_temperature_torus(
         )
         _WARNED.add("two_temperature_torus")
     l_bol_erg = 10.0**agn_log_lbol * _L_SUN
-    nu = _wavelength_to_nu(wavelength)
 
-    # Two blackbody components
-    b_hot = _planck_lnu(nu, agn_T_hot)
-    b_warm = _planck_lnu(nu, agn_T_warm)
+    def _shape(wave):
+        # Weighted mixture of two blackbodies with the silicate opacity.
+        nu = _wavelength_to_nu(wave)
+        opacity = 1.0 - jnp.exp(
+            -agn_tau_torus * (_LAMBDA_SI / jnp.maximum(wave, 1.0)) ** agn_tau_beta
+        )
+        mix = agn_frac_hot * _planck_lnu(nu, agn_T_hot) + (1.0 - agn_frac_hot) * _planck_lnu(
+            nu, agn_T_warm
+        )
+        return mix * opacity
 
-    # Silicate opacity
-    opacity = 1.0 - jnp.exp(
-        -agn_tau_torus * (_LAMBDA_SI / jnp.maximum(wavelength, 1.0)) ** agn_tau_beta
-    )
+    # Normalize on a fixed internal grid, never on the caller's.
+    integral_safe = _toy_integral(_shape)
 
-    # Weighted mixture with opacity
-    shape = (agn_frac_hot * b_hot + (1.0 - agn_frac_hot) * b_warm) * opacity
-
-    # Normalize
-    integral_safe = _bolometric_integral_nu(shape, nu, floor=1e-100)
-
-    l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
+    l_nu_erg = l_bol_erg * agn_torus_frac * _shape(wavelength) / integral_safe
     return l_nu_erg
 
 
@@ -363,7 +370,8 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
                                   {\int T(\nu,\,\tau)\,\mathrm{d}\nu}
 
         where :math:`T` is the tabulated CLUMPY template and the integral is
-        evaluated on the (sorted) frequency grid of ``wavelength``.
+        evaluated on the template's own native frequency grid, so the result
+        does not depend on how ``wavelength`` is sampled.
 
         **JIT-compatible**: yes. **Gradient-safe**: yes, ``agn_tau`` is a
         differentiable, traceable parameter.
@@ -373,9 +381,10 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         template = interp_nd_triweight(
             grid_jax, (tau_axis,), edges, (agn_tau,), index_space_interp=True
         )
+        # Normalize on the template's native grid, before resampling: the
+        # result must not depend on the caller's wavelength sampling or range.
+        integral_safe = native_bolometric_nu(template, wave_grid)
         sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        nu = _wavelength_to_nu(wavelength)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         return l_scale * sed / integral_safe
 

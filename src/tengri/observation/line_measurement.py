@@ -47,7 +47,14 @@ import math
 
 import jax.numpy as jnp
 
-from tengri.observation.spectral_indices import _window_mean_flux, soft_window_ssp_integral
+from tengri.observation.spectral_indices import (
+    WindowPoints,
+    _window_mean_flux,
+    soft_window_ssp_integral,
+    soft_window_ssp_points,
+    stack_window_points,
+    window_means_with_dust,
+)
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tengri.utils.scale import apply_log10_scale
 
@@ -201,6 +208,9 @@ class LineWindowPrecomputation:
         Per line, ``(name, blue_slot, red_slot, feat_slot, lambda_c, width)``.
     names : tuple of str
         Line names in order.
+    points : WindowPoints
+        The window integrals resolved by SSP grid point, so the dust screen acts
+        inside each window as in the exact path (#2677).
     """
 
     window_integrals: jnp.ndarray
@@ -208,6 +218,7 @@ class LineWindowPrecomputation:
     window_centers: jnp.ndarray
     line_slots: tuple
     names: tuple
+    points: WindowPoints
 
 
 def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1.0):
@@ -240,12 +251,17 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
     integrals: list[jnp.ndarray] = []
     norms: list[jnp.ndarray] = []
     centers: list[float] = []
+    pt_waves: list[jnp.ndarray] = []
+    pt_integrands: list[jnp.ndarray] = []
 
     def _slot(lo, hi) -> int:
         key = (round(float(lo), 4), round(float(hi), 4))
         if key in unique:
             return unique[key]
         integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pw, pi = soft_window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pt_waves.append(pw)
+        pt_integrands.append(pi)
         integrals.append(integral)
         norms.append(norm)
         centers.append(0.5 * (float(lo) + float(hi)))
@@ -270,6 +286,9 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
         window_centers=jnp.asarray(centers),
         line_slots=tuple(line_slots),
         names=tuple(names),
+        points=stack_window_points(
+            pt_waves, pt_integrands, ssp_flux.shape[0], ssp_flux.shape[1], ssp_flux.dtype
+        ),
     )
 
 
@@ -301,7 +320,7 @@ def measure_line_fluxes_from_window_lut(
 
     The FeaturePrecomp line-flux path: contract precomputed SSP window integrals
     with the SFH+metallicity weights, apply the age-dependent two-component screen
-    at each window center, then run the same :func:`_line_flux_from_means`
+    at every window grid point, then run the same :func:`_line_flux_from_means`
     reduction as the exact path, no full-grid SED reconstruction.
 
     Parameters
@@ -313,8 +332,9 @@ def measure_line_fluxes_from_window_lut(
         ``total_mass · L_sun``, applied here rather than by the caller so the
         power-of-two split that keeps it inside float32 stays in one place
         (see :data:`_LSUN_MANTISSA`).
-    transmission : ndarray, shape (n_age, n_window)
-        Two-component transmission at each window center per SSP age.
+    transmission : ndarray, shape (n_age, n_point)
+        Two-component transmission per SSP age at every window grid point
+        ``precomp.points.waves`` (#2677).
     precomp : LineWindowPrecomputation
         Per-(met, age) window integrals + per-line window recipe.
     log10_four_pi_dl2 : ndarray, shape ()
@@ -331,16 +351,21 @@ def measure_line_fluxes_from_window_lut(
     **JIT-compatible**: yes. Bit-exact with :func:`measure_line_flux_jax` where
     the LUT reconstructs the SED (baked-in / LUT-eligible models).
     """
-    wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
     # ``L_sun`` is carried as a binary exponent, not as a factor: the
     # product runs at the mass's own scale (~1e-5) and the power-of-two multiply
     # restores the ~1e28 erg/s/Hz window mean in one exact step. Spelling this as
     # ``(total_mass * L_sun) * ...`` was ``inf * finite`` in float32, and the
     # ``feat - cont`` below then read ``inf - inf`` -> ``nan`` on every line (#1859).
     scale = total_mass * _LSUN_MANTISSA
+    # ``scale`` enters through the weights, not as a multiply on the means: see
+    # :func:`window_means_with_dust` (the backward of ``(scale * m) * 2**112`` is
+    # reassociated by XLA into an ``inf`` constant in float32).
     window_means = (
-        scale * jnp.sum(transmission * wint_age, axis=0) / precomp.window_norms
-    ) * _LSUN_POW2
+        window_means_with_dust(
+            joint_weights, transmission, precomp.points, precomp.window_norms, scale
+        )
+        * _LSUN_POW2
+    )
     centers = precomp.window_centers
     out = []
     for _name, b, r, f, lam_c, width in precomp.line_slots:
@@ -411,10 +436,10 @@ def default_line_defs(
 #: crowded Halpha+[NII]+[SII] complex is approximate and should be tuned to the
 #: target survey's continuum definition (see the module Balmer caveat).
 DESI_LINES = (
-    LineDef("Hbeta", 4862.71, ((4820.0, 4845.0), (4880.0, 4905.0)), (4855.0, 4871.0)),
+    LineDef("Hbeta", 4862.68, ((4820.0, 4845.0), (4880.0, 4905.0)), (4855.0, 4871.0)),
     LineDef("OIII_5007", 5008.24, ((4975.0, 4995.0), (5020.0, 5045.0)), (5000.0, 5017.0)),
     LineDef("Halpha", 6564.61, ((6505.0, 6535.0), (6600.0, 6620.0)), (6556.0, 6573.0)),
-    LineDef("NII_6584", 6585.27, ((6505.0, 6535.0), (6600.0, 6620.0)), (6577.0, 6593.0)),
+    LineDef("NII_6584", 6585.28, ((6505.0, 6535.0), (6600.0, 6620.0)), (6577.0, 6593.0)),
     LineDef("SII_6717", 6718.29, ((6690.0, 6708.0), (6745.0, 6770.0)), (6711.0, 6725.0)),
 )
 

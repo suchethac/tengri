@@ -118,8 +118,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # absorb calibration error into a quantity physics fixes. Override
         # explicitly if you specifically want that slack.
     ),
-    # AGNfitter-rx double power-law AGN radio model parameters. Activated by
-    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
+    # AGNfitter-rx double power-law AGN radio model parameters. The DPL-only
+    # ones (alpha_thin, alpha_thick, log_nu_t) are read when
+    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ``radio_log_nu_cut`` is
+    # read by both AGN radio models.
     # Martinez-Ramirez, L. N. et al. 2024, "AGNfitter-rx: Modelling the
     # radio-to-X-ray SEDs of AGNs," A&A, 688, A46,
     # doi:10.1051/0004-6361/202449329, arXiv:2405.12111 -- Table 1 gives
@@ -145,17 +147,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "radio_log_nu_t",
         Fixed(10.0),
         "AGN-DPL log10(transition frequency / Hz); typical 9-11",
-        # The typical interval this description already states. Safe to declare
-        # because the radio wildcard is scoped per model:
-        # _RADIO_AGN_PARAMS_BY_MODEL only routes these four under
-        # ``agn_radio_model="dpl"``, so a powerlaw fit never sees them.
+        # _RADIO_AGN_PARAMS_BY_MODEL routes these three under
+        # ``agn_radio_model="dpl"`` only; a powerlaw fit never sees them.
         free_prior=Uniform(9.0, 11.0, "DPL transition frequency", units="log10(Hz)", default=10.0),
     ),
     ParamDeclaration(
         "radio_log_nu_cut",
         Fixed(13.0),
-        "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
-        free_prior=Uniform(12.0, 14.0, "DPL aging cutoff", units="log10(Hz)", default=13.0),
+        "AGN radio log10(synchrotron aging exponential cutoff / Hz) for "
+        "the power-law and DPL models; 40 removes the cutoff; typical 12-14",
+        free_prior=Uniform(12.0, 14.0, "AGN radio aging cutoff", units="log10(Hz)", default=13.0),
     ),
     # ── FIR-radio correlation (FIRRC) evolution coefficients ──────────────
     # Mass- and redshift-dependent q_IR(M*, z) for the evolving SF-radio

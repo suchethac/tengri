@@ -75,6 +75,9 @@ the forward model, and listed oldest first within each group.
 - Nested Slice Sampling: vectorized nested sampling for Bayesian evidence.
   Yallup, Kroupa & Handley (2026),
   [arXiv:2601.23252](https://arxiv.org/abs/2601.23252).
+- Nested sampling: evidence and its uncertainty sqrt(H / n_eff),
+  with n_eff = n_live for single-point deletion.
+  Skilling (2006), [doi:10.1214/06-BA127](https://doi.org/10.1214/06-BA127).
 
 ### Stellar populations, isochrones, and spectral libraries
 
@@ -187,6 +190,9 @@ the forward model, and listed oldest first within each group.
   [arXiv:astro-ph/0003128](https://arxiv.org/abs/astro-ph/0003128).
 - Clumpy-medium radiative transfer attenuation. Witt & Gordon (2000),
   [arXiv:astro-ph/9907342](https://arxiv.org/abs/astro-ph/9907342).
+- FM90 ultraviolet extinction parameterization (c1, c2, c3, c4, x0, gamma) used by
+  gordon03_smcbar. Fitzpatrick & Massa (1990),
+  [doi:10.1086/191413](https://doi.org/10.1086/191413).
 - SMC, LMC, and MW extinction curves. Gordon et al. (2003),
   [arXiv:astro-ph/0305257](https://arxiv.org/abs/astro-ph/0305257).
 - Four-coefficient analytical extinction curve, tengri's `li08` law. Li et

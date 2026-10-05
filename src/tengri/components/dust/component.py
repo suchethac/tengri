@@ -24,7 +24,7 @@ Cross-component reads
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import jax.numpy as jnp
@@ -32,6 +32,7 @@ import jax.numpy as jnp
 from tengri.components.dust._params import DEFAULT_DUST_ETA_BALANCE
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
 from tengri.components.dust.laws._registry import select_law_kwargs
+from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
@@ -76,7 +77,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     name: str = "dust_attenuation"
     lyman_cutoff_aa: float = 0.0
     """Lyman clip applied to the attenuation curve, mirroring two_component."""
-    eb_include_lyc: bool = False
+    lyc_in_energy_balance: bool = False
     """FSPS-parity toggle (#961), mirroring ``DustSEDComponentConfig``.
 
     ``False`` applies the canonical LyC mask to the energy-balance integral --
@@ -119,6 +120,21 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     balance unchanged. A static Python bool, not a traced value.
     """
 
+    fdust_credit_active: bool = True
+    r"""Whether the HII-region dust-heating credit (#2539 item 3) can ever be
+    nonzero, resolved from spec provenance by
+    ``SEDModel._fdust_credit_active`` and frozen here the same way
+    :attr:`log_l_ir_requested` is. ``True`` when ``neb_fdust_frac`` is a FREE
+    parameter or Fixed at a nonzero value; ``False`` when it is Fixed at
+    exactly 0 or not declared at all (BakedIn backend, or no nebular
+    component built). ``False`` makes :meth:`DustAttenuationSEDComponent.apply`
+    skip forming ``energy_balance.log10_add_fdust_credit`` entirely via a
+    static Python ``if`` -- the credit is structurally zero for every
+    possible evaluation of this model, not a runtime ``where`` on a traced
+    ``f_dust``. ``True`` (default, including a component built directly with
+    no spec to ask) keeps the smooth combine, unchanged.
+    """
+
 
 @dataclass(frozen=True)
 class DustAttenuationSEDComponentState(SEDComponentState):
@@ -157,6 +173,28 @@ class DustAttenuationSEDComponent(TemplateThreading):
     name: str = "dust_attenuation"
     parameter_prefix: str = "dust_"
     _state: DustAttenuationSEDComponentState | None = None
+    nebular_from_grid: bool = False
+    #: Optical-depth nodes ``(tau_a, tau_b)`` of the grid's energy-balance channel,
+    #: as tuples of floats; set with ``nebular_from_grid``.
+    nebular_eb_tau_grids: tuple | None = None
+
+    def materialized(self) -> DustAttenuationSEDComponent:
+        """Return a copy with nebular_from_grid reset to False for full-state exact path."""
+        return (
+            replace(self, nebular_from_grid=False, nebular_eb_tau_grids=None)
+            if self.nebular_from_grid
+            else self
+        )
+
+    def nebular_screen_transmission(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        wavelength: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Dust transmission at arbitrary rest wavelengths: exp(-dust_tau_v * k(lambda))."""
+        curve = self._curve(params)
+        tau_v = jnp.asarray(params["dust_tau_v"])
+        return jnp.exp(-tau_v * curve(jnp.asarray(wavelength)))
 
     def citations(self) -> tuple[str, ...]:
         """Attenuation-law citations (Calzetti, Cardelli, SMC, …) are
@@ -237,9 +275,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         (the single-screen analog of the two-component bug fixed in #668).
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
-        already in the SSP grid), so this is a no-op there. The screen does
-        not read that key directly: it acts on the already-summed
-        ``sed_intrinsic``: so it is purely an ordering edge.
+        already in the SSP grid), so this is a no-op there. The screen acts on
+        the already-summed ``sed_intrinsic``; it also reads ``sed_nebular``
+        together with ``nebular_phot_lnu_precomp`` to publish the reddened
+        nebular continuum integrated through each observed and rest-frame band
+        (``nebular_phot_lnu_attenuated_precomp`` and
+        ``nebular_restband_lnu_attenuated_precomp``), so the photometry
+        projectors apply the screen where the emission is.
 
         ``line_waves`` / ``line_lums`` ARE read directly: :meth:`apply`
         reddens the discrete catalog and publishes ``line_lums_attenuated``
@@ -247,24 +289,99 @@ class DustAttenuationSEDComponent(TemplateThreading):
         declaring them adds no new constraint: they are declared because
         ADR-0009 says a component states what it reads. An undeclared read
         works until someone reorders the pipeline, and then fails silently.
+
+        When ``nebular_from_grid`` is True, the nebular continuum is read from
+        the per-Q_H grid channels instead of the full SED.
         """
-        return (
+        lyc_keys = (
             DerivedKey(
-                "sed_nebular",
-                "erg/s/Hz",
-                "Nebular continuum folded into sed_intrinsic before the screen",
-            ),
-            DerivedKey(
-                "line_waves",
-                "Angstrom",
-                "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
-            ),
-            DerivedKey(
-                "log_line_lums",
+                "log_L_lyc",
                 "dex",
-                "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
+                "RAW (pre-fdust) LyC luminosity of the whole stellar population "
+                "(#2539 item 3), combined with lyc_fdust below into log_L_absorbed "
+                "unconditionally (not gated on lyc_in_energy_balance, which concerns only "
+                "the screen's own LyC absorption); read via the sed_nebular/per-Q_H-grid "
+                "edge above for ordering. Absent when sed_intrinsic was not yet "
+                "populated when the nebular component ran.",
+            ),
+            DerivedKey(
+                "lyc_fdust",
+                "",
+                "Absolute HII-region dust-absorption share (#2539 item 2/3), "
+                "lyc_shares(neb_fesc, neb_fdust_frac)[1] (#2436), the "
+                "cross-prefix analog of lyc_transmission; combined with "
+                "log_L_lyc above via the smooth log10_add_fdust_credit. "
+                "Absent/0.0 for BakedIn or at the neb_fdust_frac Fixed(0.0) "
+                "default.",
             ),
         )
+        if self.nebular_from_grid:
+            return (
+                DerivedKey(
+                    "nebular_phot_lnu_subband_precomp",
+                    "erg/s/Hz",
+                    "Intrinsic nebular L_nu per sub-band chunk from the per-Q_H grid; "
+                    "screened here at the chunk nodes",
+                ),
+                DerivedKey(
+                    "nebular_subband_waves_rest_precomp",
+                    "Angstrom",
+                    "Rest wavelength of each nebular sub-band chunk",
+                ),
+                DerivedKey(
+                    "nebular_restband_lnu_subband_precomp",
+                    "erg/s/Hz",
+                    "Rest-frame twin of the sub-band nebular photometry",
+                ),
+                DerivedKey(
+                    "nebular_restband_subband_waves_precomp",
+                    "Angstrom",
+                    "Rest-frame twin of the chunk wavelengths",
+                ),
+                DerivedKey(
+                    "nebular_eb_absorbed_per_qh_grid_precomp",
+                    "erg/s per (photon/s)",
+                    "Absorbed nebular luminosity per unit Q_H on the energy-balance tau "
+                    "grid, through the nebular screen",
+                ),
+                DerivedKey(
+                    "line_waves",
+                    "Angstrom",
+                    "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
+                ),
+                DerivedKey(
+                    "log_line_lums",
+                    "dex",
+                    "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
+                ),
+                *lyc_keys,
+            )
+        else:
+            return (
+                DerivedKey(
+                    "sed_nebular",
+                    "erg/s/Hz",
+                    "Nebular continuum folded into sed_intrinsic before the screen",
+                ),
+                DerivedKey(
+                    "nebular_phot_lnu_precomp",
+                    "erg/s/Hz",
+                    "Nebular band-integrated flux at filter effective wavelengths; "
+                    "screened by this component at the emission wavelengths and published "
+                    "as nebular_phot_lnu_attenuated_precomp",
+                ),
+                DerivedKey(
+                    "line_waves",
+                    "Angstrom",
+                    "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
+                ),
+                DerivedKey(
+                    "log_line_lums",
+                    "dex",
+                    "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
+                ),
+                *lyc_keys,
+            )
 
     def _curve(self, params: Mapping[str, jnp.ndarray]):
         r"""``k(lambda)`` for the selected law, with requested shape parameters.
@@ -396,6 +513,24 @@ class DustAttenuationSEDComponent(TemplateThreading):
             k = law_fn(wave_grid)
         return DustAttenuationSEDComponentState(name=self.name, k_lambda=k)
 
+    def _nebular_grid_absorbed(self, state, tau_a, tau_b):
+        """(log10 magnitude, sign) of the absorbed nebular luminosity read from the grid."""
+        from tengri.components.dust.energy_balance_precompute import nebular_grid_absorbed_log10
+
+        if self.nebular_eb_tau_grids is None:
+            raise ValueError(
+                f"{type(self).__name__}: nebular_from_grid is set without nebular_eb_tau_grids; "
+                "both are set together by SEDModel._chain_with_nebular_grid."
+            )
+        return nebular_grid_absorbed_log10(
+            jnp.asarray(state.derived["nebular_eb_absorbed_per_qh_grid_precomp"]),
+            jnp.asarray(state.derived["log_nion"]),
+            self.nebular_eb_tau_grids,
+            tau_a,
+            tau_b,
+            weights=jnp.ones((1,)),  # one screen, one channel
+        )
+
     def apply(
         self,
         state: ForwardState,
@@ -448,10 +583,10 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # space and publish for downstream consumers (dust emission components
         # re-emit it; RadioSEDComponent uses it to set the SF radio
         # amplitude via the FIR-radio correlation). LyC photons ionize H
-        # rather than heat dust, so the canonical integral masks λ < 912 Å
-        # (#922).
+        # rather than heat dust, so the canonical integral excludes the
+        # ionizing side of the Lyman edge (#922; edge at LYMAN_LIMIT_AA,
+        # one Lyman edge -- ``tengri.components.lyc``).
         from tengri.forward.energy_balance import (
-            LYMAN_CUTOFF_AA,
             bolometric_absorbed_log10,
             warn_if_corrupt,
         )
@@ -461,7 +596,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         nu = C_AA / state.wave  # Hz
         # Absorbed luminosities are ~1e43 erg/s (outside float32) so the
         # integral is done in log space and the linear form derived from it
-        # (#1206). The sign only tracks grid orientation; the energy is |L|.
+        # (#1206). The sign follows L_nu_intr - L_nu_att; the energy is |L|.
 
         # Try to use the energy-balance LUT (fast path) if available.
         # The LUT was built with the stellar SED only; for single-component
@@ -478,8 +613,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # FSPS-parity toggle (#961), the same expression DustSEDComponent uses:
         # None disables the canonical LyC mask so all absorbed energy heats
         # dust. The fast-path LUT bakes the same choice at build time
-        # (sed_model passes config.eb_include_lyc), so the two agree either way.
-        _eb_cutoff = None if self.config.eb_include_lyc else LYMAN_CUTOFF_AA
+        # (sed_model passes config.lyc_in_energy_balance), so the two agree either way.
+        _eb_cutoff = None if self.config.lyc_in_energy_balance else LYMAN_LIMIT_AA
 
         if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path: use precomputed LUT with degenerate two-component mapping.
@@ -494,6 +629,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 jnp.asarray(log_mass_scale),
                 jnp.asarray(0.0),  # tau_bc = 0.0 (degenerate)
                 jnp.asarray(params["dust_tau_v"]),  # tau_diff = tau_v
+                redshift=params.get("redshift")
+                if getattr(eb_lut, "ln1pz", None) is not None
+                else None,
             )
 
             # The nebular continuum is absorbed by the SAME screen, so its
@@ -515,7 +653,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # BakedIn publishes ``sed_nebular`` as zeros, so this costs a
             # zero-valued integral there and changes nothing.
             _sed_neb = state.derived.get("sed_nebular")
-            if _sed_neb is None:
+            if self.nebular_from_grid:
+                log_neb, sign_neb = self._nebular_grid_absorbed(
+                    state, jnp.asarray(0.0), jnp.asarray(params["dust_tau_v"])
+                )
+                log_l_absorbed = log10_add(
+                    log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
+                )
+            elif _sed_neb is None:
                 log_l_absorbed = log_stellar
             else:
                 sed_neb = jnp.asarray(_sed_neb)
@@ -530,15 +675,59 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb
                 )
         else:
-            # Slow path (exact integral): full-wavelength integration over all
-            # components (stellar, nebular, shock, AGN). Same as before.
-            log_l_absorbed, _ = bolometric_absorbed_log10(
+            # Full integral: ``state.sed_intrinsic`` is the sum of every emitter that ran
+            # before this component, the nebular emission included, so one integral counts
+            # each of them once.
+            log_l_absorbed, sign_all = bolometric_absorbed_log10(
                 state.sed_intrinsic,
                 attenuated,
                 nu,
                 wave=state.wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+            if self.nebular_from_grid:
+                # ``sed_nebular`` is all zeros here; its absorbed share comes from the grid.
+                from tengri.utils.scale import log10_add
+
+                log_neb_grid, sign_neb_grid = self._nebular_grid_absorbed(
+                    state, jnp.asarray(0.0), jnp.asarray(params["dust_tau_v"])
+                )
+                log_l_absorbed = log10_add(
+                    log_l_absorbed, log_neb_grid, sign_a=sign_all, sign_b=sign_neb_grid
+                )
+
+        # Add Lyman-continuum energy absorbed by dust in HII regions (#2539).
+        # The absolute f_dust share (lyc_shares(neb_fesc, neb_fdust_frac)[1],
+        # #2436) assigns a fraction of LyC photons to dust heating;
+        # NebularSEDComponent publishes the RAW (pre-fdust) LyC luminosity as
+        # log_L_lyc and that absolute share as lyc_fdust (#2539 item 3),
+        # combined here with the smooth (log1p) log10_add_fdust_credit rather
+        # than log10_add-ing an already fdust-multiplied term: L_absorbed is
+        # linear in fdust, so the combined gradient must be nonzero at
+        # fdust == 0 too (log10_add_fdust_credit's docstring). This energy
+        # enters the dust IR budget unconditionally (not gated on
+        # lyc_in_energy_balance, which concerns the screen's own LyC absorption, not
+        # HII-region dust). Placed AFTER the fast/slow branches converge to a
+        # single log_l_absorbed (one post-sum edit covers both paths,
+        # including a LUT-served nebular term landing in the same closing
+        # log10_add). Static elision (#2539 last FLOP guard): when
+        # fdust_credit_active is False (neb_fdust_frac Fixed at exactly 0,
+        # or not declared at all), the credit is structurally zero for
+        # every evaluation of this model, so skip forming it at all rather
+        # than computing a smooth combine that always evaluates to the
+        # unchanged log_l_absorbed. A static Python bool, not a runtime
+        # where on the traced value of f_dust.
+        # The credit exists only where a photoionized nebular backend published
+        # both its HII-dust share ``lyc_fdust`` and the LyC luminosity it applies to.
+        if self.config.fdust_credit_active:
+            _log_l_lyc = state.derived.get("log_L_lyc")
+            _f_dust = state.derived.get("lyc_fdust")
+            if _log_l_lyc is not None and _f_dust is not None:
+                from tengri.forward.energy_balance import log10_add_fdust_credit
+
+                log_l_absorbed = log10_add_fdust_credit(
+                    log_l_absorbed, _log_l_lyc, jnp.asarray(_f_dust)
+                )
 
         warn_if_corrupt(log_l_absorbed, component=type(self).__name__)
         if self.config.log_l_ir_requested:
@@ -577,6 +766,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # Published only when an upstream component (stellar) has put
         # ``filter_eff_waves`` into ``state.derived``: i.e. only when
         # ``approx=WavePrecomp()`` is set on SEDModel.
+
+        # AGN line-only light, when the AGN ran before this screen: it is part of
+        # ``sed_intrinsic`` and so takes the same transmission (#2565). When the
+        # AGN runs after the screen (the canonical order) it is never screened
+        # here and the AGN's own publication stands.
+        sed_agn_lines_unatt = state.derived.get("sed_agn_lines_attenuated")
+
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             dust_diff_transmission=attenuation,
@@ -586,6 +782,8 @@ class DustAttenuationSEDComponent(TemplateThreading):
             log_L_absorbed=log_l_absorbed,
             sed_dust_attenuated=attenuated,
         )
+        if sed_agn_lines_unatt is not None:
+            derived_overrides["sed_agn_lines_attenuated"] = sed_agn_lines_unatt * attenuation
 
         # Discrete emission-line catalog, reddened with this component's single
         # screen (#1867, #2223). The two-component component does the same in
@@ -633,6 +831,70 @@ class DustAttenuationSEDComponent(TemplateThreading):
             if sub_waves is not None:
                 k_sub = curve(sub_waves)
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
+                # The same screen where the IGM-surviving light sits (exact fold).
+                igm_waves = state.derived.get("stellar_subband_waves_rest_igm_precomp")
+                if igm_waves is not None:
+                    derived_overrides["dust_attenuation_subband_igm_precomp"] = jnp.exp(
+                        -tau_v * curve(igm_waves)
+                    )
+
+            # The nebular continuum is not materialized when the per-Q_H grid
+            # serves it: its band integral is the K-point sum over sub-band
+            # chunks, screened at each chunk's rest wavelength.
+            _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+            _sed_neb = state.derived.get("sed_nebular")
+            if self.nebular_from_grid:
+                for _phi_key, _lam_key, _out_key in (
+                    (
+                        "nebular_phot_lnu_subband_precomp",
+                        "nebular_subband_waves_rest_precomp",
+                        "nebular_phot_lnu_attenuated_precomp",
+                    ),
+                    (
+                        "nebular_restband_lnu_subband_precomp",
+                        "nebular_restband_subband_waves_precomp",
+                        "nebular_restband_lnu_attenuated_precomp",
+                    ),
+                ):
+                    _lam = jnp.asarray(state.derived[_lam_key])
+                    _t = self.nebular_screen_transmission(params, _lam.reshape(-1)).reshape(
+                        _lam.shape
+                    )
+                    _chunks = jnp.asarray(state.derived[_phi_key]) * _t
+                    derived_overrides[_out_key] = jnp.sum(_chunks, axis=-1)
+                    if _out_key == "nebular_phot_lnu_attenuated_precomp":
+                        # Per chunk, for the IGM at each chunk's node (#2679).
+                        derived_overrides["nebular_phot_lnu_subband_screened_precomp"] = _chunks
+            elif _neb_phot is not None and _sed_neb is not None:
+                # The reddened continuum integrated through each band: the screen is
+                # applied where the emission is. ``A(lambda_eff) * Phi_neb`` is only
+                # correct where the screen is flat across the filter, and nebular
+                # emission is line-dominated.
+                from tengri.components._band_projection import project_additive_onto_photometry
+                from tengri.parameters.resolve import require_redshift
+
+                z_neb = jnp.asarray(require_redshift(params, "components.dust.component.apply"))
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                sed_neb_reddened = jnp.asarray(_sed_neb) * attenuation
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None, sed_neb_reddened, state.wave, filter_eff, fw_pad, ft_pad, z_neb
+                    )
+                )
+                _rb_eff = state.derived.get("filter_restband_eff_waves")
+                if _rb_eff is not None:
+                    derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                        project_additive_onto_photometry(
+                            None,
+                            sed_neb_reddened,
+                            state.wave,
+                            _rb_eff,
+                            fw_pad,
+                            ft_pad,
+                            jnp.zeros_like(z_neb),
+                        )
+                    )
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
             # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z): a

@@ -136,9 +136,21 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_dust_shock_screen": content("which screen the shock SED passes through (#2234)"),
     "_dust_agn_screen": content("galaxy screen on AGN light; none until the AGN change lands"),
     "_dust_law_overrides": content("per-component dust law parameter overrides"),
+    "_dust_screens": content(
+        "age_binned screen list ((law, lo, hi) per screen): sets the declared parameters "
+        "and the age-window weights in the graph; also carried by the retained "
+        "AgeBinnedDustComponentConfig"
+    ),
     "_dust_lyman_cutoff_aa": content("Lyman-limit clip wavelength changes the FUV curve"),
-    "_dust_lyc_absorb_all": content("young-only vs absorb-all stellar LyC changes the chain"),
-    "_dust_eb_include_lyc": content("LyC-in-energy-balance flag rescales L_IR"),
+    "_dust_lyc_reprocessed_by": content("young-only vs absorb-all stellar LyC changes the chain"),
+    "_dust_lyc_in_energy_balance": content("LyC-in-energy-balance flag rescales L_IR"),
+    "_dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old split"),
+    "_dust_transition_width_dex": content(
+        "dispersal width of the young/old split (0 = hard step) changes the mass fractions"
+    ),
+    "_dust_lyc_escape_geometry": content(
+        "age-selective LyC escape geometry (#2529) changes the dust screen"
+    ),
     "_dust_ir_diffuse_screen": content("diffuse-screen pass changes the emitted IR SED"),
     "_astrodust_spinning_dust": content("astrodust AME enable flag changes the emitted SED"),
     "_astrodust_f_cnm": content("astrodust cold-neutral-medium filling fraction"),

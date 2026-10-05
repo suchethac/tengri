@@ -75,7 +75,19 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # (which only sees a literal argument) no longer sees them either. The
 # underlying guards did not disappear, only the source shape their old
 # ``ast.Constant`` matched; every one is still a live, now doubly-safe floor.
-_PINNED = 26
+# 26 -> 25: the #2581 lopez24 corona amplitude left its linear
+# ``jnp.maximum(band_integral, 1e-60)`` for the log-space band norm
+# (``_log10_cutoff_powerlaw_band_norm``, floored through ``representable_floor``);
+# a migration of one site (``xray.py``, ``xray_agn_corona_lopez24``).
+# 25 -> 24: the closed-form normalization of ``disc_cigale.piecewise_powerlaw_disk``
+# (#2601) deleted its ``jnp.maximum(jnp.abs(integral), 1e-100)`` floor outright;
+# the normalization is a log-space subtraction with no divisor. A deletion, not a
+# migration.
+# 24 -> 23: the closed-form disc normalizations (``disc.py``: the warm-ring blackbody power
+# and the multicolor bolometric, #2572) deleted one ``jnp.maximum(..., 1e-100)`` floor
+# outright (five ``disc.py`` sites before, four now); the other 23 are unchanged. A deletion,
+# not a migration.
+_PINNED = 23
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

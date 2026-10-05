@@ -62,7 +62,7 @@ import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._display import _display
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ConfigError, ParameterError
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.parameters._aliases import (
     resolve_param_name,
@@ -74,6 +74,7 @@ from tengri.parameters._builders import (
     _resolve_lazy_bucket,
 )
 from tengri.parameters._dust_keys import (
+    DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
@@ -660,6 +661,14 @@ class Parameters:
         self.shock_abundance = kwargs.pop("shock_abundance", "solar")
         self.shock_component = kwargs.pop("shock_component", "combined")
 
+        # AGB circumstellar dust-shell weighting (#2534). A tunable lever on
+        # the Villaume, Conroy & Johnson (2015) shell reprocessing FSPS bakes
+        # into MIST SSP grids at its own default weight (agb_dust=1.0). A
+        # static structural on/off flag (like ``shock`` above), not a traced
+        # free param; the one free param it gates in is ``agb_dust_weight``.
+        self.agb_dust = kwargs.pop("agb_dust", False)
+        self.agb_dust_model = kwargs.pop("agb_dust_model", "fsps_shell")
+
         # ── Metallicity ───────────────────────────────────────────
         self._init_metallicity_config(kwargs)
 
@@ -719,11 +728,13 @@ class Parameters:
             mean_sfh_type,
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
+            dust_screens=self.dust_screens,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
             xray=self.xray,
             shock=self.shock,
+            agb_dust=self.agb_dust,
             igm_patchy=self.igm_patchy,
             dla=self.dla,
             met_mode=self.met_mode,
@@ -967,6 +978,15 @@ class Parameters:
         # (the sole default before #2239, added by #303), kept for cross-code
         # comparisons.
         self.cue_full_catalog = kwargs.pop("cue_full_catalog", CUE_FULL_CATALOG_DEFAULT)
+        # Meaning of Cue's ``gas_logno`` (#2693): 'absolute' (default) = Cue's
+        # [N/O] input; a relation name = offset from that N/O-O/H relation.
+        from tengri.components.nebular._default_nitrogen import NITROGEN_MODES
+
+        self.cue_nitrogen = kwargs.pop("cue_nitrogen", "absolute")
+        if self.cue_nitrogen not in NITROGEN_MODES:
+            raise ConfigError(
+                f"neb nitrogen={self.cue_nitrogen!r}: expected one of {NITROGEN_MODES}."
+            )
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
         # MAPPINGS V photoionization stellar backend configuration
         self.nebular_mappings_model = kwargs.pop("nebular_mappings_model", None)
@@ -1099,11 +1119,25 @@ class Parameters:
         # forward model reads as use_dust=False (a dust-free model).
         if self.dust_model == "none":
             self.dust_model = "off"
-        if self.dust_model not in ("two_component", "single_component", "wg00", "off"):
+        if self.dust_model not in (
+            "two_component",
+            "single_component",
+            "wg00",
+            "age_binned",
+            "off",
+        ):
             raise ValueError(
                 f"dust_model must be 'two_component', 'single_component', 'wg00', "
-                f"or 'off'/'none' (no dust), got '{self.dust_model}'"
+                f"'age_binned', or 'off'/'none' (no dust), got '{self.dust_model}'"
             )
+
+        # age_binned (#2528): N independent screens, each (law, lo, hi) in
+        # log10(age/yr), already validated by the grammar
+        # (_translate_age_binned) or supplied directly on this flat-kwarg
+        # "expert escape hatch" surface as a pre-validated tuple. Structural,
+        # non-fittable; enters compile_signature via component_factory's
+        # dust_screens kwarg.
+        self.dust_screens: tuple = tuple(kwargs.pop("dust_screens", ()) or ())
 
         # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
         # static structural selectors. Always stored so the forward model and
@@ -1256,12 +1290,70 @@ class Parameters:
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young/birth-cloud
-        # only (default; bagpipes). See DustSEDComponent.lyc_absorb_all.
-        self.dust_lyc_absorb_all = bool(kwargs.pop("dust_lyc_absorb_all", False))
+        # only (default; bagpipes). See DustSEDComponent.lyc_reprocessed_by.
+        # #2529 ("one lyc_ key family"): the retired bare bool is intercepted
+        # here too -- the expert flat-kwarg Parameters(...) escape hatch
+        # bypasses groups.py's grammar-level rename hint entirely.
+        if "dust_lyc_absorb_all" in kwargs:
+            _old_value = kwargs.pop("dust_lyc_absorb_all")
+            raise ValueError(
+                f"dust_lyc_absorb_all={_old_value!r} was renamed 'dust_lyc_reprocessed_by' "
+                f"(owner ruling #2529, 'one lyc_ key family'): False -> 'young' (default), "
+                f"True -> 'all'. Pass "
+                f"dust_lyc_reprocessed_by={'all' if _old_value else 'young'!r} instead."
+            )
+        self.dust_lyc_reprocessed_by = str(kwargs.pop("dust_lyc_reprocessed_by", "young"))
         # Include the LyC (λ < 912 Å) in the dust energy-balance integral
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
-        self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
+        if "dust_eb_include_lyc" in kwargs:
+            _old_value = kwargs.pop("dust_eb_include_lyc")
+            raise ValueError(
+                f"dust_eb_include_lyc={_old_value!r} was renamed 'dust_lyc_in_energy_balance' "
+                f"(owner ruling #2529, 'one lyc_ key family'): same bool, same default False. "
+                f"Pass dust_lyc_in_energy_balance={_old_value!r} instead."
+            )
+        self.dust_lyc_in_energy_balance = bool(kwargs.pop("dust_lyc_in_energy_balance", False))
+        # Young/old split (static, never fittable): the birth-cloud dispersal age
+        # [yr] and the dispersal width [dex] of every age edge (0 = hard step).
+        # Same validation the grammar layer runs, repeated for the flat surface.
+        self.dust_t_birth_yr = float(kwargs.pop("dust_t_birth_yr", 1e7))
+        self.dust_transition_width_dex = float(kwargs.pop("dust_transition_width_dex", 0.0))
+        if not 0.0 < self.dust_t_birth_yr < float("inf"):
+            raise ValueError(
+                f"dust_t_birth_yr must be finite and > 0 yr, got {self.dust_t_birth_yr!r}"
+            )
+        if not 0.0 <= self.dust_transition_width_dex < float("inf"):
+            raise ValueError(
+                f"dust_transition_width_dex must be finite and >= 0, got "
+                f"{self.dust_transition_width_dex!r}"
+            )
+        # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
+        # the birth-cloud screen through a hole. Same validation the grammar
+        # layer (groups.py's _translate_dust_attenuation) runs, repeated here
+        # because this flat-kwarg surface bypasses that layer entirely.
+        self.dust_lyc_escape_geometry = str(kwargs.pop("dust_lyc_escape_geometry", "screened"))
+        if self.dust_lyc_escape_geometry not in ("screened", "birth_cloud_holes", "clear"):
+            raise ValueError(
+                f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} must be one of "
+                f"('screened', 'birth_cloud_holes', 'clear')."
+            )
+        if self.dust_lyc_escape_geometry != "screened":
+            if self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} needs a "
+                    f"birth-cloud screen distinct from the diffuse-ISM screen (got "
+                    f"dust_model={self.dust_model!r}, which has none to put a hole in). "
+                    f"Supported: {sorted(DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}."
+                )
+            if self.dust_lyc_reprocessed_by == "all":
+                raise ValueError(
+                    f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} with "
+                    f"dust_lyc_reprocessed_by='all' is refused: both drive their reduction "
+                    f"from the SAME neb_fesc for the young population, and composing them "
+                    f"double-counts its escaping photons. 'lyc_escape_geometry' only "
+                    f"composes with dust_lyc_reprocessed_by='young' (the default)."
+                )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
@@ -1568,10 +1660,15 @@ class Parameters:
         """
         import warnings
 
-        from tengri.components.grid_support import EXTRAPOLATING_SUPPORT, check_grid_support
+        from tengri.components.grid_support import (
+            EXTRAPOLATING_SUPPORT,
+            check_grid_support,
+            support_shift,
+        )
         from tengri.config.exceptions import GridSupportWarning
 
-        findings = check_grid_support(self._selected_grid_components(), param_support)
+        settings = {"cue_nitrogen": self.cue_nitrogen}
+        findings = check_grid_support(self._selected_grid_components(), param_support, settings)
         for selector, name, pname, detail, (g_lo, g_hi) in findings:
             if (selector, name) in EXTRAPOLATING_SUPPORT:
                 # No jnp.clip here (a smooth emulator, not a grid): the SED is
@@ -1582,7 +1679,8 @@ class Parameters:
                     "The prediction there is live but untrustworthy -- it is "
                     "extrapolating past where the model was validated."
                 )
-                remedy = f"Narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+                s_lo, s_hi = support_shift(selector, name, pname, param_support, settings)
+                remedy = f"Narrow {pname} to [{g_lo - s_lo:g}, {g_hi - s_hi:g}]."
             else:
                 consequence = (
                     "The SED there is bit-identical to the edge node and the "
@@ -2249,6 +2347,82 @@ class Parameters:
         object.__setattr__(new_spec, "_flat_provenance", types.MappingProxyType(merged_provenance))
         return new_spec
 
+    def with_fixed_value(self, name: str, value: float) -> Parameters:
+        """Return a copy in which the Fixed parameter ``name`` is pinned to ``value``.
+
+        Parameters
+        ----------
+        name : str
+            Name of a parameter that is currently Fixed.
+        value : float
+            The new constant.
+
+        Returns
+        -------
+        Parameters
+            New instance; the original is not modified. Unchanged (``self``)
+            when ``value`` already equals the current constant.
+
+        Raises
+        ------
+        ParameterError
+            If ``name`` is unknown or is a free parameter (a free parameter
+            has a prior, not a constant, so there is nothing to re-pin).
+
+        Notes
+        -----
+        The seam a model rebuild uses to answer "the same model at a different
+        constant" without touching the caller's spec (e.g. the ``Fitter``'s
+        ``params_override={"redshift": z}``). **JIT-compatible**: build-time only.
+        """
+        if name not in self._distributions:
+            raise ParameterError(f"Unknown parameter {name!r}.")
+        current = self._distributions[name]
+        if not current.is_fixed:
+            raise ParameterError(
+                f"Parameter {name!r} is free; with_fixed_value re-pins a Fixed parameter only."
+            )
+        if current.bounds[0] is not None and float(current.bounds[0]) == float(value):
+            return self
+        if name == "redshift" and getattr(self, "_parse_inputs", None) is not None:
+            return self._reparsed_at_fixed_redshift(float(value))
+        new_spec = copy.copy(self)
+        new_distributions = {**self._distributions, name: Fixed(float(value))}
+        object.__setattr__(new_spec, "_distributions", new_distributions)
+        return new_spec
+
+    def _reparsed_at_fixed_redshift(self, value: float) -> Parameters:
+        """Re-run the spec construction at ``redshift=Fixed(value)``.
+
+        ``parse_groups`` derives quantities from the declared redshift at parse
+        time (onset/age prior ceilings at ``age_at_z(z)``, nonparametric bin
+        edges scaled to ``age(z)``), so re-pinning the constant alone would keep
+        the first build's parameter space. The same inputs are re-parsed at the
+        new redshift instead. Anything this spec carries that a fresh parse does
+        not reproduce (parameters merged in after the parse, or priors replaced
+        after it) is detected by re-parsing at the CURRENT redshift and carried
+        over unchanged.
+        """
+        import warnings
+
+        from tengri.parameters.groups import parse_groups
+
+        inputs = dict(self._parse_inputs)
+        cur = self._distributions["redshift"].bounds[0]
+        # Warnings (free-redshift advisories, silently-fixed notices) were
+        # already raised when the model was first built.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            at_cur = parse_groups(**{**inputs, "redshift": Fixed(float(cur))})
+            fresh = parse_groups(**{**inputs, "redshift": Fixed(value)})
+        carried = {
+            n: d
+            for n, d in self._distributions.items()
+            if n != "redshift"
+            and (n not in at_cur._distributions or repr(at_cur._distributions[n]) != repr(d))
+        }
+        return fresh.merge_observation_params(**carried) if carried else fresh
+
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
         """Draw one random sample from free parameter prior distributions.
 
@@ -2517,6 +2691,8 @@ class Parameters:
             modules.append("xray")
         if getattr(self, "shock", False):
             modules.append("shock")
+        if getattr(self, "agb_dust", False):
+            modules.append(f"agb_dust={getattr(self, 'agb_dust_model', 'fsps_shell')}")
         dust_mdl = getattr(self, "dust_model", "two_component")
         if dust_mdl == "single_component":
             dust_law = getattr(self, "dust_law_bc", "power_law")
@@ -2674,6 +2850,8 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "_nebular_mappings": content("nebular backend selection determines parameters"),
     "_nebular_mappings_agn": content("nebular backend selection determines parameters"),
     "age_kernel": content("age kernel type (CIC vs DSPS) affects SFH integration"),
+    "agb_dust": content("AGB dust-shell component flag determines parameters"),
+    "agb_dust_model": content("AGB dust-shell model determines parameters"),
     "agn_attenuation_block": content("AGN attenuation type determines parameters"),
     "agn_axis_grids": content("AGN axis grids determine parameters"),
     "agn_blr_block": content("AGN BLR type determines parameters"),
@@ -2692,11 +2870,14 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "chem_evol": content("chemical evolution model determines parameters"),
     "cloudy_grid_path": content("CLOUDY grid path determines available parameters"),
     "cue_full_catalog": content("CUE full catalog setting determines parameters"),
+    "cue_nitrogen": content(
+        "CUE gas_logno meaning (relation offset or absolute) changes the forward"
+    ),
     "cue_weights_path": content("CUE weights path affects model"),
     "dla": content("DLA model determines parameters"),
     "dl07_grid_path": content("DL07 grid path determines available parameters"),
     "dust_approx": content("dust approximation type determines parameters"),
-    "dust_eb_include_lyc": content("dust LyC treatment determines parameters"),
+    "dust_lyc_in_energy_balance": content("dust LyC treatment determines parameters"),
     "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
@@ -2709,9 +2890,16 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
         "in the component chain when != 'none' (#2260)"
     ),
     "dust_law_overrides": content("dust law parameter overrides determine parameters"),
-    "dust_lyc_absorb_all": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_reprocessed_by": content("dust LyC absorption flag determines parameters"),
+    "dust_lyc_escape_geometry": content("dust LyC escape geometry (#2529) determines parameters"),
+    "dust_t_birth_yr": content("birth-cloud dispersal age sets the young/old mass split"),
+    "dust_transition_width_dex": content("dispersal width of the young/old split (0 = step)"),
     "dust_lyman_cutoff_aa": content("Lyman cutoff wavelength affects model"),
     "dust_model": content("dust model type determines parameters"),
+    "dust_screens": content(
+        "age_binned (#2528) screen list (law, log-age window per screen) "
+        "determines the indexed per-screen parameters"
+    ),
     "dust_wg00_curve": content("WG00 dust curve type determines parameters"),
     "dust_wg00_geometry": content("WG00 dust geometry determines parameters"),
     "dust_wg00_structure": content("WG00 dust structure determines parameters"),
@@ -2760,6 +2948,11 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "z_interp": content("redshift interpolation method determines model behavior"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
+    "_parse_inputs": exclude(
+        "the raw parse_groups inputs, kept only so a rebuild at another Fixed redshift can "
+        "re-derive z-dependent bounds; everything they determine is already in the keyed "
+        "distributions, structure and provenance"
+    ),
     "_flat_provenance": content("parameter provenance (name, group origin) determines structure"),
     "_group_provenance": content(
         "grammar builds attach it via parse_groups; it decides which shape parameters reach "

@@ -872,8 +872,10 @@ def radio_agn(
     # cutoff (not a hard wavelength floor) is what physically truncates the
     # jet at high frequency, so the jet extends smoothly into the sub-mm
     # instead of dropping to zero at 300 GHz (1 mm).
-    nu_cut = 10.0**log_nu_cut
-    return L_5GHz * (nu / nu_ref) ** (-alpha_agn) * jnp.exp(-nu / nu_cut)
+    # Form the exponent as nu * 10^-log_nu_cut, never nu / 10^log_nu_cut: in
+    # float32 10^log_nu_cut overflows at log_nu_cut >~ 38.5, and the reverse
+    # pass through the quotient is then 0 * inf = nan (#1206).
+    return L_5GHz * (nu / nu_ref) ** (-alpha_agn) * jnp.exp(-nu * 10.0 ** (-log_nu_cut))
 
 
 def radio_agn_dpl(
@@ -958,7 +960,7 @@ def radio_agn_dpl(
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
 
     nu_t = 10.0**log_nu_t
-    nu_cut = 10.0**log_nu_cut
+    inv_nu_cut = 10.0 ** (-log_nu_cut)  # float32-safe: see radio_agn
 
     # Double power-law (Martinez-Ramirez+2024 Eq. (2))
     def _dpl_shape(freq):
@@ -966,7 +968,7 @@ def radio_agn_dpl(
         ratio = freq / nu_t
         thick_thin = jnp.power(ratio, alpha1)
         turnover = 1.0 - jnp.exp(-jnp.power(nu_t / freq, alpha1 - alpha2))
-        cutoff = jnp.exp(-freq / nu_cut)
+        cutoff = jnp.exp(-freq * inv_nu_cut)
         return thick_thin * turnover * cutoff
 
     shape = _dpl_shape(nu)
@@ -1003,6 +1005,7 @@ def radio_total_terms(
     l_bband: float = 0.0,
     log_L_ir: float | None = None,
     log_L_agn_bol: float | None = None,
+    log_nu_cut: float = 13.0,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose radio emission into additive terms for precomputation.
@@ -1066,6 +1069,9 @@ def radio_total_terms(
         [erg/s/Hz]. When > 0, used directly in radio_agn instead of deriving
         from L_agn_bol bolometric correction. Default 0.0 (uses L_bol
         correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -1110,6 +1116,7 @@ def radio_total_terms(
         radio_loudness,
         alpha_agn,
         l_bband=l_bband,
+        log_nu_cut=log_nu_cut,
         log_L_agn_bol=log_L_agn_bol,
     )
     ff = (
@@ -1139,6 +1146,7 @@ def radio_total(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
+    log_nu_cut: float = 13.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1189,6 +1197,9 @@ def radio_total(
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly in radio_agn instead of deriving from L_agn_bol
         bolometric correction. Default 0.0 (uses L_bol correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -1218,6 +1229,7 @@ def radio_total(
         T_e,
         alpha_ff,
         l_bband,
+        log_nu_cut=log_nu_cut,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1503,6 +1515,8 @@ def compute_radio_components(
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
+    l_bband: float = 0.0,
+    log_nu_cut: float = 13.0,
     **_kwargs,
 ) -> dict:
     """Decompose total radio emission into physical components.
@@ -1543,6 +1557,13 @@ def compute_radio_components(
         Electron temperature for free-free. Default 1e4 K.
     alpha_ff : float
         Free-free spectral index. Default -0.1.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
+        When > 0, used directly in radio_agn instead of deriving from L_agn_bol
+        bolometric correction. Default 0.0 (uses L_bol correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -1569,7 +1590,14 @@ def compute_radio_components(
         z_slope,
         apply_suppression,
     )
-    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn)
+    agn = radio_agn(
+        wavelength,
+        L_agn_bol,
+        radio_loudness,
+        alpha_agn,
+        l_bband=l_bband,
+        log_nu_cut=log_nu_cut,
+    )
     ff = (
         radio_freefree(wavelength, L_ir, T_e, alpha_ff)
         if include_freefree

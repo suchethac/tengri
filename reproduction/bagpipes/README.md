@@ -1,29 +1,31 @@
 # Reproducing BAGPIPES's physics with tengri
 
-This folder places BAGPIPES (Carnall et al. 2018, MNRAS 480, 4379) next
-to tengri component by component. Same parameters, same units, same
-SSP grid; one figure per physics block.
+This folder places BAGPIPES (Carnall et al. 2018, MNRAS 480, 4379) next to tengri
+block by block on shared inputs: the same BC03+MILES Kroupa SSP grid, one stellar
+metallicity, one fiducial delayed-τ history with Calzetti dust and Draine & Li (2007)
+infrared emission. The notebook prints every number it quotes; the Summary table is
+assembled from those values and classes each remaining difference as numerical,
+convention, reference code or open.
 
 ## Files
 
 - **`01_bagpipes.py`** — the notebook, jupytext percent format.
+- **`validate_matched_physics.py`** — the same matched inputs checked band by band,
+  with the emission lines compared from each code's line table.
 - **`_drivers/`** — code-side glue:
-  - `units.py` — bagpipes (erg/s/Å) ↔ tengri (erg/s/Hz). Ships
-    `verify_unit_conversion(rtol=1e-3)`; the notebook trips at Setup
-    if the converter ever drifts.
-  - `bagpipes_driver.py` — thin wrappers around
-    `bagpipes.model_galaxy(...)` to extract stellar / attenuated /
-    nebular SEDs, SFH curves, and IGM transmission in tengri's units.
-  - `bagpipes_ssp_to_dsps.py` — one-off repackaging of bagpipes' bundled
-    `bc03_miles_stellar_grids.fits` (BC03 templates in the MILES
-    extended-wavelength library, Kroupa IMF) into the DSPS HDF5
-    layout tengri's `load_ssp_data` reads. Includes the
-    `LIV_MSTAR_FRAC` table so the mass-loss bookkeeping is
-    bit-exact.
-  - `data/bc03_miles_from_bagpipes.h5` — the shared SSP file. Both
-    codes consume this; §1 residuals below floating-point precision
-    are interpolation, nothing else.
-- **`_figs/`** — generated figures.
+  - `units.py` — BAGPIPES (erg/s/Å) to tengri (erg/s/Hz), BAGPIPES's solar luminosity,
+    and a bolometric round-trip check run at Setup.
+  - `bagpipes_driver.py` — wrappers around `bagpipes.model_galaxy(...)`. Every model is
+    built with `spec_wavs` spanning 1000-30000 Å at `R_spec = 1000` and
+    `R_other = 100` elsewhere (`bagpipes.config` is changed only inside
+    `_converged_sampling`), and the driver raises if the grid's median λ/Δλ over
+    that range is below 1000. It also reads BAGPIPES's line table, its absorbed
+    luminosity, its Inoue et al. (2014) generator and its own photometry output.
+  - `bagpipes_ssp_to_dsps.py` — repackages BAGPIPES's `bc03_miles_stellar_grids.fits`
+    into the DSPS HDF5 layout `load_ssp_data` reads, with absolute log10 Z labels and a
+    `lsun_erg_per_s` attribute equal to BAGPIPES's solar luminosity.
+  - `data/bc03_miles_from_bagpipes.h5` — the shared SSP file (not tracked).
+- **`_figs/`** — generated figures, `bagpipes_NN_<what>.png` in notebook order.
 
 ## Prerequisites
 
@@ -31,130 +33,69 @@ SSP grid; one figure per physics block.
 pip install bagpipes jupytext jupyter
 ```
 
-Bagpipes' optional `pymultinest` dependency is only needed for
-posterior sampling and can be ignored here — we use
-`bagpipes.model_galaxy` for forward-modeling only. Tengri itself
-should already be importable.
+Only `bagpipes.model_galaxy` is used (forward modeling); the optional `pymultinest`
+dependency is not needed. tengri must be importable.
 
-### BAGPIPES 1.3.5 + NumPy ≥ 2.5 compatibility
+### BAGPIPES 1.3.5 with NumPy 2
 
-BAGPIPES 1.3.5 under numpy 2.5.2+ fails in two places:
+- `star_formation_history.py` line 51 raises `TypeError: only 0-dimensional arrays
+  can be converted to Python scalars`. Change
+  `self.hubble_time = utils.age_at_z[utils.z_array == 0.]` to
+  `self.hubble_time = float(np.squeeze(utils.age_at_z[utils.z_array == 0.]))`.
+- `np.trapz` was removed; the driver aliases it to `np.trapezoid` at import.
 
-- **`star_formation_history.py:51`** — `TypeError: only 0-dimensional arrays can be converted to Python scalars` due to strict array-to-scalar conversions. Apply this one-line patch to the installed package:
-
-  ```python
-  # In site-packages/bagpipes/models/star_formation_history.py line 51, change:
-  #   self.hubble_time = utils.age_at_z[utils.z_array == 0.]
-  # to:
-  #   self.hubble_time = float(np.squeeze(utils.age_at_z[utils.z_array == 0.]))
-  ```
-
-- **`np.trapz` removal** — `AttributeError: module 'numpy' has no attribute 'trapz'` in `model_galaxy.py`, `dust_emission_model.py`, and `making/make_cloudy_models.py`. The driver (`bagpipes_driver.py`) automatically aliases `np.trapz` to the NumPy ≥ 2.0 name `np.trapezoid` at import, so no manual patch is needed for model evaluation.
-
-The `hubble_time` patch mirrors the numpy-2 compatibility fix documented in `reproduction/cigale/README.md`.
-
-## Regenerating the BC03+MILES SSP grid
+## Regenerating the SSP grid
 
 ```bash
 python -m reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps
 ```
-
-The output HDF5 has the DSPS-compatible shape:
 
 | key | shape | meaning |
 |---|---|---|
 | `ssp_lg_age_gyr` | `(n_age,)` | `log10(age / Gyr)` |
 | `ssp_lgmet` | `(n_met,)` | `log10(Z)` (absolute, not solar) |
 | `ssp_wave` | `(n_wave,)` | rest-frame wavelength [Å] |
-| `ssp_flux` | `(n_met, n_age, n_wave)` | L_ν at unit stellar mass |
+| `ssp_flux` | `(n_met, n_age, n_wave)` | L_ν per unit stellar mass, in BAGPIPES's L☉ |
 | `ssp_mass_remaining` | `(n_met, n_age)` | surviving-mass fraction |
-
-Both `bagpipes.models.model_galaxy` and `tengri.load_ssp_data`
-consume the same numeric arrays — `ssp_flux` is derived from
-bagpipes' `bc03_miles_stellar_grids.fits` by a single
-`L_λ × λ²/c` Jacobian.
 
 ## Running
 
 ```bash
-jupytext --to ipynb 01_bagpipes.py
-PYTHONPATH=$PWD/../..:$PWD/../../src \
-  jupyter nbconvert --to html --execute 01_bagpipes.ipynb \
-  --ExecutePreprocessor.timeout=900
+python scripts/render_reproduction_notebook.py bagpipes
 ```
 
-Expected runtime: 5–10 minutes on a CPU. First-time JAX compilation
-for the Cue nebular emulator dominates; subsequent runs reuse the
-persistent cache and finish in under a minute.
+renders the notebook, stamps it and copies it and its figures to `docs/reproduction/`.
+The run takes about fifteen minutes on a CPU.
 
 ## What the notebook covers
 
-**Sections:** §1 SSPs · §2 Delayed-τ SFH · §2 cont'd Intrinsic SED per SFH form · §3 Continuity SFH · §4 Stellar SED · §5 Metallicity sensitivity · §5 cont'd Metallicity sweep · §6 Dust attenuation curves · §7 Dust attenuation applied · §7 cont'd Dust attenuation laws · §8 Dust IR emission · §8 cont'd DL07 IR grid · §9 Nebular emission · §9 cont'd Nebular ionization · §10 Line-spread function · §11 Panchromatic SED · §12 Inoue14 IGM · §12 cont'd Asada CGM · §12b Inoue14 redshift sweep · §13 Photometry · §13b Photometry without nebular · §13c Photometry at z = 0.5 · §14 Forward-model timing · tengri in BAGPIPES-mode full-SED head-to-head.
+Setup (shared SSP grid, single metallicity, BAGPIPES sampling, translation table) ·
+§1 SSP templates · §2 Star formation histories · §3 Non-parametric continuity ·
+§4 Composite stellar SED · §5 Metallicity · §6 Attenuation curves ·
+§7 Attenuated SED and the `eta` mapping · §8 Dust emission and energy balance ·
+§9 Nebular emission · §10 Line widths · §11 IGM transmission · §12 Photometry ·
+§13 Panchromatic head-to-head · Summary · References.
 
-**Sweeps:** Extended parameter variations with ratio panels and filter tables for SFH forms (exponential τ, constant, double power-law, lognormal), metallicity (0.2–2.5 Z☉), dust attenuation (A_V, CF00 slope, Salim bump), dust IR emission (q_PAH, U_min, γ), and nebular ionization (logU, Z_gas, f_esc).
-
-AGN, X-ray, and radio sections are skipped — BAGPIPES has no
-counterpart. See `reproduction/cigale/` for those.
+BAGPIPES has no AGN, X-ray or radio components; see `reproduction/cigale/` for those.
 
 ## What the comparison found
 
-Component-by-component, at matched parameters. Each block either
-reproduces the BAGPIPES reference numerics, or surfaces a physics or
-convention difference worth flagging for users moving between codes.
+The notebook's Summary table is the reference for the numbers; the rows below state what
+each section shows, with the values printed by its cells.
 
 | § | Block | Result |
 |---|---|---|
-| 1 | BC03+MILES SSP | Float32 round-trip floor (~1e-5 typical, ~1e-7 best). |
-| 2 | Delayed-τ SFH | Both integrate to `10^massformed`. |
-| 3 | Stellar SED | tengri / BAGPIPES = 1.010 ± 0.001 in the optical (1% systematic — under investigation). |
-| 4 | Dust attenuation curves | Calzetti, Cardelli, CF00, Salim — visual match. |
-| 5 | Attenuation applied | Matched at single-Av. |
-| 6 | DL07 dust IR + energy balance | Exact (`L_IR_emitted − L_absorbed = 0` to floating point). |
-| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. The gap arises from differences in Cloudy versions and ionizing-spectrum treatment. |
-| 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviors are correct; they bracket different conventions of "intrinsic line width". |
-| 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
-| 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |
-| 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. Tracked as a tengri follow-up. |
-| 13 | Forward-model timing | Both codes finish a full SED build in ~80–120 ms / call — same performance class for forward-only use. tengri's real speed advantage is `jax.grad` (~1 extra fwd pass vs `2 × n_params` finite differences for non-JAX codes). |
-| 14 | SDSS ugriz photometry | Shared filter set on both sides → r/i/z agree to ≤ 0.02 mag; tengri stays −0.11 mag (u) and −0.15 mag (g) brighter — the two bands carrying the strongest nebular lines ([O II] 3727 in u, Hβ + [O III] 4959/5007 in g). **This is the nebular block projecting:** the Cue Cloudy 22.00 / BAGPIPES Cloudy v25 line-strength discrepancy dominates. Removing the nebular block on both sides collapses the residual to ~0.01 mag in every band (the earlier 0.3–0.7 mag all-band offset was the now-removed 50/50 dust-split artifact, #562). |
-| 15 | Metallicity sensitivity | Z ∈ {0.2, 1, 2.5} Z⊙ at the fiducial SFH on both sides. Both codes track the standard age-metallicity-degeneracy direction (high-Z → redder + deeper Balmer/Mg/Fe absorption). Visual match. |
-| 16 | Asada+2025 CGM damping wing | tengri-only experimental feature (`add_cgm=True`). At z = 7, log_NHI = 22.5 the simplified Lorentzian in tengri produces only ~10⁻⁴ optical depth a few Å redward of Lyα; the published Asada+2025 / Totani+06 form predicts O(0.1) over several Å. The cross-section and the sigmoid evolution are tracked as a tengri follow-up. |
-| 17 | Leja+2019 continuity SFH | Non-parametric piecewise-constant SFH (the BAGPIPES `Further Examples 2` recipe). Three configurations — flat, recent burst, quenched — match between codes once the convention difference (BAGPIPES indexes `dsfr_i` oldest→youngest, tengri young→old) is reconciled by reversing the ratio array. Hard agreement on the SFR(t) shape at matched parameters. |
-
-## Open follow-ups surfaced by this comparison
-
-Eight tengri issues were filed while writing this notebook. Each is
-small (≤ 50 LOC) and unblocked from this PR.
-
-- **igm**: `inoue14` returns 0 below the Lyman limit; the Inoue+2014
-  paper's smooth LyC continuum is missing.
-- **parameters**: `list_dust_emission_models()` advertises aliases
-  (`dl07`, `dl14`, `mbb`) that the `SEDModel.build` dust.emission
-  validator rejects — same registry-drift pattern as the AGN fix in
-  the CIGALE notebook.
-- **public-API**: `load_ssp` / `load_ssp_data` is the only path to
-  bring an SSP HDF5 into a notebook and is not in `tengri.*`. Every
-  example reaches into `tengri.components.stellar.sps.dsps_wrapper`.
-- **public-API**: `igm_transmission(wave_obs, z)` is the dispatcher
-  for Inoue14 / Madau / Meiksin but not in `tengri.*`. The reproduction
-  notebook imports from `tengri.components.igm`.
-- **public-API**: `velocity_broaden(flux, wave, sigma_km_s)` is the
-  fast JIT'd Gaussian LSF kernel matching the analytic σ to ~1 %.
-  Not in `tengri.observation.*`. BAGPIPES users need a public path
-  to apply their `veldisp` / `R_curve` to a tengri spectrum.
-- **investigation**: §3 reports a flat 1.010 × tengri/BAGPIPES ratio
-  in the optical even though both codes consume the **same** SSP
-  numerics and form the **same** total mass. Likely a quadrature or
-  surviving-mass-fraction-convention residual; root cause TBD.
-- **dust**: BAGPIPES' VW07 two-component law (independent slopes for
-  birth-cloud and diffuse) has no tengri counterpart. The closest is
-  `two_component` with a shared slope — a gap for BAGPIPES users
-  who fit with VW07.
-- **igm**: tengri's Asada+2025 CGM damping wing implementation uses a
-  simplified Lorentzian that gives essentially zero absorption
-  redward of Lyα — `_SIGMA_0` value and missing `(ν/ν_α)^4`
-  frequency dependence vs the Totani+06 / Asada published form.
-
-Any percent-level disagreement that does not have a one-sentence
-physics explanation in the figure caption above the audit table is
-either tracked here or filed as an open issue.
+| Setup | BAGPIPES sampling | A band average of the fiducial model changes by the printed amount between the build sampling and twice it. |
+| §1 | SSP templates | Both codes read the same numbers; the printed maximum deviation is the float32 round trip. |
+| §2 | SFH forms | Delayed-τ, constant, double power-law and lognormal match in the band ladders once `age_gyr` is BAGPIPES's age of the universe and the lognormal width is BAGPIPES's solved value. The worst bands (GALEX NUV for τ = 0.3 Gyr, GALEX FUV for the lognormal) are the BAGPIPES offsets from the reference convolution measured in §4 (BAGPIPES's age-grid integration). |
+| §3 | Continuity SFH | Mass formed per bin is compared with the exact value from the ratios, edges and total mass; tengri needs BAGPIPES's bin edges through `bin_edges_gyr` (its default ladder is scaled to the source redshift). The edge-bin deviations come from tengri's default 256-point history grid and fall with `n_grid=4096`; the stellar band ratios do not depend on it (numerical). |
+| §4 | Composite stellar SED | The optical median is the printed value; against a fine-grid convolution of the same SSP file the worst band of tengri deviates by at most 0.0061 and that of BAGPIPES by 0.0037 (delayed τ = 1 Gyr), 0.0176 (τ = 0.3 Gyr) and 0.0226 (lognormal); BAGPIPES integrates the history on its 0.1-dex age grid, which contributes, and the page does not isolate it as the whole cause. tengri's default metallicity scatter is an input BAGPIPES lacks and is switched off. |
+| §5 | Metallicity | The two responses agree at the BC03 nodes; between nodes the two interpolation schemes differ by the printed amounts. |
+| §6 | Attenuation curves | BAGPIPES's Calzetti curve uses 2.695 where Calzetti et al. (2000) give 2.659, the tengri/BAGPIPES ratio of A(λ)/A_V at A_V = 1 is 0.9924 at 1500 Å and 0.9949 at 3000 Å, and BAGPIPES's curve is 0.99947 A_V at 5500 Å. |
+| §7 | Attenuated SED | Single-screen mapping holds; the largest deviations are in the GALEX bands at high A_V and follow the Calzetti coefficient. BAGPIPES's birth-cloud step and tengri's 0.3-dex gate differ for young populations at `eta` ≠ 1 (printed). |
+| §8 | Dust emission | tengri conserves energy; the IR-band ratios have their worst band in WISE W3 in every case (open). tengri excludes λ < 912 Å from L_abs by default, BAGPIPES does not (printed table). |
+| §9 | Nebular emission | Line-table ratios for the strongest lines across log U, Z and f_esc; the low-ionization forbidden lines ([O II], [N II], [S II]) sit below BAGPIPES while the recombination lines and [O III] agree, and [N II] 6584 at Z = 0.3 Z☉ stays off 1 with BAGPIPES's [N/O] set in tengri (open); the f_esc rows follow two scalings of the lines; Hα per case-B ionizing photon is 1.021 (BAGPIPES) and 1.000 (tengri) at 1 Z☉, 0.542 and 1.070 at 2 Z☉, 0.257 and 1.047 at 2.5 Z☉ (open); the Z = 2 Z☉ line ratios follow that drop. |
+| §10 | Line widths | tengri's nebular line width is set to 0 to match BAGPIPES's one-pixel lines; the fitted Hα FWHMs, the pixel sizes and the default-width case with its quadrature expectation are printed (numerical). |
+| §11 | IGM | tengri equals BAGPIPES's Inoue14 generator to the printed maximum (Lyman-limit pixel); the departures from BAGPIPES's table are its 1 Å tabulation at Lyβ and its forced Lyα pixel. |
+| §12 | Photometry | SED-level SDSS magnitudes and the budget; each code's own photometry at z = 0, and at z = 0.5 after the printed distance-modulus difference of the two cosmologies. |
+| §13 | Head-to-head | Optical normalization with its 16-84 % spread. |

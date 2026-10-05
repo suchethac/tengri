@@ -164,6 +164,22 @@ CASES = [
         "independent",
     ),
     (
+        "dust_attenuation.screens",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "age_binned",
+                "screens": [
+                    {"law": "calzetti", "window_log_yr": (None, 7.0)},
+                    {"law": "cardelli", "window_log_yr": (8.0, None)},
+                ],
+                "all_params": Fixed(DEFAULT),
+            },
+        ),
+        "dust_screens",
+        (("calzetti", None, 7.0), ("cardelli", 8.0, None)),
+    ),
+    (
         "foreground.ebmv_mw",
         dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, foreground={"ebmv_mw": 0.07}),
         "foreground_ebmv_mw",
@@ -283,8 +299,15 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "law_diff",
         "law_neb",
         "lyman_cutoff",
-        "lyc_absorb_all",
-        "eb_include_lyc",
+        "lyc_reprocessed_by",
+        "lyc_in_energy_balance",
+        "lyc_escape_geometry",
+        # young/old split: static settings emitted back by the dust round-trip rule
+        "t_birth_yr",
+        "transition_width_dex",
+        # age_binned screens: stored as (law, lo, hi) tuples, emitted back as the
+        # {'law', 'window_log_yr'} dicts the grammar takes.
+        "screens",
         # a PARAMETER (dust_eta_balance) reachable as a dust_emission grammar key,
         # emitted by the parameter walk rather than by a structural rule
         "eta_balance",

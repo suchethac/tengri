@@ -141,6 +141,7 @@ from tengri.components.agn.cat3d_wind import cat3d_wind_sed
 from tengri.components.agn.disc import (
     create_relagn_disc_from_grid,
     kubota_done_disc,
+    load_relagn_default_grid,
     multicolor_disc,
     powerlaw_disc,
 )
@@ -352,6 +353,27 @@ def monolithic_agn_model_names() -> frozenset[str]:
     **JIT-compatible**: no, reads module-level registries at call time.
     """
     return frozenset(_AGN_PRESETS) | frozenset(_SELF_CONTAINED_AGN_MODELS)
+
+
+def monolithic_models_with_line_components() -> frozenset[str]:
+    """Monolithic AGN model names whose forward function returns a line-only array.
+
+    Every deprecated preset routes through the composable runner and the
+    self-contained ``grahsp`` model separates its Gaussian lines and FeII
+    forest; both accept ``return_components=True`` and return
+    ``(L_nu, {"lines": ...})``. The other self-contained models
+    (``skirtor_stalevski``) paint no emission lines.
+
+    Returns
+    -------
+    frozenset of str
+        Model names, a subset of :func:`monolithic_agn_model_names`.
+
+    Notes
+    -----
+    **JIT-compatible**: no, reads module-level registries at call time.
+    """
+    return frozenset(_AGN_PRESETS) | frozenset({"grahsp"})
 
 
 def _resolve_monolithic_model(name: str) -> Callable | None:
@@ -1270,9 +1292,10 @@ def relagn_agn(
     **Grid required**: ``data/relagn_disc_grid.h5`` built by
     ``scripts/build_relagn_disc_grid.py`` (requires HEASOFT/XSPEC + KYCONV).
 
-    **Torus normalization**: derived by integrating the disc L_ν over the
-    output wavelength grid via ``jnp.trapezoid``: no separate ``agn_log_lbol``
-    parameter needed.
+    **Torus normalization**: derived by integrating the reddened disc L_ν over
+    frequency on the disc template's own native wavelength grid (not on
+    ``wavelength``, so it does not depend on the caller's sampling or range): no
+    separate ``agn_log_lbol`` parameter needed.
 
     References
     ----------
@@ -1300,12 +1323,25 @@ def relagn_agn(
     # Attenuate disc by torus covering factor
     l_disc = l_disc_full * (1.0 - agn_torus_frac)
 
-    # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
-    nu = _C_AA / wavelength  # decreasing
+    # Derive the disc L_bol (the energy budget the torus re-emits) from the
+    # disc's own native wavelength grid, never from ``wavelength``: the budget is
+    # a property of the disc template, so it must not change with how the caller
+    # samples wavelength, and a grid that stops short of the disc (912 A - 3 um)
+    # must not shrink it. The disc is evaluated at the template's nodes (exact,
+    # no resampling), reddened there, and integrated in nu.
+    wave_native = jnp.asarray(load_relagn_default_grid()["wave_grid"], dtype=wavelength.dtype)
+    l_native = disc_fn(
+        wave_native,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_mdot=agn_log_mdot,
+        agn_astar=agn_astar,
+        agn_cos_inc=agn_cos_inc,
+    )
+    l_native = _redden_disc(wave_native, l_native, agn_ebv_disc)
     # ``nu`` is descending: negate the trapezoid instead of flipping the
     # operands (reversed operands are silently zeroed under MLX compile on
     # Apple GPU: jax-mps#232, #2295).
-    lbol_disc_erg = -jnp.trapezoid(l_disc_full, nu)
+    lbol_disc_erg = -jnp.trapezoid(l_native, _C_AA / wave_native)
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol
@@ -1441,7 +1477,7 @@ def unified_nlr_blr(
 
     1. **Analytic disc, not a grid**: Synthesizer extracts disc emission from
        precomputed CLOUDY photoionization grids. tengri uses the closed-form
-       ``multicolor_disc`` (Shakura-Sunyaev / Novikov-Thorne) from
+       ``multicolor_disc`` (Shakura-Sunyaev, zero-torque) from
        ``disc.py``. Rationale: grid look-ups are not JAX-jittable under
        gradient tape; analytic models are differentiable by construction.
 

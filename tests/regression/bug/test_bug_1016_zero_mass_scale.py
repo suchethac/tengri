@@ -69,7 +69,13 @@ class TestRefinedGridOnAgeZeroAnchor:
         contract) — the bug returned exactly 0.
         """
         fine = _refine_sfh_table_ages(bc03_like_ages)
-        sfr = delayed_exponential(fine, log_total_mass=7.153, tau=1.368e9, start=0.0)
+        # start is the lookback time of SF onset (galaxy formation), bounding
+        # the window to [0, start] (#2521); set to tau so the delayed-exponential
+        # peak (cosmic time tau after formation) lands at lookback 0 -- the
+        # oldest, most sensitive part of the age-0-anchored grid this test
+        # exercises -- rather than at start=0's now-degenerate zero-width window.
+        tau = 1.368e9
+        sfr = delayed_exponential(fine, log_total_mass=7.153, tau=tau, start=tau)
         weights, total_mass = _age_weights_cic(fine, sfr, bc03_like_ages, 13.16)
         np.testing.assert_allclose(float(total_mass), 10.0**7.153, rtol=1e-2)
         np.testing.assert_allclose(float(jnp.sum(weights)), 1.0, rtol=1e-10)

@@ -106,12 +106,15 @@ from tengri.config.exceptions import (
     AdvisoryWarning,
     ConfigError,
     DefaultFixedParametersWarning,
+    FreeRedshiftOnsetCeilingWarning,
     ParameterError,
     WildcardPartialFreeWarning,
     warn_measured,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters._dust_keys import (
+    DUST_TYPES_WITH_AGE_SPLIT,
+    DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
@@ -377,6 +380,7 @@ _VALID_DUST_TYPES = {
     "two_component",
     "single_component",
     "wg00",
+    "age_binned",
 }
 
 #: Valid ``shock={'type': ...}`` values. Named here rather than built inline
@@ -880,7 +884,18 @@ _AGN_ATTEN_LAW_TYPES: dict[str, str] = {"smc_prevot": "prevot_smc"}
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
 #: the emitter instead of retyped beside it.
 _TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
-    {"sfh", "dust_attenuation", "dust_emission", "neb", "shock", "igm", "radio", "xray", "agn"}
+    {
+        "sfh",
+        "dust_attenuation",
+        "dust_emission",
+        "neb",
+        "shock",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "agb_dust",
+    }
 )
 
 #: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
@@ -1091,6 +1106,11 @@ def parse_groups(**kwargs) -> Parameters:
     # SEDModel.build -- auto-resolution then falls back to its pre-#2426
     # behavior (see Parameters._default_cloudy_grid).
     ssp_data = kwargs.pop("ssp_data", None)
+    # The build inputs, kept on the returned spec so that a model rebuilt at a
+    # different Fixed redshift re-derives every redshift-dependent quantity
+    # parse_groups computes (onset/age ceilings at age_at_z, nonparametric bin
+    # edges scaled to age(z)) instead of keeping the first build's.
+    parse_inputs = {**kwargs, "ssp_data": ssp_data}
 
     # Redshift is required, and the question asked here is whether the caller
     # PASSED it -- not what its value is. A value-based sentinel cannot answer
@@ -1505,7 +1525,12 @@ def parse_groups(**kwargs) -> Parameters:
     # ── Construct final Parameters ────────────────────────────────────
 
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
-    _narrow_free_priors_to_z(resolved_kwargs, provenance)
+    _approx = kwargs.get("approx")
+    _catalog_z_range = getattr(_approx, "catalog_z_range", None)
+    _catalog_z_lo = float(_catalog_z_range[0]) if _catalog_z_range is not None else None
+    _narrow_free_priors_to_z(resolved_kwargs, provenance, catalog_z_lo=_catalog_z_lo)
+    _warn_free_redshift_onset_ceiling(resolved_kwargs)
+    _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
@@ -1513,6 +1538,7 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+    object.__setattr__(final_params, "_parse_inputs", parse_inputs)
 
     # Raised HERE, after the groups have been translated and validated, not at
     # the top. A caller with a malformed group AND no redshift should hear about
@@ -1718,7 +1744,7 @@ def _narrow_free_priors_to_grid(
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
     """
-    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support, support_shift
     from tengri.parameters.priors import Uniform
 
     # Drive off the registry itself, so registering a component is the only
@@ -1734,7 +1760,18 @@ def _narrow_free_priors_to_grid(
             if not isinstance(dist, Uniform):
                 continue
             lo, hi = dist.bounds
-            new_lo, new_hi = max(lo, g_lo), min(hi, g_hi)
+            # An offset parameter (gas_logno, #2693) is bounded through its shift:
+            # the offset keeps the absolute quantity inside the support for every
+            # reachable value of the parameters the shift depends on.
+            reach = {k: tuple(v.bounds) for k, v in resolved.items() if hasattr(v, "bounds")}
+            s_lo, s_hi = support_shift(
+                selector,
+                name,
+                pname,
+                reach,
+                {"cue_nitrogen": getattr(structural, "cue_nitrogen", "absolute")},
+            )
+            new_lo, new_hi = max(lo, g_lo - s_lo), min(hi, g_hi - s_hi)
             if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
                 # Disjoint (nothing sensible to narrow to; let the warning
                 # say so) or already contained.
@@ -1761,26 +1798,60 @@ def _narrow_free_priors_to_grid(
             provenance[pname] = provenance[pname] + _GRID_NARROWED_SUFFIX
 
 
-#: SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
-#: correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
-#: each one at ``age_at_z(z)`` when the build's redshift floor is known.
-#: Membership here is purely "this narrows", not "this is freeable" -- that is
-#: the declaration's business (``free_prior`` in the SFH registry, see
-#: ``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` / ``sfh_const_start_gyr`` in
-#: ``components/stellar/sfh/registry.py``). A model that does not declare one
-#: of these (e.g. a ``dpl``-only build) simply never resolves it, and this
-#: tuple has nothing to narrow.
-_Z_CAPPED_ONSET_PARAMS: tuple[str, ...] = (
-    "sfh_exp_start_gyr",
-    "sfh_dexp_start_gyr",
-    "sfh_const_start_gyr",
-)
+@lru_cache(maxsize=8)
+def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
+    """SFH onset-lookback parameters whose ``free_prior`` ceiling is only ever
+    correct at z=0 (today's cosmic age): :func:`_narrow_free_priors_to_z` caps
+    each one at ``age_at_z(z)`` when the build's redshift floor is known.
+
+    Derived from :data:`~tengri.components.stellar.sfh.registry.SFH_REGISTRY`
+    (#2521): every ``ParamDef`` across every registered family whose
+    ``z_capped_onset`` flag is set, rather than a hand-written tuple. Before
+    this, a 3-entry tuple (``sfh_exp_start_gyr`` / ``sfh_dexp_start_gyr`` /
+    ``sfh_const_start_gyr``) covered only 3 of the 21 onset/age/peak-time
+    parameters across the registry -- the other 18 kept a static ceiling of
+    today's cosmic age even when the build's redshift prior made that
+    unphysical, so a free or high-z prior could silently place star
+    formation before the Big Bang with no warning (#2521). Deriving the set
+    from the registry means a new SFH family cannot reintroduce the gap by
+    omission.
+
+    Membership here is purely "this narrows", not "this is freeable" -- that
+    is the declaration's own business (``free_prior`` in the SFH registry). A
+    model that does not declare one of these (e.g. a ``dpl_lookback``-only
+    build never resolving ``sfh_dpl_age_gyr``) simply never resolves it, and
+    this set has nothing to narrow.
+
+    Parameters
+    ----------
+    _registry_keys : frozenset of str
+        Snapshot of ``SFH_REGISTRY`` keys. Only a cache key -- passing it
+        makes a plugin registering a new SFH type invalidate the memo rather
+        than being shadowed by a stale one (mirrors :func:`_sfh_type_prefixes`).
+
+    Returns
+    -------
+    tuple of str
+        Every marked public parameter name, deduplicated (aliases such as
+        ``psb_wild2020`` / ``psb`` share one ``SFHModelSpec`` instance).
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    names: dict[str, None] = {}
+    for spec in SFH_REGISTRY.values():
+        for pname, pdef in spec.params.items():
+            if getattr(pdef, "z_capped_onset", False):
+                names[pname] = None
+    return tuple(names)
 
 
-def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None:
+def _narrow_free_priors_to_z(
+    resolved: dict, provenance: dict[str, str], catalog_z_lo: float | None = None
+) -> None:
     """Cap SF-onset lookback priors at the age of the universe at the source z.
 
-    :data:`_Z_CAPPED_ONSET_PARAMS` each declare a static ``free_prior``
+    :func:`_z_capped_onset_params`'s marked parameters each declare a static
+    ``free_prior``
     ceiling of today's cosmic age (``_AGE_UNIV_GYR``, z=0) -- the widest value
     that is ever correct, since a registry declaration cannot know the source
     redshift a given build will use. This intersects that declared range with
@@ -1830,10 +1901,11 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
       omission is raised later, after this function returns.
 
     Deliberately does **NOT** apply :data:`_MIN_RETAINED_FRACTION`: at z=6 the
-    cap retains roughly 6.5% of the 13.81 Gyr declared range (0.9 / 13.81),
-    and declining to narrow on that basis would reintroduce exactly the
-    zero-flux draws this pass exists to prevent. For a cosmological ceiling
-    the narrowing IS the physics, not a tidy-up of an incidentally dead tail.
+    cap retains only a small fraction of today's cosmic age
+    (:func:`~tengri.utils.cosmology.age_at_z0_host`), and declining to narrow
+    on that basis would reintroduce exactly the zero-flux draws this pass
+    exists to prevent. For a cosmological ceiling the narrowing IS the
+    physics, not a tidy-up of an incidentally dead tail.
 
     A catalog fit with a per-galaxy redshift cannot be narrowed here: the
     build's ``redshift`` is one placeholder value (``Fixed(z0)`` with a
@@ -1845,27 +1917,45 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
     z-narrowed onset parameter free beside a ``redshift_col``; see
     :func:`_z_narrowed_onset_params`.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
     from tengri.parameters.priors import Uniform
     from tengri.utils.cosmology import age_at_z
 
-    redshift_dist = resolved.get("redshift")
-    if redshift_dist is None:
-        # No redshift to narrow against yet -- either not given at all
-        # (introspection's `_allow_empty_wildcard`, whose caller has no
-        # target redshift) or not yet resolved. Either way, raising here
-        # would preempt the more specific "redshift is required" error this
-        # function's caller raises afterwards; leaving the static declaration
-        # untouched is exactly the earlier, correct-but-wide behavior.
-        return
-    try:
-        z_floor = redshift_dist.bounds[0]
-    except (AttributeError, NotImplementedError):
-        return
-    if z_floor is None:
-        return
+    if catalog_z_lo is not None:
+        # approx=WavePrecomp(catalog_z_range=(zlo, zhi)) means this build's
+        # own `redshift` is only a placeholder -- a runtime z override (the
+        # Catalog / Fitter `params_override`/`fixed_values` path) replaces
+        # it per galaxy, and the age-of-universe cutoff that mass
+        # conservation applies genuinely tracks that runtime value (#2521).
+        # But this static PRIOR CEILING is still fixed once, at build time,
+        # so it must use catalog_z_range's own lower bound (the oldest
+        # universe the range admits, the same "most permissive single cap"
+        # this function already uses for one galaxy's z_floor) rather than
+        # the placeholder redshift -- otherwise two builds of the same
+        # catalog_z_range model at different placeholder redshifts would
+        # declare different prior widths for the identical parameter, and a
+        # value standardized against one would not unstandardize to the
+        # same physical age against the other.
+        z_floor = catalog_z_lo
+    else:
+        redshift_dist = resolved.get("redshift")
+        if redshift_dist is None:
+            # No redshift to narrow against yet -- either not given at all
+            # (introspection's `_allow_empty_wildcard`, whose caller has no
+            # target redshift) or not yet resolved. Either way, raising here
+            # would preempt the more specific "redshift is required" error this
+            # function's caller raises afterwards; leaving the static declaration
+            # untouched is exactly the earlier, correct-but-wide behavior.
+            return
+        try:
+            z_floor = redshift_dist.bounds[0]
+        except (AttributeError, NotImplementedError):
+            return
+        if z_floor is None:
+            return
     cap = float(age_at_z(float(z_floor)))
 
-    for pname in _Z_CAPPED_ONSET_PARAMS:
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
         if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
             continue
         dist = resolved.get(pname)
@@ -1896,6 +1986,226 @@ def _narrow_free_priors_to_z(resolved: dict, provenance: dict[str, str]) -> None
             default=default,
         )
         provenance[pname] = provenance[pname] + _Z_NARROWED_SUFFIX
+
+
+def _warn_free_redshift_onset_ceiling(resolved: dict) -> None:
+    """Warn once when a free redshift's own range can outrun an onset ceiling.
+
+    :func:`_narrow_free_priors_to_z` caps each z-capped onset/age/peak-time
+    parameter (:func:`_z_capped_onset_params`) at ``age_at_z(z_floor)``, the
+    age of the universe at the LOWEST redshift the build's own ``redshift``
+    prior admits. That is the most permissive age a single static cap can
+    use, and it is deliberately silent about the redshift range's upper
+    (younger-universe) end (see that function's docstring). This check
+    covers exactly that blind spot: it re-reads each z-capped parameter's
+    FINAL declared ceiling -- after any z_floor-based narrowing, so it also
+    sees a user's own untouched explicit prior -- and compares it against
+    ``age_at_z(z_ceil)``, the age at the redshift range's upper end. A draw
+    near ``z_ceil`` paired with an onset value between the two ages places
+    star formation before the Big Bang at that draw, even though the value
+    is within the parameter's own declared range.
+
+    Fires at most once per build, naming every offending parameter together
+    with both ages, rather than once per parameter: the underlying cause
+    (redshift is free) is shared, and one build-time notice is enough to act
+    on. See :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning`
+    for why this warns rather than raises, and for why a build-time check is
+    the only way to surface this at all for a fit that runs under
+    ``jax.jit`` (every sampling backend).
+
+    Parameters
+    ----------
+    resolved : dict
+        Final resolved ``{param_name: Distribution}`` kwargs, read after
+        :func:`_narrow_free_priors_to_z` has already run.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only.
+
+    A ``Fixed`` redshift has ``bounds == (z0, z0)``, so ``z_ceil <= z_floor``
+    and this returns immediately -- the warning never fires for a fixed
+    redshift. A z-capped parameter that is itself ``Fixed`` is skipped the
+    same way: fixing an onset value is exactly how a user opts out of the
+    z_floor-based cap's assumption, and this check does not second-guess
+    that choice.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.utils.cosmology import age_at_z
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None or redshift_dist.is_fixed:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None or z_ceil is None or z_ceil <= z_floor:
+        return
+    age_at_z_ceil = float(age_at_z(float(z_ceil)))
+
+    offenders: list[tuple[str, float]] = []
+    for pname in _z_capped_onset_params(frozenset(SFH_REGISTRY)):
+        dist = resolved.get(pname)
+        if dist is None or dist.is_fixed:
+            continue
+        hi = dist.bounds[1]
+        if hi is None or hi <= age_at_z_ceil:
+            continue
+        offenders.append((pname, float(hi)))
+    if not offenders:
+        return
+
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    named = ", ".join(f"{n} (ceiling {h:.4g} Gyr)" for n, h in sorted(offenders))
+    tightest_offender_ceiling = min(h for _, h in offenders)
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}], spanning cosmic ages "
+        f"{age_at_z_floor:.4g} down to {age_at_z_ceil:.4g} Gyr. The following free "
+        f"SF-onset/age/peak-time parameter(s) keep a prior ceiling above "
+        f"{age_at_z_ceil:.4g} Gyr, the age of the universe at the redshift range's "
+        f"upper end: {named}. A prior draw near redshift {z_ceil:g} paired with an "
+        f"onset value above that ceiling places star formation before the Big Bang; "
+        f"the forward model truncates it and still conserves the requested formed "
+        f"mass (#2521), so the fit runs and reports no error there -- only the SFH "
+        f"shape at that draw is wrong, and under jax.jit not even the eager "
+        f"SFHBeforeBigBangWarning fires. Narrow the redshift prior, or give the "
+        f"affected parameter(s) an explicit tighter ceiling, e.g. "
+        f"{offenders[0][0]}=Uniform(lo, {age_at_z_ceil:.4g}).",
+        FreeRedshiftOnsetCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
+        n_offending_params=len(offenders),
+        tightest_offender_ceiling_gyr=tightest_offender_ceiling,
+    )
+
+
+#: SFH families whose default (unset) bin ladder is scaled to the source
+#: redshift rather than fixed at 0-13.7 Gyr. Distinct from
+#: :data:`_z_capped_onset_params`: this is a structural setting
+#: (``bin_edges_gyr``), not a free-parameter prior, and applies only to the
+#: families that share the plain ``DEFAULT_BIN_EDGES_GYR`` ladder --
+#: ``continuity_flex``, ``psb_suess2022`` and ``psb_flex`` derive their own
+#: edges from other declared parameters (``tflex_gyr`` and friends) and are
+#: out of scope here.
+_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES = frozenset(
+    {"continuity", "dirichlet", "bursty_continuity", "prospector_beta"}
+)
+
+
+def _default_nonparametric_bin_edges_from_z(resolved: dict) -> None:
+    """Scale the default nonparametric age-bin ladder to the source redshift.
+
+    ``continuity``, ``dirichlet``, ``bursty_continuity`` and
+    ``prospector_beta`` share a bin ladder (``DEFAULT_BIN_EDGES_GYR``) fixed
+    at 0-13.7 Gyr when no explicit ``bin_edges_gyr`` is given, regardless of
+    redshift: at z=6 (age 0.93 Gyr) 3 of 7 default bins lie entirely beyond
+    the age of the universe, taking no likelihood while
+    ``_mass_conserving_total`` (#2521) still redistributes their nominal
+    mass share across the bins that remain reachable, biasing the recovered
+    shape toward ages the ladder happens to offer a bin for. This builds the
+    default ladder from the source redshift instead, via
+    :func:`~tengri.components.stellar.sfh.nonparametric.make_agebins_from_zred`
+    (the Prospector-beta scheme, Wang et al. 2024): for a source redshift
+    ``<= 3`` the two youngest edges stay fixed (30 Myr, 100 Myr) and the
+    remaining interior edges are log-spaced up to 90% of the universe age;
+    for ``> 3`` the universe is too young to hold a 100 Myr bin and still
+    resolve the rest of cosmic time, so none of the youngest edges are
+    fixed: the edges are log-spaced against a grid anchored at 13.47 Myr
+    (Prospector-beta's own ``amin = 7.1295`` in log10 yr), which the youngest
+    edge itself skips past, matching that scheme's own construction exactly.
+    Either way the oldest edge is set to ``age_at_z`` of the source
+    redshift -- so no default bin can lie beyond cosmic time.
+
+    An explicit user-supplied ``bin_edges_gyr`` is never touched here, the
+    same convention the z-capped onset/age/peak-time *parameters* follow
+    (:func:`_narrow_free_priors_to_z` only narrows a declaration-sourced free
+    prior, never a user's own explicit value): a caller who names their own
+    edges has already made the reachability decision, and nothing here
+    second-guesses it or warns about it.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place by
+        setting ``resolved["bin_edges_gyr"]`` when applicable. Also reads the
+        structural ``resolved["mean_sfh_type"]`` (str or list) and
+        ``resolved["redshift"]``.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable; composition-time only --
+    ``make_agebins_from_zred`` is itself a NumPy, Python-control-flow
+    function and cannot be traced (see
+    :class:`~tengri.config.exceptions.NonparametricBinEdgesAtRedshiftCeilingWarning`
+    for what that costs when ``redshift`` is free).
+
+    For a ``Fixed`` redshift the ladder is built once, at that value: exact
+    for every draw, since there is only one. For a free ``redshift`` the
+    edges cannot be re-built per draw (they are not traced quantities), so
+    this builds them once, at ``age_at_z`` of the redshift prior's UPPER
+    bound -- the youngest universe the prior admits, and so the one ladder
+    that stays inside cosmic time for every draw. Emits
+    ``NonparametricBinEdgesAtRedshiftCeilingWarning`` in that case, since a
+    draw at a lower redshift then sees a ladder that stops short of its own
+    (older) age of the universe.
+    """
+    if resolved.get("bin_edges_gyr") is not None:
+        return  # explicit user edges: never overridden (see docstring)
+
+    mean_sfh_type = resolved.get("mean_sfh_type")
+    if mean_sfh_type is None:
+        return
+    types = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+    if not (_Z_SCALED_DEFAULT_BIN_LADDER_FAMILIES & set(types)):
+        return
+
+    redshift_dist = resolved.get("redshift")
+    if redshift_dist is None:
+        return
+    try:
+        z_floor, z_ceil = redshift_dist.bounds
+    except (AttributeError, NotImplementedError, ValueError):
+        return
+    if z_floor is None:
+        return
+
+    from tengri.components.stellar.sfh.nonparametric import (
+        DEFAULT_N_BINS,
+        make_agebins_from_zred,
+    )
+
+    is_free = z_ceil is not None and z_ceil > z_floor
+    z_for_edges = float(z_ceil) if is_free else float(z_floor)
+    resolved["bin_edges_gyr"] = make_agebins_from_zred(zred=z_for_edges, n_bins=DEFAULT_N_BINS)
+
+    if not is_free:
+        return
+
+    from tengri.config.exceptions import NonparametricBinEdgesAtRedshiftCeilingWarning
+    from tengri.utils.cosmology import age_at_z
+
+    age_at_z_ceil = float(age_at_z(z_for_edges))
+    age_at_z_floor = float(age_at_z(float(z_floor)))
+    warn_measured(
+        f"redshift is free over [{z_floor:g}, {z_ceil:g}]: the default nonparametric "
+        f"age-bin ladder is built once, at age_at_z({z_ceil:g}) = {age_at_z_ceil:.4g} Gyr "
+        f"(the youngest universe the prior admits), so no bin lies beyond cosmic time "
+        f"for any draw. A draw near redshift {z_floor:g} (age {age_at_z_floor:.4g} Gyr) "
+        f"therefore has cosmic time between {age_at_z_ceil:.4g} and {age_at_z_floor:.4g} "
+        f"Gyr that no bin covers, even though it is available to that draw. Pass an "
+        f"explicit sfh={{'bin_edges_gyr': ...}} built from a fixed or point-estimate "
+        f"redshift to avoid the tradeoff.",
+        NonparametricBinEdgesAtRedshiftCeilingWarning,
+        stacklevel=3,
+        z_floor=z_floor,
+        z_ceil=z_ceil,
+        age_at_z_floor=age_at_z_floor,
+        age_at_z_ceil=age_at_z_ceil,
+    )
 
 
 def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
@@ -2005,7 +2315,7 @@ def _check_met_bins_fit_cosmic_age(resolved: dict, kwargs: dict) -> None:
 
 
 def _z_narrowed_onset_params(spec) -> frozenset[str]:
-    """Free :data:`_Z_CAPPED_ONSET_PARAMS` on ``spec`` whose prior was z-narrowed.
+    """Free :func:`_z_capped_onset_params` names on ``spec`` whose prior was z-narrowed.
 
     Parameters
     ----------
@@ -2015,7 +2325,7 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Returns
     -------
     frozenset of str
-        Names from :data:`_Z_CAPPED_ONSET_PARAMS` that are free on ``spec``
+        Names from :func:`_z_capped_onset_params` that are free on ``spec``
         and whose provenance carries :data:`_Z_NARROWED_SUFFIX` -- i.e.
         ``all_params: FREE`` (or an explicit per-parameter ``FREE``) was
         capped at ``age_at_z`` of the build's own redshift. Empty for a spec
@@ -2030,13 +2340,15 @@ def _z_narrowed_onset_params(spec) -> frozenset[str]:
     Exists so a caller that CAN see a catalog's per-galaxy redshift --
     :class:`~tengri.inference.catalog.Catalog` -- can detect a cap computed
     against a single placeholder redshift without duplicating
-    :data:`_Z_CAPPED_ONSET_PARAMS` or the provenance-suffix convention.
+    :func:`_z_capped_onset_params` or the provenance-suffix convention.
     """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
     provenance = getattr(spec, "_group_provenance", None) or {}
     free = set(getattr(spec, "free_params", ()))
     return frozenset(
         name
-        for name in _Z_CAPPED_ONSET_PARAMS
+        for name in _z_capped_onset_params(frozenset(SFH_REGISTRY))
         if name in free and str(provenance.get(name, "")).endswith(_Z_NARROWED_SUFFIX)
     )
 
@@ -3098,6 +3410,12 @@ def _translate_structural(groups: dict) -> dict:
                 "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
             )
 
+        # The age of the universe behind the dense_basis tx quantiles follows
+        # from the redshift and the cosmology (#2592): the per-family settings
+        # keys are refused as a flat kwarg and inside a ``settings`` dict, with
+        # the one message the registry also raises.
+        _refuse_age_universe_settings(group_name, group_dict)
+
         if group_name not in valid_groups:
             # keyword=None: a group key is the kwarg name itself, not a value
             # assigned via ``keyword=`` (#2429 opus review M3).
@@ -3172,6 +3490,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_neb(group_dict, result)
         elif group_name == "shock":
             _translate_shock(group_dict, result)
+        elif group_name == "agb_dust":
+            _translate_agb_dust(group_dict, result)
         elif group_name == "igm":
             _translate_igm(group_dict, result)
         elif group_name == "radio":
@@ -3284,9 +3604,12 @@ def _validate_met_bin_edges(met_type, edges) -> None:
 
     Checks that edges form a valid ladder for metallicity-history binning:
     at least two edges, all finite, and strictly increasing. Also checks that
-    the met_type accepts a custom bin ladder.
+    the met_type accepts a custom bin ladder and that the bin count does not
+    exceed the declared maximum (_N_MET_BINS_DEFAULT).
     """
     import numpy as np
+
+    from tengri.components.stellar.sfh.met_registry import _N_MET_BINS_DEFAULT
 
     # Check that the met type accepts a custom bin ladder
     if met_type not in _MET_LADDER_TYPES:
@@ -3305,6 +3628,39 @@ def _validate_met_bin_edges(met_type, edges) -> None:
 
     if not np.all(np.diff(edges_arr) > 0):
         raise ValueError(f"met_bin_edges_log_yr must be strictly increasing; got {edges}")
+
+    # Check that the bin count does not exceed the declared maximum
+    n_bins = len(edges_arr) - 1
+    if n_bins > _N_MET_BINS_DEFAULT:
+        raise ValueError(
+            f"met_bin_edges_log_yr has {n_bins} bins, which exceeds the declared "
+            f"maximum of {_N_MET_BINS_DEFAULT}. The registry declares met_bin_<i> "
+            f"and met_d_log_z_<i> parameters only up to index {_N_MET_BINS_DEFAULT - 1}."
+        )
+
+
+def _validate_met_ladder_keys(met_type, met_dict, n_bins: int) -> None:
+    """Refuse user-written ``bin_<i>`` / ``d_log_z_<i>`` keys beyond the ladder (#2600).
+
+    ``bins`` reads ``bin_0..bin_{n-1}``; ``bins_continuity`` reads
+    ``d_log_z_0..d_log_z_{n-2}``.  Only keys the user wrote are checked: the
+    registry defaults filled by ``all_params`` are never in ``met_dict``.
+    """
+    import re
+
+    prefix = {"bins": "bin", "bins_continuity": "d_log_z"}.get(met_type)
+    if prefix is None:
+        return
+    max_index = n_bins - 1 if met_type == "bins" else n_bins - 2
+    pattern = re.compile(rf"^(?:met_)?{prefix}_(\d+)$")
+    for key in met_dict:
+        match = pattern.match(key) if isinstance(key, str) else None
+        if match and int(match.group(1)) > max_index:
+            raise ValueError(
+                f"met key {key!r} is outside the {n_bins}-bin ladder given by "
+                f"met_bin_edges_log_yr; the highest valid index for mode "
+                f"{met_type!r} is {prefix}_{max_index}."
+            )
 
 
 def _validate_sfh_quench_ordering(sfh_type, sfh_dict: dict) -> None:
@@ -3379,26 +3735,9 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
             raise ValueError(
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
-                f"(or None to auto-select). 'cic' is the accuracy default; "
-                f"'dsps' selects DSPS's histogram kernel for cross-code "
-                f"comparison (biases the optical CSP +1.2 %, #964)."
-            )
-        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
-        # the type list, so the incompatible pair is knowable HERE; at
-        # ``SEDModel.build``; rather than at the first prediction, which for a
-        # fit means after warmup has already started. The component-level
-        # ``_resolve_age_kernel`` still guards direct construction.
-        _types = sfh_dict.get("type") or []
-        if age_kernel == "cic" and "field" in (
-            _types if isinstance(_types, (list, tuple)) else [_types]
-        ):
-            raise NotImplementedError(
-                "sfh age_kernel='cic' is not supported with a GP-field SFH; "
-                "the field draw is defined on its own coarse lookback grid, so "
-                "there is no dense integrand to cloud-in-cell (#964). Drop the "
-                "field modulator to use the CIC kernel, or set "
-                "age_kernel='dsps' explicitly to acknowledge the field path's "
-                "kernel."
+                f"(or None to auto-select). 'cic' is the first-order default; "
+                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
+                f"table (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
@@ -3540,6 +3879,7 @@ def _translate_met(met_dict: dict, result: dict) -> None:
     if "met_bin_edges_log_yr" in met_dict:
         met_type = met_dict.get("type")
         _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
+        _validate_met_ladder_keys(met_type, met_dict, len(met_dict["met_bin_edges_log_yr"]) - 1)
         result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
 
 
@@ -3744,6 +4084,274 @@ def _normalize_off_switch(type_value: str | None) -> str | None:
     return type_value
 
 
+def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
+    """Translate ``dust_attenuation={'type': 'age_binned', ...}`` (#2528).
+
+    Validates ``screens`` (:func:`tengri.components.dust.age_binned.validate_screens`),
+    writes the structural ``dust_screens`` tuple, and resolves each screen's
+    ``tau_i`` / per-screen law-shape parameters into full flat
+    ``dust_<name>_<i>`` entries in ``result`` -- the dedicated counterpart of the
+    generic per-parameter resolution loop used by ``two_component``/
+    ``single_component``, which only knows the STATIC parameter tables in
+    ``components/dust/_params.py`` and cannot represent a per-build variable
+    screen count.
+
+    Resolution order per key (mirrors ``_resolve_value``'s contract): (1) an
+    explicit per-screen override in ``dust_atten_dict`` (either spelling,
+    ``tau_0`` or ``dust_tau_0``); (2) the ``all_params``/``other_params``/``*``
+    wildcard (exact synonyms); (3) the registry default from
+    :meth:`~tengri.components.dust.age_binned.AgeBinnedDustComponent.declared_parameters`,
+    which needs no entry here.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict, already key-normalized
+        (Pass 0d) and off-switch-checked by the caller.
+    result : dict
+        Shared structural-kwargs accumulator; mutated in place.
+
+    Raises
+    ------
+    ValueError
+        Naming the screen index: see :func:`~tengri.components.dust.age_binned.validate_screens`
+        for the ``screens`` list checks; plus a two-spellings collision for
+        any per-screen key, an unresolvable ``FREE`` (no declared
+        ``free_prior``), or more than one wildcard spelling given at once.
+    """
+    from tengri.components.dust.age_binned import (
+        AgeBinnedDustComponent,
+        AgeBinnedDustComponentConfig,
+        validate_screens,
+    )
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    screens = validate_screens(dust_atten_dict.get("screens"))
+    result["dust_screens"] = screens
+
+    declared = AgeBinnedDustComponent(
+        config=AgeBinnedDustComponentConfig(screens=screens)
+    ).declared_parameters()
+    declared_by_name = {d.name: d for d in declared}
+
+    wildcard_keys_given = [k for k in ("all_params", "other_params", "*") if k in dust_atten_dict]
+    if len(wildcard_keys_given) > 1:
+        raise ValueError(
+            "dust_attenuation: give only one of 'all_params'/'other_params'/'*' "
+            "(they are exact synonyms)."
+        )
+    wildcard = dust_atten_dict[wildcard_keys_given[0]] if wildcard_keys_given else None
+
+    for i, (law, _lo, _hi) in enumerate(screens):
+        pairs = [(f"tau_{i}", f"dust_tau_{i}")]
+        for law_kw in sorted(law_kwarg_names(law)):
+            if law_kw == "redshift":
+                continue
+            pairs.append((f"{full_to_short(law_kw)}_{i}", f"{law_kw}_{i}"))
+
+        for short_key, full_name in pairs:
+            decl = declared_by_name[full_name]
+            has_short = short_key in dust_atten_dict
+            has_full = full_name in dust_atten_dict
+            if has_short and has_full:
+                raise ValueError(
+                    f"dust_attenuation names both {short_key!r} and {full_name!r}, "
+                    f"two spellings of one key; keep one."
+                )
+            if has_short or has_full:
+                value = dust_atten_dict[short_key] if has_short else dust_atten_dict[full_name]
+                if value is DEFAULT:
+                    raise _bare_default_error(full_name)
+                if value is FREE:
+                    if decl.free_prior is None:
+                        raise ValueError(
+                            f"{full_name}=FREE has no declared free_prior (no "
+                            f"defensible admissible range); pass an explicit "
+                            f"Distribution instead."
+                        )
+                    result[full_name] = decl.free_prior
+                elif _is_default_fixed(value):
+                    result[full_name] = Fixed(_default_fixed_value(full_name, decl.prior))
+                elif isinstance(value, Distribution):
+                    result[full_name] = value
+                else:
+                    result[full_name] = Fixed(value)
+            elif wildcard is not None:
+                if wildcard is FREE:
+                    if decl.free_prior is not None:
+                        result[full_name] = decl.free_prior
+                    # else: explicit-only (no defensible range) -- leaves the
+                    # registry default (Fixed) in force, same as a FREE
+                    # wildcard over a Fixed-only two_component stem.
+                elif _is_default_fixed(wildcard):
+                    result[full_name] = Fixed(_default_fixed_value(full_name, decl.prior))
+                else:
+                    raise ValueError(
+                        f"dust_attenuation 'all_params'/'other_params'/'*' must be "
+                        f"FREE or Fixed(DEFAULT), got {wildcard!r}."
+                    )
+            # else: nothing given at all -> the registry default (decl.prior)
+            # stands; declared_parameters() already supplies it, no entry
+            # needed here.
+
+
+#: Allowed values of the ``lyc_reprocessed_by`` structural key (owner ruling
+#: #2529, "one lyc_ key family"): which stellar population's Lyman-continuum
+#: photons the HII-region dust credit and screen absorption are computed
+#: over. Replaces the boolean ``lyc_absorb_all`` (False -> 'young', True ->
+#: 'all').
+_LYC_REPROCESSED_BY_CHOICES: tuple[str, ...] = ("young", "all")
+
+
+def _validate_lyc_reprocessed_by(value: object) -> str:
+    """Validate a ``dust_attenuation['lyc_reprocessed_by']`` value.
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    str
+        ``value``, unchanged, when it is one of :data:`_LYC_REPROCESSED_BY_CHOICES`.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not one of the allowed strings.
+    """
+    if value not in _LYC_REPROCESSED_BY_CHOICES:
+        raise ValueError(
+            f"dust_attenuation['lyc_reprocessed_by'] must be one of "
+            f"{_LYC_REPROCESSED_BY_CHOICES}; got {value!r}."
+        )
+    return value
+
+
+def _validate_lyc_in_energy_balance(value: object) -> bool:
+    """Validate a ``dust_attenuation['lyc_in_energy_balance']`` value.
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    bool
+        ``value``, unchanged, when it is a ``bool``.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a ``bool`` (an ``int`` 0/1 or other truthy value
+        is rejected rather than silently coerced).
+    """
+    if not isinstance(value, bool):
+        raise ValueError(
+            f"dust_attenuation['lyc_in_energy_balance'] must be a bool; got {value!r}."
+        )
+    return value
+
+
+_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
+
+
+def _validate_t_birth_yr(value: object) -> float:
+    """Validate a ``dust_attenuation['t_birth_yr']`` value [yr].
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    float
+        The birth-cloud dispersal age [yr].
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a finite positive number.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"dust_attenuation['t_birth_yr'] must be a number [yr]; got {value!r}.")
+    out = float(value)
+    if not (0.0 < out < float("inf")):
+        raise ValueError(
+            f"dust_attenuation['t_birth_yr'] must be finite and > 0 yr; got {value!r}. "
+            f"(pcigale's separation_age is in Myr: 10 Myr is t_birth_yr=1e7.)"
+        )
+    return out
+
+
+def _validate_transition_width_dex(value: object) -> float:
+    """Validate a ``dust_attenuation['transition_width_dex']`` value [dex].
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    float
+        The dispersal width [dex]; ``0`` is the hard step.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a finite number >= 0.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"dust_attenuation['transition_width_dex'] must be a number [dex]; got {value!r}."
+        )
+    out = float(value)
+    if not (0.0 <= out < float("inf")):
+        raise ValueError(
+            f"dust_attenuation['transition_width_dex'] must be finite and >= 0 "
+            f"(0 is the hard step); got {value!r}."
+        )
+    return out
+
+
+#: Allowed values of the ``lyc_escape_geometry`` structural key (owner ruling
+#: #2529): whether the escaping fraction (``neb_fesc``, read via
+#: ``tengri.components.lyc.lyc_shares``) bypasses the birth-cloud dust screen
+#: through a geometric hole. ``'screened'`` (default) is the pre-#2529
+#: behavior, bit-identical -- ``neb_fesc`` never touches the dust screen.
+_LYC_ESCAPE_GEOMETRIES: tuple[str, ...] = ("screened", "birth_cloud_holes", "clear")
+
+
+def _validate_lyc_escape_geometry(value: object) -> str:
+    """Validate a ``dust_attenuation['lyc_escape_geometry']`` value.
+
+    Parameters
+    ----------
+    value : object
+        The raw value the caller wrote.
+
+    Returns
+    -------
+    str
+        ``value``, unchanged, when it is one of :data:`_LYC_ESCAPE_GEOMETRIES`.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not one of the allowed strings.
+    """
+    if value not in _LYC_ESCAPE_GEOMETRIES:
+        raise ValueError(
+            f"dust_attenuation['lyc_escape_geometry'] must be one of "
+            f"{_LYC_ESCAPE_GEOMETRIES}; got {value!r}."
+        )
+    return value
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -3792,6 +4400,40 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         result["dust_model"] = "off"
         return
 
+    # #2529: a hole-geometry escape fraction needs a birth-cloud screen
+    # distinct from the diffuse-ISM screen for the hole to be IN -- a
+    # single-screen attenuator (single_component, wg00) has nothing a hole
+    # bypasses. Checked by CAPABILITY (_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN),
+    # not by hardcoding 'two_component' at every call site, so a future
+    # birth-cloud-screen type (#2650's age-binned N-screen attenuation) only
+    # has to join that one set, not teach this validator its name.
+    _geom = dust_atten_dict.get("lyc_escape_geometry", "screened")
+    if _geom != "screened" and dust_type not in _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+        raise ValueError(
+            f"dust_attenuation {{'lyc_escape_geometry': {_geom!r}}} needs a "
+            f"birth-cloud screen distinct from the diffuse-ISM screen (got "
+            f"type={dust_type!r}, which has none to put a hole in). Supported "
+            f"types: {sorted(_DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}. Drop "
+            f"'lyc_escape_geometry' (default 'screened') or switch "
+            f"dust_attenuation type."
+        )
+
+    # The young/old split keys: ``t_birth_yr`` is the two-component birth-cloud
+    # lifetime; ``transition_width_dex`` is the dispersal width of every age
+    # edge (age_binned windows included). Refuse them on a type that has no
+    # age split rather than drop them silently.
+    if "t_birth_yr" in dust_atten_dict and dust_type != "two_component":
+        raise ValueError(
+            f"dust_attenuation 't_birth_yr' is the two_component birth-cloud lifetime "
+            f"(got type={dust_type!r}). age_binned takes its edges from each screen's "
+            f"'window_log_yr'; drop 't_birth_yr'."
+        )
+    if "transition_width_dex" in dust_atten_dict and dust_type not in DUST_TYPES_WITH_AGE_SPLIT:
+        raise ValueError(
+            f"dust_attenuation 'transition_width_dex' needs an age split (got "
+            f"type={dust_type!r}). Supported types: {sorted(DUST_TYPES_WITH_AGE_SPLIT)!r}."
+        )
+
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
     # WG00, and SEDModelComponents do not route through it yet).
@@ -3825,6 +4467,16 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         )
 
     result["dust_model"] = dust_type
+
+    # age_binned (#2528): N independent screens, each its own law and age
+    # window. Its parameter set is a per-build variable (one dust_tau_i per
+    # screen), so it has its own dedicated translation rather than the
+    # law-XOR-law_bc/law_diff machinery below, which is two_component/
+    # single_component-specific.
+    if dust_type == "age_binned":
+        _translate_age_binned(dust_atten_dict, result)
+        _translate_age_split_and_lyc_keys(dust_atten_dict, result)
+        return
 
     # Reject nested dust_attenuation={'emission': ...}: emission is now a top-level group
     if "emission" in dust_atten_dict:
@@ -3943,6 +4595,21 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 if val not in allowed:
                     raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
                 result[result_key] = val
+        # Include the LyC in the dust energy-balance integral (FSPS/Prospector
+        # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
+        # wg00's absorbed-luminosity integral calls the SAME
+        # bolometric_absorbed_log10 with the SAME 912 Å switch point as
+        # single_component/two_component (#2539 item 1), so this key threads
+        # here too instead of being refused the way 'lyman_cutoff' is above.
+        # This early ``return`` meant this key, though never explicitly
+        # rejected, was silently never read for dust_type='wg00' before this
+        # line existed -- the actual defect: not (only) component_factory.py
+        # forgetting to forward it, but this function never producing
+        # 'dust_lyc_in_energy_balance' for wg00 in the first place.
+        if "lyc_in_energy_balance" in dust_atten_dict:
+            result["dust_lyc_in_energy_balance"] = _validate_lyc_in_energy_balance(
+                dust_atten_dict["lyc_in_energy_balance"]
+            )
         return
 
     # Extract and validate dust laws. Attenuation laws are now EXPLICIT and required.
@@ -4151,15 +4818,74 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     if dust_atten_dict.get("lyman_cutoff"):
         result["dust_lyman_cutoff_aa"] = 912.0
 
+    _translate_age_split_and_lyc_keys(dust_atten_dict, result)
+
+
+def _translate_age_split_and_lyc_keys(dust_atten_dict: dict, result: dict) -> None:
+    """Translate the young/old split keys and the ``lyc_`` family (one parse, every type).
+
+    ``t_birth_yr`` / ``transition_width_dex`` (the age split) and
+    ``lyc_reprocessed_by`` / ``lyc_in_energy_balance`` / ``lyc_escape_geometry``
+    are static structural settings read by every attenuator that has a
+    birth-cloud screen; this is their one parser.
+
+    Parameters
+    ----------
+    dust_atten_dict : dict
+        The user's ``dust_attenuation`` group dict.
+    result : dict
+        Shared structural-kwargs accumulator; mutated in place.
+    """
+    if "t_birth_yr" in dust_atten_dict:
+        result["dust_t_birth_yr"] = _validate_t_birth_yr(dust_atten_dict["t_birth_yr"])
+    if "transition_width_dex" in dust_atten_dict:
+        result["dust_transition_width_dex"] = _validate_transition_width_dex(
+            dust_atten_dict["transition_width_dex"]
+        )
+
     # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) or only the
     # young/birth-cloud population (default; bagpipes). See DustSEDComponent.
-    if "lyc_absorb_all" in dust_atten_dict:
-        result["dust_lyc_absorb_all"] = bool(dust_atten_dict["lyc_absorb_all"])
+    if "lyc_reprocessed_by" in dust_atten_dict:
+        result["dust_lyc_reprocessed_by"] = _validate_lyc_reprocessed_by(
+            dust_atten_dict["lyc_reprocessed_by"]
+        )
 
     # Include the LyC in the dust energy-balance integral (FSPS/Prospector
     # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
-    if "eb_include_lyc" in dust_atten_dict:
-        result["dust_eb_include_lyc"] = bool(dust_atten_dict["eb_include_lyc"])
+    if "lyc_in_energy_balance" in dust_atten_dict:
+        result["dust_lyc_in_energy_balance"] = _validate_lyc_in_energy_balance(
+            dust_atten_dict["lyc_in_energy_balance"]
+        )
+
+    # #2529: an age-selective hole-geometry escape fraction only changes the
+    # YOUNG/birth-cloud population's screen (old stars have no birth cloud
+    # to have a hole in). 'lyc_reprocessed_by=\'all\'' additionally routes
+    # the OLD population's Lyman continuum through the same neb_fesc-driven
+    # nebular-reprocessing reduction (DustSEDComponent.apply §2a), applied
+    # UNIFORMLY across every age with no young/old split at all -- there is
+    # no "old-star hole" for the geometry correction to replace there, so
+    # composing the two would double-count exactly the same escaping
+    # fraction's photons (once via the hole bypass, once via the uniform
+    # reduction) for the young population, with nothing analogous defined
+    # for the old one. Refuse the combination rather than silently
+    # double-count; 'young' (the default) is the only reprocessed_by value
+    # lyc_escape_geometry composes with.
+    if "lyc_escape_geometry" in dust_atten_dict:
+        _geometry = _validate_lyc_escape_geometry(dust_atten_dict["lyc_escape_geometry"])
+        if _geometry != "screened":
+            _reprocessed_by = dust_atten_dict.get("lyc_reprocessed_by", "young")
+            if _reprocessed_by == "all":
+                raise ValueError(
+                    f"dust_attenuation={{'lyc_escape_geometry': {_geometry!r}, "
+                    f"'lyc_reprocessed_by': 'all', ...}} is refused: the hole "
+                    f"bypass and the whole-population 'all' reprocessing "
+                    f"reduction both drive their reduction from the SAME "
+                    f"neb_fesc for the young population, and composing them "
+                    f"double-counts its escaping photons. 'lyc_escape_geometry' "
+                    f"only composes with 'lyc_reprocessed_by'='young' (the "
+                    f"default) -- drop one of the two keys."
+                )
+            result["dust_lyc_escape_geometry"] = _geometry
 
 
 def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
@@ -4389,6 +5115,16 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         # added by #303) for cross-code comparisons.
         if "full_catalog" in neb_dict:
             result["cue_full_catalog"] = bool(neb_dict["full_catalog"])
+        # #2693: 'absolute' (default) = gas_logno is Cue's [N/O] input; a
+        # relation name (e.g. 'nicholls17') = gas_logno is the offset from it.
+        if "nitrogen" in neb_dict:
+            from tengri.components.nebular._default_nitrogen import NITROGEN_MODES
+
+            if neb_dict["nitrogen"] not in NITROGEN_MODES:
+                raise ConfigError(
+                    f"neb nitrogen={neb_dict['nitrogen']!r}: expected one of {NITROGEN_MODES}."
+                )
+            result["cue_nitrogen"] = neb_dict["nitrogen"]
     elif neb_type == "cloudy":
         result["nebular"] = True
         # Optional explicit grid; without it Parameters auto-resolves
@@ -4720,6 +5456,14 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
         }
     ),
 }
+#: What each AGN radio model READS, as opposed to what its ``*`` wildcard frees
+#: (:data:`_RADIO_AGN_PARAMS_BY_MODEL`). The cutoff ``radio_log_nu_cut`` is read
+#: by both models but the power-law wildcard leaves it alone: it is freed only
+#: when named. This set decides which keys a model accepts and which the
+#: round-trip emits.
+_RADIO_AGN_READS_BY_MODEL: dict[str, frozenset[str]] = {
+    model: names | {"radio_log_nu_cut"} for model, names in _RADIO_AGN_PARAMS_BY_MODEL.items()
+}
 #: X-ray corona params that only *some* models read. ``XRaySEDComponent`` picks
 #: one of two argument lists on ``config.model``: the ``lopez24`` corona passes
 #: ``alpha_irx`` (the 12um -> L_X ratio) and no ``delta_alpha_ox``; every other
@@ -4809,7 +5553,7 @@ _XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset()
 #: Union of every param owned by each radio sub-group, used by the partition
 #: to route names away from the flat ``radio`` group.
 _RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())
-_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY_MODEL.values())
+_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_MODEL.values())
 
 
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
@@ -4870,6 +5614,25 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     result["foreground_ebmv_mw"] = float(ebmv)
     result["foreground_law"] = law
     result["foreground_rv"] = float(rv)
+
+
+def _translate_agb_dust(agb_dust_dict: dict, result: dict) -> None:
+    """Translate the ``agb_dust`` group to ``agb_dust=True/False``.
+
+    Mirrors :func:`_translate_xray`: a single active type (``'fsps_shell'``)
+    plus the universal ``'none'`` off-switch, no structural sub-keys.
+    """
+    agb_dust_type = _normalize_off_switch(agb_dust_dict.get("type", "none"))
+
+    valid_agb_dust = ("fsps_shell", "none")
+    if agb_dust_type not in valid_agb_dust:
+        raise _unknown_name_error(
+            "AGB dust-shell type", agb_dust_type, valid_agb_dust, keyword="type"
+        )
+
+    result["agb_dust"] = agb_dust_type != "none"
+    if agb_dust_type != "none":
+        result["agb_dust_model"] = agb_dust_type
 
 
 def _translate_xray(xray_dict: dict, result: dict) -> None:
@@ -4938,6 +5701,12 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "law_bc",
             "law_diff",
             "law_neb",
+            # age_binned (#2528): the N-screen list. Per-screen parameter
+            # names (tau_i, <lawparam>_i) are injected dynamically from the
+            # validated screen count in _validate_user_keys's per-group loop
+            # (see _age_binned_param_names) -- this static set cannot
+            # enumerate them, since the count is a per-build choice.
+            "screens",
             # WG00 screen structural selectors (FSPS dust_type=3).
             "dust_curve",
             "geometry",
@@ -4952,10 +5721,19 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "lyman_cutoff",
             # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young-only
             # (default; bagpipes). Two-component only.
-            "lyc_absorb_all",
+            "lyc_reprocessed_by",
             # Include LyC in the dust energy-balance integral (FSPS/Prospector
             # parity) vs the canonical LyC-masked L_absorbed (#922/#961).
-            "eb_include_lyc",
+            "lyc_in_energy_balance",
+            # Age-selective LyC escape geometry (#2529): whether neb_fesc
+            # bypasses the birth-cloud screen through a hole. Two-component
+            # (birth-cloud-screen types) only -- see
+            # _DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN.
+            "lyc_escape_geometry",
+            # Young/old split: birth-cloud dispersal age [yr] (two_component) and
+            # the dispersal width [dex] of every age edge (0 = hard step). Static.
+            "t_birth_yr",
+            "transition_width_dex",
             # Per-source dust-screen choice (#2234 replacement):
             # nebular_screen / shock_screen / agn_screen. Derived from
             # screen_keys() in _dust_keys.py -- the single home of this list
@@ -4990,6 +5768,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # raises instead of silently dropping the path.
     "neb": frozenset({"type", "*", "all_params", "full_catalog"}),
     "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
+    # AGB circumstellar dust-shell weighting (#2534): a one-parameter group,
+    # no structural sub-keys beyond the universal 'type'/'*'/'all_params'.
+    "agb_dust": frozenset({"type", "*", "all_params"}),
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
@@ -5045,6 +5826,7 @@ _GROUP_STRUCTURAL_KEYS = {
 _NEB_TYPE_SPECIFIC_KEYS: dict[str, frozenset[str]] = {
     "cloudy": frozenset({"grid"}),
     "cb19": frozenset({"grid"}),
+    "cue": frozenset({"nitrogen"}),
     # "mappings" (stellar): grid plus its own model/density/warning knobs.
     "mappings": frozenset({"model", "density", "ionizing_source_warning", "grid"}),
     # "mappings_agn": grid plus density/warning, but NOT model (5D AGN grid
@@ -5176,6 +5958,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural(
             "full_catalog", "cue_full_catalog", CUE_FULL_CATALOG_DEFAULT, only_types=("cue",)
         ),
+        _Structural("nitrogen", "cue_nitrogen", "absolute", only_types=("cue",)),
         _Structural(
             "grid",
             "cloudy_grid_path",
@@ -5509,6 +6292,8 @@ def _variant_selection_text(group: str, structural_params: Parameters) -> str:
         e.g. ``"type 'casey2012'"`` or
         ``"type 'two_component' with law_bc='calzetti', law_diff='power_law'"``.
     """
+    if group == "radio.agn":
+        return f"type {structural_params.radio_agn_model!r}"
     if group == "dust_emission":
         return f"type {structural_params.dust_emission!r}"
     model = getattr(structural_params, "dust_model", None)
@@ -5582,12 +6367,13 @@ def _reject_foreign_variant_keys(
 
 
 def _laws_reading_hint(group: str, foreign: list[str]) -> str:
-    """Name the attenuation laws that read a key the selected law does not.
+    """Name the laws (or radio AGN models) that read a key the selected one does not.
 
     Parameters
     ----------
     group : str
-        Group being validated; only ``"dust_attenuation"`` gets a hint.
+        Group being validated; only ``"dust_attenuation"`` and ``"radio.agn"``
+        get a hint.
     foreign : list of str
         Rejected keys, in either spelling.
 
@@ -5605,6 +6391,11 @@ def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     median curve at z and reads no slope or bump at all, and the answer a user
     wants is the name of the law that does, which is ``kriek_conroy``.
     """
+    if group == "radio.agn":
+        wanted = {k if k.startswith("radio_") else f"radio_{k}" for k in foreign}
+        models = sorted(m for m, names in _RADIO_AGN_READS_BY_MODEL.items() if wanted & names)
+        noun = "keys" if len(foreign) > 1 else "key"
+        return f" Models that do read the {noun}: {', '.join(models)}." if models else ""
     if group != "dust_attenuation":
         return ""
     from tengri.components.dust.laws._registry import DUST_LAWS
@@ -5766,6 +6557,13 @@ def _validate_user_keys(
                 else frozenset()
             )
 
+            if "nitrogen" in top_val and "nitrogen" not in neb_type_specific_keys:
+                raise ConfigError(
+                    f"neb 'nitrogen' is only available for type 'cue' (got {neb_type!r}): "
+                    "Cue takes [N/O] as an input, while the grid backends have no "
+                    "absolute N/O knob (neb_dno is an offset from the grid's own relation)."
+                )
+
             if "grid" in top_val and "grid" not in neb_type_specific_keys:
                 raise ValueError(
                     f"Unknown key 'grid' in group 'neb': type {neb_type!r} does not "
@@ -5794,10 +6592,25 @@ def _validate_user_keys(
                 )
                 param_names = accepted
 
+        # age_binned (#2528): the per-screen parameter set (dust_tau_i,
+        # dust_<lawparam>_i) is a per-build variable -- one entry per
+        # user-supplied screen -- which the static param_partition/
+        # _variant_scoped_param_names machinery above (built from the fixed
+        # ATTENUATION_PARAMS/SINGLE_COMPONENT_PARAMS tables) cannot represent.
+        # structural_params.dust_screens is already the VALIDATED tuple by
+        # this point (_translate_dust_attenuation / _translate_age_binned ran
+        # during _translate_structural, before this validation pass), so the
+        # accepted-key set below matches exactly what that translation wrote.
+        age_binned_param_names: frozenset[str] = frozenset()
+        if top_key == "dust_attenuation" and top_val.get("type") == "age_binned":
+            age_binned_param_names = _age_binned_param_names(
+                getattr(structural_params, "dust_screens", None) or ()
+            )
+
         _check_dict_keys(
             top_key,
             top_val,
-            group_allowed | param_names | neb_type_specific_keys,
+            group_allowed | param_names | neb_type_specific_keys | age_binned_param_names,
             param_partition,
             monolithic_agn_model=monolithic_agn_model,
             # neb's displayed list must show the resolved type's actual
@@ -5867,6 +6680,21 @@ def _validate_user_keys(
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
                 sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                if sub_name == "agn":
+                    # A key some AGN radio model reads but the selected one does not
+                    # (#2689): refused by name instead of silently ignored.
+                    read = _RADIO_AGN_READS_BY_MODEL.get(
+                        getattr(structural_params, "radio_agn_model", None)
+                    )
+                    if read is not None:
+                        _reject_foreign_variant_keys(
+                            sub_group,
+                            sub,
+                            _name_spellings(read),
+                            read,
+                            sub_params,
+                            structural_params,
+                        )
                 _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
@@ -5965,7 +6793,7 @@ def _monolithic_agn_top_level_names(model: str) -> set[str]:
 #: resolved it under. Neither is a declared parameter any more -- the axis has
 #: one name, ``agn_nlr_xi_d``, owned by the ``nlr`` block that reads it. Without
 #: an interception the generic key resolver answers ``neb_xid`` in the ``neb``
-#: group with "Did you mean: neb_fdust?", a real parameter of an unrelated
+#: group with "Did you mean: neb_fdust_frac?", a real parameter of an unrelated
 #: quantity, so following the suggestion silently fits something else.
 _NEB_XID_KEYS: frozenset[str] = frozenset({"neb_xid", "xid"})
 
@@ -6035,6 +6863,37 @@ def _alpha_ion_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+def _refuse_age_universe_settings(group_name: str, group_dict: object) -> None:
+    """Raise the age-of-universe message when a retired settings key is written.
+
+    Parameters
+    ----------
+    group_name : str
+        A top-level kwarg of the grammar (a group, or the key itself when it
+        was written flat).
+    group_dict : object
+        The value written under ``group_name``; a ``settings`` dict is searched
+        for the retired keys.
+
+    Raises
+    ------
+    ConfigError
+        With the message built once in
+        :func:`tengri.components.stellar.sfh.registry.age_universe_setting_error`.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        _AGE_UNIVERSE_SETTING_KEYS,
+        age_universe_setting_error,
+    )
+
+    if group_name in _AGE_UNIVERSE_SETTING_KEYS:
+        raise age_universe_setting_error(group_name)
+    if group_name == "settings" and isinstance(group_dict, dict):
+        for key in group_dict:
+            if key in _AGE_UNIVERSE_SETTING_KEYS:
+                raise age_universe_setting_error(key)
+
+
 #: Retired E(B-V) spellings for AGN attenuation blocks (R52, #2325): the duplicate
 #: declaration and the short form the sub-block grammar would have resolved it
 #: under. Both ``smc_prevot`` and ``qsogen`` attenuation blocks now read the single
@@ -6070,6 +6929,119 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
         f"(QSOgen SMC reddening):\n"
         f"  agn={{'type': 'composable', 'atten': {{'law': 'prevot_smc', "
         f"'ebv': Uniform(0.0, 1.0)}}}}"
+    )
+
+
+#: The retired absolute Lyman-continuum dust-absorption fraction (owner
+#: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
+#: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
+#: ionizing-photon budget that only ``lyc_dust_escape_factor``'s internal
+#: clamp caught, silently. The axis has one name now, ``neb_fdust_frac`` --
+#: the fraction of the NON-escaping budget (``1 - neb_fesc``) HII-region dust
+#: absorbs -- read through the single ``lyc_shares`` helper
+#: (``components/nebular/_recombination_coeffs.py``) everywhere the absolute
+#: share is needed.
+_NEB_FDUST_KEYS: frozenset[str] = frozenset({"neb_fdust"})
+
+
+def _neb_fdust_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``neb_fdust`` gets, wherever it was written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (normally ``'neb'``).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, the conversion formula, and why the old name
+        never worked.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) was renamed 'neb_fdust_frac' (#2436): "
+        f"the absolute ionizing-photon dust-absorption fraction let "
+        f"neb_fesc + neb_fdust exceed 1, an impossible >100% of the budget. "
+        f"'neb_fdust_frac' instead sets the fraction of the NON-escaping budget "
+        f"(1 - neb_fesc) that HII-region dust absorbs, so the shares always sum "
+        f"to 1. Convert an old absolute value with "
+        f"neb_fdust_frac = neb_fdust / (1 - neb_fesc):\n"
+        f"  neb={{'type': 'cue', 'neb_fesc': Fixed(0.3), "
+        f"'neb_fdust_frac': Fixed(0.2857)}}  # was neb_fesc=0.3, neb_fdust=0.2"
+    )
+
+
+#: The retired boolean absorb-all-vs-young-only toggle (owner ruling #2529,
+#: "one lyc_ key family"). Replaced by the string ``lyc_reprocessed_by``
+#: (``'young'`` default, ``'all'``) so every LyC structural key on
+#: ``dust_attenuation`` shares one flat naming convention.
+_LYC_ABSORB_ALL_KEYS: frozenset[str] = frozenset({"lyc_absorb_all"})
+
+
+def _lyc_absorb_all_retired_error(group: str, key: str, value: object) -> ValueError:
+    """The one message the retired ``lyc_absorb_all`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (always ``'dust_attenuation'``).
+    key : str
+        The spelling the caller wrote.
+    value : object
+        The value the caller gave it, used to show the exact translation.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement, the True/False -> 'all'/'young' mapping, and
+        the one spelling that survives.
+    """
+    new_value = "all" if bool(value) else "young"
+    return ValueError(
+        f"{key!r}={value!r} (found in group {group!r}) was renamed "
+        f"'lyc_reprocessed_by' (owner ruling #2529, 'one lyc_ key family'): "
+        f"the boolean absorb-all-vs-young-only toggle is now the string "
+        f"'lyc_reprocessed_by', with False -> 'young' (default) and "
+        f"True -> 'all'. Write\n"
+        f"  dust_attenuation={{'lyc_reprocessed_by': {new_value!r}, ...}}"
+        f"  # was {key}={value!r}"
+    )
+
+
+#: The retired FSPS/Prospector-parity energy-balance toggle spelling (owner
+#: ruling #2529, "one lyc_ key family"). Replaced by ``lyc_in_energy_balance``
+#: -- same bool, same default ``False`` -- so it joins the flat ``lyc_``
+#: family instead of the one-off ``eb_`` prefix.
+_EB_INCLUDE_LYC_KEYS: frozenset[str] = frozenset({"eb_include_lyc"})
+
+
+def _eb_include_lyc_retired_error(group: str, key: str, value: object) -> ValueError:
+    """The one message the retired ``eb_include_lyc`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (always ``'dust_attenuation'``).
+    key : str
+        The spelling the caller wrote.
+    value : object
+        The value the caller gave it, used to show the exact translation.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement (same bool, same default) and the one
+        spelling that survives.
+    """
+    return ValueError(
+        f"{key!r}={value!r} (found in group {group!r}) was renamed "
+        f"'lyc_in_energy_balance' (owner ruling #2529, 'one lyc_ key family'): "
+        f"same bool, same default False -- only the prefix joined the flat "
+        f"'lyc_' family. Write\n"
+        f"  dust_attenuation={{'lyc_in_energy_balance': {bool(value)!r}, ...}}"
+        f"  # was {key}={value!r}"
     )
 
 
@@ -6128,6 +7100,23 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+        # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
+        # before the generic resolver reaches it -- it was always written
+        # under the 'neb' group, so no cross-group form is needed here.
+        if key in _NEB_FDUST_KEYS:
+            raise _neb_fdust_retired_error(group, str(key))
+        # #2529 (owner ruling, "one lyc_ key family"): the retired
+        # dust_attenuation booleans are intercepted before the generic
+        # resolver reaches them -- both were always written under
+        # 'dust_attenuation', so no cross-group form is needed here either.
+        if key in _LYC_ABSORB_ALL_KEYS:
+            raise _lyc_absorb_all_retired_error(group, str(key), user_dict[key])
+        if key in _EB_INCLUDE_LYC_KEYS:
+            raise _eb_include_lyc_retired_error(group, str(key), user_dict[key])
+
+        # #2592: the retired age-of-universe settings keys get the one message
+        # the registry raises, whichever dict they were written in.
+        _refuse_age_universe_settings(str(key), None)
 
         # Special case: 'foreground' declares no fitted parameters at all
         # (it is a bare MW-screen settings dict, see _translate_foreground),
@@ -6914,6 +7903,8 @@ def _partition_by_group(
             partition[name] = "neb"
         elif name.startswith("shock_"):
             partition[name] = "shock"
+        elif name.startswith("agb_dust_"):
+            partition[name] = "agb_dust"
         elif dust_emission_active and name in _DUST_EMISSION_PARAM_NAMES:
             partition[name] = "dust_emission"
         elif name.startswith("dust_"):
@@ -7006,6 +7997,46 @@ def _dust_group_accepted_keys() -> frozenset[str]:
     return structural | param_short_forms
 
 
+def _age_binned_param_names(screens: tuple) -> frozenset[str]:
+    """Short + full per-screen key names for ``dust_attenuation={'type': 'age_binned'}``.
+
+    One ``tau_i``/``dust_tau_i`` pair per screen, plus one
+    ``<lawparam>_i``/``dust_<lawparam>_i`` pair for every shape parameter that
+    screen's own law declares (narrowed via
+    ``tengri.components.dust.laws._registry.law_kwarg_names``, excluding
+    ``redshift``, which is threaded automatically rather than being a
+    per-screen user key).
+
+    Parameters
+    ----------
+    screens : tuple of (str, float or None, float or None)
+        The validated screen tuple
+        (:func:`tengri.components.dust.age_binned.validate_screens`), e.g.
+        ``structural_params.dust_screens``.
+
+    Returns
+    -------
+    frozenset of str
+        Both spellings (short and ``dust_``-prefixed) of every per-screen key
+        this screen count declares. Empty if ``screens`` is empty (nothing to
+        validate yet -- :func:`_translate_age_binned` has already raised in
+        that case by the time this runs).
+    """
+    from tengri.components.dust.laws._registry import law_kwarg_names
+
+    names: set[str] = set()
+    for i, (law, _lo, _hi) in enumerate(screens):
+        names.add(f"tau_{i}")
+        names.add(f"dust_tau_{i}")
+        for law_kw in law_kwarg_names(law):
+            if law_kw == "redshift":
+                continue
+            short_stem = full_to_short(law_kw)
+            names.add(f"{short_stem}_{i}")
+            names.add(f"{law_kw}_{i}")
+    return frozenset(names)
+
+
 def _resolve_value(
     param_name: str,
     group_dict: dict,
@@ -7071,8 +8102,11 @@ def _resolve_value(
             "dla",
             *per_screen_keys(),
             "lyman_cutoff",
-            "lyc_absorb_all",
-            "eb_include_lyc",
+            "lyc_reprocessed_by",
+            "lyc_in_energy_balance",
+            "lyc_escape_geometry",
+            "t_birth_yr",
+            "transition_width_dex",
         }
         # A per-screen shape key (``slope_bc``, ``Rv_neb``, ...) carrying
         # ``FREE``, bare ``DEFAULT``, or a ``Distribution`` (``Fixed(...)``
@@ -7373,6 +8407,8 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
         return full_param_name[4:]
     elif full_param_name.startswith("shock_"):
         return full_param_name[6:]
+    elif full_param_name.startswith("agb_dust_"):
+        return full_param_name[9:]
     elif full_param_name.startswith("ionspec_"):
         return full_param_name[8:]
     elif full_param_name.startswith("gas_log"):
@@ -7565,6 +8601,11 @@ def parameters_to_groups(spec: Parameters) -> dict:
             )
             if emittable is not None:
                 param_names = [name for name in param_names if name in emittable]
+        elif group_name == "radio.agn":
+            # Same rule for the radio AGN jet: emit only what its model reads.
+            read = _RADIO_AGN_READS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
+            if read is not None:
+                param_names = [name for name in param_names if name in read]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:
@@ -7750,6 +8791,15 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``shock`` is a boolean toggle on Parameters; the grammar type is
         # ``"mappings"`` when active and ``"none"`` when off (#851).
         return "mappings" if getattr(spec, "shock", False) else "none"
+    elif group_name == "agb_dust":
+        # ``agb_dust`` is a boolean toggle on Parameters, like ``shock``
+        # above; the grammar type is the stored ``agb_dust_model`` when
+        # active and ``"none"`` when off (#2534).
+        return (
+            getattr(spec, "agb_dust_model", "fsps_shell")
+            if getattr(spec, "agb_dust", False)
+            else "none"
+        )
     elif group_name == "igm":
         # ``apply_igm`` is the on/off switch; ``igm_model`` stores the
         # internal spelling (e.g. ``"inoue"``), which is also a registered
@@ -7806,6 +8856,8 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     the birth-cloud law when unset and so is emitted only when it was given, the
     per-screen law-parameter overrides are stored in one flattened dict, and
     ``lyman_cutoff`` persists as a float wavelength rather than the boolean the
+    grammar takes. ``screens`` (age_binned) is stored as ``(law, lo, hi)``
+    tuples and re-emitted as the ``{'law', 'window_log_yr'}`` dicts the
     grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
@@ -7844,15 +8896,29 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
                 if _base_provenance(_provenance.get(full_name, "")) == "user_fixed":
                     continue
                 group_output[f"{short}_{comp}"] = value
+        # age_binned: the spec stores each screen as a (law, lo, hi) tuple; the
+        # grammar takes {'law', 'window_log_yr'} dicts, so the emit rebuilds them.
+        if getattr(spec, "dust_screens", ()):
+            group_output["screens"] = [
+                {"law": law, "window_log_yr": (lo, hi)} for law, lo, hi in spec.dust_screens
+            ]
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
         # Round-trip the absorb-all LyC toggle (only emit when non-default).
-        if bool(getattr(spec, "dust_lyc_absorb_all", False)):
-            group_output["lyc_absorb_all"] = True
+        if str(getattr(spec, "dust_lyc_reprocessed_by", "young")) == "all":
+            group_output["lyc_reprocessed_by"] = "all"
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
-        if bool(getattr(spec, "dust_eb_include_lyc", False)):
-            group_output["eb_include_lyc"] = True
+        if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
+            group_output["lyc_in_energy_balance"] = True
+        # Round-trip the young/old split (non-default only).
+        if float(getattr(spec, "dust_t_birth_yr", 1e7)) != 1e7:
+            group_output["t_birth_yr"] = float(spec.dust_t_birth_yr)
+        if float(getattr(spec, "dust_transition_width_dex", 0.0)) != 0.0:
+            group_output["transition_width_dex"] = float(spec.dust_transition_width_dex)
+        # Round-trip the #2529 escape geometry (non-default only).
+        if str(getattr(spec, "dust_lyc_escape_geometry", "screened")) != "screened":
+            group_output["lyc_escape_geometry"] = spec.dust_lyc_escape_geometry
 
 
 def _analyze_wildcard_intent(

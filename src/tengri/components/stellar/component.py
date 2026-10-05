@@ -34,6 +34,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri._x64_hold import hold_x64_preference
+from tengri.components.stellar.age_boundary import (
+    age_boundary_younger_fraction_cic,
+    age_boundary_younger_fraction_dsps,
+    validate_age_boundaries,
+)
 from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.host_array import device_table, host_array
@@ -64,6 +69,30 @@ class SFHBeforeBigBangWarning(UserWarning):
     truncated_fraction = None
 
 
+class DSPSUnresolvedHistoryWarning(UserWarning):
+    """The histogram age kernel cannot resolve part of this star formation history.
+
+    ``age_kernel='dsps'`` assigns each mass parcel wholly to one SSP node, so
+    structure narrower than the local node spacing (a short burst, a sharp
+    onset or truncation) is placed on the nearest node instead of being shared
+    between the two bracketing nodes. Emitted from the eager forward path when
+    the total-variation distance between the histogram age weights and the
+    first-order (cloud-in-cell) weights exceeds
+    :data:`_DSPS_UNRESOLVED_TV_THRESHOLD`; ``age_kernel='cic'`` resolves it.
+    The check is skipped under ``jax.jit`` / ``grad`` / ``vmap`` (traced
+    values), so it costs nothing inside inference. See suchethac/tengri#2683.
+
+    Attributes
+    ----------
+    unresolved_fraction : float or None
+        Total-variation distance ``0.5 * sum |w_dsps - w_cic|`` between the two
+        normalized age-weight vectors [dimensionless], exact.
+    """
+
+    #: Set at the raise site; see the class docstring.
+    unresolved_fraction = None
+
+
 class SFHBeyondSSPGridWarning(UserWarning):
     """A tabulated SFH forms stars older than the oldest SSP template age.
 
@@ -79,24 +108,6 @@ class SFHBeyondSSPGridWarning(UserWarning):
     carries absolute Msun/yr and has no such step; which is why the mass simply
     vanished before this warning existed. The check is skipped under
     ``jax.jit`` / inference, like its sibling. See suchethac/tengri#1522.
-    """
-
-
-class AgeKernelFieldWarning(UserWarning):
-    """Warning raised when field=True forces age_kernel='dsps' silently.
-
-    When a GP-field SFH is requested without an explicit age_kernel, the field
-    draw lives on a coarse lookback grid with no dense integrand, so the kernel
-    is forced to 'dsps' (the DSPS histogram kernel). This warning alerts the user
-    to that choice and states the accuracy bound.
-
-    Notes
-    -----
-    The 'dsps' kernel costs mass-proportionality accuracy: typically well below
-    1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
-
-    To silence this advisory, set age_kernel='dsps' explicitly to acknowledge
-    the choice. See #2368 for details.
     """
 
 
@@ -116,12 +127,10 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
-    compute_surviving_mass,
     effective_metallicity,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
     interpolate_alpha_only,
-    interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
@@ -142,18 +151,64 @@ VALID_AGE_KERNELS = ("cic", "dsps")
 #: the SFH on the coarse SSP age grid and costs proportionality accuracy,
 #: typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes
 #: in the prior (#2368, #2370). This constant is used in registry docs, public
-#: docs (model_configuration.md), and the field=True advisory.
+#: docs (model_configuration.md).
 AGE_KERNEL_ACCURACY_BOUND = 1e-3
 
-#: Kernel chosen on the non-field path when ``age_kernel`` is left unset
-#: (``None`` = auto). ``"cic"`` is the accuracy default: the DSPS histogram
-#: kernel zeroes the first SSP node older than the SFH start and biases the
-#: optical CSP +1.2 % vs FSPS / bagpipes / a dense reference (#964). Flipping
-#: this one name changes the default for every non-field model.
+#: Kernel chosen when ``age_kernel`` is left unset
+#: (``None`` = auto). ``"cic"`` is the first-order default (each parcel shared
+#: between its two bracketing SSP ages); the DSPS histogram kernel assigns each
+#: parcel to one node (#964, #2683). Flipping this one name changes the default
+#: for every non-field model.
 DEFAULT_AGE_KERNEL = "cic"
 
 #: Declared default alpha-element enhancement [alpha/Fe]
 _ALPHA_FE_DEFAULT: float = declared_default(ALPHA_FE_PARAMS, "met_alpha_fe")
+
+#: SFH families whose time axis is anchored to the age of the universe at the
+#: galaxy's redshift: ``dense_basis`` and ``dense_basis_pure`` place their tx
+#: quantiles on it (Iyer et al. 2019); ``psb`` and ``psb_wild2020`` anchor their
+#: burst to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex`` bound
+#: their fixed old bins to ``[tflex, age(z)]``.
+_AGE_FAMILIES = (
+    "dense_basis",
+    "dense_basis_pure",
+    "psb",
+    "psb_wild2020",
+    "psb_suess2022",
+    "psb_flex",
+)
+
+
+def age_universe_kwargs(sfh_model, redshift) -> dict:
+    """The ``age_universe_yr`` kwarg of an age-anchored SFH, at ``redshift``.
+
+    The one definition of the rule every route that evaluates the SFH
+    function follows: the exact forward, the SED-free precompute and the SED
+    model's own history routes. A model whose SFH family (or, for a composite,
+    any member) is in ``_AGE_FAMILIES`` receives ``age_universe_yr`` equal to
+    the age of the universe at ``redshift`` under the configured cosmology
+    [yr]; every other model receives nothing.
+
+    Parameters
+    ----------
+    sfh_model : str or sequence of str
+        The SFH family, or the members of a composite SFH. ``"field"`` (the GP
+        modulator) is not a family and is ignored.
+    redshift : float or array_like
+        Redshift of THIS evaluation, fixed or sampled; may be traced.
+
+    Returns
+    -------
+    dict
+        ``{"age_universe_yr": age(z) [yr]}`` for an age-anchored model, else
+        ``{}``. A new dict on every call.
+    """
+    members = (sfh_model,) if isinstance(sfh_model, str) else tuple(sfh_model)
+    if not any(m in _AGE_FAMILIES for m in members):
+        return {}
+    from tengri.cosmology import age_at_z
+
+    return {"age_universe_yr": jnp.asarray(age_at_z(redshift)).reshape(()) * 1e9}
 
 
 def _resolve_age_kernel(config) -> str:
@@ -168,7 +223,7 @@ def _resolve_age_kernel(config) -> str:
     Parameters
     ----------
     config : StellarSEDComponentConfig
-        The component config; reads ``age_kernel`` and ``field``.
+        The component config; reads ``age_kernel``.
 
     Returns
     -------
@@ -179,11 +234,6 @@ def _resolve_age_kernel(config) -> str:
     ------
     ValueError
         ``age_kernel`` is not in :data:`VALID_AGE_KERNELS`.
-    NotImplementedError
-        ``age_kernel="cic"`` was requested with ``field=True``. The GP-field
-        draw is defined on its own coarse lookback grid, so there is no dense
-        integrand to cloud-in-cell (#964). Returning DSPS weights anyway would
-        make an explicit request a silent no-op.
 
     Notes
     -----
@@ -195,24 +245,9 @@ def _resolve_age_kernel(config) -> str:
         raise ValueError(
             f"Unknown age_kernel {kernel!r}. Valid: {', '.join(VALID_AGE_KERNELS)} "
             f"(or None to auto-select). 'cic' is the accuracy default (dense "
-            f"cloud-in-cell integrand); 'dsps' is DSPS's histogram kernel, "
-            f"offered for cross-code comparison and known to bias the optical "
-            f"CSP +1.2 % (#964)."
+            f"cloud-in-cell integrand); 'dsps' is DSPS's histogram kernel on an "
+            f"8x refined table (#2683)."
         )
-    if config.field:
-        # The field draw lives on the coarse lookback grid by construction, so
-        # DSPS is the only implemented kernel here. Auto-select resolves to it
-        # silently; an EXPLICIT 'cic' must not.
-        if kernel == "cic":
-            raise NotImplementedError(
-                "age_kernel='cic' is not supported with a GP-field SFH: the "
-                "field draw is defined on its own coarse lookback grid, so "
-                "there is no dense integrand to cloud-in-cell (#964). Drop the "
-                "field modulator to use the CIC kernel, or set "
-                "age_kernel='dsps' explicitly to acknowledge the field path's "
-                "kernel."
-            )
-        return "dsps"
     return DEFAULT_AGE_KERNEL if kernel is None else kernel
 
 
@@ -600,6 +635,51 @@ def _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, tab_
     )
 
 
+#: Total-variation distance between the histogram and cloud-in-cell age weights
+#: above which :class:`DSPSUnresolvedHistoryWarning` is emitted (#2683): the
+#: fraction of the formed mass the histogram kernel places on a different node
+#: than first-order sharing does.
+_DSPS_UNRESOLVED_TV_THRESHOLD = 0.01
+
+
+def _warn_if_dsps_unresolved(
+    joint_weights, ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr, t_obs_gyr
+):
+    """Warn when the histogram kernel mis-places more than ~1 % of the mass (#2683).
+
+    Criterion: ``TV = 0.5 * sum_a |w_dsps[a] - w_cic[a]|`` between the two
+    normalized age marginals, ``w_cic`` from the dense cloud-in-cell integrand
+    that ``age_kernel='cic'`` itself builds; ``TV > _DSPS_UNRESOLVED_TV_THRESHOLD``
+    warns. Cost: one dense integrand evaluation and one weight pass (the work of
+    one ``age_kernel='cic'`` forward), on eager calls only. Traced inputs
+    (``jit``, ``grad``, ``vmap``) return immediately, before any array op, so the
+    compiled program is unchanged.
+    """
+    if isinstance(joint_weights, jax.core.Tracer):
+        return
+    fine_age_yr, fine_sfr = _cic_integrand(
+        ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr
+    )
+    w_cic, _ = _age_weights_cic(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
+    w_dsps = joint_weights.sum(axis=0)
+    sum_cic, sum_dsps = w_cic.sum(), w_dsps.sum()
+    w_cic = w_cic / jnp.where(sum_cic > 0.0, sum_cic, 1.0)
+    w_dsps = w_dsps / jnp.where(sum_dsps > 0.0, sum_dsps, 1.0)
+    tv = float(0.5 * jnp.sum(jnp.abs(w_dsps - w_cic)))
+    if tv <= _DSPS_UNRESOLVED_TV_THRESHOLD:
+        return
+    warn_measured(
+        f"age_kernel='dsps' places {tv:.1%} of the formed mass on a different SSP "
+        f"age node than first-order sharing does: this star formation history has "
+        f"structure narrower than the local SSP node spacing (a short burst or a "
+        f"sharp onset or truncation), and the histogram kernel assigns each mass "
+        f"parcel to a single node. Use age_kernel='cic' to resolve it.",
+        DSPSUnresolvedHistoryWarning,
+        stacklevel=3,
+        unresolved_fraction=tv,
+    )
+
+
 def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     """The dense (age, SFR) integrand every CIC weight kernel consumes.
 
@@ -824,6 +904,29 @@ def _mass_scale_lnu_jvp(primals, tangents):
     return primal_out, tangent_out
 
 
+def _publish_igm_nodes(derived_overrides, joint_weights, phot_igm, waves_igm):
+    """Publish the flux-weighted sub-band node of the IGM-folded tensor.
+
+    The dust screen multiplying ``stellar_phot_lnu_per_age_subband_igm_precomp``
+    belongs at the centroid of the light the IGM lets through, not of the light
+    before it: where Ly-alpha cuts a sub-band the two differ by a large part of
+    the sub-band, and a dusty model at z = 7 read sdss_z 8.7 % off the exact
+    path with the bare node. Where the IGM leaves no weight the bare node is
+    kept, finite for the same reason as there (#1397). No-op without the exact
+    fold's nodes (node fold, patchy IGM).
+    """
+    if waves_igm is None:
+        return
+    phi = jnp.einsum("ma,mafk->afk", joint_weights, phot_igm)
+    num = jnp.einsum("ma,mafk->afk", joint_weights, waves_igm * phot_igm)
+    live = jnp.abs(phi) > _subband_live_floor()
+    derived_overrides["stellar_subband_waves_rest_igm_precomp"] = jnp.where(
+        live,
+        _flux_weighted_node(num, jnp.where(live, phi, 1.0)),
+        derived_overrides["stellar_subband_waves_rest_precomp"],
+    )
+
+
 @jax.custom_jvp
 def _flux_weighted_node(num, den):
     r"""``num / den`` (a flux-weighted mean wavelength) with a float32-safe VJP (#1206).
@@ -887,12 +990,9 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     :math:`\log_{10} t`: equivalent to evaluating a log-age-interpolated SSP
     spectrum at the parcel's exact age. DSPS's histogram kernel
     (``calc_age_weights_from_sfh_table``) instead assigns each parcel wholly
-    to its log-midpoint age bin, and interpolates :math:`\log_{10} M(<t)` in
-    :math:`\log_{10} t` across bin edges; which annihilates the mass in any
-    table segment straddling the SFH start (measured: the 5.012 Gyr node got
-    exactly zero weight for a delayed-τ SFH with age = 5 Gyr, re-attributing
-    3.8 % of the mass to younger, brighter nodes → a +1.2 % optical CSP bias
-    vs FSPS, bagpipes, and a dense reference; #964).
+    to its log-midpoint age bin; fed the 8-fold refined table of
+    :func:`_refined_dsps_table` it agrees with this kernel to <0.1 % in flux
+    for smooth histories (#964, #2683).
 
     Parameters
     ----------
@@ -938,6 +1038,104 @@ def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
         .add(contrib * f)
     )
     return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), total_mass
+
+
+def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=False):
+    r"""Pin formed stellar mass to ``10**log_total_mass`` on the CIC path (#2521).
+
+    The CIC age weights (:func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`,
+    via :func:`_cic_parcels`) already zero the integrand at lookback ages older
+    than ``age_at_z(z)`` and renormalize the surviving weights to sum to 1 --
+    the star-formation *shape* is already correctly bounded to ``[0, age(z)]``.
+    What those functions measure as ``total_mass`` is the trapezoid integral of
+    that shape restricted to the surviving support, computed AFTER
+    ``mean_sfh._renormalize_to_mass``
+    already rescaled the full (unbounded) shape to ``10**log_total_mass`` --
+    so it is strictly less than the declared mass whenever any of the shape
+    fell outside ``[0, age(z)]`` (#683's clamp truncating it away, silently).
+
+    Because ``mean_sfh._renormalize_to_mass``
+    applies one *uniform* rescale to the whole shape, masking commutes with
+    it: pinning the returned scale to the declared ``10**log_total_mass`` here
+    is the exact closed-form equivalent of masking the shape to
+    ``[0, age(z)]`` *before* that first normalization and renormalizing within
+    that support, which is the physical statement #2521 asks for. Derivation::
+
+        SFR_before(t)     = shape(t) * 10**log_total_mass / integral_full(shape)
+        C                 = 10**log_total_mass / integral_[0,age(z)](SFR_before)
+        SFR_before(t) * C = shape(t) * 10**log_total_mass / integral_[0,age(z)](shape)
+
+    which is exactly ``shape`` renormalized over the restricted support.
+
+    Parameters
+    ----------
+    sfh_kwargs : dict
+        Internal SFH kwargs built by :meth:`StellarSEDComponent.apply` /
+        :meth:`StellarSEDComponent.compute_joint_weights`.
+    measured_total_mass : ndarray, shape ()
+        The truncated mass :func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`
+        measured [Msun].
+    is_composite : bool, optional
+        A composite (list) ``sfh_model`` sums multiple additive members, each
+        under its OWN public-prefixed ``log_total_mass`` key (``apply``'s
+        internal-param-map loop writes both the internal and the public name
+        for a composite so two members sharing the internal name
+        ``log_total_mass`` do not collide, #372) -- read here as the sum of
+        every ``sfh_*_log_total_mass`` entry ``sfh_kwargs`` carries.
+
+    Returns
+    -------
+    ndarray, shape ()
+        A single-family build returns ``10**sfh_kwargs["log_total_mass"]``
+        when it declares that parameter, else ``measured_total_mass``
+        unchanged (e.g. ``sfh_model='table'`` has no ``log_total_mass`` at
+        all: its formed mass is legitimately whatever the table integrates
+        to). A composite build returns the sum of ``10**log_total_mass``
+        over every additive member's own key, or ``measured_total_mass``
+        unchanged if none is present.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; a plain ``jnp.where``-free branch on a
+    Python-static condition (``is_composite`` and dict-key membership are
+    both resolved at trace time, never on a traced value).
+
+    **Composite mass is conserved in AGGREGATE, not per member.** Every
+    additive member's own ``mean_sfh._renormalize_to_mass`` call scales its
+    shape to ITS OWN declared mass
+    over the FULL (untruncated) domain; the composed callable then sums the
+    members into one SFR array before the CIC/DSPS kernel integrates and
+    z-caps it as a single unit, so only the pooled measured mass -- not each
+    member's own surviving fraction -- reaches this function. Pinning that
+    pooled measurement to the pooled declared total (here) is therefore
+    exact for the total, but is a single UNIFORM rescale applied across
+    every member: if two members are truncated by different amounts (their
+    onset parameters place different fractions of their own support beyond
+    ``age(z)``), the rescale over-corrects the more-truncated member and
+    under-corrects the less-truncated one relative to each member's own
+    declared mass, even though the pooled total lands exactly on target.
+    Achieving per-member exactness needs the CIC/DSPS kernel to integrate
+    and correct each additive member separately before summing (paralleling
+    how the burst *mixture* already keeps its own mass fraction exact,
+    :func:`_mix_burst_mass_fraction`) -- a larger change to the composite
+    dispatch in both :meth:`StellarSEDComponent.apply` and
+    :meth:`StellarSEDComponent.compute_joint_weights`, not attempted here.
+    """
+    if is_composite:
+        member_masses = [
+            10.0 ** jnp.asarray(v)
+            for k, v in sfh_kwargs.items()
+            if k.startswith("sfh_") and k.endswith("_log_total_mass")
+        ]
+        if not member_masses:
+            return measured_total_mass
+        total = member_masses[0]
+        for m in member_masses[1:]:
+            total = total + m
+        return total
+    if "log_total_mass" not in sfh_kwargs:
+        return measured_total_mass
+    return 10.0 ** jnp.asarray(sfh_kwargs["log_total_mass"])
 
 
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
@@ -1416,6 +1614,105 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     return t_cosmic_asc, sfr_asc, total_mass
 
 
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, log10_lyc_luminosity
+
+#: Refinement factor of the DSPS histogram kernel's SFR table (#2683). The kernel
+#: reads log10 M(<t) at log-midpoint bin edges; with one table row per SSP node a
+#: bin edge inside the segment holding the SFH onset reads ~zero mass and the node
+#: containing the onset loses its whole weight (+2.3 % FUV, +1.2 % H on the
+#: delayed-tau fiducial). Subdividing each node interval 8-fold removes this; the
+#: residual (~0.7 % of mass per node) is the
+#: kernel's zeroth-order assignment of each parcel to one node.
+_DSPS_TABLE_REFINE = 8
+
+
+def _refined_dsps_lookbacks(ssp_ages_yr):
+    """Lookback points [yr] of the refined DSPS table, ascending, excluding 0.
+
+    Each interval of ``[0, ssp_ages_yr]`` is split uniformly into
+    :data:`_DSPS_TABLE_REFINE` parts (right endpoint included), so the SSP nodes
+    are members of the result and ``_DSPS_TABLE_REFINE = 1`` returns them
+    unchanged. The static shape is ``n * _DSPS_TABLE_REFINE``.
+    """
+    ages = jnp.asarray(ssp_ages_yr)
+    lo = jnp.concatenate([jnp.zeros((1,), ages.dtype), ages[:-1]])
+    frac = jnp.arange(1, _DSPS_TABLE_REFINE + 1, dtype=ages.dtype) / _DSPS_TABLE_REFINE
+    pts = lo[:, None] * (1.0 - frac[None, :]) + ages[:, None] * frac[None, :]
+    return pts.reshape(-1)
+
+
+def _refined_dsps_table(ssp_ages_yr, sfh_fn, sfh_kwargs, t_obs_gyr):
+    """DSPS (t, SFR) table on the refined lookback grid, with the young knot (#2683).
+
+    The ONE builder of the histogram kernel's input, called by
+    :meth:`StellarSEDComponent.apply` (delta and per-age-metallicity branches) and
+    the SED-free fast path, so the routes cannot drift apart (#982). The SFR is
+    ``sfh_fn`` evaluated at :func:`_refined_dsps_lookbacks`; for a field draw or a
+    tabulated history ``sfh_fn`` is the piecewise-linear interpolant of the nodes
+    (see :func:`_field_sfh_closure`), so the cloud-in-cell kernel and this table
+    integrate the same function. The lookback-0 knot (#538) copies the youngest
+    point, as :func:`_build_dsps_sfh_table` does.
+
+    Parameters
+    ----------
+    ssp_ages_yr : ndarray, shape (n,)
+        Ascending SSP lookback ages [yr].
+    sfh_fn : callable
+        ``sfh_fn(age_yr, **sfh_kwargs) -> SFR [Msun/yr]``.
+    sfh_kwargs : dict
+        Keyword arguments for ``sfh_fn``.
+    t_obs_gyr : float
+        Cosmic age at the observation redshift [Gyr].
+
+    Returns
+    -------
+    t_cosmic_asc, sfr_asc : ndarray, shape (n * _DSPS_TABLE_REFINE + 1,)
+        Strictly increasing cosmic time [Gyr] and the aligned SFR [Msun/yr].
+    lookback_yr : ndarray, shape (n * _DSPS_TABLE_REFINE,)
+        The refined lookback points (without the knot), ascending.
+    """
+    lookback_yr = _refined_dsps_lookbacks(ssp_ages_yr)
+    sfr = sfh_fn(lookback_yr, **sfh_kwargs)
+    t_cosmic_asc, sfr_asc, _ = _build_dsps_sfh_table(
+        lookback_yr, sfr, t_obs_gyr, add_young_knot=True
+    )
+    return t_cosmic_asc, sfr_asc, lookback_yr
+
+
+def _refined_dsps_lgmet(ssp_ages_yr, lgmet_on_ssp_ages, lookback_yr):
+    """Per-age log10 Z on the refined table, in the table's ascending-cosmic order (#2683).
+
+    Interpolates ``lgmet_on_ssp_ages`` (defined at the SSP nodes) onto
+    ``lookback_yr``, reverses to ascending cosmic time and appends the youngest
+    value for the lookback-0 knot, matching :func:`_refined_dsps_table`.
+    """
+    lg = jnp.interp(lookback_yr, jnp.asarray(ssp_ages_yr), lgmet_on_ssp_ages)
+    return jnp.concatenate([lg[::-1], lg[:1]])
+
+
+def _field_sfh_closure(sfh_lbt_grid, sfr_history):
+    """Interp closure + lookback knots for a correlated-field history (#2684).
+
+    The field draw defines SFR at its own lookback nodes ``sfh_lbt_grid``; the
+    history between nodes is the linear interpolation of the draw (edge-clamped
+    outside). Both age kernels consume this one function: the cloud-in-cell
+    integrand takes the nodes as exact knots (as for ``sfh_model='table'``) and
+    the DSPS table samples it at the refined lookbacks.
+
+    Returns
+    -------
+    sfh_fn : callable
+        ``f(age_yr, **kwargs) -> SFR [Msun/yr]``.
+    lbt_yr : ndarray
+        The field's lookback nodes [yr] (ascending), the exact-knot edge set.
+    """
+
+    def sfh_fn(age_yr, **_kw):
+        return jnp.interp(age_yr, sfh_lbt_grid, sfr_history)
+
+    return sfh_fn, sfh_lbt_grid
+
+
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -1459,9 +1756,10 @@ def _subband_live_floor() -> float:
     return representable_floor(1e-150)
 
 
-# Lyman limit: wavelengths below this contribute to the ionizing
-# photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
-_HI_LIMIT_AA: float = 911.76
+# Lyman limit: wavelengths below this contribute to the ionizing photon
+# rate. The one edge for every LyC consumer (:mod:`tengri.components.lyc`);
+# kept as a local alias so the ~4 call sites below need no further churn.
+_HI_LIMIT_AA: float = LYMAN_LIMIT_AA
 
 
 def _integrate_nion_log10(
@@ -1471,10 +1769,11 @@ def _integrate_nion_log10(
 
     THE single source of the Q_H integral: log-domain computation to prevent
     float32 overflow (Q_H ~ 1e56 exceeds float32 max ~3.4e38). Integrates
-    :math:`Q_H = \int_{\nu>\nu_{912}} L_\nu/(h\nu)\,d\nu` with the partial-bin
-    Lyman-limit correction (#537): the boundary bin's contribution is a rectangle
-    from ``nu_edge`` to the last ionizing grid point, not the trapezoid triangle
-    a hard mask would give.
+    :math:`Q_H = \int_{\nu>\nu_{912}} L_\nu/(h\nu)\,d\nu` via
+    :func:`tengri.components.lyc.edge_trapezoid`, which applies the
+    partial-bin Lyman-limit step model (#537): the boundary bin's
+    contribution is a rectangle from ``nu_edge`` to the last ionizing grid
+    point, not the trapezoid triangle a hard mask would give.
 
     The computation normalizes the SED by its peak, defers the Planck constant
     division, and performs the trapezoid integral in linear-normalized space,
@@ -1509,18 +1808,12 @@ def _integrate_nion_log10(
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     ell = sed_lnu / peak  # O(1) normalized L_nu
     nu = C_AA / wave
-    nu_edge = C_AA / _HI_LIMIT_AA
     integrand = ell / nu  # NO H_PLANCK division; that's deferred to avoid f32 overflow
-    ionizing_mask = wave < _HI_LIMIT_AA
-    integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-    idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(wave.shape[0]), -1))
-    idx_above = idx_below + 1
-    integrand_below = integrand[idx_below]
-    # Boundary bin: subtract the trapezoid triangle, add the true rectangle.
-    triangle_overcount = 0.5 * integrand_below * jnp.abs(nu[idx_below] - nu[idx_above])
-    rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
-    nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
-    norm = nion_bulk - triangle_overcount + rectangle_correct  # #537 correction BEFORE the log
+    # #537 partial-bin Lyman correction, generalized: the one shared
+    # step-model integral (module docstring of tengri.components.lyc).
+    norm = edge_trapezoid(
+        integrand, wave, variable="nu", side="ionizing", edge_aa=_HI_LIMIT_AA
+    )  # #537 correction BEFORE the log
     # log10_magnitude keeps "no ionizing flux" (-inf) apart from "the SED was
     # corrupt" (+inf). The hand-rolled ``norm > 0`` here was False for NaN, so a
     # non-finite ionizing SED gave log_nion = -inf, pow10 -> 0, and nebular
@@ -1598,57 +1891,61 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     age_kernel : str or None
         How the SFH is integrated onto the SSP age grid: ``"cic"``, ``"dsps"``,
         or ``None`` (default) to auto-select: :data:`DEFAULT_AGE_KERNEL` on the
-        non-field path, ``"dsps"`` on the GP-field path. ``"cic"`` evaluates the
-        SFH on a
-        :func:`_refine_sfh_table_ages` dense integrand (16x the SSP nodes) and
-        splits each ``SFR(t)*dt`` parcel between its bracketing SSP nodes with
-        log-age cloud-in-cell weights. ``"dsps"`` hands the coarse per-SSP-age
-        table to DSPS's histogram kernel
-        (:func:`~tengri.components.stellar.sps.dsps_wrapper.compute_dsps_age_weights`),
-        which interpolates ``log10(M(<t))`` in ``log10(t)``.
+        ``"cic"`` for every SFH type, including a correlated field. Both kernels
+        accept every SFH type.
 
-        The two are NOT equivalent: the DSPS kernel annihilates the mass of any
-        table segment straddling the SFH's maximum age, zeroing the first SSP
-        node older than the SFH start (3.8 % of the total for a delayed-tau with
-        age = 5 Gyr) and biasing the CSP +1.2 % in the optical with a blue-ward
-        tilt vs FSPS / bagpipes / a dense reference (#964). ``"cic"`` is
-        therefore the accuracy default; ``"dsps"`` is offered for cross-code
-        comparison against DSPS-native pipelines and pre-#964 tengri.
+        ``"cic"`` evaluates the SFH on a :func:`_refine_sfh_table_ages` dense
+        integrand (16x the SSP nodes) and splits each ``SFR(t)*dt`` parcel
+        between its bracketing SSP nodes with log-age cloud-in-cell weights
+        (first order; <= 0.01 % in flux of a converged quadrature for smooth
+        histories). ``"dsps"`` is DSPS's histogram kernel
+        (:func:`~tengri.components.stellar.sps.dsps_wrapper.compute_dsps_age_weights`):
+        it interpolates ``log10(M(<t))`` in ``log10(t)`` and assigns each parcel
+        wholly to one node. It is fed an SFR table refined 8-fold between SSP
+        nodes (:data:`_DSPS_TABLE_REFINE`), so its output differs from a code
+        that feeds the same kernel a table with one row per node.
 
-        **How large the error is depends on the SSP age grid**, since what is
-        lost is one node's share of the mass. The 3.8 % above is for the grid
-        that measurement used; on the finer 93-node ProGeny/MILES grid the same
-        delayed-tau at age = 5 Gyr relocates 0.64 %, and a double power law
-        0.13-0.29 % (rising with ``age_gyr``), which moves ``ugriz`` photometry
-        by 0.14-0.19 %. Re-measure on your own grid rather than quoting a
-        number; the mechanism is grid-independent, the magnitude is not.
+        Agreement of ``"dsps"`` with ``"cic"`` at default parameters: <0.1 % in
+        ``galex_fuv``/``sdss_u``/``sdss_r``/``2mass_h`` for smooth and
+        step-like families at z = 0 (delayed-tau, onset 5.0 Gyr: -0.05/-0.06/
+        -0.04/-0.03 %). The residual is intrinsic to assigning each parcel to
+        one node: structure narrower than the local node spacing (a burst of a
+        few Myr to tens of Myr, periodic bursts) is placed on the nearest node,
+        and :class:`DSPSUnresolvedHistoryWarning` reports it. At z = 2.5 the
+        oldest parcels sit at the age of the universe between two nodes and
+        the two kernels differ by 0.5-1.4 % in flux (the cic weight on the
+        2.82 Gyr node, older than the universe, is 0.67 % and the histogram
+        kernel gives it none). ``"cic"`` is the default for every SFH type.
 
-        **Pre-#964 equivalence is exact, verified against the pre-fix source**
-        (parent of ``d5a78433b``): on the parametric delta path this branch runs
-        the identical sequence: the same ``sfr_on_ssp`` (untouched by #964),
-        ``_build_dsps_sfh_table(..., add_young_knot=True)`` (#538),
-        ``calc_rest_sed_sfh_table_lognormal_mdf(...).weights``, the #821
-        youngest-bin multiplier, then normalization. The one deliberate
-        difference is that normalization now floors the divisor
-        (``jnp.maximum(sum, 1e-300)``) so a degenerate all-zero SFH yields zero
-        rather than NaN; on any non-degenerate input the result is unchanged.
+        **Field histories.** A field draw defines the SFR at its own lookback
+        nodes; the history between nodes is the linear interpolation of the
+        draw. ``"cic"`` takes those nodes as exact knots and ``"dsps"`` samples
+        the same interpolant on its refined table, so the two kernels integrate
+        one function. ``"cic"`` is the accurate kernel for field and rough
+        histories: against a dense-quadrature truth the age-weight
+        total-variation error is 0.001 (delayed field) to 0.03 (dpl field) for
+        ``"cic"`` and 0.03 to 0.10 for ``"dsps"``, up to 16 % in the FUV and
+        9 % in r-band flux. The ``"cic"`` integrand itself resolves structure
+        down to ~30 Myr; a 10 Myr burst is not converged (TV 0.015).
 
-        It is **not** a speed knob, and it is the slower of the two: measured
-        end-to-end, ``"cic"`` is ~3.5 % faster on the exact path and ~13 %
-        faster under ``WavePrecomp``; DSPS compiles to about twice as many
+        It is **not** a speed knob, and ``"dsps"`` is the slower of the two:
+        measured end-to-end, ``"cic"`` is ~3.5 % faster on the exact path and
+        ~13 % faster under ``WavePrecomp``; DSPS compiles to about twice as many
         ``while`` loops, which precompute cannot shrink. (Do not judge this by
         timing :func:`compute_dsps_age_weights`; it has no call sites here.)
-
-        Only consulted on the non-field path. A GP-field SFH always uses the
-        DSPS kernel: the field draw is defined on its own coarse lookback grid,
-        so there is no dense integrand to cloud-in-cell (#964). Asking for
-        ``age_kernel="cic"`` together with ``field=True`` raises rather than
-        silently returning DSPS weights.
     use_alpha_grid : bool
         Whether the SSP grid carries an α/Fe axis. Currently ``False``.
     lgmet_scatter : float
         Gaussian scatter in log10(Z) (dex) for the DSPS triweight kernel.
         Default 0.2 dex matches Prospector / DSPS convention.
+    age_boundaries_yr : tuple of float
+        Static age boundaries [yr] for which to publish
+        ``age_boundary_younger_fraction``, shape ``(n_boundary, n_age)``: per
+        SSP node, the fraction of its formed mass younger than each boundary
+        (:mod:`tengri.components.stellar.age_boundary`). Empty elides it.
+    age_boundary_width_dex : float
+        Dispersal width [dex] of the survival function at every boundary;
+        ``0`` (default) is the hard step.
     """
 
     name: str = "stellar"
@@ -1661,10 +1958,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     field_centering: float = 1.0
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
-    # Number of bins for ``metallicity_model="bins"`` /
-    # ``"bins_continuity"``. Defaults to 6 to match
-    # ``MET_REGISTRY``'s ``_N_MET_BINS_DEFAULT`` and the
-    # ``met_bin_<i>`` / ``met_d_log_z_<i>`` parameter declarations.
+    # Maximum number of declared ``met_bin_<i>`` parameters (the
+    # largest ladder the grammar accepts). The physics derives the
+    # bin count from ``met_bin_edges_log_yr`` (n_bins = len(edges) − 1),
+    # not from this field. Defaults to 6 to match ``MET_REGISTRY``'s
+    # ``_N_MET_BINS_DEFAULT``.
     met_n_bins: int = 6
     # Bin edges in ``log10(age/yr)``, sorted ascending. Used by the
     # ``"bins"`` and ``"bins_continuity"`` metallicity modes.
@@ -1687,10 +1985,24 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     # component used the bare registry ``fn`` and the user's edges were
     # accepted, stored on the spec, and silently ignored.
     sfh_bin_edges_gyr: Any = None
+    #: Static age boundaries [yr] at which a consumer (an attenuator's
+    #: young/old split) wants the exact per-node formed-mass fraction younger
+    #: than the boundary. Empty (the default) elides the computation: dust-free
+    #: and single-screen models pay nothing. Set at build time by the one
+    #: decision point ``SEDModel._age_boundary_request``.
+    age_boundaries_yr: tuple = ()
+    #: Dispersal width [dex] of the survival function at every boundary; 0 is
+    #: the hard step (see :mod:`tengri.components.stellar.age_boundary`).
+    age_boundary_width_dex: float = 0.0
 
     def __post_init__(self):
         """Emit deprecation warning for sps_backend and advisory for field=True."""
         self._validate_bin_edges()
+        object.__setattr__(
+            self,
+            "age_boundaries_yr",
+            validate_age_boundaries(self.age_boundaries_yr, self.age_boundary_width_dex),
+        )
 
         if self.sps_backend != "dsps":
             warnings.warn(
@@ -1701,17 +2013,6 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 DeprecationWarning,
                 stacklevel=3,
             )
-
-        # Emit advisory when field=True forces 'dsps' over the default kernel
-        if self.field and self.age_kernel is None:
-            bound_str = f"{AGE_KERNEL_ACCURACY_BOUND:g}"
-            msg = (
-                f"field=True forces age_kernel='dsps', which costs mass-proportionality "
-                f"accuracy: typically well below 1e-5, but reaching roughly {bound_str} "
-                f"at the sharpest SFH shapes in the prior. To silence this advisory, "
-                f"set age_kernel='dsps' explicitly to acknowledge the choice. (#2368)"
-            )
-            warnings.warn(msg, AgeKernelFieldWarning, stacklevel=3)
 
     def bin_edges_sfh_kwarg(self) -> dict:
         """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
@@ -1779,6 +2080,10 @@ class StellarSEDComponentState(SEDComponentState):
     #: ``sed_intrinsic``; that lets the WavePrecomp LUT path prune the full
     #: stellar SED einsum instead of forcing it just to publish Q_H (#950).
     n_ion_bins: int | None = None
+    #: The IGM fold actually folded into the sub-band tensors at build time
+    #: (``"exact"`` or ``"node"``), or ``None`` when no fold was built. Records
+    #: what ``WavePrecomp(igm_fold="auto")`` resolved to (#2445).
+    igm_fold_resolved: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1839,7 +2144,15 @@ class StellarSEDComponent:
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
-    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
+    parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_", "agb_dust_")
+    #: AGB circumstellar dust-shell ratio template (#2534), resampled onto
+    #: ``ssp_data``'s own axes. Set only when ``agb_dust_weight`` is FREE (a
+    #: Fixed weight is baked directly into ``ssp_data`` upstream instead, see
+    #: ``components/stellar/agb_dust_shell.py``): then ``apply`` multiplies
+    #: ``ssp_flux_for_csp`` by the live ratio at the metallicity/age-weight
+    #: seam, and ``precompute`` refuses to build a precompute LUT (which
+    #: cannot represent a parameter-dependent SSP cube).
+    agb_dust_ratio: Any | None = None
     _state: StellarSEDComponentState | None = None
 
     def citations(self) -> tuple[str, ...]:
@@ -1927,6 +2240,13 @@ class StellarSEDComponent:
                 "stellar_mass_scale, which is ~1e43 and so overflows float32",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
+            DerivedKey(
+                "age_boundary_younger_fraction",
+                "",
+                "Per SSP node, the fraction of its formed mass younger than each "
+                "config.age_boundaries_yr entry, shape (n_boundary, n_age); published "
+                "only when a consumer requested boundaries",
+            ),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
             DerivedKey(
@@ -2001,6 +2321,30 @@ class StellarSEDComponent:
         from dataclasses import replace as _replace_state
 
         state = StellarSEDComponentState(name=self.name)
+
+        # AGB circumstellar dust-shell weighting (#2534): a FREE
+        # agb_dust_weight cannot be represented in any precompute LUT -- the
+        # LUT is built once, here, from a concrete SSP cube and cached
+        # independently of params, but a free weight's correction is only
+        # known per parameter sample. Refuse loudly, naming the exact path,
+        # rather than silently building a LUT at some fixed implicit weight.
+        # (FeaturePrecomp's own activation is not a key on this ``approx``
+        # dict -- its line/photometry LUTs are built by the nebular
+        # component, not here -- so only the two stellar-cube LUTs this
+        # component itself can build are checked.)
+        if self.agb_dust_ratio is not None and (
+            approx.get("wave_precomp") or approx.get("spectrum_precomp")
+        ):
+            raise ValueError(
+                "A free agb_dust_weight (agb_dust={'type': 'fsps_shell', "
+                "'weight': Uniform(...)}) cannot be represented in a precompute "
+                "LUT (WavePrecomp / SpectrumPrecomp): the SSP "
+                "cube it corrects is parameter-dependent, but every LUT is built "
+                "once, before any parameter value is known. Use the exact path "
+                "(approx=None, the default) instead -- approx='auto' already "
+                "resolves to it for this model. Fix agb_dust_weight (e.g. "
+                "agb_dust={'weight': Fixed(1.0)}) to use a precompute LUT."
+            )
 
         # Static ionizing-bin count from the concrete build-time SSP grid, so
         # ``apply`` can compute Q_H over the ionizing slice alone (see the field
@@ -2321,7 +2665,7 @@ class StellarSEDComponent:
         sfh_model = self.config.sfh_model
         is_composite = isinstance(sfh_model, list)
         if is_composite:
-            sfh_fn_composed, spec_params, internal_param_map, sfh_spec_settings = resolve_sfh(
+            sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
                 sfh_model, bin_edges_gyr=getattr(self.config, "bin_edges_gyr", None)
             )
             # Bin-edge knot discovery (#765) inspects the first member's callable.
@@ -2331,7 +2675,6 @@ class StellarSEDComponent:
             sfh_fn_composed = None
             spec_params = sfh_spec.params
             internal_param_map = sfh_spec.internal_param_map
-            sfh_spec_settings = sfh_spec.settings
 
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in internal_param_map.items():
@@ -2355,12 +2698,17 @@ class StellarSEDComponent:
                 sfh_kwargs[public_name] = value
 
         # Mode-specific settings that are NOT free parameters.
-        # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
-        # from the configured cosmology; default of 13.47 Gyr matches
-        # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
-        if isinstance(sfh_model, str) and sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec_settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        # Every family in ``_AGE_FAMILIES`` anchors its time axis to the age of
+        # the universe AT THIS MODEL'S REDSHIFT, derived from the redshift and
+        # the configured cosmology rather than a static registry default.
+        # ``dense_basis`` and ``dense_basis_pure`` place their tx quantiles on it
+        # (Iyer et al. 2019 §2); ``psb`` and ``psb_wild2020`` anchor their burst
+        # to it (Wild et al. 2020, eq. 5); ``psb_suess2022`` and ``psb_flex``
+        # (``psb_continuity_flex``) bound their fixed old bins to
+        # ``[tflex_gyr, age_universe_yr]``, so the fixed section never extends
+        # past the Big Bang (#2645). Both routes use the same rule so they
+        # cannot diverge (#982).
+        sfh_kwargs.update(age_universe_kwargs(sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
@@ -2411,6 +2759,9 @@ class StellarSEDComponent:
             sfr_history = _apply_gp_field(
                 sfr_history, params, n_grid, log_age_grid, self.config.field_centering
             )
+            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
+        else:
+            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
         # For deterministic (non-GP) parametric SFHs, evaluate the analytic
@@ -2452,6 +2803,18 @@ class StellarSEDComponent:
         else:
             ssp_flux_for_csp = ssp.ssp_flux
 
+        # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
+        # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
+        # ``SEDModel.__init__``). Multiplying here, before the metallicity
+        # interpolation and the SFH age-weight sum, makes the correction
+        # exact per SSP and differentiable in ``agb_dust_weight``.
+        # ``ssp_flux_for_csp`` is 3-D here (an alpha-enhanced cube was collapsed
+        # above); the ratio is independent of [alpha/Fe], so applying it after
+        # the collapse equals applying it before.
+        _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp_flux_for_csp)
+        if _agb_dust_cube is not None:
+            ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
+
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
             # 3D SSP grids (no native α axis): the α-shift is folded
@@ -2467,7 +2830,6 @@ class StellarSEDComponent:
                 log_z_abs_scalar = log_z_eff + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
-            log_z_for_mr = log_z_abs_scalar
         elif self.config.metallicity_model == "ramp":
             log_z_init_abs = jnp.asarray(params["met_logzsol_0"]) + LOG10_ZSUN
             log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
@@ -2480,9 +2842,6 @@ class StellarSEDComponent:
             lgmet_on_ssp_ages = compute_log_z_evolving(
                 ssp.ssp_lg_age_gyr, log_z_init_abs, log_z_final_abs, t_obs_gyr
             )
-            # For mass-remaining interpolation use the present-day metallicity
-            # (newest stars dominate the mass-loss correction).
-            log_z_for_mr = log_z_final_abs
         elif self.config.metallicity_model == "two_step":
             # Sigmoid-smoothed step at ``met_step_age_gyr``. Stars older than
             # the step get ``met_logzsol_old``, younger get ``met_logzsol_young``.
@@ -2496,8 +2855,6 @@ class StellarSEDComponent:
             log_metallicity_history = two_step_metallicity(
                 sfh_lg_age_gyr, log_z_old_abs, log_z_young_abs, step_age_gyr
             )
-            # Present-day Z (youngest SSP age, lookback ≈ 0).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "psb_two_step":
             # Step tied to the PSB SFH burst onset
             # (``sfh_psb_burstage_gyr``). Pre-burst stars get
@@ -2513,17 +2870,17 @@ class StellarSEDComponent:
             log_metallicity_history = psb_two_step_metallicity(
                 sfh_lg_age_gyr, log_z_old_abs, log_z_burst_abs, burstage_gyr
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "bins":
             # Piecewise-constant Z per age bin. Bin edges from config
             # (defaults to log-spaced 1 Myr → 13.7 Gyr); per-bin
             # metallicities from ``met_bin_<i>`` params (i = 0..N-1).
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             metallicities_abs = (
                 jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
                 + LOG10_ZSUN
@@ -2536,22 +2893,21 @@ class StellarSEDComponent:
             log_metallicity_history = metallicity_bins_on_ssp_grid(
                 sfh_lg_age_yr - 9.0, jnp.asarray(bin_edges_log_yr), metallicities_abs
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "bins_continuity":
             # Cumulative delta-log-Z steps from oldest bin to youngest.
             # ``met_logzsol_base`` is the oldest bin; ``met_d_log_z_<i>``
             # are the N-1 steps. Reuses the binning primitive with
             # convolved metallicities.
-            n_bins = self.config.met_n_bins
+            # Derive n_bins from the edges, not from met_n_bins config.
             bin_edges_log_yr = (
                 self.config.met_bin_edges_log_yr
                 if self.config.met_bin_edges_log_yr is not None
                 else device_table(_DEFAULT_MET_BIN_EDGES_LOG_YR)
             )
+            n_bins = jnp.asarray(bin_edges_log_yr).shape[0] - 1
             log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
-            d_log_z = jnp.stack(
-                [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
-            )
+            steps = [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
+            d_log_z = jnp.stack(steps) if steps else jnp.array([])
             lgmet_on_ssp_ages = metallicity_bins_continuity_on_ssp_grid(
                 ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), log_z_base_abs, d_log_z
             )
@@ -2562,7 +2918,6 @@ class StellarSEDComponent:
                 log_z_base_abs,
                 d_log_z,
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "table":
             # Z(t) table from either (a) constructor-time config arrays, or
             # (b) the runtime ``met_history`` param: log10(Z/Zsun) at the
@@ -2577,7 +2932,6 @@ class StellarSEDComponent:
             log_metallicity_history = tabulated_metallicity_on_ssp_grid(
                 sfh_lg_age_yr - 9.0, met_log_age_yr, met_log_z_abs
             )
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "massmap_lin":
             # Linear metallicity tied to cumulative stellar mass formed
             # (ProSpect Bellstedt+2020 massmap_lin model).
@@ -2592,8 +2946,6 @@ class StellarSEDComponent:
             log_metallicity_history = massmap_lin_metallicity(
                 sfh_lg_age_gyr, sfh_lbt_grid, sfr_history, log_z_start_abs, log_z_final_abs
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "massmap_box":
             # Closed-box chemical evolution tied to cumulative stellar mass formed
             # (ProSpect Bellstedt+2020 massmap_box model).
@@ -2619,8 +2971,6 @@ class StellarSEDComponent:
                 log_z_final_abs,
                 yield_rho,
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
         else:  # chem_evol
             from tengri.components.stellar.sfh.chemical_evolution import (
                 chem_evol_metallicity_on_ssp_grid,
@@ -2658,8 +3008,6 @@ class StellarSEDComponent:
                 )
                 + LOG10_ZSUN
             )
-            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
-            log_z_for_mr = lgmet_on_ssp_ages[0]
 
         # ── 6. CSP integral via DSPS ────────────────────────────────────
         # We call DSPS directly and use ``result.weights``: the JOINT
@@ -2741,23 +3089,23 @@ class StellarSEDComponent:
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _used_cic = False
+        younger_fraction = None
         _age_kernel = _resolve_age_kernel(self.config)
         if self.config.metallicity_model == "delta":
             # Delta metallicity: separable joint weights. The age marginal
             # comes from tengri's cloud-in-cell kernel on a dense integrand
-            # (#964); DSPS's histogram kernel interpolates log10(M(<t)) in
-            # log10(t), which annihilates the mass in any table segment
-            # straddling the SFH's maximum age (3.8 % of the total for the
-            # delayed-tau age = 5 Gyr fiducial) and biased the CSP +1.2 % in
-            # the optical vs FSPS / bagpipes / a dense reference. The GP-field draw
-            # lives on the coarse lookback grid by construction, so the field path
-            # keeps DSPS; a deliberate <~1% parametric-vs-field systematic (#964).
-            # ``age_kernel`` makes that choice explicit and selectable; see
-            # :func:`_resolve_age_kernel`.
+            # (#964) or from DSPS's histogram kernel on a table refined between
+            # the SSP nodes (#2683). A field draw is the piecewise-linear
+            # interpolant of its own lookback nodes for both (#2684). The choice
+            # is explicit and selectable; see :func:`_resolve_age_kernel`.
             if _age_kernel == "cic":
                 _fine_age_yr, _fine_sfr = _cic_integrand(
-                    ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
+                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_cic(
+                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                    )
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
@@ -2765,18 +3113,22 @@ class StellarSEDComponent:
                 joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
                 _used_cic = True
             else:
-                # GP-field SFH: coarse per-SSP-age integrand (the field draw
-                # is defined on this grid) through DSPS's kernel, plus the
-                # young-boundary knot so the youngest SSP bin captures the
-                # [0, age0] mass: the delayed-tau Q_H fix (#538). total_mass
-                # stays the conserved coarse value from above (the knot's
-                # segment is excluded), so mass conservation is unaffected.
+                # DSPS's kernel on the table refined between the SSP nodes
+                # (:func:`_refined_dsps_table`), plus the young-boundary knot so
+                # the youngest SSP bin captures the [0, age0] mass: the
+                # delayed-tau Q_H fix (#538). total_mass stays the conserved
+                # coarse value from above (the knot's segment is excluded), so
+                # mass conservation is unaffected.
                 _warn_if_dsps_kernel_truncates_history(
-                    ssp_ages_yr, sfh_fn, sfh_kwargs, _tab_lbt_yr
+                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, _age_tab_lbt_yr
                 )
-                gal_t_table, gal_sfr_table, _ = _build_dsps_sfh_table(
-                    ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                gal_t_table, gal_sfr_table, _ = _refined_dsps_table(
+                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_dsps(
+                        gal_t_table, gal_sfr_table, ssp, t_obs_gyr
+                    )
                 dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                     **canonical_dsps_kwargs(
                         gal_t_table=gal_t_table,
@@ -2797,8 +3149,12 @@ class StellarSEDComponent:
                 # path and their degenerate configurations (constant table,
                 # zero step, ...) reduce to it exactly.
                 _fine_age_yr, _fine_sfr = _cic_integrand(
-                    ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
+                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
                 )
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_cic(
+                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                    )
                 joint_weights, total_mass = _joint_weights_cic_met_table(
                     _fine_age_yr,
                     _fine_sfr,
@@ -2813,14 +3169,16 @@ class StellarSEDComponent:
                 with hold_x64_preference():
                     from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
-                # GP-field SFH: coarse per-SSP-age integrand through DSPS's
-                # kernel, with the young-boundary knot (#538). The knot is the
-                # last ascending element (t_cosmic = t_obs), so the per-age
-                # metallicity table is extended by the youngest-age value.
-                _t_k, _sfr_k, _ = _build_dsps_sfh_table(
-                    ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                # DSPS's kernel on the refined table with the young-boundary knot
+                # (#538). The knot is the last ascending element
+                # (t_cosmic = t_obs), so the per-age metallicity table is
+                # extended by the youngest-age value.
+                _t_k, _sfr_k, _refined_lbt_yr = _refined_dsps_table(
+                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
                 )
-                _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
+                _lgmet_k = _refined_dsps_lgmet(ssp_ages_yr, lgmet_on_ssp_ages, _refined_lbt_yr)
+                if self.config.age_boundaries_yr:
+                    younger_fraction = self._boundary_fraction_dsps(_t_k, _sfr_k, ssp, t_obs_gyr)
                 dsps_result = calc_rest_sed_sfh_table_met_table(
                     **canonical_dsps_kwargs(
                         gal_t_table=_t_k,
@@ -2860,6 +3218,25 @@ class StellarSEDComponent:
         joint_weights = joint_weights / jnp.maximum(
             joint_weights.sum(), representable_denominator(1e-300)
         )
+        if not _used_cic:
+            _warn_if_dsps_unresolved(
+                joint_weights,
+                ssp_ages_yr,
+                _age_sfh_fn,
+                sfh_kwargs,
+                sfh_spec.fn,
+                _age_tab_lbt_yr,
+                t_obs_gyr,
+            )
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (after both the
+        # "cic" and "dsps" branches above): the CIC weights already zero the
+        # integrand at lookback ages older than age(z) and renormalize
+        # within the surviving support (#2521); the DSPS histogram weights
+        # (GP field, or an explicit ``age_kernel='dsps'`` choice) get the
+        # identical correction here rather than a second copy in that
+        # branch, so a future kernel cannot silently skip it.
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
         # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
         # folded into the (params-independent) SSP operand INSIDE the einsum, not
         # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
@@ -2928,10 +3305,9 @@ class StellarSEDComponent:
         # ``predict_sfh_quantities`` returned NaN here and was right to.
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
-            mr_at_met = interpolate_mass_remaining(
-                ssp.ssp_mass_remaining, ssp.ssp_lgmet, log_z_for_mr
-            )
-            mstar_surv = compute_surviving_mass(age_weights, mr_at_met)
+            # Surviving mass is the joint-weight contraction with each (age, Z) node
+            # at its own remaining-mass fraction.
+            mstar_surv = jnp.sum(joint_weights * ssp.ssp_mass_remaining) * total_mass
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
         else:
@@ -3007,21 +3383,72 @@ class StellarSEDComponent:
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
         if _n_ion is not None and _n_ion > 0:
-            # Compute Q_H in log-domain to avoid float32 overflow (#1206).
-            # The tensordot result is O(1); the scale rides the log integral.
-            _tensordot_result = jnp.tensordot(
-                joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
-            )
+            # ONE contraction over the (n_met, n_age, n_ion) cube, not two.
+            # Per-age ionizing LUMINOSITY (LyC credit, #2539) -- NOT the Q_H
+            # photon RATE: the dust energy-balance credit needs erg/s
+            # (integrates L_nu dnu), Q_H needs photons/s (integrates
+            # L_nu/(h*nu) dnu); the two integrands differ by a factor of h*nu
+            # and are not interchangeable (G1/G2). Marginalize over
+            # metallicity only (met axis), keeping age: contract
+            # ssp_flux_for_csp(n_met, n_age, n_ion) with joint_weights(n_met,
+            # n_age) over the met axis alone -- shape (n_age, n_ion), so the
+            # nebular/dust components can use log10_age_sum_lyc to combine
+            # ages without dragging the full stellar SED into the
+            # FeaturePrecomp graph.
+            _lnu_age_ion = jnp.einsum(
+                "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
+            )  # shape (n_age, n_ion), per-Msun
+            # Q_H's age+met-marginalized ionizing SED is the age-sum of the
+            # per-age slice above (both reduce the SAME joint_weights over the
+            # SAME met axis; summing the age axis afterward is the met-AND-age
+            # contraction a separate jnp.tensordot(..., axes=([0,1],[0,1]))
+            # would recompute from scratch over the same (n_met, n_age, n_ion)
+            # cube -- paying its O(n_met*n_age*n_ion) element-touch cost
+            # TWICE). This sum is a cheap O(n_age*n_ion) reduction of an
+            # already-computed (n_age, n_ion) array (measured: the duplicate
+            # tensordot was the dominant term in a #1748/#1770-class FLOP
+            # regression on the WavePrecomp fit path, G1/G2).
+            _tensordot_result = jnp.sum(_lnu_age_ion, axis=0)
             log_nion = _integrate_nion_log10(
                 _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
             )
+            # log10_lyc_luminosity is already vectorized over leading axes (no
+            # vmap/lambda needed); total_mass rides log10_scale as a log10
+            # offset (same normalization as log_nion above), so the ~1e42
+            # erg/s linear product is never materialized (#1206).
+            log_L_lyc_age = log10_lyc_luminosity(
+                _lnu_age_ion, wave[:_n_ion], log10_scale=log10_mass_scale, axis=-1
+            )
+            # Published alongside log_L_lyc_age (see that field's docstring):
+            # the UNREDUCED, per-Msun ionizing slice + its wavelength axis, so
+            # a WEIGHTED per-age credit can combine ages first (cheap, linear)
+            # and integrate once, instead of reducing log_L_lyc_age per age
+            # then re-combining in log space (G1/G2 FLOP guard).
+            lnu_age_ion_pub = _lnu_age_ion
+            ssp_wave_ion_pub = wave[:_n_ion]
         elif _n_ion is not None:
             # n_ion_bins == 0 (static): no grid bins below the Lyman limit
-            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
-            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            # (IR-focused configs) -> Q_H and the LyC luminosity are both
+            # identically zero. Skips the slice machinery: max/argmax over
+            # zero-size arrays raise (#1193 fallout).
             log_nion = jnp.full((), -jnp.inf)
+            log_L_lyc_age = jnp.full((age_weights.shape[0],), -jnp.inf)
+            lnu_age_ion_pub = None
+            ssp_wave_ion_pub = None
         else:
             log_nion = _integrate_nion_log10(sed_intrinsic, wave)
+            # Fallback (full grid) per-age ionizing luminosity: integrate over
+            # the full wavelength range. ``lnu_age`` is already mass-scaled
+            # (``lnu_age = total_mass * ssp_flux_at_age`` above), so
+            # log10_scale stays at its 0.0 default -- the same absolute
+            # normalization as the sliced branch above, just applied linearly
+            # upstream instead of as a log10 offset.
+            log_L_lyc_age = log10_lyc_luminosity(lnu_age, wave, axis=-1)
+            # Per-Msun form (ssp_flux_at_age, not lnu_age) to keep the SAME
+            # "needs log10_mass_scale added" contract as the sliced branch
+            # above -- a consumer must not need to know which branch ran.
+            lnu_age_ion_pub = ssp_flux_at_age
+            ssp_wave_ion_pub = wave
         nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
@@ -3066,6 +3493,16 @@ class StellarSEDComponent:
             # taken from the overflowed linear value.
             log_L_age=log_L_age,
             lnu_age=lnu_age,
+            # Per-age ionizing luminosity [erg/s], shape (n_age,). Used by
+            # nebular and dust components to compute LyC credits without
+            # dragging the full stellar SED (G1/G2 FeaturePrecomp guards).
+            log_L_lyc_age=log_L_lyc_age,
+            # The unreduced per-Msun ionizing slice + its wavelength axis
+            # (None when n_ion_bins == 0, no ionizing content at all): see
+            # log_L_lyc_age's docstring for the cheap weighted-combine
+            # identity these two exist to enable.
+            lnu_age_ion=lnu_age_ion_pub,
+            ssp_wave_ion=ssp_wave_ion_pub,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
@@ -3093,6 +3530,11 @@ class StellarSEDComponent:
             # needs the SSP age axis to apply the BC/diffuse split).
             ssp_ages_yr=ssp_ages_yr,
         )
+        if younger_fraction is not None:
+            # Exact per-node formed-mass fraction younger than each requested
+            # boundary, shape (n_boundary, n_age): the one young/old split every
+            # attenuator reads (see tengri.components.stellar.age_boundary).
+            derived_overrides["age_boundary_younger_fraction"] = younger_fraction
 
         if self._state is not None and self._state.ssp_phot_lut is not None:
             # Fixed-z path; LUT built at source's z in precompute()
@@ -3182,6 +3624,12 @@ class StellarSEDComponent:
                         _mass_scale_lnu(
                             jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
                         )
+                    )
+                    _publish_igm_nodes(
+                        derived_overrides,
+                        joint_weights,
+                        ssp_sub_phot_igm,
+                        self._state.ssp_phot_lut.ssp_subband_waves_rest_igm,
                     )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
@@ -3311,6 +3759,13 @@ class StellarSEDComponent:
                             total_mass,
                         )
                     )
+                    if ztable.subband_waves_rest_igm_table is not None:
+                        _publish_igm_nodes(
+                            derived_overrides,
+                            joint_weights,
+                            sub_phot_igm_at_z,
+                            _interp(ztable.subband_waves_rest_igm_table),
+                        )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
@@ -3410,6 +3865,98 @@ class StellarSEDComponent:
             derived=state.derived.with_(**derived_overrides),
         )
 
+    def _boundary_fraction_cic(self, fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr):
+        """Per-node younger-than-boundary mass fraction, cloud-in-cell kernel."""
+        contrib, idx, f, _, age = _cic_parcels(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
+        return age_boundary_younger_fraction_cic(
+            contrib,
+            idx,
+            f,
+            age,
+            ssp_ages_yr.shape[0],
+            self.config.age_boundaries_yr,
+            self.config.age_boundary_width_dex,
+        )
+
+    def _boundary_fraction_dsps(self, gal_t_table, gal_sfr_table, ssp, t_obs_gyr):
+        """Per-node younger-than-boundary mass fraction, DSPS histogram kernel."""
+        return age_boundary_younger_fraction_dsps(
+            gal_t_table,
+            gal_sfr_table,
+            ssp.ssp_lg_age_gyr,
+            t_obs_gyr,
+            self.config.age_boundaries_yr,
+            self.config.age_boundary_width_dex,
+            _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr),
+        )
+
+    def compute_age_boundary_fractions(self, params, ssp_data=None):
+        """Younger-than-boundary mass fractions WITHOUT the full-wavelength SED.
+
+        The SED-free twin of the ``age_boundary_younger_fraction`` key
+        :meth:`apply` publishes, from the same mass model as
+        :meth:`compute_joint_weights` (same restrictions).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape (n_boundary, n_age)
+            Fraction of each SSP node's formed mass younger than each of
+            ``config.age_boundaries_yr`` [dimensionless].
+
+        Raises
+        ------
+        ValueError
+            If the component was built without ``age_boundaries_yr``.
+        """
+        if not self.config.age_boundaries_yr:
+            raise ValueError(
+                "compute_age_boundary_fractions needs config.age_boundaries_yr; "
+                "the dust attenuator requests it at build time."
+            )
+        return self._joint_weights_impl(params, ssp_data)[3]
+
+    def compute_log_L_lyc_age(self, params, ssp_data=None):
+        """Per-age ionizing luminosity WITHOUT the full-wavelength SED.
+
+        The SED-free twin of the ``log_L_lyc_age`` key :meth:`apply` publishes,
+        from the same weights as :meth:`compute_joint_weights` (same
+        restrictions): the ionizing slice per node, integrated edge-aware.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape (n_age,)
+            ``log10(L_LyC / (erg/s))`` per SSP node [dex]; ``-inf`` where a
+            node holds no ionizing light (or the grid has no ionizing bins).
+        """
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        joint_weights, total_mass, _, _ = self._joint_weights_impl(params, ssp)
+        wave = ssp.ssp_wave
+        if self._state is not None and self._state.n_ion_bins is not None:
+            n_ion = self._state.n_ion_bins
+        else:
+            n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
+        if n_ion == 0:
+            return jnp.full((joint_weights.shape[1],), -jnp.inf)
+        lnu_age_ion = jnp.einsum("ma,mai->ai", joint_weights, ssp.ssp_flux[:, :, :n_ion])
+        log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
+            LSUN_ERG_PER_S
+        )
+        return log10_lyc_luminosity(lnu_age_ion, wave[:n_ion], log10_scale=log10_scale, axis=-1)
+
     def compute_joint_weights(self, params, ssp_data=None):
         """(met, age) CSP weights + total mass WITHOUT the full-wavelength SED.
 
@@ -3457,6 +4004,15 @@ class StellarSEDComponent:
             parametric SFH / no alpha-Fe grid: including the tabulated SFH
             (#1395). The caller must use the exact forward there.
         """
+        return self._joint_weights_impl(params, ssp_data)[:3]
+
+    def _joint_weights_impl(self, params, ssp_data=None):
+        """Weights, mass, ages and (when requested) the younger-than-boundary fractions.
+
+        The one body behind :meth:`compute_joint_weights` and
+        :meth:`compute_age_boundary_fractions`; the fourth element is ``None``
+        unless ``config.age_boundaries_yr`` is set.
+        """
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
         from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
         from tengri.cosmology import age_at_z as _age_at_z
@@ -3495,6 +4051,16 @@ class StellarSEDComponent:
 
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
+        # Cosmology: t_obs from redshift, hoisted ahead of the SFH kwargs
+        # block below so the age_universe_yr injection for every family in
+        # ``_AGE_FAMILIES`` (mirroring apply()'s own ordering) can read it;
+        # also feeds the runtime tabulated SFH and the age-of-universe
+        # truncation further down.
+        z = jnp.asarray(
+            require_redshift(params, "components.stellar.component.compute_joint_weights")
+        )
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
         # SFH kwargs: identical registry translation to apply (§2)
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
@@ -3507,15 +4073,11 @@ class StellarSEDComponent:
                     continue
                 raw = default_scalar
             sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
-        if self.config.sfh_model == "dense_basis":
-            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
-            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        # Mirrors apply()'s injection (§2) so the two routes cannot diverge
+        # (#982); t_obs_gyr was hoisted above. Both routes anchor the time axis
+        # of every ``_AGE_FAMILIES`` member to age(z).
+        sfh_kwargs.update(age_universe_kwargs(self.config.sfh_model, z))
         sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
-
-        z = jnp.asarray(
-            require_redshift(params, "components.stellar.component.compute_joint_weights")
-        )
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
         # Runtime tabulated SFH (#996/#1396): the SAME closure and lookback
         # knots the exact forward builds, from the single shared helper, so the
@@ -3537,6 +4099,7 @@ class StellarSEDComponent:
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _age_kernel = _resolve_age_kernel(self.config)
+        younger_fraction = None
 
         # Metallicity: delta gives one scalar log10(Z); table gives a per-age
         # curve that routes to the CIC met-table kernel below (matches apply §4).
@@ -3558,9 +4121,23 @@ class StellarSEDComponent:
         # internally; so the fast and exact line paths cannot diverge. ``total_mass``
         # is the conserved coarse value (no young knot), matching apply §3.
         #
-        # Reached by a GP-field SFH (whose draw lives on the coarse lookback grid,
-        # so DSPS is the only implemented kernel) and by any non-field model that
-        # explicitly selects ``age_kernel="dsps"`` (#964).
+        # Reached by a GP-field SFH (the auto-selected kernel) and by any model
+        # that explicitly selects ``age_kernel="dsps"`` (#964).
+        #
+        # The age-integrand function both kernels consume: the field draw as the
+        # piecewise-linear interpolant of its own lookback nodes (#2684), the
+        # same closure ``apply`` builds, else the registry/tabulated SFH.
+        if self.config.field:
+            n_grid = self.config.n_grid
+            log_age_grid = make_log_age_grid(n_grid)
+            sfh_lbt_grid = 10.0**log_age_grid
+            sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+            sfr_history = _apply_gp_field(
+                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
+            )
+            _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
+        else:
+            _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
         if _age_kernel == "dsps":
             if lgmet_on_ssp_ages is not None:
                 # The scalar-MDF DSPS call below has no per-age metallicity
@@ -3578,29 +4155,16 @@ class StellarSEDComponent:
             with hold_x64_preference():
                 from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
 
-            if self.config.field:
-                # The field modulates the SFR on the lookback grid
-                # (``_apply_gp_field``, the single source shared with
-                # :meth:`apply`), which is interpolated to the SSP ages.
-                n_grid = self.config.n_grid
-                log_age_grid = make_log_age_grid(n_grid)
-                sfh_lbt_grid = 10.0**log_age_grid
-                sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
-                sfr_history = _apply_gp_field(
-                    sfr_history, params, n_grid, log_age_grid, self.config.field_centering
-                )
-                sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
-            else:
-                # Non-field: apply evaluates the closed-form SFH directly on the
-                # SSP ages (§3) rather than through the log grid, so the fast
-                # path must do the same or the two routes read one SFH
-                # differently (#982).
-                sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
-            _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, _tab_lbt_yr)
-            _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
-            gal_t, gal_sfr, _ = _build_dsps_sfh_table(
-                ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+            sfr_on_ssp = _age_sfh_fn(ssp_ages_yr, **sfh_kwargs)
+            _warn_if_dsps_kernel_truncates_history(
+                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, _age_tab_lbt_yr
             )
+            _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+            gal_t, gal_sfr, _ = _refined_dsps_table(
+                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
+            )
+            if self.config.age_boundaries_yr:
+                younger_fraction = self._boundary_fraction_dsps(gal_t, gal_sfr, ssp, t_obs_gyr)
             _dsps_args = canonical_dsps_kwargs(
                 gal_t=gal_t,
                 gal_sfr=gal_sfr,
@@ -3625,27 +4189,38 @@ class StellarSEDComponent:
             # clipped ~10% low. The CIC path (below) bakes it in instead.
             weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
             joint_weights = weights / jnp.maximum(weights.sum(), representable_denominator(1e-300))
-            return joint_weights, total_mass, ssp_ages_yr
+            _warn_if_dsps_unresolved(
+                joint_weights,
+                ssp_ages_yr,
+                _age_sfh_fn,
+                sfh_kwargs,
+                sfh_spec.fn,
+                _age_tab_lbt_yr,
+                t_obs_gyr,
+            )
+        else:
+            # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
+            # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
+            # with the SFH's exact bin-edge knots injected for binned families) times
+            # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
+            # applies the youngest-bin lookback correction and returns the conserved
+            # total_mass, so (unlike the DSPS histogram path) the caller must NOT
+            # also multiply by ``_youngest_bin_lookback_multiplier`` here.
+            # The SAME builder apply uses, so the two integrands are identical point
+            # for point: the #982 contract, now enforced by construction.
+            _fine_age_yr, _fine_sfr = _cic_integrand(
+                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
+            )
+            if self.config.age_boundaries_yr:
+                younger_fraction = self._boundary_fraction_cic(
+                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                )
 
-        # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
-        # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
-        # with the SFH's exact bin-edge knots injected for binned families) times
-        # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
-        # applies the youngest-bin lookback correction and returns the conserved
-        # total_mass, so (unlike the DSPS histogram path) the caller must NOT
-        # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-        # The SAME builder apply uses, so the two integrands are identical point
-        # for point: the #982 contract, now enforced by construction.
-        _fine_age_yr, _fine_sfr = _cic_integrand(
-            ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec.fn, _tab_lbt_yr
-        )
-
-        # Per-age metallicity → the joint CIC kernel apply uses (#964), which
-        # spreads each mass parcel over the metallicity axis with the MDF
-        # centered on that parcel's own Z. It normalizes internally.
-        if lgmet_on_ssp_ages is not None:
-            return (
-                *_joint_weights_cic_met_table(
+            # Per-age metallicity → the joint CIC kernel apply uses (#964), which
+            # spreads each mass parcel over the metallicity axis with the MDF
+            # centered on that parcel's own Z. It normalizes internally.
+            if lgmet_on_ssp_ages is not None:
+                joint_weights, total_mass = _joint_weights_cic_met_table(
                     _fine_age_yr,
                     _fine_sfr,
                     ssp_ages_yr,
@@ -3653,17 +4228,66 @@ class StellarSEDComponent:
                     lgmet_on_ssp_ages,
                     lgmet_scatter,
                     ssp.ssp_lgmet,
-                ),
-                ssp_ages_yr,
-            )
+                )
+            else:
+                age_w_cic, total_mass = _age_weights_cic(
+                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+                )
+                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+                joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
+                joint_weights = joint_weights / jnp.maximum(
+                    joint_weights.sum(), representable_denominator(1e-300)
+                )
 
-        age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
-        lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
-        joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-        joint_weights = joint_weights / jnp.maximum(
-            joint_weights.sum(), representable_denominator(1e-300)
+        # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
+        # point every age kernel's total_mass converges to (mirrors
+        # :meth:`apply`): the CIC weights already zero the integrand at
+        # lookback ages older than age(z) and renormalize within the
+        # surviving support (#2521); the DSPS histogram weights (GP field,
+        # or an explicit ``age_kernel='dsps'`` choice) get the identical
+        # correction here rather than a second copy in that branch. This
+        # function never sees a composite (list) ``sfh_model``: indexing
+        # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
+        total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
+        return joint_weights, total_mass, ssp_ages_yr, younger_fraction
+
+    def _agb_dust_cube_ratio(self, params, ssp_flux):
+        """Live AGB dust-shell ratio cube for a free ``agb_dust_weight`` (#2534).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict; carries ``agb_dust_weight`` when it is free.
+        ssp_flux : array, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
+            The cube the ratio will multiply; fixes how the ratio is broadcast.
+
+        Returns
+        -------
+        ndarray or None
+            ``R(w)`` on the SSP grid [dimensionless], with an [alpha/Fe] axis
+            for a 4-D cube, or ``None`` when the weight is not free (a Fixed
+            weight is baked into the SSP cube).
+
+        Notes
+        -----
+        **JIT-compatible**: yes; differentiable in ``agb_dust_weight`` between
+        stored weight nodes.
+        """
+        if self.agb_dust_ratio is None:
+            return None
+        from tengri.components.stellar.agb_dust_shell import (
+            PARAMS as _AGB_DUST_PARAMS,
+            agb_dust_ratio as _agb_dust_ratio_fn,
+            align_ratio_to_cube,
         )
-        return joint_weights, total_mass, ssp_ages_yr
+        from tengri.protocols.component import declared_default
+
+        # The generic prefix routing always supplies a free weight in
+        # ``params``; the declared default is the defensive fallback (#2241).
+        weight = jnp.asarray(
+            params.get("agb_dust_weight", declared_default(_AGB_DUST_PARAMS, "agb_dust_weight"))
+        )
+        return align_ratio_to_cube(_agb_dust_ratio_fn(self.agb_dust_ratio, weight), ssp_flux)
 
     def compute_log_nion(self, params, ssp_data=None):
         r"""SED-free log-domain ionizing photon rate; no full-wavelength SED.
@@ -3720,7 +4344,11 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
+        ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
+        agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
+        if agb_dust_cube is not None:
+            ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
+        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -3786,15 +4414,16 @@ def _time_weighted_sfr(
 # at every call site. With registration cold-compile drops by an
 # order of magnitude.
 #
-# ``ssp_data`` is the only data field (it's a JAX-pytree-compatible
-# NamedTuple with ndarray leaves). Everything else is structural
-# (config, name, parameter_prefix) → meta.
+# ``ssp_data`` and ``agb_dust_ratio`` (#2534) are the data fields: both are
+# JAX-pytree-compatible NamedTuples with ndarray leaves (``None`` when the
+# AGB dust-shell weight is absent or Fixed, itself a valid empty pytree).
+# Everything else is structural (config, name, parameter_prefix) -> meta.
 
 from jax import tree_util as _tree_util
 
 _tree_util.register_dataclass(
     StellarSEDComponent,
-    data_fields=("ssp_data",),
+    data_fields=("ssp_data", "agb_dust_ratio"),
     meta_fields=("config", "name", "parameter_prefix", "_state"),
 )
 

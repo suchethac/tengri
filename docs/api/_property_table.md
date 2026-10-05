@@ -30,6 +30,7 @@
 | `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya`. `log_lya = log10(lya) + log10(L_sun)`. |
 | `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548`. `log_nii_6548 = log10(nii_6548) + log10(L_sun)`. |
 | `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584`. `log_nii_6584 = log10(nii_6584) + log10(L_sun)`. |
+| `log_no` | dex | lines | nebular | Absolute [N/O] = log10((N/O)/(N/O)_sun) the Cue backend is fed: gas_logno under nitrogen='absolute', else the named N/O-O/H relation at the gas metallicity plus gas_logno. NaN for other backends. |
 | `log_oii` | dex | lines | nebular | log10 of oii line luminosity [dex re erg/s]; float32-safe form of `oii`. `log_oii = log10(oii) + log10(L_sun)`. |
 | `log_oiii_4959` | dex | lines | nebular | log10 of oiii 4959 line luminosity [dex re erg/s]; float32-safe form of `oiii_4959`. `log_oiii_4959 = log10(oiii_4959) + log10(L_sun)`. |
 | `log_oiii_5007` | dex | lines | nebular | log10 of oiii 5007 line luminosity [dex re erg/s]; float32-safe form of `oiii_5007`. `log_oiii_5007 = log10(oiii_5007) + log10(L_sun)`. |

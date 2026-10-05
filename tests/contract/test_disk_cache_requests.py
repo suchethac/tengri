@@ -184,6 +184,47 @@ def test_subband_band_request_all_fields_change_digest():
         assert baseline_digest != perturbed_digest, f"Field {field.name} did not change the digest"
 
 
+def test_exact_fold_request_all_fields_change_digest():
+    """ExactFoldRequest: every field in dataclasses.fields changes the digest."""
+    from tengri._cache_keys import array_key, frozen_dataclass_key
+    from tengri.components.igm._subband_cache import ExactFoldRequest
+
+    baseline = ExactFoldRequest(
+        version=3,
+        ssp_wave=array_key(np.arange(4.0)),
+        ssp_flux=array_key(np.arange(4.0)),
+        filters=((array_key(np.arange(3.0)), array_key(np.arange(3.0))),),
+        z_grid=array_key(np.arange(5.0)),
+        igm_model="inoue",
+        n_subbands=3,
+        lyc_gate=False,
+        convention="bessell",
+        x64=False,
+        backend="cpu",
+    )
+    perturbations = {
+        "version": 4,
+        "ssp_wave": array_key(np.arange(5.0)),
+        "ssp_flux": array_key(np.arange(5.0)),
+        "filters": ((array_key(np.arange(4.0)), array_key(np.arange(3.0))),),
+        "z_grid": array_key(np.arange(6.0)),
+        "igm_model": "madau",
+        "n_subbands": 4,
+        "lyc_gate": True,
+        "convention": "energy",
+        "x64": True,
+        "backend": "gpu",
+    }
+    baseline_digest = frozen_dataclass_key(baseline)
+    for field in dataclasses.fields(ExactFoldRequest):
+        if field.name not in perturbations:
+            pytest.fail(f"Unknown field: {field.name}")
+        perturbed = dataclasses.replace(baseline, **{field.name: perturbations[field.name]})
+        assert frozen_dataclass_key(perturbed) != baseline_digest, (
+            f"Field {field.name} did not change the digest"
+        )
+
+
 def test_ztable_cache_key_no_schema_literal():
     """_ztable_cache_key source has no 'schema=' literal."""
     from tengri.components.stellar.sps.precompute import _ztable_cache_key
@@ -205,11 +246,16 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_4():
-    """_ZTABLE_CACHE_VERSION is 4 (bumped 3->4 for #2439/#2427's lyc_gate)."""
+def test_ztable_version_is_5():
+    """_ZTABLE_CACHE_VERSION is 5 (bumped 4->5 for L3's one-Lyman-edge fix:
+
+    the LyC table and (when lyc_gate) the sub-band tensors moved off the
+    bare 912 Å literal onto LYMAN_LIMIT_AA and onto a step-model-exact
+    split, neither of which ZTableRequest's own fields would catch).
+    """
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 4
+    assert _ZTABLE_CACHE_VERSION == 5
 
 
 def test_subband_version_is_3():
@@ -219,11 +265,17 @@ def test_subband_version_is_3():
     assert _CACHE_VERSION == 3
 
 
-def test_ionspec_version_is_1():
-    """_IONSPEC_CACHE_VERSION is 1."""
+def test_ionspec_version_is_2():
+    """_IONSPEC_CACHE_VERSION is 2.
+
+    Bumped from 1 by the LyC brief: ``gas_logqion`` now integrates via the
+    shared :func:`tengri.components.lyc.edge_trapezoid` step model instead of
+    a hard ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction
+    for the first time.
+    """
     from tengri.components.nebular.ionizing_spectrum import _IONSPEC_CACHE_VERSION
 
-    assert _IONSPEC_CACHE_VERSION == 1
+    assert _IONSPEC_CACHE_VERSION == 2
 
 
 def test_ztable_request_has_cosmology_field():

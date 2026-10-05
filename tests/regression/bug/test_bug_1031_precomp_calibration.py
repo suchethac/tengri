@@ -45,7 +45,9 @@ def wave_obs():
 
 
 def _build(ssp_data, wave_obs, order, approx=None):
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, calibration_order=order))
+    obs = Observation(
+        spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, calibration_order=order)
+    )
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,

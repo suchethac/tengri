@@ -437,68 +437,84 @@ class TestConstantSFH:
 
 
 class TestExponentialSFH:
-    """Tests for declining exponential SFH."""
+    """Tests for declining exponential SFH.
+
+    ``start`` is the lookback time of SF onset (galaxy formation): the shape
+    is confined to ``[0, start]``, maximal AT formation (``t = start``) and
+    declining toward the present (#2521 -- the window used to be
+    ``[start, inf)``, the mirror image of this).
+    """
 
     def test_peaks_at_start(self):
-        """SFR is highest at the start time."""
+        """SFR is highest at the start (formation) time."""
+        start = 5e9
         t = jnp.linspace(0, 10e9, 1000)
-        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=0.0)
-        assert jnp.argmax(sfr) < 10  # near t=0
+        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=start)
+        peak_t = float(t[jnp.argmax(sfr)])
+        assert abs(peak_t - start) < 1e-2 * start
 
-    def test_declining(self):
-        """SFR declines with time after start."""
-        t = jnp.array([0.0, 1e9, 2e9, 5e9, 10e9])
-        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=0.0)
-        assert jnp.all(jnp.diff(sfr) <= 0)
+    def test_declining_toward_present(self):
+        """SFR declines from start (formation) toward the present (t=0)."""
+        start = 5e9
+        t = jnp.array([0.0, 1e9, 2e9, 3e9, start])
+        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=start)
+        assert jnp.all(jnp.diff(sfr) >= 0)  # increasing toward start
 
-    def test_zero_before_start(self):
-        """SFR is zero before start."""
+    def test_zero_after_start(self):
+        """SFR is zero at lookback times older than start (before formation)."""
         # Use grid instead of scalar to avoid trapezoid dimension error
         t = jnp.array([0.5e9, 1e9, 2e9, 5e9, 10e9])
-        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=1e9)
-        assert float(sfr[0]) == 0.0
+        sfr = exponential(t, log_total_mass=1.0, tau=1e9, start=2e9)
+        assert float(sfr[-1]) == 0.0  # t=10e9 > start=2e9
 
 
 class TestDelayedExponentialSFH:
-    """Tests for delayed exponential SFH."""
+    """Tests for delayed exponential SFH.
 
-    def test_peaks_at_start_plus_tau(self):
-        """SFR peaks at t = start + tau."""
-        start = 1e9
+    ``start`` is the lookback time of SF onset (galaxy formation): the shape
+    is confined to ``[0, start]``, rising from zero at formation, peaking at
+    cosmic time ``tau`` after formation (lookback ``start - tau``), declining
+    toward the present (#2521 -- the window used to be ``[start, inf)``,
+    the mirror image of this).
+    """
+
+    def test_peaks_at_start_minus_tau(self):
+        """SFR peaks at t = start - tau (cosmic time tau after formation)."""
+        start = 8e9
         tau = 2e9
-        t = jnp.linspace(start, 10e9, 5000)
+        t = jnp.linspace(0.0, start, 5000)
         sfr = delayed_exponential(t, log_total_mass=1.0, tau=tau, start=start)
         peak_t = float(t[jnp.argmax(sfr)])
-        expected_peak = start + tau
+        expected_peak = start - tau
         assert abs(peak_t - expected_peak) / expected_peak < 0.05
 
-    def test_peak_occurs_at_start_plus_tau(self):
-        """SFR peaks at t = start + tau (shape has maximum there).
+    def test_peak_occurs_at_start_minus_tau(self):
+        """SFR peaks at t = start - tau (shape has maximum there).
 
         After NEW normalization, peak value is no longer 10^log_total_mass,
         but the integral of the curve equals 10^log_total_mass.
         """
-        start = 0.0
+        start = 3 * 1e9
         tau = 1e9
         log_total_mass = 1.0
-        # Sample around the peak
-        t = jnp.linspace(start, start + 3 * tau, 1000)
+        # Sample around the peak, back to the present (t=0).
+        t = jnp.linspace(0.0, start, 1000)
         sfr = delayed_exponential(t, log_total_mass=log_total_mass, tau=tau, start=start)
-        # Peak should occur near start + tau
+        # Peak should occur near start - tau
         t_peak = float(t[jnp.argmax(sfr)])
-        assert_allclose(t_peak, start + tau, rtol=0.02)
+        assert_allclose(t_peak, start - tau, rtol=0.02)
         # Verify integral matches log_total_mass
         dt = jnp.diff(t)
         integral = float(jnp.sum(0.5 * (sfr[:-1] + sfr[1:]) * dt))
         expected = 10.0**log_total_mass
         assert_allclose(integral, expected, rtol=0.01)
 
-    def test_zero_before_start(self):
-        """SFR is zero before start."""
+    def test_zero_after_start(self):
+        """SFR is zero at lookback times older than start (before formation)."""
         # Use grid instead of scalar to avoid trapezoid dimension error
         t = jnp.array([0.5e9, 1e9, 2e9, 5e9, 10e9])
-        sfr = delayed_exponential(t, log_total_mass=1.0, tau=1e9, start=1e9)
-        assert float(sfr[0]) == 0.0
+        sfr = delayed_exponential(t, log_total_mass=1.0, tau=1e9, start=2e9)
+        assert float(sfr[-1]) == 0.0  # t=10e9 > start=2e9
 
 
 # ── Burst (triweight) ─────────────────────────────────────────────
@@ -599,8 +615,10 @@ _ALL_MODEL_CASES = [
         },
     ),
     (constant, {"log_total_mass": 10.0, "start": 0.0, "end": AGEMAX_YR}),
-    (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
-    (delayed_exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
+    # ``start`` is the lookback time of SF onset (formation): the window is
+    # [0, start], so start=0.0 would be a zero-width degenerate window (#2521).
+    (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": _AGE_UNIV_YR}),
+    (delayed_exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": _AGE_UNIV_YR}),
 ]
 
 _ALL_MODEL_IDS = [fn.__name__ for fn, _ in _ALL_MODEL_CASES]

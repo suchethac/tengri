@@ -204,6 +204,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",
+    "log_L_lyc_age": "dex",
+    "lnu_age_ion": "erg/s/Hz/Msun",
+    "ssp_wave_ion": "Angstrom",
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
@@ -231,6 +234,12 @@ _CANONICAL_UNITS: dict[str, str] = {
     "filter_eff_waves": "Angstrom",
     # Dust attenuation per filter. A(λ_eff) and A'(λ_eff).
     "dust_attenuation_precomp": "",
+    # Exact IGM fold: the sub-band node of the IGM-folded stellar tensor, and the
+    # dust screens evaluated there.
+    "stellar_subband_waves_rest_igm_precomp": "Angstrom",
+    "dust_bc_attenuation_subband_igm_precomp": "",
+    "dust_diff_attenuation_subband_igm_precomp": "",
+    "dust_attenuation_subband_igm_precomp": "",
     "dust_attenuation_slope_precomp": "1/Angstrom",
     # Two-component dust. BC + diffuse layer precompute.
     "dust_bc_attenuation_precomp": "",
@@ -238,6 +247,11 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_diff_attenuation_precomp": "",
     "dust_diff_attenuation_slope_precomp": "1/Angstrom",
     "dust_young_indicator": "",
+    "dust_young_lyc_gate_subband_precomp": "",
+    "dust_spec_neb_transmission_precomp": "",
+    # Stellar: per-node formed-mass fraction younger than each requested age
+    # boundary, shape (n_boundary, n_age) (components/stellar/age_boundary.py).
+    "age_boundary_younger_fraction": "",
     "dust_diff_transmission": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
@@ -245,6 +259,10 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_L_ir": "dex",
     "log_L_absorbed": "dex",
     "log_L_ir_emergent": "dex",
+    "log_L_lyc_dust": "dex",
+    "log_L_lyc": "dex",
+    "lyc_fdust": "",
+    "lyc_fesc": "",
     "log_L_agn_bol": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
@@ -256,11 +274,14 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_absorbed": "erg/s",
     "L_2500_intrinsic": "erg/s/Hz",
     "L_4400_intrinsic": "erg/s/Hz",
+    "log_L_12um": "dex",
+    "log_L_6um": "dex",
     "sed_agn": "erg/s/Hz",
     # Per-sub-block AGN SEDs (task13): composable-runner only, sum to sed_agn.
     "sed_agn_disc": "erg/s/Hz",
     "sed_agn_torus": "erg/s/Hz",
     "sed_agn_lines": "erg/s/Hz",
+    "sed_agn_lines_attenuated": "erg/s/Hz",
     "sed_agn_polar": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
     # AGN, filter LUT (WavePrecomp).
@@ -288,11 +309,23 @@ _CANONICAL_UNITS: dict[str, str] = {
     # summation sweep in ``predict_via_precomp``.
     "nebular_phot_lnu_attenuated_precomp": "erg/s/Hz",
     "nebular_restband_lnu_attenuated_precomp": "erg/s/Hz",
+    # Nebular sub-band channels served by the per-Q_H grid (see DerivedState).
+    "nebular_phot_lnu_subband_precomp": "erg/s/Hz",
+    "nebular_subband_waves_rest_precomp": "Angstrom",
+    "nebular_restband_lnu_subband_precomp": "erg/s/Hz",
+    "nebular_restband_subband_waves_precomp": "Angstrom",
+    "nebular_eb_absorbed_per_qh_grid_precomp": "erg/s per (photon/s)",
     # Shock (MAPPINGS V), filter LUT. A separate additive component from the
     # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",
     # AGN filter LUT (WavePrecomp), attenuated by dust when agn_screen != 'none'.
     "agn_phot_lnu_attenuated_precomp": "erg/s/Hz",
+    # The dense rest-grid SEDs the three attenuated band keys are integrated
+    # from; the IGM weights its transmission by them (never summed).
+    "sed_nebular_attenuated_precomp": "erg/s/Hz",
+    "nebular_phot_lnu_subband_screened_precomp": "erg/s/Hz",
+    "sed_shock_attenuated_precomp": "erg/s/Hz",
+    "sed_agn_attenuated_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
@@ -304,9 +337,14 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
+    "log_L_x_xrb_2_10": "dex",
+    "log_L_x_agn_2_10": "dex",
     "igm_transmission": "",
+    "igm_rest_transmission_precomp": "",
+    "igm_reach_filters_precomp": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
+    "neb_log_no": "dex",
     # Spatial, 2D surface-brightness profile + the (x, y) kpc grid
     # underlying it. Published by spatial components (Sersic, Exponential,
     # FlatSlab, …). See architecture spec §3.3.
@@ -906,6 +944,67 @@ def _name_missing_parameter(
     )
 
 
+def wire_age_boundaries(components: Iterable[SEDComponent]) -> list[SEDComponent]:
+    """Give the stellar component the age boundaries its attenuator reads.
+
+    An attenuator with a young/old split declares ``config.age_boundaries_yr``
+    and ``config.age_boundary_width_dex``; the stellar component publishes the
+    per-node younger-than-boundary mass fractions only for boundaries its own
+    config names. This is the one place a component list is reconciled, so a
+    chain built by hand gets the same stellar configuration as one built by
+    ``SEDModel``. Returns a new list; a stellar component whose boundaries
+    already match is passed through unchanged.
+
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        Ordered component list.
+
+    Returns
+    -------
+    list of SEDComponent
+        The same components, with the stellar one replaced by a copy carrying
+        the attenuator's boundaries when they differ.
+
+    Raises
+    ------
+    ValueError
+        If two attenuators in the chain request different boundaries.
+    """
+    from dataclasses import replace
+
+    from tengri.components.stellar.component import StellarSEDComponent
+
+    components = list(components)
+    requests = {
+        (tuple(c.config.age_boundaries_yr), float(c.config.age_boundary_width_dex))
+        for c in components
+        if not isinstance(c, StellarSEDComponent)
+        and hasattr(getattr(c, "config", None), "age_boundaries_yr")
+    }
+    if not requests:
+        return components
+    if len(requests) > 1:
+        raise ValueError(
+            f"attenuators in one chain request different age boundaries: {sorted(requests)}"
+        )
+    ((boundaries, width),) = requests
+    wired = []
+    for c in components:
+        if isinstance(c, StellarSEDComponent) and (
+            tuple(c.config.age_boundaries_yr) != boundaries
+            or float(c.config.age_boundary_width_dex) != width
+        ):
+            c = replace(
+                c,
+                config=replace(
+                    c.config, age_boundaries_yr=boundaries, age_boundary_width_dex=width
+                ),
+            )
+        wired.append(c)
+    return wired
+
+
 def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
@@ -971,7 +1070,7 @@ def run_components(
     """
     import os as _os
 
-    for component in components:
+    for component in wire_age_boundaries(components):
         sliced = slice_params_for_component(component, params)
         try:
             state = component.apply(

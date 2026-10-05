@@ -178,12 +178,12 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "float32 path carries the scale in log space "
         "(``utils.scale.apply_log10_scale``, #1388).",
         (
-            "tengri.components.agn._phys:compute_l_12um_from_lbol",
             "tengri.components.agn._template_grid:torus_lnu_from_grid",
             "tengri.components.agn.adaf:adaf_spectrum",
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
             "tengri.components.agn.blocks.nlr:nlr_analytic_block",
+            "tengri.components.agn.blocks.nlr:nlr_analytic_line_power",
             "tengri.components.agn.blocks.nlr:nlr_feltre_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_block",
             "tengri.components.agn.blocks.nlr:nlr_synthesizer_spectra_block",
@@ -200,7 +200,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.kd_precompute:_compute_bh_and_radii",
             "tengri.components.agn.kd_precompute:kubota_done_disc_preintegrated",
             "tengri.components.agn.qsogen:_qsogen_components",
-            "tengri.components.agn.richards2006_disc:richards2006_disc",
             "tengri.components.agn.silva04:silva04_sed_from_grid",
             "tengri.components.agn.skirtor:_skirtor_grid_sed",
             "tengri.components.agn.skirtor:create_skirtor_components_from_grid.skirtor_components",
@@ -211,13 +210,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.torus:two_temperature_torus",
             "tengri.components.agn.unified:unified_nlr_blr",
         ),
-    ),
-    "xrb_mass_scale": (
-        "#722. The Lehmer+2016 LMXB normalization ``9.05e28 * stellar_mass`` "
-        "reaches 2.9e41 for a 3e12 Msun galaxy at the top of the declared mass "
-        "prior. It is a derived quantity read at working precision, and its float32 "
-        "path is the log-domain companion ``log_l_x_xrb``.",
-        ("tengri.utils.sed_quantities:compute_l_x_xrb",),
     ),
 }
 

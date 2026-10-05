@@ -146,7 +146,7 @@ def spectroscopic_population():
     """
     ssp = tengri.load_ssp()
     wave_obs = np.linspace(4000.0, 9000.0, 50)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resample="point"))
 
     def factory(psd_sigma, psd_tau_myr):
         return SEDModel.build(

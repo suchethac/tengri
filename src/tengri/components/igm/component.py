@@ -112,6 +112,15 @@ class IGMSEDComponentState(SEDComponentState):
         dimensionless. ``None`` when the factors cannot be precomputed
         (patchy reionization or a DLA: both carry free parameters, so the
         factor is not a function of redshift alone).
+    rest_n_wave, rest_n_blue : int or None
+        Length of the model's rest grid, and of its absorbed (blue) end: the
+        nodes up to and including the first unabsorbed one. ``T = 1`` redward.
+    rest_table : ndarray, shape (n_z, rest_n_blue) or None
+        :math:`T(\lambda_{\rm rest}(1+z), z)` on that blue end, on ``band_zgrid``.
+        ``None`` when no filter can meet an absorbed wavelength in the model's
+        redshift range, which is then the whole story for the IGM.
+    reach_filters : ndarray, shape (n_reach,) or None
+        Indices of the filters that can.
     """
 
     name: str = "igm"
@@ -119,6 +128,10 @@ class IGMSEDComponentState(SEDComponentState):
     band_table: Any | None = None
     spec_zgrid: Any | None = None
     spec_table: Any | None = None
+    rest_n_wave: int | None = None
+    rest_n_blue: int | None = None
+    rest_table: Any | None = None
+    reach_filters: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +190,22 @@ class IGMSEDComponent(TemplateThreading):
                     "",
                     "Filter-averaged IGM transmission <T>_f, one per filter "
                     "(WavePrecomp path; frees the full-grid curve for DCE)",
+                )
+            )
+        if self._state is not None and self._state.rest_table is not None:
+            keys.append(
+                DerivedKey(
+                    "igm_rest_transmission_precomp",
+                    "",
+                    "IGM transmission on the rest grid at the runtime z, from a "
+                    "build-time table (WavePrecomp; spectrum-weighted band factors)",
+                )
+            )
+            keys.append(
+                DerivedKey(
+                    "igm_reach_filters_precomp",
+                    "",
+                    "Indices of the filters the IGM can reach in the redshift range",
                 )
             )
         return tuple(keys)
@@ -302,11 +331,13 @@ class IGMSEDComponent(TemplateThreading):
             cached = _subband_cache.load(key)
             if cached is not None:
                 _subband_cache.memo_put(key, cached)
+        rest = self._rest_transmission_state(wave_rest, zgrid, fws)
         if cached is not None and cached.shape == (len(zgrid), n_filters):
             return IGMSEDComponentState(
                 name=self.name,
                 band_zgrid=jnp.asarray(zgrid),
                 band_table=jnp.asarray(cached),
+                **rest,
             )
 
         rows = []
@@ -331,7 +362,78 @@ class IGMSEDComponent(TemplateThreading):
             name=self.name,
             band_zgrid=jnp.asarray(zgrid),
             band_table=band_table,
+            **rest,
         )
+
+    def _rest_transmission_state(self, wave_rest, zgrid, filter_waves) -> dict:
+        r"""Tabulate :math:`T` on the absorbed end of the rest grid, for :meth:`apply`.
+
+        ``igm_phot_factor`` averages :math:`T` alone over each band; the LUT
+        projector weights this table by each non-stellar component's own
+        spectrum instead (``predict_via_precomp``). Only the blue end is stored:
+        :math:`T = 1` redward of Ly-alpha at every redshift, so the bound comes
+        from the transmission itself at the highest node rather than from a
+        hardcoded wavelength. Content-cached beside the node table.
+
+        Returns ``{}`` (nothing published) when no filter's support reaches an
+        absorbed wavelength anywhere in the redshift range: the projector then
+        has nothing to weight, and a low-redshift model pays nothing at runtime.
+        """
+        import numpy as np
+
+        from tengri.components.igm import _subband_cache
+
+        wave = np.asarray(wave_rest, dtype=np.float64)
+        zs = np.asarray(zgrid, dtype=np.float64)
+        z_hi = float(zs.max())
+        t_hi = np.asarray(
+            igm_absorption(
+                jnp.asarray(wave * (1.0 + z_hi)),
+                z_hi,
+                igm_patchy=False,
+                igm_model=self.config.igm_model,
+                use_dla=False,
+            )
+        )
+        absorbed = np.nonzero(t_hi < 1.0)[0]
+        if absorbed.size == 0:
+            return {}
+        # Through the first unabsorbed node: the band integral interpolates
+        # linearly between nodes, so the segment up to it still carries T < 1.
+        n_blue = int(min(absorbed[-1] + 2, wave.size))
+        bound_obs = wave[n_blue - 1] * (1.0 + z_hi)
+        reach = [i for i, fw in enumerate(filter_waves) if float(np.min(fw)) < bound_obs]
+        if not reach:
+            return {}
+
+        blue = wave[:n_blue]
+        key = _subband_cache.cache_key(blue, zs, self.config.igm_model)
+        table = _subband_cache.memo_get(key)
+        if table is None:
+            table = _subband_cache.load(key, prefix="igm_rest")
+        if table is None or table.shape != (zs.size, n_blue):
+            table = np.stack(
+                [
+                    np.asarray(
+                        igm_absorption(
+                            jnp.asarray(blue * (1.0 + z)),
+                            float(z),
+                            igm_patchy=False,
+                            igm_model=self.config.igm_model,
+                            use_dla=False,
+                        )
+                    )
+                    for z in zs
+                ]
+            )
+            _subband_cache.store(key, table, prefix="igm_rest")
+        _subband_cache.memo_put(key, table)
+        return {
+            "rest_n_wave": int(wave.size),
+            "rest_n_blue": n_blue,
+            "rest_table": jnp.asarray(table),
+            "reach_filters": jnp.asarray(reach, dtype=jnp.int32),
+        }
 
     def precompute_spec_factors(
         self,
@@ -556,6 +658,22 @@ class IGMSEDComponent(TemplateThreading):
             return None
         return self._interp_table(z, self._state.band_zgrid, self._state.band_table)
 
+    def _rest_transmission(self, z: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray | None:
+        """``T`` on the rest grid at ``z`` from the build-time table, ones redward."""
+        st = self._state
+        if st is None or st.rest_table is None:
+            return None
+        if wave.shape[0] != st.rest_n_wave:
+            # The table was built on the model's own rest grid; a different grid
+            # here is a build/runtime mismatch, and falling back to <T>_b would
+            # hide it as a quiet accuracy loss.
+            raise ValueError(
+                f"IGM rest-grid table was built on {st.rest_n_wave} wavelengths but the "
+                f"forward state carries {wave.shape[0]}; rebuild the model."
+            )
+        blue = self._interp_table(z, st.band_zgrid, st.rest_table)
+        return jnp.concatenate([blue, jnp.ones(st.rest_n_wave - st.rest_n_blue, blue.dtype)])
+
     def _spec_factor(self, z: jnp.ndarray) -> jnp.ndarray | None:
         """Interpolate the precomputed per-pixel transmission at ``z``."""
         if self._state is None or self._state.spec_table is None:
@@ -614,6 +732,12 @@ class IGMSEDComponent(TemplateThreading):
             derived = derived.with_(igm_phot_factor=band_factor)
         if spec_factor is not None:
             derived = derived.with_(igm_spec_factor=spec_factor)
+        rest_t = self._rest_transmission(z, state.wave)
+        if rest_t is not None:
+            derived = derived.with_(
+                igm_rest_transmission_precomp=rest_t,
+                igm_reach_filters_precomp=self._state.reach_filters,
+            )
         derived = self._fold_transmission_into_subbands(derived, params, z)
 
         return state.with_(sed_observed=state.sed_observed * T, derived=derived)

@@ -147,7 +147,7 @@ def _build(
     fesc_free: bool = False,
     redshift_free_range: tuple[float, float] | None = None,
     nebular: bool = True,
-    lyc_absorb_all: bool = False,
+    lyc_reprocessed_by: str = "young",
 ):
     """Build the #2439 model shape: delayed SFH, Cue nebular, optional dust/IGM."""
     neb_group: dict = (
@@ -166,7 +166,7 @@ def _build(
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
             "tau_diff": 0.3,
-            **({"lyc_absorb_all": True} if lyc_absorb_all else {}),
+            **({"lyc_reprocessed_by": "all"} if lyc_reprocessed_by == "all" else {}),
         }
         if dust
         else {"type": "none"}
@@ -340,13 +340,14 @@ def test_case3_fesc_free_gradient_and_two_point_match(lyc_ssp):
 # ── Case 4: the dusty two_component precomp instance ───────────────────────
 
 
-@pytest.mark.parametrize("lyc_absorb_all", [False, True])
-def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
+@pytest.mark.parametrize("lyc_reprocessed_by", ["young", "all"])
+def test_case4_dusty_instance(lyc_ssp, lyc_reprocessed_by):
     """The dusty ``two_component`` precomp instance, both R2 sub-rules.
 
-    ``lyc_absorb_all=False`` (default): birth-cloud-graded ``1-y(a)(1-fesc)``.
-    ``lyc_absorb_all=True``: flat, all-stellar-LyC-absorbed rule. Each must
-    match the SAME dense-path rule under its own flag (R2, no double-count).
+    ``lyc_reprocessed_by='young'`` (default): birth-cloud-graded
+    ``1-y(a)(1-fesc)``. ``lyc_reprocessed_by='all'``: flat,
+    all-stellar-LyC-absorbed rule. Each must match the SAME dense-path rule
+    under its own setting (R2, no double-count).
 
     A real bug lived here during this fix round: the sub-band code first read
     ``params.get("neb_fesc", ...)`` directly, but ``DustSEDComponent.apply``'s
@@ -365,9 +366,11 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
     filters = [_straddle_filter(z, name="straddle"), _clean_filter(5000.0, z, name="clean")]
     names = ["straddle", "clean"]
 
-    model_exact = _build(lyc_ssp, z, None, filters, dust=True, lyc_absorb_all=lyc_absorb_all)
+    model_exact = _build(
+        lyc_ssp, z, None, filters, dust=True, lyc_reprocessed_by=lyc_reprocessed_by
+    )
     model_lut = _build(
-        lyc_ssp, z, WavePrecomp(), filters, dust=True, lyc_absorb_all=lyc_absorb_all
+        lyc_ssp, z, WavePrecomp(), filters, dust=True, lyc_reprocessed_by=lyc_reprocessed_by
     )
     params = _params(model_exact)
 
@@ -375,10 +378,16 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
     lut_phot = np.asarray(model_lut.predict_photometry(params))
 
     model_exact_fesc1 = _build(
-        lyc_ssp, z, None, filters, dust=True, fesc=1.0, lyc_absorb_all=lyc_absorb_all
+        lyc_ssp, z, None, filters, dust=True, fesc=1.0, lyc_reprocessed_by=lyc_reprocessed_by
     )
     model_lut_fesc1 = _build(
-        lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=1.0, lyc_absorb_all=lyc_absorb_all
+        lyc_ssp,
+        z,
+        WavePrecomp(),
+        filters,
+        dust=True,
+        fesc=1.0,
+        lyc_reprocessed_by=lyc_reprocessed_by,
     )
     params_fesc1 = _params(model_exact_fesc1)
     exact_fesc1 = np.asarray(model_exact_fesc1.predict_photometry(params_fesc1))
@@ -387,7 +396,7 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
     # Ablation: bit-identical LUT between fesc=0/1 in the dusty branch was the
     # diagnosis's own signature that the correction never reached this path.
     assert not np.isclose(lut_phot[0], lut_fesc1[0], rtol=1e-6, atol=0.0), (
-        f"lyc_absorb_all={lyc_absorb_all}: dusty LUT straddle-band photometry "
+        f"lyc_reprocessed_by={lyc_reprocessed_by}: dusty LUT straddle-band photometry "
         "is bit-identical between neb_fesc=0 and neb_fesc=1 -- the "
         "two_component precomp branch is not reading the escape fraction"
     )
@@ -406,7 +415,7 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
     factor1 = state1.derived.get("stellar_subband_lyc_factor_precomp")
     assert factor0 is not None, "stellar_subband_lyc_factor_precomp not published at fesc=0"
     assert float(np.min(np.asarray(factor0))) < 0.999, (
-        f"lyc_absorb_all={lyc_absorb_all}: stellar_subband_lyc_factor_precomp "
+        f"lyc_reprocessed_by={lyc_reprocessed_by}: stellar_subband_lyc_factor_precomp "
         "never departs from 1.0 at neb_fesc=0 -- the sub-band LyC correction "
         "is not reaching this tensor"
     )
@@ -416,22 +425,23 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
             1.0,
             rtol=0.0,
             atol=1e-9,
-            err_msg=f"lyc_absorb_all={lyc_absorb_all}: stellar_subband_lyc_factor_precomp "
-            "is not a no-op at neb_fesc=1",
+            err_msg=f"lyc_reprocessed_by={lyc_reprocessed_by}: "
+            "stellar_subband_lyc_factor_precomp is not a no-op at neb_fesc=1",
         )
 
     # R3(b): at fesc=1 the graded and flat rules both reduce to the identity
     # factor, so the two LUTs (which otherwise differ only in
-    # ``lyc_absorb_all``) must be BIT-IDENTICAL to each other, not merely
+    # ``lyc_reprocessed_by``) must be BIT-IDENTICAL to each other, not merely
     # close -- this is the exact invariant the params-scoping bug above broke
     # (the flat rule silently used the fesc=0 answer, diverging from graded's
     # correctly-converging fesc=1 floor by a persistent, K-independent ~3%).
+    _other = "young" if lyc_reprocessed_by == "all" else "all"
     model_lut_fesc1_other = _build(
-        lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=1.0, lyc_absorb_all=not lyc_absorb_all
+        lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=1.0, lyc_reprocessed_by=_other
     )
     lut_fesc1_other = np.asarray(model_lut_fesc1_other.predict_photometry(params_fesc1))
     assert np.array_equal(lut_fesc1, lut_fesc1_other), (
-        f"lyc_absorb_all={lyc_absorb_all}: fesc=1 LUT differs between the flat "
+        f"lyc_reprocessed_by={lyc_reprocessed_by}: fesc=1 LUT differs between the flat "
         "and graded rules -- both must reduce to the identical no-op factor"
     )
 
@@ -445,7 +455,7 @@ def test_case4_dusty_instance(lyc_ssp, lyc_absorb_all):
     band, err, exact_v, lut_v = _worst_band(exact_phot, lut_phot, names)
     tol = max(dust_free_floor_err * 3.0, 1e-6)
     assert err < tol, (
-        f"lyc_absorb_all={lyc_absorb_all}: dusty z={z}: worst band '{band}' "
+        f"lyc_reprocessed_by={lyc_reprocessed_by}: dusty z={z}: worst band '{band}' "
         f"error {err * 100:.4f}% exceeds {tol * 100:.4f}% (3x the dust-free-arm "
         f"floor '{dust_free_floor_name}' {dust_free_floor_err * 100:.4f}%). "
         f"exact={exact_v}, lut={lut_v}"
@@ -785,7 +795,7 @@ def _spec_build(ssp, z, approx, fesc=0.0, n_pix=40):
     wave_obs = jnp.linspace(LYC_LIMIT * (1.0 + z) * 0.5, LYC_LIMIT * (1.0 + z) * 1.5, n_pix)
     return SEDModel.build(
         ssp_data=ssp,
-        observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+        observation=Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs)),
         sfh={
             "type": "delayed",
             "log_total_mass": 10.0,
@@ -1155,7 +1165,7 @@ def test_r2_graded_rule_spares_old_stars_flat_rule_does_not(lyc_ssp):
     discriminate it sharply: at the OLDEST age bin (old/diffuse stars,
     ``y(age)~0``), the default graded rule leaves the factor at ~1
     (unmasked -- old stars are not birth-cloud-embedded), while the flat
-    rule (``lyc_absorb_all=True``) masks it down to ``fesc`` regardless of
+    rule (``lyc_reprocessed_by='all'``) masks it down to ``fesc`` regardless of
     age. Measured: graded oldest-age factor 0.99997, flat oldest-age factor
     0.0 at fesc=0 -- not a subtle difference.
     """
@@ -1164,7 +1174,7 @@ def test_r2_graded_rule_spares_old_stars_flat_rule_does_not(lyc_ssp):
     filters = [_straddle_filter(z, name="straddle"), _clean_filter(5000.0, z, name="clean")]
     model_graded = _build(lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=fesc)
     model_flat = _build(
-        lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=fesc, lyc_absorb_all=True
+        lyc_ssp, z, WavePrecomp(), filters, dust=True, fesc=fesc, lyc_reprocessed_by="all"
     )
     state_graded = model_graded.predict_state(_params(model_graded))
     state_flat = model_flat.predict_state(_params(model_flat))
@@ -1178,7 +1188,7 @@ def test_r2_graded_rule_spares_old_stars_flat_rule_does_not(lyc_ssp):
         "-- old/diffuse stars should be ~unmasked (y(age)~0)"
     )
     assert np.all(oldest_flat < 0.5), (
-        f"R2: lyc_absorb_all=True does not mask the oldest age bin "
+        f"R2: lyc_reprocessed_by='all' does not mask the oldest age bin "
         f"({oldest_flat}) -- the flat rule should mask every age uniformly"
     )
 

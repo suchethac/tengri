@@ -173,35 +173,31 @@ class TestSFRIndicatorConsistency:
             )
 
     def test_hmxb_scales_linearly_with_sfr(self):
-        """HMXB X-ray luminosity scales linearly with SFR (Lehmer+2010)."""
-        from tengri.utils.sed_quantities import compute_l_x_xrb
+        """Emitted HMXB 2-10 keV luminosity is linear in SFR (Lehmer+2016): +1 dex per decade."""
+        from tengri.components.xray.xray import xray_total_log_band_luminosities
 
-        # Fix stellar mass to isolate HMXB (SFR-dependent) component
-        m_star = 0.0  # no LMXB contribution
-        sfrs = [1.0, 10.0, 100.0]
-        lx = [float(compute_l_x_xrb(jnp.array(s), jnp.array(m_star))) for s in sfrs]
-
-        # L_X should scale linearly: L(10 SFR) / L(SFR) = 10
-        np.testing.assert_allclose(lx[1] / lx[0], 10.0, rtol=1e-10)
-        np.testing.assert_allclose(lx[2] / lx[0], 100.0, rtol=1e-10)
+        lx = [
+            float(xray_total_log_band_luminosities(sfr=s, stellar_mass=1e10)["hmxb"])
+            for s in (1.0, 10.0, 100.0)
+        ]
+        np.testing.assert_allclose(np.diff(lx), [1.0, 1.0], atol=1e-12)
 
     def test_lmxb_scales_linearly_with_mass(self):
-        """LMXB X-ray luminosity scales linearly with M* (Lehmer+2010)."""
-        from tengri.utils.sed_quantities import compute_l_x_xrb
+        """Emitted LMXB 2-10 keV luminosity is linear in M* (Lehmer+2016): +1 dex per decade."""
+        from tengri.components.xray.xray import xray_total_log_band_luminosities
 
-        sfr = 0.0  # no HMXB contribution
-        masses = [1e9, 1e10, 1e11]
-        lx = [float(compute_l_x_xrb(jnp.array(sfr), jnp.array(m))) for m in masses]
-
-        np.testing.assert_allclose(lx[1] / lx[0], 10.0, rtol=1e-10)
-        np.testing.assert_allclose(lx[2] / lx[0], 100.0, rtol=1e-10)
+        lx = [
+            float(xray_total_log_band_luminosities(sfr=1.0, stellar_mass=m)["lmxb"])
+            for m in (1e9, 1e10, 1e11)
+        ]
+        np.testing.assert_allclose(np.diff(lx), [1.0, 1.0], atol=1e-12)
 
     def test_hmxb_calibration_value(self):
-        """HMXB coefficient matches Lehmer+2010: 2.6e39 erg/s per Msun/yr."""
-        from tengri.utils.sed_quantities import compute_l_x_xrb
+        """HMXB 2-10 keV luminosity per Msun/yr at solar Z is 3.22e39 erg/s (Lehmer+2016)."""
+        from tengri.components.xray.xray import xray_total_log_band_luminosities
 
-        lx = float(compute_l_x_xrb(jnp.array(1.0), jnp.array(0.0)))
-        np.testing.assert_allclose(lx, 2.6e39, rtol=0.01)
+        lx = float(xray_total_log_band_luminosities(sfr=1.0)["hmxb"])
+        np.testing.assert_allclose(10.0**lx, 3.22e39, rtol=0.01)
 
 
 # ── 4. Age of universe constraints ────────────────────────────────

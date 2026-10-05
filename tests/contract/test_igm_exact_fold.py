@@ -11,9 +11,9 @@ within a band, which is exactly where a Lyman break falls inside a bandpass.
 The feature shipped with no test at all. These pin the three things that can
 regress silently:
 
-1. the default stays ``"node"``. Roughly twenty peer sessions build against
-   this code, so flipping the default changes their numbers without any
-   diagnostic;
+1. the default is ``"auto"`` (#2445 step 2), with ``"node"`` kept as an explicit
+   choice. A further change moves every WavePrecomp photometry near the Lyman
+   break without any diagnostic, so it is pinned;
 2. the refusals fire, rather than quietly returning the node answer, when the
    exact fold cannot be built;
 3. **the exact fold actually is more accurate**, measured against
@@ -102,10 +102,10 @@ def _photometry(model):
     return np.asarray(model.predict_photometry({}), dtype=np.float64)
 
 
-def test_default_fold_is_node():
-    """The default must not move: peer sessions build against it."""
-    assert WavePrecomp().igm_fold == "node"
-    assert WavePrecomp(n_subbands=5).igm_fold == "node"
+def test_default_fold_is_auto():
+    """The default is ``"auto"`` (#2445 step 2): exact wherever it can be built."""
+    assert WavePrecomp().igm_fold == "auto"
+    assert WavePrecomp(n_subbands=5).igm_fold == "auto"
 
 
 def test_exact_is_an_accepted_value():
@@ -121,9 +121,14 @@ def test_an_unknown_fold_is_refused_by_name():
     assert "'node'" in message and "'exact'" in message
 
 
-def test_a_free_redshift_refuses_the_exact_fold(ssp, observation):
-    """Refuse, rather than return the node answer under the exact label."""
-    with pytest.raises(NotImplementedError) as excinfo:
+def test_a_free_redshift_builds_the_exact_fold(ssp, observation):
+    """A free redshift gets the exact fold it asked for, not the node answer under its label.
+
+    Accuracy on a free redshift is measured in ``test_igm_exact_fold_free_z.py``;
+    this pins that the request reaches the z-table at all.
+    """
+
+    def _igm_table(fold):
         model = SEDModel.build(
             ssp_data=ssp,
             observation=observation,
@@ -134,10 +139,14 @@ def test_a_free_redshift_refuses_the_exact_fold(ssp, observation):
             },
             redshift=tengri.Uniform(0.5, 1.5),
             igm={"type": "inoue"},
-            approx=WavePrecomp(igm_fold="exact", n_z=FREE_Z_NODES),
+            approx=WavePrecomp(igm_fold=fold, n_z=FREE_Z_NODES),
         )
-        model.predict_photometry({"redshift": PROBE_Z})
-    assert "node" in str(excinfo.value)
+        ztable = model._build_component_chain()[0]._state.ssp_phot_ztable
+        return np.asarray(ztable.ssp_subband_phot_igm_table)
+
+    exact, node = _igm_table("exact"), _igm_table("node")
+    assert exact.shape == node.shape
+    assert not np.array_equal(exact, node)
 
 
 @pytest.mark.parametrize("fold", ["node", "exact"])
@@ -259,9 +268,9 @@ def test_auto_is_an_accepted_value():
     assert WavePrecomp(igm_fold="auto").igm_fold == "auto"
 
 
-def test_adding_auto_does_not_move_the_default():
-    """A new mode must not change what an unconfigured WavePrecomp does."""
-    assert WavePrecomp().igm_fold == "node"
+def test_node_is_still_an_explicit_choice():
+    """The node fold stays available as an explicit A/B against the default."""
+    assert WavePrecomp(igm_fold="node").igm_fold == "node"
 
 
 def test_auto_is_not_resolved_at_construction(ssp, observation):
@@ -307,16 +316,11 @@ def _free_z_photometry(ssp, observation, fold):
     return np.asarray(model.predict_photometry({"redshift": PROBE_Z}), dtype=np.float64)
 
 
-def test_auto_falls_back_to_the_node_fold_for_a_free_redshift(ssp, observation):
-    """The precondition that makes "exact" unusable as a default.
-
-    ``test_a_free_redshift_refuses_the_exact_fold`` pins that ``"exact"``
-    raises here. ``"auto"`` must build the same model and return the node
-    answer: not raise, and not quietly return a third thing.
-    """
+def test_auto_resolves_to_exact_for_a_free_redshift(ssp, observation):
+    """``"auto"`` takes the exact fold on a free redshift, where it can be built."""
     np.testing.assert_array_equal(
         _free_z_photometry(ssp, observation, "auto"),
-        _free_z_photometry(ssp, observation, "node"),
+        _free_z_photometry(ssp, observation, "exact"),
     )
 
 

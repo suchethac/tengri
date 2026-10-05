@@ -29,7 +29,7 @@ import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import log10_flux_scale as _log10_flux_scale, representable_denominator
 
 __all__ = [
@@ -37,6 +37,7 @@ __all__ = [
     "PreintegratedLines",
     "interp_nd_pchip",
     "interp_nd_triweight",
+    "lyc_augment_grid_for_step",
     "pchip_interp_1d",
     "preintegrate_grid",
     "preintegrate_lines",
@@ -69,6 +70,58 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     t = np.where(span > 0, (xq - x0) / np.where(span > 0, span, 1.0), 0.0)
     y0, y1 = y[..., idx], y[..., idx + 1]
     return y0 + (y1 - y0) * t
+
+
+def subband_edges(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    n_subbands: int,
+    lyc_edge_obs: float | None = None,
+) -> np.ndarray:
+    """Edges of the K equal-filter-mass sub-bands, observed frame [Angstrom].
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid, observed frame [Angstrom].
+    tw_grid : ndarray, shape (m,)
+        Transmission x filter weight on ``grid`` [dimensionless].
+    n_subbands : int
+        Number of sub-bands K.
+    lyc_edge_obs : float or None, optional
+        Observed-frame Lyman-limit wavelength forced in as an extra edge
+        (see :func:`subband_quadrature`).
+
+    Returns
+    -------
+    ndarray, shape (K+1,) or (K+2,)
+        Sub-band edges, ``K+2`` wide when ``lyc_edge_obs`` is given.
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time numpy precompute.
+    """
+    K = int(n_subbands)
+    cum_w = _cumtrapz_rows(tw_grid, grid)
+    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
+    if lyc_edge_obs is not None:
+        # Clamp into [grid[0], grid[-1]] before inserting: ``_interp_rows``
+        # (used by ``subband_quadrature``) is NOT a clip-at-the-boundary
+        # interpolator like ``np.interp`` (its docstring only covers in-domain
+        # queries) -- for xq outside [x[0], x[-1]] it LINEARLY EXTRAPOLATES
+        # using the nearest segment's slope, clamping only the segment INDEX,
+        # not the query itself. An un-clamped forced edge outside the filter's own support (any
+        # filter the Lyman limit does not straddle at this redshift, e.g.
+        # every far-IR band) would then get a genuinely extrapolated
+        # (wrong, generally nonzero) cumulative value at that edge instead
+        # of the boundary's own value, breaking the "one zero-integral
+        # chunk instead" guarantee below and, with it, flux conservation
+        # (measured: up to 1.3e-3 relative on a 100 um filter). Clamping
+        # here, not fixing ``_interp_rows`` itself, keeps every OTHER
+        # caller of that helper (unrelated to this fix) untouched.
+        clamped_edge = float(np.clip(lyc_edge_obs, grid[0], grid[-1]))
+        edges = np.sort(np.concatenate([edges, [clamped_edge]]))
+    return edges
 
 
 def subband_quadrature(
@@ -116,7 +169,8 @@ def subband_quadrature(
         Filter effective wavelength, observed frame: the node fallback where a
         template has no flux in a sub-band [Angstrom].
     lyc_edge_obs : float or None, optional
-        Observed-frame Lyman-limit wavelength ``912*(1+z)`` [Angstrom]. When
+        Observed-frame Lyman-limit wavelength ``LYMAN_LIMIT_AA*(1+z)``
+        (one Lyman edge, 911.76 A rest) [Angstrom]. When
         given, forced into the edge set as an extra edge (#2439, #2427, R1),
         turning K equal-filter-mass chunks into K+1: the equal-mass edges make
         an exact quadrature for a smooth multiplicative screen (#1122) but do
@@ -156,27 +210,7 @@ def subband_quadrature(
     fractional interval at every edge: the sub-integrals stop summing to the
     whole and the quadrature error then GROWS with K. Conservation is asserted.
     """
-    K = int(n_subbands)
-    cum_w = _cumtrapz_rows(tw_grid, grid)
-    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
-    if lyc_edge_obs is not None:
-        # Clamp into [grid[0], grid[-1]] before inserting: ``_interp_rows``
-        # below is NOT a clip-at-the-boundary interpolator like ``np.interp``
-        # (its docstring only covers in-domain queries) -- for xq outside
-        # [x[0], x[-1]] it LINEARLY EXTRAPOLATES using the nearest segment's
-        # slope, clamping only the segment INDEX, not the query itself. An
-        # un-clamped forced edge outside the filter's own support (any
-        # filter the Lyman limit does not straddle at this redshift, e.g.
-        # every far-IR band) would then get a genuinely extrapolated
-        # (wrong, generally nonzero) cumulative value at that edge instead
-        # of the boundary's own value, breaking the "one zero-integral
-        # chunk instead" guarantee below and, with it, flux conservation
-        # (measured: up to 1.3e-3 relative on a 100 um filter). Clamping
-        # here, not fixing ``_interp_rows`` itself, keeps every OTHER
-        # caller of that helper (unrelated to this fix) untouched.
-        clamped_edge = float(np.clip(lyc_edge_obs, grid[0], grid[-1]))
-        edges = np.sort(np.concatenate([edges, [clamped_edge]]))
-
+    edges = subband_edges(grid, tw_grid, n_subbands, lyc_edge_obs)
     cum_sw = _cumtrapz_rows(integrand, grid)
     cum_lsw = _cumtrapz_rows(integrand * grid, grid)
     i_k = np.diff(_interp_rows(edges, grid, cum_sw), axis=-1)
@@ -201,6 +235,114 @@ def subband_quadrature(
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
     return i_k / np.maximum(denom, representable_denominator(1e-30)), nodes
+
+
+def lyc_augment_grid_for_step(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    templates_src: np.ndarray,
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""Augment a union grid so an ORDINARY trapezoid integrates the Lyman step exactly.
+
+    The raw (unmasked) template's near-discontinuous drop at the Lyman
+    limit (the #537 "rectangle" feature every LyC-adjacent quantity in
+    :mod:`tengri.components.lyc` shares) means the grid cell straddling
+    ``edge_aa`` is not a linear ramp between ``templates_src``'s two
+    bracketing nodes: it is a step. Two changes make an otherwise-unmodified
+    consumer (plain ``trapezoid``, or :func:`subband_quadrature`'s
+    cumulative-trapezoid-and-interpolate-at-the-cutoff machinery) integrate
+    that step exactly, replacing the linear-ramp assumption that construction
+    made (one Lyman edge, #2439/#2427/L3):
+
+    1. **Resample templates edge-aware** onto every existing ``grid`` node
+       inside the bracket cell: without this, a filter node that subdivides
+       the bracket (the #2447-style scenario) would still see a blended
+       (linearly-interpolated) value rather than the constant step value.
+    2. **Insert ``edge_aa`` as a zero-width node pair**, tagged with the
+       ionizing-side value first and the non-ionizing-side value second.
+       Querying the resulting cumulative trapezoid via ordinary linear
+       interpolation AT a point exactly coincident with a grid node (here,
+       the first copy) resolves to that node's own exact cumulative value,
+       not an average across the jump -- verified directly against
+       :func:`_interp_rows`.
+
+    Feeding the augmented ``(grid, integrand, tw_grid)`` into
+    :func:`subband_quadrature` UNCHANGED (same signature, same K+1 chunking,
+    same ``lyc_edge_obs`` argument) makes its own forced-boundary chunks
+    exact too, which is what keeps a corrected sub-band sum equal to the
+    correspondingly-corrected whole band
+    (``test_r3c_corrected_subband_sum_matches_corrected_whole_band``):
+    pairing an EXACT ionizing-side split with a whole band that is only
+    approximate at the SAME bracket cell (or vice versa) leaves a
+    several-1e-6 residual there, because ``NebularSEDComponent``'s
+    ``per_age - (1 - fesc) * per_age_lyc`` correction is self-consistent
+    only when both terms decompose the bracket the SAME way.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid (``wave_src`` nodes + filter nodes), observed
+        frame, ascending. [Angstrom]
+    tw_grid : ndarray, shape (m,)
+        Transmission x bandpass weight on ``grid``.
+    wave_src : ndarray, shape (n_src,)
+        Template's own (observed-frame) wavelength grid, ascending.
+        [Angstrom]
+    templates_src : ndarray, shape (..., n_src)
+        Template luminosity on ``wave_src``.
+    filter_wave : ndarray, shape (n_filt,)
+        Filter wavelength grid, observed frame. [Angstrom]
+    filter_trans : ndarray, shape (n_filt,)
+        Filter transmission (dimensionless, 0-1).
+    edge_aa : float
+        Observed-frame Lyman limit, ``LYMAN_LIMIT_AA * (1+z)``. [Angstrom]
+    convention : FilterConvention, optional
+        Bandpass weight matching the whole-band integral's own convention.
+
+    Returns
+    -------
+    grid_aug, integrand_aug, tw_grid_aug : tuple of ndarray
+        ``grid_aug`` shape ``(m,)`` or ``(m+2,)``; ``integrand_aug`` shape
+        ``(..., m)`` or ``(..., m+2)`` (``templates_src`` resampled onto
+        ``grid_aug``, edge-aware, times ``tw_grid_aug``); ``tw_grid_aug``
+        shape matching ``grid_aug``. Unaugmented (``m``-wide, ordinary
+        interpolation) when ``edge_aa`` falls outside ``wave_src``'s domain
+        (no bracket cell to fix).
+    """
+    n_src = wave_src.shape[0]
+    n_ion = int(np.sum(wave_src < edge_aa))
+    templates_on_grid = _vectorized_interp(grid, wave_src, templates_src)
+    if not (0 < n_ion < n_src):
+        return grid, templates_on_grid * tw_grid, tw_grid
+
+    idx_a = n_ion - 1
+    idx_b = n_ion
+    wave_a = float(wave_src[idx_a])
+    wave_b = float(wave_src[idx_b])
+    y_a = templates_src[..., idx_a]
+    y_b = templates_src[..., idx_b]
+
+    in_bracket = (grid >= wave_a) & (grid <= wave_b)
+    step_vals = np.where(grid < edge_aa, y_a[..., None], y_b[..., None])
+    templates_edge_aware = np.where(in_bracket, step_vals, templates_on_grid)
+
+    tw_edge = float(
+        np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
+        * _filter_weight_np(np.array([edge_aa]), convention)[0]
+    )
+    all_x = np.concatenate([grid, [edge_aa, edge_aa]])
+    all_tw = np.concatenate([tw_grid, [tw_edge, tw_edge]])
+    all_templates = np.concatenate([templates_edge_aware, np.stack([y_a, y_b], axis=-1)], axis=-1)
+    order = np.argsort(all_x, kind="stable")
+    grid_aug = all_x[order]
+    tw_grid_aug = all_tw[order]
+    integrand_aug = all_templates[..., order] * tw_grid_aug
+    return grid_aug, integrand_aug, tw_grid_aug
 
 
 @dataclasses.dataclass(frozen=True)
@@ -230,12 +372,13 @@ class PreintegratedGrid:
         (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
     lyc_phot : jnp.ndarray or None
         (*grid_dims, n_filters) [erg/s/Hz, same units as ``phot``].
-        Filter-integrated photometry restricted to rest-frame λ < 912
-        Ångström (Lyman continuum): the exact algebraic split
-        ``phot = lyc_phot + (phot - lyc_phot)`` at the physical edge, via
-        cumulative-trapezoid interpolation. ``None`` unless ``lyc_gate=True``
-        (a live nebular Lyman-continuum mask, #2439, #2427): a model without
-        one never computes or caches this. Used by
+        Filter-integrated photometry restricted to rest-frame λ <
+        ``LYMAN_LIMIT_AA`` (911.76 Å, one Lyman edge; Lyman continuum): the
+        exact algebraic split ``phot = lyc_phot + (phot - lyc_phot)`` at the
+        physical edge, step-model-exact (see
+        :func:`lyc_augment_grid_for_step`). ``None`` unless
+        ``lyc_gate=True`` (a live nebular Lyman-continuum mask, #2439,
+        #2427): a model without one never computes or caches this. Used by
         :class:`~tengri.components.nebular.component.NebularSEDComponent` to
         apply the ``neb_fesc`` escape-fraction mask to the stellar
         photometric LUT the same way the dense path masks
@@ -529,36 +672,36 @@ def preintegrate_grid(
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
         weight = tw_grid[None, :]
         integrand = templates_on_grid * weight
-        num = _np_trapezoid(integrand, grid, axis=-1)
-        phot_flat[:, f_idx] = num / np.maximum(denom, representable_denominator(1e-30))
 
-        # Compute Lyman continuum photometry: restrict to rest λ < 912 Å.
-        # Gated on lyc_gate (a live nebular Lyman-continuum mask, #2439,
-        # #2427, R1): a model without one never pays this compute or the
-        # extra ztable cache size. Use cumulative trapezoid to extract the
-        # integral over [grid_min, 912*(1+z)] on the observed-frame grid;
-        # this is an exact split matching the dense path's masking
-        # (state.sed_intrinsic * lyc_transmission where wave < 912).
-        lyc_wave_obs = 912.0 * (1.0 + redshift)
+        # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
+        # nebular Lyman-continuum mask) -- a model without one never pays
+        # this compute or the extra ztable cache size, and the whole-band
+        # table stays bit-identical to the ordinary (unaugmented) path.
+        # When live, ``lyc_augment_grid_for_step`` resamples templates
+        # edge-aware and inserts the edge as a zero-width node pair, so the
+        # WHOLE-band integral, the ionizing-only split, AND
+        # ``subband_quadrature``'s own forced-boundary chunks are all exact
+        # at the SAME bracket cell -- required for
+        # ``NebularSEDComponent``'s ``per_age - (1-fesc)*per_age_lyc``
+        # correction to stay self-consistent with the sub-band partition
+        # (see :func:`lyc_augment_grid_for_step`).
+        lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + redshift)
         if lyc_gate:
-            if np.any(grid < lyc_wave_obs):
-                cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
-                lyc_idx = np.searchsorted(grid, lyc_wave_obs)
-                if lyc_idx > 0 and lyc_idx < len(grid):
-                    cum_at_lyc = _interp_rows(np.array([lyc_wave_obs]), grid, cum_integrand)
-                    lyc_num = cum_at_lyc[:, 0]
-                elif lyc_idx >= len(grid):
-                    # Lyman limit is beyond all grid points; take everything below 912
-                    lyc_num = cum_integrand[:, -1]
-                else:
-                    # Lyman limit is before all grid points; zero LyC
-                    lyc_num = 0.0
-                lyc_phot_flat[:, f_idx] = lyc_num / np.maximum(
-                    denom, representable_denominator(1e-30)
-                )
-            else:
-                # No grid points below the Lyman limit; zero LyC photometry
-                lyc_phot_flat[:, f_idx] = 0.0
+            grid_q, integrand_q, tw_grid_q = lyc_augment_grid_for_step(
+                grid, tw_grid, wave_obs, templates_flat, fw_np, ft_np, lyc_wave_obs, convention
+            )
+            denom_q = _np_trapezoid(tw_grid_q, grid_q)
+            num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+            first_edge_idx = int(np.searchsorted(grid_q, lyc_wave_obs, side="left"))
+            ion_mask = np.arange(grid_q.shape[0]) <= first_edge_idx
+            lyc_num = _np_trapezoid(integrand_q[..., ion_mask], grid_q[ion_mask], axis=-1)
+            lyc_phot_flat[:, f_idx] = lyc_num / np.maximum(
+                denom_q, representable_denominator(1e-30)
+            )
+        else:
+            grid_q, integrand_q, tw_grid_q, denom_q = grid, integrand, tw_grid, denom
+            num = _np_trapezoid(integrand, grid, axis=-1)
+        phot_flat[:, f_idx] = num / np.maximum(denom_q, representable_denominator(1e-30))
 
         # Compute Taylor moment if requested
         if taylor:
@@ -571,13 +714,15 @@ def preintegrate_grid(
         # Sub-band quadrature nodes and weights (#1122): the single
         # implementation, shared with the free-z ztable precompute so the two
         # cannot drift. ``lyc_edge_obs`` forces a chunk boundary at the
-        # physical Lyman limit when this model has a live mask (R1).
+        # physical Lyman limit when this model has a live mask (R1); the
+        # (possibly edge-augmented) ``grid_q``/``tw_grid_q``/``integrand_q``
+        # keep its own chunks exact at that boundary too.
         if K > 0:
             sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
-                grid,
-                tw_grid,
-                integrand,
-                denom,
+                grid_q,
+                tw_grid_q,
+                integrand_q,
+                denom_q,
                 K,
                 float(eff_waves_obs[f_idx]),
                 lyc_edge_obs=lyc_wave_obs if lyc_gate else None,

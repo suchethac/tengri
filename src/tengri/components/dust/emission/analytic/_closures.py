@@ -257,10 +257,6 @@ def graybody(
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm
 
-    # Reference frequency at 250 um (convenient normalization pivot)
-    nu_ref = _C_CGS / (250.0e-4)  # 250 um in cm
-    emissivity = (nu / nu_ref) ** dust_beta_ir
-
     bnu = planck_bnu(wavelength_aa, T_eff)
 
     # Opacity factor: (1 - exp(-(lam_0/lam)^beta))
@@ -270,7 +266,7 @@ def graybody(
     opacity = -jnp.expm1(-tau)  # = 1 - exp(-tau), numerically stable
 
     # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
-    shape = opacity * emissivity * bnu
+    shape = opacity * bnu
 
     # Integrate shape over frequency for normalization.
     # nu is descending (wave ascending), so negate to get positive integral.
@@ -595,18 +591,17 @@ def pah_drude(
 
     Notes
     -----
-    **JIT-compatible**: yes, pure ``jnp`` primitives (a precomputed lookup in
-    :mod:`~tengri.components.dust.dust_analytic_precompute` is preferred in the
-    hybrid kernel; this is the direct full-wavelength evaluation).
+    **JIT-compatible**: yes, pure ``jnp`` primitives (this is the direct
+    full-wavelength evaluation).
 
     **Gradient-safe**: yes.
 
     **Not energy-balanced standalone**; see the summary above; excluded from
     the cross-model energy-balance contract test for this reason.
 
-    The PAH template is a pure shape (no free axes). Runtime evaluation uses the
-    precomputed lookup from :mod:`~tengri.components.dust.dust_analytic_precompute`
-    and skips the full-wavelength evaluation in the hybrid kernel.
+    The PAH template is a pure shape (no free axes). The adapter in
+    :mod:`~tengri.components.dust.dust_analytic_precompute` is registered in
+    ``forward/precompute/registry.py``; no kernel consumes its lookups today.
 
     References
     ----------

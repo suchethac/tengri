@@ -54,8 +54,8 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 ### Grammar rules
 
 - **Groups** are the physics blocks: `sfh`, `stellar`, `dust`, `neb`, `shock`,
-  `agn`, `igm`, `radio`, `xray` (plus top-level settings `redshift`,
-  `apply_igm`, `n_grid`).
+  `agb_dust`, `agn`, `igm`, `radio`, `xray` (plus top-level settings
+  `redshift`, `apply_igm`, `n_grid`).
 - Each group dict accepts:
   - `'type'` — the structural choice (which variant), validated against the
     domain's registered names.
@@ -79,21 +79,30 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   age grid — the one place the two implementations differ numerically:
   - `'cic'` (the default) evaluates the SFH on a 16x denser integrand and
     splits each `SFR(t)·dt` parcel between its bracketing SSP nodes with
-    log-age cloud-in-cell weights.
-  - `'dsps'` hands the coarse per-SSP-age table to DSPS's histogram kernel.
-    It **zeroes the first SSP node older than the SFH start** (3.8 % of the
-    mass for a delayed-tau at age = 5 Gyr) and biases the optical CSP +1.2 %
-    vs FSPS / bagpipes / a dense reference ([#964]). Offered for cross-code
-    comparison against DSPS-native pipelines and pre-#964 tengri, not for
-    science. Pre-#964 equivalence is **exact**, verified against the pre-fix
-    source: same `sfr_on_ssp`, same `_build_dsps_sfh_table(...,
-    add_young_knot=True)`, same `.weights`, same #821 youngest-bin multiplier.
-    The one deliberate difference is a `jnp.maximum(sum, 1e-300)` floor on the
-    normalization, so a degenerate all-zero SFH yields zero instead of NaN.
-  - Leaving it unset auto-selects: `'cic'` on the parametric path, `'dsps'`
-    on the GP-field path (whose draw lives on its own coarse grid, so there
-    is no dense integrand to cloud-in-cell). Asking for `'cic'` together with
-    a field SFH raises rather than silently returning DSPS weights.
+    log-age cloud-in-cell weights (first order; ≤ 0.01 % in flux of a
+    converged quadrature for smooth histories).
+  - `'dsps'` is DSPS's histogram kernel: each parcel goes wholly to one node.
+    It is fed an SFR table refined 8-fold between the SSP nodes ([#2683]), so
+    its output differs from a code that feeds the same kernel a table with one
+    row per node. It agrees with `'cic'` to < 0.1 % in flux for smooth and
+    step-like families at z = 0 (delayed-tau, onset 5.0 Gyr: −0.05 / −0.06 /
+    −0.04 / −0.03 % in FUV / u / r / H); at z = 2.5 the oldest parcels sit at
+    the age of the universe between two nodes and the kernels differ by
+    0.5–1.4 %: `'cic'` shares those parcels onto the bracketing nodes (the
+    interpolating reference), `'dsps'` puts them wholly on the younger one
+    because the cell's log-age midpoint lies beyond the age of the universe,
+    so no table knot removes the difference. Structure narrower than the local node spacing (a burst of a few
+    Myr to tens of Myr, periodic bursts) is placed on the nearest node and
+    raises `DSPSUnresolvedHistoryWarning`; use `'cic'` there.
+  - Both kernels accept every SFH type. A correlated-field draw defines the SFR
+    at its own lookback nodes and the history between nodes is the linear
+    interpolation of the draw; `'cic'` takes the nodes as exact knots and
+    `'dsps'` samples the same interpolant on its refined table ([#2684]).
+    Leaving the kernel unset selects `'cic'` for every SFH type. It is the
+    accurate kernel for field and rough histories: `'dsps'` differs there by up
+    to 16 % in the FUV and 9 % in r-band flux. The `'cic'` integrand resolves
+    structure down to ~30 Myr; a 10 Myr burst is not converged (age-weight TV
+    0.015).
   - It is **not** a speed knob, and `'dsps'` is the slower of the two.
     Measured on `predict_photometry` gradients (interleaved reps, medians, an
     A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact
@@ -130,6 +139,47 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     corona-carrying disc, or an X-ray-emission-free disc
     (`'richards2006'`/`'multicolor'`/`'slone_netzer'`/...) with an `xray`
     selection.
+- **`dust_attenuation={'type': 'age_binned', 'screens': [...]}`** generalizes
+  the two-component birth-cloud/diffuse screen to N independent screens, each
+  its own registered law and a `log10(age/yr)` window (`None` = unbounded;
+  windows need not partition the age axis). Optical depths add over every
+  screen whose window contains a star's age, so NESTED windows cascade the
+  way the birth cloud and the diffuse medium do in `two_component`:
+
+  ```python
+  dust_attenuation={
+      'type': 'age_binned',
+      'screens': [
+          {'law': 'calzetti', 'window_log_yr': (None, 7.0)},    # birth cloud: < 10 Myr
+          {'law': 'power_law', 'window_log_yr': (None, 8.5)},   # second screen: < 300 Myr
+          {'law': 'cardelli', 'window_log_yr': (None, None)},   # diffuse: every age
+      ],
+      'tau_0': Uniform(0, 2), 'tau_1': Uniform(0, 2), 'tau_2': Uniform(0, 2),
+      'other_params': Fixed(DEFAULT),
+  }
+  ```
+
+  A 5 Myr star sees `tau_0 k_0 + tau_1 k_1 + tau_2 k_2`, a 100 Myr star
+  `tau_1 k_1 + tau_2 k_2`, an old star `tau_2 k_2`: each `tau_i` is the depth
+  screen `i` ADDS. Windows may instead TILE the age axis, e.g.
+  `(None, 7.0)`, `(7.0, 8.5)`, `(8.5, None)`; each age then sees one screen
+  only, nothing cascades, and each `tau_i` is the total depth of its age bin.
+
+  Per-screen parameters are indexed from the screen count (`dust_tau_0`,
+  `dust_tau_1`, ...; `dust_<lawparam>_i` for every shape parameter that
+  screen's own law declares, defaulting to that law's own published value).
+  The two-screen case with the `two_component` windows reproduces
+  `two_component` bit-identically. Not yet supported under
+  `approx=WavePrecomp()`/`SpectrumPrecomp()` (both raise, naming the exact
+  path); a fit's `approx="auto"` policy resolves to the exact path instead of
+  raising (#2528). Nebular continuum and the line catalog are attenuated only
+  by screens whose window is unbounded below (the `t -> 0` limit -- the same
+  convention `two_component`, Prospector's `dust1`/`dust2`, and BAGPIPES's
+  `dust_birth_cloud`/`eta*A_V` apply to lines), so a screen's finite lower
+  edge must sit at least five transition widths above the loaded SSP grid's
+  youngest node; a closer edge raises `ConfigError` at build time, naming the
+  screen, the edge, the grid's youngest node, and the two fixes (make the
+  edge unbounded, or raise it).
 - **Sentinels** `FREE` / `DEFAULT` are singletons exported from `tengri`.
   `FREE` defers a parameter to the registry's default prior; `DEFAULT` is
   legal only as `Fixed(DEFAULT)`, pinning a parameter at the registry default

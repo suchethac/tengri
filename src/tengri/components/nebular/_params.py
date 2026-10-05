@@ -84,10 +84,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "neb_logU",
         Fixed(-3.0),
-        "Ionization parameter log10(U)",
+        "Inner-face ionization parameter at R = 10^19 cm [log10(U)]",
         lambda lo, hi: lo >= -5 and hi <= 0,
         "must be in [-5, 0]",
-        free_prior=Uniform(-5.0, 0.0, "Ionization parameter log10(U)", default=-3.0),
+        free_prior=Uniform(
+            -5.0, 0.0, "Inner-face ionization parameter at R = 10^19 cm [log10(U)]", default=-3.0
+        ),
     ),
     ParamDeclaration(
         "neb_logZ_gas",
@@ -133,12 +135,22 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(0.0, 1.0, "Ly-alpha escape fraction", default=0.0),
     ),
     ParamDeclaration(
-        "neb_fdust",
+        "neb_fdust_frac",
         Fixed(0.0),
-        "Dust-absorption fraction of ionizing photons in HII regions",
+        # #2436 (owner ruling): retired the absolute `neb_fdust` in [0, 1],
+        # which let `neb_fesc + neb_fdust` exceed 1 -- an impossible >100% of
+        # the ionizing-photon budget, silently clamped away downstream by
+        # `lyc_dust_escape_factor`. This declares the fraction of the
+        # NON-escaping budget (`1 - neb_fesc`) dust absorbs instead, so the
+        # additive shares (`lyc_shares` in `_recombination_coeffs.py`) sum to
+        # exactly 1 for any (neb_fesc, neb_fdust_frac) in [0, 1]^2 -- the
+        # whole prior box is physical.
+        "Fraction of the non-escaping ionizing budget absorbed by HII-region dust",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        free_prior=Uniform(0.0, 1.0, "Ionizing-photon dust-absorption fraction", default=0.0),
+        free_prior=Uniform(
+            0.0, 1.0, "Non-escaping ionizing budget dust-absorption fraction", default=0.0
+        ),
     ),
     ParamDeclaration(
         "neb_dig_frac",
@@ -366,7 +378,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "gas_logno",
         Uniform(-2.0, 2.0, default=0.0),
-        "Cue [N/O] abundance ratio [dex]",
+        "Cue [N/O] abundance ratio [dex] (offset from the relation under neb nitrogen=<relation>)",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
         units="dex",

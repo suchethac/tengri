@@ -72,7 +72,10 @@ class PrecomputeEngagementReport(NamedTuple):
         if self.observed_facts:
             lines.append("\n• Observed facts:")
             for key, value in sorted(self.observed_facts.items()):
-                if isinstance(value, list):
+                if isinstance(value, dict):
+                    pairs = ", ".join(f"{k}={v}" for k, v in value.items())
+                    lines.append(f"  {key}: {pairs}")
+                elif isinstance(value, list):
                     if value:
                         lines.append(f"  {key}: {', '.join(str(v) for v in value)}")
                 else:
@@ -196,14 +199,6 @@ def _infer_lut_decline_reason(model: Any) -> str | None:
     if unsafe_free:
         return f"free dust parameters outside allowlist: {sorted(unsafe_free)}"
 
-    # Check for free redshift on a law that reads it
-    if "redshift" in free:
-        from tengri.components.dust.laws._registry import law_kwarg_names
-
-        laws_in_play = (dust.config.law_bc, dust.config.law_diff)
-        if any(law and "redshift" in law_kwarg_names(law) for law in laws_in_play):
-            return "free redshift with law that reads it"
-
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
         return "approx=WavePrecomp() not enabled"
@@ -239,10 +234,10 @@ def _infer_dust_response_decline_reason(model: Any) -> str | None:
     free_dust = {p for p in free if p.startswith("dust_")}
 
     # Check for free shape parameters
-    shape_free = bool(free_dust - model._EB_ATTEN_FREE_OK) or ("redshift" in free)
-    if shape_free:
-        extra_params = free_dust - model._EB_ATTEN_FREE_OK
-        return f"free shape parameters: {sorted(extra_params) if extra_params else 'redshift'}"
+    # A free redshift is not a reason: the response is tabulated over it.
+    extra_params = free_dust - model._EB_ATTEN_FREE_OK
+    if extra_params:
+        return f"free shape parameters: {sorted(extra_params)}"
 
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
@@ -277,10 +272,6 @@ def _infer_term_response_decline_reason(model: Any, emitter_name: str) -> str | 
     free_emitter = {p for p in free if p.startswith(prefix)}
     if free_emitter:
         return f"free {emitter_name} parameters: {sorted(free_emitter)}"
-
-    # Check for free redshift
-    if "redshift" in free:
-        return "free redshift"
 
     # Check for WavePrecomp
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
@@ -333,5 +324,26 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
             facts["redshift_fixed"] = fixed.get("redshift")
         elif "redshift" in set(model.spec.free_params):
             facts["redshift_free"] = True
+
+    # IGM fold: the declared mode beside the one the build actually applied
+    # (None when no fold was built), so "auto" is never left unresolved (#2445).
+    from tengri.forward.sed_model import WavePrecomp
+
+    cfg = getattr(model, "_approx_config_wave", None)
+    if cfg is not None:
+        declared = cfg.igm_fold
+    elif facts.get("wave_precomp_enabled"):
+        declared = WavePrecomp.igm_fold
+    else:
+        declared = None
+    chain = getattr(model, "_cached_component_chain", None) or []
+    stellar_state = next(
+        (getattr(c, "_state", None) for c in chain if getattr(c, "name", None) == "stellar"),
+        None,
+    )
+    facts["igm_fold"] = {
+        "declared": declared,
+        "resolved": getattr(stellar_state, "igm_fold_resolved", None),
+    }
 
     return facts

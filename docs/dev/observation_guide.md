@@ -266,6 +266,26 @@ spec_config = SpectroscopyConfig(
 )
 ```
 
+### Resampling onto pixels
+
+`resample` chooses how the model becomes pixel values (#2530). `"point"`
+interpolates the model at each pixel center; `"conserving"` takes the mean of
+the model over each pixel; `"auto"` (the default) takes the mean where some
+pixel is wider than the model-grid interval it lies in, and the point sample
+otherwise. The decision is made once in the model's rest frame, at the fixed
+redshift or the lowest redshift of the prior, and every path that produces a
+spectrum (`predict_spectrum`, `Prediction.spectrum`, the fit kernel,
+`spectrum_from_sfh`) uses it. In the pixel-mean mode the Gaussian line-spread function and the
+velocity dispersion act on the model grid and the pixel mean is taken last, as the detector does;
+a banded resolution matrix (DESI) acts on the pixels by construction. The point mode keeps
+its order (resample, then broaden), and on pixels wider than the model grid it stays
+wrong by 3-13 % of the line peak for 2 Å pixels (up to 40 % for narrow lines),
+17-100 % for a prism, and 2-33 % in line flux. The broadened pixel mean costs more per gradient than the
+point sample because the convolution runs on the model grid. A Gaussian line of sigma = 1 Å in 2 Å pixels reads
+13.7 % high at its center when point-sampled. `SpectrumPrecomp` samples at the
+pixel centers and raises for pixels wider than the model grid: use `approx=None`
+or `resample="point"`.
+
 ### LSF configuration
 
 Two parameters control the line-spread function convolution:
@@ -288,14 +308,21 @@ Two parameters control the line-spread function convolution:
 
 ### Which kernel each SED component gets
 
-The stellar continuum and the nebular/shock emission lines are convolved
-with different kernels (#2519), because only the stellar continuum was
-drawn from the SSP template library and shares the galaxy's stellar
-velocity dispersion:
+The stellar continuum and the emission painted by the gas and the AGN are
+convolved with different kernels (#2519, #2565), because only the stellar
+continuum was drawn from the SSP template library and shares the galaxy's
+stellar velocity dispersion:
 
-- **Stellar continuum** (dust-attenuated, plus AGN/dust-IR/radio/X-ray,
-  which are bundled with it): the full kernel,
+- **Stellar continuum** (dust-attenuated, plus the AGN continuum and the
+  dust-IR/radio/X-ray terms, which are bundled with it): the full kernel,
   `sigma_eff = sqrt(sigma_v_kms^2 + sigma_inst(lambda)^2 - sigma_lib(lambda)^2)`.
+- **AGN emission lines** (composable NLR, BLR and FeII; GRAHSP's lines and
+  FeII forest; QSOGen's line template; published as
+  `sed_agn_lines_attenuated`, after the AGN's own screen and the host
+  `agn_screen`): the instrument kernel only. Each line carries its own
+  width (`agn_nlr_fwhm_kms`, the BLR FWHM, `agn_grahsp_linewidth_kms`) and
+  never passes through the stellar library, so the observed width is
+  `sqrt(sigma_line^2 + sigma_inst^2)` and does not move with `sigma_v_kms`.
 - **Nebular and shock emission lines** (continuum and lines together):
   the instrument kernel only, `sigma_eff = sigma_inst(lambda)`. Lines are
   painted at their own intrinsic width (`neb_eline_sigma_kms`) when the
@@ -307,6 +334,53 @@ velocity dispersion:
 `sigma_v_kms` (default: `Fixed(0.0)`, free prior `Uniform(0, 2000)` km/s)
 is the galaxy's stellar velocity dispersion; it reaches the stellar kernel
 only.
+
+### Order of operations: kinematics, IGM, and the instrument (#2589)
+
+When an IGM component is configured (`igm={'type': 'inoue14'}` or similar),
+the stellar piece's kernel is applied in two physically ordered stages
+instead of one combined convolution:
+
+1. **Stellar kinematics** (`sigma_v_kms`, intrinsic to the source): applied
+   to the stellar piece alone, on the rest-frame model grid, before the
+   IGM transmission multiplies the light. A galaxy's own velocity
+   dispersion cannot broaden a line-of-sight absorption feature imprinted
+   after the light has left the galaxy.
+2. **IGM transmission**: multiplies the already-kinematically-broadened
+   stellar piece and the instrument-only piece alike (observed-frame, on the
+   model grid).
+3. **Instrument stage**: the stellar piece gets
+   `sqrt(sigma_inst(lambda)^2 * lsf_scale^2 - sigma_lib(lambda)^2)` (no
+   `sigma_v_kms` term -- already applied in stage 1); nebular, shock and AGN lines get
+   `sigma_inst(lambda) * lsf_scale` as before.
+
+The library deconvolution therefore lands on the instrument stage alone,
+which is where the galaxy's own kinematics and the SSP library's
+resolution genuinely compete (`sigma_v_kms < sigma_lib(lambda)` is common:
+galaxy LOSVDs of 100-400 km/s against SSP libraries resolved to 15-90
+km/s). The IGM's sharp Lyman-limit / Lyman-alpha-forest edge consequently
+carries the library-deconvolved instrument width rather than the
+undeconvolved one -- an approximation bounded by the ratio
+`sigma_lib(lambda) / sigma_inst(lambda)`, strictly smaller than the
+`sigma_v_kms`-sized error the pre-#2589 single combined kernel produced
+whenever `sigma_v_kms >~ sigma_lib(lambda)`. With no IGM component
+configured, this split is a no-op: the single combined kernel of the
+previous section is used unchanged.
+
+**Cross-code comparison.** Prospector applies the mean-IGM transmission
+inside the FSPS call, before `smoothspec` convolves with the stellar
+velocity dispersion (`SpecModel.predict_init`, Johnson et al. 2021, ApJS,
+254, 22, arXiv:2012.01426); BAGPIPES applies its IGM transmission before
+the velocity-dispersion convolution in
+`model_galaxy._calculate_full_spectrum` (Carnall et al. 2018, MNRAS, 480,
+4379, arXiv:1712.04452). tengri applies stellar kinematics first instead:
+the Lyman-limit and Lyman-alpha-forest edges (Inoue et al. 2014, MNRAS,
+442, 1805, arXiv:1402.0677; Madau 1995, ApJ, 441, 18) are imprinted on the
+galaxy's already-kinematically-broadened light along the line of sight,
+external to the galaxy, and are only smeared afterward by the instrument
+-- the order used throughout the Lyman-break galaxy spectroscopy
+literature (e.g. Steidel et al. 1996, ApJ, 462, L17; Steidel et al. 2003,
+ApJ, 592, 728, arXiv:astro-ph/0305378).
 
 ### Free instrument-resolution scale
 

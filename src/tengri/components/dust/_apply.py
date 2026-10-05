@@ -12,9 +12,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-import jax
 import jax.numpy as jnp
 
+from tengri.components.dust._age_mixture import (
+    interval_fractions,
+    interval_optical_depth,
+    interval_transmission,
+    mix_intervals,
+)
 from tengri.components.dust._params import (
     DEFAULT_DUST_BUMP_STRENGTH,
     DEFAULT_DUST_DELTA,
@@ -27,82 +32,6 @@ from tengri.components.dust.laws._registry import (
     resolve_dust_law,
     select_law_kwargs,
 )
-
-
-def precompute_dust_age_weights(
-    age_grid: jnp.ndarray,
-    t_birth: float = 1e7,
-    transition_width: float = 0.3,
-) -> jnp.ndarray:
-    r"""Precompute the birth-cloud sigmoid weight.
-
-    Call once at Model init; pass result to ``two_component_dust_fast``.
-
-    Parameters
-    ----------
-    age_grid : array_like, shape (n_ages,)
-        Stellar population ages. [yr]
-    t_birth : float
-        Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
-    transition_width : float
-        Sigmoid width in dex. [dimensionless] Default: 0.3.
-
-    Returns
-    -------
-    ndarray, shape (n_ages,)
-        Sigmoid weight: 1 for young stars (t < t_birth), 0 for old. [dimensionless]
-
-    Notes
-    -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    The weight is:
-
-    .. math::
-
-        w(t_{\text{age}}) = \sigma\left(-\frac{\log_{10} t_{\text{age}} - \log_{10} t_{\text{birth}}}{\Delta_{\text{trans}}}\right)
-
-    where :math:`\sigma(x) = 1/(1 + e^{-x})` is the logistic sigmoid.
-    """
-    log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
-    log_t_birth = jnp.log10(t_birth)
-    return jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
-
-
-def precompute_dust_age_mask(
-    age_grid: jnp.ndarray,
-    t_birth: float = 1e7,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    r"""Precompute hard young/old masks for fast two-CSP dust decomposition.
-
-    Uses a hard threshold at ``t_birth`` instead of a smooth sigmoid.
-    This is the original Charlot & Fall (2000) formulation and enables
-    a fast path where dust is factored out of the age sum entirely.
-
-    Parameters
-    ----------
-    age_grid : array_like, shape (n_ages,)
-        Stellar population ages. [yr]
-    t_birth : float
-        Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
-
-    Returns
-    -------
-    young_mask : ndarray, shape (n_ages,)
-        1.0 for young ages (< t_birth), 0.0 for old. [dimensionless]
-    old_mask : ndarray, shape (n_ages,)
-        1.0 for old ages (≥ t_birth), 0.0 for young. [dimensionless]
-
-    Notes
-    -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    The original Charlot & Fall (2000) model uses a hard cutoff instead of a sigmoid.
-    This returns complementary masks: young_mask + old_mask = 1 everywhere.
-    """
-    young = (age_grid < t_birth).astype(age_grid.dtype)  # preserve input precision
-    return young, 1.0 - young
-
 
 #: Two-component attenuation-law parameters that may be set per-component.
 #: Maps the law-function keyword to ``(flat_param_name, default)``. The
@@ -400,37 +329,109 @@ def apply_lyman_cutoff(
     return jnp.where(wavelength >= cutoff_aa, k, 0.0)
 
 
-def two_component_dust(
+def two_component_curves(
     wavelength: jnp.ndarray,
-    age_grid: jnp.ndarray,
-    tau_v1: float,
-    tau_v2: float,
-    law_bc: str = "power_law",
-    law_diff: str = "power_law",
-    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
-    t_birth: float = 1e7,
-    transition_width: float = 0.3,
+    law_bc: str,
+    law_diff: str,
     bc_params: dict | None = None,
     diff_params: dict | None = None,
     lyman_cutoff_aa: float = 0.0,
     **law_params,
-) -> jnp.ndarray:
-    r"""Two-component dust attenuation following Charlot & Fall (2000) with smooth age transition.
-
-    Separates dust into birth-cloud (young stars) and diffuse ISM (all stars) components
-    with independent optical depths and attenuation curves. Transition between components
-    uses a smooth sigmoid in log-age, enabling automatic differentiation.
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """The birth-cloud and diffuse attenuation curves :func:`two_component_dust` applies.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    age_grid : array_like, shape (n_ages,)
-        Stellar population ages. [yr]
+    law_bc, law_diff : str
+        Attenuation-law registry keys.
+    bc_params, diff_params : dict, optional
+        Per-screen law-parameter overlays on ``law_params``.
+    lyman_cutoff_aa : float, optional
+        Zero both curves below this wavelength. [Å] ``0.0`` disables.
+    **law_params
+        Shared law keyword arguments.
+
+    Returns
+    -------
+    k_bc, k_diff : ndarray, shape (n_wave,)
+        Curves normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Shared by :func:`two_component_dust` and the
+    energy-balance LUT builders, so a LUT cannot resolve a different curve from
+    the one the direct path applies.
+    """
+    # Per-component law parameters: shared ``law_params`` with optional
+    # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
+    # keys it names, so callers can steepen the birth cloud (FSPS
+    # ``dust1_index=-1.0``) without touching the diffuse ISM.
+    bc_kw = {**law_params, **(bc_params or {})}
+    diff_kw = {**law_params, **(diff_params or {})}
+    # The two screens can carry different laws, so a key that belongs to one is
+    # foreign to the other. Offer each law only what it declares -- and refuse a
+    # key NEITHER declares, which used to vanish into the laws' `**kwargs`
+    # (#2185).
+    reject_unread_law_kwargs({**bc_kw, **diff_kw}, (law_bc, law_diff), "two_component_dust")
+    k_bc = resolve_dust_law(law_bc)(wavelength, **select_law_kwargs(law_bc, bc_kw))
+    k_diff = resolve_dust_law(law_diff)(wavelength, **select_law_kwargs(law_diff, diff_kw))
+    # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
+    # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
+    # extrapolation in place.
+    return (
+        apply_lyman_cutoff(k_bc, wavelength, lyman_cutoff_aa),
+        apply_lyman_cutoff(k_diff, wavelength, lyman_cutoff_aa),
+    )
+
+
+def two_component_dust(
+    wavelength: jnp.ndarray,
+    younger_fraction: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    law_bc: str = "power_law",
+    law_diff: str = "power_law",
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
+    bc_params: dict | None = None,
+    diff_params: dict | None = None,
+    lyman_cutoff_aa: float = 0.0,
+    **law_params,
+) -> jnp.ndarray:
+    r"""Two-component dust transmission of Charlot & Fall (2000), a mixture of two stellar populations.
+
+    Separates dust into a birth-cloud screen (stars younger than the cloud's
+    lifetime) and a diffuse-ISM screen (all stars), with independent optical
+    depths and attenuation curves.  A stellar-population node holds a mixture
+    of the two populations, and its transmission is the mass-weighted mixture
+    of theirs:
+
+    .. math::
+
+        T(\lambda, a) = y(a)\,T_{\rm young}(\lambda) + [1 - y(a)]\,T_{\rm old}(\lambda)
+
+    with :math:`y(a)` the fraction of node :math:`a`'s formed mass younger than the
+    birth-cloud lifetime (the stellar component's ``age_boundary_younger_fraction``),
+
+    .. math::
+
+        T_{\rm young} &= f_{\rm obs} + (1 - f_{\rm obs})
+            \exp[-\tau_{\rm V,BC} k_{\rm BC} - \tau_{\rm V,ISM} k_{\rm ISM}], \\
+        T_{\rm old}   &= f_{\rm obs} + (1 - f_{\rm obs})
+            \exp[-\tau_{\rm V,ISM} k_{\rm ISM}].
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+    younger_fraction : array_like, shape (n_ages,)
+        Per-node formed-mass fraction younger than the birth-cloud lifetime
+        [dimensionless, in [0, 1]]: the stellar component publishes it for the
+        attenuator's boundary (see
+        :mod:`tengri.components.stellar.age_boundary`).
     tau_v1 : float
         Birth-cloud V-band optical depth (at 5500 Å). [dimensionless]
-        Note: tengri applies ``tau_bc`` internally but exposes ``tau_v1`` after normalizing
-        by attenuation curve slope. See docs/known_bugs.md (CROSSVAL-01) for cross-code comparison.
     tau_v2 : float
         Diffuse ISM V-band optical depth. [dimensionless]
     law_bc : str, optional
@@ -440,19 +441,15 @@ def two_component_dust(
     f_obscuration : float, optional
         Fraction of unattenuated sightlines in clumpy geometry (Lower 2022). [dimensionless, in [0, 1]]
         Default: 0.0 (uniform screen).
-    t_birth : float, optional
-        Birth-cloud dispersal age (sigmoid center). [yr] Default: 1e7 (10 Myr).
-    transition_width : float, optional
-        Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
     bc_params : dict, optional
         Per-component overrides for the **birth-cloud** law (e.g.
         ``{"dust_slope": -1.0}``). Merged on top of ``**law_params``, so any key
         absent here falls back to the shared value. Enables FSPS-style
-        independent indices (birth cloud ``dust1_index`` ≠ diffuse
-        ``dust_index``). Default ``None`` → shared parameters.
+        independent indices (birth cloud ``dust1_index`` != diffuse
+        ``dust_index``). Default ``None`` -> shared parameters.
     diff_params : dict, optional
         Per-component overrides for the **diffuse ISM** law. Same merge
-        semantics as ``bc_params``. Default ``None`` → shared parameters.
+        semantics as ``bc_params``. Default ``None`` -> shared parameters.
     lyman_cutoff_aa : float, optional
         Zero both attenuation curves below this wavelength. [Å] Default ``0.0``
         -> disabled (the polynomial extrapolates through the FUV). Set to
@@ -467,39 +464,22 @@ def two_component_dust(
     Returns
     -------
     ndarray, shape (n_ages, n_wave)
-        Multiplicative transmission factor T(λ, t_age), where T ∈ [0, 1]. [dimensionless]
+        Multiplicative transmission factor T(λ, t_age), where T in [0, 1]. [dimensionless]
 
     Notes
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives and safe for ``jax.jit``.
 
-    **Gradient-safe**: yes, differentiable everywhere; smooth sigmoid age transition preserves gradients
-    through the birth-cloud boundary.
+    **Gradient-safe**: yes, differentiable in the optical depths, the law
+    parameters and ``younger_fraction``.
 
-    The total optical depth is:
-
-    .. math::
-
-        \tau(\lambda, t_{\text{age}}) = w(t_{\text{age}}) \cdot \tau_{{\rm V,BC}} \cdot k_{\rm BC}(\lambda)
-        + \tau_{{\rm V,ISM}} \cdot k_{\rm ISM}(\lambda)
-
-    where :math:`w(t_{\text{age}})` is the sigmoid weight:
-
-    .. math::
-
-        w(t_{\text{age}}) = \sigma\left(-\frac{\log_{10} t_{\text{age}} - \log_{10} t_{\text{birth}}}{\Delta_{\text{trans}}}\right)
-
-    and :math:`\sigma(x) = 1/(1 + e^{-x})` is the logistic sigmoid. The transmission is then:
-
-    .. math::
-
-        T(\lambda, t_{\text{age}}) = f_{\rm obs} + (1 - f_{\rm obs}) \cdot \exp[-\tau(\lambda, t_{\text{age}})]
-
-    where :math:`f_{\rm obs}` is the unattenuated sightline fraction.
-
-    **Upstream**: Implements the Charlot & Fall (2000) two-component framework [1]_ with sigmoid age transition
-    following tengri's differentiable design. Birth-cloud + diffuse ISM separation enables realistic modeling
-    of age-dependent dust geometry in galaxies.
+    Implements the same model as Charlot & Fall (2000) [1]_, whose
+    birth-cloud/diffuse split is a split of the *stellar populations* by age;
+    the nodes of a discrete SSP grid carry the fraction of each population,
+    rather than a single age.  ``y(a)`` in ``{0, 1}`` (a node wholly inside one
+    population) reduces to that population's own transmission.  The one
+    implementation of the mixture is
+    ``_age_mixture``, shared with ``age_binned``.
 
     References
     ----------
@@ -518,41 +498,122 @@ def two_component_dust(
     >>> from tengri import two_component_dust
     >>> wave = jnp.linspace(1000.0, 30000.0, 300)
     >>> ages = jnp.logspace(6.0, 10.14, 64)
-    >>> T = two_component_dust(wave, ages, tau_v1=1.0, tau_v2=0.3)
+    >>> young = (ages < 1e7).astype(float)
+    >>> T = two_component_dust(wave, young, tau_v1=1.0, tau_v2=0.3)
     >>> T.shape
     (64, 300)
+    """
+    t_int = two_component_interval_transmission(
+        wavelength,
+        tau_v1,
+        tau_v2,
+        law_bc=law_bc,
+        law_diff=law_diff,
+        f_obscuration=f_obscuration,
+        bc_params=bc_params,
+        diff_params=diff_params,
+        lyman_cutoff_aa=lyman_cutoff_aa,
+        **law_params,
+    )
+    fractions = interval_fractions(jnp.asarray(younger_fraction)[None, :])
+    return mix_intervals(fractions, t_int)
+
+
+def two_component_interval_transmission(
+    wavelength: jnp.ndarray,
+    tau_v1: float,
+    tau_v2: float,
+    law_bc: str = "power_law",
+    law_diff: str = "power_law",
+    f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
+    bc_params: dict | None = None,
+    diff_params: dict | None = None,
+    lyman_cutoff_aa: float = 0.0,
+    **law_params,
+) -> jnp.ndarray:
+    r"""The two populations' transmissions: young (birth cloud + diffuse) and old (diffuse).
+
+    The curve evaluation behind :func:`two_component_dust`; every parameter
+    has the meaning given there.
+
+    Returns
+    -------
+    ndarray, shape (2, n_wave)
+        ``T_young`` (row 0) and ``T_old`` (row 1) in ``[0, 1]``, each with its
+        own ``f_obscuration`` sightline mixture [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.  **Gradient-safe**: yes.
     """
     # Per-component law parameters: shared ``law_params`` with optional
     # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
     # keys it names, so callers can steepen the birth cloud (FSPS
     # ``dust1_index=-1.0``) without touching the diffuse ISM.
-    bc_kw = {**law_params, **(bc_params or {})}
-    diff_kw = {**law_params, **(diff_params or {})}
-    # The two screens can carry different laws, so a key that belongs to one is
-    # foreign to the other. Offer each law only what it declares -- and refuse a
-    # key NEITHER declares, which used to vanish into the laws' `**kwargs`
-    # (#2185).
-    reject_unread_law_kwargs({**bc_kw, **diff_kw}, (law_bc, law_diff), "two_component_dust")
-    k_bc = resolve_dust_law(law_bc)(wavelength, **select_law_kwargs(law_bc, bc_kw))
-    k_diff = resolve_dust_law(law_diff)(wavelength, **select_law_kwargs(law_diff, diff_kw))
-    # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
-    # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
-    # extrapolation in place.
-    k_bc = apply_lyman_cutoff(k_bc, wavelength, lyman_cutoff_aa)
-    k_diff = apply_lyman_cutoff(k_diff, wavelength, lyman_cutoff_aa)
+    k_bc, k_diff = two_component_curves(
+        wavelength, law_bc, law_diff, bc_params, diff_params, lyman_cutoff_aa, **law_params
+    )
+    return nested_two_screen_intervals(tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration)
 
-    log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
-    log_t_birth = jnp.log10(t_birth)
-    weight = jax.nn.sigmoid(-(log_age - log_t_birth) / transition_width)
 
-    tau_lambda = weight[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
+def nested_two_screen_intervals(
+    tau_k_bc: jnp.ndarray,
+    tau_k_diff: jnp.ndarray,
+    f_obscuration=DEFAULT_DUST_F_OBSCURATION,
+) -> jnp.ndarray:
+    """Per-interval transmissions of the nested N = 2 case: young (bc + diff), old (diff).
 
-    return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
+    Parameters
+    ----------
+    tau_k_bc, tau_k_diff : ndarray, shape (n_wave,)
+        ``tau * k(lambda)`` of the birth-cloud and diffuse screens
+        [dimensionless].
+    f_obscuration : float or ndarray, optional
+        Unattenuated-sightline fraction [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (2, n_wave)
+        ``T_young`` (row 0) and ``T_old`` (row 1), each including its own
+        ``f_obscuration`` sightline mixture.
+    """
+    cover = ((True, False), (True, True))
+    tau_int = interval_optical_depth([tau_k_bc, tau_k_diff], cover)
+    return interval_transmission(tau_int, f_obscuration)
+
+
+def nested_two_screen_mixture(
+    younger_fraction: jnp.ndarray,
+    tau_k_bc: jnp.ndarray,
+    tau_k_diff: jnp.ndarray,
+    f_obscuration=DEFAULT_DUST_F_OBSCURATION,
+) -> jnp.ndarray:
+    """The nested N = 2 case of the age-interval mixture: ``[0, t_b)`` bc + diff, then diff.
+
+    Parameters
+    ----------
+    younger_fraction : ndarray, shape (n_age,)
+        Node fraction younger than the boundary [dimensionless].
+    tau_k_bc, tau_k_diff : ndarray, shape (n_wave,)
+        ``tau * k(lambda)`` of the birth-cloud and diffuse screens
+        [dimensionless].
+    f_obscuration : float or ndarray, optional
+        Unattenuated-sightline fraction [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_age, n_wave)
+        Per-node transmission.
+    """
+    fractions = interval_fractions(jnp.asarray(younger_fraction)[None, :])
+    return mix_intervals(
+        fractions, nested_two_screen_intervals(tau_k_bc, tau_k_diff, f_obscuration)
+    )
 
 
 def two_component_dust_separable(
     wavelength: jnp.ndarray,
-    dust_age_weights: jnp.ndarray,
+    younger_fraction: jnp.ndarray,
     tau_v1: float,
     tau_v2: float,
     law_bc_fn: Callable,
@@ -560,20 +621,20 @@ def two_component_dust_separable(
     f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
-    r"""Optimized two-component dust attenuation with factorized age-independent term.
+    r"""Two-component dust transmission with pre-resolved law functions.
 
-    Exploits the exponential factorization exp(a + b) = exp(a) · exp(b) to separate
-    the diffuse ISM component from the age-dependent outer product. The diffuse
-    exponentiation operates on (n_wave,) instead of (n_ages, n_wave), saving one full-grid
-    exponential. Accepts pre-resolved law functions to avoid dict lookups in hot code.
+    The same young/old population mixture as :func:`two_component_dust`
+    (``T = y T_young + (1 - y) T_old``), taking already-resolved law callables
+    to avoid registry lookups in hot code.  The two ``exp`` calls run on
+    ``(n_wave,)``; only the mixture itself is ``(n_ages, n_wave)``.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
-    dust_age_weights : array_like, shape (n_ages,)
-        Pre-computed sigmoid birth-cloud weights from ``precompute_dust_age_weights``.
-        Computed once at Model init and cached.
+    younger_fraction : array_like, shape (n_ages,)
+        Per-node formed-mass fraction younger than the birth-cloud lifetime
+        [dimensionless, in [0, 1]].
     tau_v1 : float
         Birth-cloud V-band optical depth. [dimensionless]
     tau_v2 : float
@@ -590,37 +651,13 @@ def two_component_dust_separable(
     Returns
     -------
     ndarray, shape (n_ages, n_wave)
-        Multiplicative transmission T(λ, t_age) ∈ [0, 1]. [dimensionless]
+        Multiplicative transmission T(λ, t_age) in [0, 1]. [dimensionless]
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes.  **Gradient-safe**: yes.
 
-    **Gradient-safe**: yes, differentiable everywhere.
-
-    **Performance**: Reduces memory traffic by ~40% on (n_ages, n_wave) grids
-    relative to ``two_component_dust`` because the diffuse exponential is computed
-    on (n_wave,) and broadcast rather than materialized as (n_ages, n_wave).
-    Significant speedup on CPU; moderate benefit on GPU (memory bandwidth more abundant).
-
-    The transmission factorizes as:
-
-    .. math::
-
-        T(\lambda, t_{\text{age}}) = T_{\rm BC}(\lambda, t_{\text{age}}) \cdot T_{\rm ISM}(\lambda)
-
-    where
-
-    .. math::
-
-        T_{\rm BC}(\lambda, t_{\text{age}}) = f_{\rm obs} + (1 - f_{\rm obs}) \, \exp[-w(t_{\text{age}}) \, \tau_{\rm V,BC} \, k_{\rm BC}(\lambda)]
-
-    .. math::
-
-        T_{\rm ISM}(\lambda) = \exp[-\tau_{\rm V,ISM} \, k_{\rm ISM}(\lambda)]
-
-    The ISM component is computed once on (n_wave,) and then broadcast with the age-dependent
-    birth-cloud term, avoiding the full (n_ages, n_wave) grid in intermediate storage.
+    Implements the same model as Charlot & Fall (2000) [1]_.
 
     References
     ----------
@@ -631,23 +668,14 @@ def two_component_dust_separable(
     reject_unread_law_kwargs(law_params, (law_bc_fn, law_diff_fn), "two_component_dust_separable")
     k_bc = law_bc_fn(wavelength, **select_law_kwargs(law_bc_fn, law_params))
     k_diff = law_diff_fn(wavelength, **select_law_kwargs(law_diff_fn, law_params))
-
-    # Diffuse ISM: age-independent → (n_wave,) exp instead of (n_age, n_wave)
-    diffuse_trans = jnp.exp(-tau_v2 * k_diff)  # (n_wave,)
-
-    # Birth cloud: age-dependent outer product → (n_age, n_wave)
-    bc_trans = jnp.exp(-dust_age_weights[:, None] * tau_v1 * k_bc[None, :])
-
-    # Combine: broadcast (n_age, n_wave) * (n_wave,) avoids materializing
-    # the full (n_age, n_wave) diffuse array
-    transmission = bc_trans * diffuse_trans[None, :]
-
-    return f_obscuration + (1.0 - f_obscuration) * transmission
+    return nested_two_screen_mixture(
+        younger_fraction, tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration
+    )
 
 
 def two_component_dust_fast(
     wavelengths: jnp.ndarray,
-    dust_age_weights: jnp.ndarray,
+    younger_fraction: jnp.ndarray,
     tau_v1: float,
     tau_v2: float,
     law_bc: str = "power_law",
@@ -655,11 +683,11 @@ def two_component_dust_fast(
     f_obscuration: float = DEFAULT_DUST_F_OBSCURATION,
     **law_params,
 ) -> jnp.ndarray:
-    r"""Fast dust attenuation using precomputed age weights.
+    r"""Two-component dust transmission from a precomputed per-node young fraction.
 
-    Avoids recomputing the birth-cloud age sigmoid every call. Used by
-    both the fused kernel (at effective wavelengths) and the exact path
-    (at the full wavelength grid).
+    The same population mixture as :func:`two_component_dust`; used by the
+    fused kernel (at effective wavelengths) and the exact path (at the full
+    wavelength grid).
 
     The output dtype follows the input ``wavelengths`` dtype, so passing float32
     arrays halves memory traffic on the ``(n_ages, n_wave)`` intermediates
@@ -673,9 +701,9 @@ def two_component_dust_fast(
     wavelengths : array_like, shape (n_wave,)
         Evaluation wavelengths (rest-frame). [Å] Can be the full
         SSP grid or just the filter effective wavelengths.
-    dust_age_weights : array_like, shape (n_ages,)
-        Pre-computed sigmoid weights from ``precompute_dust_age_weights``.
-        Computed once at Model init.
+    younger_fraction : array_like, shape (n_ages,)
+        Per-node formed-mass fraction younger than the birth-cloud lifetime
+        [dimensionless, in [0, 1]].
     tau_v1 : float
         Birth-cloud V-band optical depth. [dimensionless]
     tau_v2 : float
@@ -698,17 +726,14 @@ def two_component_dust_fast(
 
     Notes
     -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    **Gradient-safe**: yes, differentiable everywhere.
+    **JIT-compatible**: yes.  **Gradient-safe**: yes.
     """
     reject_unread_law_kwargs(law_params, (law_bc, law_diff), "two_component_dust_fast")
     k_bc = resolve_dust_law(law_bc)(wavelengths, **select_law_kwargs(law_bc, law_params))
     k_diff = resolve_dust_law(law_diff)(wavelengths, **select_law_kwargs(law_diff, law_params))
-
-    tau_lambda = dust_age_weights[:, None] * tau_v1 * k_bc[None, :] + tau_v2 * k_diff[None, :]
-
-    return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_lambda)
+    return nested_two_screen_mixture(
+        younger_fraction, tau_v1 * k_bc, tau_v2 * k_diff, f_obscuration
+    )
 
 
 # ── Single-component dust model (uniform screen) ──────────────────

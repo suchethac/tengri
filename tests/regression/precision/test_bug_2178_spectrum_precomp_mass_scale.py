@@ -282,7 +282,9 @@ def test_the_spectrum_precomp_forward_is_finite_and_nonzero_in_float32(ssp_bare)
 
     wave_obs = np.linspace(4000.0, 9000.0, _N_PIX)
     build = dict(
-        observation=Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(wave_obs))),
+        observation=Observation(
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.asarray(wave_obs))
+        ),
         approx=SpectrumPrecomp(n_z=48, z_min=0.05, z_max=1.0),
         sfh={
             "type": "delayed",

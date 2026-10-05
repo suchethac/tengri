@@ -13,22 +13,29 @@ nuclei across `8 < log ν/Hz < 20`.
 
 ## What this notebook compares
 
+The notebook prints the installed registry's menus (`tengri.list_agn_models()`,
+`tengri.list_agn_blocks(category=...)`), which are authoritative; the table is
+for orientation.
+
 | Block | AGNFITTER-RX libraries | tengri |
 |-------|------------------------|--------|
+| Stellar population | GALAXY: BC03 and BC03_metal (Chabrier) | `bc03_pdva_stelib_chabrier` SSP through `SEDModel.build`; GA amplitude mapped to present stellar mass |
 | Accretion disk | R06, SN12, KD18, THB21 | `richards2006`, `slone_netzer`, `kd18_agnfitter` (+ `kd18_agnfitter_warmindex`), `qsogen` (+ `blr`/`feii`) |
 | Disk reddening | Prevot SMC `EBVbbb` | `agn_ebv_disc` (top-level); `agn.atten={'type': 'qsogen'}` for qsogen's own curve |
-| Galaxy attenuation | SMC / Calzetti (fit-time) | `dust_attenuation={'law': 'calzetti', ...}` |
+| Galaxy attenuation | Calzetti | `dust_attenuation={'law': 'calzetti', ...}` |
 | Torus | S04, NK08, SKIRTOR, CAT3D-Wind, + NK0_mean_2p/3p, SKIRTOR_mean_1p/2p, CAT3D low-`f_wd` | `silva04`, `nenkova_agnfitter` (+`_2p`/`_3p`), `skirtor` + `skirtor_agnfitter` (+`_1p`/`_2p`), `cat3d_wind` (+`_lowfwd`) |
 | Cold dust | DH02_CE01, S17, S17_radio (Schreiber+2018) | `schreiber2018` (also `schreiber2016`, `dale2014`, `dh02_ce01`) |
 | X-ray corona | α_ox–L₂₅₀₀ (Just+2007) | `xray_agn_corona_from_disc`, `alpha_ox_from_l2500` |
-| Radio | SPL / DPL (Eqs. 9–10), Bell-2003 SF (90/10 split) | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003_split`, `sfr_from_lir` |
+| Radio | SPL / DPL (Eq. 2), Bell-2003 SF (90/10 split) | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003_split` |
 | Priors | Eight informative priors (`PRIORS_AGNfitter.py`) | `tengri.agn.priors.agnfitter_priors`; `Fitter(..., extra_log_prior=...)` |
+| Full SED | `ymodel`: GA + SB + BB + TO + RAD | one `SEDModel.build` with the host and the paper's winning AGN combination |
 
 Beyond the single-node face-offs, the notebook sweeps several node grids
 directly off each library's own axes: SN12 and KD18 disc `(log M_BH, log
 λ_Edd)` nodes; S04 log N_H and NK08 inclination nodes; SKIRTOR `(oa, incl,
 τ)` index triples plus the full X-CIGALE grid at the fiducial; CAT3D-Wind
-`(incl, a, f_wd)` triples alongside the existing wind-fraction sweep; five
+`(incl, a, f_wd)` triples alongside a wind-fraction sweep over the union of
+both CAT3D blocks; five
 S17 cold-dust `(T_dust, f_PAH)` nodes and three DH02_CE01 log L_IR nodes;
 an X-ray corona grid over Δα_ox and Γ; and a radio SPL `alpha x log ν_cut`
 grid plus a DPL `log ν_t` grid.
@@ -47,8 +54,8 @@ comparisons double as end-to-end wiring checks of the composable AGN API.
 
 The AGNFITTER-RX reference templates the notebook overlays are **committed**
 to `data/` (`agnfitter_bbb_reference.h5`, `agnfitter_torus_reference.h5`,
-`agnfitter_cold_dust_reference.h5`), so the notebook runs on a clean checkout
-with no AGNfitter clone. The clone is needed only to *regenerate* those
+`agnfitter_cold_dust_reference.h5`, `agnfitter_galaxy_reference.h5`), so the
+notebook runs on a clean checkout with no AGNfitter clone. The clone is needed only to *regenerate* those
 references (`scripts/build_agnfitter_bbb_reference.py`,
 `scripts/build_agnfitter_s17_reference.py`, and the per-model grid builders).
 
@@ -79,6 +86,13 @@ run, stamps the render with the SHA-256 of the source `.py` it ran from, and
 publishes the result to `docs/reproduction/`. The figures are written to
 `_figs/agnfitter_*.png`.
 
+The capstone sums every component AGNFITTER-RX's `ymodel` sums, each from
+upstream's own template or equation read through the driver. The amplitudes are
+free parameters of upstream's fit, so each is set from a matched tengri input
+(stellar mass for GA, infrared luminosity for SB, L_ν(2500 Å) for BB, torus
+power for TO, the 5 GHz jet level for RAD); the notebook states which rows test
+absolute scale and which test shape.
+
 `validate_matched_physics.py` is the strict companion check: it removes every
 input difference between tengri and AGNFITTER-RX and compares the cold-dust
 and accretion-disk SEDs pixel by pixel at matched template nodes, rather than
@@ -99,14 +113,16 @@ JAX_PLATFORMS=cpu PYTHONPATH=$PWD/src:$PWD \
 - Temple, M. J., Hewett, P. C. & Banerji, M. 2021, MNRAS 508, 737 (THB21 disk).
 - Prevot, M. L., et al. 1984, A&A 132, 389 (SMC reddening).
 - Silva, L., et al. 2004, MNRAS 355, 973 (S04 torus).
-- Nenkova, M., et al. 2008, ApJ 685, 147 (NK08 / CLUMPY torus).
+- Nenkova, M., et al. 2008, ApJ 685, 160 (NK08 / CLUMPY torus).
 - Stalevski, M., et al. 2016, MNRAS 458, 2288 (SKIRTOR torus).
 - Hönig, S. F. & Kishimoto, M. 2017, ApJL 838, L20 (CAT3D-Wind torus).
 - Schreiber, C., et al. 2018, A&A 609, A30 (S17 cold dust).
 - Dale, D. A. & Helou, G. 2002, ApJ 576, 159; Chary, R. & Elbaz, D. 2001,
   ApJ 556, 562 (DH02_CE01 cold dust).
-- Just, A., et al. 2007, ApJ 665, 1004; Lusso, E. & Risaliti, G. 2016, ApJ 819,
+- Just, D. W., et al. 2007, ApJ 665, 1004; Lusso, E. & Risaliti, G. 2016, ApJ 819,
   154; 2017, A&A 602, A79 (α_ox–L₂₅₀₀).
-- Azadi, M., et al. 2023, ApJ 945, 145 (radio SPL/DPL); Bell, E. F. 2003, ApJ
+- Azadi, M., et al. 2020 (arXiv:2011.03130) (radio SPL/DPL); Bell, E. F. 2003, ApJ
   586, 794 (IR–radio correlation).
 - Stern, D. 2015, ApJ 807, 129 (6 µm ↔ 2–10 keV; AGNFITTER-RX X-ray prior).
+- Yang, G., et al. 2022, ApJ 927, 192 (CIGALE X-ray/radio extensions; viewing-angle
+  X-ray anisotropy).

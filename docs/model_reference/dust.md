@@ -46,6 +46,25 @@ $$ (eq-dust-sigmoid)
 $$ (eq-tau-total)
  where $k(\lambda)$ is normalized at $\lambda = 5500$ Å. This requires the full $(n_{\rm age} \times n_\lambda)$ outer product for the exponential, but preserves smooth differentiability through the age boundary, which may matter for gradient-based inference when the data constrain the transition region.
 
+### Age-Binned ($N$-Screen) Framework
+
+The age-binned mode generalizes the two-component model to $N$ independent screens, each with its own attenuation curve $k_i(\lambda)$ and a window $(l_i, h_i)$ in $\log_{10}(t_{\rm age}/{\rm yr})$, either edge of which may be unbounded. Windows need not partition the age axis. The optical depth seen by an SSP of age $t_{\rm age}$ is $$\tau(\lambda, t_{\rm age}) = \sum_{i} w_i(t_{\rm age})\, \tau_i\, k_i(\lambda),
+\qquad
+w_i(t_{\rm age}) = \sigma\!\left(\frac{\log_{10} t_{\rm age} - l_i}{\Delta_{\rm trans}}\right)
+\sigma\!\left(\frac{h_i - \log_{10} t_{\rm age}}{\Delta_{\rm trans}}\right),
+
+$$ (eq-dust-agebinned)
+ with $\sigma$ the logistic sigmoid of Equation {eq}`eq-dust-sigmoid` and $\Delta_{\rm trans}$ the shared transition width (default 0.3 dex); an unbounded window side contributes a factor of 1. The two-component model is the $N = 2$ case: the screens $\{(k_{\rm BC}, (-\infty, \log_{10} t_{\rm birth})),\, (k_{\rm ISM}, (-\infty, \infty))\}$ reduce $w_0(t_{\rm age})$ to the $w(t_{\rm age})$ of Equation {eq}`eq-dust-sigmoid` and $w_1(t_{\rm age}) \equiv 1$, recovering Equation {eq}`eq-tau-total` exactly.
+
+Nebular continuum and the discrete emission-line catalog are attenuated at the youngest age, the $t_{\rm age} \to 0$ limit of Equation {eq}`eq-dust-agebinned`: screens with a finite lower edge vanish there, leaving $$\tau_{\rm neb}(\lambda) = \sum_{i:\; l_i = -\infty} \tau_i\, k_i(\lambda).
+
+$$ (eq-dust-agebinned-neb)
+ Each screen carries its own optical depth $\tau_i$ and the shape parameters of its curve; the clumpy geometry of the next section is not applied in this mode.
+
+Because only screens that reach $t_{\rm age} \to 0$ enter Equation {eq}`eq-dust-agebinned-neb`, a finite lower edge close to the youngest SSP node would give that node a non-negligible weight from screen $i$ in Equation {eq}`eq-dust-agebinned` while the nebular and line path saw none of it. Construction therefore refuses $l_i < \log_{10} t_{\rm youngest} + 5\,\Delta_{\rm trans}$, the threshold below which the stellar-path weight exceeds $\sigma(-5) \approx 0.7\%$; the edge must be unbounded or raised to the threshold.
+
+When three or more screens tile the age axis with shared finite edges, $\sum_i w_i(t_{\rm age})$ is not exactly 1 at a shared edge: each neighboring sigmoid reaches 0.5 there independently, so the sum runs slightly above 1 (1.0033 at a shared edge and up to 1.0058 at the center of a 1.5-dex screen for $\Delta_{\rm trans} = 0.3$ dex). The partition is exact only for $N = 2$, where the single shared edge has a half-infinite screen on each side; far from every edge it returns to 1 to machine precision for any $N$.
+
 ### Clumpy Geometry
 
 All three modes support the clumpy-screen geometry of Lower et al. (2022), in which a fraction $f_{\rm obs}$ of sightlines are unobscured: $$T(\lambda, t_{\rm age}) = f_{\rm obs} + (1 - f_{\rm obs}) \cdot \exp\!\bigl[-\tau(\lambda, t_{\rm age})\bigr].
@@ -82,6 +101,7 @@ Table {ref}`1 <tab-dust-curves>` lists the attenuation curves registered in ten
 | `noll09` | Noll+2009 | Yes | $\delta$, $E_b$ |
 | `salim_sbl18` | Salim+2018 (modified Calzetti+L02) | Yes | $\delta$, $E_b$ |
 | `smc` | Pei 1992 | No | None |
+| `gordon03_smcbar` | Gordon et al. 2003 | No | None |
 | `lmc` | Pei 1992 | Weak | None |
 | `cardelli` | Cardelli+1989 | Yes | $R_V$ |
 | `li08` | Li et al. (2008) | Yes | $c_1$, $c_2$, $c_3$, $c_4$ |

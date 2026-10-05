@@ -5,12 +5,12 @@ Regression for #824 (no negative flux / no leak below 912 Å) plus the young-onl
 default. ``neb_fesc`` is a *birth-cloud* escape fraction, so by default only the
 young/birth-cloud stellar LyC is reprocessed; the old/diffuse stellar LyC passes
 through (matches bagpipes ``model_galaxy``, which zeros only ``spectrum_bc[<912]``).
-``DustSEDComponentConfig.lyc_absorb_all=True`` absorbs *all* stellar LyC
+``DustSEDComponentConfig.lyc_reprocessed_by='all'`` absorbs *all* stellar LyC
 (old + young), matching FSPS (``frac_obrun``) and CIGALE (absorbed_old+young).
 
 The nebular component publishes ``lyc_transmission = where(λ<912, neb_fesc, 1)``;
 the two-component dust applies it — young-weighted by default, uniform under
-``lyc_absorb_all`` — to the per-age ``lnu_age`` reconstruction, so:
+``lyc_reprocessed_by='all'`` — to the per-age ``lnu_age`` reconstruction, so:
 
 * ``predict()`` never goes negative below 912 Å (the #824 phantom is gone), and
 * below 912 the surviving stellar LyC is young×fesc + old (default), or
@@ -25,6 +25,7 @@ import pytest
 
 from tengri.components.dust.two_component import DustSEDComponent, DustSEDComponentConfig
 from tengri.protocols.component import ForwardState
+from tests._age_boundary import hand_age_derived
 from tests._bounds import assert_non_negative
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -50,7 +51,12 @@ def _state(fesc: float, *, young: float, old: float, publish_lyc: bool = True) -
     full = jnp.sum(lnu_age, axis=0)
     lyc_mask = _WAVE < 912.0
     sed_intrinsic = jnp.where(lyc_mask, full * fesc, full)
-    derived = {"lnu_age": lnu_age, "ssp_ages_yr": _AGES, "sed_nebular": jnp.zeros_like(_WAVE)}
+    derived = {
+        "lnu_age": lnu_age,
+        "ssp_ages_yr": _AGES,
+        **hand_age_derived(_AGES),
+        "sed_nebular": jnp.zeros_like(_WAVE),
+    }
     if publish_lyc:
         derived["lyc_transmission"] = jnp.where(lyc_mask, fesc, jnp.ones_like(_WAVE))
     return ForwardState(wave=_WAVE, sed_intrinsic=sed_intrinsic, derived=derived)
@@ -59,7 +65,15 @@ def _state(fesc: float, *, young: float, old: float, publish_lyc: bool = True) -
 def _apply(state, *, absorb_all=False):
     comp = DustSEDComponent(
         config=DustSEDComponentConfig(
-            law_bc="calzetti", law_diff="calzetti", lyc_absorb_all=absorb_all
+            law_bc="calzetti",
+            law_diff="calzetti",
+            lyc_reprocessed_by="all" if absorb_all else "young",
+            # This synthetic state has no nebular component publishing
+            # neb_fdust_frac/lyc_fdust, so the #2539 HII-region dust-heating
+            # credit (a separate mechanic from the LyC-reprocessing mode this
+            # test isolates) has nothing to read; disable it explicitly
+            # rather than hand-rolling the extra derived keys it would need.
+            fdust_credit_active=False,
         )
     )
     # tau_bc=0 -> young and old both see only the diffuse screen (age-independent
@@ -95,7 +109,7 @@ def test_default_keeps_old_lyc_absorbs_young():
 
 
 def test_absorb_all_zeros_all_lyc():
-    """lyc_absorb_all=True: fesc=0 removes BOTH young and old LyC below 912."""
+    """lyc_reprocessed_by='all': fesc=0 removes BOTH young and old LyC below 912."""
     out = _apply(_state(0.0, young=1e29, old=1e29), absorb_all=True)
     sda = np.asarray(out.derived["sed_dust_attenuated"])
     assert np.allclose(sda[_LYC], 0.0)

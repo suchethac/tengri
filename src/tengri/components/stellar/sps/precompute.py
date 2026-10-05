@@ -41,12 +41,11 @@ from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_di
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
-    _cumtrapz_rows,
-    _interp_rows,
+    lyc_augment_grid_for_step,
     preintegrate_grid,
     subband_quadrature,
 )
-from tengri.utils.physics_constants import TEN_PC_CM
+from tengri.utils.physics_constants import LYMAN_LIMIT_AA, TEN_PC_CM
 from tengri.utils.scale import (
     apply_log10_scale,
     log10_flux_scale as _log10_flux_scale,
@@ -138,7 +137,7 @@ class PhotometricPrecomputation(NamedTuple):
         Filter integral restricted to each sub-band. Sums over the last axis
         to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]. The last
         axis is ``n_subbands + 1`` wide, not ``n_subbands``, when ``lyc_gate``
-        was also True: a physical edge at 912 Å(1+z) is then forced into the
+        was also True: a physical edge at LYMAN_LIMIT_AA(1+z) is then forced into the
         equal-filter-mass partition (#2439, #2427, R1;
         :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk
         lies wholly on one side of the Lyman limit.
@@ -158,7 +157,7 @@ class PhotometricPrecomputation(NamedTuple):
         :func:`precompute_restband_photometry` and carried on the stellar component's
         state: one builder for the fixed-z and free-z paths alike (#1148).
     ssp_phot_lyc : array or None, shape (n_met, n_age, n_filters)
-        SSP broadband flux restricted to rest-frame λ < 912 Ångström
+        SSP broadband flux restricted to rest-frame λ < LYMAN_LIMIT_AA (911.76 Ångström)
         (Lyman continuum) per metallicity, age, and filter [erg/s/Hz/Msun].
         The exact algebraic split ``ssp_phot = ssp_phot_lyc + (ssp_phot -
         ssp_phot_lyc)`` at the physical edge. Used to apply the nebular
@@ -189,6 +188,10 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
     ssp_phot_lyc: "jnp.ndarray | None" = None
+    #: Rest-frame centroid of each chunk WITH the IGM inside [A], same shape as
+    #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
+    #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
+    ssp_subband_waves_rest_igm: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -655,9 +658,13 @@ class PhotometricZTable(NamedTuple):
     #: cache key needs no IGM term). ``None`` when the IGM is absent or reads free
     #: parameters (patchy reionization, DLAs).
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
-    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
+    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA)
     #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
     ssp_phot_lyc_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame centroid of each chunk
+    #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
+    #: itself, so not part of the on-disk z-table.
+    subband_waves_rest_igm_table: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -702,7 +709,11 @@ class ZTableRequest:
 
 
 # Bump when the quadrature or table layout changes: invalidates every
-# cached z-table built by an older algorithm.
+# cached z-table built by an older algorithm. The cache KEY is a content
+# hash over this function's INPUTS (SSP grid, filters, z grid, flags,
+# cosmology, session precision/backend) -- never over the quadrature CODE
+# itself -- so an algorithm change with no input-shape change is invisible
+# to the key and relies entirely on this manual bump.
 # 3 -> 4 (#2439, #2427): the npz payload gained ``ssp_phot_lyc_table`` at
 # version 3 without a bump, so a warm cache built the day before this fix
 # would have satisfied the (unversioned-for-this-field) key and silently
@@ -710,7 +721,15 @@ class ZTableRequest:
 # with no warning. ``lyc_gate`` is now also its own field in
 # :class:`ZTableRequest`, so a lyc_gate=True request can never collide with
 # a lyc_gate=False (or pre-#2439) entry even if the version were not bumped.
-_ZTABLE_CACHE_VERSION = 4
+# 4 -> 5 (one Lyman edge, L3): ``ssp_phot_lyc_table`` and (when ``lyc_gate``)
+# ``ssp_subband_phot_table``/``subband_waves_rest_table`` moved off the
+# retired bare 912 Å literal onto ``LYMAN_LIMIT_AA`` (911.76 Å) and off a
+# cumulative-trapezoid-and-interpolate-at-the-cutoff construction onto the
+# step-model-exact :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`
+# -- neither changes any field ``ZTableRequest`` hashes, so without this
+# bump a warm cache built one day earlier would silently serve the old
+# (912 Å, approximate) values under the new code.
+_ZTABLE_CACHE_VERSION = 5
 
 
 def _ztable_cache_dir():
@@ -1020,7 +1039,7 @@ def _compute_photometry_ztable(
     subband_waves_all = (
         np.zeros((n_z_pts, n_met, n_age, n_filters, K_sub), dtype=np.float64) if K > 0 else None
     )
-    # Lyman continuum photometry (rest λ < 912 Å) (#2439, #2427). Gated on
+    # Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA) (#2439, #2427). Gated on
     # lyc_gate (a live nebular Lyman-continuum mask): a model without one
     # never pays this compute or the extra table size.
     ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
@@ -1086,37 +1105,34 @@ def _compute_photometry_ztable(
 
             ssp_on_grid = _vectorized_interp(grid, wave_obs, ssp_flux_np)
             integrand = ssp_on_grid * tw_np[None, None, :]
-            num = _np_trapezoid(integrand, grid, axis=-1)
-            ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
-            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427).
-            # Gated on lyc_gate. Use cumulative trapezoid to extract the
-            # integral over [grid_min, 912*(1+z)] on the observed-frame grid.
-            lyc_wave_obs = 912.0 * (1.0 + z_val)
+            # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
+            # nebular Lyman-continuum mask) -- a model without one never
+            # pays this compute, and the whole-band table stays bit-
+            # identical to the ordinary (unaugmented) path. When live,
+            # ``lyc_augment_grid_for_step`` resamples the SSP edge-aware and
+            # inserts the edge as a zero-width node pair, so the WHOLE-band
+            # integral, the ionizing-only split, AND ``subband_quadrature``'s
+            # own forced-boundary chunks are all exact at the SAME bracket
+            # cell -- required for ``NebularSEDComponent``'s
+            # ``per_age - (1-fesc)*per_age_lyc`` correction to stay
+            # self-consistent with the sub-band partition (see
+            # :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`).
+            lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
             if lyc_gate:
-                if np.any(grid < lyc_wave_obs):
-                    # (n_met*n_age, len(grid))
-                    cum_integrand = _cumtrapz_rows(integrand, grid[None, :])
-                    # Reshape to (n_met, n_age, len(grid)) for later use
-                    cum_integrand_reshaped = cum_integrand.reshape(n_met, n_age, -1)
-                    # Interpolate cumulative integral at the Lyman limit
-                    lyc_idx = np.searchsorted(grid, lyc_wave_obs)
-                    if lyc_idx > 0 and lyc_idx < len(grid):
-                        # Interpolate the cumulative integral at lyc_wave_obs
-                        cum_at_lyc = _interp_rows(
-                            np.array([lyc_wave_obs]), grid, cum_integrand_reshaped
-                        )  # (n_met, n_age, 1)
-                        lyc_num = cum_at_lyc[:, :, 0]
-                    elif lyc_idx >= len(grid):
-                        # Lyman limit is beyond all grid points; take everything
-                        lyc_num = cum_integrand_reshaped[:, :, -1]
-                    else:
-                        # Lyman limit is before all grid points; zero LyC
-                        lyc_num = 0.0
-                    ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
-                else:
-                    # No grid points below the Lyman limit; zero LyC photometry
-                    ssp_phot_lyc_all[zi, :, :, f_idx] = 0.0
+                grid_q, integrand_q, tw_q = lyc_augment_grid_for_step(
+                    grid, tw_np, wave_obs, ssp_flux_np, fw_np, ft_np, lyc_wave_obs, convention
+                )
+                denom_q = _np_trapezoid(tw_q, grid_q)
+                num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+                first_edge_idx = int(np.searchsorted(grid_q, lyc_wave_obs, side="left"))
+                ion_mask = np.arange(grid_q.shape[0]) <= first_edge_idx
+                lyc_num = _np_trapezoid(integrand_q[..., ion_mask], grid_q[ion_mask], axis=-1)
+                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
+            else:
+                grid_q, integrand_q, tw_q, denom_q = grid, integrand, tw_np, denom
+                num = _np_trapezoid(integrand, grid, axis=-1)
+            ssp_phot_all[zi, :, :, f_idx] = num / max(denom_q, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
@@ -1134,13 +1150,15 @@ def _compute_photometry_ztable(
             # uses, so the two paths cannot drift. Nodes come back observed-frame;
             # store them rest-frame, which is where the dust law is evaluated.
             # ``lyc_edge_obs`` forces a chunk boundary at the physical Lyman
-            # limit when this model has a live mask (R1, #2439, #2427).
+            # limit when this model has a live mask (R1, #2439, #2427); the
+            # (possibly edge-augmented) ``grid_q``/``tw_q``/``integrand_q``
+            # keep its own chunks exact at that boundary too.
             if K > 0:
                 phi_k, nodes_obs = subband_quadrature(
-                    grid,
-                    tw_np,
-                    integrand,
-                    denom,
+                    grid_q,
+                    tw_q,
+                    integrand_q,
+                    denom_q,
                     K,
                     float(eff_waves_obs[f_idx]),
                     lyc_edge_obs=lyc_wave_obs if lyc_gate else None,

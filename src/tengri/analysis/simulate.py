@@ -329,6 +329,7 @@ def spectrum_from_sfh(
     dust_tau_diff: float = 0.0,
     apply_igm: bool = True,
     sigma_v: float = 0.0,
+    resample: str = "auto",
     **kwargs,
 ):
     """Compute observed spectrum from a tabulated SFH.
@@ -348,7 +349,16 @@ def spectrum_from_sfh(
     redshift : float
         Source redshift.
     sigma_v : float
-        Velocity dispersion (km/s) for broadening. Default 0.
+        Velocity dispersion (km/s) for broadening. Default 0. Applied to
+        the observed-frame, pre-IGM flux -- stellar kinematics are
+        intrinsic to the source and act before the line-of-sight IGM
+        transmission, which can only broaden the instrument's response to
+        an edge, never the edge itself (#2589).
+    resample : {"auto", "point", "conserving"}
+        How the rest-frame SED is turned into pixels, with the meaning and the
+        default of :attr:`~tengri.Spectroscopy.resample` (#2530): ``"auto"``
+        integrates over each pixel where the pixels are wider than the model
+        grid and point-samples otherwise.
     **kwargs
         Additional parameters.
 
@@ -359,7 +369,8 @@ def spectrum_from_sfh(
         "sed" : array (n_wave,). Rest-frame SED
         "stellar_mass" : float
     """
-    from tengri.observation.spectrum import compute_spectrum
+    from tengri.observation.spectroscopy import resolve_resample_mode, static_redshift
+    from tengri.observation.spectrum import compute_spectrum, compute_spectrum_conserving
 
     result = sed_from_sfh(
         t_gyr,
@@ -373,26 +384,40 @@ def spectrum_from_sfh(
     sed = result["sed"]
     wave = result["wavelength"]
 
-    # IGM
-    if apply_igm and redshift > 0:
-        from tengri.components.igm import igm_transmission
-
-        wave_obs_full = wave * (1.0 + redshift)
-        igm_trans = igm_transmission(wave_obs_full, redshift)
-        sed = sed * igm_trans
-
     # See note in ``sed_from_sfh``: ``luminosity_distance`` already
     # handles the z=0 → 10 pc absolute-magnitude convention.
     dl_cm = luminosity_distance(redshift)
 
-    # Compute observed spectrum
-    flux = compute_spectrum(sed, wave, wave_obs, redshift, dl_cm)
+    # Compute observed spectrum (pre-IGM: stellar kinematics act on the
+    # galaxy's own light, which the IGM has not yet absorbed).
+    z_static = static_redshift(redshift)
+    conserving = resolve_resample_mode(resample, wave_obs, wave, z_static)
+    resampler = compute_spectrum_conserving if conserving else compute_spectrum
+    if conserving and sigma_v > 0:
+        # The pixel integral is taken of the kinematically broadened model (#2530).
+        from tengri.observation.spectrum import broaden_velocity_only
 
-    # Velocity broadening
-    if sigma_v > 0:
+        sed = broaden_velocity_only(sed, wave, sigma_v)
+    flux = resampler(sed, wave, wave_obs, redshift, dl_cm)
+
+    # Velocity broadening -- intrinsic to the source, applied BEFORE the
+    # line-of-sight IGM transmission (#2589): a galaxy's own kinematics
+    # cannot physically broaden an absorption feature imprinted after the
+    # light has left the galaxy. Broadening is a constant-width Gaussian in
+    # ln(lambda), and redshifting only shifts ln(lambda) by the constant
+    # ln(1+z), so broadening this observed-frame, pre-IGM ``flux`` is
+    # equivalent to broadening the rest-frame SED before redshifting.
+    if sigma_v > 0 and not conserving:
         from tengri.observation.spectrum import velocity_broaden
 
         flux = velocity_broaden(flux, wave_obs, sigma_v)
+
+    # IGM: multiplies the already-kinematically-broadened observed flux.
+    if apply_igm and redshift > 0:
+        from tengri.components.igm import igm_transmission
+
+        igm_trans = igm_transmission(wave_obs, redshift)
+        flux = flux * igm_trans
 
     result["flux"] = flux
     result["wave_obs"] = wave_obs

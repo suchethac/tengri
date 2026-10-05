@@ -80,7 +80,6 @@ _TOOL = _load_tool("check_float32_scale_seams")
 _SWEEP_OF_FAMILY: dict[str, str] = {
     "stellar_mass_scale": "stellar_mass_scale",
     "agn_bolometric_renorm": "agn_bolometric",
-    "xrb_mass_scale": "xrb_mass_scale",
 }
 
 #: Sweep resolution. Nine points across the declared prior, endpoints included:
@@ -154,7 +153,9 @@ def _stellar_mass_scale(ssp, dtype):
 
         sed = SEDModel.build(
             ssp_data=ssp,
-            observation=Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE))),
+            observation=Observation(
+                spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+            ),
             approx=SpectrumPrecomp(n_z=16, z_min=0.05, z_max=1.0),
             sfh={
                 "type": "delayed",
@@ -210,47 +211,9 @@ def _agn_bolometric(ssp, dtype):
         return name, _evaluate(objective, lo, hi, dtype)
 
 
-def _xrb_mass_scale(ssp, dtype):
-    """The XRB mass term (#722), read through its float32 path, across the prior.
-
-    Swept on ``log_l_x_xrb``, not ``l_x_xrb``. The linear form is not evaluable
-    in float32 *at all* -- the HMXB coefficient ``2.6e39`` is past float32's
-    ceiling before it is multiplied by anything, so the sum overflows even at
-    zero SFR -- and ``utils.sed_quantities.compute_log_l_x_xrb`` is the
-    documented companion that carries both coefficients in log space. Sweeping
-    the linear form would measure a documented impossibility; sweeping the
-    companion measures whether the seam's actual float32 path holds across the
-    whole declared mass prior, which is the claim ``_HANDLED`` records.
-    """
-    name, lo, hi = _declared_range(r"^sfh_delayed_log_total_mass$")
-    with jax.enable_x64(dtype is jnp.float64):
-        sed = SEDModel.build(
-            ssp_data=ssp,
-            observation=Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"])),
-            approx=None,
-            sfh={
-                "type": "delayed",
-                "all_params": Fixed(DEFAULT),
-                "log_total_mass": Uniform(lo, hi),
-                "tau_gyr": 1.0,
-                "age_gyr": 5.0,
-            },
-            redshift=Fixed(0.1),
-            dust_attenuation=_DUST,
-            xray={"type": "simple"},
-        )
-        base = _reference_point(sed)
-
-        def objective(x):
-            return jnp.asarray(sed.predict({**base, name: x}).properties["log_l_x_xrb"]).sum()
-
-        return name, _evaluate(objective, lo, hi, dtype)
-
-
 _SWEEPS = {
     "stellar_mass_scale": _stellar_mass_scale,
     "agn_bolometric": _agn_bolometric,
-    "xrb_mass_scale": _xrb_mass_scale,
 }
 
 
@@ -514,27 +477,50 @@ _AGN_MBH_DUST = {
 #: factor while ``rest_sed_*`` is evaluated before that projection and is unaffected
 #: (max relative difference ~3e-11, noise floor). See
 #: :mod:`tests.regression.test_cosmology_radiation_2517` for the cosmology itself.
+#: Re-taken for the Lyman-edge convention of the dust energy balance (the cell that
+#: straddles 911.76 A is integrated with the step model, not zeroed-and-trapezoided
+#: from 912 A). Measured: ``L_absorbed`` drops by 1.357e-3 on this model; an independent
+#: numpy step-model integral of the same SEDs reproduces the new ``L_ir`` to 3e-9 and the
+#: old hard-912 construction reproduces the old one to 1.4e-3. The AGN components scale
+#: with the stellar dust luminosity (``fracAGN``), so ``rest_sed`` below 912 A (AGN only)
+#: moves by exactly -1.357e-3 and the dust-emission bands (WISE) by -7.5e-4; the
+#: stellar optical is unchanged to 5e-5. rest_sed_sum moved -7.2e-5 / -1.1e-4 / -1.3e-4.
+#: The values below are float64 outputs of this model (``fracAGN = 0.1``, i = 30 deg; the
+#: tied SKIRTOR disc carries disk(i)/disk(0) once, with no explicit eta and no torus screen),
+#: produced by :data:`_F64_REFERENCE_CHILD`. They are tied to the library through
+#: ``test_tied_disc_reference_of_the_seam_sweep`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
+#: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
+#: disc is multiplied by ``eta(30 deg) T``.
+#: Re-captured on the native kubota_done wavelength axis: the model's master grid now
+#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade, 75 below 1000 A; 6604
+#: nodes), so the node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
+#: (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The composable runner's
+#: budgets no longer depend on the caller's grid, which is what makes the entries a property
+#: of the model: the photometry agrees with the variant that carries 200 points per decade
+#: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
+#: dust-energy balance is integrated on the master grid).
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5215528515600546e32,
-        "rest_sed_0": 2.1618471431580417e23,
-        "rest_sed_mid": 3.05875473371805e28,
-        "rest_sed_last": 8.775513568033312e21,
-        "photometry": (1.0986166566917497e-27, 1.5711841718626467e-27, 1.764819215426025e-27),
+        "rest_sed_sum": 1.5593610240025491e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.8913574801798905e28,
+        "rest_sed_last": 8.775427516276051e21,
+        "photometry": (1.099479121598862e-27, 1.5700123316048635e-27, 1.763224618345872e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.558679481783208e32,
-        "rest_sed_0": 2.621597865262484e24,
-        "rest_sed_mid": 3.1456552202309087e28,
-        "rest_sed_last": 8.823791474594601e21,
-        "photometry": (1.1319561100052943e-27, 1.5726914892133822e-27, 1.7652681401268386e-27),
+        "rest_sed_sum": 1.6049266541791814e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.994003988088467e28,
+        "rest_sed_last": 8.79894545646465e21,
+        "photometry": (1.1410282257917584e-27, 1.5707883351802454e-27, 1.763449238482328e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.5745233941627343e32,
-        "rest_sed_0": 2.0084485779608986e24,
-        "rest_sed_mid": 3.175461013264611e28,
-        "rest_sed_last": 9.02096624152618e21,
-        "photometry": (1.1420945800812812e-27, 1.5791369532676527e-27, 1.766957226624605e-27),
+        "rest_sed_sum": 1.620914289829386e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 3.0199301365899735e28,
+        "rest_sed_last": 9.09664409582796e21,
+        "photometry": (1.1488156955220127e-27, 1.581055264936566e-27, 1.7660509279361245e-27),
     },
 }
 

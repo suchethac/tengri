@@ -19,10 +19,11 @@ All functions are pure JAX and JIT-compilable.
 
 References
 ----------
-.. [1] O. Fritz et al., "Dust tori around Type II active nuclei. I.
-   Observational constraints and allowed dust models," A&A, 470, 221 (2006).
-   arXiv:0606147. https://doi.org/10.1051/0004-6361:20066130
-.. [2] M. Boquien et al., "CIGALE: Code Investigating GALaxy Emission,"
+.. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+   infrared spectra of active galactic nuclei with a new torus emission
+   model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+   https://doi.org/10.1111/j.1365-2966.2006.09866.x
+.. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A, 622, A103 (2019). arXiv:1811.03094.
    https://doi.org/10.1051/0004-6361/201834156
 """
@@ -36,17 +37,15 @@ import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    L_SUN as _L_SUN,
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
+from tengri.components.agn._phys import L_SUN as _L_SUN
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 class FritzComponents(NamedTuple):
-    """Separate Fritz spectral components.
+    r"""Separate Fritz spectral components.
 
     Attributes
     ----------
@@ -58,7 +57,9 @@ class FritzComponents(NamedTuple):
     Notes
     -----
     The disk component is the accretion-disk SED, and dust is the thermal
-    torus emission. Both are rest-frame spectral luminosity densities.
+    torus emission. Both are rest-frame spectral luminosity densities,
+    obtained from the grid's :math:`L_\lambda` tables with
+    :math:`L_\nu = L_\lambda \lambda^2 / c`.
     """
 
     disk: jnp.ndarray
@@ -116,12 +117,29 @@ def _interpolate_and_normalize(
     point: tuple,
     l_scale: float,
 ) -> jnp.ndarray:
-    """Interpolate a template grid and normalize to physical luminosity.
+    r"""Interpolate a template grid and normalize to physical :math:`L_\nu`.
+
+    The shipped grid is the Fritz et al. (2006) [1]_ torus library as CIGALE's
+    ``model.dust`` and ``model.disk`` arrays [2]_: luminosity per unit
+    wavelength :math:`L_\lambda` [W/nm]. ``dust`` is normalized to unit
+    :math:`\int L_\lambda \, d\lambda`; ``disk`` is in the same units,
+    relative to that dust, and its integral differs from node to node. The
+    template is put on the requested wavelength grid and converted with
+
+    .. math::
+
+        L_\nu = L_\lambda \, \frac{\lambda^2}{c},
+
+    where :math:`\lambda` is wavelength [Angstrom], :math:`c` the speed of
+    light [Angstrom/s], :math:`L_\lambda` the tabulated template and
+    :math:`L_\nu` the specific luminosity [erg/s/Hz]. The result is scaled so
+    that :math:`\int L_\nu \, d\nu = l_{\rm scale}` over the template's native grid.
 
     Parameters
     ----------
     grid_jax : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
-        Template grid [erg/s/Hz, per-L_sun normalized at runtime].
+        Template grid, :math:`L_\lambda` [W/nm]; only its shape matters, it is
+        renormalized on use.
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -133,24 +151,46 @@ def _interpolate_and_normalize(
     point : tuple
         (r_ratio, tau, beta, gamma, oa, psy) query point.
     l_scale : float
-        Luminosity scale factor [erg s^-1].
+        Luminosity scale factor [erg/s].
 
     Returns
     -------
     ndarray, shape (n_wave,)
-        Specific luminosity L_ν [erg s^-1 Hz^-1].
+        Specific luminosity L_ν [erg/s/Hz].
 
     Notes
     -----
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
+
+    The normalization integral is taken over the template's own native
+    wavelength grid, before resampling, so ``l_scale`` is the template's total
+    power whatever the requested grid: a grid that stops short of the template
+    (one ending at 30 micron holds as little as 15 % of its power) carries
+    only the part of ``l_scale`` that falls inside it.
+
+    Each call renormalizes its template to ``l_scale``, so
+    :func:`fritz_components` carries the shape of the disc and of the dust but
+    not the library's disc-to-dust ratio.
+
+    References
+    ----------
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+       infrared spectra of active galactic nuclei with a new torus emission
+       model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+       https://doi.org/10.1111/j.1365-2966.2006.09866.x
+    .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
+       A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
     """
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
     template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
-    sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-    return l_scale * sed / integral_safe
+    # Normalize on the template's native grid, before resampling, so the
+    # result does not depend on the caller's wavelength sampling or range.
+    integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
+    sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
+    sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
+    return l_scale * sed_nu / integral_safe
 
 
 class FritzGrid(NamedTuple):
@@ -318,9 +358,10 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
     References
     ----------
-    .. [1] O. Fritz et al., "Dust tori around Type II active nuclei,"
-       A&A, 470, 221 (2006). arXiv:0606147.
-       https://doi.org/10.1051/0004-6361:20066130
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+       infrared spectra of active galactic nuclei with a new torus emission
+       model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+       https://doi.org/10.1111/j.1365-2966.2006.09866.x
     """
     grid = load_fritz_grid(grid_path)
     dust_jax, wave_grid, axes, edges = grid.dust, grid.wave_grid, grid.axes, grid.edges
@@ -617,7 +658,7 @@ def fritz_sed(*args, **kwargs):
 
     References
     ----------
-    .. [1] O. Fritz et al., A&A, 470, 221 (2006).
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, MNRAS, 366, 767 (2006).
     .. [2] M. Boquien et al., A&A, 622, A103 (2019).
     """
     # Allow the template to be threaded as a JIT runtime input

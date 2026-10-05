@@ -52,6 +52,7 @@ def test_orchestrator_matches_direct_calls(z, L_ir, L_agn_bol, log_mstar):
         "radio_alpha_sf": 0.8,
         "radio_loudness": 0.0,
         "radio_alpha_agn": 0.7,
+        "radio_log_nu_cut": 13.0,
         "radio_T_e": 1e4,
         "radio_alpha_ff": -0.1,
         "igm_z_mid": 7.0,
@@ -108,6 +109,7 @@ def test_pipeline_preserves_input_state_immutability():
             "radio_alpha_sf": 0.8,
             "radio_loudness": 0.0,
             "radio_alpha_agn": 0.7,
+            "radio_log_nu_cut": 13.0,
             "radio_T_e": 1e4,
             "radio_alpha_ff": -0.1,
             "igm_z_mid": 7.0,
@@ -135,6 +137,7 @@ def test_radio_no_dust_upstream_falls_back_to_zero():
         "radio_alpha_sf": 0.8,
         "radio_loudness": 0.0,
         "radio_alpha_agn": 0.7,
+        "radio_log_nu_cut": 13.0,
         "radio_T_e": 1e4,
         "radio_alpha_ff": -0.1,
     }

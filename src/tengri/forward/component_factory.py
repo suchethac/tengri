@@ -39,6 +39,9 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 
 # Attenuator component CLASSES are resolved from _REGISTRY via the dispatch
 # seam (single dispatch, #844), only their config dataclasses are imported here.
+from tengri.components.dust.age_binned import (
+    AgeBinnedDustComponentConfig,
+)
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
 )
@@ -126,7 +129,7 @@ def _build_domain_membership_map() -> dict[str, set[str]]:
 
     domain_membership: dict[str, set[str]] = {
         "dust_emission": set(),
-        "dust_attenuation": {"single_component", "two_component", "wg00"},
+        "dust_attenuation": {"single_component", "two_component", "wg00", "age_binned"},
         "nebular": {"nebular", "shock"},
         "agn": {
             "agn",
@@ -287,11 +290,10 @@ class XRayQuantities(NamedTuple):
     Fields (**breaking, no alias, #1206 §B**: Lsun, not erg/s -- an AGN X-ray
     luminosity is ~1e40-1e45 erg/s, past float32's 3.4e38 ceiling):
 
-    - ``l_x_xrb`` (Lsun), X-ray-binary luminosity (Lehmer 2010, 2016)
-      computed from ``sfh_quantities.sfr_100myr`` and
-      ``sfh_quantities.stellar_mass``.
-    - ``l_x_agn`` (Lsun), AGN X-ray luminosity from the published
-      ``log_L_agn_bol`` via :func:`compute_log_l_x_agn`.
+    - ``l_x_xrb`` (Lsun), 2-10 keV luminosity of the emitted HMXB + LMXB terms
+      (Lehmer 2016; SFR averaged over the last 100 Myr).
+    - ``l_x_agn`` (Lsun), 2-10 keV luminosity of the emitted AGN corona; zero
+      without an AGN.
     - ``l_x_total`` (Lsun), sum of the two.
 
     """
@@ -328,7 +330,7 @@ def build_components(
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
-    # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
+    # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
     # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
     sfh_bin_edges_gyr: Any = None,
@@ -337,6 +339,12 @@ def build_components(
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
+    # AGB circumstellar dust-shell weighting (#2534). Only set for a FREE
+    # agb_dust_weight: the ratio template resampled onto ``ssp_data``'s own
+    # (Z, age, wave) axes (see components/stellar/agb_dust_shell.py). A
+    # Fixed weight is baked directly into ``ssp_data`` by the caller
+    # (``SEDModel.__init__``) instead, so this stays None in that case.
+    agb_dust_ratio: Any | None = None,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -384,6 +392,9 @@ def build_components(
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
     dust_law_neb: str | None = None,
+    # age_binned (#2528): N independent screens, each (law, lo, hi) in
+    # log10(age/yr). Only consulted when dust_model="age_binned".
+    dust_screens: tuple = (),
     # Per-source dust-screen choice (#2234 replacement). Only threaded
     # into DustSEDComponentConfig (the two_component atten_type below);
     # single_component/wg00/off never read them.
@@ -392,8 +403,13 @@ def build_components(
     dust_agn_screen: str = "none",
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
-    dust_lyc_absorb_all: bool = False,
-    dust_eb_include_lyc: bool = False,
+    dust_lyc_reprocessed_by: str = "young",
+    dust_lyc_in_energy_balance: bool = False,
+    dust_lyc_escape_geometry: str = "screened",
+    # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
+    # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
+    dust_t_birth_yr: float = 1e7,
+    dust_transition_width_dex: float = 0.0,
     dust_ir_diffuse_screen: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
@@ -424,6 +440,16 @@ def build_components(
     # budget) is unaffected either way. False (default) is today's strict/
     # relaxed energy balance, unchanged.
     dust_log_l_ir_requested: bool = False,
+    # Whether the HII-region dust-heating credit (#2539 item 3,
+    # energy_balance.log10_add_fdust_credit) can ever be nonzero, resolved
+    # from spec provenance by ``SEDModel._fdust_credit_active``: True when
+    # ``neb_fdust_frac`` is FREE or Fixed at a nonzero value, False when it
+    # is Fixed at exactly 0 or not declared at all (BakedIn backend, or no
+    # nebular component built). False lets each attenuator's ``apply()``
+    # skip forming the credit outright (one decision point, not per-
+    # consumer guessing); True (default, including a component built
+    # directly with no spec to ask) keeps the smooth combine, unchanged.
+    dust_fdust_credit_active: bool = True,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -554,35 +580,13 @@ def build_components(
     """
     components: list[SEDComponent] = []
 
-    # 1. Stellar (always required, it publishes the cross-component
-    #    inputs that every later adapter reads).
-    components.append(
-        StellarSEDComponent(
-            config=StellarSEDComponentConfig(
-                sfh_model=sfh_model,
-                field=field,
-                metallicity_model=metallicity_model,
-                n_grid=n_grid,
-                lgmet_scatter=lgmet_scatter,
-                age_kernel=age_kernel,
-                field_centering=field_centering,
-                sfh_bin_edges_gyr=sfh_bin_edges_gyr,
-                met_bin_edges_log_yr=met_bin_edges_log_yr,
-            ),
-            ssp_data=ssp_data,
-        )
-    )
-
-    # 2. Dust (optional), runs BEFORE AGN so the AGN component can
-    # read ``state.derived["L_absorbed"]`` for the CIGALE-style
-    # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
-    # coupling (see ``agn/component.py`` and ``agn/_params.py:
-    # agn_ir_frac``). Note: although appended here, the topological sort
-    # places dust AFTER the nebular component (DustSEDComponent declares
-    # ``sed_nebular`` an optional input) so the nebular continuum is
-    # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
-    # AGN/radio/xray SEDs are still passed through unattenuated by stellar
-    # dust (they are added after dust runs).
+    # The attenuator's config is built FIRST: it is the ONE place that decides
+    # which age boundaries the stellar component must publish exact
+    # younger-than-boundary mass fractions for (and with what dispersal
+    # width), so the stellar config below can carry them. Single-screen and
+    # dust-free models request none and pay nothing.
+    atten_type = None
+    atten_config = None
     if use_dust:
         # Build the per-model attenuator config (parameterization). Class
         # SELECTION is single-dispatch: _resolve_registry_component looks the
@@ -595,6 +599,8 @@ def build_components(
                 geometry=wg00_geometry,
                 structure=wg00_structure,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
@@ -603,7 +609,18 @@ def build_components(
                 live_shape_params=frozenset(dust_live_shape_params or ()),
                 log_l_ir_requested=dust_log_l_ir_requested,
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                fdust_credit_active=dust_fdust_credit_active,
+            )
+        elif dust_model == "age_binned":
+            atten_type = "age_binned"
+            atten_config = AgeBinnedDustComponentConfig(
+                screens=tuple(dust_screens),
+                transition_width_dex=dust_transition_width_dex,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
+                fdust_credit_active=dust_fdust_credit_active,
             )
         else:
             atten_type = "two_component"
@@ -624,11 +641,48 @@ def build_components(
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                 lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                lyc_absorb_all=dust_lyc_absorb_all,
-                eb_include_lyc=dust_eb_include_lyc,
+                lyc_reprocessed_by=dust_lyc_reprocessed_by,
+                lyc_in_energy_balance=dust_lyc_in_energy_balance,
+                lyc_escape_geometry=dust_lyc_escape_geometry,
+                t_birth_yr=dust_t_birth_yr,
+                transition_width_dex=dust_transition_width_dex,
                 log_l_ir_requested=dust_log_l_ir_requested,
+                fdust_credit_active=dust_fdust_credit_active,
             )
 
+    # 1. Stellar (always required, it publishes the cross-component
+    #    inputs that every later adapter reads).
+    components.append(
+        StellarSEDComponent(
+            config=StellarSEDComponentConfig(
+                sfh_model=sfh_model,
+                field=field,
+                metallicity_model=metallicity_model,
+                n_grid=n_grid,
+                lgmet_scatter=lgmet_scatter,
+                age_kernel=age_kernel,
+                field_centering=field_centering,
+                sfh_bin_edges_gyr=sfh_bin_edges_gyr,
+                met_bin_edges_log_yr=met_bin_edges_log_yr,
+                age_boundaries_yr=tuple(getattr(atten_config, "age_boundaries_yr", ())),
+                age_boundary_width_dex=float(getattr(atten_config, "age_boundary_width_dex", 0.0)),
+            ),
+            ssp_data=ssp_data,
+            agb_dust_ratio=agb_dust_ratio,
+        )
+    )
+
+    # 2. Dust (optional), runs BEFORE AGN so the AGN component can
+    # read ``state.derived["L_absorbed"]`` for the CIGALE-style
+    # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
+    # coupling (see ``agn/component.py`` and ``agn/_params.py:
+    # agn_ir_frac``). Note: although appended here, the topological sort
+    # places dust AFTER the nebular component (DustSEDComponent declares
+    # ``sed_nebular`` an optional input) so the nebular continuum is
+    # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
+    # AGN/radio/xray SEDs are still passed through unattenuated by stellar
+    # dust (they are added after dust runs).
+    if use_dust:
         components.append(
             _resolve_registry_component("dust_attenuation", atten_type, config=atten_config)
         )
@@ -1205,49 +1259,40 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
 def state_to_xray_quantities(state: Any) -> XRayQuantities:
     """Convert :class:`ForwardState` → :class:`XRayQuantities`.
 
-    Uses the SFH-derived SFR and stellar mass to compute the XRB
-    luminosity (Lehmer+10/16) and the published ``log_L_agn_bol`` to
-    compute the AGN corona luminosity (Duras+20), staying in the log
-    domain throughout and converting to Lsun with one ``pow10`` -- the same
-    float32-safe route the ``xray`` property group uses (#1206 §B), so the
-    two stay bit-equal.
+    Reads the 2-10 keV luminosities the X-ray component publishes for the terms
+    it emits (``log_L_x_xrb_2_10`` for HMXB + LMXB, ``log_L_x_agn_2_10`` for the
+    corona), staying in the log domain throughout and converting to Lsun with
+    one ``pow10`` -- the same float32-safe route the ``xray`` property group
+    uses (#1206 §B), so the two stay bit-equal and both describe the emitted
+    spectrum.
 
     Returns
     -------
     XRayQuantities
         ``l_x_xrb``, ``l_x_agn``, ``l_x_total`` [Lsun].
     """
-    from tengri.utils.scale import pow10
-    from tengri.utils.sed_quantities import (
-        LOG10_L_SUN,
-        compute_log_l_x_agn,
-        compute_log_l_x_xrb,
-    )
+    from tengri.utils.scale import LN10, pow10
+    from tengri.utils.sed_quantities import LOG10_L_SUN
 
     derived = state.derived
-    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
-    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
-    log_l_x_xrb = compute_log_l_x_xrb(sfr, log_mstar)
+    if "log_L_x_xrb_2_10" not in derived:
+        from tengri.config.exceptions import ConfigError
 
-    log_L_agn_bol = derived.get("log_L_agn_bol")
-    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity,
-    # matching the linear helper's ``derived.get("L_agn_bol", 0.0)`` default
-    # for an XRB-only model (#1206 §B, same semantics as `_log_l_x_agn_fn`).
-    if log_L_agn_bol is None:
-        log_l_x_agn = -jnp.inf
-    else:
-        log_l_x_agn = compute_log_l_x_agn(jnp.asarray(log_L_agn_bol))
+        raise ConfigError(
+            "X-ray quantities need the X-ray component, which this model does not "
+            "carry: build it with `xray={'type': 'yang20'}` (or 'lopez24')."
+        )
+    log_l_x_xrb = jnp.asarray(derived["log_L_x_xrb_2_10"])
+    log_l_x_agn = jnp.asarray(derived["log_L_x_agn_2_10"])
 
     from jax.scipy.special import logsumexp
 
-    from tengri.utils.scale import LN10
-
-    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, jnp.asarray(log_l_x_agn)))
+    stacked = jnp.stack(jnp.broadcast_arrays(log_l_x_xrb, log_l_x_agn))
     log_l_x_total = logsumexp(LN10 * stacked, axis=0) / LN10
 
     return XRayQuantities(
         l_x_xrb=pow10(log_l_x_xrb - LOG10_L_SUN),
-        l_x_agn=pow10(jnp.asarray(log_l_x_agn) - LOG10_L_SUN),
+        l_x_agn=pow10(log_l_x_agn - LOG10_L_SUN),
         l_x_total=pow10(log_l_x_total - LOG10_L_SUN),
     )
 
@@ -1320,6 +1365,11 @@ def state_to_sed_components(state: Any) -> dict:
           when the AGN component is absent OR uses a non-composable
           (monolithic) model, which has no separate sub-blocks to
           decompose.
+        - ``sed_agn_lines_attenuated``: the AGN line light as it enters the
+          SED (after the AGN's own screen and any host ``agn_screen``),
+          the part of ``sed_agn`` the spectrum projection broadens with the
+          instrument kernel alone (#2565); present for every AGN variant
+          (zeros without lines), zeros when no AGN component is present.
 
     Notes
     -----
@@ -1354,6 +1404,7 @@ def state_to_sed_components(state: Any) -> dict:
         "sed_agn_disc": jnp.asarray(derived.get("sed_agn_disc", zeros)),
         "sed_agn_torus": jnp.asarray(derived.get("sed_agn_torus", zeros)),
         "sed_agn_lines": jnp.asarray(derived.get("sed_agn_lines", zeros)),
+        "sed_agn_lines_attenuated": jnp.asarray(derived.get("sed_agn_lines_attenuated", zeros)),
         "sed_agn_polar": jnp.asarray(derived.get("sed_agn_polar", zeros)),
         "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
         "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),

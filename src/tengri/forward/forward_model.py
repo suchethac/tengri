@@ -16,6 +16,7 @@ state keys follow the same convention via the typed
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -1002,6 +1003,73 @@ class ForwardModel:
             return self
         return ForwardModel.build(sed=new_inner, observation=self.observation)
 
+    def with_fixed_redshift(self, redshift):
+        """Return a copy of this forward model built at a different Fixed redshift.
+
+        Rebuilds the SED of **every** population via
+        :meth:`SEDModel.with_fixed_redshift` (which rebuilds each
+        redshift-dependent table) and re-wraps them with the same population
+        names, spatial submodels, observation and mode. A bare ``redshift`` is
+        the galaxy's redshift and flows to every population (see
+        :meth:`predict_observables`), so the rebuild pins all of them.
+
+        Parameters
+        ----------
+        redshift : float
+            The new constant redshift.
+
+        Returns
+        -------
+        ForwardModel
+            The rebuilt forward model, or ``self`` when every population is
+            already at that redshift.
+
+        Raises
+        ------
+        tengri.config.exceptions.ParameterError
+            If any population's redshift is free: a free redshift is fit, not
+            pinned, so an override cannot address it and the galaxy would have
+            populations at different redshifts.
+
+        Notes
+        -----
+        Hierarchical populations rebuild their template SED and keep the
+        galaxies, shared names, priors and data type. Spatial submodels are
+        kept as they are: they describe a profile in physical kpc and read no
+        redshift.
+        """
+        import dataclasses
+
+        new_pops = tuple(self._population_at_redshift(pop, redshift) for pop in self.populations)
+        if all(new is old for new, old in zip(new_pops, self.populations, strict=True)):
+            return self
+        return dataclasses.replace(self, populations=new_pops)
+
+    @staticmethod
+    def _population_at_redshift(pop, redshift):
+        import dataclasses
+
+        sub = pop.sed
+        inner = getattr(sub, "sed", sub)
+        if not hasattr(inner, "with_fixed_redshift"):
+            raise NotImplementedError(
+                f"population {pop.name!r}: {type(inner).__name__} has no with_fixed_redshift, "
+                "so a redshift override cannot rebuild its redshift-dependent tables."
+            )
+        new_inner = inner.with_fixed_redshift(redshift)
+        if new_inner is inner:
+            return pop
+        if inner is sub:
+            return dataclasses.replace(pop, sed=new_inner)
+        new_sub = type(sub)(
+            new_inner,
+            sub.galaxies,
+            shared=sub.shared,
+            priors=sub.priors,
+            data_type=sub.data_type,
+        )
+        return dataclasses.replace(pop, sed=new_sub)
+
     def fit(
         self,
         data: Any = None,
@@ -1391,9 +1459,20 @@ def _predict_observation(
     if not batched_axes:
         return observation.predict(state, params)
 
+    # The pixel-integral decision needs the concrete model grid, which is a
+    # tracer inside the vmap below: make it here, once (#2530).
+    conserving = None
+    if getattr(observation, "can_do_spectroscopy", False):
+        sed = getattr(sub_model, "sed", sub_model)
+        z_ref = sed._resample_z_ref() if hasattr(sed, "_resample_z_ref") else 0.0
+        wave = np.asarray(state.wave)
+        conserving = observation.spectroscopy.resolve_conserving(
+            wave.reshape(-1, wave.shape[-1])[0], z_ref
+        )
+
     # Vmap once per batched axis. ``params`` axes are inferred from
     # the SubModel's parameter_axes when available; otherwise broadcast.
-    predict_fn = observation.predict
+    predict_fn = functools.partial(observation.predict, conserving=conserving)
     if hasattr(sub_model, "parameter_axes"):
         params_axes = sub_model.parameter_axes(params)
     else:

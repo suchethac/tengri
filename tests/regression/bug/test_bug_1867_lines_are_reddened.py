@@ -288,17 +288,17 @@ def test_the_decrement_matches_the_curve_computed_by_hand(model, sweep):
     agree even if the published screen were wrong.
 
     This asserts against ``calzetti`` evaluated directly, outside the pipeline
-    entirely. For ``law_bc == law_diff`` in the birth-cloud regime the screen is
-    ``tau_line(λ) = (tau_bc + tau_diff)·k(λ)``, so
+    entirely. The line screen is the mixture over the two age intervals, weighted by
+    each interval's share q of the ionizing luminosity, T(λ) = q·exp(-(tau_bc +
+    tau_diff)·k(λ)) + (1 − q)·exp(-tau_diff·k(λ)), so
 
-        decrement_reddened / decrement_intrinsic
-            = exp(-(tau_bc + tau_diff)·(k(Hα) − k(Hβ)))
+        decrement_reddened / decrement_intrinsic = T(Hα) / T(Hβ)
 
     and k(Hα) < k(Hβ), which is why dust *raises* the decrement.
 
     The curve is evaluated at the **catalog's own** line wavelengths, not at the
     nominal constants above. Cue's grid does not sit exactly on them, and
-    ``KEY_LINES`` itself carries Hβ at 4862.76 against the 4862.71 used for
+    ``KEY_LINES`` itself carries Hβ at 4862.68 against the 4862.71 used for
     target matching here. Evaluating 0.05 Å away moved this assertion by 1.3e-5
     — small, and comfortably outside the 1e-6 tolerance a control this direct
     deserves. Reading the wavelengths back keeps the control first-principles
@@ -321,10 +321,19 @@ def test_the_decrement_matches_the_curve_computed_by_hand(model, sweep):
     k_hb = float(np.asarray(calzetti(np.asarray([w_hb])))[0])
     assert k_ha < k_hb, "Calzetti must attenuate Hβ more than Hα; the fixture is upside down"
 
+    derived = model.predict_state(lo).derived
+    young = np.asarray(derived["age_boundary_younger_fraction"])[0]
+    log_lyc = np.asarray(derived["log_L_lyc_age"])
+    lyc = 10.0 ** (log_lyc - np.max(log_lyc))
+    q_young = float(np.sum(young * lyc) / np.sum(lyc))
+
+    def _screen(tau_bc, tau_diff, k):
+        return q_young * np.exp(-(tau_bc + tau_diff) * k) + (1.0 - q_young) * np.exp(-tau_diff * k)
+
     intrinsic = _decrement_from_fluxes(model, lo, redden=False)
     for label, params in (("tau_lo", lo), ("tau_hi", hi)):
-        tau_total = float(params["dust_tau_bc"]) + float(params["dust_tau_diff"])
-        expected = intrinsic * np.exp(-tau_total * (k_ha - k_hb))
+        tb, td = float(params["dust_tau_bc"]), float(params["dust_tau_diff"])
+        expected = intrinsic * _screen(tb, td, k_ha) / _screen(tb, td, k_hb)
         pred = model.predict(params)
         got = float(np.asarray(pred.lines.halpha / pred.lines.hbeta))
         assert got == pytest.approx(expected, rel=1e-6), (

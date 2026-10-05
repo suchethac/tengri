@@ -166,9 +166,11 @@ class SkirtorDiscTie(NamedTuple):
     Attributes
     ----------
     R : jnp.ndarray, scalar
-        Reddened, inclination-weighted disc/dust bolometric ratio, carrying
-        the anisotropy factor :math:`\eta(i)`: what the disc *output* is
-        normalized to via ``agn_power x R``.
+        Reddened, inclination-weighted disc/dust bolometric ratio
+        :math:`\int \hat s\,\int{\rm disk}(0)\,{\rm disk}(i)/{\rm disk}(0)\,e^{-\tau}\,d\lambda
+        / \int {\rm dust}(i)\,d\lambda`: what the disc *output* is normalized to via
+        ``agn_power x R``. The library ratio ``disk(i)/disk(0)`` carries the disc
+        anisotropy :math:`\eta(i)`, so no explicit :math:`\eta` enters.
     incl_ratio : jnp.ndarray, shape (n_wave,)
         ``disk(i)/disk(0)``, resampled onto the CALLER's grid (it multiplies
         the caller's disc spectrum, so it is the one field that belongs
@@ -193,6 +195,10 @@ class SkirtorDiscTie(NamedTuple):
     wave_native : jnp.ndarray, shape (n_native,)
         The SKIRTOR template wavelength grid ``faceon_shape_native`` is
         defined and unit-normalized on [A].
+    incl_native : jnp.ndarray, shape (n_native,)
+        ``disk(i)/disk(0)`` on ``wave_native``: what ``incl_ratio`` is resampled
+        from, so the disc's reweighted bolometric can be integrated on the
+        library grid without touching the caller's.
     """
 
     R: jnp.ndarray
@@ -200,6 +206,7 @@ class SkirtorDiscTie(NamedTuple):
     R_faceon: jnp.ndarray
     faceon_shape_native: jnp.ndarray
     wave_native: jnp.ndarray
+    incl_native: jnp.ndarray | None = None
 
 
 # ── Template grid interpolation ───────────────────────────────────
@@ -903,6 +910,7 @@ def skirtor_disc_dust_ratio(
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    incl_wave: jnp.ndarray | None = None,
     _template=None,
 ) -> SkirtorDiscTie:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
@@ -910,18 +918,33 @@ def skirtor_disc_dust_ratio(
     Replicates CIGALE ``skirtor2016.py`` so the composable AGN can tie the
     disc to the single ``agn_power`` reference (energy-conserving). The
     analytic disc shape is renormalized to the **face-on** SKIRTOR disc
-    integral ``∫disk(i=0)``, reweighted by the inclination ratio
-    ``disk(i)/disk(0)``, reddened, and the **anisotropy factor**
-    ``η(i) = cos(i)(1+2cos(i))/3`` (= 0.789 at i=30°) applied: then divided
-    by the SKIRTOR dust integral ``∫dust(i)``::
+    integral :math:`\int{\rm disk}(0)\,d\lambda`, reweighted by the library
+    inclination ratio :math:`{\rm disk}(i)/{\rm disk}(0)`, reddened, and divided by
+    the SKIRTOR dust integral:
 
-        R = η(i) · ∫[ŝ·∫disk(0) · disk(i)/disk(0) · ext_fac] dλ / ∫dust(i) dλ
+    .. math::
 
-    where ``ŝ`` is the unit-area analytic disc shape. At the §9 fiducial this
-    yields R ≈ 2.23, matching CIGALE ``lumin_disk/total_dust = 2.22``. The η
-    factor (the disc's anisotropic emission, Stalevski+2016 §2.2.1) is what
-    sets the *observed* disc bolometric with viewing angle and couples it to
-    the polar-dust energy balance.
+        R = \frac{\int \hat s(\lambda)\,I_0\,
+            \frac{D_i(\lambda)}{D_0(\lambda)}\,e(\lambda)\,d\lambda}
+            {\int U_i(\lambda)\,d\lambda},
+        \qquad I_0 = \int D_0(\lambda)\,d\lambda,
+
+    where :math:`\hat s` is the unit-area analytic disc shape [1/Å],
+    :math:`D_i` and :math:`D_0` are the library disc spectra at inclination
+    :math:`i` and face-on [erg/s/Å, each on its stored scale], :math:`U_i` is the
+    library dust spectrum [erg/s/Å] and :math:`e = 10^{-0.4 k E(B-V)}` the
+    line-of-sight reddening (1 without it). At the §9 fiducial this yields
+    R = 4.42 at i = 0 and 3.61 at i = 30 deg, CIGALE's ``lumin_disk/lumin_dust``
+    to 0.2 % on the coarser library axis.
+
+    The anisotropy of the accretion disc,
+    :math:`L(\theta) \propto \cos\theta\,(1 + 2\cos\theta)` (quoted in the CIGALE
+    ``skirtor2016`` source, Boquien et al. 2019), is in the library
+    spectra: :math:`\int D_i/\int D_0 = \eta(i) = \cos i\,(1 + 2\cos i)/3` to 0.6 %
+    for i <= 40 deg. :math:`R` therefore carries :math:`\eta` once, through
+    :math:`D_i/D_0`, and no explicit factor enters. For sightlines through the torus
+    (:math:`i > 90^\circ - {\rm oa}`) :math:`D_i/D_0` also carries the torus
+    extinction of the disc.
 
     Parameters
     ----------
@@ -936,6 +959,11 @@ def skirtor_disc_dust_ratio(
     agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, agn_cos_inc
         SKIRTOR grid parameters (edge-on τ_9.7, radial/polar density
         indices, half-opening angle, cos inclination).
+    incl_wave : ndarray, shape (n_out,), optional
+        Grid ``incl_ratio`` is returned on [Å]. Defaults to ``wave``. A caller
+        that evaluates the disc on the library's own axis (so that ``R`` does not
+        depend on its output grid) passes that axis as ``wave`` and its output
+        grid here.
 
     Returns
     -------
@@ -969,20 +997,20 @@ def skirtor_disc_dust_ratio(
     dust-only, inclination-averaged libraries with no such normalization and
     do not reach this function.
 
-    **The polar reference's remaining 2.9% is the SMC extinction curve.**
+    **The polar reference's remaining 2.8% is the SMC extinction curve.**
     Writing the polar share as ``x/(1 + x)`` with
     ``x = g(oa) . R_faceon . J``, where ``J = int(disc.(1 - e^-tau)) /
     int(disc)`` is the disc-shape-weighted absorbed fraction, the CIGALE
     comparison factors into ``R_faceon``'s own per-inclination quadrature
-    times a constant **1.029181**, identical at i = 0, 30, 60 and 80. The
+    times a constant **1.02809**, identical at i = 0, 30, 60 and 80. The
     cone factor ``g(40 deg) = 0.261007`` is common to both sides, so the
     constant is in ``J`` -- and ``J`` differs only through the extinction
     curve the polar screen applies.
 
     Measured at the fiducial (``disc='schartmann2005'``, ``E(B-V) = 0.03``,
-    on the native grid): ``J`` = 0.216524061 with tengri's SMC curve against
-    0.222615502 with CIGALE's, a factor **1.028133** -- so the SMC curve
-    accounts for 2.81 of the 2.92 percentage points and leaves 0.102%.
+    on the native grid): ``J`` = 0.216753119 with tengri's SMC curve against
+    0.222831745 with CIGALE's, a factor **1.028044** -- so the SMC curve
+    accounts for 2.80 of the 2.81 percentage points and leaves 0.004%.
     Decomposed by decade, 71.8% of the difference comes from 100 - 1000 A,
     14.7% from 1 - 10 um and 7.5% from 1000 - 3000 A.
 
@@ -1007,6 +1035,7 @@ def skirtor_disc_dust_ratio(
     References
     ----------
     - Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR)
+    - Boquien et al. 2019, A&A, 622, A103 (CIGALE ``skirtor2016``; arXiv:1811.03094)
     - Pei 1992, ApJ, 395, 130 (the SMC Bar extinction curve tengri applies)
     - Prevot et al. 1984, A&A, 132, 389 (the SMC power-law family)
     - Bongiorno et al. 2012, MNRAS, 427, 3103 (the ``1.39 lambda^-1.2`` form)
@@ -1040,6 +1069,7 @@ def skirtor_disc_dust_ratio(
                 0.0,
             ),
             wave_native=jnp.asarray(wave),
+            incl_native=jnp.ones_like(wave),
         )
     disk_jax, dust_jax, wave_grid, axes, norm_jax = _as_disc_dust_grid(raw)
 
@@ -1099,8 +1129,7 @@ def skirtor_disc_dust_ratio(
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
-    R = eta * jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    R = jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
     # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
@@ -1159,7 +1188,13 @@ def skirtor_disc_dust_ratio(
     # wavelength-independent inside the template (SKIRTOR scales one disc shape
     # by an inclination-dependent factor), so the last_finite_ratio carries
     # smoothly beyond the boundary.
-    incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=last_finite_ratio)
+    incl_ratio = resample_template(
+        wave if incl_wave is None else jnp.asarray(incl_wave),
+        wave_grid,
+        incl_n,
+        left=0.0,
+        right=last_finite_ratio,
+    )
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
     # inclination attenuation of the disc continuum (CIGALE
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
@@ -1178,7 +1213,28 @@ def skirtor_disc_dust_ratio(
         R_faceon=R_faceon,
         faceon_shape_native=shape_n,
         wave_native=wave_grid,
+        incl_native=incl_n,
     )
+
+
+def skirtor_disc_dust_wave(template=None):
+    """Wavelength axis of the SKIRTOR disk/dust library [Å], or ``None`` if unavailable.
+
+    The grid :func:`skirtor_disc_dust_ratio` integrates on. A caller that
+    evaluates the disc here, rather than on its own output grid, gets a tie
+    (``R``, the face-on reference) that does not move with that grid.
+
+    Parameters
+    ----------
+    template : SkirtorDiscDustGrid or tuple, optional
+        The threaded library; loaded from disk when omitted.
+
+    Returns
+    -------
+    ndarray, shape (n_native,) or None
+    """
+    raw = template if template is not None else _load_raw_disk_dust_grid()
+    return None if raw is None else _as_disc_dust_grid(raw).wave_grid
 
 
 @functools.cache

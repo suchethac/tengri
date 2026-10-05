@@ -58,7 +58,10 @@ Cue differs in the following ways:
 - **C/O and N/O as free parameters**: BEAGLE/Gutkin+2016 has C/O as a discrete
   grid axis (9 values) but fixes N/O to scaled-solar.  Cue accepts continuous
   ``gas_logco`` and ``gas_logno`` offset parameters, enabling smooth gradient-
-  based inference over abundance ratios.
+  based inference over abundance ratios. ``gas_logno`` is Cue's absolute
+  [N/O] by default; ``nitrogen='nicholls17'`` (``_default_nitrogen``) makes it
+  the offset from that N/O--O/H relation at ``gas_logz``, the convention of
+  ``neb_dno`` in the grid backends.
 
 - **Differentiable by design**: as a neural network, Cue is smooth and
   differentiable through JAX, enabling VI (ELBO gradients) and HMC
@@ -113,7 +116,9 @@ import numpy as np
 from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
+from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -195,6 +200,11 @@ CUE_TRAINED_LOG_Z_GAS: tuple[float, float] = (-2.2, 0.5)
 #: ``gas_logco``/``gas_logno`` (``CUE_GAS_EXTRA_PARAMS``) are ``log10`` of
 #: that same ratio ("[C/O]"/"[N/O]" abundance ratio, dex), so the range is
 #: converted: log10(0.1) = -1.0, log10(5.4) ~= 0.7324.
+#:
+#: These bounds are ABSOLUTE [C/O] and [N/O]. Under ``nitrogen=<relation>``
+#: (#2693) ``gas_logno`` is an OFFSET from that N/O--O/H relation, so the
+#: range it is checked against is ``gas_logno + relation(neb_logZ_gas)``
+#: (``grid_support.SUPPORT_SHIFT``); ``gas_logco`` is always absolute.
 CUE_TRAINED_LOG_CO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 CUE_TRAINED_LOG_NO: tuple[float, float] = (math.log10(0.1), math.log10(5.4))
 
@@ -658,22 +668,40 @@ def _speculator_log_spectrum(
 # ── Parameter conversion: user-facing -> network input ────────────
 
 
+#: Meanings of ``gas_logno`` (the ``nitrogen`` structural key, #2693): Cue's
+#: absolute [N/O] input (default), or the offset from a named N/O--O/H relation.
+CUE_NITROGEN_MODES: tuple[str, ...] = NITROGEN_MODES
+
+
+def _effective_gas_logno(p: dict, nitrogen: str = "absolute") -> jnp.ndarray:
+    """The absolute [N/O] fed to the network (#2693).
+
+    ``"absolute"``: ``gas_logno`` itself, untouched (Li+2025's parameterization).
+    A relation name: that relation at ``gas_logz`` plus ``gas_logno``.
+    """
+    gas_logno = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
+    if nitrogen == "absolute":
+        return gas_logno
+    gas_logz = jnp.asarray(p["gas_logz"], dtype=jnp.float32)
+    return relation_offset(nitrogen, gas_logz).astype(jnp.float32) + gas_logno
+
+
 def _logq_from_logu(
     gas_logu: jnp.ndarray, gas_logn: jnp.ndarray, log_R: float = 19.0
 ) -> jnp.ndarray:
     """Convert ionization parameter logU to logQ.
 
-    Computes logQ = logU + log(4*pi*c) + 2*log(R) + logn using the Stromgren
-    radius as a reference scale.
+    Computes logQ = logU + log(4*pi*c) + 2*log(R) + logn using a fixed
+    reference radius of the inner-face ionization parameter.
 
     Parameters
     ----------
     gas_logu : array
-        Ionization parameter [log10(U)].
+        Inner-face ionization parameter at R = 10^19 cm [log10(U)].
     gas_logn : array
         Gas density [log10(n_H / cm^-3)].
     log_R : float, optional
-        Reference radius [log10(R / cm)]. Default: 19.0 (Stromgren radius).
+        Reference radius [log10(R / cm)]. Default: 19.0 (R = 10^19 cm).
 
     Returns
     -------
@@ -684,8 +712,16 @@ def _logq_from_logu(
     -----
     **JIT-compatible**: yes, simple arithmetic.
 
-    This formula matches Cue's internal convention with R = 1e19 cm
-    (approximately the Stromgren radius for typical HII regions).
+    `neb_logU` is the ionization parameter U = Q_H / (4π R² n_H c) evaluated
+    at the inner face R = 10^19 cm, Cue's default
+    (``cue.utils.logQ(logU, R=1e19, lognH=2)``). It is NOT the ionization
+    parameter of Synthesizer, U = (α_B^(2/3) / c) (3 Q n_H / 4π)^(1/3)
+    (Synthesizer's ``calculate_U_from_Q``), which is three times the
+    Strömgren-radius U_S of Gutkin et al. (2016, eq. 7), the quantity their
+    footnote 3 identifies with the volume-averaged ⟨U⟩. The two differ by a
+    Q- and n_H-dependent factor. At n_H = 100 cm⁻³: Synthesizer's
+    log U = −2 corresponds to neb_logU = −2.35, and neb_logU = −2 corresponds
+    to Synthesizer's log U = −1.88 (the offset increases with Q).
 
     """
     return gas_logu + device_table(_LOG_4PI) + 2.0 * log_R + gas_logn + device_table(_LOG_C)
@@ -1075,7 +1111,13 @@ class CueBackend:
         weights_path: str,
         ssp_data=None,
         default_gas_logqion: float = 49.1,
+        nitrogen: str = "absolute",
     ) -> None:
+        if nitrogen not in CUE_NITROGEN_MODES:
+            raise ValueError(
+                f"CueBackend nitrogen={nitrogen!r}: expected one of {CUE_NITROGEN_MODES}."
+            )
+        self.nitrogen = nitrogen
         self.name = "cue"
         self.has_free_params = True
         self.has_continuum = True
@@ -1364,6 +1406,15 @@ class CueBackend:
             ionspec_logLratio3=_pick("ionspec_logLratio3", ionspec_logLratio3, 0.2),
         )
 
+    def effective_log_no(self, **kwargs) -> jnp.ndarray:
+        """The absolute [N/O] the network is fed for these inputs (#2693).
+
+        Takes the same keyword arguments as the prediction methods and equals
+        ``gas_logno`` under ``nitrogen='absolute'``, else ``relation(gas_logz)
+        + gas_logno``.
+        """
+        return _effective_gas_logno(self._resolve_cue_params(**kwargs), self.nitrogen)
+
     def _forward_lines(
         self,
         p: dict,
@@ -1373,7 +1424,7 @@ class CueBackend:
         cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
-        neb_fdust=0.0,
+        neb_fdust_frac=0.0,
         template_data=None,
     ):
         """Low-level line prediction from resolved param dict."""
@@ -1389,7 +1440,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            _effective_gas_logno(p, self.nitrogen),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1405,8 +1456,11 @@ class CueBackend:
         # Apply nebular emission scaling from ionizing photon loss.
         # Following CIGALE nebular.py, use the k-factor (Inoue 2011) which
         # accounts for both escape fraction and dust absorption via the
-        # recombination coefficient ratio alpha_1 / alpha_B.
-        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        # recombination coefficient ratio alpha_1 / alpha_B. #2436: the
+        # absolute f_dust share is derived from neb_fdust_frac (fraction of
+        # the NON-escaping budget) via the one shared lyc_shares helper.
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k = lyc_dust_escape_factor(neb_fesc, _f_dust)
         lum = lum * k
         # Apply Lyα-specific resonant scattering escape via the shared helper.
         # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
@@ -1486,7 +1540,7 @@ class CueBackend:
             jnp.asarray(p["gas_logu"], dtype=jnp.float32),
             jnp.asarray(p["gas_logn"], dtype=jnp.float32),
             jnp.asarray(p["gas_logz"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logno"], dtype=jnp.float32),
+            _effective_gas_logno(p, self.nitrogen),
             jnp.asarray(p["gas_logco"], dtype=jnp.float32),
         )
         gas_logq = _logq_from_logu(
@@ -1530,7 +1584,9 @@ class CueBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         gas_logn, gas_logno, gas_logco : float
-            Cue gas properties (defaults match Cue paper).
+            Cue gas properties (defaults match Cue paper). ``gas_logno`` is
+            Cue's absolute [N/O], or under a ``nitrogen`` relation the offset
+            from that relation at the gas metallicity (0 = the relation; #2693).
 
         Returns
         -------
@@ -1676,7 +1732,7 @@ class CueBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
@@ -1721,8 +1777,9 @@ class CueBackend:
             Escape fraction [0, 1].
         neb_fesc_lya : float
             Ly-alpha escape fraction [0, 1].
-        neb_fdust : float
-            Dust-absorption fraction of ionizing photons in HII regions [0, 1].
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [0, 1] (#2436).
         cloudyfsps_only : bool
             If True, return only the 128 legacy CLOUDY/FSPS-matched lines
             (kept for cross-code comparisons). Default
@@ -1800,7 +1857,7 @@ class CueBackend:
             cloudyfsps_only=cloudyfsps_only,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
-            neb_fdust=neb_fdust,
+            neb_fdust_frac=neb_fdust_frac,
             template_data=template_data,
         )
         return wav, lum
@@ -1813,7 +1870,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         gas_logu: float | None = None,
         gas_logn: float = 2.0,
         gas_logz: float | None = None,
@@ -1852,8 +1909,9 @@ class CueBackend:
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc : float
             Escape fraction [0, 1]. Suppresses continuum luminosity.
-        neb_fdust : float
-            Dust-absorption fraction of ionizing photons in HII regions [0, 1].
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [0, 1] (#2436).
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
         gas_logqion : float or None
@@ -1880,8 +1938,10 @@ class CueBackend:
         without photoionizing nebular gas. The continuum is suppressed by the
         CIGALE ionizing-budget k-factor
         ``tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor``
-        ``(neb_fesc, neb_fdust)``, which → 0 as ``neb_fesc + neb_fdust → 1``
-        (no surviving nebular emission when all ionizing photons are lost).
+        ``(f_esc, f_dust)``, with the absolute shares derived from
+        ``(neb_fesc, neb_fdust_frac)`` via ``lyc_shares`` (#2436), which → 0
+        as ``f_esc + f_dust → 1`` (no surviving nebular emission when all
+        ionizing photons are lost).
 
         """
         p = self._resolve_cue_params(
@@ -1906,9 +1966,11 @@ class CueBackend:
         )
         cont_wav, cont_lum = self._forward_continuum(p)
         # Apply CIGALE nebular emission scaling factor (k) accounting for both
-        # ionizing photon escape (neb_fesc) and dust absorption (neb_fdust).
+        # ionizing photon escape (neb_fesc) and dust absorption (the absolute
+        # f_dust share, #2436: lyc_shares(neb_fesc, neb_fdust_frac)[1]).
         # The k-factor applies the recombination coefficient ratio (alpha_1/alpha_B).
-        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k = lyc_dust_escape_factor(neb_fesc, _f_dust)
         return cont_wav, cont_lum * k
 
     def predict_nebular_sed(
@@ -1921,7 +1983,7 @@ class CueBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
-        neb_fdust: float = 0.0,
+        neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -1949,10 +2011,12 @@ class CueBackend:
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc, neb_fesc_lya : float
             Escape fractions [dimensionless, in [0, 1]].
-        neb_fdust : float
-            Dust-absorption fraction of ionizing photons in HII regions
-            [dimensionless, in [0, 1]]. Reduces nebular emission via the
-            CIGALE k-factor (Inoue 2011).
+        neb_fdust_frac : float
+            Fraction of the non-escaping ionizing budget (1 - neb_fesc)
+            absorbed by dust in HII regions [dimensionless, in [0, 1]]
+            (#2436). Reduces nebular emission via the CIGALE k-factor
+            (Inoue 2011), applied to the absolute f_dust share
+            ``lyc_shares(neb_fesc, neb_fdust_frac)[1]``.
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
         template_data : Any | None, optional
@@ -1984,9 +2048,10 @@ class CueBackend:
         averaging to produce proper flux units.
 
         **Ionizing photon loss**: Controlled via ``neb_fesc`` (escape fraction)
-        and ``neb_fdust`` (dust-absorption fraction). Both reduce nebular
-        emission (lines + continuum) via the CIGALE k-factor (Inoue 2011),
-        accounting for the recombination coefficient ratio (alpha_1 / alpha_B).
+        and ``neb_fdust_frac`` (fraction of the non-escaping budget dust
+        absorbs, #2436). Both reduce nebular emission (lines + continuum) via
+        the CIGALE k-factor (Inoue 2011), accounting for the recombination
+        coefficient ratio (alpha_1 / alpha_B).
         ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
 
         """
@@ -2006,16 +2071,18 @@ class CueBackend:
             cloudyfsps_only=False,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
-            neb_fdust=neb_fdust,
+            neb_fdust_frac=neb_fdust_frac,
             template_data=template_data,
         )
 
         # Continuum (same resolved params: no double computation)
         cont_wav, cont_lum = self._forward_continuum(p, template_data=template_data)
         # Apply CIGALE nebular emission scaling factor (k) accounting for both
-        # ionizing photon escape (neb_fesc) and dust absorption (neb_fdust).
+        # ionizing photon escape (neb_fesc) and dust absorption (the absolute
+        # f_dust share, #2436: lyc_shares(neb_fesc, neb_fdust_frac)[1]).
         # The k-factor applies to both continuum and lines per CIGALE nebular.py.
-        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        _, _f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+        k = lyc_dust_escape_factor(neb_fesc, _f_dust)
         cont_lum = cont_lum * k
 
         # Interpolate continuum onto SSP grid; past the emulator's last node (1e8 Å)

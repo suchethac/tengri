@@ -22,7 +22,7 @@ from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
-from tengri.observation.spectroscopy import Spectroscopy
+from tengri.observation.spectroscopy import Spectroscopy, static_redshift
 from tengri.parameters.priors import Distribution
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.scale import apply_log10_scale, log10_flux_scale
@@ -107,13 +107,16 @@ def _restband_lnu(state) -> jnp.ndarray:
     y_age = state.derived.get("dust_young_indicator")
 
     if a_bc is not None and a_diff is not None:
-        # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+        # Two-component (Charlot & Fall): each SSP node mixes the young population
+        # (birth cloud + diffuse) and the old one (diffuse only) by the node's young
+        # mass fraction y(a): T(a, λ) = y·T_diff·T_bc + (1 - y)·T_diff.
         a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
         a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
         if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
             # K-point quadrature across the rest band, the screen is EVALUATED at
             # each node, not extrapolated from the pivot (#1122).
-            t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+            y3 = y_age[:, None, None]
+            t_sub = a_diff_sub * (y3 * a_bc_sub + (1.0 - y3))
             stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
         else:
             stellar_att = a_diff * a_bc * stellar
@@ -133,9 +136,35 @@ def _restband_lnu(state) -> jnp.ndarray:
             stellar_att = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
         else:
             stellar_att = a_single * stellar
+        nebular_exact = state.derived.get("nebular_restband_lnu_attenuated_precomp")
+        if nebular_exact is not None:
+            return stellar_att + nebular_exact + a_single * shock_only + unattenuated
         return stellar_att + a_single * nebular + unattenuated
 
     return total
+
+
+def _instrument_only_rest_sed(state) -> jnp.ndarray:
+    """Rest-frame light that receives the instrument kernel alone (#2519, #2565).
+
+    ``sed_nebular + sed_shock + sed_agn_lines_attenuated``, each zeros when its
+    component is absent. The one definition both kernel splits read, so the
+    two cannot disagree on the group.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output; reads the three ``state.derived`` keys above.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Instrument-only light [erg/s/Hz], pre-IGM.
+    """
+    return sum(
+        jnp.asarray(state.derived.get(key, 0.0))
+        for key in ("sed_nebular", "sed_shock", "sed_agn_lines_attenuated")
+    )
 
 
 def _split_stellar_and_instrument_only_sed(
@@ -169,44 +198,28 @@ def _split_stellar_and_instrument_only_sed(
     - Shock continuum + lines (``sed_shock``, MAPPINGS): instrument-only,
       for the same reason as nebular -- painted at its own velocity width,
       never touches the stellar library.
-    - AGN (``sed_agn``, including any composable disc/torus/polar/line
-      sub-blocks), dust IR re-emission (``sed_dust_ir``), radio
-      (``sed_radio``), X-ray (``sed_xray``): left in the stellar-kernel
-      group. None of these come from the SSP library or share
-      :math:`\sigma_v` either, but the dust adapter does not (yet)
-      publish a separately-attenuated form of ``sed_agn`` the way it does
-      for ``sed_nebular`` (its two-component variant re-publishes
-      ``sed_nebular`` post-screen but leaves ``sed_agn``/``sed_shock`` at
-      their pre-screen values; the single-screen variant attenuates
-      everything already accumulated in one multiply and republishes
-      none of them separately) -- subtracting the pre-screen array from
-      the post-screen total would introduce a real, if small, residual
-      error rather than fix one. Disc/torus/polar continua vary on
-      scales of thousands of Angstrom, far broader than any LSF, so
-      which kernel they get is observationally inconsequential for them.
-
-      **AGN emission lines on the stellar kernel.** Every AGN line
-      profile is summed into ``sed_agn`` before the dust screen and so
-      receives the stellar kernel: the composable runner's NLR
-      (:func:`~tengri.components.agn.nlr.compute_nlr_sed`, Gaussian
-      profiles at ``agn_nlr_fwhm``), BLR
-      (:func:`~tengri.components.agn.blr.compute_blr_sed`, at
-      ``agn_blr_fwhm``) and the FeII pseudo-continuum at the BLR width,
-      all collected in ``sed_agn_lines``; GRAHSP's own broad and narrow
-      Gaussians and FeII forest (``include_lines`` / ``include_feii``,
-      width ``agn_grahsp_linewidth_kms``), folded into ``sed_grahsp``;
-      and QSOGen's composite line template, which is an equivalent-width
-      scaling of the continuum with no additive line array to separate.
-      The excess over the correct instrument-only width is
-      :math:`\sigma_v^2-\sigma_{\rm lib}^2` in quadrature, independent
-      of :math:`\sigma_{\rm inst}`: at :math:`\sigma_v=200` km/s with the
-      MILES curve's :math:`\sigma_{\rm lib}=64.67` km/s at 5000 Angstrom
-      (35818 km^2/s^2), a 300 km/s narrow line reads
-      :math:`\sqrt{300^2+35818}=354.7` km/s (+18.2%) and a 3000 km/s
-      broad line :math:`\sqrt{3000^2+35818}=3006.0` km/s (+0.2%).
-      Separating these requires the AGN and dust components to publish
-      an attenuated line-only array, as the dust adapter does for
-      ``sed_nebular``.
+    - AGN emission lines (``sed_agn_lines_attenuated``): instrument-only.
+      Every line an AGN paints is built at its own intrinsic width and never
+      passes through the stellar library: the composable NLR
+      (:func:`~tengri.components.agn.nlr.compute_nlr_sed`, ``agn_nlr_fwhm_kms``),
+      the BLR and FeII pseudo-continuum
+      (:func:`~tengri.components.agn.blr.compute_blr_sed`, a 5000 km/s FWHM),
+      QSOGen's additive line template, and GRAHSP's broad and narrow Gaussians
+      and FeII forest (``agn_grahsp_linewidth_kms``). The AGN component
+      publishes this light exactly as it enters ``sed_intrinsic`` (after the
+      AGN's own screen), and the dust adapters multiply it by the host
+      ``agn_screen`` transmission when the AGN runs before them. The observed
+      width is :math:`\sqrt{\sigma_{\rm line}^2+\sigma_{\rm inst}^2}`,
+      independent of :math:`\sigma_v`; the stellar kernel would add
+      :math:`\sigma_v^2-\sigma_{\rm lib}^2` in quadrature (a 300 km/s line
+      at :math:`\sigma_v=200` km/s with :math:`\sigma_{\rm lib}=64.67` km/s
+      would read :math:`\sqrt{300^2+200^2-64.67^2}`, not the true 300 km/s).
+    - AGN continuum (disc, torus, polar: ``sed_agn`` minus the lines), dust IR
+      re-emission (``sed_dust_ir``), radio (``sed_radio``), X-ray
+      (``sed_xray``): left in the stellar-kernel group. None of these come
+      from the SSP library or share :math:`\sigma_v` either, but they vary on
+      scales of thousands of Angstrom, far broader than any LSF, so which
+      kernel they receive is observationally inconsequential.
 
     Emission lines carry the instrument kernel only, as in Prospector
     (``prospect.models.sedmodel.SpecModel`` adds lines analytically at
@@ -219,15 +232,18 @@ def _split_stellar_and_instrument_only_sed(
     Parameters
     ----------
     state : ForwardState
-        Orchestrator output; reads ``state.derived["sed_nebular"]`` and
-        ``["sed_shock"]``, each zeros on the rest-frame grid when the
-        corresponding component is absent or inactive (never ``None`` in
-        practice, since :class:`~tengri.components.nebular.component.NebularSEDComponent`
-        always publishes both).
+        Orchestrator output; reads ``state.derived["sed_nebular"]``,
+        ``["sed_shock"]`` and ``["sed_agn_lines_attenuated"]``, each zeros on
+        the rest-frame grid when the corresponding component is absent or
+        inactive.
     sed_spec : ndarray, shape (n_wave,)
         The full rest-frame SED already carrying the IGM transmission
-        (``sed_atten`` in :meth:`Observation.predict`) -- what
-        ``project_spectrum`` would otherwise receive whole.
+        (the ``sed_atten`` local of :func:`project_spectrum_kernel_split`'s
+        no-IGM fallback branch) -- what ``project_spectrum`` would
+        otherwise receive whole. Only used when ``igm_trans is None``
+        (``T\equiv 1`` structurally); when IGM is configured,
+        :func:`_split_stellar_and_instrument_only_sed_pre_igm` is used
+        instead, ahead of the IGM multiply (#2589).
     igm_trans : ndarray, shape (n_wave,), or None
         The same multiplicative IGM transmission already folded into
         ``sed_spec``, applied here to the instrument-only group so the two
@@ -241,8 +257,8 @@ def _split_stellar_and_instrument_only_sed(
         computed by summing the stellar-kernel components directly, so it
         cannot drift from ``sed_spec``).
     sed_instrument_only : ndarray, shape (n_wave,)
-        ``(state.derived["sed_nebular"] + state.derived["sed_shock"]) *
-        igm_trans``.
+        ``(state.derived["sed_nebular"] + state.derived["sed_shock"] +
+        state.derived["sed_agn_lines_attenuated"]) * igm_trans``.
 
     Notes
     -----
@@ -256,9 +272,7 @@ def _split_stellar_and_instrument_only_sed(
            "Stellar Population Inference with Prospector."
            ApJS, 254, 22. arXiv:2012.01426.
     """
-    sed_nebular = jnp.asarray(state.derived.get("sed_nebular", 0.0))
-    sed_shock = jnp.asarray(state.derived.get("sed_shock", 0.0))
-    sed_instrument_only_rest = sed_nebular + sed_shock
+    sed_instrument_only_rest = _instrument_only_rest_sed(state)
     sed_instrument_only = (
         sed_instrument_only_rest if igm_trans is None else sed_instrument_only_rest * igm_trans
     )
@@ -266,9 +280,51 @@ def _split_stellar_and_instrument_only_sed(
     return sed_stellar, sed_instrument_only
 
 
+def _split_stellar_and_instrument_only_sed_pre_igm(
+    state, sed_rest: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Split the rest-frame SED by kernel assignment, before IGM transmission (#2589).
+
+    The pre-IGM counterpart of :func:`_split_stellar_and_instrument_only_sed`,
+    used by :func:`project_spectrum_kernel_split`'s IGM-present branch: the
+    stellar piece needs its own velocity-dispersion convolution (galaxy
+    kinematics, intrinsic to the source) applied *before* the line-of-sight
+    IGM transmission multiplies the light, so the split has to happen on
+    ``sed_rest`` itself, ahead of that multiply, rather than on the
+    already-attenuated ``sed_spec`` the way the no-IGM split does.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output; reads ``state.derived["sed_nebular"]`` /
+        ``["sed_shock"]`` / ``["sed_agn_lines_attenuated"]`` (see
+        :func:`_split_stellar_and_instrument_only_sed`
+        for the component -> kernel assignment and its justification).
+    sed_rest : ndarray, shape (n_wave,)
+        Rest-frame SED *without* IGM transmission folded in
+        (``state.sed_intrinsic`` in :meth:`Observation.predict`).
+
+    Returns
+    -------
+    sed_stellar_rest : ndarray, shape (n_wave,)
+        ``sed_rest`` minus the instrument-only group, pre-IGM.
+    sed_instrument_only_rest : ndarray, shape (n_wave,)
+        ``state.derived["sed_nebular"] + state.derived["sed_shock"] +
+        state.derived["sed_agn_lines_attenuated"]``, pre-IGM.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure array reads and arithmetic, same as
+    :func:`_split_stellar_and_instrument_only_sed`.
+    """
+    sed_instrument_only_rest = _instrument_only_rest_sed(state)
+    sed_stellar_rest = sed_rest - sed_instrument_only_rest
+    return sed_stellar_rest, sed_instrument_only_rest
+
+
 def project_spectrum_kernel_split(
     state,
-    sed_atten: jnp.ndarray,
+    sed_rest: jnp.ndarray,
     igm_trans: jnp.ndarray | None,
     wave_rest: jnp.ndarray,
     wave_obs: jnp.ndarray,
@@ -285,17 +341,87 @@ def project_spectrum_kernel_split(
     conserving: bool = False,
     resolution_matrix: object | None = None,
 ) -> jnp.ndarray:
-    r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526 kernel split.
+    r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
     The single seam every spectrum-prediction surface calls
     (:meth:`Observation.predict`, ``SEDModel._predict_spectrum_on_grid``,
     and so every path built on either of those -- the eager
     ``predict_spectrum``, the compiled ``predict_observables`` kernel), so the
-    stellar/instrument-only split and the ``lsf_scale`` factor cannot drift
-    between them. ``_split_stellar_and_instrument_only_sed``
-    gives the component/kernel assignment and its physical justification.
+    stellar/instrument-only split, the IGM order and the ``lsf_scale``
+    factor cannot drift between them. ``_split_stellar_and_instrument_only_sed``
+    / ``_split_stellar_and_instrument_only_sed_pre_igm`` give the
+    component/kernel assignment and its physical justification.
 
-    Three cases:
+    **Physical order (#2589).** The galaxy's own velocity dispersion
+    :math:`\sigma_v` is intrinsic to the source and acts in the rest
+    frame; the IGM is a line-of-sight absorber that sees the light only
+    after it leaves the galaxy; the instrument LSF acts last, on the
+    ground. The correct order is therefore :math:`\sigma_v \to T_{\rm
+    IGM} \to {\rm LSF}`. Before #2589, ``sed_rest`` already carried
+    :math:`T_{\rm IGM}` by the time it reached this function, and the
+    single combined kernel
+    :math:`\sigma_{\rm eff}=\sqrt{\sigma_v^2+\sigma_{\rm
+    inst}^2-\sigma_{\rm lib}^2}` smeared the IGM transmission's sharp
+    Lyman-limit/Lyman-:math:`\alpha`-forest edge by :math:`\sigma_v`,
+    which can only broaden the instrument's own response to that edge,
+    never the edge itself: measured at :math:`z=6,\ \sigma_v=300`
+    km/s, :math:`R=3000`, the old order's edge differed from the
+    physical order by up to 87% of peak flux with a factor 7.15
+    shallower edge-steepness (#2589).
+
+    When an IGM component is configured (``igm_trans`` is not ``None``),
+    this function now applies :math:`\sigma_v` to the stellar piece
+    *before* multiplying by ``igm_trans``, and reassigns the library
+    deconvolution to the instrument stage alone:
+
+    1. Stellar piece, pre-IGM: :math:`\sigma_v`-only convolution
+       (:func:`~tengri.observation.spectrum.broaden_velocity_only`,
+       grid-robust piecewise machinery -- the tengri rest grid is not
+       uniform in :math:`\ln\lambda` over its full span, so the
+       single-FFT :func:`~tengri.observation.spectrum.velocity_broaden`
+       cannot be used here).
+    2. Multiply by ``igm_trans`` (observed-frame transmission, evaluated
+       on the rest grid at :math:`\lambda_{\rm obs}=\lambda_{\rm
+       rest}(1+z)`).
+    3. Instrument stage: the already-:math:`\sigma_v`-broadened,
+       already-IGM-multiplied stellar piece gets
+       :math:`\sqrt{\sigma_{\rm inst}(\lambda)^2\cdot{\rm
+       lsf\_scale}^2-\sigma_{\rm lib}(\lambda)^2}` (:math:`\sigma_v` is
+       *not* added again); nebular/shock get :math:`\sigma_{\rm
+       inst}\cdot{\rm lsf\_scale}` alone, as before, multiplied by
+       ``igm_trans`` with no kinematic term (#2519 is unaffected).
+
+    **Approximation.** Two sequential Gaussian convolutions
+    (:math:`\sigma_v`, then library-deconvolved :math:`\sigma_{\rm
+    inst}`) are mathematically exact for the quadrature sum they
+    replace -- a Gaussian's Fourier transform is a Gaussian, so
+    convolving with :math:`\sigma_v` then :math:`\sigma_2` multiplies
+    the two kernels' Fourier transforms, equal to one convolution with
+    :math:`\sqrt{\sigma_v^2+\sigma_2^2}` -- *except* that stage 1 runs
+    on the rest/model grid and stage 3 on the resampled pixel grid, two
+    different discretizations the pre-#2589 single-kernel path folded
+    into one. The IGM edge itself, which is what stage 2 multiplies,
+    therefore carries the library-deconvolved instrument width
+    :math:`\sqrt{\sigma_{\rm inst}^2-\sigma_{\rm lib}^2}` rather than
+    the undeconvolved :math:`\sigma_{\rm inst}`: an approximation
+    bounded by the ratio :math:`\sigma_{\rm lib}/\sigma_{\rm inst}`
+    (how much of the instrument width the library subtraction removes),
+    replacing what was previously a :math:`\sigma_v`-sized error -- for
+    any instrument where :math:`\sigma_v \gtrsim \sigma_{\rm lib}`
+    (the common case: galaxy LOSVDs of 100-400 km/s against SSP
+    libraries resolved to 15-90 km/s) this is strictly smaller. The
+    existing build-time warning for :math:`\sigma_{\rm inst} <
+    \sigma_{\rm lib}` (the deficit clamped to zero in
+    :func:`~tengri.observation.spectrum.apply_lsf`) is unchanged by
+    this split.
+
+    **Fallback.** When no IGM component is configured (``igm_trans`` is
+    ``None``, a structural/build-time property, never a traced branch),
+    :math:`T\equiv 1` and there is nothing for the physical order to
+    improve on: this function takes the pre-#2589 single-kernel path
+    unchanged, bit-for-bit.
+
+    Three LSF cases (both the IGM-present and IGM-absent branches):
 
     - ``resolution_matrix`` given (DESI/PFS spectro-perfectionism): the
       matrix already IS the measured instrument response, so there is no
@@ -304,12 +430,13 @@ def project_spectrum_kernel_split(
       ``test_lsf_scale_excluded_from_banded_path`` for why, and
       :func:`~tengri.observation.banded.deconvolve_library_lsf` for how the
       library term is removed from the matrix itself, at build time, before
-      it ever reaches here). The #2519 split still applies: the resampled
-      stellar piece is broadened by ``sigma_v_kms`` before ``R @ model``
-      (the matrix has no galaxy-kinematics term of its own, #2506); the
-      instrument-only piece is not. Because ``R`` is linear,
-      ``R @ stellar_broadened + R @ instrument_only`` is computed as two
-      calls to the unchanged single-kernel :func:`~tengri.observation.spectrum.project_spectrum`
+      it ever reaches here). The #2519 split still applies: the stellar
+      piece is broadened by ``sigma_v_kms`` before ``R @ model`` (pre-IGM,
+      when IGM is configured; on the resampled model otherwise, the matrix
+      has no galaxy-kinematics term of its own, #2506); the instrument-only
+      piece is not. Because ``R`` is linear, ``R @ stellar_broadened + R @
+      instrument_only`` is computed as two calls to the unchanged
+      single-kernel :func:`~tengri.observation.spectrum.project_spectrum`
       banded branch and summed -- equal to ``R @ (stellar_broadened +
       instrument_only)`` exactly.
     - ``resolution`` is ``None``: no LSF is configured at all, so
@@ -328,13 +455,14 @@ def project_spectrum_kernel_split(
     ----------
     state : ForwardState
         Orchestrator output; reads ``state.derived["sed_nebular"]`` /
-        ``["sed_shock"]`` (see ``_split_stellar_and_instrument_only_sed``).
-    sed_atten : ndarray, shape (n_wave,)
-        Full rest-frame SED already carrying the IGM transmission (what a
-        single-kernel projection would otherwise receive whole).
+        ``["sed_shock"]`` / ``["sed_agn_lines_attenuated"]`` (see
+        ``_split_stellar_and_instrument_only_sed``).
+    sed_rest : ndarray, shape (n_wave,)
+        Full rest-frame SED *without* IGM transmission folded in
+        (``state.sed_intrinsic``).
     igm_trans : ndarray, shape (n_wave,), or None
-        The same transmission already folded into ``sed_atten``, applied to
-        the instrument-only piece too so the split sums back exactly.
+        Observed-frame IGM transmission on the rest grid (``None`` when no
+        IGM component is configured, the structural fallback above).
     wave_rest : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
     wave_obs : ndarray, shape (n_pix,)
@@ -354,7 +482,8 @@ def project_spectrum_kernel_split(
         applied to both Gaussian kernels, not to the banded path.
     n_bins : int, default 16
         Piecewise-constant LSF bin count (Gaussian path) / sigma_v
-        broadening bin count (banded path).
+        broadening bin count (banded path, and the pre-IGM stellar
+        convolution of the IGM-present branch).
     cal_coeffs : ndarray or None
         Calibration polynomial coefficients; ``None`` skips calibration.
     cal_wave_range : tuple[float, float] or None
@@ -373,89 +502,221 @@ def project_spectrum_kernel_split(
     Notes
     -----
     **JIT-compatible**: yes, same structural (pre-trace) None/object
-    branches as :func:`~tengri.observation.spectrum.project_spectrum`.
-    """
-    from tengri.observation.spectrum import project_spectrum
+    branches as :func:`~tengri.observation.spectrum.project_spectrum`;
+    ``igm_trans is None`` is likewise structural (which components are in
+    the chain is fixed at model-build time).
 
-    if resolution_matrix is not None:
-        sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
-            state, sed_atten, igm_trans
-        )
-        flux_stellar = project_spectrum(
-            sed_stellar,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
-        flux_instrument_only = project_spectrum(
-            sed_instrument_only,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=0.0,
-            cal_coeffs=None,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
-        flux = flux_stellar + flux_instrument_only
-    elif resolution is None:
-        flux = project_spectrum(
-            sed_atten,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=None,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
+    **Cross-code comparison (#2589).** Prospector applies the mean-IGM
+    transmission inside the FSPS call, before ``smoothspec`` convolves with
+    the stellar velocity dispersion (``prospect.sources.CSPSpecBasis`` /
+    ``SpecModel.predict_init``, Johnson et al. 2021 [1]_); BAGPIPES applies
+    its IGM transmission before the velocity-dispersion convolution in
+    ``model_galaxy._calculate_full_spectrum`` (Carnall et al. 2018 [2]_).
+    tengri applies stellar kinematics first instead: the Lyman-limit and
+    Lyman-:math:`\alpha`-forest edges (Inoue et al. 2014 [3]_; Madau 1995
+    [4]_) are imprinted on the galaxy's already-kinematically-broadened
+    light along the line of sight, external to the galaxy, and are only
+    smeared afterward by the instrument -- the order used throughout the
+    Lyman-break galaxy spectroscopy literature (e.g. Steidel et al. 1996
+    [5]_, 2003 [6]_: the forest/break is measured on the observed spectrum,
+    the galaxy's own velocity dispersion is a separate, narrower kinematic
+    measurement made from unrelated absorption/emission features).
+
+    References
+    ----------
+    .. [1] Johnson, B. D., Leja, J., Conroy, C., & Speagle, J. S. (2021).
+           "Stellar Population Inference with Prospector."
+           ApJS, 254, 22. arXiv:2012.01426.
+    .. [2] Carnall, A. C., McLure, R. J., Dunlop, J. S., & Davé, R. (2018).
+           "Inferring the star formation histories of massive quiescent
+           galaxies with BAGPIPES: evidence for multiple quenching
+           mechanisms." MNRAS, 480, 4379. arXiv:1712.04452.
+    .. [3] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. (2014).
+           "An updated analytic model for attenuation by the intergalactic
+           medium." MNRAS, 442, 1805. arXiv:1402.0677.
+    .. [4] Madau, P. (1995). "Radiative transfer in a clumpy universe: the
+           colors of high-redshift galaxies." ApJ, 441, 18.
+    .. [5] Steidel, C. C., Giavalisco, M., Pettini, M., Dickinson, M., &
+           Adelberger, K. L. (1996). "Spectroscopic Confirmation of a
+           Population of Normal Star-forming Galaxies at Redshifts z > 3."
+           ApJ, 462, L17.
+    .. [6] Steidel, C. C., Adelberger, K. L., Shapley, A. E., Pettini, M.,
+           Dickinson, M., & Giavalisco, M. (2003). "Lyman Break Galaxies at
+           Redshift z ~ 3: Survey Description and Full Data Set."
+           ApJ, 592, 728. arXiv:astro-ph/0305378.
+    """
+    from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
+
+    if igm_trans is None:
+        # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
+        # to improve on, so this is the pre-#2589 single-kernel path,
+        # unchanged, bit-for-bit (the fallback identity the issue requires).
+        sed_atten = sed_rest
+        if resolution_matrix is not None:
+            sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
+                state, sed_atten, igm_trans
+            )
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux = flux_stellar + flux_instrument_only
+        elif resolution is None:
+            flux = project_spectrum(
+                sed_atten,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=None,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+        else:
+            sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
+                state, sed_atten, igm_trans
+            )
+            resolution_scaled = resolution / lsf_scale
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=0.0,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux = flux_stellar + flux_instrument_only
     else:
-        sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
-            state, sed_atten, igm_trans
+        # IGM present: #2589 three-stage split. sigma_v broadens the
+        # stellar piece first (rest grid, pre-IGM); igm_trans then
+        # multiplies the already-broadened stellar piece and the
+        # (unbroadened) nebular/shock piece alike; the instrument stage
+        # gets sigma_v_kms=0.0 on both (already applied / never applicable).
+        sed_stellar_rest, sed_instrument_only_rest = (
+            _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        resolution_scaled = resolution / lsf_scale
-        flux_stellar = project_spectrum(
-            sed_stellar,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution_scaled,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
-        flux_instrument_only = project_spectrum(
-            sed_instrument_only,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution_scaled,
-            sigma_lib_kms=0.0,
-            n_bins=n_bins,
-            sigma_v_kms=0.0,
-            cal_coeffs=None,
-            conserving=conserving,
-        )
-        flux = flux_stellar + flux_instrument_only
+        sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        sed_stellar = sed_stellar_v * igm_trans
+        sed_instrument_only = sed_instrument_only_rest * igm_trans
+
+        if resolution_matrix is not None:
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+            flux = flux_stellar + flux_instrument_only
+        elif resolution is None:
+            flux = project_spectrum(
+                sed_stellar + sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=None,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+        else:
+            resolution_scaled = resolution / lsf_scale
+            flux_stellar = project_spectrum(
+                sed_stellar,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux_instrument_only = project_spectrum(
+                sed_instrument_only,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution_scaled,
+                sigma_lib_kms=0.0,
+                n_bins=n_bins,
+                sigma_v_kms=0.0,
+                cal_coeffs=None,
+                conserving=conserving,
+            )
+            flux = flux_stellar + flux_instrument_only
 
     if cal_coeffs is not None:
         from tengri.observation.calibration import apply_calibration
@@ -1016,6 +1277,10 @@ class Observation:
 
         Notes
         -----
+        Takes one pre-combined array and applies a single kernel to it, so
+        with ``sigma_v_kms > 0`` or nebular lines it does not reproduce the
+        model path (:meth:`predict`) to rounding.
+
         Requires spectroscopy to be configured. Applies LSF convolution
         if a resolution profile is specified. Applies flux-calibration
         polynomial if ``cal_coeffs`` is provided. Returns data ready for
@@ -1035,7 +1300,7 @@ class Observation:
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
-        conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
+        conserving = self.spectroscopy.resolve_conserving(wave_rest, static_redshift(z))
         sigma_lib_kms = resolve_sigma_lib_kms(
             wave_obs, z, self.spectroscopy.sigma_lib_kms, sigma_lib_curve
         )
@@ -1070,6 +1335,8 @@ class Observation:
         lsf_sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         lsf_n_bins: int | None = None,
         lsf_scale: float = 1.0,
+        resample_z_ref: float | None = None,
+        conserving: bool | None = None,
         observables_type=None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
@@ -1122,6 +1389,15 @@ class Observation:
             reproduces the un-scaled kernel bit-for-bit. Not applied on the
             banded ``resolution_matrix`` path (see the Notes on that
             branch below).
+        resample_z_ref : float, optional
+            Redshift at which ``Spectroscopy.resample="auto"`` compares the
+            pixel width with the model grid (#2530): the fixed redshift, or the
+            lowest redshift of the prior when redshift is free. ``None`` uses
+            ``z`` when it is a concrete value and 0 when it is traced.
+        conserving : bool, optional
+            The pixel-integral decision when it was already made outside a
+            ``vmap`` (a traced model grid cannot be inspected). ``None``
+            resolves it here from ``state.wave``.
         observables_type : type or None
             If provided, a :class:`typing.NamedTuple` class produced by
             :func:`build_observables_class`. When ``None``, returns a dict
@@ -1181,21 +1457,23 @@ class Observation:
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy block ONLY; that is an observed-frame
-        # channel, where the absorber belongs.
+        # ``igm_trans`` feeds the spectroscopy block ONLY, as the separate
+        # ``igm_trans`` argument of ``project_spectrum_kernel_split``, which
+        # multiplies it in at the physically correct stage -- after the
+        # galaxy's own kinematic broadening, before the instrument LSF
+        # (#2589) -- rather than here, up front.
         #
         # The observed-photometry block does NOT use it: ``project_photometry`` reads
         # ``state.sed_intrinsic`` and applies the same transmission itself, so that
         # arbitrary post-build filters (``Prediction.photometry(filters=...)``) go
         # through the identical kernel instead of a copy that could silently omit the
-        # IGM factor. Handing it ``sed_atten`` would square the transmission.
+        # IGM factor.
         #
         # The rest-frame-photometry block does NOT use it either (#1115): the IGM is a
         # line-of-sight absorber, not part of the galaxy's rest-frame SED. See there.
         igm_trans = (
             state.derived.get("igm_transmission", None) if state.derived is not None else None
         )
-        sed_atten = sed_rest if igm_trans is None else sed_rest * igm_trans
 
         out: dict[str, jnp.ndarray] = {}
 
@@ -1209,8 +1487,6 @@ class Observation:
             out["phot_fnu"] = project_photometry(state, params, self.photometry, dl_cm=dl_cm)
 
         if self.can_do_spectroscopy:
-            sed_spec = sed_atten
-
             wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
             resolution = (
                 lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
@@ -1222,13 +1498,18 @@ class Observation:
             )
             sigma_lib = resolve_sigma_lib_kms(wo, z, sigma_lib_flat, lsf_sigma_lib_curve)
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
-            conserving = self.spectroscopy.resolve_conserving(state.wave)
+            if conserving is None:
+                conserving = self.spectroscopy.resolve_conserving(
+                    state.wave,
+                    static_redshift(z) if resample_z_ref is None else resample_z_ref,
+                    wave_obs=wo,
+                )
             cal_coeffs = self.spectroscopy.calibration_coeffs(params)
             cal_wave_range = self.spectroscopy.calibration_wave_range
 
             out["spec_fnu"] = project_spectrum_kernel_split(
                 state,
-                sed_spec,
+                sed_rest,
                 igm_trans,
                 wave_rest,
                 wo,
@@ -1418,7 +1699,7 @@ class Observation:
           dust-free mean-IGM branch), then OVERWRITTEN by
           :class:`~tengri.components.dust.two_component.DustSEDComponent`
           with its own y(age)-graded ``1-y(a)(1-fesc)`` rule (or the flat
-          rule under ``lyc_absorb_all=True``) when a dusty model runs it —
+          rule under ``lyc_reprocessed_by='all'``) when a dusty model runs it —
           same key, so whichever component is later in the chain wins, and
           there is exactly one factor per model, never a double-count. R3
           conservation invariants (tested explicitly, not just implied):
@@ -1450,27 +1731,14 @@ class Observation:
           path on a fixture built to maximize it. Previously screened at
           :math:`\lambda_{\rm eff}`, which inflated the total gap by up to 26x
           over the stellar floor while carrying only 0.8-3.5 % of the band flux.
-        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}``: **still at**
-          :math:`\lambda_{\rm eff}`. The qualifier above is not pedantry: this
-          docstring claimed nebular was exact full stop, and it was measured
-          wrong within a day of being written. :class:`DustAttenuationSEDComponent`
-          declares ``sed_nebular`` an *optional* input purely as a topological
-          ordering edge, its own docstring notes the screen "does not read the
-          key directly (it acts on the already-summed ``sed_intrinsic``") so no
-          separately reddened nebular SED exists there to project. Measured on an
-          FSPS SSP through SDSS *gri*: 1.787e-03 at :math:`\tau_v`\ =1/z=0.05 and
-          1.955e-03 at :math:`\tau_v`\ =2/z=1, against a stellar-only floor of
-          ~6.1e-04, a ~3x inflation, versus the 26x removed on two-component.
-          Bounded in ``tests/contract/test_precomp_channel_drift.py``.
-
-          Fixing it means computing ``sed_neb · exp(-tau_v · k)`` in that
-          component and projecting it through the same seam. Deliberately
-          sequenced **after** #1808, which asks whether ``k(λ)`` may be
-          precomputed at all: a nebular term reading today's cached ``k`` would
-          inherit the freeze, and a later fix would move the stellar term onto
-          the live curve while leaving nebular on the stale one. Two screens
-          disagreeing inside one model is worse than the uniform staleness
-          there now.
+        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}``:
+          :class:`DustAttenuationSEDComponent` publishes the reddened continuum
+          integrated through each band exactly as the two-component component
+          does, and this path prefers it over the screen at
+          :math:`\lambda_{\rm eff}`. Measured on an FSPS SSP through SDSS *gri*
+          against the exact path: 2.7e-04, 6.1e-04 and 5.7e-04 over the three
+          ``(tau_v, z)`` cases of ``tests/contract/test_precomp_channel_drift.py``,
+          at the stellar-only floor of ~6.3e-04.
         - **Shock**: the worst remaining channel by two orders of magnitude, and
           **not** a band-averaging error despite what this docstring said for a
           long time. This path multiplies shock by ``a_diff·a_bc``; the exact
@@ -1707,32 +1975,82 @@ class Observation:
                 # Converges as 1/K² (K=5: ≲0.6 % worst case in GALEX FUV) where the
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
-                t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
-                if lyc_factor_sub is not None:
-                    # two_component's own birth-cloud-graded rule (#2439,
-                    # #2427, R2); see nebular/component.py and
-                    # dust/two_component.py's publish for why this is exact
-                    # (not "y_age-weighted twice": the graded factor stands
-                    # in for the dense path's ``lyc_factor``, a SEPARATE
-                    # multiplicative term from the dust screen ``t_sub``
-                    # already carries, not folded into ``a_bc_sub`` before
-                    # its own ``**y_age``).
+                y3 = y_age[:, None, None]
+                a_hole_sub = state.derived.get("dust_hole_attenuation_subband_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                young_gate_sub = state.derived.get("dust_young_lyc_gate_subband_precomp")
+                if a_hole_sub is not None and fesc_geom is not None:
+                    # #2529 hole geometry: the young population's light is
+                    # (1 - fesc) on the screened sightline, zeroed where the gas
+                    # absorbs the ionizing photons, plus fesc through the hole
+                    # (never gated); the old population sees the diffuse screen.
+                    # Mirrors DustSEDComponent.apply §2a through the same
+                    # ``hole_young_transmission``.
+                    from tengri.components.lyc import hole_young_transmission
+
+                    ionizing_sub = state.derived["dust_ionizing_flag_subband_precomp"]
+                    t_young = hole_young_transmission(
+                        a_diff_sub * a_bc_sub * (1.0 - ionizing_sub), a_hole_sub, fesc_geom
+                    )
+                else:
+                    t_young = a_diff_sub * a_bc_sub
+                    if young_gate_sub is not None:
+                        # ``lyc_reprocessed_by='young'``: the gas around the
+                        # birth clouds reprocesses the young population's LyC.
+                        t_young = t_young * young_gate_sub
+                # Population mixture at every quadrature node.
+                t_sub = y3 * t_young + (1.0 - y3) * a_diff_sub
+                if young_gate_sub is None and a_hole_sub is None and lyc_factor_sub is not None:
+                    # Whole-population gate (``lyc_reprocessed_by='all'``).
                     t_sub = t_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes, only the weights carry T (#1135).
-                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub, axis=(0, 2))
+                    # The weights carry T (#1135). Under the exact fold the screen is
+                    # also re-evaluated where the IGM-surviving light sits.
+                    a_bc_igm = state.derived.get("dust_bc_attenuation_subband_igm_precomp")
+                    t_sub_igm = t_sub
+                    if a_bc_igm is not None and a_hole_sub is None:
+                        a_diff_igm = state.derived["dust_diff_attenuation_subband_igm_precomp"]
+                        # The same population mixture as ``t_sub`` above, at the
+                        # nodes the IGM-surviving light sits on.
+                        t_young_igm = a_diff_igm * a_bc_igm
+                        if young_gate_sub is not None:
+                            t_young_igm = t_young_igm * young_gate_sub
+                        t_sub_igm = y3 * t_young_igm + (1.0 - y3) * a_diff_igm
+                        if (
+                            young_gate_sub is None
+                            and a_hole_sub is None
+                            and lyc_factor_sub is not None
+                        ):
+                            t_sub_igm = t_sub_igm * lyc_factor_sub
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub_igm, axis=(0, 2))
             else:
-                atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
-                t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
+                a_hole_lut = state.derived.get("dust_hole_attenuation_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_lut is not None and fesc_geom is not None:
+                    # #2529 hole geometry, λ_eff-granularity equivalent of
+                    # the sub-band formula above (see that branch).
+                    from tengri.components.lyc import hole_young_transmission
+
+                    ionizing_lut = state.derived["dust_ionizing_flag_precomp"]
+                    t_young_lut = hole_young_transmission(
+                        a_diff_lut * a_bc_lut * (1.0 - ionizing_lut), a_hole_lut, fesc_geom
+                    )
+                else:
+                    t_young_lut = a_diff_lut * a_bc_lut
+                # Population mixture: y·T_young + (1 - y)·T_old, T_old = diffuse only.
+                t_per_age = (
+                    y_age[:, None] * t_young_lut[None, :]
+                    + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                )
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
                 # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).
-                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
-                # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
-                #   T_a' = T_a · (logslope_diff + y·logslope_bc)
-                # This avoids the A_bc^(y−1) pole, at X-ray/UV bands far off the
-                # dust curve A_bc → 0, but T_a → 0 too, so T_a' → 0 (no 0·inf NaN).
+                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). The node is a
+                # mixture of two populations, T_a = y·T_young + (1 − y)·T_old, so
+                # T_a' = y·T_young·(logslope_diff + logslope_bc) + (1 − y)·T_old·logslope_diff
+                # by the log-derivative identity of each population's own product of
+                # screens: no A_bc^(y−1) pole at bands far off the dust curve.
                 moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
                 logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
                 logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
@@ -1741,8 +2059,9 @@ class Observation:
                     and logslope_diff is not None
                     and logslope_bc is not None
                 ):
-                    t_slope_per_age = t_per_age * (
-                        logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
+                    t_slope_per_age = (
+                        y_age[:, None] * (t_young_lut * (logslope_diff + logslope_bc))[None, :]
+                        + (1.0 - y_age[:, None]) * (a_diff_lut * logslope_diff)[None, :]
                     )
                     stellar_attenuated = stellar_attenuated + jnp.sum(
                         moment_per_age * t_slope_per_age, axis=0
@@ -1804,6 +2123,10 @@ class Observation:
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
         elif a_lut is not None:
+            nebular_screened = state.derived.get("nebular_phot_lnu_attenuated_precomp")
+            nebular_term = (
+                nebular_screened if nebular_screened is not None else a_lut * nebular_phi_for_dust
+            )
             # Sub-band quadrature (#1122), single screen. Per-age Phi_k contracted
             # against the law EVALUATED at each node. Must be checked before the
             # Taylor form: the quadrature supersedes it, and without this branch a
@@ -1824,13 +2147,22 @@ class Observation:
                 a_sub_lyc = a_sub if lyc_factor_sub is None else a_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * a_sub_lyc, axis=(0, 2))
                 if sub_per_age_igm is not None:
-                    # Same screen, same nodes, only the weights carry T (#1135).
-                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_lyc, axis=(0, 2))
-                # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
-                dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
+                    # The weights carry T (#1135); under the exact fold, so does the node.
+                    a_sub_igm = state.derived.get("dust_attenuation_subband_igm_precomp")
+                    if a_sub_igm is None:
+                        a_sub_igm_lyc = a_sub_lyc
+                    elif lyc_factor_sub is None:
+                        a_sub_igm_lyc = a_sub_igm
+                    else:
+                        a_sub_igm_lyc = a_sub_igm * lyc_factor_sub
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub_igm_lyc, axis=(0, 2))
+                # Nebular (if any) is screened at the emission, not at λ_eff.
+                dust_attenuated = stellar_attenuated + nebular_term
             else:
                 # Zeroth order: flat attenuation at the filter effective wavelength.
-                dust_attenuated = a_lut * dust_attenuable_phi
+                dust_attenuated = (
+                    a_lut * (dust_attenuable_phi - nebular_phi_for_dust) + nebular_term
+                )
                 # First-order Taylor (Ψ) correction, applied only when the moment
                 # tensor and attenuation slope were built, i.e.
                 # approx=WavePrecomp(taylor_correction=True) (#617). With
@@ -1909,6 +2241,8 @@ class Observation:
         igm_factor = state.derived.get("igm_phot_factor")
         igm_trans = state.derived.get("igm_transmission")
         eff_waves = state.derived.get("filter_eff_waves")
+        fw_pad = ft_pad = None
+        from_dense_curve = igm_factor is None
         if igm_factor is None and igm_trans is not None and eff_waves is not None:
             # Fallback: patchy reionization / DLA read free parameters, so <T>_f
             # is not a function of redshift alone and cannot be tabulated.
@@ -1928,19 +2262,63 @@ class Observation:
             else:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         if igm_factor is not None:
+            # Non-stellar light gets ⟨T⟩_f, then each component with a dense
+            # spectrum is moved onto its OWN band transmission ∫S·T/∫S
+            # (``_igm_weighting``): ⟨T⟩_f alone formed ⟨S⟩·⟨T⟩, 5-28 % off near
+            # Ly-alpha for a nebular line on the break. The table is published only
+            # for bands the IGM can reach; the patchy/DLA fallback has already paid
+            # for the dense curve, so it is reused over every band.
+            rest_t = state.derived.get("igm_rest_transmission_precomp")
+            reach = state.derived.get("igm_reach_filters_precomp")
+            if rest_t is None and from_dense_curve and fw_pad is not None:
+                rest_t, reach = igm_trans, jnp.arange(igm_factor.shape[0])
+            correction = 0.0
+            if rest_t is not None and reach is not None:
+                from tengri.observation._igm_weighting import (
+                    igm_weighted_parts,
+                    spectral_igm_correction,
+                    subband_igm_correction,
+                )
+
+                if a_bc_lut is not None and (_have_subband or per_age is not None):
+                    dust_mode = "two_component"
+                elif a_lut is not None:
+                    dust_mode = "single"
+                else:
+                    dust_mode = "none"
+                correction = spectral_igm_correction(
+                    igm_weighted_parts(state.derived, dust_mode),
+                    rest_t,
+                    reach,
+                    state.wave,
+                    state.derived.get("phot_filter_waves_padded"),
+                    state.derived.get("phot_filter_trans_padded"),
+                    z,
+                    igm_factor,
+                    convention=self.photometry.convention,
+                )
+                neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
+                if neb_chunks is not None:
+                    correction = correction + subband_igm_correction(
+                        neb_chunks,
+                        state.derived["nebular_subband_waves_rest_precomp"],
+                        rest_t,
+                        state.wave,
+                        reach,
+                        igm_factor,
+                    )
             if stellar_attenuated_igm is not None:
                 # Stellar already carries T evaluated AT the quadrature nodes
                 # (#1135), so the band factor must not touch it; that would apply
-                # the IGM twice. Everything the quadrature cannot reach (nebular
-                # lines, AGN, dust emission) keeps ⟨T⟩_f, which is what it had
-                # before; the stellar continuum dominates the broadband and is now
-                # the accurate term.
+                # the IGM twice.
                 other_lnu = total_lnu - stellar_attenuated
                 phot_fnu = apply_log10_scale(
-                    other_lnu * igm_factor + stellar_attenuated_igm, log10_cos
+                    other_lnu * igm_factor + correction + stellar_attenuated_igm, log10_cos
                 )
             else:
                 phot_fnu = phot_fnu * igm_factor
+                if rest_t is not None and reach is not None:
+                    phot_fnu = phot_fnu + apply_log10_scale(correction, log10_cos)
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
 
@@ -2024,17 +2402,18 @@ class Observation:
         per_age = state.derived.get("stellar_spec_lnu_per_age_precomp")
 
         if t_bc is not None and t_diff is not None and per_age is not None:
-            # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+            # Two-component (Charlot & Fall): each node mixes the young population
+            # (birth cloud + diffuse) and the old one (diffuse only) by the node's
+            # young mass fraction: T(a, λ) = y·T_diff·T_bc + (1 − y)·T_diff.
             y_age = state.derived["dust_young_indicator"]
-            atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
-            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
-            # Nebular emission arises in the HII regions around the youngest
-            # stars, so it sees the full young-limit screen, birth cloud AND
-            # diffuse (T_bc · T_diff, i.e. y=1), matching the exact path's
-            # emission treatment (two_component.py reddens the nebular SED by
-            # τ_bc·k_bc + τ_diff·k_diff). Applying only T_diff here under-
-            # attenuated the nebular lines by the missing 1/T_bc factor.
-            nebular_attenuated = t_diff * t_bc * nebular_phi
+            atten_per_age = t_diff[None, :] * (
+                y_age[:, None] * t_bc[None, :] + (1.0 - y_age[:, None])
+            )  # (n_age, n_pix)
+            stellar_attenuated = jnp.sum(per_age * atten_per_age, axis=0)
+            # Nebular emission is lit by stars of every age: the dust component
+            # publishes its screen at the pixels, the interval mixture weighted by
+            # each interval's share of the ionizing luminosity.
+            nebular_attenuated = state.derived["dust_spec_neb_transmission_precomp"] * nebular_phi
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
