@@ -19,8 +19,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn import (
     _nt_emissivity as N,
     disc as D,

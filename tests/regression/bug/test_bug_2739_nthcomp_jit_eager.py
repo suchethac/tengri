@@ -21,8 +21,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import FREE
 from tengri.components.agn._nthcomp import load_nthcomp_table, nthcomp_lnu_interp
 from tests.physics.gradients import test_disc_block_gradient_contract as _contract
