@@ -178,8 +178,8 @@ def test_ztable_exact_at_nodes(ssp_data_for_accuracy):
 def test_ztable_nonuniform_grid(ssp_data_for_accuracy):
     """Test that ztable with edge-aware (non-uniform) grid is handled correctly (#2749)."""
     from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp
-    from tengri.observation import Observation, Photometry
     from tengri.components.stellar.sps.precompute import ztable_z_grid
+    from tengri.observation import Observation, Photometry
 
     obs = Observation(photometry=Photometry.from_names(BANDS))
 
