@@ -35,15 +35,6 @@
    "name": "dict"
   }
  ],
- "_": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
  "ax": [
   {
    "is_class": false,
@@ -910,7 +901,16 @@
    "name": "filterwarnings"
   }
  ],
- "wave_um": [
+ "wave_full_um": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "wave_panel_um": [
   {
    "is_class": false,
    "is_explicit": false,

@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
+from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.nenkova_agnfitter_2p import _load_nenkova_agnfitter_2p_arrays
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
@@ -89,14 +90,13 @@ def precompute_nenkova_agnfitter_2p_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / trapz(template, nu). This matches
+    integration constant equals L_sun / native_integral(template). This matches
     the runtime normalization in ``nenkova_agnfitter_2p.py``.
 
     **Grid reordering**: The native inclination axis is stored in degrees
     (ascending). This function converts to cos(incl) and reorders templates
     to match, mirroring ``nenkova_agnfitter_2p.load_nenkova_agnfitter_2p_grid``.
     """
-    from tengri.components.agn._phys import C_LIGHT as _C_CGS
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_nenkova_agnfitter_2p_arrays(grid_path)
@@ -110,16 +110,12 @@ def precompute_nenkova_agnfitter_2p_photometry(
     cos_inc_axis = cos_inc_axis[order]
     grid_reordered = grid[order]
 
-    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
-    sort_idx = np.argsort(nu_grid)
-    nu_sorted = nu_grid[sort_idx]
-
     n_incl, n_oa, _ = grid_reordered.shape
     lnu_grid = np.empty_like(grid_reordered)
     for i in range(n_incl):
         for j in range(n_oa):
             template = grid_reordered[i, j]
-            integral = np.trapezoid(template[sort_idx], nu_sorted)
+            integral = native_bolometric_nu_np(template, wave_grid)
             integral_safe = max(abs(integral), 1e-100)
             lnu_grid[i, j] = _LSUN_ERG * template / integral_safe
 

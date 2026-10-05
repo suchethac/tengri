@@ -25,6 +25,13 @@ XRAY_WAVE_MIN: float = 0.0413  # ~300 keV hard X-ray (matches corona E_cut)
 XRAY_WAVE_MAX: float = 100.0  # ~0.12 keV soft X-ray
 RADIO_WAVE_MIN: float = 1e5  # 10 μm: overlap with SSP IR tail
 RADIO_WAVE_MAX: float = 3e11  # ~1 MHz radio
+#: The radio wing of the master grid starts here at the latest [A]: 1e8 A (1 cm, 30 GHz) is
+#: where the rest-frame image of a 3 GHz band at z = 3 (2.5e8 A) is still covered.
+RADIO_WING_START: float = 1e8
+#: Radio-wing sampling [nodes per decade]. A 10 %-wide radio band (a 1.4 GHz top hat is
+#: 2.03e9 - 2.25e9 A) spans log10(1.1) = 0.041 decades, so 100 per decade puts ~4 nodes in it
+#: wherever it lands; the former 20 per decade left one.
+RADIO_WING_PTS_PER_DECADE: int = 100
 # 1 m (300 MHz): declared reach of a tabulated nebular continuum's free-free tail (#2346)
 NEBULAR_CONTINUUM_WAVE_MAX: float = 1e10
 
