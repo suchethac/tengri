@@ -1089,11 +1089,18 @@ jobs:
       # worker. The per-worker figure is therefore a per-FILE total, not a
       # per-test one. Do not re-derive headroom from single-test peaks. See #1346.
       #
-      # `--timeout=600 --timeout-method=thread` still guards the OTHER tail
+      # `--timeout=600 --timeout-method=signal` still guards the OTHER tail
       # failure mode: a single test that genuinely hangs (cold compile / deadlock)
       # stalls its worker while the others finish; the per-test cap converts that
       # into a fast, named failure (10 min ≫ any healthy test — all run < 150 s
       # locally) instead of a silent job-timeout.
+      # `signal`, not `thread` (2026-10-06): under xdist, thread-method timeout
+      # KILLS the worker process ("[gw1] node down: Not properly terminated",
+      # #2759 job 111919847067), and with `--dist=loadfile` the file's remaining
+      # tests are never rescheduled — the run froze at 98 % for 39 minutes with
+      # no summary and no test name. signal fails the ONE test by name and the
+      # run completes. A hang inside a single C/XLA call can outlast SIGALRM
+      # until the call returns; the job cap stays the backstop for that.
       # Resolve the test paths. Normally that is just `matrix.paths`; for the two
       # bug/ half-shards it is computed here so the split follows the directory
       # instead of a frozen list -- a hardcoded half goes stale the moment someone
@@ -1111,7 +1118,7 @@ jobs:
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
-            --timeout=600 --timeout-method=thread \
+            --timeout=600 --timeout-method=signal \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
@@ -1177,12 +1184,15 @@ jobs:
         # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
         # 51 min; b2 49, 48, 49 min and one kill at 51.
         #
-        # contract (2026-10-05, two PR runs on the shared runners, 06c69a56e and
-        # 87bf0ae47): killed at the 90-minute cap with zero FAILED markers, 98 % of
-        # the shard done at 84.6 min and 97 % at 83.2 min, i.e. a natural 92-95
-        # minutes; main @46abb3e05 was killed the same way on 2026-10-04. It gets
-        # 120: the same three runs passed regression-b1 in 36, 54 and 55 minutes, so
-        # one load spreads by a quarter on these runners.
+        # contract (re-measured 2026-10-06; the first version of this note blamed
+        # a "natural 92-95 minutes", which was FALSE): the shard reaches ~98 % at
+        # 81-85 min, then one worker died silently — test_agn_subblock_wildcard_
+        # scoping[disc/adaf] outgrew the 600 s per-test cap (#2768) and the
+        # thread-method timeout killed its xdist worker with the file's remaining
+        # tests never rescheduled under --dist=loadfile. With the timeout method
+        # on signal and that one case carrying pytest.mark.timeout(1800), the
+        # shard completes; 120 gives the worker holding that file (~98 % of the
+        # shard + up to 30 min for the marked case on a slow runner) its room.
         timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
@@ -1312,7 +1322,7 @@ jobs:
     needs: smoke
     # NOT on `push`. This job and `test` run the SAME 8 shards over the SAME
     # paths at the SAME `-n`; the invocations differ only in `--cov` (here) and
-    # `--timeout=600 --timeout-method=thread` (there). Verified 2026-08-13 by
+    # `--timeout=600 --timeout-method=signal` (there). Verified 2026-08-13 by
     # comparing both matrices field by field: 8 == 8, and every
     # (shard, paths, nproc) triple identical.
     #
@@ -1485,7 +1495,7 @@ jobs:
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
-            --timeout=600 --timeout-method=thread \
+            --timeout=600 --timeout-method=signal \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
