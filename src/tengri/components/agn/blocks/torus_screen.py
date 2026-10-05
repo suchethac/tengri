@@ -56,9 +56,15 @@ from tengri.components.agn.polar_dust import (
 from tengri.utils.scale import representable_denominator
 
 #: Torus blocks that represent a genuine dusty torus with an equatorial optical
-#: depth and an opening angle. Blocks not listed here (toy two-temperature,
-#: GRAHSP) get no torus screen. Read through :func:`torus_screen_geometry`.
-TORUS_SCREEN_BLOCKS: tuple[str, ...] = ("skirtor", "fritz")
+#: depth and an opening angle, mapped to the (opening-angle, equatorial
+#: optical-depth) parameter names the screen reads. Blocks not listed here (toy
+#: two-temperature, GRAHSP) get no torus screen. The angle's convention differs
+#: by torus; read both through :func:`torus_screen_geometry`.
+TORUS_SCREEN_PARAMS: dict[str, tuple[str, str]] = {
+    "skirtor": ("agn_oa_skirtor", "agn_tau_skirtor"),
+    "fritz": ("agn_fritz_oa", "agn_fritz_tau"),
+}
+TORUS_SCREEN_BLOCKS: tuple[str, ...] = tuple(TORUS_SCREEN_PARAMS)
 
 #: Fritz et al. (2006) dust model: the visual extinction per unit equatorial
 #: optical depth at 9.7 um, :math:`A_V/\tau_{9.7} = 23`. Section 3 of the paper
