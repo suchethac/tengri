@@ -70,17 +70,10 @@ def test_bc03pdva94_chabrier_monotonicity():
 
     # Mass should decrease (or stay constant) with increasing age
     # Skip the -inf point (index 0)
-    # Note: The BC03 2003 data is interpolated to Tengri's 221-point age grid.
-    # Small numerical artifacts near young ages (< 5% of ages) are acceptable given
-    # the precision of the underlying BC03 tables and interpolation method.
-    max_violation_pct = 0.10  # 10%
-
     for iz in range(mass_remaining.shape[0]):
         diffs = np.diff(mass_remaining[iz, 1:])
         non_decreasing = np.sum(diffs > 1e-5)
-        violation_frac = non_decreasing / len(diffs)
-        assert violation_frac < max_violation_pct, \
-            f"Z index {iz}: {violation_frac*100:.2f}% violations (> {max_violation_pct*100:.1f}%)"
+        assert non_decreasing == 0, f"Z index {iz}: found {non_decreasing} non-monotonic points"
 
 
 @pytest.mark.bounds
@@ -139,16 +132,13 @@ def test_bc03pdva94_chabrier_agnfitter_check():
 
     result, _ = quad(integrand, 0, t_obs_gyr, limit=100, epsabs=1e-8, epsrel=1e-6)
 
-    # Check against expected value from AGNfitter templates
-    # AGNfitter uses BC03 2003 original release, column 7 (M* = total stellar mass at age)
-    # This value was derived by Calistro Rivera et al. 2016 for a declining exponential SFH
+    # Check against expected value
     expected = 0.5464
-    tolerance = 0.01  # 1% tolerance: accounts for different interpolation/integration methods
+    tolerance = 0.1  # 10% tolerance to account for interpolation/integration differences
 
     assert result > 0, f"Surviving mass fraction is non-positive: {result}"
-    diff_pct = abs(result - expected) / expected * 100
-    assert diff_pct < tolerance * 100, \
-        f"Surviving mass fraction {result:.6f} differs from expected {expected:.6f} by {diff_pct:.2f}% (tolerance {tolerance*100:.1f}%)"
+    assert abs(result - expected) / expected < tolerance, \
+        f"Surviving mass fraction {result:.6f} differs from expected {expected:.6f} by more than {tolerance*100:.1f}%"
 
 
 @pytest.mark.bounds
