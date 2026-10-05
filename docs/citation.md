@@ -234,9 +234,9 @@ the forward model, and listed oldest first within each group.
   (2014), [arXiv:1402.1495](https://arxiv.org/abs/1402.1495).
 - Updated Draine & Li templates calibrated on Andromeda. Draine et al.
   (2014), [arXiv:1306.2304](https://arxiv.org/abs/1306.2304).
-- Modified-blackbody plus PAH SED template. Schreiber et al. (2016),
-  [arXiv:1601.02642](https://arxiv.org/abs/1601.02642); and the tabulated
-  cold-dust library with real PAH features, Schreiber et al. (2018),
+- Tabulated dust-continuum and PAH template library (T_dust, PAH mass
+  fraction). Schreiber et al. (2018),
+  [arXiv:1710.10276](https://arxiv.org/abs/1710.10276),
   [doi:10.1051/0004-6361/201731506](https://doi.org/10.1051/0004-6361/201731506).
 - BOSA dust SED templates parameterized by total IR luminosity and specific
   SFR. Boquien & Salim (2021),

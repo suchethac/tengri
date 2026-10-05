@@ -2,6 +2,8 @@
 
 ### Changed
 
+- **`dust_emission={'type': 'schreiber2016'}` now evaluates the tabulated Schreiber et al. (2018) dust library, and the analytic modified-blackbody plus Drude stand-in is removed (#2597).** The old model had band powers 0.000 to 8.4 times those of the library CIGALE ships under that name (3 to 24 micron power 0.00 to 0.4 of the library's, 70 to 1000 micron power 1.4 to 8.0 times it) and peaked at 131, 75 and 52.5 micron where the library peaks at 107.6, 7.6 and 7.6 micron for (T, f_PAH) of (20, 0.05), (35, 0.2) and (50, 0.5). The tabulated templates (dust continuum plus PAH per temperature node) are mixed per kilogram, so `dust_f_pah` is the PAH mass fraction of Schreiber et al. (2018), Sect. 3.2, and the band powers match CIGALE to 2e-3. A missing `data/schreiber2016_templates.h5` raises with the regeneration recipe; there is no analytic fallback. The `schreiber2016_ir` component, `Schreiber2016IRConfig` and the analytic closure and component classes are removed (`tengri.components.dust.Schreiber2016IRSEDComponent` is the tabulated component under the registry name). The `dust_T` default of `schreiber2016` is 35 K, the registry default, in the closure, the component and a built model alike (it was 30, 25 and 35 K); there is no CMB heating correction on this template. The paper reference is A&A 609, A30 (arXiv:1710.10276) in the data file attributes and the bibliography; the A&A 589, A35 entry (`schreiber2016`) is removed. (#2597)
+
 - One exact young/old split serves every attenuator. The stellar component publishes, per SSP age node, the share of its formed mass younger than each boundary age (`age_boundary_younger_fraction`), computed through the same SFH kernel as the node weights, instead of each screen evaluating a step or logistic at the node ages. `two_component` defaults to a hard step at `t_birth_yr=1e7`; `transition_width_dex > 0` opts into the smooth law, and `age_binned` windows use the same machinery. A node's transmission is the mixture of its populations' transmissions (not of their optical depths). Nebular and line screens are weighted by ionizing luminosity, the energy-balance lookup table carries young and old populations and mixes them at runtime, `age_binned` gains the `lyc_` key family, and the refusal of age windows narrower than five node spacings is gone. Golden: `two_component` `L_absorbed` 5.932047709369588e59 -> 5.93036676326139e59 erg/s (-0.0283%), matching an independent dense-parcel step reference to 5.6e-9.
 
 ### Added
@@ -11,6 +13,8 @@
 - `draine_li2007` and `draine_li2014` publish the derived key `dust_umean`, the mean starlight intensity `U_min [(1 - gamma) + gamma R]` of the model (CIGALE's `dust.umean`), with `R` the power-law to single-U luminosity ratio at `U_max = 1e6` (alpha = 2) for DL07 and `1e7` (free alpha) for DL14 (#2599).
 
 ### Fixed
+
+- **The tabulated Schreiber library mixed PAH by power, not by mass (#2597):** the standalone component unit-normalised the continuum and PAH templates separately before mixing, so its `f_pah` was a power fraction (a factor of about 3 in PAH power against the mass fraction CIGALE and Schreiber et al. 2018 define); templates are now mixed per kilogram and renormalised after mixing. (#2597)
 
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32

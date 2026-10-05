@@ -218,6 +218,12 @@ The Jones et al. (2017) THEMIS framework models amorphous hydrogenated carbon a-
 
 The Boquien and Salim (2021) templates add sSFR as a second axis alongside $L_{\rm TIR}$, capturing the observation that galaxies at fixed IR luminosity but higher sSFR have warmer dust and stronger MIR features. Templates are interpolated from a grid of 2584 star-forming galaxies; $L_{\rm TIR}$ is set by the energy balance and sSFR is computed from the SFH.
 
+(app-schreiber2016)=
+
+### Schreiber et al. (2018) Dust Library
+
+`dust_emission={'type': 'schreiber2016'}` evaluates the tabulated dust-continuum and PAH template library of Schreiber et al. (2018), as packaged by CIGALE under its `schreiber2016` module name. The library holds, for each dust temperature from 15 to 99 K in 1 K steps, the spectrum of one kilogram of dust as a dust continuum plus a PAH component. The two free parameters are $T_{\rm dust}$ and the PAH **mass** fraction $f_{\rm PAH}$ (Schreiber et al. 2018, Sect. 3.2). The temperature is interpolated linearly between nodes; the two per-kilogram templates are mixed as $(1 - f_{\rm PAH})\,S^{\rm cont}_\nu + f_{\rm PAH}\,S^{\rm PAH}_\nu$ and the mixture is renormalised to $L_{\rm IR}$. The PAH template carries about three times the power of the continuum template per kilogram, so a mass fraction $f_{\rm PAH}$ carries a power share $f R/(1 - f + f R)$ with $R \simeq 3.06$; for $f_{\rm PAH} \gtrsim 0.2$ the $\nu L_\nu$ peak sits on the 7.7 $\mu$m PAH complex. The template file `data/schreiber2016_templates.h5` is required: the model raises if it is missing and has no analytic substitute.
+
 ## References
 
 Boquien, Médéric, and Samir Salim. 2021. "New dust emission templates for star-forming galaxies." 653: A149. <https://doi.org/10.1051/0004-6361/202140734>.
@@ -265,6 +271,8 @@ Narayanan, Desika, Romeel Davé, Benjamin D. Johnson, Robert Thompson, Charlie C
 Pei, Yichuan C. 1992. "Interstellar Dust from the Milky Way to the Magellanic Clouds." 395 (August): 130. <https://doi.org/10.1086/171637>.
 
 Salim, Samir, Médéric Boquien, and Janice C. Lee. 2018. "Dust Attenuation Curves in the Local Universe: Demographics and New Laws for Star-forming Galaxies and High-redshift Analogs." 859 (1): 11. <https://doi.org/10.3847/1538-4357/aabf3c>.
+
+Schreiber, Corentin, David Elbaz, Maurilio Pannella, Laure Ciesla, Tao Wang, and Maximilien Franco. 2018. "Dust temperature and mid-to-total infrared color distributions for star-forming galaxies at 0<z<4." 609: A30. <https://doi.org/10.1051/0004-6361/201731506>.
 
 Smith, J. D. T., B. T. Draine, D. A. Dale, et al. 2007. "The Mid-Infrared Spectrum of Star-forming Galaxies: Global Properties of Polycyclic Aromatic Hydrocarbon Emission." 656: 770--91. <https://doi.org/10.1086/510549>.
 

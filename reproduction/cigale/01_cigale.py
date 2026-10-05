@@ -1854,9 +1854,8 @@ plt.show()
 # matches to well under a percent because both implementations are normalized on the same
 # absorbed stellar energy (`L_absorbed`), while the peak wavelength and the mid-infrared
 # trough differ between them, a shape difference visible in the ratio panel (`f_pah` matches
-# CIGALE's 0.05 default). Schreiber 2016 presents the starkest discrepancy: at T=25 K, the
-# filter-by-filter ratio reaches a worst case of 2.485×, with every band deviating beyond 5%,
-# reflecting different template peak wavelengths despite the flux integral remaining within 0.5%.
+# CIGALE's 0.05 default). `schreiber2016` is the tabulated library CIGALE itself ships, so
+# only the differences of the shared chain remain in its ratio panel.
 
 # %%
 _peaks_6c = []
