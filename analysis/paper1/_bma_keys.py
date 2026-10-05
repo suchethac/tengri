@@ -27,6 +27,8 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
+from .config_metadata import CONFIGS, SSP_FOR_CONFIG
+
 FILENAME_SAFE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 # --- factorial axes -------------------------------------------------------
@@ -68,18 +70,25 @@ class SspEntry(NamedTuple):
     spectral_library: str
 
 
-SSP_AXIS: tuple[SspEntry, ...] = (
-    SspEntry("fsps_mist_c3k_a_chabrier", "I", "mist", "c3k"),
-    SspEntry("fsps_prsc_c3k_a_chabrier", "II", "prsc", "c3k"),
-    SspEntry("fsps_mist_miles_chabrier", "III", "mist", "miles"),
-    SspEntry("fsps_prsc_miles_chabrier", "IV", "prsc", "miles"),
-    SspEntry("bpss_stars_c3k_a_chabrier", "V", "bpass", "c3k"),
+#: Grid configurations on the factorial axes. VI is deliberately excluded.
+GRID_IDS: tuple[str, ...] = ("I", "II", "III", "IV", "V")
+
+#: Derived-axis values (isochrone set, spectral library) per registered grid name.
+_SSP_DERIVED = {
+    "fsps_mist_c3k_a_chabrier": ("mist", "c3k"),
+    "fsps_prsc_c3k_a_chabrier": ("prsc", "c3k"),
+    "fsps_mist_miles_chabrier": ("mist", "miles"),
+    "fsps_prsc_miles_chabrier": ("prsc", "miles"),
+    "bpss_stars_c3k_a_chabrier": ("bpass", "c3k"),
+}
+
+SSP_AXIS: tuple[SspEntry, ...] = tuple(
+    SspEntry(SSP_FOR_CONFIG[c], c, *_SSP_DERIVED[SSP_FOR_CONFIG[c]]) for c in GRID_IDS
 )
 SSP_LABELS: tuple[str, ...] = tuple(e.grid for e in SSP_AXIS)
 
 # --- named ids ------------------------------------------------------------
 
-GRID_IDS: tuple[str, ...] = ("I", "II", "III", "IV", "V")
 XLIKE_IDS: tuple[str, ...] = (
     "cigale_like",
     "prospector_like",
@@ -88,21 +97,10 @@ XLIKE_IDS: tuple[str, ...] = (
     "dense_basis_like",
 )
 
-#: Structural fields of each grid configuration on the factorial axes.
-_GRID_SFH = {
-    "I": "continuity",
-    "II": "dpl",
-    "III": "delayed",
-    "IV": "dirichlet",
-    "V": "lnorm",
-}
-_GRID_ATTENUATION = {
-    "I": "kriek_conroy_2c",
-    "II": "calzetti",
-    "III": "cf00_2c",
-    "IV": "kriek_conroy_2c",
-    "V": "smc",
-}
+#: Structural fields of each grid configuration on the factorial axes, read from
+#: the configuration table (``config_metadata.CONFIGS``), never restated.
+_GRID_SFH = {c: CONFIGS[c]["sfh_type"] for c in GRID_IDS}
+_GRID_ATTENUATION = {c: CONFIGS[c]["attenuation_axis"] for c in GRID_IDS}
 
 _CONFIG_PREFIX = "config-"
 _XLIKE_PREFIX = "xlike-"
