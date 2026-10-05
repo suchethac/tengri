@@ -47,10 +47,7 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -234,8 +231,9 @@ def silva04_sed_from_grid(
                               {\int T(\nu,\,\log N_H)\,\mathrm{d}\nu}
 
     where :math:`T` is the tabulated template and the integral is
-    evaluated on the (sorted) frequency grid corresponding to
-    ``wavelength``.
+    evaluated on the template's own native frequency grid (before
+    resampling), so the result does not depend on how ``wavelength`` is
+    sampled or where it starts and stops.
 
     **JIT-compatible**: yes. Differentiable in ``agn_log_nh_silva`` (PCHIP
     monotone-cubic interpolation is C¹-continuous and node-exact: it
@@ -263,9 +261,9 @@ def silva04_sed_from_grid(
         (jnp.asarray(grid.log_nh_axis),),
         (agn_log_nh_silva,),
     )
-    sed = resample_template(wavelength, jnp.asarray(grid.wave_grid), template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
+    wave_native = jnp.asarray(grid.wave_grid)
+    integral_safe = native_bolometric_nu(template, wave_native)
+    sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
     return l_scale * sed / integral_safe
 

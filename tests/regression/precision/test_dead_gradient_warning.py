@@ -165,7 +165,13 @@ def test_reverse_mode_survives_a_realistic_ring_luminosity(param):
     x0 = {"agn_gamma_warm": 2.5, "agn_kt_warm": 0.25}[param]
 
     def total(v):
-        kw = {"agn_log_lbol": jnp.asarray(45.0), "agn_log_mbh": jnp.asarray(8.0), param: v}
+        # ``agn_log_lbol`` is log10(L_bol / L_sun): 11.5 is a luminous quasar. The 45.0
+        # this used to pass is log10(erg/s) -- 1e45 L_sun, a disc at T_in ~ 4e13 K whose
+        # every warm-zone ring has kTbb beyond the template's 0.3 keV edge, where the
+        # Comptonized shape is genuinely independent of gamma and kTe (#2572). The
+        # gradient there is zero; it only looked non-zero while the kernel's
+        # finite-difference step reached across a template cell.
+        kw = {"agn_log_lbol": jnp.asarray(11.5), "agn_log_mbh": jnp.asarray(8.0), param: v}
         return jnp.sum(kubota_done_disc(wave, **kw))
 
     x = jnp.asarray(x0)
@@ -186,8 +192,9 @@ def test_reverse_mode_survives_a_realistic_ring_luminosity(param):
 def test_kernel_returns_the_callers_precision():
     """The mechanism, pinned directly.
 
-    The table is float32 and is interpolated there on purpose. Returning
-    float32 is what forced the caller's precision and broke reverse mode.
+    The template values are float32; the coordinates are interpolated in the
+    caller's dtype. Returning float32 is what forced the caller's precision and
+    broke reverse mode.
     """
     from tengri.components.agn._nthcomp import nthcomp_lnu_interp
 
@@ -206,7 +213,12 @@ def test_kernel_returns_the_callers_precision():
         jnp.asarray(0.05, jnp.float32),
     )
     assert out32.dtype == jnp.float32, "an all-float32 caller must still get float32 back"
-    np.testing.assert_allclose(np.asarray(out64), np.asarray(out32), rtol=1e-6)
+    # rtol 1e-5, not 1e-6: the float64 caller now keeps its coordinates in float64, so
+    # the float32 caller's interpolation weight carries its own 6e-8 rounding, amplified
+    # by the ~100 e-folds the log shape spans across a template cell. Measured max
+    # relative difference 4.6e-6 (was below 1e-6 only because both sides rounded the
+    # coordinates to float32).
+    np.testing.assert_allclose(np.asarray(out64), np.asarray(out32), rtol=1e-5)
 
 
 # ── 3. The warning must not outlive the defect ────────────────────

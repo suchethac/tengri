@@ -83,7 +83,11 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # (#2601) deleted its ``jnp.maximum(jnp.abs(integral), 1e-100)`` floor outright;
 # the normalization is a log-space subtraction with no divisor. A deletion, not a
 # migration.
-_PINNED = 24
+# 24 -> 23: the closed-form disc normalizations (``disc.py``: the warm-ring blackbody power
+# and the multicolor bolometric, #2572) deleted one ``jnp.maximum(..., 1e-100)`` floor
+# outright (five ``disc.py`` sites before, four now); the other 23 are unchanged. A deletion,
+# not a migration.
+_PINNED = 23
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

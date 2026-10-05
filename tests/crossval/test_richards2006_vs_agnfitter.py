@@ -7,9 +7,10 @@ AGNfitter's ``models/BBB/R06.pickle`` and tabulated in tengri as
 tengri's runtime module produces spectra that match the upstream template
 to within interpolation tolerances.
 
-Convention verification (issue #592 A2 vs #647):
-  - AGNfitter R06.pickle 'SED' column = nu*F_nu (relative units)
-  - tengri loads this as nu*F_nu, divides by nu to get F_nu, interprets as L_nu
+Convention verification (issue #2563):
+  - Column 2 of richards2006.dat IS L_nu [erg/s/Hz] (matches Richards+2006 Table 3)
+  - AGNfitter R06.pickle stores the same data; when read as log10(nu/Hz) + SED column,
+    the SED column is also L_nu (not nu*F_nu as previously misinterpreted)
   - Both normalize by bolometric integral: integral(L_nu, dnu) = L_bol
   - Measured peak wavelength and log10 ratios at 1µm, 5µm, H-alpha confirm
     the two implementations agree within ~0.3–0.6% (interpolation error only).
@@ -118,9 +119,9 @@ class TestRichards2006Convention:
         agn_log_nu = np.asarray(agnfitter_r06["wavelength"]).ravel()
         agn_sed = np.asarray(agnfitter_r06["SED"]).ravel()
 
-        # Interpret AGNfitter's SED as nu*F_nu, then compute L_nu (like tengri does)
+        # SED column is L_nu as stored (no division needed)
         agn_nu_hz = 10.0**agn_log_nu
-        agn_lnu = agn_sed / agn_nu_hz  # nu*F_nu / nu = L_nu shape
+        agn_lnu = agn_sed  # Already L_nu
 
         # Find peaks
         agn_peak_idx = np.argmax(agn_lnu)
@@ -154,10 +155,10 @@ class TestRichards2006Convention:
         agn_log_nu = np.asarray(agnfitter_r06["wavelength"]).ravel()
         agn_sed = np.asarray(agnfitter_r06["SED"]).ravel()
 
-        # Convert to wavelength and compute L_nu
+        # Convert to wavelength; SED column is L_nu as stored (no division)
         agn_nu_hz = 10.0**agn_log_nu
         agn_wave = C_AA / agn_nu_hz
-        agn_lnu = agn_sed / agn_nu_hz
+        agn_lnu = agn_sed
 
         # Sort by ascending wavelength for interpolation
         agn_sort_idx = np.argsort(agn_wave)
@@ -180,7 +181,7 @@ class TestRichards2006Convention:
         # Compare normalized templates. Tolerance ~2%: the vendored reference HDF5
         # is a compact (1024-point, float32) regrid of the 438-point R06 template,
         # so sub-percent interpolation/rounding differences are expected — far below
-        # the 4-20x (#592 A2) divergence this test rules out (#647 confirmed correct).
+        # the 4-20x (#592 A2) divergence this test rules out.
         np.testing.assert_allclose(
             tengri_lnu_norm,
             agn_regridded,
@@ -201,7 +202,7 @@ class TestRichards2006Convention:
 
         agn_nu_hz = 10.0**agn_log_nu
         agn_wave = C_AA / agn_nu_hz
-        agn_lnu = agn_sed / agn_nu_hz
+        agn_lnu = agn_sed
 
         # Normalize by peak value (shape comparison only)
         agn_sort_idx = np.argsort(agn_wave)
@@ -251,7 +252,7 @@ class TestRichards2006Convention:
                 rtol=0.023,
                 err_msg=f"Divergence at {test_wl:.0f} Å: log10(ratio) = {np.log10(ratio):.4f}. "
                 f"Issue #592 A2 claims 4–20× divergence (log10 0.6–1.3); "
-                f"issue #647 claims tengri is correct.",
+                f"tengri is correct (column is L_nu, not nu*F_nu).",
             )
 
 

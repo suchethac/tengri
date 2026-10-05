@@ -1168,7 +1168,15 @@ jobs:
         # When the protection is re-pinned, move the timeouts into the matrix and delete
         # this expression. The budgets cover a cold cache, because a pyproject.toml
         # change legitimately cold-starts every shard.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 90 || matrix.budget }}
+        #
+        # regression-b1/b2 (2026-10-03, three consecutive main runs on the shared
+        # runners, 4ca28b4d0 .. 8ee85a914): b1 36, 48, 46 min; b2 41, 39, 50 min
+        # against the 50-minute cap. Two PR runs the same day were killed at 51-52
+        # min with 93 % of b2 done, each adding under two minutes of tests. Both
+        # halves get 70, the same margin regression-a was given over its measured 61.
+        # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
+        # 51 min; b2 49, 48, 49 min and one kill at 51.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 90 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
         with:

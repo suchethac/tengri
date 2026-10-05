@@ -492,31 +492,39 @@ _AGN_MBH_DUST = {
 #: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``: the SED minus
 #: ``disc (1 - eta(30 deg) T)``, with ``T`` the torus screen, is the SED of the model whose
 #: disc is multiplied by ``eta(30 deg) T``.
+#: Re-captured on the native kubota_done wavelength axis: the model's master grid now
+#: carries the disc's own 0.01 A - 1e8 A axis (40 points per decade, 75 below 1000 A; 6604
+#: nodes), so the node-sum ``rest_sed_sum`` and the node-wise entries are values on that axis
+#: (``rest_sed_0`` is the 0.01 A node, where the disc has no flux). The composable runner's
+#: budgets no longer depend on the caller's grid, which is what makes the entries a property
+#: of the model: the photometry agrees with the variant that carries 200 points per decade
+#: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
+#: dust-energy balance is integrated on the master grid).
 #: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
 #: integrated from the SFH instead of held at SFR(age0), which moves these
 #: references by up to 1.6e-6 relative (``rest_sed_0``, the most ill-conditioned
 #: key) and photometry by up to 9e-7.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5219768637589674e32,
-        "rest_sed_0": 2.7377406327739308e23,
-        "rest_sed_mid": 3.059752712500818e28,
-        "rest_sed_last": 8.775649751760702e21,
-        "photometry": (1.0990377767025549e-27, 1.5702163168526004e-27, 1.7634949872933752e-27),
+        "rest_sed_sum": 1.559360778233028e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.891357276939563e28,
+        "rest_sed_last": 8.775427454646825e21,
+        "photometry": (1.0994790350777986e-27, 1.5700112432007491e-27, 1.763223137306398e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.5690295661645193e32,
-        "rest_sed_0": 3.319964143606842e24,
-        "rest_sed_mid": 3.1698790267190003e28,
-        "rest_sed_last": 8.836780543213574e21,
-        "photometry": (1.1412912433762039e-27, 1.5721251554767096e-27, 1.764063476666789e-27),
+        "rest_sed_sum": 1.6049263394709507e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 2.994003637320427e28,
+        "rest_sed_last": 8.79894535961485e21,
+        "photometry": (1.1410280777227556e-27, 1.5707872456140516e-27, 1.76344775710649e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.589105211171609e32,
-        "rest_sed_0": 2.543478293984868e24,
-        "rest_sed_mid": 3.207650991713808e28,
-        "rest_sed_last": 9.086448567691009e21,
-        "photometry": (1.1541403568651668e-27, 1.5802875779708394e-27, 1.7662024272565823e-27),
+        "rest_sed_sum": 1.6209139632449693e32,
+        "rest_sed_0": 0.0,
+        "rest_sed_mid": 3.019929865300121e28,
+        "rest_sed_last": 9.096643528959812e21,
+        "photometry": (1.148815536590372e-27, 1.5810541591631039e-27, 1.7660494424511744e-27),
     },
 }
 

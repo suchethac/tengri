@@ -78,7 +78,7 @@ HERE = Path(__file__).resolve().parent
 FIGS = HERE / "_figs"
 FIGS.mkdir(exist_ok=True)
 
-# Matched nodes (01_agnfitter.py §6).
+# Matched nodes (01_agnfitter.py §1.5).
 T_DUST, F_PAH = 35.0, 0.02
 LOG_LIR = 12.0
 IR_BAND = (3e4, 3e6)  # 3-300 um, where the cold-dust shape is defined
@@ -136,7 +136,7 @@ def compare(name, w_ref, L_ref, L_tengri, results):
     results[name] = (w_ref, ref_n, ten_n)
 
 
-# AGN radio (01_agnfitter.py §11). Both codes are compared as *shapes*,
+# AGN radio (01_agnfitter.py §5). Both codes are compared as *shapes*,
 # normalized at 5 GHz, because the amplitude is set by radio loudness — a free
 # parameter on both sides and not a physics claim.
 L_AGN_BOL = 1e45  # erg/s

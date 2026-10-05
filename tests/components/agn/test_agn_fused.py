@@ -390,12 +390,18 @@ class TestAGNPredictSED:
         )
         chex.assert_tree_all_finite(lnu_high)
         assert jnp.all(lnu_high > 0), "AGN SED should be positive"
-        # L_bol ratio of 10^4 should produce proportionally brighter AGN
+        # The bolometric AGN luminosity scales with L_bol: integrated over a grid that
+        # covers the disc and torus, the 10^4 ratio of L_bol is the ratio of the energies.
+        wide = jnp.geomspace(10.0, 1.0e8, 20000)
+        kwargs = dict(agn_lum_ratio=1.0, agn_alpha=-1.0, agn_T_torus=1000.0, agn_torus_frac=0.5)
+        nu = 2.99792458e18 / wide
+        energy_high = -jnp.trapezoid(agn_fn(wide, agn_log_lbol=12.0, **kwargs), nu)
+        energy_low = -jnp.trapezoid(agn_fn(wide, agn_log_lbol=8.0, **kwargs), nu)
+        assert float(energy_high / energy_low) == pytest.approx(1.0e4, rel=1e-3)
+        # In the optical band alone the disc at fixed M_BH scales as Mdot^(2/3), so 10^4 in
+        # L_bol brightens it by 10^(8/3) = 464 (the measured 683 - 1155 includes the torus).
         ratio = jnp.max(lnu_high) / jnp.max(lnu_low)
-        assert ratio > 1e3, (
-            f"L_bol ratio of 10^4 should produce >1000x brighter AGN. "
-            f"Actual ratio: {float(ratio):.1f}"
-        )
+        assert 1.0e2 < ratio < 1.0e4, f"optical AGN ratio {float(ratio):.1f}"
 
 
 # ── Tests: SKIRTOR torus preintegration ───────────────────────────

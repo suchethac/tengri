@@ -86,27 +86,25 @@ class TestMulticolorAgn:
         ratio = l2[significant] / l1[significant]
         assert jnp.allclose(ratio, 2.0, rtol=0.01)
 
-    def test_higher_spin_more_far_uv(self, optical_wavelength):
-        """Higher BH spin → smaller ISCO → hotter inner disc → more far-UV flux.
+    def test_higher_spin_more_far_uv(self):
+        """At fixed L_bol, higher spin puts more flux shortward of the disc peak.
 
-        At maximal spin (a=0.998), the ISCO shrinks to ~1.2 R_g vs 6 R_g at a=0,
-        allowing the disc to reach temperatures ~3x higher. This shifts the
-        Wien peak into the far-UV/EUV (< 500 Å), boosting flux there.
+        The spin sets the radiative efficiency, so at fixed L_bol a higher-spin
+        disc has a smaller accreting area, a hotter inner edge, and a nu L_nu
+        peak at shorter wavelength (about 162 A at a=0, 82 A at a=0.99 for
+        L_bol = 1e12 Lsun). Both discs integrate to L_bol, so the hotter one
+        must LOSE flux longward of its peak (it does: 300-500 A drops from
+        1.49e29 to 7.5e28 erg/s/Hz) and gain it only shortward of the lower-spin
+        peak. The comparison window is therefore 20-60 A, shortward of both
+        peaks, on a grid that covers the whole disc so the closed-form
+        normalization is the one being compared.
         """
         from tengri.components.agn.unified import multicolor_agn
 
-        far_uv = (optical_wavelength > 300.0) & (optical_wavelength < 500.0)
-        # Physical, sub-Eddington L_bol (log10 L_sun): under the luminosity-first
-        # parameterization (ADR-0020) the shape is driven by L_bol + M_BH + spin,
-        # and agn_log_lbol=44 would clip at the Eddington limit and wash out the
-        # spin effect. At a sub-Eddington L_bol the far-UV (300-500 A) sits on the
-        # Wien tail, where the hotter (smaller-ISCO) high-spin disc clearly wins.
-        l_nospin = multicolor_agn(
-            optical_wavelength, agn_log_lbol=12.0, agn_a_spin=0.0, agn_torus_frac=0.0
-        )
-        l_spin = multicolor_agn(
-            optical_wavelength, agn_log_lbol=12.0, agn_a_spin=0.99, agn_torus_frac=0.0
-        )
+        wave = jnp.logspace(1.0, 5.0, 800)
+        far_uv = (wave > 20.0) & (wave < 60.0)
+        l_nospin = multicolor_agn(wave, agn_log_lbol=12.0, agn_a_spin=0.0, agn_torus_frac=0.0)
+        l_spin = multicolor_agn(wave, agn_log_lbol=12.0, agn_a_spin=0.99, agn_torus_frac=0.0)
         assert jnp.any(far_uv), "No wavelengths in far-UV window"
         assert float(jnp.sum(l_spin[far_uv])) > float(jnp.sum(l_nospin[far_uv]))
 
