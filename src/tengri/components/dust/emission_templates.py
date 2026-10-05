@@ -1387,8 +1387,9 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
 
     **Gradient-safe**: piecewise linear in ``dust_T``: the gradient is
     discontinuous at every 1 K node (the 8-24 micron band-power slope jumps by a
-    median of 42% across the 83 interior nodes), and linear in ``dust_f_pah``; both gradients are non-zero inside the grid and
-    the PAH-fraction gradient is zero only where the clip to [0, 1] binds.
+    median of 42% across the 83 interior nodes), and linear in ``dust_f_pah``;
+    both gradients are non-zero inside the grid and the PAH-fraction gradient
+    is zero only where the clip to [0, 1] binds.
 
     References
     ----------
