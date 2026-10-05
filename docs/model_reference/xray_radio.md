@@ -73,7 +73,9 @@ Synchrotron radiation from supernova remnants and cosmic-ray electrons is the do
 $$ (eq-fir-radio)
  The spectral shape is a power law $L_\nu \propto \nu^{-\alpha_{\rm SF}}$ (default $\alpha_{\rm SF} = 0.8$). Three FIRRC calibrations are available via `sfr_mode`:
 
-- `bell2003` (Bell 2003): constant $q_{\rm IR} = 2.64$.
+- `bell2003` (Bell 2003): constant $q_{\rm IR} = 2.64$, the calibration of the total 1.4 GHz luminosity (see the free-free section below).
+
+- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term.
 
 - `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
 
@@ -100,14 +102,15 @@ $$ (eq-synch-suppression)
 Thermal bremsstrahlung (free-free) from HII regions contributes at the $\sim$5--15% level at GHz frequencies and dominates above $\sim$30 GHz, tracing the instantaneous SFR on $\lesssim 10\,$Myr timescales. Following Murphy et al. (2011) (Eq. 11): $$\begin{aligned}
  
 L_\nu^{\rm ff} = {} &
-  \frac{1}{4.6\times10^{-28}\,L_\odot}
+  \frac{1}{4.6\times10^{-28}}
   \left(\frac{T_e}{10^4\,{\rm K}}\right)^{\!0.45} \nonumber \\
   & \times \left(\frac{\nu}{{\rm GHz}}\right)^{\!\alpha_{\rm ff}}
-  \frac{L_{\rm IR}}{1.73\times10^{10}\,L_\odot},
+  \,{\rm SFR},
+  \qquad {\rm SFR} = 3.88\times10^{-44}\,L_{\rm IR}\ [{\rm erg\,s^{-1}}],
 \end{aligned}
 
 $$ (eq-radio-freefree)
- where the SFR is derived from $L_{\rm IR}$ via the Kennicutt (1998) calibration. The calibration constant yields $L_\nu^{\rm ff} \approx 5.5 \times 10^{-7}\,L_\odot\,{\rm Hz}^{-1}$ per ${\rm M_\odot\,yr^{-1}}$ at $1.4\,$GHz and $T_e = 10^4\,$K, consistent with Murphy et al. (2011) Table 1.
+ where the SFR [$M_\odot\,{\rm yr}^{-1}$] is derived from $L_{\rm IR}$ via Eq. 4 of Murphy et al. (2011) and $L_\nu^{\rm ff}$ is in erg s$^{-1}$ Hz$^{-1}$. At $1.4\,$GHz and $T_e = 10^4\,$K this gives $2.10 \times 10^{27}$ erg s$^{-1}$ Hz$^{-1}$ (5.5$\times10^{-7}\,L_\odot\,{\rm Hz}^{-1}$) per ${\rm M_\odot\,yr^{-1}}$.
 
 The free-free spectral index $\alpha_{\rm ff} \approx -0.1$ is nearly flat (default), in contrast to the steep synchrotron slope $\alpha_{\rm SF} \approx -0.8$. Both $T_e$ (default $10^4\,$K) and $\alpha_{\rm ff}$ are exposed as free parameters for hierarchical inference.
 
@@ -124,9 +127,17 @@ radio={
 }
 ```
 
-Omitting the `freefree` key applies the auto rule above. `bell2003_split` is accepted as a second spelling of `bell2003` and follows the same rule.
+Omitting the `freefree` key applies the auto rule above. Exception: `bell2003_split` forces `freefree: False` (that mode already holds a thermal share of its own total), and passing `freefree: True` with it raises an error.
 
-`radio_q_ir` is the total 1.4 GHz calibration of Bell (2003): the ratio of the 8--1000 $\mu$m luminosity to the total radio luminosity, of which about 10% is thermal. With the free-free term on, the synchrotron term carries the calibrated total minus the free-free luminosity at 1.4 GHz, so the sum at 1.4 GHz equals $L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\times10^{q_{\rm IR}})$; with it off, the synchrotron term carries the whole total. The $L_{\rm IR}$ used is the total absorbed dust power $L_{\rm absorbed}\,\eta$; Bell's 8--1000 $\mu$m band holds 0.97 of it for the default dust emission model (DL14).
+#### What `radio_q_ir` calibrates
+
+`radio_q_ir` is the calibration of Bell (2003): the ratio of the 8--1000 $\mu$m luminosity to the **total** 1.4 GHz radio luminosity, about 10% of which is thermal. The $L_{\rm IR}$ used is the total absorbed dust power $L_{\rm absorbed}\,\eta$; the 8--1000 $\mu$m band holds 0.944 of it for the default dust emission model (DL14) and 0.958 for Casey (2012), for the delayed-$\tau$ galaxy used in the checks (integral of the dust-emission SED over the model grid). The three spellings:
+
+- **`freefree` omitted (default).** $q_{\rm IR}$ is the total. The synchrotron term is $(1 - f_{\rm th})$ of $L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\times10^{q_{\rm IR}})$, with $f_{\rm th}$ the free-free share at 1.4 GHz from the Murphy et al. (2011) term (0.1335 at $q_{\rm IR} = 2.64$, $T_e = 10^4\,$K), and the thermal term is added by this block, or by the nebular continuum when the nebular backend carries free-free. Without a nebular backend the 1.4 GHz total equals the calibration. With one it equals the calibration to within the difference between that backend's free-free share and $f_{\rm th}$ (a few per cent for Cue).
+- **`freefree: False`.** $q_{\rm IR}$ calibrates the non-thermal term alone, as in CIGALE: the synchrotron term carries the whole $L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\times10^{q_{\rm IR}})$, this block adds no thermal term, and a nebular free-free continuum adds to it.
+- **`freefree: True`.** As the default, with the thermal term from this block even beside a nebular backend that carries free-free (two thermal terms).
+
+For the default spelling the synchrotron term would turn negative for $q_{\rm IR}$ above $q_\ast = -\log_{10}[3.75\times10^{12}\,(3.88\times10^{-44}/4.6\times10^{-28})(T_e/10^4\,{\rm K})^{0.45}\,1.4^{\alpha_{\rm ff}}]$ (3.5145 at $10^4\,$K, 3.379 at $2\times10^4\,$K). `SEDModel.build` raises if the support of `radio_q_ir` (a fixed value or the upper end of its prior) reaches that limit for the largest $T_e$ and $\alpha_{\rm ff}$ the model allows; the declared free prior of `radio_q_ir` ends at 3.37.
 
 Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
 

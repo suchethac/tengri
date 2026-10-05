@@ -14,15 +14,22 @@ All functions are pure JAX, JIT-compatible, and fully differentiable.
 
 - ``"bell2003"``: Fixed FIRRC q_IR = 2.64 (Bell 2003). Default, no evolution.
   ``q_ir`` is Bell's **total** 1.4 GHz calibration (Eq. 1: synchrotron plus
-  thermal, about 10 % of it thermal at 1.4 GHz). With the free-free term on, the
-  synchrotron term carries the calibrated total minus the Murphy+2011 thermal
-  luminosity at 1.4 GHz, so synchrotron plus thermal equals the calibration;
-  with it off, the synchrotron term carries the whole total.
-- ``"bell2003_split"``: the same code path as ``"bell2003"``; the spelling stays
-  accepted. The stand-alone function :func:`radio_sfr_bell2003_split` keeps the
-  AGNFITTER-RX construction (Martinez-Ramirez+2024, Sec 3): the Bell total split
-  90 %/10 % into a non-thermal (alpha = 0.75, Baan & Klockner 2006) and a thermal
-  (alpha = 0.10, Dale & Helou 2002; Condon 1992) power law.
+  thermal, about 10 % of it thermal at 1.4 GHz). With the sf ``freefree`` switch
+  unset the synchrotron term is ``(1 - f_th)`` of the calibrated total, ``f_th``
+  being the Murphy+2011 free-free share at 1.4 GHz (0.1335 at q = 2.64, T_e = 1e4 K),
+  and the thermal term comes from this block's Murphy term, or from the nebular
+  continuum when the nebular backend carries free-free. With a nebular backend the
+  1.4 GHz total equals the calibration to within the difference between that
+  backend's free-free share and ``f_th``. ``freefree=False`` calibrates the
+  non-thermal term alone (CIGALE's convention): the synchrotron carries the whole
+  ``q_ir`` total, no thermal term is added here, and a nebular free-free continuum
+  adds to it.
+- ``"bell2003_split"``: AGNFITTER-RX parity mode (Martinez-Ramirez+2024, Sec 3):
+  the Bell (2003) total L(1.4 GHz) split 90%/10% into a non-thermal
+  (alpha=0.75, Baan & Klockner 2006) / thermal (alpha=0.10, Dale & Helou 2002;
+  Condon 1992) pair via :func:`radio_sfr_bell2003_split`. It is also a total-q
+  construction, with a fixed thermal fraction and its own two slopes, so it takes
+  no separate free-free term.
 - ``"delvecchio2021"``: Mass + redshift-dependent FIRRC at 1.4 GHz (Delvecchio+2021).
   Correlation params exposed as arguments for hierarchical priors.
 - ``"mccheyne2022"``: Mass + redshift-dependent FIRRC at 150 MHz (McCheyne+2022).
@@ -235,9 +242,10 @@ def radio_sfr_bell2003(
         Wavelength [Angstrom].
     L_ir : float
         Total absorbed dust power ``L_absorbed * eta`` [erg/s]: the quantity the
-        dust components publish as ``L_ir``. Bell's TIR is the 8-1000 um band;
-        that band holds 0.83-0.96 of the total dust power for the DL14 and Casey
-        templates, which this call does not resolve.
+        dust components publish as ``L_ir``. Bell's TIR is the 8-1000 um band, which
+        holds 0.944 (DL14) and 0.958 (Casey 2012) of that power for the default
+        delayed-tau galaxy (integral of the dust-emission SED over the model grid,
+        575 and 819 nodes in the band); this call does not resolve the difference.
     q_ir : float
         FIR-radio correlation parameter for the total 1.4 GHz luminosity.
         Default 2.64 (Bell 2003, z=0).
@@ -248,8 +256,9 @@ def radio_sfr_bell2003(
     thermal_ref : float
         Thermal (free-free) luminosity density already carried by a separate
         term at ``nu_ref`` [erg/s/Hz]. Default 0.0. Must stay below the
-        calibrated total: for ``q_ir`` above about 3.5 the Murphy thermal term
-        reaches it and the difference changes sign.
+        calibrated total: for ``q_ir`` above :func:`radio_q_total_limit` (3.5145 at
+        T_e = 1e4 K) the Murphy thermal term exceeds it and the difference changes
+        sign; ``SEDModel.build`` refuses a ``radio_q_ir`` support that reaches it.
 
     Returns
     -------
@@ -301,10 +310,7 @@ def radio_sfr_bell2003_split(
     Ramirez+2024, Sec 3, p.3): the Bell (2003) IR-radio correlation gives
     the TOTAL (synchrotron + thermal) L(1.4 GHz), which is then split into
     a 90% non-thermal / 10% thermal pair with the paper's own slopes.
-    This stand-alone function keeps that construction with its own fixed
-    thermal fraction and slopes; the pipeline's ``sfr_mode="bell2003_split"``
-    now takes the same code path as ``"bell2003"`` (one convention: ``q_ir``
-    calibrates the total, the thermal share is the Murphy+2011 term).
+    The pipeline's ``sfr_mode="bell2003_split"`` calls this function.
 
     .. math::
 
@@ -835,11 +841,9 @@ def _dispatch_sfr(
     -----
     **JIT-compatible**: yes, pure JAX function.
 
-    ``"bell2003_split"`` is the same code path as ``"bell2003"``: one
-    convention for what ``q_ir`` calibrates (the total), one function.
-    ``"delvecchio2021"`` and ``"mccheyne2022"`` multiply their calibrated
-    total by Bell's non-thermal fraction ``n(L)`` (at most 0.9), which already
-    leaves room for the thermal share, so they take no thermal subtraction.
+    ``"bell2003_split"`` is the AGNFITTER-RX construction: a fixed 90/10 split of the
+    same total with its own slopes, so it takes no thermal subtraction.
+    ``"delvecchio2021"`` and ``"mccheyne2022"`` take no thermal subtraction here.
     """
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
