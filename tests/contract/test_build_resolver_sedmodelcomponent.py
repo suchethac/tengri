@@ -99,8 +99,8 @@ class TestBuildResolverDustEmission:
         not the deleted duplicates (``dl07_ir``) nor the surviving unique
         components (``draine2021_pah_ir``, still in ``_REGISTRY``; the
         ``schreiber2016_ir`` spelling was retired when the tabulated library
-        took the ``schreiber2016`` name, #2597). They used to be silently accepted then fail at predict
-        (the removed #738 footgun).
+        took the ``schreiber2016`` name, #2597). They used to be silently accepted
+        then fail at predict (the removed #738 footgun).
         """
         # dust_attenuation now requires an explicit law (laws are EXPLICIT,
         # not implied by a default) -- an empty dict raises on the

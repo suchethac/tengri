@@ -62,7 +62,7 @@ def _arrays() -> dict[str, np.ndarray]:
 
 
 def _per_kg_mix_lnu(T: float, f: float) -> tuple[np.ndarray, np.ndarray]:
-    """Reference ``(wavelength_aa, L_nu)``: per-kg templates interpolated in T, then mixed by mass."""
+    """Reference ``(wavelength_aa, L_nu)``: per-kg templates, T-interpolated, mass-mixed."""
     a = _arrays()
     t = a["tdust_grid"]
     i = int(np.clip(np.searchsorted(t, T) - 1, 0, t.size - 2))
@@ -98,7 +98,7 @@ def test_band_powers_equal_the_per_kg_library_mix(T, f):
 
 @pytest.mark.parametrize(("T", "f"), [(20.0, 0.05), (35.0, 0.2), (50.0, 0.5)])
 def test_f_pah_is_the_mass_fraction_not_the_power_fraction(T, f):
-    """The SED is ``(1 - w) S(0) + w S(1)`` with ``w = f R / (1 - f + f R)``, R the per-kg power ratio."""
+    """The SED is ``(1 - w) S(0) + w S(1)``, ``w = f R / (1 - f + f R)``, R the per-kg ratio."""
     a = _arrays()
     i = int(np.searchsorted(a["tdust_grid"], T))
     wave = a["wavelength_aa"]
@@ -282,7 +282,7 @@ def test_missing_template_file_raises_with_path_and_recipe(tmp_path, monkeypatch
 
 
 def test_provenance_points_at_the_one_paper():
-    """h5 attrs and the bib agree on A&A 609, A30 = arXiv:1710.10276; the A&A 589, A35 entry is gone."""
+    """h5 attrs and the bib agree on A&A 609, A30 = arXiv:1710.10276; the A35 entry is gone."""
     with h5py.File(_H5, "r") as f:
         attrs = {k: str(v) for k, v in f.attrs.items()}
     assert attrs["arxiv"] == "1710.10276"

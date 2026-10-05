@@ -1136,7 +1136,7 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "schreiber2016": {
         "status": "production",
         "citation": "Schreiber et al. 2018 (A&A 609, A30)",
-        "short_doc": "Tabulated Schreiber+2018 dust library, CIGALE packaging; (T_dust, PAH mass fraction)",
+        "short_doc": "Tabulated Schreiber+2018 library (CIGALE); (T_dust, PAH mass fraction)",
     },
     "pah_drude": {
         "status": "unvalidated",
