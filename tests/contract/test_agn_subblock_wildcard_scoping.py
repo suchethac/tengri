@@ -271,20 +271,20 @@ def _cases(categories: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii",
 _ALL_CASES = _cases()
 
 # Q1 differentiates the model with respect to every free parameter of the block, and
-# ``disc/adaf`` is by far its costliest case: 283 s on main against 139 s at ac45672d2,
-# both on one machine (the next case, ``disc/kubota_done``, takes 29 s). A CI runner is
-# about three times slower, which puts it past the suite's 600 s per-test limit; under
-# xdist that limit kills the worker and the rest of this file never runs. It carries its
-# own limit until its cost is brought back down (#2768).
-_Q1_TIMEOUT_S = {("disc", "adaf"): 1800}
+# ``disc/adaf`` is by far its costliest case: 283 s and a 7.7 GB resident / 18.6 GB peak
+# memory footprint on one machine (139 s at ac45672d2; the next case, ``disc/kubota_done``,
+# takes 23 s and 1.7 GB). A CI runner is about three times slower and has 16 GB for two
+# workers, so the case either exceeds the suite's 600 s per-test limit — under xdist that
+# kills the worker and the rest of this file never runs — or, given more time, exhausts
+# the runner's memory. It runs in the ``slow`` tier until its cost is brought back down
+# (#2768).
+_Q1_SLOW = {("disc", "adaf")}
 _Q1_PARAMS = [
     pytest.param(
         _category,
         _block_type,
         id=f"{_category}/{_block_type}",
-        marks=[pytest.mark.timeout(_Q1_TIMEOUT_S[(_category, _block_type)])]
-        if (_category, _block_type) in _Q1_TIMEOUT_S
-        else [],
+        marks=[pytest.mark.slow] if (_category, _block_type) in _Q1_SLOW else [],
     )
     for _category, _block_type in _ALL_CASES
 ]
