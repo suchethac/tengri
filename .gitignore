@@ -249,6 +249,7 @@ _galrun/
 !data/dl07_templates_v2.h5
 !data/dl14_templates.h5
 !data/fsps_mass_remaining_chabrier.h5
+!data/mass_remaining/mass_remaining_bc03pdva94_chabrier.h5
 !data/fsps_nebular_reference.npz
 !data/fsps_spectrum_reference.npz
 !data/qsogen_cont_bb_only.npz
