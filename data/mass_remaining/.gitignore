@@ -1,0 +1,5 @@
+# Surviving-mass-fraction tables for each SSP grid isochrone & IMF.
+# These are small (~18 KB each, 107x12 float64 matrices) and essential to the
+# physics (per #2751); they are committed to the repository.
+# All files in this directory are tracked.
+!*.h5
