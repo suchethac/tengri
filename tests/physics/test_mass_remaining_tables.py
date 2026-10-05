@@ -1,168 +1,126 @@
+"""Surviving-mass tables (``src/tengri/data/ssp_mass_remaining/*.h5``): bounds and pins.
+
+Each table is the fraction of a single-age population's formed mass that is in living
+stars plus remnants, taken from the SSP grid's own isochrones and IMF (#2751). This file
+is table-only: it imports no loader.
+
+BC03 table: the Bruzual & Charlot (2003) original release (Padova 1994 tracks, STELIB hr
+library, Chabrier IMF), column (7) ``M*`` of ``bc2003_hr_m*_chab_ssp.4color``, the same
+release as ``data/bc03_pdva_stelib_chabrier.h5``.
 """
-Tests for mass_remaining tables: surviving stellar mass fraction data.
 
-These tests verify that the mass_remaining tables (living stars + remnants
-per unit formed mass) have the correct structure, bounds, and physical
-properties. Each table is built from its SSP grid's own isochrones, IMF,
-and metallicity grid.
+from __future__ import annotations
 
-Taxonomy marker: bounds
-"""
+from pathlib import Path
 
-import pytest
 import h5py
 import numpy as np
-from pathlib import Path
-from scipy.integrate import quad
+import pytest
+
+TABLE_DIR = Path(__file__).resolve().parents[2] / "src" / "tengri" / "data" / "ssp_mass_remaining"
+H5_TABLES = sorted(TABLE_DIR.glob("*.h5"))
+BC03 = TABLE_DIR / "mass_remaining_bc03pdva94_chabrier.h5"
+
+# BC03's own M* is not strictly non-increasing: it rises by up to 0.0195 between adjacent
+# nodes at log10 age 6.0-6.5 and by <= 7e-4 above 1 Gyr. Bound the rises, do not smooth.
+MAX_RISE_YOUNG = 0.02
+MAX_RISE_OLD = 1e-3
 
 
-def load_mass_remaining_table(filename):
-    """Load a mass_remaining HDF5 file and return its contents."""
-    with h5py.File(filename, 'r') as f:
-        log_age_yr = f['log10_age_yr'][:]
-        log_z_abs = f['log10_z_abs'][:]
-        mass_remaining = f['mass_remaining'][:]
-        attrs = dict(f.attrs)
-    return log_age_yr, log_z_abs, mass_remaining, attrs
-
-
-@pytest.mark.bounds
-def test_bc03pdva94_chabrier_table_structure():
-    """Test that BC03 table has correct structure and dimensions."""
-    filepath = Path(__file__).parent.parent.parent / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    assert filepath.exists(), f"File not found: {filepath}"
-
-    log_age_yr, log_z_abs, mass_remaining, attrs = load_mass_remaining_table(filepath)
-
-    # Expected dimensions: 6 metallicities, 221 ages
-    assert mass_remaining.shape == (6, 221), f"Expected shape (6, 221), got {mass_remaining.shape}"
-    assert len(log_z_abs) == 6, f"Expected 6 metallicities, got {len(log_z_abs)}"
-    assert len(log_age_yr) == 221, f"Expected 221 ages, got {len(log_age_yr)}"
-
-    # Check expected Z values (Padova BC03 grid: m22, m32, m42, m52, m62, m72)
-    expected_z = np.array([-4., -3.39794, -2.39794, -2.09691, -1.6989701, -1.30103])
-    assert np.allclose(log_z_abs, expected_z), f"Z values mismatch: {log_z_abs} vs {expected_z}"
+def _load(path: Path):
+    with h5py.File(path, "r") as f:
+        return (
+            f["log10_age_yr"][:],
+            f["log10_z_abs"][:],
+            f["mass_remaining"][:],
+            dict(f.attrs),
+        )
 
 
 @pytest.mark.bounds
-def test_bc03pdva94_chabrier_bounds():
-    """Test that all mass_remaining values are in valid range (0, 1]."""
-    filepath = Path(__file__).parent.parent.parent / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    log_age_yr, log_z_abs, mass_remaining, attrs = load_mass_remaining_table(filepath)
-
-    # All values should be in (0, 1]
-    assert np.all(mass_remaining > 0), f"Found masses <= 0: min = {mass_remaining.min()}"
-    assert np.all(mass_remaining <= 1.0001), f"Found masses > 1: max = {mass_remaining.max()}"
-
-    # Check that youngest age (non -inf) has mass close to 1.0
-    finite_mask = np.isfinite(10**log_age_yr)
-    if np.any(finite_mask):
-        young_idx = np.argmax(finite_mask)  # First finite index
-        young_mass = mass_remaining[:, young_idx]
-        assert np.all(young_mass >= 0.99), f"Young age masses should be ~1.0, got min {young_mass.min()}"
-
-
-@pytest.mark.bounds
-def test_bc03pdva94_chabrier_monotonicity():
-    """Test that mass_remaining decreases monotonically with age."""
-    filepath = Path(__file__).parent.parent.parent / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    log_age_yr, log_z_abs, mass_remaining, attrs = load_mass_remaining_table(filepath)
-
-    # Mass should decrease (or stay constant) with increasing age
-    # Skip the -inf point (index 0)
-    for iz in range(mass_remaining.shape[0]):
-        diffs = np.diff(mass_remaining[iz, 1:])
-        non_decreasing = np.sum(diffs > 1e-5)
-        assert non_decreasing == 0, f"Z index {iz}: found {non_decreasing} non-monotonic points"
+@pytest.mark.parametrize("path", H5_TABLES, ids=lambda p: p.name)
+def test_table_bounds(path):
+    """Every table: shapes, increasing axes, values in (0, 1], 1 at the youngest age."""
+    log_age, log_z, mass, attrs = _load(path)
+    assert mass.shape == (log_z.shape[0], log_age.shape[0])
+    assert mass.dtype == np.float64
+    assert np.all(np.diff(log_age) > 0.0)
+    assert np.all(np.diff(log_z) > 0.0)
+    assert np.all(mass > 0.0) and np.all(mass <= 1.0)
+    assert log_age[0] > 5.0 - 1e-9 and np.allclose(mass[:, 0], 1.0)
+    rise = np.diff(mass, axis=1)
+    old = log_age[1:] > 9.0
+    assert rise[:, ~old].max() <= MAX_RISE_YOUNG
+    assert rise[:, old].max() <= MAX_RISE_OLD
+    for key in (
+        "quantity",
+        "isochrones",
+        "imf",
+        "source",
+        "remnant_prescription",
+        "citation",
+        "generator",
+        "generator_args",
+        "input_sha256",
+    ):
+        assert key in attrs, key
 
 
 @pytest.mark.bounds
-def test_bc03pdva94_chabrier_agnfitter_check():
+def test_bc03_axes_are_the_grid_nodes():
+    """Six Z nodes of the BC03 grid; 220 ages equal to the grid's nodes after t = 0."""
+    log_age, log_z, mass, _ = _load(BC03)
+    assert mass.shape == (6, 220)
+    np.testing.assert_allclose(
+        log_z, [-4.0, -3.39794, -2.39794, -2.09691, -1.6989701, -1.30103], atol=1e-5
+    )
+    assert log_age[0] == pytest.approx(5.100002) and log_age[-1] == pytest.approx(10.30103)
+
+
+# Source values: column (7) M* of bc2003_hr_<m>_chab_ssp.4color inside
+# bc03.models.padova_1994_chabrier_imf.tar.gz (sha256 d7b51afa...cd7b, see PROVENANCE.md).
+# Row identified by its column (1) log age. The table stores exactly that decimal.
+PINS = [
+    # (z file key, log10 Z, log10 age [yr], M* from the 4color row)
+    ("m22", -4.0, 8.006543, 0.71382),
+    ("m62", -1.6989701, 9.006547, 0.60963),
+    ("m72", -1.30103, 10.000000, 0.50813),
+]
+
+
+@pytest.mark.bounds
+@pytest.mark.parametrize("key,log_z0,log_age0,expected", PINS, ids=[p[0] for p in PINS])
+def test_bc03_values_equal_the_source_column(key, log_z0, log_age0, expected):
+    """The table equals the 4color column (7) at three (Z, age) rows to 1e-10."""
+    log_age, log_z, mass, _ = _load(BC03)
+    iz = int(np.argmin(np.abs(log_z - log_z0)))
+    ia = int(np.argmin(np.abs(log_age - log_age0)))
+    assert abs(log_z[iz] - log_z0) < 1e-5
+    assert abs(log_age[ia] - log_age0) < 1e-6
+    assert abs(mass[iz, ia] - expected) < 1e-10
+
+
+def _tau_exponential_fraction(log_age, m_z, t_obs_gyr, n):
+    """Surviving fraction of a tau = 1 Gyr declining-exponential SFH [dimensionless]."""
+    a = np.concatenate([[1e-12], np.linspace(0.0, t_obs_gyr, n + 1)[1:-1], [t_obs_gyr]])
+    m_a = np.interp(np.log10(a * 1e9), log_age, m_z, left=1.0)
+    w = np.exp(-(t_obs_gyr - a))
+    return np.trapezoid(w * m_a, a) / np.trapezoid(w, a)
+
+
+@pytest.mark.bounds
+def test_bc03_2003_tau_1gyr_surviving_fraction_pin():
+    """tau = 1 Gyr declining exponential, T = 4.8939 Gyr, Z = 0.02: BC03 2003 release.
+
+    Pinned as the value of the BC03 *original 2003* release (stars + remnants, column 7
+    of ``bc2003_hr_m62_chab_ssp.4color``) derived in this task: 0.545963, converged to
+    < 1e-6 between 2000 and 200000 integration points. It is a cross-check of the table
+    against the AGNfitter-rX template (0.5464) and is not a target. The 2016 update's
+    equivalent column gives 0.592158 and its living-stars-only column 0.479432.
     """
-    Test BC03 table against AGNfitter r_X check.
-
-    Compute the surviving mass fraction of a τ = 1 Gyr declining-exponential
-    SFH at age 4.8939 Gyr and Z = 0.02, by convolving with the mass_remaining
-    table. This should be close to the value implied by the upstream BC03
-    template (approximately 0.5464).
-
-    Reference: AGNfitter (Calistro Rivera et al. 2016) uses BC03 template
-    libraries; this check verifies consistency with those templates.
-    """
-    filepath = Path(__file__).parent.parent.parent / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    log_age_yr, log_z_abs, mass_remaining, attrs = load_mass_remaining_table(filepath)
-
-    # Find Z = 0.02 (log10 Z = -1.6989701)
-    z_target = -1.6989701
-    z_idx = np.argmin(np.abs(log_z_abs - z_target))
-    assert np.abs(log_z_abs[z_idx] - z_target) < 1e-5, f"Could not find Z = 0.02"
-
-    mass_z = mass_remaining[z_idx, :]
-
-    # Convert age grid to linear Gyr
-    age_gyr = 10**(log_age_yr - 9)
-
-    # Extract finite ages for interpolation
-    finite_mask = np.isfinite(age_gyr)
-    age_gyr_finite = age_gyr[finite_mask]
-    mass_finite = mass_z[finite_mask]
-
-    # Define mass_remaining interpolant
-    def mass_remaining_func(age_gyr_val):
-        """Interpolate mass_remaining at a given age in Gyr."""
-        if age_gyr_val <= age_gyr_finite[0]:
-            return 1.0
-        if age_gyr_val >= age_gyr_finite[-1]:
-            return mass_finite[-1]
-        return np.interp(age_gyr_val, age_gyr_finite, mass_finite)
-
-    # Compute convolution: stellar_mass_surviving(t_obs)
-    #   = ∫[0 to t_obs] SFR(t_sfh) * M_rem(t_obs - t_sfh) dt_sfh
-    # where SFR(t_sfh) = exp(-t_sfh / τ)
-
-    t_obs_gyr = 4.8939
-    tau_gyr = 1.0
-
-    def integrand(t_sfh):
-        sfr = np.exp(-t_sfh / tau_gyr)
-        age_at_formation = t_obs_gyr - t_sfh
-        if age_at_formation <= 0:
-            return 0
-        return sfr * mass_remaining_func(age_at_formation)
-
-    result, _ = quad(integrand, 0, t_obs_gyr, limit=100, epsabs=1e-8, epsrel=1e-6)
-
-    # Check against expected value
-    expected = 0.5464
-    tolerance = 0.1  # 10% tolerance to account for interpolation/integration differences
-
-    assert result > 0, f"Surviving mass fraction is non-positive: {result}"
-    assert abs(result - expected) / expected < tolerance, \
-        f"Surviving mass fraction {result:.6f} differs from expected {expected:.6f} by more than {tolerance*100:.1f}%"
-
-
-@pytest.mark.bounds
-def test_bc03pdva94_chabrier_attributes():
-    """Test that BC03 table has proper metadata attributes."""
-    filepath = Path(__file__).parent.parent.parent / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    _, _, _, attrs = load_mass_remaining_table(filepath)
-
-    # Required attributes
-    required_attrs = [
-        'quantity', 'isochrones', 'imf', 'source', 'remnant_prescription',
-        'citation', 'generator'
-    ]
-
-    for attr in required_attrs:
-        assert attr in attrs, f"Missing attribute: {attr}"
-
-    # Verify specific values
-    assert attrs['isochrones'] == 'Padova 1994'
-    assert attrs['imf'] == 'Chabrier'
-    assert 'Bruzual' in attrs['citation']
-    assert '2003' in attrs['citation']
-    assert 'BC03' in attrs['source']
-
-
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+    log_age, log_z, mass, _ = _load(BC03)
+    iz = int(np.argmin(np.abs(log_z + 1.6989701)))
+    coarse = _tau_exponential_fraction(log_age, mass[iz], 4.8939, 2000)
+    fine = _tau_exponential_fraction(log_age, mass[iz], 4.8939, 200000)
+    assert abs(coarse - fine) < 1e-6
+    assert fine == pytest.approx(0.545963, abs=2e-6)

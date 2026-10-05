@@ -1,189 +1,144 @@
 #!/usr/bin/env python
+"""Build ``mass_remaining_bc03pdva94_chabrier.h5`` from the BC03 2003 model files.
+
+The surviving-mass table must come from the same BC03 release, isochrones, IMF,
+spectral library and metallicities as the spectra in ``data/bc03_pdva_stelib_chabrier.h5``.
+Those spectra are the Bruzual & Charlot (2003) original release,
+``bc03.models.padova_1994_chabrier_imf.tar.gz`` (Padova 1994 tracks, STELIB
+``hr`` library, Chabrier IMF): the grid's spectra equal that release's
+``bc2003_hr_m*_chab_ssp.ised`` to float32 round-off (see the PROVENANCE note).
+
+The quantity repackaged is column (7), ``M*``, of each ``bc2003_hr_m*_chab_ssp.4color``
+file. The release's own header defines it as "Total mass in stars at this age",
+and column (9) ``Mgalaxy = M* + Mgas = 1`` for every row, where ``Mgas`` is the
+mass returned to the ISM. Remnants are not returned, so ``M*`` is living stars
+plus remnants per 1 Msun formed. This script asserts that identity.
+
+Usage (from the repository root)::
+
+    python scripts/build_mass_remaining_bc03.py \\
+        --tarball /path/to/bc03.models.padova_1994_chabrier_imf.tar.gz
+
+Data: Bruzual & Charlot (2003), MNRAS 344, 1000, http://www.bruzual.org/bc03/
 """
-Build mass_remaining_bc03pdva94_chabrier.h5 from BC03 *.4color files.
 
-BC03 (Bruzual & Charlot 2003, MNRAS 344, 1000) provides the stellar mass
-remaining (living stars + remnants per unit formed mass) in column (11)
-of the *.4color files. This script reads the six metallicity files
-(m22..m72, corresponding to Z = 0.0001..0.05) and constructs the HDF5 table.
+from __future__ import annotations
 
-Remnant prescription: BC03's internal (different from FSPS Renzini & Ciotti).
-Isochrones: Padova 1994.
-Spectral library: STELIB.
-IMF: Chabrier (lognormal + power law).
-"""
-
-import gzip
-import numpy as np
-import h5py
+import argparse
+import hashlib
+import re
+import tarfile
 from pathlib import Path
 
+import h5py
+import numpy as np
 
-BC03_FILES = {
-    'm22': (0.0001, -4.0),
-    'm32': (0.0004, -3.39794),
-    'm42': (0.004, -2.39794),
-    'm52': (0.008, -2.09691),
-    'm62': (0.02, -1.6989701),
-    'm72': (0.05, -1.30103),
-}
-
-
-def read_bc03_4color(filepath):
-    """Read BC03 4color file and extract log-age-yr and M*_tot columns."""
-    with gzip.open(filepath, 'rt') as f:
-        lines = f.readlines()
-
-    # Skip header lines (those starting with '#')
-    data_lines = [line for line in lines if not line.startswith('#')]
-
-    ages_yr = []
-    masses = []
-
-    for line in data_lines:
-        if not line.strip():
-            continue
-        parts = line.split()
-        if len(parts) >= 11:  # Need at least 11 columns
-            try:
-                age_yr = float(parts[0])  # Column (1)
-                mass_tot = float(parts[10])  # Column (11) is index 10
-                ages_yr.append(age_yr)
-                masses.append(mass_tot)
-            except ValueError:
-                continue
-
-    return np.array(ages_yr), np.array(masses)
+REPO = Path(__file__).resolve().parent.parent
+GRID = REPO / "data" / "bc03_pdva_stelib_chabrier.h5"
+OUT = (
+    REPO
+    / "src"
+    / "tengri"
+    / "data"
+    / "ssp_mass_remaining"
+    / "mass_remaining_bc03pdva94_chabrier.h5"
+)
+TAR_MEMBER = "./bc03/models/Padova1994/chabrier/bc2003_hr_{key}_chab_ssp.4color"
+KEYS = ("m22", "m32", "m42", "m52", "m62", "m72")
+SOURCE_URL = (
+    "http://www.bruzual.org/bc03/Original_version_2003/bc03.models.padova_1994_chabrier_imf.tar.gz"
+)
+COL_AGE, COL_MSTAR, COL_MGAS, COL_MGAL = 0, 6, 7, 8
+Z_PATTERN = re.compile(r"X=([0-9.]+), Y=([0-9.]+), Z=([0-9.]+)")
 
 
-def main():
-    tengri_root = Path('/Users/suchethacooray/Projects/tengri')
-    bc03_dir = Path('/Users/suchethacooray/.claude/jobs/da5e6ce4/tmp/bc03/Stelib_Atlas/Chabrier_IMF')
-    output_file = tengri_root / 'data' / 'mass_remaining' / 'mass_remaining_bc03pdva94_chabrier.h5'
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Read Tengri's BC03 grid to get the reference Z and age nodes
-    print("Reading Tengri BC03 grid metadata...")
-    with h5py.File(tengri_root / 'data' / 'bc03_pdva_stelib_chabrier.h5', 'r') as f:
-        tengri_ages_gyr = f['ssp_lg_age_gyr'][:]
-        tengri_z_lg = f['ssp_lgmet'][:]
-
-    print(f"  Tengri ages (log Gyr): {len(tengri_ages_gyr)} points")
-    print(f"  Tengri Z (log10): {tengri_z_lg}")
-
-    # Read all BC03 files
-    all_ages_yr = None
-    mass_remaining_all = []
-    z_log10_read = []
-
-    for suffix in ['m22', 'm32', 'm42', 'm52', 'm62', 'm72']:
-        z_abs, z_lg = BC03_FILES[suffix]
-        filepath = bc03_dir / f'bc2003_hr_stelib_{suffix}_chab_ssp.4color.gz'
-
-        print(f"\nReading {filepath.name}...")
-        if not filepath.exists():
-            raise FileNotFoundError(f"File not found: {filepath}")
-
-        ages_yr, masses = read_bc03_4color(filepath)
-
-        # Store first set of ages for reference
-        if all_ages_yr is None:
-            all_ages_yr = ages_yr
-            print(f"  Found {len(ages_yr)} age points")
-            print(f"  Age range: {ages_yr[0]:.6f} to {ages_yr[-1]:.6f} (log yr)")
-        else:
-            if len(ages_yr) != len(all_ages_yr):
-                raise ValueError(f"Age mismatch: expected {len(all_ages_yr)}, got {len(ages_yr)}")
-
-        z_log10_read.append(z_lg)
-        mass_remaining_all.append(masses)
-        print(f"  Z = {z_abs:.6f} (log10 Z = {z_lg:.6f})")
-        print(f"  Mass range: {masses.min():.6f} to {masses.max():.6f}")
-
-    # Validate Z
-    z_lg_array = np.array(z_log10_read)
-    print(f"\nValidating Z values...")
-    print(f"  Expected: {tengri_z_lg}")
-    print(f"  Got:      {z_lg_array}")
-    if not np.allclose(z_lg_array, tengri_z_lg):
-        raise ValueError("Z values do not match Tengri grid")
-
-    # BC03 ages are in log(yr), convert to log(Gyr)
-    age_lg_yr = np.array(all_ages_yr, dtype=np.float64)
-    age_lg_gyr = age_lg_yr - 9
-
-    print(f"\nAge axes:")
-    print(f"  BC03 (log yr) first 5: {age_lg_yr[:5]}")
-    print(f"  BC03 (log yr) last 5:  {age_lg_yr[-5:]}")
-    print(f"  Tengri (log Gyr) first 5: {tengri_ages_gyr[:5]}")
-    print(f"  Tengri (log Gyr) last 5: {tengri_ages_gyr[-5:]}")
-
-    # Prepare output age grid: include -inf point from Tengri for compatibility
-    output_ages = tengri_ages_gyr
-    print(f"\nUsing Tengri's age axis ({len(output_ages)} points, including -inf)")
-
-    # Construct mass array: (n_z, n_age)
-    mass_array = np.empty((len(z_log10_read), len(output_ages)), dtype=np.float64)
-
-    for iz, masses in enumerate(mass_remaining_all):
-        # Interpolate BC03 masses to Tengri's age grid
-        # BC03 ages in log(Gyr)
-        bc03_lg_gyr = age_lg_yr - 9
-
-        # Handle -inf: set to 1.0 (youngest SSP)
-        if not np.isfinite(output_ages[0]):
-            mass_array[iz, 0] = 1.0
-            # Interpolate for finite ages
-            finite_gyr = bc03_lg_gyr
-            finite_masses = masses
-            output_finite = output_ages[1:]  # Skip the -inf point
-            interp_result = np.interp(output_finite, finite_gyr, finite_masses)
-            mass_array[iz, 1:] = interp_result
-        else:
-            # All finite
-            interp_result = np.interp(output_ages, bc03_lg_gyr, masses)
-            mass_array[iz, :] = interp_result
-
-    # Validate bounds
-    print(f"\nValidating bounds...")
-    assert np.all(mass_array > 0), f"Some masses <= 0: min = {mass_array.min()}"
-    assert np.all(mass_array <= 1.0001), f"Some masses > 1: max = {mass_array.max()}"
-    mass_array = np.clip(mass_array, 0, 1)
-
-    # Check monotonicity
-    mono_diff = np.diff(mass_array, axis=1)
-    non_mono = np.sum(mono_diff > 1e-5)
-    print(f"  All masses in [0, 1]")
-    print(f"  Non-monotonic points: {non_mono}")
-    print(f"  Max mass at youngest age: {mass_array[:, 0]}")
-
-    # Write HDF5
-    # Convert Tengri ages back to log(yr) for storage
-    output_age_yr_lg = output_ages + 9
-
-    print(f"\nWriting {output_file}...")
-    with h5py.File(output_file, 'w') as f:
-        f.create_dataset('log10_age_yr', data=output_age_yr_lg, dtype=np.float64)
-        f.create_dataset('log10_z_abs', data=z_lg_array, dtype=np.float64)
-        f.create_dataset('mass_remaining', data=mass_array, dtype=np.float64)
-
-        f.attrs['quantity'] = 'living stars + remnants per unit formed mass'
-        f.attrs['isochrones'] = 'Padova 1994'
-        f.attrs['imf'] = 'Chabrier'
-        f.attrs['source'] = 'BC03 Updated version (2016)'
-        f.attrs['remnant_prescription'] = 'BC03 internal (Bruzual & Charlot)'
-        f.attrs['citation'] = 'Bruzual, G., & Charlot, S. (2003). MNRAS, 344, 1000-1028.'
-        f.attrs['generator'] = 'scripts/build_mass_remaining_bc03.py'
-        f.attrs['generator_args'] = 'bc03_stelib_chabrier'
-        f.attrs['input_sha256'] = '44887abce0755c97d4273397b3e54606fbd7b28d931b61f8f148956bcd656b66'
-        f.attrs['input_url'] = 'http://www.bruzual.org/bc03/Updated_version_2016/BC03_stelib_chabrier.tgz'
-
-        print(f"  mass_remaining shape: {f['mass_remaining'].shape}")
-        print(f"  log10_age_yr shape: {f['log10_age_yr'].shape}")
-        print(f"  log10_z_abs shape: {f['log10_z_abs'].shape}")
-
-    print(f"\nDone! File: {output_file}")
+def sha256_of(path: Path) -> str:
+    """Return the sha256 hex digest of a file."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
-if __name__ == '__main__':
+def parse_4color(text: str) -> tuple[float, np.ndarray]:
+    """Return the header metal mass fraction Z and the numeric 4color table."""
+    z_abs = float(Z_PATTERN.search(text).group(3))
+    rows = [ln.split() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
+    return z_abs, np.array(rows, dtype=np.float64)
+
+
+def main() -> None:
+    """Rebuild the table and write it to the package-data directory."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--tarball", type=Path, required=True)
+    parser.add_argument(
+        "--grid", type=Path, default=GRID, help="tengri BC03 SSP grid (untracked data file)"
+    )
+    args = parser.parse_args()
+
+    with h5py.File(args.grid, "r") as grid:
+        grid_age_yr = 10.0 ** (grid["ssp_lg_age_gyr"][:] + 9.0)
+        grid_lgz = grid["ssp_lgmet"][:]
+
+    log_z, tables = [], []
+    with tarfile.open(args.tarball, "r:gz") as tar:
+        for key in KEYS:
+            text = tar.extractfile(TAR_MEMBER.format(key=key)).read().decode("ascii")
+            z_abs, tab = parse_4color(text)
+            assert np.abs(tab[:, COL_MGAL] - 1.0).max() == 0.0, "Mgalaxy != 1"
+            gap = np.abs(tab[:, COL_MSTAR] + tab[:, COL_MGAS] - tab[:, COL_MGAL]).max()
+            assert gap < 2e-5, f"M* + Mgas != Mgalaxy ({gap}): M* would not include remnants"
+            log_z.append(np.log10(z_abs))
+            tables.append(tab)
+
+    log_z = np.array(log_z)
+    assert np.allclose(log_z, grid_lgz, atol=1e-5), (log_z, grid_lgz)
+
+    ages = tables[0][:, COL_AGE]
+    for tab in tables:
+        assert np.array_equal(tab[:, COL_AGE], ages)
+    age_yr = 10.0**ages
+    node_gap = np.abs(age_yr / grid_age_yr[1:] - 1.0).max()
+    assert grid_age_yr[0] == 0.0 and grid_age_yr.shape[0] - 1 == ages.shape[0]
+    assert node_gap < 1e-5, f"BC03 4color ages are not the grid's ages ({node_gap})"
+
+    mass = np.array([t[:, COL_MSTAR] for t in tables], dtype=np.float64)
+    assert mass.min() > 0.0 and mass.max() <= 1.0
+    # BC03's own M* is not strictly monotonic: it rises by up to 2% at ages of a few
+    # Myr (m32/m62/m72) and by <= 7e-4 at ages above 1 Gyr. The values are the
+    # release's, so they are repackaged unsmoothed and the rises are bounded here.
+    rise = np.diff(mass, axis=1).max()
+    assert rise <= 0.02, f"M* rises by {rise}"
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(OUT, "w") as out:
+        out.create_dataset("log10_age_yr", data=ages.astype(np.float64))
+        out.create_dataset("log10_z_abs", data=grid_lgz.astype(np.float64))
+        out.create_dataset("mass_remaining", data=mass)
+        attrs = {
+            "quantity": "living stars + remnants per unit formed mass",
+            "isochrones": "Padova 1994 (Bertelli et al. 1994) + S. Charlot (1997), X=0.70 Y=0.28",
+            "imf": "Chabrier (lognormal below 1 Msun + x=1.3 power law, 0.1-100 Msun)",
+            "spectral_library": "STELIB (hr models)",
+            "source": "BC03 original release 2003, column (7) M* of bc2003_hr_m*_chab_ssp.4color",
+            "remnant_prescription": "BC03 internal (Bruzual & Charlot 2003, Sect. 2); "
+            "not Renzini & Ciotti",
+            "citation": "Bruzual, G. & Charlot, S. 2003, MNRAS, 344, 1000, "
+            "doi:10.1046/j.1365-8711.2003.06897.x, arXiv:astro-ph/0309134",
+            "terms_of_use": "BC03 files carry '(C) 1995-2003 G. Bruzual A. & S. Charlot - "
+            "All Rights Reserved'; repackaged as a numeric extract with attribution; cite BC03",
+            "monotonicity": "not strictly non-increasing: BC03's own M* rises by up to 0.0195 "
+            "between adjacent nodes at log10 age 6.0-6.5, and by <= 7e-4 above 1 Gyr; unsmoothed",
+            "generator": "scripts/build_mass_remaining_bc03.py",
+            "generator_args": "--tarball bc03.models.padova_1994_chabrier_imf.tar.gz",
+            "input_url": SOURCE_URL,
+            "input_sha256": sha256_of(args.tarball),
+        }
+        for name, value in attrs.items():
+            out.attrs[name] = value
+    print(f"wrote {OUT} shape {mass.shape}; age node gap {node_gap:.2e}")
+
+
+if __name__ == "__main__":
     main()
