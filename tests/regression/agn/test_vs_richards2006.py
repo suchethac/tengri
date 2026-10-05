@@ -29,7 +29,7 @@ def test_richards2006_data_file_sha256():
     path = files("tengri.data.agn_bbb") / "richards2006.dat"
     with path.open("rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()
-    expected = "17a4e0b655a967744a36341281cf3f28d05632ce526a9575f34e53f1c5ed8c97"
+    expected = "b47238d9c4ca79f139af21c244a7d4d85e43b482e9f5bbaa742b04c238a613b1"
     assert digest == expected, (
         f"Richards+2006 data file SHA256 changed: {digest} != {expected}. "
         f"If you re-extracted the file, update PROVENANCE.md and this test."

@@ -61,6 +61,7 @@ _TYPE2 = (70, 90)
 _COS = {i: float(np.cos(np.radians(i))) for i in _INCLINATIONS}
 _ETA = lambda i: np.cos(np.radians(i)) * (1 + 2 * np.cos(np.radians(i))) / 3  # noqa: E731
 _WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 3000))  # [A] covers the library axis
+_DENSE_WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 40000))  # [A] dense covering
 _RUNNER = dict(
     agn_disc_block="schartmann2005",
     agn_nlr_block="none",
@@ -448,11 +449,16 @@ def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
     normalization 1/int(dust + polar), so with polar dust on its disc is lower than tengri's
     by that factor; the difference is tracked in #2602 and is not pinned here.
     """
-    _, off = _run(i_deg)
-    _, on = _run(i_deg, **_POLAR, agn_polar_ebv=ebv)
-    budget = (_power(on["torus"]) + _power(on["polar"])) / _power(off["torus"])
+    # The budget closes exactly on the runner's fixed grids and is independent of the
+    # caller's; it is summed here on a dense covering grid, since the quadrature error
+    # of the 3000-node ``_WAVE`` alone is ~1e-6.
+    _, off = _run(i_deg, wave=_DENSE_WAVE)
+    _, on = _run(i_deg, wave=_DENSE_WAVE, **_POLAR, agn_polar_ebv=ebv)
+    budget = (_power(on["torus"], _DENSE_WAVE) + _power(on["polar"], _DENSE_WAVE)) / _power(
+        off["torus"], _DENSE_WAVE
+    )
     assert budget == pytest.approx(1.0, abs=1e-6)
-    ratio = _power(on["disc"]) / _power(off["disc"])
+    ratio = _power(on["disc"], _DENSE_WAVE) / _power(off["disc"], _DENSE_WAVE)
     if ebv == 0.0 or i_deg in _TYPE2:
         assert ratio == pytest.approx(1.0, abs=1e-3)
     else:
@@ -599,16 +605,12 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # ----------------------------------------------------------------------------------
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
-#: ``(sum, first bin, middle bin, last bin)``.
+#: ``(sum, first bin, middle bin, last bin)``, on the model's master grid (the disc's
+#: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, where the disc has no flux).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5215528515600546e32, 2.1618471431580417e23, 3.05875473371805e28, 8.775513568033312e21),
-    8.0: (1.558679481783208e32, 2.621597865262484e24, 3.1456552202309087e28, 8.823791474594601e21),
-    10.0: (
-        1.5745233941627343e32,
-        2.0084485779608986e24,
-        3.175461013264611e28,
-        9.02096624152618e21,
-    ),
+    6.0: (1.5586756183547371e32, 0.0, 2.890132589828082e28, 8.775294979760026e21),
+    8.0: (1.5945775424048933e32, 0.0, 2.9710185365363103e28, 8.79384299439796e21),
+    10.0: (1.6071818553047156e32, 0.0, 2.9914484674591455e28, 9.028630508794332e21),
 }
 
 

@@ -16,18 +16,28 @@ library, inlined, every time. A pytree passed as an argument becomes a
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_template
+from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
-__all__ = ["TorusTemplateGrid", "torus_lnu_from_grid"]
+__all__ = [
+    "TorusTemplateGrid",
+    "analytic_bolometric_nu",
+    "native_bolometric_nu",
+    "native_bolometric_nu_np",
+    "scale_to_lbol_native",
+    "torus_lnu_from_grid",
+]
 
 
 class TorusTemplateGrid(NamedTuple):
@@ -52,6 +62,199 @@ class TorusTemplateGrid(NamedTuple):
     template: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     wave_grid: jnp.ndarray
+
+
+def native_bolometric_nu(
+    lnu_native: jnp.ndarray, wave_native: jnp.ndarray, *, floor: float = 1e-100
+) -> jnp.ndarray:
+    r"""Frequency integral of a template on its OWN wavelength grid.
+
+    The normalization every tabulated component divides by. Taken on the
+    template's native grid, before resampling, it is a property of the template
+    and the model coordinates alone: the caller's wavelength sampling and range
+    never enter. (A trapezoid over the caller's grid would clip the template
+    wherever the grid stops short of its support and would shift with the node
+    density.)
+
+    The integral is that of the interpolant
+    :func:`~tengri.utils.grid_interp.resample_template` builds (a power law
+    between adjacent nodes in :math:`\lambda`), so the resampled template
+    integrates to the same value on any grid fine enough to resolve it. A
+    trapezoid in :math:`\nu` over the native nodes would instead lay a chord
+    across a convex segment and differ by up to ~1e-2 on the coarse (R ~ 7)
+    libraries.
+
+    Parameters
+    ----------
+    lnu_native : array_like, shape (n_native,)
+        Template :math:`L_\nu` on ``wave_native`` [arbitrary units per Hz;
+        shape only].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom], ascending.
+    floor : float, optional
+        Lower bound on the returned magnitude, so the division cannot hit zero.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\max(|\int L_\nu\,d\nu|, \text{floor})` in the template's units.
+
+    Notes
+    -----
+    .. math::
+
+        \int L_\nu\,\mathrm{d}\nu
+        = \int L_\nu(\lambda)\,\frac{c}{\lambda^2}\,\mathrm{d}\lambda,
+
+    where the integrand is a power law in :math:`\lambda` on every segment
+    (:math:`L_\nu\propto\lambda^{s}` gives :math:`\lambda^{s-2}`), integrated
+    in closed form by :func:`~tengri.utils.grid_interp.loglog_integral`.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The resampling kernels used
+    after this are homogeneous of degree one in the template values (log-flux
+    interpolation is not linear, but scaling the template scales the result by the
+    same factor), so dividing the resampled template by this integral equals
+    resampling the normalized template.
+    """
+    wave = jnp.asarray(wave_native)
+    integrand = jnp.asarray(lnu_native) * (_C_AA / wave**2)
+    return jnp.maximum(jnp.abs(loglog_integral(wave, integrand)), floor)
+
+
+def native_bolometric_nu_np(
+    lnu_native: np.ndarray, wave_native: np.ndarray, *, floor: float = 1e-100
+) -> float:
+    r"""NumPy twin of :func:`native_bolometric_nu`, for build-time precompute tables.
+
+    Same integral (a power law in wavelength between nodes, closed form), in
+    float64 whatever the JAX precision mode, so a precomputed table and the
+    runtime path normalize a template identically.
+
+    Parameters
+    ----------
+    lnu_native : array_like, shape (n_native,)
+        Template :math:`L_\nu` on ``wave_native`` [arbitrary units per Hz].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom], ascending.
+    floor : float, optional
+        Lower bound on the returned magnitude.
+
+    Returns
+    -------
+    float
+        :math:`\max(|\int L_\nu\,d\nu|, \text{floor})`.
+    """
+    x = np.asarray(wave_native, dtype=np.float64)
+    y = np.asarray(lnu_native, dtype=np.float64) * (_C_AA / x**2)
+    x0, x1, y0, y1 = x[:-1], x[1:], y[:-1], y[1:]
+    positive = (y0 > 0.0) & (y1 > 0.0)
+    y0_safe = np.where(positive, y0, 1.0)
+    y1_safe = np.where(positive, y1, 1.0)
+    a = np.log(x1 / x0)
+    u = a + np.log(y1_safe) - np.log(y0_safe)
+    small = np.abs(u) < 1e-7
+    ratio = np.where(small, 1.0 + 0.5 * u, np.expm1(u) / np.where(small, 1.0, u))
+    power_law = x0 * y0_safe * a * ratio
+    chord = 0.5 * (y0 + y1) * (x1 - x0)
+    return max(abs(float(np.sum(np.where(positive, power_law, chord)))), floor)
+
+
+def scale_to_lbol_native(
+    template_native: jnp.ndarray,
+    wave_native: jnp.ndarray,
+    sed: jnp.ndarray,
+    l_scale: float,
+) -> jnp.ndarray:
+    r"""Scale a resampled shape-only template to ``l_scale`` of bolometric power.
+
+    .. math::
+
+        L_\nu(\lambda) = L_{\rm scale}\,
+            \frac{T(\lambda)}{\int T(\nu)\,\mathrm{d}\nu},
+
+    with the integral taken over the template's NATIVE grid (``wave_native``),
+    never over the caller's wavelength array, so the result does not depend on
+    how the caller samples or truncates wavelength.
+
+    Parameters
+    ----------
+    template_native : array_like, shape (n_native,)
+        Interpolated template on ``wave_native`` [shape only; any scale].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom].
+    sed : array_like, shape (n_wave,)
+        The same template resampled onto the caller's grid [same units as
+        ``template_native``].
+    l_scale : float
+        Bolometric power the full template integrates to [erg/s].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+
+    Float32 (#1206): the template's bolometric integral can reach ~1e45 erg/s,
+    which overflows float32 and would flush the disc to zero, and the
+    ``1e-100`` floor is itself below the float32 minimum. In float32 the
+    integrand is therefore divided by its (stop-gradient) peak before it is
+    integrated and the factors regrouped as
+    ``(l_scale / hat_int) * (sed / peak)``, algebraically identical.
+    """
+    template_native = jnp.asarray(template_native)
+    if sed.dtype == jnp.float32:
+        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(template_native)))
+        peak = jnp.where(peak > 0.0, peak, 1.0)
+        hat_int = native_bolometric_nu(template_native / peak, wave_native, floor=1e-30)
+        return (l_scale / hat_int) * (sed / peak)
+    return l_scale * sed / native_bolometric_nu(template_native, wave_native)
+
+
+def analytic_bolometric_nu(
+    shape_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    wave_lo: float,
+    wave_hi: float,
+    n_nodes: int = 4097,
+    *,
+    floor: float | None = None,
+) -> jnp.ndarray:
+    r"""Frequency integral of an analytic shape on a FIXED internal grid.
+
+    For shapes with no tabulated native grid and no closed form (a Planck
+    function times an opacity, a blend of sigmoids). The integration grid is
+    ``n_nodes`` log-spaced wavelengths over ``[wave_lo, wave_hi]``, chosen by
+    the caller to span the shape's support; the caller's own wavelength
+    array never enters, so the normalization cannot depend on it.
+
+    Parameters
+    ----------
+    shape_fn : callable
+        Maps wavelength ``array_like, shape (n,)`` [Angstrom] to
+        :math:`L_\nu` ``ndarray, shape (n,)`` [arbitrary units per Hz].
+    wave_lo, wave_hi : float
+        Wavelength span of the internal grid [Angstrom]; the shape must be
+        negligible outside it.
+    n_nodes : int, optional
+        Grid nodes. The trapezoid error on a smooth shape is
+        :math:`O((\Delta\ln\lambda)^2)`, ~1e-6 at the default.
+    floor : float, optional
+        When given, return ``max(|integral|, floor)`` (safe denominator).
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int L_\nu\,d\nu` in the shape's units (floored magnitude if ``floor``).
+
+    Notes
+    -----
+    **JIT-compatible**: yes (the grid is a trace-time constant).
+    **Gradient-safe**: yes.
+    """
+    wave = jnp.asarray(np.geomspace(wave_lo, wave_hi, n_nodes))
+    return _bolometric_integral_nu(shape_fn(wave), _wavelength_to_nu(wave), floor=floor)
 
 
 def torus_lnu_from_grid(
@@ -93,8 +296,10 @@ def torus_lnu_from_grid(
 
     where :math:`T` is the interpolated template, :math:`\mathbf{c}` the
     coordinates, :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol} L_\odot`, and
-    the integral runs over the frequency grid matching ``wavelength``.
-    The template carries shape only; its absolute scale is divided out.
+    the integral runs over the template's own native frequency grid (before
+    resampling), so the result does not depend on how ``wavelength`` is
+    sampled or where it starts and stops. The template carries shape only; its
+    absolute scale is divided out.
 
     **JIT-compatible**: yes. **Gradient-safe**: yes, node-exact PCHIP is
     C¹-continuous across every axis.
@@ -104,8 +309,8 @@ def torus_lnu_from_grid(
         tuple(jnp.asarray(axis) for axis in grid.axes),
         coords,
     )
-    sed = resample_template(wavelength, jnp.asarray(grid.wave_grid), template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
+    wave_native = jnp.asarray(grid.wave_grid)
+    integral_safe = native_bolometric_nu(template, wave_native)
+    sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
     return l_scale * sed / integral_safe

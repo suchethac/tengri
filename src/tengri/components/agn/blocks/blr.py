@@ -17,8 +17,8 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.blr import compute_blr_sed
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
+from tengri.components.agn.blr import _blr_l_hbeta, _fe2_total_power, compute_blr_sed
 from tengri.components.agn.nlr_cloudy import (
     compute_blr_sed_synthesizer,
     compute_nlr_sed_synthesizer_spectra,
@@ -129,6 +129,50 @@ def blr_analytic_block(
         line_efficiency=agn_blr_line_efficiency,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_line_energy("blr", "analytic")
+def blr_analytic_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_blr_cf: float = 0.1,
+    agn_blr_fwhm_kms: float = 5000.0,
+    agn_fe2_strength: float = 0.0,
+    agn_blr_line_efficiency: float = 0.08,
+    agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
+    **_params,
+) -> Array:
+    r"""Bolometric line power of :func:`blr_analytic_block` [erg/s].
+
+    The broad lines are unit-integral Gaussians summing to ``efficiency x covering x
+    L_disc``, and the FeII pseudo-continuum carries ``R_Fe`` times the H-beta power
+    through its broadened template, so ``int L_lambda d lambda`` is
+    ``L_lines + L_Hbeta x P_FeII`` with no wavelength grid.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        Unused (the normalization is ``l5100_disc``).
+    l5100_disc : array_like
+        ``lambda L_lambda(5100 A)`` of the disc [erg/s].
+    agn_blr_cf, agn_blr_fwhm_kms, agn_fe2_strength, agn_blr_line_efficiency, agn_blr_f_bol
+        As for :func:`blr_analytic_block`.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del agn_log_lbol
+    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
+    l_lines = agn_blr_line_efficiency * agn_blr_cf * l_disc_bol_erg
+    l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
+    return l_lines + l_hbeta * _fe2_total_power(agn_blr_fwhm_kms, agn_fe2_strength)
 
 
 @register_agn_block(

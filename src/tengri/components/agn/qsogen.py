@@ -101,7 +101,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
-from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
+from tengri.components.agn._template_grid import analytic_bolometric_nu
 from tengri.components.dust.attenuation import smc as smc_curve
 from tengri.utils.host_array import device_table, host_array
 
@@ -127,6 +127,16 @@ _LAMBDA_BB_ANCHOR = 20000.0  # 2 um in Angstrom
 # owns lambda >= 124 A (optical/UV/EUV) and the corona owns lambda < 124 A
 # (0.1-10 keV) with no overlap. See issue #1113.
 _XRAY_FLOOR_LAMBDA_AA = 124.0
+
+# Fixed internal grid for the bolometric normalization of continuum + hot dust.
+# It starts exactly at the continuum's hard floor (a node there makes the
+# trapezoid exact across the cut: the first node carries half weight) and runs
+# to 1 cm, beyond which the red tail (f_nu ~ nu^0.593) and the hot-dust
+# Rayleigh-Jeans tail (~nu^2) hold < 1e-7 of the power. 8193 log nodes resolve
+# the 0.02 dex sigmoid break (d ln(lambda) = 1.7e-3, quadrature error ~1e-7).
+_NORM_WAVE_LO = _XRAY_FLOOR_LAMBDA_AA  # Angstrom
+_NORM_WAVE_HI = 1.0e8  # Angstrom
+_NORM_N_NODES = 8193
 
 # ── Default parameters (Temple+2021 Table 3) ──────────────────────
 
@@ -333,6 +343,7 @@ def _hot_dust_blackbody(
     continuum_flam: jnp.ndarray,
     tbb: float,
     bbnorm: float,
+    cont_at_anchor: float | None = None,
 ) -> jnp.ndarray:
     """Hot dust blackbody component.
 
@@ -349,6 +360,11 @@ def _hot_dust_blackbody(
         Hot dust temperature [K].
     bbnorm : float
         Normalization: ratio of blackbody to continuum at 2 um.
+    cont_at_anchor : float, optional
+        The continuum at the 2 um anchor, evaluated directly. When omitted it
+        is interpolated from ``continuum_flam`` on ``wavelength``, which makes
+        the anchor depend on the caller's sampling (and zero if the grid does
+        not reach 2 um).
 
     Returns
     -------
@@ -371,9 +387,10 @@ def _hot_dust_blackbody(
     bb_anchor = _LAMBDA_BB_ANCHOR ** (-3.0) / (
         jnp.exp(jnp.clip(x_anchor, 0.0, representable_exponent(500.0, base=math.e))) - 1.0
     )
-    cont_at_anchor = jnp.interp(
-        jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
-    )[0]
+    if cont_at_anchor is None:
+        cont_at_anchor = jnp.interp(
+            jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
+        )[0]
     cmult = (
         bbnorm
         * jnp.maximum(cont_at_anchor, 1e-60)
@@ -395,7 +412,7 @@ def _balmer_continuum(
 
     Adds hydrogen recombination continuum below the Balmer edge at 3646 A.
     Matches the original qsogen prescription: B_nu(T_BC) * (1 - exp(-tau))
-    where tau = tau_BE * (nu_BE / nu)^3.
+    where tau = tau_BE * (nu_BE / nu)^3 = tau_BE * (lambda / lambda_BE)^3.
 
     Parameters
     ----------
@@ -427,10 +444,13 @@ def _balmer_continuum(
     x_clip = jnp.clip(x, 0.0, representable_exponent(500.0, base=math.e))
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
-    # Optical depth: sigma_bf(nu) ~ nu^{-3} (Osterbrock & Ferland, AGN^2 Eq. 2.4), so
-    # tau(lambda) = tau_BE * (lambda_BE / lambda)^3: tau INCREASES at shorter wavelengths
-    # (higher frequencies), reaching tau_BE at the Balmer edge and falling beyond.
-    tau = taube * (wavbe / wavelength) ** 3
+    # Optical depth: sigma_bf(nu) ~ nu^{-3} (Grandi 1982; Osterbrock & Ferland, AGN^2
+    # Eq. 2.4), so tau(nu) = tau_BE * (nu_BE / nu)^3 = tau_BE * (lambda / lambda_BE)^3
+    # (nu ~ 1/lambda, so the ratio is INVERTED relative to the frequency form):
+    # tau is largest AT the Balmer edge and falls toward the blue, where the
+    # bound-free cross-section is smaller. This is the upstream QSOGen form
+    # (``taube * (nuzero / nu)**3``).
+    tau = taube * (wavelength / wavbe) ** 3
     tau_clip = jnp.clip(tau, 0.0, 50.0)
     absorption = 1.0 - jnp.exp(-tau_clip)
 
@@ -643,12 +663,25 @@ def _qsogen_components(
     adapters in :mod:`tengri.components.agn.blocks.qsogen_blocks` call this
     once per block invocation; JIT folds the redundant trace.
     """
-    continuum_unscaled = _broken_powerlaw_continuum(wavelength, agn_plslp1, agn_plslp2, agn_plbrk)
-    hot_dust_unscaled = _hot_dust_blackbody(wavelength, continuum_unscaled, agn_tbb, agn_bbnorm)
-    f_nu_cont = continuum_unscaled + hot_dust_unscaled
+    # The 2 um hot-dust anchor and the bolometric integral are properties of
+    # the recipe, not of the caller's wavelength array: the anchor is the
+    # continuum evaluated AT 2 um, and the integral runs on a fixed internal
+    # grid (below), so neither moves with the caller's sampling or range.
+    anchor = _broken_powerlaw_continuum(
+        jnp.asarray([_LAMBDA_BB_ANCHOR]), agn_plslp1, agn_plslp2, agn_plbrk
+    )[0]
 
-    nu = _wavelength_to_nu(wavelength)
-    integral_nu = _bolometric_integral_nu(f_nu_cont, nu, floor=1e-30)
+    def _cont_plus_dust(wave):
+        cont = _broken_powerlaw_continuum(wave, agn_plslp1, agn_plslp2, agn_plbrk)
+        return cont + _hot_dust_blackbody(wave, cont, agn_tbb, agn_bbnorm, cont_at_anchor=anchor)
+
+    continuum_unscaled = _broken_powerlaw_continuum(wavelength, agn_plslp1, agn_plslp2, agn_plbrk)
+    hot_dust_unscaled = _hot_dust_blackbody(
+        wavelength, continuum_unscaled, agn_tbb, agn_bbnorm, cont_at_anchor=anchor
+    )
+    integral_nu = analytic_bolometric_nu(
+        _cont_plus_dust, _NORM_WAVE_LO, _NORM_WAVE_HI, _NORM_N_NODES, floor=1e-30
+    )
 
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     norm_factor = l_bol_erg / integral_nu

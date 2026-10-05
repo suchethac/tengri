@@ -22,12 +22,19 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._phys import planck_lnu, wavelength_to_nu
 from tengri.components.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
 from tengri.utils.physics_constants import C_AA as _C_AA
+
+#: Wavelength grid [A] the graybody's normalization integral is taken on: 1000 A to
+#: 10 cm, 1000 points per decade, which holds the Planck function of any dust
+#: temperature the polar parameter allows (Wien side of a 2000 K body is below
+#: 1e-40 of its peak at 1000 A).
+_GRAYBODY_NORM_WAVE = np.geomspace(1.0e3, 1.0e9, 6001)
 
 # SMC R_V from Pei (1992)
 _RV_SMC = 2.93
@@ -537,15 +544,17 @@ def polar_dust_emission(
     b_nu = planck_lnu(wavelength_to_nu(wavelength), temperature)
     unnormalized = opacity_factor * b_nu
 
-    # Normalize so that integral(L_reemit * dnu) = l_absorbed_total
-    # dnu = -c / lambda^2 * dlambda, but we use |dnu|
-    # For a wavelength grid, dnu_i ~ c / lambda_i^2 * |dlambda_i|
-    nu = _C_AA / wavelength
-    # Use trapezoidal spacing; for boundary, replicate nearest interval
-    delta_nu = jnp.abs(jnp.diff(nu))
-    delta_nu = jnp.concatenate([delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]])
-
-    integral = jnp.sum(unnormalized * delta_nu)
+    # Normalize so that integral(L_reemit * dnu) = l_absorbed_total. The
+    # integral is taken over a FIXED frequency grid (``_GRAYBODY_NORM_WAVE``),
+    # never over the caller's wavelength array, so the normalization does not
+    # move with where that array starts or how it is sampled: the graybody's
+    # shape at any wavelength, and its total, are properties of (T, beta) alone.
+    wave_norm = jnp.asarray(_GRAYBODY_NORM_WAVE, dtype=unnormalized.dtype)
+    nu_norm = _C_AA / wave_norm
+    unnorm_norm = (1.0 - jnp.exp(-((lambda_0 / wave_norm) ** beta))) * planck_lnu(
+        wavelength_to_nu(wave_norm), temperature
+    )
+    integral = -jnp.trapezoid(unnorm_norm, nu_norm)
     # Avoid division by zero when integral is tiny (e.g., all wavelengths
     # far from the emission peak)
     safe_integral = jnp.where(integral > 0.0, integral, 1.0)

@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
+from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.silva04 import _load_silva04_arrays
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
@@ -94,10 +95,9 @@ def precompute_silva04_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / trapz(template, nu). This matches
+    integration constant equals L_sun / native_integral(template). This matches
     the runtime normalization in ``silva04.py``.
     """
-    from tengri.components.agn._phys import C_LIGHT as _C_CGS
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_silva04_arrays(grid_path)
@@ -107,19 +107,16 @@ def precompute_silva04_photometry(
 
     # Normalize each template by its frequency integral.
     # This matches silva04.py's normalization:
-    #   L_ν = L_bol * torus_frac * template / trapz(template, nu)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, nu)
+    #   L_ν = L_bol * torus_frac * template / native_integral(template)
+    # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
     # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
-    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
-    sort_idx = np.argsort(nu_grid)
-    nu_sorted = nu_grid[sort_idx]
 
     n_nh, _ = grid.shape
     lnu_grid = np.empty_like(grid)
 
     for i in range(n_nh):
         template = grid[i]
-        integral = np.trapezoid(template[sort_idx], nu_sorted)
+        integral = native_bolometric_nu_np(template, wave_grid)
         integral_safe = max(abs(integral), 1e-100)
         lnu_grid[i] = _LSUN_ERG * template / integral_safe
 

@@ -84,7 +84,10 @@ class TestAGNModelCombinations:
             raise AssertionError(
                 f"AGN model '{name}' came from the registry but does not resolve: {exc}"
             ) from exc
-        wl = jnp.logspace(np.log10(1e3), np.log10(1e4), 200)
+        # A grid that covers the models' support (disc through torus): on a UV-optical
+        # slice alone the disc peak moves with L_bol (kubota_done) and the max is not
+        # linear in L_bol, which a torus normalized on that slice used to mask.
+        wl = jnp.logspace(2.0, 8.0, 400)
         try:
             a = np.array(fn(wl, agn_log_lbol=10.0))
             b = np.array(fn(wl, agn_log_lbol=11.0))

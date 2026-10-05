@@ -128,8 +128,10 @@ def disk_axes(name: str) -> dict[str, np.ndarray]:
     Returns
     -------
     dict
-        ``{}`` for R06/THB21 (single template); for SN12/KD18 the
-        ``log_mbh`` and ``log_edd`` grid axes.
+        ``{}`` for R06/THB21 (single template); for SN12 the ``log_mbh``,
+        ``edd_index`` and ``log_edd`` (the upstream table's own
+        ``logEddra`` axis, indexed by ``edd_index``); for KD18 the ``log_mbh``
+        and ``log_edd`` grid axes.
     """
     name = name.upper()
     if name == "SN12":
@@ -137,6 +139,7 @@ def disk_axes(name: str) -> dict[str, np.ndarray]:
         return {
             "log_mbh": np.asarray(d["logBHmass"], dtype=np.float64).ravel(),
             "edd_index": np.arange(d["sed"].shape[1]),
+            "log_edd": np.asarray(d["logEddra"], dtype=np.float64).ravel(),
         }
     if name == "KD18":
         d = _ref(_DISK_H5, "kd18")
@@ -500,7 +503,8 @@ def agn_radio_spl(
 
     Computes the simple power-law radio spectrum used when insufficient radio
     data constrain the AGN. This reproduces the ``nRADdata==1`` path in
-    ``MODEL_AGNfitter.AGN_RAD`` (Martinez-Ramirez et al. 2024, Eqs. 9-10).
+    ``MODEL_AGNfitter.AGN_RAD`` (the simple power law described on p. 4 of
+    Martinez-Ramirez et al. 2024; the paper numbers only the double power law).
 
     Parameters
     ----------
@@ -552,7 +556,7 @@ def agn_radio_dpl(
     Computes a double power-law radio spectrum used when sufficient radio data
     constrain both the low- and high-frequency slopes. This reproduces the
     ``nRADdata > 3`` / ``DPL-4`` path in ``MODEL_AGNfitter.AGN_RAD``
-    (Martinez-Ramirez et al. 2024, Eqs. 9-10).
+    (Martinez-Ramirez et al. 2024, Eq. 2).
 
     Parameters
     ----------
@@ -946,6 +950,8 @@ def galaxy_template(
     tau: float,
     age: float,
     metal: float | None = None,
+    *,
+    subsample3: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load one GALAXY (BC03) stellar-population template (nearest grid node).
 
@@ -965,14 +971,23 @@ def galaxy_template(
         Metallicity [Z/Zsun] (nearest grid node). When given, reads the
         4-metallicity ``bc03_metal`` group instead of the single-metallicity
         ``bc03_840`` group.
+    subsample3 : bool, optional
+        If ``True``, keep every third wavelength point counted from the
+        long-wavelength end, which is the sampling the upstream model feeds
+        its fit (``[0:len(gal_nus):3]`` on the ascending-frequency arrays of
+        ``MODEL_AGNfitter.GALAXY``). Default ``False`` returns the full
+        1221-point grid.
 
     Returns
     -------
-    wave_aa : ndarray, shape (1221,)
-        Wavelength [Angstrom], ascending, AGNfitter-rX's native (unresampled)
-        BC03 grid.
-    L_nu : ndarray, shape (1221,)
-        Stellar luminosity density [erg/s/Hz].
+    wave_aa : ndarray, shape (1221,) or (407,)
+        Wavelength [Angstrom], ascending, AGNfitter-rX's native BC03 grid
+        (or its every-third subsample, see ``subsample3``).
+    L_nu : ndarray, shape (1221,) or (407,)
+        Stellar luminosity density of a template normalized to 1 M_sun of
+        PRESENT stellar mass (stars plus remnants alive at ``age``)
+        [erg/s/Hz per M_sun]. Multiply by the present stellar mass to get the
+        physical luminosity density.
 
     Notes
     -----
@@ -992,7 +1007,11 @@ def galaxy_template(
         L_nu = d["sed"][m, t, a, :]
     else:
         L_nu = d["sed"][t, a, :]
-    return d["wavelength_aa"], L_nu
+    wave = d["wavelength_aa"]
+    if subsample3:
+        keep = np.arange(wave.size - 1, -1, -3)[::-1]
+        return wave[keep], L_nu[keep]
+    return wave, L_nu
 
 
 def galaxy_sfr(tau: float, metal: float | None = None) -> tuple[np.ndarray, np.ndarray]:
@@ -1029,3 +1048,325 @@ def galaxy_sfr(tau: float, metal: float | None = None) -> tuple[np.ndarray, np.n
     else:
         sfr = d["sfr"][t, :]
     return d["age_axis"], sfr
+
+
+def galaxy_redden_calzetti(
+    wave_aa: np.ndarray, L_nu: np.ndarray, ebv: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Redden a GALAXY template exactly as ``MODEL_AGNfitter.GALAXYred_Calzetti`` does.
+
+    This is the reference code's own evaluation, reproduced so the notebook
+    can show where it departs from the Calzetti et al. (2000) curve; it is not
+    a recommendation. On the wavelength grid passed in (um = wavelength / 1e4):
+
+    * ``lambda >= 0.63 um``: ``k = 2.659 (-1.857 + 1.040 / lambda) + R_V``;
+      ``k`` changes sign where ``1.040 / lambda = 1.857 - R_V / 2.659``
+      (about 3.1 um), beyond which the template is amplified.
+    * ``0.12 < lambda < 0.63 um``: the usual ``2.659 (-2.156 + 1.509 / lambda -
+      0.198 / lambda^2 + 0.011 / lambda^3) + R_V``.
+    * ``lambda <= 0.12 um``: a linear extrapolation built from the grid points
+      nearest 0.12 and 0.125 um, **plus a second R_V** (``k[x1]`` already
+      contains one); the result depends on the grid spacing.
+
+    with ``R_V = 4.05`` and ``F -> F 10^(-0.4 k E(B-V))``.
+
+    Parameters
+    ----------
+    wave_aa : ndarray, shape (n,)
+        Wavelength [Angstrom], ascending.
+    L_nu : ndarray, shape (n,)
+        Unreddened luminosity density, any units.
+    ebv : float
+        Galaxy color excess E(B-V)_gal [mag].
+
+    Returns
+    -------
+    wave_aa, L_nu_red : ndarray
+        The input wavelength and the reddened luminosity density.
+    """
+    rv = 4.05
+    wl = np.asarray(wave_aa, dtype=np.float64) * 1e-4  # um, ascending
+    k = np.zeros(wl.size)
+    w_ir = wl >= 0.63
+    w_uv = wl < 0.63
+    k[w_ir] = 2.659 * (-1.857 + 1.040 / wl[w_ir]) + rv
+    k[w_uv] = 2.659 * (-2.156 + 1.509 / wl[w_uv] - 0.198 / wl[w_uv] ** 2 + 0.011 / wl[w_uv] ** 3) + rv
+    w_fuv = wl <= 0.12
+    x1 = int(np.argmin(np.abs(wl - 0.12)))
+    x2 = int(np.argmin(np.abs(wl - 0.125)))
+    if wl[x1] != wl[x2]:
+        k[w_fuv] = k[x1] + (wl[w_fuv] - 0.12) * (k[x1] - k[x2]) / (wl[x1] - wl[x2]) + rv
+    else:
+        k[w_fuv] = 0.0
+    return np.asarray(wave_aa, dtype=np.float64), np.asarray(L_nu, dtype=np.float64) * 10.0 ** (
+        -0.4 * k * ebv
+    )
+
+
+def galaxy_lnu(
+    tau: float,
+    age: float,
+    log_mstar_present: float,
+    *,
+    ebv: float = 0.0,
+    subsample3: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Physical GALAXY (BC03) luminosity density for a given present stellar mass.
+
+    ``10**GA`` times the stored unit template is the fitted galaxy term in
+    ``ymodel``; the stored template is 1 M_sun of present stellar mass
+    (:func:`galaxy_template`), so ``10**GA`` is the present stellar mass in
+    M_sun up to the luminosity-distance factor of ``stellar_info``.
+
+    Parameters
+    ----------
+    tau, age : float
+        Node of the (tau [Gyr], age [yr]) grid (nearest node).
+    log_mstar_present : float
+        ``log10`` of the present stellar mass [M_sun].
+    ebv : float, optional
+        Galaxy E(B-V) for :func:`galaxy_redden_calzetti` (0 = unreddened).
+    subsample3 : bool, optional
+        Use upstream's every-third-wavelength sampling (default).
+
+    Returns
+    -------
+    wave_aa, L_nu : ndarray
+        Ascending wavelength [Angstrom] and L_nu [erg/s/Hz].
+    """
+    w, unit = galaxy_template(tau, age, subsample3=subsample3)
+    lnu = unit * 10.0**log_mstar_present
+    if ebv != 0.0:
+        w, lnu = galaxy_redden_calzetti(w, lnu, ebv)
+    return w, lnu
+
+
+_LOG_NU_XRAY_JOIN = 16.685  # 200 eV: upstream cuts the disc here and appends the X-ray power law
+
+
+def bbb_with_xrays(
+    wave_aa: np.ndarray,
+    L_nu: np.ndarray,
+    *,
+    ebv: float = 0.0,
+    scatter: float = 0.0,
+    gamma: float = 1.8,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The BBB term of ``ymodel``: reddened disc truncated at 200 eV plus X-ray power law.
+
+    ``MODEL_AGNfitter.BBBfunctions.add_xrays`` keeps the reddened disc template
+    only where ``log10(nu) < 16.685`` and appends the alpha_ox-tied power law
+    (:func:`disk_xray_extension`, evaluated on the *unreddened* disc) from
+    ``log10(nu) = 16.685`` upward. The EUV/soft-X-ray gap and the step at the
+    join are upstream's construction, reproduced here unchanged.
+
+    Parameters
+    ----------
+    wave_aa, L_nu : ndarray
+        Unreddened disc template, ascending wavelength [Angstrom], [erg/s/Hz].
+    ebv : float
+        Disc E(B-V)_BBB [mag].
+    scatter : float
+        Delta alpha_ox [-0.4, 0.4].
+    gamma : float
+        Photon index.
+
+    Returns
+    -------
+    wave_aa, L_nu : ndarray
+        Ascending wavelength [Angstrom] and L_nu [erg/s/Hz] of disc + X-ray.
+    """
+    wave_aa = np.asarray(wave_aa, dtype=np.float64)
+    red = apply_bbb_reddening(wave_aa, L_nu, ebv)
+    lam_join = units.C_ANGSTROM_PER_S / 10.0**_LOG_NU_XRAY_JOIN
+    keep = wave_aa > lam_join
+    xw, xl = disk_xray_extension(wave_aa, L_nu, scatter=scatter, gamma=gamma)
+    return np.concatenate((xw, wave_aa[keep])), np.concatenate((xl, np.asarray(red)[keep]))
+
+
+def ymodel_sum(
+    components: dict[str, tuple[np.ndarray, np.ndarray]], wave_grid_aa: np.ndarray
+) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    """Sum AGNfitter-rX component curves as ``ymodel`` does.
+
+    ``lum = 10**SB sb + 10**BB bbb + 10**GA gal + 10**TO tor (+ 10**RAD rad)``:
+    every component is a template already multiplied by its amplitude; the
+    total is their plain sum. Each curve is interpolated log-log onto
+    ``wave_grid_aa`` and is zero outside its own coverage.
+
+    Parameters
+    ----------
+    components : dict
+        ``name -> (wave_aa, L_nu)`` for the components to sum.
+    wave_grid_aa : ndarray
+        Common ascending wavelength grid [Angstrom].
+
+    Returns
+    -------
+    per_component : dict
+        ``name -> L_nu`` on ``wave_grid_aa``.
+    total : ndarray
+        Their sum, [erg/s/Hz].
+    """
+    per = {
+        name: units.regrid(w, np.clip(np.asarray(L, dtype=np.float64), 0.0, None), wave_grid_aa)
+        for name, (w, L) in components.items()
+    }
+    total = np.zeros_like(np.asarray(wave_grid_aa, dtype=np.float64))
+    for arr in per.values():
+        total = total + arr
+    return per, total
+
+
+def torus_bolometric(name: str, **node) -> float:
+    """Integral of one upstream torus template, ``int L_nu d(nu)``, in driver units.
+
+    Upstream stores its torus templates with an inclination-dependent
+    bolometric (only the shape is normalized per template library); the
+    number returned is in the driver's ``1e40``-rescaled units and is only
+    meaningful as a ratio between nodes of the same library.
+
+    Parameters
+    ----------
+    name : str
+        Library name as in :func:`torus_template`.
+    **node
+        Node coordinates forwarded to :func:`torus_template`.
+
+    Returns
+    -------
+    float
+        ``int L_nu d(nu)`` over the template's own wavelength range.
+    """
+    w, L = torus_template(name, **node)
+    nu = units.C_ANGSTROM_PER_S / w
+    order = np.argsort(nu)
+    return float(np.trapezoid(L[order], nu[order]))
+
+
+def cat3d_union_axes() -> dict[str, np.ndarray]:
+    """Axes of upstream's single CAT3D library: the union of both tengri blocks' coverage.
+
+    ``MODEL_AGNfitter.TORUS`` takes every inclination and every wind fraction
+    of the CAT3D table but only four ``a`` values, so the library is the
+    ``fwd`` axis of the low-wind sub-library (``CAT3D_LOWFWD``) joined to that
+    of the high-wind one (``CAT3D``), at the ``a`` values the two share.
+
+    Returns
+    -------
+    dict
+        ``incl`` [deg], ``a`` and the union ``fwd`` axis.
+    """
+    hi = torus_axes("CAT3D")
+    lo = torus_axes("CAT3D_LOWFWD")
+    lo_a = {float(x) for x in lo["a"]}
+    a_ax = np.asarray([a for a in hi["a"] if float(a) in lo_a])
+    fwd = np.sort(np.concatenate((lo["fwd"], hi["fwd"])))
+    return {"incl": hi["incl"], "a": a_ax, "fwd": fwd}
+
+
+def cat3d_union_template(
+    incl: float, a: float, fwd: float
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """One node of the CAT3D union library, plus the sub-library it lives in.
+
+    Parameters
+    ----------
+    incl, a, fwd : float
+        Inclination [deg], radial cloud index and wind fraction (nearest node
+        of :func:`cat3d_union_axes`).
+
+    Returns
+    -------
+    wave_aa, L_nu : ndarray
+        Template, ascending wavelength [Angstrom], [erg/s/Hz].
+    name : str
+        ``"CAT3D_LOWFWD"`` or ``"CAT3D"``, the reference sub-library read.
+    """
+    axes = cat3d_union_axes()
+    f_sel = float(axes["fwd"][_nearest(axes["fwd"], fwd)])
+    lo_f = {float(x) for x in torus_axes("CAT3D_LOWFWD")["fwd"]}
+    name = "CAT3D_LOWFWD" if f_sel in lo_f else "CAT3D"
+    w, L = torus_template(name, incl=incl, a=a, fwd=f_sel)
+    return w, L, name
+
+
+def log_mstar_present_from_ga(ga: float, dlum_cm: float, z: float) -> float:
+    """Present stellar mass implied by an upstream galaxy amplitude ``GA``.
+
+    ``MODEL_AGNfitter.stellar_info``: ``M* = 10**GA * 4 pi d_L^2 / (L_sun (1+z)) / 1e18``.
+    The stored BC03 templates are normalized to 1 M_sun of PRESENT stellar
+    mass (stars plus remnants alive at the template age), so ``M*`` is a
+    present mass, not the mass formed.
+
+    Parameters
+    ----------
+    ga : float
+        ``log10`` galaxy amplitude (upstream's ``GA``).
+    dlum_cm : float
+        Luminosity distance [cm].
+    z : float
+        Redshift.
+
+    Returns
+    -------
+    float
+        ``log10(M*_present / M_sun)``.
+    """
+    return float(ga + np.log10(4.0 * np.pi * dlum_cm**2 / (units.L_SUN_ERG_PER_S * (1.0 + z))) - 18.0)
+
+
+def ga_from_log_mstar_present(log_mstar_present: float, dlum_cm: float, z: float) -> float:
+    """Inverse of :func:`log_mstar_present_from_ga`.
+
+    Parameters
+    ----------
+    log_mstar_present : float
+        ``log10(M*_present / M_sun)``.
+    dlum_cm : float
+        Luminosity distance [cm].
+    z : float
+        Redshift.
+
+    Returns
+    -------
+    float
+        Upstream's ``GA``.
+    """
+    return float(
+        log_mstar_present
+        - np.log10(4.0 * np.pi * dlum_cm**2 / (units.L_SUN_ERG_PER_S * (1.0 + z)))
+        + 18.0
+    )
+
+
+def galaxy_formed_per_present(tau: float, age: float, metal: float | None = None) -> float:
+    """Mass formed per unit PRESENT stellar mass of the stored unit template.
+
+    The pickle tabulates the instantaneous SFR at ``age`` for a template that
+    holds 1 M_sun of present stellar mass. For ``SFR(t) ~ exp(-t / tau)`` the
+    SFR at earlier times is ``SFR(age) exp((age - t) / tau)``, so the mass
+    formed is ``SFR(age) tau (exp(age / tau) - 1)``.
+
+    Parameters
+    ----------
+    tau : float
+        e-folding time [Gyr] (nearest grid node).
+    age : float
+        Template age [yr] (nearest grid node).
+    metal : float, optional
+        Metallicity [Z/Zsun] (nearest grid node); reads ``bc03_metal`` when
+        given, else the single-metallicity ``bc03_840`` group.
+
+    Returns
+    -------
+    float
+        ``M_formed / M_present`` of the unit template [dimensionless].
+    """
+    axes = galaxy_axes(metal=metal is not None)
+    t = _nearest(axes["tau"], tau)
+    a = _nearest(axes["age"], age)
+    tau_yr = float(axes["tau"][t]) * 1e9
+    age_yr = float(axes["age"][a])
+    _, sfr = galaxy_sfr(tau, metal)
+    return float(sfr[a] * tau_yr * np.expm1(age_yr / tau_yr))
