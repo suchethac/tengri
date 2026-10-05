@@ -42,6 +42,7 @@ __all__ = [
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
+    "ztable_pchip_interp_axis0",
 ]
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
@@ -1326,6 +1327,44 @@ def interp_nd_pchip(
     for ax, p, kind in zip(axes, point, kinds, strict=True):
         reduced = _EVAL_AXIS0[kind](ax, reduced, p)
     return reduced
+
+
+def ztable_pchip_interp_axis0(
+    z_grid: jnp.ndarray,
+    table: jnp.ndarray,
+    z: float,
+) -> jnp.ndarray:
+    """Interpolate a z-table using PCHIP on the z axis.
+
+    Monotone piecewise-cubic (PCHIP) interpolation of a ztable along axis 0
+    (the redshift axis). Works on both uniform and non-uniform grids, unlike
+    the triweight kernel which silently gives garbage on non-uniform grids.
+
+    Parameters
+    ----------
+    z_grid : jnp.ndarray, shape (n_z,)
+        Redshift grid, strictly ascending. May be uniform or include edge-aware
+        nodes where the Lyman limit crosses steep filter transmission.
+    table : jnp.ndarray, shape (n_z, ...)
+        Tabulated values at each redshift. All trailing dimensions are preserved.
+    z : float
+        Query redshift [dimensionless].
+
+    Returns
+    -------
+    jnp.ndarray, shape (...)
+        Interpolated table values at redshift ``z``, clamped to the grid bounds.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    **Gradient-safe**: yes, C¹ in ``z``.
+
+    This replaces the triweight-kernel approach which was documented uniform-grid-only
+    but silent on non-uniform grids (#2749). PCHIP is exact at the nodes, C¹-continuous,
+    monotone-preserving, and equally fast.
+    """
+    return _pchip_eval_axis0(z_grid, table, z, extrapolate=False)
 
 
 def resample_template(
