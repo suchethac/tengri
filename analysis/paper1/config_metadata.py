@@ -345,11 +345,11 @@ XLIKE_CONFIGS = {
             "Pacifici et al. (2023) Table 1 (C); Li et al. 2025, ApJ 986, 9 (arXiv:2405.04598), Section 2",
         ],
         "notes": [
-            "Age of universe set to cosmic age at redshift z (tengri's registry default is 13.47 Gyr at z=0)",
+            "The reference age for the time quantiles is the age of the universe at the galaxy's redshift",
             "The workshop catalog does not record the FSPS isochrone and spectral library versions used by Dense Basis",
         ],
         "notes_sources": [
-            "src/tengri/components/stellar/sfh/registry.py:2007",
+            "src/tengri/components/stellar/sfh/dense_basis.py:457; Iyer et al. (2019)",
             "art_sedfitting/code_outputs/header (absence of the setting)",
         ],
     },

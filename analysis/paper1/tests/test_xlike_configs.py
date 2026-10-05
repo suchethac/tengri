@@ -229,27 +229,13 @@ class TestXlikeBuildKwargs:
         # no fixed IR parameters -- since a dust-IR-free model has none to govern.
         assert dust_em == {"type": "none"}
 
-    def test_dense_basis_like_age_universe_setting(self, monkeypatch):
-        """dense_basis_like sets the dense_basis registry's cosmic-age cutoff.
+    def test_dense_basis_like_leaves_the_registry_untouched(self, monkeypatch):
+        """dense_basis_like passes the redshift and mutates no registry setting.
 
-        There is no key in the "sfh" build grammar for a model's registry
-        SETTINGS (as opposed to its fittable parameters) -- only 'type',
-        'all_params', 'bin_edges_gyr', 'age_kernel', 'field_centering', and
-        per-parameter names are recognized for the "sfh" group. The age
-        override therefore cannot travel through ``captured_kwargs["sfh"]``;
-        it goes through ``tengri.SFH_REGISTRY["dense_basis"].settings``.
-
-        dense_basis_like sets that entry and deliberately leaves it set
-        (see the docstring there): the component that reads it
-        (``StellarSEDComponent.apply``, reached from
-        ``predict_photometry``) does so lazily, at the first prediction
-        JAX traces, strictly after this function returns -- so restoring
-        the registry before returning would make the override inert for
-        every real fit. This test therefore checks the registry is left
-        holding ``age_at_z(1.0)`` exactly (not merely "less than 13.47")
-        rather than expecting it back at the default, and restores the
-        default itself afterward (``finally``) so this test cannot leak
-        into a sibling test in the same pytest session that assumes it.
+        The reference age for the dense_basis time quantiles is derived from the
+        model's redshift by tengri, so the builder must hand over ``redshift``
+        and must not write the dense_basis registry entry (global state shared
+        by every model in the process).
         """
         from unittest.mock import MagicMock
 
@@ -257,7 +243,6 @@ class TestXlikeBuildKwargs:
         from paper1.xlike_configs import dense_basis_like
 
         from tengri import SFH_REGISTRY
-        from tengri.cosmology import age_at_z
 
         captured_kwargs = {}
 
@@ -269,37 +254,14 @@ class TestXlikeBuildKwargs:
 
         ssp_data = MagicMock()
         ssp_data.ssp_lgmet = np.array([-2.0, -1.0, 0.0])
-        observation = MagicMock()
+        settings_before = dict(SFH_REGISTRY["dense_basis"].settings)
 
-        original_age_gyr = SFH_REGISTRY["dense_basis"].settings.get("sfh_db_age_universe_gyr")
+        dense_basis_like(ssp_data, MagicMock(), z=1.0)
 
-        z = 1.0
-        try:
-            dense_basis_like(ssp_data, observation, z=z)
-
-            expected_age_gyr = float(age_at_z(z))
-            assert expected_age_gyr != pytest.approx(13.47), (
-                "age_at_z(1.0) must not coincide with the z=0 registry default -- "
-                "otherwise this test cannot tell the override from a no-op"
-            )
-
-            # Left set (not restored) -- see the docstring above.
-            resolved_age_gyr = SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"]
-            assert resolved_age_gyr == pytest.approx(expected_age_gyr)
-
-            sfh = captured_kwargs["sfh"]
-            assert sfh["type"] == "dense_basis"
-            assert "settings" not in sfh, (
-                "'settings' is not a recognized key in the sfh build grammar and "
-                "raises ValueError on a real (non-mocked) build; the age override "
-                "must go through SFH_REGISTRY, not a build kwarg"
-            )
-        finally:
-            # Test hygiene only -- production leaves this mutated (see above).
-            if original_age_gyr is None:
-                SFH_REGISTRY["dense_basis"].settings.pop("sfh_db_age_universe_gyr", None)
-            else:
-                SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] = original_age_gyr
+        assert dict(SFH_REGISTRY["dense_basis"].settings) == settings_before
+        assert captured_kwargs["sfh"]["type"] == "dense_basis"
+        assert "settings" not in captured_kwargs["sfh"]
+        assert captured_kwargs["redshift"].value == pytest.approx(1.0)
 
 
 class TestFitOneArgparse:

@@ -15,15 +15,13 @@ Also pins three code-parity invariants on the built model's resolved spec:
 - beagle_like has no dust-emission (IR re-emission) component.
 - cigale_like's two-component attenuation resolves to leitherer02 on both
   the birth-cloud and diffuse screens.
-- dense_basis_like's cosmic-age cutoff resolves to ``age_at_z(z)``, not the
-  registry's z=0 default of 13.47 Gyr (see xlike_configs.dense_basis_like
-  for why this is read off ``tengri.SFH_REGISTRY`` rather than off the
-  model itself).
+- dense_basis_like's reference age for the time quantiles is ``age_at_z(z)``,
+  derived by tengri from the model's redshift, and the build leaves the
+  dense_basis registry entry untouched.
 """
 
 from __future__ import annotations
 
-import contextlib
 import sys
 from pathlib import Path
 
@@ -41,6 +39,7 @@ from paper1 import xlike_configs
 from paper1.config_metadata import XLIKE_KEYS
 
 from tengri import SFH_REGISTRY, Observation, Photometry
+from tengri.components.stellar.component import age_universe_kwargs
 from tengri.cosmology import age_at_z
 
 pytestmark = pytest.mark.contract
@@ -81,27 +80,6 @@ def _load_ssp_or_fail(key: str):
         pytest.fail(f"{key}: SSP grid not on disk, cannot smoke-test a real build.\n{exc}")
 
 
-@contextlib.contextmanager
-def _dense_basis_registry_restored():
-    """Restore SFH_REGISTRY['dense_basis']'s age-of-universe setting on exit.
-
-    ``dense_basis_like`` deliberately leaves this registry entry mutated
-    (see its docstring): the component that reads it does so lazily, at the
-    first prediction after build, so restoring inside the builder itself
-    would make the override inert. A test that builds it for real must
-    restore the setting itself so it does not leak into whatever else runs
-    in this pytest session.
-    """
-    original = SFH_REGISTRY["dense_basis"].settings.get("sfh_db_age_universe_gyr")
-    try:
-        yield
-    finally:
-        if original is None:
-            SFH_REGISTRY["dense_basis"].settings.pop("sfh_db_age_universe_gyr", None)
-        else:
-            SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] = original
-
-
 @pytest.mark.parametrize("key", XLIKE_KEYS)
 def test_xlike_config_builds_and_predicts(key):
     """Every X-like key builds against its real SSP grid and predicts a
@@ -109,22 +87,18 @@ def test_xlike_config_builds_and_predicts(key):
     ssp_data = _load_ssp_or_fail(key)
     observation = _observation()
 
-    with contextlib.ExitStack() as stack:
-        if key == "dense_basis_like":
-            stack.enter_context(_dense_basis_registry_restored())
+    model = xlike_configs.XLIKE_BUILDERS[key](ssp_data, observation, z=Z)
 
-        model = xlike_configs.XLIKE_BUILDERS[key](ssp_data, observation, z=Z)
+    free_params = model.spec.free_params
+    print(f"\n{key}: {len(free_params)} free parameters: {free_params}")
+    assert len(free_params) > 0, f"{key} built with no free parameters"
 
-        free_params = model.spec.free_params
-        print(f"\n{key}: {len(free_params)} free parameters: {free_params}")
-        assert len(free_params) > 0, f"{key} built with no free parameters"
+    sample = model.spec.sample(key=jax.random.PRNGKey(SEED))
+    pred = model.predict_photometry(sample)
 
-        sample = model.spec.sample(key=jax.random.PRNGKey(SEED))
-        pred = model.predict_photometry(sample)
-
-        assert pred.shape == (len(TEST_FILTERS),), f"{key}: wrong photometry shape {pred.shape}"
-        assert jnp.all(jnp.isfinite(pred)), f"{key}: non-finite photometry {pred}"
-        assert jnp.all(pred > 0), f"{key}: non-positive photometry {pred}"
+    assert pred.shape == (len(TEST_FILTERS),), f"{key}: wrong photometry shape {pred.shape}"
+    assert jnp.all(jnp.isfinite(pred)), f"{key}: non-finite photometry {pred}"
+    assert jnp.all(pred > 0), f"{key}: non-positive photometry {pred}"
 
 
 def test_beagle_like_has_no_dust_emission_component():
@@ -148,21 +122,26 @@ def test_cigale_like_attenuation_resolves_to_leitherer02_both_screens():
 
 
 def test_dense_basis_like_age_universe_resolves_to_age_at_z():
-    """dense_basis_like's cosmic-age cutoff resolves to age_at_z(z) -- the
-    unit the component reads (Gyr), via
-    SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] (see
-    src/tengri/components/stellar/component.py:2360 and
-    src/tengri/components/stellar/sfh/registry.py:1977-2010) -- not the
-    registry's z=0 default of 13.47 Gyr."""
+    """dense_basis_like's time-quantile reference age is age_at_z(z).
+
+    tengri derives it from the model's redshift
+    (``tengri.components.stellar.component.age_universe_kwargs``), so the
+    build must leave the dense_basis registry settings untouched and the
+    derived reference age must equal the age of the universe at ``Z`` [yr],
+    not the z=0 value.
+    """
     ssp_data = _load_ssp_or_fail("dense_basis_like")
+    settings_before = dict(SFH_REGISTRY["dense_basis"].settings)
 
-    with _dense_basis_registry_restored():
-        xlike_configs.XLIKE_BUILDERS["dense_basis_like"](ssp_data, _observation(), z=Z)
+    model = xlike_configs.XLIKE_BUILDERS["dense_basis_like"](ssp_data, _observation(), z=Z)
 
-        expected_age_gyr = float(age_at_z(Z))
-        resolved_age_gyr = SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"]
-        assert resolved_age_gyr == pytest.approx(expected_age_gyr)
-        assert resolved_age_gyr != pytest.approx(13.47), (
-            "age_at_z(1.0) must not coincide with the z=0 registry default -- "
-            "otherwise this test cannot tell the override from a no-op"
-        )
+    assert dict(SFH_REGISTRY["dense_basis"].settings) == settings_before
+    assert model._get_redshift({}) == pytest.approx(Z)
+
+    derived = age_universe_kwargs("dense_basis", model._get_redshift({}))
+    expected_yr = float(age_at_z(Z)) * 1e9
+    assert float(derived["age_universe_yr"]) == pytest.approx(expected_yr)
+    assert expected_yr != pytest.approx(13.47e9), (
+        "age_at_z(Z) must differ from the z=0 age, otherwise this cannot tell the "
+        "redshift-derived age from a constant"
+    )

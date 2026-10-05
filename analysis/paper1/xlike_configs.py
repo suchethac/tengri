@@ -9,7 +9,7 @@ component libraries. Built as free-parameter models for fitting.
 
 from __future__ import annotations
 
-from tengri import DEFAULT, SFH_REGISTRY, Fixed, SEDModel, Uniform, WavePrecomp, load_ssp
+from tengri import DEFAULT, Fixed, SEDModel, Uniform, WavePrecomp, load_ssp
 from tengri.cosmology import age_at_z
 
 from .config_metadata import XLIKE_SSP
@@ -248,51 +248,10 @@ def dense_basis_like(ssp_data, observation, z: float) -> SEDModel:
     - FSPS library version (isochrone/spectral library) not recorded in external
       run metadata
     - Cue vs FSPS default Cloudy (Byler+2017)
-    - Age of universe fixed to cosmic age at z (not the registry default 13.47 Gyr
-      at z=0), which is a necessary setting to avoid prior support outside the
-      galaxy's age at the source redshift
+    - The reference age for the time quantiles is the age of the universe at the
+      galaxy's redshift (Iyer et al. 2019), derived from ``redshift`` and the
+      cosmology; there is no separate setting for it
     """
-    age_universe_gyr = age_at_z(z)
-
-    # The "sfh" build grammar has no key for a model's registry SETTINGS (as
-    # opposed to its fittable parameters): parse_groups only recognizes
-    # 'type', 'all_params', 'bin_edges_gyr', 'age_kernel', 'field_centering',
-    # and per-parameter names for the "sfh" group (see
-    # tengri.parameters.groups._GROUP_STRUCTURAL_KEYS["sfh"]). Passing
-    # sfh={"settings": {...}} -- what an earlier revision of this function did
-    # -- raises "Unknown key 'settings' in group 'sfh'" the moment this
-    # actually builds, so the cosmic-age override never reached the
-    # component and every fit ran at the registry default of 13.47 Gyr
-    # (z=0), silently outside the galaxy's age at z>0.
-    #
-    # dense_basis reads its cutoff from
-    # SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"]
-    # (src/tengri/components/stellar/component.py:2360), a plain dict on the
-    # shared registry entry with no per-build override path, and it is read
-    # by StellarSEDComponent.apply() -- which SEDModel.predict_photometry
-    # routes through (predict_state -> run_components) -- not by anything
-    # SEDModel.build() constructs eagerly. That read happens lazily, at the
-    # first prediction JAX traces after this function returns, so mutating
-    # the registry and restoring it before returning (an earlier revision
-    # of this fix did exactly that) would make the override inert again:
-    # by the time the trace runs, the registry would already be back at
-    # 13.47.
-    #
-    # So this sets the registry entry and DELIBERATELY LEAVES IT SET. That
-    # is safe for how this is actually used: run_candels_fits.py fits one
-    # (galaxy, configuration) cell per `fit_one.py` subprocess, so each
-    # process builds at most one dense_basis_like model and this mutation
-    # never outlives the redshift it was set for. It is NOT safe to call
-    # this for two different redshifts within one long-lived process and
-    # expect both to take effect: ``compile_signature()`` does not key on
-    # this setting, so a second build with the same structure (same free
-    # parameters, filters, dust/nebular choices -- true across galaxies
-    # here) can silently reuse the first build's compiled kernel, with the
-    # first build's age baked in. A test that calls this more than once
-    # must restore ``SFH_REGISTRY["dense_basis"].settings`` itself; see
-    # tests/test_xlike_configs.py and tests/test_xlike_configs_build.py.
-    SFH_REGISTRY["dense_basis"].settings["sfh_db_age_universe_gyr"] = float(age_universe_gyr)
-
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
