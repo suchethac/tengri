@@ -163,8 +163,9 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     where :math:`\\lambda_{\\rm nm}` is wavelength in nanometers. The fit is published for
     0.12 to 2.2 um; past the zero of the second polynomial (3115 nm) the curve is held at zero
-    rather than going negative (CIGALE's ``skirtor2016`` law 1 leaves it unfloored, so the two
-    differ beyond 3.1 um, where the disc carries no power). The dust-attenuation Calzetti
+    rather than going negative. CIGALE's ``skirtor2016`` law 1 leaves it unfloored, so the two
+    differ beyond 3.1 um, which holds 7.9 % of the default disc's power: the absorbed polar
+    power is 0.57 % higher here at E(B-V) = 0.1. The dust-attenuation Calzetti
     (:func:`tengri.components.dust.attenuation.calzetti`) is the same polynomial normalized
     to :math:`k(V) = 1` and is not reused here because that normalization moves ``k`` by
     5e-4.
