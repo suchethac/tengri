@@ -166,11 +166,11 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
 def _refuse_off_grid(name: str, value, axis) -> None:
     """Raise if a concrete ``value`` lies outside the grid ``axis``.
 
-    Traced values cannot be checked here (the builder's declared bounds refuse
+    Traced values (and a grid threaded through ``jit`` as an argument) cannot be checked here (the builder's declared bounds refuse
     them at build time); concrete ones would otherwise be clamped to the edge
     template without a word.
     """
-    if isinstance(value, jax.core.Tracer):
+    if isinstance(value, jax.core.Tracer) or isinstance(axis, jax.core.Tracer):
         return
     lo, hi = float(axis[0]), float(axis[-1])
     v = float(value)

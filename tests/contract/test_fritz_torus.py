@@ -419,29 +419,24 @@ def test_fritz_tau_is_interpolated_like_every_other_axis(
 
 
 @pytest.mark.contract
-def test_fritz_clamps_beyond_the_opening_angle_grid(
+def test_fritz_refuses_the_opening_angle_beyond_the_grid(
     fritz_grid_path: Path, wavelength_aa: jnp.ndarray
 ) -> None:
-    """Past the opening-angle grid the model extrapolates, then freezes.
+    """A half-angle outside the grid [20, 60] deg raises instead of returning the edge template.
 
-    Pinned as measured behavior, not endorsed. The grid spans [20, 60] deg;
-    the model keeps varying to ~80 and returns a bit-identical SED for every
-    value above that. The test this replaces compared oa = 60 against oa = 140
-    and read the 1.9% difference as evidence that the opening angle works --
-    it is evidence about extrapolation. A caller who fits oa freely will find
-    it dead above 80.
+    The interpolator extrapolates to about 80 and returns a bit-identical SED for every value
+    above that, so a caller who set the full opening angle (100 or 140 deg) of another
+    convention got the clamped edge without a word.
     """
     path = str(fritz_grid_path)
 
     def total(oa):
         return float(jnp.sum(_fritz_sed(path, wavelength_aa, agn_fritz_oa=oa)))
 
-    far, further, absurd = total(100.0), total(140.0), total(1000.0)
-    assert far == further == absurd, (
-        "the opening angle is no longer frozen above the grid; the clamp "
-        "changed and the note above is stale."
-    )
-    assert total(60.0) != far, "oa is frozen at the last grid node, not beyond it"
+    for bad in (80.0, 100.0, 140.0, 1000.0):
+        with pytest.raises(ValueError, match="agn_fritz_oa"):
+            total(bad)
+    assert np.isfinite(total(60.0)) and np.isfinite(total(20.0))
 
 
 # ────────────────────────────────────────────────────────────────────────────
