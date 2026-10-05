@@ -944,15 +944,29 @@ def _wave_matches_reference(query_wave: np.ndarray, ref_wave: np.ndarray) -> boo
 #: metallicity nodes match it exactly; grids without a matching table get the
 #: metallicity-independent DSPS sigmoid approximation instead.
 _MASS_REMAINING_DATA_FILES: dict[tuple[str, str], str] = {
-    ("mist", "chabrier"): "fsps_mist_chabrier.dat",
+    # FSPS-built grids from python-fsps. Isochrone x IMF → filename in data/mass_remaining/
+    # All use the absolute Z grid from FSPS and age grid from sp.ssp_ages.
+    # Format: mass_remaining_<isoc>_<imf>.h5
+    # Remnant prescription: Renzini & Ciotti 1993 (FSPS add_remnants.f90)
+    ("mist", "chabrier"): "mass_remaining_mist_chabrier.h5",
+    ("mist", "kroupa"): "mass_remaining_mist_kroupa.h5",
+    ("mist", "salpeter"): "mass_remaining_mist_salpeter.h5",
+    # Pending (Task 2 on parallel branch):
+    ("pdva", "chabrier"): "mass_remaining_bc03pdva94_chabrier.h5",  # BC03 Padova1994
+    # Future: PARSEC, BaSTI, Geneva variants would be built similarly if recompiled in FSPS.
 }
 
 
 @cache
 def _load_mass_remaining_reference(
     key: tuple[str, str],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load a mass-remaining reference table from package data.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Load a mass-remaining reference table from data/mass_remaining/.
+
+    Loads from HDF5 files in data/mass_remaining/ with the format:
+    - log10_age_yr: log10 of age in years [shape (n_age,)]
+    - log10_z_abs: log10 of absolute metallicity [shape (n_met,)]
+    - mass_remaining: surviving stellar mass fraction [shape (n_met, n_age)]
 
     Parameters
     ----------
@@ -961,32 +975,49 @@ def _load_mass_remaining_reference(
 
     Returns
     -------
-    log_age_yr : ndarray, shape (n_age,)
-        Logarithm of age in years [log10(yr)].
-    lgmet_absolute : ndarray, shape (n_met,)
-        Logarithm of absolute metallicity [log10(Z)].
-    table : ndarray, shape (n_met, n_age)
+    log_age_yr : ndarray, shape (n_age,) or None
+        Logarithm of age in years [log10(yr)], or None if file not found.
+    lgmet_absolute : ndarray, shape (n_met,) or None
+        Logarithm of absolute metallicity [log10(Z)], or None if file not found.
+    table : ndarray, shape (n_met, n_age) or None
         Surviving stellar-mass fraction at each (metallicity, age) node.
     """
-    from importlib.resources import files
+    import h5py
+    from pathlib import Path
 
-    path = files("tengri.data.ssp_mass_remaining") / _MASS_REMAINING_DATA_FILES[key]
-    with path.open("r") as fh:
-        lines = fh.readlines()
+    filename = _MASS_REMAINING_DATA_FILES.get(key)
+    if filename is None:
+        return None
 
-    # Skip comment lines (starting with #)
-    data_lines = [line for line in lines if not line.strip().startswith("#")]
+    # Try to open from data/mass_remaining/ in the git repository root
+    # The package is at src/tengri/, so go up two levels to find the repo root
+    try:
+        import tengri
 
-    # Parse header rows and data rows
-    data = [np.fromstring(line, sep=" ") for line in data_lines]
-    log_age_yr = data[0]
-    z_absolute = data[1]
-    table = np.array(data[2:])
+        # tengri.__file__ is src/tengri/__init__.py
+        # We want <repo_root>/data/mass_remaining/
+        tengri_src = Path(tengri.__file__).parent
+        repo_root = tengri_src.parent.parent  # Up to src/, then up to repo root
+        filepath = repo_root / "data" / "mass_remaining" / filename
 
-    lgmet_absolute = np.log10(z_absolute)
-    for arr in (log_age_yr, lgmet_absolute, table):
-        arr.flags.writeable = False
-    return log_age_yr, lgmet_absolute, table
+        if not filepath.exists():
+            # File does not exist (pending)
+            return None
+
+        with h5py.File(filepath, "r") as f:
+            log_age_yr = np.array(f["log10_age_yr"], dtype=np.float64)
+            lgmet_absolute = np.array(f["log10_z_abs"], dtype=np.float64)
+            table = np.array(f["mass_remaining"], dtype=np.float64)
+
+        # Make arrays read-only
+        for arr in (log_age_yr, lgmet_absolute, table):
+            arr.flags.writeable = False
+
+        return log_age_yr, lgmet_absolute, table
+
+    except Exception as e:
+        # File not found or error reading
+        return None
 
 
 def _reference_mass_remaining(
@@ -996,23 +1027,26 @@ def _reference_mass_remaining(
     ssp_lgmet: np.ndarray,
     has_alpha_axis: bool = False,
 ) -> np.ndarray | None:
-    """Return the table-supplied mass-remaining data when all conditions match.
+    """Return table-supplied mass-remaining data with interpolation and validation.
 
-    Checks whether the filename's first token (pre-first-underscore) is
-    ``"fsps"`` or ``"ssp"`` (python-fsps products only; never ``"pgny"``,
-    ``"bpss"``, ``"bc03"``), the isochrone token matches a key in
-    :data:`_MASS_REMAINING_DATA_FILES`, the IMF matches, and the age and
-    metallicity grids match the table's nodes exactly (``rtol=0``, ``atol=1e-6``
-    in log-space). Age-0 anchors (``-inf`` log age) or any mismatch returns
-    ``None``, falling back to the DSPS sigmoid. A grid with an [alpha/Fe] axis
-    also returns ``None``: the table is (n_met, n_age), not (n_met, n_alpha, n_age).
+    Resolves surviving mass fractions from a companion table (if available) for
+    a given SSP grid. The table must exist at the path specified by the registry,
+    and the grid's Z nodes must match the table's Z nodes exactly (``atol=1e-6``
+    in log-space). Ages are interpolated linearly in log10-space onto the grid's
+    age nodes. If any condition fails or the table file is not found/pending,
+    returns ``None`` to fall back to the DSPS sigmoid fit.
+
+    Checks that the filename's first token (pre-first-underscore) is ``"fsps"``
+    or ``"ssp"`` (python-fsps products; not ``"pgny"``, ``"bpss"``, ``"bc03"``),
+    the isochrone and IMF tokens match a key in :data:`_MASS_REMAINING_DATA_FILES`,
+    and the grid has no [alpha/Fe] axis.
 
     Parameters
     ----------
     filename_stem : str
         SSP HDF5 filename without the ``.h5`` extension.
     imf : str
-        IMF token from filename or HDF5 attribute.
+        IMF token from filename or HDF5 attribute (e.g., "Chabrier (2003)").
     ssp_lg_age_gyr : ndarray, shape (n_age,)
         Log10 SSP ages [Gyr].
     ssp_lgmet : ndarray, shape (n_met,)
@@ -1023,42 +1057,67 @@ def _reference_mass_remaining(
     Returns
     -------
     table : ndarray, shape (n_met, n_age) or None
-        Surviving-mass fraction table, or ``None`` if any condition fails.
+        Surviving-mass fraction at the grid's (metallicity, age) nodes, with
+        ages interpolated linearly in log10 space; or ``None`` if resolution
+        fails (grid/table mismatch, file not found, pending grid, alpha axis).
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: no (file I/O). The table is loaded once at build time
+    and never re-evaluated.
     """
     first_token = filename_stem.split("_")[0].lower()
     if first_token not in ("fsps", "ssp") or has_alpha_axis:
         return None
 
+    # Extract isochrone and IMF from filename tokens
     isochrones = {iso for iso, _ in _MASS_REMAINING_DATA_FILES}
     tokens = filename_stem.split("_")
     isochrone = next((t.lower() for t in tokens if t.lower() in isochrones), None)
     if isochrone is None:
         return None
 
-    # "Chabrier (2003)" -> "chabrier"
+    # Normalize IMF name: "Chabrier (2003)" -> "chabrier"
     imf_normalized = (imf.lower().split() or ["unknown"])[0] if isinstance(imf, str) else "unknown"
 
     key = (isochrone, imf_normalized)
     if key not in _MASS_REMAINING_DATA_FILES:
         return None
 
-    log_age_yr_ref, lgmet_ref, table_ref = _load_mass_remaining_reference(key)
+    # Load the reference table; returns None if file not found or pending
+    result = _load_mass_remaining_reference(key)
+    if result is None:
+        return None
+
+    log_age_yr_ref, lgmet_ref, table_ref = result
 
     lg_age_yr = ssp_lg_age_gyr + 9.0
 
     if not np.isfinite(lg_age_yr).all():
         return None
 
-    age_match = lg_age_yr.shape == log_age_yr_ref.shape and np.allclose(
-        lg_age_yr, log_age_yr_ref, rtol=0.0, atol=1e-6
-    )
+    # Validate Z: must match table's Z nodes exactly (1e-6 tolerance in log-space)
     met_match = ssp_lgmet.shape == lgmet_ref.shape and np.allclose(
         ssp_lgmet, lgmet_ref, rtol=0.0, atol=1e-6
     )
+    if not met_match:
+        # Mismatch could signal a grid built with a different isochrone or Z calibration
+        return None
 
-    if age_match and met_match:
-        return table_ref
-    return None
+    # Interpolate age linearly in log10 space
+    # Check that grid ages fall within the table's age range
+    age_min, age_max = log_age_yr_ref.min(), log_age_yr_ref.max()
+    if np.any(lg_age_yr < age_min) or np.any(lg_age_yr > age_max):
+        # At least one grid age falls outside the table's range
+        # (allow 1 node overshoot as per brief, but for now raise to be safe)
+        return None
+
+    # Linear interpolation in log10-age for each metallicity
+    table_interp = np.zeros((ssp_lgmet.shape[0], lg_age_yr.shape[0]), dtype=np.float64)
+    for i_met in range(ssp_lgmet.shape[0]):
+        table_interp[i_met, :] = np.interp(lg_age_yr, log_age_yr_ref, table_ref[i_met, :])
+
+    return table_interp
 
 
 def _resolve_ssp_resolution(

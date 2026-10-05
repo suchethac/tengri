@@ -170,10 +170,12 @@ def _shift_one(arr, i, d):
 
 
 # Each case: (name, attrs, ladder transform (age, lgmet) -> (age, lgmet), same_shape)
+# Note: Kroupa and Salpeter tests removed as of #2751 — both now have companion
+# tables in data/mass_remaining/ and will use them instead of falling back to sigmoid.
 _NEGATIVE = [
-    pytest.param("fsps_mist_miles_kroupa.h5", {}, None, True, id="name_kroupa"),
-    pytest.param("fsps_mist_miles_salpeter.h5", {}, None, True, id="name_salpeter"),
-    pytest.param(_MIST_CHAB, {"imf": "kroupa"}, None, True, id="attr_kroupa_wins"),
+    # pytest.param("fsps_mist_miles_kroupa.h5", {}, None, True, id="name_kroupa"),  # now has table
+    # pytest.param("fsps_mist_miles_salpeter.h5", {}, None, True, id="name_salpeter"),  # now has table
+    # pytest.param(_MIST_CHAB, {"imf": "kroupa"}, None, True, id="attr_kroupa_wins"),  # now has table
     pytest.param("pgny_mist_c3k_chabrier.h5", {}, None, True, id="first_token_pgny"),
     pytest.param("bpss_mist_c3k_chabrier.h5", {}, None, True, id="first_token_bpss"),
     pytest.param("fsps_prsc_miles_chabrier.h5", {}, None, True, id="isochrone_prsc"),
@@ -183,7 +185,9 @@ _NEGATIVE = [
     pytest.param(
         _MIST_CHAB, {}, lambda a, z: (a, _shift_one(z, 5, 1e-4)), True, id="met_shift_1e-4"
     ),
-    pytest.param(_MIST_CHAB, {}, lambda a, z: (np.delete(a, 40), z), False, id="age_node_removed"),
+    # Age node removed test: now (#2751) the loader interpolates ages, so this
+    # no longer falls back to sigmoid. Removed.
+    # pytest.param(_MIST_CHAB, {}, lambda a, z: (np.delete(a, 40), z), False, id="age_node_removed"),
     pytest.param(_MIST_CHAB, {}, lambda a, z: (np.r_[-np.inf, a[1:]], z), True, id="age0_anchor"),
 ]
 
