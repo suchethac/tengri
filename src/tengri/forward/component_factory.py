@@ -556,8 +556,7 @@ def build_components(
         Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
         ``False`` when the declared nebular backend carries a free-free continuum
         (``"cue"``, ``"cloudy_grid"``; issue #2346), otherwise the
-        :class:`RadioSEDComponentConfig` default rule (``True``; ``False`` for
-        ``sfr_mode="bell2003_split"``). With ``None`` and an SSP flagged
+        :class:`RadioSEDComponentConfig` default rule (``True``). With ``None`` and an SSP flagged
         nebular-included (``ssp_data.nebular == "included"``) the term is kept but
         applies only from the SSP grid edge upward
         (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
@@ -820,10 +819,7 @@ def build_components(
         if include_freefree is None:
             if nebular_backend_carries_freefree(nebular_backend):
                 include_freefree = False
-            elif (
-                getattr(ssp_data, "nebular", "unknown") == "included"
-                and radio_sfr_mode != "bell2003_split"
-            ):
+            elif getattr(ssp_data, "nebular", "unknown") == "included":
                 # A nebular-included SSP holds the nebular continuum inside its
                 # flux up to the SSP grid edge, so the radio thermal term starts
                 # at the edge: one thermal term below it, and the radio term

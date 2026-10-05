@@ -201,31 +201,58 @@ def radio_sfr_bell2003(
     nu_ref: float = _NU_REF_BELL2003_HZ,
     *,
     log_L_ir: float | None = None,
+    thermal_ref: float = 0.0,
 ) -> jnp.ndarray:
-    """Star-forming synchrotron via fixed scalar FIRRC (Bell 2003).
+    r"""Star-forming synchrotron via fixed scalar FIRRC (Bell 2003).
 
-    This is the original Bell+2003 model with a constant q_IR.  It is
-    Equivalent to the former ``radio_star_forming`` function and available
-    as the ``sfr_mode="bell2003"`` option in ``radio_total``.
+    ``q_ir`` is Bell's **total** 1.4 GHz calibration (Bell 2003 [1]_ Eq. 1: the
+    ratio of the 8-1000 um luminosity to the total, synchrotron plus thermal,
+    1.4 GHz luminosity; Sect. 4 puts about 10 % of that total in thermal emission).
+    The calibrated total at ``nu_ref`` is
 
     .. math::
 
-        L_\\nu(\\text{radio}) = \\frac{L_{\\rm IR}}{3.75 \\times 10^{12}
-        \\times 10^{q_{\\rm IR}}} \\left(\\frac{\\nu}{\\nu_{\\rm ref}}
-        \\right)^{-\\alpha}
+        L^{\rm tot}_{\nu_{\rm ref}} = \frac{L_{\rm IR}}{3.75 \times 10^{12}
+        \times 10^{q_{\rm IR}}}
+
+    and the synchrotron term is what is left of it once the thermal term that
+    the caller adds separately is taken out,
+
+    .. math::
+
+        L_\nu(\text{radio}) = \left(L^{\rm tot}_{\nu_{\rm ref}} -
+        L^{\rm th}_{\nu_{\rm ref}}\right) \left(\frac{\nu}{\nu_{\rm ref}}
+        \right)^{-\alpha}
+
+    so that synchrotron plus thermal equals the calibration at ``nu_ref``
+    whether or not a thermal term is added. With ``thermal_ref = 0`` (a
+    stand-alone call, or a thermal term supplied elsewhere such as the nebular
+    continuum) the synchrotron term carries the whole calibrated total.
+
+    Available as the ``sfr_mode="bell2003"`` option in ``radio_total``.
+    Equivalent to the former ``radio_star_forming`` function.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s]: the quantity the
+        dust components publish as ``L_ir``. Bell's TIR is the 8-1000 um band;
+        that band holds 0.83-0.96 of the total dust power for the DL14 and Casey
+        templates, which this call does not resolve.
     q_ir : float
-        FIR-radio correlation parameter. Default 2.64 (Bell 2003, z=0).
+        FIR-radio correlation parameter for the total 1.4 GHz luminosity.
+        Default 2.64 (Bell 2003, z=0).
     alpha_sf : float
         Synchrotron spectral index (S_ν ∝ ν^{-α}). Default 0.8.
     nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz.
+    thermal_ref : float
+        Thermal (free-free) luminosity density already carried by a separate
+        term at ``nu_ref`` [erg/s/Hz]. Default 0.0. Must stay below the
+        calibrated total: for ``q_ir`` above about 3.5 the Murphy thermal term
+        reaches it and the difference changes sign.
 
     Returns
     -------
@@ -235,15 +262,23 @@ def radio_sfr_bell2003(
     Notes
     -----
     **JIT-compatible**: yes, pure JAX function.
+
+    References
+    ----------
+    .. [1] E. F. Bell, "Estimating Star Formation Rates from Infrared and
+       Radio Luminosities: The Origin of the Radio-Infrared Correlation,"
+       ApJ, 586, 794 (2003). https://doi.org/10.1086/367829
+       bibcode: 2003ApJ...586..794B
     """
     nu = _C_AA / wavelength
     if log_L_ir is None:
-        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
+        L_tot_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
     else:
         # float32-safe (#1206): the ~1e28 erg/s/Hz radio luminosity is fully
         # representable: only the linear ``L_IR`` (~1e43) overflows. Form the
         # quotient straight from ``log10(L_IR)`` so ``L_IR`` never materializes.
-        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+        L_tot_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+    L_ref = L_tot_ref - thermal_ref  # q calibrates the total (Bell 2003 Eq. 1)
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
@@ -681,6 +716,19 @@ def radio_freefree(
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
 
+def _thermal_at_nu_ref(
+    nu_ref: float,
+    L_ir: float,
+    T_e: float,
+    alpha_ff: float,
+    log_L_ir: float | None,
+) -> jnp.ndarray:
+    """Murphy+2011 free-free luminosity density at ``nu_ref`` [erg/s/Hz]."""
+    return radio_freefree(
+        jnp.asarray(_C_AA / nu_ref), L_ir, T_e, alpha_ff, log_L_ir=log_L_ir
+    )
+
+
 def _dispatch_sfr(
     wavelength: jnp.ndarray,
     L_ir: float,
@@ -694,6 +742,9 @@ def _dispatch_sfr(
     z_slope: float | None,
     apply_suppression: bool,
     log_L_ir: float | None = None,
+    include_freefree: bool = False,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
 ) -> jnp.ndarray:
     """Dispatch SFR synchrotron component by mode (private helper).
 
@@ -726,6 +777,15 @@ def _dispatch_sfr(
         Redshift slope override; None uses mode default.
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
+    log_L_ir : float or None
+        ``log10(L_ir)`` for the float32-safe path.
+    include_freefree : bool
+        Whether the caller adds the Murphy+2011 free-free term beside this one.
+        For the Bell modes, whose ``q_ir`` calibrates the TOTAL 1.4 GHz
+        luminosity, the thermal luminosity at 1.4 GHz is then taken out of the
+        synchrotron term so that the sum equals the calibration (#2590).
+    T_e, alpha_ff : float
+        Free-free electron temperature [K] and spectral index of that term.
 
     Returns
     -------
@@ -735,16 +795,24 @@ def _dispatch_sfr(
     Notes
     -----
     **JIT-compatible**: yes, pure JAX function.
+
+    ``"bell2003_split"`` is the same code path as ``"bell2003"``: one
+    convention for what ``q_ir`` calibrates (the total), one function.
+    ``"delvecchio2021"`` and ``"mccheyne2022"`` multiply their calibrated
+    total by Bell's non-thermal fraction ``n(L)`` (at most 0.9), which already
+    leaves room for the thermal share, so they take no thermal subtraction.
     """
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
-    elif sfr_mode == "bell2003":
-        return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir)
-    elif sfr_mode == "bell2003_split":
-        # alpha_sf is unused here: the split mode's two spectral indices
-        # (alpha_nonthermal=0.75, alpha_thermal=0.10) are AGNFITTER-RX's own
-        # fixed convention, not this module's tunable alpha_sf knob.
-        return radio_sfr_bell2003_split(wavelength, L_ir, q_ir, log_L_ir=log_L_ir)
+    elif sfr_mode in ("bell2003", "bell2003_split"):
+        thermal_ref = (
+            _thermal_at_nu_ref(_NU_REF_BELL2003_HZ, L_ir, T_e, alpha_ff, log_L_ir)
+            if include_freefree
+            else 0.0
+        )
+        return radio_sfr_bell2003(
+            wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir, thermal_ref=thermal_ref
+        )
     elif sfr_mode == "delvecchio2021":
         kw = {}
         if q0 is not None:
@@ -1109,6 +1177,9 @@ def radio_total_terms(
         z_slope,
         apply_suppression,
         log_L_ir=log_L_ir,
+        include_freefree=include_freefree,
+        T_e=T_e,
+        alpha_ff=alpha_ff,
     )
     agn = radio_agn(
         wavelength,
@@ -1366,6 +1437,9 @@ def radio_total_dpl_terms(
         z_slope,
         apply_suppression,
         log_L_ir=log_L_ir,
+        include_freefree=include_freefree,
+        T_e=T_e,
+        alpha_ff=alpha_ff,
     )
     agn = radio_agn_dpl(
         wavelength,
@@ -1589,6 +1663,9 @@ def compute_radio_components(
         mass_slope,
         z_slope,
         apply_suppression,
+        include_freefree=include_freefree,
+        T_e=T_e,
+        alpha_ff=alpha_ff,
     )
     agn = radio_agn(
         wavelength,
