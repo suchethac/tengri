@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import gc
+import importlib
 import json
 import logging
 import os
@@ -39,6 +40,9 @@ from pathlib import Path
 import numpy as np
 
 ANALYSIS_DIR = Path(__file__).resolve().parent
+# ``configs.py`` (reached through ``xlike_configs``) imports ``config_metadata``
+# flat, so this directory must stay on ``sys.path``. Modules are still imported
+# through the package: a flat import of one that uses relative imports fails.
 if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
@@ -151,28 +155,29 @@ def _chunked_vmap(fn, samples: dict, idx: np.ndarray, chunk: int = _DERIVED_CHUN
     return jax.tree_util.tree_map(lambda *a: np.concatenate(a), *pieces)
 
 
+def _import_xlike_configs():
+    """Import ``xlike_configs`` as a submodule of this module's own package.
+
+    ``xlike_configs`` uses package-relative imports, so it only imports as
+    ``<package>.xlike_configs``; a flat ``import xlike_configs`` off a patched
+    ``sys.path`` has no parent package and fails.
+    """
+    return importlib.import_module(f"{__package__ or 'paper1'}.xlike_configs")
+
+
 def _load_xlike_builders() -> dict[str, callable]:
     """Load XLIKE_BUILDERS from xlike_configs module if it exists.
 
     Raises:
         ImportError: If xlike_configs.py exists but fails to import (don't swallow).
     """
-    here = ANALYSIS_DIR
-    xlike_module_path = here / "xlike_configs.py"
+    xlike_module_path = ANALYSIS_DIR / "xlike_configs.py"
 
     if not xlike_module_path.is_file():
         return {}
 
     try:
-        # Import as a package module, matching the style used by bma_space for configs
-        import sys
-
-        sys.path.insert(0, str(here))
-        try:
-            import xlike_configs as module
-        finally:
-            if str(here) in sys.path:
-                sys.path.remove(str(here))
+        module = _import_xlike_configs()
     except (ImportError, ModuleNotFoundError, AttributeError) as e:
         # If the file exists but import fails, raise (don't silently drop X-like)
         raise ImportError(f"Failed to import xlike_configs from {xlike_module_path}: {e}") from e
@@ -186,14 +191,7 @@ def _load_xlike_builders() -> dict[str, callable]:
 def _load_ssp_for_xlike(key: str):
     """Load SSP for an X-like configuration via xlike_configs module."""
     try:
-        import sys
-
-        sys.path.insert(0, str(ANALYSIS_DIR))
-        try:
-            import xlike_configs as module
-        finally:
-            if str(ANALYSIS_DIR) in sys.path:
-                sys.path.remove(str(ANALYSIS_DIR))
+        module = _import_xlike_configs()
     except (ImportError, ModuleNotFoundError, AttributeError) as e:
         raise ImportError(f"Cannot load xlike_configs for {key}: {e}") from e
 

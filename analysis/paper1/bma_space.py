@@ -19,17 +19,26 @@ no copy-paste of priors or parameters.
 
 from __future__ import annotations
 
-from configs import (
-    _continuity_sfh,
-    _kriek_conroy_two_component,
-    met_prior_for,
-)
+import sys
+from pathlib import Path
+
+# ``configs.py`` imports ``config_metadata`` flat, so this directory must be on
+# ``sys.path`` for it to import at all (it cannot be loaded through the package
+# alone). Everything else here is imported through the package.
+_PAPER1_DIR = str(Path(__file__).resolve().parent)
+if _PAPER1_DIR not in sys.path:
+    sys.path.insert(0, _PAPER1_DIR)
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.cosmology import age_at_z
 
 from ._bma_keys import ATTENUATION_TYPES, DUST_EMISSION, NEBULAR, SFH_TYPES
+from .configs import (
+    _continuity_sfh,
+    _kriek_conroy_two_component,
+    met_prior_for,
+)
 
 LOG10_ZSUN = -1.848
 MET_EDGE_INSET_DEX = 0.02

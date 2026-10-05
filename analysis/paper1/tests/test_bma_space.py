@@ -59,7 +59,7 @@ def test_xlike_import_error_raises():
         pytest.skip("xlike_configs.py not present")
 
     with (
-        patch.dict(sys.modules, {"xlike_configs": None}),
+        patch.dict(sys.modules, {"paper1.xlike_configs": None}),
         pytest.raises(ImportError, match="Failed to import xlike_configs"),
     ):
         _load_xlike_builders()
