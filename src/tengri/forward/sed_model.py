@@ -1567,7 +1567,7 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
 def _validate_firrc_requires_dust(spec) -> None:
     """Raise if any FIRRC radio block is enabled without a dust component (#2106).
 
-    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    The FIRRC models (bell2003, bell2003_split, delvecchio2021, mccheyne2022) in the radio
     component normalize their synchrotron luminosity against L_ir, the dust-absorbed
     stellar luminosity published by the dust component. Without a dust component,
     L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
@@ -1580,7 +1580,7 @@ def _validate_firrc_requires_dust(spec) -> None:
     Raises
     ------
     ConfigError
-        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        If any FIRRC mode (bell2003, bell2003_split, delvecchio2021, mccheyne2022) is selected
         for radio_sfr_mode and dust is disabled.
 
     See Also
@@ -1597,7 +1597,7 @@ def _validate_firrc_requires_dust(spec) -> None:
 
     # Check if any FIRRC mode is active
     sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
-    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+    if sfr_mode not in ("bell2003", "bell2003_split", "delvecchio2021", "mccheyne2022"):
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust

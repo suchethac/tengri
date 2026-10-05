@@ -124,7 +124,9 @@ radio={
 }
 ```
 
-Omitting the `freefree` key applies the auto rule above. Exception: `bell2003_split` forces `freefree: False` (since that mode pre-allocates 10% of its total Bell 2003 radio luminosity to a thermal component). Explicitly passing `freefree: True` with `bell2003_split` raises an error to prevent unintended double-counting of thermal emission.
+Omitting the `freefree` key applies the auto rule above. `bell2003_split` is accepted as a second spelling of `bell2003` and follows the same rule.
+
+`radio_q_ir` is the total 1.4 GHz calibration of Bell (2003): the ratio of the 8--1000 $\mu$m luminosity to the total radio luminosity, of which about 10% is thermal. With the free-free term on, the synchrotron term carries the calibrated total minus the free-free luminosity at 1.4 GHz, so the sum at 1.4 GHz equals $L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\times10^{q_{\rm IR}})$; with it off, the synchrotron term carries the whole total. The $L_{\rm IR}$ used is the total absorbed dust power $L_{\rm absorbed}\,\eta$; Bell's 8--1000 $\mu$m band holds 0.97 of it for the default dust emission model (DL14).
 
 Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
 

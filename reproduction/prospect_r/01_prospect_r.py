@@ -1660,9 +1660,9 @@ V.print_window_table(
 # ## §11 Radio continuum
 #
 # ProSpect models radio continuum tied to the SFR via `addradio_SF` (free-free plus synchrotron). Tengri's
-# `bell2003_split` radio block matches that pair: the Bell (2003) total SFR-radio luminosity L(1.4 GHz) split into
-# a non-thermal synchrotron component (S_ν ∝ ν^−0.75, Baan & Klockner 2006) and a thermal free-free component
-# (S_ν ∝ ν^−0.10, Dale & Helou 2002; Condon 1992). The comparison is slope and normalization at matched SFR.
+# `bell2003` radio block carries the same pair: the Bell (2003) total SFR-radio luminosity L(1.4 GHz), shared between a
+# synchrotron component (S_ν ∝ ν^−α, α = 0.8 by default) and the Murphy et al. (2011) thermal free-free component
+# (S_ν ∝ ν^−0.1). The comparison is slope and normalization at matched SFR.
 # (ProSpect has no X-ray component.)
 
 # %% [markdown]

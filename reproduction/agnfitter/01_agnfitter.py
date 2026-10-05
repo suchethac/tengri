@@ -43,7 +43,7 @@
 # | Disc reddening | `agn_ebv_disc`, `atten` | same law, one constant factor apart | 2.2 |
 # | Torus (TO) | `silva04`, `nenkova_agnfitter*`, `skirtor*`, `cat3d_wind*` | node-exact at table nodes (CAT3D low-wind: 10% between nodes); amplitude convention differs by design | 3 |
 # | X-ray corona | `xray={'type': 'yang20'}` | exact when anisotropy and absorption are off | 4 |
-# | Radio | `radio={'agn': 'dpl', 'sf': 'bell2003_split'}` | exact for the AGN; matched by construction for star formation | 5 |
+# | Radio | `radio={'agn': 'dpl', 'sf': 'bell2003'}`, `radio_sfr_bell2003_split` | exact for the AGN; the stand-alone 90/10 function matches the star-formation radio | 5 |
 # | Informative priors | `tengri.agn.priors.agnfitter_priors` | two upstream priors replaced by physical versions | 6, 7 |
 
 # %%
@@ -1705,9 +1705,9 @@ plt.show()
 # with $L_{\rm IR}$ the 8-1000 µm luminosity. The paper adopts $q_{\rm IR} = 2.64 \pm 0.26$ and then
 # the conservative value $2.64 + \sigma$; the cell measures the value the repackaged template
 # actually embeds and prints its difference from that. tengri's `radio_sfr_bell2003_split` is the
-# matching mode and is run at the measured value. tengri's *default* architecture (`radio_sfr_bell2003` plus a separately
-# normalized `radio_freefree`) calibrates a different quantity with $q_{\rm IR}$ and is not
-# compared here, since mixing the two would double-count the thermal term.
+# matching function and is run at the measured value. The model's `bell2003` block calibrates the same
+# quantity, the total 1.4 GHz luminosity, but takes its thermal share from the Murphy et al. (2011)
+# free-free term and its synchrotron slope from `radio_alpha_sf`, so it is not compared here.
 #
 # **Caveat:** at tengri's default $q_{\rm IR} = 2.64$ instead of the template's value, the 1.4 GHz
 # luminosity of the same $L_{\rm IR}$ is higher by the factor printed below.

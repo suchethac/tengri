@@ -8,10 +8,9 @@ Radio physics is decomposed into two independent axes:
 **SF synchrotron** (FIR–radio correlation):
 
 - ``none``: SF radio turned off (AGN only)
-- ``bell2003``: fixed q_IR (default)
-- ``bell2003_split``: AGNFITTER-RX parity mode (Bell 2003 total split
-  90%/10% non-thermal/thermal; see ``components.radio.radio`` module
-  docstring)
+- ``bell2003``: fixed q_IR (default); q_IR is Bell's total 1.4 GHz calibration,
+  shared between synchrotron and the Murphy+2011 free-free term
+- ``bell2003_split``: the same model under its earlier spelling
 - ``delvecchio2021``: mass + redshift dependent at 1.4 GHz
 - ``mccheyne2022``: mass + redshift dependent at 150 MHz
 
