@@ -1176,7 +1176,14 @@ jobs:
         # halves get 70, the same margin regression-a was given over its measured 61.
         # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
         # 51 min; b2 49, 48, 49 min and one kill at 51.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 90 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
+        #
+        # contract (2026-10-05, two PR runs on the shared runners, 06c69a56e and
+        # 87bf0ae47): killed at the 90-minute cap with zero FAILED markers, 98 % of
+        # the shard done at 84.6 min and 97 % at 83.2 min, i.e. a natural 92-95
+        # minutes; main @46abb3e05 was killed the same way on 2026-10-04. It gets
+        # 120: the same three runs passed regression-b1 in 36, 54 and 55 minutes, so
+        # one load spreads by a quarter on these runners.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
         with:
