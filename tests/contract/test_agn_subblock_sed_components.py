@@ -346,9 +346,18 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     ============  ==================  ==================
     torus block   floored denominator selected denominator
     ============  ==================  ==================
-    ``none``      ``nan``             ``6.861931e+33``
-    ``skirtor``   ``nan``             ``2.655277e+33``
+    ``none``      ``nan``             ``1.372386e+34``
+    ``skirtor``   ``nan``             ``5.310558e+33``
     ============  ==================  ==================
+
+    **Re-pin (#2744).** These values are twice the earlier ``6.861931e+33`` and
+    ``2.655277e+33``, which were half the derivative. The polar absorbed power was
+    ``maximum(L (1 - exp(-tau)), 0)``; at ``E(B-V) = 0`` both arguments are zero,
+    JAX splits the derivative evenly between them, and the gradient came back at
+    half the one-sided value. Absorbed power is now ``L (1 - exp(-tau))``, which is
+    non-negative by construction for ``E(B-V) >= 0``, so its derivative at zero is
+    ``L tau'(0)``: the polar term is ``6.861926e+33`` and the ``skirtor`` torus term
+    ``-1.551373e+33`` (``-7.756859e+32`` before), each twice its old value.
 
     The values are the gradient of the node sum of the polar and torus
     components on this file's 500 A - 1e8 A, 400-node grid. The polar absorbed
@@ -421,8 +430,8 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
             "derivative everywhere would satisfy the assertion above while leaving "
             "the sampler exactly as stuck as the nan did. The class docstring pins "
-            "the selected-denominator answers: 6.861931e+33 (torus='none') and "
-            "2.655277e+33 (torus='skirtor')."
+            "the selected-denominator answers: 1.372386e+34 (torus='none') and "
+            "5.310558e+33 (torus='skirtor')."
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -467,9 +476,9 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
                 jnp.asarray(self._EBV_DEGENERATE)
             )
         )
-        assert grad == pytest.approx(-7.756859e32, rel=1e-5, abs=0.0), (
+        assert grad == pytest.approx(-1.551373e33, rel=1e-5, abs=0.0), (
             f"d(sum torus)/d(E(B-V)) at E(B-V)=0 is {grad:.6e}; the torus loses power to "
-            "the polar graybody, so it must be negative (-7.756859e+32)"
+            "the polar graybody, so it must be negative (-1.551373e+33)"
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -563,7 +572,7 @@ class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
 
         grad = float(jax.grad(_dust_total)(jnp.asarray(0.0)))
         assert np.isfinite(grad) and grad != 0.0
-        pinned = 6.861931e33 if torus_block == "none" else 2.655277e33
+        pinned = 1.372386e34 if torus_block == "none" else 5.310558e33
         assert grad == pytest.approx(pinned, rel=1e-5, abs=0.0), (
             f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
             f"(pinned {pinned:.6e}) -- the NaN-visibility fix must change only the "
