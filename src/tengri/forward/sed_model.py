@@ -4304,6 +4304,7 @@ class SEDModel:
         self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_norm = getattr(spec, "agn_norm", "cigale_joint")
+        self._agn_polar_law = getattr(spec, "agn_polar_law", "smc")
         self._agn_luminosity_mode = False
 
         delta = {}
@@ -11611,6 +11612,7 @@ class SEDModel:
             agn_torus_block=getattr(self, "_agn_torus_block", "none"),
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
+            agn_polar_law=getattr(self, "_agn_polar_law", "smc"),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),

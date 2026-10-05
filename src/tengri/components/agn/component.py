@@ -103,6 +103,9 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
+    agn_polar_law : str
+        Polar-dust extinction curve: ``"smc"`` (default), ``"calzetti"``,
+        ``"gaskell"`` or ``"bongiorno"``. A static string read by the runner.
     agn_norm : str
         Cross-block normalization policy (#556). ``"cigale_joint"``
         (default) ties the disc, torus and polar to CIGALE's single
@@ -124,6 +127,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     agn_torus_block: str = "none"
     agn_attenuation_block: str = "none"
     agn_norm: str = "cigale_joint"
+    agn_polar_law: str = "smc"
 
 
 @dataclass(frozen=True)
@@ -540,6 +544,7 @@ class AGNSEDComponent(TemplateThreading):
         agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
         agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
         agn_kwargs["agn_norm"] = self.config.agn_norm
+        agn_kwargs["agn_polar_law"] = self.config.agn_polar_law
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
         # Per-block template libraries for the composable runner. The runner

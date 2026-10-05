@@ -5777,13 +5777,13 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
     "agn.nlr": frozenset({"type", "*", "all_params"}),
     "agn.blr": frozenset({"type", "*", "all_params"}),
     "agn.feii": frozenset({"type", "*", "all_params"}),
-    "agn.atten": frozenset({"type", "*", "all_params", "law"}),
+    "agn.atten": frozenset({"type", "*", "all_params", "law", "polar_law"}),
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*", "all_params"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
@@ -5989,7 +5989,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # a patchy spec raised "Unknown key 'bubble_mpc' in group 'igm'".
         _Structural("patchy", "igm_patchy", False),
     ),
-    "agn": (_Structural("norm", "agn_norm", "cigale_joint"),),
+    "agn": (
+        _Structural("norm", "agn_norm", "cigale_joint"),
+        _Structural("polar_law", "agn_polar_law", "smc"),
+    ),
     "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
@@ -7867,6 +7870,25 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
             )
 
         result[block_to_kwarg[block_name]] = block_type
+        if block_name == "atten" and "polar_law" in block_spec:
+            if block_type != "polar_dust":
+                raise ValueError(
+                    f"agn['atten']['polar_law'] sets the polar-dust extinction curve, but "
+                    f"the attenuation block is {block_type!r}; select "
+                    f"type='polar_dust' or drop 'polar_law'."
+                )
+            result["agn_polar_law"] = _check_polar_law(block_spec["polar_law"], "agn['atten']")
+
+    # Polar-dust extinction law (``agn['polar_law']``, or ``agn['atten']['polar_law']``):
+    # a static string, menu single-sourced from POLAR_LAWS.
+    if "polar_law" in agn_dict:
+        _law = _check_polar_law(agn_dict["polar_law"], "agn")
+        if result.get("agn_polar_law", _law) != _law:
+            raise ValueError(
+                f"agn['polar_law']={_law!r} and agn['atten']['polar_law']="
+                f"{result['agn_polar_law']!r} disagree; give the law once."
+            )
+        result["agn_polar_law"] = _law
 
     # Cross-block normalization policy (``agn['norm']``): menu single-sourced
     # from AGN_NORM_POLICIES so the grammar can't drift from the runner (#556).
@@ -7877,6 +7899,31 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
+
+
+def _check_polar_law(law: object, where: str) -> str:
+    """Validate a polar-dust extinction law name; raise naming the valid laws.
+
+    Parameters
+    ----------
+    law : object
+        The value written for ``polar_law``.
+    where : str
+        The grammar spelling it was found under, for the message.
+
+    Returns
+    -------
+    str
+        The validated law name.
+    """
+    from tengri.components.agn.polar_dust import POLAR_LAWS
+
+    if law not in POLAR_LAWS:
+        raise ValueError(
+            f"Unknown {where}['polar_law']={law!r}. Valid polar-dust extinction laws: "
+            f"{list(POLAR_LAWS)} ('smc' = Pei 1992 SMC Bar, the default)."
+        )
+    return str(law)
 
 
 def _partition_by_group(

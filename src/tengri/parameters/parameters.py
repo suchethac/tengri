@@ -600,6 +600,16 @@ class Parameters:
         # fittable param. "cigale_joint" (default) ties disc/torus/polar to
         # the single agn_power reference; "independent" keeps legacy scaling.
         self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
+        # Polar-dust extinction curve: static string like agn_norm, validated here
+        # so a flat-kwarg caller gets the same refusal as the grammar.
+        self.agn_polar_law = kwargs.pop("agn_polar_law", "smc")
+        from tengri.components.agn.polar_dust import POLAR_LAWS
+
+        if self.agn_polar_law not in POLAR_LAWS:
+            raise ValueError(
+                f"Unknown agn_polar_law={self.agn_polar_law!r}. "
+                f"Valid polar-dust extinction laws: {list(POLAR_LAWS)}."
+            )
 
         # Validate agn_norm x agn_screen cycle rule (PR-D2): screened AGN
         # is incompatible with agn_norm="cigale_joint" because both read the
@@ -2678,6 +2688,9 @@ class Parameters:
                     f"torus={getattr(self, 'agn_torus_block', 'none')}",
                 ]
                 _norm = getattr(self, "agn_norm", "cigale_joint")
+                _polar = getattr(self, "agn_polar_law", "smc")
+                if getattr(self, "agn_attenuation_block", "none") == "polar_dust":
+                    _blocks.append(f"polar_law={_polar}")
                 modules.append(f"agn=composable[{', '.join(_blocks)}, norm={_norm}]")
             else:
                 modules.append(f"agn={agn}")
@@ -2860,6 +2873,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "agn_model": content("AGN model selection determines parameters"),
     "agn_nlr_block": content("AGN NLR type determines parameters"),
     "agn_norm": content("AGN normalization mode determines parameters"),
+    "agn_polar_law": content("polar-dust extinction law changes the emitted SED"),
     "agn_torus_block": content("AGN torus type determines parameters"),
     "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
     "apply_igm": content("IGM application affects forward model"),

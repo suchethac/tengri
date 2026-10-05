@@ -676,3 +676,98 @@ def _disc_cos_f32(cos_inc, wave):
         },
     )
     return comps["disc"]
+
+
+# ----------------------------------------------------------------------------------
+# 8. the SMC curve against Pei (1992) Table 4, and the law through the builder
+# ----------------------------------------------------------------------------------
+# Pei (1992, ApJ 395, 130) Table 4, Small Magellanic Cloud rows, read from the scanned page:
+# columns a_i, lambda_i [um], b_i, n_i of
+# xi(lambda) = sum_i a_i / [(l/l_i)^n_i + (l_i/l)^n_i + b_i]
+# (eq. 20). The installed pcigale's law 0 is the Bongiorno power law, not this curve, so there is
+# no pcigale SMC curve at these wavelengths to compare with; the two are reported side by side.
+_PEI_SMC = np.array(
+    [
+        (185.0, 0.042, 90.0, 2.0),
+        (27.0, 0.08, 5.50, 4.0),
+        (0.005, 0.22, -1.95, 2.0),
+        (0.010, 9.7, -1.95, 2.0),
+        (0.012, 18.0, -1.80, 2.0),
+        (0.030, 25.0, 0.00, 2.0),
+    ]
+)
+_PEI_WAVES = np.array(
+    [1216.0, 1500.0, 2000.0, 2500.0, 3000.0, 3650.0, 4400.0, 5500.0, 7000.0, 9000.0, 1.2e4, 2.2e4]
+)  # [A]
+
+
+def _pei_xi(wave_aa):
+    a, lam, b, n = _PEI_SMC.T
+    x = np.asarray(wave_aa)[:, None] * 1.0e-4
+    return np.sum(a / ((x / lam) ** n + (lam / x) ** n + b), axis=1)
+
+
+def test_polar_smc_curve_has_the_pei_1992_table4_shape():
+    """tengri's SMC k(lambda) is Pei's Table 4 SMC curve up to one constant, at 12 wavelengths."""
+    ebv = 0.05
+    wave = jnp.asarray(_PEI_WAVES)
+    _, absorbed = polar_dust_extinction(jnp.ones(wave.size), wave, 1.0, 40.0, ebv, law="smc")
+    a_lambda = -np.log1p(-np.asarray(absorbed)) / 0.921  # A(lambda) [mag] = E(B-V) R_V k
+    ratio = a_lambda / _pei_xi(_PEI_WAVES)
+    np.testing.assert_allclose(ratio / ratio[7], 1.0, atol=1e-3)
+
+
+def _agn_builder_model(inputs, **agn_extra):
+    ssp, obs = inputs
+    atten_extra = agn_extra.pop("atten_extra", {})
+    agn = {
+        "type": "composable",
+        "norm": "independent",
+        "disc": {"type": "schartmann2005", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": "skirtor", "agn_torus_frac": Fixed(0.3), "all_params": Fixed(DEFAULT)},
+        "atten": {
+            "type": "polar_dust",
+            "agn_polar_ebv": Fixed(0.2),
+            "all_params": Fixed(DEFAULT),
+            **atten_extra,
+        },
+        "agn_log_lbol": Fixed(11.0),
+        "agn_cos_inc": Fixed(1.0),
+        "all_params": Fixed(DEFAULT),
+        **agn_extra,
+    }
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+        agn=agn,
+        redshift=Fixed(0.1),
+    )
+
+
+def _polar_total(model):
+    state = model.predict_state({})
+    return float(np.sum(np.asarray(state.derived["sed_agn_polar"])))
+
+
+def test_polar_law_is_reachable_through_the_builder(_model_inputs, capsys):
+    """``agn['polar_law']`` and ``agn['atten']['polar_law']`` both select the curve."""
+    default = _polar_total(_agn_builder_model(_model_inputs))
+    smc_law = _polar_total(_agn_builder_model(_model_inputs, polar_law="smc"))
+    assert default == smc_law
+    laws = {}
+    for law in ("calzetti", "gaskell", "bongiorno"):
+        top = _agn_builder_model(_model_inputs, polar_law=law)
+        nested = _agn_builder_model(_model_inputs, atten_extra={"polar_law": law})
+        laws[law] = _polar_total(top)
+        assert laws[law] == _polar_total(nested)
+        assert laws[law] != default, f"polar_law={law!r} left the polar re-emission unchanged"
+    assert len(set(laws.values())) == 3
+    _agn_builder_model(_model_inputs, polar_law="calzetti").spec.summary()
+    assert "polar_law=calzetti" in capsys.readouterr().out
+
+
+def test_unknown_polar_law_is_refused_at_build_with_the_menu(_model_inputs):
+    for kwargs in ({"polar_law": "bogus"}, {"atten_extra": {"polar_law": "bogus"}}):
+        with pytest.raises(ValueError, match=r"polar_law.*bongiorno"):
+            _agn_builder_model(_model_inputs, **kwargs)
