@@ -730,7 +730,11 @@ class ZTableRequest:
 # -- neither changes any field ``ZTableRequest`` hashes, so without this
 # bump a warm cache built one day earlier would silently serve the old
 # (912 Å, approximate) values under the new code.
-_ZTABLE_CACHE_VERSION = 5
+# 6 (#2749): the default z grid gained Lyman-crossing nodes
+# (``build_edge_aware_z_grid``) with no hashed field changing, so a warm
+# cache would silently keep serving the uniform-grid table and the
+# accuracy fix would never reach it.
+_ZTABLE_CACHE_VERSION = 6
 
 
 def _ztable_cache_dir():
