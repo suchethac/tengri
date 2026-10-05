@@ -229,7 +229,9 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         elif self.include_freefree is None:
             object.__setattr__(self, "include_freefree", True)
         if self.q_is_total is not None and not isinstance(self.q_is_total, bool):
-            raise TypeError(f"q_is_total must be bool or None, got {type(self.q_is_total).__name__}")
+            raise TypeError(
+                f"q_is_total must be bool or None, got {type(self.q_is_total).__name__}"
+            )
         if self.q_is_total is None:
             object.__setattr__(self, "q_is_total", bool(self.include_freefree))
         # Validate freefree_wave_min

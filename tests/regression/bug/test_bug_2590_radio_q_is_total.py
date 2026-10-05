@@ -97,7 +97,9 @@ def _murphy_ff(nu, l_ir=_L_IR, t_e=1.0e4, alpha_ff=-0.1):
 def _expected_sf_ff(freqs, spelling, q=2.64, alpha=0.8, t_e=1.0e4, alpha_ff=-0.1):
     nu = np.asarray(freqs, np.float64)
     total_ref = _bell_total_ref(q)
-    subtract = float(_murphy_ff(1.4e9, t_e=t_e, alpha_ff=alpha_ff)) if _SPELLINGS[spelling][1] else 0.0
+    subtract = (
+        float(_murphy_ff(1.4e9, t_e=t_e, alpha_ff=alpha_ff)) if _SPELLINGS[spelling][1] else 0.0
+    )
     sf = (total_ref - subtract) * (nu / 1.4e9) ** (-alpha)
     ff = _murphy_ff(nu, t_e=t_e, alpha_ff=alpha_ff) if _SPELLINGS[spelling][0] else 0.0 * nu
     return sf, ff
@@ -180,7 +182,7 @@ def _split_cfg(**kw):
 
 
 def test_bell2003_split_is_the_agnfitter_construction_at_five_frequencies():
-    """Bell total split 90 % / 10 % into alpha = 0.75 and 0.10 power laws (Martinez-Ramirez+2024)."""
+    """Bell total split 90 % / 10 % into alpha 0.75 and 0.10 (Martinez-Ramirez+2024)."""
     comp = RadioSEDComponent(config=_split_cfg())
     p = {k: jnp.asarray(v) for k, v in _radio_params().items()}
     wave = jnp.asarray(_C_AA / np.asarray(_FREQS5))
@@ -275,7 +277,7 @@ def test_limit_function_matches_the_constants_written_here():
 @pytest.mark.parametrize("alpha", [0.5, 1.2])
 @pytest.mark.parametrize("spelling", ["unset", "unset_nebular"])
 def test_every_corner_of_the_declared_box_has_nonnegative_synchrotron(spelling, q, t_e, alpha):
-    """The declared free prior of radio_q_ir and radio_T_e: synchrotron >= 0 at 150 MHz, 1.4 GHz."""
+    """Corners of the declared free priors: synchrotron >= 0 at 150 MHz and 1.4 GHz."""
     params = _radio_params() | {"radio_q_ir": q, "radio_T_e": t_e, "radio_alpha_sf": alpha}
     sf, ff = _sf_ff("bell2003", spelling, [1.5e8, 1.4e9], params=params)
     assert np.all(sf >= 0.0) and np.all(sf + ff >= 0.0)
@@ -319,7 +321,9 @@ def test_the_declared_free_box_and_the_nonthermal_spelling_build(ssp_data_fsps):
     _build_box(ssp_data_fsps, all_params=tengri.FREE)
     # freefree=False calibrates the non-thermal term: no subtraction, no limit
     _build_box(
-        ssp_data_fsps, sf={"type": "bell2003", "freefree": False}, radio_q_ir=tengri.Uniform(1.8, 3.6)
+        ssp_data_fsps,
+        sf={"type": "bell2003", "freefree": False},
+        radio_q_ir=tengri.Uniform(1.8, 3.6),
     )
 
 
@@ -371,13 +375,16 @@ def _l_nu_at(state, key, freqs):
     r = np.asarray(state.derived[key])
     o = np.argsort(nu)
     return np.array(
-        [np.exp(np.interp(np.log(f), np.log(nu[o]), np.log(np.maximum(r[o], 1e-300)))) for f in freqs]
+        [
+            np.exp(np.interp(np.log(f), np.log(nu[o]), np.log(np.maximum(r[o], 1e-300))))
+            for f in freqs
+        ]
     )
 
 
 @pytest.fixture(scope="module")
 def cue_only_share(ssp_data_fsps):
-    """The nebular continuum alone (no radio block) at the four frequencies, over the calibration."""
+    """The nebular continuum alone (no radio block) over the calibration, four frequencies."""
     st = _public(ssp_data_fsps, "cue", None, radio=False)
     l_ir = float(np.asarray(st.derived["L_ir"]))
     return _l_nu_at(st, "sed_nebular", _FREQS) / _bell_total_ref(2.64, l_ir)
