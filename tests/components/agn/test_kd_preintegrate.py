@@ -304,7 +304,11 @@ class TestKDPreintegrationPipeline:
             return jnp.sum(phot)
 
         grad_jax = float(jax.grad(_loss)(11.0))
-        grad_fd = fd_grad(_loss, 11.0)
+        # eps=1e-6, not the 1e-4 default: the filter tables are piecewise linear in kTbb and
+        # a warm ring's node crossing sits within ~1e-5 of this point, so a wider central
+        # difference straddles the slope kink (FD 6.634e29 at h=1e-4 vs 6.649e29 at h<=1e-6,
+        # where AD and FD agree to 1e-7). The forward is float64 here, so the small step is exact.
+        grad_fd = fd_grad(_loss, 11.0, eps=1e-6)
         np.testing.assert_allclose(
             grad_jax,
             grad_fd,

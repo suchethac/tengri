@@ -342,6 +342,10 @@ class DerivedState:
     #: dust screen after single-pass attenuation (diffuse_screen=True only).
     #: When diffuse_screen is off, this key is absent (not published).
     log_L_ir_emergent: jnp.ndarray | None = None
+    #: Mean starlight intensity <U> of a Draine & Li dust model [dimensionless]:
+    #: ``U_min [(1 - gamma) + gamma R]`` (CIGALE ``dust.umean``). Published by
+    #: ``draine_li2007`` and ``draine_li2014``.
+    dust_umean: jnp.ndarray | None = None
     # Dust attenuation per filter. A(λ_eff) and its
     # wavelength derivative A'(λ_eff) at each filter pivot, used
     # to apply Taylor-expansion attenuation in

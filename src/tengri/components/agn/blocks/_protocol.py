@@ -82,10 +82,12 @@ __all__ = [
     "AGN_BLOCK_META",
     "AGN_NORM_POLICIES",
     "BLOCK_CATEGORIES",
+    "LINE_ENERGY_BLOCKS",
     "BlockCategory",
     "collect_block_templates",
     "disc_emits_xray",
     "register_agn_block",
+    "register_line_energy",
     "resolve_agn_block",
 ]
 
@@ -113,6 +115,14 @@ AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
 # trace freezes the entire library into the graph as ``Constant`` ops: 31 MB
 # for SKIRTOR, 17 MB for Fritz. See ``collect_block_templates``.
 AGN_BLOCK_TEMPLATE_LOADERS: dict[tuple[str, str], Callable[[], object]] = {}
+
+# Closed-form line energies: (category, name) -> callable returning the block's
+# bolometric emission-line power [erg/s]. The conserving ledger debits the line power
+# from the disc; a block that registers one here is not evaluated on a wavelength grid
+# for it. The callable takes the block's own keyword arguments
+# ``(agn_log_lbol, l5100_disc, **params)`` and returns the integral of the block's
+# L_lambda over all wavelengths, which for a line block is set by its normalization.
+LINE_ENERGY_BLOCKS: dict[tuple[str, str], Callable] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
@@ -221,6 +231,48 @@ def register_agn_block(
         }
         if template_loader is not None:
             AGN_BLOCK_TEMPLATE_LOADERS[(category, name)] = template_loader
+        return fn
+
+    return decorator
+
+
+def register_line_energy(category: BlockCategory, name: str) -> Callable:
+    """Decorator factory: register the closed-form line power of a block.
+
+    Parameters
+    ----------
+    category : {"nlr", "blr", "feii"}
+        Emission-line stage.
+    name : str
+        Block name within the category; the block must be registered separately with
+        :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn(agn_log_lbol, l5100_disc, **params) -> energy [erg/s]``, the
+        integral of the block's ``L_lambda`` over all wavelengths, and returns it
+        unchanged.
+
+    Raises
+    ------
+    KeyError
+        If ``category`` is not an emission-line stage.
+    ValueError
+        If ``(category, name)`` already has a registered line energy.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration only; the registered
+    function must be pure ``jnp`` and traceable.
+    """
+    if category not in ("nlr", "blr", "feii"):
+        raise KeyError(f"Line energies exist for nlr/blr/feii only, got {category!r}.")
+
+    def decorator(fn: Callable) -> Callable:
+        if (category, name) in LINE_ENERGY_BLOCKS:
+            raise ValueError(f"Line energy {category}/{name!r} is already registered.")
+        LINE_ENERGY_BLOCKS[(category, name)] = fn
         return fn
 
     return decorator
