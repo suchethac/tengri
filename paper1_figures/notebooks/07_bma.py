@@ -9,16 +9,29 @@
 # %% [markdown]
 # # Bayesian model averaging
 #
-# Evidence computed by eight-start MAP inference plus Laplace approximation for
-# each galaxy across all named model configurations. Routes are weighted
-# according to the validity of each model's evidence value: zero weight if the
-# configuration had convergence issues or measurement barriers, full weight
-# otherwise. Flat priors are applied within each weight set to form the combined
-# posterior.
+# Each galaxy is fit under every model in a set, and the models are weighted by
+# their evidence. The evidence of one model is ln Z from an eight-start MAP
+# optimization followed by a Laplace approximation at the best optimum. The
+# stellar mass is integrated under its prior rather than profiled out, and the
+# flux errors carry a 5% systematic floor.
 #
-# Models that yield valid evidence contribute equally; those with barriers or
-# convergence issues are excluded. The posterior under each weighting scheme is
-# aggregated to report a single posterior median in stellar mass and SFR.
+# A model's evidence is valid when ln Z is finite, the Newton decrement at the
+# optimum is at most 0.1, and the Hessian has no clipped eigenvalues. Invalid
+# models are left out of the average. Within each weight set the model prior is
+# flat, so the weights are proportional to Z (a softmax of ln Z): valid models do
+# not contribute equally, and one model with a much higher evidence dominates.
+#
+# Three weight sets are averaged separately:
+#
+# - `named_grid`: grid configurations I to V.
+# - `named_all`: configurations I to V plus the five X-like configurations.
+# - `factorial`: 100 models, the product of 5 star formation histories,
+#   5 SSP grids, and 4 attenuation laws. Axis marginals are compared with the
+#   marginals the flat model prior implies.
+#
+# A galaxy is flagged close when its largest weight in a set is below 0.9. The
+# model choice is then not settled by the evidence, and those galaxies are the
+# candidates for a nested-sampling spot-check.
 
 # %%
 import json
@@ -42,9 +55,9 @@ OUT.mkdir(parents=True, exist_ok=True)
 BMA_SUMMARY = RESULTS / "bma_summary.json"
 BMA_EVIDENCE_DIR = RESULTS / "bma_evidence"
 
-if not BMA_SUMMARY.is_file():
+if not BMA_SUMMARY.is_file() or not BMA_EVIDENCE_DIR.is_dir():
     print(
-        f"No BMA summary in {BMA_SUMMARY}.\n"
+        f"No BMA summary in {BMA_SUMMARY} or no evidence in {BMA_EVIDENCE_DIR}.\n"
         "Compute and combine evidence with:\n"
         "  python -m analysis.paper1.bma_evidence --galaxy <id> ...\n"
         "  python -m analysis.paper1.bma_combine\n"
@@ -52,134 +65,101 @@ if not BMA_SUMMARY.is_file():
     )
     raise SystemExit(SKIPPED)
 
-if not BMA_EVIDENCE_DIR.is_dir():
-    print(
-        f"No BMA evidence directory in {BMA_EVIDENCE_DIR}.\n"
-        "Compute evidence with:\n"
-        "  python -m analysis.paper1.bma_evidence --galaxy <id> ...\n"
-        "and re-run. Skipping the BMA figures."
-    )
-    raise SystemExit(SKIPPED)
+summary = json.loads(BMA_SUMMARY.read_text())
+galaxies = summary["galaxies"]
+SETS = ("named_grid", "named_all", "factorial")
+print(f"{summary['n_galaxies']} galaxies; route: {summary['route']}; {summary['model_prior']}")
 
 # %% [markdown]
-# ## Per-galaxy evidence and validity summary
+# ## Models and weights per galaxy
 #
-# Each row shows one galaxy across all model configurations. Validity flags
-# indicate which configurations contributed to the BMA average: a blank cell
-# means the evidence was excluded due to convergence issues (divergences,
-# R-hat) or too few effective samples.
+# For each weight set: how many of the expected models have a valid evidence,
+# the model with the largest weight, and that weight. A set with no cells for a
+# galaxy shows a dash.
 
 # %%
-with open(BMA_SUMMARY) as f:
-    bma_data = json.load(f)
+print(f"{'galaxy':<8}{'set':<12}{'valid':>9}  {'top model':<22}{'weight':>7}  close")
+for gid, gal in sorted(galaxies.items(), key=lambda kv: int(kv[0])):
+    for name in SETS:
+        block = gal["sets"][name]
+        valid = f"{block['n_valid']}/{block['n_expected']}"
+        weighted = [m for m in block["models"] if m["weight"] is not None]
+        if not weighted:
+            print(f"{gid:<8}{name:<12}{valid:>9}  {'-':<22}{'-':>7}")
+            continue
+        top = max(weighted, key=lambda m: m["weight"])
+        flag = "yes" if block["close"] else "no"
+        print(f"{gid:<8}{name:<12}{valid:>9}  {top['model_key']:<22}{top['weight']:>7.3f}  {flag}")
 
-galaxies = sorted(set(g["galaxy"] for g in bma_data.get("entries", [])))
-print(f"\nBMA summary: {len(galaxies)} galaxies × {len(bma_data.get('configs', []))} models\n")
-print(f"{'Galaxy':<10} ", end="")
-for cfg in sorted(bma_data.get("configs", [])):
-    print(f"{cfg[:8]:<10} ", end="")
-print()
-print("-" * (10 + 10 * len(bma_data.get("configs", []))))
+# %% [markdown]
+# ## Models left out of the average
+#
+# How many galaxies each model was excluded for, and why.
 
-for galaxy in galaxies[:10]:  # Show first 10 as a sample
-    gal_entries = [e for e in bma_data.get("entries", []) if e["galaxy"] == galaxy]
-    print(f"{galaxy:<10} ", end="")
-    for cfg in sorted(bma_data.get("configs", [])):
-        entry = next((e for e in gal_entries if e["config"] == cfg), None)
-        if entry:
-            valid = "✓" if entry.get("valid", False) else "✗"
-            print(f"{valid:<10} ", end="")
+# %%
+for name in SETS:
+    excluded = {}
+    for gal in galaxies.values():
+        for model in gal["sets"][name]["models"]:
+            if not model["valid"]:
+                excluded.setdefault(model["model_key"], set()).add(model["excluded_reason"])
+    counts = summary["invalid_counts"].get(name, {})
+    if not counts:
+        print(f"{name}: no excluded models")
+        continue
+    print(f"{name}:")
+    for key, n in sorted(counts.items()):
+        print(f"  {key}: {n} galaxies ({'; '.join(sorted(excluded.get(key, ())))})")
+
+# %% [markdown]
+# ## Galaxies for a nested-sampling spot-check
+#
+# Galaxies whose largest weight is below 0.9 in a set.
+
+# %%
+for name in SETS:
+    close = [gid for gid, gal in galaxies.items() if gal["sets"][name]["close"]]
+    print(f"{name}: {', '.join(sorted(close, key=int)) if close else 'none'}")
+
+# %% [markdown]
+# ## Model-averaged stellar mass and star formation rate
+#
+# The 16th, 50th, and 84th percentiles of the averaged posterior in the
+# `named_all` set. Stellar mass is the formed mass; the star formation rate is
+# the average over the last 100 Myr.
+
+# %%
+QUANTITIES = (
+    ("log_stellar_mass_formed", "log M*,formed"),
+    ("log_sfr_100myr", "log SFR 100 Myr"),
+)
+print(f"{'galaxy':<8}" + "".join(f"{label:>26}" for _, label in QUANTITIES))
+for gid, gal in sorted(galaxies.items(), key=lambda kv: int(kv[0])):
+    perc = gal["sets"]["named_all"]["bma_percentiles"]
+    cells = []
+    for key, _ in QUANTITIES:
+        if key in perc:
+            lo, med, hi = perc[key]
+            cells.append(f"{med:6.2f} (+{hi - med:.2f} / -{med - lo:.2f})".rjust(26))
         else:
-            print(f"{'?':<10} ", end="")
-    print()
-
-if len(galaxies) > 10:
-    print(f"... {len(galaxies) - 10} more galaxies")
+            cells.append("-".rjust(26))
+    print(f"{gid:<8}" + "".join(cells))
 
 # %% [markdown]
-# ## Evidence weights and routes
-#
-# Models are grouped into weight sets. Within each set, all valid evidence
-# values receive equal weight; models with barriers or convergence issues are
-# zero-weighted. The aggregated posterior averages across all weight routes.
-
-# %%
-weight_sets = bma_data.get("weight_sets", {})
-print(f"\nWeight routes: {len(weight_sets)}\n")
-for route_name, route_data in sorted(weight_sets.items()):
-    included = route_data.get("included_configs", [])
-    excluded = route_data.get("excluded_configs", [])
-    print(f"{route_name}:")
-    print(f"  included: {len(included)} models")
-    print(f"  excluded: {len(excluded)} models (validity: {excluded[:3]}...)")
-
-# %% [markdown]
-# ## Route agreement: close galaxies
-#
-# For galaxies marked as needing a spot-check, compare BMA evidence routes
-# against independent evidence measurements if available.
-
-# %%
-BMA_EVIDENCE_NSS = RESULTS / "bma_evidence_nss"
-close_galaxies = [g for g in bma_data.get("close_galaxies", [])]
-
-if close_galaxies:
-    print(f"\nSpot-check galaxies (close-fit cases): {len(close_galaxies)}\n")
-    if BMA_EVIDENCE_NSS.is_dir():
-        nss_files = sorted(BMA_EVIDENCE_NSS.glob("*.json"))
-        print(f"NSS reference evidence found: {len(nss_files)} measurements\n")
-        print("Comparing BMA routes against NSS:")
-        for gid in close_galaxies[:5]:
-            nss_file = BMA_EVIDENCE_NSS / f"galaxy_{gid}.json"
-            if nss_file.is_file():
-                with open(nss_file) as f:
-                    nss_data = json.load(f)
-                print(f"  Galaxy {gid}: NSS ln(Z)={nss_data.get('ln_z', float('nan')):.1f}")
-        if len(close_galaxies) > 5:
-            print(f"  ... {len(close_galaxies) - 5} more")
-    else:
-        print("NSS spot-check has not been run; the close-fit galaxies are:")
-        for gid in close_galaxies:
-            print(f"  {gid}")
-        print("\nThis is expected on the first run. No failure.")
-else:
-    print("\nNo galaxies marked for spot-check.")
-
-# %% [markdown]
-# ## Averaged posterior statistics
-#
-# Median stellar mass and 100-Myr star formation rate across all BMA routes,
-# per galaxy. These values represent the model-averaged posterior when
-# integration is performed over all valid routes.
-
-# %%
-print("\nAveraged posterior (sample of galaxies):\n")
-print(f"{'Galaxy':<10} {'M* (dex)':>12} {'SFR_100Myr':>12}")
-print("-" * 35)
-for galaxy in galaxies[:10]:
-    gal_entries = [e for e in bma_data.get("entries", []) if e["galaxy"] == galaxy]
-    if gal_entries:
-        m_vals = [e.get("mstar_med", float("nan")) for e in gal_entries if e.get("valid")]
-        sfr_vals = [e.get("sfr100_med", float("nan")) for e in gal_entries if e.get("valid")]
-        m_avg = sum(m_vals) / len(m_vals) if m_vals else float("nan")
-        sfr_avg = sum(sfr_vals) / len(sfr_vals) if sfr_vals else float("nan")
-        print(f"{galaxy:<10} {m_avg:12.2f} {sfr_avg:12.2e}")
-
-if len(galaxies) > 10:
-    print(f"... {len(galaxies) - 10} more galaxies")
-
-# %% [markdown]
-# ## BMA posterior figure
-#
-# Scatter plot of stellar mass and star formation rate under Bayesian model
-# averaging, showing both individual route posteriors and the combined result.
+# ## BMA figure
 
 # %%
 status = {}
-status["fig11_bma"] = run_figure(
-    "fig11_bma",
-    ["--summary", str(BMA_SUMMARY), "--out", str(OUT / "fig11_bma.pdf")],
-)
+has_factorial = any(gal["sets"]["factorial"]["models"] for gal in galaxies.values())
+for name in ("named_all", "factorial"):
+    if name == "factorial" and not has_factorial:
+        print("No factorial evidence cells yet; drawing the named_all set only.")
+        continue
+    stem = "fig11_bma" if name == "named_all" else "fig11_bma_factorial"
+    status[f"fig11_bma[{name}]"] = run_figure(
+        "fig11_bma",
+        ["--summary", str(BMA_SUMMARY), "--set", name, "--out", str(OUT / f"{stem}.pdf")],
+    )
 
 # %%
 for name, code in status.items():

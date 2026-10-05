@@ -21,6 +21,7 @@ rather than assumed by the reader.
 Run from the repository root or this directory::
 
     python analysis/paper1/surviving_mass_census.py --max-samples 60
+    python analysis/paper1/surviving_mass_census.py --suite xlike --max-samples 60
 """
 
 from __future__ import annotations
@@ -37,16 +38,46 @@ ANALYSIS_DIR = Path(__file__).resolve().parent
 if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
-from ._figure_style import CONFIG_ORDER
-from ._paths import repo_relative
-from .fig06_code_overlay import load_fit_results
-from .run_candels_fits import GALAXIES
+# Absolute imports on the repository root, so the file runs both as a script
+# (the documented command line) and as ``analysis.paper1.surviving_mass_census``.
+REPO_ROOT = ANALYSIS_DIR.parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-DEFAULT_RESULTS_DIR = ANALYSIS_DIR / "results" / "fits"
+from analysis.paper1._figure_style import CONFIG_ORDER
+from analysis.paper1._paths import repo_relative
+from analysis.paper1.config_metadata import XLIKE_KEYS
+from analysis.paper1.fig06_code_overlay import load_fit_results
+from analysis.paper1.run_candels_fits import GALAXIES, SUITE_CONFIGS
+
 DEFAULT_OUT = ANALYSIS_DIR / "results" / "surviving_mass_census.json"
+#: Where each suite's census lands by default; fig10 reads the X-like one.
+DEFAULT_OUT_BY_SUITE = {
+    "grid": DEFAULT_OUT,
+    "xlike": ANALYSIS_DIR / "results" / "surviving_mass_xlike.json",
+}
 
 
-def build_census(results_dir: Path, max_samples: int, out_path: Path, galaxies: list[int]) -> dict:
+def suite_config_keys(suite: str) -> list[str]:
+    """Configuration keys the census walks for ``suite`` (``"grid"`` or ``"xlike"``).
+
+    The grid keeps ``CONFIG_ORDER``, the figure order; X-like is the suite's own
+    ``XLIKE_KEYS``.
+    """
+    if suite == "grid":
+        return list(CONFIG_ORDER)
+    if suite == "xlike":
+        return list(XLIKE_KEYS)
+    raise ValueError(f"unknown suite {suite!r}; expected one of {sorted(SUITE_CONFIGS)}")
+
+
+def build_census(
+    results_dir: Path,
+    max_samples: int,
+    out_path: Path,
+    galaxies: list[int],
+    suite: str = "grid",
+) -> dict:
     """Walk every (galaxy, configuration) cell and record both stellar masses.
 
     A cell that ``load_fit_results`` declines -- missing on disk, or failing
@@ -57,9 +88,10 @@ def build_census(results_dir: Path, max_samples: int, out_path: Path, galaxies: 
     cells: dict[str, dict] = {}
     declined: list[str] = []
     started = time.time()
+    config_keys = suite_config_keys(suite)
 
     for gal_id in galaxies:
-        for config in CONFIG_ORDER:
+        for config in config_keys:
             key = f"{gal_id}_{config}"
             data = load_fit_results(gal_id, config, results_dir, max_samples)
             if data is None:
@@ -91,7 +123,8 @@ def build_census(results_dir: Path, max_samples: int, out_path: Path, galaxies: 
     payload = {
         "max_samples_requested": max_samples,
         "results_dir": repo_relative(results_dir),
-        "configurations": list(CONFIG_ORDER),
+        "suite": suite,
+        "configurations": config_keys,
         "galaxies": [int(g) for g in galaxies],
         "n_galaxies": len(galaxies),
         "n_cells_recorded": len(cells),
@@ -119,6 +152,8 @@ def merge_shards(paths: list[Path], out_path: Path) -> dict:
     galaxies: list[int] = []
     declined: list[str] = []
     requested: set[int] = set()
+    suites: set[str] = set()
+    configurations: list[str] = []
     for path in paths:
         shard = json.loads(path.read_text())
         clash = sorted(set(shard["cells"]) & set(cells))
@@ -128,6 +163,10 @@ def merge_shards(paths: list[Path], out_path: Path) -> dict:
         galaxies.extend(shard.get("galaxies", []))
         declined.extend(shard.get("declined_cells", []))
         requested.add(int(shard["max_samples_requested"]))
+        suites.add(shard.get("suite", "grid"))
+        configurations.extend(
+            c for c in shard.get("configurations", []) if c not in configurations
+        )
 
     offsets = [c["offset_dex_p50"] for c in cells.values()]
     payload = {
@@ -135,7 +174,8 @@ def merge_shards(paths: list[Path], out_path: Path) -> dict:
         if len(requested) == 1
         else sorted(requested),
         "merged_from": [repo_relative(x) for x in paths],
-        "configurations": list(CONFIG_ORDER),
+        "suite": sorted(suites)[0] if len(suites) == 1 else sorted(suites),
+        "configurations": configurations,
         "galaxies": sorted(set(galaxies)),
         "n_galaxies": len(set(galaxies)),
         "n_cells_recorded": len(cells),
@@ -152,9 +192,25 @@ def merge_shards(paths: list[Path], out_path: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="fit cells to read; default is the chosen suite's results directory",
+    )
+    parser.add_argument(
+        "--suite",
+        choices=sorted(SUITE_CONFIGS),
+        default="grid",
+        help="configuration suite to walk: the six grid configurations or the five X-like ones",
+    )
     parser.add_argument("--max-samples", type=int, default=60)
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="census JSON to write; default is the chosen suite's file (DEFAULT_OUT_BY_SUITE)",
+    )
     parser.add_argument(
         "--galaxies",
         type=str,
@@ -172,6 +228,10 @@ def main(argv: list[str] | None = None) -> int:
         help="comma-separated shard JSONs to combine into --out, instead of computing",
     )
     args = parser.parse_args(argv)
+    if args.results_dir is None:
+        args.results_dir = SUITE_CONFIGS[args.suite].get_results_dir(ANALYSIS_DIR)
+    if args.out is None:
+        args.out = DEFAULT_OUT_BY_SUITE[args.suite]
 
     if args.merge:
         paths = [Path(x) for x in args.merge.split(",") if x.strip()]
@@ -195,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         galaxies = [int(g) for g in GALAXIES]
 
-    payload = build_census(args.results_dir, args.max_samples, args.out, galaxies)
+    payload = build_census(args.results_dir, args.max_samples, args.out, galaxies, args.suite)
     print(
         f"\nrecorded {payload['n_cells_recorded']} cell(s), declined {payload['n_cells_declined']}"
     )

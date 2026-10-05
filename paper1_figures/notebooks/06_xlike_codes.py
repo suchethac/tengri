@@ -10,13 +10,12 @@
 # # Tengri's X-like configurations
 #
 # CIGALE-, Prospector-, BAGPIPES-, BEAGLE-, and Dense Basis-like configurations,
-# each constrained by parity checks where available. Each configuration's choices
-# are compared against Pacifici et al. (2023) Table 1 to document deviations.
+# each set up to resemble the named code as closely as tengri's components allow.
+# Where a parity check against the code exists it is flagged, and every remaining
+# difference from the code's choices (Pacifici et al. 2023, Table 1) is listed.
 #
-# The adoption census records which grid cells passed the inspection bar (no
-# divergent transitions, split R-hat within threshold, minimum effective samples)
-# for each code, so a figure reading the grid can note when a cell was drawn
-# against a bar that was relaxed for that configuration.
+# The adoption census counts, per code, the fits whose sampler diagnostics pass
+# the adoption bar. Only adopted fits are drawn in the one-to-one comparison.
 
 # %%
 import json
@@ -44,117 +43,104 @@ print(f"X-like cells on disk: {n_cells}")
 if n_cells == 0:
     print(
         f"\nNo X-like fit cells in {FITS_XLIKE}.\n"
-        "Run the X-like configuration suite or point PAPER1_FITS_DIR\n"
-        "at a directory that has them, and re-run. Skipping the X-like figures."
+        "Run the X-like configuration suite and re-run.\n"
+        "Skipping the X-like figures."
     )
     raise SystemExit(SKIPPED)
 
 # %% [markdown]
-# ## Configuration mismatch summary
+# ## Configuration summary
 #
-# Each X-like configuration's code name, parity check status, mismatches
-# against Pacifici et al. (2023) Table 1, and their source documentation.
+# Each X-like configuration's code, whether a parity check against that code
+# exists, how the code defines stellar mass, and how many known differences remain.
 
 # %%
-status = {}
-MISMATCH_JSON = RESULTS / "xlike_mismatch_table.json"
-if MISMATCH_JSON.is_file():
-    with open(MISMATCH_JSON) as f:
-        mismatch_data = json.load(f)
-    print("\nX-like mismatch table (from JSON):\n")
-    for key in sorted(mismatch_data.keys()):
-        cfg = mismatch_data[key]
-        parity = "Yes" if cfg["parity_check"] else "No"
-        n_mismatches = cfg.get("n_mismatches", 0)
-        print(f"{key:20} {cfg['code']:15} parity={parity:3} mismatches={n_mismatches}")
-        for m in cfg.get("mismatches", [])[:2]:
-            print(f"  - {m}")
-        if n_mismatches > 2:
-            print(f"  ... {n_mismatches - 2} more")
-    status["xlike_mismatch_table"] = 0
-else:
-    status["xlike_mismatch_table"] = run_figure(
-        "xlike_mismatch_table",
-        ["--out-json", str(RESULTS / "xlike_mismatch_table.json")],
+from analysis.paper1.config_metadata import XLIKE_CONFIGS
+
+print(f"{'configuration':<17}{'code':<13}{'parity':<8}{'M* definition':<15}{'differences'}")
+for key, cfg in sorted(XLIKE_CONFIGS.items()):
+    parity = "yes" if cfg["parity_check"] else "no"
+    print(
+        f"{key:<17}{cfg['code']:<13}{parity:<8}{cfg['mass_definition']:<15}"
+        f"{len(cfg.get('mismatches', []))}"
     )
+
+print()
+for _, cfg in sorted(XLIKE_CONFIGS.items()):
+    print(f"{cfg['code']}:{cfg['name']}")
+    for text in cfg.get("mismatches_text", cfg.get("mismatches", [])):
+        print(f"  - {text}")
 
 # %% [markdown]
 # ## Adoption census per code
 #
-# Count of adopted and unfit cells per code. A cell is adopted when it passes
-# the bar: for relaxed configurations, the split R-hat and divergence rate
-# thresholds; for others, zero divergent transitions and split R-hat below 1.01.
+# A fit is adopted when its sampler diagnostics pass the adoption bar: zero
+# divergent transitions and split R-hat below 1.01.
 
 # %%
 from analysis.paper1._adoption import is_adopted
 
-adoption_counts = {}
-for json_file in sorted(FITS_XLIKE.glob("*_*.json")):
-    with open(json_file) as f:
-        meta = json.load(f)
-    code = meta.get("code", "unknown")
-    verdict = is_adopted(meta)
-    if code not in adoption_counts:
-        adoption_counts[code] = {"adopted": 0, "unfit": 0}
-    if verdict.adopted:
-        adoption_counts[code]["adopted"] += 1
-    else:
-        adoption_counts[code]["unfit"] += 1
+counts = {}
+for path in sorted(FITS_XLIKE.glob("*_*.json")):
+    meta = json.loads(path.read_text())
+    config = meta["config"]
+    if config not in XLIKE_CONFIGS:
+        continue
+    code = XLIKE_CONFIGS[config]["code"]
+    tally = counts.setdefault(code, {"adopted": 0, "total": 0})
+    tally["total"] += 1
+    tally["adopted"] += int(is_adopted(meta, config).adopted)
 
-print("\nAdoption census by code:\n")
-for code in sorted(adoption_counts.keys()):
-    counts = adoption_counts[code]
-    total = counts["adopted"] + counts["unfit"]
-    frac = counts["adopted"] / total if total > 0 else 0
-    print(f"{code:20} adopted={counts['adopted']:3}/{total:3} ({frac:.1%})")
+print(f"{'code':<13}{'adopted':>8}{'fits':>6}")
+for code, tally in sorted(counts.items()):
+    print(f"{code:<13}{tally['adopted']:>8}{tally['total']:>6}")
 
 # %% [markdown]
-# ## Per-code statistics
+# ## One-to-one comparison
 #
-# Median offset and scatter in stellar mass and star formation rate across
-# the grid. Stellar mass is survival (present mass) except for Prospector
-# which reports formed mass. SFR is measured over the last 100 Myr.
+# Tengri's stellar mass and star formation rate for each X-like configuration
+# against the values that code published for the same galaxies. Tengri's
+# stellar mass is the formed mass; Prospector reports formed mass, while
+# BAGPIPES, BEAGLE, CIGALE, and Dense Basis report surviving mass. The star
+# formation rate axis is the average over the last 100 Myr.
 
 # %%
-data_file = RESULTS / "fig10_xlike_one_to_one_data.json"
-if data_file.is_file():
-    with open(data_file) as f:
-        fig_data = json.load(f)
-    print("\nPer-code statistics from fig10:\n")
-    hdr = (
-        f"{'Code':<20} {'M* offset':>12} {'M* scatter':>12} {'SFR offset':>12} {'SFR scatter':>12}"
-    )
-    print(hdr)
-    print("-" * 68)
-    measurements = fig_data.get("measurements", [])
-    for code in sorted(set(m.get("code") for m in measurements if "code" in m)):
-        code_meas = [m for m in measurements if m.get("code") == code]
-        if code_meas:
-            m_offsets = [m.get("offset_mstar", 0) for m in code_meas]
-            m_scatters = [m.get("scatter_mstar", 0) for m in code_meas]
-            sfr_offsets = [m.get("offset_sfr100", 0) for m in code_meas]
-            sfr_scatters = [m.get("scatter_sfr100", 0) for m in code_meas]
-            m_off_med = sorted(m_offsets)[len(m_offsets) // 2] if m_offsets else 0
-            m_scat_med = sorted(m_scatters)[len(m_scatters) // 2] if m_scatters else 0
-            sfr_off_med = sorted(sfr_offsets)[len(sfr_offsets) // 2] if sfr_offsets else 0
-            sfr_scat_med = sorted(sfr_scatters)[len(sfr_scatters) // 2] if sfr_scatters else 0
-            row = (
-                f"{code:<20} {m_off_med:12.3f} {m_scat_med:12.3f} "
-                f"{sfr_off_med:12.3f} {sfr_scat_med:12.3f}"
-            )
-            print(row)
-
-# %% [markdown]
-# ## One-to-one comparison figure
-#
-# Stellar mass and star formation rate, each code against Prospector and
-# Tengri's configuration. Cells are marked by adoption status.
-
-# %%
+DATA_OUT = RESULTS / "fig10_xlike_one_to_one_data.json"
+status = {}
 status["fig10_xlike_one_to_one"] = run_figure(
     "fig10_xlike_one_to_one",
-    ["--results-dir", str(FITS_XLIKE), "--out", str(OUT / "fig10_xlike_one_to_one.pdf")],
+    [
+        "--results-dir",
+        str(FITS_XLIKE),
+        "--out",
+        str(OUT / "fig10_xlike_one_to_one.pdf"),
+        "--data-out",
+        str(DATA_OUT),
+    ],
 )
+
+# %% [markdown]
+# ## Offsets and scatter
+#
+# Median offset (tengri minus published) and scatter in dex for each code, over
+# its adopted fits.
+
+# %%
+if DATA_OUT.is_file():
+    codes = json.loads(DATA_OUT.read_text()).get("codes", {})
+
+    def fmt(value):
+        return f"{value:8.3f}" if value is not None else f"{'n/a':>8}"
+
+    print(f"{'code':<13}{'n':>3}{'M* off':>9}{'M* scat':>9}{'SFR off':>9}{'SFR scat':>9}")
+    for code, row in sorted(codes.items()):
+        print(
+            f"{code:<13}{row['n_adopted']:>3} {fmt(row['mass_median_offset'])}"
+            f" {fmt(row['mass_scatter'])} {fmt(row['sfr_median_offset'])}"
+            f" {fmt(row['sfr_scatter'])}"
+        )
+else:
+    print("No comparison data: the figure did not run.")
 
 # %%
 for name, code in status.items():

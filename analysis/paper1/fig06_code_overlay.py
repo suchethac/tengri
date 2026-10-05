@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import importlib.util
 import json
 import logging
 import sys
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import NamedTuple
 
@@ -30,7 +33,7 @@ from _adoption import is_adopted
 from _cell_provenance import audit, banner
 from _figure_style import CONFIG_COLORS, CONFIG_ORDER
 from _grid_completeness import completeness_note, load_expected_galaxy_ids, present_on_disk
-from config_metadata import CONFIGS
+from config_metadata import CONFIGS, XLIKE_KEYS
 
 jax.config.update("jax_enable_x64", True)
 
@@ -280,6 +283,44 @@ def load_fit_results(
     )
 
 
+def resolve_configuration(config: str, configs_module) -> tuple[Callable, Callable]:
+    """Resolve a configuration key to ``(builder, ssp_loader)``, grid or X-like.
+
+    The one place a key becomes a model builder. Grid keys (``configs.CONFIG_KEYS``)
+    resolve to ``configs.config_<key>`` with ``configs.load_ssp_for``; X-like keys
+    (``config_metadata.XLIKE_KEYS``) to ``xlike_configs.XLIKE_BUILDERS`` with
+    ``xlike_configs.load_ssp_for_xlike``. Both builders take ``(ssp, observation, z)``,
+    and ``ssp_loader()`` takes no argument, so the caller treats the two alike.
+    Nothing is built or loaded here.
+
+    Parameters
+    ----------
+    config : str
+        Grid key (``"I"``..``"VI"``) or X-like key (``"prospector_like"``, ...).
+    configs_module : module
+        The loaded ``configs.py`` (it is exec'd from its path, not imported).
+
+    Raises
+    ------
+    KeyError
+        If ``config`` is in neither suite.
+    """
+    if config in configs_module.CONFIG_KEYS:
+        return getattr(configs_module, f"config_{config}"), partial(
+            configs_module.load_ssp_for, config
+        )
+    if config in XLIKE_KEYS:
+        root = str(Path(__file__).resolve().parents[2])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        xlike = importlib.import_module("analysis.paper1.xlike_configs")
+        return xlike.XLIKE_BUILDERS[config], partial(xlike.load_ssp_for_xlike, config)
+    raise KeyError(
+        f"configuration {config!r} is neither a grid key {configs_module.CONFIG_KEYS} "
+        f"nor an X-like key {XLIKE_KEYS}; add its builder before asking a figure for it"
+    )
+
+
 def _compute_all_derived_quantities(
     gal_id: int, config: str, params_dict: dict, z: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -306,19 +347,8 @@ def _compute_all_derived_quantities(
     candels_io = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(candels_io)
 
-    # Resolve the builder by name rather than restating the census. The literal
-    # map this replaces listed I, II and III -- the three configurations the
-    # paper had when it was written -- and stayed that way when the table grew,
-    # so every panel for a later configuration died on a bare KeyError.
-    if config not in configs.CONFIG_KEYS:
-        raise KeyError(
-            f"configuration {config!r} is not one of {configs.CONFIG_KEYS}; "
-            "add its builder to configs.py before asking a figure for it"
-        )
-    config_fn = getattr(configs, f"config_{config}")
-
-    # Load SSP
-    ssp = configs.load_ssp_for(config)
+    config_fn, load_ssp = resolve_configuration(config, configs)
+    ssp = load_ssp()
 
     # Load photometry
     candels_cat = candels_io.load_candels_z1()

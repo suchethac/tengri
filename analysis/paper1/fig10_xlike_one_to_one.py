@@ -36,6 +36,7 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _adoption import is_adopted
+from config_metadata import XLIKE_CONFIGS
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -129,16 +130,37 @@ def _load_selected_galaxies(json_path: Path) -> set[int]:
     return {int(g["id"]) for g in data["selected_galaxies"]}
 
 
-def _log_percentiles(values: np.ndarray) -> tuple[float, float, float]:
-    """Percentiles of already-logged values (from NPZ which stores log10 values).
+#: NPZ keys the fit writer (``fit_one.DERIVED_KEYS``) stores for the two derived
+#: quantities: linear values per draw, ``stellar_mass`` [Msun, FORMED] and
+#: ``sfr_100myr`` [Msun/yr]. Neither is stored as log10.
+NPZ_MASS_KEY = "stellar_mass"
+NPZ_SFR_KEY = "sfr_100myr"
 
-    The NPZ files store log10 values directly, so we just compute percentiles
-    without additional logging.
+#: Floor applied before ``log10`` so a zero draw (a quenched SFR) is finite [same units].
+LOG_FLOOR = 1e-30
+
+#: Command that produces the surviving-mass census this figure reads.
+CENSUS_COMMAND = (
+    "python analysis/paper1/surviving_mass_census.py --suite xlike "
+    "--results-dir analysis/paper1/results/fits_xlike "
+    "--out analysis/paper1/results/surviving_mass_xlike.json"
+)
+
+#: Default census path; the ``--out`` of ``CENSUS_COMMAND``.
+DEFAULT_SURVIVING = REPO_ROOT / "analysis" / "paper1" / "results" / "surviving_mass_xlike.json"
+
+
+def _log_percentiles(values: np.ndarray) -> tuple[float, float, float]:
+    """16/50/84 percentiles of log10 of linear draws.
+
+    ``values`` are the linear draws the NPZ stores (``stellar_mass`` [Msun],
+    ``sfr_100myr`` [Msun/yr]); non-finite draws are dropped and zeros floored
+    at ``LOG_FLOOR`` before the logarithm.
     """
     finite = values[np.isfinite(values)]
     if finite.size == 0:
         raise ValueError("no finite draws")
-    p16, p50, p84 = np.percentile(finite, PERCENTILES)
+    p16, p50, p84 = np.percentile(np.log10(np.maximum(finite, LOG_FLOOR)), PERCENTILES)
     return float(p16), float(p50), float(p84)
 
 
@@ -151,21 +173,51 @@ def _load_surviving_mass_census(json_path: Path) -> dict[str, dict]:
     return data.get("cells", {})
 
 
+def _uses_surviving_mass(xlike_key: str) -> bool:
+    """Whether the published code behind ``xlike_key`` reports surviving mass.
+
+    Read from ``config_metadata.XLIKE_CONFIGS[key]["mass_definition"]`` rather
+    than from the code's name.
+    """
+    definition = XLIKE_CONFIGS[xlike_key]["mass_definition"]
+    if definition not in ("formed", "surviving"):
+        raise ValueError(f"{xlike_key}: unknown mass_definition {definition!r}")
+    return definition == "surviving"
+
+
+def _cell_mass_percentiles(
+    npz, cell: str, xlike_key: str, surviving_census: dict
+) -> tuple[float, float, float] | None:
+    """log10 stellar-mass percentiles for one cell under its code's mass definition.
+
+    Formed mass comes from the NPZ draws; surviving mass from the census entry
+    for ``cell``. Returns ``None`` when a surviving cell has no census entry.
+    """
+    if not _uses_surviving_mass(xlike_key):
+        return _log_percentiles(np.asarray(npz[NPZ_MASS_KEY], dtype=float))
+    entry = surviving_census.get(cell)
+    if entry is None:
+        return None
+    return tuple(float(entry[f"log_mass_survived_p{q}"]) for q in (16, 50, 84))
+
+
 def _load_xlike_fits(
     results_dir: Path, selected_gal_ids: set[int], surviving_census: dict
 ) -> list[TengriValue]:
     """Load X-like fit results, yielding TengriValue for each cell.
 
-    Requires surviving_census to be pre-loaded; raises SystemExit if
-    surviving mass is needed but census is empty.
+    Mass follows each code's ``mass_definition``; SFR is the NPZ's
+    ``sfr_100myr``. An adopted surviving-mass cell absent from the census exits
+    with the missing cells named.
     """
     results = []
     xlike_keys = list(XLIKE_CODE.keys())
 
     # Collect adopted cells to detect if we have any
     all_adopted_per_code = {code: [] for code in XLIKE_CODE.values()}
+    missing_census: list[str] = []
 
-    for gal_id in selected_gal_ids:
+    for gal_id in sorted(selected_gal_ids):
         for xlike_key in xlike_keys:
             json_path = results_dir / f"{gal_id}_{xlike_key}.json"
             npz_path = results_dir / f"{gal_id}_{xlike_key}.npz"
@@ -176,8 +228,6 @@ def _load_xlike_fits(
             with open(json_path) as f:
                 meta = json.load(f)
 
-            # Use is_adopted to get adoption verdict (mimic fig09 approach)
-            # For X-like, xlike_key is the "config" in the adoption check
             verdict = is_adopted(meta, xlike_key)
             adopted = verdict.adopted
 
@@ -185,65 +235,51 @@ def _load_xlike_fits(
             if adopted:
                 all_adopted_per_code[code_name].append((gal_id, xlike_key))
 
-            # Load NPZ
-            with np.load(npz_path, allow_pickle=True) as npz:
-                # Stellar mass: formed for Prospector, survived for others
-                if code_name == "Prospector":
-                    mass_key = "log_stellar_mass_formed"
-                else:
-                    mass_key = "log_stellar_mass_survived"
-
-                if mass_key not in npz.files:
-                    logger.warning(f"{gal_id}_{xlike_key}: no {mass_key}, skipped")
+            cell = f"{gal_id}_{xlike_key}"
+            with np.load(npz_path, allow_pickle=False) as npz:
+                absent = [k for k in (NPZ_MASS_KEY, NPZ_SFR_KEY) if k not in npz.files]
+                if absent:
+                    logger.warning(f"{cell}: NPZ has no {absent}, skipped")
                     continue
-
-                if "log_sfr_100myr" not in npz.files:
-                    logger.warning(f"{gal_id}_{xlike_key}: no log_sfr_100myr, skipped")
-                    continue
-
                 try:
-                    mass_data = np.asarray(npz[mass_key], dtype=float)
-                    sfr_data = np.asarray(npz["log_sfr_100myr"], dtype=float)
-                    log_mstar_p16, log_mstar_p50, log_mstar_p84 = _log_percentiles(mass_data)
-                    log_sfr_p16, log_sfr_p50, log_sfr_p84 = _log_percentiles(sfr_data)
+                    mass = _cell_mass_percentiles(npz, cell, xlike_key, surviving_census)
+                    sfr = _log_percentiles(np.asarray(npz[NPZ_SFR_KEY], dtype=float))
                 except ValueError as exc:
-                    logger.warning(f"{gal_id}_{xlike_key}: {exc}, skipped")
+                    logger.warning(f"{cell}: {exc}, skipped")
                     continue
+
+            if mass is None:
+                if adopted:
+                    missing_census.append(cell)
+                    continue
+                # A non-adopted cell is only counted, never plotted, so it needs
+                # no mass; NaN keeps it from ever being read as a value.
+                mass = (float("nan"),) * 3
 
             results.append(
                 TengriValue(
                     gal_id=gal_id,
                     xlike_key=xlike_key,
-                    log_mstar_p16=log_mstar_p16,
-                    log_mstar_p50=log_mstar_p50,
-                    log_mstar_p84=log_mstar_p84,
-                    log_sfr_p16=log_sfr_p16,
-                    log_sfr_p50=log_sfr_p50,
-                    log_sfr_p84=log_sfr_p84,
+                    log_mstar_p16=mass[0],
+                    log_mstar_p50=mass[1],
+                    log_mstar_p84=mass[2],
+                    log_sfr_p16=sfr[0],
+                    log_sfr_p50=sfr[1],
+                    log_sfr_p84=sfr[2],
                     adopted=adopted,
                 )
             )
 
     # Check that we have at least one adopted cell across all codes
     any_adopted = any(len(v) > 0 for v in all_adopted_per_code.values())
-    if False:  # MUTATED: any_adopted check removed
+    if not any_adopted:
         sys.stderr.write("ERROR: no adopted X-like cells found.\n")
         sys.exit(1)
 
-    # Check if we need surviving mass but it's missing
-    non_prospector_adopted = [
-        (gid, key)
-        for code, cells in all_adopted_per_code.items()
-        for gid, key in cells
-        if code != "Prospector"
-    ]
-    if non_prospector_adopted and not surviving_census:
+    if missing_census:
         sys.stderr.write(
-            "ERROR: Non-Prospector adopted cells found but surviving mass census "
-            "is empty. Run:\n"
-            "  python analysis/paper1/surviving_mass_census.py "
-            "--results-dir analysis/paper1/results/fits_xlike "
-            "--out analysis/paper1/results/surviving_mass_xlike.json\n"
+            "ERROR: adopted surviving-mass cells missing from the surviving mass census: "
+            f"{', '.join(missing_census)}. Run:\n  {CENSUS_COMMAND}\n"
         )
         sys.exit(1)
 
@@ -499,8 +535,8 @@ def main() -> None:
     parser.add_argument(
         "--surviving",
         type=Path,
-        default=None,
-        help="Path to surviving mass census JSON (optional for Prospector-only)",
+        default=DEFAULT_SURVIVING,
+        help="Path to surviving mass census JSON (the --out of surviving_mass_census.py --suite xlike)",
     )
     parser.add_argument(
         "--published",
@@ -534,9 +570,7 @@ def main() -> None:
     selected_gal_ids = _load_selected_galaxies(args.selected_galaxies)
 
     # Load surviving mass census if provided
-    surviving_census = {}
-    if args.surviving:
-        surviving_census = _load_surviving_mass_census(args.surviving)
+    surviving_census = _load_surviving_mass_census(args.surviving)
 
     # Load X-like fits
     tengri_values = _load_xlike_fits(args.results_dir, selected_gal_ids, surviving_census)

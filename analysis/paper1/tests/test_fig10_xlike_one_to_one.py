@@ -18,7 +18,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 ANALYSIS_DIR = Path(__file__).resolve().parents[1]
@@ -27,7 +26,9 @@ FIG10_SCRIPT = ANALYSIS_DIR / "fig10_xlike_one_to_one.py"
 
 sys.path.insert(0, str(ANALYSIS_DIR))
 
-from fig10_xlike_one_to_one import CODE_MARKERS, XLIKE_CODE
+from fig10_xlike_one_to_one import CENSUS_COMMAND, CODE_MARKERS, XLIKE_CODE
+
+from analysis.paper1.tests._xlike_cells import surviving_census, write_xlike_cell
 
 pytestmark = pytest.mark.contract
 
@@ -76,7 +77,7 @@ def test_empty_results_dir_exits_nonzero(tmp_path: Path) -> None:
 
     assert result.returncode != 0, "Empty results dir should exit non-zero"
     assert not (tmp_path / "fig10.pdf").exists(), "No PDF should be written on error"
-    assert "no x-like cells found" in result.stderr.lower()
+    assert "no adopted x-like cells found" in result.stderr.lower()
 
 
 def test_no_adopted_cells_exits_nonzero(tmp_path: Path) -> None:
@@ -87,22 +88,7 @@ def test_no_adopted_cells_exits_nonzero(tmp_path: Path) -> None:
     # Create a non-adopted X-like cell
     gal_id = 21
     xlike_key = "cigale_like"
-    json_file = results_dir / f"{gal_id}_{xlike_key}.json"
-    npz_file = results_dir / f"{gal_id}_{xlike_key}.npz"
-
-    meta = {
-        "valid": False,
-        "adoption_pass": False,
-        "galaxy": gal_id,
-        "z": 1.0,
-        "model_key": xlike_key,
-    }
-    json_file.write_text(json.dumps(meta))
-
-    # Create NPZ with synthetic data
-    mass_data = np.log10(np.random.uniform(1e9, 1e12, 100))
-    sfr_data = np.log10(np.random.uniform(0.1, 100, 100))
-    np.savez(npz_file, log_stellar_mass_formed=mass_data, log_sfr_100myr=sfr_data)
+    write_xlike_cell(results_dir, gal_id, xlike_key, adopted=False)
 
     # Create CSV with published data
     published_csv = tmp_path / "art_sedfitting_z1.csv"
@@ -158,22 +144,7 @@ def test_missing_surviving_mass_json_exits_with_command(tmp_path: Path) -> None:
     # Create an adopted cell with survived mass
     gal_id = 21
     xlike_key = "beagle_like"
-    json_file = results_dir / f"{gal_id}_{xlike_key}.json"
-    npz_file = results_dir / f"{gal_id}_{xlike_key}.npz"
-
-    meta = {
-        "valid": True,
-        "adoption_pass": True,
-        "galaxy": gal_id,
-        "z": 1.0,
-        "model_key": xlike_key,
-    }
-    json_file.write_text(json.dumps(meta))
-
-    # Create NPZ with synthetic data (BEAGLE needs survived mass)
-    mass_data = np.log10(np.random.uniform(1e9, 1e12, 100))
-    sfr_data = np.log10(np.random.uniform(0.1, 100, 100))
-    np.savez(npz_file, log_stellar_mass_survived=mass_data, log_sfr_100myr=sfr_data)
+    write_xlike_cell(results_dir, gal_id, xlike_key)
 
     # Create CSV
     published_csv = tmp_path / "art_sedfitting_z1.csv"
@@ -212,9 +183,9 @@ def test_missing_surviving_mass_json_exits_with_command(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0, "Missing surviving JSON should exit non-zero"
-    assert "surviving_mass_census.py" in result.stderr, (
-        "Error message should name the generating command"
-    )
+    assert CENSUS_COMMAND in result.stderr, "Error message should name the generating command"
+    assert "--suite xlike" in result.stderr
+    assert f"{gal_id}_{xlike_key}" in result.stderr
 
 
 def test_all_codes_use_sfr_100myr(tmp_path: Path) -> None:
@@ -231,34 +202,16 @@ def test_all_codes_use_sfr_100myr(tmp_path: Path) -> None:
         gal_id = 20 + len(selected_ids)
         selected_ids.append(gal_id)
 
-        json_file = results_dir / f"{gal_id}_{xlike_key}.json"
-        npz_file = results_dir / f"{gal_id}_{xlike_key}.npz"
-
-        meta = {"valid": True, "adoption_pass": True, "galaxy": gal_id, "z": 1.0}
-        json_file.write_text(json.dumps(meta))
-
-        # Create distinguishable sfr_100myr vs sfr_10myr
+        # Distinguishable 100 Myr vs 10 Myr SFR [dex], so a wrong key shows
         sfr_100myr_val = 1.0 + gal_id * 0.1
-        sfr_10myr_val = 0.5 + gal_id * 0.1  # Different so we can detect if wrong key is used
-
-        mass_data = np.full(50, 10.0 + gal_id * 0.01)
-        sfr_100myr_data = np.full(50, sfr_100myr_val)
-        sfr_10myr_data = np.full(50, sfr_10myr_val)
-
-        if code_name == "Prospector":
-            np.savez(
-                npz_file,
-                log_stellar_mass_formed=mass_data,
-                log_sfr_100myr=sfr_100myr_data,
-                log_sfr_10myr=sfr_10myr_data,
-            )
-        else:
-            np.savez(
-                npz_file,
-                log_stellar_mass_survived=mass_data,
-                log_sfr_100myr=sfr_100myr_data,
-                log_sfr_10myr=sfr_10myr_data,
-            )
+        write_xlike_cell(
+            results_dir,
+            gal_id,
+            xlike_key,
+            log_mass=10.0 + gal_id * 0.01,
+            log_sfr=sfr_100myr_val,
+            log_sfr_10myr=sfr_100myr_val - 0.5,
+        )
 
         # Published value uses sfr_100myr (bounds are lower and upper, not errors)
         sfr_lo = sfr_100myr_val - 0.2
@@ -337,24 +290,10 @@ def test_prospector_uses_formed_mass_others_use_surviving(tmp_path: Path) -> Non
     # Create cells for Prospector and one other code
     gal_id = 21
 
-    # Prospector: uses formed mass
-    pro_json = results_dir / f"{gal_id}_prospector_like.json"
-    pro_npz = results_dir / f"{gal_id}_prospector_like.npz"
-    pro_json.write_text(json.dumps({"valid": True, "adoption_pass": True}))
-    formed_mass = np.full(50, 10.5)
-    survived_mass = np.full(50, 10.2)  # Different so we detect which is used
-    np.savez(
-        pro_npz,
-        log_stellar_mass_formed=formed_mass,
-        log_stellar_mass_survived=survived_mass,
-        log_sfr_100myr=np.full(50, 0.5),
-    )
-
-    # BEAGLE: uses survived mass
-    bea_json = results_dir / f"{gal_id}_beagle_like.json"
-    bea_npz = results_dir / f"{gal_id}_beagle_like.npz"
-    bea_json.write_text(json.dumps({"valid": True, "adoption_pass": True}))
-    np.savez(bea_npz, log_stellar_mass_survived=survived_mass, log_sfr_100myr=np.full(50, 0.5))
+    # Prospector reports FORMED mass: the NPZ's stellar_mass. BEAGLE reports surviving
+    # mass, which no NPZ carries, so it arrives through the census only.
+    write_xlike_cell(results_dir, gal_id, "prospector_like", log_mass=10.5)
+    write_xlike_cell(results_dir, gal_id, "beagle_like", log_mass=10.5)
 
     # CSV: Prospector published formed=10.5, BEAGLE published survived=10.2
     published_csv = tmp_path / "art_sedfitting_z1.csv"
@@ -367,20 +306,9 @@ def test_prospector_uses_formed_mass_others_use_surviving(tmp_path: Path) -> Non
     selected_gals = tmp_path / "selected_galaxies_20.json"
     selected_gals.write_text(json.dumps({"selected_galaxies": [{"id": gal_id}]}))
 
-    # Create surviving JSON for BEAGLE
     surviving_json = tmp_path / "surviving.json"
     surviving_json.write_text(
-        json.dumps(
-            {
-                "cells": {
-                    f"{gal_id}_beagle_like": {
-                        "log_mass_survived_p50": 10.2,
-                        "log_mass_survived_p16": 10.0,
-                        "log_mass_survived_p84": 10.4,
-                    }
-                }
-            }
-        )
+        json.dumps({"cells": surviving_census(gal_id, ["beagle_like"], 10.2, half_width=0.2)})
     )
 
     data_out_path = tmp_path / "fig10_data.json"
@@ -433,23 +361,7 @@ def test_code_markers_present(tmp_path: Path) -> None:
     for i, (xlike_key, code_name) in enumerate(XLIKE_CODE.items()):
         gal_id = 21 + i
 
-        json_file = results_dir / f"{gal_id}_{xlike_key}.json"
-        npz_file = results_dir / f"{gal_id}_{xlike_key}.npz"
-
-        json_file.write_text(json.dumps({"valid": True, "adoption_pass": True}))
-
-        if code_name == "Prospector":
-            np.savez(
-                npz_file,
-                log_stellar_mass_formed=np.full(50, 10.0),
-                log_sfr_100myr=np.full(50, 0.5),
-            )
-        else:
-            np.savez(
-                npz_file,
-                log_stellar_mass_survived=np.full(50, 10.0),
-                log_sfr_100myr=np.full(50, 0.5),
-            )
+        write_xlike_cell(results_dir, gal_id, xlike_key)
 
         csv_lines.append(f"{code_name},{gal_id},10.0,9.8,10.2,0.5,0.3,0.7")
 
@@ -460,16 +372,10 @@ def test_code_markers_present(tmp_path: Path) -> None:
         json.dumps({"selected_galaxies": [{"id": 21 + i} for i in range(len(XLIKE_CODE))]})
     )
 
-    # Create surviving JSON for non-Prospector codes
     surviving_cells = {}
     for i, (xlike_key, code_name) in enumerate(XLIKE_CODE.items()):
         if code_name != "Prospector":
-            gal_id = 21 + i
-            surviving_cells[f"{gal_id}_{xlike_key}"] = {
-                "log_mass_survived_p50": 10.0,
-                "log_mass_survived_p16": 9.9,
-                "log_mass_survived_p84": 10.1,
-            }
+            surviving_cells.update(surviving_census(21 + i, [xlike_key], 10.0))
 
     surviving_json = tmp_path / "surviving.json"
     surviving_json.write_text(json.dumps({"cells": surviving_cells}))
@@ -513,24 +419,9 @@ def test_non_adopted_cells_counted_not_drawn(tmp_path: Path) -> None:
     adopted_key = "cigale_like"
     non_adopted_key = "prospector_like"
 
-    # Adopted CIGALE cell
-    cigale_adopted_json = results_dir / f"{gal_id}_{adopted_key}.json"
-    cigale_adopted_npz = results_dir / f"{gal_id}_{adopted_key}.npz"
-    cigale_adopted_json.write_text(json.dumps({"valid": True, "adoption_pass": True}))
-    np.savez(
-        cigale_adopted_npz,
-        log_stellar_mass_survived=np.full(50, 10.0),
-        log_sfr_100myr=np.full(50, 0.5),
-    )
-
-    # Non-adopted Prospector cell (same galaxy)
-    pro_non_adopted_json = results_dir / f"{gal_id}_{non_adopted_key}.json"
-    pro_non_adopted_npz = results_dir / f"{gal_id}_{non_adopted_key}.npz"
-    pro_non_adopted_json.write_text(json.dumps({"valid": False}))
-    np.savez(
-        pro_non_adopted_npz,
-        log_stellar_mass_formed=np.full(50, 10.2),
-        log_sfr_100myr=np.full(50, 0.6),
+    write_xlike_cell(results_dir, gal_id, adopted_key, log_mass=10.0, log_sfr=0.5)
+    write_xlike_cell(
+        results_dir, gal_id, non_adopted_key, adopted=False, log_mass=10.2, log_sfr=0.6
     )
 
     # Published data
@@ -544,23 +435,8 @@ def test_non_adopted_cells_counted_not_drawn(tmp_path: Path) -> None:
     selected_gals = tmp_path / "selected_galaxies_20.json"
     selected_gals.write_text(json.dumps({"selected_galaxies": [{"id": gal_id}]}))
 
-    # Create surviving mass census for the adopted CIGALE cell
     surviving_json = tmp_path / "surviving.json"
-    surviving_json.write_text(
-        json.dumps(
-            {
-                "cells": {
-                    f"{gal_id}_{adopted_key}": {
-                        "galaxy": gal_id,
-                        "config": adopted_key,
-                        "log_mass_survived_p50": 10.0,
-                        "log_mass_survived_p16": 9.9,
-                        "log_mass_survived_p84": 10.1,
-                    }
-                }
-            }
-        )
-    )
+    surviving_json.write_text(json.dumps({"cells": surviving_census(gal_id, [adopted_key], 10.0)}))
 
     result = subprocess.run(
         [

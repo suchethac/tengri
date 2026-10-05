@@ -120,6 +120,7 @@ class DrawSummary:
     close_disagreement: list[str]  # Warnings about close flag disagreement
     marginal_row_labels: dict[str, list[str]]  # axis -> row labels as drawn
     factorial_marginals: dict[str, Any]  # axis -> {value: {"prior", "weight", "log2_ratio"}}
+    skipped_no_valid: list[int]  # galaxies with n_valid == 0 in the selected set, not drawn
 
 
 # --- model identity and labels --------------------------------------------
@@ -302,6 +303,18 @@ def _draw_flow_panel(ax: plt.Axes) -> None:
             )
 
 
+def _has_no_valid_models(w_set: dict[str, Any]) -> bool:
+    """True when a galaxy's set holds no valid model: nothing for a weight to sum over.
+
+    Incomplete evidence and every-model-invalid both land here. The combiner's own
+    ``n_valid`` is the authority; a set that omits it is counted from its models.
+    """
+    n_valid = w_set.get("n_valid")
+    if n_valid is None:
+        n_valid = sum(1 for m in w_set.get("models", []) if m.get("valid", True))
+    return n_valid == 0
+
+
 def _collect_weight_set(summary: dict[str, Any], selected_set: str, galaxies: list[int]):
     """Per-galaxy weights, validity and NUTS flags of the selected set, plus its models."""
     models_by_key: dict[str, dict[str, Any]] = {}
@@ -310,10 +323,14 @@ def _collect_weight_set(summary: dict[str, Any], selected_set: str, galaxies: li
     nuts_fail_by_gal: dict[int, dict[str, bool]] = {}
     close_galaxies: list[int] = []
     excluded: list[tuple[str, str]] = []
+    skipped: list[int] = []
 
     for gal_id in galaxies:
         w_set = summary["galaxies"][str(gal_id)].get("sets", {}).get(selected_set)
         if w_set is None:
+            continue
+        if _has_no_valid_models(w_set):
+            skipped.append(gal_id)
             continue
         weights: dict[str, float] = {}
         validity: dict[str, bool] = {}
@@ -343,6 +360,7 @@ def _collect_weight_set(summary: dict[str, Any], selected_set: str, galaxies: li
         nuts_fail_by_gal,
         close_galaxies,
         excluded,
+        skipped,
     )
 
 
@@ -352,7 +370,13 @@ def _draw_weights_panel(
     summary: dict[str, Any],
     selected_set: str,
 ) -> tuple[
-    list[int], list[str], list[str], list[int], list[tuple[str, str]], list[tuple[str, int]]
+    list[int],
+    list[str],
+    list[str],
+    list[int],
+    list[tuple[str, str]],
+    list[tuple[str, int]],
+    list[int],
 ]:
     """Draw panel (b1): per-galaxy BMA weights heatmap and excluded/invalid cells.
 
@@ -361,21 +385,24 @@ def _draw_weights_panel(
     own Laplace run -- is marked with a small "x" so a reader can tell the two failure modes
     apart at a glance.
 
-    Returns (galaxies, model_keys, row_labels, close_galaxies, excluded, hatched_cells).
+    A galaxy with no valid model in the set is left blank and reported, not drawn.
+
+    Returns (galaxies, model_keys, row_labels, close_galaxies, excluded, hatched_cells,
+    skipped_galaxies).
     """
     galaxies = sorted(int(gal_id) for gal_id in summary["galaxies"])
     cax.axis("off")
 
     if not any(selected_set in g.get("sets", {}) for g in summary["galaxies"].values()):
         ax.text(0.5, 0.5, f"No data for set: {selected_set}", ha="center", va="center")
-        return galaxies, [], [], [], [], []
+        return galaxies, [], [], [], [], [], []
 
-    models_by_key, weights_by_gal, validity_by_gal, nuts_by_gal, close, excluded = (
+    models_by_key, weights_by_gal, validity_by_gal, nuts_by_gal, close, excluded, skipped = (
         _collect_weight_set(summary, selected_set, galaxies)
     )
     if not models_by_key:
         ax.text(0.5, 0.5, "No valid model weights found", ha="center", va="center")
-        return galaxies, [], [], close, excluded, []
+        return galaxies, [], [], close, excluded, [], skipped
 
     order = _row_order()
     models = sorted(models_by_key.values(), key=lambda m: _model_sort_key(m, order))
@@ -427,7 +454,7 @@ def _draw_weights_panel(
         fontsize=6,
         style="italic",
     )
-    return galaxies, keys, labels, close, excluded, hatched
+    return galaxies, keys, labels, close, excluded, hatched, skipped
 
 
 def _hatch_cell(ax: plt.Axes, col: int, row: int, *, linewidth: float) -> None:
@@ -694,7 +721,7 @@ def _close_disagreements(summary: dict[str, Any], galaxies: list[int], selected_
     out = []
     for gal_id in galaxies:
         w_set = summary["galaxies"][str(gal_id)].get("sets", {}).get(selected_set)
-        if w_set is None:
+        if w_set is None or _has_no_valid_models(w_set):
             continue
         weights = [
             m["weight"]
@@ -761,7 +788,7 @@ def build_figure(
 
     ax_weights = fig.add_subplot(gs[1, 0])
     cax_weights = fig.add_subplot(gs[1, 1])
-    galaxies, models, model_labels, close_gal, excluded, hatched = _draw_weights_panel(
+    galaxies, models, model_labels, close_gal, excluded, hatched, skipped = _draw_weights_panel(
         ax_weights, cax_weights, summary, selected_set
     )
 
@@ -818,6 +845,7 @@ def build_figure(
         close_disagreement=_close_disagreements(summary, galaxies, selected_set),
         marginal_row_labels=row_labels,
         factorial_marginals=factorial_marginals,
+        skipped_no_valid=skipped,
     )
     return fig, draw_summary
 
@@ -897,6 +925,12 @@ def main(argv: list[str] | None = None) -> int:
 
     for warning in draw_summary.close_disagreement:
         print(f"WARNING: {warning}", file=sys.stderr)
+    if draw_summary.skipped_no_valid:
+        print(
+            f"WARNING: {len(draw_summary.skipped_no_valid)} galaxy(ies) have no valid model in "
+            f"set '{selected_set}' and are not drawn: {draw_summary.skipped_no_valid}",
+            file=sys.stderr,
+        )
     for warning in draw_summary.prior_warnings:
         print(f"WARNING: prior mismatch: {warning}", file=sys.stderr)
 
