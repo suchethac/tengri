@@ -12,6 +12,15 @@
 
 ### Fixed
 
+- **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
+  masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
+  911.76 Å as the same step photometry integrates, in both point-sampled and
+  pixel-integrated resampling. A pixel next to the edge previously took a linear ramp
+  across the cell and could be off by up to ~20%.
+- **Cue's ionizing photon rate includes the partial bin at the Lyman edge:** Cue line
+  and continuum fluxes rise by ~1.7% for a constant star formation history, matching the
+  stellar `nion` already reported.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a
