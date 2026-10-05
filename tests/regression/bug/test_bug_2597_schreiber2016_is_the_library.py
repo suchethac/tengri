@@ -9,8 +9,7 @@ tabulated component that did carry the library mixed unit-normalized templates
 
 The library (Schreiber et al. 2018, A&A 609, A30, arXiv:1710.10276) tabulates
 one kilogram of dust per temperature node as a dust continuum and a PAH
-template; the paper defines ``f_PAH`` as the PAH *mass* fraction (Sect. 3.2,
-eq. 14), so the two per-kg templates mix as ``(1 - f) cont + f pah`` and the
+template; the paper defines ``f_PAH`` as the PAH *mass* fraction (Sect. 3.2), so the two per-kg templates mix as ``(1 - f) cont + f pah`` and the
 mixture is renormalized to the absorbed luminosity.
 
 Every expected value below is mixed in the test from the arrays of

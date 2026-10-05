@@ -454,7 +454,7 @@ MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
 # The tabulated schreiber2016 library has no value of its own: the build path
 # resolves ``Fixed(DEFAULT)`` through this table's ``dust_T`` (35 K, inside the
-# library's 15-60 K range and the typical main-sequence dust temperature of
+# library's 15-99 K range and the typical main-sequence dust temperature of
 # Schreiber et al. 2018), so the component and its closure read the table too
 # and a direct call and a built model cannot disagree (#2597). CIGALE's own
 # ``tdust = 20`` is the first option of its parameter list, not a physical prior.

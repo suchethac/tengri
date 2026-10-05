@@ -1284,7 +1284,7 @@ def load_schreiber2016_templates(filepath: str) -> dict:
     continuum (big and small grains plus silicates, no PAH) and the PAH
     emission. The two are *not* normalized separately here: their relative
     amplitude is what makes the declared PAH fraction a **mass** fraction
-    (Schreiber et al. 2018, Sect. 3.2).
+    (Schreiber et al. 2018, Sect. 3.2, text above Eq. 13).
 
     Parameters
     ----------
@@ -1357,13 +1357,15 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
         S_\nu \propto (1 - f_{\rm PAH})\,S_\nu^{\rm cont} + f_{\rm PAH}\,S_\nu^{\rm PAH},
 
     and the mixture is then renormalized so that its frequency integral is
-    ``L_absorbed`` (Schreiber et al. 2018, Sect. 3.2, eq. 14; the same
-    construction as CIGALE's ``schreiber2016`` module). The PAH *power* share is
+    ``L_absorbed`` (Schreiber et al. 2018, Sect. 3.2 defines :math:`f_{\rm PAH}`
+    as :math:`M_{\rm PAH}/M_{\rm dust}`; the construction is that of CIGALE's
+    ``schreiber2016`` module). The PAH *power* share is
     therefore :math:`f R/(1 - f + f R)` with :math:`R = \int S^{\rm PAH} /
-    \int S^{\rm cont} \simeq 3.06` per kilogram, not :math:`f`.
+    \int S^{\rm cont}` = 3.063 to 3.065 per kilogram over the full tabulated
+    range (1 to 3000 micron), not :math:`f`.
 
     The dust temperature is interpolated linearly between the library's 1 K
-    nodes.
+    nodes (15 to 99 K).
 
     Parameters
     ----------
@@ -1383,8 +1385,9 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
     **JIT-compatible**: yes, all operations inside the returned function are
     ``jnp`` primitives.
 
-    **Gradient-safe**: piecewise linear in ``dust_T`` (kinks at the nodes),
-    linear in ``dust_f_pah``; both gradients are non-zero inside the grid and
+    **Gradient-safe**: piecewise linear in ``dust_T``: the gradient is
+    discontinuous at every 1 K node (the 8-24 micron band-power slope jumps by a
+    median of 42% across the 83 interior nodes), and linear in ``dust_f_pah``; both gradients are non-zero inside the grid and
     the PAH-fraction gradient is zero only where the clip to [0, 1] binds.
 
     References

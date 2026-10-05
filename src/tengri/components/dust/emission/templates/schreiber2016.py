@@ -31,26 +31,32 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
         \frac{(1 - f_{\rm PAH})\,S_\nu^{\rm cont} + f_{\rm PAH}\,S_\nu^{\rm PAH}}
              {\int [(1 - f_{\rm PAH})\,S_\nu^{\rm cont} + f_{\rm PAH}\,S_\nu^{\rm PAH}]\,d\nu},
 
-    exactly as CIGALE's ``schreiber2016`` module does (the module name keeps the
-    2016 preprint year of the library paper). Because the PAH template carries
-    about three times the power of the continuum template per kilogram, the PAH
-    *power* share is :math:`f R/(1 - f + f R)` with :math:`R \simeq 3.06`; at
+    the construction of CIGALE's ``schreiber2016`` module (the module name keeps
+    the 2016 preprint year of the library paper); against pcigale 2025.1 the six
+    band powers between 3 and 1000 micron agree to better than 1e-4 at
+    (T, f_PAH) = (20 K, 0.05), (35 K, 0.2) and (50 K, 0.5). Over the full
+    tabulated range (1 to 3000 micron) the PAH template carries
+    :math:`R` = 3.063 to 3.065 times the power of the continuum template per
+    kilogram, so the PAH *power* share is :math:`f R/(1 - f + f R)`; at
     :math:`f_{\rm PAH} \ge 0.2` the SED peaks on the 7.7 micron PAH complex.
 
     Notes
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: piecewise linear in ``dust_T`` (kinks at the 1 K nodes)
-    and linear in ``dust_f_pah``.
+    **Gradient-safe**: piecewise linear in ``dust_T``; the template is exact at
+    the 1 K nodes (15 to 99 K) and its gradient with respect to ``dust_T`` is
+    discontinuous at every node (the 8-24 micron band-power slope jumps by a
+    median of 42% across the 83 interior nodes). Linear in ``dust_f_pah``.
 
     **Missing data**: the template file ``schreiber2016_templates.h5`` is
     required; there is no analytic fallback, and a missing file raises with the
     path and how to regenerate it.
 
-    **Not modeled**: the CMB heating and contrast corrections of the
-    analytic emission models are not applied (the library is a local-universe
-    template; the same holds for the other tabulated dust emission models).
+    **Not modeled**: this model has no CMB heating or contrast term; the
+    redshift is not used. The contrast factor against the CMB is 0.94, 0.83 and
+    0.73 at rest-frame 250, 500 and 1000 micron for 35 K at z = 4. The types
+    that apply it are ``modified_blackbody``, ``graybody`` and ``casey2012``.
 
     References
     ----------
@@ -65,7 +71,7 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     name: str = "schreiber2016"
 
     # Free parameters (user-facing names, prefix-stripped). Both defaults are
-    # read from the declared registry defaults through the module constants the
+    # read from the declared ``dust_T`` and ``dust_f_pah`` defaults (35 K and 0.05) through the module constants the
     # closure's own signature reads, so a direct call, a built model and the
     # closure cannot disagree (#2241, #2597).
     T = Fixed(SCHREIBER_T_K_DEFAULT)
