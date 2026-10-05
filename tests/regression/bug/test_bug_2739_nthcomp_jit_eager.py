@@ -80,12 +80,16 @@ _POINTS = [
 @pytest.mark.gradient
 @pytest.mark.parametrize("overrides", _POINTS)
 def test_warm_comptonization_ad_matches_central_fd(kubota_model, overrides, monkeypatch):
-    """AD and central FD of ``sum(log10 sed_agn)`` agree to 1e-5 for the warm-zone knobs.
+    """AD of ``sum(log10 sed_agn)`` matches the step-converged central FD for the warm zone.
 
     Measured with the contract's own entry, point and error metric (error over the larger
-    of ``|FD|`` and 1e-3 of the largest FD derivative of the disc). The comparison is made
-    at two FD steps, h and h/2, which also agree with each other: the central difference
-    is in its truncation-balanced regime, so the residual is not step noise.
+    of ``|FD|`` and 1e-3 of the largest FD derivative of the disc). A central difference
+    carries an O(h^2) truncation error, so FD at one step is not the reference: the
+    Richardson extrapolation of the steps h and h/2, ``(4 FD(h/2) - FD(h)) / 3``, cancels
+    that term. Measured at ``r_hot_unclipped`` for ``agn_kt_warm``: FD(h) is 3.1e-4 off
+    AD and FD(h/2) is 7.8e-5 off, a ratio of exactly 4 (pure truncation), while the
+    extrapolation is 1e-8 off. AD is compared to the extrapolation and to FD(h/2), and
+    halving the step must move FD toward the extrapolated value, not away from it.
     """
     full = _contract._grad_and_fd(kubota_model, overrides)
     scale = max(abs(fd) for _, fd in full.values())
@@ -100,16 +104,17 @@ def test_warm_comptonization_ad_matches_central_fd(kubota_model, overrides, monk
         assert np.isclose(ad, ad_half, rtol=1e-12), f"{name}: AD depends on the FD step"
         den = max(abs(fd), _contract._ZERO_FLOOR * scale)
         assert abs(fd) > 0.0, f"vacuous: {name} has no response"
+        richardson = (4.0 * fd_half - fd) / 3.0
+        detail = f"AD={ad:.8e} FD(h)={fd:.8e} FD(h/2)={fd_half:.8e} R={richardson:.8e}"
         errors = {
-            "AD vs FD(h)": abs(ad - fd) / den,
+            "AD vs Richardson(h, h/2)": abs(ad - richardson) / den,
             "AD vs FD(h/2)": abs(ad - fd_half) / den,
-            "FD(h) vs FD(h/2)": abs(fd - fd_half) / den,
         }
         for label, err in errors.items():
-            assert err < _AD_FD_RTOL, (
-                f"{name} ({label}): {err:.2e} >= {_AD_FD_RTOL:.0e}; "
-                f"AD={ad:.8e} FD(h)={fd:.8e} FD(h/2)={fd_half:.8e}"
-            )
+            assert err < _AD_FD_RTOL, f"{name} ({label}): {err:.2e} >= {_AD_FD_RTOL:.0e}; {detail}"
+        assert abs(fd_half - richardson) <= abs(fd - richardson), (
+            f"{name}: halving the FD step moved FD away from the extrapolated derivative; {detail}"
+        )
 
 
 def test_float32_mode_is_float32_finite_and_close_to_float64():
