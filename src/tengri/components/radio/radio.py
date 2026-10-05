@@ -736,7 +736,7 @@ def _dispatch_sfr(
     z_slope: float | None,
     apply_suppression: bool,
     log_L_ir: float | None = None,
-    include_freefree: bool = False,
+    q_is_total: bool = False,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
 ) -> jnp.ndarray:
@@ -773,11 +773,13 @@ def _dispatch_sfr(
         Apply Bell+2003 synchrotron suppression.
     log_L_ir : float or None
         ``log10(L_ir)`` for the float32-safe path.
-    include_freefree : bool
-        Whether the caller adds the Murphy+2011 free-free term beside this one.
-        For the Bell modes, whose ``q_ir`` calibrates the TOTAL 1.4 GHz
-        luminosity, the thermal luminosity at 1.4 GHz is then taken out of the
-        synchrotron term so that the sum equals the calibration (#2590).
+    q_is_total : bool
+        Whether ``q_ir`` of the Bell mode calibrates the TOTAL 1.4 GHz luminosity
+        (Bell 2003 Eq. 1). Then the synchrotron term is ``(1 - f_th)`` of the
+        calibrated total, with ``f_th`` the Murphy+2011 free-free share at 1.4 GHz,
+        whichever component supplies the thermal term (the radio block's own, or
+        the nebular continuum). With ``False`` the synchrotron term carries the
+        whole ``q_ir`` total (a non-thermal calibration, as in CIGALE).
     T_e, alpha_ff : float
         Free-free electron temperature [K] and spectral index of that term.
 
@@ -798,10 +800,15 @@ def _dispatch_sfr(
     """
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
-    elif sfr_mode in ("bell2003", "bell2003_split"):
+    elif sfr_mode == "bell2003_split":
+        # alpha_sf is unused here: the split mode's two spectral indices
+        # (alpha_nonthermal=0.75, alpha_thermal=0.10) are AGNFITTER-RX's own
+        # fixed convention, not this module's tunable alpha_sf knob.
+        return radio_sfr_bell2003_split(wavelength, L_ir, q_ir, log_L_ir=log_L_ir)
+    elif sfr_mode == "bell2003":
         thermal_ref = (
             _thermal_at_nu_ref(_NU_REF_BELL2003_HZ, L_ir, T_e, alpha_ff, log_L_ir)
-            if include_freefree
+            if q_is_total
             else 0.0
         )
         return radio_sfr_bell2003(
@@ -1068,6 +1075,7 @@ def radio_total_terms(
     log_L_ir: float | None = None,
     log_L_agn_bol: float | None = None,
     log_nu_cut: float = 13.0,
+    q_is_total: bool | None = None,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose radio emission into additive terms for precomputation.
@@ -1121,6 +1129,10 @@ def radio_total_terms(
         (delvecchio2021/mccheyne2022 modes). Default True.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
+    q_is_total : bool or None
+        Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
+        synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
+        follows ``include_freefree``.
     T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
@@ -1171,7 +1183,7 @@ def radio_total_terms(
         z_slope,
         apply_suppression,
         log_L_ir=log_L_ir,
-        include_freefree=include_freefree,
+        q_is_total=include_freefree if q_is_total is None else q_is_total,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
@@ -1212,6 +1224,7 @@ def radio_total(
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
+    q_is_total: bool | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1254,6 +1267,10 @@ def radio_total(
         Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
     include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
+    q_is_total : bool or None
+        Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
+        synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
+        follows ``include_freefree``.
     T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
@@ -1295,6 +1312,7 @@ def radio_total(
         alpha_ff,
         l_bband,
         log_nu_cut=log_nu_cut,
+        q_is_total=q_is_total,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1323,6 +1341,7 @@ def radio_total_dpl_terms(
     l_bband: float = 0.0,
     log_L_ir: float | None = None,
     log_L_agn_bol: float | None = None,
+    q_is_total: bool | None = None,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose AGN double power-law radio emission into additive terms.
@@ -1386,6 +1405,10 @@ def radio_total_dpl_terms(
         (delvecchio2021/mccheyne2022 modes). Default True.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
+    q_is_total : bool or None
+        Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
+        synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
+        follows ``include_freefree``.
     T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
@@ -1431,7 +1454,7 @@ def radio_total_dpl_terms(
         z_slope,
         apply_suppression,
         log_L_ir=log_L_ir,
-        include_freefree=include_freefree,
+        q_is_total=include_freefree if q_is_total is None else q_is_total,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
@@ -1476,6 +1499,7 @@ def radio_total_dpl(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
+    q_is_total: bool | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission: star-forming + optional free-free + AGN double power-law.
@@ -1521,6 +1545,10 @@ def radio_total_dpl(
         Apply Bell+2003 synchrotron suppression.
     include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
+    q_is_total : bool or None
+        Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
+        synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
+        follows ``include_freefree``.
     T_e : float
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
@@ -1561,6 +1589,7 @@ def radio_total_dpl(
         T_e,
         alpha_ff,
         l_bband,
+        q_is_total=q_is_total,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1585,6 +1614,7 @@ def compute_radio_components(
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
+    q_is_total: bool | None = None,
     **_kwargs,
 ) -> dict:
     """Decompose total radio emission into physical components.
@@ -1621,6 +1651,10 @@ def compute_radio_components(
         Apply Bell+2003 synchrotron suppression.
     include_freefree : bool
         Include free-free component. Default True (diagnostic function).
+    q_is_total : bool or None
+        Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
+        synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
+        follows ``include_freefree``.
     T_e : float
         Electron temperature for free-free. Default 1e4 K.
     alpha_ff : float
@@ -1657,7 +1691,7 @@ def compute_radio_components(
         mass_slope,
         z_slope,
         apply_suppression,
-        include_freefree=include_freefree,
+        q_is_total=include_freefree if q_is_total is None else q_is_total,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
