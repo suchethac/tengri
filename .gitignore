@@ -323,3 +323,6 @@ docs/_generated/
 # The mass-reinsertion lock file (TENGRI_REINSERT_LOCK): runtime coordination
 # between concurrent fits, not a result.
 analysis/paper1/results/fits/.reinsert.lock
+
+# Package-data surviving-mass tables (repackaged BC03 column; tiny, shipped in the wheel)
+!src/tengri/data/ssp_mass_remaining/*.h5
