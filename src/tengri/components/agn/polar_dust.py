@@ -305,7 +305,7 @@ def bongiorno2012_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     the SMC-like power law of Bongiorno et al. (2012) [1]_ for
     :math:`\lambda \ge 100` nm. Below 100 nm the curve is the shape of the tabulated SMC
     dust-mixture opacity of CIGALE's ``skirtor2016`` (repackaged in
-    :mod:`tengri.components.agn._polar_smc_opacity`, with its provenance), rescaled to equal
+    ``tengri.components.agn._polar_smc_opacity``, with its provenance), rescaled to equal
     the power law at 100 nm and interpolated linearly in wavelength, so ``bongiorno`` is
     CIGALE's ``extinction_law = 0``. CIGALE rescales at the last grid point below 100 nm
     rather than at 100 nm itself; for a dense grid the two differ by less than the opacity's
