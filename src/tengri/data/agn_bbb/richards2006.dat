@@ -1,12 +1,12 @@
-# Richards et al. 2006 ApJ 166, 470 — mean Type-1 quasar SED template (SDSS composite).
-# Columns: wavelength [Angstrom]   nu*F_nu [arbitrary units; normalise per use].
+# Richards et al. 2006 ApJS 166, 470 — mean Type-1 quasar SED template (SDSS composite).
+# Columns: wavelength [Angstrom]   L_nu [erg/s/Hz; matches Table 3 of Richards+2006].
 # Source: extracted from AGNfitter (https://github.com/GabrielaCR/AGNfitter)
 #   models/BBB/R06.pickle (sha256 e14c380014fc07b4ecc2cb3ce0b3e2bee100f3753b90fcf24c500fd94386e791).
 # Note: AGNfitter stored the abscissa as log10(nu/Hz); converted to wavelength [Å]
 #       via lambda = c/nu (c = 2.99792458e18 Å/s). Sorted ascending in wavelength.
+#       Column 2 is L_nu (spectral luminosity density), not nu*F_nu.
 # The numerical data is the Richards et al. 2006 composite itself; AGNfitter only
 # provided the tabulated form.
-# 
 3.053660e+01 1.854812e+27
 3.168259e+01 1.921321e+27
 3.287159e+01 1.995262e+27

@@ -642,7 +642,7 @@ if _has_any_nonstell:
 - **BUG-02**: SFR time-averaging — correct trapezoid with proper span
 - **BUG-03**: ADAF T_e — now includes m_dot dependence
 - **BUG-05**: Beloborodov Gamma — correct formula per K&D 2018 Eq. 6
-- **BUG-06**: Balmer tau — corrected to `(wavbe/wavelength)^3`
+- **BUG-06**: Balmer tau — `(wavbe/wavelength)^3` was itself a transcription error of upstream QSOGen's frequency form; corrected to `(wavelength/wavbe)^3` (largest at the edge, sigma_bf ~ nu^-3)
 - **BUG-08**: Shock units — both branches now consistent erg/s/Hz (updated 2026-04-08 after CGS refactor)
 - **BUG-09**: Mean photon energy — correct denominator exponent
 - **BUG-12**: Calibration determinant — signs corrected
