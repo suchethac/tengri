@@ -439,6 +439,12 @@ class DerivedState:
     # term (#1206) via ``apply_log10_scale`` so the AGN-driven radio emission
     # never materializes the out-of-range linear luminosity.
     log_L_agn_bol: jnp.ndarray | None = None
+    # log10 of the line-of-sight isotropic-equivalent bolometric luminosity of
+    # the AGN's direct emission [dex re erg/s]: int L_nu(i) dnu with
+    # L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust.
+    # ``L_agn_bol`` is the accretion power integrated over all directions.
+    # Published by the composable AGN only.
+    log_L_agn_los: jnp.ndarray | None = None
     L_agn_torus: jnp.ndarray | None = None
     L_agn_absorbed: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];

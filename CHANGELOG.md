@@ -174,6 +174,26 @@
 
 ### Changed
 
+- Behaviour change: `agn_log_lbol` is the accretion power radiated into all directions, and the
+  line-of-sight luminosity is a derived output. A thin disc radiates proportional to cos i from
+  each face and the hot corona is isotropic (Kubota & Done 2018, Sects. 2.1 and 2.2), so with
+  `D_nu` the angle-integrated spectrum of the disc and warm zones, `H_nu` that of the corona and
+  `L_acc = int (D_nu + H_nu) dnu = 10**agn_log_lbol L_sun`, the `kubota_done`, `multicolor` and
+  `relagn` discs return `L_nu(i) = 2 cos i D_nu + H_nu` (the disc alone for the latter two): the
+  luminosity density an observer at inclination i assigns assuming isotropy. Before, the
+  bolometric normalization carried the same cos i as the rings, so it cancelled it (the 5100 A
+  level moved by 0.999, 0.991 and 0.976 at i = 30, 60 and 75 deg instead of 0.866, 0.5 and 0.26
+  relative to face-on) and the true power was 1/cos i times `agn_log_lbol`. Now the power at
+  cos i = 0.5 equals `L_acc`, the mean over cos i in [0, 1] equals `L_acc`, the zone radii, T(r),
+  mdot and the corona power do not depend on i, and the default i = 30 deg disc is 2 cos 30 =
+  1.732 times its `D_nu` (the optical and UV of a default AGN is 1.7 times brighter relative to
+  the torus and the corona). `L_2500_intrinsic` and `L_4400_intrinsic` are the line-of-sight
+  values at 30 deg. The new `log_L_agn_los` (dex re erg/s, composable model) is
+  log10 int L_nu(i) dnu of the direct emission before the torus screen and the polar dust: compare
+  it, not `agn_log_lbol`, with a catalog L_bol from a bolometric correction; `L_agn_bol` stays
+  `L_acc`. `ring_area` is the isotropic-equivalent projected area 4 pi (2 pi r dr) cos i with no
+  floor at cos i = 0.01. (#2678)
+
 - Breaking: `Spectroscopy.resample` defaults to `"auto"` (was `"point"`), decided in the model's rest frame at the fixed (or lowest prior) redshift by one function that every spectrum path calls, including `spectrum_from_sfh`. Pixels wider than the model grid now return the pixel mean of the light after the line-spread function (the Gaussian LSF acts on the model grid, then the bin integral; a DESI resolution matrix still acts on the pixels): a sigma = 1 Å line in 2 Å pixels read +14 % at its centre when point-sampled. `Spectroscopy(resample="point")` restores the old values. `SpectrumPrecomp` raises on pixels wider than the model grid instead of warning; pixel-integral gradients in redshift are continuous (#2530).
 
 ### Added

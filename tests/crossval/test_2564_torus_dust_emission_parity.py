@@ -337,6 +337,10 @@ _DISC_CASES = [
     "kd18_agnfitter_warmindex",
 ]
 _C_AA_PER_S = 2.99792458e18
+# A thin disc radiates 2 cos i times its angle-integrated spectrum (kubota_done, multicolor,
+# the kd18 variants; #2678), so its line-of-sight power equals ``agn_log_lbol`` at cos i = 0.5;
+# the discs without an inclination law ignore the knob.
+_DISC_COS_INC = 0.5
 
 
 def _predict_disc(ssp, disc):
@@ -358,6 +362,7 @@ def _predict_disc(ssp, disc):
             "blr": {"type": "none"},
             "atten": {"type": "none"},
             "agn_log_lbol": Fixed(11.0),
+            "agn_cos_inc": Fixed(_DISC_COS_INC),
             "all_params": Fixed(DEFAULT),
             "norm": "independent",
         },
@@ -375,7 +380,7 @@ def _predict_disc(ssp, disc):
 def _disc_block(disc, w):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        out = AGN_BLOCKS["disc"][disc](jnp.asarray(w), 11.0)
+        out = AGN_BLOCKS["disc"][disc](jnp.asarray(w), 11.0, agn_cos_inc=_DISC_COS_INC)
     return np.nan_to_num(np.asarray(out, float))
 
 
