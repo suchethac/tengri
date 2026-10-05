@@ -35,7 +35,7 @@ from tengri.components.agn._params import (
     DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
 )
-from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.nlr_cloudy import (
     compute_nlr_sed_cue,
@@ -132,6 +132,45 @@ def nlr_analytic_block(
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
     return jnp.zeros_like(L_lambda), L_lambda
+
+
+@register_line_energy("nlr", "analytic")
+def nlr_analytic_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_nlr_cf: float = 0.1,
+    agn_nlr_line_efficiency: float = 0.10,
+    **_params,
+) -> Array:
+    r"""Bolometric line power of :func:`nlr_analytic_block` [erg/s].
+
+    The 23 Richardson et al. (2014) lines are Gaussians each normalized to unit
+    integral, scaled so they sum to ``efficiency x covering x L_bol``; the integral of
+    ``L_lambda`` over all wavelengths is therefore that product, exactly.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        log10 of the intrinsic bolometric luminosity [Lsun], as the block receives it.
+    l5100_disc : array_like
+        Unused (the NLR is illuminated by the intrinsic bolometric luminosity).
+    agn_nlr_cf : float, optional
+        NLR covering fraction.
+    agn_nlr_line_efficiency : float, optional
+        Fraction of the intercepted luminosity radiated in lines.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del l5100_disc
+    return agn_nlr_line_efficiency * agn_nlr_cf * 10.0**agn_log_lbol * _L_SUN_ERG
 
 
 @register_agn_block(

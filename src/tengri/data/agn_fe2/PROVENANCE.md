@@ -7,7 +7,7 @@
 **File**: `fe_uv_pyqsofit.txt`
 **Source**: PyQSOFit repository (https://github.com/legolason/PyQSOFit/blob/084df5a/src/pyqsofit/fe_uv.txt)
 **Upstream Commit**: 084df5a (latest as of 2026-05-24)
-**SHA256**: `f2bbdd82c6c66337f61e858fc7abd0c9666eee586818fc9db1e06567a659eb7d`
+**SHA256**: `f2bbdd82c6c66337f61e858fe7abd0c9666eee586818fc9db1e06567a659eb7d`
 **Date Fetched**: 2026-05-24
 
 The PyQSOFit UV template is a composite:
@@ -15,7 +15,7 @@ The PyQSOFit UV template is a composite:
 - 2200–3090 Å: Salvatori et al. 2006 (extrapolated under MgII)
 - 3090–3500 Å: Tsuzuki et al. 2006
 
-Columns: log10(wavelength), flux [erg/s/cm²/Å]
+Columns: log10(wavelength), F_lambda [erg/s/cm²/Å] (only the shape is used; scale set by R_Fe x L(Hbeta))
 Velocity dispersion: 103.6 km/s
 
 **Underlying References**:
@@ -27,12 +27,12 @@ Velocity dispersion: 103.6 km/s
 **File**: `fe_optical_pyqsofit.txt`
 **Source**: PyQSOFit repository (https://github.com/legolason/PyQSOFit/blob/084df5a/src/pyqsofit/fe_optical.txt)
 **Upstream Commit**: 084df5a (latest as of 2026-05-24)
-**SHA256**: `096c6ed6ca2f97a401ffca24b2d8577d46c699d06fe77569bb491aa15a6ee300`
+**SHA256**: `096c6ed6ca2f97a401ffca24b2d8577d46c699d06fe77569cb491aa15a6ee300`
 **Date Fetched**: 2026-05-24
 
 Based on Boroson & Green 1992 optical Fe template.
 
-Columns: log10(wavelength), flux [erg/s/cm²/Å]
+Columns: log10(wavelength), F_lambda [erg/s/cm²/Å] (only the shape is used; scale set by R_Fe x L(Hbeta))
 
 **Underlying Reference**:
 - Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109 (https://doi.org/10.1086/191679)

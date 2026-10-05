@@ -10,31 +10,27 @@ pytestmark = pytest.mark.regression_bug
 
 
 class TestBug06BalmerTau:
-    """qsogen.py:397 — tau must increase at shorter wavelengths.
+    """qsogen.py — tau must be largest at the Balmer edge and fall toward the blue.
 
-    Grandi 1982: σ(ν) ∝ ν³, so τ ∝ ν³ ∝ λ⁻³ must increase at shorter wavelengths.
-    Buggy code had τ ∝ λ³ (inverted).
+    Grandi 1982: sigma_bf(nu) ~ nu^-3, so tau ~ nu^-3 ~ lambda^3. An earlier
+    version of this test asserted the inverse (tau ~ lambda^-3), i.e. it pinned a
+    transcription error of upstream QSOGen's ``taube * (nuzero/nu)**3``; it also
+    only evaluated local arithmetic and never called the model. It now measures
+    tau(lambda) through ``_balmer_continuum``.
     """
 
-    def test_tau_increases_shortward(self):
-        """Grandi 1982: sigma(nu) ~ nu^3, so tau increases at shorter lambda."""
-        wavbe = 3646.0  # Balmer edge wavelength
-        taube = 1.0
+    def test_tau_decreases_shortward(self):
+        """Grandi 1982: sigma(nu) ~ nu^-3, so tau decreases toward shorter lambda."""
+        import jax.numpy as jnp
+        import numpy as np
 
-        # Current (buggy) code: tau = taube * (wave / wavbe)^3
-        wave_short = 3000.0
-        wave_long = 3500.0
-        tau_short_buggy = taube * (wave_short / wavbe) ** 3
-        tau_long_buggy = taube * (wave_long / wavbe) ** 3
+        from tengri.components.agn.qsogen import _balmer_continuum
 
-        # Correct: tau = taube * (wavbe / wave)^3
-        tau_short_correct = taube * (wavbe / wave_short) ** 3
-        tau_long_correct = taube * (wavbe / wave_long) ** 3
-
-        # Bug: tau_short < tau_long (wrong — should be higher at shorter lambda)
-        assert tau_short_buggy < tau_long_buggy, (
-            "If this fails, BUG-06 may have been fixed — remove xfail"
-        )
-
-        # Correct: tau_short > tau_long
-        assert tau_short_correct > tau_long_correct
+        wave = jnp.asarray([2000.0, 2500.0])
+        # tau << 1: component = B_lambda * tau, so component / B_lambda ~ tau(lambda).
+        bc = np.asarray(_balmer_continuum(wave, jnp.ones_like(wave), 1.0, 15000.0, 1e-6, 3646.0))
+        w = np.asarray(wave)
+        b_lam = w ** (-3.0) / np.expm1(1.43877735e8 / (15000.0 * w))
+        tau_short, tau_long = bc / b_lam
+        assert tau_short < tau_long
+        assert tau_long / tau_short == pytest.approx((2500.0 / 2000.0) ** 3, rel=2e-3)

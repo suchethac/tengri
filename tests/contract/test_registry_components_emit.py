@@ -493,7 +493,11 @@ _AGN_BLOCK_ROWS = [
     ("nlr", "feltre", None, 1.0),
     ("blr", "analytic", None, 0.5),
     ("feii", "grahsp", None, 0.01),
-    ("feii", "boroson_green", {"fe2_strength": 2.0}, 0.1),
+    # Floor 0.05 (was 0.1): the old 0.1 pinned the amplitude of the FeII spectrum
+    # carrying a spurious lambda^-2 tilt (F_lambda treated as L_nu then x c/lambda^2).
+    # The corrected block gives 8.2e-2 at the prior-maximum R_Fe=2 on this fixture
+    # (max over the probe waves, at MgII); 0.05 is still a >1e3 margin over a dead block.
+    ("feii", "boroson_green", {"fe2_strength": 2.0}, 0.05),
     ("feii", "qsogen_balmer", {"agn_bcnorm": 0.3}, 0.1),
     ("atten", "polar_dust", {"polar_ebv": 0.1}, 0.05),
     ("atten", "qsogen_smc", {"agn_ebv": 0.1}, 0.1),

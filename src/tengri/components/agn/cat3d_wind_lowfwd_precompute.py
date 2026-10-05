@@ -30,6 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
+from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.cat3d_wind_lowfwd import _load_cat3d_lowfwd_arrays
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
@@ -87,7 +88,7 @@ def precompute_cat3d_wind_lowfwd_photometry(
     **JIT-compatible**: no, this is a build-time function using NumPy.
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / trapz(template, nu). This matches
+    integration constant equals L_sun / native_integral(template). This matches
     the runtime normalization in ``cat3d_wind_lowfwd.py``.
 
     **Grid reordering**: The native inclination axis is stored in degrees
@@ -95,7 +96,6 @@ def precompute_cat3d_wind_lowfwd_photometry(
     to match, mirroring
     ``cat3d_wind_lowfwd.load_cat3d_wind_lowfwd_grid``.
     """
-    from tengri.components.agn._phys import C_LIGHT as _C_CGS
     from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_cat3d_lowfwd_arrays(grid_path)
@@ -111,17 +111,13 @@ def precompute_cat3d_wind_lowfwd_photometry(
     a_axis = np.asarray(raw["a_axis"], dtype=np.float64)
     fwd_axis = np.asarray(raw["fwd_axis"], dtype=np.float64)
 
-    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
-    sort_idx = np.argsort(nu_grid)
-    nu_sorted = nu_grid[sort_idx]
-
     n_cos_inc, n_a, n_fwd, _ = grid.shape
     lnu_grid = np.empty_like(grid)
     for i in range(n_cos_inc):
         for j in range(n_a):
             for k in range(n_fwd):
                 template = grid[i, j, k]
-                integral = np.trapezoid(template[sort_idx], nu_sorted)
+                integral = native_bolometric_nu_np(template, wave_grid)
                 integral_safe = max(abs(integral), 1e-100)
                 lnu_grid[i, j, k] = _LSUN_ERG * template / integral_safe
 

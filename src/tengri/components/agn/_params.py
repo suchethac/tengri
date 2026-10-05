@@ -440,7 +440,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_f_hard",
         Uniform(0.0, 0.1, default=0.02),
-        "Coronal luminosity fraction (fraction of disc power to hot corona)",
+        "Coronal luminosity fraction (hot-flow dissipation as a fraction of L_Edd)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),

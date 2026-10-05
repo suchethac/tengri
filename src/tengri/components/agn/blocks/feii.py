@@ -11,14 +11,13 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
+from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum, _fe2_total_power
 
 __all__ = [
     "boroson_green_feii_block",
+    "boroson_green_feii_line_power",
 ]
-
-from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 DEFAULT_F_BOL_5100: float = 9.0
 
@@ -107,15 +106,50 @@ def boroson_green_feii_block(
     # This ensures FeII scales consistently with BLR emission lines.
     l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
 
-    # FeII L_nu per unit H-beta luminosity, scaled by fe2_strength.
+    # FeII L_lambda [1/Angstrom] per unit H-beta luminosity, scaled by
+    # fe2_strength (the template's F_lambda shape is the L_lambda shape).
     fe2_spectrum = _fe2_pseudo_continuum(wave_aa, agn_blr_fwhm_kms, agn_fe2_strength)
 
-    # Scale FeII template to absolute luminosity by multiplying by l_hbeta.
-    # _fe2_pseudo_continuum returns L_nu [Hz^-1] per unit H-beta.
-    l_nu_fe2 = l_hbeta * fe2_spectrum
+    # Scale to absolute luminosity: L_lambda [erg/s/A] = L(H-beta) * spectrum.
+    return l_hbeta * fe2_spectrum
 
-    # Convert L_nu to L_lambda: L_lambda = L_nu * c / lambda^2.
-    # Clip negative values (from ringing in broadened template) to zero.
-    l_lambda = jnp.maximum(l_nu_fe2 * _C_AA_PER_S / wave_aa**2, 0.0)
 
-    return l_lambda
+@register_line_energy("feii", "boroson_green")
+def boroson_green_feii_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_fe2_strength: float = 0.0,
+    agn_blr_fwhm_kms: float = 5000.0,
+    agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
+    agn_blr_cf: float = 0.1,
+    agn_blr_line_efficiency: float = 0.08,
+    **_params,
+) -> Array:
+    r"""Bolometric power of :func:`boroson_green_feii_block` [erg/s].
+
+    ``L_Hbeta`` times the integral of the broadened, R_Fe-normalized template, taken on
+    the template's own internal grid, so no wavelength grid is involved.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        Unused (the normalization is ``l5100_disc``).
+    l5100_disc : array_like
+        ``lambda L_lambda(5100 A)`` of the disc [erg/s].
+    agn_fe2_strength, agn_blr_fwhm_kms, agn_blr_f_bol, agn_blr_cf, agn_blr_line_efficiency
+        As for :func:`boroson_green_feii_block`.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del agn_log_lbol
+    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
+    l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
+    return l_hbeta * _fe2_total_power(agn_blr_fwhm_kms, agn_fe2_strength)
