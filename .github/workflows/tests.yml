@@ -1174,11 +1174,9 @@ jobs:
         # against the 50-minute cap. Two PR runs the same day were killed at 51-52
         # min with 93 % of b2 done, each adding under two minutes of tests. Both
         # halves get 70, the same margin regression-a was given over its measured 61.
-        #
-        # contract (2026-10-04): main @46abb3e05 and three PR runs the same day were
-        # killed at 91 minutes against the 90-minute cap (14:44-16:15, 14:29-16:01,
-        # 13:50-15:21 UTC), all on the shared runners. It gets 120.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
+        # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
+        # 51 min; b2 49, 48, 49 min and one kill at 51.
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 90 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
         with:
