@@ -75,6 +75,11 @@ class TestIGMPrecomputation:
         assert n_z_actual >= n_z_uniform, (
             f"z_grid has fewer points ({n_z_actual}) than requested uniform nodes ({n_z_uniform})"
         )
+        z_grid = np.asarray(zt.z_grid)
+        uniform = np.linspace(z_grid[0], z_grid[-1], n_z_uniform)
+        assert np.all(np.min(np.abs(z_grid[None, :] - uniform[:, None]), axis=1) < 1e-12), (
+            "the requested uniform nodes are not all present in z_grid"
+        )
         # The table's leading dim equals the actual grid size
         chex.assert_shape(zt.igm_trans_table, (n_z_actual, 3))
 

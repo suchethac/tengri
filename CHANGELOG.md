@@ -28,7 +28,7 @@
   cubic Hermite (PCHIP) is exact at nodes, keeps the grid monotone, and resolves sharp features like the
   Lyman-limit edge via edge-aware node clusters (refinement factor 8, graded spacing). Measured on GALEX/SDSS/DES/
   NIRCam free-z fits: FUV/NUV/u/des_i worst error 0.59/0.06/0.04/0.08 % at n_z=250; NIRCam F090W/F115W at z 4–12
-  reduce from 7.39/5.64 % (main) to 0.58/0.77 %. Gradient vs central difference error drops to ≤0.8 % (was ≤23 %).
+  reduce from 7.39/5.64 % to 0.58/0.77 %. Gradient vs central difference error drops to ≤0.8 % (was ≤23 %).
   Gradient FLOP count down 22 % (2.94M vs 3.76M).
 
 - The radio wing of the master wavelength grid is sampled at 100 points per decade from at

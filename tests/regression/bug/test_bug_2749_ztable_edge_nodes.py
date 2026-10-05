@@ -324,3 +324,40 @@ def test_nircam_wide_bands_at_high_z_within_budget(ssp_id):
     live = fe >= TAIL_FRACTION * fe.max(axis=0)
     worst = np.where(live, err, 0.0).max(axis=0)
     assert np.all(worst < RTOL), dict(zip(JWST_BANDS, np.round(100 * worst, 2), strict=True))
+
+
+def test_cubic_read_is_float32_safe_at_physical_table_scale():
+    """The z-read keeps a finite, scale-equivariant gradient on physical-unit tables in float32.
+
+    The free-z tables carry band luminosities in physical units, ~1e-13 to 1e-24
+    after the population weights. On values that small the PCHIP harmonic-mean
+    tangent's reverse pass squares a ~1e21 reciprocal sum past float32's range,
+    and the redshift fit returned a NaN mass gradient on every free-z float32
+    seam. The cubic is positively homogeneous in the node values, so it is
+    formed on each column over its own stencil maximum: the result and the
+    gradient at scale c must equal c times the O(1) ones.
+    """
+    from tengri.utils.grid_interp import pchip_interp_local
+
+    x = np.linspace(0.05, 1.0, 12)
+    base = np.stack([np.exp(-3.0 * x), 1.0 + 0.5 * np.sin(4.0 * x), x**2 + 0.1], axis=-1)
+    zq = 0.5249999761581421  # the float32 seams' standardized origin, mid-cell
+    # A power of two scales every float32 entry exactly, so equivariance is exact.
+    c = 2.0**-73  # ~1.06e-22
+    with jax.enable_x64(False):
+        xs = jnp.asarray(x, jnp.float32)
+
+        def read(scale):
+            table = jnp.asarray(base * scale, jnp.float32)
+
+            def f(z, tab):
+                return jnp.sum(pchip_interp_local(xs, tab, z))
+
+            return f(jnp.float32(zq), table), jax.grad(f, argnums=(0, 1))(jnp.float32(zq), table)
+
+        v1, (gz1, gt1) = read(1.0)
+        vc, (gzc, gtc) = read(c)
+    assert np.all(np.isfinite(np.asarray(gtc))) and np.isfinite(float(gzc))
+    assert float(vc) == c * float(v1)
+    assert float(gzc) == c * float(gz1)
+    np.testing.assert_array_equal(np.asarray(gtc), np.asarray(gt1))

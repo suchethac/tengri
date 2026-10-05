@@ -76,6 +76,11 @@ class TestZTablePrecomputation:
         assert n_z_actual >= n_z_uniform, (
             f"z_grid has fewer points ({n_z_actual}) than requested uniform nodes ({n_z_uniform})"
         )
+        z_grid = np.asarray(zt.z_grid)
+        uniform = np.linspace(z_grid[0], z_grid[-1], n_z_uniform)
+        assert np.all(np.min(np.abs(z_grid[None, :] - uniform[:, None]), axis=1) < 1e-12), (
+            "the requested uniform nodes are not all present in z_grid"
+        )
         assert zt.ssp_phot_table.shape == (n_z_actual, 3, 20, 3), (
             f"(n_z, n_met, n_age, n_filt) = ({n_z_actual}, 3, 20, 3), "
             f"got {zt.ssp_phot_table.shape}"

@@ -1305,6 +1305,15 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
     tables = table if isinstance(table, tuple) else (table,)
     rows = tuple(jax.lax.dynamic_slice_in_dim(t, start, 4, axis=0) for t in tables)
     ys = reduce(*rows) if reduce is not None else rows[0]
+    # The cubic is positively homogeneous in the node values (secants, the
+    # harmonic-mean tangents and the endpoint caps all scale with y), so it is
+    # formed on each column divided by its own stencil maximum and scaled back:
+    # identical in exact arithmetic, value and gradient. Physical-unit tables sit
+    # at ~1e-13 to 1e-24, where the harmonic mean's reverse pass would square a
+    # ~1e21 reciprocal sum past float32's range and return NaN (#2749).
+    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    ys = ys / scale
     jc = i - start  # the bracketing cell's lower node within the stencil
     slopes = _pchip_slopes(xs, ys)
     x0, x1 = xs[jc], xs[jc + 1]
@@ -1312,7 +1321,7 @@ def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray
     t = (xq_c - x0) / h
     t2 = t * t
     t3 = t2 * t
-    return (
+    return scale * (
         (2.0 * t3 - 3.0 * t2 + 1.0) * ys[jc]
         + (t3 - 2.0 * t2 + t) * h * slopes[jc]
         + (-2.0 * t3 + 3.0 * t2) * ys[jc + 1]
