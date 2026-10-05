@@ -712,6 +712,49 @@ def radio_freefree(
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
 
+def radio_q_total_limit(T_e: float = 1e4, alpha_ff: float = -0.1) -> float:
+    r"""Largest ``q_ir`` for which the Bell-total synchrotron term stays non-negative.
+
+    With ``q_ir`` calibrating the total 1.4 GHz luminosity (Bell 2003 [1]_ Eq. 1),
+    the synchrotron term is the total minus the Murphy+2011 [2]_ free-free luminosity
+    at 1.4 GHz, and both scale with ``L_ir``. It vanishes at
+
+    .. math::
+
+        q_\ast = -\log_{10}\left[3.75\times10^{12}\,
+        \frac{3.88\times10^{-44}}{4.6\times10^{-28}}
+        \left(\frac{T_e}{10^4\,{\rm K}}\right)^{0.45}
+        (1.4)^{\alpha_{\rm ff}}\right]
+
+    (3.5145 for ``T_e`` = 1e4 K, ``alpha_ff`` = -0.1) and is negative for larger q.
+
+    Parameters
+    ----------
+    T_e : float
+        Electron temperature [K].
+    alpha_ff : float
+        Free-free spectral index (L_nu ∝ nu^alpha_ff).
+
+    Returns
+    -------
+    float
+        ``q_*`` [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no, plain Python floats (build-time validation).
+
+    References
+    ----------
+    .. [1] E. F. Bell, ApJ, 586, 794 (2003). https://doi.org/10.1086/367829
+    .. [2] E. J. Murphy et al., ApJ, 737, 67 (2011), Eqs. 4 and 11.
+       https://doi.org/10.1088/0004-637X/737/2/67
+    """
+    ff_per_lir = _SFR_FROM_LIR_MURPHY2011 * _C_FF * (T_e / 1.0e4) ** 0.45
+    ff_per_lir *= (_NU_REF_BELL2003_HZ / 1.0e9) ** alpha_ff
+    return -math.log10(3.75e12 * ff_per_lir)
+
+
 def _thermal_at_nu_ref(
     nu_ref: float,
     L_ir: float,

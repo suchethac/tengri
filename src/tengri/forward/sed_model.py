@@ -1618,6 +1618,63 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
+def _upper_support(spec, name: str) -> float | None:
+    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
+    dists = getattr(spec, "_distributions", {})
+    dist = dists.get(name)
+    if dist is None:
+        return None
+    if dist.is_fixed:
+        value = dist.value
+        return float(value) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[1])
+
+
+def _validate_radio_q_total_support(spec) -> None:
+    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+
+    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
+    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
+    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
+    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
+    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
+    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
+    non-thermal term) or to the other star-formation radio modes.
+
+    Raises
+    ------
+    ConfigError
+        If the support of ``radio_q_ir`` reaches the limit at the support of the
+        electron temperature.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    q_hi = _upper_support(spec, "radio_q_ir")
+    t_hi = _upper_support(spec, "radio_T_e")
+    a_hi = _upper_support(spec, "radio_alpha_ff")
+    if q_hi is None or t_hi is None or a_hi is None:
+        return
+    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.config.exceptions import ConfigError
+
+    q_star = radio_q_total_limit(t_hi, a_hi)
+    if q_hi > q_star:
+        raise ConfigError(
+            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
+            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
+            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
+            "total minus the Murphy+2011 free-free luminosity, "
+            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
+            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
+            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
+            "term alone."
+        )
+
+
 def _validate_dale2014_requires_no_sf_radio(spec) -> None:
     r"""Raise if a radio-bearing dust template is combined with SF radio (#1970).
 
@@ -12455,6 +12512,7 @@ class SEDModel:
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
+        _validate_radio_q_total_support(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
