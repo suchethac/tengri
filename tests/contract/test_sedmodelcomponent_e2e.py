@@ -531,7 +531,6 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         # engine models (modified_blackbody/dl07/dl14/dale2014/astrodust) are the
         # canonical emission surface.
         "draine2021_pah_ir",
-        "schreiber2016_ir",
         # AGN
         "skirtor",
         "kd18_disc",

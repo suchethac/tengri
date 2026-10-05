@@ -26,7 +26,6 @@ def test_registry_baseline_keys_registered():
         "kd18_disc",
         "powerlaw_disc",
         "radio_powerlaw",
-        "schreiber2016_ir",
         "silva04",
         "skirtor",
         "xray_aird",
