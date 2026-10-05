@@ -95,7 +95,7 @@ _NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
 # thermal pair. Declared once, cited, and reused by
 # :func:`radio_sfr_bell2003_split` -- NOT the same numbers as this module's
 # default ``_ALPHA_SF_DEFAULT`` (0.8, Condon 1992) or ``radio_freefree``'s
-# Murphy+2011 normalization (thermal share 13.3 % of the Bell total at q = 2.64).
+# Murphy+2011 normalization (thermal share 13.4 % of the Bell total at q = 2.64).
 _F_THERMAL_AGNFITTER: float = 0.10  # thermal fraction of the Bell(2003) total
 _ALPHA_NONTHERMAL_AGNFITTER: float = 0.75  # Baan & Klockner (2006)
 _ALPHA_THERMAL_AGNFITTER: float = 0.10  # Dale & Helou (2002); Condon (1992)

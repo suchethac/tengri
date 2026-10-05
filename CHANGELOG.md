@@ -2,6 +2,8 @@
 
 ### Changed
 
+- The default star-forming radio flux changes: Bell (2003)'s `radio_q_ir = 2.64` calibrates the TOTAL 1.4 GHz luminosity (Eq. 1; about 10 % of it thermal, Sect. 4), and the default `bell2003` block used to put that whole total in the synchrotron term and add the Murphy et al. (2011) free-free term on top, counting the thermal emission twice. With free-free on, the synchrotron term is now the calibrated total minus the free-free luminosity at 1.4 GHz, so synchrotron plus thermal equals `L_IR / (3.75e12 Hz x 10^q)` at 1.4 GHz; with it off, the synchrotron term carries the whole total as before. For q = 2.64, alpha = 0.8, T_e = 1e4 K the default flux relative to the old one is 1/1.134 at 1.4 GHz (the old 1.134 on/off ratio is now 1.000), and the on/off ratio at 5, 30 and 100 GHz falls from 1.326, 2.141 and 3.650 to 1.192, 2.007 and 3.516; below 1.4 GHz the synchrotron is lower by the thermal share (13.4 % of the total at 1.4 GHz). `bell2003_split` is the same code path as `bell2003` (the spelling stays accepted; `freefree: True` with it no longer raises); the stand-alone `radio_sfr_bell2003_split` keeps the AGNFITTER-RX 90/10 construction. The `L_ir` that enters q is documented as the total absorbed dust power `L_absorbed x eta`, not the 8-1000 micron band (0.97 of it for the default DL14 emission). `delvecchio2021` and `mccheyne2022` are unchanged: they carry Bell's non-thermal fraction n(L) <= 0.9. (#2590)
+
 - One exact young/old split serves every attenuator. The stellar component publishes, per SSP age node, the share of its formed mass younger than each boundary age (`age_boundary_younger_fraction`), computed through the same SFH kernel as the node weights, instead of each screen evaluating a step or logistic at the node ages. `two_component` defaults to a hard step at `t_birth_yr=1e7`; `transition_width_dex > 0` opts into the smooth law, and `age_binned` windows use the same machinery. A node's transmission is the mixture of its populations' transmissions (not of their optical depths). Nebular and line screens are weighted by ionizing luminosity, the energy-balance lookup table carries young and old populations and mixes them at runtime, `age_binned` gains the `lyc_` key family, and the refusal of age windows narrower than five node spacings is gone. Golden: `two_component` `L_absorbed` 5.932047709369588e59 -> 5.93036676326139e59 erg/s (-0.0283%), matching an independent dense-parcel step reference to 5.6e-9.
 
 ### Added
@@ -11,6 +13,8 @@
 - `draine_li2007` and `draine_li2014` publish the derived key `dust_umean`, the mean starlight intensity `U_min [(1 - gamma) + gamma R]` of the model (CIGALE's `dust.umean`), with `R` the power-law to single-U luminosity ratio at `U_max = 1e6` (alpha = 2) for DL07 and `1e7` (free alpha) for DL14 (#2599).
 
 ### Fixed
+
+- `bell2003_split` is now covered by the build-time check that refuses a FIRRC radio block without a dust component, which would otherwise return an all-zero radio SED silently. (#2590)
 
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
