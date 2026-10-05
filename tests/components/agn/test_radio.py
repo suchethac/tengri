@@ -711,9 +711,20 @@ class TestRadioComponents:
         assert jnp.all(comps["freefree"] > 0.0)
 
     def test_total_includes_freefree_when_enabled(self):
+        """Bell's q calibrates the total: thermal on/off agree at 1.4 GHz, differ elsewhere.
+
+        With the free-free term on, the synchrotron term gives up the thermal luminosity at
+        1.4 GHz, so the total there is the calibration with or without it; above ~30 GHz the
+        flat thermal term exceeds the synchrotron power it displaced (#2590).
+        """
+        ref_off = compute_radio_components(_WAVE_14GHZ, **_RC_KW, include_freefree=False)
+        ref_on = compute_radio_components(_WAVE_14GHZ, **_RC_KW, include_freefree=True)
+        np.testing.assert_allclose(ref_on["total"], ref_off["total"], rtol=1e-9)
         comps_off = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
         comps_on = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
-        assert jnp.all(comps_on["total"] > comps_off["total"])
+        nu = _C_AA / _WAVE_RADIO
+        high = nu > 3.0e10
+        assert jnp.all(comps_on["total"][high] > comps_off["total"][high])
 
     def test_thermal_fraction_milky_way_like(self):
         """Thermal fraction at 1.4 GHz for L_ir=1e10 Lsun: 2–25% (Bell+2003 FIRRC ~5%)."""
