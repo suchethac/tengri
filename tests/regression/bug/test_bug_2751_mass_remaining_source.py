@@ -200,7 +200,7 @@ def test_embedded_table_disagreeing_with_companion_raises(tmp_path):
     path = _write_grid(
         tmp_path / "fsps_mist_miles_chabrier.h5", age - 9.0, logz, mass_remaining=tab + 1e-3
     )
-    with pytest.raises(ValueError, match="differs from mass_remaining_mist_chabrier.h5"):
+    with pytest.raises(ValueError, match=r"differs from mass_remaining_mist_chabrier\.h5"):
         _load_ssp_data(str(path))
 
 
@@ -383,9 +383,10 @@ def test_no_locally_present_grid_silently_uses_the_fit():
 
 
 def test_bc03_grid_resolves_to_its_companion_with_t0_equal_one():
+    from tengri._data_setup import data_dirs
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-    for root in (REPO / "data", Path("/Users/suchethacooray/Projects/tengri/data")):
+    for root in (REPO / "data", *data_dirs()):
         grid = root / "bc03_pdva_stelib_chabrier.h5"
         if grid.is_file():
             break
