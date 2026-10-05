@@ -428,6 +428,16 @@ def apply_dust_emission(
 # ── Lazy loading infrastructure for template-based models ─────────
 
 
+#: Per-model advice appended to the missing-template error of the lazy loader.
+_MISSING_DATA_HINTS: dict[str, str] = {
+    "schreiber2016": (
+        "There is no analytic substitute. Regenerate it from CIGALE's database with "
+        "`python scripts/regenerate_schreiber2016_from_cigale.py` (requires pcigale), "
+        "or restore data/schreiber2016_templates.h5 from the repository."
+    ),
+}
+
+
 def _make_lazy_loader(
     name: str,
     template_filename: str,
@@ -483,11 +493,17 @@ def _make_lazy_loader(
                 DUST_EMISSION_MODELS[name] = tabulated
                 return tabulated(*args, **kwargs)
             else:
+                from tengri._data_setup import data_dirs
+
+                searched = ", ".join(str(d) for d in data_dirs())
                 raise FileNotFoundError(
-                    f"Template file '{template_filename}' not found in data/. "
-                    f"The analytic fallback for {name} has been removed because it "
-                    f"produced scientifically incorrect results. Download templates "
-                    f"or register manually via register_*_tabulated()."
+                    f"Template file '{template_filename}' not found (searched: {searched}). "
+                    + _MISSING_DATA_HINTS.get(
+                        name,
+                        f"The analytic fallback for {name} has been removed because it "
+                        f"produced scientifically incorrect results. Download templates "
+                        f"or register manually via register_*_tabulated().",
+                    )
                 )
         # Already resolved.  If the slot still holds *this* lazy wrapper the
         # earlier resolution failed silently: fail loudly instead of

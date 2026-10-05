@@ -237,7 +237,7 @@ def test_gradient_is_finite_nonzero_and_equals_the_reference(knob, x0):
 
 
 def test_wave_precomp_matches_the_exact_path(synthetic_ssp):  # noqa: F811
-    """WavePrecomp photometry of a built ``schreiber2016`` model matches the exact path (0.5%)."""
+    """WavePrecomp photometry of a built ``schreiber2016`` model matches exact (1e-6)."""
     from tengri import DEFAULT, Fixed
     from tests.contract.test_dust_ir_emission_precompute_parity import _tophat
 
@@ -260,7 +260,7 @@ def test_wave_precomp_matches_the_exact_path(synthetic_ssp):  # noqa: F811
                     "f_pah": Fixed(0.3),
                 },
             },
-            tolerance=0.005,
+            tolerance=1e-6,
         )
 
 
@@ -298,3 +298,19 @@ def test_provenance_points_at_the_one_paper():
     entry = bib[bib.index("@article{Schreiber_2018,") :].split("\n}\n", 1)[0]
     assert "1710.10276" in entry and "registry_key  = {schreiber2018}" in entry
     assert associations.DUST_EMISSION_CITATIONS["schreiber2016"] == ["schreiber2018"]
+
+
+def test_registry_loader_missing_file_raises_with_path_and_recipe(monkeypatch):
+    """The registry closure path names the searched path and the regeneration script."""
+    from tengri.components.dust.emission import emission as emission_module
+
+    monkeypatch.setattr(emission_module, "_resolved", set())
+    monkeypatch.setattr(emission_module, "find_data_str", lambda *a, **k: None)
+    loader = emission_module._make_lazy_loader(
+        "schreiber2016", "schreiber2016_templates.h5", "create_schreiber2016_from_grid"
+    )
+    with pytest.raises(FileNotFoundError, match=r"schreiber2016_templates\.h5") as exc:
+        loader(jnp.geomspace(1e4, 1e7, 5), 1.0)
+    message = str(exc.value)
+    assert "searched:" in message
+    assert "regenerate_schreiber2016_from_cigale.py" in message

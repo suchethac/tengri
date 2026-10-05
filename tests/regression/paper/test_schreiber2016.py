@@ -14,7 +14,7 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-from tengri.components.dust.emission import DUST_EMISSION_MODELS, cmb_corrected_temperature
+from tengri.components.dust.emission import DUST_EMISSION_MODELS
 from tests._bounds import assert_non_negative
 
 _C_AA = 2.99792458e18  # speed of light [Angstrom/s]
@@ -96,8 +96,9 @@ class TestSchreiber2016:
         l_nu = schreiber2016(wavelength_grid, l_absorbed, dust_T=30.0, dust_f_pah=0.5)
         chex.assert_equal_shape([l_nu, wavelength_grid])
 
-    def test_cmb_temperature_correction_raises_the_effective_temperature(self):
-        """The CMB heating utility raises the effective temperature at high redshift."""
-        t_z0 = cmb_corrected_temperature(30.0, 0.0, 1.5)
-        t_z3 = cmb_corrected_temperature(30.0, 3.0, 1.5)
-        assert t_z3 > t_z0
+    def test_redshift_is_not_used(self, wavelength_grid, l_absorbed):
+        """The model has no CMB term: the rest-frame SED at z = 6 equals the one at z = 0."""
+        kwargs = {"dust_T": 35.0, "dust_f_pah": 0.05}
+        at_z0 = schreiber2016(wavelength_grid, l_absorbed, redshift=0.0, **kwargs)
+        at_z6 = schreiber2016(wavelength_grid, l_absorbed, redshift=6.0, **kwargs)
+        np.testing.assert_array_equal(np.asarray(at_z6), np.asarray(at_z0))
