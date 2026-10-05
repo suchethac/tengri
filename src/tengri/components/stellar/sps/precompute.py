@@ -38,6 +38,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
+from tengri.components.stellar.sps.ztable_grid import build_edge_aware_z_grid
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
@@ -839,7 +840,7 @@ def precompute_photometry_ztable(
     **JIT-compatible**: no, data precomputation with file I/O.
     """
     if z_grid is None:
-        z_grid = jnp.linspace(z_min, z_max, n_z)
+        z_grid = build_edge_aware_z_grid(z_min, z_max, n_z, filter_waves, filter_trans)
     else:
         z_grid = jnp.asarray(z_grid)
 
