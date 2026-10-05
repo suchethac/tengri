@@ -1,42 +1,34 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression test for Balmer continuum tau direction bug.
 
-Bug: qsogen.py:397 — tau ∝ (lambda/lambda_BE)^3 made tau larger at longer wavelengths.
-Correct: sigma_bf(nu) ~ nu^{-3} → tau(lambda) = tau_BE * (lambda_BE/lambda)^3
-(Osterbrock & Ferland AGN^2 Eq. 2.4).
+sigma_bf(nu) ~ nu^{-3} (Grandi 1982; Osterbrock & Ferland AGN^2 Eq. 2.4) gives
+tau(nu) = tau_BE * (nu_BE/nu)^3 = tau_BE * (lambda/lambda_BE)^3: largest at the Balmer
+edge, falling toward the blue. This file previously asserted the inverse,
+(lambda_BE/lambda)^3, by evaluating local arithmetic only (never the model).
 """
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.regression_bug
 
 
 class TestBalmerContinuumTauDirection:
-    """Bug: qsogen.py:397 — tau direction reversed (lambda_BE/lambda)^3."""
+    """tau direction: largest at the edge, smaller to the blue (upstream QSOGen form)."""
 
-    def test_tau_decreases_at_longer_wavelengths(self):
-        """tau must be largest at the Balmer edge (3646 A) and fall off at longer wavelengths."""
-        wavbe = 3646.0  # Balmer edge in Angstrom
-        taube = 1.0
+    def test_tau_decreases_toward_shorter_wavelengths(self):
+        """The model's tau(lambda) rises toward the Balmer edge (3646 A) from the blue."""
+        from tengri.components.agn.qsogen import _balmer_continuum
 
-        # Wavelengths shorter (above edge, higher nu) should have large tau
-        # Wavelengths longer (below edge, lower nu) should have smaller tau
-        wave_short = jnp.array([3000.0, 3200.0, 3400.0])  # shorter than edge -> tau > taube
-        wave_long = jnp.array([4000.0, 5000.0, 7000.0])  # longer than edge -> tau < taube
-
-        tau_short = taube * (wavbe / wave_short) ** 3
-        tau_long = taube * (wavbe / wave_long) ** 3
-
-        # tau at the edge should be taube
-        tau_at_edge = taube * (wavbe / wavbe) ** 3
-        assert jnp.isclose(tau_at_edge, taube)
-
-        # tau should increase toward shorter wavelengths (tau_short > taube)
-        assert jnp.all(tau_short > taube), "tau should exceed taube below the Balmer edge"
-
-        # tau should decrease at longer wavelengths (tau_long < taube)
-        assert jnp.all(tau_long < taube), "tau should fall below taube above the Balmer edge"
+        wave = jnp.asarray([1500.0, 2000.0, 2500.0])  # well blueward of the edge
+        # tau << 1: component / B_lambda ~ tau(lambda) (scale is wavelength independent)
+        bc = np.asarray(_balmer_continuum(wave, jnp.ones_like(wave), 1.0, 15000.0, 1e-6, 3646.0))
+        w = np.asarray(wave)
+        b_lam = w ** (-3.0) / np.expm1(1.43877735e8 / (15000.0 * w))
+        tau_rel = bc / b_lam
+        assert np.all(np.diff(tau_rel) > 0.0), "tau must rise toward the Balmer edge"
+        np.testing.assert_allclose(tau_rel[1:] / tau_rel[0], (w[1:] / w[0]) ** 3, rtol=2e-3)
 
     def test_qsogen_balmer_continuum_shape(self):
         """Balmer continuum in qsogen should peak near the edge and fall at longer wavelengths."""

@@ -20,7 +20,7 @@ arbitrary internal normalization — tengri renormalizes at the bolometric
 anchor point at runtime, so the absolute scale does not matter.
 
 **Output file**: `richards2006.dat`, plain text two-column, sha256
-`17a4e0b655a967744a36341281cf3f28d05632ce526a9575f34e53f1c5ed8c97`. The
+`b47238d9c4ca79f139af21c244a7d4d85e43b482e9f5bbaa742b04c238a613b1`. The
 numerical data is the Richards+2006 composite itself, not AGNfitter
 code — AGNfitter only provided the convenient tabulated form. Tengri
 ships it under BSD-3-Clause; the underlying scientific data is in the
