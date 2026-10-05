@@ -396,7 +396,12 @@ def test_explicit_freefree_true_overrides_cue_auto_rule(ssp_data_fsps, synthetic
 
 
 def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs):
-    """Cue model absent freefree key = Cue model explicit False; exactly one thermal term."""
+    """Cue model, absent key vs explicit False: one thermal term (the nebular's) in both.
+
+    The radio block adds no thermal term either way; the nebular SED is identical. With the
+    key absent ``radio_q_ir`` is the total, so the synchrotron is (1 - f_th) of the explicit
+    ``False`` (non-thermal q) one (#2590), f_th being the Murphy share at 1.4 GHz.
+    """
     model_absent = _build_cue_radio_model(ssp_data_fsps, synthetic_tophat_obs, freefree=None)
     model_explicit_false = _build_cue_radio_model(
         ssp_data_fsps, synthetic_tophat_obs, freefree=False
@@ -414,11 +419,26 @@ def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs)
     sed_nebular_absent = np.asarray(state_absent.derived["sed_nebular"])
     sed_nebular_explicit = np.asarray(state_explicit_false.derived["sed_nebular"])
 
-    np.testing.assert_array_equal(
-        sed_radio_absent,
-        sed_radio_explicit,
-        err_msg="absent freefree key and explicit freefree=False must produce identical sed_radio",
+    values = {**model_absent.spec.get_fixed_values(), **dict(params_absent)}
+    l_ir = float(state_absent.derived["L_ir"])
+    q, t_e = float(values["radio_q_ir"]), float(values["radio_T_e"])
+    f_th = (
+        (3.88e-44 / 4.6e-28)
+        * (t_e / 1.0e4) ** 0.45
+        * 1.4 ** float(values["radio_alpha_ff"])
+        * 3.75e12
+        * 10.0**q
     )
+    wave = np.asarray(state_absent.wave)
+    mask = wave > _RADIO_WAVE_MIN_AA
+    assert np.any(mask)
+    np.testing.assert_allclose(
+        sed_radio_absent[mask],
+        (1.0 - f_th) * sed_radio_explicit[mask],
+        rtol=1e-9,
+        err_msg="absent key: radio synchrotron is (1 - f_th) of the explicit-False one",
+    )
+    assert l_ir > 0.0
     np.testing.assert_array_equal(
         sed_nebular_absent,
         sed_nebular_explicit,
