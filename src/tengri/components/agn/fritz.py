@@ -42,6 +42,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
@@ -166,13 +167,17 @@ def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
 def _refuse_off_grid(name: str, value, axis) -> None:
     """Raise if a concrete ``value`` lies outside the grid ``axis``.
 
-    Traced values (and a grid threaded through ``jit`` as an argument) cannot be checked here (the builder's declared bounds refuse
-    them at build time); concrete ones would otherwise be clamped to the edge
-    template without a word.
+    Traced values, and a grid threaded through ``jit`` as an argument, cannot be
+    checked here (the builder's declared bounds refuse them at build time);
+    concrete ones would otherwise be clamped to the edge template without a word.
     """
-    if isinstance(value, jax.core.Tracer) or isinstance(axis, jax.core.Tracer):
+    if isinstance(value, jax.core.Tracer):
         return
-    lo, hi = float(axis[0]), float(axis[-1])
+    try:
+        axis_np = np.asarray(axis)
+    except jax.errors.TracerArrayConversionError:
+        return
+    lo, hi = float(axis_np[0]), float(axis_np[-1])
     v = float(value)
     if not lo <= v <= hi:
         raise ValueError(
