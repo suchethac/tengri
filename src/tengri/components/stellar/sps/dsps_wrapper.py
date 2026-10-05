@@ -89,6 +89,7 @@ def canonical_dsps_kwargs(**kwargs):
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
 # only the standard library, so there is no cycle to avoid.
 from tengri._data_setup import download_ssp
+from tengri.components.stellar.sps.mass_remaining_tables import resolve_mass_remaining
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 
@@ -118,6 +119,9 @@ class SSPData(NamedTuple):
         at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
+    mass_remaining_source : str, optional
+        Provenance of ``ssp_mass_remaining``: ``"embedded"``,
+        ``"companion:<file>"``, ``"dsps_fit"`` or ``"unspecified"`` (hand-built).
     ssp_alpha_fe : array, shape (n_alpha,), optional
         [alpha/Fe] grid values, relative to solar. Present only for a 4D
         alpha-enhanced library; ``None`` for every library shipped here.
@@ -204,6 +208,12 @@ class SSPData(NamedTuple):
     # from bare by any Q_H heuristic, so the flag is the only reliable
     # signal. Metadata only: never a JIT leaf.
     nebular: str = "unknown"
+    # Where ``ssp_mass_remaining`` came from (#2751): ``"embedded"`` (the grid
+    # file's own table), ``"companion:<file>"`` (a table shipped in
+    # ``tengri.data.ssp_mass_remaining`` for the grid's isochrones and IMF),
+    # ``"dsps_fit"`` (DSPS's metallicity-independent sigmoid, explicit opt-in) or
+    # ``"unspecified"`` for a hand-built SSPData. Metadata only: never a JIT leaf.
+    mass_remaining_source: str = "unspecified"
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this SSPData instance.
@@ -211,7 +221,7 @@ class SSPData(NamedTuple):
         Returns
         -------
         tuple
-            Cache key derived from all nine fields of the NamedTuple.
+            Cache key derived from every field of the NamedTuple.
 
         Notes
         -----
@@ -222,7 +232,7 @@ class SSPData(NamedTuple):
 
 
 def _sspdata_flatten(s):
-    # ``imf``/``source``/``nebular`` are metadata, not JIT leaves: keep
+    # ``imf``/``source``/``nebular``/``mass_remaining_source`` are metadata, not JIT leaves: keep
     # strings out of the trace.
     children = (
         s.ssp_wave,
@@ -233,7 +243,7 @@ def _sspdata_flatten(s):
         s.ssp_alpha_fe,
         s.ssp_resolution_kms,
     )
-    aux = (s.imf, s.source, s.nebular)
+    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source)
     return children, aux
 
 
@@ -253,6 +263,7 @@ def _sspdata_unflatten(aux, children):
         imf=aux[0],
         source=aux[1],
         nebular=aux[2],
+        mass_remaining_source=aux[3],
     )
 
 
@@ -270,6 +281,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "imf": content("initial mass function affects stellar population synthesis"),
     "source": content("source/library identity affects stellar templates"),
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
+    "mass_remaining_source": content("where the surviving-mass table came from"),
 }
 
 
@@ -336,7 +348,9 @@ _LOAD_SSP_PRESETS: dict[str, str] = {
 }
 
 
-def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
+def load_ssp(
+    name: str | None = None, *, download: bool = False, mass_remaining: str = "table"
+) -> "SSPData":
     """Load an SSP grid by short name, walking parent dirs for ``data/``.
 
     Convenience wrapper around :func:`load_ssp_data` for tutorial and
@@ -360,6 +374,8 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
         turn any mistyped grid name into a silent multi-tens-of-megabyte
         download (#1486). Pass ``True`` in tutorials and gallery scripts,
         where a fresh checkout is expected not to have the grid yet.
+    mass_remaining : {"table", "dsps_fit"}, optional
+        Surviving-mass source, forwarded to :func:`load_ssp_data` (see there).
 
     Returns
     -------
@@ -410,7 +426,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
         # ``reproduction/<code>/_drivers/data/`` rather than ``<root>/data/``).
         as_path = Path(name)
         if as_path.suffix == ".h5" and as_path.exists():
-            return load_ssp_data(str(as_path))
+            return load_ssp_data(str(as_path), mass_remaining=mass_remaining)
         filename = name if name.endswith(".h5") else name + ".h5"
         catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
 
@@ -419,10 +435,10 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     for directory in data_dirs():
         candidate = directory / filename
         if candidate.exists():
-            return load_ssp_data(str(candidate))
+            return load_ssp_data(str(candidate), mass_remaining=mass_remaining)
 
     if download and catalog_key is not None:
-        return load_ssp_data(str(download_ssp(catalog_key)))
+        return load_ssp_data(str(download_ssp(catalog_key)), mass_remaining=mass_remaining)
 
     catalog_note = (
         f"{filename!r} is not in the download catalog, so download=True cannot "
@@ -463,7 +479,9 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
     return jnp.asarray(dataset[:], dtype=dtype if dtype is not None else jnp.result_type(float))
 
 
-def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPData:
+def load_ssp_data(
+    filepath: str, *, dtype=None, download: bool = False, mass_remaining: str = "table"
+) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
     Reads stellar population synthesis templates stored in HDF5 format
@@ -489,11 +507,19 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         Fetch the grid from the hosted catalog when ``filepath`` does not
         exist and its basename is one the catalog ships. Default ``False``,
         which raises instead. See Notes for why the default is off.
+    mass_remaining : {"table", "dsps_fit"}, optional
+        Source of ``ssp_mass_remaining``. ``"table"`` (default) takes the
+        grid's own table or the companion table registered for its isochrones
+        and IMF, and refuses a registered grid that has neither (a ``ValueError``
+        naming the missing table); an unregistered grid with no table warns and
+        uses the fit. ``"dsps_fit"`` is the explicit opt-in to DSPS's
+        metallicity-independent sigmoid fit to FSPS, for any grid.
 
     Returns
     -------
     SSPData
-        Loaded SSP container with all template data and metadata.
+        Loaded SSP container with all template data and metadata;
+        ``mass_remaining_source`` records where the surviving mass came from.
 
     Raises
     ------
@@ -507,6 +533,12 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
         If required HDF5 fields are missing.
     OSError
         If filepath exists but is not readable.
+    ValueError
+        If ``mass_remaining`` is not a known mode, or the surviving-mass table
+        cannot be resolved honestly (see :func:`resolve_mass_remaining`):
+        a registered grid with no table, a metallicity-node mismatch with the
+        companion table, ages beyond the table, or an embedded table that
+        disagrees with its companion.
 
     Notes
     -----
@@ -527,13 +559,16 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
     path: it walks every ancestor for a ``data/`` directory, honors
     ``$TENGRI_DATA_DIR``, and so does not depend on the working directory.
 
-    **Surviving-mass fraction resolution** (ssp_mass_remaining): The function
-    resolves ``ssp_mass_remaining`` in three steps: (1) use the file's own table
-    if present; (2) use the packaged Z-dependent table when the grid is FSPS
-    MIST + Chabrier with matching age and metallicity nodes; (3) synthesize
-    the Z-independent DSPS sigmoid approximation. The table (step 2) provides
-    metallicity dependence for FSPS MIST grids; all other grids get the
-    metallicity-independent sigmoid.
+    **Surviving-mass fraction** (``ssp_mass_remaining``): living stars plus
+    stellar remnants per unit formed mass [dimensionless], from the grid's own
+    isochrones, IMF and metallicity (Conroy, Gunn & White 2009; FSPS remnants
+    after Renzini & Ciotti 1993; BC03 after Bruzual & Charlot 2003). It is
+    resolved by :func:`resolve_mass_remaining`:
+    the file's own table (cross-checked against the registered companion), else the
+    companion table shipped as package data, else, only with
+    ``mass_remaining="dsps_fit"``, DSPS's metallicity-independent fit. The fit
+    discards the isochrones and the metallicity dependence (0.03 in the surviving
+    mass at 10 Gyr on MIST), so it is never used silently.
 
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
@@ -671,32 +706,27 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
                 # Python-float scalar keeps ssp_flux's dtype under JAX weak typing.
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
-        if "ssp_mass_remaining" in f:
-            mass_remaining = _load_float(f["ssp_mass_remaining"], dtype=dtype)
+        embedded = np.asarray(f["ssp_mass_remaining"][:]) if "ssp_mass_remaining" in f else None
+        resolution = resolve_mass_remaining(
+            stem=fp.stem,
+            detected_imf=imf,
+            lg_age_gyr=np.asarray(ssp_lg_age_gyr, dtype=np.float64),
+            lgmet=np.asarray(ssp_lgmet, dtype=np.float64),
+            embedded=embedded,
+            has_alpha_axis="ssp_alpha_fe" in f,
+            synthetic=bool(f.attrs.get("synthetic", False)),
+            mode=mass_remaining,
+        )
+        target = dtype if dtype is not None else jnp.result_type(float)
+        if resolution.table is not None:
+            mass_table = jnp.asarray(resolution.table, dtype=target)
         else:
-            # Try the reference table first (FSPS MIST + Chabrier)
-            mass_remaining = _reference_mass_remaining(
-                fp.stem,
-                imf,
-                ssp_lg_age_gyr,
-                ssp_lgmet,
-                has_alpha_axis="ssp_alpha_fe" in f,
+            mass_table = jnp.asarray(
+                _synthesize_mass_remaining(
+                    filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=resolution.fit_imf
+                ),
+                dtype=target,
             )
-            if mass_remaining is not None:
-                # Convert reference table to JAX array with proper dtype handling
-                mass_remaining = jnp.asarray(
-                    mass_remaining,
-                    dtype=dtype if dtype is not None else jnp.result_type(float),
-                )
-            else:
-                # Fall back to DSPS sigmoid (metallicity-independent)
-                mass_remaining = _synthesize_mass_remaining(
-                    filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
-                )
-                # The synthesizer works at default precision; honor the request so
-                # every array in the returned grid shares one dtype.
-                if dtype is not None and mass_remaining is not None:
-                    mass_remaining = jnp.asarray(mass_remaining, dtype=dtype)
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
@@ -733,12 +763,13 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
-            ssp_mass_remaining=mass_remaining,
+            ssp_mass_remaining=mass_table,
             ssp_alpha_fe=alpha_fe,
             ssp_resolution_kms=ssp_resolution_kms,
             imf=imf,
             source=fp.stem,
             nebular=nebular,
+            mass_remaining_source=resolution.source,
         )
 
 
@@ -937,189 +968,6 @@ def _wave_matches_reference(query_wave: np.ndarray, ref_wave: np.ndarray) -> boo
     )
 
 
-#: SSP mass-remaining (surviving-fraction) reference tables (#2614): maps the
-#: (isochrone, IMF) pair to the package-data file holding the per-age,
-#: per-metallicity surviving-mass fractions. FSPS MIST + Chabrier only.
-#: ``load_ssp_data`` uses this table when available and the grid's age and
-#: metallicity nodes match it exactly; grids without a matching table get the
-#: metallicity-independent DSPS sigmoid approximation instead.
-_MASS_REMAINING_DATA_FILES: dict[tuple[str, str], str] = {
-    # FSPS-built grids from python-fsps. Isochrone x IMF → filename in data/mass_remaining/
-    # All use the absolute Z grid from FSPS and age grid from sp.ssp_ages.
-    # Format: mass_remaining_<isoc>_<imf>.h5
-    # Remnant prescription: Renzini & Ciotti 1993 (FSPS add_remnants.f90)
-    ("mist", "chabrier"): "mass_remaining_mist_chabrier.h5",
-    ("mist", "kroupa"): "mass_remaining_mist_kroupa.h5",
-    ("mist", "salpeter"): "mass_remaining_mist_salpeter.h5",
-    # Pending (Task 2 on parallel branch):
-    ("pdva", "chabrier"): "mass_remaining_bc03pdva94_chabrier.h5",  # BC03 Padova1994
-    # Future: PARSEC, BaSTI, Geneva variants would be built similarly if recompiled in FSPS.
-}
-
-
-@cache
-def _load_mass_remaining_reference(
-    key: tuple[str, str],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-    """Load a mass-remaining reference table from data/mass_remaining/.
-
-    Loads from HDF5 files in data/mass_remaining/ with the format:
-    - log10_age_yr: log10 of age in years [shape (n_age,)]
-    - log10_z_abs: log10 of absolute metallicity [shape (n_met,)]
-    - mass_remaining: surviving stellar mass fraction [shape (n_met, n_age)]
-
-    Parameters
-    ----------
-    key : tuple of str
-        Tuple of (isochrone, IMF) into :data:`_MASS_REMAINING_DATA_FILES`.
-
-    Returns
-    -------
-    log_age_yr : ndarray, shape (n_age,) or None
-        Logarithm of age in years [log10(yr)], or None if file not found.
-    lgmet_absolute : ndarray, shape (n_met,) or None
-        Logarithm of absolute metallicity [log10(Z)], or None if file not found.
-    table : ndarray, shape (n_met, n_age) or None
-        Surviving stellar-mass fraction at each (metallicity, age) node.
-    """
-    import h5py
-    from pathlib import Path
-
-    filename = _MASS_REMAINING_DATA_FILES.get(key)
-    if filename is None:
-        return None
-
-    # Try to open from data/mass_remaining/ in the git repository root
-    # The package is at src/tengri/, so go up two levels to find the repo root
-    try:
-        import tengri
-
-        # tengri.__file__ is src/tengri/__init__.py
-        # We want <repo_root>/data/mass_remaining/
-        tengri_src = Path(tengri.__file__).parent
-        repo_root = tengri_src.parent.parent  # Up to src/, then up to repo root
-        filepath = repo_root / "data" / "mass_remaining" / filename
-
-        if not filepath.exists():
-            # File does not exist (pending)
-            return None
-
-        with h5py.File(filepath, "r") as f:
-            log_age_yr = np.array(f["log10_age_yr"], dtype=np.float64)
-            lgmet_absolute = np.array(f["log10_z_abs"], dtype=np.float64)
-            table = np.array(f["mass_remaining"], dtype=np.float64)
-
-        # Make arrays read-only
-        for arr in (log_age_yr, lgmet_absolute, table):
-            arr.flags.writeable = False
-
-        return log_age_yr, lgmet_absolute, table
-
-    except Exception as e:
-        # File not found or error reading
-        return None
-
-
-def _reference_mass_remaining(
-    filename_stem: str,
-    imf: str,
-    ssp_lg_age_gyr: np.ndarray,
-    ssp_lgmet: np.ndarray,
-    has_alpha_axis: bool = False,
-) -> np.ndarray | None:
-    """Return table-supplied mass-remaining data with interpolation and validation.
-
-    Resolves surviving mass fractions from a companion table (if available) for
-    a given SSP grid. The table must exist at the path specified by the registry,
-    and the grid's Z nodes must match the table's Z nodes exactly (``atol=1e-6``
-    in log-space). Ages are interpolated linearly in log10-space onto the grid's
-    age nodes. If any condition fails or the table file is not found/pending,
-    returns ``None`` to fall back to the DSPS sigmoid fit.
-
-    Checks that the filename's first token (pre-first-underscore) is ``"fsps"``
-    or ``"ssp"`` (python-fsps products; not ``"pgny"``, ``"bpss"``, ``"bc03"``),
-    the isochrone and IMF tokens match a key in :data:`_MASS_REMAINING_DATA_FILES`,
-    and the grid has no [alpha/Fe] axis.
-
-    Parameters
-    ----------
-    filename_stem : str
-        SSP HDF5 filename without the ``.h5`` extension.
-    imf : str
-        IMF token from filename or HDF5 attribute (e.g., "Chabrier (2003)").
-    ssp_lg_age_gyr : ndarray, shape (n_age,)
-        Log10 SSP ages [Gyr].
-    ssp_lgmet : ndarray, shape (n_met,)
-        Log10 absolute SSP metallicity [Z, dimensionless].
-    has_alpha_axis : bool, optional
-        Whether the grid carries an [alpha/Fe] axis (``ssp_alpha_fe``).
-
-    Returns
-    -------
-    table : ndarray, shape (n_met, n_age) or None
-        Surviving-mass fraction at the grid's (metallicity, age) nodes, with
-        ages interpolated linearly in log10 space; or ``None`` if resolution
-        fails (grid/table mismatch, file not found, pending grid, alpha axis).
-
-    Notes
-    -----
-    **JIT/grad/vmap-safe**: no (file I/O). The table is loaded once at build time
-    and never re-evaluated.
-    """
-    first_token = filename_stem.split("_")[0].lower()
-    if first_token not in ("fsps", "ssp") or has_alpha_axis:
-        return None
-
-    # Extract isochrone and IMF from filename tokens
-    isochrones = {iso for iso, _ in _MASS_REMAINING_DATA_FILES}
-    tokens = filename_stem.split("_")
-    isochrone = next((t.lower() for t in tokens if t.lower() in isochrones), None)
-    if isochrone is None:
-        return None
-
-    # Normalize IMF name: "Chabrier (2003)" -> "chabrier"
-    imf_normalized = (imf.lower().split() or ["unknown"])[0] if isinstance(imf, str) else "unknown"
-
-    key = (isochrone, imf_normalized)
-    if key not in _MASS_REMAINING_DATA_FILES:
-        return None
-
-    # Load the reference table; returns None if file not found or pending
-    result = _load_mass_remaining_reference(key)
-    if result is None:
-        return None
-
-    log_age_yr_ref, lgmet_ref, table_ref = result
-
-    lg_age_yr = ssp_lg_age_gyr + 9.0
-
-    if not np.isfinite(lg_age_yr).all():
-        return None
-
-    # Validate Z: must match table's Z nodes exactly (1e-6 tolerance in log-space)
-    met_match = ssp_lgmet.shape == lgmet_ref.shape and np.allclose(
-        ssp_lgmet, lgmet_ref, rtol=0.0, atol=1e-6
-    )
-    if not met_match:
-        # Mismatch could signal a grid built with a different isochrone or Z calibration
-        return None
-
-    # Interpolate age linearly in log10 space
-    # Check that grid ages fall within the table's age range
-    age_min, age_max = log_age_yr_ref.min(), log_age_yr_ref.max()
-    if np.any(lg_age_yr < age_min) or np.any(lg_age_yr > age_max):
-        # At least one grid age falls outside the table's range
-        # (allow 1 node overshoot as per brief, but for now raise to be safe)
-        return None
-
-    # Linear interpolation in log10-age for each metallicity
-    table_interp = np.zeros((ssp_lgmet.shape[0], lg_age_yr.shape[0]), dtype=np.float64)
-    for i_met in range(ssp_lgmet.shape[0]):
-        table_interp[i_met, :] = np.interp(lg_age_yr, log_age_yr_ref, table_ref[i_met, :])
-
-    return table_interp
-
-
 def _resolve_ssp_resolution(
     ssp_wave: jnp.ndarray, library_key: str
 ) -> tuple[jnp.ndarray, np.ndarray]:
@@ -1196,7 +1044,7 @@ def _resolve_ssp_resolution(
 def _synthesize_mass_remaining(
     filepath, ssp_lg_age_gyr: jnp.ndarray, ssp_lgmet: jnp.ndarray, imf_tag=None
 ) -> jnp.ndarray:
-    """Fill missing ssp_mass_remaining when the SSP HDF5 lacks the table.
+    """Evaluate the DSPS surviving-mass fit; reached only through the explicit opt-in.
 
     Uses :func:`dsps.imf.surviving_mstar.surviving_mstar`, a 9-parameter
     sigmoid fit to FSPS with shipped per-IMF calibrations (Chabrier,
@@ -1217,8 +1065,8 @@ def _synthesize_mass_remaining(
     -------
     array, shape (n_met, n_age)
         Surviving mass fraction broadcast over the metallicity axis (metallicity
-        dependence is dropped here by design; the packaged table-supplied
-        version, when present, is what carries Z dependence).
+        dependence is dropped here by design; a grid table (embedded or
+        companion, :func:`resolve_mass_remaining`) is what carries it).
     """
     import warnings
 
