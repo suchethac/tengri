@@ -36,11 +36,10 @@ import functools
 from collections.abc import Callable
 from typing import NamedTuple
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
+from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -54,12 +53,6 @@ __all__ = [
 ]
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
-
-
-def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
-    """Convert wavelength [Å] to frequency [Hz]."""
-    return _C_AA_PER_S / wavelength
 
 
 def _load_slone_netzer_arrays(grid_path: str) -> dict:
@@ -218,7 +211,9 @@ def slone_netzer_sed_from_grid(
                               {\int T(\nu;\,\log M_{\rm BH},\,\log\dot m)
                                \,\mathrm{d}\nu}
 
-    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. The
+    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot` and the integral
+    taken over the template's own native grid (before resampling), so the
+    result does not depend on how ``wavelength`` is sampled or truncated. The
     template is shape-only; ``agn_log_lbol`` sets the normalization.
 
     **JIT-compatible**: yes.
@@ -245,25 +240,9 @@ def slone_netzer_sed_from_grid(
         + fm * fe * grid_jax[i + 1, j + 1]
     )
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
-    if wavelength.dtype == jnp.float32:
-        # Float32 (#1206). Two traps here, both silent:
-        #   1. the template's own bolometric integral is ~1e45 erg/s (the SN12
-        #      L_nu ~1e30 over a ~1e15 Hz span): it overflows float32, and
-        #      ``l_scale * sed / inf`` then flushes the whole disc to ZERO;
-        #   2. ``floor=1e-100`` is itself below the float32 minimum, so the
-        #      zero-template guard silently becomes a no-op.
-        # Peak-factor the integrand and regroup so only representable values
-        # form: ``l_scale * sed / (peak * hat_int)`` is evaluated as
-        # ``(l_scale / hat_int) * (sed / peak)``: algebraically identical.
-        # stop_gradient: factorization constant; peak * hat_int == bolint(sed) (#1436).
-        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
-        peak = jnp.where(peak > 0.0, peak, 1.0)
-        hat_int = _bolometric_integral_nu(sed / peak, nu, floor=1e-30)
-        return (l_scale / hat_int) * (sed / peak)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-    return l_scale * sed / integral_safe
+    # Normalize on the template's native grid, before resampling (the caller's
+    # grid never enters); the float32 factorization lives in the helper.
+    return scale_to_lbol_native(template, wave_grid, sed, 10.0**agn_log_lbol * _LSUN_ERG)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (

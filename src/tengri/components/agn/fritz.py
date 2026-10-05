@@ -37,11 +37,8 @@ import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    L_SUN as _L_SUN,
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
+from tengri.components.agn._phys import L_SUN as _L_SUN
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
@@ -136,7 +133,7 @@ def _interpolate_and_normalize(
     where :math:`\lambda` is wavelength [Angstrom], :math:`c` the speed of
     light [Angstrom/s], :math:`L_\lambda` the tabulated template and
     :math:`L_\nu` the specific luminosity [erg/s/Hz]. The result is scaled so
-    that :math:`\int L_\nu \, d\nu = l_{\rm scale}` over the requested grid.
+    that :math:`\int L_\nu \, d\nu = l_{\rm scale}` over the template's native grid.
 
     Parameters
     ----------
@@ -165,10 +162,11 @@ def _interpolate_and_normalize(
     -----
     **JIT-compatible**: yes, uses ``jnp.interp`` and ``jax.vmap``.
 
-    The normalization integral is taken over the requested grid, so a grid
-    that truncates the template still carries ``l_scale`` in total: a grid
-    ending at 30 micron holds as little as 15 % of a template's power, and
-    all of ``l_scale`` is then placed inside the grid.
+    The normalization integral is taken over the template's own native
+    wavelength grid, before resampling, so ``l_scale`` is the template's total
+    power whatever the requested grid: a grid that stops short of the template
+    (one ending at 30 micron holds as little as 15 % of its power) carries
+    only the part of ``l_scale`` that falls inside it.
 
     Each call renormalizes its template to ``l_scale``, so
     :func:`fritz_components` carries the shape of the disc and of the dust but
@@ -187,10 +185,11 @@ def _interpolate_and_normalize(
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
     template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
+    # Normalize on the template's native grid, before resampling, so the
+    # result does not depend on the caller's wavelength sampling or range.
+    integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
     sed_lam = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
     sed_nu = sed_lam * wavelength**2 / _C_AA_PER_S
-    nu = _wavelength_to_nu(wavelength)
-    integral_safe = _bolometric_integral_nu(sed_nu, nu, floor=1e-100)
     return l_scale * sed_nu / integral_safe
 
 

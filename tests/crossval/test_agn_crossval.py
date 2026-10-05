@@ -996,8 +996,10 @@ class TestPolarDustCrossval:
             polar_dust_total,
         )
 
-        # Use a wide wavelength grid spanning UV to FIR
-        wavelength = jnp.geomspace(500.0, 5e6, 5000)
+        # The graybody is normalized over the band it occupies (1e3 A - 1e9 A, fixed and
+        # independent of the caller's grid), so the balance closes on a grid that covers it:
+        # 500 A - 5e6 A cuts the 100 K graybody's Rayleigh-Jeans tail and reads a 1.5e-4 deficit.
+        wavelength = jnp.geomspace(500.0, 1e9, 60000)
         l_nu_flat = jnp.ones_like(wavelength) * 1e-10  # small flat spectrum
 
         _l_att, l_absorbed = polar_dust_extinction(

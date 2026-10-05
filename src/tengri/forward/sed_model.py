@@ -4640,6 +4640,8 @@ class SEDModel:
         from tengri.forward.wavelength_extension import collect_native_wavelength_grids
         from tengri.utils.wavelength import (
             RADIO_WAVE_MAX,
+            RADIO_WING_PTS_PER_DECADE,
+            RADIO_WING_START,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -4668,14 +4670,18 @@ class SEDModel:
             )
 
         if self._uses_radio:
-            # Pick the longest wavelength reached by any template; extend the
-            # radio wing past that point so the synchrotron tail has node
-            # coverage even when dust templates don't already cover it.
+            # The wing starts at the end of the longest template, or at
+            # ``RADIO_WING_START`` if that comes first, and runs to
+            # ``RADIO_WAVE_MAX`` at ``RADIO_WING_PTS_PER_DECADE``: a template that
+            # reaches into the radio (a CIGALE Dale grid ends at 2.2e9 A) must not
+            # leave a radio band one sparse node of its own, and the synchrotron tail
+            # has node coverage even when no template reaches it. The union
+            # deduplicates the overlap.
             template_max = max((float(g.max()) for g in component_grids), default=ssp_max)
-            radio_min = max(template_max, ssp_max)
+            radio_min = min(max(template_max, ssp_max), RADIO_WING_START)
             if radio_min < RADIO_WAVE_MAX:
                 n_dec = np.log10(RADIO_WAVE_MAX) - np.log10(radio_min)
-                n_pts = max(int(n_dec * 20), 2)
+                n_pts = max(round(n_dec * RADIO_WING_PTS_PER_DECADE) + 1, 2)
                 extra_wings.append(
                     np.logspace(
                         np.log10(radio_min),

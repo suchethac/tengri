@@ -258,7 +258,15 @@ class TestEndToEndRadioDiscCoupling:
         assert sed_radio_mc is not None and sed_radio_r6 is not None, (
             "probe setup failed: sed_radio was not published"
         )
-        assert not jnp.allclose(sed_radio_mc, sed_radio_r6)
+        # Each model carries its disc's own wavelength axis, so the two radio SEDs are
+        # compared at wavelengths they share, each read off its own axis.
+        wave_mc, wave_r6 = np.asarray(state_mc.wave), np.asarray(state_r6.wave)
+        common = np.geomspace(
+            max(wave_mc.min(), wave_r6.min()), min(wave_mc.max(), wave_r6.max()), 400
+        )
+        radio_mc = np.interp(common, wave_mc, np.asarray(sed_radio_mc))
+        radio_r6 = np.interp(common, wave_r6, np.asarray(sed_radio_r6))
+        assert not np.allclose(radio_mc, radio_r6)
 
     def test_radio_enabled_build_is_finite_with_and_without_disc(self, synthetic_ssp_wide):
         """End-to-end: radio build remains finite whether or not a disc is set.

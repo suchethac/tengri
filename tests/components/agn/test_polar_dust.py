@@ -242,8 +242,15 @@ class TestSKIRTORPolarDustIntegration:
 
     @pytest.fixture
     def wave_test(self):
-        """Test wavelength grid from 1000 Å to 1e7 Å (50 points logspaced)."""
-        return jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 50)
+        """Test grid from 10 Å to 1e8 Å (700 points logspaced).
+
+        The grid must cover the disc: its nu L_nu peak sits near 160 Å, and the
+        absorbed energy the polar screen re-emits is the integral of the disc
+        over the grid. A grid starting at 1000 Å sees only the Rayleigh-Jeans
+        tail (ratio 1.021 there); on a covering grid the ratio is 1.173, the
+        same at 700 and 3000 nodes.
+        """
+        return jnp.logspace(1.0, 8.0, 700)
 
     # test_skirtor_polar_dust_type2_reemission lived here. It called
     # SKIRTORTorus.predict() directly and was skipped by
@@ -276,7 +283,7 @@ class TestSKIRTORPolarDustIntegration:
         section 2.2.2 -- to the re-emission normalization: at the default
         agn_polar_oa=45deg used here, the covering fraction is ~0.58, so the
         FIR bump this test measures is correspondingly smaller than before;
-        measured ratio at these exact params is 1.044.)
+        measured ratio at these exact params on the covering grid is 1.173.)
 
         References
         ----------

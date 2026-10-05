@@ -137,10 +137,19 @@ def test_fritz_analytic_basic(fritz_grid_path: Path, wavelength_aa: jnp.ndarray)
 @pytest.mark.contract
 def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
     """Output integrated luminosity ≈ agn_torus_frac × L_bol."""
+    import h5py
+
     from tengri.components.agn._phys import wavelength_to_nu
     from tengri.components.agn.fritz import create_fritz_from_grid
 
     fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
+
+    # The template carries power out to the far infrared, past the standard 100 um
+    # grid, and the normalization is the template's whole power: integrate over a
+    # grid that covers the template's native range.
+    with h5py.File(fritz_grid_path, "r") as f:
+        wave_native = f["fritz2006/wavelength_aa"][:]
+    wavelength_aa = jnp.geomspace(float(wave_native[0]), float(wave_native[-1]), 4096)
 
     # Test parameters
     log_lbol = 44.5
@@ -201,17 +210,21 @@ def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jn
 #: axis -> (grid low, grid high, off-node evaluation point, max relative
 #: L_nu change across the full axis). The last entry is the library's own
 #: value: the change between the raw tables at the two end nodes, converted
-#: to L_nu and derived by ``test_fritz_axis_pin_is_the_library_value``. Endpoints are the real grid
+#: to L_nu, each scaled to unit power over the template's native grid, and
+#: derived by ``test_fritz_axis_pin_is_the_library_value``. (Until the model
+#: stopped normalizing over the caller's grid these were scaled to unit power
+#: over the 100 A-100 um test grid, which cuts the far-infrared tail and gave
+#: 0.736, 0.319, 0.301, 1.266, 0.630, 1.071 in axis order below.) Endpoints are the real grid
 #: bounds read from the HDF5 axes. The evaluation point is the midpoint of the
 #: widest interior cell, which is off-node by construction -- a derivative
 #: referenced against a central difference must not sit on a node.
 _FRITZ_AXES = {
-    "agn_fritz_tau": (0.1, 10.0, 8.0, 0.736),
-    "agn_fritz_psy": (0.001, 89.99, 5.0505, 0.319),
-    "agn_fritz_oa": (20.0, 60.0, 30.0, 0.301),
-    "agn_fritz_beta": (-1.0, 0.0, -0.875, 1.266),
-    "agn_fritz_gamma": (0.0, 6.0, 1.0, 0.630),
-    "agn_fritz_r_ratio": (10.0, 150.0, 125.0, 1.071),
+    "agn_fritz_tau": (0.1, 10.0, 8.0, 0.748),
+    "agn_fritz_psy": (0.001, 89.99, 5.0505, 0.222),
+    "agn_fritz_oa": (20.0, 60.0, 30.0, 0.186),
+    "agn_fritz_beta": (-1.0, 0.0, -0.875, 0.826),
+    "agn_fritz_gamma": (0.0, 6.0, 1.0, 0.559),
+    "agn_fritz_r_ratio": (10.0, 150.0, 125.0, 0.576),
 }
 
 #: Fixed point in the other five dimensions. Physical luminosity, mid-grid
@@ -268,8 +281,9 @@ def test_fritz_axis_pin_is_the_library_value(
 
     Reads the two raw ``dust`` tables at the end nodes of ``axis`` (the other
     five parameters at ``_FRITZ_BASE``, all on nodes), converts each from
-    L_lambda to L_nu (``lambda^2 / c``), scales both to unit power on the test
-    grid and takes the ratio ``test_fritz_axis_moves_the_sed`` uses.
+    L_lambda to L_nu (``lambda^2 / c``), scales both to unit power over the
+    template's native grid (what the model does) and takes the ratio
+    ``test_fritz_axis_moves_the_sed`` uses.
     """
     import h5py
 
@@ -312,7 +326,21 @@ def test_fritz_axis_pin_is_the_library_value(
         a0, a1 = np.log(np.where(pos, y0, 1.0)), np.log(np.where(pos, y1, 1.0))
         l_lam = np.where(pos, np.exp(a0 + t * (a1 - a0)), y0 + t * (y1 - y0))
         out = l_lam * wave**2 / C_AA
-        return out / -np.trapezoid(out, C_AA / wave)
+        # unit power over the template's own native grid (L_nu dnu = L_lambda dlambda,
+        # a power law between nodes), as the model normalizes: the test grid enters
+        # only as where the SED is read off
+        return out / _native_power(template, wave_in)
+
+    def _native_power(template, wave_in):
+        x0, x1, y0, y1 = wave_in[:-1], wave_in[1:], template[:-1], template[1:]
+        pos = (y0 > 0) & (y1 > 0)
+        y0s, y1s = np.where(pos, y0, 1.0), np.where(pos, y1, 1.0)
+        a = np.log(x1 / x0)
+        u = a + np.log(y1s) - np.log(y0s)
+        ratio = np.where(np.abs(u) < 1e-7, 1.0 + 0.5 * u, np.expm1(u) / np.where(u == 0, 1.0, u))
+        power = x0 * y0s * a * ratio
+        trap = 0.5 * (y0 + y1) * (x1 - x0)
+        return float(np.sum(np.where(pos, power, trap)))
 
     sed_lo, sed_hi = lnu(raw_lo), lnu(raw_hi)
     rel = float(np.max(np.abs(sed_lo - sed_hi)) / np.max(np.abs(sed_lo)))
