@@ -84,7 +84,22 @@ def test_schreiber2016_builds_and_balances():
         f"Schreiber2016 breaks energy balance: emitted L_IR / L_absorbed = {ratio:.4f}"
     )
 
-    # ...and the emission must live in the IR, not be smeared across the grid
-    # (the #1005 native-grid regression put it partly outside 8-1000 um).
+    # ...and the emission must live in the IR: the share of the dust IR in
+    # 8-1000 um equals the library's own, mixed per kg from the h5 arrays for
+    # the declared defaults (T = 35 K, f_PAH = 0.05). It is below 1 by
+    # construction: the tabulated PAH features at 3-8 um and the tail past
+    # 1 mm carry part of the power, which the #1005 native-grid regression
+    # check (emission smeared over the whole grid) must not be confused with.
+    import h5py
+
+    with h5py.File("data/schreiber2016_templates.h5", "r") as f:
+        w = np.asarray(f["wavelength_aa"][:])
+        t = np.asarray(f["tdust_grid"][:])
+        i = int(np.searchsorted(t, 35.0))
+        mix = ((1 - 0.05) * f["continuum"][i] + 0.05 * f["pah"][i]) * w**2 / c_aa
+    full = bolo(w, mix)
+    expected = bolo(w, mix, 8.0e4, 1.0e7) / full
     in_band = bolo(wave, sed_ir, 8.0e4, 1.0e7) / l_ir
-    assert in_band > 0.95, f"only {in_band:.1%} of the dust IR falls in 8-1000 um"
+    assert abs(in_band / expected - 1.0) < 0.02, (
+        f"dust IR share in 8-1000 um is {in_band:.3f}; the library gives {expected:.3f}"
+    )
