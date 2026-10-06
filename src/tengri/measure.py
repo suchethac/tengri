@@ -176,9 +176,16 @@ def spectral_index(wave_rest, flux, index_def):
         defines: de-redshift an observed grid before passing it (``wave_obs /
         (1 + z)``).
     flux : array_like, shape (n_wave,)
-        Flux density on ``wave_rest``. **Any consistent units**; indices are
-        ratios of window means, so :math:`L_\nu` [erg/s/Hz] and :math:`F_\nu`
-        [erg/s/cm^2/Hz] give the same answer, and no distance is needed.
+        Flux density **per unit frequency** on ``wave_rest``: :math:`L_\nu`
+        [erg/s/Hz] or :math:`F_\nu` [erg/s/cm^2/Hz], in any consistent units
+        (they give the same answer, and no distance is needed). Equivalent
+        widths and magnitude indices convert it to :math:`F_\lambda \propto
+        F_\nu/\lambda^2` internally (Lick definition); break indices are
+        ratios of :math:`F_\nu` window means. A spectrum in :math:`F_\lambda`
+        [erg/s/cm^2/Angstrom] is passed as ``flux_lambda * wave_rest**2``; an
+        :math:`F_\lambda` array passed as is gives a different equivalent
+        width. An index defined with ``pseudo_continuum="mean"`` measures
+        ``flux`` as given, in any frame.
     index_def : str or SpectralIndexDef or CompositeIndexDef
         An index name from :data:`STANDARD_INDICES` (e.g. ``"Dn4000"``,
         ``"HdA"``) or a definition object.
@@ -203,6 +210,12 @@ def spectral_index(wave_rest, flux, index_def):
     Delegates to :func:`~tengri.observation.spectral_indices.measure_index_jax`;
     this is the same operator :meth:`SEDModel.predict_spectral_indices` applies
     to the model, so an observed value measured here is on the model's ruler.
+
+    A Lick equivalent width follows Trager et al. (1998, ApJS 116, 1, Eqs. 1-3):
+    the pseudo-continuum is the straight line through the mean :math:`F_\lambda`
+    of the two sidebands at the sideband mid-wavelengths.
+    :attr:`~tengri.SpectralIndexDef.pseudo_continuum` selects BAGPIPES'
+    constant-continuum arithmetic instead (``"mean"``).
 
     Examples
     --------

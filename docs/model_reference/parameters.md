@@ -46,7 +46,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `dust_agn_screen` | --- | `"none"` | 3 choices | --- | Screen for AGN light: `"birth_cloud"` / `"diffuse"` / `"none"` (default); refused with `agn_norm="cigale_joint"` |
 | *AGN Core Parameters* |  |  |  |  |  |
 | `agn_frac` | $f_{\rm AGN}$ | Fixed(0) | $[0, 1]$ | --- | AGN bolometric luminosity fraction |
-| `agn_log_lbol` | $\log L_{\rm bol}$ | Fixed(10) | $[40, 48]$ | $\log({\rm erg\,s}^{-1})$ | AGN bolometric luminosity (direct) |
+| `agn_log_lbol` | $\log L_{\rm bol}$ | Fixed(10) | $[40, 48]$ | $\log({\rm erg\,s}^{-1})$ | AGN accretion power, integrated over all directions (direct) |
 | `agn_alpha` | $\alpha$ | Fixed($-1$) | $[-2, 0]$ | --- | Disc power-law slope |
 | `agn_log_mbh` | $\log M_{\rm BH}$ | Fixed(7) | $[5, 10]$ | $\log(M_\odot)$ | Black hole mass |
 | `agn_log_ledd` | $\log(\dot{m}/\dot{m}_{\rm Edd})$ | Fixed($-1$) | $[-3, 0]$ | --- | Eddington ratio |
@@ -58,7 +58,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `agn_p_skirtor` | $p$ | Fixed(1) | $[0, 1.5]$ | --- | SKIRTOR radial density gradient |
 | `agn_q_skirtor` | $q$ | Fixed(1) | $[0, 1.5]$ | --- | SKIRTOR polar density gradient |
 | `agn_oa_skirtor` | $\theta_{\rm oa}$ | Fixed(40) | $[20, 60]$ | deg | SKIRTOR half-opening angle |
-| `agn_cos_inc` | $\cos i$ | Fixed(0.5) | $[0, 1]$ | --- | Cosine of inclination |
+| `agn_cos_inc` | $\cos i$ | Fixed(0.5) | $[0, 1]$ | --- | Cosine of inclination (the disc scales as $2\cos i$) |
 | *Nebular Emission (CloudyGrid / Cue)* |  |  |  |  |  |
 | `neb_gas_logz` | $\log Z_{\rm gas}$ | Uniform | $[-2, 0.5]$ | --- | Gas metallicity |
 | `neb_gas_logu` | $\log U$ | Uniform | $[-4, -1]$ | --- | Ionization parameter |

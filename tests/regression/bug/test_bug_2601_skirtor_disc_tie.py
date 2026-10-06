@@ -607,10 +607,18 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
 #: ``(sum, first bin, middle bin, last bin)``, on the model's master grid (the disc's
 #: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, where the disc has no flux).
+#: The tie normalizes the 30 deg shape ``2 cos i D_nu + H_nu`` (#2678) on the SKIRTOR native
+#: grid (10 A - 1e8 A). With ``x = H / D`` the corona-to-disc power ratio inside that grid
+#: (``D`` both faces) and ``c = cos 30``, the disc part of the tied shape is
+#: ``4 (c/2 + x) / (2c + x) - 1`` higher than under ``(cos i / 2) D_nu + H_nu``: +0.25 % /
+#: +88 % / +102 % at log M_BH = 6 / 8 / 10 (measured x = 0.0015 / 0.71 / 0.89 at
+#: ``log_lbol = 11``, lambda_Edd = 3 / 0.03 / 3e-4). The tuples are aggregates over host and
+#: AGN in which this disc is a small part, so they move far less: the sum by +4.0e-6 /
+#: +1.8 % / +1.9 % (eta(30 deg) = 0.789 times the ``rest_sed_sum`` shifts of the seam sweep).
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586756183547371e32, 0.0, 2.890132589828082e28, 8.775294979760026e21),
-    8.0: (1.5945775424048933e32, 0.0, 2.9710185365363103e28, 8.79384299439796e21),
-    10.0: (1.6071818553047156e32, 0.0, 2.9914484674591455e28, 9.028630508794332e21),
+    6.0: (1.5586818994930873e32, 0.0, 2.890144051307899e28, 8.775296224915539e21),
+    8.0: (1.6231783393908302e32, 0.0, 3.0357717681217046e28, 8.81050134328935e21),
+    10.0: (1.6371879037133235e32, 0.0, 3.055844001572324e28, 9.286565918882074e21),
 }
 
 

@@ -26,6 +26,7 @@
   raises `ValueError`, a supplied axis of fewer than 4 nodes warns (PCHIP degrades to a parabola
   or a chord), and an unbounded prior (which cannot be spanned) emits one `GridSupportWarning`
   (#2722).
+- Lick equivalent widths and magnitude indices follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3). The index operator converts its per-frequency input (`L_ν` or `F_ν`) to `F_λ ∝ F_ν/λ²` and builds the pseudo-continuum as the straight line through the two sideband means placed at the sideband mid-wavelengths, integrating `1 − F_λ/F_C` over the feature window (the window-LUT path, `predict_spectral_indices(approx=True)`, evaluates the same definition at the window grid points, as the line path of #2677 does, and agrees with the exact path to round-off, also under a strong dust screen). A constant mean-of-sidebands continuum is the continuum at the wrong wavelength for asymmetric sidebands (Fe4383: 12 Å from the feature center): on solar SSP spectra it differs from the Lick definition by up to 1.0 Å (HγA, 10 Gyr), 0.4 Å (Fe4383) and 0.5 Å (HγF). Break indices (`Dn4000`, `D4000`, `F_ν` ratios) and `uv_slope_beta` are unchanged. `measure.spectral_index` documents its flux argument as a per-frequency flux density (pass `F_λ` as `flux_lambda * wave_rest**2`); `SpectralIndexDef(pseudo_continuum="mean")` keeps the constant continuum of `bagpipes.input.spectral_indices.single_index`, measured on the array as given, for comparison with BAGPIPES. An EW or magnitude index must declare exactly two continuum windows under the default definition. (#2690).
 - The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
   and `{'type': 'synthesizer'}`) read the grid's black-hole-mass and Eddington-ratio axes
   from `agn_log_mbh` and `agn_log_ledd`: all four blocks called the grid backend without
@@ -216,6 +217,26 @@
 - The window LUT behind `measure_line_fluxes(approx=True)`, `predict_spectral_indices(approx=True)` and the line-flux loss channel applied the dust screen at each window center, where the exact path applies it across the window; a faint line beside a strong one (a small difference of two large window means) therefore disagreed by 13 % for [N II] 6584 next to Hα (and 5e-5 to 3e-4 for the other lines and indices). The LUT now keeps the SSP integrand per grid point and applies the screen there, so it equals the exact measurement to float rounding on every line and break/EW index (#2677).
 
 ### Changed
+
+- Behaviour change: `agn_log_lbol` is the accretion power radiated into all directions, and the
+  line-of-sight luminosity is a derived output. A thin disc radiates proportional to cos i from
+  each face and the hot corona is isotropic (Kubota & Done 2018, Sects. 2.1 and 2.2), so with
+  `D_nu` the angle-integrated spectrum of the disc and warm zones, `H_nu` that of the corona and
+  `L_acc = int (D_nu + H_nu) dnu = 10**agn_log_lbol L_sun`, the `kubota_done`, `multicolor` and
+  `relagn` discs return `L_nu(i) = 2 cos i D_nu + H_nu` (the disc alone for the latter two): the
+  luminosity density an observer at inclination i assigns assuming isotropy. Before, the
+  bolometric normalization carried the same cos i as the rings, so it cancelled it (the 5100 A
+  level moved by 0.999, 0.991 and 0.976 at i = 30, 60 and 75 deg instead of 0.866, 0.5 and 0.26
+  relative to face-on) and the true power was 1/cos i times `agn_log_lbol`. Now the power at
+  cos i = 0.5 equals `L_acc`, the mean over cos i in [0, 1] equals `L_acc`, the zone radii, T(r),
+  mdot and the corona power do not depend on i, and the default i = 30 deg disc is 2 cos 30 =
+  1.732 times its `D_nu` (the optical and UV of a default AGN is 1.7 times brighter relative to
+  the torus and the corona). `L_2500_intrinsic` and `L_4400_intrinsic` are the line-of-sight
+  values at 30 deg. The new `log_L_agn_los` (dex re erg/s, composable model) is
+  log10 int L_nu(i) dnu of the direct emission before the torus screen and the polar dust: compare
+  it, not `agn_log_lbol`, with a catalog L_bol from a bolometric correction; `L_agn_bol` stays
+  `L_acc`. `ring_area` is the isotropic-equivalent projected area 4 pi (2 pi r dr) cos i with no
+  floor at cos i = 0.01. (#2678)
 
 - Breaking: `Spectroscopy.resample` defaults to `"auto"` (was `"point"`), decided in the model's rest frame at the fixed (or lowest prior) redshift by one function that every spectrum path calls, including `spectrum_from_sfh`. Pixels wider than the model grid now return the pixel mean of the light after the line-spread function (the Gaussian LSF acts on the model grid, then the bin integral; a DESI resolution matrix still acts on the pixels): a sigma = 1 Å line in 2 Å pixels read +14 % at its centre when point-sampled. `Spectroscopy(resample="point")` restores the old values. `SpectrumPrecomp` raises on pixels wider than the model grid instead of warning; pixel-integral gradients in redshift are continuous (#2530).
 

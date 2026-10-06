@@ -41,8 +41,8 @@ from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     SpectralIndexDef,
     measure_index_jax,
+    measure_indices_from_point_terms,
     measure_indices_from_window_lut,
-    measure_indices_from_windows,
     precompute_index_windows,
 )
 from tengri.parameters.resolve import merge_fixed_params
@@ -139,12 +139,9 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
     ]
     rest = m.predict_rest_sed(p)
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
-    wmeans = (
-        sms
-        * jnp.tensordot(jnp.asarray(jw), pc.window_integrals, axes=([0, 1], [0, 1]))
-        / pc.window_norms
-    )
-    lut = np.asarray(measure_indices_from_windows(wmeans, pc))
+    # per-point terms: a Lick EW (HdA, Hbeta, Halpha_EW) is evaluated at the grid points (#2690)
+    terms = sms * jnp.einsum("ma,map->p", jnp.asarray(jw), pc.points.integrands)
+    lut = np.asarray(measure_indices_from_point_terms(terms, pc))
     for d, l in zip(defs, lut):
         exact = float(measure_index_jax(rest.wavelength, rest.sed, d))
         rel = abs(exact - l) / max(abs(exact), 1e-9)
