@@ -70,5 +70,20 @@ def write_xlike_cell(
     derived = {key: draws(centers[key]) for key in DERIVED_KEYS}
     payload = build_npz_payload({"met_logzsol": rng.standard_normal(n_draws)}, derived)
     np.savez(results_dir / f"{gal_id}_{xlike_key}.npz", **payload)
-    meta = {"gal_id": gal_id, "config": xlike_key, "z": 1.0, "adoption_pass": adopted}
+    # The diagnostics fit_one records, consistent with ``adopted`` under both the
+    # strict bar (adoption_pass) and the relaxed one, which reads them directly.
+    diagnostics = (
+        {"rhat_max": 1.003, "divergences": 0, "ess_min": 500.0}
+        if adopted
+        else {"rhat_max": 1.05, "divergences": 120, "ess_min": 40.0}
+    )
+    meta = {
+        "gal_id": gal_id,
+        "config": xlike_key,
+        "z": 1.0,
+        "adoption_pass": adopted,
+        "n_samples": 600,
+        "n_chains": 4,
+        **diagnostics,
+    }
     (results_dir / f"{gal_id}_{xlike_key}.json").write_text(json.dumps(meta))

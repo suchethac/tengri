@@ -503,3 +503,20 @@ def test_no_jax_import_in_dependencies() -> None:
         assert "import tengri" not in content, f"{module_path.name} imports tengri"
         assert "from jax" not in content, f"{module_path.name} imports from jax"
         assert "from tengri" not in content, f"{module_path.name} imports from tengri"
+
+
+def test_sidecar_records_the_adoption_bar_per_code():
+    """A caption drawing a relaxed code must say so; the sidecar is where it reads that.
+
+    Prospector-like is a continuity-SFH configuration and so on the relaxed bar;
+    every other X-like code is judged strictly.
+    """
+    from fig10_xlike_one_to_one import ADOPTION_BAR
+
+    assert ADOPTION_BAR == {
+        "CIGALE": "strict",
+        "Prospector": "relaxed",
+        "BAGPIPES": "strict",
+        "BEAGLE": "strict",
+        "Dense_Basis": "strict",
+    }

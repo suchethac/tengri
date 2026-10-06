@@ -35,7 +35,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _adoption import is_adopted
+from _adoption import RELAXED_CONFIGS, is_adopted
 from config_metadata import XLIKE_CONFIGS
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,12 @@ XLIKE_CODE = {
     "bagpipes_like": "BAGPIPES",
     "beagle_like": "BEAGLE",
     "dense_basis_like": "Dense_Basis",
+}
+
+#: The adoption bar each code's cells are judged on; a caption drawing a
+#: relaxed code must say so (see _adoption).
+ADOPTION_BAR = {
+    code: "relaxed" if key in RELAXED_CONFIGS else "strict" for key, code in XLIKE_CODE.items()
 }
 
 #: Markers per code (locked to fig06_code_overlay.py)
@@ -339,6 +345,7 @@ def _make_figure(
         pairs = by_code[code]
         if not pairs:
             sidecar["codes"][code] = {
+                "adoption_bar": ADOPTION_BAR[code],
                 "n_adopted": 0,
                 "n_non_adopted": non_adopted_counts[code],
                 "mass_median_offset": None,
@@ -394,6 +401,7 @@ def _make_figure(
         mass_median_offset, _, mass_scatter = _compute_stats(mass_offsets.tolist())
 
         sidecar["codes"][code] = {
+            "adoption_bar": ADOPTION_BAR[code],
             "n_adopted": len(pairs),
             "n_non_adopted": non_adopted_counts[code],
             "mass_median_offset": float(mass_median_offset)

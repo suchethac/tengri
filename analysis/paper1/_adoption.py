@@ -41,6 +41,16 @@ general loosening. Owner ruling 2026-09-24, on #2496; III keeps the relaxation
 although it no longer needs it, because removing it changes nothing and was not
 asked for.
 
+The same property puts the Prospector-like X-like configuration on the relaxed
+bar: it uses the continuity SFH. Measured over its 19 cells of 2026-10-06,
+strict 1 of 19 against relaxed 14 of 19, with R-hat under 1.01 in 18 of 19 and
+a median of 5 divergent transitions in 2400 draws. Over the same run the other
+X-like configurations move little or not at all under the relaxed bar
+(BAGPIPES-like 20 -> 20, CIGALE-like 13 -> 13, BEAGLE-like 14 -> 17), and
+Dense Basis-like, which is not a continuity SFH, stays strict: it reaches only
+4 of 20 under the relaxed bar because its chains fail on R-hat and effective
+samples rather than on divergences. Owner ruling 2026-10-06.
+
 Any figure drawing a relaxed configuration must say so in its caption.
 """
 
@@ -50,9 +60,10 @@ import re
 from typing import NamedTuple
 
 #: Judged on a divergence *rate* plus R-hat and ESS rather than on zero
-#: divergences. The continuity rows (I, VI) and III, which keeps it
-#: historically. See the module docstring for the measurement.
-RELAXED_CONFIGS = frozenset({"I", "III", "VI"})
+#: divergences. Every continuity-SFH configuration (grid I and VI, the
+#: Prospector-like X-like configuration) and III, which keeps it historically.
+#: See the module docstring for the measurement.
+RELAXED_CONFIGS = frozenset({"I", "III", "VI", "prospector_like"})
 RELAXED_RHAT_MAX = 1.01
 RELAXED_DIVERGENCE_RATE = 0.015
 

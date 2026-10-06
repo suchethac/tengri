@@ -320,16 +320,27 @@ def test_the_peak_cap_check_is_configuration_v_only():
 # --- the relaxed bar follows the SFH, not the label (#2496, owner 2026-09-24) ---
 
 
-def test_the_relaxed_set_is_the_two_continuity_rows_and_iii():
-    """I and VI are the continuity rows; III keeps it although it no longer needs it.
+def test_the_relaxed_set_is_every_continuity_configuration_and_iii():
+    """Every continuity-SFH configuration is relaxed; III keeps it although it no longer needs it.
 
     The exception was introduced for III on the grounds that a nonparametric
     continuity SFH cannot reach a zero-divergence bar at this dimensionality.
     The table was later diversified and that SFH moved to I and VI, while the
-    frozenset kept the string. Pinning membership here so a future reshuffle
-    has to come past a test rather than past a comment.
+    frozenset kept the string. The expectation is derived from the
+    configuration metadata, so a continuity configuration added to either table
+    (the Prospector-like X-like configuration is one) has to come past this
+    test rather than past a comment.
     """
-    assert frozenset({"I", "III", "VI"}) == RELAXED_CONFIGS
+    from paper1.config_metadata import CONFIGS, XLIKE_CONFIGS
+
+    continuity = {
+        key
+        for table in (CONFIGS, XLIKE_CONFIGS)
+        for key, entry in table.items()
+        if entry.get("sfh_type") == "continuity"
+    }
+    assert continuity >= {"I", "VI", "prospector_like"}
+    assert frozenset(continuity | {"III"}) == RELAXED_CONFIGS
 
 
 @pytest.mark.parametrize(
