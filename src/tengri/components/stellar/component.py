@@ -929,7 +929,7 @@ def _mass_scale_lnu_jvp(primals, tangents):
     return primal_out, tangent_out
 
 
-def _publish_igm_nodes(derived_overrides, joint_weights, phot_igm, waves_igm):
+def _publish_igm_nodes(derived_overrides, phi, num):
     """Publish the flux-weighted sub-band node of the IGM-folded tensor.
 
     The dust screen multiplying ``stellar_phot_lnu_per_age_subband_igm_precomp``
@@ -939,11 +939,17 @@ def _publish_igm_nodes(derived_overrides, joint_weights, phot_igm, waves_igm):
     path with the bare node. Where the IGM leaves no weight the bare node is
     kept, finite for the same reason as there (#1397). No-op without the exact
     fold's nodes (node fold, patchy IGM).
+
+    Parameters
+    ----------
+    phi : ndarray, shape (n_age, n_filt, K)
+        Population-weighted IGM-folded sub-band flux, ``sum_m w * phi``.
+    num : ndarray, shape (n_age, n_filt, K) or None
+        The same sum weighted by the node wavelength, ``sum_m w * lambda * phi``;
+        ``None`` when the fold carries no nodes.
     """
-    if waves_igm is None:
+    if num is None:
         return
-    phi = jnp.einsum("ma,mafk->afk", joint_weights, phot_igm)
-    num = jnp.einsum("ma,mafk->afk", joint_weights, waves_igm * phot_igm)
     live = jnp.abs(phi) > _subband_live_floor()
     derived_overrides["stellar_subband_waves_rest_igm_precomp"] = jnp.where(
         live,
@@ -3772,11 +3778,15 @@ class StellarSEDComponent:
                             jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
                         )
                     )
+                    waves_igm = self._state.ssp_phot_lut.ssp_subband_waves_rest_igm
                     _publish_igm_nodes(
                         derived_overrides,
-                        joint_weights,
-                        ssp_sub_phot_igm,
-                        self._state.ssp_phot_lut.ssp_subband_waves_rest_igm,
+                        jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
+                        None
+                        if waves_igm is None
+                        else jnp.einsum(
+                            "ma,mafk->afk", joint_weights, waves_igm * ssp_sub_phot_igm
+                        ),
                     )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
@@ -3788,86 +3798,84 @@ class StellarSEDComponent:
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path: smooth triweight
-            # interp of the ztable at runtime z. Publishes the same derived
-            # keys as the fixed-z path: stellar_phot_lnu_precomp,
-            # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
-            # stellar_phot_moment_per_age_precomp, filter_eff_waves.
+            # Free-z path: local monotone cubic Hermite (PCHIP) read of the
+            # ztable at runtime z. Publishes the same derived keys as the
+            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
+            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
+            # filter_eff_waves.
             #
-            # The original linear z-interp was O(h^2) and non-monotonic in
-            # n_z at fixed test redshifts: doubling the grid can shift a
-            # test point into a less-favorable cell and raise the error.
-            # The triweight kernel (Hearin et al. 2023) is the canonical
-            # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
-            # and SKIRTOR grids; C²-continuous, kernel-supported on the
-            # 3-bandwidth neighborhood. See issue #438.
-            from tengri.utils.interpolation import (
-                apply_grid_window,
-                compute_grid_window,
-                edges_for_grid,
-            )
+            # The read is exact at every node, C1 in z, and valid on a graded
+            # grid (nodes added where a spectral edge sweeps a band cutoff,
+            # #2749). It replaces a triweight window (Hearin et al. 2023, #438)
+            # that smoothed the table over +-1.5 cells: it was not exact at the
+            # nodes, so a node placed on a kink could not resolve it, and its
+            # window arithmetic assumed uniform spacing. Only the four rows that
+            # bracket z are read, so the cost does not track n_z (the dense
+            # contraction of the whole table was 87% of the free-redshift
+            # gradient arithmetic, 128 MFLOP at n_z=250 against 2.7 MFLOP at
+            # fixed z).
+            from tengri.utils.grid_interp import pchip_interp_local
 
             # Use ztable_data if threaded as JIT input, otherwise fall
             # back to the closure (for non-JIT paths).
             ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
-            z_edges = edges_for_grid(z_grid)
-            # Match grid-cell width for the kernel bandwidth (Hearin 2023
-            # convention): smooth across one neighbor on each side. Given in
-            # CELLS, not in z: the window width is a shape, and 0.5 * (z_grid[1]
-            # - z_grid[0]) is a tracer under jit even though z_grid is a
-            # constant, so it cannot size anything.
-            # Windowed, not dense. The kernel is supported on five nodes; the
-            # other n_z - 5 weights are EXACTLY zero, so contracting the full
-            # axis multiplied the whole (n_z, n_met, n_age, n_filt) table by
-            # zeros. That was 87% of the free-redshift gradient arithmetic;
-            # 128 MFLOP at n_z=250 against 2.7 MFLOP at fixed z. Identical
-            # values and gradients; the cost simply stops tracking n_z.
-            z_start, w_z = compute_grid_window(z, z_grid, bandwidth_cells=0.5, edges=z_edges)
 
-            def _interp(table):
-                # table: (n_z, ...). Contract the supported window of axis 0.
-                return apply_grid_window(table, z_start, w_z)
+            def _interp(table, reduce=None):
+                # table: (n_z, ...). Cubic Hermite read of axis 0 at z. ``reduce``
+                # contracts the population-weight axes of the four bracketing rows
+                # first, so the cubic is formed on the (n_age, ...) quantity that
+                # is consumed rather than on every (n_met, n_age, ...) entry.
+                return pchip_interp_local(z_grid, table, z, reduce=reduce)
 
-            # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
-            ssp_phot_at_z = _interp(ztable.ssp_phot_table)
+            def _per_age(w):
+                return lambda rows: jnp.einsum("ma,zma...->za...", w, rows)
+
+            per_age_rows = _per_age(joint_weights)
+
+            def _interp_phi_num(phot, waves):
+                # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z.
+                def rows(p_rows, w_rows):
+                    return jnp.stack(
+                        [
+                            jnp.einsum("ma,zmafk->zafk", joint_weights, p_rows),
+                            jnp.einsum("ma,zmafk->zafk", joint_weights, w_rows * p_rows),
+                        ],
+                        axis=1,
+                    )
+
+                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows)
+                return both[0], both[1]
+
+            # ssp_phot_table: (n_z, n_met, n_age, n_filt) -> per-age (n_age, n_filt).
+            phot_per_age = _interp(ztable.ssp_phot_table, per_age_rows)
             # Marginalized + age-resolved LUTs (parity with the fixed-z path).
             stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z), total_mass
+                jnp.sum(phot_per_age, axis=0), total_mass
             )
-            stellar_phot_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,maf->af", joint_weights, ssp_phot_at_z), total_mass
-            )
+            stellar_phot_lnu_per_age = _mass_scale_lnu(phot_per_age, total_mass)
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Lyman continuum photometry at runtime z (#2439, #2427).
             if ztable.ssp_phot_lyc_table is not None:
-                ssp_lyc_at_z = _interp(ztable.ssp_phot_lyc_table)
-                stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_lyc_at_z), total_mass
+                lyc_per_age = _interp(ztable.ssp_phot_lyc_table, per_age_rows)
+                derived_overrides["stellar_phot_lnu_precomp_lyc"] = _mass_scale_lnu(
+                    jnp.sum(lyc_per_age, axis=0), total_mass
                 )
-                derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
                 # Per-age twin (R3d): see the fixed-z path for why.
-                stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_lyc_at_z), total_mass
-                )
-                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
-                    stellar_phot_lnu_per_age_lyc
+                derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = _mass_scale_lnu(
+                    lyc_per_age, total_mass
                 )
             # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:
-                ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
-                stellar_phot_moment_precomp = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z), total_mass
+                moment_per_age = _interp(ztable.ssp_phot_moment_table, per_age_rows)
+                derived_overrides["stellar_phot_moment_precomp"] = _mass_scale_lnu(
+                    jnp.sum(moment_per_age, axis=0), total_mass
                 )
-                stellar_phot_moment_per_age = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_moment_at_z), total_mass
-                )
-                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
-                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
-                    stellar_phot_moment_per_age
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = _mass_scale_lnu(
+                    moment_per_age, total_mass
                 )
             # Interpolate effective rest-frame wavelengths and publish for
             # downstream consumers (dust LUT, AGN, IGM).
@@ -3877,11 +3885,12 @@ class StellarSEDComponent:
             # Sub-band quadrature tensors at runtime z (#1122), same contract as
             # the fixed-z path. Φ_k carries the mass and L_sun scaling; the node
             # λ_k is a RATIO, so those cancel and it comes from the unscaled sums.
+            # The two sums Σ w·φ and Σ w·λ·φ are the quantities read, so each is
+            # contracted over the population weights and then cubic-read in z.
             if ztable.ssp_subband_phot_table is not None:
-                sub_phot_at_z = _interp(ztable.ssp_subband_phot_table)
-                sub_wave_at_z = _interp(ztable.subband_waves_rest_table)
-                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_at_z)
-                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, sub_wave_at_z * sub_phot_at_z)
+                sub_phi, sub_num = _interp_phi_num(
+                    ztable.ssp_subband_phot_table, ztable.subband_waves_rest_table
+                )
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
                 )
@@ -3896,23 +3905,21 @@ class StellarSEDComponent:
                     eff_waves_at_z[:, None],
                 )
                 # IGM folded in at the nodes (#1135): tabulated against this same
-                # z grid at build time, so it rides the same triweight interpolation
-                # as the sub-band photometry it multiplies.
+                # z grid at build time, so it rides the same cubic read as the
+                # sub-band photometry it multiplies.
                 if ztable.ssp_subband_phot_igm_table is not None:
-                    sub_phot_igm_at_z = _interp(ztable.ssp_subband_phot_igm_table)
-                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_igm_at_z),
-                            total_mass,
-                        )
-                    )
                     if ztable.subband_waves_rest_igm_table is not None:
-                        _publish_igm_nodes(
-                            derived_overrides,
-                            joint_weights,
-                            sub_phot_igm_at_z,
-                            _interp(ztable.subband_waves_rest_igm_table),
+                        phi_igm, num_igm = _interp_phi_num(
+                            ztable.ssp_subband_phot_igm_table,
+                            ztable.subband_waves_rest_igm_table,
                         )
+                    else:
+                        phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
+                        num_igm = None
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        _mass_scale_lnu(phi_igm, total_mass)
+                    )
+                    _publish_igm_nodes(derived_overrides, phi_igm, num_igm)
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
