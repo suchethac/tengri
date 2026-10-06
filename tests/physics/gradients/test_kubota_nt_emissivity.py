@@ -14,12 +14,9 @@ for the circular-orbit ``Omega, E, L`` of Kerr (``sqrt(-g) = r`` in the equatori
 
 from __future__ import annotations
 
-import jax
 import numpy as np
 import pytest
 from scipy.integrate import quad
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.agn import _nt_emissivity as N
 

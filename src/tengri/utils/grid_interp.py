@@ -39,6 +39,7 @@ __all__ = [
     "interp_nd_triweight",
     "lyc_augment_grid_for_step",
     "pchip_interp_1d",
+    "pchip_interp_local",
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
@@ -1244,6 +1245,88 @@ def pchip_interp_1d(
     Array([0.        , 1.86666667, 6.        ], dtype=float64)
     """
     return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
+
+
+def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray:
+    """Monotone cubic (PCHIP) read of one query off a table's leading axis, 4-node stencil.
+
+    Gives the same value as :func:`pchip_interp_1d` applied column by column
+    (clamped outside ``[x[0], x[-1]]``) while touching only the four rows that
+    bracket ``xq``: the tangents of the two bracketing nodes depend only on
+    their neighbors, so the table is never contracted or differentiated
+    whole. That keeps the cost of a read independent of the node count, which
+    is what a free-redshift z-table of 250+ nodes needs.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 4``; need not be uniform.
+    table : array_like, shape (n, ...) or tuple of such
+        Node values; interpolation is over the leading axis. A tuple gives
+        several tables sharing the axis, which ``reduce`` combines.
+    xq : float
+        Query coordinate, same unit as ``x``.
+    reduce : callable, optional
+        Applied to the four bracketing rows of each table (arrays of shape
+        ``(4, ...)``) before the tangents are formed, and returning one array
+        of shape ``(4, ...)``. It lets a caller contract axes that do not
+        depend on ``x`` (population weights) first, so the cubic is formed on
+        the contracted quantity actually consumed and costs nothing per
+        contracted element. The interpolant is then the cubic of the reduced
+        node values.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        Interpolant at ``xq``, exact at every node, :math:`C^1` in ``xq``.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. The stencil start is an integer and
+    carries no tangent; the derivative flows through the Hermite basis and the
+    tangents (Fritsch & Carlson 1980 [1]_, as in :func:`pchip_interp_1d`).
+
+    References
+    ----------
+    .. [1] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+    """
+    n = x.shape[0]
+    if n < 4:
+        raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
+    xq_c = jnp.clip(xq, x[0], x[-1])
+    # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
+    # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
+    pos = jnp.searchsorted(x, xq_c) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - 4))
+    xs = jax.lax.dynamic_slice_in_dim(x, start, 4, axis=0)
+    tables = table if isinstance(table, tuple) else (table,)
+    rows = tuple(jax.lax.dynamic_slice_in_dim(t, start, 4, axis=0) for t in tables)
+    ys = reduce(*rows) if reduce is not None else rows[0]
+    # The cubic is positively homogeneous in the node values (secants, the
+    # harmonic-mean tangents and the endpoint caps all scale with y), so it is
+    # formed on each column divided by its own stencil maximum and scaled back:
+    # identical in exact arithmetic, value and gradient. Physical-unit tables sit
+    # at ~1e-13 to 1e-24, where the harmonic mean's reverse pass would square a
+    # ~1e21 reciprocal sum past float32's range and return NaN (#2749).
+    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    ys = ys / scale
+    jc = i - start  # the bracketing cell's lower node within the stencil
+    slopes = _pchip_slopes(xs, ys)
+    x0, x1 = xs[jc], xs[jc + 1]
+    h = x1 - x0
+    t = (xq_c - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return scale * (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * ys[jc]
+        + (t3 - 2.0 * t2 + t) * h * slopes[jc]
+        + (-2.0 * t3 + 3.0 * t2) * ys[jc + 1]
+        + (t3 - t2) * h * slopes[jc + 1]
+    )
 
 
 def interp_nd_pchip(
