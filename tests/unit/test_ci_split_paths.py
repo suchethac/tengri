@@ -237,12 +237,23 @@ class TestBugTreeWorkflowSplit:
         parts = []
         for n in self.BUG_PARTS:
             r = subprocess.run(
-                [sys.executable, "tools/ci_split_paths.py", "--root", "tests/regression/bug",
-                 "--part", n, "--of", "3"],
-                capture_output=True, text=True, cwd=self.REPO,
+                [
+                    sys.executable,
+                    "tools/ci_split_paths.py",
+                    "--root",
+                    "tests/regression/bug",
+                    "--part",
+                    n,
+                    "--of",
+                    "3",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=self.REPO,
             )
             assert r.returncode == 0, r.stderr
             parts.append(r.stdout.split())
         flat = [p for part in parts for p in part]
         assert len(flat) == len(set(flat))
-        assert set(flat) == {str(p.relative_to(self.REPO)) for p in (self.REPO / "tests/regression/bug").glob("test_*.py")}
+        bug_tree = (self.REPO / "tests/regression/bug").glob("test_*.py")
+        assert set(flat) == {str(p.relative_to(self.REPO)) for p in bug_tree}
