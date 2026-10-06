@@ -15,6 +15,15 @@
 ### Fixed
 
 - `_pdr_luminosity_weight` (the power-law to single-U luminosity ratio of the Draine & Li 2007 Eq. 33 mass distribution, which weights the DL07/DL14 PDR component and `dust_umean`) is one closed form at every α: `R = g((2 − α)L)/g((1 − α)L)` with `g(u) = expm1(u)/u` and `L = ln(U_max/U_min)`, `g` by its series below |u| < 1e-3. It had held the α = 1 and α = 2 limit values across |α − pole| < 1e-3, which left `R` 3–4e-3 off and flat in α there and made it jump by 5–8e-3 at the window edges — a likelihood step with a zero gradient on a free `alpha_dl14` (#2727).
+- The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
+  and `{'type': 'synthesizer'}`) read the grid's black-hole-mass and Eddington-ratio axes
+  from `agn_log_mbh` and `agn_log_ledd`: all four blocks called the grid backend without
+  them, so the axes sat at the backend's hard-coded node (8.0, -0.3) and the two
+  parameters were inert (the [O III] 5007 light of the `synthesizer_spectra` NLR moves by
+  about 18% between `agn_log_ledd` = -0.3 and -1.0). The blocks now forward the registry
+  defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
+  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3)
+  (#2634).
 - `bell2003_split` is now covered by the build-time check that refuses a FIRRC radio block without a dust component, which would otherwise return an all-zero radio SED silently. (#2590)
 - **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
   masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
