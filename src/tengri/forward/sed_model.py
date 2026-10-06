@@ -7933,8 +7933,9 @@ class SEDModel:
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
             per evaluation (measured, wNE grid) and bit-exact for the supported
-            configuration, **stellar + two-component (or no) dust + baked-in
-            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            configuration (a Lick equivalent width is evaluated at the window
+            grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
+            baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
@@ -7959,6 +7960,10 @@ class SEDModel:
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
+        The spectrum is :math:`L_\\nu`; a Lick equivalent width converts it to
+        :math:`F_\\lambda` and builds the sideband straight-line pseudo-continuum
+        (Trager et al. 1998, ApJS 116, 1, Eqs. 1-3; see
+        :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax

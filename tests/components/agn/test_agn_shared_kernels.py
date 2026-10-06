@@ -3,7 +3,7 @@
 
 Covers:
 1. gaussian_line_profile — normalization, shape, consistency with NLR/BLR
-2. ring_area — R&L 1979 Eq 1.6 geometry, cos_inc clamping
+2. ring_area, isotropic-equivalent projected area 4 pi (2 pi r dr) cos i
 3. Differentiability and JIT compatibility of both
 """
 
@@ -98,23 +98,30 @@ class TestGaussianLineProfile:
 class TestRingArea:
     """Disc ring projected area tests."""
 
-    def test_formula_matches_rl79(self):
-        """ring_area = pi * 2*pi * r * dr * max(cos_inc, 0.01)."""
+    def test_formula_is_the_isotropic_equivalent_projected_area(self):
+        """ring_area = 4 pi * 2 pi r dr * cos_inc.
+
+        The ring radiates the intensity B_nu from each face, so the flux at distance d is
+        B_nu 2 pi r dr cos(i) / d^2 and the isotropic-equivalent luminosity density 4 pi d^2
+        times that: 4 pi B_nu (2 pi r dr) cos i (the disc is 2 cos i D_nu with the two-face
+        D_nu = 2 pi B_nu 2 pi r dr). The earlier pi * 2 pi r dr * cos i is one quarter of it:
+        a factor 2 for the two faces and a factor 2 of 2 cos i.
+        """
         r = 1e12
         dr = 1e10
         cos_inc = 0.5
-        expected = jnp.pi * 2.0 * jnp.pi * r * dr * cos_inc
+        expected = 4.0 * jnp.pi * 2.0 * jnp.pi * r * dr * cos_inc
         result = ring_area(r, dr, cos_inc)
         assert jnp.isclose(result, expected, rtol=1e-10)
 
-    def test_cos_inc_clamped_at_001(self):
-        """Edge-on (cos_inc=0) should clamp to 0.01, not zero."""
+    def test_edge_on_is_exactly_zero_and_linear_in_cos_inc(self):
+        """Edge-on (cos_inc=0) has no projected area: no floor, constant derivative in cos i."""
         r, dr = 1e12, 1e10
-        result_zero = ring_area(r, dr, 0.0)
-        result_neg = ring_area(r, dr, -0.5)
-        expected = jnp.pi * 2.0 * jnp.pi * r * dr * 0.01
-        assert jnp.isclose(result_zero, expected, rtol=1e-10)
-        assert jnp.isclose(result_neg, expected, rtol=1e-10)
+        assert float(ring_area(r, dr, 0.0)) == 0.0
+        slope = float(jax.grad(lambda c: ring_area(r, dr, c))(0.3))
+        assert slope == pytest.approx(
+            4.0 * float(jnp.pi) * 2.0 * float(jnp.pi) * r * dr, rel=1e-12
+        )
 
     def test_face_on_is_maximum(self):
         """cos_inc=1 (face-on) should give the largest area."""
