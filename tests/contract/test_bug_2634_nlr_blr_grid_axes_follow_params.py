@@ -12,10 +12,13 @@ The backend ``compute_nlr_sed_synthesizer_spectra`` is the reference. Cells:
 (a) the block equals the backend at explicit (log M_BH, log lambda_Edd), both regions;
 (b) the axes move the spectrum by the backend-measured amounts;
 (c) the same through ``SEDModel.build``, value and ``jax.grad``;
-(d) the #931 U / n / Z forwarding is unchanged.
+(d) the #931 U / n / Z forwarding is unchanged;
+(e) grid-free: the ``synthesizer_spectra`` blocks hand the declared ``agn_log_mbh`` /
+    ``agn_log_ledd`` to the backend as ``log_bh_mass=`` / ``log_eddington=``, both regions.
 
-Grid-gated: the Synthesizer AGN test grids are not shipped, so the module skips
-only when the specific grid file is missing.
+Cells (a)-(d) are grid-gated: the Synthesizer AGN test grids are not shipped, so each
+of them skips when the specific grid file is missing. Cell (e) replaces the backend
+with a recorder and runs without the grids.
 """
 
 from __future__ import annotations
@@ -26,6 +29,8 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
+from tengri.components.agn.blocks import blr as blr_module
+from tengri.components.agn.blocks import nlr as nlr_module
 from tengri.components.agn.blocks.blr import (
     DEFAULT_F_BOL_5100,
     blr_synthesizer_block,
@@ -46,6 +51,9 @@ from tengri.parameters.priors import Uniform
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.contract
+
+#: Marks the cells that read the Synthesizer AGN test grids.
+needs_grids = pytest.mark.usefixtures("_grids_present")
 
 _LOG_LBOL = 13.0
 _WAVE = np.linspace(900.0, 30000.0, 29101)
@@ -106,9 +114,9 @@ _RATIOS = {
 _AXIS_POINTS = {"ledd": (8.0, -1.0), "mbh": (9.0, -0.3)}
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="module")
 def _grids_present():
-    """Skip only when a specific Synthesizer AGN grid file is missing."""
+    """Skip the requesting cell when a specific Synthesizer AGN grid file is missing."""
     for kind in _REGIONS:
         try:
             _resolve_synthesizer_grid(kind)
@@ -163,6 +171,7 @@ def _bolometric(l_lambda):
     return float(np.trapezoid(l_lambda, _WAVE))
 
 
+@needs_grids
 @pytest.mark.parametrize("key", _KEYS, ids=lambda k: "/".join(k))
 @pytest.mark.parametrize("mbh, ledd", [(8.0, -1.0), (9.0, -1.0), (8.0, -0.3)])
 def test_block_equals_backend_at_declared_axes(key, mbh, ledd):
@@ -179,6 +188,7 @@ def test_block_equals_backend_at_declared_axes(key, mbh, ledd):
     )
 
 
+@needs_grids
 @pytest.mark.parametrize("key", _KEYS, ids=lambda k: "/".join(k))
 @pytest.mark.parametrize("axis", ["ledd", "mbh"])
 def test_axes_move_the_spectrum_by_the_backend_amount(key, axis):
@@ -228,6 +238,7 @@ _VARIANTS = ("synthesizer_spectra", "synthesizer")
 _LINES = "sed_agn_lines"  # nlr + blr + feii light of the composable AGN
 
 
+@needs_grids
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.mark.filterwarnings("ignore:agn_log_ledd has no effect:UserWarning")
 @pytest.mark.parametrize("variant", _VARIANTS)
@@ -244,6 +255,7 @@ def test_agn_log_ledd_moves_the_nlr_light_through_the_grammar(synthetic_ssp_wide
     assert rel > 1e-2, f"agn_log_ledd is inert through SEDModel.build (max rel diff {rel})"
 
 
+@needs_grids
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.mark.filterwarnings("ignore:agn_log_ledd has no effect:UserWarning")
 @pytest.mark.parametrize("variant", _VARIANTS)
@@ -258,6 +270,7 @@ def test_agn_log_ledd_gradient_reaches_the_nlr_light(synthetic_ssp_wide, variant
     assert g != 0.0, "agn_log_ledd has an exactly zero gradient (inert parameter)"
 
 
+@needs_grids
 @pytest.mark.parametrize("key", _KEYS, ids=lambda k: "/".join(k))
 def test_photoionization_axes_still_forwarded(key):
     """(d) #931 unchanged (GREEN before and after): U / Z reach the backend.
@@ -269,3 +282,36 @@ def test_photoionization_axes_still_forwarded(key):
     got = _block(key, knobs, agn_log_mbh=_BASE[0], agn_log_ledd=_BASE[1])
     want = _backend(key, *_BASE, knobs)
     np.testing.assert_allclose(got, want, rtol=1e-12, atol=0)
+
+
+@pytest.mark.parametrize(
+    "module, block, region, prefix",
+    [
+        (nlr_module, nlr_synthesizer_spectra_block, "nlr", "agn_nlr"),
+        (blr_module, blr_synthesizer_spectra_block, "blr", "agn_blr"),
+    ],
+    ids=["nlr", "blr"],
+)
+def test_spectra_blocks_forward_declared_mbh_and_ledd_to_the_backend(
+    monkeypatch, module, block, region, prefix
+):
+    """(e) Grid-free: the backend receives the declared (log M_BH, log lambda_Edd) verbatim."""
+    seen = {}
+
+    def _recorder(wave_aa, **kwargs):
+        seen.update(kwargs)
+        return jnp.ones_like(wave_aa)
+
+    monkeypatch.setattr(module, "compute_nlr_sed_synthesizer_spectra", _recorder)
+    monkeypatch.setattr(module, "_resolve_synthesizer_grid", lambda kind: f"{kind}.hdf5")
+    block(
+        _WAVE,
+        _LOG_LBOL,
+        0.0,
+        **{f"{prefix}_cf": 0.1},
+        agn_log_mbh=9.37,
+        agn_log_ledd=-1.23,
+    )
+    assert seen.get("log_bh_mass") == 9.37, f"{region}: agn_log_mbh not forwarded as log_bh_mass"
+    assert seen.get("log_eddington") == -1.23, f"{region}: agn_log_ledd not forwarded as log_eddington"
+    assert seen["region"] == region
