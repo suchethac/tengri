@@ -101,8 +101,8 @@ class TestPercentParsing:
 
         The cell type is the bracketed token immediately after the marker.
         Testing for any "[" in the remainder reclassifies this as markdown and
-        silently drops a real code cell — the bug that made
-        `analysis/hst_proposal` report as drifted when it was in sync.
+        silently drops a real code cell — the bug that made an in-sync
+        paired notebook report as drifted.
         """
         py = tmp_path / "m.py"
         py.write_text('# %% tags=["imports"]\nimport os\n', encoding="utf-8")
