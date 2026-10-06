@@ -520,3 +520,76 @@ def test_sidecar_records_the_adoption_bar_per_code():
         "BEAGLE": "strict",
         "Dense_Basis": "strict",
     }
+
+
+def _outlier_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, list[float], list[float]]:
+    """Eleven BAGPIPES galaxies near the 1:1 line plus one whose published SFR is -11.5.
+
+    Returns the results dir, published CSV, selected-galaxies JSON, census JSON,
+    and the published and tengri log SFRs of every galaxy (outlier last).
+    """
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    key = "bagpipes_like"
+    gal_ids = [*range(21, 32), 99]
+    pub_sfr = [0.5 + 0.1 * i for i in range(11)] + [-11.5]
+    tengri_sfr = [v + 0.05 * (i % 3) for i, v in enumerate(pub_sfr[:-1])] + [0.2]
+    lines = ["code,id,logmstar,logmstar_lo,logmstar_hi,logsfr,logsfr_lo,logsfr_hi"]
+    cells: dict = {}
+    for gal_id, p, t in zip(gal_ids, pub_sfr, tengri_sfr, strict=True):
+        write_xlike_cell(results_dir, gal_id, key, log_mass=10.0, log_sfr=t)
+        lines.append(f"BAGPIPES,{gal_id},10.0,9.8,10.2,{p},{p - 0.2},{p + 0.2}")
+        cells.update(surviving_census(gal_id, [key], 10.0))
+    published = tmp_path / "pub.csv"
+    published.write_text("\n".join(lines) + "\n")
+    selected = tmp_path / "sel.json"
+    selected.write_text(json.dumps({"selected_galaxies": [{"id": g} for g in gal_ids]}))
+    census = tmp_path / "surviving.json"
+    census.write_text(json.dumps({"cells": cells}))
+    return results_dir, published, selected, census, pub_sfr, tengri_sfr
+
+
+def test_sfr_outlier_is_recorded_out_of_range_and_statistics_keep_it(tmp_path: Path) -> None:
+    """A point off the SFR axes is pinned and reported; offset/scatter use every point."""
+    import numpy as np
+
+    results_dir, published, selected, census, pub_sfr, tengri_sfr = _outlier_fixture(tmp_path)
+    result = _run_fig10(results_dir, census, published, tmp_path, selected)
+    assert result.returncode == 0, result.stderr
+
+    sidecar = json.loads((tmp_path / "fig10_data.json").read_text())
+    entry = sidecar["codes"]["BAGPIPES"]
+    assert entry["sfr_out_of_range"] == {"n": 1, "gal_ids": [99]}
+    lo, hi = sidecar["sfr_limits"]
+    assert lo > -11.5, "limits must follow the bulk, not the outlier"
+    assert all(lo <= v <= hi for v in pub_sfr[:-1])
+
+    offsets = np.array(tengri_sfr) - np.array(pub_sfr)
+    assert entry["n_adopted"] == 12
+    assert entry["sfr_median_offset"] == pytest.approx(float(np.median(offsets)))
+    half_iqr = (np.percentile(offsets, 84) - np.percentile(offsets, 16)) / 2
+    assert entry["sfr_scatter"] == pytest.approx(float(half_iqr))
+
+
+def test_legend_lies_inside_the_saved_figure(tmp_path: Path) -> None:
+    """Every legend entry is drawn, and inside the figure's bounds."""
+    import fig10_xlike_one_to_one as fig10
+    import matplotlib.pyplot as plt
+
+    results_dir, published, selected, census, *_ = _outlier_fixture(tmp_path)
+    pub = fig10._load_published_csv(published)
+    cen = fig10._load_surviving_mass_census(census)
+    values = fig10._load_xlike_fits(results_dir, fig10._load_selected_galaxies(selected), cen)
+    _, fig = fig10._make_figure(pub, values, cen)
+    try:
+        fig.canvas.draw()
+        legends = [ax.get_legend() for ax in fig.axes if ax.get_legend() is not None]
+        legends += fig.legends
+        assert len(legends) == 1
+        extent = legends[0].get_window_extent()
+        figbox = fig.bbox
+        assert extent.x0 >= figbox.x0 and extent.y0 >= figbox.y0
+        assert extent.x1 <= figbox.x1 and extent.y1 <= figbox.y1
+        assert [t.get_text() for t in legends[0].get_texts()] == ["BAGPIPES"]
+    finally:
+        plt.close(fig)

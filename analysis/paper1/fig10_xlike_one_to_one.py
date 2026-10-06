@@ -80,6 +80,14 @@ FIGURE_WIDTH = 7.0
 FIGURE_HEIGHT = 3.5
 PERCENTILES = (16.0, 50.0, 84.0)
 
+#: SFR-panel limits come from this central range of all plotted values [percent],
+#: padded by ``SFR_LIMIT_MARGIN`` [dex]; points outside are pinned at the edge.
+SFR_LIMIT_PERCENTILES = (2.0, 98.0)
+SFR_LIMIT_MARGIN = 0.5
+
+#: Marker pointing out of the panel for a point pinned at the left/right/bottom/top edge.
+EDGE_MARKERS = {"left": "<", "right": ">", "bottom": "v", "top": "^"}
+
 
 class PublishedValue(NamedTuple):
     """Published value for one code."""
@@ -304,6 +312,42 @@ def _compute_stats(
     return median, mad, half_iqr
 
 
+def _robust_sfr_limits(by_code: dict[str, list]) -> list[float]:
+    """Common x/y limits [dex] from the bulk of all plotted published and tengri SFRs.
+
+    Uses the ``SFR_LIMIT_PERCENTILES`` range of every adopted published and
+    tengri-median log SFR, padded by ``SFR_LIMIT_MARGIN`` and rounded outward to
+    0.5 dex, so one outlier cannot set the scale. Both axes share the limits.
+    """
+    values = [
+        v
+        for pairs in by_code.values()
+        for pub, ten in pairs
+        for v in (pub.logsfr, ten.log_sfr_p50)
+        if np.isfinite(v)
+    ]
+    if not values:
+        return [-1.0, 2.0]
+    lo, hi = np.percentile(values, SFR_LIMIT_PERCENTILES)
+    return [
+        float(np.floor((lo - SFR_LIMIT_MARGIN) * 2) / 2),
+        float(np.ceil((hi + SFR_LIMIT_MARGIN) * 2) / 2),
+    ]
+
+
+def _edge_side(x: float, y: float, lim: list[float]) -> str | None:
+    """Edge a point outside ``lim`` is pinned to (the larger excursion), else ``None``."""
+    lo, hi = lim
+    excess = {
+        "left": lo - x,
+        "right": x - hi,
+        "bottom": lo - y,
+        "top": y - hi,
+    }
+    side, amount = max(excess.items(), key=lambda kv: kv[1])
+    return side if amount > 0 else None
+
+
 def _make_figure(
     published: dict[tuple[str, int], PublishedValue],
     tengri_values: list[TengriValue],
@@ -352,6 +396,7 @@ def _make_figure(
                 "mass_scatter": None,
                 "sfr_median_offset": None,
                 "sfr_scatter": None,
+                "sfr_out_of_range": {"n": 0, "gal_ids": []},
             }
             continue
 
@@ -431,6 +476,8 @@ def _make_figure(
 
     # Plot SFR panel (right)
     ax_sfr = fig.add_subplot(gs[0, 1])
+    sfr_lim = _robust_sfr_limits(by_code)
+    sidecar["sfr_limits"] = sfr_lim
     for code in sorted(XLIKE_CODE.values()):
         pairs = by_code[code]
         if not pairs:
@@ -466,9 +513,11 @@ def _make_figure(
             alpha=0.6,
             zorder=2,
         )
+        sides = [_edge_side(x, y, sfr_lim) for x, y in zip(pub_sfrs, tengri_sfrs)]
+        inside = [i for i, side in enumerate(sides) if side is None]
         ax_sfr.scatter(
-            pub_sfrs,
-            tengri_sfrs,
+            [pub_sfrs[i] for i in inside],
+            [tengri_sfrs[i] for i in inside],
             s=30,
             marker=CODE_MARKERS[code],
             color=CODE_COLORS[code],
@@ -476,6 +525,21 @@ def _make_figure(
             label=code,
             zorder=3,
         )
+        # Out-of-range points stay visible: pinned at the edge, marker pointing outward.
+        for i, side in enumerate(sides):
+            if side is None:
+                continue
+            ax_sfr.scatter(
+                [float(np.clip(pub_sfrs[i], *sfr_lim))],
+                [float(np.clip(tengri_sfrs[i], *sfr_lim))],
+                s=30,
+                marker=EDGE_MARKERS[side],
+                color=CODE_COLORS[code],
+                edgecolors="none",
+                clip_on=False,
+                zorder=4,
+            )
+        out_ids = [pairs[i][0].gal_id for i, side in enumerate(sides) if side is not None]
 
         # Compute SFR statistics
         sfr_offsets = np.array(tengri_sfrs) - np.array(pub_sfrs)
@@ -488,16 +552,9 @@ def _make_figure(
         sidecar["codes"][code]["sfr_scatter"] = (
             float(sfr_scatter) if sfr_scatter is not None else None
         )
+        sidecar["codes"][code]["sfr_out_of_range"] = {"n": len(out_ids), "gal_ids": out_ids}
 
-    # One-to-one diagonal for SFR
-    sfr_values = []
-    for c in by_code:
-        if by_code[c]:
-            sfr_values.extend([p[0].logsfr for p in by_code[c]])
-    if sfr_values:
-        sfr_lim = [np.floor(min(sfr_values) * 2) / 2, np.ceil(max(sfr_values) * 2) / 2]
-    else:
-        sfr_lim = [-1, 2]
+    # One-to-one diagonal for SFR (identical limits on both axes)
     ax_sfr.plot(sfr_lim, sfr_lim, "k--", alpha=0.3, linewidth=0.8, zorder=1)
     ax_sfr.set_xlim(sfr_lim)
     ax_sfr.set_ylim(sfr_lim)
@@ -524,7 +581,8 @@ def _make_figure(
         for code in sorted(XLIKE_CODE.values())
         if by_code[code]
     ]
-    fig.legend(handles=handles, loc="upper right", fontsize=7, ncol=1)
+    # The mass data hug the diagonal, so the lower right of that panel is empty.
+    ax_mass.legend(handles=handles, loc="lower right", fontsize=7, ncol=1, framealpha=0.9)
 
     return sidecar, fig
 
