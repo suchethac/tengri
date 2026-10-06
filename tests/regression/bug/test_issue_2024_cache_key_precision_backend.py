@@ -249,9 +249,11 @@ def test_schema_version_bumps_prevent_collisions():
     would otherwise have satisfied an unversioned key and silently served a
     table with no Lyman-continuum split); and 4→5 when the Lyman-continuum tables
     moved onto the 911.76 Å step-model edge (same request fields, different values,
-    so only the version separates a warm cache from the new content).
+    so only the version separates a warm cache from the new content); and 5→6 when
+    the default z grid gained nodes at each band's Lyman-limit crossings (#2749,
+    again with no request field changing).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 5, (
+    assert pc._ZTABLE_CACHE_VERSION == 6, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 3, (

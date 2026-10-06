@@ -21,6 +21,15 @@
   defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
   a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3)
   (#2634).
+- **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
+  masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
+  911.76 Å as the same step photometry integrates, in both point-sampled and
+  pixel-integrated resampling. A pixel next to the edge previously took a linear ramp
+  across the cell and could be off by up to ~20%.
+- **Cue's ionizing photon rate includes the partial bin at the Lyman edge:** Cue line
+  and continuum fluxes rise by ~1.7% for a constant star formation history, matching the
+  stellar `nion` already reported.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a
@@ -29,6 +38,16 @@
   dtype (float64 under x64, float32 in pure-float32 mode); the float32 template values are
   promoted where they are gathered. JIT against eager now agrees to 2e-13, and AD against a
   central difference of `agn_gamma_warm` and `agn_kt_warm` agrees to 1e-5 (was 3e-5).
+
+- **Free-redshift photometry table (`WavePrecomp`) interpolates in z with a monotone local cubic Hermite,
+  exact at nodes, with nodes added where each band's Lyman-limit crossing falls (#2749):** the old triweight kernel
+  (C² but blurred) had non-monotone interpolation error that did not decrease monotonically with grid refinement
+  (11.6 / 1.5 / 0.7 / 1.2 % error at 100 / 200 / 400 / 800 nodes, worst case GALEX FUV). The new shape-preserving
+  cubic Hermite (PCHIP) is exact at nodes, keeps the grid monotone, and resolves sharp features like the
+  Lyman-limit edge via edge-aware node clusters (refinement factor 8, graded spacing). Measured on GALEX/SDSS/DES/
+  NIRCam free-z fits: FUV/NUV/u/des_i worst error 0.59/0.06/0.04/0.08 % at n_z=250; NIRCam F090W/F115W at z 4–12
+  reduce from 7.39/5.64 % to 0.58/0.77 %. Gradient vs central difference error drops to ≤0.8 % (was ≤23 %).
+  Gradient FLOP count down 22 % (2.94M vs 3.76M).
 
 - The radio wing of the master wavelength grid is sampled at 100 points per decade from at
   most 1e8 A (was 20 per decade from the end of the longest template), so a 10 %-wide radio

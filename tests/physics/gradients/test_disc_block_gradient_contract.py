@@ -34,13 +34,10 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tests._data_skip import DATA_DIR
-
-jax.config.update("jax_enable_x64", True)
-
 import tengri
 from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.agn.blocks import AGN_BLOCKS
+from tests._data_skip import DATA_DIR
 
 # The disc block never reads the stellar grid (AGN-only build, ``sed_agn`` is the disc), so
 # any bare-stellar SSP will do. CI has no BC03 download, but ``tests/conftest.py`` writes a

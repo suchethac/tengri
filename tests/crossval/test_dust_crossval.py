@@ -459,19 +459,19 @@ class TestCharlotFallReference:
         tau_bc = 1.0
         tau_diff = 0.5
 
+        younger_fraction = (age_grid < 1e7).astype(float)
         trans = two_component_dust(
             wave,
-            age_grid,
+            younger_fraction,
             tau_v1=tau_bc,
             tau_v2=tau_diff,
             law_bc="power_law",
             law_diff="power_law",
             dust_slope=-0.7,
-            transition_width=0.1,  # sharp transition
         )
         trans = np.array(trans)
 
-        # Young star (1 Myr << 10 Myr): sigmoid weight ~ 1
+        # Young star (1 Myr << 10 Myr): younger_fraction = 1
         # T_young ~ exp(-(1.0 * 1.0 + 0.5 * 1.0)) = exp(-1.5)
         expected_young = np.exp(-1.5)
         np.testing.assert_allclose(
@@ -488,19 +488,19 @@ class TestCharlotFallReference:
         tau_bc = 1.0
         tau_diff = 0.5
 
+        younger_fraction = (age_grid < 1e7).astype(float)
         trans = two_component_dust(
             wave,
-            age_grid,
+            younger_fraction,
             tau_v1=tau_bc,
             tau_v2=tau_diff,
             law_bc="power_law",
             law_diff="power_law",
             dust_slope=-0.7,
-            transition_width=0.1,
         )
         trans = np.array(trans)
 
-        # Old star (1 Gyr >> 10 Myr): sigmoid weight ~ 0
+        # Old star (1 Gyr >> 10 Myr): younger_fraction = 0
         # T_old ~ exp(-0.5 * 1.0) = exp(-0.5)
         expected_old = np.exp(-0.5)
         np.testing.assert_allclose(
@@ -533,9 +533,10 @@ class TestCharlotFallReference:
         wave = jnp.array([5500.0])
         age_grid = jnp.array([1e5, 1e6, 1e7, 1e8, 1e9, 1e10])
 
+        younger_fraction = (age_grid < 1e7).astype(float)
         trans = two_component_dust(
             wave,
-            age_grid,
+            younger_fraction,
             tau_v1=1.0,
             tau_v2=0.5,
             law_bc="power_law",
