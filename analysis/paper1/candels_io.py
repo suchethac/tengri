@@ -8,15 +8,9 @@ from pathlib import Path
 import numpy as np
 
 #: Default catalog location, resolved relative to this file (analysis/paper1/
-#: candels_io.py -> paper1 -> analysis -> repository root). Override with the
+#: candels_io.py -> analysis/paper1/data). Override with the
 #: ``TENGRI_CANDELS_CATALOG`` environment variable.
-CANDELS_CATALOG = (
-    Path(__file__).resolve().parents[2]
-    / "analysis"
-    / "hst_proposal"
-    / "data"
-    / "CANDELS_GDSS_workshop_z1.dat"
-)
+CANDELS_CATALOG = Path(__file__).resolve().parent / "data" / "CANDELS_GDSS_workshop_z1.dat"
 
 
 def load_candels_z1() -> dict:
@@ -28,7 +22,7 @@ def load_candels_z1() -> dict:
 
     Notes:
         Data path: resolved relative to this file as ``CANDELS_CATALOG`` (repo
-        root / analysis/hst_proposal/data/CANDELS_GDSS_workshop_z1.dat),
+        root / analysis/paper1/data/CANDELS_GDSS_workshop_z1.dat),
         overridable via the ``TENGRI_CANDELS_CATALOG`` environment variable.
         Missing data indicated by 98.999 or negative errors
         flg1: data quality flag (0 = good, 1 = issues)

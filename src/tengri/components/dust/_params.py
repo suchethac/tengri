@@ -497,6 +497,18 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "must have lo >= 0",
     ),
     ParamDeclaration(
+        "dust_tau_neb",
+        # Read only under nebular_screen='own' (#2625): the nebular continuum
+        # and line catalog's own optical depth at 5500 A. Declared only for
+        # that choice (see ``_build_param_registry``); Fixed at the birth-cloud
+        # fiducial unless freed, with the birth-cloud prior as its free range.
+        Fixed(1.0),
+        "Nebular optical depth at 5500 A, own screen (nebular_screen='own')",
+        lambda lo, hi: lo >= 0,
+        "must have lo >= 0",
+        free_prior=Uniform(0.0, 4.0, "Nebular optical depth at 5500 A", default=1.0),
+    ),
+    ParamDeclaration(
         "dust_slope",
         Fixed(-0.7),
         "Dust power-law index",
@@ -822,7 +834,7 @@ DEFAULT_DUST_TEA_SCATTER = declared_default(ATTENUATION_PARAMS, "dust_tea_scatte
 # distinction to name, so ``dust_slope_bc`` etc. would be a declared
 # parameter with nothing for the per-screen spelling to mean.
 ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset(
-    {"dust_tau_bc", "dust_tau_diff"}
+    {"dust_tau_bc", "dust_tau_diff", "dust_tau_neb"}
 ) | frozenset(short_to_full(f"{stem}_{screen}") for stem in OVERRIDE_STEMS for screen in SCREENS)
 
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (

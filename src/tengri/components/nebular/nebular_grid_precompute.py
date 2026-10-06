@@ -236,7 +236,7 @@ def validate_n_grid(n_grid):
 #: not depend on who else is in the batch. Grids at or below this size take the
 #: single-call path unchanged, so the common one-axis grid is untouched.
 _BUILD_CHUNK_NODES = 64
-_DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
+_DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v", "dust_tau_neb")
 
 
 @dataclasses.dataclass(frozen=True)
