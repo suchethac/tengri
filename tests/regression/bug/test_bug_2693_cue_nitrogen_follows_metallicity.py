@@ -147,9 +147,15 @@ def test_absolute_mode_compares_gas_logno_directly():
 
 #: [H-beta, N II 6584] fluxes of Cue on origin/main with the default
 #: ``gas_logno`` and log U = -2, same SFH: the default must reproduce them.
+#: Re-pinned after #2724: Cue's per-SSP Q_H table now integrates the ionizing
+#: photon rate with the edge-exact step model, picking up the partial bin
+#: between the last SSP node below 911.76 A and the edge that the former
+#: ``wave <= 911.76`` mask dropped (the stellar ``nion`` already had it, #537,
+#: and is unchanged). Every line at both metallicities moves by the same
+#: factor, 1.0173561: the Q_H normalization, with no change in the ratios.
 _MAIN_DEFAULT_FLUXES = {
-    0.0: [73.90650561556737, 27.98730662176506],
-    math.log10(0.3): [72.79523121746439, 19.117594787480527],
+    0.0: [75.18923406031823, 28.4730570167633],
+    math.log10(0.3): [74.0586722765041, 19.449401607798606],
 }
 
 

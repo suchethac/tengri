@@ -186,13 +186,13 @@ def _dust_group(dust: str | None) -> dict:
     raise ValueError(dust)  # pragma: no cover - parametrize controls this
 
 
-def _build(ssp, z, fesc, dust, igm, filters=None, wave_obs=None):
+def _build(ssp, z, fesc, dust, igm, filters=None, wave_obs=None, resample="auto"):
     """Build the issue's model shape: delayed SFH, Cue nebular, optional dust/IGM."""
     igm_group = {"type": "none"} if igm is None else {"type": igm, "all_params": Fixed(DEFAULT)}
     if filters is not None:
         observation = Observation(photometry=Photometry(filters=tuple(filters)))
     else:
-        observation = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+        observation = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resample=resample))
     return SEDModel.build(
         ssp_data=ssp,
         observation=observation,
@@ -266,59 +266,87 @@ def test_band_flux_matches_split_at_edge(lyc_ssp, fesc, z, dust, igm):
 # ── Spectrum channel: pixels straddling the edge ────────────────────────────
 
 
-@pytest.mark.parametrize("z", [2.0, 6.0])
-def test_spectrum_pixels_straddling_edge(lyc_ssp, z):
-    """Exact-path spectrum pixels match the edge-exact reference off the node pair.
+def _step_model_nodes(wave, sed):
+    """``(wave, sed)`` with the Lyman edge inserted as a zero-width node pair.
 
-    ``predict_spectrum`` (``approx=None``) resamples ``state.sed_intrinsic``
-    directly onto the pixel grid (``observation.spectrum.project_spectrum``
-    -> ``compute_spectrum``), point-sampling with an ORDINARY (non-edge-
-    aware) ``jnp.interp`` -- unlike the photometric band integral, the
-    spectroscopy projection is NOT part of this brief's scope (L3) and is
-    unchanged. A pixel landing OUTSIDE the SSP grid's own straddling
-    interval ``[lambda_a, lambda_b)`` is unaffected by the interval's two
-    node values (interpolation there uses two OTHER, unmodified nodes) and
-    is checked against an independent direct reference (``state.sed_intrinsic``
-    resampled by this test's own ``np.interp``, scaled by the same
-    ``(1+z)/(4*pi*dl_cm**2)`` factor ``lnu_to_fnu`` applies) to round-off. A
-    pixel landing INSIDE that interval samples the ordinary linear ramp
-    across the straddle (unchanged pre/post-L3 behavior) and is checked only
-    for finiteness.
+    The ionizing-side node value is held up to the edge and the non-ionizing
+    one from it, so ordinary piecewise-linear interpolation of the returned
+    arrays IS the step model (#2447). Independent of :mod:`tengri.components.lyc`.
+    """
+    k = int(np.searchsorted(wave, LYC))
+    y_a, y_b = sed[k - 1], sed[k]
+    return (
+        np.concatenate([wave[:k], [LYC, LYC], wave[k:]]),
+        np.concatenate([sed[:k], [y_a, y_b], sed[k:]]),
+    )
+
+
+def _reference_point(wave, sed, x):
+    """Step-model point samples at ``x`` (the caller keeps every ``x`` off the edge itself)."""
+    wn, sn = _step_model_nodes(wave, sed)
+    k = int(np.searchsorted(wn, LYC))
+    below = np.interp(x, wn[: k + 1], sn[: k + 1], left=0.0)
+    above = np.interp(x, wn[k + 1 :], sn[k + 1 :], right=0.0)
+    return np.where(x < LYC, below, above)
+
+
+def _reference_pixel_mean(wave, sed, x):
+    """Step-model mean over each pixel, edges at midpoints between centers."""
+    wn, sn = _step_model_nodes(wave, sed)
+    mid = 0.5 * (x[1:] + x[:-1])
+    edges = np.concatenate([[x[0] - 0.5 * (x[1] - x[0])], mid, [x[-1] + 0.5 * (x[-1] - x[-2])]])
+    out = np.empty(x.size)
+    for j in range(x.size):
+        lo, hi = edges[j], edges[j + 1]
+        inner = (wn > lo) & (wn < hi)
+        xs = np.concatenate([[lo], wn[inner], [hi]])
+        ys = np.concatenate([[np.interp(lo, wn, sn)], sn[inner], [np.interp(hi, wn, sn)]])
+        out[j] = np.trapezoid(ys, xs) / (hi - lo)
+    return out
+
+
+@pytest.mark.parametrize("resample", ["point", "conserving"])
+@pytest.mark.parametrize("z", [2.0, 6.0])
+def test_spectrum_pixels_straddling_edge(lyc_ssp, z, resample):
+    """Every spectrum pixel reads the Lyman edge as the step model, in both resample modes.
+
+    ``state.sed_intrinsic`` carries the Lyman-continuum mask per node, so the
+    SED is a step at 911.76 A, not the linear ramp across the SSP cell that
+    straddles it. Photometry integrates that step exactly (above); the
+    spectrum projection must read the same step, whether it point-samples the
+    model (``resample="point"``) or averages it over each pixel
+    (``"conserving"``, the bin integral). The reference inserts the edge as a
+    zero-width node pair and samples or integrates the result with ordinary
+    numpy -- an implementation independent of :mod:`tengri.components.lyc`.
+    Pixels are ~14 A wide in the rest frame, wider than the 6.5 A straddling
+    cell, so a ramp misplaces up to ~20% of a pixel's flux next to the edge.
     """
     from tengri.cosmology import luminosity_distance
     from tengri.units import lnu_to_fnu
 
-    wave = np.asarray(lyc_ssp.ssp_wave, dtype=np.float64)
-    insert_at = int(np.searchsorted(wave, LYC))
-    lam_a, lam_b = wave[insert_at - 1], wave[insert_at]
-
-    wave_obs = jnp.linspace(LYC * (1.0 + z) * 0.7, LYC * (1.0 + z) * 1.3, 41)
-    fesc = 0.3
-    m_exact = _build(lyc_ssp, z, fesc, None, None, wave_obs=wave_obs)
+    # An even pixel count keeps every center off the edge, where a point sample
+    # of a step is undefined (it reads either side at round-off); the pixel
+    # holding the edge still straddles it in the bin integral.
+    wave_obs = jnp.linspace(LYC * (1.0 + z) * 0.7, LYC * (1.0 + z) * 1.3, 40)
+    m_exact = _build(lyc_ssp, z, 0.3, None, None, wave_obs=wave_obs, resample=resample)
     s_exact = m_exact.predict_state({})
+    assert _has_lyc_edge(s_exact), "fixture bug: no Lyman-continuum mask to exercise"
 
     rest = np.asarray(wave_obs) / (1.0 + z)
-    below = rest < LYC
-    assert np.any(below) and np.any(~below), "fixture bug: pixel grid no longer straddles the edge"
+    assert np.any(rest < LYC) and np.any(rest >= LYC), "fixture bug: pixels miss the edge"
 
-    spec_exact = np.asarray(m_exact.predict_spectrum({}))
-    assert np.all(np.isfinite(spec_exact)), "exact-path spectrum has non-finite pixels"
-
-    dl_cm = float(luminosity_distance(z))
-    sed_at_pixels = np.interp(
-        rest, np.asarray(s_exact.wave), np.asarray(s_exact.sed_intrinsic), left=0.0, right=0.0
+    spec = np.asarray(m_exact.predict_spectrum({}))
+    wave, sed = np.asarray(s_exact.wave), np.asarray(s_exact.sed_intrinsic)
+    reference = _reference_point if resample == "point" else _reference_pixel_mean
+    spec_ref = np.asarray(
+        lnu_to_fnu(jnp.asarray(reference(wave, sed, rest)), float(luminosity_distance(z)), z)
     )
-    spec_ref = np.asarray(lnu_to_fnu(jnp.asarray(sed_at_pixels), dl_cm, z))
 
-    inside = (rest >= lam_a) & (rest < lam_b)
-    outside_nonzero = (~inside) & (spec_ref != 0.0)
-    rel = np.abs(
-        (spec_exact[outside_nonzero] - spec_ref[outside_nonzero]) / spec_ref[outside_nonzero]
-    )
-    assert np.max(rel) < 1e-9, (
-        f"z={z}: off-interval pixels worst relative error {np.max(rel):.3e} too large "
-        f"(pixels inside the SSP straddling interval [{lam_a:.4f}, {lam_b:.4f}) A are "
-        "excluded by construction -- see docstring)"
+    nonzero = spec_ref != 0.0
+    rel = np.abs((spec[nonzero] - spec_ref[nonzero]) / spec_ref[nonzero])
+    assert np.max(rel) < _SYNTHETIC_RTOL, (
+        f"z={z}, resample={resample}: worst pixel relative error {np.max(rel):.3e} "
+        f"against the step-model reference"
     )
 
 

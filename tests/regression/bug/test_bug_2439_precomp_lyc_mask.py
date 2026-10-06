@@ -466,6 +466,29 @@ def test_case4_dusty_instance(lyc_ssp, lyc_reprocessed_by):
 
 
 def test_case5_z_axis_falsification(lyc_ssp):
+    """The Lyman-continuum split adds no error along the free-redshift axis.
+
+    The split is exact at BUILD time, per z node, not a redshift-quadrature
+    term. Its z-axis error is therefore only the ordinary ztable interpolation
+    error, which vanishes at the nodes and converges as the grid is refined.
+    Both properties are measured directly: the free-z table is compared with
+    the fixed-z LUT built at the same redshift. Against the exact path, any
+    redshift also carries the LUT's wavelength-quadrature floor, which does not
+    depend on n_z. Measured (2026-10) for the straddling band at the mid-node
+    redshift, 1.1e-5, the same on both interpolants. A node-vs-midpoint
+    comparison against the exact path therefore contrasts two different
+    wavelength floors, not two z positions.
+
+    1. Exact at nodes: at a node of the n_z=60 grid the free-z table equals
+       the fixed-z LUT to float64 round-off (measured: 0.0). The z-interpolant
+       is exact at nodes (#2749).
+    2. Convergence: the mid-node z-interpolation error must fall at least 10x
+       from n_z=60 to n_z=960 (16x finer). Measured, straddling band:
+       2.1e-5 -> 4.2e-6 -> 1.4e-7 (n_z 60/240/960), about 150x. The
+       triweight window this replaced managed 3.5x and was 3.1e-5 off at the
+       node. An LyC term mis-integrated along z would not converge like that.
+    3. Against the exact path: bounded and non-diverging in n_z, as before.
+    """
     z_min, z_max = 0.5, 2.5
     n_z_a, n_z_b, n_z_c = 60, 240, 960
     dz_a = (z_max - z_min) / (n_z_a - 1)
@@ -512,27 +535,31 @@ def test_case5_z_axis_falsification(lyc_ssp):
         _, err, _, _ = _worst_band(exact_v, lut_v, names)
         return err
 
-    err_node_a = _err_at(model_lut_a, node_z)
     err_mid_a = _err_at(model_lut_a, mid_z)
     err_mid_b = _err_at(model_lut_b, mid_z)
     err_mid_c = _err_at(model_lut_c, mid_z)
 
-    # R4: measured (2026-09) node_err 0.0020-0.0053%, mid_err 0.0069-0.0109%
-    # across n_z in {60, 240, 960} -- floor x10 comfortably covers all three
-    # with margin, no hardcoded residual-sized minimum.
-    assert err_mid_a < max(err_node_a, 1e-6) * 10.0, (
-        f"between-node z={mid_z} error {err_mid_a * 100:.4f}% far exceeds "
-        f"node z={node_z} error {err_node_a * 100:.4f}%"
+    def _z_interp_err(model, z_value):
+        # Free-z table vs the fixed-z LUT at the same redshift: isolates the
+        # z-axis interpolation from the shared wavelength-quadrature floor.
+        fixed_v = np.asarray(
+            _build(lyc_ssp, z_value, WavePrecomp(), filters).predict_photometry({})
+        )
+        free_v = np.asarray(model.predict_photometry({redshift_name: float(z_value)}))
+        return float(np.max(np.abs(free_v / fixed_v - 1.0)))
+
+    z_err_node = _z_interp_err(model_lut_a, node_z)
+    assert z_err_node < 1e-12, (
+        f"free-z table is not exact at its node z={node_z}: {z_err_node:.3e} "
+        "relative to the fixed-z LUT"
+    )
+    z_err_mid_a = _z_interp_err(model_lut_a, mid_z)
+    z_err_mid_c = _z_interp_err(model_lut_c, mid_z)
+    assert z_err_mid_c < z_err_mid_a / 10.0, (
+        f"z-interpolation error at z={mid_z} did not converge: {z_err_mid_a:.3e} at "
+        f"n_z={n_z_a} -> {z_err_mid_c:.3e} at n_z={n_z_c}"
     )
 
-    # Convergence statement (replaces the old "did not move materially"
-    # pairwise check): the LyC split is an exact algebraic split at BUILD
-    # time, not a redshift-quadrature term, so raising n_z must not make the
-    # between-node residual diverge -- it may wobble with the ordinary
-    # ztable-interpolation floor, but the finest grid's residual must stay
-    # bounded by (not grow past) the coarser grids', not run away as a
-    # genuine ztable-resolution bug would. Measured: 0.0069% -> 0.0109% ->
-    # 0.0078% (n_z=60,240,960) -- bounded, non-diverging.
     errs = {n_z_a: err_mid_a, n_z_b: err_mid_b, n_z_c: err_mid_c}
     assert max(errs.values()) < 0.05, (
         f"between-node residual failed to stay bounded across n_z={list(errs)}: "

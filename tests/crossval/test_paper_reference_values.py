@@ -649,19 +649,20 @@ class TestCharlotFall2000:
         CF00 Eq. 3: T_young = exp(-(tau_bc + tau_diff) × k(λ)).
         At V-band (5500 Å): k(5500) ≈ 1.0, so T_young = exp(-1.3) ≈ 0.2725.
 
-        The birth-cloud transition is a sigmoid with t_birth=10 Myr, width=0.3 dex.
-        At age=1e4 yr the weight is 0.99995 ≈ 1 (deep sigmoid limit).
+        The exact split occurs at t_birth=10 Myr.
+        At age=1e4 yr the younger_fraction = 1.0 (young star).
         """
         from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
-        # 1e4 yr (10 kyr) — deep inside sigmoid → birth-cloud weight ≈ 1.0
+        # 1e4 yr (10 kyr) — younger than 10 Myr → younger_fraction = 1.0
         age_young = jnp.array([1e4])
+        younger_fraction = (age_young < 1e7).astype(float)
         # two_component_dust returns shape (n_ages, n_wave); index [0, 0] for scalar
         t_young = float(
             two_component_dust(
                 wave_v,
-                age_young,
+                younger_fraction,
                 tau_v1=1.0,
                 tau_v2=0.3,
                 law_bc="power_law",
@@ -681,17 +682,18 @@ class TestCharlotFall2000:
         CF00 Eq. 3: T_old = exp(-tau_diff × k(λ)).
         At V-band: T_old = exp(-0.3) ≈ 0.7408.
 
-        At age=5e9 yr the sigmoid weight is < 2e-4 ≈ 0 (deep old-star limit).
+        At age=5e9 yr, the exact split puts it in the old population (younger_fraction = 0.0).
         """
         from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
-        # 5 Gyr — deep outside sigmoid → birth-cloud weight ≈ 0.0
+        # 5 Gyr — older than 10 Myr → younger_fraction = 0.0
         age_old = jnp.array([5e9])
+        younger_fraction = (age_old < 1e7).astype(float)
         t_old = float(
             two_component_dust(
                 wave_v,
-                age_old,
+                younger_fraction,
                 tau_v1=1.0,
                 tau_v2=0.3,
                 law_bc="power_law",
@@ -709,17 +711,19 @@ class TestCharlotFall2000:
         """Young/old attenuation ratio = exp(-tau_bc) at V-band.
 
         CF00: T_young / T_old = exp(-tau_bc × k(V)) = exp(-1.0) ≈ 0.3679.
-        Uses deep sigmoid limits: 1e4 yr (weight≈1) and 5e9 yr (weight≈0).
+        Uses the exact split: 1e4 yr (younger_fraction=1) and 5e9 yr (younger_fraction=0).
         """
         from tengri.components.dust.attenuation import two_component_dust
 
         wave_v = jnp.array([5500.0])
-        age_young = jnp.array([1e4])  # deep young limit: weight ≈ 1
-        age_old = jnp.array([5e9])  # deep old limit: weight ≈ 0
+        age_young = jnp.array([1e4])  # younger than 10 Myr: younger_fraction = 1
+        age_old = jnp.array([5e9])  # older than 10 Myr: younger_fraction = 0
+        younger_fraction_young = (age_young < 1e7).astype(float)
+        younger_fraction_old = (age_old < 1e7).astype(float)
         t_young = float(
             two_component_dust(
                 wave_v,
-                age_young,
+                younger_fraction_young,
                 tau_v1=1.0,
                 tau_v2=0.3,
                 law_bc="power_law",
@@ -729,7 +733,7 @@ class TestCharlotFall2000:
         t_old = float(
             two_component_dust(
                 wave_v,
-                age_old,
+                younger_fraction_old,
                 tau_v1=1.0,
                 tau_v2=0.3,
                 law_bc="power_law",

@@ -13,6 +13,15 @@
 ### Fixed
 
 - `_pdr_luminosity_weight` (the power-law to single-U luminosity ratio of the Draine & Li 2007 Eq. 33 mass distribution, which weights the DL07/DL14 PDR component and `dust_umean`) is one closed form at every α: `R = g((2 − α)L)/g((1 − α)L)` with `g(u) = expm1(u)/u` and `L = ln(U_max/U_min)`, `g` by its series below |u| < 1e-3. It had held the α = 1 and α = 2 limit values across |α − pole| < 1e-3, which left `R` 3–4e-3 off and flat in α there and made it jump by 5–8e-3 at the window edges — a likelihood step with a zero gradient on a free `alpha_dl14` (#2727).
+- **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
+  masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
+  911.76 Å as the same step photometry integrates, in both point-sampled and
+  pixel-integrated resampling. A pixel next to the edge previously took a linear ramp
+  across the cell and could be off by up to ~20%.
+- **Cue's ionizing photon rate includes the partial bin at the Lyman edge:** Cue line
+  and continuum fluxes rise by ~1.7% for a constant star formation history, matching the
+  stellar `nion` already reported.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a
@@ -21,6 +30,16 @@
   dtype (float64 under x64, float32 in pure-float32 mode); the float32 template values are
   promoted where they are gathered. JIT against eager now agrees to 2e-13, and AD against a
   central difference of `agn_gamma_warm` and `agn_kt_warm` agrees to 1e-5 (was 3e-5).
+
+- **Free-redshift photometry table (`WavePrecomp`) interpolates in z with a monotone local cubic Hermite,
+  exact at nodes, with nodes added where each band's Lyman-limit crossing falls (#2749):** the old triweight kernel
+  (C² but blurred) had non-monotone interpolation error that did not decrease monotonically with grid refinement
+  (11.6 / 1.5 / 0.7 / 1.2 % error at 100 / 200 / 400 / 800 nodes, worst case GALEX FUV). The new shape-preserving
+  cubic Hermite (PCHIP) is exact at nodes, keeps the grid monotone, and resolves sharp features like the
+  Lyman-limit edge via edge-aware node clusters (refinement factor 8, graded spacing). Measured on GALEX/SDSS/DES/
+  NIRCam free-z fits: FUV/NUV/u/des_i worst error 0.59/0.06/0.04/0.08 % at n_z=250; NIRCam F090W/F115W at z 4–12
+  reduce from 7.39/5.64 % to 0.58/0.77 %. Gradient vs central difference error drops to ≤0.8 % (was ≤23 %).
+  Gradient FLOP count down 22 % (2.94M vs 3.76M).
 
 - The radio wing of the master wavelength grid is sampled at 100 points per decade from at
   most 1e8 A (was 20 per decade from the end of the longest template), so a 10 %-wide radio
