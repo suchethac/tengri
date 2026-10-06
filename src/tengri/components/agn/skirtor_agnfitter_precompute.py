@@ -32,6 +32,7 @@ import numpy as np
 
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
@@ -108,10 +109,9 @@ def precompute_skirtor_agnfitter_photometry(
     (depends only on filter curves and redshift, not wavelength grid).
 
     **Normalization**: Templates are frequency-normalized so that the
-    integration constant equals L_sun / trapz(template, nu). This matches
+    integration constant equals L_sun / native_integral(template). This matches
     the runtime normalization in ``skirtor_agnfitter.py``.
     """
-    from tengri.components.agn._phys import C_LIGHT as _C_CGS
 
     raw = _load_skirtor_agnfitter_arrays(grid_path)
     grid = np.asarray(raw["template"], dtype=np.float64)  # (n_oa, n_incl, n_tv, n_wave)
@@ -122,12 +122,9 @@ def precompute_skirtor_agnfitter_photometry(
 
     # Normalize each template by its frequency integral.
     # This matches skirtor_agnfitter.py's normalization:
-    #   L_ν = L_bol * torus_frac * template / trapz(template, nu)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, nu)
+    #   L_ν = L_bol * torus_frac * template / native_integral(template)
+    # Precomputed: lnu_per_lsun = LSUN_ERG * template / native_integral(template)
     # Runtime: L_bol_lsun * torus_frac * lnu_per_lsun → L_ν [erg/s/Hz]
-    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
-    sort_idx = np.argsort(nu_grid)
-    nu_sorted = nu_grid[sort_idx]
 
     n_oa, n_incl, n_tv, _n_wave = grid.shape
     lnu_grid = np.empty_like(grid)
@@ -136,7 +133,7 @@ def precompute_skirtor_agnfitter_photometry(
         for i_incl in range(n_incl):
             for i_tv in range(n_tv):
                 template = grid[i_oa, i_incl, i_tv]
-                integral = np.trapezoid(template[sort_idx], nu_sorted)
+                integral = native_bolometric_nu_np(template, wave_grid)
                 integral_safe = max(abs(integral), 1e-100)
                 lnu_grid[i_oa, i_incl, i_tv] = _LSUN_ERG * template / integral_safe
 

@@ -17,7 +17,8 @@ A new code should earn trust by reproducing the physics in the codes already in 
 - **{doc}`agnfitter`**: AGNFITTER-RX (Martínez-Ramírez et al. 2024). An
   AGN-first, radio-to-X-ray deep dive: four accretion-disk libraries
   (R06, SN12, KD18, THB21) and four torus libraries (S04, NK08, SKIRTOR,
-  CAT3D-Wind) head to head, plus the X-ray corona and radio jets.
+  CAT3D-Wind) head to head, plus the X-ray corona and radio jets, a table of
+  where the two codes differ, and a parameter map for translating a fit.
 - **{doc}`prospect_r`**: ProSpect (Robotham et al. 2020), the R-based
   GAMA code, driven live through `rpy2`: BC03 SSPs, the skew-normal SFH,
   a metallicity history tied to the stellar mass formed, Charlot & Fall

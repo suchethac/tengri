@@ -195,6 +195,10 @@ class SkirtorDiscTie(NamedTuple):
     wave_native : jnp.ndarray, shape (n_native,)
         The SKIRTOR template wavelength grid ``faceon_shape_native`` is
         defined and unit-normalized on [A].
+    incl_native : jnp.ndarray, shape (n_native,)
+        ``disk(i)/disk(0)`` on ``wave_native``: what ``incl_ratio`` is resampled
+        from, so the disc's reweighted bolometric can be integrated on the
+        library grid without touching the caller's.
     """
 
     R: jnp.ndarray
@@ -202,6 +206,7 @@ class SkirtorDiscTie(NamedTuple):
     R_faceon: jnp.ndarray
     faceon_shape_native: jnp.ndarray
     wave_native: jnp.ndarray
+    incl_native: jnp.ndarray | None = None
 
 
 # ── Template grid interpolation ───────────────────────────────────
@@ -905,6 +910,7 @@ def skirtor_disc_dust_ratio(
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    incl_wave: jnp.ndarray | None = None,
     _template=None,
 ) -> SkirtorDiscTie:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
@@ -953,6 +959,11 @@ def skirtor_disc_dust_ratio(
     agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, agn_cos_inc
         SKIRTOR grid parameters (edge-on τ_9.7, radial/polar density
         indices, half-opening angle, cos inclination).
+    incl_wave : ndarray, shape (n_out,), optional
+        Grid ``incl_ratio`` is returned on [Å]. Defaults to ``wave``. A caller
+        that evaluates the disc on the library's own axis (so that ``R`` does not
+        depend on its output grid) passes that axis as ``wave`` and its output
+        grid here.
 
     Returns
     -------
@@ -1058,6 +1069,7 @@ def skirtor_disc_dust_ratio(
                 0.0,
             ),
             wave_native=jnp.asarray(wave),
+            incl_native=jnp.ones_like(wave),
         )
     disk_jax, dust_jax, wave_grid, axes, norm_jax = _as_disc_dust_grid(raw)
 
@@ -1176,7 +1188,13 @@ def skirtor_disc_dust_ratio(
     # wavelength-independent inside the template (SKIRTOR scales one disc shape
     # by an inclination-dependent factor), so the last_finite_ratio carries
     # smoothly beyond the boundary.
-    incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=last_finite_ratio)
+    incl_ratio = resample_template(
+        wave if incl_wave is None else jnp.asarray(incl_wave),
+        wave_grid,
+        incl_n,
+        left=0.0,
+        right=last_finite_ratio,
+    )
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
     # inclination attenuation of the disc continuum (CIGALE
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
@@ -1195,7 +1213,28 @@ def skirtor_disc_dust_ratio(
         R_faceon=R_faceon,
         faceon_shape_native=shape_n,
         wave_native=wave_grid,
+        incl_native=incl_n,
     )
+
+
+def skirtor_disc_dust_wave(template=None):
+    """Wavelength axis of the SKIRTOR disk/dust library [Å], or ``None`` if unavailable.
+
+    The grid :func:`skirtor_disc_dust_ratio` integrates on. A caller that
+    evaluates the disc here, rather than on its own output grid, gets a tie
+    (``R``, the face-on reference) that does not move with that grid.
+
+    Parameters
+    ----------
+    template : SkirtorDiscDustGrid or tuple, optional
+        The threaded library; loaded from disk when omitted.
+
+    Returns
+    -------
+    ndarray, shape (n_native,) or None
+    """
+    raw = template if template is not None else _load_raw_disk_dust_grid()
+    return None if raw is None else _as_disc_dust_grid(raw).wave_grid
 
 
 @functools.cache

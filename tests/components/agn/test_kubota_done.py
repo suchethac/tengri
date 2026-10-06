@@ -203,22 +203,23 @@ class TestHotCoronaSeedRollover:
 
 @pytest.mark.regression_bug
 class TestSelfGravityRadiusQsosedConvention:
-    """The outer disc radius must follow the canonical qsosed normalization.
+    """The outer disc radius must follow the reference codes' Laor & Netzer form.
 
-    The Laor & Netzer (1989) self-gravity radius in qsosed (Quera-Bofarull,
-    ``Sed.gravity_radius``) is
+    qsosed (Quera-Bofarull, ``SED.gravity_radius``) and the QSOSED/RELQSO Fortran
+    (Hagen & Done, ``calc_rsg``) both evaluate
 
-        r_sg / R_g = 2150 * (M_BH / 10^9 M_sun)^{-2/9}
-                          * mdot^{4/9} * (alpha/0.1)^{2/9},
+        r_sg / R_g = 2150 * (M_BH / 10^9 M_sun)^{-2/9} * mdot^{4/9} * alpha^{2/9},
 
-    with the mass normalized to 10^9 M_sun. A prior tengri version normalized
-    by 10^8 M_sun, making r_sg a factor 10^{2/9} ~ 1.67 too small at every
-    mass: it truncated the coolest outer annuli and produced a near-IR disc
-    tail ~30% below the AGNfitter-rX KD18 reference. This pins the convention.
+    with alpha = 0.1 fixed: ``alpha`` enters as ``alpha^{2/9}``, not ``(alpha/0.1)^{2/9}``.
+    tengri carried ``(alpha/0.1)^{2/9}`` with the 10^9 M_sun normalization, a factor
+    10^{2/9} = 1.67 too large at alpha = 0.1 (an earlier "fix" of the mass normalization
+    had removed the compensating factor and misquoted qsosed); the near-IR disc tail was
+    then 0.06 dex too bright against the AGNfitter-rX KD18 grid, which is built with the
+    reference form. This pins it.
     """
 
     def test_matches_qsosed_gravity_radius_formula(self):
-        """``_self_gravity_radius`` reproduces the qsosed 10^9-M_sun form."""
+        """``_self_gravity_radius`` reproduces ``2150 m9^{-2/9} mdot^{4/9} alpha^{2/9}``."""
         import numpy as np
 
         from tengri.components.agn.disc import _self_gravity_radius
@@ -229,26 +230,18 @@ class TestSelfGravityRadiusQsosedConvention:
             (7.0, 1.0, 0.05),
             (8.5, 0.3, 0.2),
         ]:
-            mass = 10.0**log_mbh / 1.0e9  # qsosed convention: M / 10^9 Msun
-            expected = (
-                2150.0 * mass ** (-2.0 / 9.0) * lam ** (4.0 / 9.0) * (alpha / 0.1) ** (2.0 / 9.0)
-            )
+            mass = 10.0**log_mbh / 1.0e9  # M / 10^9 Msun
+            expected = 2150.0 * mass ** (-2.0 / 9.0) * lam ** (4.0 / 9.0) * alpha ** (2.0 / 9.0)
             got = float(_self_gravity_radius(log_mbh, lam, alpha))
             assert np.isclose(got, expected, rtol=1e-6), (
                 f"log_mbh={log_mbh} lam={lam} alpha={alpha}: "
                 f"got {got:.4f} R_g, expected {expected:.4f} R_g"
             )
 
-    def test_not_the_buggy_1e8_normalization(self):
-        """Guard against regressing to the 10^8-M_sun normalization."""
+    def test_reference_anchor_value(self):
+        """M = 1e8 Msun, mdot = 1, alpha = 0.1 gives exactly 2150 R_g (qsosed prints 2150.0)."""
         import numpy as np
 
         from tengri.components.agn.disc import _self_gravity_radius
 
-        got = float(_self_gravity_radius(8.0, 0.5, 0.1))
-        buggy_1e8 = 2150.0 * (10.0**8.0 / 1.0e8) ** (-2.0 / 9.0) * 0.5 ** (4.0 / 9.0)
-        # The correct value is a factor 10^{2/9} ~ 1.67 larger than the bug.
-        assert got > buggy_1e8 * 1.6, (
-            f"r_sg {got:.1f} R_g looks like the 1e8 bug ({buggy_1e8:.1f})"
-        )
-        assert np.isclose(got / buggy_1e8, 10.0 ** (2.0 / 9.0), rtol=1e-6)
+        assert np.isclose(float(_self_gravity_radius(8.0, 1.0, 0.1)), 2150.0, rtol=1e-12)

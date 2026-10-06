@@ -101,6 +101,7 @@ def polar_dust_reemission_lnu(
     l_in: Array,
     *,
     l_in_wavelength: Array | None = None,
+    return_absorbed: bool = False,
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
@@ -177,6 +178,9 @@ def polar_dust_reemission_lnu(
         caller's wavelength extent, which is not a physical parameter
         (measured: 11.0% for the ``skirtor`` disc block between an 8-1e8 Å
         and a 500-1e8 Å grid).
+    return_absorbed : bool, optional
+        Also return the absorbed power ``l_absorbed_total`` [erg/s] (cone-covering
+        factor included), the integral the graybody is normalized to. Default ``False``.
     agn_polar_ebv : float, optional
         :math:`E(B-V)` of the polar dust [mag]. Default ``0.0``.
     agn_cos_inc : float, optional
@@ -282,4 +286,6 @@ def polar_dust_reemission_lnu(
         lambda_0=2e6,  # 200 μm reference wavelength
     )
 
+    if return_absorbed:
+        return l_nu_reemit, l_absorbed_total
     return l_nu_reemit

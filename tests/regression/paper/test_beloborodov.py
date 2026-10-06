@@ -349,8 +349,12 @@ class TestLSeedGeometric:
         """Larger r_hot (smaller disc area intercepted) -> smaller L_seed."""
         r_isco, t_in = _make_disc_params()
         l_edd = float(_eddington_luminosity(8.0))
-        r_hot_small = float(_r_hot_bisect(r_isco, t_in, 0.01 * l_edd))
-        r_hot_large = float(_r_hot_bisect(r_isco, t_in, 0.05 * l_edd))
+        # L_seed(R_hot) rises to a peak near x = R_hot/R_isco ~ 2 (more covering per ring
+        # outweighs the lost inner rings) and only then falls, so the claim holds beyond it.
+        # With the corrected Eq. 2 integral (#2572) f_hard = 0.01 / 0.05 give x = 1.4 / 2.7,
+        # straddling the peak; 0.05 / 0.1 give x = 2.7 / 7.1, both past it.
+        r_hot_small = float(_r_hot_bisect(r_isco, t_in, 0.05 * l_edd))
+        r_hot_large = float(_r_hot_bisect(r_isco, t_in, 0.10 * l_edd))
         r_out = 1000.0 * r_isco
 
         l_seed_small = float(_l_seed_geometric(r_isco, r_hot_small, r_out, t_in))

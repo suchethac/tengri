@@ -177,7 +177,11 @@ class TestBalmerContinuum:
     def test_comprehensive_finite_non_negative_and_jit_parity(self, uv_optical_wave):
         """Collapsed test: shape, non-negativity, finiteness, JIT parity, and frozen goldens.
 
-        Golden values frozen from the current implementation (test-audit PR, 2026-07).
+        Golden values frozen from the current implementation (test-audit PR, 2026-07);
+        re-frozen after the Balmer optical-depth direction fix (tau = tau_BE *
+        (lambda/lambda_BE)^3, as upstream QSOGen). The new values were checked to
+        1e-10 against an independent NumPy evaluation of the Grandi (1982) form in
+        ``tests/regression/agn/test_qsogen_balmer_optical_depth.py``.
         """
         from tengri.components.agn.qsogen import _balmer_continuum, _broken_powerlaw_continuum
 
@@ -197,7 +201,7 @@ class TestBalmerContinuum:
 
         # Frozen golden values at indices [0, n//3, 2n//3, -1]
         indices = [0, len(uv_optical_wave) // 3, 2 * len(uv_optical_wave) // 3, -1]
-        golden_values = [3.097122e-16, 1.384550e00, 4.171700e-07, 1.498691e-11]
+        golden_values = [5.111666e-20, 1.161221e00, 2.836441e-06, 3.167700e-10]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(bc_eager[idx]),

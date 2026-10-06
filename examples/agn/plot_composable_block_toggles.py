@@ -100,19 +100,20 @@ def predict_nu_lnu(blocks):
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
-    wave_um = np.asarray(model.wavelengths) * 1.0e-4
-    nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
+    wave = np.asarray(out.wave_rest)
+    wave_um = wave * 1.0e-4
+    nu_lnu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     return wave_um, np.where(nu_lnu > 0, nu_lnu, np.nan)
 
 
-wave_um, full_sed = predict_nu_lnu(BLOCK_PROGRESSION[-1][1])
+wave_full_um, full_sed = predict_nu_lnu(BLOCK_PROGRESSION[-1][1])
 
 fig, axes = plt.subplots(1, 5, figsize=(15.0, 3.6), sharey=True)
 colors = plt.cm.viridis(np.linspace(0.1, 0.85, len(BLOCK_PROGRESSION)))
 for ax, (label, blocks), color in zip(axes, BLOCK_PROGRESSION, colors):
-    _, panel_sed = predict_nu_lnu(blocks)
-    ax.loglog(wave_um, full_sed, lw=1.0, color="0.6", ls="--", label="full recipe")
-    ax.loglog(wave_um, panel_sed, lw=1.8, color=color, label=label)
+    wave_panel_um, panel_sed = predict_nu_lnu(blocks)
+    ax.loglog(wave_full_um, full_sed, lw=1.0, color="0.6", ls="--", label="full recipe")
+    ax.loglog(wave_panel_um, panel_sed, lw=1.8, color=color, label=label)
     ax.set_xlim(5.0e-3, 1.0e2)
     ax.set_ylim(1.0e42, 1.0e47)
     ax.set_xlabel(r"$\lambda$  [$\mu$m]")

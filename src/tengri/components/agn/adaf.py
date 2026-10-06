@@ -614,6 +614,13 @@ def _adaf_mdot_from_lbol(
     return jnp.clip(mdot, 1e-8, mdot_crit)
 
 
+#: Nodes of the fixed internal frequency grid that normalizes the spectrum.
+#: 8193 log nodes over [0.02 nu_min, 100 kT_e / h] ~ 1e7 - 1e22 Hz (15 decades, 35 in ln):
+#: d ln(nu) ~ 4e-3, so the trapezoid error on the continuous broken power law (a slope
+#: kink at nu_p) is ~1e-6.
+_NORM_N_NODES = 8193
+
+
 # ── Public spectrum ──────────────────────────────────────────────────────
 
 
@@ -671,7 +678,8 @@ def adaf_spectrum(
     -------
     ndarray, shape (n_wave,)
         Spectral luminosity density :math:`L_\nu` [erg/s/Hz], normalized so that
-        :math:`\int L_\nu\,d\nu = \mathrm{agn\_frac}\times L_{\rm bol}`.
+        :math:`\int L_\nu\,d\nu = \mathrm{agn\_frac}\times L_{\rm bol}` over the
+        model's whole support (radio to X-ray), whatever ``wavelength`` covers.
 
     Notes
     -----
@@ -707,30 +715,46 @@ def adaf_spectrum(
     l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
     l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
 
-    # Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p), joined
-    # continuously at nu_p (both = l_nu_p there).
-    ratio = nu / nu_p
-    shape_sc = jnp.where(nu <= nu_p, ratio**0.4, ratio ** (-alpha_c))
     # Low cutoff at the largest-radius synchrotron frequency (nu ~ r^{-5/4});
     # high cutoff at the Comptonization ceiling 3 k T_e / h.
     nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
     nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
-    shape_sc = shape_sc * jnp.exp(-nu_min / nu) * jnp.exp(-jnp.clip(nu / nu_max_c, 0.0, 500.0))
-    sc = l_nu_p * shape_sc
 
-    # Bremsstrahlung: flat with an exponential cutoff at k T_e / h.
-    brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu / (_K_BOLTZ * t_e), 0.0, 500.0))
+    def _total(nu_):
+        # Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p),
+        # joined continuously at nu_p (both = l_nu_p there).
+        ratio = nu_ / nu_p
+        shape_sc = jnp.where(nu_ <= nu_p, ratio**0.4, ratio ** (-alpha_c))
+        shape_sc = (
+            shape_sc * jnp.exp(-nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / nu_max_c, 0.0, 500.0))
+        )
+        # Bremsstrahlung: flat with an exponential cutoff at k T_e / h.
+        brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * t_e), 0.0, 500.0))
+        return l_nu_p * shape_sc + brems
 
-    total = sc + brems
+    total = _total(nu)
+
     # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
-    # reference on the float32 path). nu descending -> negate the trapezoid
-    # (reversed operands are silently zeroed under MLX compile on Apple GPU:
-    # jax-mps#232, #2295).
+    # reference on the float32 path). The integral runs on a FIXED internal
+    # frequency grid spanning the model's own scales, never on the caller's
+    # wavelength array: the spectrum reaches the X-ray (3 k T_e / h ~ 1e19 Hz)
+    # and a caller grid that stops short of it would otherwise renormalize the
+    # truncated spectrum (a 912 A grid by a factor ~1e3), and any sampling would
+    # shift the quadrature. The span is [0.02 nu_min, 100 k T_e / h]: below
+    # 0.02 nu_min the exp(-nu_min / nu) factor is < e^-50, above 100 k T_e / h
+    # the cutoffs are < e^-33. It is ascending in nu (a descending trapezoid
+    # needs negation and is silently zeroed under MLX compile: jax-mps#232, #2295).
+    nu_lo = 0.02 * nu_min
+    nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
+    log_lo = jnp.log(nu_lo)
+    u = jnp.linspace(0.0, 1.0, _NORM_N_NODES, dtype=wavelength.dtype)
+    nu_int = jnp.exp(log_lo + u * (jnp.log(nu_hi) - log_lo))
+    total_int = _total(nu_int)
     if _f32:
         # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
         # work the normalization in L_sun (total/L_sun keeps the integral in
         # range) and order 10**log_lbol / integral before the ~1e28 shape.
-        integral = -jnp.trapezoid(total / _LSUN_ERG, nu)
+        integral = jnp.trapezoid(total_int / _LSUN_ERG, nu_int)
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
         # the float32 branch, the divide-by-zero guard guarded nothing. Returns
@@ -741,7 +765,7 @@ def adaf_spectrum(
             * total
         )
     else:
-        integral = -jnp.trapezoid(total, nu)
+        integral = jnp.trapezoid(total_int, nu_int)
         l_nu = (
             10.0**agn_log_lbol
             * _LSUN_ERG
