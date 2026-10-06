@@ -198,3 +198,62 @@ class TestCiSplitPaths:
         )
 
         assert result1.stdout == result2.stdout, "Identical calls should return identical output"
+
+
+class TestBugTreeWorkflowSplit:
+    """The workflow's bug/ shards must agree with the splitter's part count."""
+
+    REPO = pathlib.Path(__file__).resolve().parents[2]
+    BUG_PARTS = ("1", "2", "3")
+
+    def _workflow(self) -> dict:
+        import yaml
+
+        return yaml.safe_load((self.REPO / ".github/workflows/tests.yml").read_text())
+
+    def test_every_matrix_has_three_bug_shards(self) -> None:
+        wf = self._workflow()
+        for job in ("test", "coverage"):
+            include = wf["jobs"][job]["strategy"]["matrix"]["include"]
+            halves = {e["shard"]: e["bug_half"] for e in include if e.get("bug_half")}
+            assert halves == {
+                "regression-b1": "1",
+                "regression-b2": "2",
+                "regression-b3": "3",
+            }, job
+
+    def test_split_command_uses_three_parts(self) -> None:
+        text = (self.REPO / ".github/workflows/tests.yml").read_text()
+        calls = [ln for ln in text.splitlines() if "--root tests/regression/bug" in ln]
+        assert len(calls) == 2
+        assert all("--of 3" in ln for ln in calls)
+
+    def test_b3_is_wired_like_b2(self) -> None:
+        text = (self.REPO / ".github/workflows/tests.yml").read_text()
+        assert '"regression-b3":' in text
+        assert "matrix.shard == 'regression-b3'" in text
+
+    def test_three_parts_partition_the_real_bug_tree(self) -> None:
+        parts = []
+        for n in self.BUG_PARTS:
+            r = subprocess.run(
+                [
+                    sys.executable,
+                    "tools/ci_split_paths.py",
+                    "--root",
+                    "tests/regression/bug",
+                    "--part",
+                    n,
+                    "--of",
+                    "3",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=self.REPO,
+            )
+            assert r.returncode == 0, r.stderr
+            parts.append(r.stdout.split())
+        flat = [p for part in parts for p in part]
+        assert len(flat) == len(set(flat))
+        bug_tree = (self.REPO / "tests/regression/bug").glob("test_*.py")
+        assert set(flat) == {str(p.relative_to(self.REPO)) for p in bug_tree}
