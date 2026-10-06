@@ -15,6 +15,15 @@
 ### Fixed
 
 - Lick equivalent widths and magnitude indices follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3). The index operator converts its per-frequency input (`L_ν` or `F_ν`) to `F_λ ∝ F_ν/λ²` and builds the pseudo-continuum as the straight line through the two sideband means placed at the sideband mid-wavelengths, integrating `1 − F_λ/F_C` over the feature window (the window-LUT path, `predict_spectral_indices(approx=True)`, evaluates the same definition at the window grid points, as the line path of #2677 does, and agrees with the exact path to round-off, also under a strong dust screen). A constant mean-of-sidebands continuum is the continuum at the wrong wavelength for asymmetric sidebands (Fe4383: 12 Å from the feature center): on solar SSP spectra it differs from the Lick definition by up to 1.0 Å (HγA, 10 Gyr), 0.4 Å (Fe4383) and 0.5 Å (HγF). Break indices (`Dn4000`, `D4000`, `F_ν` ratios) and `uv_slope_beta` are unchanged. `measure.spectral_index` documents its flux argument as a per-frequency flux density (pass `F_λ` as `flux_lambda * wave_rest**2`); `SpectralIndexDef(pseudo_continuum="mean")` keeps the constant continuum of `bagpipes.input.spectral_indices.single_index`, measured on the array as given, for comparison with BAGPIPES. An EW or magnitude index must declare exactly two continuum windows under the default definition. (#2690).
+- The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
+  and `{'type': 'synthesizer'}`) read the grid's black-hole-mass and Eddington-ratio axes
+  from `agn_log_mbh` and `agn_log_ledd`: all four blocks called the grid backend without
+  them, so the axes sat at the backend's hard-coded node (8.0, -0.3) and the two
+  parameters were inert (the [O III] 5007 light of the `synthesizer_spectra` NLR moves by
+  about 18% between `agn_log_ledd` = -0.3 and -1.0). The blocks now forward the registry
+  defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
+  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3)
+  (#2634).
 - `bell2003_split` is now covered by the build-time check that refuses a FIRRC radio block without a dust component, which would otherwise return an all-zero radio SED silently. (#2590)
 - **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
   masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
