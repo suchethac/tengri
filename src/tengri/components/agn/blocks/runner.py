@@ -59,6 +59,7 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
+from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     describe_clipping,
@@ -85,6 +86,7 @@ from tengri.components.agn.skirtor import (
 )
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
+from tengri.utils.scale import representable_floor
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -103,6 +105,9 @@ _SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
 #: Gaussian sigma) over the range they occupy, for a line block that registers no
 #: closed-form power (``LINE_ENERGY_BLOCKS``).
 _LEDGER_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
+#: Key of the ``components`` dict that carries :math:`\log_{10}` of the line-of-sight
+#: isotropic-equivalent bolometric luminosity [erg/s] of the direct emission: a scalar, not an SED.
+LOS_LOG_LUMINOSITY_KEY = "log_L_agn_los"
 _LINE_LEDGER_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
 
 
@@ -129,6 +134,7 @@ __all__ = [
     "BLOCK_SELECTOR_KEYS",
     "C_AA_PER_S",
     "DEFAULT_BLOCK_SELECTORS",
+    "LOS_LOG_LUMINOSITY_KEY",
     "RecipeWarning",
     "composable_agn_l_nu",
     "compose_l_nu",
@@ -551,6 +557,27 @@ def _agn_sed_components(
     }
 
 
+def _los_budget_wave(compact: bool, dtype) -> Array:
+    """The disc's fixed budget grid [A], built in the trace from scalar end points.
+
+    Reproduces ``_KUBOTA_LEDGER_WAVE`` (``compact``: three geometric pieces, the shared end
+    points kept once) or ``_LEDGER_WAVE`` without an array literal entering the graph.
+    """
+
+    def piece(lo: float, hi: float, n: int) -> Array:
+        return jnp.exp(jnp.linspace(jnp.log(lo), jnp.log(hi), n, dtype=dtype))
+
+    if compact:
+        return jnp.concatenate(
+            [
+                piece(1.0e-3, 1.0e-2, 101),
+                piece(1.0e-2, 1.0e6, 8001)[1:],
+                piece(1.0e6, 1.0e10, 401)[1:],
+            ]
+        )
+    return piece(float(_LEDGER_WAVE[0]), float(_LEDGER_WAVE[-1]), _LEDGER_WAVE.size)
+
+
 def compose_l_nu(
     wavelength: Array,
     agn_log_lbol: float,
@@ -714,13 +741,15 @@ agn_torus_block, agn_attenuation_block : str
     # factor eta(i) = cos i (1 + 2 cos i)/3 (skirtor2016.py:405-406). CIGALE's
     # eta(30 deg) = 0.789 is specific to the SKIRTOR intrinsic-disc TEMPLATE
     # (``AGN1.disk``); it is NOT a universal correction for the analytic /
-    # physical disc models used here (multicolor, kubota_done, richards2006,
-    # ...), which already carry their own foreshortening. Comparing this
-    # L_2500_intrinsic to CIGALE's ``intrin_Lnu_2500A_30deg`` therefore shows an
-    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc; that is a convention
-    # difference between disc models, not a bug. Do NOT blindly multiply by
-    # eta(30 deg) here (it would double-count inclination for discs that model
-    # their own, and be wrong for isotropic ones).
+    # physical disc models used here (multicolor, kubota_done, relagn), which
+    # carry ``2 cos i`` on the disc part (``agn_log_lbol`` is the angle-integrated
+    # accretion power; the observed spectrum is ``2 cos i D_nu + H_nu``). The anchors are
+    # therefore the line-of-sight values at 30 deg: the disc part is ``2 cos 30 = 1.732``
+    # times its angle-integrated ``D_nu``, the corona is unchanged. Comparing this
+    # L_2500_intrinsic to CIGALE's ``intrin_Lnu_2500A_30deg`` shows an ~eta(30 deg)
+    # (~27%) offset for a non-SKIRTOR disc; that is a convention difference between disc
+    # models, not a bug. Do NOT multiply by eta(30 deg) here (it would double-count
+    # inclination for discs that model their own, and be wrong for isotropic ones).
     _COS_30DEG = 0.86602540378443864
     # Evaluate at the REFERENCE luminosity like every other block call in this
     # function: under the float32 factoring the true agn_log_lbol here would
@@ -858,6 +887,10 @@ agn_torus_block, agn_attenuation_block : str
     # in the standalone ``polar_dust`` attenuation block).
     # Evaluated at 5100 A itself (like the anchors above), so the line, FeII and
     # torus normalizations that read it do not depend on the caller's node spacing.
+    # The lines, FeII and torus are powered by the engine, not by the viewing angle, so
+    # the disc is read at the reference inclination where a ``2 cos i`` disc radiates its
+    # angle-integrated power (``cos i = 0.5``): taking the line-of-sight value would carry
+    # the disc's own ``2 cos i`` into them, a second inclination factor on isotropic emission.
     _wave_5100 = jnp.asarray([5100.0], dtype=wave.dtype)
     l5100_disc = (
         redden_disc(
@@ -866,7 +899,7 @@ agn_torus_block, agn_attenuation_block : str
                 _wave_5100,
                 agn_log_lbol=agn_log_lbol_eval,
                 templates=disc_templates,
-                **params,
+                **{**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE},
             ),
             jnp.asarray(params.get("agn_ebv_disc", 0.0)),
         )[0]
@@ -927,7 +960,12 @@ agn_torus_block, agn_attenuation_block : str
         return _ledger_wave()
 
     def _disc_on_ledger():
-        """The intrinsic (pre-debit) disc on its fixed budget grid, built once."""
+        """The intrinsic (pre-debit) disc on its fixed budget grid, built once.
+
+        Taken at the reference inclination where a ``2 cos i`` disc radiates its angle-integrated
+        power (``agn_log_lbol``): the budgets it feeds (the polar dust's absorbed power, the line
+        debit) do not depend on where the observer stands.
+        """
         if "disc" not in _ledger_cache:
             _w = _disc_ledger_wave()
             _ledger_cache["disc"] = redden_disc(
@@ -936,7 +974,7 @@ agn_torus_block, agn_attenuation_block : str
                     _w,
                     agn_log_lbol=agn_log_lbol_eval,
                     templates=disc_templates,
-                    **params,
+                    **{**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE},
                 ),
                 jnp.asarray(params.get("agn_ebv_disc", 0.0)),
             )
@@ -1430,6 +1468,27 @@ agn_torus_block, agn_attenuation_block : str
         L_4400_final = L_4400_intrinsic
         components_final = components
 
+    # Line-of-sight isotropic-equivalent bolometric luminosity of the direct emission
+    # (``log_L_agn_los``): the disc block's own spectrum at the viewing angle, integrated over the
+    # budget grid, before the torus screen, the polar dust, the tie and the energy debits. It is
+    # the quantity to compare with a catalog L_bol from a bolometric correction;
+    # ``agn_log_lbol`` is the angle-integrated accretion power. Held in log10 (an erg/s scalar
+    # overflows float32) and not scaled by ``agn_lum_ratio``, like ``L_agn_bol``.
+    if return_components:
+        _los_wave = _los_budget_wave(agn_disc_block == "kubota_done", wave.dtype)
+        _direct_lambda = disc_fn(
+            _los_wave,
+            agn_log_lbol=agn_log_lbol_eval,
+            templates=disc_templates,
+            **params,
+        )
+        _direct_power = jnp.abs(jnp.trapezoid(_direct_lambda, _los_wave))
+        _log_direct = jnp.log10(jnp.maximum(_direct_power, representable_floor(1e-100)))
+        components_final = {
+            **components_final,
+            LOS_LOG_LUMINOSITY_KEY: _log_direct + (_log_scale_offset if _use_ref else 0.0),
+        }
+
     # Return with optional L_2500_intrinsic/L_4400_intrinsic and per-sub-block
     # components tuples.
     if return_l2500 and return_components:
@@ -1440,6 +1499,13 @@ agn_torus_block, agn_attenuation_block : str
         return (L_nu_final, components_final)
     else:
         return L_nu_final
+
+
+def _scale_components(components: dict, agn_lum_ratio: Array | float) -> dict:
+    """Scale every SED sub-block by ``agn_lum_ratio``; the log10 luminosity key is not an SED."""
+    return {
+        k: v if k == LOS_LOG_LUMINOSITY_KEY else agn_lum_ratio * v for k, v in components.items()
+    }
 
 
 def composable_agn_l_nu(
@@ -1543,14 +1609,14 @@ agn_torus_block, agn_attenuation_block : str, optional
     )
     if return_l2500 and return_components:
         L_nu, L_2500_intrinsic, L_4400_intrinsic, components = result
-        components = {k: agn_lum_ratio * v for k, v in components.items()}
+        components = _scale_components(components, agn_lum_ratio)
         return (agn_lum_ratio * L_nu, L_2500_intrinsic, L_4400_intrinsic, components)
     elif return_l2500:
         L_nu, L_2500_intrinsic, L_4400_intrinsic = result
         return (agn_lum_ratio * L_nu, L_2500_intrinsic, L_4400_intrinsic)
     elif return_components:
         L_nu, components = result
-        components = {k: agn_lum_ratio * v for k, v in components.items()}
+        components = _scale_components(components, agn_lum_ratio)
         return (agn_lum_ratio * L_nu, components)
     else:
         return agn_lum_ratio * result

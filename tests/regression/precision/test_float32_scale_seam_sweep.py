@@ -500,27 +500,36 @@ _AGN_MBH_DUST = {
 #: of the model: the photometry agrees with the variant that carries 200 points per decade
 #: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
 #: dust-energy balance is integrated on the master grid).
+#: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
+#: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
+#: where the corona now weighs four times less relative to the disc than under
+#: ``(cos i / 2) D_nu + H_nu``, so the disc part of the tied shape rises by +0.25 % / +88 % /
+#: +102 % (mbh 6/8/10; the formula and the measured in-grid corona-to-disc ratios are beside
+#: ``_DISC_TIMES_ETA_T_REFERENCE``). The disc is 0.21 % / 5.2 % / 6.2 % of ``rest_sed_sum``,
+#: which moves by +5.1e-6 / +2.26 % / +2.35 % (at mbh 6 the product closes, 0.25 % x 0.0021;
+#: at 8 and 10 the corona's own bins mix in); the r-band photometry moves by +5.6e-6 /
+#: +2.9 % / +2.7 %.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593610240025491e32,
+        "rest_sed_sum": 1.559368999510649e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.8913574801798905e28,
-        "rest_sed_last": 8.775427516276051e21,
-        "photometry": (1.099479121598862e-27, 1.5700123316048635e-27, 1.763224618345872e-27),
+        "rest_sed_mid": 2.8913720251154028e28,
+        "rest_sed_last": 8.775429095069979e21,
+        "photometry": (1.0994852594319436e-27, 1.5700123860297097e-27, 1.7632246337486667e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6049266541791814e32,
+        "rest_sed_sum": 1.6412255052044134e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.994003988088467e28,
-        "rest_sed_last": 8.79894545646465e21,
-        "photometry": (1.1410282257917584e-27, 1.5707883351802454e-27, 1.763449238482328e-27),
+        "rest_sed_mid": 3.076177633431483e28,
+        "rest_sed_last": 8.820067396495217e21,
+        "photometry": (1.1741596222309563e-27, 1.5714860896440464e-27, 1.763651086890311e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.620914289829386e32,
+        "rest_sed_sum": 1.658990989478862e32,
         "rest_sed_0": 0.0,
-        "rest_sed_mid": 3.0199301365899735e28,
-        "rest_sed_last": 9.09664409582796e21,
-        "photometry": (1.1488156955220127e-27, 1.581055264936566e-27, 1.7660509279361245e-27),
+        "rest_sed_mid": 3.101649853928127e28,
+        "rest_sed_last": 9.423693090848645e21,
+        "photometry": (1.1797312296056812e-27, 1.587981702686331e-27, 1.76875720476564e-27),
     },
 }
 
