@@ -32,7 +32,7 @@ from tengri.components.radio.component import RadioSEDComponentConfig
 from tengri.config.exceptions import ConfigError
 from tengri.observation import Photometry
 from tengri.parameters.registry import registry
-from tengri.radio import radio_freefree, radio_sfr_bell2003, radio_sfr_bell2003_split
+from tengri.radio import radio_sfr_bell2003_split
 
 pytestmark = pytest.mark.contract
 
@@ -109,7 +109,7 @@ def test_bell2003_split_component_equals_direct_function_no_extra_term(ssp_data_
 
 
 def test_bell2003_still_adds_freefree(ssp_data_bc03):
-    """The non-split ``bell2003`` mode is unchanged: free-free is still added."""
+    """The non-split ``bell2003`` mode adds free-free beside the Bell-total synchrotron (#2590)."""
     model = _build(ssp_data_bc03, "bell2003")
     params = model.spec.sample(jax.random.PRNGKey(0))
     state = model.predict_state(params)
@@ -118,22 +118,20 @@ def test_bell2003_still_adds_freefree(ssp_data_bc03):
     wave = np.asarray(state.wave)
     sed_radio = np.asarray(state.derived["sed_radio"])
 
-    # Use the declared defaults for radio_T_e and radio_alpha_ff from the registry.
-    T_e = registry().get("radio_T_e").prior.value
-    alpha_ff = registry().get("radio_alpha_ff").prior.value
-
-    sf_only = np.asarray(radio_sfr_bell2003(wave, L_ir, _Q_IR, _ALPHA_SF))
-    ff_only = np.asarray(radio_freefree(wave, L_ir, T_e, alpha_ff))
+    # Murphy+2011 Eqs. 4 and 11 (T_e = 1e4 K, alpha_ff = -0.1), Bell (2003) Eq. 1.
+    nu = 2.99792458e18 / wave
+    ff_only = (1.0 / 4.6e-28) * (nu / 1.0e9) ** -0.1 * 3.88e-44 * L_ir
+    ff_ref = (1.0 / 4.6e-28) * 1.4**-0.1 * 3.88e-44 * L_ir
+    sync = (L_ir / (3.75e12 * 10.0**_Q_IR) - ff_ref) * (nu / 1.4e9) ** (-_ALPHA_SF)
 
     radio_mask = wave > _RADIO_WAVE_MIN_AA
-    ff_over_sf = float(np.sum(ff_only[radio_mask]) / np.sum(sf_only[radio_mask]))
-    assert ff_over_sf > 0.0, "bell2003 mode must still add a nonzero free-free term"
-
+    assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
+    assert np.sum(ff_only[radio_mask]) > 0.0, "bell2003 mode must still add a free-free term"
     np.testing.assert_allclose(
         sed_radio[radio_mask],
-        (sf_only + ff_only)[radio_mask],
+        (sync + ff_only)[radio_mask],
         rtol=1e-8,
-        err_msg="bell2003 component output must equal sf + ff (both terms present)",
+        err_msg="bell2003 component output must equal (total - thermal) synchrotron + ff",
     )
 
 

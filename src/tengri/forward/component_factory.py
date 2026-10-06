@@ -41,6 +41,7 @@ from tengri.components.agn.component import AGNSEDComponentConfig
 # seam (single dispatch, #844), only their config dataclasses are imported here.
 from tengri.components.dust.age_binned import (
     AgeBinnedDustComponentConfig,
+    age_binned_nebular_mode,
 )
 from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
@@ -616,6 +617,8 @@ def build_components(
             atten_type = "age_binned"
             atten_config = AgeBinnedDustComponentConfig(
                 screens=tuple(dust_screens),
+                nebular_screen=age_binned_nebular_mode(dust_nebular_screen),
+                law_neb=dust_law_neb if dust_nebular_screen == "own" else None,
                 transition_width_dex=dust_transition_width_dex,
                 lyc_reprocessed_by=dust_lyc_reprocessed_by,
                 lyc_in_energy_balance=dust_lyc_in_energy_balance,
@@ -842,6 +845,9 @@ def build_components(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
                     include_freefree=include_freefree,
+                    # q calibrates the total unless the user pinned ``freefree: False``,
+                    # which is the non-thermal (CIGALE) reading of q (#2590).
+                    q_is_total=radio_include_freefree is not False,
                     freefree_wave_min=freefree_wave_min,
                 ),
             )

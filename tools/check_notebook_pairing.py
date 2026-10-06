@@ -16,8 +16,8 @@ months at a time:
 * ``notebooks/tutorials/01_quickstart.ipynb`` kept teaching ``Fitter(...)`` and
   ``fitter.run("map")`` after ``67550696e`` (#1341) migrated the mirror to
   ``ForwardModel.build(...)`` / ``.fit(method="map")``.
-* ``notebooks/tutorials/05_prior_predictive.ipynb`` and
-  ``analysis/hst_proposal/fig01_multimodel_candels.ipynb`` still declared
+* ``notebooks/tutorials/05_prior_predictive.ipynb`` and a paired figure
+  notebook under ``analysis/`` still declared
   ``sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5)`` — a parameter #369 renamed
   three months earlier, with the log-SFR range that rename was supposed to
   convert.

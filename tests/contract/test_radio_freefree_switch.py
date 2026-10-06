@@ -9,11 +9,12 @@ The ``radio.sf.freefree`` key gates thermal free-free emission inclusion via
   ``RadioSEDComponentConfig`` in ``model._component_configs``.
 - Physics: explicit ``False`` drops the Murphy+2011 thermal term, leaving
   ``sed_radio`` bit-exact with :func:`tengri.radio.radio_sfr_bell2003` in the
-  radio band; the default build carries measurably more flux there.
+  radio band; the default build shares the calibrated total between synchrotron
+  and the thermal term (equal at 1.4 GHz, more flux above it).
 - Defaults: an absent ``freefree`` key resolves to ``spec.radio_include_freefree
   is None``, which the component itself resolves to ``True`` for ``bell2003``.
 - Errors: ``freefree=True`` with ``sfr_mode='bell2003_split'`` raises
-  ``ConfigError`` (the double-counting guard, ruling R19); a non-bool value
+  ``ConfigError`` (that mode already holds a thermal share); a non-bool value
   raises ``TypeError`` both at ``RadioSEDComponentConfig`` directly and at the
   public grammar.
 - Round trip: ``freefree`` survives ``to_groups()`` and ``spec.summary()``.
@@ -181,10 +182,17 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
 
     sed_radio_default = np.asarray(state_default.derived["sed_radio"])
     ratio = sed_radio_default[radio_mask] / sed_radio_no_ff[radio_mask]
-    assert np.all(ratio >= 1.0), "the default build must produce SED >= freefree=False"
-    assert np.mean(ratio) > 1.01, (
-        "the default build should have noticeably more flux than freefree=False"
-    )
+    # Bell's q calibrates the total: the synchrotron term of the default build is the total
+    # minus the Murphy et al. (2011) thermal luminosity at 1.4 GHz, written out here.
+    nu = 2.99792458e18 / wave[radio_mask]
+    sfr = 3.88e-44 * L_ir  # Msun/yr, Murphy+2011 Eq. 4
+    t_fac = (float(params_default["radio_T_e"]) / 1.0e4) ** 0.45  # T_e is a sampled free parameter
+    ff = (1.0 / 4.6e-28) * t_fac * (nu / 1.0e9) ** -0.1 * sfr  # Eq. 11, alpha_ff = -0.1
+    ff_ref = (1.0 / 4.6e-28) * t_fac * 1.4**-0.1 * sfr
+    total_ref = L_ir / (3.75e12 * 10.0**q_ir)
+    want = (1.0 - ff_ref / total_ref) + ff / (total_ref * (nu / 1.4e9) ** (-alpha_sf))
+    np.testing.assert_allclose(ratio, want, rtol=1e-8)
+    assert np.all(ratio[nu > 3.0e10] > 1.0), "the thermal term dominates well above 1.4 GHz"
 
 
 # ── Errors ────────────────────────────────────────────────────────
@@ -388,7 +396,12 @@ def test_explicit_freefree_true_overrides_cue_auto_rule(ssp_data_fsps, synthetic
 
 
 def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs):
-    """Cue model absent freefree key = Cue model explicit False; exactly one thermal term."""
+    """Cue model, absent key vs explicit False: one thermal term (the nebular's) in both.
+
+    The radio block adds no thermal term either way; the nebular SED is identical. With the
+    key absent ``radio_q_ir`` is the total, so the synchrotron is (1 - f_th) of the explicit
+    ``False`` (non-thermal q) one (#2590), f_th being the Murphy share at 1.4 GHz.
+    """
     model_absent = _build_cue_radio_model(ssp_data_fsps, synthetic_tophat_obs, freefree=None)
     model_explicit_false = _build_cue_radio_model(
         ssp_data_fsps, synthetic_tophat_obs, freefree=False
@@ -406,11 +419,26 @@ def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs)
     sed_nebular_absent = np.asarray(state_absent.derived["sed_nebular"])
     sed_nebular_explicit = np.asarray(state_explicit_false.derived["sed_nebular"])
 
-    np.testing.assert_array_equal(
-        sed_radio_absent,
-        sed_radio_explicit,
-        err_msg="absent freefree key and explicit freefree=False must produce identical sed_radio",
+    values = {**model_absent.spec.get_fixed_values(), **dict(params_absent)}
+    l_ir = float(state_absent.derived["L_ir"])
+    q, t_e = float(values["radio_q_ir"]), float(values["radio_T_e"])
+    f_th = (
+        (3.88e-44 / 4.6e-28)
+        * (t_e / 1.0e4) ** 0.45
+        * 1.4 ** float(values["radio_alpha_ff"])
+        * 3.75e12
+        * 10.0**q
     )
+    wave = np.asarray(state_absent.wave)
+    mask = wave > _RADIO_WAVE_MIN_AA
+    assert np.any(mask)
+    np.testing.assert_allclose(
+        sed_radio_absent[mask],
+        (1.0 - f_th) * sed_radio_explicit[mask],
+        rtol=1e-9,
+        err_msg="absent key: radio synchrotron is (1 - f_th) of the explicit-False one",
+    )
+    assert l_ir > 0.0
     np.testing.assert_array_equal(
         sed_nebular_absent,
         sed_nebular_explicit,

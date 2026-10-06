@@ -55,6 +55,20 @@ class TestFIRRCDustCoupling2106:
                 redshift=Fixed(0.1),
             )
 
+    def test_dust_none_bell2003_split_raises_configerror(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """``bell2003_split`` is a FIRRC mode too: no dust means an all-zero radio SED (#2590)."""
+        with pytest.raises(ConfigError, match=r"FIRRC.*bell2003_split.*L_ir"):
+            SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                observation=synthetic_tophat_obs,
+                sfh={"type": "const"},
+                dust_attenuation={"type": "none"},
+                radio={"sf": {"type": "bell2003_split"}},
+                redshift=Fixed(0.1),
+            )
+
     # Test b) Dust none + delvecchio2021 raises ConfigError
     def test_dust_none_delvecchio2021_raises_configerror(
         self, synthetic_ssp_wide, synthetic_tophat_obs
