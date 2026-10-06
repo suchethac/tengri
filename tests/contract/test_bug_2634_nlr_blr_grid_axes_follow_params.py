@@ -29,8 +29,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
-from tengri.components.agn.blocks import blr as blr_module
-from tengri.components.agn.blocks import nlr as nlr_module
+from tengri.components.agn.blocks import blr as blr_module, nlr as nlr_module
 from tengri.components.agn.blocks.blr import (
     DEFAULT_F_BOL_5100,
     blr_synthesizer_block,
@@ -313,5 +312,7 @@ def test_spectra_blocks_forward_declared_mbh_and_ledd_to_the_backend(
         agn_log_ledd=-1.23,
     )
     assert seen.get("log_bh_mass") == 9.37, f"{region}: agn_log_mbh not forwarded as log_bh_mass"
-    assert seen.get("log_eddington") == -1.23, f"{region}: agn_log_ledd not forwarded as log_eddington"
+    assert seen.get("log_eddington") == -1.23, (
+        f"{region}: agn_log_ledd not forwarded as log_eddington"
+    )
     assert seen["region"] == region
