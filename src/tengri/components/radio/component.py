@@ -135,6 +135,15 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         term. Passing an explicit ``True``/``False`` pins it; explicit ``True``
         together with ``sfr_mode="bell2003_split"`` raises
         :class:`~tengri.config.exceptions.ConfigError` (see below).
+    q_is_total : bool or None
+        Whether ``radio_q_ir`` of ``sfr_mode="bell2003"`` calibrates the TOTAL
+        1.4 GHz luminosity (Bell 2003 Eq. 1). ``True``: the synchrotron term is
+        ``(1 - f_th)`` of the calibrated total, ``f_th`` the Murphy+2011 free-free
+        share at 1.4 GHz, whichever component supplies the thermal term (this
+        block's own, or the nebular continuum). ``False``: ``radio_q_ir`` calibrates
+        the non-thermal term alone and the synchrotron carries all of it (CIGALE's
+        convention). ``None`` (default) follows the resolved ``include_freefree``;
+        the factory sets it ``False`` only for an explicit ``freefree: False``.
     agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS`:
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
@@ -155,7 +164,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
 
     Notes
     -----
-    **``"bell2003_split"`` forces ``include_freefree=False`` (ruling R19).**
+    **``"bell2003_split"`` forces ``include_freefree=False``.**
     :func:`tengri.components.radio.radio.radio_sfr_bell2003_split` already
     allocates 10% of the Bell (2003) *total* L(1.4 GHz) to a thermal
     component (see its docstring); the separately-normalized
@@ -171,6 +180,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     name: str = "radio"
     sfr_mode: str = "bell2003"
     include_freefree: bool | None = None
+    q_is_total: bool | None = None
     agn_radio_model: str = "powerlaw"
     freefree_wave_min: float | None = None
 
@@ -218,6 +228,12 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             object.__setattr__(self, "include_freefree", False)
         elif self.include_freefree is None:
             object.__setattr__(self, "include_freefree", True)
+        if self.q_is_total is not None and not isinstance(self.q_is_total, bool):
+            raise TypeError(
+                f"q_is_total must be bool or None, got {type(self.q_is_total).__name__}"
+            )
+        if self.q_is_total is None:
+            object.__setattr__(self, "q_is_total", bool(self.include_freefree))
         # Validate freefree_wave_min
         if self.freefree_wave_min is not None:
             if isinstance(self.freefree_wave_min, bool) or not isinstance(
@@ -494,6 +510,9 @@ class RadioSEDComponent(TemplateThreading):
                 z_slope=firrc_z_slope,
                 apply_suppression=True,
                 log_L_ir=_log_L_ir,
+                q_is_total=self.config.q_is_total,
+                T_e=jnp.asarray(params["radio_T_e"]),
+                alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
             ff = (
                 radio_freefree(
@@ -525,6 +544,7 @@ class RadioSEDComponent(TemplateThreading):
                     mass_slope=firrc_mass_slope,
                     z_slope=firrc_z_slope,
                     include_freefree=self.config.include_freefree,
+                    q_is_total=self.config.q_is_total,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                     l_bband=L_4400_intrinsic,
@@ -555,6 +575,7 @@ class RadioSEDComponent(TemplateThreading):
                 mass_slope=firrc_mass_slope,
                 z_slope=firrc_z_slope,
                 include_freefree=self.config.include_freefree,
+                q_is_total=self.config.q_is_total,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                 l_bband=L_4400_intrinsic,
