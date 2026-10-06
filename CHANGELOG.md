@@ -26,6 +26,15 @@
   raises `ValueError`, a supplied axis of fewer than 4 nodes warns (PCHIP degrades to a parabola
   or a chord), and an unbounded prior (which cannot be spanned) emits one `GridSupportWarning`
   (#2722).
+- The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
+  and `{'type': 'synthesizer'}`) read the grid's black-hole-mass and Eddington-ratio axes
+  from `agn_log_mbh` and `agn_log_ledd`: all four blocks called the grid backend without
+  them, so the axes sat at the backend's hard-coded node (8.0, -0.3) and the two
+  parameters were inert (the [O III] 5007 light of the `synthesizer_spectra` NLR moves by
+  about 18% between `agn_log_ledd` = -0.3 and -1.0). The blocks now forward the registry
+  defaults (`agn_log_mbh` 7.0, `agn_log_ledd` -1.0) when the model leaves them unset, so
+  a model that never set them sees the (7.0, -1.0) grid node instead of (8.0, -0.3)
+  (#2634).
 - `bell2003_split` is now covered by the build-time check that refuses a FIRRC radio block without a dust component, which would otherwise return an all-zero radio SED silently. (#2590)
 - **Spectra read the Lyman edge as a step (#2447):** when a photoionized nebular backend
   masks the Lyman continuum, the spectrum projection now treats the SSP cell straddling
