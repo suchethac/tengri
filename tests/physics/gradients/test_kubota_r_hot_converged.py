@@ -10,12 +10,9 @@ polished to the residual of the dissipation integral's own evaluation.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.agn import (
     _nt_emissivity as N,

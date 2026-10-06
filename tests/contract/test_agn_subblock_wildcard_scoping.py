@@ -270,6 +270,25 @@ def _cases(categories: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii",
 
 _ALL_CASES = _cases()
 
+# Q1 differentiates the model with respect to every free parameter of the block, and
+# ``disc/adaf`` is by far its costliest case: 283 s and a 7.7 GB resident / 18.6 GB peak
+# memory footprint on one machine (139 s at ac45672d2; the next case, ``disc/kubota_done``,
+# takes 23 s and 1.7 GB). A CI runner is about three times slower and has 16 GB for two
+# workers, so the case either exceeds the suite's 600 s per-test limit — under xdist that
+# kills the worker and the rest of this file never runs — or, given more time, exhausts
+# the runner's memory. It runs in the ``slow`` tier until its cost is brought back down
+# (#2768).
+_Q1_SLOW = {("disc", "adaf")}
+_Q1_PARAMS = [
+    pytest.param(
+        _category,
+        _block_type,
+        id=f"{_category}/{_block_type}",
+        marks=[pytest.mark.slow] if (_category, _block_type) in _Q1_SLOW else [],
+    )
+    for _category, _block_type in _ALL_CASES
+]
+
 
 def _maybe_skip_grid_gated(category: str, block_type: str, exc: Exception):
     # nlr._resolve_synthesizer_grid raises TengriIOError; blr._resolve_synthesizer_grid
@@ -367,9 +386,7 @@ def skip_if_empty_scope(build_fn, *, category: str, block_type: str) -> bool:
     return True  # pragma: no cover - pytest.skip raises
 
 
-@pytest.mark.parametrize(
-    ("category", "block_type"), _ALL_CASES, ids=[f"{c}/{t}" for c, t in _ALL_CASES]
-)
+@pytest.mark.parametrize(("category", "block_type"), _Q1_PARAMS)
 def test_q1_wildcard_frees_exactly_declared_and_live(ssp, obs, category, block_type):
     """Q1: the sub-block's own wildcard frees exactly its declared params,
     all live; an empty declared set produces a loud, not silent, signal

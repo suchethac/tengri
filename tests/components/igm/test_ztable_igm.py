@@ -59,10 +59,29 @@ class TestIGMPrecomputation:
     """IGM transmission is correctly precomputed on the z grid."""
 
     def test_igm_table_shape(self, ssp_data, filters):
-        """IGM table has shape (n_z, n_filters)."""
+        """IGM table's leading dimension >= n_z; uniform nodes are a subset of z_grid.
+
+        Edge-aware nodes may be added at band crossings of spectral features
+        (Lyman limit), so the actual grid has n >= n_z points. The z_grid
+        nodes include the n_z uniform nodes exactly (subset), and the table's
+        leading dimension always equals len(z_grid).
+        """
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10, apply_igm=True)
-        chex.assert_shape(zt.igm_trans_table, (10, 3))
+        n_z_uniform = 10
+        n_z_actual = len(zt.z_grid)
+
+        # The uniform grid is a subset of the edge-aware grid
+        assert n_z_actual >= n_z_uniform, (
+            f"z_grid has fewer points ({n_z_actual}) than requested uniform nodes ({n_z_uniform})"
+        )
+        z_grid = np.asarray(zt.z_grid)
+        uniform = np.linspace(z_grid[0], z_grid[-1], n_z_uniform)
+        assert np.all(np.min(np.abs(z_grid[None, :] - uniform[:, None]), axis=1) < 1e-12), (
+            "the requested uniform nodes are not all present in z_grid"
+        )
+        # The table's leading dim equals the actual grid size
+        chex.assert_shape(zt.igm_trans_table, (n_z_actual, 3))
 
     def test_igm_values_in_range(self, ssp_data, filters):
         """IGM transmission is in [0, 1]."""
