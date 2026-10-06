@@ -4,7 +4,7 @@ This is an internal engineering audit record kept for contributors — users sho
 
 # Known Bugs — Audit 2026-03-31 (Updated 2026-04-30)
 
-**2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the HST AR proposal
+**2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the multi-model CANDELS
 NSS work, 2026-04-16) are now FIXED. The only remaining open functional bug is PERF-01
 (DL07 dust emission JIT graph >2 GB), which is architectural and tracked separately.
 
@@ -442,7 +442,7 @@ In DSPS's lookback-time convention used by tengri, a declining tau model in cosm
 
 ---
 
-## ISSUES FOUND DURING HST AR PROPOSAL FIGURE WORK (2026-04-16)
+## ISSUES FOUND DURING MULTI-MODEL CANDELS FIGURE WORK (2026-04-16)
 
 Discovered while fitting CANDELS z~1 galaxies with NSS under multiple model
 configurations (dense_basis, tsnorm, dirichlet, DPL × 4 SSP libraries × 4 dust laws).
