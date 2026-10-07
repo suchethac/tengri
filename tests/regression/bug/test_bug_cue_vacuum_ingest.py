@@ -27,8 +27,8 @@ from tengri.observation.eline_catalog import EMISSION_LINES
 from tengri.observation.line_measurement import DESI_LINES, LineDef
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 from tests.regression.bug.test_bug_nebular_grid_eval_redshift import (  # noqa: F401
-    _point,
     _Models,
+    _point,
     _shared_stellar_ztables,
 )
 
@@ -77,12 +77,12 @@ def _nearest(waves: np.ndarray, target: float) -> float:
 
 
 @pytest.mark.parametrize("key", _CUE_CHECK)
-def test_cue_published_centres_land_on_the_vacuum_catalog(cue_waves, key):
+def test_cue_published_centers_land_on_the_vacuum_catalog(cue_waves, key):
     target = _catalog_wave(key)
     assert abs(_nearest(cue_waves, target) - target) < _TOL_AA, key
 
 
-def test_cue_published_centres_land_on_the_desi_vacuum_lines(cue_waves):
+def test_cue_published_centers_land_on_the_desi_vacuum_lines(cue_waves):
     for line in DESI_LINES:
         if 3000.0 < line.wavelength < 9000.0:
             got = _nearest(cue_waves, line.wavelength)
@@ -140,27 +140,27 @@ def test_no_post_hoc_air_vacuum_vote_remains():
 # ── window measurement of the blended pair ─────────────────────────────────
 
 
-def _half(name: str, centre: float, lo: float, hi: float) -> LineDef:
+def _half(name: str, center: float, lo: float, hi: float) -> LineDef:
     return LineDef(
         name,
-        centre,
-        ((centre - 14, centre - 8), (centre + 8, centre + 14)),
-        (centre + lo, centre + hi),
+        center,
+        ((center - 14, center - 8), (center + 8, center + 14)),
+        (center + lo, center + hi),
     )
 
 
-def _halves_ratio(model, centre: float) -> float:
-    """Flux in [c-4, c] over flux in [c, c+4]: 1 for a line centred on c."""
-    defs = [_half("blue", centre, -4.0, 0.0), _half("red", centre, 0.0, 4.0)]
+def _halves_ratio(model, center: float) -> float:
+    """Flux in [c-4, c] over flux in [c, c+4]: 1 for a line centered on c."""
+    defs = [_half("blue", center, -4.0, 0.0), _half("red", center, 0.0, 4.0)]
     blue, red = np.asarray(model.measure_line_fluxes({}, defs, approx=False), dtype=float)
     assert np.isfinite(blue) and np.isfinite(red) and blue > 0.0 and red > 0.0
     return blue / red
 
 
 @requires_cue_weights
-@pytest.mark.parametrize("centre", [6564.61, 6585.28])
-def test_blended_pair_lines_are_centred_on_the_vacuum_centres(centre):
-    """[N II] 6584 and H-alpha sit on their vacuum centres in the rendered SED.
+@pytest.mark.parametrize("center", [6564.61, 6585.28])
+def test_blended_pair_lines_are_centered_on_the_vacuum_centers(center):
+    """[N II] 6584 and H-alpha sit on their vacuum centers in the rendered SED.
 
     A line rendered at its air label (1.8 Angstrom blueward) puts about twice
     the flux in the blue half-window as in the red one (measured ratio 2.1).
@@ -184,11 +184,11 @@ def test_blended_pair_lines_are_centred_on_the_vacuum_centres(centre):
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
-    assert abs(_halves_ratio(model, centre) - 1.0) < 0.05
+    assert abs(_halves_ratio(model, center) - 1.0) < 0.05
 
 
-@pytest.mark.parametrize("centre", [6564.61, 6585.28])
-def test_window_lut_measures_the_blended_pair_on_the_vacuum_centres(centre):
+@pytest.mark.parametrize("center", [6564.61, 6585.28])
+def test_window_lut_measures_the_blended_pair_on_the_vacuum_centers(center):
     """The window LUT (baked-in grid) agrees with the exact path on the vacuum windows."""
     if not _WNE_SSP.is_file():
         pytest.skip("wNE SSP grid not available")
@@ -209,7 +209,7 @@ def test_window_lut_measures_the_blended_pair_on_the_vacuum_centres(centre):
             neb={"type": "none"},
             redshift=Fixed(0.0),
         )
-    defs = [_half("blue", centre, -4.0, 0.0), _half("red", centre, 0.0, 4.0)]
+    defs = [_half("blue", center, -4.0, 0.0), _half("red", center, 0.0, 4.0)]
     lut = np.asarray(model.measure_line_fluxes({}, defs, approx=True), dtype=float)
     exact = np.asarray(model.measure_line_fluxes({}, defs, approx=False), dtype=float)
     assert np.all(np.isfinite(lut)) and np.all(lut != 0.0)
@@ -269,8 +269,8 @@ def test_cb19_hosted_file_is_mixed_air_and_vacuum_and_loads_as_vacuum(monkeypatc
 
 
 def test_cb19_air_mask_leaves_a_vacuum_catalog_alone():
-    from tengri.components.nebular.cloudy_cb19 import _cb19_air_mask
     from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+    from tengri.components.nebular.cloudy_cb19 import _cb19_air_mask
 
     vac = np.array([1215.67, 4341.68, 4862.68, 6302.04, 6549.86, 6564.61, 6585.27])
     assert not _cb19_air_mask(vac).any()
