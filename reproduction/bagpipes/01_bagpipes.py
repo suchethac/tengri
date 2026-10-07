@@ -469,11 +469,7 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # unchanged and line strengths are compared in §9.
 
 # %%
-def air_to_vacuum(w_air):
-    """Vacuum wavelength [Å] of an air wavelength [Å] (Morton / IAU standard-air relation)."""
-    s2 = (1.0e4 / np.asarray(w_air, float)) ** 2
-    return w_air * (1.0 + 8.336624212083e-5 + 2.408926869968e-2 / (130.1065924522 - s2)
-                    + 1.599740894897e-4 / (38.92568793293 - s2))
+from tengri.utils.air_vacuum import air_to_vac as air_to_vacuum  # the one converter
 
 
 assert abs(float(air_to_vacuum(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
