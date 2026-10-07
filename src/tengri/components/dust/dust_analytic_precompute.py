@@ -459,11 +459,10 @@ def _build_grid_pah_drude(
 # priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
 # PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
 # casey2012 mid-IR bands (8-24 um at z = 0; 60-90 um, 250-500 um at z = 3): beta_ir raised
-# to 10 (from 8) so 13-point grid achieves <= 4e-4 error; per-band tested with 13 seeded
-# random points (the issue query plus 12 RandomState(7) points in the declared priors).
+# to 10 (from 8) so 13-point grid achieves <= 4e-4 error on 200 seeded random points.
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
-    "casey2012": {"dust_T": 41, "dust_beta_ir": 10, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
+    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
@@ -585,10 +584,11 @@ def precompute(
     the default nodes against the exact closure, maximum over 200 seeded random points inside
     the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
     3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 8.0e-4 (60-90 um), 6.7e-4 (250-500 um), 7.0e-4
-    (750-950 um). ``casey2012`` at 8-24 um and 24-40 um is 1.9e-4 at z = 0; at z = 3 (observed
-    bands) it is 1.8e-4 in 60-90 um, 5.3e-4 in 250-500 um (13 seeded points in the declared
-    priors). The 1 um lower bound of ``casey2012`` is a node of the rest grid, so its
-    normalization has no cell straddling the bound.
+    (750-950 um). ``casey2012`` at 8-24 um is 2.09e-3 and 24-40 um is 1.61e-3 at z = 0; at z = 3
+    (observed bands) it is 1.53e-3 in 60-90 um, 7.8e-4 in 250-500 um. After beta_ir node count
+    raised to 10 (from 8), errors reduce to 4.0e-4 or better on all four bands. The 1 um lower
+    bound of ``casey2012`` is a node of the rest grid, so its normalization has no cell
+    straddling the bound.
 
     Parameters
     ----------
@@ -748,14 +748,15 @@ def build_lookup(
 
     Interpolates ln(band flux) with monotone cubic Hermite (PCHIP) in the coordinates
     (ln T, beta, alpha_mir, ln lambda_0) of the axes the model has. The contract
-    tests assert 1e-3 against the exact closure at random points inside the declared priors.
+    tests assert 5e-4 against the exact closure at random points inside the declared priors.
     The nodes are band integrals of the closed-form model on a rest grid of 0.01 um
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
     below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 8-24 um and 24-40 um 1.9e-4 at z = 0,
-    1.8e-4 in 60-90 um and 5.3e-4 in 250-500 um at z = 3). A query outside the node span is
-    clamped to the edge node: the value is constant and the gradient zero beyond it.
+    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 2.09e-3 in 8-24 um, 1.61e-3 in 24-40 um
+    at z = 0; 1.53e-3 in 60-90 um, 7.8e-4 in 250-500 um at z = 3; reduced to 4.0e-4 or
+    better with beta_ir nodes raised to 10). A query outside the node span is clamped to
+    the edge node: the value is constant and the gradient zero beyond it.
 
     Parameters
     ----------

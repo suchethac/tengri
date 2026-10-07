@@ -364,7 +364,12 @@ def test_off_node_accuracy_far_ir_at_z3(model):
 
 
 def test_casey2012_mid_ir_accuracy_default_grids():
-    """Casey2012 mid-IR band accuracy: 8-24, 24-40 um at z=0; 60-90, 250-500 um at z=3."""
+    """Casey2012 mid-IR band accuracy: 8-24, 24-40 um at z=0; 60-90, 250-500 um at z=3.
+
+    200 seeded random points inside declared priors. Baseline on main's counts
+    (beta_ir=8): z=0 8-24 um 2.09e-3, 24-40 um 1.61e-3; z=3 60-90 um 1.53e-3,
+    250-500 um 7.8e-4. Must reach <= 5e-4 after fix.
+    """
     from tengri.components.dust import dust_analytic_precompute as adapter
 
     names = adapter.AXIS_PARAMS["casey2012"]
@@ -386,7 +391,7 @@ def test_casey2012_mid_ir_accuracy_default_grids():
 
     points = [{n: _ISSUE_QUERY[n] for n in names}]
     rng = np.random.RandomState(7)
-    points += [{n: rng.uniform(*_get_param_bounds(n)) for n in names} for _ in range(12)]
+    points += [{n: rng.uniform(*_get_param_bounds(n)) for n in names} for _ in range(200)]
 
     for kw in points:
         query = tuple(kw[n] for n in names)
@@ -395,14 +400,14 @@ def test_casey2012_mid_ir_accuracy_default_grids():
         for b, f, lkp in zip(bands_z0, filters_z0, got_z0):
             ratio = lkp / exact("casey2012", kw, *f, z=0.0)
             error = abs(ratio - 1.0)
-            assert error < 1e-3, (
-                f"casey2012 z=0 point {kw}, band {b}: ratio {ratio:.6f}, error {error:.6f}"
+            assert error < 5e-4, (
+                f"casey2012 z=0 band {b}: error {error:.6e}"
             )
 
         got_z3 = np.asarray(lookup_z3(1.0, *query))
         for b, f, lkp in zip(bands_z3, filters_z3, got_z3):
             ratio = lkp / exact("casey2012", kw, *f, z=3.0)
             error = abs(ratio - 1.0)
-            assert error < 1e-3, (
-                f"casey2012 z=3 point {kw}, band {b}: ratio {ratio:.6f}, error {error:.6f}"
+            assert error < 5e-4, (
+                f"casey2012 z=3 band {b}: error {error:.6e}"
             )
