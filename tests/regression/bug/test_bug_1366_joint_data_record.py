@@ -61,7 +61,7 @@ def joint_model_and_mock(ssp_data_fsps):
     """A fixed-parameter joint model plus one photometry+spectrum realization."""
     obs = Observation(
         photometry=Photometry.from_names(_BANDS),
-        spectroscopy=Spectroscopy(wave_obs=_WAVE),
+        spectroscopy=Spectroscopy(resample="point", wave_obs=_WAVE),
     )
     sed = SEDModel.build(
         ssp_data=ssp_data_fsps,

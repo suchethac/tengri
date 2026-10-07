@@ -832,7 +832,9 @@ def _channel_obs(channel, line_data=None):
     from tengri.observation.spectroscopy import Spectroscopy
 
     if channel == "spec":
-        return Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE)))
+        return Observation(
+            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+        )
     if channel == "phot2":
         return Observation(photometry=Photometry.from_names(_PHOT2))
     if channel in ("lines_cue", "lines_meas"):
@@ -1721,7 +1723,9 @@ def test_the_spectroscopic_redshift_finite_difference_is_truncation_not_defect(s
     from tengri.observation.spectroscopy import Spectroscopy
 
     with jax.enable_x64(True):
-        obs = Observation(spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE)))
+        obs = Observation(
+            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+        )
         zfac = Uniform(_Z_LO, _Z_HI)
         sed = SEDModel.build(
             ssp_data=ssp_bare,

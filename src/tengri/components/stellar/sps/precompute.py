@@ -38,14 +38,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
+from tengri.components.stellar.sps.ztable_grid import build_edge_aware_z_grid
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
     edge_split,
+    lyc_augment_grid_for_step,
     preintegrate_grid,
     subband_quadrature,
 )
-from tengri.utils.physics_constants import TEN_PC_CM
+from tengri.utils.physics_constants import LYMAN_LIMIT_AA, TEN_PC_CM
 from tengri.utils.scale import (
     apply_log10_scale,
     log10_flux_scale as _log10_flux_scale,
@@ -137,7 +139,7 @@ class PhotometricPrecomputation(NamedTuple):
         Filter integral restricted to each sub-band. Sums over the last axis
         to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]. The last
         axis is ``n_subbands + 1`` wide, not ``n_subbands``, when ``lyc_gate``
-        was also True: a physical edge at 912 Å(1+z) is then forced into the
+        was also True: a physical edge at LYMAN_LIMIT_AA(1+z) is then forced into the
         equal-filter-mass partition (#2439, #2427, R1;
         :func:`tengri.utils.grid_interp.subband_quadrature`), so every chunk
         lies wholly on one side of the Lyman limit.
@@ -157,7 +159,7 @@ class PhotometricPrecomputation(NamedTuple):
         :func:`precompute_restband_photometry` and carried on the stellar component's
         state: one builder for the fixed-z and free-z paths alike (#1148).
     ssp_phot_lyc : array or None, shape (n_met, n_age, n_filters)
-        SSP broadband flux restricted to rest-frame λ < 912 Ångström
+        SSP broadband flux restricted to rest-frame λ < LYMAN_LIMIT_AA (911.76 Ångström)
         (Lyman continuum) per metallicity, age, and filter [erg/s/Hz/Msun].
         The exact algebraic split ``ssp_phot = ssp_phot_lyc + (ssp_phot -
         ssp_phot_lyc)`` at the physical edge. Used to apply the nebular
@@ -170,7 +172,7 @@ class PhotometricPrecomputation(NamedTuple):
         computes or caches this.
     ssp_phot_nolyc : array or None, shape (n_met, n_age, n_filters)
         The other half of that split: the band flux from rest-frame
-        λ >= 912 Ångström, from the same cumulative integral, so a band wholly
+        λ >= LYMAN_LIMIT_AA (911.76 Ångström), from the same cumulative integral, so a band wholly
         below the edge has exactly zero here. The escape-fraction mask is
         ``ssp_phot_nolyc + neb_fesc * ssp_phot_lyc`` (an addition) rather than
         ``ssp_phot - (1 - neb_fesc) * ssp_phot_lyc``, which cancels two equal
@@ -668,10 +670,10 @@ class PhotometricZTable(NamedTuple):
     #: cache key needs no IGM term). ``None`` when the IGM is absent or reads free
     #: parameters (patchy reionization, DLAs).
     ssp_subband_phot_igm_table: jnp.ndarray | None = None
-    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < 912 Å)
+    #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA)
     #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
     ssp_phot_lyc_table: jnp.ndarray | None = None
-    #: (n_z, n_met, n_age, n_filters) photometry from rest λ >= 912 Å: the other
+    #: (n_z, n_met, n_age, n_filters) photometry from rest λ >= LYMAN_LIMIT_AA: the other
     #: half of the Lyman-limit split, exactly zero in a band wholly below the edge.
     #: Present exactly when ``ssp_phot_lyc_table`` is.
     ssp_phot_nolyc_table: jnp.ndarray | None = None
@@ -723,7 +725,11 @@ class ZTableRequest:
 
 
 # Bump when the quadrature or table layout changes: invalidates every
-# cached z-table built by an older algorithm.
+# cached z-table built by an older algorithm. The cache KEY is a content
+# hash over this function's INPUTS (SSP grid, filters, z grid, flags,
+# cosmology, session precision/backend) -- never over the quadrature CODE
+# itself -- so an algorithm change with no input-shape change is invisible
+# to the key and relies entirely on this manual bump.
 # 3 -> 4 (#2439, #2427): the npz payload gained ``ssp_phot_lyc_table`` at
 # version 3 without a bump, so a warm cache built the day before this fix
 # would have satisfied the (unversioned-for-this-field) key and silently
@@ -731,13 +737,25 @@ class ZTableRequest:
 # with no warning. ``lyc_gate`` is now also its own field in
 # :class:`ZTableRequest`, so a lyc_gate=True request can never collide with
 # a lyc_gate=False (or pre-#2439) entry even if the version were not bumped.
+# 4 -> 5 (one Lyman edge, L3): ``ssp_phot_lyc_table`` and (when ``lyc_gate``)
+# ``ssp_subband_phot_table``/``subband_waves_rest_table`` moved off the
+# retired bare 912 Å literal onto ``LYMAN_LIMIT_AA`` (911.76 Å) and off a
+# cumulative-trapezoid-and-interpolate-at-the-cutoff construction onto the
+# step-model-exact :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`
+# -- neither changes any field ``ZTableRequest`` hashes, so without this
+# bump a warm cache built one day earlier would silently serve the old
+# (912 Å, approximate) values under the new code.
+# 6 (#2749): the default z grid gained Lyman-crossing nodes
+# (``build_edge_aware_z_grid``) with no hashed field changing, so a warm
+# cache would silently keep serving the uniform-grid table and the
+# accuracy fix would never reach it.
 #
-# 4 -> 5: the npz payload gained ``ssp_phot_nolyc_table``, the above-edge half of
+# 6 -> 7: the npz payload gained ``ssp_phot_nolyc_table``, the above-edge half of
 # the Lyman-limit split computed from the same cumulative integral as the
-# below-edge half. A version-4 entry has no such table and would be served to a
+# below-edge half. A version-6 entry has no such table and would be served to a
 # ``lyc_gate`` request that now needs it (the load path below also rebuilds on
 # the missing key).
-_ZTABLE_CACHE_VERSION = 5
+_ZTABLE_CACHE_VERSION = 7
 
 
 def _ztable_cache_dir():
@@ -847,7 +865,7 @@ def precompute_photometry_ztable(
     **JIT-compatible**: no, data precomputation with file I/O.
     """
     if z_grid is None:
-        z_grid = jnp.linspace(z_min, z_max, n_z)
+        z_grid = build_edge_aware_z_grid(z_min, z_max, n_z, filter_waves, filter_trans)
     else:
         z_grid = jnp.asarray(z_grid)
 
@@ -1051,7 +1069,7 @@ def _compute_photometry_ztable(
     subband_waves_all = (
         np.zeros((n_z_pts, n_met, n_age, n_filters, K_sub), dtype=np.float64) if K > 0 else None
     )
-    # Lyman continuum photometry (rest λ < 912 Å) (#2439, #2427). Gated on
+    # Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA) (#2439, #2427). Gated on
     # lyc_gate (a live nebular Lyman-continuum mask): a model without one
     # never pays this compute or the extra table size.
     ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
@@ -1118,17 +1136,33 @@ def _compute_photometry_ztable(
 
             ssp_on_grid = _vectorized_interp(grid, wave_obs, ssp_flux_np)
             integrand = ssp_on_grid * tw_np[None, None, :]
-            num = _np_trapezoid(integrand, grid, axis=-1)
-            ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
-            # Lyman continuum photometry: rest λ < 912 Å (#2439, #2427), and the
-            # λ >= 912 Å half of the same split from the same cumulative
-            # integral. Gated on lyc_gate.
-            lyc_wave_obs = 912.0 * (1.0 + z_val)
+            # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
+            # nebular Lyman-continuum mask) -- a model without one never
+            # pays this compute, and the whole-band table stays bit-
+            # identical to the ordinary (unaugmented) path. When live,
+            # ``lyc_augment_grid_for_step`` resamples the SSP edge-aware and
+            # inserts the edge as a zero-width node pair, so the WHOLE-band
+            # integral, the ionizing-only split, AND ``subband_quadrature``'s
+            # own forced-boundary chunks are all exact at the SAME bracket
+            # cell (see :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`).
+            # Both halves of the split (below and above the edge) come from
+            # ONE cumulative integral (``edge_split``), so a band wholly on
+            # one side has exactly zero in the other half.
+            lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
             if lyc_gate:
-                lyc_num, above_num = edge_split(integrand, grid, lyc_wave_obs)
-                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom, 1e-30)
-                ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom, 1e-30)
+                grid_q, integrand_q, tw_q = lyc_augment_grid_for_step(
+                    grid, tw_np, wave_obs, ssp_flux_np, fw_np, ft_np, lyc_wave_obs, convention
+                )
+                denom_q = _np_trapezoid(tw_q, grid_q)
+                num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+                lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
+                ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom_q, 1e-30)
+            else:
+                grid_q, integrand_q, tw_q, denom_q = grid, integrand, tw_np, denom
+                num = _np_trapezoid(integrand, grid, axis=-1)
+            ssp_phot_all[zi, :, :, f_idx] = num / max(denom_q, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
@@ -1146,13 +1180,15 @@ def _compute_photometry_ztable(
             # uses, so the two paths cannot drift. Nodes come back observed-frame;
             # store them rest-frame, which is where the dust law is evaluated.
             # ``lyc_edge_obs`` forces a chunk boundary at the physical Lyman
-            # limit when this model has a live mask (R1, #2439, #2427).
+            # limit when this model has a live mask (R1, #2439, #2427); the
+            # (possibly edge-augmented) ``grid_q``/``tw_q``/``integrand_q``
+            # keep its own chunks exact at that boundary too.
             if K > 0:
                 phi_k, nodes_obs = subband_quadrature(
-                    grid,
-                    tw_np,
-                    integrand,
-                    denom,
+                    grid_q,
+                    tw_q,
+                    integrand_q,
+                    denom_q,
                     K,
                     float(eff_waves_obs[f_idx]),
                     lyc_edge_obs=lyc_wave_obs if lyc_gate else None,

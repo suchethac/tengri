@@ -27,7 +27,7 @@ surface is refused on the other for the same reason.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 DUST_PREFIX = "dust_"
 SCREENS: tuple[str, ...] = ("bc", "diff", "neb")
@@ -50,6 +50,13 @@ OVERRIDE_STEMS: tuple[str, ...] = ("slope", "bump_strength", "delta", "Rv")
 # ``Parameters._init_dust_config``, the grammar round-trip table) derives from
 # them instead of hand-listing the three names again.
 SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
+#: The one choice only the nebular source takes: ``"own"`` gives the nebular
+#: continuum and line catalog a dedicated screen
+#: ``T_neb = exp(-tau_neb * k_neb)`` (``dust_tau_neb``, ``law_neb``), with no
+#: cascade through the diffuse screen and no age mixture (#2625).
+NEBULAR_OWN_SCREEN: str = "own"
+#: Sources that accept :data:`NEBULAR_OWN_SCREEN` in addition to :data:`SCREEN_CHOICES`.
+OWN_SCREEN_SOURCES: tuple[str, ...] = ("nebular",)
 # The ``'off'`` synonym for ``'none'`` is NOT spelled here: the off-switch
 # vocabulary has exactly one home, ``tengri.parameters.groups._normalize_off_switch``
 # (the helper every off-switch group's ``type`` goes through), and both
@@ -61,6 +68,16 @@ SCREEN_CHOICES: tuple[str, ...] = ("birth_cloud", "diffuse", "none")
 #: ``screen_keys()`` returns and the per-source default in
 #: :data:`_SCREEN_DEFAULTS`.
 SCREEN_SOURCES: tuple[str, ...] = ("nebular", "shock", "agn")
+#: CAPABILITY set (#2529), not a type-name alias list: ``dust_attenuation``
+#: types that declare a birth-cloud screen distinct from the diffuse-ISM
+#: screen, the one thing a ``lyc_escape_geometry`` hole needs to be IN.
+#: ``single_component`` and ``wg00`` attenuate with one screen and have no
+#: birth-cloud/diffuse split at all. ``age_binned`` (its screens with a
+#: finite upper edge are the birth-cloud ones) joined with the age-split
+#: unification.
+DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN: frozenset[str] = frozenset({"two_component", "age_binned"})
+#: Types whose young/old split can be configured (``transition_width_dex``).
+DUST_TYPES_WITH_AGE_SPLIT: frozenset[str] = DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
 #: Per-source default, read by both the grammar translator and the flat-kwarg
 #: resolver so the two surfaces cannot drift. ``agn`` defaults to ``"none"``:
 #: the AGN component runs after dust in the pipeline, unattenuated, and
@@ -87,7 +104,26 @@ def screen_keys() -> tuple[str, ...]:
     return tuple(f"{source}_screen" for source in SCREEN_SOURCES)
 
 
-def normalize_screen_choice(value: str, *, key: str) -> str:
+def screen_choices_for(source: str) -> tuple[str, ...]:
+    """Allowed screen choices for one source.
+
+    Parameters
+    ----------
+    source : str
+        One of :data:`SCREEN_SOURCES`.
+
+    Returns
+    -------
+    tuple of str
+        :data:`SCREEN_CHOICES`, plus :data:`NEBULAR_OWN_SCREEN` for the
+        nebular source.
+    """
+    if source in OWN_SCREEN_SOURCES:
+        return (*SCREEN_CHOICES, NEBULAR_OWN_SCREEN)
+    return SCREEN_CHOICES
+
+
+def normalize_screen_choice(value: str, *, key: str, source: str | None = None) -> str:
     """Check one dust-screen selector against :data:`SCREEN_CHOICES`.
 
     Parameters
@@ -102,6 +138,10 @@ def normalize_screen_choice(value: str, *, key: str) -> str:
         The key name to name in the error message (e.g. ``"nebular_screen"``
         or ``"dust_shock_screen"``), so the raised error points at exactly
         what the caller wrote.
+    source : str, optional
+        The source the selector belongs to; the nebular source also accepts
+        ``"own"`` (:func:`screen_choices_for`). ``None`` checks the shared
+        :data:`SCREEN_CHOICES` only.
 
     Returns
     -------
@@ -116,9 +156,10 @@ def normalize_screen_choice(value: str, *, key: str) -> str:
     """
     from tengri.config.exceptions import ParameterError
 
-    if value not in SCREEN_CHOICES:
+    allowed = SCREEN_CHOICES if source is None else screen_choices_for(source)
+    if value not in allowed:
         raise ParameterError(
-            f"{key}={value!r} is not a valid dust-screen choice. Choose one of {SCREEN_CHOICES!r}."
+            f"{key}={value!r} is not a valid dust-screen choice. Choose one of {allowed!r}."
         )
     return value
 
@@ -177,7 +218,7 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
         default = _SCREEN_DEFAULTS[source]
         grammar_key = f"{source}_screen"
         display_key = grammar_key if surface == "grammar" else f"{DUST_PREFIX}{grammar_key}"
-        choice = normalize_screen_choice(raw[source], key=display_key)
+        choice = normalize_screen_choice(raw[source], key=display_key, source=source)
 
         from tengri.config.exceptions import ParameterError
 
@@ -189,6 +230,18 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
                 f"would be silently ignored. Drop {display_key!r}, or select the "
                 f"two-component dust model."
             )
+        if (
+            dust_model == "age_binned"
+            and source == "nebular"
+            and choice not in (default, NEBULAR_OWN_SCREEN)
+        ):
+            raise ParameterError(
+                f"{display_key}={raw[source]!r} is not valid with dust_model='age_binned': "
+                f"its nebular light sees the stellar screens' ionizing-weighted interval "
+                f"mixture (the default, {default!r}) or one dedicated screen "
+                f"({display_key}='own', with tau_neb and law_neb). Drop {display_key!r} or "
+                f"use one of those."
+            )
         if dust_model == "single_component" and choice not in ("none", default):
             raise ParameterError(
                 f"{display_key}={raw[source]!r} is not valid with a single-screen "
@@ -198,6 +251,52 @@ def resolve_screen_choices(raw: Mapping[str, object], *, dust_model: str, surfac
             )
         resolved[source] = choice
     return resolved
+
+
+def reject_own_screen_keys(
+    nebular_choice: str, requested: Iterable[str], *, dust_model: str, surface: str
+) -> None:
+    """Refuse the keys only ``nebular_screen='own'`` reads (#2625).
+
+    THE single check for both surfaces, called after :func:`resolve_screen_choices`
+    with the resolved nebular choice (the per-source default when the caller did
+    not name one).
+
+    Parameters
+    ----------
+    nebular_choice : str
+        The resolved nebular screen choice.
+    requested : iterable of str
+        The own-screen keys the caller wrote, in the surface's own spelling:
+        ``tau_neb`` on every model, plus ``law_neb`` and the ``<shape>_neb``
+        overrides on ``age_binned``, where the nebular light has no law of its
+        own without the dedicated screen. (On ``two_component`` those two keep
+        their meaning of retargeting the birth-cloud part of the nebular
+        screen, so the caller does not pass them.)
+    dust_model : str
+        The resolved dust attenuation model.
+    surface : str
+        ``"grammar"`` or ``"flat"``; selects the spelling used in the message.
+
+    Raises
+    ------
+    ParameterError
+        If any key was requested and ``nebular_choice`` is not ``'own'``. Names
+        the key and the remedy, ``nebular_screen='own'``.
+    """
+    from tengri.config.exceptions import ParameterError
+
+    keys = sorted(requested)
+    if nebular_choice == NEBULAR_OWN_SCREEN or not keys:
+        return
+    prefix = "" if surface == "grammar" else DUST_PREFIX
+    own = f"{prefix}nebular_screen='own'"
+    raise ParameterError(
+        f"{', '.join(repr(k) for k in keys)} set(s) the nebular screen's own "
+        f"optical depth/law, which only {own} reads (got "
+        f"{prefix}nebular_screen={nebular_choice!r}, dust_model={dust_model!r}). "
+        f"Add {own}, or drop {', '.join(repr(k) for k in keys)}."
+    )
 
 
 def short_to_full(stem: str) -> str:

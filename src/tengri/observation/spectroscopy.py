@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -49,6 +50,16 @@ class Spectroscopy:
     lsf_n_bins : int
         Number of bins for piecewise constant approximation of
         variable-R LSF convolution. Default: 16.
+    resample : {"auto", "point", "conserving"}
+        How the model is turned into pixel values (#2530). ``"point"``
+        interpolates the model at each pixel center; ``"conserving"`` takes the
+        mean of the model over the pixel (the integral between the midpoints
+        of neighboring pixel centers, divided by the width); ``"auto"``
+        takes the mean where some pixel is wider than the model-grid
+        interval it lies in and the point sample otherwise. The decision is
+        made once, before tracing, in the model's rest frame at the fixed
+        redshift (the lowest redshift of the prior when redshift is free).
+        Default: ``"auto"``.
     calibration_order : int
         Order of multiplicative Chebyshev calibration polynomial.
         0 = no calibration (default). Order N adds N free params
@@ -135,6 +146,30 @@ class Spectroscopy:
     Used by SEDModel to configure spectral prediction and by the inference
     engine to set up calibration priors.
 
+    **Pixel values.** A pixel records the mean of the spectrum over its edges.
+    A point sample equals that mean only where the model is smooth across the
+    pixel; for a Gaussian line of sigma = 1 Angstrom in 2 Angstrom pixels it
+    reads 13.7 % high at the line center, and an unresolved line 166 % high.
+    The pixel mean of the model is exact for a model that is linear between
+    its nodes and is continuous, with a continuous derivative in redshift.
+    In the pixel-mean modes the kinematic and Gaussian instrument broadening
+    act on the model grid and the mean over the pixel is taken last; a banded
+    resolution matrix acts on the pixels. The point mode resamples first. What a point
+    sample leaves wrong on pixels wider than the model grid, as a fraction of
+    the line peak: 3-13 % for 2 Angstrom pixels (up to 40 % for narrow lines),
+    17-100 % for a prism (R = 100), and 2-33 % in integrated line flux.
+
+    **Other codes.** BAGPIPES resamples its model spectrum onto the observed
+    pixels with SpectRes, a flux-conserving bin integral
+    (``bagpipes/models/model_galaxy.py``, ``spectres.spectres``); with a
+    resolution curve it first resamples onto a grid oversampled by 4 per
+    resolution FWHM, disperses there, and integrates onto the pixels last.
+    Prospector
+    smooths the model on its own grid and then interpolates at the pixel
+    wavelengths (``sedpy.smoothing.smoothspec`` with ``outwave``, called from
+    ``prospect/models/sedmodel.py``), a point sample. SpectRes: Carnall (2017),
+    arXiv:1705.05165.
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -151,7 +186,7 @@ class Spectroscopy:
     sigma_lib_kms: float = 70.0
     lsf_n_bins: int = 16
     calibration_order: int = 0
-    resample: str = "point"
+    resample: str = "auto"
     eline_prior_sigma: float = 100.0
     eline_mode: str = "off"
     eline_catalog: object | None = dataclasses.field(default=None, hash=False)
@@ -339,43 +374,50 @@ class Spectroscopy:
         """
         return len(self.wave_obs)
 
-    def resolve_conserving(self, wave_rest_model, z_ref: float = 0.0) -> bool:
-        """Resolve the ``resample`` mode to a flux-conserving flag (#1166).
+    def resolve_conserving(self, wave_rest_model, z_ref: float = 0.0, wave_obs=None) -> bool:
+        """Resolve the ``resample`` mode to a flux-conserving flag (#1166, #2530).
 
         ``"point"`` maps to ``False`` and ``"conserving"`` to ``True``. ``"auto"``
-        returns ``True`` only when the observed pixels are coarse enough that point
-        interpolation would skip model bins, the median rest-frame pixel spacing
-        exceeds the median model-grid spacing over their overlap, evaluated at
-        ``z_ref`` (pass the lowest redshift in the prior, the worst case for
-        under-sampling). A pure-Python decision made once before tracing, so the
-        forward branch stays static.
+        returns ``True`` when, anywhere in the overlap of the pixels and the
+        model, a pixel is wider than the model-grid interval it falls in: there
+        a point sample skips model structure that the pixel integral keeps.
+        Where every pixel is at least as fine as the model the two modes agree
+        to the interpolation error of the model itself, so the decision is
+        made per pixel, not from a median spacing that a grid with a coarse
+        and a fine region would hide. Every path that turns a model into
+        pixels calls this one function, so they cannot disagree.
+
+        The decision is evaluated in the model's rest frame: the observed pixels
+        are divided by ``1 + z_ref``. It is a pure-Python decision made once
+        before tracing, so the forward branch stays static.
 
         Parameters
         ----------
         wave_rest_model : array_like, shape (n_wave,)
-            Rest-frame model wavelength grid [Angstrom].
+            Rest-frame model wavelength grid [Angstrom], increasing.
         z_ref : float, optional
             Redshift at which observed pixels are mapped to the rest frame.
-            Default 0.0.
+            Pass the fixed redshift, or the lowest redshift of the prior when
+            redshift is free (the coarsest rest-frame pixels). Default 0.0.
+        wave_obs : array_like, shape (n_pix,), optional
+            Pixel grid actually being evaluated, when it is not the configured
+            one. A traced grid cannot be inspected and the configured grid is
+            used instead. Default ``None`` (the configured grid).
 
         Returns
         -------
         bool
             Whether to use the flux-conserving resample.
-        """
-        if self.resample != "auto":
-            return self.resample == "conserving"
-        import numpy as np
 
-        wr = np.asarray(wave_rest_model)
-        wq = np.asarray(self.wave_obs) / (1.0 + float(z_ref))
-        lo = max(float(wq.min()), float(wr.min()))
-        hi = min(float(wq.max()), float(wr.max()))
-        qm = (wq >= lo) & (wq <= hi)
-        mm = (wr >= lo) & (wr <= hi)
-        if int(qm.sum()) < 2 or int(mm.sum()) < 2:
-            return False
-        return bool(np.median(np.diff(wq[qm])) > np.median(np.diff(wr[mm])))
+        Raises
+        ------
+        ValueError
+            If ``resample="conserving"`` on a pixel grid that is not strictly
+            increasing (overlapping camera seams); the bin integral needs bin
+            edges that increase. ``"auto"`` point-samples such a grid.
+        """
+        grid = self.wave_obs if wave_obs is None or _is_traced(wave_obs) else wave_obs
+        return resolve_resample_mode(self.resample, grid, wave_rest_model, z_ref)
 
     @property
     def has_covariance(self) -> bool:
@@ -968,6 +1010,120 @@ class Spectroscopy:
         if self.has_covariance:
             parts.append("cov_matrix")
         return ", ".join(parts)
+
+
+def resolve_resample_mode(mode: str, wave_obs, wave_rest_model, z_ref: float = 0.0) -> bool:
+    """Resolve a ``resample`` mode to a flux-conserving flag (#2530).
+
+    The single decision behind :meth:`Spectroscopy.resolve_conserving` and every
+    other path that turns a model into pixels without a ``Spectroscopy``.
+
+    Parameters
+    ----------
+    mode : {"point", "conserving", "auto"}
+        Resample mode.
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame pixel centers [Angstrom].
+    wave_rest_model : array_like, shape (n_wave,)
+        Rest-frame model wavelength grid [Angstrom], increasing.
+    z_ref : float, optional
+        Redshift at which the pixels are mapped to the rest frame. Default 0.0.
+
+    Returns
+    -------
+    bool
+        Whether to use the flux-conserving bin integral.
+
+    Raises
+    ------
+    ValueError
+        If ``mode`` is unknown, or ``"conserving"`` is requested on a pixel grid
+        that is not strictly increasing (``"auto"`` point-samples such a grid).
+    """
+    if mode not in ("point", "conserving", "auto"):
+        raise ValueError(f"resample must be one of ('point', 'conserving', 'auto'), got {mode!r}")
+    if mode == "point":
+        return False
+    w_obs = np.asarray(wave_obs, dtype=np.float64)
+    increasing = bool(np.all(np.diff(w_obs) > 0.0))
+    if mode == "auto" and not increasing:
+        # Overlapping camera seams have no pixel edges to integrate between:
+        # "auto" point-samples such a grid, "conserving" refuses it below.
+        return False
+    if mode == "conserving":
+        conserving = True
+    else:
+        conserving = _pixels_coarser_than_model(
+            w_obs / (1.0 + float(z_ref)), np.asarray(wave_rest_model, dtype=np.float64)
+        )
+    if conserving and not increasing:
+        raise ValueError(
+            f"resample={mode!r} selects the flux-conserving bin integral, which needs a "
+            "strictly increasing pixel grid, but wave_obs decreases where segments "
+            "overlap. Use resample='point' (#2530)."
+        )
+    return conserving
+
+
+def _is_traced(x) -> bool:
+    """Whether ``x`` is a JAX tracer (a value that cannot be inspected before tracing)."""
+    return isinstance(x, jax.core.Tracer)
+
+
+def static_redshift(z) -> float:
+    """Return ``z`` as a Python float, or 0.0 when it is traced (#2530).
+
+    The resample decision is made before tracing, so a traced redshift cannot
+    enter it; the lowest redshift (the coarsest rest-frame pixels) is the
+    conservative stand-in.
+
+    Parameters
+    ----------
+    z : float or array_like
+        Redshift, concrete or traced.
+
+    Returns
+    -------
+    float
+        ``float(z)``, or 0.0 for a tracer or a non-scalar.
+    """
+    try:
+        return float(z)
+    except TypeError:
+        return 0.0
+
+
+def _pixels_coarser_than_model(wave_rest_pix, wave_rest_model) -> bool:
+    """Whether any pixel in the overlap is wider than the model interval under it.
+
+    Parameters
+    ----------
+    wave_rest_pix : ndarray, shape (n_pix,)
+        Pixel centers in the model's rest frame [Angstrom].
+    wave_rest_model : ndarray, shape (n_wave,)
+        Model wavelength grid [Angstrom], increasing.
+
+    Returns
+    -------
+    bool
+        True if some pixel (edge to edge, the midpoints between neighboring
+        centers) is wider than the model-grid interval containing its center.
+    """
+    if wave_rest_pix.size < 2 or wave_rest_model.size < 2:
+        return False
+    mid = 0.5 * (wave_rest_pix[1:] + wave_rest_pix[:-1])
+    lo = wave_rest_pix[0] - 0.5 * (wave_rest_pix[1] - wave_rest_pix[0])
+    hi = wave_rest_pix[-1] + 0.5 * (wave_rest_pix[-1] - wave_rest_pix[-2])
+    width = np.abs(np.diff(np.concatenate([[lo], mid, [hi]])))
+    inside = (wave_rest_pix >= wave_rest_model[0]) & (wave_rest_pix <= wave_rest_model[-1])
+    if not np.any(inside):
+        return False
+    idx = np.clip(
+        np.searchsorted(wave_rest_model, wave_rest_pix, side="right") - 1,
+        0,
+        wave_rest_model.size - 2,
+    )
+    return bool(np.any(width[inside] > np.diff(wave_rest_model)[idx][inside]))
 
 
 _SPECTROSCOPY_CACHE_KEY_POLICY: KeyPolicy = {

@@ -402,6 +402,10 @@ class WavePrecomp:
             in those cases: a mode named by the caller is never silently
             downgraded.
 
+        ``"auto"`` resolves at build time; the fold actually built is reported
+        under ``precompute_engagement_report(model).observed_facts["igm_fold"]``
+        (``None`` when no fold was built).
+
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
@@ -1563,7 +1567,7 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
 def _validate_firrc_requires_dust(spec) -> None:
     """Raise if any FIRRC radio block is enabled without a dust component (#2106).
 
-    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    The FIRRC models (bell2003, bell2003_split, delvecchio2021, mccheyne2022) in the radio
     component normalize their synchrotron luminosity against L_ir, the dust-absorbed
     stellar luminosity published by the dust component. Without a dust component,
     L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
@@ -1576,7 +1580,7 @@ def _validate_firrc_requires_dust(spec) -> None:
     Raises
     ------
     ConfigError
-        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        If any FIRRC mode (bell2003, bell2003_split, delvecchio2021, mccheyne2022) is selected
         for radio_sfr_mode and dust is disabled.
 
     See Also
@@ -1593,7 +1597,7 @@ def _validate_firrc_requires_dust(spec) -> None:
 
     # Check if any FIRRC mode is active
     sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
-    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+    if sfr_mode not in ("bell2003", "bell2003_split", "delvecchio2021", "mccheyne2022"):
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
@@ -1611,6 +1615,63 @@ def _validate_firrc_requires_dust(spec) -> None:
             "or (2) use a dust-independent radio block such as powerlaw or dpl "
             "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
             "See issue #2106."
+        )
+
+
+def _upper_support(spec, name: str) -> float | None:
+    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
+    dists = getattr(spec, "_distributions", {})
+    dist = dists.get(name)
+    if dist is None:
+        return None
+    if dist.is_fixed:
+        value = dist.value
+        return float(value) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[1])
+
+
+def _validate_radio_q_total_support(spec) -> None:
+    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+
+    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
+    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
+    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
+    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
+    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
+    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
+    non-thermal term) or to the other star-formation radio modes.
+
+    Raises
+    ------
+    ConfigError
+        If the support of ``radio_q_ir`` reaches the limit at the support of the
+        electron temperature.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    q_hi = _upper_support(spec, "radio_q_ir")
+    t_hi = _upper_support(spec, "radio_T_e")
+    a_hi = _upper_support(spec, "radio_alpha_ff")
+    if q_hi is None or t_hi is None or a_hi is None:
+        return
+    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.config.exceptions import ConfigError
+
+    q_star = radio_q_total_limit(t_hi, a_hi)
+    if q_hi > q_star:
+        raise ConfigError(
+            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
+            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
+            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
+            "total minus the Murphy+2011 free-free luminosity, "
+            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
+            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
+            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
+            "term alone."
         )
 
 
@@ -2128,7 +2189,7 @@ def _fold_igm_into_subbands(
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
-        return _fold_igm_exact_into_subbands(
+        result = _fold_igm_exact_into_subbands(
             igm_comp,
             stellar_state,
             ssp_data,
@@ -2137,31 +2198,39 @@ def _fold_igm_into_subbands(
             lyc_gate=lyc_gate,
             convention=convention,
         )
+        built = result is not stellar_state
+        return _replace(result, igm_fold_resolved=igm_fold if built else None)
 
     # Default: node fold (fast, exact for smooth transmission)
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+            igm_fold_resolved=igm_fold,
         )
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
     if ztable is not None and ztable.ssp_subband_phot_table is not None:
         trans = igm_comp.subband_node_transmission(ztable.subband_waves_rest_table, ztable.z_grid)
         if trans is None:
-            return stellar_state
+            # Patchy / DLA: nothing to fold at build time; the node fold runs
+            # live on the sub-band nodes at every call (#1149).
+            return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
             ssp_phot_ztable=ztable._replace(
                 ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
             ),
+            igm_fold_resolved=igm_fold,
         )
 
-    return stellar_state
+    return _replace(stellar_state, igm_fold_resolved=None)
 
 
 #: Accepted ``csp_integration`` values. All are equivalent (#1500): the stellar
@@ -2608,24 +2677,45 @@ class SEDModel:
         else:
             self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
-            # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
-            # pixel grid at build time, so it does NOT honor a flux-conserving
-            # resample. Warn rather than silently ignore the request, the exact
-            # path (approx=None) carries the conserving low-resolution fix.
-            spectro = getattr(observation, "spectroscopy", None)
-            if spectro is not None and getattr(spectro, "resample", "point") != "point":
-                import numpy as _np
+            if self._spectrum_lut_needs_pixel_integral(observation):
+                raise ValueError(
+                    f"approx=SpectrumPrecomp() samples the model at the pixel "
+                    f"centers, but resample="
+                    f"{observation.spectroscopy.resample!r} resolves to the "
+                    f"flux-conserving pixel integral for this model grid and "
+                    f"pixel grid (pixels wider than the model grid), which the LUT "
+                    f"cannot carry (#2530). Use approx=None for the exact "
+                    f"spectrum, or Spectroscopy(resample='point') to accept point "
+                    f"sampling."
+                )
 
-                if spectro.resolve_conserving(_np.asarray(self.ssp_data.ssp_wave)):
-                    import warnings
+    def _spectrum_lut_needs_pixel_integral(self, observation) -> bool:
+        """Whether the spectrum channel resolves to the pixel integral (#2530).
 
-                    warnings.warn(
-                        f"resample={spectro.resample!r} requests a flux-conserving "
-                        f"resample, but approx=SpectrumPrecomp() point-interpolates the "
-                        f"SSP onto the pixel grid and does not apply it. Use approx=None "
-                        f"for the flux-conserving low-resolution spectrum (#1166).",
-                        stacklevel=3,
-                    )
+        The spectrum LUT evaluates every component (attenuation, nebular lines,
+        AGN) at the pixel center, so it cannot carry a pixel integral; when the
+        resample decision is the bin integral the LUT would return point
+        samples.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        bool
+            True if the LUT must not serve this spectrum channel.
+        """
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None:
+            return False
+        import numpy as _np
+
+        grid = getattr(self, "_rest_wavelength", None)
+        if grid is None:
+            grid = self.ssp_data.ssp_wave
+        return bool(spectro.resolve_conserving(_np.asarray(grid), self._resample_z_ref()))
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -2828,7 +2918,11 @@ class SEDModel:
             and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
         ):
             self._approx = self._approx.replace(wave_precomp=True)
-            self._approx = self._approx.replace(spectrum_precomp=True)
+            # The spectrum channel is promoted onto its LUT only when that LUT
+            # can serve it: pixels wider than the model grid stay on the exact
+            # path (#2530).
+            if not self._spectrum_lut_needs_pixel_integral(observation):
+                self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
@@ -3695,6 +3789,8 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
             dust_screens=getattr(spec, "dust_screens", ()),
+            dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
+            dust_law_neb=getattr(spec, "dust_law_neb", None),
         )
 
     def _init_metallicity(self, spec):
@@ -3988,10 +4084,16 @@ class SEDModel:
         self._dust_lyman_cutoff_aa = float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0)
         # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) vs the
         # default young/birth-cloud-only (bagpipes). See DustSEDComponent.
-        self._dust_lyc_absorb_all = bool(getattr(spec, "dust_lyc_absorb_all", False))
+        self._dust_lyc_reprocessed_by = str(getattr(spec, "dust_lyc_reprocessed_by", "young"))
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
-        self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
+        self._dust_lyc_in_energy_balance = bool(getattr(spec, "dust_lyc_in_energy_balance", False))
+        # Age-selective LyC escape geometry (#2529). See DustSEDComponent.
+        self._dust_lyc_escape_geometry = str(getattr(spec, "dust_lyc_escape_geometry", "screened"))
+        # Young/old split: birth-cloud dispersal age [yr] and the dispersal width
+        # [dex] of every age edge (0 = hard step). See stellar/age_boundary.py.
+        self._dust_t_birth_yr = float(getattr(spec, "dust_t_birth_yr", 1e7))
+        self._dust_transition_width_dex = float(getattr(spec, "dust_transition_width_dex", 0.0))
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
@@ -4120,7 +4222,11 @@ class SEDModel:
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
                     delta[name] = (name, 1.0, 0.0)
-            self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+            self._nebular_backend = CueBackend(
+                spec.cue_weights_path,
+                ssp_data=ssp_data,
+                nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+            )
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
 
@@ -4602,6 +4708,8 @@ class SEDModel:
         from tengri.forward.wavelength_extension import collect_native_wavelength_grids
         from tengri.utils.wavelength import (
             RADIO_WAVE_MAX,
+            RADIO_WING_PTS_PER_DECADE,
+            RADIO_WING_START,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -4630,14 +4738,18 @@ class SEDModel:
             )
 
         if self._uses_radio:
-            # Pick the longest wavelength reached by any template; extend the
-            # radio wing past that point so the synchrotron tail has node
-            # coverage even when dust templates don't already cover it.
+            # The wing starts at the end of the longest template, or at
+            # ``RADIO_WING_START`` if that comes first, and runs to
+            # ``RADIO_WAVE_MAX`` at ``RADIO_WING_PTS_PER_DECADE``: a template that
+            # reaches into the radio (a CIGALE Dale grid ends at 2.2e9 A) must not
+            # leave a radio band one sparse node of its own, and the synchrotron tail
+            # has node coverage even when no template reaches it. The union
+            # deduplicates the overlap.
             template_max = max((float(g.max()) for g in component_grids), default=ssp_max)
-            radio_min = max(template_max, ssp_max)
+            radio_min = min(max(template_max, ssp_max), RADIO_WING_START)
             if radio_min < RADIO_WAVE_MAX:
                 n_dec = np.log10(RADIO_WAVE_MAX) - np.log10(radio_min)
-                n_pts = max(int(n_dec * 20), 2)
+                n_pts = max(round(n_dec * RADIO_WING_PTS_PER_DECADE) + 1, 2)
                 extra_wings.append(
                     np.logspace(
                         np.log10(radio_min),
@@ -5388,7 +5500,54 @@ class SEDModel:
             "lsf_sigma_lib_curve": self._sigma_lib_curve_for(self.ssp_data),
             "lsf_n_bins": self._lsf_n_bins,
             "lsf_scale": self._get_lsf_scale(params),
+            "resample_z_ref": self._resample_z_ref(),
         }
+
+    def _spectrum_resample_decision(self) -> bool | None:
+        """The static point-vs-pixel-integral decision of the spectrum channel (#2530).
+
+        ``resample="auto"`` depends on the redshift and the model grid as well as
+        on the pixels, so the resolved flag (not just the mode string) must key
+        the compiled kernel: two models with identical pixels but different
+        redshifts may resolve differently.
+
+        Returns
+        -------
+        bool or None
+            ``True`` for the bin integral, ``False`` for point sampling,
+            ``None`` when there is no spectroscopy channel.
+        """
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is None:
+            return None
+        return spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref())
+
+    def _resample_z_ref(self) -> float:
+        """Redshift at which ``resample="auto"`` is decided (#2530).
+
+        The fixed redshift when redshift is fixed; the lowest redshift of the
+        prior when it is free (the coarsest rest-frame pixels, where a point
+        sample is worst). Every path that turns the model into pixels passes
+        this to :meth:`Spectroscopy.resolve_conserving`, so they all reach the
+        same decision.
+
+        Returns
+        -------
+        float
+            Reference redshift (>= 0).
+        """
+        try:
+            d = self.spec.get_distribution("redshift")
+        except (AttributeError, KeyError):
+            d = None
+        if d is None:
+            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+        if getattr(d, "is_fixed", False):
+            return max(0.0, float(d.value))
+        lo = getattr(d, "lo", None)
+        return max(0.0, float(lo)) if lo is not None else 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -6276,6 +6435,7 @@ class SEDModel:
             tail=(
                 ("x64", bool(jax.config.jax_enable_x64)),
                 ("backend", jax.default_backend()),
+                ("spec_resample_conserving", self._spectrum_resample_decision()),
             ),
         )
         self._signature_memo = signature
@@ -6657,7 +6817,7 @@ class SEDModel:
         # grid is fixed, so this is a Python bool baked into the trace, not a
         # branch on the sampled redshift.
         conserving = (
-            spectroscopy.resolve_conserving(self.wavelengths)
+            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
             if spectroscopy is not None
             else False
         )
@@ -6821,10 +6981,37 @@ class SEDModel:
             return line_lums
         from tengri.utils.scale import log10_magnitude, pow10
 
+        extra = ()
+        if getattr(component, "needs_nebular_interval_weights", False):
+            extra = (self._nebular_interval_weights(params),)
         log_atten = component.attenuate_line_catalog(
-            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums))
+            params, jnp.asarray(line_waves), log10_magnitude(jnp.asarray(line_lums)), *extra
         )
         return pow10(log_atten)
+
+    def _nebular_interval_weights(self, params):
+        """Share of the ionizing luminosity produced in each age interval, no ForwardState.
+
+        The stateless twin of what an age-split attenuator's ``apply`` computes
+        from stellar's published ``age_boundary_younger_fraction`` and
+        ``log_L_lyc_age``: the nebular lines are lit by stars of every age, so
+        their screen weighs the age intervals by this share. ``params`` is the
+        merged evaluation dict.
+        """
+        from tengri.components.dust._age_mixture import (
+            interval_fractions,
+            ionizing_interval_weights,
+        )
+
+        chain = getattr(self, "_cached_component_chain", None) or self._build_component_chain()
+        stellar = next(c for c in chain if c.name == "stellar")
+        # A caller may hand free-only or already-merged params; fill the Fixed
+        # values in underneath either (the stellar methods read redshift, Z, ...).
+        full = {**dict(self.spec.get_fixed_values()), **dict(params)}
+        return ionizing_interval_weights(
+            interval_fractions(stellar.compute_age_boundary_fractions(full)),
+            stellar.compute_log_L_lyc_age(full),
+        )
 
     def _line_igm_component(self):
         """The chain's IGM component (``name`` "igm"), or ``None`` (#2520).
@@ -7481,7 +7668,7 @@ class SEDModel:
           shape, WG00, or a free redshift with a redshift-reading law) cannot take
           the nebular from the grid; the grid serves line fluxes only while photometry
           takes the exact nebular path.
-        * The grid applies ``neb_fesc`` and ``neb_fdust`` at reconstruction
+        * The grid applies ``neb_fesc`` and ``neb_fdust_frac`` at reconstruction
           (computed per-galaxy from parameters), not at table build (which uses
           zero for both); every other free nebular parameter held at the build
           value (``neb_fesc_lya``, ``ionspec_*``, ``gas_*``, ``neb_eline_sigma_kms``,
@@ -7762,8 +7949,9 @@ class SEDModel:
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
             per evaluation (measured, wNE grid) and bit-exact for the supported
-            configuration, **stellar + two-component (or no) dust + baked-in
-            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            configuration (a Lick equivalent width is evaluated at the window
+            grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
+            baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
@@ -7788,6 +7976,10 @@ class SEDModel:
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
+        The spectrum is :math:`L_\\nu`; a Lick equivalent width converts it to
+        :math:`F_\\lambda` and builds the sideband straight-line pseudo-continuum
+        (Trager et al. 1998, ApJS 116, 1, Eqs. 1-3; see
+        :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
@@ -8030,16 +8222,23 @@ class SEDModel:
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
         joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
         scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+        younger_fraction = (
+            stellar.compute_age_boundary_fractions(full_params)
+            if stellar.config.age_boundaries_yr
+            else None
+        )
 
         pc = self._index_window_precomp(index_defs)
 
-        # per-age transmission at the window centers, from the model's own dust
+        # per-age transmission at every window grid point, from the model's own dust
         # (single-sourced with the forward), or unity when there is no dust.
         dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
         if dust is None:
-            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
         else:
-            transmission = dust.compute_transmission(full_params, pc.window_centers, ssp_ages_yr)
+            transmission = dust.compute_transmission(
+                full_params, pc.points.waves, younger_fraction
+            )
 
         values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
 
@@ -8314,10 +8513,12 @@ class SEDModel:
             pc = self._line_window_precomp(line_defs)
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
-                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
             else:
                 transmission = dust.compute_transmission(
-                    full_params, pc.window_centers, ssp_ages_yr
+                    full_params,
+                    pc.points.waves,
+                    stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
                 joint_weights, total_mass, transmission, pc, log10_4pi_dl2
@@ -9912,6 +10113,7 @@ class SEDModel:
         lsf_resolution = self._lsf_resolution
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
+        resample_z_ref = self._resample_z_ref()
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -9998,6 +10200,7 @@ class SEDModel:
                     lsf_sigma_lib_curve=sigma_lib_curve,
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
+                    resample_z_ref=resample_z_ref,
                     observables_type=observables_type,
                 )
             if use_lut:
@@ -10440,12 +10643,12 @@ class SEDModel:
                         f"{None if grid_tab is None else jnp.shape(grid_tab)} vs "
                         f"{jnp.shape(grid_lut)}."
                     )
-            if bool(table.eb_include_lyc) != (_lyc_cutoff_for(dust_c) is None):
-                table_lyc = bool(table.eb_include_lyc)
+            if bool(table.lyc_in_energy_balance) != (_lyc_cutoff_for(dust_c) is None):
+                table_lyc = bool(table.lyc_in_energy_balance)
                 dust_lyc = _lyc_cutoff_for(dust_c) is None
                 raise RuntimeError(
-                    f"nebular grid table was built with eb_include_lyc={table_lyc} "
-                    f"but the dust component has eb_include_lyc={dust_lyc}; "
+                    f"nebular grid table was built with lyc_in_energy_balance={table_lyc} "
+                    f"but the dust component has lyc_in_energy_balance={dust_lyc}; "
                     f"rebuild the table with enable_fast_nebular()"
                 )
             # Build flagged chain with both fields set
@@ -10514,6 +10717,7 @@ class SEDModel:
             build_energy_balance_lut_over_z,
         )
         from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
 
         lut = None
         dust = next(
@@ -10591,45 +10795,35 @@ class SEDModel:
                 # (#922: LyC photons ionize H rather than heat dust). Baking a
                 # different cutoff here than DustAttenuationSEDComponent.apply()
                 # uses is what made the LUT disagree with the exact integral.
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
                 lyman_cutoff_aa = dust.config.lyman_cutoff_aa
 
-                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
-
                 z_nodes = self._energy_balance_z_nodes((law,), 1, tau_v_grid.shape[0])
+                single_kwargs = dict(
+                    law_bc=law,
+                    law_diff=law,
+                    f_obscuration=0.0,
+                    single_population=True,
+                    lyman_cutoff_aa=lyman_cutoff_aa,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
+                    tau_bc_grid=jnp.asarray([0.0]),
+                    tau_diff_grid=tau_v_grid,
+                )
                 if z_nodes is None:
                     lut = build_energy_balance_lut(
                         jnp.asarray(self.ssp_data.ssp_flux),
                         jnp.asarray(self.ssp_data.ssp_wave),
-                        jnp.asarray(ssp_ages_yr),
-                        law_bc=law,
-                        law_diff=law,
-                        f_obscuration=0.0,
-                        t_birth_yr=1e7,
-                        transition_width_dex=0.3,
                         bc_params={k: float(v) for k, v in dust_params.items()},
                         diff_params={k: float(v) for k, v in dust_params.items()},
-                        lyman_cutoff_aa=lyman_cutoff_aa,
-                        eb_include_lyc=eb_include_lyc,
-                        tau_bc_grid=jnp.asarray([0.0]),
-                        tau_diff_grid=tau_v_grid,
+                        **single_kwargs,
                     )
                 else:
                     lut = build_energy_balance_lut_over_z(
                         jnp.asarray(self.ssp_data.ssp_flux),
                         jnp.asarray(self.ssp_data.ssp_wave),
-                        jnp.asarray(ssp_ages_yr),
                         ln1pz=z_nodes,
                         params_at_z=lambda z: (_single_params(z), _single_params(z)),
-                        law_bc=law,
-                        law_diff=law,
-                        f_obscuration=0.0,
-                        t_birth_yr=1e7,
-                        transition_width_dex=0.3,
-                        lyman_cutoff_aa=lyman_cutoff_aa,
-                        eb_include_lyc=eb_include_lyc,
-                        tau_bc_grid=jnp.asarray([0.0]),
-                        tau_diff_grid=tau_v_grid,
+                        **single_kwargs,
                     )
             else:
                 # Two-component dust: existing logic
@@ -10647,9 +10841,36 @@ class SEDModel:
                 bc_params, diff_params = _two_params(fixed.get("redshift"))
                 law_bc = dust.config.law_bc
                 law_diff = dust.config.law_diff
-                t_birth_yr = dust.config.t_birth_yr
-                transition_width_dex = dust.config.transition_width_dex
-                eb_include_lyc = dust.config.eb_include_lyc
+                lyc_in_energy_balance = dust.config.lyc_in_energy_balance
+
+                # #2539 item 1: the LUT's stellar B/G terms
+                # (energy_balance_precompute.build_energy_balance_lut) are
+                # integrated from the raw SSP cube alone -- on their own they
+                # carry no nebular-fesc dependence, unlike
+                # DustSEDComponent.apply()'s exact path, which reads the SAME
+                # per-age, gas-reprocessed population ``sed_attenuated``
+                # attenuates (see the §2a/§3 comments in two_component.py).
+                # ``neb_fesc`` can be a runtime FREE parameter, so that
+                # per-age masking cannot be baked into a build-time LUT the
+                # way (tau_bc, tau_diff) are -- but the absorbed integral IS
+                # affine in fesc (A(fesc) = A_0 + fesc*A_1), so build the
+                # SECOND (fesc-linear) B/G family instead of declining the
+                # LUT outright: ``lut_l_absorbed_stellar_log10`` then combines
+                # it with the runtime fesc exactly, no approximation. Only
+                # worth the extra build-time cost when a live photoionized
+                # nebular component is in the chain (BakedIn/no-nebular
+                # models never publish ``lyc_transmission``/``lyc_fesc``, so
+                # the runtime fesc combine is a no-op there regardless) and
+                # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
+                # place (otherwise B/G alone are already exact, LyC-masked
+                # out unconditionally).
+                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "mappings")
+                _live_neb = any(
+                    isinstance(c, NebularSEDComponent)
+                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    for c in chain
+                )
+                _fesc_exact = lyc_in_energy_balance and _live_neb
 
                 def _grid(name):
                     if name in free:
@@ -10668,32 +10889,27 @@ class SEDModel:
                 lut = build_energy_balance_lut_over_z(
                     jnp.asarray(self.ssp_data.ssp_flux),
                     jnp.asarray(self.ssp_data.ssp_wave),
-                    jnp.asarray((10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9),
                     ln1pz=z_nodes,
                     params_at_z=_two_params,
                     law_bc=law_bc,
                     law_diff=law_diff,
                     f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                    t_birth_yr=t_birth_yr,
-                    transition_width_dex=transition_width_dex,
                     lyman_cutoff_aa=getattr(dust.config, "lyman_cutoff_aa", 0.0),
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
                     tau_diff_grid=tau_diff_grid,
+                    fesc_exact=_fesc_exact,
+                    lyc_reprocessed_by=dust.config.lyc_reprocessed_by,
+                    lyc_escape_geometry=dust.config.lyc_escape_geometry,
                 )
             elif not is_single_component:
                 # Two-component: use the standard LUT builder
-                ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
-
                 lut = build_energy_balance_lut(
                     jnp.asarray(self.ssp_data.ssp_flux),
                     jnp.asarray(self.ssp_data.ssp_wave),
-                    jnp.asarray(ssp_ages_yr),
                     law_bc=law_bc,
                     law_diff=law_diff,
                     f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
-                    t_birth_yr=t_birth_yr,
-                    transition_width_dex=transition_width_dex,
                     bc_params={k: float(v) for k, v in bc_params.items()},
                     diff_params={k: float(v) for k, v in diff_params.items()},
                     lyman_cutoff_aa=(
@@ -10701,9 +10917,12 @@ class SEDModel:
                         if hasattr(dust.config, "lyman_cutoff_aa")
                         else 0.0
                     ),
-                    eb_include_lyc=eb_include_lyc,
+                    lyc_in_energy_balance=lyc_in_energy_balance,
                     tau_bc_grid=tau_bc_grid,
                     tau_diff_grid=tau_diff_grid,
+                    fesc_exact=_fesc_exact,
+                    lyc_reprocessed_by=dust.config.lyc_reprocessed_by,
+                    lyc_escape_geometry=dust.config.lyc_escape_geometry,
                 )
 
         self._energy_balance_lut_cache = lut
@@ -11247,6 +11466,44 @@ class SEDModel:
             | per_screen_reads
         )
 
+    def _fdust_credit_active(self) -> bool:
+        """Whether the HII-region dust-heating credit (#2539 item 3) can be nonzero.
+
+        Returns
+        -------
+        bool
+            ``True`` when ``neb_fdust_frac`` is a FREE parameter (its value
+            can move away from 0 during fitting, so the smooth combine's
+            nonzero gradient at ``f_dust == 0`` is needed) or Fixed at a
+            value other than exactly 0. ``False`` when it is Fixed at
+            exactly 0 -- the registry default -- or not declared at all
+            (BakedIn backend, whose ``declared_parameters()`` is empty, or
+            no nebular component built at all, ``nebular_backend=None``):
+            in both of those cases the credit is structurally zero for
+            every possible evaluation of this model, not merely at the
+            current parameter vector.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time provenance lookup, the same
+        value-aware shape as ``_warn_agn_dust_double_count``'s
+        ``_positive_active`` helper: a free parameter counts as active
+        unconditionally (its value is not yet known), a Fixed parameter
+        counts only if its value is nonzero. Threaded into
+        ``WG00AttenuationSEDComponentConfig`` /
+        ``DustAttenuationSEDComponentConfig`` / ``DustSEDComponentConfig``'s
+        ``fdust_credit_active`` field (one decision point, computed once,
+        not re-derived per consumer) so ``apply()`` can skip forming
+        ``energy_balance.log10_add_fdust_credit`` entirely via a static
+        Python ``if`` -- never a runtime ``where`` on the traced value of
+        ``f_dust``.
+        """
+        free = set(self.spec.free_params)
+        if "neb_fdust_frac" in free:
+            return True
+        fixed = self.spec.get_fixed_values()
+        return float(fixed.get("neb_fdust_frac", 0.0)) != 0.0
+
     def _requested_dust_log_L_ir(self) -> bool:
         """Whether the caller declared ``dust_log_L_ir`` (the total dust IR budget override).
 
@@ -11436,10 +11693,14 @@ class SEDModel:
             dust_agn_screen=getattr(self, "_dust_agn_screen", "none"),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
-            dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
-            dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
+            dust_lyc_reprocessed_by=getattr(self, "_dust_lyc_reprocessed_by", "young"),
+            dust_lyc_in_energy_balance=getattr(self, "_dust_lyc_in_energy_balance", False),
+            dust_lyc_escape_geometry=getattr(self, "_dust_lyc_escape_geometry", "screened"),
+            dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
+            dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
+            dust_fdust_credit_active=self._fdust_credit_active(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
             astrodust_f_cnm=float(getattr(self, "_astrodust_f_cnm", 0.28)),
@@ -12267,6 +12528,7 @@ class SEDModel:
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
+        _validate_radio_q_total_support(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

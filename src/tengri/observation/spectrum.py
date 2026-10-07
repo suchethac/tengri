@@ -20,6 +20,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp, ionizing_mask
 from tengri.units import lnu_to_fnu
 
 # ── SSP library spectral resolutions (velocity dispersion in km/s) ──
@@ -645,6 +646,7 @@ def project_spectrum(
     cal_wave_range: tuple[float, float] | None = None,
     conserving: bool = False,
     resolution_matrix: object | None = None,
+    has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -712,6 +714,12 @@ def project_spectrum(
         subtracted on this path (see #2506 follow-up). Default ``None`` (Gaussian
         LSF from ``resolution``). See :func:`~tengri.observation.banded.banded_matvec`.
         #1163.
+    has_lyc_edge : bool, optional
+        ``sed_rest`` carries a Lyman-continuum mask (a photoionized nebular
+        backend published ``lyc_transmission``), so it is a step at the Lyman
+        edge, not a ramp across the model cell straddling it. The resampler
+        then reads the cell with the step model of :mod:`tengri.components.lyc`,
+        as photometry does (#2447). Static. Default ``False``.
 
     Returns
     -------
@@ -780,8 +788,25 @@ def project_spectrum(
 
     # ``conserving`` is a static structural flag (resolved from the ``resample``
     # mode before the trace), so this branch resolves at trace time (#1166).
-    resampler = compute_spectrum_conserving if conserving else compute_spectrum
-    flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
+    if conserving and resolution is not None and resolution_matrix is None:
+        # The detector integrates the light that has already passed through the
+        # line-spread function: broaden on the model grid, then take the pixel
+        # integral (#2530).
+        flux = compute_spectrum_conserving_lsf(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            n_bins=n_bins,
+            sigma_v_kms=sigma_v_kms,
+        )
+        resolution = None
+    else:
+        resampler = compute_spectrum_conserving if conserving else compute_spectrum
+        flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm, has_lyc_edge=has_lyc_edge)
     if resolution_matrix is not None:
         # The banded matrix (DESI/PFS spectro-perfectionism; Bolton & Schlegel 2010)
         # is the *instrument* LSF and replaces the Gaussian apply_lsf (#1163). The
@@ -811,13 +836,14 @@ def project_spectrum(
     return flux
 
 
-@jax.jit
+@partial(jax.jit, static_argnames=("has_lyc_edge",))
 def compute_spectrum(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
     wave_obs: jnp.ndarray,
     redshift: float,
     dl_cm: float,
+    has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     """Compute observed spectrum at arbitrary pixel wavelengths.
 
@@ -838,6 +864,10 @@ def compute_spectrum(
         Source redshift z.
     dl_cm : float
         Luminosity distance [cm].
+    has_lyc_edge : bool, optional
+        Interpolate the model cell straddling the Lyman edge with the step
+        model (:func:`tengri.components.lyc.edge_interp`) instead of a linear
+        ramp. Static. Default ``False``.
 
     Returns
     -------
@@ -864,7 +894,10 @@ def compute_spectrum(
     wave_rest_query = wave_obs / (1.0 + redshift)
 
     # Interpolate rest-frame SED
-    sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
+    if has_lyc_edge:
+        sed_at_pixels = edge_interp(wave_rest_query, wave_rest, sed_rest)
+    else:
+        sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
 
     # Apply the (1+z)/(4π d_L²) dimming to the pixel SED directly. A standalone
     # ``flux_scale = lnu_to_fnu(1.0, ...)`` is ~1e-58 and underflows float32 to
@@ -875,7 +908,10 @@ def compute_spectrum(
 
 
 def _flux_conserving_resample(
-    wave_rest: jnp.ndarray, sed_rest: jnp.ndarray, wave_query: jnp.ndarray
+    wave_rest: jnp.ndarray,
+    sed_rest: jnp.ndarray,
+    wave_query: jnp.ndarray,
+    edge_aa: float | None = None,
 ) -> jnp.ndarray:
     r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
 
@@ -894,9 +930,10 @@ def _flux_conserving_resample(
     (low-resolution spectroscopy, e.g. NIRSpec PRISM) it aliases the sub-pixel
     structure, biasing the integrated continuum. The bin integral does not.
 
-    Implemented as a difference of the cumulative trapezoidal integral evaluated
-    at the bin edges, so it is O(n_wave + n_pix), JIT-compatible, and
-    differentiable w.r.t. ``sed_rest`` (the edges are static; only the SED varies).
+    Implemented as a difference of the exact cumulative integral of the
+    piecewise-linear model evaluated at the bin edges, so it is O(n_wave + n_pix),
+    JIT-compatible, and differentiable w.r.t. ``sed_rest`` and, through the
+    edges, the redshift.
     Outside the model grid the cumulative integral is flat, so out-of-range bins
     contribute zero, matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
 
@@ -908,6 +945,12 @@ def _flux_conserving_resample(
         Rest-frame flux density on ``wave_rest`` [erg/s/Hz].
     wave_query : array, shape (n_pix,)
         Rest-frame pixel-center wavelengths to resample onto [Angstrom].
+    edge_aa : float or None, optional
+        Rest-frame wavelength of a step in the model [Angstrom] (the Lyman
+        edge of an SED carrying a Lyman-continuum mask). The model cell
+        straddling it is integrated as the step of
+        :func:`tengri.components.lyc.edge_interp`, not a linear ramp.
+        ``None`` (default): piecewise linear everywhere.
 
     Returns
     -------
@@ -917,6 +960,20 @@ def _flux_conserving_resample(
     Notes
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes (linear in ``sed_rest``).
+
+    With ``edge_aa`` inside the cell :math:`[\lambda_a, \lambda_b]` of width
+    :math:`h`, with node values :math:`y_a, y_b` and :math:`d = \lambda_e -
+    \lambda_a`, the cumulative integral at :math:`\lambda_a + t` gains the
+    difference between the step and the ramp,
+
+    .. math::
+
+        \Delta(t) = y_a \min(t, d) + y_b \max(t - d, 0)
+                     - y_a t - \frac{(y_b - y_a)\, t^2}{2h},
+        \qquad 0 \le t \le h,
+
+    held at :math:`\Delta(h)` above the cell and zero below it, so the pixel
+    mean is exact for the step model (#2447).
 
     References
     ----------
@@ -928,21 +985,52 @@ def _flux_conserving_resample(
     hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
     edges = jnp.concatenate([lo, mid, hi])  # (n_pix + 1,)
 
-    # Cumulative trapezoidal integral of the model, clamped flat outside the grid.
-    cum = jnp.concatenate(
-        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * jnp.diff(wave_rest))]
+    # Exact cumulative integral of the piecewise-linear model, clamped flat
+    # outside the grid. Inside interval i the integral from its left node is
+    # f_i t + (f_{i+1} - f_i) t^2 / (2 h_i), so its slope is the interpolated
+    # model value and the pixel flux is continuous in the edge position with a
+    # continuous first derivative (a linear interpolation of the node integrals
+    # would leave a slope that jumps each time an edge crosses a node, a step
+    # in the redshift gradient; #2530).
+    h = jnp.diff(wave_rest)
+    node_cum = jnp.concatenate(
+        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * h)]
     )
-    flux_at_edges = jnp.interp(edges, wave_rest, cum)
+    e = jnp.clip(edges, wave_rest[0], wave_rest[-1])
+    i = jnp.clip(jnp.searchsorted(wave_rest, e, side="right") - 1, 0, wave_rest.shape[0] - 2)
+    t = e - wave_rest[i]
+    f0 = sed_rest[i]
+    flux_at_edges = node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
+    if edge_aa is not None:
+        flux_at_edges = flux_at_edges + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
     return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
 
 
-@jax.jit
+def _step_minus_ramp(wave_rest, sed_rest, x, edge_aa):
+    """Cumulative-integral difference, step model minus linear ramp, at ``x``."""
+    n_ion = jnp.sum(ionizing_mask(wave_rest, edge_aa).astype(jnp.int32))
+    has_bracket = (n_ion > 0) & (n_ion < wave_rest.shape[0])
+    ia = jnp.clip(n_ion - 1, 0, wave_rest.shape[0] - 2)
+    lam_a, h = wave_rest[ia], wave_rest[ia + 1] - wave_rest[ia]
+    y_a, y_b = sed_rest[ia], sed_rest[ia + 1]
+    d = edge_aa - lam_a
+    # Position of ``x`` within the cell: 0 below it, h above it.
+    t = jnp.where(x < lam_a, 0.0, jnp.where(x > lam_a + h, h, x - lam_a))
+    # y_a min(t, d) + y_b (t - d)_+ - [y_a t + (y_b - y_a) t^2 / 2h]: only the jump
+    # y_b - y_a survives, times the step's ramp minus the linear ramp's.
+    past_edge = jnp.where(t > d, t - d, 0.0)
+    delta = (y_b - y_a) * (past_edge - 0.5 * t * t / h)
+    return jnp.where(has_bracket, delta, 0.0)
+
+
+@partial(jax.jit, static_argnames=("has_lyc_edge",))
 def compute_spectrum_conserving(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
     wave_obs: jnp.ndarray,
     redshift: float,
     dl_cm: float,
+    has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     """Flux-conserving twin of :func:`compute_spectrum`.
 
@@ -959,11 +1047,76 @@ def compute_spectrum_conserving(
     **JIT-compatible**: yes. **Gradient-safe**: yes.
     """
     wave_rest_query = wave_obs / (1.0 + redshift)
-    sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query)
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query, edge_aa)
     # Dimming applied to the pixel SED directly, not as a standalone flux_scale
     # (~1e-58, which underflows float32 to zero). See _resample_to_spectrum
     # above and #1206.
     return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
+
+
+def compute_spectrum_conserving_lsf(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift: float,
+    dl_cm: float,
+    *,
+    resolution: jnp.ndarray | float,
+    sigma_lib_kms: jnp.ndarray | float = 0.0,
+    n_bins: int = 16,
+    sigma_v_kms: jnp.ndarray | float = 0.0,
+) -> jnp.ndarray:
+    r"""Line-spread function on the model grid, then the pixel integral (#2530).
+
+    A detector pixel records the mean over its edges of the light that has
+    passed through the instrument's line-spread function, so the Gaussian
+    kernel :math:`\sqrt{\sigma_{\rm inst}^2 - \sigma_{\rm lib}^2 + \sigma_v^2}`
+    (see :func:`apply_lsf`) acts on the model before the bin integral of
+    :func:`compute_spectrum_conserving`. The kernel is a Gaussian in
+    :math:`\ln\lambda`, so it is applied on the rest-frame model grid with
+    the resolution and library width read at the observed wavelength
+    :math:`(1+z)\lambda`.
+
+    Parameters
+    ----------
+    sed_rest, wave_rest, wave_obs, redshift, dl_cm
+        As in :func:`compute_spectrum`.
+    resolution : float or array, shape (n_pix,)
+        Resolving power :math:`R(\lambda)` at the pixels; interpolated onto the
+        model grid when an array.
+    sigma_lib_kms : float or array, shape (n_pix,), optional
+        Library velocity dispersion [km/s] (scalar, or per pixel).
+    n_bins : int, optional
+        Piecewise-constant segments of the variable-width kernel.
+    sigma_v_kms : float, optional
+        Intrinsic velocity dispersion [km/s], added in quadrature.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Observed flux density [erg/s/cm^2/Hz] per pixel.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+    """
+    wave_model_obs = wave_rest * (1.0 + redshift)
+
+    def _onto_model(x):
+        x = jnp.asarray(x)
+        return x if x.ndim == 0 else jnp.interp(wave_model_obs, wave_obs, x)
+
+    # An array resolution takes the piecewise path (rest grids are not log-uniform).
+    sed_broad = apply_lsf(
+        sed_rest,
+        wave_rest,
+        _onto_model(resolution),
+        sigma_lib_kms=_onto_model(sigma_lib_kms),
+        n_bins=n_bins,
+        sigma_v_kms=sigma_v_kms,
+    )
+    return compute_spectrum_conserving(sed_broad, wave_rest, wave_obs, redshift, dl_cm)
 
 
 #: Fractional spread in ``d(ln lambda)`` tolerated before a grid is called

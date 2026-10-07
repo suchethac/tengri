@@ -16,6 +16,7 @@ state keys follow the same convention via the typed
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -1458,9 +1459,20 @@ def _predict_observation(
     if not batched_axes:
         return observation.predict(state, params)
 
+    # The pixel-integral decision needs the concrete model grid, which is a
+    # tracer inside the vmap below: make it here, once (#2530).
+    conserving = None
+    if getattr(observation, "can_do_spectroscopy", False):
+        sed = getattr(sub_model, "sed", sub_model)
+        z_ref = sed._resample_z_ref() if hasattr(sed, "_resample_z_ref") else 0.0
+        wave = np.asarray(state.wave)
+        conserving = observation.spectroscopy.resolve_conserving(
+            wave.reshape(-1, wave.shape[-1])[0], z_ref
+        )
+
     # Vmap once per batched axis. ``params`` axes are inferred from
     # the SubModel's parameter_axes when available; otherwise broadcast.
-    predict_fn = observation.predict
+    predict_fn = functools.partial(observation.predict, conserving=conserving)
     if hasattr(sub_model, "parameter_axes"):
         params_axes = sub_model.parameter_axes(params)
     else:

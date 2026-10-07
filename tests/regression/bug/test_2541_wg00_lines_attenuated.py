@@ -269,11 +269,18 @@ class TestClassSweepEveryLineMatchesTheAttenuatorsOwnCurve:
         tau_bc = float(params_on["dust_tau_bc"])
         tau_diff = float(params_on["dust_tau_diff"])
         k = np.asarray(calzetti(line_waves))
-        # Default nebular_screen="birth_cloud": _screen_transmission's
-        # birth_cloud branch is f_obsc + (1-f_obsc)*exp(-(tau_bc*k_bc +
-        # tau_diff*k_diff)); dust_f_obscuration defaults to 0, and law_bc ==
-        # law_diff == calzetti here, so k_bc == k_diff == k.
-        expected = np.exp(-(tau_bc + tau_diff) * k)
+        # Default nebular screen: the mixture of the two age intervals' screens,
+        # weighted by each interval's share q of the ionizing luminosity --
+        # q*exp(-(tau_bc + tau_diff)*k) + (1-q)*exp(-tau_diff*k); dust_f_obscuration
+        # defaults to 0 and law_bc == law_diff == calzetti, so k_bc == k_diff == k.
+        derived = model_two.predict_state(params_on).derived
+        young = np.asarray(derived["age_boundary_younger_fraction"])[0]
+        log_lyc = np.asarray(derived["log_L_lyc_age"])
+        lyc = 10.0 ** (log_lyc - np.max(log_lyc))
+        q_young = float(np.sum(young * lyc) / np.sum(lyc))
+        expected = q_young * np.exp(-(tau_bc + tau_diff) * k) + (1.0 - q_young) * np.exp(
+            -tau_diff * k
+        )
 
         assert expected.min() < 0.1, (
             "FIXTURE FAULT: this tau sweep should attenuate the bluest lines "
@@ -284,7 +291,7 @@ class TestClassSweepEveryLineMatchesTheAttenuatorsOwnCurve:
             expected,
             rtol=_CURVE_RTOL,
             err_msg="two_component predict_line_fluxes ratio disagrees with its "
-            "documented birth_cloud line screen evaluated by hand",
+            "documented ionizing-weighted line screen evaluated by hand",
         )
 
     def test_wg00_matches_grid_transmission_at_every_line(self, model_wg00):

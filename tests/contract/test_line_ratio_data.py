@@ -73,7 +73,7 @@ class TestLineRatioPrediction:
             {("Halpha", "Hbeta"): (4.2, 0.3), ("NII_6584", "Halpha"): (0.35, 0.05)}
         )
         obs = Observation(
-            spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, 64)),
+            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64)),
             line_ratios=lrd,
         )
         with warnings.catch_warnings():

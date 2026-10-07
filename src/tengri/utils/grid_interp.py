@@ -29,7 +29,7 @@ import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import log10_flux_scale as _log10_flux_scale, representable_denominator
 
 __all__ = [
@@ -38,7 +38,9 @@ __all__ = [
     "edge_split",
     "interp_nd_pchip",
     "interp_nd_triweight",
+    "lyc_augment_grid_for_step",
     "pchip_interp_1d",
+    "pchip_interp_local",
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
@@ -211,7 +213,8 @@ def subband_quadrature(
         Filter effective wavelength, observed frame: the node fallback where a
         template has no flux in a sub-band [Angstrom].
     lyc_edge_obs : float or None, optional
-        Observed-frame Lyman-limit wavelength ``912*(1+z)`` [Angstrom]. When
+        Observed-frame Lyman-limit wavelength ``LYMAN_LIMIT_AA*(1+z)``
+        (one Lyman edge, 911.76 A rest) [Angstrom]. When
         given, forced into the edge set as an extra edge (#2439, #2427, R1),
         turning K equal-filter-mass chunks into K+1: the equal-mass edges make
         an exact quadrature for a smooth multiplicative screen (#1122) but do
@@ -278,6 +281,114 @@ def subband_quadrature(
     return i_k / np.maximum(denom, representable_denominator(1e-30)), nodes
 
 
+def lyc_augment_grid_for_step(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    templates_src: np.ndarray,
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""Augment a union grid so an ORDINARY trapezoid integrates the Lyman step exactly.
+
+    The raw (unmasked) template's near-discontinuous drop at the Lyman
+    limit (the #537 "rectangle" feature every LyC-adjacent quantity in
+    :mod:`tengri.components.lyc` shares) means the grid cell straddling
+    ``edge_aa`` is not a linear ramp between ``templates_src``'s two
+    bracketing nodes: it is a step. Two changes make an otherwise-unmodified
+    consumer (plain ``trapezoid``, or :func:`subband_quadrature`'s
+    cumulative-trapezoid-and-interpolate-at-the-cutoff machinery) integrate
+    that step exactly, replacing the linear-ramp assumption that construction
+    made (one Lyman edge, #2439/#2427/L3):
+
+    1. **Resample templates edge-aware** onto every existing ``grid`` node
+       inside the bracket cell: without this, a filter node that subdivides
+       the bracket (the #2447-style scenario) would still see a blended
+       (linearly-interpolated) value rather than the constant step value.
+    2. **Insert ``edge_aa`` as a zero-width node pair**, tagged with the
+       ionizing-side value first and the non-ionizing-side value second.
+       Querying the resulting cumulative trapezoid via ordinary linear
+       interpolation AT a point exactly coincident with a grid node (here,
+       the first copy) resolves to that node's own exact cumulative value,
+       not an average across the jump -- verified directly against
+       :func:`_interp_rows`.
+
+    Feeding the augmented ``(grid, integrand, tw_grid)`` into
+    :func:`subband_quadrature` UNCHANGED (same signature, same K+1 chunking,
+    same ``lyc_edge_obs`` argument) makes its own forced-boundary chunks
+    exact too, which is what keeps a corrected sub-band sum equal to the
+    correspondingly-corrected whole band
+    (``test_r3c_corrected_subband_sum_matches_corrected_whole_band``):
+    pairing an EXACT ionizing-side split with a whole band that is only
+    approximate at the SAME bracket cell (or vice versa) leaves a
+    several-1e-6 residual there, because ``NebularSEDComponent``'s
+    ``per_age - (1 - fesc) * per_age_lyc`` correction is self-consistent
+    only when both terms decompose the bracket the SAME way.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid (``wave_src`` nodes + filter nodes), observed
+        frame, ascending. [Angstrom]
+    tw_grid : ndarray, shape (m,)
+        Transmission x bandpass weight on ``grid``.
+    wave_src : ndarray, shape (n_src,)
+        Template's own (observed-frame) wavelength grid, ascending.
+        [Angstrom]
+    templates_src : ndarray, shape (..., n_src)
+        Template luminosity on ``wave_src``.
+    filter_wave : ndarray, shape (n_filt,)
+        Filter wavelength grid, observed frame. [Angstrom]
+    filter_trans : ndarray, shape (n_filt,)
+        Filter transmission (dimensionless, 0-1).
+    edge_aa : float
+        Observed-frame Lyman limit, ``LYMAN_LIMIT_AA * (1+z)``. [Angstrom]
+    convention : FilterConvention, optional
+        Bandpass weight matching the whole-band integral's own convention.
+
+    Returns
+    -------
+    grid_aug, integrand_aug, tw_grid_aug : tuple of ndarray
+        ``grid_aug`` shape ``(m,)`` or ``(m+2,)``; ``integrand_aug`` shape
+        ``(..., m)`` or ``(..., m+2)`` (``templates_src`` resampled onto
+        ``grid_aug``, edge-aware, times ``tw_grid_aug``); ``tw_grid_aug``
+        shape matching ``grid_aug``. Unaugmented (``m``-wide, ordinary
+        interpolation) when ``edge_aa`` falls outside ``wave_src``'s domain
+        (no bracket cell to fix).
+    """
+    n_src = wave_src.shape[0]
+    n_ion = int(np.sum(wave_src < edge_aa))
+    templates_on_grid = _vectorized_interp(grid, wave_src, templates_src)
+    if not (0 < n_ion < n_src):
+        return grid, templates_on_grid * tw_grid, tw_grid
+
+    idx_a = n_ion - 1
+    idx_b = n_ion
+    wave_a = float(wave_src[idx_a])
+    wave_b = float(wave_src[idx_b])
+    y_a = templates_src[..., idx_a]
+    y_b = templates_src[..., idx_b]
+
+    in_bracket = (grid >= wave_a) & (grid <= wave_b)
+    step_vals = np.where(grid < edge_aa, y_a[..., None], y_b[..., None])
+    templates_edge_aware = np.where(in_bracket, step_vals, templates_on_grid)
+
+    tw_edge = float(
+        np.interp(edge_aa, filter_wave, filter_trans, left=0.0, right=0.0)
+        * _filter_weight_np(np.array([edge_aa]), convention)[0]
+    )
+    all_x = np.concatenate([grid, [edge_aa, edge_aa]])
+    all_tw = np.concatenate([tw_grid, [tw_edge, tw_edge]])
+    all_templates = np.concatenate([templates_edge_aware, np.stack([y_a, y_b], axis=-1)], axis=-1)
+    order = np.argsort(all_x, kind="stable")
+    grid_aug = all_x[order]
+    tw_grid_aug = all_tw[order]
+    integrand_aug = all_templates[..., order] * tw_grid_aug
+    return grid_aug, integrand_aug, tw_grid_aug
+
+
 @dataclasses.dataclass(frozen=True)
 class PreintegratedGrid:
     """Template grid with wavelength dimension collapsed into filter integrals.
@@ -305,19 +416,20 @@ class PreintegratedGrid:
         (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
     lyc_phot : jnp.ndarray or None
         (*grid_dims, n_filters) [erg/s/Hz, same units as ``phot``].
-        Filter-integrated photometry restricted to rest-frame λ < 912
-        Ångström (Lyman continuum): the exact algebraic split
-        ``phot = lyc_phot + (phot - lyc_phot)`` at the physical edge, via
-        cumulative-trapezoid interpolation. ``None`` unless ``lyc_gate=True``
-        (a live nebular Lyman-continuum mask, #2439, #2427): a model without
-        one never computes or caches this. Used by
+        Filter-integrated photometry restricted to rest-frame λ <
+        ``LYMAN_LIMIT_AA`` (911.76 Å, one Lyman edge; Lyman continuum): the
+        exact algebraic split ``phot = lyc_phot + (phot - lyc_phot)`` at the
+        physical edge, step-model-exact (see
+        :func:`lyc_augment_grid_for_step`). ``None`` unless
+        ``lyc_gate=True`` (a live nebular Lyman-continuum mask, #2439,
+        #2427): a model without one never computes or caches this. Used by
         :class:`~tengri.components.nebular.component.NebularSEDComponent` to
         apply the ``neb_fesc`` escape-fraction mask to the stellar
         photometric LUT the same way the dense path masks
         ``state.sed_intrinsic``.
     nolyc_phot : jnp.ndarray or None
         (*grid_dims, n_filters) [erg/s/Hz]. The other half of the same split:
-        the integral over rest-frame λ >= 912 Ångström, taken from the same
+        the integral over rest-frame λ >= LYMAN_LIMIT_AA (911.76 Ångström), taken from the same
         cumulative integral as ``lyc_phot`` so that ``lyc_phot + nolyc_phot`` is
         the band integral and a band wholly on one side of the edge has
         EXACTLY zero in the other half. The escape-fraction mask is then
@@ -617,22 +729,39 @@ def preintegrate_grid(
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
         weight = tw_grid[None, :]
         integrand = templates_on_grid * weight
-        num = _np_trapezoid(integrand, grid, axis=-1)
-        phot_flat[:, f_idx] = num / np.maximum(denom, representable_denominator(1e-30))
 
-        # Compute Lyman continuum photometry: restrict to rest λ < 912 Å.
-        # Gated on lyc_gate (a live nebular Lyman-continuum mask, #2439,
-        # #2427, R1): a model without one never pays this compute or the
-        # extra ztable cache size. Use cumulative trapezoid to extract the
-        # integral over [grid_min, 912*(1+z)] on the observed-frame grid;
-        # this is an exact split matching the dense path's masking
-        # (state.sed_intrinsic * lyc_transmission where wave < 912).
-        lyc_wave_obs = 912.0 * (1.0 + redshift)
+        # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
+        # nebular Lyman-continuum mask) -- a model without one never pays
+        # this compute or the extra ztable cache size, and the whole-band
+        # table stays bit-identical to the ordinary (unaugmented) path.
+        # When live, ``lyc_augment_grid_for_step`` resamples templates
+        # edge-aware and inserts the edge as a zero-width node pair, so the
+        # WHOLE-band integral, the ionizing-only split, AND
+        # ``subband_quadrature``'s own forced-boundary chunks are all exact
+        # at the SAME bracket cell -- required for
+        # ``NebularSEDComponent``'s ``per_age - (1-fesc)*per_age_lyc``
+        # correction to stay self-consistent with the sub-band partition
+        # (see :func:`lyc_augment_grid_for_step`).
+        lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + redshift)
         if lyc_gate:
-            lyc_num, above_num = edge_split(integrand, grid, lyc_wave_obs)
-            norm = np.maximum(denom, representable_denominator(1e-30))
+            grid_q, integrand_q, tw_grid_q = lyc_augment_grid_for_step(
+                grid, tw_grid, wave_obs, templates_flat, fw_np, ft_np, lyc_wave_obs, convention
+            )
+            denom_q = _np_trapezoid(tw_grid_q, grid_q)
+            num = _np_trapezoid(integrand_q, grid_q, axis=-1)
+            # Both halves of the split from ONE cumulative integral on the
+            # edge-augmented grid: the below half is the cumulative value at the
+            # first copy of the zero-width edge pair (step-exact), the above half
+            # is total - below, and a band wholly on one side has exactly zero in
+            # the other half (no whole - other-half cancellation).
+            lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+            norm = np.maximum(denom_q, representable_denominator(1e-30))
             lyc_phot_flat[:, f_idx] = lyc_num / norm
             nolyc_phot_flat[:, f_idx] = above_num / norm
+        else:
+            grid_q, integrand_q, tw_grid_q, denom_q = grid, integrand, tw_grid, denom
+            num = _np_trapezoid(integrand, grid, axis=-1)
+        phot_flat[:, f_idx] = num / np.maximum(denom_q, representable_denominator(1e-30))
 
         # Compute Taylor moment if requested
         if taylor:
@@ -645,13 +774,15 @@ def preintegrate_grid(
         # Sub-band quadrature nodes and weights (#1122): the single
         # implementation, shared with the free-z ztable precompute so the two
         # cannot drift. ``lyc_edge_obs`` forces a chunk boundary at the
-        # physical Lyman limit when this model has a live mask (R1).
+        # physical Lyman limit when this model has a live mask (R1); the
+        # (possibly edge-augmented) ``grid_q``/``tw_grid_q``/``integrand_q``
+        # keep its own chunks exact at that boundary too.
         if K > 0:
             sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
-                grid,
-                tw_grid,
-                integrand,
-                denom,
+                grid_q,
+                tw_grid_q,
+                integrand_q,
+                denom_q,
                 K,
                 float(eff_waves_obs[f_idx]),
                 lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
@@ -1175,6 +1306,88 @@ def pchip_interp_1d(
     Array([0.        , 1.86666667, 6.        ], dtype=float64)
     """
     return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
+
+
+def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray:
+    """Monotone cubic (PCHIP) read of one query off a table's leading axis, 4-node stencil.
+
+    Gives the same value as :func:`pchip_interp_1d` applied column by column
+    (clamped outside ``[x[0], x[-1]]``) while touching only the four rows that
+    bracket ``xq``: the tangents of the two bracketing nodes depend only on
+    their neighbors, so the table is never contracted or differentiated
+    whole. That keeps the cost of a read independent of the node count, which
+    is what a free-redshift z-table of 250+ nodes needs.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 4``; need not be uniform.
+    table : array_like, shape (n, ...) or tuple of such
+        Node values; interpolation is over the leading axis. A tuple gives
+        several tables sharing the axis, which ``reduce`` combines.
+    xq : float
+        Query coordinate, same unit as ``x``.
+    reduce : callable, optional
+        Applied to the four bracketing rows of each table (arrays of shape
+        ``(4, ...)``) before the tangents are formed, and returning one array
+        of shape ``(4, ...)``. It lets a caller contract axes that do not
+        depend on ``x`` (population weights) first, so the cubic is formed on
+        the contracted quantity actually consumed and costs nothing per
+        contracted element. The interpolant is then the cubic of the reduced
+        node values.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        Interpolant at ``xq``, exact at every node, :math:`C^1` in ``xq``.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. The stencil start is an integer and
+    carries no tangent; the derivative flows through the Hermite basis and the
+    tangents (Fritsch & Carlson 1980 [1]_, as in :func:`pchip_interp_1d`).
+
+    References
+    ----------
+    .. [1] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+    """
+    n = x.shape[0]
+    if n < 4:
+        raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
+    xq_c = jnp.clip(xq, x[0], x[-1])
+    # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
+    # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
+    pos = jnp.searchsorted(x, xq_c) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - 4))
+    xs = jax.lax.dynamic_slice_in_dim(x, start, 4, axis=0)
+    tables = table if isinstance(table, tuple) else (table,)
+    rows = tuple(jax.lax.dynamic_slice_in_dim(t, start, 4, axis=0) for t in tables)
+    ys = reduce(*rows) if reduce is not None else rows[0]
+    # The cubic is positively homogeneous in the node values (secants, the
+    # harmonic-mean tangents and the endpoint caps all scale with y), so it is
+    # formed on each column divided by its own stencil maximum and scaled back:
+    # identical in exact arithmetic, value and gradient. Physical-unit tables sit
+    # at ~1e-13 to 1e-24, where the harmonic mean's reverse pass would square a
+    # ~1e21 reciprocal sum past float32's range and return NaN (#2749).
+    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    ys = ys / scale
+    jc = i - start  # the bracketing cell's lower node within the stencil
+    slopes = _pchip_slopes(xs, ys)
+    x0, x1 = xs[jc], xs[jc + 1]
+    h = x1 - x0
+    t = (xq_c - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return scale * (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * ys[jc]
+        + (t3 - 2.0 * t2 + t) * h * slopes[jc]
+        + (-2.0 * t3 + 3.0 * t2) * ys[jc + 1]
+        + (t3 - t2) * h * slopes[jc + 1]
+    )
 
 
 def interp_nd_pchip(

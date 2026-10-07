@@ -755,7 +755,7 @@ def apply_lya_escape(
     Lyα is the sole recombination line with an independent escape fraction
     channel (resonant scattering and destruction in neutral ISM). After all
     lines have been multiplied by the general escape/dust suppression factor
-    `k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)`, apply an
+    `k_factor = lyc_dust_escape_factor(f_esc, f_dust)`, apply an
     *additional* suppression to Lyα alone: multiply the Lyα luminosity by
     `(1 - neb_fesc_lya)`.
 
@@ -768,7 +768,7 @@ def apply_lya_escape(
     ----------
     line_lum : ndarray, shape (n_lines,)
         Recombination line luminosities [erg/s/Hz], already multiplied by
-        `k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)` for all lines.
+        `k_factor = lyc_dust_escape_factor(f_esc, f_dust)` for all lines.
     line_wavelengths : ndarray, shape (n_lines,)
         Line rest-frame wavelengths [Angstrom]. Lyα is identified as the line
         nearest 1215.67 Angstrom.

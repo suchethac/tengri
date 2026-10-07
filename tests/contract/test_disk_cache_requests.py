@@ -190,7 +190,7 @@ def test_exact_fold_request_all_fields_change_digest():
     from tengri.components.igm._subband_cache import ExactFoldRequest
 
     baseline = ExactFoldRequest(
-        version=1,
+        version=3,
         ssp_wave=array_key(np.arange(4.0)),
         ssp_flux=array_key(np.arange(4.0)),
         filters=((array_key(np.arange(3.0)), array_key(np.arange(3.0))),),
@@ -203,7 +203,7 @@ def test_exact_fold_request_all_fields_change_digest():
         backend="cpu",
     )
     perturbations = {
-        "version": 2,
+        "version": 4,
         "ssp_wave": array_key(np.arange(5.0)),
         "ssp_flux": array_key(np.arange(5.0)),
         "filters": ((array_key(np.arange(4.0)), array_key(np.arange(3.0))),),
@@ -246,12 +246,20 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_5():
-    """_ZTABLE_CACHE_VERSION is 5 (3->4 for #2439/#2427's lyc_gate; 4->5 for the
-    ``ssp_phot_nolyc_table`` payload, the lambda >= 912 half of the Lyman-limit split)."""
+def test_ztable_version_is_7():
+    """_ZTABLE_CACHE_VERSION is 7.
+
+    4->5 for L3's one-Lyman-edge fix: the LyC table and (when lyc_gate) the
+    sub-band tensors moved off the bare 912 Å literal onto LYMAN_LIMIT_AA and
+    onto a step-model-exact split. 5->6 for #2749: the default z grid gained
+    nodes at each band's Lyman-limit crossings. 6->7 for the
+    ``ssp_phot_nolyc_table`` payload, the above-edge half of the Lyman-limit
+    split. In every case no ZTableRequest field changes, so only the version
+    separates a warm cache from the new content.
+    """
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 5
+    assert _ZTABLE_CACHE_VERSION == 7
 
 
 def test_subband_version_is_3():
@@ -261,11 +269,17 @@ def test_subband_version_is_3():
     assert _CACHE_VERSION == 3
 
 
-def test_ionspec_version_is_1():
-    """_IONSPEC_CACHE_VERSION is 1."""
+def test_ionspec_version_is_2():
+    """_IONSPEC_CACHE_VERSION is 2.
+
+    Bumped from 1 by the LyC brief: ``gas_logqion`` now integrates via the
+    shared :func:`tengri.components.lyc.edge_trapezoid` step model instead of
+    a hard ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction
+    for the first time.
+    """
     from tengri.components.nebular.ionizing_spectrum import _IONSPEC_CACHE_VERSION
 
-    assert _IONSPEC_CACHE_VERSION == 1
+    assert _IONSPEC_CACHE_VERSION == 2
 
 
 def test_ztable_request_has_cosmology_field():

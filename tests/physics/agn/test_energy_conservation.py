@@ -24,7 +24,9 @@ from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.conservation
 
-_WAVE = np.geomspace(1e2, 1e7, 2000)  # Å — wide enough for disc UV + torus IR
+# Å. Covers the power-law disc's normalization band (10 A - 1e8 A): the grid 1e2 - 1e7 A holds
+# only 0.7822 of its power, which is what a band-limited energy ledger would then report.
+_WAVE = np.geomspace(10.0, 1e8, 8000)
 _C_AA_PER_S = 2.99792458e18
 
 # Every non-self-contained torus must conserve energy under the conserving policy.

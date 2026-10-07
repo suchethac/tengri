@@ -22,7 +22,7 @@ from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
-from tengri.observation.spectroscopy import Spectroscopy
+from tengri.observation.spectroscopy import Spectroscopy, static_redshift
 from tengri.parameters.priors import Distribution
 from tengri.parameters.resolve import require_redshift
 from tengri.utils.scale import apply_log10_scale, log10_flux_scale
@@ -107,13 +107,16 @@ def _restband_lnu(state) -> jnp.ndarray:
     y_age = state.derived.get("dust_young_indicator")
 
     if a_bc is not None and a_diff is not None:
-        # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+        # Two-component (Charlot & Fall): each SSP node mixes the young population
+        # (birth cloud + diffuse) and the old one (diffuse only) by the node's young
+        # mass fraction y(a): T(a, λ) = y·T_diff·T_bc + (1 - y)·T_diff.
         a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
         a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
         if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
             # K-point quadrature across the rest band, the screen is EVALUATED at
             # each node, not extrapolated from the pivot (#1122).
-            t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+            y3 = y_age[:, None, None]
+            t_sub = a_diff_sub * (y3 * a_bc_sub + (1.0 - y3))
             stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
         else:
             stellar_att = a_diff * a_bc * stellar
@@ -544,6 +547,12 @@ def project_spectrum_kernel_split(
     """
     from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
 
+    # A photoionized backend publishes ``lyc_transmission`` whenever it masked
+    # the Lyman continuum, so the SED is a step at the Lyman edge: read the
+    # straddling model cell as that step, as photometry does (#2447).
+    derived = getattr(state, "derived", None)
+    has_lyc_edge = derived is not None and derived.get("lyc_transmission") is not None
+
     if igm_trans is None:
         # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
         # to improve on, so this is the pre-#2589 single-kernel path,
@@ -565,6 +574,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux_instrument_only = project_spectrum(
@@ -579,6 +589,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux = flux_stellar + flux_instrument_only
@@ -595,6 +606,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
         else:
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
@@ -613,6 +625,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -626,6 +639,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux = flux_stellar + flux_instrument_only
     else:
@@ -654,6 +668,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux_instrument_only = project_spectrum(
@@ -668,6 +683,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux = flux_stellar + flux_instrument_only
@@ -684,6 +700,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
         else:
             resolution_scaled = resolution / lsf_scale
@@ -699,6 +716,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -712,6 +730,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux = flux_stellar + flux_instrument_only
 
@@ -1274,6 +1293,10 @@ class Observation:
 
         Notes
         -----
+        Takes one pre-combined array and applies a single kernel to it, so
+        with ``sigma_v_kms > 0`` or nebular lines it does not reproduce the
+        model path (:meth:`predict`) to rounding.
+
         Requires spectroscopy to be configured. Applies LSF convolution
         if a resolution profile is specified. Applies flux-calibration
         polynomial if ``cal_coeffs`` is provided. Returns data ready for
@@ -1293,7 +1316,7 @@ class Observation:
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
-        conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
+        conserving = self.spectroscopy.resolve_conserving(wave_rest, static_redshift(z))
         sigma_lib_kms = resolve_sigma_lib_kms(
             wave_obs, z, self.spectroscopy.sigma_lib_kms, sigma_lib_curve
         )
@@ -1328,6 +1351,8 @@ class Observation:
         lsf_sigma_lib_curve: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         lsf_n_bins: int | None = None,
         lsf_scale: float = 1.0,
+        resample_z_ref: float | None = None,
+        conserving: bool | None = None,
         observables_type=None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
@@ -1380,6 +1405,15 @@ class Observation:
             reproduces the un-scaled kernel bit-for-bit. Not applied on the
             banded ``resolution_matrix`` path (see the Notes on that
             branch below).
+        resample_z_ref : float, optional
+            Redshift at which ``Spectroscopy.resample="auto"`` compares the
+            pixel width with the model grid (#2530): the fixed redshift, or the
+            lowest redshift of the prior when redshift is free. ``None`` uses
+            ``z`` when it is a concrete value and 0 when it is traced.
+        conserving : bool, optional
+            The pixel-integral decision when it was already made outside a
+            ``vmap`` (a traced model grid cannot be inspected). ``None``
+            resolves it here from ``state.wave``.
         observables_type : type or None
             If provided, a :class:`typing.NamedTuple` class produced by
             :func:`build_observables_class`. When ``None``, returns a dict
@@ -1480,7 +1514,12 @@ class Observation:
             )
             sigma_lib = resolve_sigma_lib_kms(wo, z, sigma_lib_flat, lsf_sigma_lib_curve)
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
-            conserving = self.spectroscopy.resolve_conserving(state.wave)
+            if conserving is None:
+                conserving = self.spectroscopy.resolve_conserving(
+                    state.wave,
+                    static_redshift(z) if resample_z_ref is None else resample_z_ref,
+                    wave_obs=wo,
+                )
             cal_coeffs = self.spectroscopy.calibration_coeffs(params)
             cal_wave_range = self.spectroscopy.calibration_wave_range
 
@@ -1676,7 +1715,7 @@ class Observation:
           dust-free mean-IGM branch), then OVERWRITTEN by
           :class:`~tengri.components.dust.two_component.DustSEDComponent`
           with its own y(age)-graded ``1-y(a)(1-fesc)`` rule (or the flat
-          rule under ``lyc_absorb_all=True``) when a dusty model runs it —
+          rule under ``lyc_reprocessed_by='all'``) when a dusty model runs it —
           same key, so whichever component is later in the chain wins, and
           there is exactly one factor per model, never a double-count. R3
           conservation invariants (tested explicitly, not just implied):
@@ -1952,16 +1991,33 @@ class Observation:
                 # Converges as 1/K² (K=5: ≲0.6 % worst case in GALEX FUV) where the
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
-                t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
-                if lyc_factor_sub is not None:
-                    # two_component's own birth-cloud-graded rule (#2439,
-                    # #2427, R2); see nebular/component.py and
-                    # dust/two_component.py's publish for why this is exact
-                    # (not "y_age-weighted twice": the graded factor stands
-                    # in for the dense path's ``lyc_factor``, a SEPARATE
-                    # multiplicative term from the dust screen ``t_sub``
-                    # already carries, not folded into ``a_bc_sub`` before
-                    # its own ``**y_age``).
+                y3 = y_age[:, None, None]
+                a_hole_sub = state.derived.get("dust_hole_attenuation_subband_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                young_gate_sub = state.derived.get("dust_young_lyc_gate_subband_precomp")
+                if a_hole_sub is not None and fesc_geom is not None:
+                    # #2529 hole geometry: the young population's light is
+                    # (1 - fesc) on the screened sightline, zeroed where the gas
+                    # absorbs the ionizing photons, plus fesc through the hole
+                    # (never gated); the old population sees the diffuse screen.
+                    # Mirrors DustSEDComponent.apply §2a through the same
+                    # ``hole_young_transmission``.
+                    from tengri.components.lyc import hole_young_transmission
+
+                    ionizing_sub = state.derived["dust_ionizing_flag_subband_precomp"]
+                    t_young = hole_young_transmission(
+                        a_diff_sub * a_bc_sub * (1.0 - ionizing_sub), a_hole_sub, fesc_geom
+                    )
+                else:
+                    t_young = a_diff_sub * a_bc_sub
+                    if young_gate_sub is not None:
+                        # ``lyc_reprocessed_by='young'``: the gas around the
+                        # birth clouds reprocesses the young population's LyC.
+                        t_young = t_young * young_gate_sub
+                # Population mixture at every quadrature node.
+                t_sub = y3 * t_young + (1.0 - y3) * a_diff_sub
+                if young_gate_sub is None and a_hole_sub is None and lyc_factor_sub is not None:
+                    # Whole-population gate (``lyc_reprocessed_by='all'``).
                     t_sub = t_sub * lyc_factor_sub
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
                 if sub_per_age_igm is not None:
@@ -1969,25 +2025,48 @@ class Observation:
                     # also re-evaluated where the IGM-surviving light sits.
                     a_bc_igm = state.derived.get("dust_bc_attenuation_subband_igm_precomp")
                     t_sub_igm = t_sub
-                    if a_bc_igm is not None:
-                        t_sub_igm = (
-                            state.derived["dust_diff_attenuation_subband_igm_precomp"]
-                            * a_bc_igm ** y_age[:, None, None]
-                        )
-                        if lyc_factor_sub is not None:
+                    if a_bc_igm is not None and a_hole_sub is None:
+                        a_diff_igm = state.derived["dust_diff_attenuation_subband_igm_precomp"]
+                        # The same population mixture as ``t_sub`` above, at the
+                        # nodes the IGM-surviving light sits on.
+                        t_young_igm = a_diff_igm * a_bc_igm
+                        if young_gate_sub is not None:
+                            t_young_igm = t_young_igm * young_gate_sub
+                        t_sub_igm = y3 * t_young_igm + (1.0 - y3) * a_diff_igm
+                        if (
+                            young_gate_sub is None
+                            and a_hole_sub is None
+                            and lyc_factor_sub is not None
+                        ):
                             t_sub_igm = t_sub_igm * lyc_factor_sub
                     stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub_igm, axis=(0, 2))
             else:
-                atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
-                t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
+                a_hole_lut = state.derived.get("dust_hole_attenuation_precomp")
+                fesc_geom = state.derived.get("lyc_fesc")
+                if a_hole_lut is not None and fesc_geom is not None:
+                    # #2529 hole geometry, λ_eff-granularity equivalent of
+                    # the sub-band formula above (see that branch).
+                    from tengri.components.lyc import hole_young_transmission
+
+                    ionizing_lut = state.derived["dust_ionizing_flag_precomp"]
+                    t_young_lut = hole_young_transmission(
+                        a_diff_lut * a_bc_lut * (1.0 - ionizing_lut), a_hole_lut, fesc_geom
+                    )
+                else:
+                    t_young_lut = a_diff_lut * a_bc_lut
+                # Population mixture: y·T_young + (1 - y)·T_old, T_old = diffuse only.
+                t_per_age = (
+                    y_age[:, None] * t_young_lut[None, :]
+                    + (1.0 - y_age[:, None]) * a_diff_lut[None, :]
+                )
                 stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
                 # First-order Taylor (Ψ) correction, only when the moment tensor was
                 # built (approx=WavePrecomp(taylor_correction=True); #617).
-                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
-                # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
-                #   T_a' = T_a · (logslope_diff + y·logslope_bc)
-                # This avoids the A_bc^(y−1) pole, at X-ray/UV bands far off the
-                # dust curve A_bc → 0, but T_a → 0 too, so T_a' → 0 (no 0·inf NaN).
+                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). The node is a
+                # mixture of two populations, T_a = y·T_young + (1 − y)·T_old, so
+                # T_a' = y·T_young·(logslope_diff + logslope_bc) + (1 − y)·T_old·logslope_diff
+                # by the log-derivative identity of each population's own product of
+                # screens: no A_bc^(y−1) pole at bands far off the dust curve.
                 moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
                 logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
                 logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
@@ -1996,8 +2075,9 @@ class Observation:
                     and logslope_diff is not None
                     and logslope_bc is not None
                 ):
-                    t_slope_per_age = t_per_age * (
-                        logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
+                    t_slope_per_age = (
+                        y_age[:, None] * (t_young_lut * (logslope_diff + logslope_bc))[None, :]
+                        + (1.0 - y_age[:, None]) * (a_diff_lut * logslope_diff)[None, :]
                     )
                     stellar_attenuated = stellar_attenuated + jnp.sum(
                         moment_per_age * t_slope_per_age, axis=0
@@ -2338,17 +2418,18 @@ class Observation:
         per_age = state.derived.get("stellar_spec_lnu_per_age_precomp")
 
         if t_bc is not None and t_diff is not None and per_age is not None:
-            # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+            # Two-component (Charlot & Fall): each node mixes the young population
+            # (birth cloud + diffuse) and the old one (diffuse only) by the node's
+            # young mass fraction: T(a, λ) = y·T_diff·T_bc + (1 − y)·T_diff.
             y_age = state.derived["dust_young_indicator"]
-            atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
-            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
-            # Nebular emission arises in the HII regions around the youngest
-            # stars, so it sees the full young-limit screen, birth cloud AND
-            # diffuse (T_bc · T_diff, i.e. y=1), matching the exact path's
-            # emission treatment (two_component.py reddens the nebular SED by
-            # τ_bc·k_bc + τ_diff·k_diff). Applying only T_diff here under-
-            # attenuated the nebular lines by the missing 1/T_bc factor.
-            nebular_attenuated = t_diff * t_bc * nebular_phi
+            atten_per_age = t_diff[None, :] * (
+                y_age[:, None] * t_bc[None, :] + (1.0 - y_age[:, None])
+            )  # (n_age, n_pix)
+            stellar_attenuated = jnp.sum(per_age * atten_per_age, axis=0)
+            # Nebular emission is lit by stars of every age: the dust component
+            # publishes its screen at the pixels, the interval mixture weighted by
+            # each interval's share of the ionizing luminosity.
+            nebular_attenuated = state.derived["dust_spec_neb_transmission_precomp"] * nebular_phi
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.

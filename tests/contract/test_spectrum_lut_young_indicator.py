@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SpectrumPrecomp LUT publishes the single _young_indicator definition.
+"""SpectrumPrecomp LUT publishes the same per-node young fraction as the exact path.
 
 Spectroscopy-only models with SpectrumPrecomp (the default for spectroscopy fits)
-must apply the same birth-cloud selector as the exact screen and the photometry LUT.
-The indicator was the base-10 logistic (2.3x sharper), causing young-star reddenings
-to differ by 20%+ between paths. With the fix, all three paths use the natural
-sigmoid.
+must split every SSP node into its young and old populations exactly as the exact
+screen and the photometry LUT do: the node's formed-mass fraction younger than the
+birth-cloud lifetime, taken from the stellar component. A different selector on one
+path shifted young-star reddenings by 20% or more between paths.
 
 References
 ----------
@@ -26,7 +26,6 @@ from tengri import (
     SpectrumPrecomp,
     list_dust_laws,
 )
-from tengri.components.dust.two_component import _young_indicator
 from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.contract
@@ -38,11 +37,10 @@ pytestmark = pytest.mark.contract
     ids=lambda x: x,
 )
 def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic_ssp_wide, law):
-    """SpectrumPrecomp-only model publishes dust_young_indicator = _young_indicator.
+    """SpectrumPrecomp-only model publishes the exact path's dust_young_indicator.
 
     For every registered dust law, a spectroscopy-only model under SpectrumPrecomp
-    must apply the same stellar birth-cloud selector (the natural sigmoid) that the
-    exact path applies.
+    must apply the same per-node young fraction that the exact path applies.
 
     Parameters
     ----------
@@ -50,7 +48,7 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
         Dust attenuation law name from list_dust_laws().
     """
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+    obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
@@ -64,25 +62,26 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
 
     st = model.predict_state({})
 
-    # Expected indicator from the definition. The defaults for two_component dust
-    # are t_birth_yr=1e7 and transition_width_dex=0.3.
-    ssp = synthetic_ssp_wide
-    ssp_ages_yr = 10.0 ** np.asarray(ssp.ssp_lg_age_gyr) * 1e9
-    t_birth_yr = 1e7
-    transition_width_dex = 0.3
-    expected = _young_indicator(
-        jnp.asarray(ssp_ages_yr),
-        t_birth_yr,
-        transition_width_dex,
+    # The exact path (no approximation) is the definition of the young fraction.
+    exact = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        redshift=Fixed(0.3),
     )
+    # The exact path mixes with row 0 of the stellar component's boundary table.
+    expected = exact.predict_state({}).derived["age_boundary_younger_fraction"][0]
 
     got = st.derived["dust_young_indicator"]
+    assert np.all((np.asarray(got) >= 0.0) & (np.asarray(got) <= 1.0))
     np.testing.assert_allclose(
         np.asarray(got),
         np.asarray(expected),
         atol=1e-12,
         rtol=0.0,
-        err_msg=f"law={law}: published indicator does not match _young_indicator",
+        err_msg=f"law={law}: published young fraction differs from the exact path",
     )
 
 
@@ -138,7 +137,7 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
     """
     # Build observation with 80-point log grid 3300–8000 Å.
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+    obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
     # LUT and exact models with the same config.
     model_lut = SEDModel.build(

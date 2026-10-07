@@ -81,7 +81,7 @@ from tengri.utils.scale import apply_log10_scale, pow10
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
-#: conditions. ``neb_fesc`` and ``neb_fdust`` are applied at reconstruction
+#: conditions. ``neb_fesc`` and ``neb_fdust_frac`` are applied at reconstruction
 #: (table built at zero for both, every channel scaled by ``lyc_dust_escape_factor``),
 #: and the ionizing-spectrum params are SSP-derived. ``neb_logU`` also joins the
 #: axes whenever DIG mixing could be active, even when it is itself Fixed (#2222):
@@ -90,7 +90,7 @@ _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 
 #: Nebular parameters applied at reconstruction as one scalar on every channel
 #: (``lyc_dust_escape_factor``). The table is built at zero for both.
-_RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust")
+_RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust_frac")
 #: Nebular parameters applied at reconstruction by mixing two lookups (#2222).
 _RECONSTRUCTION_MIXED = ("neb_dig_frac", "neb_dig_delta_logU")
 #: Prefixes of the parameters the nebular component owns.
@@ -247,7 +247,7 @@ def validate_n_grid(n_grid):
 #: not depend on who else is in the batch. Grids at or below this size take the
 #: single-call path unchanged, so the common one-axis grid is untouched.
 _BUILD_CHUNK_NODES = 64
-_DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v")
+_DUST_TAU_NAMES = ("dust_tau_bc", "dust_tau_diff", "dust_tau_v", "dust_tau_neb")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -363,10 +363,10 @@ class NebularGridTable:
         Rest-frame twin (filters at redshift 0), same shape and units.
     restband_subband_waves_rest : ndarray, shape ``(*grid_dims, n_filter, K)`` or None
         Rest-frame twin of the node wavelengths.
-    eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, n_tau_a, n_tau_b)`` or None
+    eb_absorbed_per_qh : ndarray, shape ``(*grid_dims, K, n_tau_a, n_tau_b)`` or None
         SIGNED LyC-masked absorbed nebular luminosity per unit nion through the model's
-        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)], in the orientation
-        of the frequency integral (negative on an ascending wavelength grid); exactly 0
+        NEBULAR dust screen at tau node (a, b) [erg/s per (photon/s)],
+        positively oriented (+1 for a net absorber); exactly 0
         where the screen is unity.
     eb_tau_a_grid : ndarray, shape (n_tau_a,) or None
         The stellar EnergyBalanceLUT's tau_bc_grid (two_component) or
@@ -374,8 +374,9 @@ class NebularGridTable:
     eb_tau_b_grid : ndarray, shape (n_tau_b,) or None
         The stellar EnergyBalanceLUT's tau_diff_grid (two_component) or its tau_v
         grid (single screen).
-    eb_include_lyc : bool
-        The LyC-mask choice baked into eb_absorbed_per_qh (must equal dust.config.eb_include_lyc).
+    lyc_in_energy_balance : bool
+        The LyC-mask choice baked into eb_absorbed_per_qh (must equal
+        dust.config.lyc_in_energy_balance).
     """
 
     axis_names: tuple
@@ -420,7 +421,7 @@ class NebularGridTable:
     eb_absorbed_per_qh: jnp.ndarray | None = None
     eb_tau_a_grid: jnp.ndarray | None = None
     eb_tau_b_grid: jnp.ndarray | None = None
-    eb_include_lyc: bool = False
+    lyc_in_energy_balance: bool = False
 
     @property
     def serves_dust(self) -> bool:
@@ -982,7 +983,7 @@ def _preserve_spacing_n(base_n, own_lo, own_hi, ext_lo, ext_hi):
 
 
 def reconstruction_escape_factor(params) -> jnp.ndarray:
-    """``lyc_dust_escape_factor`` at the evaluation's ``neb_fesc`` and ``neb_fdust``.
+    """``lyc_dust_escape_factor`` at the evaluation's ``neb_fesc`` and ``neb_fdust_frac``.
 
     This is the single place the grid reads the escape and dust-destruction
     fractions; every other reference to them in the reconstruction path is
@@ -991,18 +992,20 @@ def reconstruction_escape_factor(params) -> jnp.ndarray:
     Parameters
     ----------
     params : Mapping
-        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust_frac`` default to 0.
 
     Returns
     -------
     ndarray, shape ()
         The escape factor [dimensionless].
     """
+    from tengri.components.lyc import lyc_shares
     from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 
-    return lyc_dust_escape_factor(
-        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust", 0.0))
+    f_esc, f_dust, _ = lyc_shares(
+        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust_frac", 0.0))
     )
+    return lyc_dust_escape_factor(f_esc, f_dust)
 
 
 def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
@@ -1022,7 +1025,7 @@ def reconstruction_amplitude_log10(log_nion, params) -> jnp.ndarray:
     log_nion : ndarray, shape ()
         :math:`\log_{10} Q_H` [dex re photon/s].
     params : Mapping
-        Evaluation parameters; ``neb_fesc`` and ``neb_fdust`` default to 0.
+        Evaluation parameters; ``neb_fesc`` and ``neb_fdust_frac`` default to 0.
 
     Returns
     -------
@@ -2286,9 +2289,10 @@ def reconstruct_nebular_eb_absorbed_per_qh(params, table) -> jnp.ndarray:
 
     Returns
     -------
-    ndarray, shape (n_tau_a, n_tau_b)
-        SIGNED per unit nion, interpolated over the nebular axes [erg/s per (photon/s)], in
-        the orientation of the frequency integral (negative on an ascending wavelength grid).
+    ndarray, shape (K, n_tau_a, n_tau_b)
+        SIGNED per unit nion (one channel per pure nebular screen),
+        interpolated over the nebular axes
+        [erg/s per (photon/s)], positively oriented (+1 for a net absorber).
 
     Notes
     -----

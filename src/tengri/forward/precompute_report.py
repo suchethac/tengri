@@ -72,7 +72,10 @@ class PrecomputeEngagementReport(NamedTuple):
         if self.observed_facts:
             lines.append("\n• Observed facts:")
             for key, value in sorted(self.observed_facts.items()):
-                if isinstance(value, list):
+                if isinstance(value, dict):
+                    pairs = ", ".join(f"{k}={v}" for k, v in value.items())
+                    lines.append(f"  {key}: {pairs}")
+                elif isinstance(value, list):
                     if value:
                         lines.append(f"  {key}: {', '.join(str(v) for v in value)}")
                 else:
@@ -321,5 +324,26 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
             facts["redshift_fixed"] = fixed.get("redshift")
         elif "redshift" in set(model.spec.free_params):
             facts["redshift_free"] = True
+
+    # IGM fold: the declared mode beside the one the build actually applied
+    # (None when no fold was built), so "auto" is never left unresolved (#2445).
+    from tengri.forward.sed_model import WavePrecomp
+
+    cfg = getattr(model, "_approx_config_wave", None)
+    if cfg is not None:
+        declared = cfg.igm_fold
+    elif facts.get("wave_precomp_enabled"):
+        declared = WavePrecomp.igm_fold
+    else:
+        declared = None
+    chain = getattr(model, "_cached_component_chain", None) or []
+    stellar_state = next(
+        (getattr(c, "_state", None) for c in chain if getattr(c, "name", None) == "stellar"),
+        None,
+    )
+    facts["igm_fold"] = {
+        "declared": declared,
+        "resolved": getattr(stellar_state, "igm_fold_resolved", None),
+    }
 
     return facts

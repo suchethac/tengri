@@ -25,10 +25,12 @@ from tengri.utils.scale import representable_floor
 
 __all__ = [
     "ANGSTROM_CM",
+    "COS_INC_ISOTROPIC_REFERENCE",
     "C_LIGHT",
     "H_PLANCK",
     "K_BOLTZ",
     "L_SUN",
+    "TWO_FACES",
     "bolometric_integral_nu",
     "gaussian_line_profile",
     "lines_to_sed",
@@ -243,14 +245,21 @@ def gaussian_line_profile(
 
 # ── Disc ring projected area (R&L 1979 Eq 1.6 geometry) ───────────
 
+#: Faces of a thin disc: the angle-integrated power of an annulus is this times
+#: :math:`\sigma T^4\,2\pi r\,dr`.
+TWO_FACES: float = 2.0
+#: cos i at which the line-of-sight power of a ``2 cos i`` disc equals its angle-integrated
+#: power (:math:`2 \cos i = 1`).
+COS_INC_ISOTROPIC_REFERENCE: float = 0.5
+
 
 def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
-    """Projected area of an annular accretion disc ring.
+    r"""Isotropic-equivalent projected area of an annular accretion-disc ring.
 
-    Compute the projected area (solid angle factor) for an annular ring of
-    radius :math:`r` and width :math:`dr` at inclination angle :math:`i`.
-    Used to scale the Planck function when integrating disc rings into
-    total luminosity.
+    A flat, optically thick ring of radius :math:`r` and width :math:`dr` radiates the
+    intensity :math:`B_\nu(T)` from each face, so a distant observer at inclination
+    :math:`i` receives :math:`F_\nu = B_\nu\,(2\pi r\,dr \cos i)/d^2`. The luminosity
+    density the observer assigns to the ring assuming isotropy is :math:`4\pi d^2 F_\nu`.
 
     Parameters
     ----------
@@ -259,39 +268,38 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
     dr_cm : float
         Ring radial width. [cm]
     cos_inc : float
-        Cosine of the inclination angle. Must be in (0, 1].
+        Cosine of the inclination angle, in :math:`[0, 1]`. [dimensionless]
 
     Returns
     -------
     float
-        Projected area factor. [cm^2 sr]
+        Projected area factor that multiplies :math:`B_\nu`. [cm^2 sr]
 
     Notes
     -----
-    **JIT-compatible**: yes.
-
-    The geometry is based on Rybicki & Lightman (1979), Eq. 1.6. The luminosity
-    from a flat annular ring of radius :math:`r`, width :math:`dr`, and
-    temperature :math:`T` is:
+    **JIT-compatible**: yes. **Gradient-safe**: yes, linear in ``cos_inc``.
 
     .. math::
 
-        dL_\\nu = \\pi \\cdot B_\\nu(T) \\cdot 2\\pi r \\, dr \\cdot \\cos(i)
+        dL_\nu(i) = 4\pi\, B_\nu(T)\; 2\pi r\,dr\; \cos i
+                  = 2\cos i\; dD_\nu ,
 
-    where :math:`B_\\nu(T)` is the Planck function [erg/s/cm^2/Hz/sr],
-    :math:`i` is the inclination angle, and the factor :math:`\\pi \\cdot 2\\pi r \\, dr`
-    is the projected area of the ring.
-
-    **Numerical safeguard**: :math:`\\cos(i)` is clamped to [0.01, 1.0] to
-    prevent zero-area rings at edge-on inclinations while maintaining
-    finite derivatives.
+    where :math:`dD_\nu = 2\pi B_\nu \, 2\pi r\,dr` is the angle-integrated (two-face)
+    luminosity density of the ring: :math:`\int dD_\nu\,d\nu = 2\sigma T^4\, 2\pi r\,dr`.
+    The mean of :math:`2\cos i` over :math:`\cos i \in [0, 1]` is 1, so the average of the
+    ring power over directions is its two-face power, and at :math:`\cos i = 0.5` the
+    line-of-sight power equals it. The factor is exactly zero at an edge-on view; there is no
+    floor, so the derivative with respect to ``cos_inc`` is the constant :math:`2\,dD_\nu`.
 
     References
     ----------
     .. [1] G. B. Rybicki and A. P. Lightman, "Radiative Processes in
        Astrophysics," John Wiley & Sons (1979). ISBN: 0-471-82759-2
+    .. [2] A. Kubota and C. Done, "A physical model of the broad-band continuum of AGN and
+       its implications for the UV/X relation and optical variability," MNRAS, 480, 1247
+       (2018), Sect. 2.1. arXiv:1804.00171.
     """
-    return jnp.pi * 2.0 * jnp.pi * r_cm * dr_cm * jnp.maximum(cos_inc, 0.01)
+    return 4.0 * jnp.pi * 2.0 * jnp.pi * r_cm * dr_cm * cos_inc
 
 
 # ── Line list → SED convolution ───────────────────────────────────

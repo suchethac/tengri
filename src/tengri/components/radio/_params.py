@@ -60,8 +60,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # The FIRRC is tight -- under 0.3 dex scatter across five decades in
         # luminosity -- so the range is the Bell (2003) value carried to about
         # +/-3 sigma of that scatter. It is the radio-excess knob: a fitted q_IR
-        # well below 2.64 is the signature of an AGN contribution.
-        free_prior=Uniform(1.8, 3.5, "FIR-radio correlation q_IR", default=2.64),
+        # well below 2.64 is the signature of an AGN contribution. The upper end
+        # is the largest q at which the synchrotron share of the Bell total stays
+        # non-negative for the hottest declared gas (q_* = 3.379 at T_e = 2e4 K,
+        # see ``radio_q_total_limit``).
+        free_prior=Uniform(1.8, 3.37, "FIR-radio correlation q_IR", default=2.64),
     ),
     ParamDeclaration(
         "radio_alpha_sf",
@@ -118,8 +121,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # absorb calibration error into a quantity physics fixes. Override
         # explicitly if you specifically want that slack.
     ),
-    # AGNfitter-rx double power-law AGN radio model parameters. Activated by
-    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
+    # AGNfitter-rx double power-law AGN radio model parameters. The DPL-only
+    # ones (alpha_thin, alpha_thick, log_nu_t) are read when
+    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ``radio_log_nu_cut`` is
+    # read by both AGN radio models.
     # Martinez-Ramirez, L. N. et al. 2024, "AGNfitter-rx: Modelling the
     # radio-to-X-ray SEDs of AGNs," A&A, 688, A46,
     # doi:10.1051/0004-6361/202449329, arXiv:2405.12111 -- Table 1 gives

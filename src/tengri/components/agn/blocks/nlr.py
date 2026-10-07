@@ -31,7 +31,11 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+)
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.nlr_cloudy import (
     compute_nlr_sed_cue,
@@ -128,6 +132,45 @@ def nlr_analytic_block(
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
     return jnp.zeros_like(L_lambda), L_lambda
+
+
+@register_line_energy("nlr", "analytic")
+def nlr_analytic_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_nlr_cf: float = 0.1,
+    agn_nlr_line_efficiency: float = 0.10,
+    **_params,
+) -> Array:
+    r"""Bolometric line power of :func:`nlr_analytic_block` [erg/s].
+
+    The 23 Richardson et al. (2014) lines are Gaussians each normalized to unit
+    integral, scaled so they sum to ``efficiency x covering x L_bol``; the integral of
+    ``L_lambda`` over all wavelengths is therefore that product, exactly.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        log10 of the intrinsic bolometric luminosity [Lsun], as the block receives it.
+    l5100_disc : array_like
+        Unused (the NLR is illuminated by the intrinsic bolometric luminosity).
+    agn_nlr_cf : float, optional
+        NLR covering fraction.
+    agn_nlr_line_efficiency : float, optional
+        Fraction of the intercepted luminosity radiated in lines.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del l5100_disc
+    return agn_nlr_line_efficiency * agn_nlr_cf * 10.0**agn_log_lbol * _L_SUN_ERG
 
 
 @register_agn_block(
@@ -280,6 +323,8 @@ def nlr_synthesizer_block(
     agn_nlr_fwhm_kms: float = 500.0,
     agn_nlr_logU: float = -2.0,
     agn_nlr_logZ: float = -1.8477,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR lines from the Synthesizer Cloudy ``/lines`` grid.
@@ -294,6 +339,14 @@ def nlr_synthesizer_block(
     and are drivable through ``SEDModel.build``: otherwise they were frozen at
     their defaults (a silent no-op, #931). They translate to the grid's
     ``neb_*`` axes internally.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol: ``agn_log_lbol`` does).
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -304,6 +357,8 @@ def nlr_synthesizer_block(
         covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("nlr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_nlr_logU,
         neb_logZ_gas=agn_nlr_logZ,
     )
@@ -331,6 +386,8 @@ def nlr_synthesizer_spectra_block(
     # Left as-is rather than unified; NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = 4.0,
     agn_nlr_logZ: float = -2.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -344,6 +401,14 @@ def nlr_synthesizer_spectra_block(
     ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
     and are drivable through ``SEDModel.build`` (#931); they translate to the
     grid's ``neb_*`` axes internally.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol — ``agn_log_lbol`` does).
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -353,6 +418,8 @@ def nlr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_nlr_cf,
         grid_path=_resolve_synthesizer_grid("nlr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_nlr_logU,
         neb_logn=agn_nlr_logn,
         neb_logZ_gas=agn_nlr_logZ,

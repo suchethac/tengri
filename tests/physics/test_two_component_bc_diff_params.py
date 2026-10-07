@@ -22,10 +22,10 @@ from tengri.components.dust.attenuation import V_BAND_ANGSTROM, two_component_du
 
 pytestmark = [pytest.mark.regression_bug]
 
-# Young limit: age << t_birth so the sigmoid weight -> 1 (birth cloud active).
-_YOUNG = jnp.array([1.0e4])
-# Old limit: age >> t_birth so the weight -> 0 (diffuse only).
-_OLD = jnp.array([1.0e10])
+# Young limit: the whole node formed inside the birth-cloud lifetime (younger fraction 1).
+_YOUNG = jnp.array([1.0])
+# Old limit: none of the node is younger than the lifetime (younger fraction 0).
+_OLD = jnp.array([0.0])
 _WAVE = jnp.array([2700.0, 5500.0])
 
 
@@ -68,7 +68,7 @@ class TestIndependentSlopes:
         )
         tau = _tau_from_trans(trans)[0]  # single age row
         # Expected birth-cloud optical depth: tau_v1 * (lambda/5500)^-1.0,
-        # weight ~ 1 at age 1e4 yr.
+        # weight 1 for a wholly young node.
         k_expected = (np.asarray(_WAVE) / V_BAND_ANGSTROM) ** -1.0
         np.testing.assert_allclose(tau, 1.0 * k_expected, rtol=2e-3)
 
@@ -101,7 +101,7 @@ class TestIndependentSlopes:
 
         trans_fixed = two_component_dust(
             wave,
-            jnp.array([1.0e4]),
+            jnp.array([1.0]),
             tau_v1=tau_bc,
             tau_v2=0.0,
             bc_params={"dust_slope": -1.0},

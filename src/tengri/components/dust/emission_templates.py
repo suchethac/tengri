@@ -63,6 +63,34 @@ _DL07_UMAX_POWERLAW = 1.0e6
 _DL14_UMAX_POWERLAW = 1.0e7
 
 
+def _expm1_over_u(u):
+    r"""Numerically stable evaluation of expm1(u) / u.
+
+    For |u| < 1e-3, use the Taylor series through u³: 1 + u/2 + u²/6 + u³/24.
+    For |u| >= 1e-3, use jnp.expm1(u) / u directly, avoiding the pole at u = 0.
+
+    The series truncation error is <= 1e-14 at |u| = 1e-3, and the switch
+    point ensures continuity and differentiability to floating-point precision
+    in both float32 and float64.
+
+    Parameters
+    ----------
+    u : array_like
+        Input scalar or array.
+
+    Returns
+    -------
+    result : ndarray
+        Value of expm1(u) / u, with smooth Taylor transition near u = 0.
+    """
+    # Guard against NaN in gradient by making sure the safe denominator
+    # is always used when |u| is small (double-where idiom).
+    u_safe = jnp.where(jnp.abs(u) < 1e-3, 1.0, u)
+    series = 1.0 + u / 2.0 + (u**2) / 6.0 + (u**3) / 24.0
+    ratio = jnp.expm1(u_safe) / u_safe
+    return jnp.where(jnp.abs(u) < 1e-3, series, ratio)
+
+
 def _pdr_luminosity_weight(umin, umax, alpha):
     r"""Relative luminosity of the power-law (PDR) vs single-U dust component.
 
@@ -76,35 +104,29 @@ def _pdr_luminosity_weight(umin, umax, alpha):
     under-represented (~14x at U_min=1) and the IR SED comes out spuriously
     cold.
 
-    Closed form (``alpha != 1, 2``), with ``x = U_max/U_min``::
+    The ratio is evaluated without any window, using the closed form with
+    logarithmic reduction:
 
-        R = (1 - alpha) / (2 - alpha) * (x ^ {2 - alpha} - 1) / (x ^ {1 - alpha} - 1)
+    .. math::
 
-    and the integrable-pole limits ``R = (x-1)/ln x`` at ``alpha=1`` and
-    ``R = x ln x / (x-1)`` at ``alpha=2``.
+        L = \ln(U_{\max} / U_{\min})
+        t = 1 - \alpha,  s = 2 - \alpha
+        R = g(sL) / g(tL),  \quad g(u) = \frac{\exp(u) - 1}{u}
+
+    ``g`` has no pole, so the same expression holds at ``alpha = 1`` and
+    ``alpha = 2`` as everywhere else: no limit form is selected, and the value
+    and its α-gradient are continuous to floating-point precision.
 
     Notes
     -----
-    **JIT/grad-safe**: the general branch evaluates a pole-shifted ``alpha`` so
-    it stays finite, and ``jnp.where`` selects the exact limit forms at
-    ``alpha = 1, 2``: no NaN leaks through the ``where`` VJP.
+    **JIT/grad-safe**: both the general and pole limits use the same closed
+    form — no branch selection, no conditional limit selection. Gradients are
+    continuous and non-zero at α = 1, 2 and everywhere else.
     """
-    x = umax / umin
-    lnx = jnp.log(x)
-    eps = 1e-3
-    near1 = jnp.abs(alpha - 1.0) < eps
-    near2 = jnp.abs(alpha - 2.0) < eps
-    # Shift alpha off the integrable poles in the general branch so it never
-    # evaluates 0/0 (which would poison the gradient even when unselected).
-    a_gen = jnp.where(near1, 1.0 + eps, jnp.where(near2, 2.0 + eps, alpha))
-    a1 = 1.0 - a_gen
-    a2 = 2.0 - a_gen
-    general = (a1 / a2) * (x**a2 - 1.0) / (x**a1 - 1.0)
-    return jnp.where(
-        near1,
-        (x - 1.0) / lnx,
-        jnp.where(near2, x * lnx / (x - 1.0), general),
-    )
+    L = jnp.log(umax / umin)
+    t = 1.0 - alpha
+    s = 2.0 - alpha
+    return _expm1_over_u(s * L) / _expm1_over_u(t * L)
 
 
 # Import DUST_EMISSION_MODELS from emission.py after module initialization

@@ -3040,7 +3040,10 @@ def compute_field_gp(
     Returns
     -------
     gp_x : array, shape (n_grid,)
-        GP realization sampled on the log-age grid.
+        GP realization sampled on the log-age grid. The draw defines the SFR at
+        these lookback nodes; the history between nodes is the linear
+        interpolation of the draw (edge-clamped outside), and both age kernels
+        (``'cic'`` and ``'dsps'``) integrate that one function (#2684).
     k0_half : float
         Lognormal bias correction K(0)/2 so ``exp(gp_x - k0_half)`` is
         mean-preserving. For ``drw`` this is ``(psd_sigma * ln10)^2 / 2``.

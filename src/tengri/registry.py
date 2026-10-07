@@ -957,7 +957,7 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
     "age_binned": {
         "status": "production",
         "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
-        "short_doc": "N independent screens, each its own law and log-age window (#2528)",
+        "short_doc": "N screens, each its own law and exact young/old age window (#2528)",
         # The bare {'type': 'age_binned'} is refused (the screen list is the
         # structural content), so the row carries the minimal runnable form: the
         # two_component birth-cloud/diffuse split, legal on any SSP grid.
@@ -1373,7 +1373,7 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Fixed-q FIR-radio correlation",
     },
     ("sf", "bell2003_split"): {
-        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 692, A85)",
+        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 688, A46)",
         "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
     },
     ("sf", "delvecchio2021"): {
@@ -1391,7 +1391,7 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Single power-law AGN radio scaled by radio-loudness",
     },
     ("agn", "dpl"): {
-        "citation": "Martinez-Ramirez+2024 (A&A 692, A85)",
+        "citation": "Martinez-Ramirez+2024 (A&A 688, A46)",
         "short_doc": "Broken double power-law with exp aging cutoff",
     },
 }
@@ -1615,8 +1615,9 @@ _AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
     (
         "dsps",
         "comparison",
-        "DSPS histogram kernel; cross-code parity only; costs "
-        "mass-proportionality ~1e-3 at sharpest shapes (#2368)",
+        "DSPS histogram kernel on an 8x refined table; each parcel goes to "
+        "one node; costs mass-proportionality ~1e-3 at sharpest shapes "
+        "(#2368, #2683)",
     ),
 )
 
@@ -1627,18 +1628,19 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
     The kernel decides how the star-formation history is integrated onto the SSP
     age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
     SSP nodes with log-age cloud-in-cell weights on a dense integrand;
-    ``'dsps'`` hands the coarse per-SSP-age table to DSPS's histogram kernel,
-    which interpolates ``log10(M(<t))`` in ``log10(t)``.
+    ``'dsps'`` hands an SFR table refined 8-fold between the SSP nodes to DSPS's
+    histogram kernel, which interpolates ``log10(M(<t))`` in ``log10(t)`` and
+    assigns each parcel wholly to one node (#2683).
 
-    They are not interchangeable. The DSPS kernel annihilates the mass of any
-    table segment straddling the SFH's maximum age; the first SSP node older
-    than the SFH start keeps ~1e-5 of its share: which biases the optical CSP
-    +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
-    comparison against DSPS-native pipelines, not for science.
+    Both accept every SFH type and agree to < 0.1 % in flux for smooth
+    histories at z = 0. Structure narrower than the local node spacing (a short
+    burst) is placed on one node by ``'dsps'``, which warns; ``'cic'`` resolves
+    it. A correlated-field draw is the linear interpolation of its own lookback
+    nodes for both (#2684).
 
-    Leaving ``age_kernel`` unset auto-selects: ``'cic'`` on the parametric path,
-    ``'dsps'`` on the GP-field path (whose draw lives on its own coarse lookback
-    grid, so there is no dense integrand to cloud-in-cell).
+    Leaving ``age_kernel`` unset selects ``'cic'`` for every SFH type, field
+    included; it is the accurate kernel for field and rough histories (``'dsps'``
+    differs there by up to 16 % in the FUV and 9 % in r-band flux).
 
     Parameters
     ----------

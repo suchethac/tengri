@@ -206,7 +206,8 @@ class TestPolarDustExtinction:
         """Test that polar dust reemission conserves energy."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
-        wave = jnp.logspace(2, 5, 256)  # 100 Å to 100 μm
+        # The graybody is normalized over 1e3 A - 1e9 A (fixed), so the grid covers that band.
+        wave = jnp.logspace(2, 9, 8000)
         from tengri.components.agn._phys import wavelength_to_nu
 
         l_absorbed_total = 1e45  # erg/s
@@ -224,7 +225,7 @@ class TestPolarDustExtinction:
         l_reemit_total = jnp.trapezoid(l_reemit[idx_sort], nu[idx_sort])
 
         # Should equal input absorbed luminosity (within numerical tolerance)
-        np.testing.assert_allclose(float(l_reemit_total), l_absorbed_total, rtol=0.15)
+        np.testing.assert_allclose(float(l_reemit_total), l_absorbed_total, rtol=1e-4)
 
 
 class TestSKIRTORModelComponent:

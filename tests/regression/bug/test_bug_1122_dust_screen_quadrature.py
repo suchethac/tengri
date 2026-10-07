@@ -59,19 +59,21 @@ def _lut_vs_exact(ssp, approx, **kw):
 
 
 def test_young_indicator_matches_the_exact_screen():
-    """The LUT's young indicator must be the logistic the exact screen uses.
+    """The survival function of the age split must be the natural-log logistic.
 
-    It was ``1 / (1 + 10**u)`` while ``two_component_dust`` used
+    The LUT's indicator was ``1 / (1 + 10**u)`` while the exact screen used
     ``jax.nn.sigmoid``. Since 10^u = e^(u*ln10), the LUT's birth-cloud transition
     was 2.3x sharper: a different stellar population sat behind the birth cloud in
-    the fast path. An AGE-domain error, so no wavelength refinement could see it.
+    the fast path. The split now has one definition, the cell mean of
+    S(t) = sigmoid(-(log10 t - log10 b) / w); on a zero-width cell it is S at the
+    edge, which this pins against the logistic spelled out here.
     """
-    from tengri.components.dust.two_component import _young_indicator
+    from tengri.components.stellar.age_boundary import survival_cell_mean
 
     ages = np.logspace(6.0, 10.1, 64)
     t_birth, width = 1e7, 0.3
 
-    got = np.asarray(_young_indicator(jnp.asarray(ages), t_birth, width))
+    got = np.asarray(survival_cell_mean(jnp.asarray(ages), jnp.asarray(ages), t_birth, width))
     want = np.asarray(jax.nn.sigmoid(-(jnp.log10(ages) - jnp.log10(t_birth)) / width))
     np.testing.assert_allclose(got, want, rtol=1e-12)
 
