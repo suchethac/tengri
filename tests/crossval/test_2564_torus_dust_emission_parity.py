@@ -56,8 +56,8 @@ pytestmark = pytest.mark.crossval
 _SSP_GRID = "bc03_pdva_stelib_chabrier.h5"
 if find_data(_SSP_GRID) is None:
     pytest.skip(
-        f"BC03 SSP not found: {_SSP_GRID}. This grid is absent in CI; tests are "
-        "deselected from the crossval run.",
+        f"BC03 SSP grid '{_SSP_GRID}' not found. Set $TENGRI_DATA_DIR to its "
+        "directory, or run tengri.download_ssp('bc03_pdva_stelib_chabrier').",
         allow_module_level=True,
     )
 
