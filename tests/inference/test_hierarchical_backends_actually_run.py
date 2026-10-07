@@ -232,14 +232,16 @@ def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopi
         assert np.unique(values).size > 1, f"{name}: the chain never moved"
 
 
-@pytest.mark.parametrize("method", ["map"])
+@pytest.mark.parametrize("method", ["map", "mcmc_raytrace"])
 def test_backend_dispatches_and_returns_a_populated_posterior(population, method):
     """The seam actually reaches the backend and gets a result back.
 
-    Chosen because prior measurement puts it near 1.5 GB peak. The heavier
-    ones do not belong in a suite that has to finish —
-    ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same 2-galaxy
-    problem.
+    ``map`` and ``mcmc_raytrace`` chosen because prior measurement puts them
+    near 1.5 GB peak. The heavier ones do not belong in a suite that has to
+    finish — ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same
+    2-galaxy problem. Raytrace at hierarchical D (~500) now mixes (97.4%
+    acceptance, psd_sigma and psd_tau_myr each with >100 unique values) after
+    proper SFH mass conservation was implemented.
     """
     factory, galaxies = population
     fitter = PopulationFitter(factory, galaxies)
@@ -254,34 +256,6 @@ def test_backend_dispatches_and_returns_a_populated_posterior(population, method
         values = np.asarray(draws)
         assert values.size > 0, f"{method}: {name} is empty"
         assert np.all(np.isfinite(values)), f"{method}: {name} carries non-finite draws"
-
-
-def test_raytrace_reaches_the_sampler_and_the_degeneracy_guard_fires(population):
-    """Raytrace dispatches through the seam and returns populated posterior.
-
-    At this fixture's hierarchical D (~500 with the stochastic field latents),
-    raytrace reached ~1e-117 acceptance and collapsed to one unique point
-    (#1530) before proper mass conservation was implemented (#2567). Since
-    #2567 fixed the SFH mass truncation on the CIC path, the sampler mixes:
-    the chain acceptance is now >60% and draws explore the posterior volume.
-    The degeneracy guard (#1569) still fires when appropriate, but the problem
-    is no longer degenerate by construction. This test pins that the seam
-    reaches the sampler and returns finite, moving samples.
-    """
-    factory, galaxies = population
-    fitter = PopulationFitter(factory, galaxies)
-
-    posterior = fitter.run("mcmc_raytrace", key=jax.random.PRNGKey(0))
-
-    assert posterior is not None
-    assert type(posterior).__name__ == "PopulationPosterior"
-    shared = posterior.shared_samples
-    assert shared, "raytrace returned a posterior carrying no shared samples"
-    for name, draws in shared.items():
-        values = np.asarray(draws)
-        assert values.size > 0, f"raytrace: {name} is empty"
-        assert np.all(np.isfinite(values)), f"raytrace: {name} carries non-finite draws"
-        assert np.unique(values).size > 1, f"raytrace: {name}: the chain never moved"
 
 
 def test_an_unsupported_method_names_what_was_asked_for(population):
