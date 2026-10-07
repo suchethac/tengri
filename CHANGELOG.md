@@ -14,18 +14,6 @@
 
 ### Fixed
 
-- The analytic dust-emission precompute (`WavePrecomp` on `modified_blackbody`, `casey2012`,
-  `graybody`) built its node axes over the declared free prior (dust_T 20-80 K, dust_beta_ir
-  1-2.5, dust_alpha_mir 1-3, dust_lambda_0_um 50-500 um), and the lookup holds the edge value
-  with exactly zero gradient beyond the nodes. A widened prior (`dust_T: Uniform(10, 120)`) or a
-  `Fixed` value outside the declared range therefore gave a flat likelihood and no gradient over
-  the part the nodes did not reach, with nothing raised. The default axes now span the declared
-  range extended to what the model can reach, at the declared node density in the interpolation
-  coordinate (ln for dust_T and dust_lambda_0_um), so the #2676 accuracy carries over; with
-  default priors they are unchanged bit for bit. A supplied axis that does not cover that reach
-  raises `ValueError`, a supplied axis of fewer than 4 nodes warns (PCHIP degrades to a parabola
-  or a chord), and an unbounded prior (which cannot be spanned) emits one `GridSupportWarning`
-  (#2722).
 - `_pdr_luminosity_weight` (the power-law to single-U luminosity ratio of the Draine & Li 2007 Eq. 33 mass distribution, which weights the DL07/DL14 PDR component and `dust_umean`) is one closed form at every α: `R = g((2 − α)L)/g((1 − α)L)` with `g(u) = expm1(u)/u` and `L = ln(U_max/U_min)`, `g` by its series below |u| < 1e-3. It had held the α = 1 and α = 2 limit values across |α − pole| < 1e-3, which left `R` 3–4e-3 off and flat in α there and made it jump by 5–8e-3 at the window edges — a likelihood step with a zero gradient on a free `alpha_dl14` (#2727).
 - Lick equivalent widths and magnitude indices follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3). The index operator converts its per-frequency input (`L_ν` or `F_ν`) to `F_λ ∝ F_ν/λ²` and builds the pseudo-continuum as the straight line through the two sideband means placed at the sideband mid-wavelengths, integrating `1 − F_λ/F_C` over the feature window (the window-LUT path, `predict_spectral_indices(approx=True)`, evaluates the same definition at the window grid points, as the line path of #2677 does, and agrees with the exact path to round-off, also under a strong dust screen). A constant mean-of-sidebands continuum is the continuum at the wrong wavelength for asymmetric sidebands (Fe4383: 12 Å from the feature center): on solar SSP spectra it differs from the Lick definition by up to 1.0 Å (HγA, 10 Gyr), 0.4 Å (Fe4383) and 0.5 Å (HγF). Break indices (`Dn4000`, `D4000`, `F_ν` ratios) and `uv_slope_beta` are unchanged. `measure.spectral_index` documents its flux argument as a per-frequency flux density (pass `F_λ` as `flux_lambda * wave_rest**2`); `SpectralIndexDef(pseudo_continuum="mean")` keeps the constant continuum of `bagpipes.input.spectral_indices.single_index`, measured on the array as given, for comparison with BAGPIPES. An EW or magnitude index must declare exactly two continuum windows under the default definition. (#2690).
 - The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
@@ -216,6 +204,18 @@
 - `age_kernel='dsps'` gives the histogram kernel an SFR table refined 8-fold between SSP nodes; with one row per node the node containing the SFH onset lost its whole weight (delayed-tau, onset 5.0 Gyr: dsps/cic flux +2.32/+2.00/+1.48/+1.23 % in FUV/u/r/H, now -0.05/-0.06/-0.04/-0.03 %) and the flux jumped as the onset crossed a node. `dsps` outputs move; `cic` is unchanged for non-field models. Structure narrower than the node spacing raises `DSPSUnresolvedHistoryWarning` (#2683).
 
 - The window LUT behind `measure_line_fluxes(approx=True)`, `predict_spectral_indices(approx=True)` and the line-flux loss channel applied the dust screen at each window center, where the exact path applies it across the window; a faint line beside a strong one (a small difference of two large window means) therefore disagreed by 13 % for [N II] 6584 next to Hα (and 5e-5 to 3e-4 for the other lines and indices). The LUT now keeps the SSP integrand per grid point and applies the screen there, so it equals the exact measurement to float rounding on every line and break/EW index (#2677).
+- The analytic dust-emission precompute (`WavePrecomp` on `modified_blackbody`, `casey2012`,
+  `graybody`) built its node axes over the declared free prior (dust_T 20-80 K, dust_beta_ir
+  1-2.5, dust_alpha_mir 1-3, dust_lambda_0_um 50-500 um), and the lookup holds the edge value
+  with exactly zero gradient beyond the nodes. A widened prior (`dust_T: Uniform(10, 120)`) or a
+  `Fixed` value outside the declared range therefore gave a flat likelihood and no gradient over
+  the part the nodes did not reach, with nothing raised. The default axes now span the declared
+  range extended to what the model can reach, at the declared node density in the interpolation
+  coordinate (ln for dust_T and dust_lambda_0_um), so the #2676 accuracy carries over; with
+  default priors they are unchanged bit for bit. A supplied axis that does not cover that reach
+  raises `ValueError`, a supplied axis of fewer than 4 nodes warns (PCHIP degrades to a parabola
+  or a chord), and an unbounded prior (which cannot be spanned) emits one `GridSupportWarning`
+  (#2722).
 
 ### Changed
 
