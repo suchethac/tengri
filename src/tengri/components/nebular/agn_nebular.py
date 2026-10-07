@@ -159,6 +159,7 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 from tengri.protocols.component import declared_default
 
@@ -505,6 +506,22 @@ def agn_nlr_cue(
 
 
 # ── Synthesizer NLR backend ───────────────────────────────────────
+
+
+#: Feltre+2016 table lines quoted in AIR (NIST air values). The table's other
+#: optical lines, Halpha and [OII]3727, and every UV line are already vacuum.
+FELTRE_AIR_LINE_NAMES: frozenset[str] = frozenset(
+    {
+        "Hbeta",
+        "[OIII]4959",
+        "[OIII]5007",
+        "[OI]6300",
+        "[NII]6548",
+        "[NII]6584",
+        "[SII]6717",
+        "[SII]6731",
+    }
+)
 
 
 @dataclass
@@ -1159,7 +1176,18 @@ def _load_feltre_grid(filepath: str | Path) -> FeltreGridData:
         logn_axis = jnp.array(grp["logn_axis"][:])
         logZ_axis = jnp.array(grp["logZ_axis"][:])
         xi_d_axis = jnp.array(grp["xi_d_axis"][:])
-        line_wavelengths_aa = jnp.array(grp["line_wavelengths_aa"][:])
+        # The table quotes Halpha and [OII]3727 in vacuum and the other optical
+        # lines in air (NIST air values); the UV lines are vacuum. Convert the
+        # air ones once, here.
+        feltre_names = [
+            n.decode() if isinstance(n, bytes) else str(n) for n in grp["line_names"][:]
+        ]
+        line_wavelengths_aa = jnp.array(
+            catalog_air_to_vacuum(
+                grp["line_wavelengths_aa"][:],
+                air_mask=[n in FELTRE_AIR_LINE_NAMES for n in feltre_names],
+            )
+        )
         logHB_per_logq = jnp.array(grp["logHB_per_logq"][:])
         line_ratios = jnp.array(grp["line_ratios"][:])
 

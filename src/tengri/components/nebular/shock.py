@@ -42,6 +42,7 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
@@ -294,7 +295,11 @@ def _load_mappings_grids() -> dict | None:
             "log_density_cm3": jnp.array(g["log_density_cm3"][:], dtype=jnp.float32),
             "abundance_names": _decode(g["abundance_names"][:]),
             "line_names": _decode(g["line_names"][:]),
-            "line_wavelengths_aa": jnp.array(g["line_wavelengths_aa"][:], dtype=jnp.float32),
+            # 3MdB/MAPPINGS V line labels are PyNeb-style air labels (6563,
+            # 5007, ...); ingested once here, so every consumer sees vacuum.
+            "line_wavelengths_aa": jnp.array(
+                catalog_air_to_vacuum(g["line_wavelengths_aa"][:]), dtype=jnp.float32
+            ),
             # Shape (N_abund, N_n, N_v, N_B, N_lines): NaN-filled cells → 0.0
             "shock_ratios": shock_ratios,
             "precursor_ratios": precursor_ratios,

@@ -414,6 +414,7 @@ os.environ.setdefault("TENGRI_DATA_NO_ANCESTOR_WALK", "1")
 from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.utils.grid import grid_spacing, make_log_age_grid
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Enable 64-bit for numerical precision in tests
 jax.config.update("jax_enable_x64", True)
@@ -509,13 +510,18 @@ def sdss_filters():
 
 @pytest.fixture(scope="session")
 def synthetic_ssp():
-    """Minimal synthetic SSP: 3 Z × 20 ages × 100 wavelengths."""
+    """Minimal synthetic SSP: 3 Z × 20 ages × 100 wavelengths.
+
+    ``ssp_lgmet`` is absolute log10(Z), as in ``SSPData``: the nodes are
+    ``logzsol = [-1.5, -0.5, 0.0]`` shifted by ``LOG10_ZSUN``, so the grid spans
+    ``logzsol`` -1.5 to 0.0 and the declared ``met_logzsol`` prior lies inside it.
+    """
     n_met, n_age, n_wave = 3, 20, 100
     wave = jnp.linspace(3000.0, 10000.0, n_wave)
     ages_gyr = jnp.linspace(-1.0, 1.14, n_age)
     key = jax.random.PRNGKey(123)
     flux = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-5
-    lgmet = jnp.array([-1.5, -0.5, 0.0])
+    lgmet = jnp.array([-1.5, -0.5, 0.0]) + LOG10_ZSUN
     return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
 

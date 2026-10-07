@@ -53,6 +53,7 @@ from reproduction import _validation as V
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -242,7 +243,7 @@ RESULTS["Setup BAGPIPES sampling"] = ("band average, 2x vs 1x sampling", max(abs
 # | Lognormal | `lognormal`: `tmax`, `fwhm` | `sfh={"type": "lnorm", "peak_gyr": tmax, "width_gyr": sigma_ln / ln 10, "age_gyr"}`; $\sigma_{\ln}$ is the value BAGPIPES's `lognorm_equations` solves for (printed in §2) |
 # | Continuity | `continuity`: `bin_edges` [Myr], `dsfr1 ... dsfrN` ordered oldest to youngest | `sfh={"type": "continuity", "ratio_0 ... ratio_N-1"}` ordered youngest to oldest: with six ratios `ratio_i` $=$ `dsfr`$_{6-i}$; the bin edges are passed as `bin_edges_gyr`, because tengri's default ladder is scaled to the source redshift |
 # | Attenuation | `dust`: `type`, `Av`, `eta`, `n` | `dust_attenuation={"type": "two_component", "law_bc", "law_diff", "tau_diff": Av ln10/2.5, "tau_bc": (eta - 1) tau_diff}`; BAGPIPES `Salim` is the law `salim_sbl18` |
-# | Birth cloud | `t_bc`: step at 0.01 Gyr | `t_birth_yr` with a logistic gate of 0.3 dex width (§7) |
+# | Birth cloud | `t_bc`: step at 0.01 Gyr | `t_birth_yr`: hard step at 10 Myr on the exact formed-mass share of each SSP node (§7) |
 # | Dust emission | `dust`: `qpah`, `umin`, `gamma` | `dust_emission={"type": "draine_li2007", "qpah", "umin", "gamma_dl"}` |
 # | Nebular | `nebular`: `logU`, `metallicity`, `fesc` | `neb={"type": "cue", "neb_logU": logU, "neb_logZ_gas": log10(metallicity), "neb_fesc": fesc}`; U is defined at the inner face of a cloud at $R = 10^{19}$ cm, $n_{\rm H} = 100$ cm$^{-3}$ in both codes; gas metallicity is on the shared Dopita et al. (2000) solar scale; [N/O] follows BAGPIPES's relation to the gas metallicity (`gas_logno`, §9); the escape fraction scales the lines differently (§9) |
 # | Velocity dispersion | `veldisp` [km/s]; BAGPIPES's lines have no width of their own | `velocity_broaden(sed, wave, sigma_kms)` applied to the SED with `neb_eline_sigma_kms = 0`; tengri's default adds a 100 km/s width to each nebular line before the broadening (§10) |
@@ -469,14 +470,7 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # unchanged and line strengths are compared in §9.
 
 # %%
-def air_to_vacuum(w_air):
-    """Vacuum wavelength [Å] of an air wavelength [Å] (Morton / IAU standard-air relation)."""
-    s2 = (1.0e4 / np.asarray(w_air, float)) ** 2
-    return w_air * (1.0 + 8.336624212083e-5 + 2.408926869968e-2 / (130.1065924522 - s2)
-                    + 1.599740894897e-4 / (38.92568793293 - s2))
-
-
-assert abs(float(air_to_vacuum(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
+assert abs(float(air_to_vac(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
 
 
 _mg_lines = B._build_model(
@@ -488,7 +482,7 @@ _mg_lines = B._build_model(
 )
 _wl_air, _ = B.line_table(_mg_lines)
 # BAGPIPES labels the lines below 2000 A in vacuum and above in air.
-LINE_MASK_AA = np.where(_wl_air > 2000.0, air_to_vacuum(_wl_air), _wl_air)
+LINE_MASK_AA = np.where(_wl_air > 2000.0, air_to_vac(_wl_air), _wl_air)
 
 # %%
 # The double power-law and lognormal forms are functions of cosmic time T = age - lookback.
@@ -1319,14 +1313,19 @@ caveat(
 # younger than `t_bc` by an extra $(\eta - 1) A_V$, mapped to `tau_bc` $= (\eta - 1)\,\tau_V$.
 
 # %%
-from tengri.components.dust.two_component import DustSEDComponentConfig, _young_indicator
+from tengri.components.dust.two_component import DustSEDComponentConfig
+from tengri.components.stellar.age_boundary import survival_cell_mean
 
 _gate_cfg = DustSEDComponentConfig()
 _ages_probe_yr = np.array([3e6, 1e7, 3e7])
-_gate = np.asarray(_young_indicator(_ages_probe_yr, _gate_cfg.t_birth_yr, _gate_cfg.transition_width_dex))
+# Share of the formed mass in a cell ending at each probe age that is younger than the dispersal age.
+_gate = np.asarray(
+    survival_cell_mean(0.98 * _ages_probe_yr, _ages_probe_yr, _gate_cfg.t_birth_yr, _gate_cfg.transition_width_dex)
+)
 print(
-    f"tengri birth-cloud gate: logistic in log10(age), centered at {_gate_cfg.t_birth_yr:.0e} yr, width "
-    f"{_gate_cfg.transition_width_dex:g} dex; fraction of stars inside the cloud at 3, 10, 30 Myr: "
+    f"tengri birth-cloud split: exact formed-mass share younger than {_gate_cfg.t_birth_yr:.0e} yr "
+    f"(width {_gate_cfg.transition_width_dex:g} dex, 0 = hard step); share of the cell ending at 3, 10, 30 Myr "
+    f"inside the cloud: "
     + ", ".join(f"{g:.3f}" for g in _gate)
     + " (BAGPIPES: 1, 1, 0 for t_bc = 0.01 Gyr)"
 )
@@ -1374,9 +1373,10 @@ RESULTS["§7 birth-cloud gate (eta = 2, 30 Myr burst)"] = (
 )
 caveat(
     f"with $\\eta = {_ETA:g}$ BAGPIPES attenuates every star younger than `t_bc` by the extra screen, a step at "
-    f"10 Myr, while tengri's gate falls over about 0.3 dex ({_gate[0]:.3f}, {_gate[1]:.3f} and {_gate[2]:.3f} of the "
-    f"stars inside the cloud at 3, 10 and 30 Myr). For a 30 Myr constant-SFR burst the tengri/BAGPIPES band ratios "
-    f"are {_burst['GALEX FUV']:.3f} in GALEX FUV, {_burst['GALEX NUV']:.3f} in NUV and {_burst['SDSS g']:.3f} in SDSS g. "
+    f"10 Myr; tengri's default is the same hard step at 10 Myr, applied to the exact formed-mass share of each SSP "
+    f"node younger than `t_birth_yr` ({_gate[0]:.3f}, {_gate[1]:.3f} and {_gate[2]:.3f} of the formed mass inside "
+    f"the cloud for cells ending at 3, 10 and 30 Myr). For a 30 Myr constant-SFR burst the "
+    f"tengri/BAGPIPES band ratios are {_burst['GALEX FUV']:.3f} in GALEX FUV, {_burst['GALEX NUV']:.3f} in NUV and {_burst['SDSS g']:.3f} in SDSS g. "
     f"For populations that are old compared with 30 Myr, or at $\\eta = 1$, the gate does not act and the "
     f"mapping in the table above is exact."
 )
@@ -1886,7 +1886,7 @@ RESULTS["§8 dust emission"] = (f"worst IR band over the DL07 sweep ({_dl_worst_
 #
 # Absorbed luminosity $L_{\rm abs} = \int (L_{\rm in} - L_{\rm att})\,d\lambda$ in erg/s. BAGPIPES integrates
 # over its whole grid, including $\lambda < 912$ Å, and counts nebular emission in $L_{\rm in}$ when the
-# block is present. tengri excludes $\lambda < 912$ Å by default; `eb_include_lyc=True` includes it.
+# block is present. tengri excludes $\lambda < 912$ Å by default; `lyc_in_energy_balance=True` includes it.
 
 # %%
 _DL07_DUST = {"type": "Calzetti", "Av": AV_FIDUCIAL, "eta": 1.0, "qpah": QPAH_FIDUCIAL,
@@ -1906,7 +1906,7 @@ def _l_abs_tengri(*, neb: bool, include_lyc: bool) -> float:
         "all_params": Fixed(DEFAULT),
     }
     if include_lyc:
-        dust_att["eb_include_lyc"] = True
+        dust_att["lyc_in_energy_balance"] = True
     groups = dict(
         ssp_data=ssp,
         met=MET_FIDUCIAL,
@@ -1946,7 +1946,7 @@ def _l_abs_bagpipes(*, neb: bool) -> float:
 
 _eb_rows = [
     ("nebular off in both; tengri default (λ ≥ 912 Å)", False, False),
-    ("nebular off in both; tengri eb_include_lyc=True", False, True),
+    ("nebular off in both; tengri lyc_in_energy_balance=True", False, True),
     ("nebular on in both; tengri default (λ ≥ 912 Å)", True, False),
 ]
 _L_ABS_RATIOS = {}
@@ -1960,7 +1960,7 @@ RESULTS["§8 energy balance (L_abs)"] = ("L_abs, nebular off, default", abs(_L_A
 caveat(
     f"tengri excludes $\\lambda < 912$ Å from the absorbed luminosity by default, and BAGPIPES does not. With the nebular "
     f"block off in both codes tengri's $L_{{\\rm abs}}$, and so its IR luminosity, is {_L_ABS_RATIOS[_lab_off]:.4f} of "
-    f"BAGPIPES's; with `eb_include_lyc=True` it is {_L_ABS_RATIOS[_lab_lyc]:.4f}. With the nebular block on in both, "
+    f"BAGPIPES's; with `lyc_in_energy_balance=True` it is {_L_ABS_RATIOS[_lab_lyc]:.4f}. With the nebular block on in both, "
     f"the ionizing light is reprocessed into lines and the ratio is {_L_ABS_RATIOS[_lab_on]:.4f} at the default. "
     f"The IR shape is unaffected (§8 ladders); a stellar-only BAGPIPES model compared in IR luminosity needs the "
     f"keyword."
@@ -2229,7 +2229,7 @@ def paired_line_table(mg_b, state_t):
     wt = np.asarray(state_t.derived["line_waves"])
     lt = np.asarray(state_t.derived["line_lums"])
     # BAGPIPES labels the lines below 2000 A in vacuum and above in air.
-    wvac = np.where(wb > 2000.0, air_to_vacuum(wb), wb)
+    wvac = np.where(wb > 2000.0, air_to_vac(wb), wb)
     # Each tengri line is assigned to the nearest BAGPIPES line, so two lines closer than the match window
     # (He I 3888.64 and H I 3889.05 in BAGPIPES's air scale) are compared each with its own counterpart.
     nearest = np.argmin(np.abs(wt[:, None] - wvac[None, :]), axis=1)

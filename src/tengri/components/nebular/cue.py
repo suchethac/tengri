@@ -119,6 +119,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -288,9 +289,11 @@ class CueWeights(NamedTuple):
     line_wav_selections : tuple of ndarray
         Wavelength selection masks per sub-network.
     sorted_line_wav : ndarray, shape (n_lines_total,)
-        Sorted emission line wavelengths [Angstrom].
+        Sorted emission line wavelengths [Angstrom, vacuum]. The file stores
+        Cloudy air labels; the loader converts them once.
     nn_line_wav : ndarray, shape (n_nn_lines,)
-        Concatenated NN output wavelengths [Angstrom].
+        Concatenated NN output wavelengths [Angstrom, vacuum], converted from
+        the file's air labels at load.
     line_old_idx : ndarray
         Indices of CLOUDY/FSPS-matched (old) lines.
     cont_wav : ndarray, shape (n_wave_cont,)
@@ -540,14 +543,17 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         """Pad a 1D array to target shape."""
         return np.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
-    nn_line_wav = np.asarray(npz["nn_line_wavelength"])
+    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ...). Convert them
+    # exactly once, here; everything downstream is vacuum. The conversion is
+    # monotonic, so the sort order below is unchanged.
+    nn_line_wav = catalog_air_to_vacuum(npz["nn_line_wavelength"])
 
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
-        sorted_line_wav=np.asarray(npz["sorted_line_wavelength"]),
+        sorted_line_wav=catalog_air_to_vacuum(npz["sorted_line_wavelength"]),
         nn_line_wav=nn_line_wav,
         line_old_idx=np.asarray(npz["line_old_idx"]),
         cont_wav=np.asarray(npz["cont_wavelength"]),
@@ -826,7 +832,8 @@ def predict_all_lines(
     Returns
     -------
     wavelengths : array, shape (n_lines,)
-        Line wavelengths in Angstrom (sorted, vacuum) [Angstrom].
+        Line wavelengths in Angstrom (sorted, vacuum: converted from the
+        file's air labels at load) [Angstrom].
     luminosities : array, shape (n_lines,)
         Line luminosities in Lsun [Lsun].
 
@@ -1486,18 +1493,11 @@ class CueBackend:
         Returns
         -------
         ndarray, shape (n_lines,)
-            Rest-frame wavelengths [Angstrom], plain ``numpy``, in this
-            backend's **native** frame -- air, for cue's upstream ``.npy``
-            (see the vacuum-contract comment in
-            ``components/nebular/component.py``) -- the same frame
-            :meth:`_forward_lines` / :meth:`predict_nebular_line_luminosities`
-            return. **Not** the vacuum frame ``state.derived["line_waves"]``
-            holds: callers that need to compare against a vacuum target
-            (e.g. the #2239 warning seam) must apply
-            ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
-            themselves, exactly as
-            :class:`~tengri.components.nebular.component.NebularSEDComponent`
-            does before publishing.
+            Rest-frame **vacuum** wavelengths [Angstrom], plain ``numpy``:
+            the same array :meth:`_forward_lines` and
+            :meth:`predict_nebular_line_luminosities` return and
+            ``state.derived["line_waves"]`` holds. The weights file stores
+            Cloudy air labels; they are converted once, at load.
 
         Notes
         -----
@@ -2136,10 +2136,9 @@ class CueBackend:
         cont : ndarray, shape (n_wave,)
             Continuum on ``ssp_wave`` [Lsun/Hz].
         line_wav : ndarray, shape (n_lines,)
-            Line centers **as the SED renders them** [Angstrom]: the raw network
-            wavelengths, which for Cue's upstream file are AIR wavelengths
-            (H-beta at 4861.3), not the vacuum values the published catalog
-            carries. Anything that must agree with the SED uses these.
+            Line centers **as the SED renders them** [Angstrom, vacuum]: the
+            network wavelengths converted from the file's air labels at load,
+            identical to the published catalog.
         line_lum : ndarray, shape (n_lines,)
             Integrated line luminosities [Lsun] (k-factor and Lyman-alpha escape
             applied), all ~138 catalog lines.

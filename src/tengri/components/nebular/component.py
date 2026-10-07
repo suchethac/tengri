@@ -28,7 +28,6 @@ import numpy as np
 
 from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
-from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.nebular.dig import (
     mix_dig_emission,
@@ -714,9 +713,10 @@ class NebularSEDComponent(TemplateThreading):
         cont : ndarray, shape (n_wave,)
             Continuum on ``state.wave`` [erg/s/Hz].
         line_wave : ndarray, shape (n_lines,)
-            Line centers **as the SED renders them** [Angstrom]. For Cue these are
-            the raw network wavelengths, which are AIR wavelengths; the published
-            ``line_waves`` catalog is the vacuum conversion.
+            Line centers **as the SED renders them** [Angstrom, vacuum]. For Cue
+            these are the network wavelengths converted from the weights file's
+            air labels once at load, the same array as the published
+            ``line_waves`` catalog.
         log_line_lum : ndarray, shape (n_lines,)
             ``log10`` of the integrated line luminosities [dex re erg/s]
             (``-inf`` for a dark line). Kept in log because a strong line is
@@ -1039,28 +1039,14 @@ class NebularSEDComponent(TemplateThreading):
                         dig_active=self.config.dig_active,
                         **common_kwargs,
                     )
-                # CLAUDE.md contract: vacuum wavelengths throughout. See
-                # ``nebular_line_waves_to_vacuum`` (components/nebular/_shared.py)
-                # for the upstream-Cue rationale and the Balmer-vote /
-                # Edlén (1953) mechanism; this is the ONE implementation,
-                # also called by the #2239 warning seam's static accessor
-                # (``forward/properties.py::_published_line_wavelengths_static``)
-                # so the two never compare air against vacuum.
-                #
-                # Trace-safe: under a jitted sampler (NUTS/HMC loss),
-                # ``line_waves`` arrives as a Tracer via the threaded
-                # ``template_data``, so numpy conversion / boolean indexing /
-                # Python branches raise: and the guard below used to swallow
-                # that, silently dropping the line catalog from
-                # ``state.derived`` (joint phot+lines fits then fail with a
-                # misleading "backend did not publish" error). This call
-                # relies on ``nebular_line_waves_to_vacuum``'s default
-                # ``xp=jax.numpy`` for exactly that reason -- unlike the
-                # #2239 seam's accessor (which passes ``xp=numpy`` because
-                # its input is always concrete), this ``line_waves`` can be
-                # a genuine tracer and must stay one.
-                if self.config.backend in ("cue", "cloudy_grid", "cb19", "mappings"):
-                    line_waves = nebular_line_waves_to_vacuum(line_waves)
+                # Vacuum wavelengths throughout: every backend's loader converts
+                # its air labels to vacuum ONCE at ingestion (cue:
+                # ``load_cue_weights``; mappings, feltre: ``catalog_air_to_vacuum``;
+                # cb19: its declared air lines; cloudy_grid is vacuum as
+                # published), so ``line_waves`` is published as-is. There is no
+                # post-hoc air/vacuum vote here: a second conversion would be a
+                # double conversion. ``line_waves`` may be a tracer under a
+                # jitted sampler, which is why nothing is read from it on the host.
 
                 # THE unit seam (#1559). Every backend returns [Lsun]; the
                 # published ``line_lums`` DerivedKey is [erg/s], and

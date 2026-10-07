@@ -473,8 +473,6 @@ _RST_LITERAL = re.compile(r"`+[^`]*`+")
 #: with the reason it is not an inverse variance. Editing an exempt line
 #: re-arms the guard on it, which is the intended behavior.
 _ALLOWED = {
-    # Not a variance: 1/lambda**2 is the ENERGY filter convention.
-    ("utils/conversions.py", "inv_lambda_sq = 1.0 / (wavelength_aa**2)"),
     # Not a variance: Lyman-series index n, an integer >= 2.
     (
         "components/igm/meiksin06.py",

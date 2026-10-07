@@ -69,7 +69,7 @@ pytestmark = pytest.mark.regression_bug
 _C_KMS = 299792.458
 _FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
 _MILES_BARE = "data/fsps_prsc_miles_chabrier.h5"
-_HBETA_REST = 4861.35
+_HBETA_REST = 4862.68  # vacuum, = EMISSION_LINES["Hbeta"]
 
 
 def _resolution_for_sigma_inst(sigma_inst_kms: float) -> float:

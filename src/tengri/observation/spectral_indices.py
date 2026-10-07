@@ -45,6 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
+from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.scale import representable_denominator, representable_floor
 
 #: Reference wavelength [Å] of the F_λ conversion ``F_λ ∝ F_ν (λ_ref/λ)²``. The
@@ -210,6 +211,59 @@ class SpectralIndexDef:
 
 # ── Standard index catalog ────────────────────────────────────────
 
+#: Published Lick passbands in **air** Angstrom, exactly as tabulated by their
+#: papers: ``name -> (continuum windows, feature window)``. Hbeta, Mgb, Fe5270,
+#: Fe5335, Fe4383 and Ca4227 are Trager et al. (1998, ApJS 116, 1, Table 1;
+#: Worthey et al. 1994 definitions); HdA, HdF, HgA and HgF are Worthey &
+#: Ottaviani (1997, ApJS 111, 377, Table 1). Both were defined on spectra
+#: calibrated against arc lamps in air, and FSPS likewise treats them as air
+#: (``sps_setup.f90`` converts ``allindices.dat`` with ``airtovac``). They are
+#: never used directly: :func:`_lick_index_def` converts every edge to vacuum
+#: once, here at import, so the windows apply to tengri's vacuum spectra.
+_LICK_AIR_WINDOWS: dict[str, tuple[tuple[tuple[float, float], ...], tuple[float, float]]] = {
+    "HdA": (((4041.60, 4079.75), (4128.50, 4161.00)), (4083.50, 4122.25)),
+    "HdF": (((4057.25, 4088.50), (4114.75, 4137.25)), (4091.00, 4112.25)),
+    "HgA": (((4283.50, 4319.75), (4367.25, 4419.75)), (4319.75, 4363.50)),
+    "HgF": (((4283.50, 4319.75), (4354.75, 4384.75)), (4331.25, 4352.25)),
+    "Mgb": (((5142.63, 5161.38), (5191.38, 5206.38)), (5160.13, 5192.63)),
+    "Fe5270": (((5233.15, 5248.15), (5285.65, 5318.15)), (5245.65, 5285.65)),
+    "Fe5335": (((5304.63, 5315.88), (5353.38, 5363.38)), (5312.13, 5352.13)),
+    "Hbeta": (((4827.88, 4847.88), (4876.63, 4891.63)), (4847.88, 4876.63)),
+    "Fe4383": (((4359.13, 4370.38), (4442.88, 4455.38)), (4369.13, 4420.38)),
+    "Ca4227": (((4211.00, 4219.75), (4241.00, 4251.00)), (4222.25, 4234.75)),
+}
+
+
+def _window_to_vacuum(window: tuple[float, float]) -> tuple[float, float]:
+    """Convert one air-wavelength window ``(lo, hi)`` to vacuum [Angstrom]."""
+    lo, hi = (float(w) for w in air_to_vac(np.asarray(window, dtype=np.float64)))
+    return (lo, hi)
+
+
+def _lick_index_def(name: str) -> SpectralIndexDef:
+    """The vacuum-frame :class:`SpectralIndexDef` of a published air Lick index.
+
+    Parameters
+    ----------
+    name : str
+        Key of :data:`_LICK_AIR_WINDOWS`.
+
+    Returns
+    -------
+    SpectralIndexDef
+        Equivalent-width index whose continuum and feature windows are the
+        published air edges converted with
+        :func:`tengri.utils.air_vacuum.air_to_vac`.
+    """
+    continuum_air, feature_air = _LICK_AIR_WINDOWS[name]
+    return SpectralIndexDef(
+        name=name,
+        index_type="EW",
+        continuum=tuple(_window_to_vacuum(w) for w in continuum_air),
+        feature=_window_to_vacuum(feature_air),
+    )
+
+
 #: Catalog of the 13 single-passband spectral indices tengri ships, keyed by
 #: index name. Three kinds are represented: ``break`` ratios (``Dn4000``,
 #: ``D4000``), Lick-style equivalent widths (``HdA``, ``HdF``, ``HgA``,
@@ -218,8 +272,10 @@ class SpectralIndexDef:
 #: equivalent widths use the Lick pseudo-continuum (see
 #: :attr:`SpectralIndexDef.pseudo_continuum`). Values are
 #: :class:`SpectralIndexDef` records carrying the passband definitions in
-#: rest-frame vacuum Angstrom. Pass a key to
-#: :func:`tengri.measure.spectral_index` or :func:`tengri.measure_index_jax`.
+#: rest-frame **vacuum** Angstrom: the Lick windows are published in air and
+#: converted once at import (:data:`_LICK_AIR_WINDOWS`); the 4000 A break
+#: windows and the UV slope range are taken as vacuum, as FSPS does. Pass a key
+#: to :func:`tengri.measure.spectral_index` or :func:`tengri.measure_index_jax`.
 STANDARD_INDICES: dict[str, SpectralIndexDef] = {
     "Dn4000": SpectralIndexDef(
         name="Dn4000",
@@ -231,66 +287,7 @@ STANDARD_INDICES: dict[str, SpectralIndexDef] = {
         index_type="break",
         continuum=((3750.0, 3950.0), (4050.0, 4250.0)),
     ),
-    "HdA": SpectralIndexDef(
-        name="HdA",
-        index_type="EW",
-        continuum=((4041.60, 4079.75), (4128.50, 4161.00)),
-        feature=(4083.50, 4122.25),
-    ),
-    "HdF": SpectralIndexDef(
-        name="HdF",
-        index_type="EW",
-        continuum=((4057.25, 4088.50), (4114.75, 4137.25)),
-        feature=(4091.00, 4112.25),
-    ),
-    "HgA": SpectralIndexDef(
-        name="HgA",
-        index_type="EW",
-        continuum=((4283.50, 4319.75), (4367.25, 4419.75)),
-        feature=(4319.75, 4363.50),
-    ),
-    "HgF": SpectralIndexDef(
-        name="HgF",
-        index_type="EW",
-        continuum=((4283.50, 4319.75), (4354.75, 4384.75)),
-        feature=(4331.25, 4352.25),
-    ),
-    "Mgb": SpectralIndexDef(
-        name="Mgb",
-        index_type="EW",
-        continuum=((5142.63, 5161.38), (5191.38, 5206.38)),
-        feature=(5160.13, 5192.63),
-    ),
-    "Fe5270": SpectralIndexDef(
-        name="Fe5270",
-        index_type="EW",
-        continuum=((5233.15, 5248.15), (5285.65, 5318.15)),
-        feature=(5245.65, 5285.65),
-    ),
-    "Fe5335": SpectralIndexDef(
-        name="Fe5335",
-        index_type="EW",
-        continuum=((5304.63, 5315.88), (5353.38, 5363.38)),
-        feature=(5312.13, 5352.13),
-    ),
-    "Hbeta": SpectralIndexDef(
-        name="Hbeta",
-        index_type="EW",
-        continuum=((4827.88, 4847.88), (4876.63, 4891.63)),
-        feature=(4847.88, 4876.63),
-    ),
-    "Fe4383": SpectralIndexDef(
-        name="Fe4383",
-        index_type="EW",
-        continuum=((4359.13, 4370.38), (4442.88, 4455.38)),
-        feature=(4369.13, 4420.38),
-    ),
-    "Ca4227": SpectralIndexDef(
-        name="Ca4227",
-        index_type="EW",
-        continuum=((4211.00, 4219.75), (4241.00, 4251.00)),
-        feature=(4222.25, 4234.75),
-    ),
+    **{name: _lick_index_def(name) for name in _LICK_AIR_WINDOWS},
     # UV continuum slope β (Calzetti+1994), f_λ ∝ λ^β over 1250–2600 Å.
     "uv_slope_beta": SpectralIndexDef(
         name="uv_slope_beta",

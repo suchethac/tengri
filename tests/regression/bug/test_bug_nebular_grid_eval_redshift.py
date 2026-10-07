@@ -401,11 +401,14 @@ class TestPublishedSplit:
             assert not key.endswith("_phot_lnu_precomp")
 
     def test_line_wavelengths_are_those_the_sed_renders(self, models):
-        """Cue's network wavelengths are air: Halpha sits at 6562.8, not vacuum 6564.6."""
+        """The SED renders the vacuum catalog: Halpha at 6564.6, not the air label 6562.8.
+
+        Cue's file stores air labels; the loader converts them once (#2778 follow-up).
+        """
         fast = models.fast(Uniform(0.05, 2.0))
         waves = np.asarray(_grid_component(fast).grid_table.sed_line_waves)
-        assert np.min(np.abs(waves - 6562.8)) < 0.1
-        assert np.min(np.abs(waves - 6564.6)) > 1.0
+        assert np.min(np.abs(waves - 6564.61)) < 0.05
+        assert np.min(np.abs(waves - 6562.8)) > 1.0
 
 
 # ── T2: catalog_z_range, the Fitter's runtime-redshift path ──────────────────────

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Shared utilities: grid construction, cosmology, conversions, magnitudes."""
 
+from tengri.utils.air_vacuum import air_to_vac, vac_to_air
 from tengri.utils.conversions import (
     air_to_vacuum,
     attenuation_to_tau,
@@ -92,6 +93,7 @@ __all__ = [
     "age_at_z",
     "age_at_z0",
     # Conversions
+    "air_to_vac",
     "air_to_vacuum",
     "angular_diameter_distance",
     "angular_diameter_distance_mpc",
@@ -149,6 +151,7 @@ __all__ = [
     "tw_ndhist",
     "tw_ndhist_weighted",
     "ujy_to_fnu",
+    "vac_to_air",
     "vacuum_to_air",
     "vega_to_ab",
     "z_at_cosmic_time",
