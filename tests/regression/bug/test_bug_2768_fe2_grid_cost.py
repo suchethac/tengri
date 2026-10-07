@@ -172,6 +172,7 @@ class TestTransforms:
         assert np.isfinite(g_old), "a non-finite full-lattice FWHM gradient"
         assert g_old != 0.0, "an identically zero full-lattice FWHM gradient"
         assert np.isfinite(g_new), "a non-finite FWHM gradient"
+        assert g_new != 0.0, "an identically zero FWHM gradient"
         assert g_new == pytest.approx(g_old, rel=1.0e-6)
 
 
@@ -222,3 +223,75 @@ class TestGradientCost:
 
         flops = _flops(fn, jnp.array([11.5, 8.0, 1.0, 5000.0]))
         assert flops <= _COMPOSITION_FLOP_BUDGET, f"{flops:,.0f} > {_COMPOSITION_FLOP_BUDGET:,}"
+
+
+class TestWidthContract:
+    """The band-limited path is only reachable with a width it was built for."""
+
+    def test_traced_narrow_width_is_nan_not_a_lowpassed_spectrum(self):
+        wave = jnp.asarray(_CALLER_GRID)
+        narrow = jax.jit(lambda f: blr._fe2_pseudo_continuum(wave, f, 1.0))(_FWHM_MIN - 1.0)
+        power = jax.jit(lambda f: blr._fe2_total_power(f, 1.0))(_FWHM_MIN - 1.0)
+        assert bool(jnp.all(jnp.isnan(narrow)))
+        assert bool(jnp.isnan(power))
+
+    def test_traced_width_at_the_minimum_is_finite(self):
+        wave = jnp.asarray(_CALLER_GRID)
+        at_min = jax.jit(lambda f: blr._fe2_pseudo_continuum(wave, f, 1.0))(_FWHM_MIN)
+        assert bool(jnp.all(jnp.isfinite(at_min)))
+        assert float(at_min.max()) > 0.0
+
+    def test_concrete_narrow_width_is_finite_on_the_full_lattice_path(self):
+        wave = jnp.asarray(_CALLER_GRID)
+        narrow = blr._fe2_pseudo_continuum(wave, 100.0, 1.0)
+        assert bool(jnp.all(jnp.isfinite(narrow)))
+        assert float(narrow.max()) > 0.0
+
+    def test_no_declared_fe2_or_blr_width_prior_reaches_below_the_minimum(self):
+        """Any declared BLR/FeII width parameter must have a prior inside the fast path.
+
+        None is declared today: the width is a block keyword, not a parameter.
+        """
+        from tengri.components.agn._params import PARAMS
+
+        widths = [d for d in PARAMS if "fwhm" in d.name and "nlr" not in d.name]
+        for decl in widths:
+            prior = decl.free_prior if decl.free_prior is not None else decl.prior
+            assert float(prior.lo) >= _FWHM_MIN, f"{decl.name} prior reaches {prior.lo}"
+
+    def test_the_grammar_refuses_a_blr_width_so_a_model_never_traces_one(self):
+        """``agn_blr_fwhm_kms`` cannot be freed through ``SEDModel.build``.
+
+        The model path therefore always evaluates the FeII block at its concrete default width.
+        """
+        import glob
+        import os
+
+        from tengri import DEFAULT, Fixed, SEDModel, Uniform
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+        from tengri.observation import Observation, Photometry
+
+        paths = sorted(glob.glob(os.path.join("data", "ssp_*.h5")))
+        if not paths:
+            pytest.skip("no SSP grid under data/")
+        ssp = load_ssp_data(os.path.abspath(paths[0]))
+        obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
+        agn = {
+            "type": "composable",
+            "disc": {"type": "multicolor"},
+            "blr": {"type": "analytic", "agn_blr_fwhm_kms": Uniform(100.0, 3000.0)},
+            "all_params": Fixed(DEFAULT),
+        }
+        with pytest.raises(ValueError, match="Unknown key 'agn_blr_fwhm_kms'"):
+            SEDModel.build(
+                ssp_data=ssp,
+                observation=obs,
+                sfh={"type": "const", "all_params": Fixed(DEFAULT)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "all_params": Fixed(DEFAULT),
+                },
+                agn=agn,
+                redshift=Fixed(0.1),
+            )

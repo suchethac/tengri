@@ -409,14 +409,17 @@ def _fe2_window_flux_and_total(fwhm_kms):
     -------
     window_flux, total : scalar
         ``sum_i w_i y_i`` and ``trapezoid(y, wave)`` of the broadened full-lattice template
-        [Angstrom], each a K-term sum against the transfer function.
+        [Angstrom], each a K-term sum against the transfer function. NaN when ``fwhm_kms`` is
+        below ``_FE2_MIN_FWHM_KMS`` (the tables carry no Fourier content past that cutoff).
     """
     tab = _fe2_spectral_tables()
     transfer = _fe2_transfer(fwhm_kms, tab["window"].shape[0])
-    return (
-        jnp.sum(device_table(tab["window"]) * transfer),
-        jnp.sum(device_table(tab["total"]) * transfer),
-    )
+    window_flux = jnp.sum(device_table(tab["window"]) * transfer)
+    total = jnp.sum(device_table(tab["total"]) * transfer)
+    # A traced width below the cutoff the tables were truncated for cannot raise; it returns NaN
+    # (every spectrum and power divides by these), never a low-passed spectrum.
+    in_contract = fwhm_kms >= _FE2_MIN_FWHM_KMS
+    return jnp.where(in_contract, window_flux, jnp.nan), jnp.where(in_contract, total, jnp.nan)
 
 
 def _fe2_sample_band_limited(wavelength, fwhm_kms):
@@ -504,9 +507,9 @@ def _fe2_pseudo_continuum(
     above 1e-10 beyond 6 669 of its 131 073 bins (see ``_fe2_spectral_tables``).
     That path matches the full-lattice convolution to 2.3e-9 relative
     (50 widths in 500-30000 km/s) and the R_Fe window flux to 1e-15. A traced
-    ``fwhm_kms`` below 500 km/s is outside the contract (the spectrum is then
-    low-passed at the 500 km/s cutoff); a concrete one takes the full-lattice
-    convolution, which has no lower limit (``fwhm_kms -> 0`` is the template).
+    ``fwhm_kms`` below 500 km/s returns NaN (it cannot raise, and a low-passed spectrum
+    would be silently wrong); a concrete one takes the full-lattice convolution, which
+    has no lower limit (``fwhm_kms -> 0`` is the template).
 
     **Unit convention.** The PyQSOFit template columns are F_lambda
     [erg/s/cm²/Å]; their *shape* is treated as the shape of L_lambda. The
