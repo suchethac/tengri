@@ -158,6 +158,7 @@ UNCURATED_DOIS = frozenset(
         "10.1086/151796",  # disc.py +1
         "10.1086/159815",  # balmer.py
         "10.1086/161102",  # xray.py
+        "10.1086/162480",  # _polar_smc_opacity.py
         "10.1086/162686",  # attenuation.py
         "10.1086/171637",  # attenuation.py
         "10.1086/174330",  # spectral.py
@@ -167,6 +168,7 @@ UNCURATED_DOIS = frozenset(
         "10.1086/311810",  # disc.py
         "10.1086/318651",  # attenuation.py
         "10.1086/320357",  # blr_precompute.py
+        "10.1086/323147",  # _polar_smc_opacity.py
         "10.1086/320360",  # blr.py
         "10.1086/342486",  # attenuation.py +1
         "10.1086/423885",  # polar_dust.py
