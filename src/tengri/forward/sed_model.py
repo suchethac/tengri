@@ -3231,6 +3231,15 @@ class SEDModel:
         spectrum, and it gets the window LUT instead (plus the flag that lets the
         likelihood reach it).
 
+        The Cue grid's band photometry follows the **evaluation** redshift, so it
+        serves a free redshift, a ``catalog_z_range`` fit's per-galaxy redshift, and
+        a ``Fixed`` one alike: lines are placed in each band at ``(1 + z) lambda_0``
+        and the continuum is tabulated over ``ln(1 + z)``
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`).
+        The redshift the grid is built at is a deterministic convention
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.reference_redshift`),
+        never a prior draw.
+
         Parameters
         ----------
         cfg : FeaturePrecomp
@@ -4391,14 +4400,16 @@ class SEDModel:
             # The trigger is deliberately NOT a list of carve-outs. Measured
             # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
             # only one configuration is inert (rel change 6.4e-15); an active
-            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # nlr or blr block, a torus without the disc tie, no torus, and
             # norm='independent' all measure 2.5e5. The measurement below sees
             # every one of those without being told about them.
-            torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
+            torus_is_tied = (
+                self._agn_torus_block in ("skirtor", "fritz") or self._agn_model == "skirtor"
+            )
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
             lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
             if (
-                torus_is_skirtor
+                torus_is_tied
                 and agn_norm_is_cigale_joint
                 and (lbol_is_free or lbol_is_user_provided)
             ):
@@ -7704,15 +7715,23 @@ class SEDModel:
         # at two different points on the dust attenuation curve. See
         # ``_snap_to_nebular_catalog``.
         target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
-        chain0 = self._build_component_chain()
+        # The pristine (exact, no grid) chain. Building it runs every component's
+        # ``precompute``, which for a fast model re-integrates the stellar redshift
+        # table (about a minute without the disk cache), and it depends only on the
+        # model's settings, not on the grid built below, so the cached chain of a
+        # model that has no grid yet is the same chain and is reused.
+        pristine = (
+            getattr(self, "_cached_component_chain", None)
+            if getattr(self, "_nebular_grid_table", None) is None
+            else None
+        )
+        chain0 = pristine if pristine is not None else self._build_component_chain()
         dust = next(
             (c for c in chain0 if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
             None,
         )
         eb_lut = self._energy_balance_lut(chain0)
-        with_dust = (
-            dust is not None and eb_lut is not None and self._redshift_is_a_build_constant()
-        )
+        with_dust = dust is not None and eb_lut is not None
         table = precompute_nebular_grid(
             self,
             target_wavelengths,
@@ -7723,12 +7742,11 @@ class SEDModel:
             n_subbands=self._approx.get("n_subbands"),
         )
         self._nebular_grid_table = table
-        # Rebuild the chain from scratch (exact, no grid) and swap in the
-        # grid-carrying nebular component so ``apply`` takes the fast branch.
-        # compile_signature() now differs (the _nebular_grid_table row,
-        # invalidated below), so the next predict_* builds a fresh kernel
-        # over this chain, no stale reuse.
-        chain = self._build_component_chain()
+        # Swap the grid-carrying nebular component into the pristine chain (exact,
+        # no grid) so ``apply`` takes the fast branch. compile_signature() now
+        # differs (the _nebular_grid_table row, invalidated below), so the next
+        # predict_* builds a fresh kernel over this chain, no stale reuse.
+        chain = chain0
         # Whether the grid may also serve the photometry channel. It may only
         # when nothing downstream reads the continuum, because serving
         # photometry from the grid requires zeroing ``sed_nebular``, and the
@@ -10307,6 +10325,21 @@ class SEDModel:
                     break
             break
 
+        # ── Fast-nebular grid: the continuum z-table ──
+        # ``n_z x n_filter`` floats per grid node (tens of MB for a three-axis
+        # grid): threaded as an argument like the stellar z-table (#1413), never
+        # baked into the graph as a constant.
+        for component in cached:
+            grid = getattr(component, "grid_table", None)
+            if isinstance(component, NebularSEDComponent) and grid is not None:
+                if grid.serves_split_bands:
+                    result["nebular_grid"] = {
+                        "log_cont_ztable_per_qh": grid.log_cont_ztable_per_qh,
+                        "cont_keep": grid.cont_keep,
+                        "cont_lnz": grid.cont_lnz,
+                    }
+                break
+
         # Dust IR emission components (Astrodust, PAHspec, Dale, …) self-load their
         # HDF5 grids in ``EmissionComponent.load``/``predict``, no adapter-state
         # threading is needed here. The build-time energy-balance LUT and
@@ -10543,22 +10576,6 @@ class SEDModel:
         """
         return self._energy_balance_lut(chain) is not None
 
-    def _redshift_is_a_build_constant(self) -> bool:
-        """Whether every evaluation of this model runs at the redshift it was built at.
-
-        False for a free ``redshift`` and for a runtime redshift
-        (``WavePrecomp(catalog_z_range=...)``), where a precompute integrated
-        through observed bands at the build redshift describes another galaxy.
-
-        Returns
-        -------
-        bool
-        """
-        return (
-            "redshift" not in self.spec.free_params
-            and getattr(self, "_catalog_z_range", None) is None
-        )
-
     def nebular_grid_can_serve_photometry(self) -> bool:
         """Whether the per-Q_H nebular grid can serve this model's photometry.
 
@@ -10570,17 +10587,15 @@ class SEDModel:
         Returns
         -------
         bool
-            True when no continuum consumer remains after that exclusion, and
-            the redshift is a build-time constant (neither free nor runtime).
+            True when no continuum consumer remains after that exclusion. The
+            redshift may be fixed, free or a runtime ``catalog_z_range`` value: the
+            grid's band photometry follows the evaluation redshift.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import (
             grid_baked_free_params,
         )
-
-        if not self._redshift_is_a_build_constant():
-            return False
 
         if grid_baked_free_params(self.spec):
             return False
@@ -10600,14 +10615,13 @@ class SEDModel:
         """``chain`` with the nebular grid attached and the dust flagged to read it.
 
         The dust component is flagged (``nebular_from_grid``) and its tau grids are set
-        BEFORE the continuum census, but only when the redshift is a build-time constant
-        and no other component consumes the continuum, so the census sees a dust component
-        that does not read ``sed_nebular`` and ``must_materialize_sed`` follows from it.
-        Both happen here so the flag and the census cannot drift between call sites.
+        BEFORE the continuum census, but only when no other component consumes the
+        continuum, so the census sees a dust component that does not read ``sed_nebular``
+        and ``must_materialize_sed`` follows from it. Both happen here so the flag and
+        the census cannot drift between call sites.
 
-        The grid serves band fluxes only at the build redshift. With a free or runtime
-        redshift the nebular component materializes its continuum and the dust component
-        reads it.
+        The grid's band photometry follows the evaluation redshift (fixed, free or
+        runtime), so no redshift condition applies.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
@@ -10615,9 +10629,8 @@ class SEDModel:
         from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
-        serves_bands = self._redshift_is_a_build_constant()
         chain = list(chain)
-        if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+        if table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
             eb_lut = self._energy_balance_lut(chain)
             dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
             for name_table, name_lut, grid_lut in (
@@ -10666,9 +10679,7 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(
-                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or not serves_bands
-            )
+            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain

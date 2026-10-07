@@ -56,11 +56,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_T",
         # Analytic templates split on this value (#2265, #2261): graybody and
-        # casey2012 declare Fixed(35.0); modified_blackbody and schreiber2016
-        # declare Fixed(30.0); Schreiber2018IRSEDComponent declares Fixed(25.0).
+        # casey2012 declare Fixed(35.0); modified_blackbody
+        # declares Fixed(30.0); Schreiber2018IRSEDComponent declares Fixed(25.0).
         # This table stays at 35.0, left unchanged pending #2261, and the
-        # MBB/schreiber2016 closures read their own constants
-        # (``MBB_T_K_DEFAULT``/``SCHREIBER_T_K_DEFAULT``) instead of the table.
+        # MBB closure reads its own constant (``MBB_T_K_DEFAULT``) instead of
+        # the table; the tabulated schreiber2016 reads the table itself.
         # Schreiber2018IRSEDComponent reads its own ``SCHREIBER2018_T_K_DEFAULT
         # = 25.0``. Closures are free to disagree with the table while class
         # declarations internally match their corresponding closures.
@@ -82,10 +82,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # GraybodyIRSEDComponent, Casey2012IRSEDComponent) declare Fixed(1.8),
         # not the old table value 1.6 (#2265, #2261). Corrected to match those
         # three; ``ANALYTIC_BETA_IR_DEFAULT = 1.8`` below is shared across their
-        # closures and components. Schreiber2016AnalyticIRSEDComponent declares
-        # no ``dust_beta_ir`` at all -- its closure pins beta=1.5 internally
-        # (``emission/analytic/_closures.py``'s ``schreiber2016``), so it never
-        # reads this entry.
+        # closures and components.
         Fixed(1.8),
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo >= 0,
@@ -442,10 +439,10 @@ DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 # ``dust_T`` is deliberately NOT a declared_default(PARAMS, ...) candidate
 # (#2241, follow-up #2261): this table's own Fixed(35.0) disagrees with what
 # some analytic templates' own class-level declaration actually defaults to
-# (modified_blackbody/schreiber2016 use T=30.0 K; schreiber2018 uses 25.0 K),
+# (modified_blackbody uses T=30.0 K; schreiber2018 uses 25.0 K),
 # so reading it off PARAMS would silently CHANGE those templates' defaults --
-# a behavior change this fix must not make. These four T constants are each
-# template's own value today, shared between its closure's signature default
+# a behavior change this fix must not make. These T constants are each
+# analytic template's own value today, shared between its closure's signature default
 # and its component's class-level declaration so the two cannot drift from
 # EACH OTHER, even while some remain out of step with the table above until
 # #2261 resolves which value is correct. ``dust_beta_ir`` now agrees with the
@@ -455,7 +452,13 @@ DEFAULT_DUST_ALPHA = declared_default(PARAMS, "dust_alpha")
 # for the same no-cross-drift reason as the T constants.
 MBB_T_K_DEFAULT = 30.0
 CASEY_T_K_DEFAULT = 35.0  # shared by casey2012 and graybody
-SCHREIBER_T_K_DEFAULT = 30.0  # schreiber2016 analytic component
+# The tabulated schreiber2016 library has no value of its own: the build path
+# resolves ``Fixed(DEFAULT)`` through this table's ``dust_T`` (35 K, inside the
+# library's 15-99 K range and the typical main-sequence dust temperature of
+# Schreiber et al. 2018), so the component and its closure read the table too
+# and a direct call and a built model cannot disagree (#2597). CIGALE's own
+# ``tdust = 20`` is the first option of its parameter list, not a physical prior.
+SCHREIBER_T_K_DEFAULT = declared_default(PARAMS, "dust_T")
 SCHREIBER2018_T_K_DEFAULT = 25.0  # Schreiber2018IRSEDComponent tabulated
 ANALYTIC_BETA_IR_DEFAULT = 1.8  # modified_blackbody, graybody, casey2012
 

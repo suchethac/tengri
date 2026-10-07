@@ -39,6 +39,7 @@ References
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from typing import Any
 
 import jax
@@ -52,6 +53,7 @@ from tengri.components.dust.emission import (
     graybody as _graybody,
     modified_blackbody as _modified_blackbody,
 )
+from tengri.config.exceptions import GridSupportWarning
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -458,12 +460,80 @@ _FLOAT64_TINY = np.finfo(np.float64).tiny
 _LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
 
 
-def _default_axis(param_name: str, n_nodes: int) -> np.ndarray:
-    """Node grid spanning the parameter's declared free prior: geometric for log axes."""
-    lo, hi = _get_param_bounds(param_name)
-    if param_name in _LOG_AXIS_PARAMS:
-        return np.geomspace(lo, hi, n_nodes, dtype=np.float64)
-    return np.linspace(lo, hi, n_nodes, dtype=np.float64)
+def _active_support(param_name: str, parameters: Any) -> tuple[float, float] | None:
+    """Range of ``param_name`` the model can reach, or None when it is not bounded by the model.
+
+    ``Fixed(v)`` gives ``(v, v)`` and a free parameter its prior's finite ``bounds``. ``None``
+    means no model, a parameter the model does not declare, or a prior with an infinite bound; the
+    last warns once, because the nodes then span the declared range and the lookup holds the edge
+    value beyond it.
+    """
+    if parameters is None:
+        return None
+    fixed = parameters.get_fixed_values()
+    if param_name in fixed:
+        return (fixed[param_name], fixed[param_name])
+    if param_name not in parameters.free_params:
+        return None
+    lo, hi = parameters.get_distribution(param_name).bounds
+    if lo is not None and hi is not None and np.isfinite(lo) and np.isfinite(hi):
+        return (float(lo), float(hi))
+    declared = _get_param_bounds(param_name)
+    warnings.warn(
+        f"{param_name} has an unbounded prior; the nodes span its declared range "
+        f"[{declared[0]:g}, {declared[1]:g}] and the lookup holds the edge value, with zero "
+        f"gradient, beyond it. Give the prior finite bounds to widen the nodes.",
+        GridSupportWarning,
+        stacklevel=3,
+    )
+    return None
+
+
+def _default_axis(
+    param_name: str, n_nodes: int, support: tuple[float, float] | None = None
+) -> np.ndarray:
+    """Node grid over the declared prior extended to ``support``, at the declared node density.
+
+    Geometric for the log axes, linear otherwise. The count scales with the span in the
+    interpolation coordinate (``ln`` for :data:`_LOG_AXIS_PARAMS`),
+    ``ceil(n_nodes * span_axis / span_declared)``, never below ``n_nodes``, so the node spacing
+    that the #2676 accuracy figures were measured at is kept when the support is wider. With
+    ``support`` None, or inside the declared prior, the axis is the declared one exactly.
+    """
+    declared_lo, declared_hi = _get_param_bounds(param_name)
+    lo, hi = declared_lo, declared_hi
+    if support is not None:
+        lo, hi = min(lo, support[0]), max(hi, support[1])
+    log_axis = param_name in _LOG_AXIS_PARAMS
+    if log_axis and lo <= 0.0:
+        raise ValueError(f"{param_name} reaches {lo:g}; a logarithmic node axis needs lo > 0.")
+    coordinate = np.log if log_axis else np.asarray
+    stretch = (coordinate(hi) - coordinate(lo)) / (
+        coordinate(declared_hi) - coordinate(declared_lo)
+    )
+    n_axis = max(n_nodes, int(np.ceil(n_nodes * stretch)))
+    if log_axis:
+        return np.geomspace(lo, hi, n_axis, dtype=np.float64)
+    return np.linspace(lo, hi, n_axis, dtype=np.float64)
+
+
+def _check_user_axis(
+    param_name: str, axis: np.ndarray, support: tuple[float, float] | None
+) -> None:
+    """Refuse a user-supplied axis that does not span the model's reach; warn below 4 nodes."""
+    if support is not None and (axis.min() > support[0] or axis.max() < support[1]):
+        raise ValueError(
+            f"{param_name} nodes span [{axis.min():g}, {axis.max():g}] but the model reaches "
+            f"[{support[0]:g}, {support[1]:g}]; the lookup would hold the edge value with zero "
+            f"gradient beyond the nodes. Supply nodes covering the support."
+        )
+    if axis.size < 4:
+        warnings.warn(
+            f"{param_name} has {axis.size} nodes; the PCHIP lookup degrades to a parabola or a "
+            f"chord below 4.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 _CONTINUUM_BUILDERS = {
@@ -519,17 +589,17 @@ def precompute(
         One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature nodes [K]. If None, ``_DEFAULT_NODES`` geometric nodes spanning the
-        declared free prior (dust_T: 20-80 K).
+        Temperature nodes [K]. If None, geometric nodes over the declared free prior
+        (dust_T: 20-80 K) extended to the model's reach (see Notes).
     beta_grid : ndarray, optional
-        Emissivity-index nodes [dimensionless]. If None, linear nodes spanning the declared
-        free prior (dust_beta_ir: 1.0-2.5).
+        Emissivity-index nodes [dimensionless]. If None, linear nodes over the declared free
+        prior (dust_beta_ir: 1.0-2.5), extended likewise.
     alpha_mir_grid : ndarray, optional
-        Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, linear nodes
-        spanning the declared free prior (dust_alpha_mir: 1.0-3.0).
+        Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, linear nodes over
+        the declared free prior (dust_alpha_mir: 1.0-3.0), extended likewise.
     lambda_0_um_grid : ndarray, optional
-        Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None,
-        geometric nodes spanning the declared free prior (dust_lambda_0_um: 50-500 um).
+        Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None, geometric
+        nodes over the declared free prior (dust_lambda_0_um: 50-500 um), extended likewise.
 
     Returns
     -------
@@ -544,9 +614,34 @@ def precompute(
     .. [2] Smith, J. D., et al., "The mid-infrared emission of ultraluminous
            infrared galaxies," ApJ, 656, 770 (2007).
 
+    Raises
+    ------
+    ValueError
+        If a supplied node axis does not span what ``parameters`` lets the axis parameter reach
+        (``Fixed(v)``: ``v``; a free prior: its finite bounds), or a default axis would need a
+        non-positive node on a logarithmic axis.
+
+    Warns
+    -----
+    GridSupportWarning
+        Once per axis whose prior has an infinite bound: the nodes then span the declared range
+        and the lookup holds the edge value, with zero gradient, beyond it.
+    UserWarning
+        If a supplied node axis has fewer than 4 nodes (the PCHIP lookup degrades to a parabola
+        or a chord).
+
     Notes
     -----
     **JIT-compatible**: no, this is a build-time function using NumPy.
+
+    **Node axes.** The lookup holds the edge value beyond its nodes, so a default axis spans the
+    declared free prior extended to the range ``parameters`` can reach: ``Fixed(v)`` extends it
+    to include ``v``, a free prior with finite bounds to include them. The node count keeps the
+    declared density in the interpolation coordinate (``ln`` for dust_T and dust_lambda_0_um),
+    ``ceil(n_default * span_axis / span_declared)``, so the #2676 accuracy figures above carry
+    over. With ``parameters=None``, or priors inside the declared ranges, the axes are the
+    declared ones exactly. A supplied axis is used as given and is checked against the same
+    reach. Nothing here changes the exact closures.
     """
     if model == "pah_drude":
         preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift)
@@ -561,12 +656,16 @@ def precompute(
             "dust_alpha_mir": alpha_mir_grid,
             "dust_lambda_0_um": lambda_0_um_grid,
         }
-        axes = tuple(
-            _default_axis(name, _DEFAULT_NODES[model][name])
-            if supplied[name] is None
-            else supplied[name]
-            for name in axis_params
-        )
+        axes = []
+        for name in axis_params:
+            support = _active_support(name, parameters)
+            if supplied[name] is None:
+                axes.append(_default_axis(name, _DEFAULT_NODES[model][name], support))
+            else:
+                axis = np.asarray(supplied[name], dtype=np.float64)
+                _check_user_axis(name, axis, support)
+                axes.append(axis)
+        axes = tuple(axes)
         preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
         result = {
             "grid_phot": preint.phot,
@@ -676,6 +775,10 @@ def build_lookup(
     interpolation.
 
     **Gradient-safe**: yes, PCHIP kernel is fully differentiable.
+
+    A query outside the node span returns the edge value with exactly zero gradient (the
+    interpolation coordinate is clamped). :func:`precompute` spans the nodes over everything the
+    model can reach, so that happens only under an unbounded prior, which warns at build.
     """
     axis_params_names = tuple(
         name

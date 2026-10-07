@@ -31,7 +31,6 @@ def _force_import_all_components() -> None:
 
     # Non-auto-imported components — list grows when new components ship.
     import tengri.components.dust.draine2021_pah_ir
-    import tengri.components.dust.schreiber2016_ir
     import tengri.components.nebular.shock_model
     import tengri.components.radio.radio_dpl_model
     import tengri.components.spatial.exponential

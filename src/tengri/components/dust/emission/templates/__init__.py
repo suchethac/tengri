@@ -15,7 +15,8 @@ Available models (auto-registered):
 - ``astrodust``: Hensley & Draine (2023) Astrodust+PAH
 - ``bosa``: Boquien & Salim (2021) (L_TIR, sSFR)-parameterized
 - ``themis``: Jones et al. (2017) THEMIS/DustEM
-- ``schreiber2018``: Schreiber et al. (2018) dust emission templates
+- ``schreiber2016``: Schreiber et al. (2018) dust library as packaged by CIGALE
+- ``schreiber2018``: Schreiber et al. (2018) dust emission templates (AGNfitter-rX packaging)
 - ``dh02_ce01``: Dale & Helou (2002) + Chary & Elbaz (2001) cold dust
 
 Notes
@@ -42,6 +43,9 @@ from tengri.components.dust.emission.templates.draine_li import (
     DraineLi2007IRSEDComponent,
     DraineLi2014IRSEDComponent,
 )
+from tengri.components.dust.emission.templates.schreiber2016 import (
+    Schreiber2016IRSEDComponent,
+)
 from tengri.components.dust.emission.templates.schreiber2018 import (
     Schreiber2018IRSEDComponent,
 )
@@ -55,6 +59,7 @@ __all__ = [
     "Dale2014IRSEDComponent",
     "DraineLi2007IRSEDComponent",
     "DraineLi2014IRSEDComponent",
+    "Schreiber2016IRSEDComponent",
     "Schreiber2018IRSEDComponent",
     "ThemisIRSEDComponent",
 ]

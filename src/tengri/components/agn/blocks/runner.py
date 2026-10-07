@@ -66,6 +66,8 @@ from tengri.components.agn.blocks._grid_support import (
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
+    DISC_POWER_BLOCKS,
+    DISC_SPLIT_BLOCKS,
     LINE_ENERGY_BLOCKS,
     resolve_agn_block,
 )
@@ -78,6 +80,7 @@ from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_PARAMS,
     torus_screen_transmission,
 )
+from tengri.components.agn.fritz import FritzGrid, fritz_disc_dust_ratio, fritz_disc_dust_wave
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import (
     SKIRTORBundle,
@@ -86,7 +89,7 @@ from tengri.components.agn.skirtor import (
 )
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
-from tengri.utils.scale import representable_floor
+from tengri.utils.scale import representable_denominator, representable_floor
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -129,6 +132,33 @@ _KUBOTA_LEDGER_WAVE = np.unique(
 
 #: Trapezoid nodes the CIGALE tie integrates the disc on over the SKIRTOR library's range.
 _TIE_FINE_NODES = 4001
+
+#: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
+#: and ``fritz2006``).
+_TIE_TORI: tuple[str, ...] = ("skirtor", "fritz")
+
+#: The Fritz library coordinates the tie reads off the model, as the torus block does.
+_FRITZ_LIBRARY_PARAMS: tuple[str, ...] = (
+    "agn_fritz_r_ratio",
+    "agn_fritz_tau",
+    "agn_fritz_beta",
+    "agn_fritz_gamma",
+    "agn_fritz_oa",
+    "agn_fritz_psy",
+)
+
+#: Mean of the library disc's anisotropy over the viewing hemisphere, in units of its face-on
+#: power: ``int_0^1 eta(cos i) d cos i = 7/18`` for SKIRTOR (``eta = cos i (1 + 2 cos i)/3``,
+#: ``skirtor2016.py``), 1 for the isotropic Fritz disc.
+_TIE_HEMISPHERE_MEAN: dict[str, float] = {"skirtor": 7.0 / 18.0, "fritz": 1.0}
+
+#: Anisotropy of the library disc at the 30 degree reference of ``intrin_Lnu_2500A_30deg``:
+#: ``eta(i) = cos i (1 + 2 cos i) / 3`` for SKIRTOR (``skirtor2016.py``), none for Fritz
+#: (``fritz2006.py`` reads the face-on record).
+_TIE_ANCHOR_ANISOTROPY: dict[str, float] = {
+    "skirtor": 0.86602540378443864 * (2.0 * 0.86602540378443864 + 1.0) / 3.0,
+    "fritz": 1.0,
+}
 
 __all__ = [
     "BLOCK_SELECTOR_KEYS",
@@ -230,7 +260,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
-from tengri.utils.physics_constants import C_AA as C_AA_PER_S
+from tengri.utils.physics_constants import C_AA as C_AA_PER_S, L_SUN as L_SUN_ERG
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
 BLOCK_SELECTOR_KEYS: tuple[str, ...] = (
@@ -766,8 +796,6 @@ agn_torus_block, agn_attenuation_block : str
         templates=disc_templates,
         **{**params, "agn_cos_inc": _COS_30DEG},
     )
-    L_2500_intrinsic = _anchor_lambda[0] * (2500.0**2 / C_AA_PER_S)
-    L_4400_intrinsic = _anchor_lambda[1] * (4400.0**2 / C_AA_PER_S)
 
     # R22 (ONE polar-dust mechanism): before this fix, polar-dust LOS
     # reddening of the disc applied HERE unconditionally whenever
@@ -824,52 +852,86 @@ agn_torus_block, agn_attenuation_block : str
     _tie_wave = None
     _tie_disc = None
     _tie_incl_native = None
-    if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
-        _skirtor_bundle = _templates_for("torus", agn_torus_block)
-        _library = (
-            _skirtor_bundle.disc_dust if isinstance(_skirtor_bundle, SKIRTORBundle) else None
+    _tie_active = _agn_norm == "cigale_joint" and agn_torus_block in _TIE_TORI
+    # A disc with a corona registers its disc/corona split; the tie normalizes the disc part
+    # and carries the corona on top (see ``_disc_parts``). A corona-less disc takes the
+    # whole spectrum as its disc part, exactly as before.
+    _split_fn = DISC_SPLIT_BLOCKS.get(agn_disc_block) if _tie_active else None
+    _corona_fraction = None
+
+    def _disc_parts(w):
+        """Disc part, corona and the corona's power share on ``w``, reddened like the disc."""
+        _d, _h, _f = _split_fn(
+            w, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
         )
+        _ebv = jnp.asarray(params.get("agn_ebv_disc", 0.0))
+        return redden_disc(w, _d, _ebv), redden_disc(w, _h, _ebv), _f
+
+    if _tie_active:
+        _bundle = _templates_for("torus", agn_torus_block)
+        if agn_torus_block == "skirtor":
+            _library = _bundle.disc_dust if isinstance(_bundle, SKIRTORBundle) else None
+            _library_wave = skirtor_disc_dust_wave(_library)
+        else:
+            _library = _bundle if isinstance(_bundle, FritzGrid) else None
+            _library_wave = fritz_disc_dust_wave(_library)
         # The tie (R and the face-on reference) is a ratio of integrals over the
-        # SKIRTOR library's own axis. The disc it integrates is therefore
-        # evaluated ON that axis, not resampled from the caller's grid, whose
-        # start would otherwise cut the corona and move R. Without a library
-        # the tie degenerates onto the caller's grid.
-        _library_wave = skirtor_disc_dust_wave(_library)
+        # library's own axis. The disc it integrates is therefore evaluated ON that
+        # axis, not resampled from the caller's grid, whose start would otherwise cut
+        # the corona and move R. Without a library the tie degenerates onto the caller's
+        # grid.
         if _library_wave is None:
-            _tie_wave, _tie_disc = wave, L_lambda_disc
+            _tie_wave = wave
+            if _split_fn is None:
+                _tie_disc = L_lambda_disc
+            else:
+                _tie_disc, _, _corona_fraction = _disc_parts(wave)
         else:
             _tie_wave = jnp.asarray(_library_wave, dtype=wave.dtype)
-            _tie_disc = redden_disc(
-                _tie_wave,
-                disc_fn(
+            if _split_fn is None:
+                _tie_disc = redden_disc(
                     _tie_wave,
-                    agn_log_lbol=agn_log_lbol_eval,
-                    templates=disc_templates,
-                    **params,
-                ),
-                jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                    disc_fn(
+                        _tie_wave,
+                        agn_log_lbol=agn_log_lbol_eval,
+                        templates=disc_templates,
+                        **params,
+                    ),
+                    jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                )
+            else:
+                _tie_disc, _, _corona_fraction = _disc_parts(_tie_wave)
+        if agn_torus_block == "skirtor":
+            _disc_tie = skirtor_disc_dust_ratio(
+                _tie_wave,
+                _tie_disc,
+                jnp.ones_like(_tie_wave),
+                incl_wave=wave,
+                _template=_library,
+                agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
+                agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
+                agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
+                agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
+                # R70: the grid's third geometry axis. Left out, the tie
+                # interpolated the SKIRTOR templates at the signature default
+                # R = 20 while the torus block honored the model's value, so
+                # int(polar)/int(torus) came out bit-identical (2.605153276 at
+                # i=80) across R = 10, 20 and 30. Since R64 put norm(0)/norm(i)
+                # into R_faceon that also picked the wrong normalization: the
+                # factor is R-dependent (2.896205 / 3.172626 / 3.338009 at i=80
+                # for R = 10 / 20 / 30, a 15% spread).
+                agn_radius_ratio=params.get("agn_radius_ratio", 20.0),
+                agn_cos_inc=_cos_inc,
             )
-        _disc_tie = skirtor_disc_dust_ratio(
-            _tie_wave,
-            _tie_disc,
-            jnp.ones_like(_tie_wave),
-            incl_wave=wave,
-            _template=_library,
-            agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
-            agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
-            agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
-            agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
-            # R70: the grid's third geometry axis. Left out, the tie
-            # interpolated the SKIRTOR templates at the signature default
-            # R = 20 while the torus block honored the model's value, so
-            # int(polar)/int(torus) came out bit-identical (2.605153276 at
-            # i=80) across R = 10, 20 and 30. Since R64 put norm(0)/norm(i)
-            # into R_faceon that also picked the wrong normalization: the
-            # factor is R-dependent (2.896205 / 3.172626 / 3.338009 at i=80
-            # for R = 10 / 20 / 30, a 15% spread).
-            agn_radius_ratio=params.get("agn_radius_ratio", 20.0),
-            agn_cos_inc=_cos_inc,
-        )
+        else:
+            _disc_tie = fritz_disc_dust_ratio(
+                _tie_wave,
+                _tie_disc,
+                jnp.ones_like(_tie_wave),
+                incl_wave=wave,
+                _template=_library,
+                **{k: params[k] for k in _FRITZ_LIBRARY_PARAMS if k in params},
+            )
         _disc_R = _disc_tie.R
         _disc_incl = _disc_tie.incl_ratio
         _disc_R_faceon = _disc_tie.R_faceon
@@ -934,7 +996,8 @@ agn_torus_block, agn_attenuation_block : str
     # "independent" never debits (each component on its own luminosity scale).
     # Static Python branch on the policy string + torus name (JIT-safe).
     _conserve_via_debit = agn_torus_block not in _SELF_CONTAINED_TORI and (
-        _agn_norm == "conserving" or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
+        _agn_norm == "conserving"
+        or (_agn_norm == "cigale_joint" and agn_torus_block not in _TIE_TORI)
     )
     # Intrinsic (pre-reprocessor) disc shape, captured before any debit so the
     # line-energy debit below (#929) can subtract exactly the integrated line
@@ -951,7 +1014,10 @@ agn_torus_block, agn_attenuation_block : str
     _ledger_cache: dict = {}
 
     def _ledger_wave():
-        return jnp.asarray(_LEDGER_WAVE, dtype=wave.dtype)
+        """The fixed budget grid, built once so the graph carries one constant."""
+        if "wave" not in _ledger_cache:
+            _ledger_cache["wave"] = _los_budget_wave(False, wave.dtype)
+        return _ledger_cache["wave"]
 
     def _disc_ledger_wave():
         """The fixed budget grid of the disc: compact for the Kubota & Done disc."""
@@ -1114,7 +1180,16 @@ agn_torus_block, agn_attenuation_block : str
             if _tuple:
                 _on_grid = sum(split_lines_result(_on_grid))
             _e_lines = _e_lines + jnp.trapezoid(_on_grid, _w_lines)
-        _e_disc = jnp.maximum(_disc_power_on_ledger(), 1e-30)
+        # The disc's bolometric power is the accretion power for a disc that registers it in
+        # closed form (``DISC_POWER_BLOCKS``); any other disc is integrated on the fixed
+        # budget grid.
+        _closed_disc = DISC_POWER_BLOCKS.get(agn_disc_block)
+        _e_disc = jnp.maximum(
+            _disc_power_on_ledger()
+            if _closed_disc is None
+            else _closed_disc(agn_log_lbol_eval, **params) * (10.0**agn_log_lbol_eval * L_SUN_ERG),
+            1e-30,
+        )
         _line_fraction = _e_lines / _e_disc
         L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
         _disc_scalar = _disc_scalar - _line_fraction
@@ -1159,7 +1234,11 @@ agn_torus_block, agn_attenuation_block : str
         # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
         # so the disc spectrum is inclination-correct, then renormalize the
         # reweighted shape to the agn_power-tied bolometric ``agn_power x R``.
-        _disc_reweighted = L_lambda_disc * _disc_incl
+        if _split_fn is None:
+            _disc_part, _corona_part = L_lambda_disc, None
+        else:
+            _disc_part, _corona_part, _ = _disc_parts(wave)
+        _disc_reweighted = _disc_part * _disc_incl
         if _library_wave is None:
             _disc_integral = jnp.trapezoid(_tie_disc * _tie_incl_native, _tie_wave)
         else:
@@ -1168,19 +1247,79 @@ agn_torus_block, agn_attenuation_block : str
             # integral over the library's range: the disc re-evaluated on a fixed fine grid
             # spanning it (4000 points, ~3e-4 in ln lambda per node).
             _fine = jnp.geomspace(_tie_wave[0], _tie_wave[-1], _TIE_FINE_NODES)
-            _disc_fine = redden_disc(
-                _fine,
-                disc_fn(_fine, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params),
-                jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-            )
+            if _split_fn is None:
+                _disc_fine = redden_disc(
+                    _fine,
+                    disc_fn(
+                        _fine, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
+                    ),
+                    jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                )
+            else:
+                _disc_fine = _disc_parts(_fine)[0]
             _incl_fine = resample_template(_fine, _tie_wave, _tie_incl_native, left=0.0, right=0.0)
             _disc_integral = jnp.trapezoid(_disc_fine * _incl_fine, _fine)
         _disc_int = jnp.maximum(_disc_integral, 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
+        if _corona_part is not None:
+            # The tie fixes the DISC power to what the library was computed for; the corona
+            # is not reprocessed by that library disc, so it keeps the model's own ratio to
+            # the disc in ANGLE-INTEGRATED powers (the corona is isotropic, the disc is not):
+            # ``P_H = (H/D) P_D,tied`` with ``H/D = f/(1-f)`` the closed-form power ratio of
+            # the untied model at the declared M_BH and Eddington ratio and ``P_D,tied`` the
+            # tied disc's 4 pi power, the face-on library power ``agn_power x R_faceon`` times
+            # the library disc's hemisphere mean. The corona then scales by
+            # ``P_D,tied / P_D,model`` with ``P_D,model = (1 - f) L_acc``, and on the line of
+            # sight it carries only the torus screen: the same transmission on a Type-2
+            # sightline as the dusty torus gives any source behind it, unity on a Type-1 one.
+            _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
+            _corona_scale = (
+                _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
+            ) / _p_disc_model
+            _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
+            _corona_screen = torus_screen_transmission(
+                wave,
+                cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+                oa_deg=params.get(_oa_key, 40.0),
+                tau_v=params.get(_tau_key, 7.0),
+            )
+            _disc_scaled = _disc_scaled + _corona_part * _corona_screen * _corona_scale
         _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
         # Where the tie is inactive (fracAGN = 0) the disc is the debited one.
         _disc_scalar = 1.0 - _torus_frac
+
+        # The anchors are those of the disc as normalized in the model. Under the tie the
+        # disc's own angular law is replaced by the library's, so the 30 degree reference is
+        # the library's anisotropy at that angle (CIGALE ``intrin_Lnu_2500A_30deg``): the unit
+        # area disc shape (its value at the anchor over its integral on the library axis, the
+        # normalization the tie and the polar-dust reference share) times the face-on library
+        # power ``agn_power x R_faceon``. The corona, when the disc has one, is scaled as in
+        # the model. They follow ``agn_power``, hence fracAGN, and do not follow the viewing
+        # angle or the screen.
+        if _split_fn is None:
+            _a_disc = disc_fn(
+                _anchor_wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
+            )
+            _a_corona = None
+        else:
+            _a_disc, _a_corona, _ = _split_fn(
+                _anchor_wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
+            )
+        _tie_native_integral = jnp.maximum(
+            jnp.trapezoid(_tie_disc, _tie_wave), representable_denominator(1e-30)
+        )
+        _anchor_tied = (
+            _a_disc
+            / _tie_native_integral
+            * (_agn_power * _disc_R_faceon * _TIE_ANCHOR_ANISOTROPY[agn_torus_block])
+        )
+        if _a_corona is not None:
+            _anchor_tied = _anchor_tied + _a_corona * _corona_scale
+        _anchor_lambda = jnp.where(_agn_fracAGN > 0.0, _anchor_tied, _anchor_lambda)
+
+    L_2500_intrinsic = _anchor_lambda[0] * (2500.0**2 / C_AA_PER_S)
+    L_4400_intrinsic = _anchor_lambda[1] * (4400.0**2 / C_AA_PER_S)
 
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays

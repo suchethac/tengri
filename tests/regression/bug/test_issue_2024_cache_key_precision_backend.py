@@ -247,13 +247,15 @@ def test_schema_version_bumps_prevent_collisions():
     the request dataclasses replaced the hand-written keys (#2163); ztable's own
     3→4 for #2439/#2427's ``lyc_gate`` field (a warm cache built one day earlier
     would otherwise have satisfied an unversioned key and silently served a
-    table with no Lyman-continuum split); and 4→5 when the Lyman-continuum tables
+    table with no Lyman-continuum split); 4→5 when the Lyman-continuum tables
     moved onto the 911.76 Å step-model edge (same request fields, different values,
-    so only the version separates a warm cache from the new content); and 5→6 when
+    so only the version separates a warm cache from the new content); 5→6 when
     the default z grid gained nodes at each band's Lyman-limit crossings (#2749,
-    again with no request field changing).
+    again with no request field changing); and 6→7 for the ``ssp_phot_nolyc_table``
+    payload (the above-edge half of the Lyman-limit split, built from the same
+    cumulative integral).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 6, (
+    assert pc._ZTABLE_CACHE_VERSION == 7, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 3, (

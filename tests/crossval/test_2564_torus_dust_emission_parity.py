@@ -42,6 +42,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri._data_setup import find_data
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 from tengri.forward.wavelength_extension import (
@@ -50,6 +51,16 @@ from tengri.forward.wavelength_extension import (
 )
 
 pytestmark = pytest.mark.crossval
+
+# Resolve BC03 SSP grid path once at module level using the data locator; skip if absent
+_SSP_GRID_NAME = "bc03_pdva_stelib_chabrier.h5"
+_SSP_GRID_PATH = find_data(_SSP_GRID_NAME)
+if _SSP_GRID_PATH is None:
+    pytest.skip(
+        f"BC03 SSP grid '{_SSP_GRID_NAME}' not found. Set $TENGRI_DATA_DIR to its "
+        "directory, or run tengri.download_ssp('bc03_pdva_stelib_chabrier').",
+        allow_module_level=True,
+    )
 
 _LSUN = 3.828e33  # erg/s, converts the model's l_* properties [Lsun] to erg/s
 _UM = 1.0e4  # Angstrom per micron
@@ -98,7 +109,7 @@ _SFH = {
 
 @pytest.fixture(scope="module")
 def ssp():
-    return load_ssp_data("data/bc03_pdva_stelib_chabrier.h5")
+    return load_ssp_data(str(_SSP_GRID_PATH))
 
 
 def band_mean(wave_aa, lnu, lo_um, hi_um):

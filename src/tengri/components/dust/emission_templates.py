@@ -47,6 +47,7 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_QPAH,
     DEFAULT_DUST_UMIN,
     SCHREIBER2018_T_K_DEFAULT,
+    SCHREIBER_T_K_DEFAULT,
 )
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
@@ -1128,16 +1129,37 @@ def load_dale2014_templates(filepath: str) -> dict:
     return result
 
 
+def _unit_fraction(fraction):
+    """Bound a mixing fraction to its declared prior support [0, 1].
+
+    Shared by the two Schreiber template closures so the bound is written once.
+
+    Parameters
+    ----------
+    fraction : float or array_like
+        PAH fraction, dimensionless.
+
+    Returns
+    -------
+    ndarray
+        ``fraction`` clipped to [0, 1]; its gradient is half the live one-sided
+        slope at either bound and zero outside.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    return jnp.clip(fraction, 0.0, 1.0)
+
+
 def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
 
-    This is the tabulated counterpart of the analytic ``schreiber2016`` model:
-    it shares the two-parameter ``(dust_T, dust_f_pah)`` interface but draws the
-    dust-continuum and PAH shapes from the published Schreiber et al. (2018)
-    library (the ``S17`` cold-dust templates packaged with AGNfitter-rX) rather
-    than a modified-blackbody + Drude-profile approximation. The faithful PAH
-    forest at 6--13 μm is the reason to prefer it over ``schreiber2016`` when
-    reproducing AGNfitter-rX's cold-dust component.
+    It shares the two-parameter ``(dust_T, dust_f_pah)`` interface of
+    ``schreiber2016`` (the CIGALE packaging of the same Schreiber et al. 2018
+    library, mixed per kg) but draws the dust-continuum and PAH shapes from the
+    ``S17`` cold-dust templates packaged with AGNfitter-rX, mixed by AGNfitter-rX's
+    native recipe, so its ``f_pah`` is not the ``schreiber2016`` mass fraction.
 
     The grid (``data/schreiber2018_templates.h5``, built by
     ``scripts/build_schreiber2018_grid.py``) stores dust and PAH templates as
@@ -1230,7 +1252,7 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
         pah_on_grid = resample_template(
             wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0
         )
-        f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
+        f_pah = _unit_fraction(dust_f_pah)
         mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
 
         # Renormalize the frequency integral to L_absorbed (nu descending for
@@ -1276,14 +1298,15 @@ def load_schreiber2018_templates(filepath: str) -> dict:
 
 
 def load_schreiber2016_templates(filepath: str) -> dict:
-    r"""Load Schreiber+2016 template grid from HDF5.
+    r"""Load the Schreiber et al. (2018) per-kg dust and PAH templates from HDF5.
 
-    The template file must contain:
-
-    - ``wavelength_aa``: wavelength grid in Angstrom (n_wave,)
-    - ``tdust_grid``: dust temperature grid (n_tdust,) in Kelvin
-    - ``continuum``: continuum templates (n_tdust, n_wave) in W/nm/kg
-    - ``pah``: PAH templates (n_tdust, n_wave) in W/nm/kg
+    The file (``data/schreiber2016_templates.h5``, built by
+    ``scripts/regenerate_schreiber2016_from_cigale.py``) holds the library's two
+    components for one kilogram of dust, per dust-temperature node: the dust
+    continuum (big and small grains plus silicates, no PAH) and the PAH
+    emission. The two are *not* normalized separately here: their relative
+    amplitude is what makes the declared PAH fraction a **mass** fraction
+    (Schreiber et al. 2018, Sect. 3.2, text above Eq. 13).
 
     Parameters
     ----------
@@ -1293,57 +1316,167 @@ def load_schreiber2016_templates(filepath: str) -> dict:
     Returns
     -------
     dict
-        Keys: wavelength_aa, tdust_grid, continuum, pah.
-        All arrays are JAX arrays. wavelength_aa is in Angstrom.
-        continuum and pah have shape (n_tdust, n_wave) and are
-        normalized in L_nu convention (integral over nu = 1).
+        Keys: ``wavelength_aa`` (Angstrom, ``(n_wave,)``), ``tdust_grid`` (K,
+        ``(n_tdust,)``), ``continuum`` and ``pah`` (``(n_tdust, n_wave)``,
+        :math:`L_\nu` per kg of dust, in the units of the file's
+        :math:`L_\lambda` times :math:`\lambda^2/c`; only their ratio is
+        physical here).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``filepath`` does not exist; the message names the generating
+        script.
 
     Notes
     -----
     **JIT-compatible**: no, file I/O operations not supported in JIT.
     Call at factory/init time before JIT compilation.
     """
+    import os
+
     import h5py as _h5py
     import numpy as np
 
-    already_lnu = False
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(
+            f"Schreiber et al. (2018) template file {filepath!r} not found. "
+            "Regenerate it from CIGALE's database with "
+            "`python scripts/regenerate_schreiber2016_from_cigale.py` "
+            "(requires pcigale), or restore data/schreiber2016_templates.h5 from the repository."
+        )
 
     with _h5py.File(filepath, "r") as f:
-        already_lnu = f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
         wavs_aa = np.array(f["wavelength_aa"][:])
         tdust_grid = np.array(f["tdust_grid"][:])
-        continuum = np.array(f["continuum"][:])
-        pah = np.array(f["pah"][:])
+        continuum_llam = np.array(f["continuum"][:])
+        pah_llam = np.array(f["pah"][:])
 
-    if not already_lnu:
-        # Convert to L_nu and normalize
-        wave_cm = wavs_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm
-
-        for i in range(continuum.shape[0]):
-            lnu = continuum[i] * (wave_cm**2) / _C_CGS
-            integral = -np.trapezoid(lnu, nu)
-            if integral > 0:
-                continuum[i] = lnu / integral
-            else:
-                continuum[i] = lnu
-
-        for i in range(pah.shape[0]):
-            lnu = pah[i] * (wave_cm**2) / _C_CGS
-            integral = -np.trapezoid(lnu, nu)
-            if integral > 0:
-                pah[i] = lnu / integral
-            else:
-                pah[i] = lnu
+    # L_lambda -> L_nu with the same factor for both components, so the per-kg
+    # amplitude ratio between them is preserved.
+    wave_cm = wavs_aa * _AA_TO_CM
+    to_lnu = wave_cm**2 / _C_CGS
 
     # Use jnp.array so dynamic JAX indexing works inside JIT.
     # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
     return {
         "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
         "tdust_grid": jnp.array(tdust_grid, dtype=jnp.float64),
-        "continuum": jnp.array(continuum, dtype=jnp.float64),
-        "pah": jnp.array(pah, dtype=jnp.float64),
+        "continuum": jnp.array(continuum_llam * to_lnu, dtype=jnp.float64),
+        "pah": jnp.array(pah_llam * to_lnu, dtype=jnp.float64),
     }
+
+
+def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
+    r"""Create the Schreiber et al. (2018) dust-library model from the tabulated templates.
+
+    The library gives, for each dust temperature, the spectrum of one kilogram of
+    dust split into a continuum and a PAH component. The PAH **mass** fraction
+    :math:`f_{\rm PAH}` mixes them per kilogram,
+
+    .. math::
+
+        S_\nu \propto (1 - f_{\rm PAH})\,S_\nu^{\rm cont} + f_{\rm PAH}\,S_\nu^{\rm PAH},
+
+    and the mixture is then renormalized so that its frequency integral is
+    ``L_absorbed`` (Schreiber et al. 2018, Sect. 3.2 defines :math:`f_{\rm PAH}`
+    as :math:`M_{\rm PAH}/M_{\rm dust}`; the construction is that of CIGALE's
+    ``schreiber2016`` module). The PAH *power* share is
+    therefore :math:`f R/(1 - f + f R)` with :math:`R = \int S^{\rm PAH} /
+    \int S^{\rm cont}` = 3.063 to 3.065 per kilogram over the full tabulated
+    range (1 to 3000 micron), not :math:`f`.
+
+    The dust temperature is interpolated linearly between the library's 1 K
+    nodes (15 to 99 K).
+
+    Parameters
+    ----------
+    grid_path : str or dict
+        Path to ``schreiber2016_templates.h5``, or the dict
+        :func:`load_schreiber2016_templates` returns (so a caller can thread
+        the arrays into ``jit`` rather than bake them, #1649).
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_T=35.0, dust_f_pah=0.05, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations inside the returned function are
+    ``jnp`` primitives.
+
+    **Gradient-safe**: piecewise linear in ``dust_T``: the gradient is
+    discontinuous at every 1 K node (the 8-24 micron band-power slope jumps by a
+    median of 42% across the 83 interior nodes), and linear in ``dust_f_pah``;
+    both gradients are non-zero inside the grid and the PAH-fraction gradient
+    is zero only where the clip to [0, 1] binds.
+
+    References
+    ----------
+    .. [1] Schreiber, C., Elbaz, D., Pannella, M., Ciesla, L., Wang, T., & Franco, M.,
+           2018, A&A, 609, A30. arXiv:1710.10276.
+           https://doi.org/10.1051/0004-6361/201731506
+    """
+    grid = grid_path if isinstance(grid_path, dict) else load_schreiber2016_templates(grid_path)
+    tdust = jnp.asarray(grid["tdust_grid"])
+    tmpl_wave = jnp.asarray(grid["wavelength_aa"])
+    continuum = jnp.asarray(grid["continuum"])
+    pah = jnp.asarray(grid["pah"])
+
+    def schreiber2016_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_T: float = SCHREIBER_T_K_DEFAULT,
+        dust_f_pah: float = DEFAULT_DUST_F_PAH,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Schreiber et al. (2018) dust emission from the tabulated per-kg templates.
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+        L_absorbed : float
+            Total absorbed luminosity; the output L_nu is in the same units per Hz.
+        dust_T : float
+            Dust temperature [K], clipped to the 15--99 K node range.
+            Default: ``SCHREIBER_T_K_DEFAULT``.
+        dust_f_pah : float
+            PAH **mass** fraction in [0, 1]. Default: the declared ``dust_f_pah``.
+        **_kwargs
+            Extra keyword arguments (ignored, e.g. ``redshift``).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Dust emission L_nu in ``[L_absorbed units] / Hz``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+        """
+        t = jnp.clip(dust_T, tdust[0], tdust[-1])
+        i = jnp.clip(jnp.searchsorted(tdust, t) - 1, 0, tdust.shape[0] - 2)
+        ft = (t - tdust[i]) / (tdust[i + 1] - tdust[i])
+        cont_t = (1.0 - ft) * continuum[i] + ft * continuum[i + 1]
+        pah_t = (1.0 - ft) * pah[i] + ft * pah[i + 1]
+
+        # Per-kg mixture: f is the PAH mass fraction, so the amplitudes of the
+        # two library components (not unit-normalized ones) are what mix.
+        f_pah = _unit_fraction(dust_f_pah)
+        mixed_t = (1.0 - f_pah) * cont_t + f_pah * pah_t
+        mixed = resample_template(wavelength_aa, tmpl_wave, mixed_t, left=0.0, right=0.0)
+
+        # Renormalize the frequency integral to L_absorbed (nu descending for
+        # ascending wavelength, so negate for a positive integral).
+        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
+        integral = -jnp.trapezoid(mixed, nu)
+        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        return norm * mixed
+
+    return schreiber2016_tabulated
 
 
 def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:

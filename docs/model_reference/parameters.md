@@ -71,7 +71,8 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | `shock_abundance` | --- | Fixed(`solar`) | --- | --- | Abundance set (categorical) |
 | `shock_component` | --- | Fixed(`combined`) | --- | --- | Emission component (categorical) |
 | *Dust Emission* |  |  |  |  |  |
-| `dust_T` | $T_{\rm dust}$ | Uniform | $[15, 60]$ | K | Dust temperature (MBB) |
+| `dust_T` | $T_{\rm dust}$ | Uniform | $[15, 60]$ | K | Dust temperature (MBB, Casey, Schreiber library) |
+| `dust_f_pah` | $f_{\rm PAH}$ | Uniform | $[0, 1]$ | --- | PAH mass fraction (Schreiber library) |
 | `dust_beta_ir` | $\beta_{\rm IR}$ | Uniform | $[1.0, 2.5]$ | --- | MBB emissivity index |
 | `dust_alpha_dale` | $\alpha$ | Uniform | $[1.0, 4.0]$ | --- | Dale template slope |
 | `dust_eta_balance` | $\eta$ | Gaussian(1, 0.2) | $[0, \infty)$ | --- | Energy balance relaxation |

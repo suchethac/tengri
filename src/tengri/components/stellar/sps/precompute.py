@@ -42,6 +42,7 @@ from tengri.components.stellar.sps.ztable_grid import build_edge_aware_z_grid
 from tengri.utils.cosmology import DEFAULT_COSMO
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import (
+    edge_split,
     lyc_augment_grid_for_step,
     preintegrate_grid,
     subband_quadrature,
@@ -169,6 +170,14 @@ class PhotometricPrecomputation(NamedTuple):
         Lyman-continuum mask (a photoionized backend whose ``neb_fesc`` is not
         pinned at exactly ``1.0``, #2439, #2427). A model without one never
         computes or caches this.
+    ssp_phot_nolyc : array or None, shape (n_met, n_age, n_filters)
+        The other half of that split: the band flux from rest-frame
+        λ >= LYMAN_LIMIT_AA (911.76 Ångström), from the same cumulative integral, so a band wholly
+        below the edge has exactly zero here. The escape-fraction mask is
+        ``ssp_phot_nolyc + neb_fesc * ssp_phot_lyc`` (an addition) rather than
+        ``ssp_phot - (1 - neb_fesc) * ssp_phot_lyc``, which cancels two equal
+        numbers in that band and returns rounding noise. ``None`` exactly when
+        ``ssp_phot_lyc`` is.
 
     Notes
     -----
@@ -189,6 +198,7 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
     ssp_phot_lyc: "jnp.ndarray | None" = None
+    ssp_phot_nolyc: "jnp.ndarray | None" = None
     #: Rest-frame centroid of each chunk WITH the IGM inside [A], same shape as
     #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
     #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
@@ -343,6 +353,7 @@ def precompute_photometry(
         ssp_subband_phot=preint.subband_phot,
         ssp_subband_waves_rest=preint.subband_waves_rest,
         ssp_phot_lyc=preint.lyc_phot,
+        ssp_phot_nolyc=preint.nolyc_phot,
     )
 
 
@@ -662,6 +673,10 @@ class PhotometricZTable(NamedTuple):
     #: (n_z, n_met, n_age, n_filters) Lyman continuum photometry (rest λ < LYMAN_LIMIT_AA)
     #: at each redshift (#2439, #2427). ``None`` when not explicitly computed.
     ssp_phot_lyc_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters) photometry from rest λ >= LYMAN_LIMIT_AA: the other
+    #: half of the Lyman-limit split, exactly zero in a band wholly below the edge.
+    #: Present exactly when ``ssp_phot_lyc_table`` is.
+    ssp_phot_nolyc_table: jnp.ndarray | None = None
     #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame centroid of each chunk
     #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
     #: itself, so not part of the on-disk z-table.
@@ -734,7 +749,13 @@ class ZTableRequest:
 # (``build_edge_aware_z_grid``) with no hashed field changing, so a warm
 # cache would silently keep serving the uniform-grid table and the
 # accuracy fix would never reach it.
-_ZTABLE_CACHE_VERSION = 6
+#
+# 6 -> 7: the npz payload gained ``ssp_phot_nolyc_table``, the above-edge half of
+# the Lyman-limit split computed from the same cumulative integral as the
+# below-edge half. A version-6 entry has no such table and would be served to a
+# ``lyc_gate`` request that now needs it (the load path below also rebuilds on
+# the missing key).
+_ZTABLE_CACHE_VERSION = 7
 
 
 def _ztable_cache_dir():
@@ -873,7 +894,7 @@ def precompute_photometry_ztable(
                 # (that is the exact shape of the original bug: a warm cache
                 # serving a table with no Lyman-continuum split, no warning).
                 # Fall through and rebuild instead.
-                has_lyc = "ssp_phot_lyc_table" in d.files
+                has_lyc = "ssp_phot_lyc_table" in d.files and "ssp_phot_nolyc_table" in d.files
                 if not (lyc_gate and not has_lyc):
                     return PhotometricZTable(
                         ssp_phot_table=jnp.array(d["ssp_phot_table"]),
@@ -899,6 +920,9 @@ def precompute_photometry_ztable(
                         ),
                         ssp_phot_lyc_table=(
                             jnp.array(d["ssp_phot_lyc_table"]) if has_lyc else None
+                        ),
+                        ssp_phot_nolyc_table=(
+                            jnp.array(d["ssp_phot_nolyc_table"]) if has_lyc else None
                         ),
                     )
 
@@ -934,6 +958,7 @@ def precompute_photometry_ztable(
             payload["subband_waves_rest_table"] = np.asarray(table.subband_waves_rest_table)
         if table.ssp_phot_lyc_table is not None:
             payload["ssp_phot_lyc_table"] = np.asarray(table.ssp_phot_lyc_table)
+            payload["ssp_phot_nolyc_table"] = np.asarray(table.ssp_phot_nolyc_table)
         # Atomic publish: concurrent builds of the same key race benignly.
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
         try:
@@ -1048,6 +1073,7 @@ def _compute_photometry_ztable(
     # lyc_gate (a live nebular Lyman-continuum mask): a model without one
     # never pays this compute or the extra table size.
     ssp_phot_lyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
+    ssp_phot_nolyc_all = np.zeros((n_z_pts, n_met, n_age, n_filters)) if lyc_gate else None
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -1119,10 +1145,10 @@ def _compute_photometry_ztable(
             # inserts the edge as a zero-width node pair, so the WHOLE-band
             # integral, the ionizing-only split, AND ``subband_quadrature``'s
             # own forced-boundary chunks are all exact at the SAME bracket
-            # cell -- required for ``NebularSEDComponent``'s
-            # ``per_age - (1-fesc)*per_age_lyc`` correction to stay
-            # self-consistent with the sub-band partition (see
-            # :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`).
+            # cell (see :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`).
+            # Both halves of the split (below and above the edge) come from
+            # ONE cumulative integral (``edge_split``), so a band wholly on
+            # one side has exactly zero in the other half.
             lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
             if lyc_gate:
                 grid_q, integrand_q, tw_q = lyc_augment_grid_for_step(
@@ -1130,10 +1156,9 @@ def _compute_photometry_ztable(
                 )
                 denom_q = _np_trapezoid(tw_q, grid_q)
                 num = _np_trapezoid(integrand_q, grid_q, axis=-1)
-                first_edge_idx = int(np.searchsorted(grid_q, lyc_wave_obs, side="left"))
-                ion_mask = np.arange(grid_q.shape[0]) <= first_edge_idx
-                lyc_num = _np_trapezoid(integrand_q[..., ion_mask], grid_q[ion_mask], axis=-1)
+                lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
                 ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
+                ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom_q, 1e-30)
             else:
                 grid_q, integrand_q, tw_q, denom_q = grid, integrand, tw_np, denom
                 num = _np_trapezoid(integrand, grid, axis=-1)
@@ -1195,6 +1220,9 @@ def _compute_photometry_ztable(
             jnp.array(subband_waves_all) if subband_waves_all is not None else None
         ),
         ssp_phot_lyc_table=(jnp.array(ssp_phot_lyc_all) if ssp_phot_lyc_all is not None else None),
+        ssp_phot_nolyc_table=(
+            jnp.array(ssp_phot_nolyc_all) if ssp_phot_nolyc_all is not None else None
+        ),
     )
 
 
