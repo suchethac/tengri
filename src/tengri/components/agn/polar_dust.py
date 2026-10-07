@@ -309,7 +309,7 @@ def bongiorno2012_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
     ``tengri.components.agn._polar_smc_opacity`` with its provenance), rescaled to equal
     the power law at 100 nm and interpolated linearly in wavelength. This is the splice of
     CIGALE's ``extinction_law = 0``, which uses its own SMC-mixture table; the two shapes
-    agree (shape relative to 100 nm) within 5 per cent above 35 nm, within 15 per cent between
+    agree (shape relative to 100 nm) within 5.5 per cent above 35 nm, within 15.5 per cent between
     10 and 35 nm, and to 19 per cent at 1 nm. CIGALE rescales at the last grid point below
     100 nm rather than at 100 nm itself; for a dense grid the two differ by less than the
     opacity's change across one grid step. Wavelengths below the table's 10 A edge take its

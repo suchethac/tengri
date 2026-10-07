@@ -6,8 +6,8 @@ The polar-dust ``bongiorno`` law is the Bongiorno et al. (2012) power law
 replaced by the *shape* of an SMC dust-mixture mass extinction coefficient, rescaled to equal
 the power law at 100 nm, as CIGALE's ``skirtor2016`` and ``fritz2006`` modules do (Boquien et
 al. 2019 [1]_; Yang et al. 2020 [2]_). CIGALE uses its own tabulated SMC dust mixture for the
-splice; the two agree in shape (relative to 100 nm) within 5 per cent above 35 nm, within
-15 per cent between 10 and 35 nm, and 19 per cent at 1 nm (measured; see the regression test
+splice; the two agree in shape (relative to 100 nm) within 5.5 per cent above 35 nm, within
+15.5 per cent between 10 and 35 nm, and 19 per cent at 1 nm (measured; see the regression test
 of the polar law).
 
 The data are repackaged from B. T. Draine's public tabulation of the Weingartner & Draine

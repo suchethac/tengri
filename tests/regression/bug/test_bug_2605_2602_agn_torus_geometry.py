@@ -1122,6 +1122,13 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
     ``fritz2006``'s ``accretion_power`` (``int AGN1.disk x norm``; the Fritz disc is isotropic,
     hemisphere mean 1), and it carries CIGALE's ``1/(1 + l_ext)`` under polar dust, so the
     corona shares the disc's normalization. Measured ``b`` against that: see the tolerance.
+
+    Under polar dust the ``1/(1 + l_ext)`` factor is taken from this model's own polar share:
+    CIGALE's ``fritz2006`` runs a ``schartmann2005`` disc, whose polar share differs from the
+    ``kubota_done`` disc's. So this cell tests the corona's single scale, the torus screen on a
+    Type-2 sightline and ``b`` against CIGALE's accretion power, not the polar share itself;
+    ``test_fritz_disc_under_polar_dust_is_the_unattenuated_disc_over_one_plus_l_ext`` tests
+    that against CIGALE.
     """
     from tengri.components.agn.blocks import _protocol as protocol
     from tengri.components.agn.blocks.torus_screen import torus_screen_transmission
