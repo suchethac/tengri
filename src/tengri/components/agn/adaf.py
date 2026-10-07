@@ -32,8 +32,11 @@ References
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import jax.numpy as jnp
 from jax.scipy.special import i0 as _i0, i1 as _i1
+from scipy.special import roots_legendre as _scipy_roots_legendre
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._phys import (
@@ -614,11 +617,39 @@ def _adaf_mdot_from_lbol(
     return jnp.clip(mdot, 1e-8, mdot_crit)
 
 
-#: Nodes of the fixed internal frequency grid that normalizes the spectrum.
-#: 8193 log nodes over [0.02 nu_min, 100 kT_e / h] ~ 1e7 - 1e22 Hz (15 decades, 35 in ln):
-#: d ln(nu) ~ 4e-3, so the trapezoid error on the continuous broken power law (a slope
-#: kink at nu_p) is ~1e-6.
-_NORM_N_NODES = 8193
+# ── Gauss-Legendre quadrature for the normalization integral ─────────────
+#
+# The spectrum is smooth in ln(nu) between its own breaks (nu_min, nu_p, 3 k T_e / h), so the
+# power is integrated by one 30-point Gauss-Legendre rule per segment between them, in
+# ln(nu), instead of a fixed grid; the bremsstrahlung tail has a closed form.
+
+_GL_ORDER = 30
+_GL_X_RAW, _GL_W_RAW = _scipy_roots_legendre(_GL_ORDER)  # on [-1, 1]
+_GL_X = (_GL_X_RAW + 1.0) / 2.0  # nodes on [0, 1]
+_GL_W = _GL_W_RAW / 2.0  # weights on [0, 1]
+
+
+def _segment_power(f, nu_a, nu_b, dtype):
+    r"""Gauss-Legendre integral of ``f(nu) d nu`` over ``[nu_a, nu_b]``, in ``ln(nu)``.
+
+    Parameters
+    ----------
+    f : callable
+        Integrand ``f(nu)``, smooth on the segment.
+    nu_a, nu_b : array_like, shape ()
+        Segment limits [Hz], ``nu_a < nu_b``.
+    dtype : dtype
+        Working dtype of the nodes and weights (float32 stays float32).
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int_{\nu_a}^{\nu_b} f\,d\nu` in the units of ``f`` times Hz.
+    """
+    log_a, log_b = jnp.log(nu_a), jnp.log(nu_b)
+    width = log_b - log_a
+    nu = jnp.exp(log_a + jnp.asarray(_GL_X, dtype=dtype) * width)
+    return width * jnp.sum(jnp.asarray(_GL_W, dtype=dtype) * f(nu) * nu)
 
 
 # ── Public spectrum ──────────────────────────────────────────────────────
@@ -720,7 +751,7 @@ def adaf_spectrum(
     nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
     nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
 
-    def _total(nu_):
+    def _synch_compton(nu_):
         # Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p),
         # joined continuously at nu_p (both = l_nu_p there).
         ratio = nu_ / nu_p
@@ -728,33 +759,45 @@ def adaf_spectrum(
         shape_sc = (
             shape_sc * jnp.exp(-nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / nu_max_c, 0.0, 500.0))
         )
+        return l_nu_p * shape_sc
+
+    def _brems(nu_):
         # Bremsstrahlung: flat with an exponential cutoff at k T_e / h.
-        brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * t_e), 0.0, 500.0))
-        return l_nu_p * shape_sc + brems
+        return l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * t_e), 0.0, 500.0))
+
+    def _total(nu_):
+        return _synch_compton(nu_) + _brems(nu_)
 
     total = _total(nu)
 
     # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
-    # reference on the float32 path). The integral runs on a FIXED internal
-    # frequency grid spanning the model's own scales, never on the caller's
-    # wavelength array: the spectrum reaches the X-ray (3 k T_e / h ~ 1e19 Hz)
-    # and a caller grid that stops short of it would otherwise renormalize the
-    # truncated spectrum (a 912 A grid by a factor ~1e3), and any sampling would
-    # shift the quadrature. The span is [0.02 nu_min, 100 k T_e / h]: below
-    # 0.02 nu_min the exp(-nu_min / nu) factor is < e^-50, above 100 k T_e / h
-    # the cutoffs are < e^-33. It is ascending in nu (a descending trapezoid
-    # needs negation and is silently zeroed under MLX compile: jax-mps#232, #2295).
+    # reference on the float32 path). The integral uses Gauss-Legendre quadrature
+    # on segments defined by the spectrum's break frequencies (nu_p, Compton cutoff),
+    # NOT the caller's wavelength array. The spectrum support is [0.02 nu_min, 100 k T_e / h].
+    # Grid invariance: a caller grid that stops short of the X-ray (e.g., 912 A at z=0)
+    # would renormalize the truncated spectrum by ~1e3 if we integrated over the caller's grid.
     nu_lo = 0.02 * nu_min
     nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
-    log_lo = jnp.log(nu_lo)
-    u = jnp.linspace(0.0, 1.0, _NORM_N_NODES, dtype=wavelength.dtype)
-    nu_int = jnp.exp(log_lo + u * (jnp.log(nu_hi) - log_lo))
-    total_int = _total(nu_int)
+
+    # The power in synchrotron + Compton is Gauss-Legendre on the segments between the
+    # spectrum's own breaks; the bremsstrahlung power
+    #   int l_brems0 exp(-h nu / k T_e) d nu = l_brems0 (k T_e / h) [exp(-h nu_lo / k T_e)
+    #                                                              - exp(-h nu_hi / k T_e)]
+    # is exact. Float32 (#1206): the erg/s-scale integral (~1e43) overflows, so it is carried in
+    # L_sun, where only its ratio with 10**agn_log_lbol is formed.
+    unit = _LSUN_ERG if _f32 else 1.0
+    breaks = (nu_lo, nu_min, nu_p, nu_max_c, nu_hi)
+    int_synch_compton = sum(
+        _segment_power(lambda nu_: _synch_compton(nu_) / unit, lo, hi, wavelength.dtype)
+        for lo, hi in pairwise(breaks)
+    )
+    t_scale = _K_BOLTZ * t_e / _H_PLANCK
+    exp_lo = jnp.exp(-nu_lo / t_scale)
+    exp_hi = jnp.exp(-nu_hi / t_scale)
+    integral = int_synch_compton + (l_brems0 / unit) * t_scale * (exp_lo - exp_hi)
+
     if _f32:
-        # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
-        # work the normalization in L_sun (total/L_sun keeps the integral in
-        # range) and order 10**log_lbol / integral before the ~1e28 shape.
-        integral = jnp.trapezoid(total_int / _LSUN_ERG, nu_int)
+        # ``integral`` is in L_sun: order 10**log_lbol / integral before the ~1e28 shape.
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
         # the float32 branch, the divide-by-zero guard guarded nothing. Returns
@@ -765,7 +808,6 @@ def adaf_spectrum(
             * total
         )
     else:
-        integral = jnp.trapezoid(total_int, nu_int)
         l_nu = (
             10.0**agn_log_lbol
             * _LSUN_ERG

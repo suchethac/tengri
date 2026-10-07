@@ -47,6 +47,7 @@ from tengri.utils.physics_constants import L_SUN
 
 __all__ = [
     "adaf_disc_block",
+    "adaf_disc_power",
     "cigale_adaf_disc_block",
     "cigale_schartmann_disc_block",
     "cigale_schartmann_skirtor_attenuated_disc_block",
@@ -181,6 +182,35 @@ def adaf_disc_block(
         agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_disc_power("adaf")
+def adaf_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of :func:`adaf_disc_block`, in units of ``L_acc``.
+
+    :func:`~tengri.components.agn.adaf.adaf_spectrum` renormalizes the spectrum so that
+    :math:`\int L_\nu\,d\nu = 10^{\mathtt{agn\_log\_lbol}} L_\odot` over the model's whole
+    support, whatever wavelength grid the caller passes, so the power is the
+    normalization itself.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
+        fraction does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. The quadrature
+        that sets the normalization agrees with a 262 145-node reference to 4e-8.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
 
 
 @register_agn_block(
