@@ -22,6 +22,8 @@ import pytest
 
 from tengri.utils.wavelength_conventions import SOURCES
 
+pytestmark = pytest.mark.regression_bug
+
 ROOT = Path(__file__).resolve().parents[3]
 DATA = ROOT / "data"
 VAC_HALPHA, VAC_HBETA = 6564.61, 4862.68
@@ -119,12 +121,13 @@ def test_sweep_every_source_declares_a_convention_and_is_registered():
 
     assert all(s.convention in {"vacuum", "air", "mixed"} and s.evidence for s in SOURCES)
     registered = {s.path for s in SOURCES}
-    for path in sorted(DATA.glob("*.h5")) + [DATA / "cue_weights.npz"]:
+    for path in sorted(DATA.glob("*.h5")):
         if not path.exists() or path.suffix != ".h5":
             continue
         with h5py.File(path) as f:
-            has_lines = []
-            f.visit(lambda n: has_lines.append(n) if "line_wavelength" in n else None)
+            names: list[str] = []
+            f.visit(names.append)
+        has_lines = [n for n in names if "line_wavelength" in n]
         if has_lines:
             assert f"data/{path.name}" in registered, f"{path.name}: undeclared line wavelengths"
     for s in SOURCES:
@@ -135,7 +138,16 @@ def test_sweep_every_source_declares_a_convention_and_is_registered():
     assert set(STANDARD_INDICES)  # the Lick subset is covered by test_lick_*
 
 
-_REFRACTIVE = re.compile(r"131\.4182|2\.76249e8|6\.4328e-5|2\.94981e-2|8\.34254e-5|2\.406147e-2|130\.1065924522|8\.336624212083e-5|2\.408926869968e-2", re.I)
+_REFRACTIVE = re.compile(
+    "|".join(
+        [
+            r"131\.4182", r"2\.76249e8", r"6\.4328e-5", r"2\.94981e-2",
+            r"8\.34254e-5", r"2\.406147e-2", r"130\.1065924522",
+            r"8\.336624212083e-5", r"2\.408926869968e-2",
+        ]
+    ),
+    re.I,
+)  # fmt: skip
 
 
 def test_no_second_refractive_index_formula_anywhere():

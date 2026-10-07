@@ -48,7 +48,9 @@ def test_gradient_finite_and_nonzero(fn, x):
 
 def test_jit_and_numpy_agree():
     x = np.array([1500.0, 4862.68, 6564.61])
-    np.testing.assert_allclose(np.asarray(jax.jit(vac_to_air)(jnp.asarray(x))), vac_to_air(x), rtol=1e-12)
+    np.testing.assert_allclose(
+        np.asarray(jax.jit(vac_to_air)(jnp.asarray(x))), vac_to_air(x), rtol=1e-12
+    )
     assert isinstance(vac_to_air(x), np.ndarray)
     assert isinstance(vac_to_air(jnp.asarray(x)), jax.Array)
     assert vac_to_air(2500.0).shape == ()

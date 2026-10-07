@@ -204,8 +204,10 @@ _SSP_CASES = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0), ("
 #: means against hard masks and per-pixel means); tolerance 1.25 x, rounded up.
 _BAGPIPES_MEAN_TOL_AA = 0.2
 #: Largest soft-window - hard-window difference of the default over three ages [Å],
-#: 1.25 x, rounded up: HgA 0.050, Fe4383 0.050, Hbeta 0.130.
-_EDGE_TOL_AA = {"HgA": 0.050, "Fe4383": 0.050, "Hbeta": 0.130}
+#: 1.25 x, rounded up: HgA 0.145, Fe4383 0.050, Hbeta 0.130. HgA rose from 0.050 when the
+#: Lick windows moved from the published air numbers to vacuum (every edge +1.1 to +1.8 A):
+#: the 1 A soft edges now sit on different SSP pixels (the edge effect is #2637, unchanged).
+_EDGE_TOL_AA = {"HgA": 0.145, "Fe4383": 0.050, "Hbeta": 0.130}
 
 
 def _ssp_flam(age_gyr: float):
@@ -267,7 +269,7 @@ class TestLickDefinitionVsBagpipes:
 
         pcigale EW is emission-positive with the continuum interpolated linearly between
         the sideband centers and integrates (line − cont)/cont over the feature window,
-        so the comparison is tengri_default == −pcigale_ew within abs=0.06 Å (the difference
+        so the comparison is tengri_default == −pcigale_ew within abs=0.14 Å (the difference
         between an integral of the ratio and a ratio of integrals plus the 1 Å soft edges).
 
         Also asserts that the OLD arithmetic (pseudo_continuum="mean" on L_ν) differs from
@@ -327,7 +329,7 @@ class TestLickDefinitionVsBagpipes:
         # tengri's Lick EW is in Angstrom and absorption-positive.
         for name, age, tengri_default, pcigale_ew, _tengri_mean in measured_values:
             pcigale_aa = -10.0 * pcigale_ew
-            assert tengri_default == pytest.approx(pcigale_aa, abs=0.06), (
+            assert tengri_default == pytest.approx(pcigale_aa, abs=0.14), (
                 f"{name} {age} Gyr: tengri default {tengri_default:.4f} vs "
                 f"pcigale {pcigale_aa:.4f} A"
             )

@@ -39,6 +39,7 @@ from tengri import (
     measure,
 )
 from tengri.observation.spectral_indices import (
+    _LICK_AIR_WINDOWS,
     STANDARD_INDICES,
     SpectralIndexDef,
     measure_index_jax,
@@ -63,31 +64,35 @@ AGES_GYR = (1.0, 3.0, 10.0)
 #: per index [Å], times 1.25 and rounded up to 0.005. The reference differs only
 #: in the 1 Å sigmoid edges (#2637), which this fix does not change; the
 #: continuum and frame error the fix removes is 0.3-1.0 Å for HγA, HγF, Fe4383.
+#: Re-measured when the Lick windows moved from their published air numbers to
+#: vacuum (every edge +1.1 to +1.8 Å): the soft edges now sit on different SSP
+#: pixels, so the (sampling-dependent) soft-vs-hard difference changed; the rule
+#: above is unchanged.
 EDGE_TOL_AA = {
     "HdA": 0.100,
-    "HdF": 0.080,
-    "HgA": 0.050,
-    "HgF": 0.085,
-    "Mgb": 0.045,
-    "Fe5270": 0.140,
-    "Fe5335": 0.310,
-    "Hbeta": 0.130,
-    "Fe4383": 0.050,
-    "Ca4227": 0.040,
+    "HdF": 0.110,
+    "HgA": 0.145,
+    "HgF": 0.070,
+    "Mgb": 0.015,
+    "Fe5270": 0.165,
+    "Fe5335": 0.225,
+    "Hbeta": 0.055,
+    "Fe4383": 0.030,
+    "Ca4227": 0.100,
 }
 
 #: Same rule for the magnitude form of each index [mag].
 EDGE_TOL_MAG = {
     "HdA": 0.0030,
-    "HdF": 0.0055,
-    "HgA": 0.0010,
-    "HgF": 0.0040,
-    "Mgb": 0.0015,
-    "Fe5270": 0.0045,
-    "Fe5335": 0.0095,
-    "Hbeta": 0.0055,
-    "Fe4383": 0.0015,
-    "Ca4227": 0.0035,
+    "HdF": 0.0075,
+    "HgA": 0.0035,
+    "HgF": 0.0050,
+    "Mgb": 0.0005,
+    "Fe5270": 0.0050,
+    "Fe5335": 0.0070,
+    "Hbeta": 0.0025,
+    "Fe4383": 0.0010,
+    "Ca4227": 0.0100,
 }
 
 #: Bound on |window-LUT - exact path| for an EW index [Å]. The LUT evaluates the Lick
@@ -389,10 +394,10 @@ def test_registry_ew_equals_the_soft_window_reference_exactly(ssp, grid, name, a
 @pytest.mark.parametrize(
     "name,age,old_minus_lick",
     [
-        ("HgA", 1.0, 0.300),
-        ("Fe4383", 1.0, 0.428),
-        ("HgA", 10.0, 1.035),
-        ("Fe4383", 10.0, 0.409),
+        ("HgA", 1.0, 0.260),
+        ("Fe4383", 1.0, 0.425),
+        ("HgA", 10.0, 0.896),
+        ("Fe4383", 10.0, 0.392),
     ],
 )
 def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
@@ -404,7 +409,9 @@ def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
     old = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mean_idx))
     ref = lick_hard_reference(wave, _flam(wave, lnu), STANDARD_INDICES[name])
     assert old - ref == pytest.approx(old_minus_lick, abs=0.01)
-    assert abs(old - ref) > 5.0 * EDGE_TOL_AA[name]
+    # HgA's vacuum windows put its soft edges on pixels that widen EDGE_TOL_AA, so the
+    # miss is required to clear the edge noise, not five times it
+    assert abs(old - ref) > 1.5 * EDGE_TOL_AA[name]
 
 
 # ── (d) window-LUT path equals the exact path ──────────────────────
@@ -593,6 +600,18 @@ BAGPIPES_LITERALS = {
 }
 
 
+def _bagpipes_index(name):
+    """The index as BAGPIPES defines it: the published (air) window numbers, verbatim.
+
+    BAGPIPES applies them to its vacuum wavelengths unconverted. These cells test the
+    *arithmetic* against BAGPIPES, so they use its windows, not tengri's vacuum ones.
+    """
+    continuum, feature = _LICK_AIR_WINDOWS[name]
+    return dataclasses.replace(
+        STANDARD_INDICES[name], pseudo_continuum="mean", continuum=continuum, feature=feature
+    )
+
+
 def _bagpipes_dict(idx):
     return {"type": "EW", "continuum": list(idx.continuum), "feature": list(idx.feature)}
 
@@ -600,7 +619,7 @@ def _bagpipes_dict(idx):
 @pytest.mark.parametrize("name,age", list(BAGPIPES_LITERALS))
 def test_mean_option_equals_bagpipes_single_index_pinned(ssp, grid, name, age):
     """Literal twin of the BAGPIPES cell (no BAGPIPES needed) on a sloped SSP F_λ spectrum."""
-    idx = dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
+    idx = _bagpipes_index(name)
     wave, lnu = _solar_spectrum(ssp, grid, age)
     flam = _flam(wave, lnu)
     got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(flam), idx))
@@ -613,7 +632,7 @@ def test_mean_option_equals_bagpipes_single_index_pinned(ssp, grid, name, age):
 @pytest.mark.parametrize("name,age", list(BAGPIPES_LITERALS))
 def test_mean_option_equals_bagpipes_single_index(ssp, grid, name, age):
     bp = pytest.importorskip("bagpipes.input.spectral_indices")
-    idx = dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
+    idx = _bagpipes_index(name)
     wave, lnu = _solar_spectrum(ssp, grid, age)
     flam = _flam(wave, lnu)
     ref = float(bp.single_index(_bagpipes_dict(idx), np.column_stack([wave, flam]), 0.0))
