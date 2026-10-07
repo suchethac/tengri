@@ -53,6 +53,7 @@ from reproduction import _validation as V
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
@@ -469,10 +470,7 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # unchanged and line strengths are compared in §9.
 
 # %%
-from tengri.utils.air_vacuum import air_to_vac as air_to_vacuum  # the one converter
-
-
-assert abs(float(air_to_vacuum(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
+assert abs(float(air_to_vac(6562.80)) - 6564.61) < 0.05, "air-to-vacuum relation does not reproduce H-alpha"
 
 
 _mg_lines = B._build_model(
@@ -484,7 +482,7 @@ _mg_lines = B._build_model(
 )
 _wl_air, _ = B.line_table(_mg_lines)
 # BAGPIPES labels the lines below 2000 A in vacuum and above in air.
-LINE_MASK_AA = np.where(_wl_air > 2000.0, air_to_vacuum(_wl_air), _wl_air)
+LINE_MASK_AA = np.where(_wl_air > 2000.0, air_to_vac(_wl_air), _wl_air)
 
 # %%
 # The double power-law and lognormal forms are functions of cosmic time T = age - lookback.
@@ -2225,7 +2223,7 @@ def paired_line_table(mg_b, state_t):
     wt = np.asarray(state_t.derived["line_waves"])
     lt = np.asarray(state_t.derived["line_lums"])
     # BAGPIPES labels the lines below 2000 A in vacuum and above in air.
-    wvac = np.where(wb > 2000.0, air_to_vacuum(wb), wb)
+    wvac = np.where(wb > 2000.0, air_to_vac(wb), wb)
     # Each tengri line is assigned to the nearest BAGPIPES line, so two lines closer than the match window
     # (He I 3888.64 and H I 3889.05 in BAGPIPES's air scale) are compared each with its own counterpart.
     nearest = np.argmin(np.abs(wt[:, None] - wvac[None, :]), axis=1)

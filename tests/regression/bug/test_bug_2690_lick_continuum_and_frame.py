@@ -392,16 +392,19 @@ def test_registry_ew_equals_the_soft_window_reference_exactly(ssp, grid, name, a
 
 
 @pytest.mark.parametrize(
-    "name,age,old_minus_lick",
+    "name,age,old_minus_lick,resolved",
     [
-        ("HgA", 1.0, 0.260),
-        ("Fe4383", 1.0, 0.425),
-        ("HgA", 10.0, 0.896),
-        ("Fe4383", 10.0, 0.392),
+        # HgA at 1 Gyr: a young population has a weak Hgamma line, so the sideband-line
+        # miss is only 0.260 A, 4.9x the measured soft-edge effect (0.053 A) and below the
+        # 5x separation bar. Its value is still pinned; only the separation is not claimed.
+        ("HgA", 1.0, 0.260, False),
+        ("Fe4383", 1.0, 0.425, True),
+        ("HgA", 10.0, 0.896, True),
+        ("Fe4383", 10.0, 0.392, True),
     ],
 )
 def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
-    ssp, grid, name, age, old_minus_lick
+    ssp, grid, name, age, old_minus_lick, resolved
 ):
     """Constant continuum on L_ν (mean option) misses the Lick value by the #2690 table."""
     mean_idx = dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
@@ -409,9 +412,8 @@ def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
     old = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mean_idx))
     ref = lick_hard_reference(wave, _flam(wave, lnu), STANDARD_INDICES[name])
     assert old - ref == pytest.approx(old_minus_lick, abs=0.01)
-    # HgA's vacuum windows put its soft edges on pixels that widen EDGE_TOL_AA, so the
-    # miss is required to clear the edge noise, not five times it
-    assert abs(old - ref) > 1.5 * EDGE_TOL_AA[name]
+    if resolved:
+        assert abs(old - ref) > 5.0 * EDGE_TOL_AA[name]
 
 
 # ── (d) window-LUT path equals the exact path ──────────────────────
