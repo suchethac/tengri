@@ -42,6 +42,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
+from tengri._data_setup import find_data
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 from tengri.forward.wavelength_extension import (
@@ -50,6 +51,15 @@ from tengri.forward.wavelength_extension import (
 )
 
 pytestmark = pytest.mark.crossval
+
+# Skip module if the BC03 SSP grid is absent; crossval does not stage it
+_SSP_GRID = "bc03_pdva_stelib_chabrier.h5"
+if find_data(_SSP_GRID) is None:
+    pytest.skip(
+        f"BC03 SSP not found: {_SSP_GRID}. This grid is absent in CI; tests are "
+        "deselected from the crossval run.",
+        allow_module_level=True,
+    )
 
 _LSUN = 3.828e33  # erg/s, converts the model's l_* properties [Lsun] to erg/s
 _UM = 1.0e4  # Angstrom per micron
