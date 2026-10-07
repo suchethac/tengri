@@ -99,12 +99,13 @@ def test_flury_labels_are_vacuum_after_load():
 
 
 def test_cue_air_catalog_ingests_to_vacuum():
-    from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
+    from tengri.components.nebular.cue import load_cue_weights
 
-    waves = np.load(_need("cue_weights.npz"))["lineList_wav"]
-    out = np.asarray(nebular_line_waves_to_vacuum(waves, xp=np))
-    j = int(np.argmin(np.abs(waves - 6562.80)))
-    assert abs(out[j] - VAC_HALPHA) < 0.05
+    path = _need("cue_weights.npz")
+    assert np.load(path)["lineList_wav"].min() > 0.0  # the file itself stays air
+    waves = load_cue_weights(str(path)).nn_line_wav
+    assert abs(waves[int(np.argmin(np.abs(waves - VAC_HALPHA)))] - VAC_HALPHA) < 0.05
+    assert not np.any(np.abs(waves - 6562.80) < 0.05)  # the air label is gone
 
 
 def test_fsps_ssp_is_vacuum():
