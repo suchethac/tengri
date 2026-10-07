@@ -113,6 +113,7 @@ from tengri.config.exceptions import (
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters._dust_keys import (
+    _SCREEN_DEFAULTS,
     DUST_TYPES_WITH_AGE_SPLIT,
     DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
@@ -121,6 +122,7 @@ from tengri.parameters._dust_keys import (
     full_to_short,
     normalize_dust_group_keys,
     per_screen_keys,
+    reject_own_screen_keys,
     resolve_screen_choices,
     screen_keys,
     short_to_full,
@@ -4122,6 +4124,7 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     from tengri.components.dust.age_binned import (
         AgeBinnedDustComponent,
         AgeBinnedDustComponentConfig,
+        age_binned_nebular_mode,
         validate_screens,
     )
     from tengri.components.dust.laws._registry import law_kwarg_names
@@ -4129,8 +4132,19 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     screens = validate_screens(dust_atten_dict.get("screens"))
     result["dust_screens"] = screens
 
+    own = result.get("dust_nebular_screen") == "own"
+    law_neb = dust_atten_dict.get("law_neb") if own else None
+    if law_neb is not None:
+        valid_laws = _valid_dust_laws()
+        if law_neb not in valid_laws:
+            raise _unknown_name_error("dust law", law_neb, valid_laws, keyword="law_neb")
+        result["dust_law_neb"] = law_neb
     declared = AgeBinnedDustComponent(
-        config=AgeBinnedDustComponentConfig(screens=screens)
+        config=AgeBinnedDustComponentConfig(
+            screens=screens,
+            nebular_screen=age_binned_nebular_mode("own" if own else ""),
+            law_neb=law_neb,
+        )
     ).declared_parameters()
     declared_by_name = {d.name: d for d in declared}
 
@@ -4142,12 +4156,20 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
         )
     wildcard = dust_atten_dict[wildcard_keys_given[0]] if wildcard_keys_given else None
 
-    for i, (law, _lo, _hi) in enumerate(screens):
-        pairs = [(f"tau_{i}", f"dust_tau_{i}")]
-        for law_kw in sorted(law_kwarg_names(law)):
+    # (law, suffix) per parameter family: every screen, then the own nebular screen.
+    families = [(law, str(i)) for i, (law, _lo, _hi) in enumerate(screens)]
+    if own:
+        families.append((None, "neb"))
+    for law, suffix in families:
+        if law is None:
+            pairs = [("tau_neb", "dust_tau_neb")]
+            law = law_neb  # None -> no <shape>_neb names (the first screen's are read)
+        else:
+            pairs = [(f"tau_{suffix}", f"dust_tau_{suffix}")]
+        for law_kw in sorted(law_kwarg_names(law)) if law is not None else ():
             if law_kw == "redshift":
                 continue
-            pairs.append((f"{full_to_short(law_kw)}_{i}", f"{law_kw}_{i}"))
+            pairs.append((f"{full_to_short(law_kw)}_{suffix}", f"{law_kw}_{suffix}"))
 
         for short_key, full_name in pairs:
             decl = declared_by_name[full_name]
@@ -4352,6 +4374,21 @@ def _validate_lyc_escape_geometry(value: object) -> str:
     return value
 
 
+def _own_screen_keys_given(dust_atten_dict: dict, dust_type: str) -> list[str]:
+    """The keys of ``dust_atten_dict`` that only ``nebular_screen='own'`` reads.
+
+    ``tau_neb`` on every dust type; on ``age_binned`` also ``law_neb`` and the
+    ``<shape>_neb`` overrides (on ``two_component`` those keep their meaning of
+    retargeting the birth-cloud part of the nebular screen).
+    """
+    names = {"tau_neb", "dust_tau_neb"}
+    if dust_type == "age_binned":
+        names.add("law_neb")
+        for stem in OVERRIDE_STEMS:
+            names.update((f"{stem}_neb", short_to_full(f"{stem}_neb")))
+    return [k for k in dust_atten_dict if k in names]
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -4390,6 +4427,15 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     )
     for _source, _choice in _screen_choices.items():
         result[f"dust_{_source}_screen"] = _choice
+
+    # tau_neb (and, on age_binned, law_neb and the <shape>_neb keys) are read
+    # only by nebular_screen='own'; refuse them with any other choice.
+    reject_own_screen_keys(
+        _screen_choices.get("nebular", _SCREEN_DEFAULTS["nebular"]),
+        _own_screen_keys_given(dust_atten_dict, dust_type),
+        dust_model=("off" if dust_type == "none" else dust_type),
+        surface="grammar",
+    )
 
     # 'none' (its 'off' synonym normalized above by _normalize_off_switch)
     # disables the dust block entirely; parity with neb/agn/radio/xray/igm/
@@ -5929,7 +5975,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # and constrains single_component to a no-op value, so only a
         # two_component spec's non-default value is ever worth emitting.
         _Structural(
-            "nebular_screen", "dust_nebular_screen", "birth_cloud", only_types=("two_component",)
+            "nebular_screen",
+            "dust_nebular_screen",
+            "birth_cloud",
+            only_types=("two_component", "age_binned"),
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
@@ -6607,7 +6656,9 @@ def _validate_user_keys(
         age_binned_param_names: frozenset[str] = frozenset()
         if top_key == "dust_attenuation" and top_val.get("type") == "age_binned":
             age_binned_param_names = _age_binned_param_names(
-                getattr(structural_params, "dust_screens", None) or ()
+                getattr(structural_params, "dust_screens", None) or (),
+                own=getattr(structural_params, "dust_nebular_screen", None) == "own",
+                law_neb=getattr(structural_params, "dust_law_neb", None),
             )
 
         _check_dict_keys(
@@ -8083,7 +8134,9 @@ def _dust_group_accepted_keys() -> frozenset[str]:
     return structural | param_short_forms
 
 
-def _age_binned_param_names(screens: tuple) -> frozenset[str]:
+def _age_binned_param_names(
+    screens: tuple, *, own: bool = False, law_neb: str | None = None
+) -> frozenset[str]:
     """Short + full per-screen key names for ``dust_attenuation={'type': 'age_binned'}``.
 
     One ``tau_i``/``dust_tau_i`` pair per screen, plus one
@@ -8099,6 +8152,11 @@ def _age_binned_param_names(screens: tuple) -> frozenset[str]:
         The validated screen tuple
         (:func:`tengri.components.dust.age_binned.validate_screens`), e.g.
         ``structural_params.dust_screens``.
+    own : bool, optional
+        ``nebular_screen='own'``: also admit ``tau_neb`` and, with an explicit
+        ``law_neb``, that law's ``<shape>_neb`` keys.
+    law_neb : str or None, optional
+        The own screen's explicit law.
 
     Returns
     -------
@@ -8120,6 +8178,11 @@ def _age_binned_param_names(screens: tuple) -> frozenset[str]:
             short_stem = full_to_short(law_kw)
             names.add(f"{short_stem}_{i}")
             names.add(f"{law_kw}_{i}")
+    if own:
+        names.update(("tau_neb", "dust_tau_neb"))
+        for law_kw in law_kwarg_names(law_neb) if law_neb is not None else ():
+            if law_kw != "redshift":
+                names.update((f"{full_to_short(law_kw)}_neb", f"{law_kw}_neb"))
     return frozenset(names)
 
 

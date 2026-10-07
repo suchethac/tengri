@@ -1847,16 +1847,17 @@ plt.show()
 # single-screen Calzetti attenuation; the §3 energy-anchor offset sits under
 # every ratio). `dl2007` (qpah, umin, γ) at three grid points, cold to warm;
 # `dl2014` at α ∈ {1, 2, 3}; `casey2012` at T ∈ {25, 35, 50} K (β=1.6,
-# α_mir=2.0); `schreiber2016` at T ∈ {25, 35, 50} K (supported range 15–60 K);
+# α_mir=2.0); `schreiber2016` at T ∈ {25, 35, 50} K (tabulated range 15–99 K);
 # `dale2014` (CIGALE's own grid, via `dale2014_cigale`) at α ∈ {0.5, 2, 4}. One tengri build per
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
-# the 8–1000 µm L_ν ratio locate each family's shape. The integrated 8–1000 µm luminosity
-# matches to well under a percent because both implementations are normalized on the same
-# absorbed stellar energy (`L_absorbed`), while the peak wavelength and the mid-infrared
-# trough differ between them, a shape difference visible in the ratio panel (`f_pah` matches
-# CIGALE's 0.05 default). Schreiber 2016 presents the starkest discrepancy: at T=25 K, the
-# filter-by-filter ratio reaches a worst case of 2.485×, with every band deviating beyond 5%,
-# reflecting different template peak wavelengths despite the flux integral remaining within 0.5%.
+# the 8–1000 µm L_ν ratio locate each family's shape. Both implementations are normalized
+# on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 µm L_ν ratios printed
+# below lie between 1.003× and 1.021× across the sweep. The filter-by-filter tables show
+# where shapes differ: `dl2014` at α=1 has a worst filter ratio of 1.370× with 7 of 13
+# bands outside 5%, and every other row has none outside 5% (`f_pah` matches CIGALE's 0.05
+# default). `schreiber2016` is the tabulated library CIGALE ships: at T = 25, 35 and 50 K
+# its 8–1000 µm ratio is 1.010× each time, and its filter-by-filter median is 1.009×,
+# 1.009× and 1.010× with worst cases of 1.015×, 1.015× and 1.032×.
 
 # %%
 _peaks_6c = []

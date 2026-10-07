@@ -14,11 +14,19 @@ is read from :data:`BARE_NAME_ALLOWLIST`.
 Cross-component publications
 ----------------------------
 
-- ``state.derived["L_agn_bol"]`` (scalar, erg/s): bolometric AGN
-  luminosity. Consumed by
+- ``state.derived["L_agn_bol"]`` (scalar, erg/s): the AGN accretion power,
+  :math:`10^{\\mathtt{agn\\_log\\_lbol}} L_\\odot`, integrated over all directions
+  (the same at every inclination). Consumed by
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
+- ``state.derived["log_L_agn_los"]`` (dex re erg/s, composable model only):
+  :math:`\\log_{10}` of the line-of-sight isotropic-equivalent bolometric luminosity
+  of the AGN's direct emission, :math:`\\int L_\\nu(i)\\,d\\nu` with
+  :math:`L_\\nu(i) = 2\\cos i\\,D_\\nu + H_\\nu` (disc and warm zones scale with
+  :math:`\\cos i`, the corona does not), before the torus screen and the polar dust.
+  Compare this key, not ``L_agn_bol``, with a catalog :math:`L_{\\rm bol}` from a
+  bolometric correction.
 - ``state.derived["log_L_12um"]``, ``["log_L_6um"]`` (dex re erg/s):
   :math:`\\log_{10}\\nu L_\\nu` at 12 and 6 µm of the AGN's own emission (disc +
   torus + polar dust for the composable model, the whole SED for a monolithic
@@ -59,6 +67,7 @@ from tengri.components.agn._lbol_reference import (
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
+from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
     resolve_agn_model,
@@ -200,12 +209,25 @@ class AGNSEDComponent(TemplateThreading):
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
         """
         return (
-            DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
+            DerivedKey(
+                "L_agn_bol",
+                "erg/s",
+                "AGN accretion power 10**agn_log_lbol L_sun, integrated over all directions "
+                "(independent of the inclination)",
+            ),
             DerivedKey(
                 "log_L_agn_bol",
                 "dex",
                 "log10(L_agn_bol / (erg/s)); float32-safe form "
                 "(L_agn_bol ~1e46 overflows float32)",
+            ),
+            DerivedKey(
+                "log_L_agn_los",
+                "dex",
+                "log10 of the line-of-sight isotropic-equivalent bolometric luminosity "
+                "[dex re erg/s] of the AGN direct emission, int L_nu(i) dnu with "
+                "L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust; "
+                "composable model only. Compare with a catalog L_bol",
             ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
@@ -652,6 +674,7 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_torus"] = agn_components["torus"]
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
+            derived_overrides["log_L_agn_los"] = agn_components[LOS_LOG_LUMINOSITY_KEY]
         # The line-only light exactly as it enters the pipeline SED (#2565): the
         # AGN's own screen is already applied (``agn_components["lines"]``, the
         # monolithic ``return_components`` lines), the host dust screen is not.

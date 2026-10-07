@@ -105,17 +105,6 @@
         512
       ]
     },
-    "schreiber2016": {
-      "params": {
-        "dust_T": 30.0,
-        "dust_f_pah": 0.05,
-        "redshift": 0.0
-      },
-      "call_path": "closure",
-      "output_shape": [
-        512
-      ]
-    },
     "schreiber2018": {
       "params": {
         "dust_T": 30.0,

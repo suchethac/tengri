@@ -20,9 +20,6 @@ from tengri.components.dust.emission.analytic.modified_blackbody import (
 from tengri.components.dust.emission.analytic.pah_drude import (
     PAHDrudeIRSEDComponent,
 )
-from tengri.components.dust.emission.analytic.schreiber2016 import (
-    Schreiber2016AnalyticIRSEDComponent,
-)
 
 __all__ = [
     "Casey2012IRSEDComponent",
@@ -30,5 +27,4 @@ __all__ = [
     "GraybodyIRSEDComponent",
     "ModifiedBlackbodyIRSEDComponent",
     "PAHDrudeIRSEDComponent",
-    "Schreiber2016AnalyticIRSEDComponent",
 ]

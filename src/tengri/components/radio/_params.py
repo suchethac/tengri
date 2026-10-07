@@ -60,8 +60,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # The FIRRC is tight -- under 0.3 dex scatter across five decades in
         # luminosity -- so the range is the Bell (2003) value carried to about
         # +/-3 sigma of that scatter. It is the radio-excess knob: a fitted q_IR
-        # well below 2.64 is the signature of an AGN contribution.
-        free_prior=Uniform(1.8, 3.5, "FIR-radio correlation q_IR", default=2.64),
+        # well below 2.64 is the signature of an AGN contribution. The upper end
+        # is the largest q at which the synchrotron share of the Bell total stays
+        # non-negative for the hottest declared gas (q_* = 3.379 at T_e = 2e4 K,
+        # see ``radio_q_total_limit``).
+        free_prior=Uniform(1.8, 3.37, "FIR-radio correlation q_IR", default=2.64),
     ),
     ParamDeclaration(
         "radio_alpha_sf",

@@ -22,6 +22,7 @@ import pytest
 from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     measure_index_jax,
+    measure_indices_from_point_terms,
     measure_indices_from_windows,
     precompute_index_windows,
 )
@@ -65,11 +66,14 @@ def test_index_lut_bit_exact_vs_measure_index_jax(seed):
     exact = np.asarray(jnp.stack([measure_index_jax(wave, sed, d) for d in defs]))
 
     pc = precompute_index_windows(wave, flux, defs)
-    window_means = jnp.tensordot(w, pc.window_integrals, axes=([0, 1], [0, 1])) / pc.window_norms
-    lut = np.asarray(measure_indices_from_windows(window_means, pc))
+    # Every index, the Lick EWs included, from the per-point terms: the LUT evaluates the
+    # definition at the window grid points as the exact path does (round-off, #2690).
+    terms = jnp.einsum("ma,map->p", w, pc.points.integrands)
+    lut = np.asarray(measure_indices_from_point_terms(terms, pc))
 
-    # bit-exact up to float64 round-off (window mean commutes with the weight sum)
-    np.testing.assert_allclose(lut, exact, rtol=1e-9, atol=0)
+    is_ew = np.array([d.index_type == "EW" for d in defs])
+    np.testing.assert_allclose(lut[~is_ew], exact[~is_ew], rtol=1e-9, atol=0)
+    np.testing.assert_allclose(lut[is_ew], exact[is_ew], rtol=1e-9, atol=1e-9)
     assert not pc.has_slope
 
 

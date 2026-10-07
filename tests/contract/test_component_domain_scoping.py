@@ -37,7 +37,6 @@ _NOT_ROUTED = frozenset(
         # emission backend, which is also what the ``draine2021_pah`` ->
         # ``draine2021_pah_ir`` entry in ``_EMISSION_TYPE_ALIASES`` always
         # implied.
-        "schreiber2016_ir",  # Standalone IR component, not routed through build_components
         # ``fsps_shell`` is consumed inside the stellar component through the
         # ``agb_dust`` group (agb_dust_shell.py); the stellar component applies
         # it to the SSP grid itself, so it never routes through

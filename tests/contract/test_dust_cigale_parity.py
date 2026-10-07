@@ -15,7 +15,7 @@ References
 ----------
 .. [1] Jones, A.P. et al. 2017, A&A, 602, A46 (THEMIS).
 .. [2] Dale, D.A. et al. 2014, ApJ 784, 83 (Dale2014).
-.. [3] Schreiber, C. et al. 2016, A&A, 609, A30 (Schreiber2016).
+.. [3] Schreiber, C. et al. 2018, A&A, 609, A30 (the library CIGALE calls ``schreiber2016``).
 """
 
 from __future__ import annotations
@@ -84,13 +84,14 @@ def _dale2014_engine():
 
 @functools.lru_cache(maxsize=1)
 def _schreiber2016_component():
+    from tengri.components.dust.emission.templates.schreiber2016 import (
+        Schreiber2016IRSEDComponent,
+    )
     from tengri.components.dust.emission_templates import load_schreiber2016_templates
-    from tengri.components.dust.schreiber2016_ir import Schreiber2016IRSEDComponent
 
     comp = Schreiber2016IRSEDComponent()
     data = load_schreiber2016_templates(_require("data/schreiber2016_templates.h5"))
-    object.__setattr__(comp, "data", data)
-    return comp
+    return comp, data
 
 
 # ── THEMIS: radiation-field slope alpha (FSPS-anchored hybrid grid) ──
@@ -186,15 +187,16 @@ class TestDale2014FracAGN:
 
 
 class TestSchreiber2016Tabulated:
-    """Tabulated Schreiber+2016 templates (tdust, fpah), matching CIGALE."""
+    """Tabulated Schreiber+2018 templates (tdust, fpah), matching CIGALE."""
 
     def _component(self):
         return _schreiber2016_component()
 
     def _sed(self, comp, tdust, fpah):
         # Canonical stripped param names (#849): T / f_pah.
-        sed_out, _ = comp.predict(
-            {"T": tdust, "f_pah": fpah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0
+        component, data = comp
+        sed_out, _ = component.predict(
+            {"T": tdust, "f_pah": fpah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0, templates=data
         )
         return sed_out
 
@@ -327,20 +329,24 @@ def _obj_dale_frac_agn():
 
 
 def _obj_schreiber2016_fpah():
-    comp = _schreiber2016_component()
+    comp, data = _schreiber2016_component()
 
     def total(f_pah):
-        sed, _ = comp.predict({"T": 30.0, "f_pah": f_pah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0)
+        sed, _ = comp.predict(
+            {"T": 30.0, "f_pah": f_pah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0, templates=data
+        )
         return jnp.sum(sed)
 
     return total
 
 
 def _obj_schreiber2016_tdust():
-    comp = _schreiber2016_component()
+    comp, data = _schreiber2016_component()
 
     def total(tdust):
-        sed, _ = comp.predict({"T": tdust, "f_pah": 0.05}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0)
+        sed, _ = comp.predict(
+            {"T": tdust, "f_pah": 0.05}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0, templates=data
+        )
         return jnp.sum(sed)
 
     return total
@@ -425,7 +431,7 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
 
     Measured 2026-08-16: the value outside is bit-identical to the value at
     the bound, the gradient outside is exactly +/-0.0, and the gradient *at*
-    the bound is exactly half the interior slope. That last number is not a
+    the bound is exactly half the live one-sided slope. That last number is not a
     coincidence: ``jnp.where``-style clamping differentiates to the average of
     the live one-sided slope and the dead one.
     """
@@ -450,9 +456,13 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
             f"clamped range -- the forward value is frozen there, so any "
             f"gradient is spurious."
         )
-        assert float(grad(bound)) == pytest.approx(0.5 * interior, rel=1e-2), (
+        # The live one-sided slope is the slope just inside the bound. Reading
+        # it at 0.5 instead assumes the objective is linear in the knob, which a
+        # luminosity-renormalized mixture (schreiber2016) is not.
+        live = float(grad(bound + (1e-6 if bound == lo else -1e-6)))
+        assert float(grad(bound)) == pytest.approx(0.5 * live, rel=1e-2), (
             f"{knob} gradient at the bound {bound} is {float(grad(bound)):.6e}, "
-            f"not half the interior slope {interior:.6e}. The clamp's "
+            f"not half the live one-sided slope {live:.6e}. The clamp's "
             f"differentiation convention changed."
         )
 

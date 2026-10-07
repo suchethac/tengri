@@ -67,7 +67,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # log10(L_bol / Lsun): ~1e8 Lsun (low-luminosity Seyfert) to ~1e14
         # Lsun (luminous QSO) brackets the AGN population.
         Uniform(8.0, 14.0, default=10.0),
-        "AGN bolometric luminosity log10(L_bol / Lsun): direct parametric mode",
+        "AGN accretion power log10(L_acc / Lsun), integrated over all directions "
+        "(independent of the inclination); the line-of-sight value is the derived "
+        "log_L_agn_los",
     ),
     ParamDeclaration(
         "agn_alpha",
@@ -230,7 +232,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # inclination mismatch as the dominant source of residual at
         # the SKIRTOR torus peak.
         Uniform(0.0, 1.0, default=0.86602540378443864),
-        "Cosine of inclination (0=edge-on, 1=face-on); default matches CIGALE i=30",
+        "Cosine of inclination (0=edge-on, 1=face-on); the disc and warm zones scale "
+        "as 2 cos i, the corona is isotropic; default matches CIGALE i=30",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
@@ -938,6 +941,9 @@ DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 #: so a *fit* on that model can also clip: tracked separately.)
 DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
 
+#: Default AGN Eddington ratio, sub-Eddington. Used by Synthesizer grid blocks.
+DEFAULT_AGN_LOG_LEDD = declared_default(PARAMS, "agn_log_ledd")
+
 #: Default disc inclination, ``cos(30 deg)``. Matches CIGALE's skirtor2016
 #: ``i=30`` face-on type-1 convention; the older 0.5 (``i=60``) was found by the
 #: §9 reproduction audit to be the dominant residual at the SKIRTOR torus peak,
@@ -1225,6 +1231,7 @@ GRID_EXTENT_SOURCES: dict[str, tuple[str, str, str, str]] = {
 __all__ = [
     "DEFAULT_AGN_COS_INC",
     "DEFAULT_AGN_LOG_LBOL",
+    "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
     "GRID_EXTENT_SOURCES",

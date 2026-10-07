@@ -78,6 +78,7 @@ from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
+    reject_own_screen_keys,
     resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
@@ -739,6 +740,8 @@ class Parameters:
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
             dust_screens=self.dust_screens,
+            dust_nebular_screen=self.dust_nebular_screen,
+            dust_law_neb=self.dust_law_neb,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1209,6 +1212,22 @@ class Parameters:
         self.dust_nebular_screen = _screen_choices.get("nebular", "birth_cloud")
         self.dust_shock_screen = _screen_choices.get("shock", "diffuse")
         self.dust_agn_screen = _screen_choices.get("agn", "none")
+
+        # tau_neb (and, on age_binned, law_neb and the <shape>_neb overrides) are
+        # read only by nebular_screen='own': the same refusal as the grammar.
+        _own_only = ["dust_tau_neb"] if "dust_tau_neb" in kwargs else []
+        if self.dust_model == "age_binned":
+            _own_only += [
+                name
+                for name in (
+                    *(short_to_full(f"{stem}_neb") for stem in OVERRIDE_STEMS),
+                    "dust_law_neb",
+                )
+                if name in kwargs or (name == "dust_law_neb" and law_neb_explicit is not None)
+            ]
+        reject_own_screen_keys(
+            self.dust_nebular_screen, _own_only, dust_model=self.dust_model, surface="flat"
+        )
 
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global
