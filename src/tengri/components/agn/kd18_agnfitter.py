@@ -47,10 +47,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LOG_MBH
-from tengri.components.agn._phys import (
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
+from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -79,7 +76,12 @@ __all__ = [
 _DEFAULT_AGN_LOG_LEDD = -1.0
 
 
-def _renormalize(sed: jnp.ndarray, wavelength: jnp.ndarray, agn_log_lbol: float) -> jnp.ndarray:
+def _renormalize(
+    template: jnp.ndarray,
+    wave_native: jnp.ndarray,
+    sed: jnp.ndarray,
+    agn_log_lbol: float,
+) -> jnp.ndarray:
     r"""Renormalize a shape-only :math:`F_\nu` template to ``agn_log_lbol``.
 
     .. math::
@@ -87,7 +89,10 @@ def _renormalize(sed: jnp.ndarray, wavelength: jnp.ndarray, agn_log_lbol: float)
         L_\nu(\lambda) = L_{\rm bol}\,
                          \frac{T(\lambda)}{\int T(\nu)\,\mathrm{d}\nu}
 
-    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. Mirrors
+    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot` and the integral
+    taken over the template's own native grid (0.062 A to 1.2e5 A, X-ray to
+    far-IR), so the result does not depend on how the caller samples or
+    truncates wavelength. Mirrors
     :func:`tengri.components.agn.slone_netzer.slone_netzer_sed_from_grid`: the
     vendored KD18 template's own absolute flux calibration (a fixed distance,
     AGNfitter-rX's ``BB=0`` free-normalization-off convention) is discarded --
@@ -97,10 +102,12 @@ def _renormalize(sed: jnp.ndarray, wavelength: jnp.ndarray, agn_log_lbol: float)
 
     Parameters
     ----------
+    template : array_like, shape (n_native,)
+        Node-interpolated template on its native grid. [F_nu, unnormalized]
+    wave_native : array_like, shape (n_native,)
+        Template native wavelength grid. [Angstrom]
     sed : array_like, shape (n_wave,)
-        Node-interpolated template, resampled onto ``wavelength``. [F_nu, unnormalized]
-    wavelength : array_like, shape (n_wave,)
-        Rest-frame wavelength grid. [Angstrom]
+        The template resampled onto the caller's grid. [F_nu, unnormalized]
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
 
@@ -111,21 +118,10 @@ def _renormalize(sed: jnp.ndarray, wavelength: jnp.ndarray, agn_log_lbol: float)
 
     Notes
     -----
-    **JIT-compatible**: yes.
+    **JIT-compatible**: yes. The float32 two-trap factorization lives in
+    ``scale_to_lbol_native`` in ``_template_grid``.
     """
-    nu = _wavelength_to_nu(wavelength)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
-    if wavelength.dtype == jnp.float32:
-        # Float32 (#1206): same two-trap factorization as slone_netzer_sed_from_grid
-        # (peak-factor the integrand so no ~1e45 erg/s intermediate overflows).
-        import jax
-
-        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
-        peak = jnp.where(peak > 0.0, peak, 1.0)
-        hat_int = _bolometric_integral_nu(sed / peak, nu, floor=1e-30)
-        return (l_scale / hat_int) * (sed / peak)
-    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-    return l_scale * sed / integral_safe
+    return scale_to_lbol_native(template, wave_native, sed, 10.0**agn_log_lbol * _LSUN_ERG)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -286,7 +282,7 @@ def kd18_agnfitter_sed_from_grid(
         + fm * fe * grid_jax[i + 1, j + 1]
     )
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    return _renormalize(sed, wavelength, agn_log_lbol)
+    return _renormalize(template, wave_grid, sed, agn_log_lbol)
 
 
 @functools.cache
@@ -533,7 +529,7 @@ def kd18_agnfitter_warmindex_sed_from_grid(
         + fm * fe * fw * c111
     )
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-    return _renormalize(sed, wavelength, agn_log_lbol)
+    return _renormalize(template, wave_grid, sed, agn_log_lbol)
 
 
 @functools.cache

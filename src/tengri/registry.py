@@ -1131,12 +1131,12 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     "schreiber2018": {
         "status": "experimental",
         "citation": "Schreiber et al. 2018 (A&A 609, A30)",
-        "short_doc": "Tabulated IR template library (T_dust, f_PAH)",
+        "short_doc": "Tabulated Schreiber+2018 library, AGNfitter-rX packaging; (T_dust, f_PAH)",
     },
     "schreiber2016": {
         "status": "production",
-        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
-        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+        "citation": "Schreiber et al. 2018 (A&A 609, A30)",
+        "short_doc": "Tabulated Schreiber+2018 library (CIGALE); (T_dust, PAH mass fraction)",
     },
     "pah_drude": {
         "status": "unvalidated",
@@ -1373,7 +1373,7 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Fixed-q FIR-radio correlation",
     },
     ("sf", "bell2003_split"): {
-        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 692, A85)",
+        "citation": "Bell 2003 (ApJ 586, 794); Martinez-Ramirez+2024 (A&A 688, A46)",
         "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
     },
     ("sf", "delvecchio2021"): {
@@ -1391,7 +1391,7 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Single power-law AGN radio scaled by radio-loudness",
     },
     ("agn", "dpl"): {
-        "citation": "Martinez-Ramirez+2024 (A&A 692, A85)",
+        "citation": "Martinez-Ramirez+2024 (A&A 688, A46)",
         "short_doc": "Broken double power-law with exp aging cutoff",
     },
 }

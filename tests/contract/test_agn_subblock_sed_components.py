@@ -25,6 +25,7 @@ from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConf
 from tengri.protocols.component import ForwardState
 
 _WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 400)
+_DENSE_WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 20000)
 
 _SUBBLOCK_KEYS = ("sed_agn_disc", "sed_agn_torus", "sed_agn_lines", "sed_agn_polar")
 
@@ -222,12 +223,17 @@ class TestPolarDustSharesTheAgnDustBudget:
         from tengri.components.agn.blocks.runner import compose_l_nu
         from tengri.utils.physics_constants import C_AA
 
-        nu = C_AA / _WAVE
+        # Integrated on a dense covering grid: the budgets are measured on the
+        # runner's fixed grids and are independent of the caller's, so the sum of
+        # torus and polar closes to the quadrature error of the grid it is summed on,
+        # and the 400-node ``_WAVE`` (about 60 per decade) carries ~1e-5 of that.
+        wave = _DENSE_WAVE
+        nu = C_AA / wave
         order = jnp.argsort(nu)
         out = []
         for ebv in self._EBVS:
             _sed, comps = compose_l_nu(
-                _WAVE,
+                wave,
                 12.0,
                 agn_disc_block="schartmann2005",
                 agn_nlr_block="none",
@@ -340,12 +346,32 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
     ============  ==================  ==================
     torus block   floored denominator selected denominator
     ============  ==================  ==================
-    ``none``      ``nan``             ``6.743538e+33``
-    ``skirtor``   ``nan``             ``4.134017e+33``
+    ``none``      ``nan``             ``6.861931e+33``
+    ``skirtor``   ``nan``             ``2.655277e+33``
     ============  ==================  ==================
 
+    The values are the gradient of the node sum of the polar and torus
+    components on this file's 500 A - 1e8 A, 400-node grid. The polar absorbed
+    power is measured on the runner's fixed budget grid (1e-3 A - 1e10 A), so it
+    includes the disc energy shortward of this file's 500 A start (0.13 % of
+    L_bol), which the SMC screen absorbs; it adds 1.9 % to the
+    degenerate-point gradient (6.734910e+33 -> 6.861931e+33 for ``none``,
+    4.128727e+33 -> 4.206651e+33 for ``skirtor``) and 1.0 % to the live one at
+    ``ebv = 0.1`` (2.189596e+33 -> 2.211796e+33).
+
+    The ``skirtor`` degenerate-point value then moved again, to ``2.655277e+33``,
+    when the polar budget became the absorbed power itself (``l_absorbed >= 0``)
+    rather than ``abs`` of a frequency-descending trapezoid of the graybody. That
+    integral is ``-0.0`` at ``ebv = 0``, and JAX differentiates ``abs`` at zero as
+    ``+1``, so the old budget carried the *negative* of the absorbed power's
+    derivative: the torus component was rising with ``E(B-V)`` at the one point
+    where it was sampled. The polar term is unchanged (``3.430963e+33``); the torus
+    term is ``-7.756859e+32`` instead of ``+7.756853e+32``, the sign the live
+    gradient at ``ebv = 0.1`` already had (the polar power takes energy from the
+    torus). ``torus='none'`` has no torus term and does not move.
+
     Away from the degenerate point nothing moves: at ``ebv = 0.1`` both forms
-    give ``2.192167e+33``. A fit that starts a sampler at zero polar
+    give ``2.211796e+33``. A fit that starts a sampler at zero polar
     reddening -- the registry default -- took a NaN gradient on step one.
     """
 
@@ -395,8 +421,8 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
             f"{grad}. Finite is not the whole claim -- a rewrite that zeroed the "
             "derivative everywhere would satisfy the assertion above while leaving "
             "the sampler exactly as stuck as the nan did. The class docstring pins "
-            "the selected-denominator answers: 6.743538e+33 (torus='none') and "
-            "4.134017e+33 (torus='skirtor')."
+            "the selected-denominator answers: 6.861931e+33 (torus='none') and "
+            "2.655277e+33 (torus='skirtor')."
         )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
@@ -419,10 +445,32 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         # non-zero value pinned exactly on the next line.
         assert np.isfinite(grad)
         if torus_block == "skirtor":
-            assert grad == pytest.approx(2.192167e33, rel=1e-5, abs=0.0), (
+            assert grad == pytest.approx(2.211796e33, rel=1e-5, abs=0.0), (
                 "the live E(B-V) gradient moved; the selection must only change the "
                 f"degenerate point, got {grad:.6e}"
             )
+
+    @pytest.mark.regression_bug
+    def test_the_torus_gives_energy_to_the_polar_power_at_the_degenerate_point(self):
+        """``d(torus)/d(E(B-V))`` is negative at ``E(B-V) = 0``, as it is at 0.1.
+
+        The AGN dust budget is split between torus and polar graybody, so raising
+        ``E(B-V)`` takes power from the torus. The polar budget used to be ``abs`` of a
+        frequency-descending trapezoid, ``-0.0`` at ``E(B-V) = 0``; JAX differentiates
+        ``abs`` at zero as ``+1``, so the torus gradient came back positive, +7.756853e+32
+        against -7.756859e+32 now.
+        """
+        import jax
+
+        grad = float(
+            jax.grad(lambda e: jnp.sum(jnp.asarray(self._compose(e, "skirtor")[1]["torus"])))(
+                jnp.asarray(self._EBV_DEGENERATE)
+            )
+        )
+        assert grad == pytest.approx(-7.756859e32, rel=1e-5, abs=0.0), (
+            f"d(sum torus)/d(E(B-V)) at E(B-V)=0 is {grad:.6e}; the torus loses power to "
+            "the polar graybody, so it must be negative (-7.756859e+32)"
+        )
 
     @pytest.mark.parametrize("torus_block", ["none", "skirtor"])
     def test_zero_polar_power_leaves_the_forward_components_defined(self, torus_block):
@@ -515,7 +563,7 @@ class TestAgnDustBudgetSplitKeepsANanBudgetVisible:
 
         grad = float(jax.grad(_dust_total)(jnp.asarray(0.0)))
         assert np.isfinite(grad) and grad != 0.0
-        pinned = 6.743538e33 if torus_block == "none" else 4.134017e33
+        pinned = 6.861931e33 if torus_block == "none" else 2.655277e33
         assert grad == pytest.approx(pinned, rel=1e-5, abs=0.0), (
             f"torus={torus_block!r}: the degenerate-point gradient moved to {grad:.6e} "
             f"(pinned {pinned:.6e}) -- the NaN-visibility fix must change only the "

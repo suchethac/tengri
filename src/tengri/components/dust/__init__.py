@@ -14,8 +14,8 @@ Components (selected via the model grammar):
   re-emission with energy balance).
 - ``wg00_model.py``: WG00 radiative-transfer attenuation component
   (physics in ``wg00.py``).
-- ``schreiber2016_ir.py``, ``draine2021_pah_ir.py``: standalone IR
-  emission components (Draine+2021 physics in ``draine2021_pah.py``).
+- ``draine2021_pah_ir.py``: standalone IR
+  emission component (Draine+2021 physics in ``draine2021_pah.py``).
 
 Physics libraries:
 
@@ -124,6 +124,9 @@ from tengri.components.dust.emission import (
     register_themis_tabulated,
     themis,
 )
+from tengri.components.dust.emission.templates.schreiber2016 import (
+    Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
+)
 from tengri.components.dust.emission_templates import (
     Draine2021PAHTemplates,
     load_draine2021_pahspec_templates,
@@ -133,10 +136,6 @@ from tengri.components.dust.emission_templates import (
 from tengri.components.dust.priors import (
     narayanan_prior,
     narayanan_tau_prior,
-)
-from tengri.components.dust.schreiber2016_ir import (
-    Schreiber2016IRConfig as Schreiber2016IRConfig,
-    Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
 )
 from tengri.components.dust.wg00 import (
     WG00_DUST_CURVES as WG00_DUST_CURVES,
@@ -189,9 +188,8 @@ _CURATED_DIR = (
     # SEDModelComponent-style attenuation components
     "WG00AttenuationSEDComponent",
     "WG00AttenuationSEDComponentConfig",
-    # Standalone IR emission SEDComponent backends
+    # IR emission SEDComponent backends
     "Schreiber2016IRSEDComponent",
-    "Schreiber2016IRConfig",
     "Draine2021PAHIRSEDComponent",
     "Draine2021PAHIRConfig",
     # Draine+2021 PAHspec template loader

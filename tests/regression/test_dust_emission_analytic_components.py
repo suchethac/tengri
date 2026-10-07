@@ -29,7 +29,7 @@ class TestDustEmissionAnalyticPorts:
         return 1e44  # erg/s (arbitrary scale)
 
     def test_registry_contains_analytic_names(self):
-        """Verify all 5 analytic dust models are registered."""
+        """Verify all 4 analytic dust models are registered."""
         from tengri.components.sed_model_component import _REGISTRY
 
         required_names = {
@@ -37,7 +37,6 @@ class TestDustEmissionAnalyticPorts:
             "casey2012",
             "graybody",
             "pah_drude",
-            "schreiber2016",
         }
         registered_names = set(_REGISTRY.keys())
         assert required_names.issubset(registered_names), (
@@ -326,76 +325,6 @@ class TestDustEmissionAnalyticPorts:
             err_msg="PAH Drude redshift scaling broken (should be invariant)",
         )
 
-    def test_schreiber2016_z0_exact(self, wave_grid, L_ir):
-        """Schreiber2016: z=0 golden test (exact match to closure)."""
-        from tengri.components.dust.emission import schreiber2016 as closure_fn
-        from tengri.components.sed_model_component import _REGISTRY
-
-        comp = _REGISTRY["schreiber2016"]()
-
-        # Closure call (golden truth, note: dust_f_pah in closure)
-        golden = closure_fn(
-            wave_grid,
-            L_ir,
-            dust_T=30.0,
-            dust_f_pah=0.05,
-            redshift=0.0,
-        )
-
-        # Component call (canonical f_pah, #849)
-        p = {"T": 30.0, "f_pah": 0.05, "redshift": 0.0}
-        sed_out, _published = comp.predict(
-            p,
-            jnp.zeros_like(wave_grid),
-            wave_grid,
-            L_ir=L_ir,
-        )
-
-        # Exact match
-        np.testing.assert_allclose(
-            sed_out,
-            golden,
-            rtol=0.0,
-            atol=0.0,
-            err_msg="Schreiber2016 component does not match closure exactly",
-        )
-
-    def test_schreiber2016_cmb_parity(self, wave_grid, L_ir):
-        """Schreiber2016: z>0 CMB parity (component vs direct closure)."""
-        from tengri.components.dust.emission import schreiber2016 as closure_fn
-        from tengri.components.sed_model_component import _REGISTRY
-
-        comp = _REGISTRY["schreiber2016"]()
-
-        z = 6.0
-
-        # Closure call
-        golden = closure_fn(
-            wave_grid,
-            L_ir,
-            dust_T=30.0,
-            dust_f_pah=0.05,
-            redshift=z,
-        )
-
-        # Component call
-        p = {"T": 30.0, "f_pah": 0.05, "redshift": z}
-        sed_out, _published = comp.predict(
-            p,
-            jnp.zeros_like(wave_grid),
-            wave_grid,
-            L_ir=L_ir,
-        )
-
-        # Exact match
-        np.testing.assert_allclose(
-            sed_out,
-            golden,
-            rtol=0.0,
-            atol=0.0,
-            err_msg=f"Schreiber2016 CMB parity broken at z={z}",
-        )
-
 
 # ── Frozen absolute goldens ───────────────────────────────────────
 #
@@ -407,11 +336,11 @@ class TestDustEmissionAnalyticPorts:
 # slope, and an optically-thin-only graybody), the tests encoding the old
 # behavior were updated, and the golden was not, because **nothing loaded it**.
 #
-# All four analytic captures written by scripts/baseline_dust_emission_golden.py
+# All analytic captures written by scripts/baseline_dust_emission_golden.py
 # were orphaned this way. Parametrizing over them is what makes them coverage
 # rather than decoration.
 
-_ANALYTIC_GOLDENS = ("casey2012", "graybody", "modified_blackbody", "pah_drude", "schreiber2016")
+_ANALYTIC_GOLDENS = ("casey2012", "graybody", "modified_blackbody", "pah_drude")
 
 
 @pytest.mark.regression_bug

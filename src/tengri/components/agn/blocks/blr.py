@@ -17,8 +17,12 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.blr import compute_blr_sed
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+)
+from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
+from tengri.components.agn.blr import _blr_l_hbeta, _fe2_total_power, compute_blr_sed
 from tengri.components.agn.nlr_cloudy import (
     compute_blr_sed_synthesizer,
     compute_nlr_sed_synthesizer_spectra,
@@ -131,6 +135,50 @@ def blr_analytic_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
+@register_line_energy("blr", "analytic")
+def blr_analytic_line_power(
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_blr_cf: float = 0.1,
+    agn_blr_fwhm_kms: float = 5000.0,
+    agn_fe2_strength: float = 0.0,
+    agn_blr_line_efficiency: float = 0.08,
+    agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
+    **_params,
+) -> Array:
+    r"""Bolometric line power of :func:`blr_analytic_block` [erg/s].
+
+    The broad lines are unit-integral Gaussians summing to ``efficiency x covering x
+    L_disc``, and the FeII pseudo-continuum carries ``R_Fe`` times the H-beta power
+    through its broadened template, so ``int L_lambda d lambda`` is
+    ``L_lines + L_Hbeta x P_FeII`` with no wavelength grid.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        Unused (the normalization is ``l5100_disc``).
+    l5100_disc : array_like
+        ``lambda L_lambda(5100 A)`` of the disc [erg/s].
+    agn_blr_cf, agn_blr_fwhm_kms, agn_fe2_strength, agn_blr_line_efficiency, agn_blr_f_bol
+        As for :func:`blr_analytic_block`.
+
+    Returns
+    -------
+    ndarray
+        ``int L_lambda d lambda`` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
+    """
+    del agn_log_lbol
+    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
+    l_lines = agn_blr_line_efficiency * agn_blr_cf * l_disc_bol_erg
+    l_hbeta = _blr_l_hbeta(l_disc_bol_erg, agn_blr_cf, agn_blr_line_efficiency)
+    return l_lines + l_hbeta * _fe2_total_power(agn_blr_fwhm_kms, agn_fe2_strength)
+
+
 @register_agn_block(
     "blr",
     "synthesizer",
@@ -148,6 +196,8 @@ def blr_synthesizer_block(
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
     agn_blr_logU: float = -1.0,
     agn_blr_logZ: float = -1.8477,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR lines from the Synthesizer Cloudy grid (grid-backed blr block).
@@ -173,6 +223,11 @@ def blr_synthesizer_block(
             Covering fraction, broad-line FWHM [km/s], and bolometric correction.
     agn_blr_logU, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter.
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol: ``agn_log_lbol`` does).
 
     Returns
     -------
@@ -188,6 +243,8 @@ def blr_synthesizer_block(
         covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("blr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_blr_logU,
         neb_logZ_gas=agn_blr_logZ,
     )
@@ -210,6 +267,8 @@ def blr_synthesizer_spectra_block(
     agn_blr_logU: float = -1.0,
     agn_blr_logn: float = 4.0,
     agn_blr_logZ: float = -2.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -237,6 +296,11 @@ def blr_synthesizer_spectra_block(
             BLR covering fraction.
     agn_blr_logU, agn_blr_logn, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter (log Z absolute).
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol — ``agn_log_lbol`` does).
 
     Returns
     -------
@@ -251,6 +315,8 @@ def blr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_blr_cf,
         grid_path=_resolve_synthesizer_grid("blr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_blr_logU,
         neb_logn=agn_blr_logn,
         neb_logZ_gas=agn_blr_logZ,

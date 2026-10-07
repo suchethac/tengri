@@ -44,9 +44,11 @@ from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.regression_bug
 
-#: 500 A to 1 mm, wide enough to catch the UV/optical disc AND the FIR
-#: graybody bump the polar screen re-emits into.
-_WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e8), 400)
+#: 500 A to 1e9 A, wide enough to catch the UV/optical disc AND the whole FIR graybody the
+#: polar screen re-emits into: the graybody is normalized over a fixed 1e3 A - 1e9 A band
+#: independent of the caller's grid, so a grid that stops at 1 mm cuts its Rayleigh-Jeans tail
+#: (1.5e-4 of the energy for the 100 K default) and an energy balance read off it is short.
+_WAVE = jnp.logspace(jnp.log10(500.0), jnp.log10(1e9), 20000)
 
 #: Common composable-AGN recipe: disc-only (no torus/nlr/blr/feii), the
 #: standalone polar_dust attenuation block, 'independent' normalization
@@ -396,8 +398,6 @@ def _joint_integrals(*, ir_frac, torus_frac, wave=_WAVE_JOINT, **over):
     """Bolometric ``polar``/``torus``/``disc`` of one cigale_joint build [erg/s]."""
     from tengri.components.agn.blocks.runner import compose_l_nu
 
-    nu = C_AA / wave
-    order = jnp.argsort(nu)
     _sed, comps = compose_l_nu(
         wave,
         12.0,
@@ -406,6 +406,8 @@ def _joint_integrals(*, ir_frac, torus_frac, wave=_WAVE_JOINT, **over):
         return_components=True,
         **{**_JOINT_BASE, **over},
     )
+    nu = C_AA / wave
+    order = jnp.argsort(nu)
     return {
         key: float(jnp.abs(jnp.trapezoid(jnp.asarray(comps[key])[order], nu[order])))
         for key in ("polar", "torus", "disc")
@@ -522,10 +524,12 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
         self._skip_without_grid()
         from tengri.components.agn.blocks import resolve_agn_block
         from tengri.components.agn.polar_dust import polar_cone_covering_factor
-        from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+        from tengri.components.agn.skirtor import skirtor_disc_dust_ratio, skirtor_disc_dust_wave
         from tengri.utils.grid_interp import resample_template
 
-        wave = _WAVE_JOINT
+        # The R-tie evaluates the disc ON the SKIRTOR library axis (not on the caller's grid,
+        # whose start would cut the corona and move R), so the reconstruction does too.
+        wave = jnp.asarray(skirtor_disc_dust_wave())
         cos_inc = 0.86602540378443864
         disc = jnp.asarray(
             resolve_agn_block("disc", _JOINT_BASE["agn_disc_block"])(
@@ -593,9 +597,11 @@ class TestPolarReemissionFollowsTheDiscsActualFrame:
 #: whole of the analytic disc's 8 A - 1e6 A support and the whole of the
 #: SKIRTOR templates' 10 A - 1e8 A support. Nothing physical distinguishes
 #: them, so nothing in the SED's component split may.
-_GRID_SKIRTOR_SPAN = jnp.asarray(np.geomspace(8.0, 1.0e8, 3000))
-_GRID_PANCHROMATIC = jnp.asarray(np.geomspace(0.0413, 3.0e11, 4000))
-_GRID_SKIRTOR_SPAN_FINE = jnp.asarray(np.geomspace(1.0, 1.0e9, 6000))
+# 10x denser than a plain caller grid: the comparison is of grid EXTENT, and a 3000-node
+# trapezoid of the peaked graybody alone carries ~4e-6 of quadrature error.
+_GRID_SKIRTOR_SPAN = jnp.asarray(np.geomspace(8.0, 1.0e8, 30000))
+_GRID_PANCHROMATIC = jnp.asarray(np.geomspace(0.0413, 3.0e11, 40000))
+_GRID_SKIRTOR_SPAN_FINE = jnp.asarray(np.geomspace(1.0, 1.0e9, 60000))
 
 
 class TestFaceOnReferenceUsesTheNativeSkirtorGrid:
@@ -648,15 +654,15 @@ class TestFaceOnReferenceUsesTheNativeSkirtorGrid:
         self._skip_without_grid()
         rs = {}
         for tag, grid in (
-            ("8 A - 1e8 A n=3000", _GRID_SKIRTOR_SPAN),
-            ("0.0413 A - 3e11 A n=4000", _GRID_PANCHROMATIC),
-            ("1 A - 1e9 A n=6000", _GRID_SKIRTOR_SPAN_FINE),
+            ("8 A - 1e8 A n=30000", _GRID_SKIRTOR_SPAN),
+            ("0.0413 A - 3e11 A n=40000", _GRID_PANCHROMATIC),
+            ("1 A - 1e9 A n=60000", _GRID_SKIRTOR_SPAN_FINE),
         ):
             got = _joint_integrals(
                 ir_frac=0.3, torus_frac=0.5, wave=grid, agn_disc_block=disc_block
             )
             rs[tag] = got["polar"] / got["torus"]
-        ref_tag = "8 A - 1e8 A n=3000"
+        ref_tag = "8 A - 1e8 A n=30000"
         ref = rs[ref_tag]
         for tag, r in rs.items():
             assert r == pytest.approx(ref, rel=1e-6, abs=0.0), (

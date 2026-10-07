@@ -90,7 +90,7 @@ def covered_prefixes(text: str) -> set[str]:
     for key in set(_MATRIX_VAR.findall(text)):
         prefixes.update(f"tests/{value}" for value in _matrix_values(text, key))
 
-    # The two bug/ half-shards carry `paths: ""` and compute their file list
+    # The bug/ shards carry `paths: ""` and compute their file list
     # at runtime from the directory (see the workflow's run step).
     if "bug_half" in text:
         prefixes.add("tests/regression/bug")

@@ -201,8 +201,8 @@ def test_dust_closure_literals_match_declarations(filename):
 # The component's own class-level prior is the declaration for a name that
 # some class declares; a shared ``components/dust/_params.py`` table entry
 # that disagrees is a stale copy. ``dust_T`` is the one case where multiple
-# classes disagree with EACH OTHER, not just the table: MBB/schreiber2016
-# read 30.0, graybody/casey2012 read 35.0, schreiber2018 reads 25.0, and the
+# classes disagree with EACH OTHER, not just the table: MBB reads
+# 30.0, graybody/casey2012 read 35.0, schreiber2018 reads 25.0, and the
 # table stays at 35.0, left unchanged pending #2261 (see ``_params.py``'s
 # ``dust_T`` docstring).
 #
@@ -217,9 +217,6 @@ _TABLE_CLASS_EXCEPTIONS: dict[tuple[str, str], str] = {
     ("ModifiedBlackbodyIRSEDComponent", "dust_T"): (
         "declares Fixed(MBB_T_K_DEFAULT)=30.0; table keeps Fixed(35.0), left "
         "unchanged pending #2261 -- see _params.py's dust_T docstring."
-    ),
-    ("Schreiber2016AnalyticIRSEDComponent", "dust_T"): (
-        "declares Fixed(SCHREIBER_T_K_DEFAULT)=30.0; see dust_T docstring, #2261."
     ),
     ("Schreiber2018IRSEDComponent", "dust_T"): (
         "declares Fixed(SCHREIBER2018_T_K_DEFAULT)=25.0; see dust_T docstring, #2261."

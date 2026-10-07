@@ -4,7 +4,7 @@ This is an internal engineering audit record kept for contributors — users sho
 
 # Known Bugs — Audit 2026-03-31 (Updated 2026-04-30)
 
-**2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the HST AR proposal
+**2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the multi-model CANDELS
 NSS work, 2026-04-16) are now FIXED. The only remaining open functional bug is PERF-01
 (DL07 dust emission JIT graph >2 GB), which is architectural and tracked separately.
 
@@ -442,7 +442,7 @@ In DSPS's lookback-time convention used by tengri, a declining tau model in cosm
 
 ---
 
-## ISSUES FOUND DURING HST AR PROPOSAL FIGURE WORK (2026-04-16)
+## ISSUES FOUND DURING MULTI-MODEL CANDELS FIGURE WORK (2026-04-16)
 
 Discovered while fitting CANDELS z~1 galaxies with NSS under multiple model
 configurations (dense_basis, tsnorm, dirichlet, DPL × 4 SSP libraries × 4 dust laws).
@@ -642,7 +642,7 @@ if _has_any_nonstell:
 - **BUG-02**: SFR time-averaging — correct trapezoid with proper span
 - **BUG-03**: ADAF T_e — now includes m_dot dependence
 - **BUG-05**: Beloborodov Gamma — correct formula per K&D 2018 Eq. 6
-- **BUG-06**: Balmer tau — corrected to `(wavbe/wavelength)^3`
+- **BUG-06**: Balmer tau — `(wavbe/wavelength)^3` was itself a transcription error of upstream QSOGen's frequency form; corrected to `(wavelength/wavbe)^3` (largest at the edge, sigma_bf ~ nu^-3)
 - **BUG-08**: Shock units — both branches now consistent erg/s/Hz (updated 2026-04-08 after CGS refactor)
 - **BUG-09**: Mean photon energy — correct denominator exponent
 - **BUG-12**: Calibration determinant — signs corrected

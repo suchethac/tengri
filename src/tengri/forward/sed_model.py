@@ -1567,7 +1567,7 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
 def _validate_firrc_requires_dust(spec) -> None:
     """Raise if any FIRRC radio block is enabled without a dust component (#2106).
 
-    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    The FIRRC models (bell2003, bell2003_split, delvecchio2021, mccheyne2022) in the radio
     component normalize their synchrotron luminosity against L_ir, the dust-absorbed
     stellar luminosity published by the dust component. Without a dust component,
     L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
@@ -1580,7 +1580,7 @@ def _validate_firrc_requires_dust(spec) -> None:
     Raises
     ------
     ConfigError
-        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        If any FIRRC mode (bell2003, bell2003_split, delvecchio2021, mccheyne2022) is selected
         for radio_sfr_mode and dust is disabled.
 
     See Also
@@ -1597,7 +1597,7 @@ def _validate_firrc_requires_dust(spec) -> None:
 
     # Check if any FIRRC mode is active
     sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
-    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+    if sfr_mode not in ("bell2003", "bell2003_split", "delvecchio2021", "mccheyne2022"):
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
@@ -1615,6 +1615,63 @@ def _validate_firrc_requires_dust(spec) -> None:
             "or (2) use a dust-independent radio block such as powerlaw or dpl "
             "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
             "See issue #2106."
+        )
+
+
+def _upper_support(spec, name: str) -> float | None:
+    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
+    dists = getattr(spec, "_distributions", {})
+    dist = dists.get(name)
+    if dist is None:
+        return None
+    if dist.is_fixed:
+        value = dist.value
+        return float(value) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[1])
+
+
+def _validate_radio_q_total_support(spec) -> None:
+    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+
+    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
+    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
+    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
+    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
+    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
+    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
+    non-thermal term) or to the other star-formation radio modes.
+
+    Raises
+    ------
+    ConfigError
+        If the support of ``radio_q_ir`` reaches the limit at the support of the
+        electron temperature.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    q_hi = _upper_support(spec, "radio_q_ir")
+    t_hi = _upper_support(spec, "radio_T_e")
+    a_hi = _upper_support(spec, "radio_alpha_ff")
+    if q_hi is None or t_hi is None or a_hi is None:
+        return
+    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.config.exceptions import ConfigError
+
+    q_star = radio_q_total_limit(t_hi, a_hi)
+    if q_hi > q_star:
+        raise ConfigError(
+            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
+            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
+            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
+            "total minus the Murphy+2011 free-free luminosity, "
+            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
+            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
+            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
+            "term alone."
         )
 
 
@@ -3723,6 +3780,8 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
             dust_screens=getattr(spec, "dust_screens", ()),
+            dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
+            dust_law_neb=getattr(spec, "dust_law_neb", None),
         )
 
     def _init_metallicity(self, spec):
@@ -4332,14 +4391,16 @@ class SEDModel:
             # The trigger is deliberately NOT a list of carve-outs. Measured
             # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
             # only one configuration is inert (rel change 6.4e-15); an active
-            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # nlr or blr block, a torus without the disc tie, no torus, and
             # norm='independent' all measure 2.5e5. The measurement below sees
             # every one of those without being told about them.
-            torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
+            torus_is_tied = (
+                self._agn_torus_block in ("skirtor", "fritz") or self._agn_model == "skirtor"
+            )
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
             lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
             if (
-                torus_is_skirtor
+                torus_is_tied
                 and agn_norm_is_cigale_joint
                 and (lbol_is_free or lbol_is_user_provided)
             ):
@@ -4640,6 +4701,8 @@ class SEDModel:
         from tengri.forward.wavelength_extension import collect_native_wavelength_grids
         from tengri.utils.wavelength import (
             RADIO_WAVE_MAX,
+            RADIO_WING_PTS_PER_DECADE,
+            RADIO_WING_START,
             XRAY_WAVE_MIN,
             make_union_grid,
         )
@@ -4668,14 +4731,18 @@ class SEDModel:
             )
 
         if self._uses_radio:
-            # Pick the longest wavelength reached by any template; extend the
-            # radio wing past that point so the synchrotron tail has node
-            # coverage even when dust templates don't already cover it.
+            # The wing starts at the end of the longest template, or at
+            # ``RADIO_WING_START`` if that comes first, and runs to
+            # ``RADIO_WAVE_MAX`` at ``RADIO_WING_PTS_PER_DECADE``: a template that
+            # reaches into the radio (a CIGALE Dale grid ends at 2.2e9 A) must not
+            # leave a radio band one sparse node of its own, and the synchrotron tail
+            # has node coverage even when no template reaches it. The union
+            # deduplicates the overlap.
             template_max = max((float(g.max()) for g in component_grids), default=ssp_max)
-            radio_min = max(template_max, ssp_max)
+            radio_min = min(max(template_max, ssp_max), RADIO_WING_START)
             if radio_min < RADIO_WAVE_MAX:
                 n_dec = np.log10(RADIO_WAVE_MAX) - np.log10(radio_min)
-                n_pts = max(int(n_dec * 20), 2)
+                n_pts = max(round(n_dec * RADIO_WING_PTS_PER_DECADE) + 1, 2)
                 extra_wings.append(
                     np.logspace(
                         np.log10(radio_min),
@@ -7868,8 +7935,9 @@ class SEDModel:
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
             per evaluation (measured, wNE grid) and bit-exact for the supported
-            configuration, **stellar + two-component (or no) dust + baked-in
-            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            configuration (a Lick equivalent width is evaluated at the window
+            grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
+            baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
@@ -7894,6 +7962,10 @@ class SEDModel:
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
+        The spectrum is :math:`L_\\nu`; a Lick equivalent width converts it to
+        :math:`F_\\lambda` and builds the sideband straight-line pseudo-continuum
+        (Trager et al. 1998, ApJS 116, 1, Eqs. 1-3; see
+        :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
@@ -12449,6 +12521,7 @@ class SEDModel:
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
+        _validate_radio_q_total_support(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
