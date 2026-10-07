@@ -16,6 +16,11 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+ANALYSIS_DIR = Path(__file__).resolve().parents[1]
+for _path in (ANALYSIS_DIR, ANALYSIS_DIR.parents[1]):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
 from analysis.paper1.tests._xlike_cells import surviving_census, write_xlike_cell
 
 GAL = 101
@@ -127,7 +132,7 @@ def test_fig10_default_census_path_is_the_census_default_out(fig10):
 @pytest.fixture
 def fake_figure(monkeypatch):
     """Install ``analysis.paper1.<name>`` whose ``main`` exits with a chosen code."""
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "paper1_figures"))
+    monkeypatch.syspath_prepend(str(ANALYSIS_DIR.parents[1] / "paper1_figures"))
 
     def install(code):
         module = types.ModuleType("analysis.paper1._fake_exit")
