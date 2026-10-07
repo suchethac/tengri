@@ -139,6 +139,42 @@ def test_sweep_every_source_declares_a_convention_and_is_registered():
     assert set(STANDARD_INDICES)  # the Lick subset is covered by test_lick_*
 
 
+# Air wavelengths (Edlen/Morton, standard air) of the strong optical lines, every
+# value a label in some published air table (Cloudy, MAPPINGS, PyNeb, NIST air).
+_AIR_LINE_CENTERS = (
+    3726.03, 3728.82, 4101.74, 4340.47, 4861.32, 4861.33, 4861.35, 4958.91, 5006.84,
+    5875.62, 6300.30, 6300.304, 6548.05, 6562.80, 6562.85, 6583.45, 6716.44, 6730.82,
+)  # fmt: skip
+# Files that legitimately hold air numbers because they ARE the ingestion point.
+_AIR_INGEST_FILES = {
+    "src/tengri/components/nebular/cloudy_cb19.py",  # _CB19_AIR_LABELS_AA, converted on load
+    "src/tengri/utils/air_vacuum.py",  # doctest-style reference values
+}
+
+
+def _air_float_literals(path: Path) -> list[tuple[int, float]]:
+    import ast
+
+    hits = []
+    for node in ast.walk(ast.parse(path.read_text())):
+        is_float = isinstance(node, ast.Constant) and isinstance(node.value, float)
+        if is_float and any(abs(node.value - air) < 0.011 for air in _AIR_LINE_CENTERS):
+            hits.append((node.lineno, node.value))
+    return hits
+
+
+def test_no_hard_coded_air_line_center_in_src():
+    offenders = {}
+    for path in (ROOT / "src").rglob("*.py"):
+        rel = str(path.relative_to(ROOT))
+        if rel in _AIR_INGEST_FILES:
+            continue
+        hits = _air_float_literals(path)
+        if hits:
+            offenders[rel] = hits
+    assert not offenders, f"air line centers as numbers (convert with air_to_vac): {offenders}"
+
+
 _REFRACTIVE = re.compile(
     "|".join(
         [

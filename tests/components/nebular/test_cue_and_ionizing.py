@@ -260,7 +260,7 @@ class TestCueBackend:
             gas_logz=0.0,
             gas_logqion=49.0,
         )
-        ha_idx = jnp.argmin(jnp.abs(wave - 6562.8))
+        ha_idx = jnp.argmin(jnp.abs(wave - 6564.61))
         ha_lum = float(lum[ha_idx])
         assert ha_lum > 0, "H-alpha luminosity should be positive"
 
@@ -481,7 +481,7 @@ class TestKennicutt1998Halpha:
         )
         from tengri.utils.physics_constants import L_SUN_CUE
 
-        ha_idx = int(jnp.argmin(jnp.abs(wave - 6562.8)))
+        ha_idx = int(jnp.argmin(jnp.abs(wave - 6564.61)))
         # The backend returns [Lsun] (#1559); Kennicutt's calibration is in
         # erg/s, so the conversion belongs here. ``L_SUN_CUE``, not the IAU
         # value: this is Cue's own catalog, and the two differ by 0.287%.
