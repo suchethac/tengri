@@ -53,6 +53,13 @@ _SSP_DIR = pathlib.Path("data")
 # above it; SKIRTOR (+31.4 MB) is 30x over.
 _BAKED_BUDGET_MB = 1.0
 
+# A tighter budget [MB] for the tied Fritz path, where the 1 MB budget is blind to a
+# multiple. A kubota_done disc behind a Fritz torus with the analytic NLR measures 0.196 MB
+# without the disc tie, 0.481 MB when the tie evaluated the 13001-node budget grid twice
+# as graph literals, and 0.283 MB with that grid built once inside the trace; the budget
+# sits 0.07 MB above the measurement.
+_FRITZ_TIED_BUDGET_MB = 0.35
+
 # ``none`` is the no-op selector present in every category.
 _SKIP_BLOCKS = frozenset({"none"})
 
@@ -236,3 +243,22 @@ def test_threaded_grid_matches_closure_path(name, module, sed_fn, loader_fn, kwa
     # would pass any equality check.
     assert float(jnp.max(jnp.abs(closure_result))) > 0.0, f"{name} produced an all-zero SED"
     chex.assert_trees_all_close(threaded_result, closure_result, rtol=0.0, atol=0.0)
+
+
+def test_tied_fritz_disc_bakes_one_budget_grid_at_most(ssp, obs):
+    """kubota_done behind a Fritz torus stays within its measured budget (the tie's grids)."""
+    group = {
+        "type": "composable",
+        "all_params": Fixed(DEFAULT),
+        "disc": {"type": "kubota_done"},
+        "torus": {"type": "fritz"},
+        "nlr": {"type": "analytic"},
+    }
+    try:
+        baked = _traced_baked_mb(_build(ssp, obs, agn=group))
+    except (FileNotFoundError, TengriIOError) as exc:
+        pytest.skip(f"fritz template unavailable: {exc}")
+    assert baked < _FRITZ_TIED_BUDGET_MB, (
+        f"kubota_done + fritz bakes {baked:.3f} MB (budget {_FRITZ_TIED_BUDGET_MB} MB): "
+        "a fixed budget grid enters the graph as a literal more than once"
+    )

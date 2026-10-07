@@ -4391,14 +4391,16 @@ class SEDModel:
             # The trigger is deliberately NOT a list of carve-outs. Measured
             # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
             # only one configuration is inert (rel change 6.4e-15); an active
-            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # nlr or blr block, a torus without the disc tie, no torus, and
             # norm='independent' all measure 2.5e5. The measurement below sees
             # every one of those without being told about them.
-            torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
+            torus_is_tied = (
+                self._agn_torus_block in ("skirtor", "fritz") or self._agn_model == "skirtor"
+            )
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
             lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
             if (
-                torus_is_skirtor
+                torus_is_tied
                 and agn_norm_is_cigale_joint
                 and (lbol_is_free or lbol_is_user_provided)
             ):

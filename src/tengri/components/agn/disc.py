@@ -1440,7 +1440,7 @@ def _compute_zone_luminosities(
     agn_a_spin: float = 0.0,
     nthcomp_table=None,
 ) -> tuple:
-    """Compute self-consistent luminosities of the three AGN zones.
+    """Compute self-consistent luminosities of the three AGN zones, disc and corona apart.
 
     Integrates the Novikov-Thorne temperature profile over annuli in each zone
     (outer standard disc, warm Comptonization, hot corona) and combines the
@@ -1485,12 +1485,18 @@ def _compute_zone_luminosities(
     Returns
     -------
     tuple
-        (l_nu_total, scale) where:
+        (l_nu_total, scale, l_nu_disc, l_nu_hot, corona_fraction) where:
 
         - l_nu_total : Unnormalized total L_ν(i) = 2 cos i D_ν + H_ν [erg s^-1 Hz^-1]
           (before scaling)
         - scale : Normalization factor with ``scale * (D + H) = l_bol_erg``, the accretion
           power; independent of ``agn_cos_inc`` [dimensionless]
+        - l_nu_disc : Unnormalized disc and warm-zone part of the line-of-sight spectrum,
+          ``2 cos i D_ν`` [erg s^-1 Hz^-1] (before scaling)
+        - l_nu_hot : Unnormalized corona ``H_ν``, isotropic [erg s^-1 Hz^-1] (before scaling)
+        - corona_fraction : ``H / (D + H)``, the share of the accretion power the corona
+          carries, in closed form from the radial integration (no spectral grid)
+          [dimensionless]
 
     Notes
     -----
@@ -1615,8 +1621,8 @@ def _compute_zone_luminosities(
     if float32:
         l_nu_hot = l_nu_hot * _LSUN_ERG
 
-    # ── Combine and normalize ─────────────────────────────────────
-    l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
+    # ── Normalize ─────────────────────────────────────────────────
+    l_nu_disc = l_nu_outer + l_nu_warm
 
     # Zone bolometric integrals (sigma T^4 * 2*pi*r*dr) reach ~1e44 erg/s and
     # overflow float32; work them in L_sun (pre-divided 2*pi*sigma/L_sun folds
@@ -1631,9 +1637,16 @@ def _compute_zone_luminosities(
         l_bol_outer = jnp.sum(_SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer)
         l_bol_warm = jnp.sum(_SIGMA_SB * t_warm**4 * 2.0 * jnp.pi * r_warm_grid * dr_warm)
     l_bol_unnorm = _TWO_FACES * (l_bol_outer + l_bol_warm) + l_hot_erg
-    scale = l_bol_erg / jnp.maximum(l_bol_unnorm, _representable_denominator(1e-100))
+    l_bol_unnorm_safe = jnp.maximum(l_bol_unnorm, _representable_denominator(1e-100))
+    scale = l_bol_erg / l_bol_unnorm_safe
 
-    return l_nu_total, scale
+    return (
+        l_nu_disc + l_nu_hot,
+        scale,
+        l_nu_disc,
+        l_nu_hot,
+        l_hot_erg / l_bol_unnorm_safe,
+    )
 
 
 def beloborodov_gamma_hot(
@@ -1728,6 +1741,76 @@ def compute_l2500(
     return jnp.interp(2500.0, wavelength[sort_idx], l_nu[sort_idx])
 
 
+def kubota_done_disc_split(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = -1.0,
+    agn_a_spin: float = 0.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_f_hard: float = 0.02,
+    agn_gamma_warm: float = 2.5,
+    agn_kt_warm: float = 0.2,
+    agn_gamma_hard: float = 1.8,
+    agn_kt_hot: float = 100.0,
+    agn_r_warm_ratio: float = 2.0,
+    n_radii: int = 50,
+    agn_self_consistent_gamma: bool = False,
+    agn_log_lbol_shape: float | None = None,
+    _template=None,
+    **_kwargs,
+) -> tuple:
+    r"""Kubota & Done (2018) disc and corona, returned apart (for the SKIRTOR tie).
+
+    The same model as :func:`kubota_done_disc` (see there for the physics and the
+    parameters), with the two parts of its line-of-sight spectrum
+    :math:`L_\nu(i) = 2\cos i\, D_\nu + H_\nu` separated: the optically thick disc and warm
+    Comptonization zones :math:`2\cos i\, D_\nu` and the isotropic corona :math:`H_\nu`, and
+    the corona's share of the accretion power in closed form.
+
+    Returns
+    -------
+    l_nu_total : ndarray, shape (n_wave,)
+        :math:`L_\nu(i)`, identical to :func:`kubota_done_disc` [erg/s/Hz].
+    l_nu_disc : ndarray, shape (n_wave,)
+        The disc and warm-zone part :math:`2\cos i\, D_\nu` [erg/s/Hz].
+    l_nu_hot : ndarray, shape (n_wave,)
+        The corona :math:`H_\nu` [erg/s/Hz].
+    corona_fraction : float
+        :math:`P_H / (P_D + P_H)`, with :math:`P_H = \int H_\nu\,d\nu` and
+        :math:`P_D = \int D_\nu\,d\nu` the angle-integrated powers of the corona and of the
+        two-face disc. It follows from the radial dissipation integrals (the Page-Thorne
+        profile for :math:`D`, the hot-flow dissipation :math:`f_{\rm hard} L_{\rm Edd}` for
+        :math:`H`) and is independent of the wavelength grid and of ``agn_cos_inc``
+        [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``l_nu_disc + l_nu_hot`` equals ``l_nu_total`` exactly.
+    """
+    return kubota_done_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_lum_ratio=agn_lum_ratio,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_a_spin=agn_a_spin,
+        agn_cos_inc=agn_cos_inc,
+        agn_f_hard=agn_f_hard,
+        agn_gamma_warm=agn_gamma_warm,
+        agn_kt_warm=agn_kt_warm,
+        agn_gamma_hard=agn_gamma_hard,
+        agn_kt_hot=agn_kt_hot,
+        agn_r_warm_ratio=agn_r_warm_ratio,
+        n_radii=n_radii,
+        agn_self_consistent_gamma=agn_self_consistent_gamma,
+        agn_log_lbol_shape=agn_log_lbol_shape,
+        _template=_template,
+        _return_parts=True,
+    )
+
+
 def kubota_done_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -1746,6 +1829,7 @@ def kubota_done_disc(
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
     _template=None,
+    _return_parts: bool = False,
     **_kwargs,
 ) -> jnp.ndarray:
     """Kubota & Done (2018) three-zone accretion disc with self-consistent corona.
@@ -2012,7 +2096,7 @@ def kubota_done_disc(
     else:
         l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
 
-    l_nu_total, scale = _compute_zone_luminosities(
+    l_nu_total, scale, l_nu_disc, l_nu_hot, corona_fraction = _compute_zone_luminosities(
         nu,
         r_isco_cm,
         r_hot_cm,
@@ -2044,6 +2128,8 @@ def kubota_done_disc(
     # agreement to 3e-04. The defect is in the hot-corona zone, not in this
     # normalization, so a factorization here would be an unverified change to a
     # path that is already wrong. Tracked in #1439.
+    if _return_parts:
+        return l_nu_total * scale, l_nu_disc * scale, l_nu_hot * scale, corona_fraction
     return l_nu_total * scale
 
 

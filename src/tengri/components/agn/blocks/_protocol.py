@@ -82,11 +82,15 @@ __all__ = [
     "AGN_BLOCK_META",
     "AGN_NORM_POLICIES",
     "BLOCK_CATEGORIES",
+    "DISC_POWER_BLOCKS",
+    "DISC_SPLIT_BLOCKS",
     "LINE_ENERGY_BLOCKS",
     "BlockCategory",
     "collect_block_templates",
     "disc_emits_xray",
     "register_agn_block",
+    "register_disc_power",
+    "register_disc_split",
     "register_line_energy",
     "resolve_agn_block",
 ]
@@ -123,6 +127,21 @@ AGN_BLOCK_TEMPLATE_LOADERS: dict[tuple[str, str], Callable[[], object]] = {}
 # ``(agn_log_lbol, l5100_disc, **params)`` and returns the integral of the block's
 # L_lambda over all wavelengths, which for a line block is set by its normalization.
 LINE_ENERGY_BLOCKS: dict[tuple[str, str], Callable] = {}
+
+# Closed-form disc power: disc name -> callable returning the bolometric power of the
+# block's spectrum, as a fraction of ``L_acc = 10**agn_log_lbol L_sun`` [dimensionless],
+# at the reference inclination ``cos i = 0.5``, where a
+# ``2 cos i`` disc radiates its angle-integrated power. The conserving line debit reads
+# it instead of integrating the disc on a wavelength grid. The callable takes the
+# block's own keyword arguments ``(agn_log_lbol, **params)``.
+DISC_POWER_BLOCKS: dict[str, Callable] = {}
+
+# Disc and corona apart: disc name -> callable
+# ``fn(wavelength, agn_log_lbol, **params) -> (L_lambda_disc, L_lambda_corona, corona_fraction)``
+# [erg/s/Angstrom] x2 and a dimensionless power share. The two spectra sum to the block's
+# own output; ``corona_fraction`` is ``P_H / (P_D + P_H)`` of the angle-integrated powers, in
+# closed form. A disc with no corona registers nothing: the runner treats it as all disc.
+DISC_SPLIT_BLOCKS: dict[str, Callable] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
@@ -273,6 +292,82 @@ def register_line_energy(category: BlockCategory, name: str) -> Callable:
         if (category, name) in LINE_ENERGY_BLOCKS:
             raise ValueError(f"Line energy {category}/{name!r} is already registered.")
         LINE_ENERGY_BLOCKS[(category, name)] = fn
+        return fn
+
+    return decorator
+
+
+def register_disc_power(name: str) -> Callable:
+    """Decorator factory: register the closed-form bolometric power of a disc block.
+
+    Parameters
+    ----------
+    name : str
+        Disc block name; the block must be registered separately with
+        :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn(agn_log_lbol, **params) -> power / L_acc`` [dimensionless], the integral
+        of the block's ``L_lambda`` over all wavelengths in units of ``L_acc``, at
+        ``cos i = 0.5`` (the reference
+        inclination at which a ``2 cos i`` disc radiates its angle-integrated power), and
+        returns it unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` already has a registered disc power.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration only; the registered function must
+    be pure ``jnp`` and traceable.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if name in DISC_POWER_BLOCKS:
+            raise ValueError(f"Disc power {name!r} is already registered.")
+        DISC_POWER_BLOCKS[name] = fn
+        return fn
+
+    return decorator
+
+
+def register_disc_split(name: str) -> Callable:
+    """Decorator factory: register the disc/corona split of a disc block.
+
+    Parameters
+    ----------
+    name : str
+        Disc block name; the block must be registered separately with
+        :func:`register_agn_block`.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn(wavelength, agn_log_lbol, **params) ->
+        (L_lambda_disc, L_lambda_corona, corona_fraction)`` and returns it unchanged. The two
+        spectra [erg/s/Angstrom] sum to the block's own output at the same arguments;
+        ``corona_fraction`` is the corona's share of the angle-integrated power, in closed
+        form [dimensionless].
+
+    Raises
+    ------
+    ValueError
+        If ``name`` already has a registered split.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration only; the registered function must
+    be pure ``jnp`` and traceable.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if name in DISC_SPLIT_BLOCKS:
+            raise ValueError(f"Disc split {name!r} is already registered.")
+        DISC_SPLIT_BLOCKS[name] = fn
         return fn
 
     return decorator
