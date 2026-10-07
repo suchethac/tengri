@@ -361,3 +361,56 @@ def test_off_node_accuracy_far_ir_at_z3(model):
         for b, f, lkp in zip(bands, filters, got):
             ratio = lkp / exact(model, kw, *f, z)
             assert abs(ratio - 1.0) < 1e-3, f"{model} z=3 point {kw}, band {b}: ratio {ratio:.6f}"
+
+
+def test_casey2012_mid_ir_accuracy_default_grids():
+    """Casey2012 mid-IR band accuracy: 8-24, 24-40 um at z=0; 60-90, 250-500 um at z=3.
+
+    200 seeded random points inside declared priors. Reference grid converged with 16x
+    refinement around 1 um (casey2012's opacity pivot discontinuity): ~1 A spacing at 1 um.
+    Baseline before fix (beta_ir=8, alpha_mir=21, unrefined grid): z=0 8-24 um 2.09e-3,
+    24-40 um 1.61e-3; z=3 60-90 um 1.53e-3, 250-500 um 7.8e-4. After local grid refinement
+    and alpha_mir raised to 40: z=0 8-24 um 1.63e-3, 24-40 um 1.33e-3; z=3 60-90 um 1.26e-3,
+    250-500 um 4.4e-4. Must reach <= 5e-4.
+    """
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    names = adapter.AXIS_PARAMS["casey2012"]
+    bands_z0 = ((8, 24), (24, 40))
+    bands_z3 = ((60, 90), (250, 500))
+
+    filters_z0 = [tophat(*b) for b in bands_z0]
+    filters_z3 = [tophat(*b) for b in bands_z3]
+
+    res_z0 = adapter.precompute(
+        [f[0] for f in filters_z0], [f[1] for f in filters_z0], 0.0, None, model="casey2012"
+    )
+    lookup_z0 = adapter.build_lookup(res_z0, model="casey2012")
+
+    res_z3 = adapter.precompute(
+        [f[0] for f in filters_z3], [f[1] for f in filters_z3], 3.0, None, model="casey2012"
+    )
+    lookup_z3 = adapter.build_lookup(res_z3, model="casey2012")
+
+    points = [{n: _ISSUE_QUERY[n] for n in names}]
+    rng = np.random.RandomState(7)
+    points += [{n: rng.uniform(*_get_param_bounds(n)) for n in names} for _ in range(200)]
+
+    for kw in points:
+        query = tuple(kw[n] for n in names)
+
+        got_z0 = np.asarray(lookup_z0(1.0, *query))
+        for b, f, lkp in zip(bands_z0, filters_z0, got_z0):
+            ratio = lkp / exact("casey2012", kw, *f, z=0.0)
+            error = abs(ratio - 1.0)
+            assert error < 5e-4, (
+                f"casey2012 z=0 band {b}: error {error:.6e}"
+            )
+
+        got_z3 = np.asarray(lookup_z3(1.0, *query))
+        for b, f, lkp in zip(bands_z3, filters_z3, got_z3):
+            ratio = lkp / exact("casey2012", kw, *f, z=3.0)
+            error = abs(ratio - 1.0)
+            assert error < 5e-4, (
+                f"casey2012 z=3 band {b}: error {error:.6e}"
+            )

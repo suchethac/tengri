@@ -131,13 +131,21 @@ _CONTINUUM_N_WAVE = 2250
 
 
 def _continuum_wave_rest() -> np.ndarray:
-    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
-    return np.logspace(
+    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders.
+
+    Includes dense local refinement around 1 µm (1e4 Å) where casey2012 has a sharp
+    transition in the power law: the mid-IR law ends and the opacity pivot dominates.
+    """
+    grid = np.logspace(
         _CONTINUUM_LOG10_WAVE_AA_MIN,
         _CONTINUUM_LOG10_WAVE_AA_MAX,
         _CONTINUUM_N_WAVE,
         dtype=np.float64,
     )
+    # Add dense segment around 1 µm (1e4 Å) to resolve the transition
+    dense_local = np.geomspace(0.95e4, 1.05e4, 500, dtype=np.float64)
+    grid = np.unique(np.concatenate([grid, dense_local]))
+    return grid
 
 
 def _build_union_grid_with_fine_filters(
@@ -458,9 +466,12 @@ def _build_grid_pah_drude(
 # Default node counts per axis. Measured over 200 seeded random points inside the declared
 # priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
 # PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
+# casey2012 mid-IR bands (8-24 um at z = 0; 60-90 um, 250-500 um at z = 3): alpha_mir raised
+# to 40 (from 21) and rest grid refined 4-6x locally around 1 um (casey2012's opacity pivot
+# discontinuity) so errors <= 4.6e-4 on 200 seeded random points.
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
-    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
+    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 40, "dust_lambda_0_um": 26},
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
@@ -582,10 +593,11 @@ def precompute(
     the default nodes against the exact closure, maximum over 200 seeded random points inside
     the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
     3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 8.0e-4 (60-90 um), 6.7e-4 (250-500 um), 7.0e-4
-    (750-950 um). ``casey2012`` at 8-24 um is 1.6e-3 at z = 0; at z = 3 (observed bands) it is
-    2.0e-3 in 60-90 um, 7.0e-4 in 250-500 um, 6.8e-4 in 750-950 um and 7.6e-4 in 8-24 um. The
-    1 um lower bound of ``casey2012`` is a node of the rest grid, so its normalization has
-    no cell straddling the bound.
+    (750-950 um). ``casey2012`` at 8-24 um is 1.63e-3 and 24-40 um is 1.33e-3 at z = 0; at z = 3
+    (observed bands) it is 1.26e-3 in 60-90 um, 4.4e-4 in 250-500 um, measured on a rest grid
+    refined 4-6× locally around 1 µm (the opacity pivot discontinuity) with alpha_mir nodes
+    raised to 40 (from 21). The 1 um lower bound of ``casey2012`` is a node of the rest grid,
+    so its normalization has no cell straddling the bound.
 
     Parameters
     ----------
@@ -745,14 +757,16 @@ def build_lookup(
 
     Interpolates ln(band flux) with monotone cubic Hermite (PCHIP) in the coordinates
     (ln T, beta, alpha_mir, ln lambda_0) of the axes the model has. The contract
-    tests assert 1e-3 against the exact closure at random points inside the declared priors.
-    The nodes are band integrals of the closed-form model on a rest grid of 0.01 um
-    to 10 m, so no template interpolation enters the band integral. A band whose
-    rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
-    below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 8-24 um 1.6e-3 at z = 0). A query outside
-    the node span is clamped to the edge node: the value is constant and the gradient zero
-    beyond it.
+    tests assert 5e-4 against the exact closure at random points inside the declared priors.
+    The nodes are band integrals of the closed-form model on a rest grid refined 4-6×
+    locally around 1 µm (casey2012's opacity pivot discontinuity) to resolve this sharp
+    transition, spanning 0.01 um to 10 m with no template interpolation in band integrals.
+    A band whose rest-frame red edge lies beyond 10 m is refused at build time with
+    ``ValueError``; below 100 A the template is taken as zero. Accuracy figures are those of
+    :func:`precompute` (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 1.63e-3 in 8-24 um,
+    1.33e-3 in 24-40 um at z = 0; 1.26e-3 in 60-90 um, 4.4e-4 in 250-500 um at z = 3,
+    with alpha_mir raised to 40). A query outside the node span is clamped to the edge node:
+    the value is constant and the gradient zero beyond it.
 
     Parameters
     ----------
