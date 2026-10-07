@@ -32,6 +32,8 @@ References
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import jax.numpy as jnp
 from jax.scipy.special import i0 as _i0, i1 as _i1
 from scipy.special import roots_legendre as _scipy_roots_legendre
@@ -615,39 +617,39 @@ def _adaf_mdot_from_lbol(
     return jnp.clip(mdot, 1e-8, mdot_crit)
 
 
-# ── Gauss-Legendre quadrature for normalization integrals ────────────────
+# ── Gauss-Legendre quadrature for the normalization integral ─────────────
 #
-# Precomputed Gauss-Legendre nodes and weights (in [0, 1]) for adaptive
-# segmented quadrature. Each component (synchrotron, Compton, bremsstrahlung)
-# is integrated on segments defined by its own break frequencies, with per-segment
-# GL order chosen by measurement (GL error ~ exp(-2*N)). Bremsstrahlung uses
-# closed form only.
+# The spectrum is smooth in ln(nu) between its own breaks (nu_min, nu_p, 3 k T_e / h), so the
+# power is integrated by one 30-point Gauss-Legendre rule per segment between them, in
+# ln(nu), instead of a fixed grid; the bremsstrahlung tail has a closed form.
+
+_GL_ORDER = 30
+_GL_X_RAW, _GL_W_RAW = _scipy_roots_legendre(_GL_ORDER)  # on [-1, 1]
+_GL_X = (_GL_X_RAW + 1.0) / 2.0  # nodes on [0, 1]
+_GL_W = _GL_W_RAW / 2.0  # weights on [0, 1]
 
 
-def _make_gl_table(n: int) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Gauss-Legendre nodes and weights on [-1, 1], scaled to [0, 1].
+def _segment_power(f, nu_a, nu_b, dtype):
+    r"""Gauss-Legendre integral of ``f(nu) d nu`` over ``[nu_a, nu_b]``, in ``ln(nu)``.
 
     Parameters
     ----------
-    n : int
-        Order (number of nodes).
+    f : callable
+        Integrand ``f(nu)``, smooth on the segment.
+    nu_a, nu_b : array_like, shape ()
+        Segment limits [Hz], ``nu_a < nu_b``.
+    dtype : dtype
+        Working dtype of the nodes and weights (float32 stays float32).
 
     Returns
     -------
-    tuple of ndarray
-        (nodes [0, 1], weights [0, 1]).
+    ndarray, shape ()
+        :math:`\int_{\nu_a}^{\nu_b} f\,d\nu` in the units of ``f`` times Hz.
     """
-    x_raw, w_raw = _scipy_roots_legendre(n)  # on [-1, 1]
-    x = (x_raw + 1.0) / 2.0  # scale to [0, 1]
-    w = w_raw / 2.0
-    return jnp.asarray(x, dtype=jnp.float64), jnp.asarray(w, dtype=jnp.float64)
-
-
-# Precomputed GL tables for each segment.
-_GL_30_X, _GL_30_W = _make_gl_table(30)
-_GL_20_X, _GL_20_W = _make_gl_table(20)
-_GL_10_X, _GL_10_W = _make_gl_table(10)
-_GL_5_X, _GL_5_W = _make_gl_table(5)
+    log_a, log_b = jnp.log(nu_a), jnp.log(nu_b)
+    width = log_b - log_a
+    nu = jnp.exp(log_a + jnp.asarray(_GL_X, dtype=dtype) * width)
+    return width * jnp.sum(jnp.asarray(_GL_W, dtype=dtype) * f(nu) * nu)
 
 
 # ── Public spectrum ──────────────────────────────────────────────────────
@@ -777,66 +779,31 @@ def adaf_spectrum(
     nu_lo = 0.02 * nu_min
     nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
 
-    # Segmented Gauss-Legendre quadrature with boundaries at kinks/discontinuities.
-    # Kinks in _total(): derivative discontinuity at nu_p (synchrotron->Compton);
-    # curvature changes at nu_min (exp(-nu_min/nu)); Compton cutoff at nu_max_c.
-    # GL-30 per segment achieves exponential convergence on smooth pieces.
-
-    # Segment 1: [nu_lo, nu_min) — weak exponential envelope
-    # Integrate synchrotron+Compton only; bremsstrahlung handled separately with closed form
-    log_nu_lo_s1 = jnp.log(nu_lo)
-    log_nu_hi_s1 = jnp.log(nu_min)
-    log_nu_s1 = log_nu_lo_s1 + _GL_30_X * (log_nu_hi_s1 - log_nu_lo_s1)
-    nu_s1 = jnp.exp(log_nu_s1)
-    f_s1 = _synch_compton(nu_s1)
-    int_seg1 = jnp.sum(_GL_30_W * f_s1 * nu_s1 * (log_nu_hi_s1 - log_nu_lo_s1))
-
-    # Segment 2: [nu_min, nu_p) — synchrotron rise
-    log_nu_lo_s2 = jnp.log(nu_min)
-    log_nu_hi_s2 = jnp.log(nu_p)
-    log_nu_s2 = log_nu_lo_s2 + _GL_30_X * (log_nu_hi_s2 - log_nu_lo_s2)
-    nu_s2 = jnp.exp(log_nu_s2)
-    f_s2 = _synch_compton(nu_s2)
-    int_seg2 = jnp.sum(_GL_30_W * f_s2 * nu_s2 * (log_nu_hi_s2 - log_nu_lo_s2))
-
-    # Segment 3: [nu_p, nu_max_c) — Compton power law
-    log_nu_lo_s3 = jnp.log(nu_p)
-    log_nu_hi_s3 = jnp.log(nu_max_c)
-    log_nu_s3 = log_nu_lo_s3 + _GL_30_X * (log_nu_hi_s3 - log_nu_lo_s3)
-    nu_s3 = jnp.exp(log_nu_s3)
-    f_s3 = _synch_compton(nu_s3)
-    int_seg3 = jnp.sum(_GL_30_W * f_s3 * nu_s3 * (log_nu_hi_s3 - log_nu_lo_s3))
-
-    # Segment 4: [nu_max_c, nu_hi] — exponential tail
-    log_nu_lo_s4 = jnp.log(nu_max_c)
-    log_nu_hi_s4 = jnp.log(nu_hi)
-    log_nu_s4 = log_nu_lo_s4 + _GL_30_X * (log_nu_hi_s4 - log_nu_lo_s4)
-    nu_s4 = jnp.exp(log_nu_s4)
-    f_s4 = _synch_compton(nu_s4)
-    int_seg4 = jnp.sum(_GL_30_W * f_s4 * nu_s4 * (log_nu_hi_s4 - log_nu_lo_s4))
-
-    # Bremsstrahlung closed-form integral: ∫L_brems0 exp(-h*ν/(k*T_e)) * ν * d(ln ν)
-    # = L_brems0 * (k*T_e/h) * [exp(-h*ν_lo/(k*T_e)) - exp(-h*ν_hi/(k*T_e))]
-    # This is exact, verifying against Mahadevan (1997) Eq. 30.
+    # The power in synchrotron + Compton is Gauss-Legendre on the segments between the
+    # spectrum's own breaks; the bremsstrahlung power
+    #   int l_brems0 exp(-h nu / k T_e) d nu = l_brems0 (k T_e / h) [exp(-h nu_lo / k T_e)
+    #                                                              - exp(-h nu_hi / k T_e)]
+    # is exact. Float32 (#1206): the erg/s-scale integral (~1e43) overflows, so it is carried in
+    # L_sun, where only its ratio with 10**agn_log_lbol is formed.
+    unit = _LSUN_ERG if _f32 else 1.0
+    breaks = (nu_lo, nu_min, nu_p, nu_max_c, nu_hi)
+    int_synch_compton = sum(
+        _segment_power(lambda nu_: _synch_compton(nu_) / unit, lo, hi, wavelength.dtype)
+        for lo, hi in pairwise(breaks)
+    )
     t_scale = _K_BOLTZ * t_e / _H_PLANCK
-    exp_lo = jnp.exp(-_H_PLANCK * nu_lo / (_K_BOLTZ * t_e))
-    exp_hi = jnp.exp(-_H_PLANCK * nu_hi / (_K_BOLTZ * t_e))
-    int_brems = l_brems0 * t_scale * (exp_lo - exp_hi)
-
-    # Total integral = synchrotron + Compton + bremsstrahlung
-    integral = int_seg1 + int_seg2 + int_seg3 + int_seg4 + int_brems
+    exp_lo = jnp.exp(-nu_lo / t_scale)
+    exp_hi = jnp.exp(-nu_hi / t_scale)
+    integral = int_synch_compton + (l_brems0 / unit) * t_scale * (exp_lo - exp_hi)
 
     if _f32:
-        # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
-        # work the normalization in L_sun (total/L_sun keeps the integral in
-        # range) and order 10**log_lbol / integral before the ~1e28 shape.
-        integral_lsun = integral / _LSUN_ERG
+        # ``integral`` is in L_sun: order 10**log_lbol / integral before the ~1e28 shape.
         # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
         # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
         # the float32 branch, the divide-by-zero guard guarded nothing. Returns
         # ``1e-100`` unchanged under x64, so float64 is bit-identical.
         l_nu = (
-            (10.0**agn_log_lbol / jnp.maximum(integral_lsun, _representable_floor(1e-100)))
+            (10.0**agn_log_lbol / jnp.maximum(integral, _representable_floor(1e-100)))
             * agn_lum_ratio
             * total
         )

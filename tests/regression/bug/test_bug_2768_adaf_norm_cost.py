@@ -1,19 +1,27 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Regression test for issue #2768 — ADAF normalization integral cost.
+r"""Regression test for #2768: the ADAF normalization must be accurate and cheap under grad.
 
-Issue #2768: Commit 2cc4ed5c4 introduced a fixed 8193-node normalization grid
-for ADAF spectrum, causing 3.4× gradient FLOP increase and 2.4× peak RSS
-increase in test_agn_subblock_wildcard_scoping[disc/adaf].
+#2728 normalized ``adaf_spectrum`` on an 8193-node fixed grid and left the ADAF disc without a
+closed-form power, so the composable runner integrated it again on its 13001-node budget
+grid whenever a line block debited the disc. Gradient FLOPs (compiled-graph cost analysis,
+caller grid 1000 nodes, ``agn_log_lbol`` and ``agn_log_mbh`` traced):
 
-This regression test verifies:
-(a) The GL+closed-form normalization integral matches a dense-trapezoid
-    reference (65537 nodes) to 1e-7 accuracy across parameter space;
-(b) The gradient FLOP count stays within 1.2× of the pre-#2728 baseline.
+========================================  ==========  =========  ==========
+graph                                     before      this fix   budget
+========================================  ==========  =========  ==========
+``adaf_spectrum``                         1 423 587   393 826    524 000
+``compose_l_nu``, ADAF only               1 438 905   409 538    524 000
+``compose_l_nu``, ADAF + NLR + BLR        5 364 822   1 040 749  1 250 000
+========================================  ==========  =========  ==========
 
-Reference: https://github.com/suchethac/tengri/issues/2768
-Pre-#2728 FLOPs: 436,640 (measured on 2cc4ed5c4^)
-Current (main) FLOPs: 1,476,936 (regression, issue opened)
-Target FLOPs: ≤ 520,000 (GL + closed-form optimization)
+524 000 is 1.2 x 436 640, the cost before #2728 integrated the spectrum on a fixed grid. The
+NLR and BLR line profiles add about 630 000 to the last row for every disc (a multicolor
+disc gains 670 000 from them); that part is not the ADAF's, so its budget is the measured
+total with 20 % headroom.
+
+Accuracy is measured against an independent quadrature: 64 panels of 16-point Gauss-Legendre
+on each of the spectrum's four log-frequency segments, which resolves the integrand to
+round-off.
 """
 
 from __future__ import annotations
@@ -22,148 +30,185 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.special import roots_legendre
+
+from tengri.components.agn import adaf as adaf_module
+from tengri.components.agn.adaf import adaf_spectrum
+from tengri.components.agn.blocks import _protocol
+from tengri.components.agn.blocks.disc import adaf_disc_block
+from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.regression_bug
 
+_ACCURACY = 1.0e-7
+_N_PRIOR_SAMPLES = 200
+_SPECTRUM_FLOP_BUDGET = 524_000  # 1.2 x 436 640
+_COMPOSITION_FLOP_BUDGET = 524_000
+_COMPOSITION_LINES_FLOP_BUDGET = 1_250_000  # 1.2 x 1 040 749, measured
+_CALLER_GRID = np.geomspace(1.0e3, 1.0e8, 1000)  # [Angstrom]
+_PROBES = np.geomspace(1.0e3, 2.0e5, 24)  # [Angstrom]
 
-def _adaf_trapezoid_reference(
-    wavelength: jnp.ndarray,
-    agn_log_lbol: float,
-    agn_log_mbh: float = 8.0,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
-    n_nodes: int = 65537,
-) -> jnp.ndarray:
-    """ADAF spectrum with trapezoid normalization on a dense grid (reference).
+# Declared priors of the ADAF parameters, and the black-hole mass / luminosity range a fit spans.
+_RANGES = {
+    "agn_log_lbol": (9.0, 13.0),  # [log10 Lsun]
+    "agn_log_mbh": (6.0, 10.0),  # [log10 Msun]
+    "agn_adaf_alpha": (0.05, 0.5),
+    "agn_adaf_beta": (0.1, 0.9),
+    "agn_adaf_delta": (0.001, 0.5),
+}
+_NAMES = tuple(_RANGES)
 
-    Uses the same physics as adaf_spectrum, but normalizes the integral using
-    a fine trapezoid grid (default 65537 nodes) for ground-truth reference.
-    """
-    from tengri.components.agn.adaf import (
-        _H_PLANCK as _H,
-        _K_BOLTZ as _K_B,
-        _LSUN_ERG,
-        _R_MAX,
-        _R_MIN,
-        _adaf_alpha_c,
-        _adaf_electron_temperature,
-        _adaf_lbrems0,
-        _adaf_lnu_peak,
-        _adaf_mdot_from_lbol,
-        _adaf_nu_peak,
-        _adaf_tau_es,
-        _adaf_x_m,
-        _wavelength_to_nu,
+
+def _parameter_sets() -> np.ndarray:
+    """200 prior draws followed by the 32 corners of the parameter box, shape (232, 5)."""
+    rng = np.random.default_rng(2768)
+    lo = np.array([_RANGES[n][0] for n in _NAMES])
+    hi = np.array([_RANGES[n][1] for n in _NAMES])
+    draws = lo + (hi - lo) * rng.random((_N_PRIOR_SAMPLES, len(_NAMES)))
+    corners = np.array(np.meshgrid(*zip(lo, hi), indexing="ij")).reshape(len(_NAMES), -1).T
+    return np.concatenate([draws, corners])
+
+
+def _spectrum_at_probes(x):
+    """``adaf_spectrum`` at the probe wavelengths for the parameter vector ``x``."""
+    return adaf_spectrum(
+        jnp.asarray(_PROBES),
+        agn_log_lbol=x[0],
+        agn_log_mbh=x[1],
+        agn_adaf_alpha=x[2],
+        agn_adaf_beta=x[3],
+        agn_adaf_delta=x[4],
     )
 
-    nu = _wavelength_to_nu(wavelength)
-    m = 10.0**agn_log_mbh
-    alpha, beta, delta = agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta
 
-    mdot = _adaf_mdot_from_lbol(10.0**agn_log_lbol * _LSUN_ERG, m, alpha, beta, delta)
-    t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
-    x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
-    alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
-    nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
-    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
-    l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
-
-    nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
-    nu_max_c = 3.0 * _K_B * t_e / _H
-
-    def _total(nu_):
-        ratio = nu_ / nu_p
-        shape_sc = jnp.where(nu_ <= nu_p, ratio**0.4, ratio ** (-alpha_c))
-        shape_sc = (
-            shape_sc * jnp.exp(-nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / nu_max_c, 0.0, 500.0))
-        )
-        brems = l_brems0 * jnp.exp(-jnp.clip(_H * nu_ / (_K_B * t_e), 0.0, 500.0))
-        return l_nu_p * shape_sc + brems
-
-    total = _total(nu)
-
-    # Dense trapezoid reference: n_nodes log-spaced points over [nu_lo, nu_hi]
-    nu_lo = 0.02 * nu_min
-    nu_hi = 100.0 * _K_B * t_e / _H
-    log_lo = jnp.log(nu_lo)
-    u = jnp.linspace(0.0, 1.0, n_nodes, dtype=wavelength.dtype)
-    nu_int = jnp.exp(log_lo + u * (jnp.log(nu_hi) - log_lo))
-    total_int = _total(nu_int)
-    integral = jnp.trapezoid(total_int, nu_int)
-
-    l_nu = 10.0**agn_log_lbol * _LSUN_ERG * total / jnp.maximum(integral, 1e-100)
-    return l_nu
+def _gl_panels(log_lo, log_hi, n_panels=64, order=16):
+    """Nodes and weights of ``n_panels`` Gauss-Legendre panels over ``[log_lo, log_hi]``."""
+    x, w = roots_legendre(order)
+    edges = log_lo + (log_hi - log_lo) * jnp.linspace(0.0, 1.0, n_panels + 1)
+    half = 0.5 * (edges[1:] - edges[:-1])
+    mid = 0.5 * (edges[1:] + edges[:-1])
+    nodes = (mid[:, None] + half[:, None] * jnp.asarray(x)[None, :]).ravel()
+    weights = (half[:, None] * jnp.asarray(w)[None, :]).ravel()
+    return nodes, weights
 
 
-class TestADAFNormalizationAccuracy:
-    """Accuracy of GL+closed-form normalization against dense trapezoid.
+def _reference_spectrum_at_probes(x):
+    """The spectrum normalized by the dense composite quadrature, at the probe wavelengths."""
+    m = adaf_module
+    log_lbol, log_mbh, alpha, beta, delta = x
+    mass = 10.0**log_mbh
+    mdot = m._adaf_mdot_from_lbol(10.0**log_lbol * m._LSUN_ERG, mass, alpha, beta, delta)
+    t_e = m._adaf_electron_temperature(mass, mdot, alpha, beta, delta)
+    x_m = m._adaf_x_m(t_e, mass, mdot, alpha, beta)
+    alpha_c = m._adaf_alpha_c(m._adaf_tau_es(mdot, alpha), t_e)
+    nu_p = m._adaf_nu_peak(t_e, x_m, mass, mdot, alpha, beta)
+    l_nu_p = m._adaf_lnu_peak(t_e, nu_p, mass)
+    l_brems0 = m._adaf_lbrems0(t_e, mass, mdot, alpha)
+    nu_min = nu_p * (m._R_MIN / m._R_MAX) ** 1.25
+    nu_max_c = 3.0 * m._K_BOLTZ * t_e / m._H_PLANCK
 
-    Tests that the new segmented GL + bremsstrahlung closed-form integral matches
-    a 65537-node trapezoid reference to 1e-7 relative error. Sweeps 200 random
-    points in the ADAF parameter space, plus corners.
-    """
+    def total(nu):
+        ratio = nu / nu_p
+        shape = jnp.where(nu <= nu_p, ratio**0.4, ratio ** (-alpha_c))
+        shape = shape * jnp.exp(-nu_min / nu) * jnp.exp(-jnp.clip(nu / nu_max_c, 0.0, 500.0))
+        brems = l_brems0 * jnp.exp(-jnp.clip(m._H_PLANCK * nu / (m._K_BOLTZ * t_e), 0.0, 500.0))
+        return l_nu_p * shape + brems
 
-    def test_norm_integral_accurate_at_fixed_points(self):
-        """Normalization matches 65537-node reference to 1e-7 at probe wavelengths.
+    breaks = jnp.log(
+        jnp.stack([0.02 * nu_min, nu_min, nu_p, nu_max_c, 100.0 * m._K_BOLTZ * t_e / m._H_PLANCK])
+    )
+    integral = 0.0
+    for i in range(4):
+        log_nu, weight = _gl_panels(breaks[i], breaks[i + 1])
+        nu = jnp.exp(log_nu)
+        integral = integral + jnp.sum(weight * total(nu) * nu)
+    nu_probe = m._wavelength_to_nu(jnp.asarray(_PROBES))
+    return 10.0**log_lbol * m._LSUN_ERG * total(nu_probe) / integral
 
-        Segmented GL-30 quadrature with boundaries at spectrum kinks (nu_min, nu_p,
-        nu_max_c) achieves exponential convergence. Combined with closed-form
-        bremsstrahlung, the total normalization matches to machine precision (~1e-15)
-        relative to a 262145-node reference. The 1e-7 tolerance is conservative and
-        covers numerical noise.
-        """
-        from tengri.components.agn.adaf import adaf_spectrum
 
-        # Probe wavelengths where we compare the spectra.
-        probes = np.geomspace(1e3, 2e5, 20)  # A
+@pytest.fixture(scope="module")
+def _parameters():
+    return jnp.asarray(_parameter_sets())
 
-        # Reference at fine grid.
-        ref_sed = np.asarray(
-            _adaf_trapezoid_reference(jnp.asarray(probes), agn_log_lbol=11.5, agn_log_mbh=8.0)
-        )
 
-        # Test spectrum (GL + closed-form).
-        test_sed = np.asarray(
-            adaf_spectrum(jnp.asarray(probes), agn_log_lbol=11.5, agn_log_mbh=8.0)
-        )
+class TestNormalizationAccuracy:
+    """The segmented quadrature reproduces the dense reference to 1e-7."""
 
-        # Relative error, ignoring negligible regions (< 1e-6 of peak).
-        mask = np.abs(ref_sed) > 1e-6 * np.max(np.abs(ref_sed))
-        rel_err = np.abs(test_sed[mask] / ref_sed[mask] - 1.0)
-        max_rel_err = float(np.max(rel_err))
+    def test_prior_samples_and_corners(self, _parameters):
+        """Max |SED / reference - 1| over 200 prior draws and the 32 corners is below 1e-7."""
+        got = np.asarray(jax.jit(jax.vmap(_spectrum_at_probes))(_parameters))
+        ref = np.asarray(jax.jit(jax.vmap(_reference_spectrum_at_probes))(_parameters))
+        assert got.shape == (len(_parameter_sets()), _PROBES.size)
+        assert np.all(np.isfinite(got)) and np.all(np.isfinite(ref))
+        keep = ref > 1.0e-6 * ref.max(axis=1, keepdims=True)
+        worst = float(np.max(np.abs(got[keep] / ref[keep] - 1.0)))
+        assert worst < _ACCURACY, f"max relative error {worst:.3e} exceeds {_ACCURACY:.0e}"
 
-        assert max_rel_err < 1e-7, f"Max relative error {max_rel_err:.3e} exceeds 1e-7"
 
-class TestADAFGradientFLOPs:
-    """Gradient FLOP count stays within performance budget.
+class TestClosedFormPower:
+    """The ADAF disc registers its power, so the runner never integrates it on a grid."""
 
-    The pre-#2728 baseline was 436,640 FLOPs. After the regression (2cc4ed5c4),
-    it jumped to 1,476,936 (3.38×). The GL+closed-form optimization targets
-    ≤1.2× baseline, or ≤520,000 FLOPs.
-    """
+    def test_registered(self):
+        """``DISC_POWER_BLOCKS`` carries ``adaf`` and returns 1 in units of L_acc."""
+        assert "adaf" in _protocol.DISC_POWER_BLOCKS
+        assert float(_protocol.DISC_POWER_BLOCKS["adaf"](11.5)) == 1.0
 
-    def test_grad_flop_count(self):
-        """Compiled gradient FLOP count of adaf disc L_ν w.r.t. free params."""
-        from tengri.components.agn.adaf import adaf_spectrum
+    @pytest.mark.parametrize("log_mbh", [6.5, 8.0, 9.5])
+    def test_matches_the_integral_of_the_block(self, log_mbh):
+        """The block's L_lambda integrates to ``L_acc`` over 1e-5 A - 1e12 A to 1e-4."""
+        wave = jnp.asarray(np.geomspace(1.0e-5, 1.0e12, 400_001))
+        l_lambda = adaf_disc_block(wave, agn_log_lbol=11.5, agn_log_mbh=log_mbh)
+        nu = C_AA / np.asarray(wave)
+        l_nu = np.asarray(l_lambda) * np.asarray(wave) ** 2 / C_AA
+        power = float(np.trapezoid(l_nu[::-1], nu[::-1]))
+        assert power / (10.0**11.5 * L_SUN) == pytest.approx(1.0, abs=1.0e-4)
 
-        # Caller's 1000-node grid (photometry case).
-        wavelength = jnp.geomspace(1e3, 1e8, 1000)
 
-        def grad_fn(log_lbol):
-            sed = adaf_spectrum(wavelength, agn_log_lbol=log_lbol)
-            return jnp.sum(sed)
+def _flops(fn, x0) -> float:
+    return jax.jit(jax.grad(fn)).lower(x0).compile().cost_analysis()["flops"]
 
-        # Compile the gradient.
-        jitted_grad = jax.jit(jax.grad(grad_fn))
-        compiled = jitted_grad.lower(11.5).compile()
 
-        # Get FLOP count from HLO cost analysis.
-        flops = compiled.cost_analysis()["flops"]
+class TestGradientCost:
+    """Compiled gradient FLOPs stay within the budgets in the module docstring."""
 
-        # Pre-#2728 baseline: 436,640 FLOPs
-        # Target: ≤ 1.2 × baseline = 524,000 FLOPs
-        max_flops = 524_000
-        assert (
-            flops <= max_flops
-        ), f"Gradient FLOPs {flops} exceeds target {max_flops} (ratio: {flops / 436_640:.2f}×)"
+    def test_adaf_spectrum_alone(self):
+        wave = jnp.asarray(_CALLER_GRID)
+
+        def fn(x):
+            return jnp.sum(adaf_spectrum(wave, agn_log_lbol=x[0], agn_log_mbh=x[1]))
+
+        flops = _flops(fn, jnp.array([11.5, 8.0]))
+        assert flops <= _SPECTRUM_FLOP_BUDGET, f"{flops:,.0f} > {_SPECTRUM_FLOP_BUDGET:,}"
+
+    @pytest.mark.parametrize(
+        ("lines", "budget"),
+        [
+            (("none", "none"), _COMPOSITION_FLOP_BUDGET),
+            (("analytic", "analytic"), _COMPOSITION_LINES_FLOP_BUDGET),
+        ],
+        ids=["no_lines", "nlr_blr"],
+    )
+    def test_conserving_composition(self, lines, budget):
+        """``compose_l_nu`` with the conserving ledger never integrates the ADAF on a grid."""
+        wave = jnp.asarray(_CALLER_GRID)
+
+        def fn(x):
+            return jnp.sum(
+                compose_l_nu(
+                    wave,
+                    x[0],
+                    agn_cos_inc=0.5,
+                    agn_log_mbh=x[1],
+                    agn_disc_block="adaf",
+                    agn_torus_block="none",
+                    agn_attenuation_block="none",
+                    agn_norm="conserving",
+                    agn_nlr_block=lines[0],
+                    agn_blr_block=lines[1],
+                    agn_feii_block="none",
+                )
+            )
+
+        flops = _flops(fn, jnp.array([11.5, 8.0]))
+        assert flops <= budget, f"{flops:,.0f} > {budget:,}"
