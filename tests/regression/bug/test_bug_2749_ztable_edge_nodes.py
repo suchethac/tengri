@@ -38,9 +38,8 @@ pytestmark = pytest.mark.regression_bug
 
 LYMAN_LIMIT_AA = 911.76
 BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "des_i"]
-#: Same budgets as ``test_issue_1134_ztable_accuracy.py``: 1 %, GALEX FUV 1.5 %.
+#: Same budget as ``test_issue_1134_ztable_accuracy.py``: 1 % in every band.
 RTOL = 0.01
-BAND_RTOL = {"galex_fuv": 0.015}
 JWST_BANDS = [
     "JWST_NIRCam_F090W",
     "JWST_NIRCam_F115W",
@@ -55,7 +54,7 @@ TAIL_FRACTION = 1e-3
 
 
 def _budget(band):
-    return BAND_RTOL.get(band, RTOL)
+    return RTOL
 
 
 def _curves(bands):
