@@ -25,8 +25,20 @@
   `tengri.utils.air_vacuum.vac_to_air` / `air_to_vac` (IAU, Morton 2000 / Ciddor 1996; closed
   form forward, exact fixed-point inverse), replaces the mismatched Morton (1991) and Edlén
   (1953) formulas; `vacuum_to_air` / `air_to_vacuum` remain as aliases. The CB19 builder table
-  is all-vacuum. Cue's air catalog still converts through `nebular_line_waves_to_vacuum`
-  (follow-up after #2701).
+  is all-vacuum. Cue and CB_19 convert at load too (see the next entry).
+- **Cue and CB_19 ingest vacuum wavelengths; the post-hoc Balmer vote is gone.** The Cue weights
+  file stores Cloudy's air labels (`6562.80`, `5006.84`, ...); `load_cue_weights` now converts
+  `nn_line_wavelength` and `sorted_line_wavelength` once with `air_to_vac`, so
+  `CueBackend.published_line_wavelengths`, the SED's line centres, `state.derived["line_waves"]`,
+  `_published_line_wavelengths_static` and the #2701 `nebular_line_phot_waves_rest` are one vacuum
+  array (Hα 6564.61, [N II] 6584 at 6585.27; they had been 1.2-1.8 Å blueward in the raw frame).
+  The hosted `cb19_templates.h5` mixes conventions (measured: Hβ, Hα and [O III] 5008 vacuum;
+  Hγ 4340.47, [O I] 6300.30, [N II] 6548.05 and 6583.45 air); its four air labels are converted
+  at load and a regenerated all-vacuum file passes through unchanged. `nebular_line_waves_to_vacuum`
+  (a Balmer-series vote at publication) is removed, since every backend now ingests vacuum and a
+  vote on top would be a second conversion. CB_19's [N II] 6584 now sits 0.01 Å from the vacuum
+  catalog, not 1.8 Å. `data/cue_weights.npz` itself still stores air
+  (`scripts/convert_cue_weights.py` is the raw-data writer).
 - `_pdr_luminosity_weight` (the power-law to single-U luminosity ratio of the Draine & Li 2007 Eq. 33 mass distribution, which weights the DL07/DL14 PDR component and `dust_umean`) is one closed form at every α: `R = g((2 − α)L)/g((1 − α)L)` with `g(u) = expm1(u)/u` and `L = ln(U_max/U_min)`, `g` by its series below |u| < 1e-3. It had held the α = 1 and α = 2 limit values across |α − pole| < 1e-3, which left `R` 3–4e-3 off and flat in α there and made it jump by 5–8e-3 at the window edges — a likelihood step with a zero gradient on a free `alpha_dl14` (#2727).
 - Lick equivalent widths and magnitude indices follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3). The index operator converts its per-frequency input (`L_ν` or `F_ν`) to `F_λ ∝ F_ν/λ²` and builds the pseudo-continuum as the straight line through the two sideband means placed at the sideband mid-wavelengths, integrating `1 − F_λ/F_C` over the feature window (the window-LUT path, `predict_spectral_indices(approx=True)`, evaluates the same definition at the window grid points, as the line path of #2677 does, and agrees with the exact path to round-off, also under a strong dust screen). A constant mean-of-sidebands continuum is the continuum at the wrong wavelength for asymmetric sidebands (Fe4383: 12 Å from the feature center): on solar SSP spectra it differs from the Lick definition by up to 1.0 Å (HγA, 10 Gyr), 0.4 Å (Fe4383) and 0.5 Å (HγF). Break indices (`Dn4000`, `D4000`, `F_ν` ratios) and `uv_slope_beta` are unchanged. `measure.spectral_index` documents its flux argument as a per-frequency flux density (pass `F_λ` as `flux_lambda * wave_rest**2`); `SpectralIndexDef(pseudo_continuum="mean")` keeps the constant continuum of `bagpipes.input.spectral_indices.single_index`, measured on the array as given, for comparison with BAGPIPES. An EW or magnitude index must declare exactly two continuum windows under the default definition. (#2690).
 - The Synthesizer-grid NLR and BLR line regions (`nlr/blr={'type': 'synthesizer_spectra'}`
