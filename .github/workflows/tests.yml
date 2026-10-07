@@ -1117,7 +1117,7 @@ jobs:
           if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
           else
-            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join 2>&1) || exit 1
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
       - run: |
@@ -1195,6 +1195,13 @@ jobs:
         # sat at the cap and runner speed varies by +-30 %. The bug tree is now split
         # in thirds (regression-b1/b2/b3, each about two thirds of the former half
         # load); b3 gets the same 70-minute cap and cache limit as b2.
+        #
+        # 2026-10-08: the thirds were contiguous equal-COUNT blocks of the sorted file
+        # list, so heavy files clustered: recent runs took b1 36-38 min, b3 45-54 min,
+        # b2 58-72 min against the 70-minute cap, and main's own b2 was killed at 72
+        # min (run 37662030748). The split is now balanced by duration from the
+        # committed ledger tools/ci_bug_durations.json (see tools/ci_split_paths.py
+        # for the regeneration command); matrix values and job names are unchanged.
         #
         # contract (re-measured 2026-10-06; the first version of this note blamed
         # a "natural 92-95 minutes", which was FALSE): the shard reaches ~98 % at
@@ -1507,7 +1514,7 @@ jobs:
           if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
           else
-            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join 2>&1) || exit 1
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
       - run: |
