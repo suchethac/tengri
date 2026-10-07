@@ -347,50 +347,23 @@ def _published_line_wavelengths_static(model, backend):
 
     Notes
     -----
-    **Trace-safe by construction, not by widening an exception clause.**
-    Every attribute read here (``CueBackend.published_line_wavelengths``;
-    each grid backend's ``grid.line_wavelengths``) is loaded once at backend
-    construction from a weights/grid file and is never a function of any
-    traced parameter. That alone is not sufficient, though: any
-    ``jax.numpy`` primitive invoked while *some* ``jax.jit`` trace is active
-    anywhere on the call stack returns a tracer regardless of whether its
-    own operands are literal or closed-over constants -- unlike this
-    function's data, tracing is a property of the ambient call context, not
-    of an individual value's provenance (an earlier version of this seam
-    got this backwards: it called
-    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
-    with its default ``xp=jax.numpy``, which raised
-    ``TracerArrayConversionError`` whenever a caller wrapped
-    ``model.predict_properties`` itself in ``jax.jit``, even though ``raw``
-    was always a concrete numpy array).
-    This function instead calls that conversion with ``xp=numpy`` explicitly,
-    which never invokes a JAX primitive at all, so the result stays concrete
-    regardless of any ``jax.jit``/``jax.vmap`` trace active around this call.
-    That is a stronger guarantee than "catch the right tracer-conversion
-    exception": no such exception can be raised here, so this method needs
-    (and has) no ``try``/``except``.
+    **Trace-safe by construction.** Every attribute read here
+    (``CueBackend.published_line_wavelengths``; each grid backend's
+    ``grid.line_wavelengths``) is a plain ``numpy`` or concrete array loaded
+    once at backend construction from a weights/grid file and is never a
+    function of any traced parameter. It is returned through ``numpy`` only,
+    so no ``jax.numpy`` primitive runs and the result stays concrete under
+    any ambient ``jax.jit`` trace.
 
-    Generalizes across catalog-publishing backends by dispatch on what each
-    one already exposes, rather than one shared attribute path: cue's
-    subset selection is per-call state (:meth:`CueBackend.published_line_wavelengths`
-    resolves it the same way :meth:`CueBackend._forward_lines` does, sharing
-    its index arrays rather than recomputing the selection); CloudyGrid,
-    CB19 and both MAPPINGS backends carry no subset concept at all, so their
-    already-existing ``grid.line_wavelengths`` is read directly. Either way
-    the raw catalog is each backend's native frame (air, for cue's upstream
-    ``.npy`` -- see
-    ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``),
-    not yet the vacuum frame ``state.derived["line_waves"]`` holds; this
-    function applies the exact same conversion
-    :class:`~tengri.components.nebular.component.NebularSEDComponent` applies
-    before publishing (#2239's I5: comparing an unconverted catalog against
-    a vacuum ``KEY_LINES`` target shrank every optical headline line's
-    margin from the true ~0.1 A to ~1.9 A against the 5 A tolerance, close
-    enough to risk a false warning or a missed one).
+    Every backend ingests vacuum wavelengths (its loader converts air labels
+    once, at load), so this reads the ingested catalog as-is: there is no
+    conversion here and no air/vacuum vote. It is the same array
+    :class:`~tengri.components.nebular.component.NebularSEDComponent`
+    publishes (#2239's I5: comparing a different-frame catalog against a
+    vacuum ``KEY_LINES`` target shrank every optical headline line's margin
+    from the true ~0.1 A to ~1.9 A against the 5 A tolerance).
     """
     import numpy as np
-
-    from tengri.components.nebular._shared import nebular_line_waves_to_vacuum
 
     if hasattr(backend, "published_line_wavelengths"):
         cloudyfsps_only = not bool(
@@ -402,7 +375,7 @@ def _published_line_wavelengths_static(model, backend):
         raw = getattr(grid, "line_wavelengths", None)
         if raw is None:
             return None
-    return np.asarray(nebular_line_waves_to_vacuum(raw, xp=np))
+    return np.asarray(raw)
 
 
 def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
@@ -437,7 +410,7 @@ def _warn_if_headline_line_uncovered(model, backend, requested) -> None:
     when) that NaN is about to happen -- true only because
     :func:`_published_line_wavelengths_static` returns the vacuum-frame
     array ``extract_line_luminosity`` actually compares against (#2239's I5:
-    comparing the backend's native, sometimes-air frame against a vacuum
+    comparing the backend's pre-ingestion air frame against a vacuum
     ``KEY_LINES`` target moved every optical headline line's margin from
     ~0.1 A to ~1.9 A against the 5 A tolerance, close enough to risk a
     false warning or a missed one). An empty published catalog (size 0)

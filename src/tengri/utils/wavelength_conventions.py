@@ -85,10 +85,11 @@ SOURCES: tuple[WavelengthSource, ...] = (
     WavelengthSource(
         "cb19_templates",
         "data/cb19_templates.h5",
-        "vacuum",
-        "scripts/download_cb19_templates.py _LINE_MAP, now all vacuum (five air entries "
-        "converted). The hosted file predates this and was NOT inspectable offline",
-        "tengri.components.nebular.cloudy_cb19",
+        "mixed",
+        "measured 2026-10-07 on the hosted file: Hbeta 4862.68, Halpha 6564.61, [OIII]5008.24 "
+        "vacuum; Hgamma 4340.47, [OI]6300.30, [NII]6548.05, [NII]6583.45 Cloudy air labels. "
+        "scripts/download_cb19_templates.py _LINE_MAP is all vacuum",
+        "tengri.components.nebular.cloudy_cb19.load_cb19_grid",
     ),
     WavelengthSource(
         "cue_network",
@@ -96,7 +97,7 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "air",
         "lineList_wav carries 6562.80, 5006.84, 4861.32 (Cloudy air labels); "
         "scripts/convert_cue_weights.py",
-        "tengri.components.nebular._shared.nebular_line_waves_to_vacuum",
+        "tengri.components.nebular.cue._load_cue_weights_eager",
     ),
     WavelengthSource(
         "cloudy_fsps_grid",

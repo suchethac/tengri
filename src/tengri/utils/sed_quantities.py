@@ -1055,8 +1055,8 @@ def compute_luminosity_weighted_metallicity(
 #: *something*: on a catalog missing the requested line it returns a different
 #: line's luminosity, with nothing to say so. Measured against the sparsest
 #: catalog in the package, CB_19's ten lines: every genuine match is within
-#: 1.92 A (the widest being [NII] 6584, tabulated there in air against a vacuum
-#: target) and every genuine miss is at least 47.9 A away ([OIII] 4959, which
+#: 1.92 A (the widest being [NII] 6584, which that file tabulated in air against a
+#: vacuum target; CB_19's loader now converts it, leaving ~0.1 A) and every genuine miss is at least 47.9 A away ([OIII] 4959, which
 #: that catalog does not carry). 5 A separates the two populations with an
 #: order of magnitude of margin on the miss side.
 _LINE_MATCH_TOL_AA: float = 5.0

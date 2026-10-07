@@ -317,9 +317,10 @@ class NebularGridTable:
         band exactly).
     sed_line_waves : ndarray, shape (n_sed_lines,) or None
         Rest wavelengths of the lines **as the nebular SED renders them**
-        [Angstrom]. For Cue these are the raw network wavelengths, which are
-        AIR wavelengths (H-beta at 4861.3); the published catalog
-        (``wavelengths`` above is a subset of it) is the vacuum conversion.
+        [Angstrom, vacuum]. For Cue these are the network wavelengths, converted
+        from the weights file's air labels once at load (H-beta at 4862.7); the
+        published catalog (``wavelengths`` above is a subset of it) is the same
+        array.
     sed_line_node_waves : ndarray, shape (n_sed_lines, 5) or None
         The five SED-grid wavelengths nearest each line [Angstrom]; the SED renderer puts
         a line's flux on grid nodes, and a screen that steps across a line (the IGM at
