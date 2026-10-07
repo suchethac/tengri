@@ -52,11 +52,12 @@ from tengri.forward.wavelength_extension import (
 
 pytestmark = pytest.mark.crossval
 
-# Skip module if the BC03 SSP grid is absent; crossval does not stage it
-_SSP_GRID = "bc03_pdva_stelib_chabrier.h5"
-if find_data(_SSP_GRID) is None:
+# Resolve BC03 SSP grid path once at module level using the data locator; skip if absent
+_SSP_GRID_NAME = "bc03_pdva_stelib_chabrier.h5"
+_SSP_GRID_PATH = find_data(_SSP_GRID_NAME)
+if _SSP_GRID_PATH is None:
     pytest.skip(
-        f"BC03 SSP grid '{_SSP_GRID}' not found. Set $TENGRI_DATA_DIR to its "
+        f"BC03 SSP grid '{_SSP_GRID_NAME}' not found. Set $TENGRI_DATA_DIR to its "
         "directory, or run tengri.download_ssp('bc03_pdva_stelib_chabrier').",
         allow_module_level=True,
     )
@@ -108,7 +109,7 @@ _SFH = {
 
 @pytest.fixture(scope="module")
 def ssp():
-    return load_ssp_data("data/bc03_pdva_stelib_chabrier.h5")
+    return load_ssp_data(str(_SSP_GRID_PATH))
 
 
 def band_mean(wave_aa, lnu, lo_um, hi_um):
