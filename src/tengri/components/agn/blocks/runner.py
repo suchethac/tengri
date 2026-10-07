@@ -68,6 +68,7 @@ from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     DISC_POWER_BLOCKS,
     DISC_SPLIT_BLOCKS,
+    DISC_STATE_BLOCKS,
     LINE_ENERGY_BLOCKS,
     resolve_agn_block,
 )
@@ -740,6 +741,17 @@ agn_torus_block, agn_attenuation_block : str
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
+    # A disc whose scalar solve does not depend on the wavelength (the ADAF's electron
+    # temperature) is solved once here; the grid, the anchors, the 5100 A reference and the
+    # budget grids below all read the same state.
+    _disc_state_fn = DISC_STATE_BLOCKS.get(agn_disc_block)
+    if _disc_state_fn is not None:
+        _disc_state = _disc_state_fn(agn_log_lbol_eval, dtype=wave.dtype, **params)
+        _disc_raw = disc_fn
+
+        def disc_fn(wavelength, **kwargs):
+            return _disc_raw(wavelength, disc_state=_disc_state, **kwargs)
+
     L_lambda_disc = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol_eval,

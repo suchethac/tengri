@@ -188,7 +188,7 @@ from collections.abc import Sequence
 #: against numerical-noise underflow in the trapezoid sum, not a degenerate
 #: physical input. The twin shares the sibling site's denominator and its
 #: classification.
-EXPECTED_SITES = 85
+EXPECTED_SITES = 83
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

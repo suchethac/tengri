@@ -84,6 +84,7 @@ __all__ = [
     "BLOCK_CATEGORIES",
     "DISC_POWER_BLOCKS",
     "DISC_SPLIT_BLOCKS",
+    "DISC_STATE_BLOCKS",
     "LINE_ENERGY_BLOCKS",
     "BlockCategory",
     "collect_block_templates",
@@ -91,6 +92,7 @@ __all__ = [
     "register_agn_block",
     "register_disc_power",
     "register_disc_split",
+    "register_disc_state",
     "register_line_energy",
     "resolve_agn_block",
 ]
@@ -135,6 +137,13 @@ LINE_ENERGY_BLOCKS: dict[tuple[str, str], Callable] = {}
 # it instead of integrating the disc on a wavelength grid. The callable takes the
 # block's own keyword arguments ``(agn_log_lbol, **params)``.
 DISC_POWER_BLOCKS: dict[str, Callable] = {}
+
+# Wavelength-independent state of a disc, solved once per composition: disc name -> callable
+# ``fn(agn_log_lbol, *, dtype, **params) -> state``. The runner evaluates the disc block on the
+# caller's grid, at the anchors, at 5100 A and on the budget grids; a disc whose scalar solve
+# (e.g. the ADAF electron temperature) does not depend on the wavelength registers it here and
+# the runner hands the result to every one of those evaluations as ``disc_state=``.
+DISC_STATE_BLOCKS: dict[str, Callable] = {}
 
 # Disc and corona apart: disc name -> callable
 # ``fn(wavelength, agn_log_lbol, **params) -> (L_lambda_disc, L_lambda_corona, corona_fraction)``
@@ -330,6 +339,41 @@ def register_disc_power(name: str) -> Callable:
         if name in DISC_POWER_BLOCKS:
             raise ValueError(f"Disc power {name!r} is already registered.")
         DISC_POWER_BLOCKS[name] = fn
+        return fn
+
+    return decorator
+
+
+def register_disc_state(name: str) -> Callable:
+    """Decorator factory: register the wavelength-independent solve of a disc block.
+
+    Parameters
+    ----------
+    name : str
+        Disc block name; the block must be registered separately with
+        :func:`register_agn_block` and accept a ``disc_state`` keyword.
+
+    Returns
+    -------
+    decorator : callable
+        Registers ``fn(agn_log_lbol, *, dtype, **params) -> state`` (``dtype`` is the dtype of
+        the wavelength arrays the state is evaluated on) and returns it unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` already has a registered disc state.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- registration only; the registered function must be
+    pure ``jnp`` and traceable.
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        if name in DISC_STATE_BLOCKS:
+            raise ValueError(f"Disc state {name!r} is already registered.")
+        DISC_STATE_BLOCKS[name] = fn
         return fn
 
     return decorator
