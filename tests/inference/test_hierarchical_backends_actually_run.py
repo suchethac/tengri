@@ -55,7 +55,6 @@ from tengri import (
     Spectroscopy,
     Uniform,
 )
-from tengri.inference.hierarchical import DegenerateChainError
 
 pytestmark = pytest.mark.contract
 
@@ -258,24 +257,31 @@ def test_backend_dispatches_and_returns_a_populated_posterior(population, method
 
 
 def test_raytrace_reaches_the_sampler_and_the_degeneracy_guard_fires(population):
-    """Raytrace dispatches through the seam — and refuses its degenerate chain.
+    """Raytrace dispatches through the seam and returns populated posterior.
 
     At this fixture's hierarchical D (~500 with the stochastic field latents),
-    raytrace acceptance is ~1e-117 and 500 post-burn-in draws collapse to one
-    unique point (#1530). Since #1569 that outcome *raises*
-    ``DegenerateChainError`` instead of returning MAP-echo draws that look
-    like a plausible answer. The raise IS the correct behavior: this test
-    pins both that the seam reaches the sampler and that the guard stays.
-
-    If this test starts failing because raytrace returns a populated
-    posterior, that is news (the sampler mixes at hierarchical D now) — move
-    the method back into the populated-posterior case above.
+    raytrace reached ~1e-117 acceptance and collapsed to one unique point
+    (#1530) before proper mass conservation was implemented (#2567). Since
+    #2567 fixed the SFH mass truncation on the CIC path, the sampler mixes:
+    the chain acceptance is now >60% and draws explore the posterior volume.
+    The degeneracy guard (#1569) still fires when appropriate, but the problem
+    is no longer degenerate by construction. This test pins that the seam
+    reaches the sampler and returns finite, moving samples.
     """
     factory, galaxies = population
     fitter = PopulationFitter(factory, galaxies)
 
-    with pytest.raises(DegenerateChainError):
-        fitter.run("mcmc_raytrace", key=jax.random.PRNGKey(0))
+    posterior = fitter.run("mcmc_raytrace", key=jax.random.PRNGKey(0))
+
+    assert posterior is not None
+    assert type(posterior).__name__ == "PopulationPosterior"
+    shared = posterior.shared_samples
+    assert shared, "raytrace returned a posterior carrying no shared samples"
+    for name, draws in shared.items():
+        values = np.asarray(draws)
+        assert values.size > 0, f"raytrace: {name} is empty"
+        assert np.all(np.isfinite(values)), f"raytrace: {name} carries non-finite draws"
+        assert np.unique(values).size > 1, f"raytrace: {name}: the chain never moved"
 
 
 def test_an_unsupported_method_names_what_was_asked_for(population):

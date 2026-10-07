@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- The `test_raytrace_reaches_the_sampler_and_the_degeneracy_guard_fires` test expected a degenerate chain at high D, but proper mass conservation for the SFH on the CIC path (#2567) made the posterior less degenerate, so raytrace now mixes correctly with >60% acceptance; the test now verifies that raytrace returns a populated posterior instead of asserting degeneracy (#2747).
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows
   (`STANDARD_INDICES`: `HdA`, `HdF`, `HgA`, `HgF`, `Hbeta`, `Mgb`, `Fe4383`, `Fe5270`,
   `Fe5335`, `Ca4227`) were published in air but applied to vacuum spectra, putting every
