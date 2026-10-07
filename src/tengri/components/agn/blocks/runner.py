@@ -81,7 +81,12 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_geometry,
     torus_screen_transmission,
 )
-from tengri.components.agn.fritz import FritzGrid, fritz_disc_dust_ratio, fritz_disc_dust_wave
+from tengri.components.agn.fritz import (
+    FritzGrid,
+    fritz_disc_dust_ratio,
+    fritz_disc_dust_wave,
+    fritz_psy_from_cos_inc,
+)
 from tengri.components.agn.polar_dust import resolve_polar_opening_angle, type1_weight
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import (
@@ -139,14 +144,14 @@ _TIE_FINE_NODES = 4001
 #: and ``fritz2006``).
 _TIE_TORI: tuple[str, ...] = ("skirtor", "fritz")
 
-#: The Fritz library coordinates the tie reads off the model, as the torus block does.
+#: The Fritz library coordinates the tie reads off the model, as the torus block does; the
+#: viewing elevation ``psy`` is not one of them, it is derived from ``agn_cos_inc``.
 _FRITZ_LIBRARY_PARAMS: tuple[str, ...] = (
     "agn_fritz_r_ratio",
     "agn_fritz_tau",
     "agn_fritz_beta",
     "agn_fritz_gamma",
     "agn_fritz_oa",
-    "agn_fritz_psy",
 )
 
 #: Mean of the library disc's anisotropy over the viewing hemisphere, in units of its face-on
@@ -933,6 +938,7 @@ agn_torus_block, agn_attenuation_block : str
                 incl_wave=wave,
                 _template=_library,
                 **{k: params[k] for k in _FRITZ_LIBRARY_PARAMS if k in params},
+                agn_fritz_psy=fritz_psy_from_cos_inc(_cos_inc),
             )
         _disc_R = _disc_tie.R
         _disc_incl = _disc_tie.incl_ratio

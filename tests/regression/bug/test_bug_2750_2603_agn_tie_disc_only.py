@@ -532,7 +532,7 @@ def test_fritz_disc_follows_the_fritz_tie():
             agn_ir_frac=frac,
             agn_disc_block="schartmann2005",
             agn_torus_block="fritz",
-            agn_fritz_psy=70.1,
+            agn_cos_inc=_cos_of_psy(70.1),
             agn_fritz_oa=60.0,
             agn_torus_frac=_TORUS_FRAC,
             return_components=True,
@@ -540,6 +540,11 @@ def test_fritz_disc_follows_the_fritz_tie():
         )
         got = _power(comps["disc"]) / _power(comps["torus"])
         assert got == pytest.approx(cigale_ratio, rel=1e-4), f"log_lbol {log_lbol}: {got}"
+
+
+def _cos_of_psy(psy_deg):
+    """``agn_cos_inc`` of the Fritz library viewing elevation ``psy`` (psi = 90 deg - i)."""
+    return float(np.sin(np.radians(psy_deg)))
 
 
 _FRITZ_NODE = dict(r_ratio=60.0, tau=1.0, beta=-0.5, gamma=4.0, opening_angle=60.0)
@@ -585,7 +590,7 @@ def test_fritz_anchor_is_cigale_value_at_every_viewing_angle(psy):
     import h5py
 
     _, anchor_cigale, _ = _pcigale_fritz(psy)
-    kwargs = dict(agn_fritz_psy=psy, agn_fritz_oa=60.0)
+    kwargs = dict(cos_inc=_cos_of_psy(psy), agn_fritz_oa=60.0)
     l2500, _ = _anchors("schartmann2005", "fritz", **kwargs)
     power = _power(_run("schartmann2005", "fritz", **kwargs)[1]["torus"])
     with h5py.File(_FRITZ_FILE, "r") as f:
@@ -609,11 +614,11 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
     the torus quadrature on this grid).
     """
     _, _, accretion = _pcigale_fritz(70.1)
-    kwargs = dict(agn_fritz_psy=70.1, agn_fritz_oa=60.0, agn_fritz_tau=1.0)
-    _, comps = _run("kubota_done", "fritz", mbh=disc_mbh, cos_inc=1.0, **kwargs)
+    kwargs = dict(agn_fritz_oa=60.0, agn_fritz_tau=1.0)
+    _, comps = _run("kubota_done", "fritz", mbh=disc_mbh, cos_inc=_cos_of_psy(70.1), **kwargs)
     below = np.asarray(_WAVE) < 9.0
     _, h_lam = _kubota_parts(_WAVE, disc_mbh)
-    screen = _screen(_WAVE, 0.0, oa=60.0, tau_v=1.0)
+    screen = _screen(_WAVE, 90.0 - 70.1, oa=90.0 - 60.0, tau_v=1.0)  # oa = 90 - cone half-angle
     tied = comps["disc"] * C_AA / np.asarray(_WAVE, float) ** 2
     b = tied[below] / (h_lam[below] * screen[below])
     np.testing.assert_allclose(b, b[0], rtol=1e-9)
