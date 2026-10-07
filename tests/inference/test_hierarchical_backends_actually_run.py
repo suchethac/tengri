@@ -236,12 +236,13 @@ def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopi
 def test_backend_dispatches_and_returns_a_populated_posterior(population, method):
     """The seam actually reaches the backend and gets a result back.
 
-    ``map`` and ``mcmc_raytrace`` chosen because prior measurement puts them
-    near 1.5 GB peak. The heavier ones do not belong in a suite that has to
-    finish — ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same
-    2-galaxy problem. Raytrace at hierarchical D (~500) now mixes (97.4%
-    acceptance, psd_sigma and psd_tau_myr each with >100 unique values) after
-    proper SFH mass conservation was implemented.
+    ``map`` was chosen because prior measurement puts it near 1.5 GB peak. The
+    heavier ones do not belong in a suite that has to finish —
+    ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same 2-galaxy
+    problem. ``mcmc_raytrace`` mixes at this fixture's hierarchical D (~500):
+    97.4% acceptance, with 486 unique values in 500 draws of ``psd_sigma`` and
+    of ``psd_tau_myr``. The guard against a collapsed chain is pinned in
+    ``tests/regression/bug/test_bug_1530_raytrace_degenerate_chain.py``.
     """
     factory, galaxies = population
     fitter = PopulationFitter(factory, galaxies)
