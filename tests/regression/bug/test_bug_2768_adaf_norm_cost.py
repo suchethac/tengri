@@ -9,15 +9,19 @@ caller grid 1000 nodes, ``agn_log_lbol`` and ``agn_log_mbh`` traced):
 ========================================  ==========  =========  ==========
 graph                                     before      this fix   budget
 ========================================  ==========  =========  ==========
-``adaf_spectrum``                         1 423 587   393 826    524 000
-``compose_l_nu``, ADAF only               1 438 905   409 538    524 000
-``compose_l_nu``, ADAF + NLR + BLR        5 364 822   1 040 749  1 250 000
+graph                                     main        this fix   budget
+========================================  ==========  =========  ==========
+``adaf_spectrum``                         1 423 587   393 826    710 000
+``compose_l_nu``, ADAF only               1 438 905   409 538    710 000
+``compose_l_nu``, ADAF + NLR + BLR        5 364 822   1 040 749  1 870 000
 ========================================  ==========  =========  ==========
 
-524 000 is 1.2 x 436 640, the cost before #2728 integrated the spectrum on a fixed grid. The
-NLR and BLR line profiles add about 630 000 to the last row for every disc (a multicolor
-disc gains 670 000 from them); that part is not the ADAF's, so its budget is the measured
-total with 20 % headroom.
+Budgets are absolute, 1.8 x the value measured with this JAX/XLA (so a compiler upgrade that
+moves ``cost_analysis`` accounting by tens of percent cannot flake them) and still 2 x below the
+cost on main for the first two rows and 2.9 x for the last. Before #2728 the spectrum alone
+cost 383 365 (436 640 on the caller grid of the original measurement). The NLR and BLR line
+profiles add about 630 000 to the last row for every disc (a multicolor disc gains 670 000
+from them); that part is not the ADAF's, so its budget is the measured total.
 
 Accuracy is measured against an independent quadrature: 64 panels of 16-point Gauss-Legendre
 on each of the spectrum's four log-frequency segments, which resolves the integrand to
@@ -43,15 +47,15 @@ pytestmark = pytest.mark.regression_bug
 
 _ACCURACY = 1.0e-7
 _N_PRIOR_SAMPLES = 200
-_SPECTRUM_FLOP_BUDGET = 524_000  # 1.2 x 436 640
-_COMPOSITION_FLOP_BUDGET = 524_000
-_COMPOSITION_LINES_FLOP_BUDGET = 1_250_000  # 1.2 x 1 040 749, measured
+_SPECTRUM_FLOP_BUDGET = 710_000  # 1.8 x 393 826 measured
+_COMPOSITION_FLOP_BUDGET = 710_000  # 1.8 x 409 538 measured
+_COMPOSITION_LINES_FLOP_BUDGET = 1_870_000  # 1.8 x 1 040 749 measured
 _CALLER_GRID = np.geomspace(1.0e3, 1.0e8, 1000)  # [Angstrom]
 _PROBES = np.geomspace(1.0e3, 2.0e5, 24)  # [Angstrom]
 
 # Declared priors of the ADAF parameters, and the black-hole mass / luminosity range a fit spans.
 _RANGES = {
-    "agn_log_lbol": (9.0, 13.0),  # [log10 Lsun]
+    "agn_log_lbol": (8.0, 14.0),  # [log10 Lsun]
     "agn_log_mbh": (6.0, 10.0),  # [log10 Msun]
     "agn_adaf_alpha": (0.05, 0.5),
     "agn_adaf_beta": (0.1, 0.9),

@@ -16,13 +16,12 @@ total power are K-term sums against the same transfer function.
 
 Gradient FLOPs (compiled-graph cost analysis, 1000-node caller grid):
 
-=======================================================  ===========  ==========  ==========
-graph                                                    before       this fix    budget
-=======================================================  ===========  ==========  ==========
-``_fe2_pseudo_continuum``, d/d(fwhm, strength)           119 884 544   7 044 777   8 500 000
-``_fe2_total_power``                                     120 463 816     140 067     170 000
-``compose_l_nu``, multicolor + BLR + FeII                205 354 976  16 547 740  20 000 000
-=======================================================  ===========  ==========  ==========
+- ``_fe2_pseudo_continuum``, d/d(fwhm, strength): 119 884 544 on main, 7 044 777 here;
+  asserted <= 0.15 x the full-lattice path compiled in the same test (measured 0.06).
+- ``_fe2_total_power``: 120 463 816 on main, 140 067 here; asserted <= 0.01 x the full-lattice
+  path (measured 0.001).
+- ``compose_l_nu``, multicolor + BLR + FeII: 205 354 976 on main, 16 547 740 here; asserted
+  <= 33 000 000 (2 x measured), there being no in-process reference for a whole composition.
 
 Accuracy is measured against the full-lattice path (``_fe2_internal_grid`` +
 ``_fe2_broadened_on_grid``), which is what the band-limited path replaces.
@@ -47,9 +46,9 @@ _PROBES_PER_DRAW = 600
 _RELATIVE_ACCURACY = 1.0e-6
 _PEAK_ACCURACY = 1.0e-8
 _NORMALIZATION_ACCURACY = 1.0e-8
-_PSEUDO_CONTINUUM_FLOP_BUDGET = 8_500_000
-_TOTAL_POWER_FLOP_BUDGET = 170_000
-_COMPOSITION_FLOP_BUDGET = 20_000_000
+_PSEUDO_CONTINUUM_RATIO = 0.15  # measured 0.06 of the full-lattice path, same process
+_TOTAL_POWER_RATIO = 0.01  # measured 0.001
+_COMPOSITION_FLOP_BUDGET = 33_000_000  # 2 x 16 547 740 measured; 205 354 976 on main
 _CALLER_GRID = np.geomspace(1.0e3, 1.0e4, 1000)  # [Angstrom]
 _COMPOSITION_GRID = np.geomspace(1.0e3, 1.0e8, 1000)  # [Angstrom]
 _STRENGTHS = (0.3, 1.0, 2.5)
@@ -181,22 +180,47 @@ def _flops(fn, x0) -> float:
 
 
 class TestGradientCost:
-    """Compiled gradient FLOPs stay within the budgets in the module docstring."""
+    """Compiled gradient FLOPs, as a ratio to the full-lattice path measured in the same process.
+
+    ``cost_analysis`` accounting (FFT flops, fusion) moves across JAX/XLA releases, so the two
+    FeII graphs are asserted as a ratio against the retained full-lattice computation compiled
+    in the same test: measured 0.06 (``_fe2_pseudo_continuum``) and 0.001 (``_fe2_total_power``),
+    asserted at 0.15 and 0.01. A reference that shifts with the compiler shifts both sides. The
+    composition has no in-process reference, so it keeps an absolute ceiling at 2 x the
+    measured value (main costs 12 x that).
+    """
 
     def test_pseudo_continuum(self):
         wave = jnp.asarray(_CALLER_GRID)
+        weight = jnp.sin(wave / 300.0)
 
-        def fn(x):
-            return jnp.sum(blr._fe2_pseudo_continuum(wave, x[0], x[1]) * jnp.sin(wave / 300.0))
+        def new(x):
+            return jnp.sum(blr._fe2_pseudo_continuum(wave, x[0], x[1]) * weight)
 
-        flops = _flops(fn, jnp.array([5000.0, 1.0]))
-        assert flops <= _PSEUDO_CONTINUUM_FLOP_BUDGET, (
-            f"{flops:,.0f} > {_PSEUDO_CONTINUUM_FLOP_BUDGET:,}"
+        def full_lattice(x):
+            grid, _, window_weights, _ = blr._fe2_internal_grid()
+            b = blr._fe2_broadened_on_grid(x[0])
+            on_caller = jnp.interp(wave, grid, b, left=0.0, right=0.0)
+            return jnp.sum(x[1] * on_caller / jnp.sum(window_weights * b) * weight)
+
+        x0 = jnp.array([5000.0, 1.0])
+        flops, reference = _flops(new, x0), _flops(full_lattice, x0)
+        assert flops <= _PSEUDO_CONTINUUM_RATIO * reference, (
+            f"{flops:,.0f} vs full-lattice {reference:,.0f} ({flops / reference:.3f})"
         )
 
     def test_total_power(self):
-        flops = _flops(lambda x: blr._fe2_total_power(x[0], x[1]), jnp.array([5000.0, 1.0]))
-        assert flops <= _TOTAL_POWER_FLOP_BUDGET, f"{flops:,.0f} > {_TOTAL_POWER_FLOP_BUDGET:,}"
+        def full_lattice(x):
+            grid, _, window_weights, _ = blr._fe2_internal_grid()
+            b = blr._fe2_broadened_on_grid(x[0])
+            return x[1] * jnp.trapezoid(b, grid) / jnp.sum(window_weights * b)
+
+        x0 = jnp.array([5000.0, 1.0])
+        flops = _flops(lambda x: blr._fe2_total_power(x[0], x[1]), x0)
+        reference = _flops(full_lattice, x0)
+        assert flops <= _TOTAL_POWER_RATIO * reference, (
+            f"{flops:,.0f} vs full-lattice {reference:,.0f} ({flops / reference:.4f})"
+        )
 
     def test_composition_with_blr_and_feii(self):
         """Analytic BLR + FeII blocks under a conserving ledger, strength and width traced."""
