@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import inspect
 import re
+from pathlib import Path
 
 import h5py
 import jax
@@ -758,26 +759,29 @@ def test_unknown_polar_law_is_refused_at_build_with_the_menu(_model_inputs):
 # ----------------------------------------------------------------------------------
 # 9. the polar law is CIGALE's: Bongiorno above 100 nm, the tabulated SMC shape below
 # ----------------------------------------------------------------------------------
-# Rows of CIGALE's ``pcigale/sed_modules/curves/extFun_SMC.dat`` (total mass extinction
-# coefficient, m^2/kg): the first row, rows 17, 34, 51 and 62, and the two rows that bracket
-# 100 nm, written out here.
+# Rows of Draine's public ``kext_albedo_WD_SMCbar_0`` (Weingartner & Draine 2001 SMC-bar model;
+# https://www.astro.princeton.edu/~draine/dust/extcurvs/): wavelength [um] and extinction cross
+# section per H nucleon [cm^2/H], as printed. The first row, four more below 100 nm, and the row
+# at 100 nm and the one after it. The mass extinction coefficient is C_ext/H over the file's
+# 3.506e-27 g/H of dust; only the shape (a ratio) enters the law.
+_DRAINE_M_DUST_PER_H = 3.506e-27
 _SMC_TABLE = (
-    (1.000000e-03, 6.777918e02),
-    (3.255089e-03, 2.099654e03),
-    (1.059560e-02, 5.313827e03),
-    (3.448962e-02, 8.367591e03),
-    (7.401960e-02, 1.855779e04),
-    (9.771242e-02, 1.512779e04),
-    (1.047371e-01, 1.385008e04),
+    (1.000e-03, 1.814e-23),
+    (3.255e-03, 6.062e-23),
+    (1.059e-02, 1.733e-22),
+    (3.447e-02, 2.658e-22),
+    (7.413e-02, 6.306e-22),
+    (1.000e-01, 4.857e-22),
+    (1.006e-01, 4.825e-22),
 )
 
 
-def test_bongiorno_below_100nm_is_the_cigale_table_shape():
-    """k(lambda < 100 nm) = table(lambda) x k_power(100 nm)/table(100 nm), from the nodes above."""
-    (w_lo, e_lo), (w_hi, e_hi) = _SMC_TABLE[-2:]
-    table_100nm = e_lo + (e_hi - e_lo) * (0.1 - w_lo) / (w_hi - w_lo)
+def test_bongiorno_below_100nm_is_the_draine_table_shape():
+    """k(lambda < 100 nm) = kappa x k_power(100 nm)/kappa(100 nm), kappa from Draine rows."""
+    kappa = [(w, c / _DRAINE_M_DUST_PER_H) for w, c in _SMC_TABLE]  # cm^2/g, scale cancels
+    table_100nm = kappa[-2][1]  # the table has a node at exactly 100 nm
     k_100nm = 1.39 * 0.1**-1.2
-    nodes = np.array(_SMC_TABLE[:5])  # five nodes below 100 nm
+    nodes = np.array(kappa[:5])  # five nodes below 100 nm
     expected = nodes[:, 1] * k_100nm / table_100nm
     wave = jnp.asarray(nodes[:, 0] * 1.0e4)  # [A]
     _, absorbed = polar_dust_extinction(jnp.ones(5), wave, 1.0, 40.0, 0.01, law="bongiorno")
@@ -789,6 +793,40 @@ def test_bongiorno_below_100nm_is_the_cigale_table_shape():
     k_above = -np.log1p(-np.asarray(abs_above)) / (0.4 * np.log(10.0) * 0.01)
     np.testing.assert_allclose(k_above, 1.39 * (np.asarray(above) * 1e-4) ** -1.2, rtol=1e-4)
     assert k_above[0] == pytest.approx(k_100nm, rel=1e-3)
+
+
+#: Largest |tengri / pcigale - 1| of the sub-100 nm shape, relative to 100 nm, by band of
+#: wavelength [um], measured against pcigale 2025.1's ``extFun_SMC.dat`` nodes: 18.9 % at 1 nm,
+#: 15.3 % (near 22 nm) between 10 and 35 nm, 5.4 % from 35 to 100 nm. The cause is the public
+#: Weingartner & Draine (2001) table against pcigale's own re-computed SMC mixture.
+_SHAPE_BANDS = ((1.0e-3, 1.0e-2, 0.195), (1.0e-2, 3.5e-2, 0.155), (3.5e-2, 0.1, 0.055))
+
+
+def test_sub_100nm_shape_matches_pcigale_to_the_measured_residual():
+    """Shape relative to 100 nm against pcigale's tabulated SMC mixture, band by band."""
+    pcigale = pytest.importorskip("pcigale")
+    path = Path(pcigale.__file__).parent / "sed_modules" / "curves" / "extFun_SMC.dat"
+    if not path.exists():
+        pytest.skip("pcigale does not ship extFun_SMC.dat")
+    table = np.loadtxt(path)
+    wave_um, ext = table[:, 0], table[:, 1]
+    keep = wave_um < 0.1
+    pc_shape = ext[keep] / np.interp(0.1, wave_um, ext)
+    _, absorbed = polar_dust_extinction(
+        jnp.ones(int(keep.sum())), jnp.asarray(wave_um[keep] * 1.0e4), 1.0, 40.0, 0.01,
+        law="bongiorno",
+    )  # fmt: skip
+    k = -np.log1p(-np.asarray(absorbed)) / (0.4 * np.log(10.0) * 0.01)
+    shape = k / (1.39 * 0.1**-1.2)
+    residual = np.abs(shape / pc_shape - 1.0)
+    for lo, hi, bound in _SHAPE_BANDS:
+        band = (wave_um[keep] >= lo) & (wave_um[keep] < hi)
+        assert band.any()
+        assert residual[band].max() < bound, (
+            f"{lo:g}-{hi:g} um: shape residual {residual[band].max():.4f} exceeds {bound}"
+        )
+        # the bound is the measurement, not slack: the residual reaches within 1 % of it
+        assert residual[band].max() > bound - 0.01
 
 
 # pcigale ``skirtor2016`` (SKIRTOR, t = 7, p = q = 1, R = 20, i = 0, schartmann2005 disc,
@@ -807,9 +845,10 @@ _PCIGALE_SHARES = (
 #: below 100 nm (95.5 nm) and tengri at 100 nm, which moves the absorbed power by -0.41 %,
 #: -0.18 % and -0.004 % at E(B-V) 0.03, 0.1 and 0.5; integrating on 948 nodes rather than a
 #: dense grid moves it by a further 0.10 %, 0.08 % and 0.04 %. Measured agreement: polar
-#: 0.9993 / 0.9952 / 0.9936 / 0.9976 / 0.9990, disc 1.0008 / 1.0019 / 1.0006.
+#: 0.9996 / 0.9974 / 0.9963 / 0.9973 / 0.9989, disc 0.9997 / 1.0031 / 1.0015. The disc's
+#: 0.31 % is the Draine WD01 sub-100 nm shape (public table) against pcigale's own SMC mixture.
 _POLAR_REL = 1.0e-2
-_DISC_REL = 3.0e-3
+_DISC_REL = 3.2e-3
 
 
 def _tied_shares(oa, ebv, law="bongiorno"):
