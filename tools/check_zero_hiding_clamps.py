@@ -188,7 +188,16 @@ from collections.abc import Sequence
 #: against numerical-noise underflow in the trapezoid sum, not a degenerate
 #: physical input. The twin shares the sibling site's denominator and its
 #: classification.
-EXPECTED_SITES = 83
+#:
+#: 85 -> 84 with #2768: ``adaf_spectrum`` divided by a clamped denominator in each of its
+#: float32 and float64 branches (two sites). The spectrum is now ``adaf_scalar_state`` (the
+#: solve and the power of the shape) plus ``adaf_spectrum_from_state``, which normalizes with
+#: one ``scale = numer / jnp.maximum(integral, representable_floor(1e-100))``, the same clamp,
+#: stated once, inline, where this guard sees it: ``integral`` is carried in L_sun on float32
+#: and in erg/s on float64, with ``numer`` in the matching unit, so one division serves both.
+#: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
+#: and still counted.
+EXPECTED_SITES = 84
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

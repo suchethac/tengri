@@ -116,7 +116,7 @@ def _cigale_disc_lambda(
 def adaf_disc_state(
     agn_log_lbol: float,
     *,
-    dtype=jnp.float64,
+    dtype=None,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
@@ -252,7 +252,8 @@ def adaf_disc_power(agn_log_lbol: float, **_params) -> Array:
     -------
     ndarray
         1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. The quadrature
-        that sets the normalization agrees with a 262 145-node reference to 4e-8.
+        that sets the normalization agrees with an independent composite Gauss-Legendre reference
+        to 4.7e-15, and the closed-form power with a dense integral of the block to 1.6e-9.
 
     Notes
     -----
