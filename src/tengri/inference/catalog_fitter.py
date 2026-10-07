@@ -1944,12 +1944,8 @@ class _CatalogFitterOriginal:
                 "positional array in the flat unconstrained space, whose width is the "
                 "un-profiled dimension. Pass parameter dicts instead to keep profiling."
             )
-        # profile_mass is not yet compatible with preconditioning in the catalog path:
-        # the preconditioner builds per-galaxy metrics, but interacts badly with the
-        # profiled log-density (#2746). Disable profile_mass when precondition is set.
-        _disable_profile_mass = _init_is_positional_array or precondition is not None
         fitter = self._get_dummy_fitter(
-            profile_mass=False if _disable_profile_mass else "auto"
+            profile_mass=False if _init_is_positional_array else "auto"
         )
         # Per-galaxy redshift override (#1337 phase 2): only when the catalog actually
         # carries a per-galaxy Fixed redshift. Free / shared-redshift catalogs leave
