@@ -20,6 +20,7 @@ from tengri.components.nebular._constants import (
     _LYMAN_LIMIT,
     NEBULAR_FREEFREE_TAIL_ALPHA_NU,
 )
+from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
@@ -90,7 +91,7 @@ def nebular_line_waves_to_vacuum(line_waves, *, xp=jnp):
     ``state.derived["line_waves"]``) and
     ``tengri.forward.properties._published_line_wavelengths_static``
     (the #2239 warning seam's static, never-traced accessor) call it rather
-    than each keeping its own copy of the Edlén coefficients. But the two
+    than each keeping its own copy of the refractive-index coefficients. But the two
     callers need opposite guarantees from the *array library*, not just the
     math: the component's ``line_waves`` can genuinely be a JAX tracer
     (threaded through ``template_data`` under a jitted sampler), so it must
@@ -105,26 +106,15 @@ def nebular_line_waves_to_vacuum(line_waves, *, xp=jnp):
     ``xp=numpy`` to stay concrete under an ambient trace it does not control
     and did not create.
 
-    .. math::
-        \sigma = 10^4 / \lambda_{\rm air}
-
-        n = 1 + 6.4328 \times 10^{-5}
-              + \frac{2.94981 \times 10^{-2}}{146 - \sigma^2}
-              + \frac{2.5540 \times 10^{-4}}{41 - \sigma^2}
-
-        \lambda_{\rm vac} = n \, \lambda_{\rm air}
-
-    Edlen (1953) formula for standard air (15 C, 760 mmHg), applied only
-    within its 2000-10000 Angstrom validity window; the same conversion
-    :func:`tengri.utils.conversions.air_to_vacuum` implements (that
-    numpy-only function does not include the Balmer-vote gate or the
-    optical-window mask, so it is not called here directly; the coefficients
-    agree).
+    The conversion itself is :func:`tengri.utils.air_vacuum.air_to_vac`, the
+    one air -> vacuum converter in tengri (IAU standard, Morton 2000 with the
+    Ciddor 1996 refractive index); this function only decides *whether* a
+    catalog needs it and applies it within the 2000-10000 Angstrom optical
+    window that Cloudy's air labels cover.
 
     References
     ----------
-    .. [1] Edlen, B. (1953), "The Dispersion of Standard Air",
-        J. Opt. Soc. Am., 43(5), 339.
+    .. [1] Morton, D. C. (2000), ApJS, 130, 403 (Eq. 8, the IAU standard).
     .. [2] Li, Y.-J. et al. (2024), "Cue: A Fast and Flexible Photoionization
         Emulator for Modeling Nebular Emission Powered by Almost Any
         Ionizing Source", ApJ, 986, 9. arXiv:2405.04598.
@@ -141,11 +131,8 @@ def nebular_line_waves_to_vacuum(line_waves, *, xp=jnp):
         air_votes = air_votes + xp.where(in_band & is_air, 1.0, 0.0)
         vac_votes = vac_votes + xp.where(in_band & ~is_air, 1.0, 0.0)
     looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
-    # Edlen (1953) air->vacuum.
-    sigma = 1e4 / line_waves
-    n_refr = 1.0 + 6.4328e-5 + 2.94981e-2 / (146.0 - sigma**2) + 2.5540e-4 / (41.0 - sigma**2)
     in_optical = (line_waves >= 2000.0) & (line_waves <= 1.0e4)
-    converted = xp.where(in_optical, line_waves * n_refr, line_waves)
+    converted = xp.where(in_optical, air_to_vac(line_waves).astype(line_waves.dtype), line_waves)
     return xp.where(looks_air, converted, line_waves)
 
 
