@@ -366,9 +366,12 @@ def test_off_node_accuracy_far_ir_at_z3(model):
 def test_casey2012_mid_ir_accuracy_default_grids():
     """Casey2012 mid-IR band accuracy: 8-24, 24-40 um at z=0; 60-90, 250-500 um at z=3.
 
-    200 seeded random points inside declared priors. Baseline on main's counts
-    (beta_ir=8): z=0 8-24 um 2.09e-3, 24-40 um 1.61e-3; z=3 60-90 um 1.53e-3,
-    250-500 um 7.8e-4. Must reach <= 5e-4 after fix.
+    200 seeded random points inside declared priors. Reference grid converged with 16x
+    refinement around 1 um (casey2012's opacity pivot discontinuity): ~1 A spacing at 1 um.
+    Baseline before fix (beta_ir=8, alpha_mir=21, unrefined grid): z=0 8-24 um 2.09e-3,
+    24-40 um 1.61e-3; z=3 60-90 um 1.53e-3, 250-500 um 7.8e-4. After local grid refinement
+    and alpha_mir raised to 40: z=0 8-24 um 1.63e-3, 24-40 um 1.33e-3; z=3 60-90 um 1.26e-3,
+    250-500 um 4.4e-4. Must reach <= 5e-4.
     """
     from tengri.components.dust import dust_analytic_precompute as adapter
 
