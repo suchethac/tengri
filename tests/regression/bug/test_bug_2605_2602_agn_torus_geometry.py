@@ -1008,3 +1008,153 @@ def test_calzetti_is_zero_beyond_its_polynomial_zero_crossing():
     )
     np.testing.assert_array_equal(np.asarray(absorbed)[2:], 0.0)
     assert np.all(np.asarray(absorbed)[:2] > 0.0)
+
+
+# ----------------------------------------------------------------------------------
+# 12. the tied Fritz torus under polar dust, against CIGALE ``fritz2006``
+# ----------------------------------------------------------------------------------
+# CIGALE ``fritz2006`` (r = 60, tau = 1, beta = -0.5, gamma = 4, opening_angle = 60 (the
+# half-angle of the dust-free cone is 60 deg), schartmann2005 disc, law = 0, fracAGN = 0.3).
+# Its polar blackbody joins the dust BEFORE ``norm = 1 / int dust`` (fritz2006.py:325-331), so
+# the disc, the polar blackbody and the intrinsic accretion power are all scaled by ``norm``:
+# on a Type-2 sightline the disc is not extincted (line 305), hence
+# ``disk(E) = disk(0) x norm(E)/norm(0) = disk(0) / (1 + l_ext)`` (line 309 gives ``l_ext``).
+_FRITZ_NODE = dict(r_ratio=60.0, tau=1.0, beta=-0.5, gamma=4.0, opening_angle=60.0)
+_FRITZ_HALF = 60.0  # the node's dust-free cone half-angle [deg]
+_FRITZ_TIE = dict(
+    agn_disc_block="schartmann2005",
+    agn_nlr_block="none",
+    agn_blr_block="none",
+    agn_feii_block="none",
+    agn_torus_block="fritz",
+    agn_attenuation_block="polar_dust",
+    agn_polar_law="bongiorno",
+    agn_norm="cigale_joint",
+    agn_fritz_oa=_FRITZ_HALF,
+    agn_torus_frac=0.5,
+    **_POLAR_PARAMS,
+)
+_FRITZ_FRAC = 0.3
+_FRITZ_TIE_TAU = 1.0  # agn_fritz_tau, the node's tau
+#: Measured |b / b_CIGALE - 1|: 2e-6 (E(B-V) = 0), 1.4e-4 at most under polar dust (the torus
+#: budget quadrature of tengri against CIGALE's, and the polar share the run itself reports).
+_CORONA_REL = 2.0e-4
+_FRITZ_WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 40000))  # [A] covers the library axis
+
+
+def _cos_of_psy(psy_deg):
+    """``agn_cos_inc`` of the Fritz library viewing elevation (psi = 90 deg - i)."""
+    return float(np.sin(np.radians(psy_deg)))
+
+
+def _pcigale_fritz(psy, ebv):
+    """``agn.{disk_luminosity, polar_dust_luminosity, accretion_power}`` per ``agn_power``."""
+    pcigale_sed = pytest.importorskip("pcigale.sed")
+    fritz_module = pytest.importorskip("pcigale.sed_modules.fritz2006")
+    sed = pcigale_sed.SED()
+    sed.add_info("dust.luminosity", 1.0, True, unit="W")
+    fritz_module.Fritz2006(
+        name="fritz2006", **_FRITZ_NODE, psy=psy, disk_type=1, delta=0.0, fracAGN=_FRITZ_FRAC,
+        lambda_fracAGN="0/0", law=0, EBV=ebv, temperature=100.0, emissivity=1.6,
+    ).process(sed)  # fmt: skip
+    per = _FRITZ_FRAC / (1.0 - _FRITZ_FRAC)
+    keys = ("agn.disk_luminosity", "agn.polar_dust_luminosity", "agn.accretion_power")
+    return {k: sed.info[k] / per for k in keys}
+
+
+def _tied_fritz(psy, ebv, *, disc="schartmann2005", mbh=8.0):
+    """Components of the tied Fritz composition at the library elevation ``psy`` [erg/s/Hz]."""
+    _, comps = compose_l_nu(
+        _FRITZ_WAVE,
+        _LOG_LBOL,
+        agn_ir_frac=_FRITZ_FRAC,
+        agn_cos_inc=_cos_of_psy(psy),
+        agn_polar_ebv=ebv,
+        agn_log_mbh=mbh,
+        return_components=True,
+        **{**_FRITZ_TIE, "agn_disc_block": disc},
+    )
+    return {k: np.asarray(v) for k, v in comps.items() if k != "log_L_agn_los"}
+
+
+_TYPE2_PSY = (10.1, 20.1)  # i = 79.9 and 69.9 deg, beyond the 60 deg cone half-angle
+
+
+@pytest.mark.parametrize("psy", _TYPE2_PSY)
+@pytest.mark.parametrize("ebv", (0.03, 0.1, 0.5))
+def test_fritz_disc_under_polar_dust_is_the_unattenuated_disc_over_one_plus_l_ext(psy, ebv):
+    """disc(E) = disc(0) / (1 + l_ext) at every wavelength, ``l_ext`` from CIGALE ``fritz2006``.
+
+    CIGALE's ``polar_dust_luminosity / agn_power`` is ``l_ext / (1 + l_ext)``, so
+    ``1 / (1 + l_ext)`` is one minus it, and it is also CIGALE's own disc ratio
+    (fritz2006.py:328-331). Measured agreement of the disc ratio: 0.20 % / 0.28 % / 0.04 % at
+    E(B-V) = 0.03 / 0.1 / 0.5 (the Weingartner-Draine sub-100 nm shape and the quadrature).
+    """
+    pc_on, pc_off = _pcigale_fritz(psy, ebv), _pcigale_fritz(psy, 0.0)
+    norm_ratio = 1.0 - pc_on["agn.polar_dust_luminosity"]
+    assert pc_on["agn.disk_luminosity"] / pc_off["agn.disk_luminosity"] == pytest.approx(
+        norm_ratio, rel=1e-6
+    )
+    on, off = _tied_fritz(psy, ebv), _tied_fritz(psy, 0.0)
+    live = off["disc"] > 1.0e-6 * off["disc"].max()
+    pointwise = on["disc"][live] / off["disc"][live]
+    # one factor, not a reshaping; at psy = 20.1 the polar mask's Type-1 weight is 1.9e-3 and
+    # leaves a spread across wavelength of 0.19 % at most, at E(B-V) = 0.5 (2e-6 at psy = 10.1)
+    np.testing.assert_allclose(pointwise, pointwise[0], rtol=2.0e-3)
+    assert pointwise[0] == pytest.approx(norm_ratio, rel=3.0e-3), (
+        f"psy={psy}, E(B-V)={ebv}: disc(E)/disc(0) = {pointwise[0]:.5f}, "
+        f"CIGALE 1/(1 + l_ext) = {norm_ratio:.5f}"
+    )
+    power = _power(on["torus"], _FRITZ_WAVE) + _power(on["polar"], _FRITZ_WAVE)
+    assert _power(on["polar"], _FRITZ_WAVE) / power == pytest.approx(
+        pc_on["agn.polar_dust_luminosity"], rel=3.0e-3
+    )
+
+
+@pytest.mark.parametrize("psy", _TYPE2_PSY)
+@pytest.mark.parametrize("ebv", (0.0, 0.1))
+def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_power(psy, ebv):
+    """The X-ray corona behind a Type-2 Fritz torus is ``b H T`` with ``b`` from CIGALE.
+
+    Below the library's 10 A edge the tied disc vanishes and the corona alone is left: the
+    model's corona ``H`` times the torus screen ``T`` (the dusty torus's own transmission at
+    this sightline, tau_V = 1) times ``b = P_D,tied / ((1 - f) L_acc)``. ``P_D,tied`` is CIGALE
+    ``fritz2006``'s ``accretion_power`` (``int AGN1.disk x norm``; the Fritz disc is isotropic,
+    hemisphere mean 1), and it carries CIGALE's ``1/(1 + l_ext)`` under polar dust, so the
+    corona shares the disc's normalization. Measured ``b`` against that: see the tolerance.
+    """
+    from tengri.components.agn.blocks import _protocol as protocol
+    from tengri.components.agn.blocks.torus_screen import torus_screen_transmission
+    from tengri.utils.physics_constants import L_SUN
+
+    mbh = 8.0
+    comps = _tied_fritz(psy, ebv, disc="kubota_done", mbh=mbh)
+    wave = np.asarray(_FRITZ_WAVE, dtype=float)
+    below = wave < 9.0
+    _, h_lam, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
+        _FRITZ_WAVE, _LOG_LBOL, agn_log_mbh=mbh
+    )
+    cos_inc = _cos_of_psy(psy)
+    screen = np.asarray(
+        torus_screen_transmission(
+            _FRITZ_WAVE, cos_inc=cos_inc, oa_deg=90.0 - _FRITZ_HALF, tau_v=_FRITZ_TIE_TAU
+        )
+    )
+    tied = comps["disc"] * C_AA / wave**2  # L_lambda [erg/s/A]
+    b = tied[below] / (np.asarray(h_lam)[below] * screen[below])
+    np.testing.assert_allclose(b, b[0], rtol=1e-9)  # one scale: b H T
+    polar = _power(comps["polar"], _FRITZ_WAVE)
+    agn_power = _power(comps["torus"], _FRITZ_WAVE) + polar
+    # CIGALE scales the intrinsic accretion power by norm(E)/norm(0) = 1 - polar share
+    # (fritz2006.py:331, 339); the share is taken from this run, whose kubota_done disc
+    # reprocesses differently from CIGALE's schartmann2005 one, and CIGALE's own relation is
+    # checked on its schartmann2005 run.
+    pc_on, pc_off = _pcigale_fritz(psy, ebv), _pcigale_fritz(psy, 0.0)
+    assert pc_on["agn.accretion_power"] / pc_off["agn.accretion_power"] == pytest.approx(
+        1.0 - pc_on["agn.polar_dust_luminosity"], rel=1e-6
+    )
+    accretion = pc_off["agn.accretion_power"] * (1.0 - polar / agn_power)
+    expected = accretion * agn_power / ((1.0 - float(f_corona)) * 10.0**_LOG_LBOL * L_SUN)
+    assert b[0] == pytest.approx(expected, rel=_CORONA_REL), (
+        f"psy={psy}, E(B-V)={ebv}: b = {b[0]:.5f}, CIGALE-derived {expected:.5f}"
+    )

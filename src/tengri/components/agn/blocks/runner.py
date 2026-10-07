@@ -1488,11 +1488,15 @@ agn_torus_block, agn_attenuation_block : str
             # between an 8-1e8 A and a 500-1e8 A grid, neither of which
             # truncates the SKIRTOR templates at all.
             _polar_disc_face_on = _disc_shape_faceon * (_agn_power * _disc_R_faceon)
+            # The Fritz disc is isotropic (hemisphere mean 1, ``_TIE_HEMISPHERE_MEAN``), so
+            # its face-on power IS its bolometric power and the cone share is CIGALE
+            # ``fritz2006``'s ``1 - cos(half)`` of it; only the SKIRTOR disc needs the
+            # face-on frame (``g`` referenced to ``int L(theta=0)``, 18/7 off bolometric).
             return polar_dust_reemission_lnu(
                 wave,
                 _polar_disc_face_on,
                 l_in_wavelength=_disc_wave_native,
-                agn_polar_reference="face_on",
+                agn_polar_reference="bolometric" if agn_torus_block == "fritz" else "face_on",
                 return_absorbed=True,
                 **_polar_params,
             )
