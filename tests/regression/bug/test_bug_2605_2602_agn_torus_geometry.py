@@ -750,6 +750,19 @@ def test_polar_law_is_reachable_through_the_builder(_model_inputs, capsys):
     assert "polar_law=calzetti" in capsys.readouterr().out
 
 
+def test_polar_law_round_trips_through_to_groups_in_both_spellings(_model_inputs):
+    """Either spelling re-emits as ``agn['polar_law']`` and rebuilds the same model."""
+    for law in ("calzetti", "bongiorno"):
+        top = _agn_builder_model(_model_inputs, polar_law=law)
+        nested = _agn_builder_model(_model_inputs, atten_extra={"polar_law": law})
+        for model in (top, nested):
+            groups = model.spec.to_groups()
+            assert groups["agn"]["polar_law"] == law
+            assert "polar_law" not in groups["agn"].get("atten", {})
+    default_groups = _agn_builder_model(_model_inputs).spec.to_groups()
+    assert "polar_law" not in default_groups["agn"]
+
+
 def test_unknown_polar_law_is_refused_at_build_with_the_menu(_model_inputs):
     for kwargs in ({"polar_law": "bogus"}, {"atten_extra": {"polar_law": "bogus"}}):
         with pytest.raises(ValueError, match=r"polar_law.*bongiorno"):

@@ -852,8 +852,8 @@ _TABLE = """
 _ROWS = np.array([line.split() for line in _TABLE.split("\n") if line], dtype=float)
 
 #: Wavelengths of the tabulated opacity. [um]
-SMC_OPACITY_WAVE_UM = _ROWS[:, 0]
+SMC_OPACITY_WAVE_UM = np.ascontiguousarray(_ROWS[:, 0])
 
 #: Total mass extinction coefficient at SMC_OPACITY_WAVE_UM. [m^2/kg]
 #: ``(C_ext/H) / (M_dust/H)`` in cm^2/g, times 0.1 for m^2/kg.
-SMC_OPACITY_EXT = _ROWS[:, 1] / SMC_DUST_MASS_PER_H * 0.1
+SMC_OPACITY_EXT = np.ascontiguousarray(_ROWS[:, 1] / SMC_DUST_MASS_PER_H * 0.1)
