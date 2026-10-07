@@ -33,8 +33,10 @@ References
 
 """
 
+from functools import lru_cache
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -193,6 +195,31 @@ _FE2_GRID_LAMBDA_RANGE = (900.0, 9000.0)
 # >5e4 km/s of padding at each end, so the circular wrap-around never reaches support.
 _FE2_FFT_SIZE = 1 << 18
 
+# Band-limited evaluation (the default path of every FeII entry point).
+#
+# The Gaussian transfer function exp(-2 pi^2 sigma_s^2 f^2) is below ``_FE2_TRUNCATION`` for
+# every f above 1.08 / sigma_s [cycles/sample], so for a width >= ``_FE2_MIN_FWHM_KMS`` the
+# broadened template has no content beyond K = ceil(N * 1.08 / sigma_s_min) of the N/2 + 1
+# Fourier bins (K = 6.7k of 131k at 500 km/s). The template does not depend on the width, so
+# its spectrum is a constant, built once on the host from the same lattice and truncated to
+# those K bins. Each trace multiplies it by the transfer function and synthesizes the
+# broadened function on a lattice ``_FE2_DECIMATION`` times coarser (one 2^15-point inverse
+# FFT instead of a 2^18-point forward and inverse pair on the full lattice). A caller
+# wavelength is then read by the same linear interpolation between full-lattice nodes the
+# full-lattice path applies, each node value coming from the coarse lattice by
+# ``_FE2_STENCIL``-point Lagrange interpolation. The R_Fe window flux and the total power are
+# linear in the broadened lattice, so they are K-term sums against the transfer function of
+# constants (the adjoint of their lattice weights applied to the template spectrum): no
+# lattice array is formed for them.
+# [km/s] Narrowest FWHM the band-limited path represents; narrower concrete widths take the
+# full-lattice path (the unbroadened template, FWHM -> 0, is one of them).
+_FE2_MIN_FWHM_KMS = 500.0
+# Transfer-function level below which Fourier bins are dropped.
+_FE2_TRUNCATION = 1.0e-10
+# Coarse-lattice step [full-lattice samples] and Lagrange stencil width [coarse nodes].
+_FE2_DECIMATION = 8
+_FE2_STENCIL = 12
+
 
 def _fe2_internal_grid():
     """FeII template on the internal ln(lambda) grid, built inside the trace.
@@ -267,6 +294,190 @@ def _fe2_broadened_on_grid(fwhm_kms):
     return jnp.where(out > 0.0, out, 0.0)
 
 
+def _fe2_lattice_host():
+    """Host (float64) copy of :func:`_fe2_internal_grid`, for the band-limited path's constants.
+
+    Returns
+    -------
+    wave, template, window_weights, trapezoid_weights : ndarray, shape (n_grid,)
+        As :func:`_fe2_internal_grid`, plus the trapezoid-rule weights in wavelength
+        [Angstrom] (``sum_i t_i y_i`` is ``trapezoid(y, wave)``).
+    """
+    dln = _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
+    lo, hi = np.log(_FE2_GRID_LAMBDA_RANGE[0]), np.log(_FE2_GRID_LAMBDA_RANGE[1])
+    n_grid = int(np.ceil((hi - lo) / dln)) + 1
+    wave = np.exp(lo + dln * np.arange(n_grid))
+    uv = np.interp(wave, _FE2_UV_WAVE, _FE2_UV_FLUX, left=0.0, right=0.0)
+    op = np.interp(wave, _FE2_OPT_WAVE, _FE2_OPT_FLUX, left=0.0, right=0.0)
+    template = np.where(wave < 3500.0, uv, op)
+    template = template / template.max()
+
+    w0, w1 = wave[:-1], wave[1:]
+    a = np.clip(w0, *_FE2_RFE_WINDOW)
+    b = np.clip(w1, *_FE2_RFE_WINDOW)
+    half = 0.5 * (b - a)
+    ta, tb = (a - w0) / (w1 - w0), (b - w0) / (w1 - w0)
+    window = np.zeros(n_grid)
+    window[:-1] += half * ((1.0 - ta) + (1.0 - tb))
+    window[1:] += half * (ta + tb)
+
+    step = np.diff(wave)
+    trapezoid = np.zeros(n_grid)
+    trapezoid[:-1] += 0.5 * step
+    trapezoid[1:] += 0.5 * step
+    return wave, template, window, trapezoid
+
+
+def _lagrange_table(decimation, stencil):
+    """Lagrange weights, shape (decimation, stencil), for the fractions ``r / decimation``.
+
+    Row ``r`` interpolates at ``j + r / decimation`` from the nodes
+    ``j - stencil/2 + 1 ... j + stencil/2``.
+    """
+    nodes = np.arange(-(stencil // 2) + 1, stencil // 2 + 1, dtype=np.float64)
+    table = np.ones((decimation, stencil))
+    for r in range(decimation):
+        s = r / decimation
+        for c in range(stencil):
+            for c2 in range(stencil):
+                if c2 != c:
+                    table[r, c] *= (s - nodes[c2]) / (nodes[c] - nodes[c2])
+    return table
+
+
+@lru_cache(maxsize=1)
+def _fe2_spectral_tables():
+    """Constants of the band-limited FeII path, built once on the host (float64).
+
+    The template of :func:`_fe2_internal_grid` is zero-padded to ``_FE2_FFT_SIZE`` and Fourier
+    transformed once; only the bins the narrowest supported Gaussian leaves above
+    ``_FE2_TRUNCATION`` are kept. With ``H_k`` the transfer function, the broadened lattice
+    is ``irfft(S H)``, and any linear functional ``sum_i c_i y_i`` of it is ``sum_k r_k H_k``
+    with ``r_k = m_k Re(conj(C_k) S_k) / N`` (Parseval; ``m_k`` = 2 for the doubled
+    half-spectrum bins, 1 for DC).
+
+    Returns
+    -------
+    dict of ndarray
+        ``spectrum`` complex (K,): ``S_k / decimation`` (coarse-lattice synthesis scale);
+        ``window`` and ``total`` real (K,): the R_Fe-window flux and the trapezoid integral as
+        functionals ``r_k`` [Angstrom]; ``lagrange`` real (decimation, stencil).
+    """
+    n_fft = _FE2_FFT_SIZE
+    _, template, window, trapezoid = _fe2_lattice_host()
+    sigma_min = (_FE2_MIN_FWHM_KMS / 2.3548 / _C_LIGHT_KMS) / (_FE2_GRID_STEP_KMS / _C_LIGHT_KMS)
+    f_cut = np.sqrt(-0.5 * np.log(_FE2_TRUNCATION)) / (np.pi * sigma_min)
+    n_keep = int(np.ceil(f_cut * n_fft)) + 1
+    spec = np.fft.rfft(template, n=n_fft)[:n_keep]
+    mult = np.full(n_keep, 2.0)
+    mult[0] = 1.0
+
+    def functional(weights):
+        w_hat = np.fft.rfft(weights, n=n_fft)[:n_keep]
+        return mult * np.real(np.conj(w_hat) * spec) / n_fft
+
+    return {
+        "spectrum": spec / _FE2_DECIMATION,
+        "window": functional(window),
+        "total": functional(trapezoid),
+        "lagrange": _lagrange_table(_FE2_DECIMATION, _FE2_STENCIL),
+    }
+
+
+def _fe2_is_concrete_narrow(fwhm_kms) -> bool:
+    """Whether ``fwhm_kms`` is a concrete width below ``_FE2_MIN_FWHM_KMS`` (full-lattice path)."""
+    if isinstance(fwhm_kms, jax.core.Tracer):
+        return False
+    return float(fwhm_kms) < _FE2_MIN_FWHM_KMS
+
+
+def _fe2_transfer(fwhm_kms, n_keep):
+    """Gaussian transfer function on the first ``n_keep`` Fourier bins of the full lattice.
+
+    ``exp(-2 pi^2 sigma_s^2 f^2)`` with ``sigma_s`` in lattice samples, ``f = k / N`` in
+    cycles/sample, as in :func:`_fe2_broadened_on_grid` (unit DC gain).
+    """
+    sigma_samples = (fwhm_kms / 2.3548 / _C_LIGHT_KMS) / (_FE2_GRID_STEP_KMS / _C_LIGHT_KMS)
+    freq = jnp.arange(n_keep) / _FE2_FFT_SIZE
+    return jnp.exp(-2.0 * (jnp.pi * sigma_samples * freq) ** 2)
+
+
+def _fe2_window_flux_and_total(fwhm_kms):
+    """R_Fe-window flux and total integral of the broadened lattice template (band-limited path).
+
+    Returns
+    -------
+    window_flux, total : scalar
+        ``sum_i w_i y_i`` and ``trapezoid(y, wave)`` of the broadened full-lattice template
+        [Angstrom], each a K-term sum against the transfer function.
+    """
+    tab = _fe2_spectral_tables()
+    transfer = _fe2_transfer(fwhm_kms, tab["window"].shape[0])
+    return (
+        jnp.sum(device_table(tab["window"]) * transfer),
+        jnp.sum(device_table(tab["total"]) * transfer),
+    )
+
+
+def _fe2_sample_band_limited(wavelength, fwhm_kms):
+    """Broadened FeII template at the caller's wavelengths, from the band-limited synthesis.
+
+    One inverse FFT builds the broadened template on the coarse lattice; each caller wavelength
+    then takes the two full-lattice nodes that bracket it by Lagrange interpolation from the coarse
+    lattice and interpolates linearly between them in wavelength, the value
+    ``jnp.interp(wavelength, grid_wave, broadened)`` returns on the full lattice. Zero outside
+    the lattice's wavelength range.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    fwhm_kms : float
+        BLR velocity broadening FWHM [km/s], at or above ``_FE2_MIN_FWHM_KMS``.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Broadened template on the scale of :func:`_fe2_internal_grid` (peak of the unbroadened
+        template = 1) [dimensionless].
+    """
+    tab = _fe2_spectral_tables()
+    dln = _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
+    lo = np.log(_FE2_GRID_LAMBDA_RANGE[0])
+    n_grid = int(np.ceil((np.log(_FE2_GRID_LAMBDA_RANGE[1]) - lo) / dln)) + 1
+    n_coarse = _FE2_FFT_SIZE // _FE2_DECIMATION
+    n_keep = tab["spectrum"].shape[0]
+
+    transfer = _fe2_transfer(fwhm_kms, n_keep)
+    coarse = jnp.fft.irfft(device_table(tab["spectrum"]) * transfer, n=n_coarse)
+
+    wave = jnp.asarray(wavelength)
+    lattice_lo = float(np.exp(lo))
+    lattice_hi = float(np.exp(lo + dln * (n_grid - 1)))
+    inside = (wave >= lattice_lo) & (wave <= lattice_hi)
+    pos = (jnp.log(jnp.where(inside, wave, lattice_lo)) - lo) / dln
+    # floor of an in-range position; a round-off ULP below node 0 reads the periodic neighbor,
+    # and the bracket's linear weight stays within one ULP of [0, 1], so no clamp is needed
+    i0 = jnp.floor(pos).astype(jnp.int32)
+    w0 = jnp.exp(lo + dln * i0)
+    w1 = jnp.exp(lo + dln * (i0 + 1))
+    frac = (wave - w0) / (w1 - w0)
+
+    half = _FE2_STENCIL // 2
+    offsets = jnp.arange(-half + 1, half + 1)
+    lagrange = device_table(tab["lagrange"])
+
+    def node(i):
+        cols = (i // _FE2_DECIMATION)[:, None] + offsets[None, :]
+        weights = lagrange[i % _FE2_DECIMATION]
+        return jnp.sum(weights * coarse[cols % n_coarse], axis=-1)
+
+    y0, y1 = node(i0), node(i0 + 1)
+    value = y0 + (y1 - y0) * frac
+    # truncating the spectrum can leave ~1e-11 negatives on a non-negative function
+    return jnp.where(inside & (value > 0.0), value, 0.0)
+
+
 def _fe2_pseudo_continuum(
     wavelength: jnp.ndarray,
     fwhm_kms: float,
@@ -282,10 +493,20 @@ def _fe2_pseudo_continuum(
 
     The combined UV+optical template is carried on a fixed internal grid
     uniform in ln(lambda) (5 km/s step), broadened there by a constant-velocity
-    Gaussian (BLR FWHM in km/s; one FFT convolution), normalized there, and only
-    then sampled at the input wavelengths. The result is therefore independent of
-    the caller's grid (coverage and sampling); JIT/grad/vmap safe in ``fwhm_kms``
-    (the FFT size is static) and float32-safe (the template is scale-normalized).
+    Gaussian (BLR FWHM in km/s), normalized there, and only then sampled at the
+    input wavelengths. The result is therefore independent of the caller's grid
+    (coverage and sampling); JIT/grad/vmap safe in ``fwhm_kms`` (every size is
+    static) and float32-safe (the template is scale-normalized).
+
+    For ``fwhm_kms >= 500`` km/s the broadening costs one 2^15-point inverse FFT:
+    the template's spectrum on the internal grid is a constant computed once, and
+    the broadened spectrum has no Fourier content the transfer function leaves
+    above 1e-10 beyond 6 669 of its 131 073 bins (see ``_fe2_spectral_tables``).
+    That path matches the full-lattice convolution to 2.3e-9 relative
+    (50 widths in 500-30000 km/s) and the R_Fe window flux to 1e-15. A traced
+    ``fwhm_kms`` below 500 km/s is outside the contract (the spectrum is then
+    low-passed at the 500 km/s cutoff); a concrete one takes the full-lattice
+    convolution, which has no lower limit (``fwhm_kms -> 0`` is the template).
 
     **Unit convention.** The PyQSOFit template columns are F_lambda
     [erg/s/cm²/Å]; their *shape* is treated as the shape of L_lambda. The
@@ -343,19 +564,21 @@ def _fe2_pseudo_continuum(
         # Absent by construction (a concrete zero): skip the template broadening.
         return jnp.zeros_like(jnp.asarray(wavelength))
 
-    grid_wave, _, window_weights, _ = _fe2_internal_grid()
-    broadened = _fe2_broadened_on_grid(fwhm_kms)
-
     # Normalize: energy in the R_Fe window (4434-4684 A, Boroson & Green 1992) is
     # integral(L_lambda d lambda) = fe2_strength per unit L(H-beta). It is computed
     # on the internal grid, so neither the amplitude nor the broadening depends on
     # the caller's wavelength grid (coverage or sampling).
-    window_flux = jnp.sum(window_weights * broadened)
+    if _fe2_is_concrete_narrow(fwhm_kms):
+        grid_wave, _, window_weights, _ = _fe2_internal_grid()
+        broadened = _fe2_broadened_on_grid(fwhm_kms)
+        window_flux = jnp.sum(window_weights * broadened)
+        # Sample the (smooth) broadened spectrum at the caller's wavelengths; zero outside
+        # the internal grid's support.
+        on_caller = jnp.interp(wavelength, grid_wave, broadened, left=0.0, right=0.0)
+    else:
+        window_flux, _ = _fe2_window_flux_and_total(fwhm_kms)
+        on_caller = _fe2_sample_band_limited(wavelength, fwhm_kms)
     window_flux = jnp.maximum(window_flux, representable_denominator(1e-30))
-
-    # Sample the (smooth) broadened spectrum at the caller's wavelengths; zero outside
-    # the internal grid's support.
-    on_caller = jnp.interp(wavelength, grid_wave, broadened, left=0.0, right=0.0)
     return fe2_strength * on_caller / window_flux
 
 
@@ -390,17 +613,20 @@ def _fe2_total_power(fwhm_kms, fe2_strength):
 
     Notes
     -----
-    **JIT-compatible**: yes; shares the broadened array with
-    :func:`_fe2_pseudo_continuum` (one FFT per trace).
+    **JIT/grad/vmap-compatible**: yes. For ``fwhm_kms >= 500`` km/s the window flux and the total
+    are K-term sums of host constants against the transfer function (no FFT, no lattice array);
+    a concrete narrower width takes the full-lattice convolution.
     """
     if _fe2_is_off(fe2_strength):
         return 0.0
-    grid_wave, _, window_weights, _ = _fe2_internal_grid()
-    broadened = _fe2_broadened_on_grid(fwhm_kms)
-    window_flux = jnp.maximum(
-        jnp.sum(window_weights * broadened), representable_denominator(1e-30)
-    )
-    total = jnp.trapezoid(broadened, grid_wave)
+    if _fe2_is_concrete_narrow(fwhm_kms):
+        grid_wave, _, window_weights, _ = _fe2_internal_grid()
+        broadened = _fe2_broadened_on_grid(fwhm_kms)
+        window_flux = jnp.sum(window_weights * broadened)
+        total = jnp.trapezoid(broadened, grid_wave)
+    else:
+        window_flux, total = _fe2_window_flux_and_total(fwhm_kms)
+    window_flux = jnp.maximum(window_flux, representable_denominator(1e-30))
     return fe2_strength * total / window_flux
 
 
