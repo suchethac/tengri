@@ -44,19 +44,18 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components._collapsed_lookup import interp_collapsed
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
 from tengri.components.agn.disc import (
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
 )
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
-    build_template_photometry_lookup,
     collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import PreintegratedGrid
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip
+from tengri.utils.physics_constants import L_SUN
 
 # ── Axis definitions per model ──────────────────────────────────
 
@@ -87,7 +86,6 @@ def _build_grid_powerlaw(
     filter_trans: list,
     redshift: float,
     alpha_grid: np.ndarray,
-    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_T_max: float = 1e5,
 ) -> PreintegratedGrid:
@@ -103,9 +101,6 @@ def _build_grid_powerlaw(
         Source redshift.
     alpha_grid : ndarray, shape (n_alpha,)
         Power-law spectral index grid.
-    agn_log_lbol : float
-        Reference bolometric luminosity [log10(L/L_sun)].
-        Defaults to the declared ``agn_log_lbol`` default.
     agn_lum_ratio : float
         Disc fraction. Default 1.0.
     agn_T_max : float
@@ -125,11 +120,11 @@ def _build_grid_powerlaw(
     # Precompute L_nu for each alpha value
     phot_grid = []
     for alpha in alpha_grid:
-        # Call the JAX disc function with reference L_bol and collect L_nu
+        # Per L_sun (agn_log_lbol = 0); the lookup scales it by 10**agn_log_lbol.
         l_nu = np.asarray(
             _powerlaw_disc(
                 jnp.asarray(wave_rest),
-                agn_log_lbol=agn_log_lbol,
+                agn_log_lbol=0.0,
                 agn_lum_ratio=agn_lum_ratio,
                 agn_alpha=float(alpha),
                 agn_T_max=agn_T_max,
@@ -148,7 +143,7 @@ def _build_grid_powerlaw(
         axes=(alpha_grid,),
         redshift=redshift,
         dl_cm=1.0,
-        energy_normalize=False,  # already normalized per L_sun from disc function
+        energy_normalize=False,  # per L_sun by construction (agn_log_lbol = 0 above)
         units="lnu",
     )
 
@@ -294,6 +289,37 @@ def _build_grid_cigale(
     )
 
 
+# Node counts per axis at the declared prior range. The alpha axis keeps the spacing
+# (2 / 14) of the first literal grid; the log axes keep one node per dex. Accuracy is
+# stated with :func:`build_lookup`.
+_DEFAULT_NODES: dict[str, int] = {"agn_alpha": 15, "agn_log_mbh": 5, "agn_log_lbol": 7}
+
+# Luminosity each template is scaled by at runtime, in erg/s per unit of 10**agn_log_lbol.
+# ``powerlaw_disc`` templates are per L_sun; ``ss_disc`` templates are energy-normalized to
+# unit bolometric power in erg/s, so the runtime scale is the bolometric power in erg/s.
+_LOOKUP_UNIT_ERG = {"powerlaw_disc": 1.0, "ss_disc": L_SUN, "cigale_disc": L_SUN}
+
+# The ln of a band flux is taken in float64 at build, so its floor is the float64 smallest normal.
+_FLOAT64_TINY = np.finfo(np.float64).tiny
+
+
+def _axis(param_name: str, supplied: Any, parameters: Any) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the default.
+
+    The default spans the declared prior extended to the model's reach, at
+    :data:`_DEFAULT_NODES` nodes over the declared range (see ``reach_axes.default_axis``).
+    """
+    declared = reach_axes.declared_bounds(_AGN_PARAMS, param_name)
+    support = reach_axes.active_support(param_name, parameters, declared)
+    if supplied is None:
+        return reach_axes.default_axis(
+            param_name, _DEFAULT_NODES[param_name], support, declared=declared
+        )
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 # ── Protocol-shaped entry points ──────────────────────────────────
 
 
@@ -327,15 +353,15 @@ def precompute(
         One of "powerlaw_disc", "ss_disc", "cigale_disc".
         Default: "powerlaw_disc".
     alpha_grid : ndarray, optional
-        Grid for agn_alpha (powerlaw_disc only). If None, uses a default
-        range [-2, 0] with 15 points.
+        Grid for agn_alpha (powerlaw_disc only). If None, the declared prior [-2, 0] with
+        15 nodes, extended to the parameter's reach (``Fixed`` value or finite prior bounds).
     mbh_grid : ndarray, optional
-        Grid for agn_log_mbh (ss_disc only). If None, uses [6, 7, 8, 9, 10].
+        Grid for agn_log_mbh (ss_disc only). If None, the declared prior [6, 10] with 5 nodes,
+        extended to the reach.
     lbol_grid : ndarray, optional
-        Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, uses
-        [9, 10, 11, 12, 13]: faint-Seyfert through bright-quasar bolometric
-        luminosities (sub-Eddington across the default M_bh grid; the disc peak
-        sweeps from the optical into the EUV over this range).
+        Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, the declared prior
+        [8, 14] with 7 nodes (one per dex), extended to the reach. A supplied grid is checked
+        against the reach and refused if it does not span it.
 
     Returns
     -------
@@ -356,8 +382,7 @@ def precompute(
     **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     if model == "powerlaw_disc":
-        if alpha_grid is None:
-            alpha_grid = np.linspace(-2.0, 0.0, 15, dtype=np.float64)
+        alpha_grid = _axis("agn_alpha", alpha_grid, parameters)
         preint = _build_grid_powerlaw(filter_waves, filter_trans, redshift, alpha_grid)
         result = {
             "grid_phot": preint.phot,
@@ -367,10 +392,8 @@ def precompute(
         axis_params = AXIS_PARAMS_POWERLAW
 
     elif model == "ss_disc":
-        if mbh_grid is None:
-            mbh_grid = np.array([6.0, 7.0, 8.0, 9.0, 10.0], dtype=np.float64)
-        if lbol_grid is None:
-            lbol_grid = np.array([9.0, 10.0, 11.0, 12.0, 13.0], dtype=np.float64)
+        mbh_grid = _axis("agn_log_mbh", mbh_grid, parameters)
+        lbol_grid = _axis("agn_log_lbol", lbol_grid, parameters)
         preint = _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, lbol_grid)
         result = {
             "grid_phot": preint.phot,
@@ -412,7 +435,11 @@ def build_lookup(
 ):
     """Build the runtime disc photometry lookup from a preintegrated dict.
 
-    Delegates to the template helper for triweight interpolation.
+    The band photometry is interpolated with node-exact PCHIP on ``ln`` of the band flux
+    (:func:`~tengri.utils.grid_interp.interp_nd_pchip`), so the lookup returns the tabulated
+    value at every node and is C¹ in the query. The former triweight smoother did not
+    reproduce its own nodes (the powerlaw table was 1.08 to 1.67 times the tabulated value at
+    the nodes it spans).
 
     Parameters
     ----------
@@ -420,7 +447,7 @@ def build_lookup(
         Preintegrated data dict with keys "grid_phot", "axes", optionally
         "_collapsed_axes".
     model : str, keyword-only
-        Disc model name (for documentation; not used in lookup logic).
+        One of "powerlaw_disc", "ss_disc". Sets the luminosity scale of the templates.
     free_param_names : tuple of str, optional
         Names of remaining free axes in the collapsed case.
         Not used in the default (no-collapse) case.
@@ -432,59 +459,62 @@ def build_lookup(
 
             fn(agn_log_lbol, *free_axis_values) -> ndarray, shape (n_filters,)
 
-        Returns disc L_ν [erg/s/Hz]. Caller applies flux scaling.
+        Returns disc L_ν [erg/s/Hz].
 
-    References
-    ----------
-    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
-       of AGN and its implications for the UV/X relation and optical variability,"
-       MNRAS, 480, 1247 (2018).
+    Raises
+    ------
+    ValueError
+        If ``model`` is not one with a shape table (``cigale_disc`` is scalar; see
+        ``_build_grid_cigale``).
 
     Notes
     -----
-    **JIT-compatible**: yes, the returned function uses ``jnp`` and triweight
-    interpolation.
+    **JIT-compatible**: yes, the returned function uses ``jnp`` and PCHIP primitives.
 
-    **Gradient-safe**: yes, triweight kernel is fully differentiable.
+    **Gradient-safe**: yes; the gradient is C¹ in every axis and finite inside the nodes.
+    The lookup holds the edge value beyond the nodes, so the axes come from
+    :func:`reach_axes.default_axis` over the parameter's reach (see :func:`precompute`).
+
+    **Accuracy**: at the default nodes, against the exact closure at 40 seeded random
+    off-node points of the reach (``agn_alpha`` in [-3, 0.5], ``agn_log_lbol`` in [8, 14]),
+    band-averaged over 1400-1600, 4000-5000, 8000-9000 and 60000-90000 A: ``powerlaw_disc``
+    at most 1.6e-2 relative (1.5e-2 in the far-IR band). ``ss_disc`` at off-node
+    ``agn_log_mbh`` in [6, 10]: 6-9e-2 relative; the floor is set by the energy normalization
+    of the template on its own rest-frame grid, not by the node density (9 and 17 mbh nodes
+    give the same error).
 
     The leading argument is ``agn_log_lbol = log10(L_bol / L_sun)``. See
     :mod:`~tengri.forward.precompute.protocol` for the unified AGN adapter
     convention.
     """
-    if not preint.get("_collapsed_axes"):
-        # No axes collapsed: wrap template helper to accept log10 luminosity
-        # instead of linear scale (see protocol docstring for convention).
-        template_lookup = build_template_photometry_lookup(preint["_preint"])
+    if model not in _LOOKUP_UNIT_ERG:
+        raise ValueError(f"build_lookup has no table for model {model!r}")
+    unit_erg = _LOOKUP_UNIT_ERG[model]
+    if preint.get("_collapsed_axes"):
+        grid_phot = np.asarray(preint["grid_phot"], dtype=np.float64)
+        axes = tuple(jnp.asarray(ax) for ax in preint["axes"])
+    else:
+        grid_phot = np.asarray(preint["_preint"].phot, dtype=np.float64)
+        axes = tuple(jnp.asarray(ax) for ax in preint["_preint"].axes)
+    if not axes:
+        flat = jnp.asarray(grid_phot)
 
         @jax.jit
-        def disc_phot_no_collapse(agn_log_lbol, *free_axis_values):
-            """Compute disc photometry from log10 bolometric luminosity.
+        def disc_phot_scalar(agn_log_lbol):
+            """Compute disc photometry from log10 bolometric luminosity (no shape axes)."""
+            return (10.0**agn_log_lbol) * unit_erg * flat
 
-            Returns filter-integrated L_nu [erg/s/Hz] at runtime.
-            """
-            l_bol_lsun = 10.0**agn_log_lbol
-            return template_lookup(l_bol_lsun, *free_axis_values)
+        return disc_phot_scalar
 
-        return disc_phot_no_collapse
-
-    # Collapsed case: return a wrapped lookup that takes remaining free params
-    grid_phot = preint["grid_phot"]
-    axes = preint["axes"]
-    if axes:
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    else:
-        edges = ()
+    log_grid = jnp.log(jnp.maximum(jnp.asarray(grid_phot), _FLOAT64_TINY))
 
     @jax.jit
-    def disc_phot_collapsed(agn_log_lbol, *free_axis_values):
-        """Compute disc photometry with some axes collapsed (fixed).
+    def disc_phot(agn_log_lbol, *free_axis_values):
+        """Compute disc photometry from log10 bolometric luminosity.
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
-        l_bol_lsun = 10.0**agn_log_lbol
-        normed = interp_collapsed(
-            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
-        )
-        return l_bol_lsun * normed
+        normed = jnp.exp(interp_nd_pchip(log_grid, axes, tuple(free_axis_values)))
+        return (10.0**agn_log_lbol) * unit_erg * normed
 
-    return disc_phot_collapsed
+    return disc_phot

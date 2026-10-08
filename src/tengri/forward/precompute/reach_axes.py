@@ -21,7 +21,34 @@ import numpy as np
 
 from tengri.config.exceptions import GridSupportWarning
 
-__all__ = ["active_support", "check_user_axis", "default_axis"]
+__all__ = ["active_support", "check_user_axis", "declared_bounds", "default_axis"]
+
+
+def declared_bounds(declarations: Any, param_name: str) -> tuple[float, float]:
+    """Declared prior range ``(lo, hi)`` of ``param_name`` in a component's declarations.
+
+    Parameters
+    ----------
+    declarations : sequence of ParamDeclaration
+        A component's ``PARAMS`` tuple; each entry carries a ``name`` and a ``prior``.
+    param_name : str
+        Parameter to look up.
+
+    Returns
+    -------
+    tuple[float, float]
+        ``prior.bounds`` of the declaration named ``param_name``.
+
+    Raises
+    ------
+    KeyError
+        If no declaration carries that name.
+    """
+    for decl in declarations:
+        if decl.name == param_name:
+            lo, hi = decl.prior.bounds
+            return float(lo), float(hi)
+    raise KeyError(f"{param_name} is not declared")
 
 
 def active_support(

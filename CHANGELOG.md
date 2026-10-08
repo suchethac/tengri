@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **The `powerlaw_disc` and `ss_disc` precompute tables span the parameter's reach (#2737, part).** The default `agn_alpha`, `agn_log_mbh` and `agn_log_lbol` axes come from the shared reach-axis rule (`forward/precompute/reach_axes.py`) instead of literals, so a widened prior is covered rather than clipped. The `powerlaw_disc` template is per L_sun (it had been built at 10 L_sun and scaled again at runtime, a factor 10^10), the `ss_disc` template is scaled by the bolometric power in erg/s (it had been scaled without the L_sun = 3.828e33 erg/s factor), and both tables are interpolated with node-exact PCHIP in place of the triweight smoother, which did not reproduce its own nodes. At `agn_alpha` = -2.7 under a widened Uniform(-3, 0.5) prior the table now agrees with the exact closure to 6e-3 relative. The `ss_disc` widened-mbh accuracy is not yet within tolerance (see the issue).
+
 ### Changed
 
 - **ADAF normalization (#2768).** `adaf_spectrum` normalizes with closed-form bremsstrahlung plus a 30-point Gauss-Legendre rule on each of the four segments between the spectrum's own breaks (`0.02 nu_min`, `nu_min`, `nu_p`, `3 k T_e / h`, `100 k T_e / h`) instead of an 8193-node trapezoid. ADAF SEDs move by 2.3e-6 to 2.7e-6 relative, the trapezoid's error against an independent dense reference (3.2e-6 measured there); the new normalization agrees with that reference to 3.9e-12 (declared prior box corners and 300 draws).
