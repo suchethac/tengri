@@ -1091,6 +1091,25 @@ def _warm_comptonization_lnu(
     return b_nu * enhancement
 
 
+#: Gauss-Legendre order of the radial ring rule in ``ln r``, per zone. The disc and warm
+#: integrals are smooth in ``ln r`` on each zone, so the rule converges well before this order.
+_RING_GL_ORDER = 64
+_RING_GL_T, _RING_GL_W = np.polynomial.legendre.leggauss(_RING_GL_ORDER)
+
+
+def _log_r_gauss_legendre(log_lo, log_hi):
+    """Gauss-Legendre nodes ``log10 r`` on ``[log_lo, log_hi]`` and their ``d(log10 r)`` weights.
+
+    The rule replaces a uniform rectangle sum, whose O(1 %) error on the zone power fed the
+    normalization (#2733). Returned in ``log10`` units, matching the zone grids.
+    """
+    half = 0.5 * (log_hi - log_lo)
+    mid = 0.5 * (log_hi + log_lo)
+    nodes = mid + half * device_table(_RING_GL_T)
+    weights = half * device_table(_RING_GL_W)
+    return nodes, weights
+
+
 # Fixed internal frequency grid for corona normalization.
 # Matches RELAGN (scotthgn/RELAGN) default: [1e-4, 1e4] keV → [2.418e13, 2.418e21] Hz.
 # Using a fixed grid makes the normalization integral grid-independent,
@@ -1517,7 +1536,8 @@ def _compute_zone_luminosities(
     agn_cos_inc : float
         Cosine of inclination angle [dimensionless, 0–1].
     n_radii : int
-        Number of radial integration points per zone [dimensionless].
+        Kept for call compatibility and not used: each zone is integrated with the fixed
+        Gauss-Legendre rule ``_RING_GL_ORDER`` in ``ln r``, so the result does not depend on it.
     agn_gamma_warm : float
         Photon index of warm Comptonization [dimensionless, ~1.5–3.5].
     agn_kt_warm : float
@@ -1572,14 +1592,13 @@ def _compute_zone_luminosities(
     # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
     log_r_warm = jnp.log10(r_warm_cm)
     log_r_out = jnp.log10(r_out_cm)
-    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
+    log_r_outer, d_log_r_outer = _log_r_gauss_legendre(log_r_warm, log_r_out)
     r_outer = 10.0**log_r_outer
 
     r_ratio_outer = r_outer / r_isco_cm
     rt_outer = jnp.maximum(_nt_rt(r_ratio_outer, agn_a_spin), 1e-30) ** 0.25
     t_outer = t_in * r_ratio_outer ** (-0.75) * rt_outer
 
-    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
     dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
 
     # The Planck prefactor 2 h nu (nu/c)^2 reaches ~4e11 at 0.1 A and a ring area reaches
@@ -1610,14 +1629,13 @@ def _compute_zone_luminosities(
         )
 
     log_r_hot = jnp.log10(r_hot_cm)
-    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
+    log_r_warm_grid, d_log_r_warm = _log_r_gauss_legendre(log_r_hot, log_r_warm)
     r_warm_grid = 10.0**log_r_warm_grid
 
     r_ratio_warm = r_warm_grid / r_isco_cm
     rt_warm = jnp.maximum(_nt_rt(r_ratio_warm, agn_a_spin), 1e-30) ** 0.25
     t_warm = t_in * r_ratio_warm ** (-0.75) * rt_warm
 
-    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
     # Ring areas are carried relative to the largest one, as in the outer zone, and the scale is
@@ -1696,7 +1714,8 @@ def _compute_zone_luminosities(
     # thermal-Comptonization relation Gamma = sqrt(9/4 + 4/y) - 1/2
     # (Sunyaev & Titarchuk 1980), i.e. y_warm = 4 / [(Gamma_warm + 1/2)^2 - 9/4].
     # This sets the low-energy rollover so the corona cannot leak into the IR/radio.
-    t_seed_nt = t_warm[0]  # T_NT(R_hot): first (innermost) warm-zone annulus
+    x_hot = r_hot_cm / r_isco_cm
+    t_seed_nt = t_in * x_hot ** (-0.75) * jnp.maximum(_nt_rt(x_hot, agn_a_spin), 1e-30) ** 0.25
     y_warm_denom = jnp.maximum((agn_gamma_warm + 0.5) ** 2 - 2.25, 1e-3)
     y_warm = jnp.clip(4.0 / y_warm_denom, 0.0, 10.0)
     t_seed_hot = t_seed_nt * jnp.exp(y_warm)
