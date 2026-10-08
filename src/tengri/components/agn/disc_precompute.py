@@ -290,9 +290,10 @@ def _build_grid_cigale(
 
 
 # Node counts per axis at the declared prior range. The alpha axis keeps the spacing
-# (2 / 14) of the first literal grid; the log axes keep one node per dex. Accuracy is
-# stated with :func:`build_lookup`.
-_DEFAULT_NODES: dict[str, int] = {"agn_alpha": 15, "agn_log_mbh": 5, "agn_log_lbol": 7}
+# (2 / 14) of the first literal grid; the ss_disc log axes take 0.25 dex spacing, the
+# density at which the node-exact PCHIP holds 2e-3 off-node (9-13 nodes give 3e-2).
+# Accuracy is stated with :func:`build_lookup`.
+_DEFAULT_NODES: dict[str, int] = {"agn_alpha": 15, "agn_log_mbh": 17, "agn_log_lbol": 25}
 
 # Luminosity each template is scaled by at runtime, in erg/s per unit of 10**agn_log_lbol.
 # ``powerlaw_disc`` templates are per L_sun; ``ss_disc`` templates are energy-normalized to
