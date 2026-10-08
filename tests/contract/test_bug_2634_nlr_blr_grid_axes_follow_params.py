@@ -100,15 +100,20 @@ _BASE = (8.0, -0.3)
 #: Measured from the BACKEND on the two-node test grids (``_WAVE``, L_bol = 1e13 L_sun,
 #: cf = 0.1, region default U / n=4 / Z=-2): ratio of the modified spectrum to the
 #: (8.0, -0.3) baseline, bolometric trapezoid and [O III] 5007 pixel sum (4995-5020 A).
+#: The ``synthesizer`` (``/lines``) [O III] ratios were re-pinned when the Cloudy air labels of
+#: ``lines/wavelength`` began converting to vacuum at load: the lines moved +1.4 A against the
+#: fixed pixel window (4995-5020 A, vacuum), and the old code with the window moved by
+#: ``vac_to_air`` reproduces the new ratios to 4e-7 on a 0.005 A grid. The bolometric ratios and
+#: the ``synthesizer_spectra`` rows (a continuum mesh, not labels) are unchanged.
 _RATIOS = {
     ("synthesizer_spectra", "nlr", "ledd"): (0.8765613891643922, 0.821758212949826),
     ("synthesizer_spectra", "nlr", "mbh"): (0.8251230154217267, 0.757977443821904),
     ("synthesizer_spectra", "blr", "ledd"): (0.879708808683233, 0.8244935449320386),
     ("synthesizer_spectra", "blr", "mbh"): (0.8292592457445129, 0.760726440329576),
-    ("synthesizer", "nlr", "ledd"): (0.8862299605022597, 0.8477651099237017),
-    ("synthesizer", "nlr", "mbh"): (0.8276594927031491, 0.7817233659626618),
-    ("synthesizer", "blr", "ledd"): (0.8928151729780258, 0.9731690563415479),
-    ("synthesizer", "blr", "mbh"): (0.8358174204085614, 0.951575257078095),
+    ("synthesizer", "nlr", "ledd"): (0.8862299605022597, 0.847658401515718),
+    ("synthesizer", "nlr", "mbh"): (0.8276594927031491, 0.7815635352506513),
+    ("synthesizer", "blr", "ledd"): (0.8928151729780258, 0.972631807964777),
+    ("synthesizer", "blr", "mbh"): (0.8358174204085614, 0.9508063300277503),
 }
 _AXIS_POINTS = {"ledd": (8.0, -1.0), "mbh": (9.0, -0.3)}
 
