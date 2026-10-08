@@ -9,14 +9,16 @@ integrated luminosity is :math:`L_{\\rm line} = r_i \\cdot L_{\\rm Hb}` where
 strength relative to H-beta from Mor & Netzer 2012 (Table in
 ``data/grahsp/grahsp_templates.h5``).
 
-The line profile uses upstream's slightly unusual normalization
-:math:`N = 510 / \\sqrt{\\pi\\sigma^2}` rather than the textbook
-:math:`1/\\sqrt{2\\pi\\sigma^2}`. This is because :math:`\\mathrm{l5100}`
-is :math:`\\lambda L_\\lambda` (W or erg/s) while the SED is in
-:math:`L_\\lambda` (W/nm), the 510 (= 5100 Å in nm) absorbs the
-:math:`\\lambda` factor; the :math:`\\sqrt{\\pi}` rather than
-:math:`\\sqrt{2\\pi}` is a convention baked into upstream and matched here
-exactly for fixture parity.
+Each profile is a unit-area Gaussian, :math:`N = 510 / \\sqrt{2\\pi\\sigma^2}`,
+so a line of strength :math:`r_i` integrates to exactly
+:math:`r_i \\cdot L_{\\rm Hb}` [erg/s]. :math:`\\mathrm{l5100}` is
+:math:`\\lambda L_\\lambda` (erg/s) while the SED is :math:`L_\\lambda` (erg/s/nm);
+the 510 (= 5100 Å in nm) absorbs the :math:`\\lambda` factor.
+
+Upstream GRAHSP's ``activatelines`` normalises with :math:`\\sqrt{\\pi\\sigma^2}`
+instead, so every line it emits carries an extra factor :math:`\\sqrt{2}` (its
+H-beta broad line is 2.8 % of L5100, not the documented 2 %). tengri
+deliberately does not reproduce this.
 
 References
 ----------
@@ -73,7 +75,7 @@ def _add_gaussians(
     # Per-line widths in nm.
     width_nm = line_wave_nm * (linewidth_kms / _C_KMS)  # km/s / (km/s) = 1
     sigma = width_nm * device_table(_FWHM_TO_SIGMA)  # (n_lines,)
-    norm_factor = _LAMBDA_5100_NM / jnp.sqrt(jnp.pi * sigma**2)  # (n_lines,)
+    norm_factor = _LAMBDA_5100_NM / jnp.sqrt(2.0 * jnp.pi * sigma**2)  # (n_lines,)
     # Broadcast: (n_wave, n_lines)
     diff = wave_nm[:, None] - line_wave_nm[None, :]
     shape = jnp.exp(-0.5 * diff**2 / sigma[None, :] ** 2)
@@ -174,6 +176,7 @@ def feii_forest(
     l5100: float,
     a_lines: float,
     a_feii: float,
+    agn_type: int = AGN_TYPE_BL,
 ) -> Array:
     r"""Bruhweiler+Verner 2008 FeII forest, scaled to the broad H-beta budget.
 
@@ -199,6 +202,11 @@ def feii_forest(
     a_feii : float
         FeII strength relative to broad H-beta (paper ``AFeII``,
         reasonable range 2-10).
+    agn_type : {1, 2, 3}, optional
+        FeII is emitted by the broad-line region, so it is present only for
+        ``1`` (broad-line AGN) and zero for ``2`` (Sy2) and ``3`` (LINER), the
+        same switch that gates the broad lines and the Balmer continuum
+        (upstream ``activatelines``). Default ``1``. **static** under JIT.
 
     Returns
     -------
@@ -211,6 +219,8 @@ def feii_forest(
     template support: no extrapolation.
     """
     wave_nm = jnp.asarray(wave_nm)
+    if agn_type != AGN_TYPE_BL:
+        return jnp.zeros_like(wave_nm)
     l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines
     interp = jnp.interp(
         wave_nm,

@@ -69,6 +69,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_uvslope",
         }
     ),
+    ("disc", "grahsp_netzer"): frozenset(
+        {
+            "agn_grahsp_log_l5100",
+            "agn_grahsp_netzer_log_mbh",
+            "agn_grahsp_netzer_spin",
+            "agn_grahsp_netzer_log_mdot",
+        }
+    ),
     ("disc", "kubota_done"): frozenset(
         {
             "agn_a_spin",
@@ -144,6 +152,9 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_hot_width",
             "agn_grahsp_si",
         }
+    ),
+    ("torus", "grahsp_mn12"): frozenset(
+        {"agn_grahsp_fcov", "agn_grahsp_si", "agn_grahsp_tor_temp", "agn_grahsp_tor_cutoff_um"}
     ),
     # The gray Type-1/2 visibility mask (runner Stage 4.5) applies to the
     # physical-decomposition tori, so agn_cos_inc + agn_theta_torus move predict
@@ -343,7 +354,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ),
     ("blr", "synthesizer"): frozenset({"agn_blr_cf"}),
     ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
-    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms", "agn_grahsp_a_bc"}),
     ("blr", "qsogen"): frozenset(),
     ("feii", "boroson_green"): frozenset(
         {
@@ -353,6 +364,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
+    ("feii", "grahsp_veroncetty"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
     # QSOgen Balmer continuum (Temple+2021), registered in #1488 but never
     # added here, so the block's own enabling knob was invisible to the
     # top-level ``agn={'all_params': FREE}`` wildcard scope: selectable,

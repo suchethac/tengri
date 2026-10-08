@@ -751,7 +751,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_cool_width",
         Uniform(0.2, 0.65, default=0.45),
-        "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
+        "GRAHSP cool dust log-Gaussian standard deviation [dex] (paper COOLwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -765,7 +765,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_hot_width",
         Uniform(0.2, 0.65, default=0.5),
-        "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
+        "GRAHSP hot dust log-Gaussian standard deviation [dex] (paper HOTwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -916,6 +916,32 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Default 0.0 is no reddening.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    # GRAHSP Netzer accretion-disc multilinear interpolation parameters (Task 3).
+    # The 16-node grid spans black-hole mass, spin, and Eddington ratio.
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mbh",
+        Uniform(6.0, 9.0, default=8.0),
+        "GRAHSP Netzer disc black-hole mass log10(M_BH/Msun). "
+        "Interpolates over the grid support [6, 9] dex; "
+        "clipped to edges outside this range.",
+        units="dex(Msun)",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_spin",
+        Uniform(0.0, 0.998, default=0.0),
+        "GRAHSP Netzer disc spin parameter. "
+        "Interpolates over the grid support [0, 0.998]; "
+        "clipped to edges outside this range.",
+        units="dimensionless",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_netzer_log_mdot",
+        Uniform(-1.5228787452803376, -0.5228787452803376, default=-0.5228787452803376),
+        "GRAHSP Netzer disc Eddington ratio log10(Mdot). "
+        "Grid support [log10(0.03), log10(0.3)], with default 0.3. "
+        "Interpolates over this range; clipped to edges outside.",
+        units="dex",
     ),
 )
 

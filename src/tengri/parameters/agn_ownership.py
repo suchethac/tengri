@@ -189,6 +189,9 @@ _AGN_PARTITION = {
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
     "agn_grahsp_cutoff_nm": "agn.disc",
     "agn_grahsp_log_l5100": "agn.disc",
+    "agn_grahsp_netzer_log_mbh": "agn.disc",
+    "agn_grahsp_netzer_spin": "agn.disc",
+    "agn_grahsp_netzer_log_mdot": "agn.disc",
     "agn_grahsp_plbendloc_nm": "agn.disc",
     "agn_grahsp_plbendwidth": "agn.disc",
     "agn_grahsp_plslope": "agn.disc",
@@ -226,13 +229,10 @@ _AGN_PARTITION = {
     # at the agn top level is the spelling every caller and the #2189 guard
     # already use.
     "agn_ir_frac": "agn",
-    # The three self-contained-GRAHSP knobs: no composable block reads them
-    # (grep-verified across blocks/), only the monolithic grahsp forward
-    # function, where every parameter is written flat at the agn level (R27).
-    # A sub-block owner would name a sub-block that never runs for them.
-    "agn_grahsp_a_bc": "agn",
-    "agn_grahsp_tor_temp": "agn",
-    "agn_grahsp_tor_cutoff_um": "agn",
+    # GRAHSP variant parameters, owned by their respective blocks (issue #985).
+    "agn_grahsp_a_bc": "agn.blr",
+    "agn_grahsp_tor_temp": "agn.torus",
+    "agn_grahsp_tor_cutoff_um": "agn.torus",
 }
 
 
