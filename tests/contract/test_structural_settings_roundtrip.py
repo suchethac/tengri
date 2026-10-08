@@ -155,6 +155,15 @@ CASES = [
         True,
     ),
     (
+        "dust_emission.cmb",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_emission={"type": "schreiber2016", "all_params": Fixed(DEFAULT), "cmb": True},
+        ),
+        "dust_ir_cmb",
+        True,
+    ),
+    (
         "agn.norm",
         dict(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},

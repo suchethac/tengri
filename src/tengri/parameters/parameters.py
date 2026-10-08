@@ -1387,6 +1387,9 @@ class Parameters:
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once (no iteration). Default False (off, bit-identical).
         self.dust_ir_diffuse_screen = bool(kwargs.pop("dust_ir_diffuse_screen", False))
+        # Opt-in CMB heating / contrast (da Cunha et al. 2013) of a tabulated
+        # dust-emission model (#2766). Default False (off, bit-identical).
+        self.dust_ir_cmb = bool(kwargs.pop("dust_ir_cmb", False))
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
@@ -2922,6 +2925,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "dust_approx": content("dust approximation type determines parameters"),
     "dust_lyc_in_energy_balance": content("dust LyC treatment determines parameters"),
     "dust_ir_diffuse_screen": content("opt-in diffuse-screen attenuation of IR emission (#2533)"),
+    "dust_ir_cmb": content("opt-in CMB heating/contrast of tabulated IR emission (#2766)"),
     "dust_emission": content("dust emission model selection determines parameters"),
     "dust_law_bc": content("birth cloud dust law determines parameters"),
     "dust_law_diff": content("diffuse dust law determines parameters"),

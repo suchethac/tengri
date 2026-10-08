@@ -53,10 +53,15 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     required; there is no analytic fallback, and a missing file raises with the
     path and how to regenerate it.
 
-    **Not modeled**: this model has no CMB heating or contrast term; the
-    redshift is not used. The contrast factor against the CMB is 0.94, 0.83 and
-    0.73 at rest-frame 250, 500 and 1000 micron for 35 K at z = 4. The types
-    that apply it are ``modified_blackbody``, ``graybody`` and ``casey2012``.
+    **CMB heating and contrast (opt-in)**: ``dust_emission={'type':
+    'schreiber2016', 'cmb': True}`` reads the library at the CMB-heated
+    temperature of Eq. 12 of da Cunha et al. (2013) [2]_, scales it by the
+    luminosity boost :math:`[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}` of their
+    Sect. 2.2 and multiplies by the contrast factor of their Eq. 18, with
+    :math:`\beta = 1.8`. Without the key the redshift is not used. For a 35 K
+    galaxy at z = 4 the contrast is 0.94, 0.83 and 0.73 at rest-frame 250, 500
+    and 1000 micron. See :doc:`/model_reference/dust` for the equations and
+    ``tengri.components.dust.emission._component_base`` for the wrapper.
 
     References
     ----------
@@ -65,9 +70,15 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
        distributions for star-forming galaxies at 0 < z < 4",
        A&A, 609, A30. arXiv:1710.10276.
        https://doi.org/10.1051/0004-6361/201731506
+    .. [2] da Cunha, E., Groves, B., Walter, F., et al., 2013, "On the Effect of
+       the Cosmic Microwave Background in High-redshift (Sub-)millimeter
+       Observations", ApJ, 766, 13. arXiv:1302.0844.
+       https://doi.org/10.1088/0004-637X/766/1/13
 
     """
 
+    cmb_supported: ClassVar[bool] = True
+    cmb_heats_template: ClassVar[bool] = True
     name: str = "schreiber2016"
 
     # Free parameters (user-facing names, prefix-stripped). Both defaults are

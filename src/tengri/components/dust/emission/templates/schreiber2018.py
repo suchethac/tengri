@@ -46,6 +46,8 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
+    cmb_heats_template: ClassVar[bool] = True
     name: str = "schreiber2018"
 
     # Free parameters (user-facing names, prefix-stripped). Canonical names

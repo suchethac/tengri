@@ -413,6 +413,7 @@ def build_components(
     dust_t_birth_yr: float = 1e7,
     dust_transition_width_dex: float = 0.0,
     dust_ir_diffuse_screen: bool = False,
+    dust_ir_cmb: bool = False,
     dust_emission_model: str = "modified_blackbody",
     astrodust_spinning_dust: bool = False,
     astrodust_f_cnm: float = 0.28,
@@ -734,6 +735,8 @@ def build_components(
             )
             # Set the opt-in diffuse-screen attenuation flag (#2533)
             emission_component.diffuse_screen = dust_ir_diffuse_screen
+            # Opt-in CMB heating / contrast of tabulated IR models (#2766).
+            emission_component.cmb = dust_ir_cmb
             components.append(emission_component)
 
     # 3. Nebular (optional)
