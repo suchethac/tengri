@@ -107,8 +107,11 @@ def test_imf_ordering_at_log_age_10(tmp_path):
     assert values["salpeter"] == pytest.approx(0.7468, abs=5e-4)
 
 
-def test_prsc_chabrier_companion_matches_the_grid_own_table(tmp_path):
-    """The repackaged PARSEC table is the one the PARSEC grid carries (cross-check passes)."""
+PRSC_GRID = REPO / "data" / "fsps_prsc_miles_chabrier.h5"
+
+
+def test_prsc_chabrier_registered_grids_take_the_companion_not_the_embedded_table(tmp_path):
+    """A PARSEC grid resolves to the companion table, whatever its file carries (#2751)."""
     age, logz, tab = _table("mass_remaining_prsc_chabrier.h5")
     path = _write_grid(tmp_path / "fsps_prsc_c3k_a_chabrier.h5", age - 9.0, logz)
     wne = _write_grid(
@@ -118,10 +121,24 @@ def test_prsc_chabrier_companion_matches_the_grid_own_table(tmp_path):
         ssp = _load_ssp_data(str(p))
         assert ssp.mass_remaining_source == "companion:mass_remaining_prsc_chabrier.h5"
         np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0)
-    emb = _write_grid(
-        tmp_path / "fsps_prsc_miles_chabrier.h5", age - 9.0, logz, mass_remaining=tab
-    )
-    assert _load_ssp_data(str(emb)).mass_remaining_source == "embedded"
+
+
+def test_prsc_chabrier_embedded_table_equals_the_committed_companion():
+    """Characterization of the shipped PARSEC grid's embedded table (read-only).
+
+    Measured: the embedded table equals the committed repacked companion at every node
+    (max |diff| = 0). A rebuild from the local FSPS PARSEC build does NOT reproduce it,
+    and no tested FSPS variant does either. This pins the shipped state only.
+    """
+    if not PRSC_GRID.exists():
+        pytest.skip(f"{PRSC_GRID.name} is not present")
+    from tengri.components.stellar.sps.mass_remaining_tables import load_companion_table
+
+    with h5py.File(PRSC_GRID, "r") as f:
+        embedded = np.asarray(f["ssp_mass_remaining"][...], dtype=np.float64)
+    comp = load_companion_table("mass_remaining_prsc_chabrier.h5", "prsc", "chabrier")
+    assert embedded.shape == comp.table.shape
+    np.testing.assert_allclose(embedded, comp.table, rtol=0.0, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -195,23 +212,25 @@ def test_unreadable_companion_propagates_the_io_error(tmp_path, monkeypatch):
         _load_ssp_data(str(path))
 
 
-def test_embedded_table_disagreeing_with_companion_raises(tmp_path):
+def test_embedded_table_disagreeing_with_companion_is_ignored_for_a_registered_grid(tmp_path):
+    """The registry companion is authoritative; the embedded table is not cross-checked."""
     age, logz, tab = _table("mass_remaining_mist_chabrier.h5")
     path = _write_grid(
         tmp_path / "fsps_mist_miles_chabrier.h5", age - 9.0, logz, mass_remaining=tab + 1e-3
     )
-    with pytest.raises(ValueError, match=r"differs from mass_remaining_mist_chabrier\.h5"):
-        _load_ssp_data(str(path))
+    ssp = _load_ssp_data(str(path))
+    assert ssp.mass_remaining_source == "companion:mass_remaining_mist_chabrier.h5"
+    np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0)
 
 
-def test_embedded_table_agreeing_with_companion_is_used(tmp_path):
+def test_embedded_table_agreeing_with_companion_still_reports_the_companion(tmp_path):
     age, logz, tab = _table("mass_remaining_mist_chabrier.h5")
     path = _write_grid(
         tmp_path / "fsps_mist_miles_chabrier.h5", age - 9.0, logz, mass_remaining=tab
     )
     ssp = _load_ssp_data(str(path))
-    assert ssp.mass_remaining_source == "embedded"
-    np.testing.assert_array_equal(np.asarray(ssp.ssp_mass_remaining), tab)
+    assert ssp.mass_remaining_source == "companion:mass_remaining_mist_chabrier.h5"
+    np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0)
 
 
 def test_grid_imf_contradicting_registry_raises(tmp_path):

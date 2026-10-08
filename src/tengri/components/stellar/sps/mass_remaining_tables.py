@@ -4,8 +4,9 @@
 single-age population that is, at that age, in living stars plus stellar
 remnants (per 1 Msun formed, dimensionless). It depends on the isochrones, the
 IMF and the metallicity, and not on the spectral library. This module resolves
-it for a grid from, in order, the grid file's own table, a companion table
-shipped as package data, or (only on an explicit opt-in) DSPS's
+it for a grid from, in order, a companion table shipped as package data (for a
+registered grid, authoritative over any table the file carries), the grid file's
+own table (for grids with no companion), or (only on an explicit opt-in) DSPS's
 metallicity-independent sigmoid fit; anything else raises.
 
 References
@@ -46,8 +47,6 @@ SOURCE_DSPS_FIT = MODE_DSPS_FIT
 
 #: Metallicity nodes of a grid and its companion table must agree to this [dex].
 LOGZ_ATOL = 1e-6
-#: An embedded table and its companion must agree to this [dimensionless].
-CROSSCHECK_ATOL = 1e-6
 #: A grid age within this of a table node [dex] is that node, not an interpolation.
 AGE_NODE_ATOL = 1e-5
 
@@ -333,12 +332,16 @@ def resolve_mass_remaining(
 
     Resolution order, with ``mode="table"`` (the default):
 
-    1. The grid's own embedded table. If the registry also names a companion
-       table the two are cross-checked and a disagreement above
-       ``CROSSCHECK_ATOL`` raises.
-    2. The registry's companion table: metallicity nodes must match the grid's
-       to ``LOGZ_ATOL`` in log Z, ages are placed as in
+    1. A registered grid with a companion table (registry ``source`` is a file,
+       not PENDING or EMBEDDED, and the grid has no [alpha/Fe] axis): the
+       registry's companion table, built from the grid's own isochrones. Any
+       ``embedded`` table in the file is ignored and not cross-checked; the
+       companion is authoritative. Metallicity nodes must match the grid's to
+       ``LOGZ_ATOL`` in log Z, and ages are placed as in
        :func:`_grid_ages_to_table`.
+    2. Otherwise the grid's own embedded table, if it has one. This covers an
+       unregistered (user) grid, a registered grid whose table is still PENDING
+       or EMBEDDED, and an [alpha/Fe] grid.
     3. No table: a registered grid (shipped, PENDING) raises ``ValueError``
        naming the missing table and the opt-in; an unregistered (user) grid
        emits a ``UserWarning`` naming the opt-in and uses the DSPS fit.
@@ -377,8 +380,8 @@ def resolve_mass_remaining(
     ------
     ValueError
         Unknown mode; PENDING or table-less registered grid without the opt-in;
-        metallicity mismatch; ages out of range; embedded-vs-companion
-        disagreement; grid attribute contradicting the registry.
+        metallicity mismatch; ages out of range; grid attribute contradicting
+        the registry.
     OSError
         A companion file cannot be read.
 
@@ -404,21 +407,12 @@ def resolve_mass_remaining(
     has_companion = (
         entry is not None and entry.source not in (PENDING, EMBEDDED) and not has_alpha_axis
     )
-    if embedded is not None:
-        if has_companion:
-            companion = _companion_on_grid(entry, lg_age_yr, lgmet)
-            err = float(np.max(np.abs(np.asarray(embedded) - companion)))
-            if err > CROSSCHECK_ATOL:
-                raise ValueError(
-                    f"{stem}: the grid's own ssp_mass_remaining differs from "
-                    f"{entry.source} by {err:.3g} (> {CROSSCHECK_ATOL}); one of them "
-                    "belongs to different isochrones or IMF"
-                )
-        return MassRemainingResolution(np.asarray(embedded, dtype=np.float64), EMBEDDED, fit_imf)
-
     if has_companion:
         table = _companion_on_grid(entry, lg_age_yr, lgmet)
         return MassRemainingResolution(table, f"companion:{entry.source}", fit_imf)
+
+    if embedded is not None:
+        return MassRemainingResolution(np.asarray(embedded, dtype=np.float64), EMBEDDED, fit_imf)
 
     optin = f"load_ssp_data(..., mass_remaining={MODE_DSPS_FIT!r})"
     if entry is None:

@@ -98,7 +98,9 @@
   `load_ssp_data(..., mass_remaining="dsps_fit")` is the explicit opt-in to the fit (an
   unregistered grid warns instead). `SSPData.mass_remaining_source` and `tengri.doctor()`
   report the source. A grid's t = 0 node is exactly 1; metallicity-node mismatches and ages
-  more than one table node beyond the table raise.
+  more than one table node beyond the table raise. For a registered grid the companion table
+  is authoritative: a table the grid file carries is ignored, not cross-checked. An embedded
+  table is used only where no companion applies (unregistered, PENDING, or [alpha/Fe] grids).
 
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32

@@ -40,9 +40,14 @@ The MIST Chabrier table is bit-identical (max |diff| = 0) to the earlier
 
 The table of `data/fsps_prsc_miles_chabrier.h5` (`ssp_mass_remaining`, python-fsps,
 PARSEC isochrones, Chabrier IMF) repackaged as a companion, so that every PARSEC + Chabrier
-grid (C3K, BaSeL, the wNE post-processed grids that drop the table) resolves to it; the
-grid's own table is the cross-check. `input_sha256` is that file's digest. PARSEC Kroupa
-and Salpeter are PENDING: no table has been built.
+grid (C3K, BaSeL, the wNE post-processed grids that drop the table) resolves to it. The
+companion is authoritative; the grid's embedded table is not cross-checked against it.
+Measured: the embedded table equals this companion at every node (max |diff| = 0). A table
+rebuilt with the local FSPS PARSEC build does NOT reproduce it (max |diff| 0.13 where the
+embedded value is below 1), and neither do the remnant, zcontinuous or IMF-limit variants
+tried. The grid's spectra match that build (zcontinuous=0, relative 1e-7). The companion is
+kept until the discrepancy is resolved. PARSEC Kroupa and Salpeter are PENDING: no table
+has been committed.
 
 ## PENDING grids
 

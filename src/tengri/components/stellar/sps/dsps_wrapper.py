@@ -563,9 +563,9 @@ def load_ssp_data(
     stellar remnants per unit formed mass [dimensionless], from the grid's own
     isochrones, IMF and metallicity (Conroy, Gunn & White 2009; FSPS remnants
     after Renzini & Ciotti 1993; BC03 after Bruzual & Charlot 2003). It is
-    resolved by :func:`resolve_mass_remaining`:
-    the file's own table (cross-checked against the registered companion), else the
-    companion table shipped as package data, else, only with
+    resolved by :func:`resolve_mass_remaining`: for a registered grid, the
+    companion table shipped as package data (authoritative; any table in the file
+    is ignored); otherwise the file's own table; otherwise, only with
     ``mass_remaining="dsps_fit"``, DSPS's metallicity-independent fit. The fit
     discards the isochrones and the metallicity dependence (0.03 in the surviving
     mass at 10 Gyr on MIST), so it is never used silently.
