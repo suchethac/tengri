@@ -20,8 +20,8 @@ On ``multicolor`` that is now **fixed**: the disc's float32 renormalization retu
 ``l_nu * scale``, and transposing that product forms ``sum(g * l_nu)`` — ~1e64 with the
 cotangent the AGN reference offset supplies, so ``inf``, against a partner term that
 underflows to ``0``. Returning the L1-normalized SED against the correspondingly
-inflated scale is the same number with both factors in range. ``kubota_done`` is a
-different defect at the same call site and is still open; see its strict xfail.
+inflated scale is the same number with both factors in range. ``kubota_done`` is fixed the
+same way, by carrying its luminosity scales as log10 exponents (#2767).
 """
 
 import jax
@@ -157,8 +157,8 @@ def test_multicolor_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs, log_l
     2.14x at 11) before it became NaN: a single-point check could have landed where
     the error was small. Measured after the fix: 1.000002 at every point here.
 
-    Not covered: ``kubota_done``, which takes the same ``agn_log_lbol_shape`` hand-off
-    and is still wrong — see the strict xfail below.
+    ``kubota_done``, which takes the same ``agn_log_lbol_shape`` hand-off, is pinned
+    separately below.
     """
     groups = dict(
         sfh=_SFH,
@@ -206,20 +206,6 @@ def test_multicolor_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs, log_l
     )
 
 
-@pytest.mark.xfail(
-    reason="#1439 residual, now narrowed to 'kubota_done' alone — 'multicolor' is "
-    "fixed and pinned by the sweep above. This is NOT the same defect: it is not a "
-    "range problem at all. With an O(1) cotangent, where nothing can overflow, "
-    "d(sum L_nu)/d(agn_log_lbol) in pure float32 is -0.034x float64 — SIGN FLIPPED — "
-    "and it becomes NaN only once the cotangent passes ~1e10. Localized by A/B "
-    "measurement: agn_f_hard=0.0 (no hot corona) restores float32/float64 agreement "
-    "to 3e-04, and every nonzero agn_f_hard reproduces the -0.034x exactly, so the "
-    "defect is in the hot-corona zone (_hot_corona_lnu / the nthcomp custom_jvp of "
-    "#1822), not in the disc renormalization. Regrouping the renormalization the way "
-    "multicolor_disc's is regrouped was written and measured here: it does not close "
-    "this, and was reverted rather than shipped unverified.",
-    strict=True,
-)
 def test_kubota_done_agn_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     """The other shape-class disc, pinned so its state cannot change silently."""
     groups = _agn_groups("kubota_done")

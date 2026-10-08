@@ -140,19 +140,30 @@ def nt_rt(x, a_spin):
     r = x * r_isco
     y = jnp.sqrt(r)
     y_isco = jnp.sqrt(r_isco)
-    theta = jnp.arccos(a)
-    y1 = 2.0 * jnp.cos((theta - jnp.pi) / 3.0)
-    y2 = 2.0 * jnp.cos((theta + jnp.pi) / 3.0)
-    y3 = -2.0 * jnp.cos(theta / 3.0)
+    # The three roots of ``y^3 - 3 y + 2 a = 0`` are ``2 cos((theta - pi)/3)``,
+    # ``2 cos((theta + pi)/3)`` and ``-2 cos(theta/3)`` with ``theta = arccos a``; they are
+    # written here in ``eps = arcsin a = pi/2 - theta``.
+    # The same numbers, but ``y2 = 2 sin(eps/3)`` keeps its relative accuracy as ``a -> 0``: as a
+    # cosine of an argument next to ``pi/2`` it is rounding noise in float32 (-8.7e-8 for a true
+    # 6.7e-10), and ``1/y2`` in the terms below then amplifies a reverse-mode cotangent past the
+    # float32 range (#2767).
+    eps_third = jnp.arcsin(a) / 3.0
+    y1 = 2.0 * jnp.cos(jnp.pi / 6.0 + eps_third)
+    y2 = 2.0 * jnp.sin(eps_third)
+    y3 = -2.0 * jnp.cos(jnp.pi / 6.0 - eps_third)
 
     b = 1.0 - 3.0 / r + 2.0 * a / r**1.5
     c1 = 1.0 - y_isco / y - (3.0 * a / (2.0 * y)) * jnp.log(y / y_isco)
 
     def _term(ya, yb, yc):
+        # ``(ya - a)^2 / ya`` for a root of ``y^3 - 3 y + 2 a = 0``: ``a = (3 ya - ya^3) / 2``
+        # gives ``ya - a = -ya (1 - ya^2) / 2``, hence ``ya (1 - ya^2)^2 / 4``. Written this way
+        # there is no division by the root ``y2 ~ 2a/3``, which is ~7e-10 at ``a -> 0`` and
+        # would multiply a reverse-mode cotangent by ~1e9 (#2767).
         return (
             3.0
-            * (ya - a) ** 2
-            / (y * ya * (ya - yb) * (ya - yc))
+            * (0.25 * ya * (1.0 - ya**2) ** 2)
+            / (y * (ya - yb) * (ya - yc))
             * jnp.log((y - ya) / (y_isco - ya))
         )
 
