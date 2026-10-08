@@ -27,6 +27,7 @@ from __future__ import annotations
 import dataclasses
 import math
 from pathlib import Path
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -45,6 +46,7 @@ from tengri.components.agn._phys import (
     TWO_FACES as _TWO_FACES,
     ring_area as _ring_area,
 )
+from tengri.forward.precompute import reach_axes
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
 from tengri.utils.scale import pow10 as _pow10, representable_denominator
 
@@ -486,6 +488,27 @@ def _compute_effective_bandwidths_hz(
 # ───────────────────────────────────────────────────────────────────
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def preintegrate_kd_components(
     filter_waves: list[np.ndarray],
     filter_trans: list[np.ndarray],
@@ -496,6 +519,7 @@ def preintegrate_kd_components(
     n_Gamma: int = 20,
     n_kT_corona: int = 15,
     n_kTbb_corona: int = 16,
+    parameters: Any = None,
 ) -> KDPreintegratedData:
     """Precompute all K&D disc filter tables at model init time.
 
@@ -521,6 +545,9 @@ def preintegrate_kd_components(
         Number of photon index grid points for the corona table.
     n_kT_corona : int
         Number of temperature grid points for the corona table.
+    parameters : Parameters or None
+        Parameters spec; the corona Gamma and kT axes widen to the reach of their Fixed value
+        or free prior (see ``reach_axes.hull_axis``).
 
     Returns
     -------
@@ -563,10 +590,11 @@ def preintegrate_kd_components(
     )
 
     # --- Corona table ---
-    Gamma_grid = np.linspace(1.4, 3.0, n_Gamma)
-    kT_grid_keV = np.geomspace(10.0, 500.0, n_kT_corona)  # 10-500 keV
+    Gamma_grid = _axis("agn_gamma_hard", None, np.linspace(1.4, 3.0, n_Gamma), parameters)
+    kT_grid_keV = _axis("agn_kt_hot", None, np.geomspace(10.0, 500.0, n_kT_corona), parameters)
     # Seed-photon temperature axis: kT_NT(R_hot)*exp(y_warm) spans roughly
     # 5e-4 to 0.1 keV (NIR to EUV) across the M_BH / Eddington / Gamma_warm space.
+    # No declared parameter drives the seed-photon axis, so its literal range stays.
     kTbb_seed_grid_keV = np.geomspace(5.0e-4, 0.12, n_kTbb_corona)
     corona_table = _build_corona_filter_table(
         Gamma_grid,
@@ -1247,7 +1275,9 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
     **JIT-compatible**: no, this is a build-time function using NumPy.
     The returned tables are JIT-compatible.
     """
-    return preintegrate_kd_components(filter_waves, filter_trans, redshift, **kwargs)
+    return preintegrate_kd_components(
+        filter_waves, filter_trans, redshift, parameters=parameters, **kwargs
+    )
 
 
 def build_lookup(preint, **kwargs):
