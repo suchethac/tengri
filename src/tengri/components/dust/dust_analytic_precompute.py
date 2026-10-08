@@ -128,16 +128,27 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 _CONTINUUM_LOG10_WAVE_AA_MIN = 2.0
 _CONTINUUM_LOG10_WAVE_AA_MAX = 11.0
 _CONTINUUM_N_WAVE = 2250
+_CASEY_REFINE_AA = (0.95e4, 1.05e4)
+_CASEY_REFINE_N = 500
 
 
 def _continuum_wave_rest() -> np.ndarray:
-    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
-    return np.logspace(
+    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders.
+
+    The log grid carries an extra geometric segment of ``_CASEY_REFINE_N`` points across
+    ``_CASEY_REFINE_AA``: ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the trapezoid cell that straddles the 1 um step has to be narrow (about
+    1 Angstrom here against 92 Angstrom on the log grid) for the band flux to approach the
+    continuum limit.
+    """
+    grid = np.logspace(
         _CONTINUUM_LOG10_WAVE_AA_MIN,
         _CONTINUUM_LOG10_WAVE_AA_MAX,
         _CONTINUUM_N_WAVE,
         dtype=np.float64,
     )
+    refine = np.geomspace(*_CASEY_REFINE_AA, _CASEY_REFINE_N, dtype=np.float64)
+    return np.unique(np.concatenate([grid, refine]))
 
 
 def _build_union_grid_with_fine_filters(
@@ -455,12 +466,15 @@ def _build_grid_pah_drude(
     )
 
 
-# Default node counts per axis. Measured over 200 seeded random points inside the declared
-# priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
-# PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
+# Default node counts per axis. Measured over 200 seeded RandomState(7) points inside the declared
+# priors against the exact closure on a rest grid converged at the 1 um step, the log band flux
+# interpolated with PCHIP agrees to <= 5.5e-4 in the 60-90, 250-500 and 750-950 um bands at
+# z = 0 (casey2012 also at z = 3) and, for casey2012, to <= 4.7e-4 in 8-24 and 24-40 um at z = 0
+# and 60-90 and 250-500 um at z = 3. dust_alpha_mir is interpolated in ln(alpha_mir): the band
+# flux is most curved at alpha_mir near 1, where the log spacing is finest.
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
-    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
+    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 28, "dust_lambda_0_um": 26},
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
@@ -468,7 +482,7 @@ _DEFAULT_NODES: dict[str, dict[str, int]] = {
 _FLOAT64_TINY = np.finfo(np.float64).tiny
 
 # Axes whose interpolation coordinate is the natural log of the parameter.
-_LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
+_LOG_AXIS_PARAMS = ("dust_T", "dust_alpha_mir", "dust_lambda_0_um")
 
 
 def _active_support(param_name: str, parameters: Any) -> tuple[float, float] | None:
@@ -579,13 +593,16 @@ def precompute(
     ``ValueError`` naming the filter; below 100 A (0.01 um) the template is taken as
     zero: exact to double precision for the thermal models, and for ``pah_drude`` the Drude
     wings there are below 1.7e-14 of the peak (measured). Accuracy of :func:`build_lookup` at
-    the default nodes against the exact closure, maximum over 200 seeded random points inside
-    the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
-    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 8.0e-4 (60-90 um), 6.7e-4 (250-500 um), 7.0e-4
-    (750-950 um). ``casey2012`` at 8-24 um is 1.6e-3 at z = 0; at z = 3 (observed bands) it is
-    2.0e-3 in 60-90 um, 7.0e-4 in 250-500 um, 6.8e-4 in 750-950 um and 7.6e-4 in 8-24 um. The
-    1 um lower bound of ``casey2012`` is a node of the rest grid, so its normalization has
-    no cell straddling the bound.
+    the default nodes against the exact closure, maximum over 200 seeded ``RandomState(7)`` points
+    inside the declared priors, reference rest grid converged at the 1 um step (0.25 Angstrom
+    spacing there), bands 60-90 / 250-500 / 750-950 um at z = 0: ``modified_blackbody`` 3.3e-4,
+    3.4e-5, 3.3e-5; ``graybody`` 5.5e-4, 1.5e-4, 1.6e-4; ``casey2012`` 3.6e-4, 4.0e-4, 2.9e-4.
+    ``casey2012`` at z = 3 (observed bands) is 3.1e-4, 4.7e-4, 3.7e-4 in the same three bands, and
+    in the mid-IR 3.8e-4 (8-24 um) and 4.0e-4 (24-40 um) at z = 0, 3.1e-4 (60-90 um) and 4.7e-4
+    (250-500 um) at z = 3. ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the rest grid carries 500 points over 0.95-1.05 um (about 1 Angstrom against
+    92 Angstrom on the log grid) and the 1 um bound is a node; ``dust_alpha_mir`` is interpolated
+    in its natural log.
 
     Parameters
     ----------
@@ -750,9 +767,9 @@ def build_lookup(
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
     below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 8-24 um 1.6e-3 at z = 0). A query outside
-    the node span is clamped to the edge node: the value is constant and the gradient zero
-    beyond it.
+    (``casey2012`` mid-IR at most 4.7e-4 in 8-24, 24-40 um at z = 0 and 60-90, 250-500 um at
+    z = 3). The coordinates are ln T, beta, ln alpha_mir and ln lambda_0. A query outside the node
+    span is clamped to the edge node: the value is constant and the gradient zero beyond it.
 
     Parameters
     ----------
