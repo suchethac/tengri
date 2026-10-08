@@ -1091,6 +1091,19 @@ class CueBackend:
     gradient evaluation. Warnings are emitted if the SSP appears to have
     baked-in nebular emission (wNE), which violates Cue's assumptions.
 
+    **Response to ``neb_logU`` (#2786)**: ``neb_logU`` is passed unchanged as
+    Cue's ``gas_logu``, the inner-face U at R = 10^19 cm (trained range
+    ``CUE_TRAINED_LOG_U``; Li et al. 2025, arXiv:2405.04598, Table 1), and the
+    network sees ``logQ = logU + log10(4 pi) + 2 log10(R) + log10(n_H) +
+    log10(c)`` (``cue.utils.logQ``). Unlike a CLOUDY grid at a fixed ionizing
+    spectrum, Cue also takes the 7 ionizing-shape inputs, and the O++ zone it
+    predicts depends on them. For Cue's default hard young-starburst shape
+    [O III]/H-beta rises about 6x from log U = -3 to -1.5; for the soft shape
+    an FSPS MIST+MILES population of 0-100 Myr (Z = 0.02) fits to, it saturates
+    near 0.65 and [O II]/H-beta stays large. A flat [O III]/H-beta against
+    ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
+    wiring is guarded by ``tests/components/nebular/test_cue_logu_response.py``.
+
     **Calling conventions**: Two modes are supported:
 
     1. **High-level** (CloudyGridBackend compatible): Pass ``ssp_weights``,
