@@ -27,7 +27,9 @@ REPO = Path.cwd()
 while not (REPO / "analysis" / "paper1").is_dir() and REPO.parent != REPO:
     REPO = REPO.parent
 sys.path.insert(0, str(REPO))
+sys.path.insert(0, str(REPO / "paper1_figures"))
 
+from _run import figure_outcome, report_figures
 from analysis.paper1 import fig04_gpu_datacenter as gpu
 
 RESULTS = REPO / "analysis" / "paper1" / "results"
@@ -86,3 +88,13 @@ for name, (payload, _stats) in summaries.items():
     print(f"\n{name}:")
     for caveat in payload["caveats"]:
         print(f"  - {caveat}")
+
+# %% [markdown]
+# ## Every figure produced
+#
+# A figure that was not written makes this family fail, so regenerate.py
+# cannot count it as built. This is the last statement on purpose.
+
+# %%
+_outcomes = {f"{name}.pdf": figure_outcome(0, OUT / f"{name}.pdf") for name in DATASETS}
+raise SystemExit(report_figures(_outcomes))

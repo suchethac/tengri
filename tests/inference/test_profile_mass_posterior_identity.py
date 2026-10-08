@@ -191,22 +191,146 @@ def _evaluate_cdf_at_sample(sample_mass, sample_params, model, forward, flux, no
     return u
 
 
+#: Seeds pooled into one PIT statistic per model. Each seed draws its own truth
+#: and mock, so under the null the thinned PIT values of different seeds are
+#: independent Uniform(0, 1) draws and their pool is one Uniform(0, 1) sample.
+#: One KS test on the pool has a false-alarm rate of ``_PIT_ALPHA`` by
+#: construction. Six single-seed tests at the same bar each fail at that rate,
+#: so one red per run was the expected outcome, not a defect (#2424).
+_PIT_SEEDS = (0, 1, 2, 3, 4, 5)
+_PIT_ALPHA = 0.01
+
+
+def _pit_thinned_for_seed(model, forward, *, seed, snr, key_offset, mass_shift=0.0):
+    """Return the ESS-thinned PIT values of one seed's unprofiled posterior.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Photometry model the mock and fit are built on.
+    forward : ForwardModel
+        Forward model wrapping ``model``.
+    seed : int
+        Seed of the injected truth and the mock noise.
+    snr : float
+        Photometric signal-to-noise of the mock.
+    key_offset : int
+        Offset added to ``seed`` for the fit's PRNG key.
+    mass_shift : float, optional
+        Added to each draw's mass before the conditional CDF is evaluated
+        [dex]. Zero in the shipped test; nonzero only to plant a defect.
+
+    Returns
+    -------
+    ndarray, shape (n_thinned,)
+        Uniform(0, 1) PIT values under the null.
+    """
+    _truth, flux, noise = _mock(model, seed=seed, snr=snr)
+    fit_kw = dict(
+        method="mcmc_nuts",
+        dense_mass_matrix=False,
+        n_warmup=100,
+        n_samples=200,
+        n_chains=1,
+    )
+
+    t0 = time.time()
+    key_fit = jax.random.PRNGKey(seed + key_offset)
+    post = forward.fit(flux, noise, profile_mass=False, key=key_fit, **fit_kw)
+    elapsed_fit = time.time() - t0
+
+    mass_samples = np.asarray(post.samples[_MASS_NAME]).flatten()
+    n_raw = len(mass_samples)
+    fixed_vals = model.spec.get_fixed_values()
+
+    t0 = time.time()
+    u_samples = np.empty(n_raw)
+    for i, m_i in enumerate(mass_samples):
+        sample_params = {
+            name: float(post.samples[name].flatten()[i])
+            for name in post.samples
+            if name != _MASS_NAME
+        }
+        for name, val in fixed_vals.items():
+            sample_params[name] = float(val) if hasattr(val, "__float__") else val
+        # Required by model.predict but unused by _profile_stats.
+        sample_params[_MASS_NAME] = 0.0
+        u_samples[i] = _evaluate_cdf_at_sample(
+            float(m_i) + mass_shift,
+            sample_params,
+            model,
+            forward,
+            flux,
+            noise,
+            data_type="photometry",
+        )
+    elapsed_cdf = time.time() - t0
+
+    thinned, n_thinned, ess_ratio = _thin_by_ess(u_samples, max_thinned_count=500)
+    print(
+        f"\nSeed {seed} (snr={snr}): fit {elapsed_fit:.1f}s, CDF {elapsed_cdf:.1f}s. "
+        f"Raw draws: {n_raw}. ESS ratio: {ess_ratio:.3f}. Thinned: {n_thinned}."
+    )
+    return thinned
+
+
+def _pooled_pit_ks(model, forward, *, snr, key_offset, label, mass_shift=0.0):
+    """Pool the PIT values of ``_PIT_SEEDS`` and assert one KS test passes.
+
+    Parameters
+    ----------
+    model, forward : SEDModel, ForwardModel
+        As in :func:`_pit_thinned_for_seed`.
+    snr : float
+        Mock signal-to-noise.
+    key_offset : int
+        Fit PRNG key offset, as in :func:`_pit_thinned_for_seed`.
+    label : str
+        Model description for the failure message.
+    mass_shift : float, optional
+        Planted mass offset [dex], forwarded to every seed. Zero in the test.
+
+    Raises
+    ------
+    AssertionError
+        If the pooled KS p-value is below ``_PIT_ALPHA``.
+    """
+    pooled = np.concatenate(
+        [
+            _pit_thinned_for_seed(
+                model,
+                forward,
+                seed=seed,
+                snr=snr,
+                key_offset=key_offset,
+                mass_shift=mass_shift,
+            )
+            for seed in _PIT_SEEDS
+        ]
+    )
+    ks_stat, ks_pvalue = stats.kstest(pooled, stats.uniform(0, 1).cdf)
+    print(
+        f"\nPooled PIT over seeds {_PIT_SEEDS}, {label}: n={len(pooled)}, "
+        f"KS stat={ks_stat:.4f}, p-value={ks_pvalue:.4f} (alpha={_PIT_ALPHA})."
+    )
+    assert ks_pvalue >= _PIT_ALPHA, (
+        f"Pooled PIT over seeds {_PIT_SEEDS} on the {label} model: KS p-value "
+        f"{ks_pvalue:.4f} < {_PIT_ALPHA}. PIT u samples are not uniform; the "
+        f"conditional may be incorrect."
+    )
+
+
 class TestProfileMassPosteriorIdentityPIT:
     """PIT uniformity test: the profiled conditional CDF is correct."""
 
-    @pytest.fixture(params=[0, 1, 2, 3, 4, 5])
-    def seed(self, request):
-        """All six seeds must pass (no seed selection)."""
-        return request.param
-
-    def test_pit_uniformity_minimal_model(self, ssp_data_fsps, seed):
+    def test_pit_uniformity_minimal_model(self, ssp_data_fsps):
         """PIT test on the minimal (8-filter) photometry model.
 
-        Procedure:
+        Procedure, per seed in ``_PIT_SEEDS``:
         1. Run ONE unprofiled fit to get posterior samples.
         2. For each sample, evaluate the profiled conditional CDF at that sample's mass.
-        3. If the conditional is correct, the u_i are Uniform(0, 1).
-        4. Thin by ESS and test with one-sample KS.
+        3. Thin by ESS. If the conditional is correct, the u_i are Uniform(0, 1).
+        Then pool the thinned u_i over seeds and test once with a one-sample KS.
 
         The model has many photometry bands so the mass amplitude is well
         determined (A is large). This tests that the quadrature is accurate
@@ -214,138 +338,30 @@ class TestProfileMassPosteriorIdentityPIT:
         """
         model = _minimal_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
-        _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
-
-        # One unprofiled fit
-        fit_kw = dict(
-            method="mcmc_nuts",
-            dense_mass_matrix=False,
-            n_warmup=100,
-            n_samples=200,
-            n_chains=1,
+        _pooled_pit_ks(
+            model,
+            forward,
+            snr=30.0,
+            key_offset=10000,
+            label="minimal (8 filters, SNR=30)",
         )
 
-        t0 = time.time()
-        key_fit = jax.random.PRNGKey(seed + 10000)
-        post = forward.fit(flux, noise, profile_mass=False, key=key_fit, **fit_kw)
-        elapsed_fit = time.time() - t0
-
-        # Extract mass samples and other parameters
-        mass_samples = np.asarray(post.samples[_MASS_NAME]).flatten()
-        n_raw = len(mass_samples)
-
-        # For each sample, evaluate the profiled conditional CDF
-        t0 = time.time()
-        u_samples = np.empty(n_raw)
-
-        for i, m_i in enumerate(mass_samples):
-            # Reconstruct physical params from the sample
-            # Get free params (excluding mass)
-            sample_params = {}
-            for name in post.samples:
-                if name != _MASS_NAME:
-                    sample_params[name] = float(post.samples[name].flatten()[i])
-
-            # Get fixed values from the model
-            fixed_vals = model.spec.get_fixed_values()
-            for name, val in fixed_vals.items():
-                sample_params[name] = float(val) if hasattr(val, "__float__") else val
-
-            # Add dummy mass value (required by model.predict but not used by _profile_stats)
-            sample_params[_MASS_NAME] = 0.0
-
-            # Evaluate CDF at this sample
-            u_samples[i] = _evaluate_cdf_at_sample(
-                float(m_i), sample_params, model, forward, flux, noise, data_type="photometry"
-            )
-
-        elapsed_cdf = time.time() - t0
-
-        # Thin by ESS to approximate independence
-        u_thinned, n_thinned, ess_ratio = _thin_by_ess(u_samples, max_thinned_count=500)
-
-        # KS test
-        ks_stat, ks_pvalue = stats.kstest(u_thinned, stats.uniform(0, 1).cdf)
-
-        print(
-            f"\nSeed {seed}: Minimal model (8 filters, SNR=30).\n"
-            f"  Fit time: {elapsed_fit:.1f}s. CDF eval time: {elapsed_cdf:.1f}s.\n"
-            f"  Raw draws: {n_raw}. ESS ratio: {ess_ratio:.3f}. Thinned: {n_thinned}.\n"
-            f"  KS stat={ks_stat:.4f}, p-value={ks_pvalue:.4f}.\n"
-            f"  u_samples: mean={np.mean(u_thinned):.3f}, std={np.std(u_thinned):.3f}.\n"
-        )
-
-        assert ks_pvalue >= 0.01, (
-            f"Seed {seed}: KS p-value {ks_pvalue:.4f} on minimal model. "
-            f"PIT u samples are not uniform — conditional may be incorrect."
-        )
-
-    def test_pit_uniformity_sparse_model(self, ssp_data_fsps, seed):
+    def test_pit_uniformity_sparse_model(self, ssp_data_fsps):
         """PIT test on the sparse (3-filter) model with low SNR.
 
         This fixture has a skewed, poorly-constrained mass posterior (few bands,
         low SNR = low A). Tests that the quadrature is accurate even when the
-        posterior is broad and non-Gaussian.
+        posterior is broad and non-Gaussian. Seeds are pooled as in the minimal
+        test.
         """
         model = _sparse_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
-        _truth, flux, noise = _mock(model, seed=seed, snr=10.0)
-
-        fit_kw = dict(
-            method="mcmc_nuts",
-            dense_mass_matrix=False,
-            n_warmup=100,
-            n_samples=200,
-            n_chains=1,
-        )
-
-        t0 = time.time()
-        key_fit = jax.random.PRNGKey(seed + 20000)
-        post = forward.fit(flux, noise, profile_mass=False, key=key_fit, **fit_kw)
-        elapsed_fit = time.time() - t0
-
-        mass_samples = np.asarray(post.samples[_MASS_NAME]).flatten()
-        n_raw = len(mass_samples)
-
-        t0 = time.time()
-        u_samples = np.empty(n_raw)
-
-        for i, m_i in enumerate(mass_samples):
-            # Reconstruct physical params from the sample
-            sample_params = {}
-            for name in post.samples:
-                if name != _MASS_NAME:
-                    sample_params[name] = float(post.samples[name].flatten()[i])
-
-            # Get fixed values from the model
-            fixed_vals = model.spec.get_fixed_values()
-            for name, val in fixed_vals.items():
-                sample_params[name] = float(val) if hasattr(val, "__float__") else val
-
-            # Add dummy mass value (required by model.predict but not used by _profile_stats)
-            sample_params[_MASS_NAME] = 0.0
-
-            u_samples[i] = _evaluate_cdf_at_sample(
-                float(m_i), sample_params, model, forward, flux, noise, data_type="photometry"
-            )
-
-        elapsed_cdf = time.time() - t0
-
-        u_thinned, n_thinned, ess_ratio = _thin_by_ess(u_samples, max_thinned_count=500)
-
-        ks_stat, ks_pvalue = stats.kstest(u_thinned, stats.uniform(0, 1).cdf)
-
-        print(
-            f"\nSeed {seed}: Sparse model (3 filters, SNR=10).\n"
-            f"  Fit time: {elapsed_fit:.1f}s. CDF eval time: {elapsed_cdf:.1f}s.\n"
-            f"  Raw draws: {n_raw}. ESS ratio: {ess_ratio:.3f}. Thinned: {n_thinned}.\n"
-            f"  KS stat={ks_stat:.4f}, p-value={ks_pvalue:.4f}.\n"
-            f"  u_samples: mean={np.mean(u_thinned):.3f}, std={np.std(u_thinned):.3f}.\n"
-        )
-
-        assert ks_pvalue >= 0.01, (
-            f"Seed {seed}: KS p-value {ks_pvalue:.4f} on sparse model. "
-            f"PIT u samples are not uniform — conditional may be incorrect."
+        _pooled_pit_ks(
+            model,
+            forward,
+            snr=10.0,
+            key_offset=20000,
+            label="sparse (3 filters, SNR=10)",
         )
 
 
