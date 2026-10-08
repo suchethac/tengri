@@ -136,22 +136,75 @@ def _load_adoption_status(fits_dir: Path, galaxy_id: int, config: str) -> bool |
         return None
 
 
-def _extract_percentiles(npz: np.lib.npyio.NpzFile | None, quantity: str) -> list[float] | None:
-    """Extract [p16, p50, p84] percentiles from NPZ for a quantity.
+# Draws of these quantities are cleaned together (see ``_clean_draws``).
+DRAW_QUANTITIES = (
+    "log_stellar_mass_formed",
+    "log_stellar_mass_survived",
+    "log_sfr_100myr",
+    "log_sfr_10myr",
+)
+_LOG_SFR_QUANTITIES = frozenset({"log_sfr_100myr", "log_sfr_10myr"})
 
-    Returns None if quantity not present or NPZ is None.
+# Floor on log10(SFR) [log10 Msun/yr]: a draw with SFR exactly 0 is physical
+# "no star formation", so it is kept at -10 instead of -inf. Matches the paper-1
+# figures (fig05_candels_galaxies.py floors SFR at 1e-10 Msun/yr before the log).
+SFR_FLOOR_MSUN_YR = 1e-10
+LOG_SFR_FLOOR = float(np.log10(SFR_FLOOR_MSUN_YR))
+
+
+def _clean_draws(npz: Any) -> tuple[dict[str, np.ndarray], int]:
+    """Return the usable posterior draws of a cell and how many draws were dropped.
+
+    Log SFR quantities are floored at ``LOG_SFR_FLOOR`` (so a zero-SFR draw, whose
+    log is -inf, survives). A draw that is still non-finite in any quantity (the
+    forward model returned NaN at that Laplace draw) is dropped from every
+    quantity, so the quantities stay jointly consistent. Quantities absent from
+    the cell are omitted. Both the per-model percentiles and the mixture
+    resampling read draws only through this function.
+
+    Parameters
+    ----------
+    npz : NpzFile-like or None
+        Cell draws, indexable by quantity name (``KeyError`` when absent).
+
+    Returns
+    -------
+    draws : dict[str, ndarray]
+        Cleaned draws per present quantity, all of one length.
+    n_dropped : int
+        Number of draws removed for being non-finite.
     """
     if npz is None:
-        return None
+        return {}, 0
+    raw: dict[str, np.ndarray] = {}
+    for quantity in DRAW_QUANTITIES:
+        try:
+            values = np.asarray(npz[quantity], dtype=float)
+        except KeyError:
+            continue
+        if quantity in _LOG_SFR_QUANTITIES:
+            values = np.maximum(values, LOG_SFR_FLOOR)  # NaN propagates; -inf -> floor
+        raw[quantity] = values
+    if not raw:
+        return {}, 0
+    lengths = {v.shape for v in raw.values()}
+    if len(lengths) != 1 or len(next(iter(lengths))) != 1:
+        raise ValueError(f"draw arrays must be 1-D and equal length; got shapes {sorted(lengths)}")
+    keep = np.all([np.isfinite(v) for v in raw.values()], axis=0)
+    n_dropped = int(keep.size - keep.sum())
+    return {q: v[keep] for q, v in raw.items()}, n_dropped
 
-    try:
-        data = npz[quantity]
-        p16 = float(np.percentile(data, 16))
-        p50 = float(np.percentile(data, 50))
-        p84 = float(np.percentile(data, 84))
-        return [p16, p50, p84]
-    except (KeyError, Exception):
+
+def _extract_percentiles(npz: Any, quantity: str) -> list[float] | None:
+    """Extract [p16, p50, p84] percentiles of a quantity's cleaned draws.
+
+    Returns None if the quantity is absent, the NPZ is None, or no finite draws remain.
+    """
+    draws, _ = _clean_draws(npz)
+    data = draws.get(quantity)
+    if data is None or data.size == 0:
         return None
+    return [float(np.percentile(data, q)) for q in (16, 50, 84)]
 
 
 def _resample_mixture(
@@ -186,24 +239,17 @@ def _resample_mixture(
     # Resample: draw model indices, then samples from each
     model_indices = rng.choice(len(valid_posts), size=n_draws, p=weights_array)
 
-    # Collect all quantities that appear in at least one valid posterior
-    all_quantities = set()
-    for post in valid_posts:
-        if post.get("_npz") is not None:
-            all_quantities.update(post["_npz"].files)
+    # Cleaned draws per valid posterior (same cleaning as the per-model percentiles)
+    cleaned = [_clean_draws(post.get("_npz"))[0] for post in valid_posts]
+    all_quantities = {q for draws in cleaned for q in draws}
 
-    # Resample each quantity
+    # Resample each quantity; a model with no usable draws contributes none
     resampled = {q: [] for q in all_quantities}
     for model_idx in model_indices:
-        post = valid_posts[model_idx]
-        npz = post.get("_npz")
-        if npz is None:
-            continue
-
+        draws = cleaned[model_idx]
         for quantity in all_quantities:
-            if quantity in npz:
-                # Draw one sample from this model's chain
-                chain = npz[quantity]
+            chain = draws.get(quantity)
+            if chain is not None and len(chain) > 0:
                 idx = rng.choice(len(chain))
                 resampled[quantity].append(chain[idx])
 
@@ -410,6 +456,7 @@ def combine_bma(
                     "close": False,
                     "n_valid": 0,
                     "n_expected": len(expected_models),
+                    "n_draws_dropped_nonfinite": 0,
                     "bma_percentiles": {},
                     "marginal": {},
                     "reason": f"No cells found for {set_name}",
@@ -443,6 +490,8 @@ def combine_bma(
                     "excluded_reason": reason,
                     "nuts_adoption_pass": None,
                     "percentiles": {},
+                    "n_draws_dropped_nonfinite": 0,
+                    "no_finite_draws": False,
                 }
 
                 # Load NUTS adoption status for named sets
@@ -456,12 +505,13 @@ def combine_bma(
 
                 # Extract percentiles
                 npz = cell.get("_npz")
-                for quantity in [
-                    "log_stellar_mass_formed",
-                    "log_stellar_mass_survived",
-                    "log_sfr_100myr",
-                    "log_sfr_10myr",
-                ]:
+                cleaned, n_dropped = _clean_draws(npz)
+                model_info["n_draws_dropped_nonfinite"] = n_dropped
+                # A cell with draws on disk but none usable: record, never crash.
+                model_info["no_finite_draws"] = npz is not None and not any(
+                    len(v) for v in cleaned.values()
+                )
+                for quantity in DRAW_QUANTITIES:
                     perc = _extract_percentiles(npz, quantity)
                     if perc is not None:
                         model_info["percentiles"][quantity] = perc
@@ -493,6 +543,9 @@ def combine_bma(
                     "close": False,
                     "n_valid": 0,
                     "n_expected": len(expected_models),
+                    "n_draws_dropped_nonfinite": sum(
+                        m["n_draws_dropped_nonfinite"] for m in model_list
+                    ),
                     "bma_percentiles": {},
                     "marginal": {},
                     "reason": "No valid cells in set",
@@ -518,6 +571,9 @@ def combine_bma(
                 "close": is_close,
                 "n_valid": len(valid_indices),
                 "n_expected": len(expected_models),
+                "n_draws_dropped_nonfinite": sum(
+                    m["n_draws_dropped_nonfinite"] for m in model_list
+                ),
                 "bma_percentiles": bma_perc,
                 "marginal": marginal,
             }
@@ -545,8 +601,12 @@ def combine_bma(
             "Close weights (max weight < 0.9 within a weight set) flag that galaxy for an NSS spot-check. "
             "Flat prior over models within a set. For the factorial set report marginal weights per component axis. "
             "Configuration VI excluded from BMA. Weight sets: named_grid=I..V; named_all=I..V+X-like; factorial=100 models. "
-            "Derived factorial marginals: isochrone (mist|prsc|bpass) and spectral_library (c3k|miles) from ssp axis."
+            "Derived factorial marginals: isochrone (mist|prsc|bpass) and spectral_library (c3k|miles) from ssp axis. "
+            f"Draw handling: log SFR floored at log10({SFR_FLOOR_MSUN_YR:g} Msun/yr) = {LOG_SFR_FLOOR:g} "
+            "(matches fig05); draws non-finite in any quantity are dropped from all quantities of that cell "
+            "and counted in n_draws_dropped_nonfinite."
         ),
+        "sfr_floor_msun_yr": SFR_FLOOR_MSUN_YR,
         "n_galaxies": len(galaxies),
         "generated_from": repo_relative(evidence_dir),
         "galaxies": {str(gid): gdata for gid, gdata in galaxies.items()},
