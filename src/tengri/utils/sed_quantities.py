@@ -45,6 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import logsumexp
 
+from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
 from tengri.utils.scale import LN10, log10_magnitude, pow10, representable_denominator
@@ -525,7 +526,8 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Narrow 4000 Å break index (Balogh et al. 1999).
 
     Defined as the ratio of mean f_ν in the red (4000–4100 Å) to blue
-    (3850–3950 Å) windows:
+    (3850–3950 Å) windows, published in air and applied in vacuum
+    (:mod:`tengri.utils.break_windows`):
 
     .. math::
 
@@ -546,8 +548,8 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     float
         Dn4000 (dimensionless).
     """
-    red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
-    blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
+    red = _mean_flux_in_band(sed, wave, *DN4000_RED_AA)
+    blue = _mean_flux_in_band(sed, wave, *DN4000_BLUE_AA)
     # Denominator floor sized for its derivative, not its value: 1e-30 squares
     # to exactly 0.0 in float32 so the quotient's VJP divides by zero (#1860).
     return red / jnp.maximum(blue, representable_denominator(1e-30))
