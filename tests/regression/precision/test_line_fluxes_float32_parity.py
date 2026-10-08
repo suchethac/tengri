@@ -107,8 +107,14 @@ _DUST_FREE = {
 #: [4.812464808957834e-16, 5.883964125382075e-16, 1.6985691572175287e-15,
 #: 5.3145048745591e-16] -> [4.896033417598987e-16, 5.986139354661126e-16,
 #: 1.7280648661285269e-15, 5.40679142534215e-16]. 17 significant digits.
+#:
+#: Re-taken for the vacuum-wavelength fix: Cue's air line catalog is now converted with
+#: the IAU relation (Morton 2000 / Ciddor 1996) instead of Edlen (1953), which moves each
+#: line ~0.01 A and so its sampled continuum/filter weight by 1e-8 relative (max 1.02e-8):
+#: [4.896033417598987e-16, 5.986139354661126e-16, 1.7280648661285269e-15,
+#: 5.40679142534215e-16] -> the values below.
 _CUE_F64_REF = np.array(
-    [4.896033417598987e-16, 5.986139354661126e-16, 1.7280648661285269e-15, 5.40679142534215e-16]
+    [4.89603343881362e-16, 5.986139384506482e-16, 1.728064883784351e-15, 5.406791480717495e-16]
 )
 
 #: ``measure_line_fluxes(..., approx=True)`` on the wNE model, float64: the window-LUT

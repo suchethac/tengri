@@ -78,6 +78,7 @@ from tengri.parameters._dust_keys import (
     OVERRIDE_STEMS,
     SCREEN_SOURCES,
     SCREENS,
+    reject_own_screen_keys,
     resolve_screen_choices,
     short_to_full,
     validate_shape_requests,
@@ -600,6 +601,16 @@ class Parameters:
         # fittable param. "cigale_joint" (default) ties disc/torus/polar to
         # the single agn_power reference; "independent" keeps legacy scaling.
         self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
+        # Polar-dust extinction curve: static string like agn_norm, validated here
+        # so a flat-kwarg caller gets the same refusal as the grammar.
+        self.agn_polar_law = kwargs.pop("agn_polar_law", "smc")
+        from tengri.components.agn.polar_dust import POLAR_LAWS
+
+        if self.agn_polar_law not in POLAR_LAWS:
+            raise ValueError(
+                f"Unknown agn_polar_law={self.agn_polar_law!r}. "
+                f"Valid polar-dust extinction laws: {list(POLAR_LAWS)}."
+            )
 
         # Validate agn_norm x agn_screen cycle rule (PR-D2): screened AGN
         # is incompatible with agn_norm="cigale_joint" because both read the
@@ -729,6 +740,8 @@ class Parameters:
             nebular=self.nebular_mode,
             dust_model=self.dust_model,
             dust_screens=self.dust_screens,
+            dust_nebular_screen=self.dust_nebular_screen,
+            dust_law_neb=self.dust_law_neb,
             dust_emission=self.dust_emission,
             agn_model=self.agn_model,
             radio=self.radio,
@@ -1199,6 +1212,22 @@ class Parameters:
         self.dust_nebular_screen = _screen_choices.get("nebular", "birth_cloud")
         self.dust_shock_screen = _screen_choices.get("shock", "diffuse")
         self.dust_agn_screen = _screen_choices.get("agn", "none")
+
+        # tau_neb (and, on age_binned, law_neb and the <shape>_neb overrides) are
+        # read only by nebular_screen='own': the same refusal as the grammar.
+        _own_only = ["dust_tau_neb"] if "dust_tau_neb" in kwargs else []
+        if self.dust_model == "age_binned":
+            _own_only += [
+                name
+                for name in (
+                    *(short_to_full(f"{stem}_neb") for stem in OVERRIDE_STEMS),
+                    "dust_law_neb",
+                )
+                if name in kwargs or (name == "dust_law_neb" and law_neb_explicit is not None)
+            ]
+        reject_own_screen_keys(
+            self.dust_nebular_screen, _own_only, dust_model=self.dust_model, surface="flat"
+        )
 
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global
@@ -2678,6 +2707,9 @@ class Parameters:
                     f"torus={getattr(self, 'agn_torus_block', 'none')}",
                 ]
                 _norm = getattr(self, "agn_norm", "cigale_joint")
+                _polar = getattr(self, "agn_polar_law", "smc")
+                if getattr(self, "agn_attenuation_block", "none") == "polar_dust":
+                    _blocks.append(f"polar_law={_polar}")
                 modules.append(f"agn=composable[{', '.join(_blocks)}, norm={_norm}]")
             else:
                 modules.append(f"agn={agn}")
@@ -2777,6 +2809,16 @@ class Parameters:
                 if provenance:
                     tag = _TAGS.get(provenance.get(name, "registry_default"), "")
                     val_str = f"{val:.4g}"
+                    if name == "agn_polar_oa" and val == 0.0:
+                        from tengri.components.agn.blocks.torus_screen import (
+                            polar_follow_parameter,
+                        )
+
+                        val_str = "follows torus"
+                        tag = (
+                            f"{tag} polar cone = torus opening angle, "
+                            f"{polar_follow_parameter(self.agn_torus_block)}"
+                        )
                     lines.append(f"  {name:<32s} {'Fixed':<26s} {val_str:<22s} {tag}")
                 else:
                     lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")
@@ -2860,6 +2902,7 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "agn_model": content("AGN model selection determines parameters"),
     "agn_nlr_block": content("AGN NLR type determines parameters"),
     "agn_norm": content("AGN normalization mode determines parameters"),
+    "agn_polar_law": content("polar-dust extinction law changes the emitted SED"),
     "agn_torus_block": content("AGN torus type determines parameters"),
     "alpha_fe_evolving": content("metallicity evolution choice determines parameters"),
     "apply_igm": content("IGM application affects forward model"),

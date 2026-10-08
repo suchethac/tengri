@@ -43,15 +43,11 @@ from tengri.components.dust.emission.analytic._closures import (
     casey2012,
     graybody,
     modified_blackbody,
-    schreiber2016,
 )
 from tengri.components.dust.emission.analytic.casey2012 import Casey2012IRSEDComponent
 from tengri.components.dust.emission.analytic.graybody import GraybodyIRSEDComponent
 from tengri.components.dust.emission.analytic.modified_blackbody import (
     ModifiedBlackbodyIRSEDComponent,
-)
-from tengri.components.dust.emission.analytic.schreiber2016 import (
-    Schreiber2016AnalyticIRSEDComponent,
 )
 
 pytestmark = pytest.mark.contract
@@ -63,7 +59,6 @@ _CLOSURE_COMPONENT_PAIRS = (
     (modified_blackbody, ModifiedBlackbodyIRSEDComponent),
     (graybody, GraybodyIRSEDComponent),
     (casey2012, Casey2012IRSEDComponent),
-    (schreiber2016, Schreiber2016AnalyticIRSEDComponent),
 )
 
 
@@ -115,13 +110,12 @@ def test_closure_default_matches_component_declaration(closure, component_cls):
 
 
 def test_every_registered_analytic_component_is_covered():
-    """The four analytic templates with their own class-level declarations
-    are all paired above; a fifth one added later must extend this list."""
+    """The three analytic templates with their own class-level declarations
+    are all paired above; a fourth one added later must extend this list."""
     covered = {cls.__name__ for _, cls in _CLOSURE_COMPONENT_PAIRS}
     expected = {
         "ModifiedBlackbodyIRSEDComponent",
         "GraybodyIRSEDComponent",
         "Casey2012IRSEDComponent",
-        "Schreiber2016AnalyticIRSEDComponent",
     }
     assert covered == expected

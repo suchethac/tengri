@@ -38,11 +38,11 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
 
     References
     ----------
-    .. [1] Schreiber, C., Pannella, M., Elbaz, D., et al., 2018,
-       "The ALMA Spectroscopic Survey in the Hubble Ultra Deep Field:
-       The molecular gas content of galaxies and tension with
-       IllustrisTNG and the Santa Cruz Simulations",
-       A&A, 609, A30. https://doi.org/10.1051/0004-6361/201731506
+    .. [1] Schreiber, C., Elbaz, D., Pannella, M., Ciesla, L., Wang, T., &
+       Franco, M., 2018, "Dust temperature and mid-to-total infrared color
+       distributions for star-forming galaxies at 0 < z < 4",
+       A&A, 609, A30. arXiv:1710.10276.
+       https://doi.org/10.1051/0004-6361/201731506
 
     """
 

@@ -225,6 +225,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     # quantity restricted to a sub-band of the filter.
     "stellar_phot_lnu_precomp_lyc": "erg/s/Hz",
     "stellar_phot_lnu_per_age_precomp_lyc": "erg/s/Hz",
+    "stellar_phot_lnu_precomp_nolyc": "erg/s/Hz",
+    "stellar_phot_lnu_per_age_precomp_nolyc": "erg/s/Hz",
     # Per-chunk Lyman-continuum multiplicative factor at the K-node
     # sub-band quadrature nodes (#2439, #2427): dimensionless, like
     # dust_young_indicator below.
@@ -264,6 +266,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lyc_fdust": "",
     "lyc_fesc": "",
     "log_L_agn_bol": "dex",
+    "log_L_agn_los": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",
@@ -302,6 +305,14 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular, photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # Its decomposition at the evaluation redshift (fast nebular grid only): line
+    # rows (n_lines, n_filter) + continuum (n_filter,), and the rest wavelengths
+    # of the line rows. Named to stay OUT of predict_via_precomp's
+    # ``*_phot_lnu_precomp`` summation sweep: they decompose the total, they do
+    # not add to it.
+    "nebular_phot_lnu_lines_precomp": "erg/s/Hz",
+    "nebular_phot_lnu_cont_precomp": "erg/s/Hz",
+    "nebular_line_phot_waves_rest": "Angstrom",
     # The same bucket with the young-limit screen integrated THROUGH each band,
     # published by the dust component from the reddened continuum (#1738). Replaces
     # the lambda_eff screening of the key above rather than adding to it, the

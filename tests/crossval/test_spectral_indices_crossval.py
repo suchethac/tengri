@@ -6,13 +6,25 @@ soft-sigmoid JAX measurement and Bagpipes' hard-mask numpy measurement.
 Agreement is expected to ~1% on dense grids (soft sigmoid edges converge
 to hard masks as pixel spacing → 0).
 
+Bagpipes' ``single_index`` is not the Lick definition: it takes a constant
+continuum, the mean of the two sideband means, on the array it is given.
+Tengri's default is the Lick definition (Trager et al. 1998, ApJS 116, 1,
+Eqs. 1-3: F_λ, straight line through the sideband means); the Bagpipes
+comparison therefore uses ``pseudo_continuum="mean"``, and the equivalent
+widths of the default are checked on sloped SSP spectra against a numpy
+implementation of the definition (#2690).
+
 Invoke with:  pytest -m crossval tests/crossval/test_spectral_indices_crossval.py
 """
+
+import dataclasses
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+
+from tengri import load_ssp_data
 
 pytestmark = pytest.mark.crossval
 
@@ -23,6 +35,11 @@ from tengri.observation.spectral_indices import (
     SpectralIndexData,
     measure_index_jax,
 )
+
+
+def _mean_def(name: str):
+    """The registry index with Bagpipes' constant-continuum arithmetic."""
+    return dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
 
 
 def _bp_index_dict(name: str) -> dict:
@@ -86,7 +103,7 @@ class TestDn4000CrossVal:
 
 
 class TestHdACrossVal:
-    """HdA equivalent width: Tengri vs Bagpipes on synthetic spectra."""
+    """HdA equivalent width: Tengri (``"mean"`` option) vs Bagpipes on synthetic F_λ spectra."""
 
     def _make_spectrum(self, n: int = 5000):
         wave = np.linspace(3900.0, 4300.0, n)
@@ -99,7 +116,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), atol=0.15)
         assert_allclose(float(tengri_val), 0.0, atol=0.15)
@@ -114,7 +131,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), rtol=0.05)
         assert float(tengri_val) > 0.0
@@ -129,7 +146,7 @@ class TestHdACrossVal:
         bp_spec = np.column_stack([wave, flux])
         bp_val = bp_indices.single_index(_bp_index_dict("HdA"), bp_spec, 0.0)
 
-        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), STANDARD_INDICES["HdA"])
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flux), _mean_def("HdA"))
 
         assert_allclose(float(tengri_val), float(bp_val), rtol=0.05)
         assert float(tengri_val) < 0.0
@@ -177,3 +194,174 @@ class TestSpectralIndexDataConvenience:
             jnp.sum(-0.5 * residual**2 - jnp.log(sid.errors) - 0.5 * jnp.log(2.0 * jnp.pi))
         )
         assert_allclose(float(sid.log_likelihood(model)), manual, rtol=1e-10)
+
+
+# ── Lick definition vs Bagpipes on sloped SSP spectra (#2690) ───────
+
+C_AA = 2.99792458e18  # speed of light [Å/s]
+_SSP_CASES = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0), ("Hbeta", 3.0)]
+#: |Tengri "mean" - Bagpipes| <= 0.157 Å on these cases (1 Å soft edges and trapezoid
+#: means against hard masks and per-pixel means); tolerance 1.25 x, rounded up.
+_BAGPIPES_MEAN_TOL_AA = 0.2
+
+
+def _ssp_flam(age_gyr: float):
+    """Optical solar-metallicity SSP: wave, L_ν, and F_λ (up to a constant)."""
+    ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    wave = np.asarray(ssp.ssp_wave, dtype=float)
+    sel = (wave > 3600.0) & (wave < 5600.0)
+    i_met = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) + 1.848)))
+    i_age = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr) - np.log10(age_gyr))))
+    lnu = np.asarray(ssp.ssp_flux, dtype=float)[i_met, i_age][sel]
+    return wave[sel], lnu, lnu * C_AA / wave[sel] ** 2
+
+
+def _lick_hard(wave, flam, idx) -> float:
+    """Trager et al. 1998 Eqs. 1-2 with hard windows, flux interpolated at the bounds."""
+
+    def seg(lo, hi):
+        x = np.concatenate(([lo], wave[(wave > lo) & (wave < hi)], [hi]))
+        return x, np.interp(x, wave, flam)
+
+    def mean(lo, hi):
+        x, v = seg(lo, hi)
+        return np.trapezoid(v, x) / (hi - lo)
+
+    (b0, b1), (r0, r1) = idx.continuum
+    f_b, f_r = mean(b0, b1), mean(r0, r1)
+    x, v = seg(*idx.feature)
+    line = f_b + (f_r - f_b) * (x - 0.5 * (b0 + b1)) / (0.5 * (r0 + r1) - 0.5 * (b0 + b1))
+    return float(np.trapezoid(1.0 - v / line, x))
+
+
+def _lick_soft(wave, flam, idx) -> float:
+    """Trager et al. 1998 Eqs. 1-2 with tengri's own 1 A sigmoid window edges (#2637).
+
+    The same definition as :func:`_lick_hard`; only the window weights differ. tengri's
+    edges are soft so the windows stay differentiable, and an external code's are hard.
+    The two are the same index up to an edge term of order (pi^2/6) * edge^2 * |g'| per
+    window edge (g = 1 - F/continuum), which is largest where an edge sits on the wing of
+    a Balmer line: 0.11 A for HgA at 10 Gyr. A tengri-vs-external comparison therefore
+    cannot be tighter than that, so each side is checked against the definition with its
+    own edges, both tightly.
+    """
+
+    def weights(lo, hi):
+        sig = lambda x: 0.5 * (1.0 + np.tanh(0.5 * x))  # noqa: E731
+        return sig(wave - lo) * sig(hi - wave)
+
+    def mean(lo, hi):
+        w = weights(lo, hi)
+        return np.trapezoid(flam * w, wave) / np.trapezoid(w, wave)
+
+    (b0, b1), (r0, r1) = idx.continuum
+    f0, f1 = idx.feature
+    f_b, f_r = mean(b0, b1), mean(r0, r1)
+    line = f_b + (f_r - f_b) * (wave - 0.5 * (b0 + b1)) / (0.5 * (r0 + r1) - 0.5 * (b0 + b1))
+    w = weights(f0, f1)
+    return float((f1 - f0) * (1.0 - np.trapezoid(w * flam / line, wave) / np.trapezoid(w, wave)))
+
+
+class TestLickDefinitionVsBagpipes:
+    """The split: ``"mean"`` is Bagpipes; the default is the published definition."""
+
+    @pytest.mark.parametrize("name,age", _SSP_CASES)
+    def test_mean_option_reproduces_bagpipes_on_f_lambda(self, name, age):
+        wave, _, flam = _ssp_flam(age)
+        bp_val = bp_indices.single_index(_bp_index_dict(name), np.column_stack([wave, flam]), 0.0)
+        tengri_val = measure_index_jax(jnp.array(wave), jnp.array(flam), _mean_def(name))
+        assert_allclose(float(tengri_val), float(bp_val), atol=_BAGPIPES_MEAN_TOL_AA)
+
+    @pytest.mark.parametrize("name,age", _SSP_CASES)
+    def test_default_is_the_published_definition_not_bagpipes(self, name, age):
+        """Default (from L_ν) equals the numpy Lick definition with tengri's own soft edges."""
+        wave, lnu, flam = _ssp_flam(age)
+        idx = STANDARD_INDICES[name]
+        tengri_val = float(measure_index_jax(jnp.array(wave), jnp.array(lnu), idx))
+        assert tengri_val == pytest.approx(_lick_soft(wave, flam, idx), abs=1e-6)
+
+    @pytest.mark.parametrize("name,min_gap", [("HgA", 0.5), ("Fe4383", 0.1)])
+    def test_bagpipes_misses_the_published_definition_on_an_old_population(self, name, min_gap):
+        """Constant continuum vs sideband line: 0.69 Å (HgA) and 0.17 Å (Fe4383) at 10 Gyr."""
+        wave, _, flam = _ssp_flam(10.0)
+        bp_val = bp_indices.single_index(_bp_index_dict(name), np.column_stack([wave, flam]), 0.0)
+        assert abs(float(bp_val) - _lick_hard(wave, flam, STANDARD_INDICES[name])) > min_gap
+
+    def test_default_matches_pcigale_linear_continuum(self):
+        """Tengri default (Lick/Trager) agrees with pcigale's RestframeParam.EW on SSP spectra.
+
+        pcigale EW is emission-positive with the continuum interpolated linearly between
+        the sideband centers and integrates (line − cont)/cont over the feature window,
+        so pcigale_ew == the numpy hard-window definition (abs=0.02 Å: pcigale's window
+        parameters are in nm to 0.001, i.e. 0.01 Å), and tengri_default == the same definition
+        with tengri's 1 Å soft edges (abs=1e-6 Å). Like for like on both sides: the windows are
+        the same vacuum numbers handed to pcigale.
+
+        Also asserts that the OLD arithmetic (pseudo_continuum="mean" on L_ν) differs from
+        −pcigale_ew by more than 0.2 Å for HgA at 10 Gyr.
+        """
+        pytest.importorskip("pcigale")  # EW in nm
+        from pcigale.sed import SED
+        from pcigale.sed_modules.restframe_parameters import RestframeParam
+
+        # Test on HgA and Fe4383 at 1 and 10 Gyr
+        cases = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0)]
+        measured_values = []
+
+        for name, age in cases:
+            wave, lnu, flam = _ssp_flam(age)
+            idx = STANDARD_INDICES[name]
+
+            # Build pcigale EW parameter string in nm format
+            (b_lo, b_hi), (r_lo, r_hi) = idx.continuum
+            f_lo, f_hi = idx.feature
+            edges_nm = "/".join(f"{x / 10:.3f}" for x in (b_lo, b_hi, f_lo, f_hi, r_lo, r_hi))
+            pcigale_param = f"{name}/{edges_nm}"
+
+            # Call pcigale: compute L_λ and scale to match pcigale's typical magnitude
+            sed = SED()
+            wave_nm = wave / 10.0  # Convert Å to nm
+            # L_λ = L_ν * c / λ² (already in flam from _ssp_flam)
+            # Scale to match pcigale's typical magnitudes (synthetic spectra use ~1e30)
+            flam_scaled = flam * 1e30
+            sed.add_contribution("x", wave_nm.copy(), flam_scaled.copy())
+            kwargs = dict.fromkeys(RestframeParam.parameters, False)
+            kwargs.update({k: "" for k in kwargs if k.endswith("_filters")})
+            kwargs["EW"] = pcigale_param  # EW parameter accepts the full spec string
+            module = RestframeParam(name="rf", **kwargs)
+            pcigale_ew = float(module.EW(sed)[name])  # Emission-positive
+
+            # Tengri default (absorption-positive Lick definition)
+            tengri_default = float(measure_index_jax(jnp.array(wave), jnp.array(lnu), idx))
+
+            # Old arithmetic (pseudo_continuum="mean" on L_ν)
+            tengri_mean = float(
+                measure_index_jax(jnp.array(wave), jnp.array(lnu), _mean_def(name))
+            )
+
+            measured_values.append((name, age, tengri_default, pcigale_ew, tengri_mean))
+
+        # Print summary
+        for name, age, tengri_default, pcigale_ew, tengri_mean in measured_values:
+            print(
+                f"{name:8s} {age:4.1f} Gyr: "
+                f"tengri_default={tengri_default:7.4f}, "
+                f"−pcigale_ew={-pcigale_ew:7.4f}, "
+                f"tengri_mean={tengri_mean:7.4f}"
+            )
+
+        # pcigale's EW is in nm (its windows are given in nm) and emission-positive;
+        # tengri's Lick EW is in Angstrom and absorption-positive.
+        for name, age, tengri_default, pcigale_ew, _tengri_mean in measured_values:
+            pcigale_aa = -10.0 * pcigale_ew
+            wave, lnu, flam = _ssp_flam(age)
+            idx = STANDARD_INDICES[name]
+            assert pcigale_aa == pytest.approx(_lick_hard(wave, flam, idx), abs=0.02), (
+                f"{name} {age} Gyr: pcigale {pcigale_aa:.4f} A vs the hard-window definition"
+            )
+            assert tengri_default == pytest.approx(_lick_soft(wave, flam, idx), abs=1e-6), (
+                f"{name} {age} Gyr: tengri {tengri_default:.4f} A vs the soft-edge definition"
+            )
+        old = {(n, a): m for n, a, _, _, m in measured_values}
+        ref = {(n, a): -10.0 * p for n, a, _, p, _ in measured_values}
+        assert abs(old[("HgA", 10.0)] - ref[("HgA", 10.0)]) > 0.2

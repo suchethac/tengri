@@ -100,7 +100,7 @@ def bpass_ssp():
 def optical_nir_filters():
     """Standard 11-band optical+NIR filter set (HST+VISTA+IRAC).
 
-    Matches the CANDELS z~1 galaxy setup from fig01_multimodel_candels.py:
+    Matches a CANDELS z~1 galaxy setup:
     - HST ACS: F435W, F606W, F775W, F814W, F850LP
     - HST WFC3: F125W, F140W, F160W
     - VISTA: Ks

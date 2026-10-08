@@ -51,6 +51,7 @@ from tengri.components.dust._age_mixture import (
     nebular_interval_weights,
 )
 from tengri.components.dust._params import (
+    ATTENUATION_PARAMS,
     DEFAULT_DUST_ETA_BALANCE,
     DEFAULT_DUST_F_OBSCURATION,
 )
@@ -63,7 +64,7 @@ from tengri.components.dust.attenuation import (
 from tengri.components.dust.laws._registry import select_law_kwargs
 from tengri.components.lyc import LYMAN_LIMIT_AA, credited_log10_lyc
 from tengri.components.template_threading import TemplateThreading
-from tengri.parameters._dust_keys import SCREEN_CHOICES
+from tengri.parameters._dust_keys import NEBULAR_OWN_SCREEN, SCREEN_CHOICES
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
@@ -82,6 +83,11 @@ __all__ = [
 ]
 
 
+def _own_tau_neb(choice: str, params: Mapping[str, jnp.ndarray]) -> jnp.ndarray | None:
+    """``dust_tau_neb`` for the ``"own"`` nebular screen, ``None`` for every other choice."""
+    return jnp.asarray(params["dust_tau_neb"]) if choice == NEBULAR_OWN_SCREEN else None
+
+
 def _screen_transmission(
     choice: str,
     *,
@@ -91,6 +97,7 @@ def _screen_transmission(
     tau_diff: jnp.ndarray,
     f_obsc: jnp.ndarray,
     neb_weights: jnp.ndarray | None = None,
+    tau_neb: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Dust-screen transmission for one emission source's configured choice.
 
@@ -113,6 +120,8 @@ def _screen_transmission(
         T_{\rm diffuse} = f_{\rm obsc} + (1 - f_{\rm obsc})
             \exp\!\left(-\tau_{\rm diff} k_{\rm diff}\right)
 
+        T_{\rm own} = \exp\!\left(-\tau_{\rm neb} k_{\rm neb}\right)
+
         T_{\rm none} = 1
 
     ``neb_weights`` turns the ``"birth_cloud"`` choice into the nebular
@@ -126,6 +135,13 @@ def _screen_transmission(
     ``"diffuse"`` is the old-star screen and ``"none"`` is unity, whatever the
     weights.
 
+    ``"own"`` (nebular source only, #2625) is a dedicated screen: the TOTAL
+    nebular attenuation :math:`\exp(-\tau_{\rm neb} k_{\rm neb})`, read on
+    the curve passed as ``k_bc`` (the nebular source's law, ``law_neb``).  It
+    is not cascaded with the diffuse screen, is not age-mixed (``neb_weights``
+    is ignored), and carries NO ``f_obsc`` floor: ``tau_neb`` is the whole
+    nebular optical depth.
+
     ``choice`` is a static Python string (one of
     ``tengri.parameters._dust_keys.SCREEN_CHOICES``), read off a frozen
     component config, never a traced value: the branch below is resolved once
@@ -136,7 +152,8 @@ def _screen_transmission(
     Parameters
     ----------
     choice : str
-        One of ``"birth_cloud"``, ``"diffuse"``, ``"none"``.
+        One of ``"birth_cloud"``, ``"diffuse"``, ``"none"``, or (nebular
+        source only) ``"own"``.
     k_bc : ndarray
         Birth-cloud attenuation-law curve [dimensionless], evaluated at the
         same wavelengths (or line positions) as ``k_diff``. Unused (and may
@@ -154,6 +171,9 @@ def _screen_transmission(
     neb_weights : ndarray, shape (2,), optional
         Ionizing-luminosity share ``(q_young, q_old)`` of the two age
         intervals; only read when ``choice == "birth_cloud"``.
+    tau_neb : ndarray, optional
+        Own-screen V-band optical depth [dimensionless]; required (and only
+        read) when ``choice == "own"``.
 
     Returns
     -------
@@ -186,9 +206,15 @@ def _screen_transmission(
             return neb_weights[0] * t_young + neb_weights[1] * t_old
     elif choice == "diffuse":
         tau = jnp.asarray(tau_diff) * jnp.asarray(k_diff)
+    elif choice == NEBULAR_OWN_SCREEN:
+        if tau_neb is None:
+            raise ValueError("_screen_transmission: choice='own' requires tau_neb.")
+        # Total nebular attenuation: no cascade, no age mixture, no f_obsc floor.
+        return jnp.exp(-jnp.asarray(tau_neb) * jnp.asarray(k_bc))
     else:
         raise ValueError(
-            f"_screen_transmission: choice must be one of {SCREEN_CHOICES!r}, got {choice!r}."
+            f"_screen_transmission: choice must be one of "
+            f"{(*SCREEN_CHOICES, NEBULAR_OWN_SCREEN)!r}, got {choice!r}."
         )
     f_obsc = jnp.asarray(f_obsc)
     return f_obsc + (1.0 - f_obsc) * jnp.exp(-tau)
@@ -231,8 +257,10 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Which screen attenuates the nebular continuum, the discrete line
         catalog, and the fast-nebular fallback grid (#2234): ``"birth_cloud"``
         (default; Charlot & Fall 2000, bagpipes/FSPS/CIGALE behavior),
-        ``"diffuse"``, or ``"none"``. One of
-        ``tengri.parameters._dust_keys.SCREEN_CHOICES``.
+        ``"diffuse"``, ``"none"``, or ``"own"`` (a dedicated screen with its
+        own optical depth ``dust_tau_neb`` and law ``law_neb``, #2625; see
+        :class:`DustSEDComponent`). One of
+        ``tengri.parameters._dust_keys.SCREEN_CHOICES`` or ``"own"``.
     shock_screen : str
         Which screen attenuates the MAPPINGS V shock SED (#851, #1434):
         ``"birth_cloud"``, ``"diffuse"`` (default -- shocked gas from an
@@ -409,7 +437,27 @@ class DustSEDComponentState(SEDComponentState):
 
 @dataclass(frozen=True)
 class DustSEDComponent(TemplateThreading):
-    """SEDComponent adapter for two-component dust + energy-balanced IR.
+    r"""SEDComponent adapter for two-component dust + energy-balanced IR.
+
+    **Own nebular screen** (``nebular_screen='own'``, #2625): the nebular
+    continuum and every line see ONE dedicated screen,
+
+    .. math::
+
+        T_{\rm neb}(\lambda) = \exp\!\left[-\tau_{\rm neb}\,k_{\rm neb}(\lambda)\right],
+
+    with :math:`k_{\rm neb}` the ``law_neb`` curve (default ``law_bc``; the
+    ``*_neb`` shape overrides apply to it), normalized to
+    :math:`k(5500\,\mathrm{\AA}) = 1`, and :math:`\tau_{\rm neb}` the declared
+    ``dust_tau_neb`` (same prior and default as ``dust_tau_bc``, Fixed unless
+    set or freed; refused with any other ``nebular_screen``).  It is the TOTAL
+    nebular attenuation, the CIGALE ``E(B-V)_lines`` convention: not cascaded
+    with the diffuse screen, not mixed over the age intervals, and without the
+    ``dust_f_obscuration`` floor.  The nebular energy it absorbs,
+    :math:`\int (1 - T_{\rm neb}) L_{\nu}^{\rm neb}\,d\nu`, joins the dust
+    budget through the same ``sed_neb`` minus attenuated ``sed_neb`` integral as
+    the other choices.  Prospector/FSPS and BAGPIPES have no separate nebular
+    depth.
 
     Notes
     -----
@@ -656,7 +704,7 @@ class DustSEDComponent(TemplateThreading):
         dust_umin, etc.) are now owned by the dust emission components
         (modified_blackbody, dale2014, etc.) and are no longer declared here.
         """
-        return [
+        decls = [
             ParamDeclaration(
                 "dust_tau_bc",
                 # default 1.0: Charlot & Fall (2000) canonical birth-cloud tau_V
@@ -703,6 +751,10 @@ class DustSEDComponent(TemplateThreading):
                 "Cardelli total-to-selective extinction R_V [dimensionless]",
             ),
         ]
+        if self.config.nebular_screen == NEBULAR_OWN_SCREEN:
+            # The one declaration of dust_tau_neb (nebular_screen='own' only).
+            decls.append(next(d for d in ATTENUATION_PARAMS if d.name == "dust_tau_neb"))
+        return decls
 
     def precompute(
         self,
@@ -914,6 +966,7 @@ class DustSEDComponent(TemplateThreading):
             tau_diff=jnp.asarray(params["dust_tau_diff"]),
             f_obsc=jnp.asarray(params.get("dust_f_obscuration", DEFAULT_DUST_F_OBSCURATION)),
             neb_weights=neb_weights,
+            tau_neb=_own_tau_neb(self.config.nebular_screen, params),
         )
 
     def nebular_screen_transmission(
@@ -969,6 +1022,7 @@ class DustSEDComponent(TemplateThreading):
             for k, v in select_law_kwargs(neb_law, {**bc_law_params, **neb_overrides}).items()
         }
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
+
         return self._line_transmission(
             params, jnp.asarray(wavelength), neb_law, neb_bc_params, diff_law_kw, neb_weights
         )
@@ -1358,6 +1412,7 @@ class DustSEDComponent(TemplateThreading):
         # reddens the continuum; the pre-#2234 behavior (unconditional
         # birth-cloud + diffuse) is the default, so an untouched model is
         # bit-identical to before.
+
         sed_neb_attenuated = sed_neb * _screen_transmission(
             self.config.nebular_screen,
             k_bc=k_bc_neb,
@@ -1366,6 +1421,7 @@ class DustSEDComponent(TemplateThreading):
             tau_diff=_tau_diff,
             f_obsc=_f_obsc,
             neb_weights=neb_weights,
+            tau_neb=_own_tau_neb(self.config.nebular_screen, params),
         )
 
         # ── 2c. Emission-line catalog attenuation (#1867, #2223) ───────────

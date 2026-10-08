@@ -17,6 +17,10 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+)
 from tengri.components.agn.blocks._protocol import register_agn_block, register_line_energy
 from tengri.components.agn.blr import _blr_l_hbeta, _fe2_total_power, compute_blr_sed
 from tengri.components.agn.nlr_cloudy import (
@@ -112,6 +116,14 @@ def blr_analytic_block(
 
     Notes
     -----
+    **Traced FeII width**: the FeII broadening is evaluated by a band-limited synthesis that is
+    valid for a width of 500 km/s or more. A concrete width (a Python or NumPy scalar, as every
+    model build passes: the width is a block keyword, not a fit parameter) below 500 km/s takes
+    the exact full-lattice convolution, with no lower limit. A *traced* width
+    below 500 km/s cannot raise inside a trace and returns NaN for the FeII spectrum and
+    power, rather than a silently low-passed spectrum, so the same value is finite eager
+    and NaN under ``jax.jit``. Keep a traced width >= 500 km/s.
+
     Geometric masking by the torus is **not** applied here. If the
     composable recipe also activates a torus block, double-counting is
     possible for line-of-sight inclination effects; see Section 2 of
@@ -166,6 +178,14 @@ def blr_analytic_line_power(
 
     Notes
     -----
+    **Traced FeII width**: the FeII broadening is evaluated by a band-limited synthesis that is
+    valid for a width of 500 km/s or more. A concrete width (a Python or NumPy scalar, as every
+    model build passes: the width is a block keyword, not a fit parameter) below 500 km/s takes
+    the exact full-lattice convolution, with no lower limit. A *traced* width
+    below 500 km/s cannot raise inside a trace and returns NaN for the FeII spectrum and
+    power, rather than a silently low-passed spectrum, so the same value is finite eager
+    and NaN under ``jax.jit``. Keep a traced width >= 500 km/s.
+
     **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
     """
     del agn_log_lbol
@@ -192,6 +212,8 @@ def blr_synthesizer_block(
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
     agn_blr_logU: float = -1.0,
     agn_blr_logZ: float = -1.8477,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR lines from the Synthesizer Cloudy grid (grid-backed blr block).
@@ -217,6 +239,11 @@ def blr_synthesizer_block(
             Covering fraction, broad-line FWHM [km/s], and bolometric correction.
     agn_blr_logU, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter.
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol: ``agn_log_lbol`` does).
 
     Returns
     -------
@@ -232,6 +259,8 @@ def blr_synthesizer_block(
         covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("blr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_blr_logU,
         neb_logZ_gas=agn_blr_logZ,
     )
@@ -254,6 +283,8 @@ def blr_synthesizer_spectra_block(
     agn_blr_logU: float = -1.0,
     agn_blr_logn: float = 4.0,
     agn_blr_logZ: float = -2.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     **_params,
 ) -> Array:
     r"""BLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -281,6 +312,11 @@ def blr_synthesizer_spectra_block(
             BLR covering fraction.
     agn_blr_logU, agn_blr_logn, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter (log Z absolute).
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)]. Drives the grid's mass axis.
+    agn_log_ledd : float
+        Eddington ratio [dimensionless, log10(L/L_Edd)]. Drives the grid's
+        mdot_Edd axis (do not set L_bol — ``agn_log_lbol`` does).
 
     Returns
     -------
@@ -295,6 +331,8 @@ def blr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_blr_cf,
         grid_path=_resolve_synthesizer_grid("blr"),
+        log_bh_mass=agn_log_mbh,
+        log_eddington=agn_log_ledd,
         neb_logU=agn_blr_logU,
         neb_logn=agn_blr_logn,
         neb_logZ_gas=agn_blr_logZ,

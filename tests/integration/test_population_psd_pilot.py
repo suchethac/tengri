@@ -127,6 +127,7 @@ _N_KEPT = _N_SAMPLES // _THIN
 
 
 @pytest.mark.slow
+@pytest.mark.population_fit
 def test_interim_fit_completes_on_a_small_population():
     """Smoke test: the interim fit completes without error on a small population.
 

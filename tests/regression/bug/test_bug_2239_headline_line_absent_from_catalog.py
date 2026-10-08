@@ -258,15 +258,14 @@ def test_civ_1549_warns_at_trace_time_under_jit_on_the_legacy_subset(_cue_fixtur
 def test_published_line_wavelengths_matches_state_derived_line_waves(_cue_fixture_available):
     """I5: the seam's static catalog must equal the array the component publishes.
 
-    ``NebularSEDComponent.apply`` applies tengri's vacuum-wavelength contract
-    (``nebular_line_waves_to_vacuum``) to the backend's raw catalog before
-    publishing ``state.derived["line_waves"]``; cue's raw catalog is air.
-    ``_published_line_wavelengths_static`` must apply the exact same
-    conversion, not compare against the pre-conversion array -- otherwise
-    the seam's NaN decision (made against the vacuum array) and its own
-    tolerance check (made against whatever this function returns) can
-    disagree. RED before this fix: up to 2.70 Angstrom off, 70 of 138
-    entries on the default catalog differing by more than 0.5 Angstrom.
+    ``NebularSEDComponent.apply`` publishes the backend's catalog as
+    ingested (every loader converts its air labels to vacuum once, at load),
+    as ``state.derived["line_waves"]``. ``_published_line_wavelengths_static``
+    must return that same ingested array, so the seam's NaN decision (made
+    against the published array) and its own tolerance check (made against
+    whatever this function returns) cannot disagree. Historically the two
+    frames differed by up to 2.70 Angstrom (70 of 138 entries on the default
+    catalog by more than 0.5 Angstrom) when the raw catalog was air.
     """
     from tengri.forward.properties import _published_line_wavelengths_static
 

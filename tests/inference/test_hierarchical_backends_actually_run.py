@@ -55,7 +55,6 @@ from tengri import (
     Spectroscopy,
     Uniform,
 )
-from tengri.inference.hierarchical import DegenerateChainError
 
 pytestmark = pytest.mark.contract
 
@@ -203,6 +202,7 @@ def spectroscopic_population():
     return factory, galaxies
 
 
+@pytest.mark.population_fit
 def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopic_population):
     """The spectroscopy arm of the batch precompute default, executed.
 
@@ -233,14 +233,18 @@ def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopi
         assert np.unique(values).size > 1, f"{name}: the chain never moved"
 
 
-@pytest.mark.parametrize("method", ["map"])
+@pytest.mark.population_fit
+@pytest.mark.parametrize("method", ["map", "mcmc_raytrace"])
 def test_backend_dispatches_and_returns_a_populated_posterior(population, method):
     """The seam actually reaches the backend and gets a result back.
 
-    Chosen because prior measurement puts it near 1.5 GB peak. The heavier
-    ones do not belong in a suite that has to finish —
+    ``map`` was chosen because prior measurement puts it near 1.5 GB peak. The
+    heavier ones do not belong in a suite that has to finish —
     ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same 2-galaxy
-    problem.
+    problem. ``mcmc_raytrace`` mixes at this fixture's hierarchical D (~500):
+    97.4% acceptance, with 486 unique values in 500 draws of ``psd_sigma`` and
+    of ``psd_tau_myr``. The guard against a collapsed chain is pinned in
+    ``tests/regression/bug/test_bug_1530_raytrace_degenerate_chain.py``.
     """
     factory, galaxies = population
     fitter = PopulationFitter(factory, galaxies)
@@ -255,27 +259,6 @@ def test_backend_dispatches_and_returns_a_populated_posterior(population, method
         values = np.asarray(draws)
         assert values.size > 0, f"{method}: {name} is empty"
         assert np.all(np.isfinite(values)), f"{method}: {name} carries non-finite draws"
-
-
-def test_raytrace_reaches_the_sampler_and_the_degeneracy_guard_fires(population):
-    """Raytrace dispatches through the seam — and refuses its degenerate chain.
-
-    At this fixture's hierarchical D (~500 with the stochastic field latents),
-    raytrace acceptance is ~1e-117 and 500 post-burn-in draws collapse to one
-    unique point (#1530). Since #1569 that outcome *raises*
-    ``DegenerateChainError`` instead of returning MAP-echo draws that look
-    like a plausible answer. The raise IS the correct behavior: this test
-    pins both that the seam reaches the sampler and that the guard stays.
-
-    If this test starts failing because raytrace returns a populated
-    posterior, that is news (the sampler mixes at hierarchical D now) — move
-    the method back into the populated-posterior case above.
-    """
-    factory, galaxies = population
-    fitter = PopulationFitter(factory, galaxies)
-
-    with pytest.raises(DegenerateChainError):
-        fitter.run("mcmc_raytrace", key=jax.random.PRNGKey(0))
 
 
 def test_an_unsupported_method_names_what_was_asked_for(population):
@@ -311,6 +294,7 @@ def test_broken_tier_stays_gated_through_the_seam(population, method):
 # ── #2296 fix-round 3: the predict-side positive filter dropped sfh_field_xi ──
 
 
+@pytest.mark.population_fit
 def test_flat_problem_gradients_reach_the_latents_and_psd(population):
     """d logL/d gal_xi, d logL/d psd_sigma_u, d logL/d psd_tau_u must be nonzero.
 
@@ -397,6 +381,7 @@ def test_population_fitter_refuses_a_factory_with_fixed_shared_psd():
         PopulationFitter(bad_factory, [{"flux_obs": np.ones(5), "noise": np.ones(5) * 0.1}])
 
 
+@pytest.mark.population_fit
 def test_fit_population_public_factory_runs():
     """model.fit_population's own convenience.py factory must complete a fit.
 

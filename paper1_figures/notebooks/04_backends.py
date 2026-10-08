@@ -29,7 +29,7 @@ while not (HERE / "paper1_figures").is_dir() and HERE.parent != HERE:
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "paper1_figures"))
 
-from _run import repo_root, run_figure
+from _run import figure_outcome, repo_root, report_figures, run_figure
 
 REPO = repo_root(HERE)
 sys.path.insert(0, str(REPO))
@@ -54,5 +54,6 @@ status = run_figure(
 print(f"fig07_backends: {status}")
 
 # %%
-path = OUT / "fig07_backends.pdf"
-print(f"{'ok ' if path.is_file() else 'MISSING'} fig07_backends.pdf")
+raise SystemExit(
+    report_figures({"fig07_backends.pdf": figure_outcome(status, OUT / "fig07_backends.pdf")})
+)

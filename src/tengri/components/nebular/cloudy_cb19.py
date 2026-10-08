@@ -169,6 +169,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _qh_bilinear,
@@ -198,6 +199,21 @@ _HB_PER_QH_LSUN: float = 4.78e-13 / _LSUN_ERG
 
 # Default data file location. Honors $TENGRI_DATA_DIR (#1431).
 _DEFAULT_PATH = package_or_env_data_path("cb19_templates.h5")
+
+#: Cloudy AIR labels [Angstrom] carried by the hosted ``cb19_templates.h5``
+#: (H-gamma, [OI]6300, [NII]6548, [NII]6583); its H-beta, H-alpha, [OIII]5008
+#: and [OII]3727 entries are already vacuum. Only a line matching one of these
+#: to :data:`_CB19_AIR_MATCH_AA` is converted, so an all-vacuum regenerated
+#: file is never converted twice.
+_CB19_AIR_LABELS_AA: tuple[float, ...] = (4340.47, 6300.30, 6548.05, 6583.45)
+_CB19_AIR_MATCH_AA: float = 0.05
+
+
+def _cb19_air_mask(waves) -> np.ndarray:
+    """Which CB_19 line wavelengths are Cloudy air labels (see :data:`_CB19_AIR_LABELS_AA`)."""
+    wave = np.asarray(waves, dtype=np.float64)
+    labels = np.asarray(_CB19_AIR_LABELS_AA)
+    return np.any(np.abs(wave[:, None] - labels[None, :]) < _CB19_AIR_MATCH_AA, axis=1)
 
 
 # ── Ionizing spectrum warnings ────────────────────────────────────
@@ -345,7 +361,7 @@ class CB19GridData(NamedTuple):
     hbfrac_grid: jnp.ndarray  # (N_HbFrac,) L_Hβ(matter-bounded)/L_Hβ(radiation-bounded)
 
     # Line data (last axis of line_ratios)
-    line_wavelengths: jnp.ndarray  # (N_lines,) Å vacuum
+    line_wavelengths: jnp.ndarray  # (N_lines,) Å vacuum (air labels converted at load)
     log_line_ratios: jnp.ndarray  # (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)
     log_hb_per_qh: float  # log10(_HB_PER_QH_LSUN) for fast scaling
 
@@ -455,7 +471,17 @@ def load_cb19_grid(
         age_key = "log_age_yr_ssp" if sed_type == "SSP" else "log_age_yr_csf"
         log_age = jnp.array(ax[age_key][:], dtype=jnp.float32)
 
-        line_wavelengths = jnp.array(f["line_wavelengths_aa"][:], dtype=jnp.float32)
+        # The hosted file mixes conventions (measured 2026-10-07): H-beta
+        # 4862.68, H-alpha 6564.61, [OIII]5008.24 are vacuum, but H-gamma
+        # 4340.47, [OI]6300.30, [NII]6548.05 and [NII]6583.45 are Cloudy AIR
+        # labels. Convert exactly those, once, here. A regenerated all-vacuum
+        # file (scripts/download_cb19_templates.py) matches none of them and
+        # passes through unchanged.
+        raw_waves = np.asarray(f["line_wavelengths_aa"][:], dtype=np.float64)
+        line_wavelengths = jnp.array(
+            catalog_air_to_vacuum(raw_waves, air_mask=_cb19_air_mask(raw_waves)),
+            dtype=jnp.float32,
+        )
 
         # Load line_ratios: (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines).
         # Both HbFrac nodes are retained (#2213); it is a genuine interpolation

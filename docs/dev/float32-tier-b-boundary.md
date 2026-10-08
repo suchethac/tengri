@@ -631,7 +631,7 @@ from silently repopulating.
 
 ## The Planck function — three copies of one overflow
 
-The analytic closures (`mbb`, `modified_blackbody`, `casey2012`, `schreiber2016`) were blocked by a
+The analytic closures (`mbb`, `modified_blackbody`, `casey2012`) were blocked by a
 defect independent of the `L_ir` seam, in the Planck function itself:
 
 ```

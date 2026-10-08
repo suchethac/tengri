@@ -1568,7 +1568,7 @@ def _validate_fracagn_requires_cigale_joint(spec) -> None:
 def _validate_firrc_requires_dust(spec) -> None:
     """Raise if any FIRRC radio block is enabled without a dust component (#2106).
 
-    The three FIRRC models (bell2003, delvecchio2021, mccheyne2022) in the radio
+    The FIRRC models (bell2003, bell2003_split, delvecchio2021, mccheyne2022) in the radio
     component normalize their synchrotron luminosity against L_ir, the dust-absorbed
     stellar luminosity published by the dust component. Without a dust component,
     L_ir defaults to 0.0, causing the radio SED to silently return all zeros with
@@ -1581,7 +1581,7 @@ def _validate_firrc_requires_dust(spec) -> None:
     Raises
     ------
     ConfigError
-        If any FIRRC mode (bell2003, delvecchio2021, mccheyne2022) is selected
+        If any FIRRC mode (bell2003, bell2003_split, delvecchio2021, mccheyne2022) is selected
         for radio_sfr_mode and dust is disabled.
 
     See Also
@@ -1598,7 +1598,7 @@ def _validate_firrc_requires_dust(spec) -> None:
 
     # Check if any FIRRC mode is active
     sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
-    if sfr_mode not in ("bell2003", "delvecchio2021", "mccheyne2022"):
+    if sfr_mode not in ("bell2003", "bell2003_split", "delvecchio2021", "mccheyne2022"):
         return  # Non-FIRRC mode selected, no validation needed
 
     # Check dust configuration: dust_model='off' means no dust
@@ -1616,6 +1616,63 @@ def _validate_firrc_requires_dust(spec) -> None:
             "or (2) use a dust-independent radio block such as powerlaw or dpl "
             "(radio_sfr_mode='none' for AGN-only radio, or choose a different sfr_mode). "
             "See issue #2106."
+        )
+
+
+def _upper_support(spec, name: str) -> float | None:
+    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
+    dists = getattr(spec, "_distributions", {})
+    dist = dists.get(name)
+    if dist is None:
+        return None
+    if dist.is_fixed:
+        value = dist.value
+        return float(value) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[1])
+
+
+def _validate_radio_q_total_support(spec) -> None:
+    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+
+    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
+    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
+    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
+    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
+    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
+    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
+    non-thermal term) or to the other star-formation radio modes.
+
+    Raises
+    ------
+    ConfigError
+        If the support of ``radio_q_ir`` reaches the limit at the support of the
+        electron temperature.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    q_hi = _upper_support(spec, "radio_q_ir")
+    t_hi = _upper_support(spec, "radio_T_e")
+    a_hi = _upper_support(spec, "radio_alpha_ff")
+    if q_hi is None or t_hi is None or a_hi is None:
+        return
+    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.config.exceptions import ConfigError
+
+    q_star = radio_q_total_limit(t_hi, a_hi)
+    if q_hi > q_star:
+        raise ConfigError(
+            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
+            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
+            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
+            "total minus the Murphy+2011 free-free luminosity, "
+            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
+            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
+            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
+            "term alone."
         )
 
 
@@ -3176,6 +3233,15 @@ class SEDModel:
         spectrum, and it gets the window LUT instead (plus the flag that lets the
         likelihood reach it).
 
+        The Cue grid's band photometry follows the **evaluation** redshift, so it
+        serves a free redshift, a ``catalog_z_range`` fit's per-galaxy redshift, and
+        a ``Fixed`` one alike: lines are placed in each band at ``(1 + z) lambda_0``
+        and the continuum is tabulated over ``ln(1 + z)``
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`).
+        The redshift the grid is built at is a deterministic convention
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.reference_redshift`),
+        never a prior draw.
+
         Parameters
         ----------
         cfg : FeaturePrecomp
@@ -3725,6 +3791,8 @@ class SEDModel:
             spec.mean_sfh_type,
             dust_model=getattr(spec, "dust_model", "two_component"),
             dust_screens=getattr(spec, "dust_screens", ()),
+            dust_nebular_screen=getattr(spec, "dust_nebular_screen", "birth_cloud"),
+            dust_law_neb=getattr(spec, "dust_law_neb", None),
         )
 
     def _init_metallicity(self, spec):
@@ -4342,6 +4410,7 @@ class SEDModel:
         self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_norm = getattr(spec, "agn_norm", "cigale_joint")
+        self._agn_polar_law = getattr(spec, "agn_polar_law", "smc")
         self._agn_luminosity_mode = False
 
         delta = {}
@@ -4370,14 +4439,16 @@ class SEDModel:
             # The trigger is deliberately NOT a list of carve-outs. Measured
             # across the declared Uniform(8, 14) prior with agn_ir_frac=0.3,
             # only one configuration is inert (rel change 6.4e-15); an active
-            # nlr or blr block, a non-SKIRTOR torus, no torus, and
+            # nlr or blr block, a torus without the disc tie, no torus, and
             # norm='independent' all measure 2.5e5. The measurement below sees
             # every one of those without being told about them.
-            torus_is_skirtor = self._agn_torus_block == "skirtor" or self._agn_model == "skirtor"
+            torus_is_tied = (
+                self._agn_torus_block in ("skirtor", "fritz") or self._agn_model == "skirtor"
+            )
             agn_norm_is_cigale_joint = self._agn_norm == "cigale_joint"
             lbol_is_user_provided = _param_is_user_provided(spec, "agn_log_lbol")
             if (
-                torus_is_skirtor
+                torus_is_tied
                 and agn_norm_is_cigale_joint
                 and (lbol_is_free or lbol_is_user_provided)
             ):
@@ -7683,15 +7754,23 @@ class SEDModel:
         # at two different points on the dust attenuation curve. See
         # ``_snap_to_nebular_catalog``.
         target_wavelengths = _snap_to_nebular_catalog(self, target_wavelengths)
-        chain0 = self._build_component_chain()
+        # The pristine (exact, no grid) chain. Building it runs every component's
+        # ``precompute``, which for a fast model re-integrates the stellar redshift
+        # table (about a minute without the disk cache), and it depends only on the
+        # model's settings, not on the grid built below, so the cached chain of a
+        # model that has no grid yet is the same chain and is reused.
+        pristine = (
+            getattr(self, "_cached_component_chain", None)
+            if getattr(self, "_nebular_grid_table", None) is None
+            else None
+        )
+        chain0 = pristine if pristine is not None else self._build_component_chain()
         dust = next(
             (c for c in chain0 if isinstance(c, (DustSEDComponent, DustAttenuationSEDComponent))),
             None,
         )
         eb_lut = self._energy_balance_lut(chain0)
-        with_dust = (
-            dust is not None and eb_lut is not None and self._redshift_is_a_build_constant()
-        )
+        with_dust = dust is not None and eb_lut is not None
         table = precompute_nebular_grid(
             self,
             target_wavelengths,
@@ -7702,12 +7781,11 @@ class SEDModel:
             n_subbands=self._approx.get("n_subbands"),
         )
         self._nebular_grid_table = table
-        # Rebuild the chain from scratch (exact, no grid) and swap in the
-        # grid-carrying nebular component so ``apply`` takes the fast branch.
-        # compile_signature() now differs (the _nebular_grid_table row,
-        # invalidated below), so the next predict_* builds a fresh kernel
-        # over this chain, no stale reuse.
-        chain = self._build_component_chain()
+        # Swap the grid-carrying nebular component into the pristine chain (exact,
+        # no grid) so ``apply`` takes the fast branch. compile_signature() now
+        # differs (the _nebular_grid_table row, invalidated below), so the next
+        # predict_* builds a fresh kernel over this chain, no stale reuse.
+        chain = chain0
         # Whether the grid may also serve the photometry channel. It may only
         # when nothing downstream reads the continuum, because serving
         # photometry from the grid requires zeroing ``sed_nebular``, and the
@@ -7912,8 +7990,9 @@ class SEDModel:
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
             per evaluation (measured, wNE grid) and bit-exact for the supported
-            configuration, **stellar + two-component (or no) dust + baked-in
-            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            configuration (a Lick equivalent width is evaluated at the window
+            grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
+            baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
@@ -7938,6 +8017,10 @@ class SEDModel:
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
+        The spectrum is :math:`L_\\nu`; a Lick equivalent width converts it to
+        :math:`F_\\lambda` and builds the sideband straight-line pseudo-continuum
+        (Trager et al. 1998, ApJS 116, 1, Eqs. 1-3; see
+        :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
@@ -10281,6 +10364,21 @@ class SEDModel:
                     break
             break
 
+        # ── Fast-nebular grid: the continuum z-table ──
+        # ``n_z x n_filter`` floats per grid node (tens of MB for a three-axis
+        # grid): threaded as an argument like the stellar z-table (#1413), never
+        # baked into the graph as a constant.
+        for component in cached:
+            grid = getattr(component, "grid_table", None)
+            if isinstance(component, NebularSEDComponent) and grid is not None:
+                if grid.serves_split_bands:
+                    result["nebular_grid"] = {
+                        "log_cont_ztable_per_qh": grid.log_cont_ztable_per_qh,
+                        "cont_keep": grid.cont_keep,
+                        "cont_lnz": grid.cont_lnz,
+                    }
+                break
+
         # Dust IR emission components (Astrodust, PAHspec, Dale, …) self-load their
         # HDF5 grids in ``EmissionComponent.load``/``predict``, no adapter-state
         # threading is needed here. The build-time energy-balance LUT and
@@ -10517,22 +10615,6 @@ class SEDModel:
         """
         return self._energy_balance_lut(chain) is not None
 
-    def _redshift_is_a_build_constant(self) -> bool:
-        """Whether every evaluation of this model runs at the redshift it was built at.
-
-        False for a free ``redshift`` and for a runtime redshift
-        (``WavePrecomp(catalog_z_range=...)``), where a precompute integrated
-        through observed bands at the build redshift describes another galaxy.
-
-        Returns
-        -------
-        bool
-        """
-        return (
-            "redshift" not in self.spec.free_params
-            and getattr(self, "_catalog_z_range", None) is None
-        )
-
     def nebular_grid_can_serve_photometry(self) -> bool:
         """Whether the per-Q_H nebular grid can serve this model's photometry.
 
@@ -10544,17 +10626,15 @@ class SEDModel:
         Returns
         -------
         bool
-            True when no continuum consumer remains after that exclusion, and
-            the redshift is a build-time constant (neither free nor runtime).
+            True when no continuum consumer remains after that exclusion. The
+            redshift may be fixed, free or a runtime ``catalog_z_range`` value: the
+            grid's band photometry follows the evaluation redshift.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import (
             grid_baked_free_params,
         )
-
-        if not self._redshift_is_a_build_constant():
-            return False
 
         if grid_baked_free_params(self.spec):
             return False
@@ -10574,14 +10654,13 @@ class SEDModel:
         """``chain`` with the nebular grid attached and the dust flagged to read it.
 
         The dust component is flagged (``nebular_from_grid``) and its tau grids are set
-        BEFORE the continuum census, but only when the redshift is a build-time constant
-        and no other component consumes the continuum, so the census sees a dust component
-        that does not read ``sed_nebular`` and ``must_materialize_sed`` follows from it.
-        Both happen here so the flag and the census cannot drift between call sites.
+        BEFORE the continuum census, but only when no other component consumes the
+        continuum, so the census sees a dust component that does not read ``sed_nebular``
+        and ``must_materialize_sed`` follows from it. Both happen here so the flag and
+        the census cannot drift between call sites.
 
-        The grid serves band fluxes only at the build redshift. With a free or runtime
-        redshift the nebular component materializes its continuum and the dust component
-        reads it.
+        The grid's band photometry follows the evaluation redshift (fixed, free or
+        runtime), so no redshift condition applies.
         """
         from tengri.components.dust.component import DustAttenuationSEDComponent
         from tengri.components.dust.two_component import DustSEDComponent
@@ -10589,9 +10668,8 @@ class SEDModel:
         from tengri.components.nebular.nebular_grid_dust_build import _lyc_cutoff_for
 
         dust_types = (DustSEDComponent, DustAttenuationSEDComponent)
-        serves_bands = self._redshift_is_a_build_constant()
         chain = list(chain)
-        if serves_bands and table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
+        if table.serves_dust and self._dust_can_take_nebular_from_grid(chain):
             eb_lut = self._energy_balance_lut(chain)
             dust_c = next((c for c in chain if isinstance(c, dust_types)), None)
             for name_table, name_lut, grid_lut in (
@@ -10640,9 +10718,7 @@ class SEDModel:
         else:
             sed_consumers = _nebular_continuum_consumers(chain)
         return [
-            dataclasses.replace(
-                c, grid_table=table, must_materialize_sed=bool(sed_consumers) or not serves_bands
-            )
+            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain
@@ -11649,6 +11725,7 @@ class SEDModel:
             agn_torus_block=getattr(self, "_agn_torus_block", "none"),
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
+            agn_polar_law=getattr(self, "_agn_polar_law", "smc"),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_law_neb=getattr(self, "_dust_law_neb", None),
@@ -12493,6 +12570,7 @@ class SEDModel:
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
+        _validate_radio_q_total_support(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

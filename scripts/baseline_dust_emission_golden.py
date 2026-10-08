@@ -78,14 +78,6 @@ def main():
             "call_path": "closure",
             "params": {"redshift": 0.0},
         },
-        "schreiber2016": {
-            "call_path": "closure",
-            "params": {
-                "dust_T": 30.0,
-                "dust_f_pah": 0.05,
-                "redshift": 0.0,
-            },
-        },
         # Grid-based models
         "dale2014": {
             "call_path": "lazy_loader",

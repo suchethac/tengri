@@ -259,7 +259,9 @@ def _radio_model(ssp, obs):
             "agn": {"type": "powerlaw"},
             "all_params": FREE,
             "T_e": Uniform(5000.0, 20000.0),
-            "alpha_ff": Uniform(-0.3, 0.0),
+            # upper end -0.05, not 0: with q_ir free up to 3.37 and T_e up to 2e4 K, a flat
+            # (alpha_ff = 0) corner would put the Bell-total synchrotron below zero (#2590)
+            "alpha_ff": Uniform(-0.3, -0.05),
         },
     )
 
@@ -459,7 +461,9 @@ def test_radio_include_freefree_plumbing_is_live(synthetic_tophat_obs):
             "agn": {"type": "powerlaw"},
             "all_params": FREE,
             "T_e": Uniform(5000.0, 20000.0),
-            "alpha_ff": Uniform(-0.3, 0.0),
+            # upper end -0.05, not 0: with q_ir free up to 3.37 and T_e up to 2e4 K, a flat
+            # (alpha_ff = 0) corner would put the Bell-total synchrotron below zero (#2590)
+            "alpha_ff": Uniform(-0.3, -0.05),
         },
     )
 

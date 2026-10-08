@@ -500,27 +500,48 @@ _AGN_MBH_DUST = {
 #: of the model: the photometry agrees with the variant that carries 200 points per decade
 #: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
 #: dust-energy balance is integrated on the master grid).
+#: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
+#: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
+#: where the corona now weighs four times less relative to the disc than under
+#: ``(cos i / 2) D_nu + H_nu``, so the disc part of the tied shape rises by +0.25 % / +88 % /
+#: +102 % (mbh 6/8/10; the formula and the measured in-grid corona-to-disc ratios are beside
+#: ``_DISC_TIMES_ETA_T_REFERENCE``). The disc is 0.21 % / 5.2 % / 6.2 % of ``rest_sed_sum``,
+#: which moves by +5.1e-6 / +2.26 % / +2.35 % (at mbh 6 the product closes, 0.25 % x 0.0021;
+#: at 8 and 10 the corona's own bins mix in); the r-band photometry moves by +5.6e-6 /
+#: +2.9 % / +2.7 %.
+#: Re-captured for the SKIRTOR tie that normalizes the disc only and carries the corona on top
+#: (angle-integrated share ``f/(1 - f)`` of the tied disc's power, torus-screened; the formula and
+#: every measured input are beside ``_DISC_TIMES_ETA_T_REFERENCE`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``). The disc part of the tied
+#: disc rises by 1.00084 / 1.41163 / 1.51225 (mbh 6/8/10) and the corona is added; the disc
+#: sum changes by 0.084 % / 40.61 % / 49.11 % (measured sums 3.2340e+29 /
+#: 8.5090e+30 / 1.0286e+31). The first bin (0.01 A) is the corona alone, below the library
+#: range, and no longer vanishes. Predicted forward from the previous capture (rest_sed_sum
+#: 1.559372e+32 / 1.675785e+32 / 1.709509e+32) it agrees with these entries to
+#: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
+#: the three photometry entries are predicted through the same filter projection (band disc
+#: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593610240025491e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.8913574801798905e28,
-        "rest_sed_last": 8.775427516276051e21,
-        "photometry": (1.099479121598862e-27, 1.5700123316048635e-27, 1.763224618345872e-27),
+        "rest_sed_sum": 1.5593717102152515e32,
+        "rest_sed_0": 102893969334605.2,
+        "rest_sed_mid": 2.8913768894385195e28,
+        "rest_sed_last": 8.775429623072713e21,
+        "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6049266541791814e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.994003988088467e28,
-        "rest_sed_last": 8.79894545646465e21,
-        "photometry": (1.1410282257917584e-27, 1.5707883351802454e-27, 1.763449238482328e-27),
+        "rest_sed_sum": 1.6757849286069842e32,
+        "rest_sed_0": 2.8226908028998744e16,
+        "rest_sed_mid": 3.1537086678827116e28,
+        "rest_sed_last": 8.838700680503838e21,
+        "photometry": (1.2055131101702632e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.620914289829386e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 3.0199301365899735e28,
-        "rest_sed_last": 9.09664409582796e21,
-        "photometry": (1.1488156955220127e-27, 1.581055264936566e-27, 1.7660509279361245e-27),
+        "rest_sed_sum": 1.709508629849637e32,
+        "rest_sed_0": 2.9574176722363988e16,
+        "rest_sed_mid": 3.2080316645611165e28,
+        "rest_sed_last": 9.756086413931552e21,
+        "photometry": (1.220384227860453e-27, 1.596873080026319e-27, 1.7715814700124443e-27),
     },
 }
 

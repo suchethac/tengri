@@ -53,9 +53,15 @@ from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
 from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
+    "AGE_BINNED_NEBULAR_SCREENS",
     "AgeBinnedDustComponent",
     "AgeBinnedDustComponentConfig",
+    "age_binned_nebular_mode",
 ]
+
+#: Values of :attr:`AgeBinnedDustComponentConfig.nebular_screen`: the
+#: ionizing-weighted interval mixture (default) or a dedicated ``"own"`` screen.
+AGE_BINNED_NEBULAR_SCREENS: tuple[str, ...] = ("mixture", "own")
 
 #: Screen structural entry: (law registry key, lo log10(age/yr) or None, hi
 #: log10(age/yr) or None). A plain tuple of tuples, not a dict/dataclass, so
@@ -69,6 +75,23 @@ ScreenSpec = tuple[str, float | None, float | None]
 #: only the REGISTRY DEFAULT differs, which is the law's own published value
 #: (see :func:`_law_kwarg_default`), not this shared Fixed(0.0)/Fixed(-0.7)/...
 _SHARED_LAW_PARAM_DECL: dict[str, ParamDeclaration] = {p.name: p for p in ATTENUATION_PARAMS}
+
+
+def age_binned_nebular_mode(nebular_screen: str) -> str:
+    """The attenuator's nebular mode for a grammar ``nebular_screen`` choice.
+
+    Parameters
+    ----------
+    nebular_screen : str
+        The user-facing ``nebular_screen`` value (``"birth_cloud"`` is the
+        default; ``"own"`` selects the dedicated screen).
+
+    Returns
+    -------
+    str
+        ``"own"`` for ``"own"``, else ``"mixture"``.
+    """
+    return "own" if nebular_screen == "own" else "mixture"
 
 
 def _edge_yr(log_edge: float | None) -> float | None:
@@ -217,6 +240,14 @@ class AgeBinnedDustComponentConfig(SEDComponentConfig):
         ``'screened'`` (default), ``'birth_cloud_holes'`` or ``'clear'``: a
         covering fraction ``neb_fesc`` of the youngest interval's light
         bypasses the screens that end (the birth-cloud-like ones).
+    nebular_screen : str
+        ``"mixture"`` (default): the nebular continuum and lines see the
+        ionizing-weighted interval mixture. ``"own"``: they see one dedicated
+        screen ``exp(-dust_tau_neb * k_neb)`` (grammar
+        ``dust_attenuation={'nebular_screen': 'own'}``).
+    law_neb : str or None
+        Registry key of the own screen's law; ``None`` reads the first
+        screen's law. Only valid with ``nebular_screen='own'``.
     fdust_credit_active : bool
         Whether the HII-region dust-heating credit can ever be nonzero
         (resolved at build time by ``SEDModel._fdust_credit_active``).
@@ -225,10 +256,31 @@ class AgeBinnedDustComponentConfig(SEDComponentConfig):
     screens: tuple[ScreenSpec, ...] = ()
     transition_width_dex: float = 0.0
     name: str = "dust"
+    nebular_screen: str = "mixture"
+    law_neb: str | None = None
     lyc_reprocessed_by: str = "young"
     lyc_in_energy_balance: bool = False
     lyc_escape_geometry: str = "screened"
     fdust_credit_active: bool = True
+
+    def __post_init__(self) -> None:
+        if self.nebular_screen not in AGE_BINNED_NEBULAR_SCREENS:
+            raise ValueError(
+                f"AgeBinnedDustComponentConfig.nebular_screen={self.nebular_screen!r} must be "
+                f"one of {AGE_BINNED_NEBULAR_SCREENS!r}."
+            )
+        if self.law_neb is not None and self.nebular_screen != "own":
+            raise ValueError(
+                f"AgeBinnedDustComponentConfig.law_neb={self.law_neb!r} needs "
+                f"nebular_screen='own' (the dedicated nebular screen): the default "
+                f"nebular light sees the stellar screens' interval mixture, which has "
+                f"no law of its own."
+            )
+
+    @property
+    def neb_law(self) -> str:
+        """Registry key of the own nebular screen's law: ``law_neb`` or the youngest screen's."""
+        return self.law_neb if self.law_neb is not None else self.screens[0][0]
 
     @property
     def windows_yr(self) -> tuple[tuple[float | None, float | None], ...]:
@@ -302,9 +354,26 @@ class AgeBinnedDustComponent(TemplateThreading):
 
     with :math:`L_{\rm LyC}(a)` the published per-age ionizing luminosity.
     A screen with a finite lower edge therefore attenuates the lines by its
-    ionizing-weighted share, rather than being refused.  The nebular
-    transmission is dispatched in one place, so a dedicated nebular screen
-    can replace it without touching the stellar mixture.
+    ionizing-weighted share, rather than being refused.
+
+    **Own nebular screen** (``nebular_screen='own'``, #2625): the nebular
+    continuum and every line see ONE screen,
+
+    .. math::
+
+        T_{\rm neb}(\lambda) = \exp\!\left[-\tau_{\rm neb}\,k_{\rm neb}(\lambda)\right],
+
+    with :math:`k_{\rm neb}` the law ``law_neb`` (default: the first screen's
+    law, with that screen's shape parameters) normalized to
+    :math:`k(5500\,\mathrm{\AA}) = 1` and :math:`\tau_{\rm neb}` the declared
+    ``dust_tau_neb`` (Fixed at 1 unless set or freed).  It is the TOTAL nebular
+    attenuation, not cascaded with any stellar screen and not age-mixed (the
+    CIGALE ``E(B-V)_lines`` convention; Prospector/FSPS and BAGPIPES have no
+    separate nebular depth).  The absorbed nebular energy enters the dust
+    budget through the same ``sed_neb`` minus attenuated ``sed_neb`` integral
+    as the mixture.  A ``law_neb`` shape override is declared as
+    ``dust_<shape>_neb`` and the grammar refuses ``law_neb``, ``tau_neb`` and
+    ``*_neb`` keys without ``'own'``.
 
     **Lyman continuum**: the gas that reprocesses the ionizing photons
     surrounds the youngest stars, i.e. the interval below the lowest edge;
@@ -314,11 +383,11 @@ class AgeBinnedDustComponent(TemplateThreading):
     covering fraction of the youngest light bypass them.
 
     **Scope** (narrower than ``two_component``): no per-source screen choice
-    (``nebular_screen``/``shock_screen``/``agn_screen``) -- shock and AGN
-    light pass through unattenuated; no clumpy-geometry ``dust_f_obscuration``
-    floor; no Lyman-limit clip; no decoupled nebular law (``law_neb`` is
-    refused: a dedicated nebular screen is the way to give HII-region light
-    its own curve).
+    (``shock_screen``/``agn_screen``; ``nebular_screen`` takes only the default
+    mixture or ``'own'``) -- shock and AGN light pass through unattenuated; no
+    clumpy-geometry ``dust_f_obscuration`` floor; no Lyman-limit clip; no
+    decoupled nebular law except through the dedicated ``nebular_screen='own'``
+    screen (``law_neb`` is refused otherwise).
 
     Precedent: two-screen age-dependent attenuation is implemented under
     other names by FSPS (``dust1``/``dust2``, which splits the continuous age
@@ -503,6 +572,24 @@ class AgeBinnedDustComponent(TemplateThreading):
                         free_prior=shared.free_prior if shared else None,
                     )
                 )
+        if self.config.nebular_screen == "own":
+            decls.append(_SHARED_LAW_PARAM_DECL["dust_tau_neb"])
+            if self.config.law_neb is not None:
+                for law_kw in sorted(law_kwarg_names(self.config.law_neb)):
+                    if law_kw == "redshift":
+                        continue
+                    shared = _SHARED_LAW_PARAM_DECL.get(law_kw)
+                    decls.append(
+                        ParamDeclaration(
+                            f"{law_kw}_neb",
+                            Fixed(_law_kwarg_default(self.config.law_neb, law_kw)),
+                            f"{law_kw} on the own nebular screen "
+                            f"(law={self.config.law_neb!r}; its own published default)",
+                            bound_check=shared.bound_check if shared else None,
+                            bound_error=shared.bound_error if shared else "",
+                            free_prior=shared.free_prior if shared else None,
+                        )
+                    )
         return decls
 
     def precompute(
@@ -532,21 +619,30 @@ class AgeBinnedDustComponent(TemplateThreading):
         wherever it is used.
         """
         wavelength = jnp.asarray(wavelength)
-        out = []
-        for i, (law, _lo, _hi) in enumerate(self.config.screens):
-            tau_i = jnp.asarray(params[f"dust_tau_{i}"])
-            law_kwargs: dict[str, jnp.ndarray] = {}
-            for law_kw in law_kwarg_names(law):
-                if law_kw == "redshift":
-                    z = params.get("redshift")
-                    if z is not None:
-                        law_kwargs["redshift"] = jnp.asarray(z)
-                    continue
-                flat = f"{law_kw}_{i}"
-                if flat in params:
-                    law_kwargs[law_kw] = jnp.asarray(params[flat])
-            out.append((tau_i, resolve_dust_law(law)(wavelength, **law_kwargs)))
-        return out
+        return [
+            (
+                jnp.asarray(params[f"dust_tau_{i}"]),
+                self._law_curve(params, law, str(i), wavelength),
+            )
+            for i, (law, _lo, _hi) in enumerate(self.config.screens)
+        ]
+
+    @staticmethod
+    def _law_curve(
+        params: Mapping[str, jnp.ndarray], law: str, suffix: str, wavelength: jnp.ndarray
+    ) -> jnp.ndarray:
+        """``law`` on ``wavelength`` with its ``dust_<shape>_<suffix>`` parameters and redshift."""
+        law_kwargs: dict[str, jnp.ndarray] = {}
+        for law_kw in law_kwarg_names(law):
+            if law_kw == "redshift":
+                z = params.get("redshift")
+                if z is not None:
+                    law_kwargs["redshift"] = jnp.asarray(z)
+                continue
+            flat = f"{law_kw}_{suffix}"
+            if flat in params:
+                law_kwargs[law_kw] = jnp.asarray(params[flat])
+        return resolve_dust_law(law)(wavelength, **law_kwargs)
 
     def _interval_tau(
         self, params: Mapping[str, jnp.ndarray], wavelength: jnp.ndarray
@@ -805,28 +901,38 @@ class AgeBinnedDustComponent(TemplateThreading):
         wavelength: jnp.ndarray,
         neb_weights: jnp.ndarray,
     ) -> jnp.ndarray:
-        r"""Transmission of the nebular continuum / lines: :math:`\sum_j q_j T_j(\lambda)`.
+        r"""Transmission of the nebular continuum / lines.
 
         The one place the nebular screen is chosen: every nebular consumer
-        (continuum, line catalog) calls it, and a dedicated nebular screen
-        replaces it without touching the stellar mixture.
+        (continuum, line catalog) calls it.  ``nebular_screen='mixture'``
+        (default) gives :math:`\sum_j q_j T_j(\lambda)`; ``'own'`` gives the
+        dedicated screen :math:`\exp[-\tau_{\rm neb} k_{\rm neb}(\lambda)]`
+        (no interval mixture, no stellar screen, no floor).
 
         Parameters
         ----------
         params : mapping
-            Receives the per-screen ``dust_tau_i`` and law parameters.
+            Receives the per-screen ``dust_tau_i`` and law parameters; under
+            ``'own'`` also ``dust_tau_neb`` and, with an explicit ``law_neb``,
+            its ``dust_<shape>_neb`` parameters.
         wavelength : ndarray, shape (n,)
             Rest-frame wavelengths [Å] (the full grid for the continuum, the
             discrete line wavelengths for the catalog).
         neb_weights : ndarray, shape (n_interval,)
             Share of the ionizing luminosity produced in each age interval
-            (``ionizing_interval_weights``).
+            (``ionizing_interval_weights``); unused under ``'own'``.
 
         Returns
         -------
         ndarray, shape (n,)
             Transmission in ``[0, 1]``.
         """
+        if self.config.nebular_screen == "own":
+            wavelength = jnp.asarray(wavelength)
+            law = self.config.neb_law
+            suffix = "neb" if self.config.law_neb is not None else "0"
+            k_neb = self._law_curve(params, law, suffix, wavelength)
+            return jnp.exp(-jnp.asarray(params["dust_tau_neb"]) * k_neb)
         tau_int, _ = self._interval_tau(params, wavelength)
         return weighted_interval_transmission(neb_weights, interval_transmission(tau_int, 0.0))
 

@@ -354,8 +354,9 @@ def _build_fritz_model(ssp, obs, node):
             "agn_fritz_beta": Fixed(beta),
             "agn_fritz_gamma": Fixed(gamma),
             "agn_fritz_oa": Fixed(_half_angle(theta)),
-            "agn_fritz_psy": Fixed(psy),
         },
+        # One inclination: the library elevation psi = 90 deg - i, cos i = sin psi.
+        "agn_cos_inc": Fixed(float(np.sin(np.radians(psy)))),
         "agn_log_lbol": Fixed(_MODEL_AGN_LOG_LBOL),
         "all_params": Fixed(DEFAULT),
     }

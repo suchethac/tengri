@@ -319,9 +319,9 @@ class TestNebularSpectrumUnifiedAGNParity:
             m = (wave > w0 - half) & (wave < w0 + half)
             return jnp.max(jnp.where(m, l_nu, 0.0))
 
-        assert float(peak(5006.84)) > float(peak(1215.67))
+        assert float(peak(5008.24)) > float(peak(1215.67))
         # and [O III] should tower over Hβ (strong forbidden AGN line)
-        assert float(peak(5006.84)) > 3.0 * float(peak(4861.33))
+        assert float(peak(5008.24)) > 3.0 * float(peak(4862.68))
 
     def test_nebular_spectrum_jit(self, nebular_grid_path):
         """predict_agn_nebular_spectrum is JIT-compatible."""

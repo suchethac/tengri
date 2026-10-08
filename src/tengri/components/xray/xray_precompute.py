@@ -56,6 +56,7 @@ from tengri.components.xray.xray import (
     xray_agn_corona_lopez24 as _xray_corona_lopez24,
     xray_xrb as _xray_xrb,
 )
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -226,6 +227,27 @@ _DEFAULT_GRIDS = {
 }
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -264,10 +286,15 @@ def precompute(
     if model not in _BUILDERS:
         raise ValueError(f"Unknown X-ray model: {model!r}. Expected one of {sorted(_BUILDERS)}.")
 
-    if axis_grids is None:
-        axis_grids = _DEFAULT_GRIDS[model]
-
-    a0, a1 = axis_grids
+    literal0, literal1 = _DEFAULT_GRIDS[model]
+    user0, user1 = (None, None) if axis_grids is None else axis_grids
+    a0 = _axis(AXIS_PARAMS[model][0], user0, literal0, parameters)
+    if model == "xray_corona":
+        # The alpha_ox grid is converted from absolute alpha_ox to delta_alpha_ox inside the
+        # builder, so no unit-consistent reach applies to it and its literal stays.
+        a1 = literal1 if user1 is None else np.asarray(user1, dtype=np.float64)
+    else:
+        a1 = _axis(AXIS_PARAMS[model][1], user1, literal1, parameters)
     preint = _BUILDERS[model](filter_waves, filter_trans, redshift, a0, a1)
     result = {
         "grid_phot": preint.phot,

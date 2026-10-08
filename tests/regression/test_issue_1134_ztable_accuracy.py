@@ -71,8 +71,6 @@ def _probe_redshifts(bands=BANDS, z_lo=Z_LO, z_hi=Z_HI, n_uniform=25):
 
 Z_GRID = _probe_redshifts()
 RTOL = 0.01
-#: Per-band override: FUV's IGM-free Lyman-limit floor (0.91 %) plus z interpolation.
-BAND_RTOL = {"galex_fuv": 0.015}
 
 
 @pytest.fixture(scope="session")
@@ -117,10 +115,10 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
         fe = np.asarray(exact.predict_photometry(p))
         ff = np.asarray(fast.predict_photometry(p))
         # Relative error
-        rel = np.abs(ff - fe) / np.abs(fe) / np.array([BAND_RTOL.get(b, RTOL) for b in BANDS])
+        rel = np.abs(ff - fe) / np.abs(fe)
         worst = max(worst, float(np.max(rel)))
 
-    assert worst < 1.0, f"worst ztable error is {worst:.2f}x its band budget"
+    assert worst < RTOL, f"worst ztable error is {worst:.3%}, budget {RTOL:.0%}"
 
 
 def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):

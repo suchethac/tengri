@@ -8,17 +8,36 @@ that same screen. This module supplies the screen so the runner can apply it to
 the central-engine components only: closing the "disc + torus composed
 additively, no torus screen on disc" gap (#294).
 
-Geometry (Stalevski+2016 / CIGALE ``skirtor2016`` convention): the torus has a
-half-opening angle ``oa`` measured from the equatorial plane and the inclination
-``i`` is measured from the polar axis. The sightline grazes/enters the torus
-(Type 2) when :math:`i > 90^\circ - {\rm oa}`, i.e.
-:math:`\cos i < \sin({\rm oa})`. The transition is smoothed with a sigmoid so the
-screen is C¹ in ``cos_inc`` (gradient-safe for inference); face-on (Type 1)
-sightlines get unit transmission, so a default-inclination model is unchanged.
+Geometry. ``agn_cos_inc`` is the one inclination of every torus, measured from
+the polar axis. The torus has a half-opening angle ``oa`` measured from the
+equatorial plane (Stalevski+2016 / CIGALE ``skirtor2016``), so the dust-free
+polar cone has half-angle :math:`90^\circ - {\rm oa}`; the sightline reaches
+the nucleus directly (Type 1) when it lies inside it,
+:math:`i < 90^\circ - {\rm oa}`, i.e. :math:`\cos i > \sin({\rm oa})`. The
+Fritz et al. (2006) library keys its torus by that cone's half-angle
+:math:`\theta_c` (``agn_fritz_oa``, full opening :math:`\Theta = 180^\circ -
+2\theta_c`), so for it :math:`{\rm oa} = 90^\circ - \theta_c` and Type 1 is
+:math:`i < \theta_c`; the library's own viewing elevation
+:math:`\psi = 90^\circ - i` is derived from the same inclination. The
+transition is the sigmoid of the polar-dust Type-1 mask (``polar_dust._type1_mask``),
+at the one width :data:`~tengri.components.agn.polar_dust.TYPE_TRANSITION_WIDTH`
+the polar mask uses, so the screen is C¹ in ``cos_inc`` (gradient-safe for
+inference); face-on (Type 1) sightlines get unit transmission, so a
+default-inclination model is unchanged.
 
 The wavelength dependence uses the torus equatorial V-band optical depth
 ``tau_v`` and an SMC (default) or Calzetti reddening curve, normalized at V
 (5500 Å): :math:`\tau(\lambda) = \tau_V\,k(\lambda)/k(V)`.
+
+References
+----------
+.. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, "Revisiting the
+   infrared spectra of active galactic nuclei with a new torus emission
+   model," MNRAS, 366, 767 (2006). arXiv:astro-ph/0511428.
+   https://doi.org/10.1111/j.1365-2966.2006.09866.x
+.. [2] M. Stalevski, C. Ricci, Y. Ueda, P. Lira, J. Fritz, and M. Baes,
+   "The dust covering factor in active galactic nuclei," MNRAS, 458,
+   2288 (2016). arXiv:1602.06954. https://doi.org/10.1093/mnras/stw444
 """
 
 from __future__ import annotations
@@ -26,25 +45,118 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.components.agn.polar_dust import (
+    _type1_mask,
     calzetti2000_extinction_curve,
     smc_extinction_curve,
 )
 from tengri.utils.scale import representable_denominator
 
-# Torus blocks that represent a genuine dusty torus with an equatorial optical
-# depth + opening angle, mapped to the (opening-angle, V-band-tau) param names
-# the screen reads from the runner's param dict. Blocks not listed here (toy
-# two-temperature, GRAHSP) get no torus screen.
+#: Torus blocks that represent a genuine dusty torus with an equatorial optical
+#: depth and an opening angle, mapped to the (opening-angle, equatorial
+#: optical-depth) parameter names the screen reads. Blocks not listed here (toy
+#: two-temperature, GRAHSP) get no torus screen. The angle's convention differs
+#: by torus; read both through :func:`torus_screen_geometry`.
 TORUS_SCREEN_PARAMS: dict[str, tuple[str, str]] = {
     "skirtor": ("agn_oa_skirtor", "agn_tau_skirtor"),
     "fritz": ("agn_fritz_oa", "agn_fritz_tau"),
 }
+TORUS_SCREEN_BLOCKS: tuple[str, ...] = tuple(TORUS_SCREEN_PARAMS)
 
-# Smoothing width in cos(i) units for the Type-1/2 edge. Kept small so a
-# clearly face-on sightline (cos_inc well above sin(oa)) has transmission ~1 to
-# <1e-3 even at large tau_v (i.e. default-inclination models are unchanged),
-# while the screen still has a finite, differentiable slope across the edge.
-_TRANSITION_WIDTH = 0.025
+#: The parameter naming the half-opening angle (from the equatorial plane) of the
+#: tori that read one but are not screened; every other torus is governed by the
+#: generic ``agn_theta_torus``.
+_TORUS_OPENING_ANGLE_PARAM: dict[str, str] = {
+    "skirtor": "agn_oa_skirtor",
+    "skirtor_agnfitter": "agn_oa_skirtor",
+    "skirtor_agnfitter_1p": "agn_oa_skirtor",
+    "skirtor_agnfitter_2p": "agn_oa_skirtor",
+    "nenkova_agnfitter_2p": "agn_oa_nenkova",
+    "nenkova_agnfitter_3p": "agn_oa_nenkova",
+}
+
+
+def polar_follow_parameter(torus_block: str) -> str:
+    """The parameter (or expression) whose angle the polar cone follows for a torus.
+
+    Parameters
+    ----------
+    torus_block : str
+        The torus block name.
+
+    Returns
+    -------
+    str
+        ``"90 - agn_fritz_oa"`` for the Fritz library, ``"agn_oa_skirtor"`` /
+        ``"agn_oa_nenkova"`` for the families that read them, else
+        ``"agn_theta_torus"``: the quantity :func:`polar_follow_opening_angle` returns.
+    """
+    if torus_block == "fritz":
+        return "90 - agn_fritz_oa"
+    return _TORUS_OPENING_ANGLE_PARAM.get(torus_block, "agn_theta_torus")
+
+
+def polar_follow_opening_angle(torus_block: str, params: dict) -> float:
+    """The selected torus's own opening angle, which the polar cone follows.
+
+    Parameters
+    ----------
+    torus_block : str
+        The torus block name.
+    params : dict
+        The runner's parameter dict.
+
+    Returns
+    -------
+    float
+        Half-opening angle from the equatorial plane [deg]: ``90 - agn_fritz_oa``
+        for the Fritz library, ``agn_oa_skirtor`` for the SKIRTOR family,
+        ``agn_oa_nenkova`` for the AGNfitter CLUMPY grids and ``agn_theta_torus``
+        for every torus governed by the generic Type-1/2 mask.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The torus block name is a static Python string.
+    """
+    if torus_block == "fritz":
+        return torus_screen_geometry("fritz", params)[0]
+    key = _TORUS_OPENING_ANGLE_PARAM.get(torus_block)
+    if key is None:
+        return params.get("agn_theta_torus", 30.0)
+    return params.get(key, 40.0)
+
+
+def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float, str]:
+    r"""The half-opening angle, V-band optical depth and cone geometry of a torus.
+
+    Parameters
+    ----------
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+    params : dict
+        The runner's parameter dict.
+
+    Returns
+    -------
+    oa_deg : float
+        Half-opening angle from the equatorial plane [deg], the convention of
+        :func:`torus_screen_transmission` and ``agn_polar_oa``. For the Fritz
+        library, whose ``agn_fritz_oa`` is the dust-free cone's half-angle
+        :math:`\theta_c`, it is :math:`90^\circ - \theta_c`.
+    tau_v : float
+        Equatorial V-band optical depth. [dimensionless]
+    geometry : str
+        The polar-cone form this torus uses: ``"skirtor"`` or ``"fritz"``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The torus block name is a static Python string.
+    """
+    if torus_block == "fritz":
+        cone_half = params.get("agn_fritz_oa", 60.0)
+        return 90.0 - cone_half, params.get("agn_fritz_tau", 1.0), "fritz"
+    if torus_block == "skirtor":
+        return params.get("agn_oa_skirtor", 40.0), params.get("agn_tau_skirtor", 7.0), "skirtor"
+    raise ValueError(f"torus_screen_geometry: no screen for torus block {torus_block!r}")
 
 
 def torus_screen_transmission(
@@ -64,7 +176,9 @@ def torus_screen_transmission(
         Cosine of the inclination (angle from the polar axis); 1 = face-on.
         [dimensionless]
     oa_deg : float
-        Torus half-opening angle from the equatorial plane. [deg]
+        Torus half-opening angle from the equatorial plane. [deg] The Type-1
+        limit is :math:`i = 90^\circ - {\rm oa}`; see :func:`torus_screen_geometry`
+        for the Fritz library's angle.
     tau_v : float
         Torus equatorial V-band optical depth (the disc seen through the torus
         rim is reddened by ~this depth). [dimensionless]
@@ -95,9 +209,9 @@ def torus_screen_transmission(
         k_lambda = smc_extinction_curve(wave)
         k_v = smc_extinction_curve(jnp.array([5500.0]))[0]
 
-    # Type-2 weight: 1 when edge-on (cos_inc < sin(oa)), 0 when face-on.
-    sin_oa = jnp.sin(jnp.deg2rad(oa_deg))
-    type2 = jax_sigmoid((sin_oa - cos_inc) / _TRANSITION_WIDTH)
+    # Type-2 weight: 1 when edge-on (cos_inc < sin(oa)), 0 when face-on; the
+    # complement of the polar mask's Type-1 weight, at the same width.
+    type2 = 1.0 - _type1_mask(cos_inc, oa_deg)
 
     tau_lambda = (
         jnp.maximum(tau_v, 0.0)

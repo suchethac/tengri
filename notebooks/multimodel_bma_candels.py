@@ -70,7 +70,7 @@ from tengri.units import ab_mag_to_fnu
 
 # %%
 DATA_DIR = REPO_ROOT / "data"
-CANDELS_DIR = REPO_ROOT / "analysis" / "hst_proposal" / "data"
+CANDELS_DIR = REPO_ROOT / "analysis" / "paper1" / "data"
 print(f"SSP grids : {DATA_DIR.exists()}")
 print(f"CANDELS   : {CANDELS_DIR.exists()}")
 
@@ -241,7 +241,7 @@ DIR_SFH = {
 # all four and collapse the comparison to one curve.
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
-# Display metadata (colors/labels match the published proposal figure)
+# Display metadata: one color and label per configuration
 CONFIG_ORDER = ["A", "B", "C", "D"]
 SSP_FOR = {"A": "mist", "B": "padova", "C": "pdva", "D": "basti"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
@@ -832,7 +832,7 @@ plt.rcParams.update(
     }
 )
 
-POINT_COLOR = "#e8000b"  # red photometry markers (matches proposal figure)
+POINT_COLOR = "#e8000b"  # red photometry markers
 # FILTER_HALFWIDTH is computed from the real transmission curves above (the x
 # error bars on the photometry are the filters' rectangular-equivalent widths).
 

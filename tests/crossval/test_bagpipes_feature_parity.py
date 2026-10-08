@@ -653,7 +653,9 @@ class TestSpectralIndexPhysics:
         from tengri.observation.spectral_indices import SpectralIndexDef, measure_index_jax
 
         wave = jnp.linspace(4000.0, 5500.0, 1000)
-        flux = jnp.ones_like(wave) * 1.0
+        # flat in F_lambda: the index operator takes a per-frequency flux, F_nu ∝ F_lambda λ²
+        # (#2690); a flat F_nu is a λ^-2 F_lambda and has a non-zero Lick EW.
+        flux = (wave / 4000.0) ** 2
 
         idx = SpectralIndexDef(
             name="test_ew",

@@ -485,7 +485,7 @@ jobs:
       # A paired notebook declares in its own metadata that its .ipynb and .py
       # are one document. Nothing enforced that, and three drifted for months:
       # 01_quickstart.ipynb kept teaching `Fitter(...)` after #1341 migrated the
-      # mirror to `ForwardModel`; 05_prior_predictive and hst_proposal still
+      # mirror to `ForwardModel`; 05_prior_predictive and a figure notebook still
       # declared `sfh_tsnorm_log_peak_sfr`, a parameter #369 renamed; and
       # 02_the_api imported `Model`/`ParamSpec`, which tengri no longer exports,
       # so it died at its first cell with no mirror at all.
@@ -861,7 +861,7 @@ jobs:
       # deterministic and runs in the ordinary parallel sweep. Prefer that shape
       # for any new guard here: measure compiled cost, not wall clock, whenever
       # the question is "does this path do less work".
-      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval and not population_fit' -n 0
 
   test:
     runs-on: ubuntu-latest
@@ -872,7 +872,7 @@ jobs:
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
     # Sizes from warm working sets; see CHANGELOG.md.
     env:
-      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"contract":"1.55","components":"0.6","regression-a":"1.0","regression-b1":"0.7","regression-b2":"1.1","regression-c":"0.05","regression-d":"0.65","physics":"0.28"}')[matrix.shard] }}
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"contract":"1.55","components":"0.6","regression-a":"1.0","regression-b1":"0.7","regression-b2":"1.1","regression-b3":"1.1","regression-c":"0.05","regression-d":"0.65","physics":"0.28"}')[matrix.shard] }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
@@ -1000,7 +1000,7 @@ jobs:
             nproc: 1
             budget: 50
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
+          # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
           # on whichever side a frozen glob happens to match.
@@ -1012,6 +1012,11 @@ jobs:
           - shard: regression-b2
             paths: ""
             bug_half: "2"
+            nproc: 1
+            budget: 50
+          - shard: regression-b3
+            paths: ""
+            bug_half: "3"
             nproc: 1
             budget: 50
           - shard: regression-c
@@ -1101,10 +1106,10 @@ jobs:
       # no summary and no test name. signal fails the ONE test by name and the
       # run completes. A hang inside a single C/XLA call can outlast SIGALRM
       # until the call returns; the job cap stays the backstop for that.
-      # Resolve the test paths. Normally that is just `matrix.paths`; for the two
-      # bug/ half-shards it is computed here so the split follows the directory
-      # instead of a frozen list -- a hardcoded half goes stale the moment someone
-      # adds a test file, and the wrong half silently grows.
+      # Resolve the test paths. Normally that is just `matrix.paths`; for the
+      # bug/ shards it is computed here so the split follows the directory
+      # instead of a frozen list -- a hardcoded slice goes stale the moment someone
+      # adds a test file, and the wrong slice silently grows.
       - name: Resolve test paths
         id: paths
         run: |
@@ -1112,7 +1117,7 @@ jobs:
           if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
           else
-            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
       - run: |
@@ -1184,6 +1189,20 @@ jobs:
         # Four further main runs on 2026-10-04 (bfc1fc279 .. ac45672d2): b1 49, 46, 46,
         # 51 min; b2 49, 48, 49 min and one kill at 51.
         #
+        # 2026-10-06: recent main runs took b1 57 and 37 min, b2 53 and 69 min (run
+        # 37406879725, 03:09 to 04:18), and two PR runs (#2716, #2736) were killed at
+        # exactly 70 min with b2 at 95-96 % done and every test passing. Both halves
+        # sat at the cap and runner speed varies by +-30 %. The bug tree is now split
+        # in thirds (regression-b1/b2/b3, each about two thirds of the former half
+        # load); b3 gets the same 70-minute cap and cache limit as b2.
+        #
+        # 2026-10-08: the thirds were contiguous equal-COUNT blocks of the sorted file
+        # list, so heavy files clustered: recent runs took b1 36-38 min, b3 45-54 min,
+        # b2 58-72 min against the 70-minute cap, and main's own b2 was killed at 72
+        # min (run 37662030748). The split is now balanced by duration from the
+        # committed ledger tools/ci_bug_durations.json (see tools/ci_split_paths.py
+        # for the regeneration command); matrix values and job names are unchanged.
+        #
         # contract (re-measured 2026-10-06; the first version of this note blamed
         # a "natural 92-95 minutes", which was FALSE): the shard reaches ~98 % at
         # 81-85 min, then one worker died silently — test_agn_subblock_wildcard_
@@ -1193,7 +1212,7 @@ jobs:
         # on signal and that one case carrying pytest.mark.timeout(1800), the
         # shard completes; 120 gives the worker holding that file (~98 % of the
         # shard + up to 30 min for the marked case on a slow runner) its room.
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2') && 70 || matrix.budget }}
+        timeout-minutes: ${{ matrix.shard == 'regression-a' && 85 || matrix.shard == 'contract' && 120 || (matrix.shard == 'regression-b1' || matrix.shard == 'regression-b2' || matrix.shard == 'regression-b3') && 70 || matrix.budget }}
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
         with:
@@ -1420,7 +1439,7 @@ jobs:
             budget: 50
             coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
+          # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
           # on whichever side a frozen glob happens to match.
@@ -1433,6 +1452,12 @@ jobs:
           - shard: regression-b2
             paths: ""
             bug_half: "2"
+            nproc: 1
+            budget: 50
+            coverage_budget: 75
+          - shard: regression-b3
+            paths: ""
+            bug_half: "3"
             nproc: 1
             budget: 50
             coverage_budget: 75
@@ -1478,10 +1503,10 @@ jobs:
       # same commit on different runners is a free near-controlled experiment, and
       # when one passes while the other dies the test *content* is exonerated by
       # construction. That only holds while the jobs do not diverge in how they run.
-      # Resolve the test paths. Normally that is just `matrix.paths`; for the two
-      # bug/ half-shards it is computed here so the split follows the directory
-      # instead of a frozen list -- a hardcoded half goes stale the moment someone
-      # adds a test file, and the wrong half silently grows.
+      # Resolve the test paths. Normally that is just `matrix.paths`; for the
+      # bug/ shards it is computed here so the split follows the directory
+      # instead of a frozen list -- a hardcoded slice goes stale the moment someone
+      # adds a test file, and the wrong slice silently grows.
       - name: Resolve test paths
         id: paths
         run: |
@@ -1489,7 +1514,7 @@ jobs:
           if [ -z "${{ matrix.bug_half }}" ]; then
             echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
           else
-            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 2 --join 2>&1) || exit 1
+            RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
       - run: |
@@ -1648,11 +1673,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1673,7 +1698,7 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
