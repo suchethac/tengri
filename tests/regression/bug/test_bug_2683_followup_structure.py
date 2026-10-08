@@ -68,7 +68,7 @@ def _truth(monkeypatch, ssp, obs, z, sfh):
     try:
         with monkeypatch.context() as m:
             m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
-            m.setattr(stellar_component, "INTEGRAND_FACTOR_SAWTOOTH", TRUTH_FACTOR)
+            m.setattr(stellar_component, "INTEGRAND_FACTOR_SAWTOOTH", TRUTH_FACTOR, raising=False)
             return _phot(_model(ssp, obs, "cic", z, sfh))
     finally:
         jax.clear_caches()
