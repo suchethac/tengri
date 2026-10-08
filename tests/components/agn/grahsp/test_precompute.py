@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import types
+
 import chex
 import pytest
 
@@ -54,6 +56,10 @@ def test_precompute_collapses_fixed_axes():
         def free_params(self):
             return self._fp
 
+        def get_distribution(self, name):
+            # The declared prior of agn_grahsp_plslope: the free axis spans its finite bounds.
+            return types.SimpleNamespace(bounds=(-2.7, -1.0))
+
     params = _StubParams(
         fixed_values={"agn_grahsp_ebv": 0.1},
         free_params=["agn_grahsp_plslope"],
@@ -64,9 +70,9 @@ def test_precompute_collapses_fixed_axes():
         redshift=0.0,
         parameters=params,
     )
-    # ebv axis collapsed -> only plslope (3) remains
+    # ebv axis collapsed -> plslope remains, widened from 3 to 4 nodes to reach -2.7
     assert "_collapsed_axes" in out
-    assert out["grid_phot"].shape == (3, 1)
+    assert out["grid_phot"].shape == (4, 1)
 
 
 def test_runtime_lookup_returns_finite_photometry():
