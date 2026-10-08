@@ -3,7 +3,7 @@ r"""The torus template lookups return the tabulated SED at an exact grid node.
 
 SKIRTOR and Fritz are tabulated radiative-transfer libraries, so the SED at a node
 is the model. The lookup used to be the triweight smoother, a kernel-weighted
-average of the node and its neighbours; at a node the band shares were off by up
+average of the node and its neighbors; at a node the band shares were off by up
 to 65 % (#2606). The lookup is now the node-exact PCHIP interpolant, so at every
 node the normalized template equals the stored node to floating-point precision.
 
@@ -78,7 +78,7 @@ def skirtor_grid():
 
     try:
         return skirtor.load_skirtor_grid()
-    except Exception as exc:  # missing template data
+    except OSError as exc:  # grid file absent and not downloadable
         pytest.skip(f"SKIRTOR template grid unavailable: {exc}")
 
 
@@ -88,7 +88,7 @@ def fritz_grid():
 
     try:
         return fritz.load_fritz_grid(fritz._find_fritz_grid())
-    except Exception as exc:  # missing template data
+    except OSError as exc:  # grid file absent and not downloadable
         pytest.skip(f"Fritz template grid unavailable: {exc}")
 
 
@@ -136,4 +136,6 @@ def test_skirtor_lookup_off_node_is_finite_with_finite_gradient(skirtor_grid):
     val = float(total(jnp.asarray(base)))
     grad = np.asarray(jax.grad(total)(jnp.asarray(base)))
     assert np.isfinite(val)
+    assert val > 0.0, "an off-node lookup of a positive template must be positive"
     assert np.all(np.isfinite(grad))
+    assert np.any(grad != 0.0), "an identically zero gradient would mean the lookup is flat"
