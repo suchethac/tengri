@@ -60,6 +60,34 @@ def _cumtrapz_rows(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     return np.concatenate([head, np.cumsum(seg, axis=-1)], axis=-1)
 
 
+def _cumtrapz_weights(x: np.ndarray, xq: np.ndarray) -> np.ndarray:
+    """Node weights of the cumulative trapezoid read at ``xq``: ``y @ W``.
+
+    ``_interp_rows(xq, x, _cumtrapz_rows(y, x))`` is linear in ``y``, so it equals
+    ``y @ W`` with ``W`` built from the 1-D grid alone. Every template row then
+    costs one BLAS pass instead of a cumulative sum over the whole grid (#2769).
+    The fractional cell is placed exactly as ``_interp_rows`` places it, including
+    its extrapolation outside ``[x[0], x[-1]]``.
+
+    Shapes: x (m,), xq (q,) -> (m, q).
+    """
+    idx = np.clip(np.searchsorted(x, xq) - 1, 0, x.size - 2)
+    span = x[idx + 1] - x[idx]
+    t = np.where(span > 0, (xq - x[idx]) / np.where(span > 0, span, 1.0), 0.0)
+    seg = np.arange(x.size - 1)[:, None]
+    coef = (seg < idx).astype(np.float64) + np.where(seg == idx, t, 0.0)
+    half = 0.5 * coef * np.diff(x)[:, None]
+    weights = np.zeros((x.size, xq.size), dtype=np.float64)
+    weights[:-1] += half
+    weights[1:] += half
+    return weights
+
+
+def _rows_dot(y: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """``y @ weights`` over the last axis of ``y``. Shapes: (..., m), (m, q) -> (..., q)."""
+    return (y.reshape(-1, y.shape[-1]) @ weights).reshape(*y.shape[:-1], weights.shape[-1])
+
+
 def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """Linear interpolation of every row of ``y`` (over ``x``) at ``xq``.
 
@@ -107,13 +135,14 @@ def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
         return np.zeros(lead), np.zeros(lead)
     if not np.any(grid < edge):
         return np.zeros(lead), _np_trapezoid(integrand, grid, axis=-1)
-    cum = _cumtrapz_rows(integrand, grid)
-    total = cum[..., -1]
-    idx = int(np.searchsorted(grid, edge))
-    if idx >= grid.size:
-        return total, np.zeros(lead)
-    below = _interp_rows(np.array([edge]), grid, cum)[..., 0]
-    return below, total - below
+    if int(np.searchsorted(grid, edge)) >= grid.size:
+        return _np_trapezoid(integrand, grid, axis=-1), np.zeros(lead)
+    # The above-half weights are the whole-band minus the below-half weights on
+    # the 1-D grid: identical floats on every segment wholly below the edge, so
+    # those nodes weigh exactly zero and no row subtracts two integrals.
+    cum_w = _cumtrapz_weights(grid, np.array([edge, grid[-1]]))
+    halves = _rows_dot(integrand, np.stack([cum_w[:, 0], cum_w[:, 1] - cum_w[:, 0]], axis=-1))
+    return halves[..., 0], halves[..., 1]
 
 
 def subband_edges(
@@ -255,12 +284,17 @@ def subband_quadrature(
     whole and the quadrature error then GROWS with K. Conservation is asserted.
     """
     edges = subband_edges(grid, tw_grid, n_subbands, lyc_edge_obs)
-    cum_sw = _cumtrapz_rows(integrand, grid)
-    cum_lsw = _cumtrapz_rows(integrand * grid, grid)
-    i_k = np.diff(_interp_rows(edges, grid, cum_sw), axis=-1)
-    l_k = np.diff(_interp_rows(edges, grid, cum_lsw), axis=-1)
+    # Chunk k's weights are the difference of the cumulative weights at its two
+    # edges, taken on the 1-D weights, so no template row subtracts two large
+    # cumulative integrals. The centroid numerator reuses them times lambda.
+    n_chunks = edges.size - 1
+    chunk_w = np.diff(_cumtrapz_weights(grid, edges), axis=-1)
+    total_w = _cumtrapz_weights(grid, grid[-1:])
+    sums = _rows_dot(integrand, np.concatenate([chunk_w, grid[:, None] * chunk_w, total_w], -1))
+    i_k = sums[..., :n_chunks]
+    l_k = sums[..., n_chunks : 2 * n_chunks]
 
-    total = cum_sw[..., -1]
+    total = sums[..., -1]
     resid = np.abs(i_k.sum(axis=-1) - total)
     scale = np.maximum(np.abs(total), 1e-300)
     if not np.all(resid / scale < 1e-10):
