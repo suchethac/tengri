@@ -174,11 +174,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # inactive model. Only the active ``sfr_mode``'s triplet is consumed; the
     # other three stay Fixed no-ops (mirrors the DPL-param pattern above).
     #
-    # Delvecchio+2021 (1.4 GHz; SEMPER Eq. 4):
+    # Delvecchio+2021 (1.4 GHz total radio; arXiv:2010.05510 Eq. 5):
     #   q(M*, z) = q0 (1+z)^z_slope - (logM* - 10) * mass_slope
     ParamDeclaration(
         "radio_delv_q0",
-        Fixed(2.743),
+        Fixed(2.646),
         "Delvecchio+2021 FIRRC normalization q0 at logM*=10, z=0 (1.4 GHz)",
         lambda lo, hi: lo > 0,
         "must be > 0",
@@ -187,19 +187,22 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # because _RADIO_SF_PARAMS_BY_MODE routes this triplet only under
         # ``radio_sfr_mode="delvecchio2021"`` -- the McCheyne triplet stays
         # pinned, and vice versa, so only one calibration is ever freed.
-        free_prior=Uniform(1.8, 3.5, "Delvecchio+2021 FIRRC q0", default=2.743),
+        # The upper bound keeps the synchrotron non-negative: at log M* = 9.5 (the
+        # low-mass end of the fit) q = q0 + 0.074, which must stay below q_* = 3.364
+        # (T_e = 2e4 K, alpha_ff = 0), so q0 <= 3.25 leaves margin. See radio_q_total_limit.
+        free_prior=Uniform(1.8, 3.25, "Delvecchio+2021 FIRRC q0", default=2.646),
     ),
     ParamDeclaration(
         "radio_delv_mass_slope",
-        Fixed(0.234),
+        Fixed(0.148),
         "Delvecchio+2021 FIRRC mass slope dq/dlogM* (subtracted; >0 = massive -> more radio)",
     ),
     ParamDeclaration(
         "radio_delv_z_slope",
-        Fixed(-0.025),
+        Fixed(-0.023),
         "Delvecchio+2021 FIRRC redshift exponent on (1+z) (slight decline with z)",
     ),
-    # McCheyne+2022 (150 MHz; SEMPER Eq. 5):
+    # McCheyne+2022 (150 MHz, A&A 662, A100; constants not verified against the body):
     #   q(M*, z) = q0 (1+z)^z_slope + mass_slope * (logM* - 10)
     ParamDeclaration(
         "radio_mcch_q0",
@@ -208,8 +211,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         # As above but centered on the 150 MHz normalization (1.98 rather than
-        # 2.743); the low-frequency q0 sits lower because synchrotron dominates
-        # further above the thermal component there.
+        # 2.646); the low-frequency q0 sits lower because synchrotron dominates
+        # further above the thermal component there. Upper bound 3.0 is below the
+        # 150 MHz limit q_* (about 3.28 at T_e = 2e4 K, alpha_ff = -0.1).
         free_prior=Uniform(1.0, 3.0, "McCheyne+2022 FIRRC q0", default=1.98),
     ),
     ParamDeclaration(

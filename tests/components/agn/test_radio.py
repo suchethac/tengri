@@ -128,10 +128,10 @@ class TestDelvecchio2021:
     """Tests for radio_sfr_delvecchio2021."""
 
     def test_q_at_fiducial_mass_z0(self):
-        """At log(M★)=10, z=0: q = q0 × 1^z_slope - 0 = 2.743."""
+        """At log(M★)=10, z=0: q = q0 × 1^z_slope - 0 = 2.646 (Delvecchio+2021 Eq. 5)."""
         # L_1.4GHz = L_IR / (3.75e12 × 10^q)
-        # At log(M★)=10, z=0: q = 2.743
-        expected_q = 2.743
+        # At log(M★)=10, z=0: q = 2.646
+        expected_q = 2.646
         L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
         L = radio_sfr_delvecchio2021(
             _WAVE_14GHZ,
@@ -159,31 +159,31 @@ class TestDelvecchio2021:
         )
 
     def test_q_mass_dependence_correct_magnitude(self):
-        """Δq over 2 dex in M★ should be 2 × mass_slope = 0.468."""
+        """Δq over 2 dex in M★ should be 2 × mass_slope = 0.296."""
         L_m10 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_m12 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
         )
-        # L ∝ 10^(-q), so Δlog(L) = Δq = 2 × 0.234 = 0.468
+        # L ∝ 10^(-q), so Δlog(L) = Δq = 2 × 0.148 = 0.296
         delta_log_L = jnp.log10(L_m12[0]) - jnp.log10(L_m10[0])
-        assert abs(float(delta_log_L) - 0.468) < 0.01, (
-            f"Δlog(L) = {float(delta_log_L):.4f} expected 0.468"
+        assert abs(float(delta_log_L) - 0.296) < 0.01, (
+            f"Δlog(L) = {float(delta_log_L):.4f} expected 0.296"
         )
 
     def test_z_evolution_mild(self):
-        """z_slope = -0.025: q decreases mildly from z=0 to z=4."""
+        """z_slope = -0.023: q decreases mildly from z=0 to z=4."""
         L_z0 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_z4 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=4.0, apply_suppression=False
         )
-        # q(z=4) = 2.743 * 5^(-0.025) ≈ 2.743 * 0.9604 ≈ 2.634
-        # Δq ≈ 0.109 → L_z4 / L_z0 ≈ 10^0.109 ≈ 1.285
+        # q(z=4) = 2.646 * 5^(-0.023) ≈ 2.646 * 0.9637 ≈ 2.550
+        # Δq ≈ 0.096 → L_z4 / L_z0 ≈ 10^0.096 ≈ 1.247
         ratio = float(L_z4[0] / L_z0[0])
-        assert 1.2 < ratio < 1.4, f"z=4 / z=0 radio ratio {ratio:.3f}, expected ~1.28"
+        assert 1.2 < ratio < 1.4, f"z=4 / z=0 radio ratio {ratio:.3f}, expected ~1.25"
 
     def test_hierarchical_param_q0_increases_L(self):
         """Higher q0 → higher q → lower L_radio (L ∝ 10^{-q})."""
@@ -467,7 +467,7 @@ class TestRadioTotalDispatcher:
             q0=2.5,
             apply_suppression=False,
         )
-        # q0=2.5 < 2.743 default → L should be higher (L ∝ 10^{-q})
+        # q0=2.5 < 2.646 default → L should be higher (L ∝ 10^{-q})
         assert float(L_override[0]) > float(L_default[0])
 
     def test_total_dpl_bell2003_backward_compat(self):

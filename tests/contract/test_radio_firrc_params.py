@@ -61,11 +61,11 @@ class TestFirrcParamRegistry:
 
     def test_literature_defaults(self):
         priors = {d.name: d.prior for d in RadioSEDComponent().declared_parameters()}
-        # Delvecchio+2021 best-fit (SEMPER Eq. 4).
-        assert float(priors["radio_delv_q0"].value) == pytest.approx(2.743)
-        assert float(priors["radio_delv_mass_slope"].value) == pytest.approx(0.234)
-        assert float(priors["radio_delv_z_slope"].value) == pytest.approx(-0.025)
-        # McCheyne+2022 best-fit (SEMPER Eq. 5) — distinct values + sign.
+        # Delvecchio+2021 best-fit, arXiv:2010.05510 Eq. 5 (total-radio q_IR).
+        assert float(priors["radio_delv_q0"].value) == pytest.approx(2.646)
+        assert float(priors["radio_delv_mass_slope"].value) == pytest.approx(0.148)
+        assert float(priors["radio_delv_z_slope"].value) == pytest.approx(-0.023)
+        # McCheyne+2022 constants as carried by the code (not verified; see radio.py).
         assert float(priors["radio_mcch_q0"].value) == pytest.approx(1.98)
         assert float(priors["radio_mcch_mass_slope"].value) == pytest.approx(-0.22)
         assert float(priors["radio_mcch_z_slope"].value) == pytest.approx(0.02)

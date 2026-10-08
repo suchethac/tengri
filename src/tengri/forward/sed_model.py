@@ -1618,60 +1618,76 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
-def _upper_support(spec, name: str) -> float | None:
-    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
-    dists = getattr(spec, "_distributions", {})
-    dist = dists.get(name)
+def _support_bounds(spec, name: str) -> tuple[float, float] | None:
+    """``(lo, hi)`` support of ``name`` in ``spec`` (Fixed value or prior bounds)."""
+    dist = getattr(spec, "_distributions", {}).get(name)
     if dist is None:
         return None
     if dist.is_fixed:
         value = dist.value
-        return float(value) if isinstance(value, (int, float)) else None
-    return float(dist.bounds[1])
+        return (float(value), float(value)) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[0]), float(dist.bounds[1])
+
+
+#: SF radio mode -> (q parameter, calibration frequency [Hz]) for the total-radio refusal.
+_TOTAL_Q_MODES = {
+    "bell2003": ("radio_q_ir", 1.4e9),
+    "delvecchio2021": ("radio_delv_q0", 1.4e9),
+    "mccheyne2022": ("radio_mcch_q0", 1.5e8),
+}
 
 
 def _validate_radio_q_total_support(spec) -> None:
-    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+    """Refuse a q-prior support that makes the total-calibrated synchrotron negative (#2590).
 
-    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
-    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
-    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
-    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
-    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
-    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
-    non-thermal term) or to the other star-formation radio modes.
+    The Bell (2003) modes calibrate the total at 1.4 GHz with ``radio_q_ir``. The
+    Delvecchio+2021 and McCheyne+2022 modes calibrate the total at their own reference
+    frequencies (1.4 GHz and 150 MHz) with ``radio_delv_q0`` and ``radio_mcch_q0``. In each
+    case the synchrotron term is the total minus the Murphy+2011 free-free luminosity at
+    that frequency, which is negative once q exceeds
+    :func:`~tengri.components.radio.radio.radio_q_total_limit` (3.5145 at 1.4 GHz, 1e4 K).
+    The limit is evaluated at every corner of the ``radio_T_e`` and ``radio_alpha_ff``
+    support and the smallest is taken, since it is the corner that binds. This is the
+    prior-support check at log M* = 10, z = 0. The mass and redshift terms of the
+    Delvecchio and McCheyne forms are galaxy properties and are covered by the declared
+    priors of their q0 parameters. It does not apply to ``freefree: False``, which
+    calibrates the non-thermal term alone.
 
     Raises
     ------
     ConfigError
-        If the support of ``radio_q_ir`` reaches the limit at the support of the
-        electron temperature.
+        If the support of the mode's q parameter reaches the limit.
     """
     if not getattr(spec, "radio", False):
         return
-    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in _TOTAL_Q_MODES:
         return
     if getattr(spec, "radio_include_freefree", None) is False:
         return
-    q_hi = _upper_support(spec, "radio_q_ir")
-    t_hi = _upper_support(spec, "radio_T_e")
-    a_hi = _upper_support(spec, "radio_alpha_ff")
-    if q_hi is None or t_hi is None or a_hi is None:
+    q_name, nu_ref = _TOTAL_Q_MODES[mode]
+    q_bounds = _support_bounds(spec, q_name)
+    t_bounds = _support_bounds(spec, "radio_T_e")
+    a_bounds = _support_bounds(spec, "radio_alpha_ff")
+    if q_bounds is None or t_bounds is None or a_bounds is None:
         return
     from tengri.components.radio.radio import radio_q_total_limit
     from tengri.config.exceptions import ConfigError
 
-    q_star = radio_q_total_limit(t_hi, a_hi)
+    corners = [(t, a, radio_q_total_limit(t, a, nu_ref)) for t in t_bounds for a in a_bounds]
+    t_bind, a_bind, q_star = min(corners, key=lambda c: c[2])
+    q_hi = q_bounds[1]
     if q_hi > q_star:
         raise ConfigError(
-            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
-            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
-            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
-            "total minus the Murphy+2011 free-free luminosity, "
-            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
-            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
-            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
-            "term alone."
+            f"{q_name} reaches {q_hi:g}, above q_* = {q_star:.4f} at "
+            f"{nu_ref / 1e9:g} GHz for radio_T_e = {t_bind:g} K and "
+            f"radio_alpha_ff = {a_bind:g} (the binding corner of the declared support). "
+            f"{q_name} calibrates the TOTAL luminosity at {nu_ref / 1e9:g} GHz, so the "
+            "synchrotron term is the total minus the Murphy+2011 free-free luminosity, "
+            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 (nu/1 GHz)^alpha_ff], "
+            "and it is negative above q_*. Use "
+            f"{q_name} <= {q_star:.4f} (or a lower radio_T_e upper bound), or pass "
+            "freefree=False to calibrate the non-thermal term alone."
         )
 
 

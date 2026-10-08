@@ -93,8 +93,8 @@ _ALPHA_SF_MCCHEYNE2022: float = 0.7  # McCheyne+2022, SEMPER Eq. 5
 # constants, not a single shared value, and the AGN jet has its own separate
 # reference frequency.
 _NU_REF_BELL2003_HZ: float = 1.4e9  # Bell (2003) calibration frequency
-_NU_REF_DELVECCHIO2021_HZ: float = 1.4e9  # SEMPER Eq. 4 (1.4 GHz)
-_NU_REF_MCCHEYNE2022_HZ: float = 1.5e8  # SEMPER Eq. 5 (150 MHz)
+_NU_REF_DELVECCHIO2021_HZ: float = 1.4e9  # Delvecchio+2021 Eq. 1 (1.4 GHz total radio)
+_NU_REF_MCCHEYNE2022_HZ: float = 1.5e8  # McCheyne+2022 (150 MHz)
 _NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
 
 # AGNFITTER-RX (Martinez-Ramirez+2024, A&A 688 A46, Sec 3, p.3) parity mode:
@@ -459,56 +459,79 @@ def radio_sfr_delvecchio2021(
     L_ir: float,
     log_mstar: float,
     redshift: float,
-    q0: float = 2.743,
-    mass_slope: float = 0.234,
-    z_slope: float = -0.025,
+    q0: float = 2.646,
+    mass_slope: float = 0.148,
+    z_slope: float = -0.023,
     alpha_sf: float = _ALPHA_SF_DELVECCHIO2021,
     nu_ref: float = _NU_REF_DELVECCHIO2021_HZ,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     *,
     log_L_ir: float | None = None,
+    thermal_ref: float = 0.0,
 ) -> jnp.ndarray:
-    """Star-forming synchrotron via mass- and redshift-dependent FIRRC at 1.4 GHz.
+    r"""Star-forming synchrotron from the Delvecchio+2021 total-radio FIRRC at 1.4 GHz.
 
-    Implements the UV+FIR FIRRC from Delvecchio+2021 (Eq. 4 in SEMPER,
-    arXiv:2503.20525), calibrated on >400 000 SFGs in COSMOS at 0.1 < z < 4:
+    Implements the multi-parametric fit of the IR-radio ratio as a function of stellar
+    mass and redshift, Delvecchio et al. (2021) Eq. 5 [1]_, fitted to the AGN-corrected
+    total 1.4 GHz luminosity of >400 000 star-forming COSMOS galaxies at 0.1 < z < 4.5:
 
     .. math::
 
-        q(M_\\star, z) = q_0 \\, (1+z)^{z_{\\rm slope}}
-        - (\\log M_\\star/M_\\odot - 10) \\times m_{\\rm slope}
+        q(M_\star, z) = q_0 \, (1+z)^{z_{\rm slope}}
+        - (\log M_\star/M_\odot - 10) \times m_{\rm slope}
 
-    The three FIRRC parameters (``q0``, ``mass_slope``, ``z_slope``) are
-    exposed as function arguments so they can be promoted to hierarchical
-    prior hyperparameters in ``PopulationFitter`` without modifying this
-    code.  Their defaults are the Delvecchio+2021 best-fit values.
+    with the calibration of Eq. 1 of the same paper,
+    :math:`q = \log[L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz})] - \log L_{1.4\,{\rm GHz}}`.
+    The calibrated total at the reference frequency is therefore
+
+    .. math::
+
+        L^{\rm tot}_{\nu_{\rm ref}} = \frac{L_{\rm IR}}{3.75\times10^{12}\,{\rm Hz}
+        \times 10^{q(M_\star, z)}}
+
+    and the synchrotron term is the calibrated total minus the thermal term that the
+    caller supplies at the same frequency (``thermal_ref``), so that synchrotron plus
+    thermal equals the calibration at ``nu_ref``. The spectral shape is
+    :math:`L_\nu \propto \nu^{-\alpha}`.
+
+    The defaults are the paper's best-fit values, :math:`q_0 = 2.646 \pm 0.024`,
+    :math:`z_{\rm slope} = -0.023 \pm 0.008`, :math:`m_{\rm slope} = 0.148 \pm 0.013`
+    (Delvecchio+2021 Eq. 5, verified against the arXiv body text). The fit is the
+    total-radio relation: no Bell (2003) n(L) factor is applied, because q(M_\star, z)
+    already carries the mass and luminosity dependence that n(L) would correct for.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     L_ir : float
-        Total absorbed dust power ``L_absorbed * eta`` [erg/s].
+        Total absorbed dust power ``L_absorbed * eta`` [erg/s]. The paper's L_IR is the
+        rest 8-1000 um luminosity; the two agree to the 0.94-0.96 band fraction noted in
+        :func:`radio_sfr_bell2003`.
     log_mstar : float
-        log10(M★ / M⊙). Typical range [8, 12].
+        log10(M★ / M⊙). Fit sample: the M⋆-selected bins of the paper (about 9 to 12).
     redshift : float
-        Galaxy redshift. Valid range [0.1, 4] per Delvecchio+2021.
+        Galaxy redshift [dimensionless]. Fit sample: 0.1 < z < 4.5.
     q0 : float
-        FIRRC normalization at log(M★)=10, z=0. Default 2.743.
-        Hierarchical prior suggestion: Uniform(2.4, 3.1).
+        FIRRC normalization at log(M★)=10, z=0 [dimensionless]. Default 2.646.
     mass_slope : float
-        ∂q / ∂log(M★). Default 0.234 (negative: massive → lower q → more radio).
-        Hierarchical prior suggestion: Uniform(0.0, 0.5).
+        Coefficient of -(log M★ - 10) [dex^-1]. Default 0.148 (massive galaxies have a
+        lower q, hence more radio per unit IR).
     z_slope : float
-        Power-law exponent on (1+z). Default -0.025 (slight decline with z).
-        Hierarchical prior suggestion: Uniform(-0.2, 0.05).
+        Power-law exponent on (1+z) [dimensionless]. Default -0.023.
     alpha_sf : float
-        Synchrotron spectral index. Default 0.7 (consensus: Novak+2017, SEMPER).
+        Synchrotron spectral index [dimensionless]. Default 0.7 (Novak+2017, SEMPER).
     nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz (calibration frequency).
     apply_suppression : bool
-        Apply Bell+2003 synchrotron suppression for low-SFR galaxies.
-        Default True.
+        Legacy opt-in: multiply the synchrotron normalization by the Bell (2003) n(L)
+        factor. Not part of the total-radio construction; default False.
+    log_L_ir : float or None, keyword only
+        ``log10(L_ir)`` for the float32-safe path (#1206).
+    thermal_ref : float, keyword only
+        Thermal (free-free) luminosity density at ``nu_ref`` [erg/s/Hz] carried by a
+        separate term, subtracted from the calibrated total. Default 0.0 (stand-alone:
+        the synchrotron term carries the whole calibrated total).
 
     Returns
     -------
@@ -519,24 +542,34 @@ def radio_sfr_delvecchio2021(
     -----
     **JIT-compatible**: yes, pure JAX function.
 
-    q decreases with increasing M★ (radio-brighter per unit IR for massive
-    galaxies), consistent with stronger magnetic fields and denser ISM.
-    The z_slope = -0.025 implies much more modest redshift evolution than the
-    older Delhaize+2017 value of -0.15.
+    Approximation of the Delvecchio et al. (2021) Eq. 5 fit: the redshift dependence is
+    the power law the paper reports, valid over 0.1 < z < 4.5 and about 9 < log M* < 12.
+    Outside that range the fit is an extrapolation. The fit is the AGN-corrected median
+    total-radio relation; its scatter (about 0.2 dex) is not modelled.
+
+    The "total at nu_ref" construction and the thermal subtraction follow the
+    #2590 convention used by the Bell (2003) modes (see
+    :func:`radio_sfr_bell2003`); this function consumes the same ``thermal_ref`` argument.
+
+    References
+    ----------
+    .. [1] I. Delvecchio et al., "The infrared-radio correlation of star-forming galaxies
+       is strongly M*-dependent but nearly redshift-invariant since z ~ 4", A&A, 647, A123
+       (2021). arXiv:2010.05510. https://doi.org/10.1051/0004-6361/202039647
     """
     nu = _C_AA / wavelength
 
-    # Mass- and redshift-dependent q_IR (Delvecchio+2021 UV+FIR, SEMPER Eq. 4)
+    # Mass- and redshift-dependent q (Delvecchio+2021 Eq. 5, total 1.4 GHz)
     q_ir = q0 * (1.0 + redshift) ** z_slope - (log_mstar - 10.0) * mass_slope
 
-    # L at 1.4 GHz reference from FIRRC definition. float32-safe (#1206): form
-    # from log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
+    # Calibrated total at nu_ref (Eq. 1). float32-safe (#1206): form from
+    # log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
     if log_L_ir is None:
-        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+        L_tot = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
     else:
-        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+        L_tot = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+    L_ref = L_tot - thermal_ref
 
-    # Optional Bell+2003 synchrotron suppression (low-SFR galaxies)
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
 
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
@@ -553,15 +586,16 @@ def radio_sfr_mccheyne2022(
     z_slope: float = 0.02,
     alpha_sf: float = _ALPHA_SF_MCCHEYNE2022,
     nu_ref: float = _NU_REF_MCCHEYNE2022_HZ,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     *,
     log_L_ir: float | None = None,
+    thermal_ref: float = 0.0,
 ) -> jnp.ndarray:
-    """Star-forming synchrotron via mass- and redshift-dependent FIRRC at 150 MHz.
+    r"""Star-forming synchrotron from the McCheyne+2022 total-radio FIRRC at 150 MHz.
 
-    Implements the FIRRC from McCheyne+2022 (Eq. 5 in SEMPER, arXiv:2503.20525),
-    derived from LOFAR 150 MHz observations of a mass-complete sample in
-    ELAIS-N1 at z < 1:
+    Implements the mass- and redshift-dependent FIRRC of McCheyne et al. (2022) [1]_,
+    derived from LOFAR 150 MHz observations of a mass-complete sample in ELAIS-N1 at
+    z < 1, and calibrated against total IR luminosity (rest 8-1000 um):
 
     .. math::
 
@@ -572,9 +606,15 @@ def radio_sfr_mccheyne2022(
     spectral-index rescaling from 1.4 GHz for low-frequency data. For z > 1,
     the Delvecchio+2021 model (rescaled to 150 MHz) is better constrained.
 
+    The calibrated total at 150 MHz is :math:`L^{\rm tot}_{\nu_{\rm ref}} = L_{\rm IR}
+    / (3.75\times10^{12}\,{\rm Hz}\times10^{q})`, the same construction as the Bell (2003)
+    modes and :func:`radio_sfr_delvecchio2021`. The synchrotron term is that total minus
+    the thermal term supplied at ``nu_ref`` (``thermal_ref``), with spectral shape
+    :math:`L_\nu \propto \nu^{-\alpha}`.
+
     The three FIRRC parameters (``q0``, ``mass_slope``, ``z_slope``) are
-    exposed as hierarchical prior parameters; their defaults are the
-    McCheyne+2022 best-fit values.
+    exposed as hierarchical prior parameters; their defaults are the constants
+    documented for McCheyne+2022 (see Notes).
 
     Parameters
     ----------
@@ -590,8 +630,8 @@ def radio_sfr_mccheyne2022(
         FIRRC normalization at log(M★)=10, z=0. Default 1.98.
         Hierarchical prior suggestion: Uniform(1.5, 2.5).
     mass_slope : float
-        ∂q / ∂log(M★). Default -0.22 (negative sign convention differs from
-        Delvecchio: here higher M★ → lower q directly via negative coefficient).
+        Coefficient of (log M★ - 10) in q [dex^-1]. Default -0.22 (higher M★ gives a
+        lower q, hence more radio per unit IR).
         Hierarchical prior suggestion: Uniform(-0.5, 0.0).
     z_slope : float
         Power-law exponent on (1+z). Default 0.02 (nearly no z evolution).
@@ -601,7 +641,13 @@ def radio_sfr_mccheyne2022(
     nu_ref : float
         Reference frequency [Hz]. Default 150 MHz (calibration frequency).
     apply_suppression : bool
-        Apply Bell+2003 synchrotron suppression. Default True.
+        Legacy opt-in: multiply the synchrotron normalization by the Bell (2003) n(L)
+        factor. Not part of the total-radio construction; default False.
+    log_L_ir : float or None, keyword only
+        ``log10(L_ir)`` for the float32-safe path (#1206).
+    thermal_ref : float, keyword only
+        Thermal (free-free) luminosity density at ``nu_ref`` [erg/s/Hz] carried by a
+        separate term, subtracted from the calibrated total. Default 0.0.
 
     Returns
     -------
@@ -612,23 +658,32 @@ def radio_sfr_mccheyne2022(
     -----
     **JIT-compatible**: yes, pure JAX function.
 
-    McCheyne+2022 reports a steeper mass dependence than Delvecchio+2021.
-    The discrepancy is reconciled when using α = -0.59 instead of -0.7 for
-    spectral index conversion between 1.4 GHz and 150 MHz.
+    **Coefficients not verified against the paper body.** The defaults (1.98, -0.22,
+    0.02) are the constants this module has always carried. The abstract of
+    McCheyne et al. (2022) [1]_ gives the mass dependence as
+    :math:`q_{\rm TIR}(M_\star) = (2.00\pm0.01) - (0.22\pm0.02)(\log M_\star - 10.05)` and
+    the redshift dependence as :math:`q_{\rm TIR}(z) = 1.94\,(1+z)^{-0.04\pm0.01}`; a
+    combined fit was not available to check, so the defaults are not pinned to the paper.
+
+    References
+    ----------
+    .. [1] I. McCheyne et al., "The LOFAR Two-metre Sky Survey Deep fields. The mass
+       dependence of the far-infrared radio correlation at 150 MHz using deblended Herschel
+       fluxes", A&A, 662, A100 (2022). https://doi.org/10.1051/0004-6361/202141307
     """
     nu = _C_AA / wavelength
 
-    # Mass- and redshift-dependent q at 150 MHz (McCheyne+2022, SEMPER Eq. 5)
+    # Mass- and redshift-dependent q at 150 MHz (McCheyne+2022, total)
     q_ir = q0 * (1.0 + redshift) ** z_slope + mass_slope * (log_mstar - 10.0)
 
-    # L at 150 MHz reference from FIRRC definition. float32-safe (#1206): form
-    # from log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
+    # Calibrated total at nu_ref. float32-safe (#1206): form from log10(L_IR)
+    # when supplied so the ~1e43 linear L_IR never materializes.
     if log_L_ir is None:
-        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+        L_tot = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
     else:
-        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+        L_tot = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
+    L_ref = L_tot - thermal_ref
 
-    # Optional Bell+2003 synchrotron suppression
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
 
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
@@ -718,21 +773,27 @@ def radio_freefree(
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
 
-def radio_q_total_limit(T_e: float = 1e4, alpha_ff: float = -0.1) -> float:
-    r"""Largest ``q_ir`` for which the Bell-total synchrotron term stays non-negative.
+def radio_q_total_limit(
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
+    nu_ref: float = _NU_REF_BELL2003_HZ,
+) -> float:
+    r"""Largest ``q_ir`` for which the total-calibrated synchrotron term stays non-negative.
 
-    With ``q_ir`` calibrating the total 1.4 GHz luminosity (Bell 2003 [1]_ Eq. 1),
-    the synchrotron term is the total minus the Murphy+2011 [2]_ free-free luminosity
-    at 1.4 GHz, and both scale with ``L_ir``. It vanishes at
+    With ``q_ir`` calibrating the total luminosity at ``nu_ref`` (Bell 2003 [1]_ Eq. 1 at
+    1.4 GHz; Delvecchio+2021 and McCheyne+2022 at their own reference frequencies), the
+    synchrotron term is the total minus the Murphy+2011 [2]_ free-free luminosity at
+    ``nu_ref``, and both scale with ``L_ir``. It vanishes at
 
     .. math::
 
         q_\ast = -\log_{10}\left[3.75\times10^{12}\,
         \frac{3.88\times10^{-44}}{4.6\times10^{-28}}
         \left(\frac{T_e}{10^4\,{\rm K}}\right)^{0.45}
-        (1.4)^{\alpha_{\rm ff}}\right]
+        \left(\frac{\nu_{\rm ref}}{1\,{\rm GHz}}\right)^{\alpha_{\rm ff}}\right]
 
-    (3.5145 for ``T_e`` = 1e4 K, ``alpha_ff`` = -0.1) and is negative for larger q.
+    (3.5145 at 1.4 GHz for ``T_e`` = 1e4 K, ``alpha_ff`` = -0.1) and is negative for
+    larger q.
 
     Parameters
     ----------
@@ -740,6 +801,8 @@ def radio_q_total_limit(T_e: float = 1e4, alpha_ff: float = -0.1) -> float:
         Electron temperature [K].
     alpha_ff : float
         Free-free spectral index (L_nu ∝ nu^alpha_ff).
+    nu_ref : float
+        Calibration frequency [Hz]. Default 1.4 GHz (Bell 2003).
 
     Returns
     -------
@@ -757,7 +820,7 @@ def radio_q_total_limit(T_e: float = 1e4, alpha_ff: float = -0.1) -> float:
        https://doi.org/10.1088/0004-637X/737/2/67
     """
     ff_per_lir = _SFR_FROM_LIR_MURPHY2011 * _C_FF * (T_e / 1.0e4) ** 0.45
-    ff_per_lir *= (_NU_REF_BELL2003_HZ / 1.0e9) ** alpha_ff
+    ff_per_lir *= (nu_ref / 1.0e9) ** alpha_ff
     return -math.log10(3.75e12 * ff_per_lir)
 
 
@@ -843,7 +906,10 @@ def _dispatch_sfr(
 
     ``"bell2003_split"`` is the AGNFITTER-RX construction: a fixed 90/10 split of the
     same total with its own slopes, so it takes no thermal subtraction.
-    ``"delvecchio2021"`` and ``"mccheyne2022"`` take no thermal subtraction here.
+    ``"delvecchio2021"`` and ``"mccheyne2022"`` are total-radio calibrations at their own
+    reference frequency (1.4 GHz and 150 MHz). With ``q_is_total`` the Murphy+2011
+    free-free term at that frequency is subtracted from the calibrated total, exactly as
+    for the Bell modes, and no n(L) factor is applied.
     """
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
@@ -861,7 +927,7 @@ def _dispatch_sfr(
         return radio_sfr_bell2003(
             wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir, thermal_ref=thermal_ref
         )
-    elif sfr_mode == "delvecchio2021":
+    elif sfr_mode in ("delvecchio2021", "mccheyne2022"):
         kw = {}
         if q0 is not None:
             kw["q0"] = q0
@@ -869,30 +935,22 @@ def _dispatch_sfr(
             kw["mass_slope"] = mass_slope
         if z_slope is not None:
             kw["z_slope"] = z_slope
-        return radio_sfr_delvecchio2021(
-            wavelength,
-            L_ir,
-            log_mstar,
-            redshift,
-            apply_suppression=apply_suppression,
-            log_L_ir=log_L_ir,
-            **kw,
+        fn, nu_ref_mode = (
+            (radio_sfr_delvecchio2021, _NU_REF_DELVECCHIO2021_HZ)
+            if sfr_mode == "delvecchio2021"
+            else (radio_sfr_mccheyne2022, _NU_REF_MCCHEYNE2022_HZ)
         )
-    elif sfr_mode == "mccheyne2022":
-        kw = {}
-        if q0 is not None:
-            kw["q0"] = q0
-        if mass_slope is not None:
-            kw["mass_slope"] = mass_slope
-        if z_slope is not None:
-            kw["z_slope"] = z_slope
-        return radio_sfr_mccheyne2022(
+        thermal_ref = (
+            _thermal_at_nu_ref(nu_ref_mode, L_ir, T_e, alpha_ff, log_L_ir) if q_is_total else 0.0
+        )
+        return fn(
             wavelength,
             L_ir,
             log_mstar,
             redshift,
             apply_suppression=apply_suppression,
             log_L_ir=log_L_ir,
+            thermal_ref=thermal_ref,
             **kw,
         )
     else:
@@ -1114,7 +1172,7 @@ def radio_total_terms(
     q0: float | None = None,
     mass_slope: float | None = None,
     z_slope: float | None = None,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
@@ -1172,8 +1230,9 @@ def radio_total_terms(
     z_slope : float or None
         Redshift slope override; None uses the mode's literature default.
     apply_suppression : bool
-        Apply Bell+2003 synchrotron suppression for low-SFR galaxies
-        (delvecchio2021/mccheyne2022 modes). Default True.
+        Legacy opt-in: Bell (2003) n(L) factor on the delvecchio2021/mccheyne2022
+        synchrotron. Those modes are total-radio calibrations and do not take it.
+        Default False.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
     q_is_total : bool or None
@@ -1265,7 +1324,7 @@ def radio_total(
     q0: float | None = None,
     mass_slope: float | None = None,
     z_slope: float | None = None,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
@@ -1311,7 +1370,8 @@ def radio_total(
     z_slope : float or None
         Redshift slope override. None uses the mode's literature default.
     apply_suppression : bool
-        Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
+        Legacy opt-in n(L) factor for the delvecchio/mccheyne modes (default False;
+        see :func:`radio_sfr_delvecchio2021`).
     include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
     q_is_total : bool or None
@@ -1381,7 +1441,7 @@ def radio_total_dpl_terms(
     q0: float | None = None,
     mass_slope: float | None = None,
     z_slope: float | None = None,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
@@ -1448,8 +1508,9 @@ def radio_total_dpl_terms(
     z_slope : float or None
         Redshift slope override; None uses the mode's literature default.
     apply_suppression : bool
-        Apply Bell+2003 synchrotron suppression for low-SFR galaxies
-        (delvecchio2021/mccheyne2022 modes). Default True.
+        Legacy opt-in: Bell (2003) n(L) factor on the delvecchio2021/mccheyne2022
+        synchrotron. Those modes are total-radio calibrations and do not take it.
+        Default False.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
     q_is_total : bool or None
@@ -1541,7 +1602,7 @@ def radio_total_dpl(
     q0: float | None = None,
     mass_slope: float | None = None,
     z_slope: float | None = None,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
@@ -1655,7 +1716,7 @@ def compute_radio_components(
     q0: float | None = None,
     mass_slope: float | None = None,
     z_slope: float | None = None,
-    apply_suppression: bool = True,
+    apply_suppression: bool = False,
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,

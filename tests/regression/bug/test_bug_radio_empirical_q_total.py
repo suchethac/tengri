@@ -1,0 +1,215 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Delvecchio+2021 and McCheyne+2022 q_IR are TOTAL-radio calibrations (#2590 follow-up).
+
+Both relations are fitted to observed total radio luminosity against total IR luminosity,
+so the calibrated total at the relation's own reference frequency is
+
+    L_tot(nu_ref) = L_IR / (3.75e12 Hz x 10^q(M*, z)),                 (Delvecchio Eq. 1)
+
+and the emitted synchrotron is what remains after the Murphy+2011 free-free term at the same
+frequency is taken out. With the free-free term on the radio block the public SED
+(``sed_radio`` + ``sed_nebular``) therefore reproduces the calibration at nu_ref, for every
+(M*, z, L_IR). The earlier construction multiplied the total by the Bell (2003) n(L)
+suppression on top of a q(M*, z) that already carries the mass and luminosity trend,
+which counted that correction twice and missed the calibration by -11 % to +12 %.
+
+Every expectation in this file is written from the paper equation, never by calling the
+code under test:
+
+* Delvecchio+2021, arXiv:2010.05510, Eq. 5 (multi-parametric q_IR(M*, z) fit, 1.4 GHz,
+  AGN-corrected total radio), coefficients 2.646 +/- 0.024, -0.023 +/- 0.008, 0.148 +/- 0.013.
+* McCheyne+2022, A&A 662, A100 (150 MHz). The paper body was not readable from this
+  environment, so the constants asserted here are the ones the code documents
+  (q0 = 1.98 at log M* = 10, z = 0; mass slope -0.22; z exponent +0.02). The test pins the
+  construction, not the constants; see the report for the open coefficient check.
+* Murphy+2011 Eqs. 4 and 11 for the free-free term (3.88e-44 Msun/yr per erg/s of L_IR,
+  2.174e27 erg/s/Hz per Msun/yr at 1 GHz, nu^-0.1 at T_e = 1e4 K).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import tengri
+from tengri.config.exceptions import ConfigError
+
+pytestmark = pytest.mark.regression_bug
+
+_C_AA = 2.99792458e18  # Angstrom/s
+_LOG_M_GRID = (9.5, 10.0, 10.5, 11.0)
+_Z_GRID = (0.0, 1.0)
+_LOG_TOTAL_MASS_OFFSET = 0.2246  # log_total_mass - log_mstar at age 5 Gyr, measured
+
+# (sfr_mode, paper q(M*, z), nu_ref [Hz], synchrotron index used by the mode)
+_MODES = {
+    "delvecchio2021": (
+        lambda logm, z: 2.646 * (1.0 + z) ** (-0.023) - 0.148 * (logm - 10.0),
+        1.4e9,
+    ),
+    "mccheyne2022": (
+        lambda logm, z: 1.98 * (1.0 + z) ** 0.02 - 0.22 * (logm - 10.0),
+        1.5e8,
+    ),
+}
+
+
+# ---- the literature, written out here ----------------------------------------------
+
+
+def _total_ref(q, l_ir):
+    """L_tot at the calibration frequency [erg/s/Hz] (Delvecchio Eq. 1)."""
+    return l_ir / (3.75e12 * 10.0**q)
+
+
+def _murphy_ff(nu, l_ir):
+    """Murphy+2011 free-free L_nu [erg/s/Hz] at T_e = 1e4 K, alpha_ff = -0.1."""
+    sfr = 3.88e-44 * l_ir  # Murphy Eq. 4, Msun/yr
+    return (1.0 / 4.6e-28) * (nu / 1.0e9) ** (-0.1) * sfr  # Murphy Eq. 11, inverted
+
+
+# ---- public path --------------------------------------------------------------------
+
+_NEBULAR = {
+    "none": {"type": "none"},
+    "cue": {"type": "cue", "all_params": tengri.Fixed(tengri.DEFAULT)},
+}
+
+
+def _build(ssp, mode, *, log_total_mass, age, z, neb):
+    return tengri.SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": tengri.Fixed(1.0),
+            "age_gyr": tengri.Fixed(age),
+            "log_total_mass": tengri.Fixed(log_total_mass),
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
+        dust_attenuation={
+            "law": "calzetti",
+            "type": "two_component",
+            "tau_bc": tengri.Fixed(0.0),
+            "tau_diff": tengri.Fixed(1.0),
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
+        dust_emission={"type": "dl14", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        radio={
+            "sf": {"type": mode, "all_params": tengri.Fixed(tengri.DEFAULT)},
+            "agn": {"type": "none"},
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
+        neb=_NEBULAR[neb],
+        redshift=tengri.Fixed(z),
+    ).predict_state({})
+
+
+def _l_nu_at(state, key, nu):
+    """Log-interpolate a rest-frame L_nu [erg/s/Hz] component at frequency ``nu`` [Hz]."""
+    wave_nu = _C_AA / np.asarray(state.wave, dtype=np.float64)
+    vals = np.asarray(state.derived[key], dtype=np.float64)
+    order = np.argsort(wave_nu)
+    return float(
+        np.exp(
+            np.interp(
+                np.log(nu),
+                np.log(wave_nu[order]),
+                np.log(np.maximum(vals[order], 1e-300)),
+            )
+        )
+    )
+
+
+def _radio_ir_input(state):
+    """The IR luminosity the radio block receives, read from the published state.
+
+    The radio component takes ``state.derived["L_ir"]`` as its input. The expected total is
+    computed from this same value, so the identity total = L_IR,in / (3.75e12 10^q) holds
+    whichever IR window feeds it (the TIR-window default is a separate change).
+    """
+    return float(np.asarray(state.derived["L_ir"]))
+
+
+def _public_ratio(ssp, mode, neb, log_total_mass, age, z):
+    """(sed_radio + sed_nebular)(nu_ref) over the paper calibration, read off the state."""
+    q_of, nu_ref = _MODES[mode]
+    st = _build(ssp, mode, log_total_mass=log_total_mass, age=age, z=z, neb=neb)
+    l_ir = _radio_ir_input(st)
+    logm = float(np.asarray(st.derived["log_mstar"]))
+    total = _l_nu_at(st, "sed_radio", nu_ref)
+    if neb == "cue":
+        total += _l_nu_at(st, "sed_nebular", nu_ref)
+    return total / _total_ref(q_of(logm, z), l_ir), logm, l_ir
+
+
+def _cases():
+    for mode in _MODES:
+        for logm in _LOG_M_GRID:
+            for z in _Z_GRID:
+                for age in (1.0, 5.0):
+                    yield mode, logm, z, age
+
+
+@pytest.mark.parametrize(("mode", "logm", "z", "age"), list(_cases()))
+def test_radio_block_alone_reproduces_the_total_calibration(ssp_data_fsps, mode, logm, z, age):
+    """No nebular: sed_radio at nu_ref is the paper's total, thermal term included."""
+    ratio, got_logm, l_ir = _public_ratio(
+        ssp_data_fsps, mode, "none", logm + _LOG_TOTAL_MASS_OFFSET, age, z
+    )
+    assert got_logm == pytest.approx(logm, abs=0.3)  # realized M*; the offset depends on age
+    assert ratio == pytest.approx(1.0, abs=1e-3), (
+        f"{mode} logM*={got_logm:.3f} z={z} L_IR={l_ir:.3g}: total/calibration = {ratio:.5f}"
+    )
+
+
+@pytest.mark.parametrize(("mode", "logm", "z", "age"), list(_cases()))
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Cue's own free-free at nu_ref (0.1167 of the total at 1.4 GHz) differs from "
+        "Murphy's fixed share (0.1335): the fixed-share subtraction leaves a residual of "
+        "about -1.7 % at 1.4 GHz. Exact closure needs the nebular continuum as thermal_ref, "
+        "which the shared helper's contract does not take. Tracked for the owner."
+    ),
+)
+def test_radio_plus_cue_nebular_reproduces_the_total_calibration(
+    ssp_data_fsps, mode, logm, z, age
+):
+    ratio, _, _ = _public_ratio(ssp_data_fsps, mode, "cue", logm + _LOG_TOTAL_MASS_OFFSET, age, z)
+    assert ratio == pytest.approx(1.0, abs=1e-3)
+
+
+# ---- negative synchrotron: the refusal covers the new modes ---------------------------
+
+
+def _build_radio_box(ssp, mode, sf=None):
+    return tengri.SEDModel.build(
+        ssp_data=ssp,
+        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        dust_attenuation={"type": "two_component", "law": "calzetti"},
+        dust_emission={"type": "draine_li2014"},
+        radio={"sf": {"type": mode, **(sf or {})}, "agn": {"type": "none"}},
+        redshift=tengri.Fixed(0.0),
+    )
+
+
+@pytest.mark.parametrize("mode", list(_MODES))
+def test_declared_free_box_of_the_new_modes_builds(ssp_data_fsps, mode):
+    _build_radio_box(ssp_data_fsps, mode, sf={"all_params": tengri.FREE})
+
+
+def test_delvecchio_q0_above_the_limit_is_refused_at_build(ssp_data_fsps):
+    with pytest.raises(ConfigError, match=r"q_\*"):
+        _build_radio_box(
+            ssp_data_fsps,
+            "delvecchio2021",
+            sf={"radio_delv_q0": tengri.Uniform(1.8, 3.6)},
+        )
+
+
+def test_mccheyne_default_box_is_below_its_limit(ssp_data_fsps):
+    _build_radio_box(
+        ssp_data_fsps,
+        "mccheyne2022",
+        sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.0)},
+    )

@@ -508,7 +508,7 @@ class RadioSEDComponent(TemplateThreading):
                 q0=firrc_q0,
                 mass_slope=firrc_mass_slope,
                 z_slope=firrc_z_slope,
-                apply_suppression=True,
+                apply_suppression=False,
                 log_L_ir=_log_L_ir,
                 q_is_total=self.config.q_is_total,
                 T_e=jnp.asarray(params["radio_T_e"]),
