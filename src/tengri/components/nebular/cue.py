@@ -1099,6 +1099,22 @@ class CueBackend:
     gradient evaluation. Warnings are emitted if the SSP appears to have
     baked-in nebular emission (wNE), which violates Cue's assumptions.
 
+    **Response to ``neb_logU``**: ``neb_logU`` is passed unchanged as
+    Cue's ``gas_logu``, the inner-face U at R = 10^19 cm (trained range
+    ``CUE_TRAINED_LOG_U``; Li et al. 2025, arXiv:2405.04598, Table 1), and the
+    network sees ``logQ = logU + log10(4 pi) + 2 log10(R) + log10(n_H) +
+    log10(c)`` (``cue.utils.logQ``). Unlike a CLOUDY grid at a fixed ionizing
+    spectrum, Cue also takes the 7 ionizing-shape inputs, and the O++ zone it
+    predicts depends on them. For Cue's default hard young-starburst shape
+    [O III]/H-beta rises from 3.4 to 6.1 between log U = -3 and -1.5. For the soft
+    shape fitted to a delayed-tau population (tau = 300 Myr, age 100 Myr, FSPS
+    MIST+MILES, Z = 0.02) it saturates: 0.60, 0.67, 0.65 at log U = -3, -2, -1.5.
+    The saturated level depends on the population's age weights (about 0.3-0.65
+    for nearby star formation histories). A flat [O III]/H-beta against
+    ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
+    wiring is guarded by ``tests/components/nebular/test_cue_logu_response.py``.
+    Values outside the trained range are passed to the network unclipped.
+
     **Calling conventions**: Two modes are supported:
 
     1. **High-level** (CloudyGridBackend compatible): Pass ``ssp_weights``,
@@ -1667,8 +1683,10 @@ class CueBackend:
         #   * the log-ratios follow as diff(log10 L_k)
         # Averaging the log-ratios directly (a geometric mean where an arithmetic
         # one is required) biases [OIII] by ~12 %: worse than the argmax it would
-        # replace. This rule lands within ~1 % of re-fitting the true composite
-        # spectrum, and is smooth + differentiable.
+        # replace. This rule is smooth and differentiable but approximates
+        # re-fitting the composite spectrum: for a delayed-tau (300 Myr) population
+        # at 100 Myr, Z = 0.02, indices 1-4 differ from a refit by 1-2 units and
+        # [O III]/H-beta by 10-15 %.
         log_seglum_all = jax.vmap(
             lambda log_age_yr: interpolate_ionizing_seglum(
                 self._seglum_table,
