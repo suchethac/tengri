@@ -18,6 +18,7 @@ Two checks per model:
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -35,9 +36,36 @@ BAND_CENTRES_AA = (1.0e5, 2.5e5, 5.0e5)
 BAND_HALF_DEX = 0.1
 
 
+def _draine2021_pah_ir_closure():
+    """The PAHspec component's emission as a closure ``(wave, L_ir, **kwargs)``.
+
+    The component is a stateful ``SEDComponent``, not a plain closure, so this
+    wraps its ``apply()`` at a fixed ``dust_lgU``.
+    """
+    from tengri.components.dust.draine2021_pah_ir import Draine2021PAHIRSEDComponent
+    from tengri.protocols.component import ForwardState
+
+    component = Draine2021PAHIRSEDComponent()
+
+    def closure(wave_aa, l_ir, dust_lgU=1.0):
+        state = ForwardState(
+            wave=jnp.asarray(wave_aa),
+            sed_intrinsic=None,
+            derived={
+                "L_ir": jnp.asarray(l_ir),
+                "log_L_ir": jnp.asarray(np.log10(l_ir)),
+            },
+        )
+        out = component.apply(state, {"dust_lgU": jnp.asarray(dust_lgU)})
+        return np.asarray(out.derived["sed_dust_ir"], dtype=np.float64)
+
+    return closure
+
+
 def _factories():
     """Model name -> (factory, kwargs for the closure at a fixed parameter point)."""
     return {
+        "draine2021_pah_ir": (_draine2021_pah_ir_closure, {"dust_lgU": 1.0}),
         "dale2014": (
             lambda: et.create_dale2014_from_grid(find_data_str("dale2014_templates.h5")),
             {"dust_alpha_dale": 2.0, "dust_frac_agn": 0.0},
@@ -91,6 +119,7 @@ def _model(name):
             "astrodust_templates.h5",
             "bosa_templates.h5",
             "dh02_ce01_grid.h5",
+            "pahspec_draine2021.h5",
         )
     )
     if not path_ok:

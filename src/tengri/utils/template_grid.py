@@ -9,13 +9,14 @@ neutral module that neither component imports from the other.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 from tengri.utils.grid_interp import loglog_integral
 from tengri.utils.physics_constants import C_AA as _C_AA
 
-__all__ = ["native_bolometric_nu", "native_bolometric_nu_np"]
+__all__ = ["native_bolometric_nu", "native_bolometric_nu_np", "native_nu_integral"]
 
 
 def native_bolometric_nu(
@@ -111,3 +112,36 @@ def native_bolometric_nu_np(
     power_law = x0 * y0_safe * a * ratio
     chord = 0.5 * (y0 + y1) * (x1 - x0)
     return max(abs(float(np.sum(np.where(positive, power_law, chord)))), floor)
+
+
+def native_nu_integral(lnu_native, wave_native):
+    r"""Frequency integral :math:`\int L_\nu\,d\nu` of a template on its own grid.
+
+    Every tabulated dust emission closure divides the resampled template by this
+    value, so the emitted power is the template's absorbed power ``L_absorbed``
+    whatever wavelength grid the caller supplies. Integrating the resampled
+    spectrum on the caller's grid instead would tie the normalization to that
+    grid's density and extent.
+
+    Parameters
+    ----------
+    lnu_native : array_like, shape (n_native,)
+        Template :math:`L_\nu` on ``wave_native`` [any scale].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom], ascending.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int L_\nu\,d\nu` in the units of ``lnu_native``.
+
+    Notes
+    -----
+    The template is divided by its (stop-gradient) peak before the integral,
+    so float32 cannot overflow; the factor is restored afterwards, which is
+    algebraically exact. **JIT-compatible**: yes. **Gradient-safe**: yes.
+    """
+    lnu = jnp.asarray(lnu_native)
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu)))
+    peak = jnp.where(peak > 0.0, peak, 1.0)
+    return native_bolometric_nu(lnu / peak, wave_native, floor=1e-30) * peak

@@ -32,7 +32,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NamedTuple
 
-import jax
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
@@ -55,7 +54,7 @@ from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
 )
-from tengri.utils.template_grid import native_bolometric_nu
+from tengri.utils.template_grid import native_nu_integral as _native_nu_integral
 
 # Upper bound of the U^-2 power-law radiation-field distribution used to
 # generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
@@ -64,39 +63,6 @@ from tengri.utils.template_grid import native_bolometric_nu
 _DL07_UMAX_POWERLAW = 1.0e6
 # DL14 (Draine et al. 2014) extends the power-law upper bound to U_max = 1e7.
 _DL14_UMAX_POWERLAW = 1.0e7
-
-
-def _native_nu_integral(lnu_native, wave_native):
-    r"""Frequency integral :math:`\int L_\nu\,d\nu` of a template on its own grid.
-
-    Every dust emission closure divides the resampled template by this value,
-    so the emitted power is the template's absorbed power ``L_absorbed``
-    whatever wavelength grid the caller supplies. Integrating the resampled
-    spectrum on the caller's grid instead would tie the normalization to that
-    grid's density and extent.
-
-    Parameters
-    ----------
-    lnu_native : array_like, shape (n_native,)
-        Template :math:`L_\nu` on ``wave_native`` [any scale].
-    wave_native : array_like, shape (n_native,)
-        Template wavelength grid [Angstrom], ascending.
-
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int L_\nu\,d\nu` in the units of ``lnu_native``.
-
-    Notes
-    -----
-    The template is divided by its (stop-gradient) peak before the integral,
-    so float32 cannot overflow; the factor is restored afterwards, which is
-    algebraically exact. **JIT-compatible**: yes. **Gradient-safe**: yes.
-    """
-    lnu = jnp.asarray(lnu_native)
-    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu)))
-    peak = jnp.where(peak > 0.0, peak, 1.0)
-    return native_bolometric_nu(lnu / peak, wave_native, floor=1e-30) * peak
 
 
 def _expm1_over_u(u):

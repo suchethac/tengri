@@ -28,14 +28,15 @@ import jax.numpy as jnp
 
 from tengri.components.dust.draine2021_pah import (
     load_pahspec_or_raise,
-    resample_lnu_on_aa_grid,
     select_pahspec_axes,
     select_pahspec_starlight_auto,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
-from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
+from tengri.utils.grid_interp import resample_template
+from tengri.utils.physics_constants import C_CGS
+from tengri.utils.template_grid import native_nu_integral
 
 __all__ = ["Draine2021PAHIRConfig", "Draine2021PAHIRSEDComponent"]
 
@@ -85,6 +86,95 @@ class Draine2021PAHIRConfig(SEDComponentConfig):
     auto_age_myr: float | None = None
     auto_log_z_solar: float | None = None
     auto_sps_family: str | None = None
+
+
+_UM_TO_AA = 1.0e4
+
+
+def _native_lnu(nu_pnu_um: jnp.ndarray, wave_um: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert :math:`\nu P_\nu` on the native micron grid to :math:`L_\nu`.
+
+    Parameters
+    ----------
+    nu_pnu_um : array_like, shape ``(..., n_wave_um)``
+        :math:`\nu P_\nu` on the template's native wavelength grid [erg/s/H].
+    wave_um : array_like, shape ``(n_wave_um,)``
+        Template wavelengths [micron], strictly increasing.
+
+    Returns
+    -------
+    ndarray, shape ``(..., n_wave_um)``
+        :math:`L_\nu = \nu P_\nu\,\lambda / c` on the native grid [erg/s/Hz/H].
+    """
+    dtype = jnp.result_type(float)  # float64 under x64, as the caller grid's norms need
+    nu_pnu = jnp.asarray(nu_pnu_um, dtype=dtype)
+    wave = jnp.asarray(wave_um, dtype=dtype)
+    return nu_pnu * (wave * 1.0e-4) / C_CGS
+
+
+def _resample_native_rows(
+    nu_pnu_um: jnp.ndarray, wave_um: jnp.ndarray, wave_aa: jnp.ndarray
+) -> jnp.ndarray:
+    r"""Resample each lgU row of the template onto a caller grid, log-log.
+
+    Uses the same power-law interpolant as the other tabulated dust templates
+    (:func:`~tengri.utils.grid_interp.resample_template`), so the caller-grid
+    shape and the native normalization of :func:`_native_norms` are one
+    interpolant and the emitted power is grid-independent.
+
+    Parameters
+    ----------
+    nu_pnu_um : array_like, shape ``(..., n_wave_um)``
+        :math:`\nu P_\nu` on the native micron grid [erg/s/H].
+    wave_um : array_like, shape ``(n_wave_um,)``
+        Template wavelengths [micron].
+    wave_aa : array_like, shape ``(n_wave_aa,)``
+        Caller rest-frame grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape ``(..., n_wave_aa)``
+        :math:`L_\nu` [erg/s/Hz/H] on the caller grid, zero outside the support.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+    """
+    lnu_native = _native_lnu(nu_pnu_um, wave_um)
+    wave_native_aa = jnp.asarray(wave_um) * _UM_TO_AA
+    rows = lnu_native.reshape((-1, lnu_native.shape[-1]))
+    out = jax.vmap(
+        lambda row: resample_template(wave_aa, wave_native_aa, row, left=0.0, right=0.0)
+    )(rows)
+    return out.reshape((*lnu_native.shape[:-1], out.shape[-1]))
+
+
+def _native_norms(nu_pnu_um: jnp.ndarray, wave_um: jnp.ndarray) -> jnp.ndarray:
+    r"""Frequency integral of each lgU row of the template on its native grid.
+
+    Parameters
+    ----------
+    nu_pnu_um : array_like, shape ``(..., n_wave_um)``
+        :math:`\nu P_\nu` on the template's native wavelength grid [erg/s/H].
+    wave_um : array_like, shape ``(n_wave_um,)``
+        Template wavelengths [micron], strictly increasing.
+
+    Returns
+    -------
+    ndarray, shape ``(...,)``
+        :math:`\int L_\nu\,d\nu` per row [erg/s/H].
+
+    Notes
+    -----
+    The integral is taken on the template's own grid, so the normalization does
+    not depend on the caller's wavelength grid. **JIT-compatible**: yes.
+    **Gradient-safe**: yes.
+    """
+    lnu_native = _native_lnu(nu_pnu_um, wave_um)
+    wave_aa = jnp.asarray(wave_um) * _UM_TO_AA
+    rows = lnu_native.reshape((-1, lnu_native.shape[-1]))
+    norms = jax.vmap(lambda row: native_nu_integral(row, wave_aa))(rows)
+    return norms.reshape(lnu_native.shape[:-1])
 
 
 class Draine2021PAHIRSEDComponent(EmissionComponent):
@@ -258,12 +348,12 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                 slab=self.config.slab,
             )
             wave_aa = jnp.asarray(wave)
-            lnu_template = resample_lnu_on_aa_grid(
+            lnu_template = _resample_native_rows(
                 nu_pnu_um=nu_pnu_um,
                 wave_um=templates.wavelength_um,
                 wave_aa=wave_aa,
             )
-            norms = integrate_lnu_over_nu(lnu_template, wave_aa)
+            norms = _native_norms(nu_pnu_um, templates.wavelength_um)
             return {
                 "lgU_grid": jnp.asarray(templates.lgU),
                 "lnu_template": lnu_template,
@@ -333,7 +423,6 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
 
             from tengri.components.dust.draine2021_pah import (
                 load_pahspec_or_raise,
-                resample_lnu_on_aa_grid,
                 select_pahspec_axes,
             )
 
@@ -372,14 +461,12 @@ class Draine2021PAHIRSEDComponent(EmissionComponent):
                     slab=self.config.slab,
                 )
                 wave_aa = jnp.asarray(wave)
-                lnu_template = resample_lnu_on_aa_grid(
+                lnu_template = _resample_native_rows(
                     nu_pnu_um=nu_pnu_um,
                     wave_um=templates.wavelength_um,
                     wave_aa=wave_aa,
                 )
-                from tengri.components.dust.emission._physics import integrate_lnu_over_nu
-
-                norms = integrate_lnu_over_nu(lnu_template, wave_aa)
+                norms = _native_norms(nu_pnu_um, templates.wavelength_um)
                 precomp = {
                     "lgU_grid": jnp.asarray(templates.lgU),
                     "lnu_template": lnu_template,
