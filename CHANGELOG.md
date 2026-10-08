@@ -96,6 +96,23 @@
 - The polar absorbed power is formed as `L_nu (1 - exp(-tau))` rather than clipped with `maximum(., 0)`: the clip tied its two arguments at E(B-V) = 0, the lower edge of the prior, and halved the polar and torus gradients there (#2744)
 - The Fritz docstrings list the grid half-angles 20 / 40 / 60 deg (they said 60 / 100 / 140, the full angles of another convention) (#2605)
 
+- **Surviving mass comes from each SSP grid's own isochrones, IMF and metallicity, or the
+  load refuses (#2751):** a grid without its own `ssp_mass_remaining` used to receive DSPS's
+  metallicity-independent sigmoid fit whatever its isochrones (a MIST grid lost the 0.03
+  spread over Z at 10 Gyr; Kroupa and Salpeter grids read the fit's single column). Companion
+  tables shipped as package data (MIST Chabrier/Kroupa/Salpeter from python-fsps, PARSEC
+  Chabrier, Padova 2007 and BaSTI, all three IMFs for the last two; BC03 Padova 1994) are resolved through an explicit registry; a registered grid
+  with no table (PARSEC Kroupa/Salpeter, BPASS, ProGeny) raises a
+  `ValueError` naming the missing table, and `load_ssp(..., mass_remaining="dsps_fit")` /
+  `load_ssp_data(..., mass_remaining="dsps_fit")` is the explicit opt-in to the fit (an
+  unregistered grid warns instead). `SSPData.mass_remaining_source` and `tengri.doctor()`
+  report the source. A grid's t = 0 node is exactly 1; metallicity-node mismatches and ages
+  more than one table node beyond the table raise. For a registered grid the companion table
+  is authoritative: a table the grid file carries is ignored, not cross-checked. An embedded
+  table is used only where no companion applies (unregistered, PENDING, or [alpha/Fe] grids).
+
+- **The default grid's surviving mass changes (#2751):** `fsps_prsc_miles_chabrier` now takes the surviving-mass table rebuilt with the local FSPS PARSEC build, which reproduces the grid's spectra to 1e-7; the table that shipped with the grid is not reproduced by that build. Measured change: +0.017 (+3.0%) at 10 Gyr, solar Z (0.555 to 0.572); largest change at any node 0.132 at the top metallicity, log10 age 6.15 (1.000 to 0.868, the truncation of the PARSEC Z = 0.06 isochrone at 12 Msun). Fits that use the default grid move accordingly.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a

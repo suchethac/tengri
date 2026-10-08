@@ -9,7 +9,6 @@ Z-dependent grids (BAGPIPES and FSPS both use exact per-node evaluation).
 
 from pathlib import Path
 
-import h5py
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -304,9 +303,11 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         # Normalize joint weights to sum to 1
         jw_norm = joint_weights / jnp.sum(joint_weights)
 
-        # Load the grid's mass_remaining table directly
-        with h5py.File(str(grid_path), "r") as f:
-            table = np.asarray(f["ssp_mass_remaining"])
+        # The table the loader resolved for this registered grid (the companion, #2751).
+        # It is NOT the grid file's embedded ssp_mass_remaining: that table differs from the
+        # companion by up to 0.132, so contracting over it moved the ratio from 0 to +1.489%.
+        table = np.asarray(ssp.ssp_mass_remaining)
+        assert ssp.mass_remaining_source.startswith("companion:")
 
         # Compute exact surviving mass: Σ_age Σ_Z w(age, Z) · m_rem(age, Z)
         exact_surv_frac = float(jnp.sum(jw_norm * table))
