@@ -1,21 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""#2683 follow-up: the ``dsps`` kernel places structure finer than the SSP node spacing.
+"""#2683 follow-up: the ``dsps`` age kernel places structure finer than the SSP node spacing.
 
-The histogram kernel assigns every mass parcel to the single node whose
-log-midpoint bin holds it. A burst narrower than the local node spacing is then
+The histogram kernel assigned every mass parcel to the single node whose
+log-midpoint bin holds it. A burst narrower than the local node spacing was then
 put on a node whose age can differ by half a spacing from the burst's, which in
 the far UV (flux falls steeply with age) is a 14-19 % error for a 30 Myr burst
-at z = 2.5, ~20 % for periodic bursts, 5.4 % for Gaussian-in-lookback peaks.
-
-The kernel now integrates each bin's mass exactly (the same dense integrand as
-cic, with the bin edges as exact knots) and deposits it by its mass-weighted
-mean log-age, linearly between the two bracketing nodes, which preserves the
-first moment of log-age: a burst lands where it belongs.
+at z = 2.5, 26 % for periodic bursts, 5.6 % for Gaussian-in-lookback peaks, and
+no refinement of the SFR table removes it. First-order (log-age linear) sharing
+of the exact integrand is the exact answer, so ``age_kernel='dsps'`` now selects
+the same integration as ``'cic'``: the weights agree to round-off for every SFH
+family, and both reproduce the converged quadrature (the integrand at 256x).
 """
 
 from __future__ import annotations
 
-import jax.numpy as jnp
+import jax
 import numpy as np
 import pytest
 
@@ -63,29 +62,62 @@ def _phot(model):
 
 
 def _truth(monkeypatch, ssp, obs, z, sfh):
-    with monkeypatch.context() as m:
-        m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
-        return _phot(_model(ssp, obs, "cic", z, sfh))
+    """Photometry on the 256x integrand. The compiled kernels are cached per
+    function, not per module constant, so the cache is cleared around the patch."""
+    jax.clear_caches()
+    try:
+        with monkeypatch.context() as m:
+            m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
+            return _phot(_model(ssp, obs, "cic", z, sfh))
+    finally:
+        jax.clear_caches()
+
+
+CASES = [
+    ("burst 30 Myr, lookback 1.00-1.03 Gyr, z=2.5", 2.5, _const_burst(1.03, 1.0)),
+    ("burst 30 Myr, lookback 0.50-0.53 Gyr, z=2.5", 2.5, _const_burst(0.53, 0.5)),
+    ("burst 10 Myr, lookback 1.00-1.01 Gyr, z=2.5", 2.5, _const_burst(1.01, 1.0)),
+    ("burst 10 Myr, lookback 2.00-2.01 Gyr, z=0", 0.0, _const_burst(2.01, 2.0)),
+    ("periodic, z=0", 0.0, {"type": "periodic"}),
+    ("periodic, z=2.5", 2.5, {"type": "periodic"}),
+    ("norm, z=2.5", 2.5, {"type": "norm"}),
+    ("tsnorm, z=2.5", 2.5, {"type": "tsnorm"}),
+    ("snorm, z=2.5", 2.5, {"type": "snorm"}),
+    ("continuity, z=0", 0.0, {"type": "continuity"}),
+    ("continuity, z=2.5", 2.5, {"type": "continuity"}),
+    ("psb_flex, z=0", 0.0, {"type": "psb_flex"}),
+    ("psb_flex, z=2.5", 2.5, {"type": "psb_flex"}),
+]
+
+
+@pytest.mark.parametrize(("label", "z", "sfh"), CASES, ids=[c[0] for c in CASES])
+def test_a_dsps_is_the_first_order_integration(ssp, obs, label, z, sfh):
+    """dsps flux equals cic flux to round-off (was up to 26 % in the FUV)."""
+    cic = _phot(_model(ssp, obs, "cic", z, sfh))
+    dsps = _phot(_model(ssp, obs, "dsps", z, sfh))
+    err = np.abs(dsps / cic - 1.0)
+    assert np.all(err <= 1e-9), f"{label}: |dsps/cic-1| = {np.round(err * 100, 4)} % in {BANDS}"
 
 
 @pytest.mark.parametrize(
     ("label", "z", "sfh", "tol"),
     [
-        ("burst 30 Myr, lookback 1.00-1.03 Gyr, z=2.5", 2.5, _const_burst(1.03, 1.0), 0.005),
-        ("burst 30 Myr, lookback 0.50-0.53 Gyr, z=2.5", 2.5, _const_burst(0.53, 0.5), 0.005),
+        ("burst 30 Myr, lookback 1.00-1.03 Gyr, z=2.5", 2.5, _const_burst(1.03, 1.0), 0.002),
+        ("burst 30 Myr, lookback 0.50-0.53 Gyr, z=2.5", 2.5, _const_burst(0.53, 0.5), 0.003),
         ("burst 10 Myr, lookback 1.00-1.01 Gyr, z=2.5", 2.5, _const_burst(1.01, 1.0), 0.005),
-        ("burst 10 Myr, lookback 2.00-2.01 Gyr, z=0", 0.0, _const_burst(2.01, 2.0), 0.005),
-        ("periodic, z=0", 0.0, {"type": "periodic"}, 0.02),
-        ("periodic, z=2.5", 2.5, {"type": "periodic"}, 0.02),
-        ("norm, z=2.5", 2.5, {"type": "norm"}, 0.015),
-        ("tsnorm, z=2.5", 2.5, {"type": "tsnorm"}, 0.015),
-        ("snorm, z=2.5", 2.5, {"type": "snorm"}, 0.015),
-        ("continuity, z=0", 0.0, {"type": "continuity"}, 0.002),
-        ("psb_flex, z=0", 0.0, {"type": "psb_flex"}, 0.002),
+        ("norm, z=2.5", 2.5, {"type": "norm"}, 0.002),
+        ("tsnorm, z=2.5", 2.5, {"type": "tsnorm"}, 0.002),
+        ("continuity, z=0", 0.0, {"type": "continuity"}, 1e-4),
+        ("psb_flex, z=0", 0.0, {"type": "psb_flex"}, 1e-4),
     ],
 )
-def test_a_dsps_flux_matches_converged_quadrature(monkeypatch, ssp, obs, label, z, sfh, tol):
-    """dsps flux vs the 256x converged quadrature, worst of FUV/u/r/H."""
+def test_b_dsps_flux_matches_converged_quadrature(monkeypatch, ssp, obs, label, z, sfh, tol):
+    """dsps flux vs the 256x converged quadrature, worst of FUV/u/r/H.
+
+    The cic integrand is exact for a top-hat or step with its edges as knots, so
+    the burst and step cases converge to 1e-4; the Gaussian peaks and the 10 Myr
+    burst are limited by the integrand's own ~30 Myr resolution.
+    """
     truth = _truth(monkeypatch, ssp, obs, z, sfh)
     err = np.abs(_phot(_model(ssp, obs, "dsps", z, sfh)) / truth - 1.0)
     assert np.all(err <= tol), f"{label}: |dsps/truth-1| = {np.round(err * 100, 3)} % in {BANDS}"
@@ -116,6 +148,6 @@ def test_b_log_age_first_moment_is_preserved(ssp, obs, kernel, start, end):
     assert abs(got - exact) <= 5e-5, f"{kernel}: mean log-age {got:.6f} vs exact {exact:.6f} dex"
 
 
-def test_c_unresolved_warning_is_gone():
-    """The kernel resolves the structure, so there is nothing left to warn about."""
+def test_c_no_unresolved_history_warning_is_defined():
+    """Nothing is left unresolved, so there is no warning class to emit."""
     assert not hasattr(stellar_component, "DSPSUnresolvedHistoryWarning")

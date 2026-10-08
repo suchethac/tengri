@@ -70,11 +70,15 @@ def _grad(model, key, x):
 
 def _truth_fd(monkeypatch, ssp, obs, z, sfh, key, x, h):
     """Central difference of the cic kernel on the 256x integrand."""
-    with monkeypatch.context() as m:
-        m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
-        model = _model(ssp, obs, "cic", z, sfh)
-        f = lambda v: np.asarray(model.predict_photometry({key: jnp.asarray(v)}))  # noqa: E731
-        return (f(x + h) - f(x - h)) / (2.0 * h)
+    jax.clear_caches()  # compiled kernels are cached per function, not per module constant
+    try:
+        with monkeypatch.context() as m:
+            m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
+            model = _model(ssp, obs, "cic", z, sfh)
+            f = lambda v: np.asarray(model.predict_photometry({key: jnp.asarray(v)}))  # noqa: E731
+            return (f(x + h) - f(x - h)) / (2.0 * h)
+    finally:
+        jax.clear_caches()
 
 
 @pytest.mark.parametrize(

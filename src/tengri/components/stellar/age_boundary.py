@@ -72,7 +72,6 @@ import numpy as np
 
 __all__ = [
     "age_boundary_younger_fraction_cic",
-    "age_boundary_younger_fraction_hist",
     "cic_cell_edges",
     "survival_cell_mean",
     "validate_age_boundaries",
@@ -265,78 +264,5 @@ def age_boundary_younger_fraction_cic(
         .add(contrib * (1.0 - f))
         .at[idx + 1]
         .add(contrib * f)
-    )
-    return _safe_fraction(young, total[None, :])
-
-
-def age_boundary_younger_fraction_hist(
-    seg_mass,
-    seg_lo,
-    seg_hi,
-    seg_unit,
-    unit_idx,
-    unit_f,
-    n_unit: int,
-    n_age: int,
-    boundaries_yr: Sequence[float],
-    width_dex: float,
-):
-    r"""Per-node younger-than-boundary mass fraction for the histogram kernel.
-
-    The histogram kernel (``_hist_parcels``) integrates the history exactly over
-    each sub-bin of an SSP log-midpoint bin and deposits the sub-bin's mass by
-    its mean log-age between two nodes.  The young mass on a node is the *same*
-    kernel applied to the young part of each sub-bin: every integrand segment of
-    mass :math:`m_s` inside it contributes :math:`m_s \bar S_s`, where
-    :math:`\bar S_s` is the survival function averaged over the segment's own
-    cell (:func:`survival_cell_mean`), and the sub-bin's young mass is shared
-    onto nodes with the sub-bin's own ``(unit_idx, unit_f)``.  Numerator and denominator
-    therefore go through one kernel, as for the cloud-in-cell function.
-
-    Parameters
-    ----------
-    seg_mass, seg_lo, seg_hi, seg_unit
-        Integrand-segment masses [Msun], lookback edges [yr] and the sub-bin
-        holding each segment, from ``_hist_parcels``.
-    unit_idx, unit_f
-        Per-sub-bin lower node and share on the upper node, from
-        ``_hist_parcels``.
-    n_unit : int
-        Number of sub-bins.
-    n_age : int
-        Number of SSP age nodes.
-    boundaries_yr : sequence of float
-        Static boundary ages [yr].
-    width_dex : float
-        Dispersal width [dex]; ``0`` is the hard step.
-
-    Returns
-    -------
-    ndarray, shape (n_boundary, n_age)
-        :math:`F_a(b_k)` in ``[0, 1]`` [dimensionless]; 0 where a node holds no
-        mass.
-
-    Notes
-    -----
-    **JIT/grad/vmap-compatible.**  Segment sums via ``jax.ops.segment_sum``.
-    """
-    s_bar = jnp.stack([survival_cell_mean(seg_lo, seg_hi, b, width_dex) for b in boundaries_yr])
-    young_bin = jax.vmap(lambda y: jax.ops.segment_sum(y, seg_unit, num_segments=n_unit))(
-        s_bar * seg_mass[None, :]
-    )
-    total_bin = jax.ops.segment_sum(seg_mass, seg_unit, num_segments=n_unit)
-    zeros = jnp.zeros((s_bar.shape[0], n_age), dtype=seg_mass.dtype)
-    young = (
-        zeros.at[:, unit_idx]
-        .add(young_bin * (1.0 - unit_f)[None, :])
-        .at[:, unit_idx + 1]
-        .add(young_bin * unit_f[None, :])
-    )
-    total = (
-        jnp.zeros(n_age, dtype=seg_mass.dtype)
-        .at[unit_idx]
-        .add(total_bin * (1.0 - unit_f))
-        .at[unit_idx + 1]
-        .add(total_bin * unit_f)
     )
     return _safe_fraction(young, total[None, :])
