@@ -3150,6 +3150,7 @@ class SEDModel:
                 )
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
+                self._dust_shape_table_cache = None
                 self._xray_term_response_cache = None
                 self._radio_term_response_cache = None
 
@@ -3179,6 +3180,18 @@ class SEDModel:
                         stacklevel=2,
                     )
                     self._dust_band_response_cache = None
+
+                try:
+                    self._dust_emission_shape_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp dust-emission shape-table precompute failed "
+                        f"({e!r}); falling back to the exact per-call filter integral "
+                        "(correct, but without the precomputed-table speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._dust_shape_table_cache = None
 
                 # Derive which emitters in the chain implement the emission_terms
                 # contract rather than hardcoding ("xray", "radio"). Any additive
@@ -10396,6 +10409,10 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        shape_table = self._dust_emission_shape_table(cached)
+        if shape_table is not None:
+            result.setdefault("dust_ir", {})["emission_shape_table"] = shape_table
+
         # ── Component template libraries, keyed [namespace][component name] ──
         #
         # A template-backed component that reads its library inside ``predict``
@@ -11162,6 +11179,66 @@ class SEDModel:
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
         return response
+
+    def _dust_emission_shape_table(self, chain):
+        """Registry-adapter band fluxes of the dust emission over its free shape axes.
+
+        :meth:`_dust_emission_band_response` is exact but needs every shape parameter fixed.
+        With ``dust_T``, ``dust_beta_ir``, ``dust_alpha_mir`` or ``dust_lambda_0_um`` free
+        the band flux depends on them, and the component would integrate the filters on every
+        call. The registry adapter for the emitter's ``precompute_key`` tabulates the band
+        fluxes over those axes at build, spanning the priors, and the component reads the table
+        at the current shape parameters (``EmissionComponent._shape_table_phot``).
+
+        The adapter is built at one redshift, so the table is built only for a single ``Fixed``
+        redshift. Returns ``{"ln_phot", "axes"}`` (arrays only, so it threads through ``jit``),
+        or ``None`` with the reason in ``_dust_shape_table_decline``.
+        """
+        cached = getattr(self, "_dust_shape_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        reason = None
+        emitter = next((c for c in chain if getattr(c, "name", "") == "dust_emission"), None)
+        key = getattr(emitter, "precompute_key", None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        free_dust = {p for p in self.spec.free_params if p.startswith("dust_")}
+
+        if emitter is None or key is None or not self._approx.get("wave_precomp"):
+            reason = "no registry adapter for this dust emission model"
+        elif getattr(st, "phot_fw_padded", None) is None:
+            reason = "no padded filter curves"
+        elif getattr(emitter, "fast_emission", False) or self._dust_ir_diffuse_screen:
+            reason = "fast_emission or diffuse_screen is set"
+        elif not (free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK):
+            reason = "the emission shape is fixed; the exact band response applies"
+        elif self._response_z_nodes() is not None:
+            reason = "the registry adapter is built at one redshift and the redshift is not Fixed"
+        else:
+            from tengri.forward.precompute import registry
+
+            module = registry.resolve(key)
+            axes = set(module.AXIS_PARAMS[key])
+            amplitude = set(getattr(emitter, "lookup_amplitude_params", ()))
+            unknown = free_dust - self._BAND_RESPONSE_ATTEN_FREE_OK - axes - amplitude
+            if unknown:
+                reason = f"free parameters {sorted(unknown)} are not axes of the {key} table"
+            else:
+                redshift = float(self.spec.get_fixed_values()["redshift"])
+                preint = module.precompute(
+                    [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
+                    [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
+                    redshift,
+                    self.spec,
+                    model=key,
+                )
+                table = module.table_arrays(preint, key)
+
+        self._dust_shape_table_decline = reason
+        self._dust_shape_table_cache = table
+        return table
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.

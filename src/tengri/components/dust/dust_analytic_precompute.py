@@ -671,6 +671,58 @@ def _pin_axes(
     return pinned_grid, reduced
 
 
+def table_arrays(preint: dict, model: str) -> dict:
+    """The arrays a lookup of ``model`` reads, as a pytree that can ride through ``jax.jit``.
+
+    Parameters
+    ----------
+    preint : dict
+        Output of :func:`precompute`.
+    model : str
+        Analytic dust model name.
+
+    Returns
+    -------
+    dict
+        ``{"ln_phot": (*n_axes, n_filters), "axes": {param_name: (n_nodes,)}}``. The axes that
+        :func:`precompute` collapsed are absent; the keys are the remaining free axes, whose order
+        is that of ``AXIS_PARAMS[model]``.
+    """
+    collapsed = preint.get("_collapsed_axes", {})
+    names = tuple(n for i, n in enumerate(AXIS_PARAMS[model]) if i not in collapsed)
+    return {
+        "ln_phot": jnp.asarray(preint["_ln_phot"]),
+        "axes": {n: jnp.asarray(ax) for n, ax in zip(names, preint["_preint"].axes)},
+    }
+
+
+def lookup_from_table(table: dict, model: str, L_absorbed, *free_axis_values):
+    """Band-averaged L_nu [erg/s/Hz] from :func:`table_arrays` data; traceable under ``jax.jit``.
+
+    Parameters
+    ----------
+    table : dict
+        Output of :func:`table_arrays`.
+    model : str
+        Analytic dust model name.
+    L_absorbed : float
+        Amplitude multiplying the unit-luminosity band fluxes [erg/s].
+    *free_axis_values : float
+        Values of the table's axes, in ``AXIS_PARAMS[model]`` order.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        ``L_absorbed`` times the PCHIP interpolant of ln flux, exponentiated.
+    """
+    names = tuple(n for n in AXIS_PARAMS[model] if n in table["axes"])
+    axes = tuple(_axis_coordinate(n, table["axes"][n]) for n in names)
+    query = tuple(_axis_coordinate(n, v) for n, v in zip(names, free_axis_values))
+    ln_phot = table["ln_phot"]
+    normed = jnp.exp(interp_nd_pchip(ln_phot, axes, query)) if axes else jnp.exp(ln_phot.ravel())
+    return L_absorbed * normed
+
+
 def build_lookup(
     preint: dict,
     *,
@@ -728,25 +780,11 @@ def build_lookup(
     interpolation coordinate is clamped). :func:`precompute` spans the nodes over everything the
     model can reach, so that happens only under an unbounded prior, which warns at build.
     """
-    axis_params_names = tuple(
-        name
-        for i, name in enumerate(AXIS_PARAMS[model])
-        if i not in preint.get("_collapsed_axes", {})
-    )
-    axes = tuple(
-        _axis_coordinate(name, ax) for name, ax in zip(axis_params_names, preint["_preint"].axes)
-    )
-    log_grid_phot = jnp.asarray(preint["_ln_phot"])
+    table = table_arrays(preint, model)
 
     @jax.jit
     def dust_phot(L_absorbed, *free_axis_values):
         """Band-averaged L_nu [erg/s/Hz]: ``L_absorbed`` times the PCHIP interpolant of ln flux."""
-        query = tuple(_axis_coordinate(n, v) for n, v in zip(axis_params_names, free_axis_values))
-        normed = (
-            jnp.exp(interp_nd_pchip(log_grid_phot, axes, query))
-            if axes
-            else jnp.exp(log_grid_phot.ravel())
-        )
-        return L_absorbed * normed
+        return lookup_from_table(table, model, L_absorbed, *free_axis_values)
 
     return dust_phot

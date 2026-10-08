@@ -257,6 +257,11 @@ SIGNATURE_POLICY: KeyPolicy = {
         "was refused, recorded for precompute_report. Derived from the same keyed "
         "structure as the cache, and read by no numerical path"
     ),
+    "_dust_shape_table_cache": exclude("memo cache computed from keyed structure"),
+    "_dust_shape_table_decline": exclude(
+        "the verdict that accompanies _dust_shape_table_cache; derived from the same keyed "
+        "structure and read by no numerical path"
+    ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "

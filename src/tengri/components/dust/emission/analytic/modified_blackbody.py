@@ -59,6 +59,9 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
 
     name: str = "modified_blackbody"
 
+    precompute_key: ClassVar[str | None] = "modified_blackbody"
+    lookup_amplitude_params: ClassVar[tuple[str, ...]] = ("dust_epsilon_mbb",)
+
     # Free parameters (user-facing names, prefix-stripped). ``T``/``beta_ir``
     # read the same module constants as the closure's own signature defaults
     # (#2241), so the two cannot drift from each other; see
@@ -75,6 +78,13 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
         "draine2011",
         "dacunha2013",
     )
+
+    def lookup_amplitude(self, p: dict[str, jnp.ndarray]) -> jnp.ndarray:
+        """Absorbed-luminosity fraction re-emitted, ``clip(epsilon_mbb, 0, 1)``.
+
+        The registry table is built at the closure default of ``epsilon_mbb``.
+        """
+        return jnp.clip(p["epsilon_mbb"], 0.0, 1.0) / min(max(DEFAULT_DUST_EPSILON_MBB, 0.0), 1.0)
 
     def predict(
         self,
