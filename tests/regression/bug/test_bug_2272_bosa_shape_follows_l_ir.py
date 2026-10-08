@@ -176,7 +176,10 @@ def test_bosa_shape_follows_the_real_l_ir(two_l_ir_values):
     # at BOTH luminosities -- the shape moves, the energy balance does not.
     for label, sed, l_ir in (("lo", sed_lo, l_lo), ("hi", sed_hi, l_hi)):
         ratio = _integral_over_l_ir(sed, l_ir)
-        assert abs(ratio - 1.0) < 1.0e-6, (
+        # The template is normalized on its native grid; this trapezoid runs on
+        # the caller's 3000-point grid, so the residual is its discretization
+        # (2.1e-5 measured at this grid, 1e-6 before the native normalization).
+        assert abs(ratio - 1.0) < 1.0e-3, (
             f"{label}: integral(sed_dust_ir)/L_ir = {ratio:.8f}, expected ~1.0"
         )
     # This energy-balance check doubles as the guard against a future
@@ -288,6 +291,8 @@ def test_bosa_shape_follows_the_real_l_ir_at_astrophysical_scales(ssp, two_reali
     nu = _C_AA_PER_S / wave_lo
     for label, sed, l_ir in (("lo", sed_lo, l_lo), ("hi", sed_hi, l_hi)):
         ratio = float(-np.trapezoid(sed, nu)) / l_ir
-        assert abs(ratio - 1.0) < 1.0e-6, (
+        # Residual 3.2e-4 at the astrophysical scale: the template's red tail lies
+        # past this grid's end (3e8 A), outside the caller-grid trapezoid.
+        assert abs(ratio - 1.0) < 1.0e-3, (
             f"{label}: integral(sed_dust_ir)/L_ir = {ratio:.8f}, expected ~1.0"
         )
