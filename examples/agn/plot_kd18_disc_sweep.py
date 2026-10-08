@@ -84,7 +84,6 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
                     "type": "kubota_done",
                     "all_params": tengri.Fixed(tengri.DEFAULT),
                     "log_mbh": log_mbh,
-                    "log_ledd": log_ledd,
                 },
                 "all_params": tengri.Fixed(tengri.DEFAULT),
                 "log_lbol": log_lbol,
