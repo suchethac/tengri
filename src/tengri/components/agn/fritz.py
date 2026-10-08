@@ -50,7 +50,7 @@ from tengri.components.agn._phys import L_SUN as _L_SUN
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.skirtor import SkirtorDiscTie
 from tengri.config.exceptions import TengriIOError
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 from tengri.utils.scale import representable_denominator
@@ -199,7 +199,6 @@ def _interpolate_and_normalize(
     grid_jax: jnp.ndarray,
     wave_grid: jnp.ndarray,
     axes: tuple,
-    edges: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
     l_scale: float,
@@ -231,8 +230,6 @@ def _interpolate_and_normalize(
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
         Grid axis values (r_ratio, tau, beta, gamma, oa, psy).
-    edges : tuple of ndarray
-        Precomputed bin edges for triweight interpolation.
     wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
     point : tuple
@@ -269,11 +266,11 @@ def _interpolate_and_normalize(
        A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
-    # Use index-space interpolation for correct gradients throughout the range.
+    # The torus library is a tabulated radiative-transfer result, so the lookup is a
+    # node-exact PCHIP interpolant rather than the triweight smoother (#2606).
     _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
     _refuse_off_grid("agn_fritz_psy", point[5], axes[5])
-    template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
+    template = interp_nd_pchip(grid_jax, axes, point)
     # Normalize on the template's native grid, before resampling, so the
     # result does not depend on the caller's wavelength sampling or range.
     integral_safe = native_bolometric_nu(template * wave_grid**2 / _C_AA_PER_S, wave_grid)
@@ -415,7 +412,6 @@ def fritz_sed_from_grid(
         jnp.asarray(grid.dust),
         jnp.asarray(grid.wave_grid),
         tuple(jnp.asarray(a) for a in grid.axes),
-        tuple(jnp.asarray(e) for e in grid.edges),
         wavelength,
         point,
         l_scale,
@@ -466,7 +462,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
        https://doi.org/10.1111/j.1365-2966.2006.09866.x
     """
     grid = load_fritz_grid(grid_path)
-    dust_jax, wave_grid, axes, edges = grid.dust, grid.wave_grid, grid.axes, grid.edges
+    dust_jax, wave_grid, axes = grid.dust, grid.wave_grid, grid.axes
 
     def fritz_grid(
         wavelength: jnp.ndarray,
@@ -526,7 +522,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
             agn_fritz_psy,
         )
         return _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
+            dust_jax, wave_grid, axes, wavelength, point, l_scale
         )
 
     return fritz_grid
@@ -574,7 +570,6 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
         dust_jax = jnp.array(raw["dust"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def fritz_components(
         wavelength: jnp.ndarray,
@@ -618,10 +613,10 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_psy,
         )
         disk = _interpolate_and_normalize(
-            disk_jax, wave_grid, axes, edges, wavelength, point, l_scale
+            disk_jax, wave_grid, axes, wavelength, point, l_scale
         )
         dust = _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
+            dust_jax, wave_grid, axes, wavelength, point, l_scale
         )
         return FritzComponents(disk=disk, dust=dust)
 
