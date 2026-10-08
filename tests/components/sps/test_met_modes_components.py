@@ -282,31 +282,14 @@ class TestTable:
         sed_delta = _delta_sed(synthetic_ssp, Z_solar)
         np.testing.assert_allclose(sed, sed_delta, rtol=1e-3)
 
-    def test_table_missing_raises(self, synthetic_ssp):
-        from tengri.components.stellar.component import (
-            StellarSEDComponent,
-            StellarSEDComponentConfig,
-        )
-        from tengri.forward.orchestrator import run_components
-        from tengri.protocols.component import ForwardState
+    def test_table_missing_raises(self):
+        from tengri.components.stellar.component import StellarSEDComponentConfig
 
-        stellar = StellarSEDComponent(
-            config=StellarSEDComponentConfig(
+        # #2425: with no table and no runtime history channel (sfh is not
+        # 'table') the config is refused at construction, before any predict.
+        with pytest.raises(ValueError, match="met_table_log_age_yr"):
+            StellarSEDComponentConfig(
                 sfh_model="dpl",
                 metallicity_model="table",
                 # met_table_log_age_yr / met_table_log_z_abs NOT set
-            ),
-            ssp_data=synthetic_ssp,
-        )
-        wave = synthetic_ssp.ssp_wave
-        state0 = ForwardState(wave=wave, sed_observed=jnp.ones_like(wave))
-        params = {
-            "sfh_dpl_alpha": 1.5,
-            "sfh_dpl_beta": 1.0,
-            "sfh_dpl_tau_gyr": 5.0,
-            "sfh_dpl_age_gyr": 5.0,
-            "sfh_dpl_log_total_mass": 1.0,
-            "redshift": 0.0,
-        }
-        with pytest.raises(ValueError, match="met_table_log_age_yr"):
-            run_components([stellar], state0, params)
+            )
