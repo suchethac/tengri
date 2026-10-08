@@ -1235,17 +1235,30 @@ def _periodic_edges_yr(sfh_kwargs: dict) -> jnp.ndarray:
     :data:`PERIODIC_MAX_ONSETS`) are moved to distinct points just beyond the
     formation age, where the SFR is zero, so no knot is duplicated (a duplicated
     knot has a zero-width cell, and the cell-averaged window then zeroes its SFR).
+
+    The burst ends, ``tau`` after each onset, are discontinuities of the
+    rectangular burst only. The exponential and delayed bursts are smooth there,
+    so for them the ends are parked beyond the formation age as well: a knot at
+    ``onset - tau`` moves with ``tau`` and, wherever ``tau`` is a multiple of
+    ``delta``, lands exactly on a later onset knot. The sort then pairs a knot
+    that moves with ``tau`` and one that does not in an order no perturbation
+    produces, and the ``tau`` gradient there was off the central difference by 16-230 %
+    (#2683).
     """
     delta = sfh_kwargs["delta_bursts_yr"]
     tau = sfh_kwargs["tau_bursts_yr"]
     age = sfh_kwargs["age_yr"]
+    rectangular = sfh_kwargs["burst_type"] == 2
     k = jnp.arange(PERIODIC_MAX_ONSETS, dtype=jnp.result_type(delta, age))
     onset = age - k * delta
     end = onset - tau
     dead_onset = age * (1.0 + 1e-3 * (k + 1.0) / PERIODIC_MAX_ONSETS)
     dead_end = age * (1.0 + 2e-3 * (k + 1.0) / PERIODIC_MAX_ONSETS)
     return jnp.concatenate(
-        [jnp.where(onset > 0.0, onset, dead_onset), jnp.where(end > 0.0, end, dead_end)]
+        [
+            jnp.where(onset > 0.0, onset, dead_onset),
+            jnp.where(rectangular & (end > 0.0), end, dead_end),
+        ]
     )
 
 

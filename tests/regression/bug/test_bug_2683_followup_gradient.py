@@ -153,3 +153,28 @@ def test_c_onset_flux_has_no_row_staircase(ssp, obs):
     )
     step = float(np.max(np.abs(np.diff(ratio))))
     assert step <= 5e-5, f"largest step of dsps/cic in 0.5 Myr onset increments: {step:.2e}"
+
+
+@pytest.mark.parametrize("kernel", ["cic", "dsps"])
+@pytest.mark.parametrize("tau", [0.1, 0.2])
+def test_d_periodic_tau_gradient_where_a_burst_end_meets_an_onset(ssp, obs, kernel, tau):
+    """Exponential periodic bursts at ``tau = k * delta``: was 16-230 % off the slope.
+
+    The integrand took every burst end (``onset - tau``) as a knot, though only a
+    rectangular burst is discontinuous there. At ``tau = k * delta`` (here
+    ``delta`` = 0.1 Gyr) that knot coincided with a later onset knot and the tau
+    gradient was 16-230 % off the central difference at h = 1e-4 across the four
+    bands. Reference: the
+    central difference of the same model, at a tau where no knot is crossed
+    within h.
+    """
+    full = {"type": "periodic", "tau_bursts_gyr": Uniform(0.05, 0.25)}
+    model = _model(ssp, obs, kernel, 0.1, full)
+    key = "sfh_periodic_tau_bursts_gyr"
+    g = _grad(model, key, tau)
+    h = 1e-4
+    f = lambda v: np.asarray(model.predict_photometry({key: jnp.asarray(v)}))  # noqa: E731
+    fd = (f(tau + h) - f(tau - h)) / (2.0 * h)
+    assert np.all(np.isfinite(g)) and np.all(g != 0.0), f"tau gradient {g}"
+    rel = np.abs(g / fd - 1.0)
+    assert np.all(rel <= 1e-3), f"tau={tau}: |grad/FD-1| = {rel}"
