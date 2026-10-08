@@ -32,6 +32,7 @@ References
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 from typing import NamedTuple
 
@@ -50,7 +51,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
-from tengri.utils.scale import representable_floor as _representable_floor
+from tengri.utils.scale import representable_exponent, representable_floor as _representable_floor
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -687,14 +688,22 @@ def _adaf_synch_compton(nu_, s):
     ratio = nu_ / s.nu_p
     shape_sc = jnp.where(nu_ <= s.nu_p, ratio**0.4, ratio ** (-s.alpha_c))
     shape_sc = (
-        shape_sc * jnp.exp(-s.nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0))
+        shape_sc
+        * jnp.exp(-s.nu_min / nu_)
+        * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, representable_exponent(500.0, base=math.e)))
     )
     return s.l_nu_p * shape_sc
 
 
 def _adaf_brems(nu_, s):
     """Bremsstrahlung: flat with an exponential cutoff at k T_e / h."""
-    return s.l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * s.t_e), 0.0, 500.0))
+    return s.l_brems0 * jnp.exp(
+        -jnp.clip(
+            _H_PLANCK * nu_ / (_K_BOLTZ * s.t_e),
+            0.0,
+            representable_exponent(500.0, base=math.e),
+        )
+    )
 
 
 def _adaf_total(nu_, s):

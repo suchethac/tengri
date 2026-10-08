@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- **Exponential ceilings are representable in float32 (#2767, partial).** The disc's Wien-tail and Comptonization clips and the ADAF bremsstrahlung clips bound `exp` with `representable_exponent(500.0, base=math.e)` (identity in float64). The hot-corona shape is formed in log space, shifted by its grid peak before exponentiating, so no exponential of an unscaled value enters the reverse pass. `d/d(agn_log_mbh)` of the `kubota_done` SED is still non-finite in pure float32 (the cotangent overflows inside the L_sun-scaled chain through `nt_h`); #2767 stays open.
+
 - **A dtype-free `jnp.asarray` on a module-level numpy constant no longer poisons the next x64 state (#2774).** The cosmology Gauss-Legendre nodes and weights, the non-thermal emissivity quadrature, the EUV band of the multicolor tail and the BLR line strengths go through `device_table`, which passes the canonical dtype explicitly. `tools/check_jnp_asarray_module_constants.py` (wired in CI) rejects a new dtype-free site.
 
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.

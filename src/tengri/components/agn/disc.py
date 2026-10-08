@@ -88,6 +88,7 @@ from tengri.utils.physics_constants import (
 from tengri.utils.scale import (
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
+    representable_exponent,
     representable_floor as _representable_floor,
 )
 
@@ -236,13 +237,17 @@ def powerlaw_disc(
 
     # Unnormalized spectral shape
     x = _H_PLANCK * nu / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0))
-    x_clip = jnp.clip(x, 0.0, 500.0)
+    x_clip = jnp.clip(x, 0.0, representable_exponent(500.0, base=math.e))
     shape = nu**agn_alpha * jnp.exp(-x_clip)
 
     # Normalize over the FIXED band [_PL_LAMBDA_HI, _PL_LAMBDA_LO] (log-spaced internal nodes), not
     # over the caller's grid: the same SED must come out whichever grid it is evaluated on (#2572).
     nu_int = _wavelength_to_nu(jnp.asarray(_PL_BAND_AA, dtype=nu.dtype))
-    x_int = jnp.clip(_H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
+    x_int = jnp.clip(
+        _H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)),
+        0.0,
+        representable_exponent(500.0, base=math.e),
+    )
     shape_int = nu_int**agn_alpha * jnp.exp(-x_int)
     integral = jnp.trapezoid(shape_int, nu_int)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
@@ -1153,24 +1158,35 @@ def _hot_corona_lnu(
     """
     kt_safe = jnp.maximum(kt_hot_erg, 1e-30)
 
-    def _comp_shape(freq):
-        """Band-limited Comptonization shape: seed rollover x power law x cutoff.
+    def _comp_log_shape(freq):
+        """Log of the band-limited Comptonization shape: rollover x power law x cutoff.
 
-        Computed once and reused for both the output grid and the normalization
-        grid so the two can never drift apart.
+        Kept in log space and exponentiated only after a shift by the grid peak
+        (see below). ``exp(-x_hi)`` and ``exp(-x_lo)`` each underflow to 0 in float32
+        before their product could be formed, so the product is never formed that way.
         """
         freq_safe = jnp.maximum(freq, 1e-30)
-        x_hi = jnp.clip(_H_PLANCK * freq / kt_safe, 0.0, 500.0)  # electron-temperature cutoff
-        x_lo = jnp.clip(nu_seed_hz / freq_safe, 0.0, 700.0)  # seed-photon rollover
-        return freq ** (1.0 - gamma_hard) * jnp.exp(-x_hi) * jnp.exp(-x_lo)
+        x_hi = jnp.clip(  # electron-temperature cutoff
+            _H_PLANCK * freq / kt_safe, 0.0, representable_exponent(500.0, base=math.e)
+        )
+        x_lo = jnp.clip(  # seed-photon rollover
+            nu_seed_hz / freq_safe, 0.0, representable_exponent(700.0, base=math.e)
+        )
+        return (1.0 - gamma_hard) * jnp.log(freq_safe) - x_hi - x_lo
 
-    shape = _comp_shape(nu)
-    # Normalize on the fixed internal grid (grid-independent).
-    shape_norm = _comp_shape(device_table(_CORONA_NU_GRID))
-    integral = jnp.trapezoid(shape_norm, device_table(_CORONA_NU_GRID))
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    grid_nu = device_table(_CORONA_NU_GRID)
+    # Normalize on the fixed internal grid (grid-independent). The shape and the
+    # integral are both taken relative to the grid peak in log space: shape/integral is
+    # unchanged by the shift, the integral is O(1) per node, and the shift's own
+    # derivative is zero, so it is stopped. Without the shift the reverse pass
+    # multiplies cotangents by 1/peak, which overflows float32 (#2767).
+    log_norm = _comp_log_shape(grid_nu)
+    log_peak = jax.lax.stop_gradient(jnp.max(log_norm))
+    integral = jnp.trapezoid(jnp.exp(log_norm - log_peak), grid_nu)
+    integral_safe = jnp.maximum(jnp.abs(integral), _representable_denominator(1e-100))
 
-    return l_hot_erg * shape / integral_safe
+    shape_scaled = jnp.exp(_comp_log_shape(nu) - log_peak)
+    return l_hot_erg * shape_scaled / integral_safe
 
 
 def _compute_bh_params(
