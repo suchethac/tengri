@@ -21,9 +21,9 @@ pytestmark = pytest.mark.regression_bug
 
 jax = pytest.importorskip("jax")
 jax.config.update("jax_enable_x64", True)
-import jax.numpy as jnp  # noqa: E402
+import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_AA  # noqa: E402
+from tengri.utils.physics_constants import C_AA
 
 RTOL = 1e-6
 
