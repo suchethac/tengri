@@ -755,7 +755,12 @@ class ZTableRequest:
 # below-edge half. A version-6 entry has no such table and would be served to a
 # ``lyc_gate`` request that now needs it (the load path below also rebuilds on
 # the missing key).
-_ZTABLE_CACHE_VERSION = 7
+#
+# 7 -> 8 (#2769): the sub-band integrals are read off node weights instead of
+# as differences of one running total, removing a cancellation error of up to
+# 2.5e-7 relative in faint (Lyman-side) sub-bands of ``ssp_subband_phot_table``.
+# No hashed field changes.
+_ZTABLE_CACHE_VERSION = 8
 
 
 def _ztable_cache_dir():
