@@ -670,7 +670,9 @@ def _measure_ew(
     feat_lo, feat_hi = idx.feature
     feat_width = feat_hi - feat_lo
     if idx.pseudo_continuum == "mean":
-        cont_fluxes = [_window_mean_flux(wave, flux, lo, hi, edge_width) for lo, hi in idx.continuum]
+        cont_fluxes = [
+            _window_mean_flux(wave, flux, lo, hi, edge_width) for lo, hi in idx.continuum
+        ]
         feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi, edge_width)
         return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
     flam = _to_flam(wave, flux)

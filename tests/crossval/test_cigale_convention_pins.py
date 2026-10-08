@@ -61,6 +61,7 @@ def _window_average_conventions(wave, flam):
     Windows [A]: blue 6500-6525, line 6535-6600, red 6610-6635. CIGALE: W (<F>/<C> - 1),
     emission positive. Lick (Trager et al. 1998, Eq. 3): W (1 - <F/C>), absorption positive.
     """
+
     def mean(lo, hi, y):
         m = (wave >= lo) & (wave <= hi)
         return np.trapezoid(y[m], wave[m]) / (wave[m][-1] - wave[m][0])

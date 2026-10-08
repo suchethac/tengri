@@ -97,9 +97,11 @@ def _irregular():
 @pytest.mark.parametrize("units", ["AA", "mag"])
 def test_ew_with_edges_inside_pixels_matches_trager_eqs_1_to_3(grid, units):
     """Edges at 4984.93 etc. fall between pixels; the partial pixels carry the overlap."""
-    wave = {"uniform_0.25": _uniform(0.25), "uniform_0.9": _uniform(0.9), "irregular": _irregular()}[
-        grid
-    ]
+    wave = {
+        "uniform_0.25": _uniform(0.25),
+        "uniform_0.9": _uniform(0.9),
+        "irregular": _irregular(),
+    }[grid]
     idx = dataclasses.replace(_EDGE_OFF_GRID, units=units)
     got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(_fnu(wave)), idx))
     truth = trager_ew(_EDGE_OFF_GRID, _flam)
@@ -235,7 +237,9 @@ def test_hard_window_ew_is_differentiable_in_the_flux():
     lo = idx.continuum[0][0] - 1.0
     hi = idx.continuum[1][1] + 1.0
     outside = (np.asarray(wave) < lo - 1.0) | (np.asarray(wave) > hi + 1.0)
-    assert bool(jnp.all(grad[outside] == 0.0))  # hard edges: nothing beyond one pixel sees the flux
+    assert bool(
+        jnp.all(grad[outside] == 0.0)
+    )  # hard edges: nothing beyond one pixel sees the flux
     direction = jnp.cos(wave / 11.0) * flux
     h = 1e-6
     fd = (
