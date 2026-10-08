@@ -329,3 +329,68 @@ def test_skirtor_torus_integral_equals_its_target_on_caller_grid(cos_inc):
     power = float(np.asarray(jnp.abs(bolometric_integral_nu(out.dust, nu))))
     rel = abs(power / target - 1.0)
     assert rel < 1.0e-4, f"cos_inc={cos_inc:.3f} torus dust: rel error {rel:.3e}"
+
+
+# -- SKIRTOR polar-dust absorbed reference is the converged integral (#2322) -------
+
+
+def _fiducial_polar_templates():
+    """The face-on disc, the i=30 dust and the norm ratio at the fiducial node, from the file."""
+    import h5py
+
+    from tengri.components.agn.skirtor import _find_skirtor_grid
+
+    with h5py.File(_find_skirtor_grid(), "r") as f:
+        wl = np.asarray(f["wavelength"][:])
+        axes = {
+            "tau": np.asarray(f["grid/tau_97"][:]),
+            "p": np.asarray(f["grid/p"][:]),
+            "q": np.asarray(f["grid/q"][:]),
+            "oa": np.asarray(f["grid/opening_angle"][:]),
+            "R": np.asarray(f["grid/radius_ratio"][:]),
+            "cos_inc": np.asarray(f["grid/cos_inclination"][:]),
+        }
+        idx = (
+            int(np.argmin(np.abs(axes["tau"] - 7.0))),
+            int(np.argmin(np.abs(axes["p"] - 1.0))),
+            int(np.argmin(np.abs(axes["q"] - 1.0))),
+            int(np.argmin(np.abs(axes["oa"] - 40.0))),
+            int(np.argmin(np.abs(axes["R"] - 20.0))),
+        )
+        j_0 = int(np.argmin(np.abs(axes["cos_inc"] - 1.0)))
+        j_i = int(np.argmin(np.abs(axes["cos_inc"] - np.cos(np.deg2rad(30.0)))))
+        disk0 = np.asarray(f["spectra/disk_emission"][(*idx, j_0)])
+        dust_i = np.asarray(f["spectra/dust_emission"][(*idx, j_i)])
+        norm = np.asarray(f["spectra/norm"][idx])
+    return wl, disk0, dust_i, float(norm[j_0] / norm[j_i])
+
+
+def test_skirtor_polar_reference_matches_converged_integral():
+    """R_faceon equals a 40000-node integral of the same templates to 1e-6.
+
+    The reference resamples the file's own templates onto 40000 log nodes and
+    integrates them with the trapezoid rule, the converged value of the integrand the
+    polar reference is defined by. The 136-node trapezoid it replaces is 6e-5 off.
+    """
+    from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+    from tengri.utils.grid_interp import resample_template
+
+    wl, disk0, dust_i, ratio = _fiducial_polar_templates()
+    fine = np.geomspace(wl[0], wl[-1], 40000)
+
+    def _on_fine(y):
+        return np.asarray(
+            resample_template(
+                jnp.asarray(fine), jnp.asarray(wl), jnp.asarray(y), left=0.0, right=0.0
+            )
+        )
+
+    ref = np.trapezoid(_on_fine(disk0), fine) * ratio / np.trapezoid(_on_fine(dust_i), fine)
+    wave = jnp.asarray(np.geomspace(1.0e2, 1.0e8, 3000))
+    got = float(
+        skirtor_disc_dust_ratio(
+            wave, jnp.ones_like(wave), jnp.ones_like(wave), agn_cos_inc=np.cos(np.deg2rad(30.0))
+        ).R_faceon
+    )
+    rel = abs(got / ref - 1.0)
+    assert rel < 1.0e-6, f"R_faceon(i=30) rel error vs 40000-node reference {rel:.3e}"

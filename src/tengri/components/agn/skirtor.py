@@ -1108,7 +1108,11 @@ def skirtor_disc_dust_ratio(
     # Bring the analytic disc shape + reddening onto the native grid.
     disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
     ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
-    int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
+    # The bolometric integrals of the polar reference are the power-law integrals of the
+    # same interpolant ``resample_template`` builds, not a trapezoid over the 136 native
+    # nodes (#2322). That is the converged value: a 4000-node trapezoid of the resampled
+    # templates sits 1.5e-6 from it, and a trapezoid over the native nodes 6e-5.
+    int_disk0 = loglog_integral(wave_grid, disk_0_n)
     shape_n = disc_n / jnp.maximum(
         jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
     )
@@ -1137,8 +1141,8 @@ def skirtor_disc_dust_ratio(
     )
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
-    int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    R = jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    int_dust = jnp.maximum(loglog_integral(wave_grid, dust_i_n), 1e-30)
+    R = loglog_integral(wave_grid, sk_disk_reddened) / int_dust
     # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
