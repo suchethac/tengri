@@ -187,10 +187,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # because _RADIO_SF_PARAMS_BY_MODE routes this triplet only under
         # ``radio_sfr_mode="delvecchio2021"`` -- the McCheyne triplet stays
         # pinned, and vice versa, so only one calibration is ever freed.
-        # The build refuses a declared box whose worst (q0, log M*, z) corner gives q above
-        # q_* (see _validate_radio_q_total_support). This upper bound is not narrowed for the
-        # stellar-mass floor; that prior-support question is open for the owner.
-        free_prior=Uniform(1.8, 3.25, "Delvecchio+2021 FIRRC q0", default=2.646),
+        # Free prior: q0_pub +/- 2 sigma_q with q0_pub = 2.646 (arXiv:2010.05510 Eq. 5) and
+        # sigma_q = 0.22 dex, the intrinsic IRRC scatter the paper quotes (Sect. 4.2 Gaussian
+        # fits 0.20 and 0.23 dex; Sect. 4.3 "constant IRRC scatter of 0.21-0.22 dex").
+        # The build refuses a box whose worst (q0, log M*, z) corner is above q_*.
+        free_prior=Uniform(2.206, 3.086, "Delvecchio+2021 FIRRC q0", default=2.646),
     ),
     ParamDeclaration(
         "radio_delv_mass_slope",
@@ -212,9 +213,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
         # As above but centered on the 150 MHz normalization (1.98 rather than
         # 2.646); the low-frequency q0 sits lower because synchrotron dominates
-        # further above the thermal component there. Upper bound 3.0 is below the
-        # 150 MHz limit q_* (about 3.28 at T_e = 2e4 K, alpha_ff = -0.1).
-        free_prior=Uniform(1.0, 3.0, "McCheyne+2022 FIRRC q0", default=1.98),
+        # further above the thermal component there.
+        # Free prior: q0_pub +/- 2 sigma_q with q0_pub = 1.98 (McCheyne+2022 Sect. 5.2) and
+        # sigma_q = 0.3 dex. McCheyne's comment quotes no intrinsic scatter, so 0.3 dex is a
+        # modelling choice (typical far-infrared radio correlation scatter).
+        free_prior=Uniform(1.38, 2.58, "McCheyne+2022 FIRRC q0", default=1.98),
     ),
     ParamDeclaration(
         "radio_mcch_mass_slope",
