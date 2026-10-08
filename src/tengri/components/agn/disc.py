@@ -54,6 +54,7 @@ from tengri.components.agn._nt_emissivity import (
 from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
+    nthcomp_norm_grid as _nthcomp_norm_grid,
 )
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
@@ -1626,6 +1627,8 @@ def _compute_zone_luminosities(
     dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
 
+    nu_norm = device_table(_nthcomp_norm_grid())
+
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Comptonized L_nu of one warm-zone annulus, in units of the largest ring area."""
         # Ring blackbody power per unit area: int B_nu dnu = (sigma_Planck/pi) T^4, closed form.
@@ -1636,6 +1639,18 @@ def _compute_zone_luminosities(
         shape = _nthcomp_lnu_interp(
             nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table, unit=_NTHCOMP_UNIT
         )
+        # The template is normalized by its own integral over its band, so the ring carries
+        # exactly ``p_plain`` (the template's own normalization is ~0.5 % off, #2733).
+        shape_band = _nthcomp_lnu_interp(
+            nu_norm,
+            agn_gamma_warm,
+            agn_kt_warm,
+            kTbb_keV,
+            _template=nthcomp_table,
+            unit=_NTHCOMP_UNIT,
+        )
+        # The ring sum is multiplied by ``_NTHCOMP_UNIT`` at the end, so the shape carries 1/unit.
+        shape = shape / (jnp.trapezoid(shape_band, nu_norm) * _NTHCOMP_UNIT)
         # The normalized ``shape`` (per ``_NTHCOMP_UNIT``) is folded in before the area, so the
         # ring's bolometric power is never formed on its own.
         return (shape * p_plain) * _ring_area_relative(
