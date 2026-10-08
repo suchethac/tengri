@@ -202,6 +202,7 @@ def spectroscopic_population():
     return factory, galaxies
 
 
+@pytest.mark.population_fit
 def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopic_population):
     """The spectroscopy arm of the batch precompute default, executed.
 
@@ -232,6 +233,7 @@ def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopi
         assert np.unique(values).size > 1, f"{name}: the chain never moved"
 
 
+@pytest.mark.population_fit
 @pytest.mark.parametrize("method", ["map", "mcmc_raytrace"])
 def test_backend_dispatches_and_returns_a_populated_posterior(population, method):
     """The seam actually reaches the backend and gets a result back.
@@ -292,6 +294,7 @@ def test_broken_tier_stays_gated_through_the_seam(population, method):
 # ── #2296 fix-round 3: the predict-side positive filter dropped sfh_field_xi ──
 
 
+@pytest.mark.population_fit
 def test_flat_problem_gradients_reach_the_latents_and_psd(population):
     """d logL/d gal_xi, d logL/d psd_sigma_u, d logL/d psd_tau_u must be nonzero.
 
@@ -378,6 +381,7 @@ def test_population_fitter_refuses_a_factory_with_fixed_shared_psd():
         PopulationFitter(bad_factory, [{"flux_obs": np.ones(5), "noise": np.ones(5) * 0.1}])
 
 
+@pytest.mark.population_fit
 def test_fit_population_public_factory_runs():
     """model.fit_population's own convenience.py factory must complete a fit.
 
