@@ -32,6 +32,8 @@
 
 - GRAHSP publishes `L_agn_bol`, `L_agn_torus` and `L_agn_absorbed` from the fixed budget grid instead of a trapezoid over the caller's wavelength array. On a 60-point against a 6000-point caller grid the BBB value had moved by 14 % (#2745).
 
+- The `kd18_disc` and `powerlaw_disc` components read their declared `lum_ratio`. The disc `predict` read a `frac` key that no caller supplied, so every `apply` through the component raised `KeyError: 'frac'` and the parameter could not reach the model.
+
 - AGN `L_*` diagnostics published by the `cat3d_wind`, `kd18_disc`, `powerlaw_disc`, `silva04`, `skirtor_agnfitter` and `skirtor` components are integrated on a fixed budget grid, not the caller's wavelength array, so they no longer change with how the caller samples wavelength (#2745).
 - The SKIRTOR torus is renormalized with the log-log integral of the template interpolant rather than a trapezoid over the native nodes, so the resampled torus carries its full normalized power at every inclination (0.37-0.59 % was lost before; the loss depended on inclination) (#2319).
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.

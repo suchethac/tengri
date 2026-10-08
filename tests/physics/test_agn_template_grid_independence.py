@@ -309,8 +309,6 @@ def _published_luminosities(name, wave):
     object.__setattr__(comp, "data", data)
     prefix = comp.parameter_prefix
     p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
-    if "frac" not in p and "lum_ratio" in p:
-        p["frac"] = p["lum_ratio"]
     _, published = comp.predict(p, jnp.zeros_like(wave), wave)
     return {k: float(np.asarray(v)) for k, v in published.items() if k.startswith("L_")}
 

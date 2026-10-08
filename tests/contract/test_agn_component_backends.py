@@ -139,7 +139,7 @@ class TestKD18DiscContract:
             "gamma_hard": 1.8,
             "kt_hot": 100.0,
             "r_warm_ratio": 2.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         }
 
         sed_out, published = component.predict(p, sed_in, wave)
@@ -212,7 +212,7 @@ class TestPowerLawDiscContract:
             "log_lbol": 44.0,
             "alpha": -1.0,
             "T_max": 1e5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         }
 
         sed_out, published = component.predict(p, sed_in, wave)

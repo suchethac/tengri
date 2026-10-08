@@ -276,7 +276,7 @@ class KD18Disc(SEDModelComponent):
             - gamma_hard: hard X-ray index
             - kt_hot: hot corona temperature (keV)
             - r_warm_ratio: R_warm / R_hot
-            - frac: disc luminosity fraction
+            - lum_ratio: disc luminosity fraction of L_bol
 
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
@@ -300,7 +300,7 @@ class KD18Disc(SEDModelComponent):
             return _kubota_done_disc_fn(
                 wavelength=wavelength,
                 agn_log_lbol=p["log_lbol"],
-                agn_lum_ratio=p["frac"],
+                agn_lum_ratio=p["lum_ratio"],
                 agn_log_mbh=p["log_mbh"],
                 agn_log_ledd=p["log_ledd"],
                 agn_a_spin=p["a_spin"],

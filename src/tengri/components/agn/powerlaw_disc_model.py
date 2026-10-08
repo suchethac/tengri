@@ -161,7 +161,7 @@ class PowerLawDisc(SEDModelComponent):
             - log_lbol: log₁₀(L_bol / L_sun)
             - alpha: power-law index
             - T_max: UV cutoff temperature (K)
-            - frac: disc luminosity fraction
+            - lum_ratio: disc luminosity fraction of L_bol
 
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
@@ -185,7 +185,7 @@ class PowerLawDisc(SEDModelComponent):
             return _powerlaw_disc_fn(
                 wavelength=wavelength,
                 agn_log_lbol=p["log_lbol"],
-                agn_lum_ratio=p["frac"],
+                agn_lum_ratio=p["lum_ratio"],
                 agn_alpha=p["alpha"],
                 agn_T_max=p["T_max"],
             )
