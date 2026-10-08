@@ -856,6 +856,12 @@ def build_components(
                     # which is the non-thermal (CIGALE) reading of q (#2590).
                     q_is_total=radio_include_freefree is not False,
                     freefree_wave_min=freefree_wave_min,
+                    # One owner of the thermal emission: the split's own 10 % law
+                    # gives way to a nebular continuum that carries free-free (#2764).
+                    split_thermal=not (
+                        radio_sfr_mode == "bell2003_split"
+                        and nebular_backend_carries_freefree(nebular_backend)
+                    ),
                     **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
                 ),
             )

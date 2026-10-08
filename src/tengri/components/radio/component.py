@@ -156,6 +156,11 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Frequency [Hz] at which ``radio_q_ir`` anchors the ``"bell2003"`` synchrotron.
         Default 1.4 GHz, where Bell (2003) defines q. CIGALE anchors at 21 cm
         (1.42758 GHz); ``radio.sf.nu_ref = "21cm"`` selects that point (#2762).
+    split_thermal : bool
+        ``"bell2003_split"`` only. ``True`` (default) keeps the split's own 10 %
+        thermal power law. ``False`` drops it because the nebular continuum
+        already carries the free-free; the synchrotron stays 90 % of the Bell
+        total, so one component owns the thermal emission (#2764). The build sets
         it ``False`` beside a ``"cue"`` or ``"cloudy_grid"`` nebular backend.
     freefree_wave_min : float or None
         Rest wavelength [Angstrom] below which the thermal free-free term is
@@ -189,6 +194,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     agn_radio_model: str = "powerlaw"
     freefree_wave_min: float | None = None
     sf_nu_ref: float = 1.4e9
+    split_thermal: bool = True
 
     def __post_init__(self) -> None:
         if self.agn_radio_model not in AGN_RADIO_MODELS:
@@ -533,6 +539,7 @@ class RadioSEDComponent(TemplateThreading):
                 log_L_ir=_log_L_ir,
                 q_is_total=self.config.q_is_total,
                 sf_nu_ref=self.config.sf_nu_ref,
+                split_thermal=self.config.split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
@@ -568,6 +575,7 @@ class RadioSEDComponent(TemplateThreading):
                     include_freefree=self.config.include_freefree,
                     q_is_total=self.config.q_is_total,
                     sf_nu_ref=self.config.sf_nu_ref,
+                    split_thermal=self.config.split_thermal,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                     l_bband=L_4400_intrinsic,
@@ -600,6 +608,7 @@ class RadioSEDComponent(TemplateThreading):
                 include_freefree=self.config.include_freefree,
                 q_is_total=self.config.q_is_total,
                 sf_nu_ref=self.config.sf_nu_ref,
+                split_thermal=self.config.split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                 l_bband=L_4400_intrinsic,

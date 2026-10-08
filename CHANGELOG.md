@@ -30,6 +30,8 @@
 
 ### Fixed
 
+- `radio={'sf': {'type': 'bell2003_split'}}` beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) counted the thermal emission twice: the split's own 10 % thermal law and the nebular continuum, giving a 1.4 GHz total of 1.06 times Bell's calibration (Cue, delayed-tau = 1 Gyr galaxy at 5 Gyr; 1.12 for a constant star formation history). One component now owns the thermal emission, as in the `bell2003` auto-rule (#2346, #2590): beside such a backend the split keeps its 90 % synchrotron (`nu^-0.75`) and drops the 10 % thermal law, so the total is the synchrotron share of the calibration plus the nebular free-free. Without a nebular backend the split is unchanged. (#2764)
+
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows
