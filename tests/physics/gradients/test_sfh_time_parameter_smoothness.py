@@ -13,8 +13,12 @@ This sweeps every registered SFH family's onset/age/peak-time parameters
 ``tests/contract/test_onset_age_z_narrowing_registry_derived.py`` does) plus
 every other time parameter that moves a support boundary or a sharp feature
 (burst ages, truncation and quench times, end times), on both age kernels, on
-the tracked MILES grid. The statistic (:func:`tests._step_excess.step_excess`)
-is the one ``test_lognormal_onset_smoothness.py`` pins for the log-normal.
+the tracked MILES grid. The statistic is
+:func:`tests._step_excess.local_step_excess`, each step against the median of
+its neighbors: the whole-sweep median of
+:func:`tests._step_excess.step_excess` (which ``test_lognormal_onset_smoothness.py``
+pins for the log-normal) reads a smooth curve whose slope varies by more than
+the threshold across the window as a staircase (#2683).
 """
 
 from __future__ import annotations
@@ -26,11 +30,11 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tests._step_excess import step_excess
+from tests._step_excess import local_step_excess
 
 pytestmark = pytest.mark.gradient
 
-#: Above this multiple of the median step, the curve is not smooth.
+#: Above this multiple of the median neighboring step, the curve is not smooth.
 STAIRCASE = 4.0
 #: Fine sweep width, matching test_lognormal_onset_smoothness.py's own scale.
 N_POINTS = 201
@@ -85,13 +89,13 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
 
 #: Known, documented residual gaps, at (family, param, kernel) granularity --
 #: a family can be smooth in one parameter or kernel and not another, so a
-#: whole-family skip would hide passing cases. Each entry's mechanism:
+#: whole-family skip would hide passing cases. The two kernel names integrate
+#: the same function since #2683, so every row is identical for ``cic`` and
+#: ``dsps`` and each gap is listed for both. Local step excess (see
+#: :func:`tests._step_excess.local_step_excess`) on the MILES grid, measured
+#: at #2683:
 #:
-#: * ``tsnorm_burst.burst_age_gyr`` (both kernels): the burst width aliases
-#:   against the SSP age grid's own resolution, the same mechanism issue
-#:   #299's ``SFHBurstAliasingWarning`` describes -- not a moving-boundary
-#:   quadrature defect, so no partial-cell weight fixes it.
-#: * ``periodic.age_gyr`` (both kernels): differentiable everywhere --
+#: * ``periodic.age_gyr`` (14.6): differentiable everywhere --
 #:   confirmed by a finite-difference/autodiff comparison at the exact
 #:   worst point a coarse sweep finds, converging cleanly from
 #:   ``|FD/AD - 1| = 0.83`` at ``h = 1e-3`` Gyr to ``4.9e-6`` at ``h = 1e-6``
@@ -101,43 +105,39 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
 #:   sweep or a sampler step comparable to the burst period reads it as a
 #:   step. See the module docstring of ``mean_sfh.periodic`` for the
 #:   burst-cycle blend this affects.
-#: * ``periodic.delta_bursts_gyr`` (cic only; the dsps kernel measures
-#:   below threshold): the same transition-width mechanism as
-#:   ``age_gyr`` above, seen on one kernel because the two kernels sample
-#:   the transition at different points.
-#: * ``psb_suess2022.tflex_gyr`` / ``psb_suess2022.tlast_gyr`` /
-#:   ``psb_flex.tflex_gyr`` / ``psb_flex.tlast_gyr`` on the ``dsps`` kernel:
-#:   an exactly flat direction, not a staircase -- confirmed by a direct
-#:   gradient check (both the analytic gradient and a finite difference at
-#:   ``h = 1e-6`` are 0 at every point checked). The ``dsps`` histogram
-#:   kernel quantizes the flex-region edge onto its own coarse age-bin
-#:   grid, and the swept window stays inside one bin throughout, so summed
-#:   photometry never moves. ``step_excess`` reports ``inf`` here (a zero
-#:   median step divided into a single float-roundoff-sized step), which
-#:   reads as a divide-by-zero warning, not as the large-but-finite ratio a
-#:   real staircase gives.
-#: * ``psb_suess2022.tlast_gyr`` (cic) and ``psb_flex.tflex_gyr`` (cic):
-#:   ``_piecewise_constant_sfr_smooth``'s partial-cell weight resolves some
-#:   but not every CIC cell at that edge for these two params.
-#: * ``periodic.delta_bursts_gyr`` (dsps) and ``periodic.tau_bursts_gyr``
-#:   (cic): every burst is a hard rectangular/triangular/exponential
-#:   pulse in lookback time (see the module docstring of ``mean_sfh.periodic``
-#:   for the pulse shapes); sweeping the spacing or width between bursts
-#:   moves each pulse's edges across the age grid one bin at a time, the same
-#:   moving-hard-boundary mechanism as ``age_gyr`` above.
+#: * ``periodic.delta_bursts_gyr`` (9.3): every burst is a hard
+#:   rectangular/triangular/exponential pulse in lookback time (see the
+#:   module docstring of ``mean_sfh.periodic`` for the pulse shapes);
+#:   sweeping the spacing moves each pulse's edges across the age grid. The
+#:   onsets are exact knots on a 128x integrand since #2683 (the integral is
+#:   accurate to 0.1 %), so the statistic reads the burst edges crossing
+#:   grid cells, not the quadrature.
+#: * ``psb_suess2022.tlast_gyr`` (5.6), ``psb_flex.tflex_gyr`` (7.0) and
+#:   ``psb_flex.tlast_gyr`` (4.6): ``_piecewise_constant_sfr_smooth``'s
+#:   partial-cell weight resolves some but not every CIC cell at that edge.
+#:   The converged finite difference agrees with the autodiff gradient to
+#:   0.5 % at the points tested
+#:   (``tests/regression/bug/test_bug_2683_followup_gradient.py``), so the
+#:   gradient is not a staircase; the statistic reads a few cells at the
+#:   threshold. ``psb_flex.tlast_gyr`` read 3.8 on the whole-sweep median,
+#:   which a jump on a sloped curve understates.
+#:
+#: Not gaps: ``periodic.tau_bursts_gyr`` (1.13) and
+#: ``tsnorm_burst.burst_age_gyr`` (1.14) are smooth; the whole-sweep median
+#: read them at 4.3 and 5.0 because their slope varies that much across the
+#: window. The ``tau_bursts`` finite differences match the autodiff gradient
+#: to 6e-5 at all 201 points, and 4.32 at a 512x integrand against 4.33 at
+#: 128x shows the curvature is the physics, not the quadrature.
 _KNOWN_GAPS = {
-    ("tsnorm_burst", "burst_age_gyr", "cic"),
-    ("tsnorm_burst", "burst_age_gyr", "dsps"),
     ("periodic", "age_gyr", "cic"),
     ("periodic", "age_gyr", "dsps"),
     ("periodic", "delta_bursts_gyr", "cic"),
     ("periodic", "delta_bursts_gyr", "dsps"),
-    ("periodic", "tau_bursts_gyr", "cic"),
-    ("psb_suess2022", "tflex_gyr", "dsps"),
     ("psb_suess2022", "tlast_gyr", "cic"),
     ("psb_suess2022", "tlast_gyr", "dsps"),
     ("psb_flex", "tflex_gyr", "cic"),
     ("psb_flex", "tflex_gyr", "dsps"),
+    ("psb_flex", "tlast_gyr", "cic"),
     ("psb_flex", "tlast_gyr", "dsps"),
 }
 
@@ -181,7 +181,7 @@ def _sweep_excess(ssp_data_fsps, observation, family, param, window, extra, kern
     values = np.asarray(f(jnp.linspace(lo, hi, N_POINTS)))
     if np.std(values) == 0.0:
         pytest.skip(f"{family}.{param} at kernel={kernel} is inert over this window")
-    return step_excess(values)
+    return local_step_excess(values)
 
 
 @pytest.mark.parametrize("kernel", _AGE_KERNELS)
@@ -189,7 +189,7 @@ def _sweep_excess(ssp_data_fsps, observation, family, param, window, extra, kern
 def test_no_staircase_in_the_swept_time_parameter(
     ssp_data_fsps, observation, family, param, window, extra, kernel
 ):
-    """``step_excess`` of summed photometry stays below 4 across a fine sweep.
+    """``local_step_excess`` of summed photometry stays below 4 across a fine sweep.
 
     (family, param, kernel) triples in :data:`_KNOWN_GAPS` are measured and
     reported but not held to the threshold -- see that constant's docstring
@@ -199,6 +199,6 @@ def test_no_staircase_in_the_swept_time_parameter(
     if (family, param, kernel) in _KNOWN_GAPS:
         pytest.skip(f"{family}.{param} kernel={kernel}: known gap, excess={excess:.3g}")
     assert excess < STAIRCASE, (
-        f"{family}.{param} kernel={kernel}: step_excess={excess:.3g} >= {STAIRCASE} "
+        f"{family}.{param} kernel={kernel}: local_step_excess={excess:.3g} >= {STAIRCASE} "
         f"over [{window[0]}, {window[1]}] Gyr -- staircase in the swept parameter."
     )
