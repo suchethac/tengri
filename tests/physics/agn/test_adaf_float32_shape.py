@@ -208,9 +208,11 @@ def test_adaf_gradient_finite_at_box_corners_both_precisions(corner):
     p = [shape, log_mbh, alpha, beta, delta, 1.0]
     g64 = np.asarray(jax.grad(_loss_fn(jnp.float64))(jnp.asarray(p, jnp.float64)))
     assert np.all(np.isfinite(g64[:5])), f"float64 gradient not finite at {corner}: {g64}"
+    assert float(np.max(np.abs(g64[:5]))) > 0.0, f"float64 gradient identically zero at {corner}"
     with jax.enable_x64(False):
         g32 = np.asarray(jax.grad(_loss_fn(jnp.float32))(jnp.asarray(p, dtype=jnp.float32)))
     assert np.all(np.isfinite(g32[:5])), f"float32 gradient not finite at {corner}: {g32}"
+    assert float(np.max(np.abs(g32[:5]))) > 0.0, f"float32 gradient identically zero at {corner}"
 
 
 # Reproducer for the linear luminosity ratio: a zero ratio must give the exact zero spectrum
@@ -248,6 +250,7 @@ def test_adaf_ratio_gradient_matches_finite_differences_both_precisions(ratio):
     g64 = np.asarray(jax.grad(_loss_fn(jnp.float64))(jnp.asarray(p, jnp.float64)))
     scale = max(np.max(np.abs(fd)), 1e-300)
     assert np.all(np.isfinite(g64)), f"float64 gradient not finite: {g64}"
+    assert float(np.max(np.abs(g64))) > 0.0, f"float64 gradient identically zero: {g64}"
     assert np.max(np.abs(g64 - fd)) <= 1e-6 * scale, f"f64 AD vs FD: {g64} vs {fd}"
 
     with jax.enable_x64(False):
@@ -255,4 +258,5 @@ def test_adaf_ratio_gradient_matches_finite_differences_both_precisions(ratio):
             jax.grad(_loss_fn(jnp.float32))(jnp.asarray(p, dtype=jnp.float32))
         ).astype(np.float64)
     assert np.all(np.isfinite(g32)), f"float32 gradient not finite: {g32}"
+    assert float(np.max(np.abs(g32))) > 0.0, f"float32 gradient identically zero: {g32}"
     assert np.max(np.abs(g32 - fd)) <= 1e-3 * scale, f"f32 AD vs f64 FD: {g32} vs {fd}"
