@@ -146,6 +146,15 @@ CASES = [
         "twice_solar",
     ),
     (
+        "radio.sf.ir_window",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            radio={"sf": {"type": "bell2003", "ir_window": "tir"}},
+        ),
+        "radio_ir_window",
+        "tir",
+    ),
+    (
         "igm.patchy",
         dict(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},

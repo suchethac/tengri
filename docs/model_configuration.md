@@ -465,7 +465,7 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 **Structural keys:**
 - `'type'`: Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize.
+- `'sf'`: Star-formation radio sub-block: `{'type': ..., 'freefree': bool, 'ir_window': 'total' | 'tir' | 'fir'}`. `'ir_window'` (default `'total'`, the dust power as published) selects the infrared band of the dust-emission SED that `L_IR` is integrated over for the q relations: `'tir'` is 8-1000 um (Bell 2003), `'fir'` is 42.5-122.5 um (Helou et al. 1985). See the radio model reference.
 - `'agn'`: AGN radio sub-block: `{'type': ...}` to customize.
 
 **Minimal example:**

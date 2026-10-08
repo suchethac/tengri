@@ -35,6 +35,20 @@ All functions are pure JAX, JIT-compatible, and fully differentiable.
 - ``"mccheyne2022"``: Mass + redshift-dependent FIRRC at 150 MHz (McCheyne+2022).
   Same architecture as Delvecchio2021.
 
+**IR window of ``L_IR``**: the q relations are written for different infrared
+luminosities: Helou et al. (1985) [1]_ on the far-infrared band 42.5-122.5 um,
+Bell (2003) [2]_ and Delvecchio et al. (2021) on the total infrared 8-1000 um.
+The kernels here take ``L_ir`` as an argument and do not choose; the radio
+component integrates the dust-emission SED over the window set by the ``ir_window``
+config field (``"total"`` default, ``"tir"``, ``"fir"``) before calling them.
+
+.. [1] G. Helou, B. T. Soifer and M. Rowan-Robinson, "Thermal infrared and
+   nonthermal radio: Remarkable correlation in disks of galaxies," ApJ, 298, L7
+   (1985). https://doi.org/10.1086/184556
+.. [2] E. F. Bell, "Estimating Star Formation Rates from Infrared and Radio
+   Luminosities: The Origin of the Radio-Infrared Correlation," ApJ, 586, 794
+   (2003). https://doi.org/10.1086/367829
+
 **Synchrotron suppression**: Low-mass galaxies have reduced non-thermal fraction
 (Bell 2003), encoded via the suppression function that scales luminosity by
 n(L) = 0.9 × (L/L*)^0.3 below threshold L* = 3e28 erg/s/Hz.
@@ -246,6 +260,8 @@ def radio_sfr_bell2003(
         holds 0.944 (DL14) and 0.958 (Casey 2012) of that power for the default
         delayed-tau galaxy (integral of the dust-emission SED over the model grid,
         575 and 819 nodes in the band); this call does not resolve the difference.
+        The radio component's ``ir_window="tir"`` passes the band luminosity here
+        instead (Bell 2003 [1]_; Helou et al. 1985, ApJ 298, L7 use 42.5-122.5 um).
     q_ir : float
         FIR-radio correlation parameter for the total 1.4 GHz luminosity.
         Default 2.64 (Bell 2003, z=0).

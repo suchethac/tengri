@@ -217,9 +217,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
                 f"Choose one of {AGN_RADIO_MODELS}."
             )
         if self.ir_window not in IR_WINDOWS:
-            raise ValueError(
-                f"Unknown ir_window {self.ir_window!r}. Choose one of {IR_WINDOWS}."
-            )
+            raise ValueError(f"Unknown ir_window {self.ir_window!r}. Choose one of {IR_WINDOWS}.")
         # ``sfr_mode`` went unchecked here while its AGN sibling was validated.
         # A typo did still raise, but only later and further away: inside
         # ``radio._dispatch_sfr`` during a forward pass, naming a function

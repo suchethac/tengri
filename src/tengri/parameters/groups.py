@@ -5462,7 +5462,10 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                 ir_window_val = sf_dict["ir_window"]
                 if ir_window_val not in IR_WINDOWS:
                     raise _unknown_name_error(
-                        "radio sf ir_window", ir_window_val, frozenset(IR_WINDOWS), keyword="ir_window"
+                        "radio sf ir_window",
+                        ir_window_val,
+                        frozenset(IR_WINDOWS),
+                        keyword="ir_window",
                     )
                 result["radio_ir_window"] = ir_window_val
         else:
@@ -8850,7 +8853,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # from the round-trip entirely. The MW foreground screen (#297) is the
     # standing case: it has three settings and no fitted parameters.
     for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
-        if group_name in result:
+        # A dotted name (``radio.sf``) lives NESTED under its parent: testing the
+        # flat key never matched, so a spec whose sub-block had already been
+        # emitted grew a stray top-level ``'radio.sf'`` that ``parse_groups``
+        # refuses on the way back in.
+        parent, _, subkey = group_name.partition(".")
+        if (subkey and subkey in result.get(parent, {})) or (not subkey and group_name in result):
             continue
         type_value = _extract_group_type(group_name, spec)
         pending: dict = {} if type_value is None else {"type": type_value}
@@ -8859,7 +8867,10 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Emit the group only when a setting actually fired: a bare type is
         # the business of the block above, which knows which are non-default.
         if len(pending) > n_before:
-            result[group_name] = pending
+            if subkey:
+                result.setdefault(parent, {})[subkey] = pending
+            else:
+                result[group_name] = pending
 
     # Handle top-level settings. No `apply_igm`: the igm group carries
     # activation on its own (``type: "none"`` when off, omitted when off and

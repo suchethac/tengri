@@ -60,7 +60,9 @@ def test_band_integral_is_exactly_the_requested_window(grid, window):
     wave, shape = grid
     lo, hi = IR_WINDOWS_AA[window]
     # Edges sit strictly between nodes: a node mask would be off by up to a cell.
-    assert not np.any(np.isclose(wave, lo, rtol=1e-9)) and not np.any(np.isclose(wave, hi, rtol=1e-9))
+    assert not np.any(np.isclose(wave, lo, rtol=1e-9)) and not np.any(
+        np.isclose(wave, hi, rtol=1e-9)
+    )
     got = 10.0 ** float(log10_band_luminosity(jnp.asarray(shape), jnp.asarray(wave), lo, hi))
     assert got == pytest.approx(_quad_band(lo, hi), rel=1e-5)
 
@@ -78,10 +80,14 @@ def _derived(grid):
     wave, shape = grid
     total = _quad_band(wave[0], wave[-1])
     sed = shape * (_L_IR_TOTAL / total)
-    return wave, {
-        "L_ir": jnp.asarray(_L_IR_TOTAL),
-        "sed_dust_ir": jnp.asarray(sed),
-    }, total
+    return (
+        wave,
+        {
+            "L_ir": jnp.asarray(_L_IR_TOTAL),
+            "sed_dust_ir": jnp.asarray(sed),
+        },
+        total,
+    )
 
 
 def _params():
