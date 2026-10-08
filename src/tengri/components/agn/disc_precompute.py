@@ -49,13 +49,14 @@ from tengri.components.agn.disc import (
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
 )
+from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum, skirtor_disk_spectrum
 from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip
-from tengri.utils.physics_constants import L_SUN
+from tengri.utils.physics_constants import C_AA, L_SUN
 
 # ── Axis definitions per model ──────────────────────────────────
 
@@ -70,8 +71,8 @@ AXIS_PARAMS_POWERLAW = ("agn_alpha",)
 # agn_log_ledd and was silently degenerate (#902).
 AXIS_PARAMS_SS = ("agn_log_mbh", "agn_log_lbol")
 
-# cigale_disc: shape is fixed; no grid axes (purely template-scaled by L_bol)
-AXIS_PARAMS_CIGALE = ()
+# cigale_disc: the slope modulator delta is the one axis; disk_type is a build-time choice.
+AXIS_PARAMS_CIGALE = ("agn_cigale_disk_delta",)
 
 # Protocol-required dict form for multi-model module (see test_precompute_protocol.py).
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
@@ -228,18 +229,48 @@ def _build_grid_ss(
     )
 
 
+# Rest-frame grid of the cigale_disc template [Angstrom]. The CIGALE discs span [8, 1e6] nm, so
+# the grid covers 10 Angstrom to 1e7 Angstrom and the energy normalization is taken on it.
+_CIGALE_REST_WAVE_AA = np.logspace(1, 7, 2000, dtype=np.float64)
+
+# CIGALE disc of each skirtor2016 disk_type: 0 = SKIRTOR, 1 = Schartmann 2005.
+_CIGALE_DISKS = (skirtor_disk_spectrum, schartmann2005_disk_spectrum)
+
+
+def _cigale_template(disk_type: int, delta: float) -> np.ndarray:
+    """Per-L_sun L_nu of one CIGALE disc on the cigale rest grid [s].
+
+    The disc density is per nm and unit-area. Per Angstrom it is the per-nm value over 10, and
+    L_nu = L_lambda * lambda^2 / c with lambda in Angstrom and c in Angstrom/s.
+
+    Parameters
+    ----------
+    disk_type : int
+        0 for SKIRTOR, 1 for Schartmann 2005.
+    delta : float
+        Slope modulator of the disc, dimensionless.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        L_nu per unit bolometric luminosity on ``_CIGALE_REST_WAVE_AA`` [s].
+    """
+    wave_aa = _CIGALE_REST_WAVE_AA
+    density_nm = np.asarray(_CIGALE_DISKS[disk_type](jnp.asarray(wave_aa / 10.0), delta=delta))
+    return (density_nm / 10.0) * wave_aa**2 / C_AA
+
+
 def _build_grid_cigale(
     filter_waves: list,
     filter_trans: list,
     redshift: float,
+    disk_type: int,
+    delta_grid: np.ndarray,
 ) -> PreintegratedGrid:
-    """Preintegrate the axis-less broken-power-law disc template of the ``cigale_disc`` precompute.
+    """Preintegrate the CIGALE disc of ``disk_type`` over a grid of the slope modulator delta.
 
-    The template is a fixed broken power law defined by the limits and slopes
-    written in this function; it is not the SKIRTOR (disk_type 0) or Schartmann
-    et al. 2005 (disk_type 1) disc of :mod:`tengri.components.agn.disc_cigale`,
-    whose breakpoints and slopes differ; it is scaled only by luminosity at
-    runtime; the mismatch is tracked in issue #2670.
+    Each template is energy-normalized to unit bolometric luminosity on the rest grid, so the
+    runtime ``agn_log_lbol`` sets the absolute scale, as in :func:`_build_grid_ss`.
 
     Parameters
     ----------
@@ -249,42 +280,27 @@ def _build_grid_cigale(
         Per-filter transmission curves.
     redshift : float
         Source redshift.
+    disk_type : int
+        0 for SKIRTOR, 1 for Schartmann 2005.
+    delta_grid : ndarray, shape (n_delta,)
+        Slope modulator nodes, dimensionless.
 
     Returns
     -------
     PreintegratedGrid
-        Preintegrated photometry with shape (1, n_filters) for scalar access.
+        Preintegrated photometry with shape (n_delta, n_filters).
     """
-    # Fixed broken power law of this template (breakpoints and slopes are the template's own,
-    # not those of a ``disk_type`` of ``disc_cigale``): segment k is
-    # ``wave**coefs[k]`` between ``limits[k]`` and ``limits[k+1]``, continuous at the
-    # breakpoints, the first and last segments extended over the whole grid, and the
-    # trapezoid area on ``wave_rest`` set to 1.
-    limits = np.array([100.0, 400.0, 1500.0, 5000.0, 20000.0], dtype=np.float64)
-    coefs = np.array([-0.5, -0.3, 1.5, 1.0], dtype=np.float64)
-
-    wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
-
-    segment = np.clip(np.searchsorted(limits, wave_rest, side="right") - 1, 0, coefs.size - 1)
-    norms = np.ones(coefs.size)
-    for k in range(1, coefs.size):
-        norms[k] = norms[k - 1] * limits[k] ** (coefs[k - 1] - coefs[k])
-    spec = wave_rest ** coefs[segment] * norms[segment]
-    spec = spec / np.trapezoid(spec, wave_rest)
-
-    # Wrap in shape (1, n_wave) for compatibility with precompute_template_photometry
-    templates = np.array([spec], dtype=np.float64)
-
-    # No grid axes for CIGALE: preintegrate as a single template
+    delta_grid = np.asarray(delta_grid, dtype=np.float64)
+    templates = np.array([_cigale_template(disk_type, float(d)) for d in delta_grid])
     return precompute_template_photometry(
         templates=templates,
-        wave_rest=wave_rest,
+        wave_rest=_CIGALE_REST_WAVE_AA,
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(),  # No axes: scalar template
+        axes=(delta_grid,),
         redshift=redshift,
         dl_cm=1.0,
-        energy_normalize=True,  # Template is dimensionless; normalize to unit L_bol
+        energy_normalize=True,
         units="lnu",
     )
 
@@ -293,7 +309,12 @@ def _build_grid_cigale(
 # (2 / 14) of the first literal grid; the ss_disc log axes take 0.25 dex spacing, the
 # density at which the node-exact PCHIP holds 2e-3 off-node (9-13 nodes give 3e-2).
 # Accuracy is stated with :func:`build_lookup`.
-_DEFAULT_NODES: dict[str, int] = {"agn_alpha": 15, "agn_log_mbh": 17, "agn_log_lbol": 25}
+_DEFAULT_NODES: dict[str, int] = {
+    "agn_alpha": 15,
+    "agn_log_mbh": 17,
+    "agn_log_lbol": 25,
+    "agn_cigale_disk_delta": 9,
+}
 
 # Luminosity each template is scaled by at runtime, in erg/s per unit of 10**agn_log_lbol.
 # ``powerlaw_disc`` templates are per L_sun; ``ss_disc`` templates are energy-normalized to
@@ -334,6 +355,8 @@ def precompute(
     alpha_grid: np.ndarray | None = None,
     mbh_grid: np.ndarray | None = None,
     lbol_grid: np.ndarray | None = None,
+    delta_grid: np.ndarray | None = None,
+    disk_type: int = 0,
 ) -> dict:
     """Build preintegrated disc grid, auto-collapsing Fixed-parameter axes.
 
@@ -357,12 +380,18 @@ def precompute(
         Grid for agn_alpha (powerlaw_disc only). If None, the declared prior [-2, 0] with
         15 nodes, extended to the parameter's reach (``Fixed`` value or finite prior bounds).
     mbh_grid : ndarray, optional
-        Grid for agn_log_mbh (ss_disc only). If None, the declared prior [6, 10] with 5 nodes,
+        Grid for agn_log_mbh (ss_disc only). If None, the declared prior [6, 10] with 17 nodes,
         extended to the reach.
     lbol_grid : ndarray, optional
         Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, the declared prior
-        [8, 14] with 7 nodes (one per dex), extended to the reach. A supplied grid is checked
+        [8, 14] with 25 nodes, extended to the reach. A supplied grid is checked
         against the reach and refused if it does not span it.
+    delta_grid : ndarray, optional
+        Grid for agn_cigale_disk_delta (cigale_disc only), dimensionless. If None, the declared
+        prior [-0.5, 0.5] with 9 nodes, extended to the reach. A Fixed delta collapses the axis.
+    disk_type : int, optional
+        cigale_disc only: 0 for the SKIRTOR disc (default), 1 for Schartmann 2005. A build-time
+        choice, not a lookup axis.
 
     Returns
     -------
@@ -404,10 +433,16 @@ def precompute(
         axis_params = AXIS_PARAMS_SS
 
     elif model == "cigale_disc":
-        preint = _build_grid_cigale(filter_waves, filter_trans, redshift)
+        if disk_type not in (0, 1):
+            raise ValueError(
+                "cigale_disc disk_type must be 0 (SKIRTOR) or 1 (Schartmann 2005), "
+                f"got {disk_type!r}"
+            )
+        delta_grid = _axis("agn_cigale_disk_delta", delta_grid, parameters)
+        preint = _build_grid_cigale(filter_waves, filter_trans, redshift, disk_type, delta_grid)
         result = {
             "grid_phot": preint.phot,
-            "axes": (),
+            "axes": (jnp.asarray(delta_grid),),
             "_preint": preint,
         }
         axis_params = AXIS_PARAMS_CIGALE
@@ -465,8 +500,8 @@ def build_lookup(
     Raises
     ------
     ValueError
-        If ``model`` is not one with a shape table (``cigale_disc`` is scalar; see
-        ``_build_grid_cigale``).
+        If ``model`` is not a disc model with a lookup (``powerlaw_disc``, ``ss_disc``,
+        ``cigale_disc``).
 
     Notes
     -----
@@ -498,7 +533,8 @@ def build_lookup(
         grid_phot = np.asarray(preint["_preint"].phot, dtype=np.float64)
         axes = tuple(jnp.asarray(ax) for ax in preint["_preint"].axes)
     if not axes:
-        flat = jnp.asarray(grid_phot)
+        # The scalar form keeps a leading axis of length 1, shape (1, n_filters).
+        flat = jnp.asarray(grid_phot).reshape(1, -1)
 
         @jax.jit
         def disc_phot_scalar(agn_log_lbol):
