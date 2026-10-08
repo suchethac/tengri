@@ -28,7 +28,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -36,7 +36,7 @@ import jax.numpy as jnp
 from tengri._x64_hold import hold_x64_preference
 from tengri.components.stellar.age_boundary import (
     age_boundary_younger_fraction_cic,
-    age_boundary_younger_fraction_dsps,
+    age_boundary_younger_fraction_hist,
     validate_age_boundaries,
 )
 from tengri.config.exceptions import warn_measured
@@ -67,30 +67,6 @@ class SFHBeforeBigBangWarning(UserWarning):
 
     #: Set at the raise site; see the class docstring.
     truncated_fraction = None
-
-
-class DSPSUnresolvedHistoryWarning(UserWarning):
-    """The histogram age kernel cannot resolve part of this star formation history.
-
-    ``age_kernel='dsps'`` assigns each mass parcel wholly to one SSP node, so
-    structure narrower than the local node spacing (a short burst, a sharp
-    onset or truncation) is placed on the nearest node instead of being shared
-    between the two bracketing nodes. Emitted from the eager forward path when
-    the total-variation distance between the histogram age weights and the
-    first-order (cloud-in-cell) weights exceeds
-    :data:`_DSPS_UNRESOLVED_TV_THRESHOLD`; ``age_kernel='cic'`` resolves it.
-    The check is skipped under ``jax.jit`` / ``grad`` / ``vmap`` (traced
-    values), so it costs nothing inside inference. See suchethac/tengri#2683.
-
-    Attributes
-    ----------
-    unresolved_fraction : float or None
-        Total-variation distance ``0.5 * sum |w_dsps - w_cic|`` between the two
-        normalized age-weight vectors [dimensionless], exact.
-    """
-
-    #: Set at the raise site; see the class docstring.
-    unresolved_fraction = None
 
 
 class SFHBeyondSSPGridWarning(UserWarning):
@@ -607,80 +583,7 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
     )
 
 
-def _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, tab_lbt_yr):
-    """``age_kernel="dsps"`` still truncates a tabulated history: say so (#1522).
-
-    The CIC fix extends the *integrand*; DSPS's histogram kernel bins onto
-    ``ssp_lg_age_gyr`` itself and has no bin past the oldest template, so mass out
-    there is still lost. That kernel is opt-in for cross-code comparison (#964),
-    so the behavior stands; but it must not be silent, which was the whole of
-    #1522. Cheap: returns immediately for every non-tabulated SFH.
-    """
-    if tab_lbt_yr is None:
-        return
-    # Tabulated-only (returns above otherwise), so this must use the tabulated
-    # resolution: the warning has to describe the grid actually integrated.
-    fine_age_yr, _top = _extend_integrand_to_history(
-        _refine_sfh_table_ages(ssp_ages_yr, factor=INTEGRAND_FACTOR_TABULATED),
-        tab_lbt_yr,
-        ssp_ages_yr,
-        factor=INTEGRAND_FACTOR_TABULATED,
-    )
-    _warn_if_history_exceeds_ssp_grid(
-        fine_age_yr,
-        sfh_fn(fine_age_yr, **sfh_kwargs),
-        ssp_ages_yr,
-        tab_lbt_yr,
-        conserved=False,
-    )
-
-
-#: Total-variation distance between the histogram and cloud-in-cell age weights
-#: above which :class:`DSPSUnresolvedHistoryWarning` is emitted (#2683): the
-#: fraction of the formed mass the histogram kernel places on a different node
-#: than first-order sharing does.
-_DSPS_UNRESOLVED_TV_THRESHOLD = 0.01
-
-
-def _warn_if_dsps_unresolved(
-    joint_weights, ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr, t_obs_gyr
-):
-    """Warn when the histogram kernel mis-places more than ~1 % of the mass (#2683).
-
-    Criterion: ``TV = 0.5 * sum_a |w_dsps[a] - w_cic[a]|`` between the two
-    normalized age marginals, ``w_cic`` from the dense cloud-in-cell integrand
-    that ``age_kernel='cic'`` itself builds; ``TV > _DSPS_UNRESOLVED_TV_THRESHOLD``
-    warns. Cost: one dense integrand evaluation and one weight pass (the work of
-    one ``age_kernel='cic'`` forward), on eager calls only. Traced inputs
-    (``jit``, ``grad``, ``vmap``) return immediately, before any array op, so the
-    compiled program is unchanged.
-    """
-    if isinstance(joint_weights, jax.core.Tracer):
-        return
-    fine_age_yr, fine_sfr = _cic_integrand(
-        ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr
-    )
-    w_cic, _ = _age_weights_cic(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
-    w_dsps = joint_weights.sum(axis=0)
-    sum_cic, sum_dsps = w_cic.sum(), w_dsps.sum()
-    w_cic = w_cic / jnp.where(sum_cic > 0.0, sum_cic, 1.0)
-    w_dsps = w_dsps / jnp.where(sum_dsps > 0.0, sum_dsps, 1.0)
-    tv = float(0.5 * jnp.sum(jnp.abs(w_dsps - w_cic)))
-    if tv <= _DSPS_UNRESOLVED_TV_THRESHOLD:
-        return
-    warn_measured(
-        f"age_kernel='dsps' places {tv:.1%} of the formed mass on a different SSP "
-        f"age node than first-order sharing does: this star formation history has "
-        f"structure narrower than the local SSP node spacing (a short burst or a "
-        f"sharp onset or truncation), and the histogram kernel assigns each mass "
-        f"parcel to a single node. Use age_kernel='cic' to resolve it.",
-        DSPSUnresolvedHistoryWarning,
-        stacklevel=3,
-        unresolved_fraction=tv,
-    )
-
-
-def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
+def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr, extra_points_yr=None):
     """The dense (age, SFR) integrand every CIC weight kernel consumes.
 
     One source for the three call sites: :meth:`StellarSEDComponent.apply`'s
@@ -703,6 +606,10 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
         The registry's SFH function, for bin-edge discovery on binned families.
     tab_lbt_yr : ndarray or None
         A tabulated history's own lookback nodes [yr], else None.
+    extra_points_yr : ndarray or None, optional
+        Lookbacks [yr] to merge into the grid as exact points (no epsilon pair):
+        the histogram kernel passes its SSP bin edges so that no integrand
+        segment straddles a bin boundary (#2683). Default ``None``.
 
     Returns
     -------
@@ -731,6 +638,8 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     edges_yr = tab_lbt_yr if tab_lbt_yr is not None else _sfh_bin_edges_yr(sfh_spec_fn, sfh_kwargs)
     if edges_yr is not None:
         fine_age_yr = _inject_edge_knots(fine_age_yr, edges_yr, ssp_ages_yr[0], hi_yr)
+    if extra_points_yr is not None:
+        fine_age_yr = jnp.sort(jnp.concatenate([fine_age_yr, extra_points_yr]))
     sfr = sfh_fn(fine_age_yr, **sfh_kwargs)
     _warn_if_history_exceeds_ssp_grid(fine_age_yr, sfr, ssp_ages_yr, tab_lbt_yr)
     return fine_age_yr, sfr
@@ -1144,6 +1053,43 @@ def _mass_conserving_total(sfh_kwargs, measured_total_mass, *, is_composite=Fals
     return 10.0 ** jnp.asarray(sfh_kwargs["log_total_mass"])
 
 
+def _bracket_shares(age_yr, ssp_ages_yr):
+    """Lower bracketing SSP node and log-age share on the upper node (#964).
+
+    The one definition of first-order sharing, used for CIC parcels and for the
+    histogram kernel's per-bin centroids (#2683): a mass at lookback ``age_yr``
+    goes ``1 - f`` to node ``idx`` and ``f`` to node ``idx + 1``, linear in
+    :math:`\\log_{10}` age, which reproduces a log-age-interpolated SSP spectrum
+    evaluated at the exact age. Ages outside the grid clip to the end node. A
+    leading ``age = 0`` template (lg = -inf) falls back to linear-in-age shares.
+
+    Parameters
+    ----------
+    age_yr : ndarray, shape (m,)
+        Lookback ages [yr].
+    ssp_ages_yr : ndarray, shape (n_age,)
+        Ascending SSP template ages [yr].
+
+    Returns
+    -------
+    idx : ndarray of int, shape (m,)
+        Lower bracketing node, in ``[0, n_age - 2]``.
+    f : ndarray, shape (m,)
+        Share on node ``idx + 1``, in ``[0, 1]`` [dimensionless].
+    """
+    n_age = ssp_ages_yr.shape[0]
+    lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
+    lg_age = jnp.log10(jnp.maximum(age_yr, 1e-30))
+    idx = jnp.clip(jnp.searchsorted(lg_nodes, lg_age) - 1, 0, n_age - 2)
+    f_log = (lg_age - lg_nodes[idx]) / (lg_nodes[idx + 1] - lg_nodes[idx])
+    # Fallback for a leading age = 0 template (lg = -inf): linear in age.
+    f_lin = (age_yr - ssp_ages_yr[idx]) / jnp.maximum(
+        ssp_ages_yr[idx + 1] - ssp_ages_yr[idx], representable_denominator(1e-30)
+    )
+    f = jnp.clip(jnp.where(jnp.isfinite(f_log), f_log, f_lin), 0.0, 1.0)
+    return idx, f
+
+
 def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     """Shared parcel machinery for the CIC weight builders (#964).
 
@@ -1166,16 +1112,7 @@ def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     # Split each parcel between bracketing SSP nodes, linear in log10(age)
     # (FSPS's isochrones are log-spaced; the dense-reference arbitration in
     # #964 found FSPS consistent with log-age interpolation to 1e-4).
-    n_age = ssp_ages_yr.shape[0]
-    lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
-    lg_age = jnp.log10(jnp.maximum(age, 1e-30))
-    idx = jnp.clip(jnp.searchsorted(lg_nodes, lg_age) - 1, 0, n_age - 2)
-    f_log = (lg_age - lg_nodes[idx]) / (lg_nodes[idx + 1] - lg_nodes[idx])
-    # Fallback for a leading age = 0 template (lg = -inf): linear in age.
-    f_lin = (age - ssp_ages_yr[idx]) / jnp.maximum(
-        ssp_ages_yr[idx + 1] - ssp_ages_yr[idx], representable_denominator(1e-30)
-    )
-    f = jnp.clip(jnp.where(jnp.isfinite(f_log), f_log, f_lin), 0.0, 1.0)
+    idx, f = _bracket_shares(age, ssp_ages_yr)
     total_mass = jnp.maximum(jnp.trapezoid(sfr_valid[1:], age_yr), 0.0)
     return contrib, idx, f, total_mass, age
 
@@ -1379,6 +1316,204 @@ def _joint_weights_cic_met_table(
         .add(met_w.T * (contrib * f)[None, :])
     )
     return joint / jnp.maximum(jnp.sum(joint), representable_denominator(1e-300)), total_mass
+
+
+#: Sub-bins each SSP log-midpoint bin is cut into before its mass is deposited
+#: (#2683). A bin's mass is exact whatever this is; it sets how finely the
+#: *placement* of that mass between the two bracketing nodes follows the history
+#: inside the bin. One sub-bin per bin preserves only the bin's first moment of
+#: log-age and leaves the variance inside it unresolved (periodic bursts 4.8 % in
+#: the FUV, Gaussian peaks 1.4 %); the error falls as the square of the sub-bin
+#: width, so four sub-bins bring every measured family to <= 0.5 %.
+_HIST_SUBBINS = 4
+
+
+def _hist_edges_yr(ssp_ages_yr):
+    """Interior sub-bin edges of the histogram kernel [yr], ``n_age * _HIST_SUBBINS - 1`` of them (#2683).
+
+    DSPS's histogram kernel gives SSP node :math:`a` the mass formed between the
+    geometric midpoints with its neighbors, :math:`[e_{a-1}, e_a]`. The youngest
+    bin is open below (it holds everything younger, the ``[0, age_0]`` sliver
+    included) and the oldest open above; their outer bounds are the mirror images
+    of the first and last interior edge about the end node, used only to place
+    sub-edges. Each bin is cut into :data:`_HIST_SUBBINS` log-equal sub-bins and
+    every sub-edge, the bin edges among them, is returned.
+    """
+    ages = ssp_ages_yr
+    e = jnp.sqrt(jnp.maximum(ages[:-1], 0.0) * ages[1:])
+    lo0 = jnp.where(e[0] > 0.0, ages[0] * ages[0] / jnp.where(e[0] > 0.0, e[0], 1.0), 0.0)
+    hi_n = ages[-1] * ages[-1] / e[-1]
+    bounds = jnp.concatenate([lo0[None], e, hi_n[None]])
+    lower, upper = bounds[:-1], bounds[1:]
+    frac = jnp.arange(_HIST_SUBBINS, dtype=ages.dtype) / _HIST_SUBBINS
+    pos = lower > 0.0
+    safe_lower = jnp.where(pos, lower, 1.0)
+    geo = jnp.where(
+        pos[:, None],
+        safe_lower[:, None] * (upper[:, None] / safe_lower[:, None]) ** frac[None, :],
+        upper[:, None] * frac[None, :],
+    )
+    return geo.reshape(-1)[1:]
+
+
+class _HistParcels(NamedTuple):
+    """Per-sub-bin mass, centroid and node shares of the histogram kernel (#2683)."""
+
+    seg_mass: jnp.ndarray  # (n_seg,) trapezoid mass of each integrand segment [Msun]
+    seg_lo: jnp.ndarray  # (n_seg,) segment lower lookback [yr]
+    seg_hi: jnp.ndarray  # (n_seg,) segment upper lookback [yr]
+    seg_lg: jnp.ndarray  # (n_seg,) log10 lookback [yr] of the segment centroid
+    seg_unit: jnp.ndarray  # (n_seg,) sub-bin holding the segment
+    unit_mass: jnp.ndarray  # (n_unit,) exact mass formed in each sub-bin [Msun]
+    unit_idx: jnp.ndarray  # (n_unit,) lower node the sub-bin's mass is shared onto
+    unit_f: jnp.ndarray  # (n_unit,) share on the upper node [dimensionless]
+    n_unit: int  # n_age * _HIST_SUBBINS
+    total_mass: jnp.ndarray  # () #538-contract mass [Msun]
+
+
+def _hist_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
+    r"""Exact sub-bin masses of the histogram kernel, placed by mean log-age (#2683).
+
+    DSPS's histogram kernel gives SSP node :math:`a` the mass formed inside its
+    log-midpoint age bin. That mass is evaluated here as the exact trapezoid
+    integral of the dense integrand over the bin (the bin edges are quadrature
+    knots, so no segment straddles one and a moving SFH edge moves mass between
+    bins continuously), not read off an SFR table interpolated in
+    :math:`\log_{10} M`: the table is what made the kernel blind to a burst, an
+    onset or a step edge falling between its rows.
+
+    Each bin is cut into :data:`_HIST_SUBBINS` sub-bins and the mass of each is
+    deposited at its mass-weighted mean log-age :math:`\bar x`, shared linearly
+    between the two bracketing nodes (:func:`_bracket_shares`). Assigning the
+    whole bin to its node instead puts a burst up to half a node spacing from
+    where it formed (a 30 Myr burst at z = 2.5 was 14-19 % off in the FUV); this
+    placement preserves the first moment of :math:`\log_{10}` age of every
+    sub-bin exactly, and the bin masses, which are the histogram kernel's
+    definition, are untouched.
+
+    Parameters
+    ----------
+    age_yr : ndarray, shape (n,)
+        Ascending lookback ages [yr] of the dense integrand, **including the
+        sub-bin edges** (see :func:`_cic_integrand`'s ``extra_points_yr``).
+    sfr : ndarray, shape (n,)
+        SFR at ``age_yr`` [Msun/yr].
+    ssp_ages_yr : ndarray, shape (n_age,)
+        Ascending SSP template ages [yr].
+    t_obs_gyr : float
+        Cosmic age at the observation [Gyr]; nodes at lookbacks beyond it carry
+        no mass (as in :func:`_cic_parcels`).
+
+    Returns
+    -------
+    _HistParcels
+        Segment masses and sub-bins, per-sub-bin mass and node shares, and the
+        #538-contract total mass (the ``[0, age_0]`` sliver redistributes mass
+        into the youngest bin, it does not inflate the total).
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: static shapes; segment sums via
+    ``jax.ops.segment_sum``; the sub-bin index and node shares are
+    integer-valued or clipped functions of the centroid and carry gradient only
+    through it.
+    """
+    n_unit = ssp_ages_yr.shape[0] * _HIST_SUBBINS
+    age = jnp.concatenate([jnp.zeros((1,), age_yr.dtype), age_yr])
+    sfr_ext = jnp.concatenate([sfr[:1], sfr])
+    sfr_valid = jnp.where(age < t_obs_gyr * 1e9, sfr_ext, 0.0)
+    seg_lo, seg_hi = age[:-1], age[1:]
+    seg_mass = 0.5 * (sfr_valid[:-1] + sfr_valid[1:]) * (seg_hi - seg_lo)
+    # Centroid of a segment: its arithmetic midpoint (segments are ~1/16 of a
+    # node spacing wide), floored at the youngest node so the ``[0, age_0]``
+    # sliver sits on it, as :func:`_cic_parcels` puts it.
+    mid = jnp.maximum(0.5 * (seg_lo + seg_hi), ssp_ages_yr[0])
+    seg_lg = jnp.log10(jnp.maximum(mid, 1e-30))
+    seg_unit = jnp.searchsorted(_hist_edges_yr(ssp_ages_yr), mid)
+    unit_mass = jax.ops.segment_sum(seg_mass, seg_unit, num_segments=n_unit)
+    unit_moment = jax.ops.segment_sum(seg_mass * seg_lg, seg_unit, num_segments=n_unit)
+    live = unit_mass > 0.0
+    # An empty sub-bin carries no mass; park it on its own node so the shares stay finite.
+    lg_unit_mid = jnp.log10(jnp.maximum(jnp.repeat(ssp_ages_yr, _HIST_SUBBINS), 1e-30))
+    lg_bar = jnp.where(live, unit_moment / jnp.where(live, unit_mass, 1.0), lg_unit_mid)
+    unit_idx, unit_f = _bracket_shares(10.0**lg_bar, ssp_ages_yr)
+    total_mass = jnp.maximum(jnp.sum(seg_mass[1:]), 0.0)
+    return _HistParcels(
+        seg_mass,
+        seg_lo,
+        seg_hi,
+        seg_lg,
+        seg_unit,
+        unit_mass,
+        unit_idx,
+        unit_f,
+        n_unit,
+        total_mass,
+    )
+
+
+def _deposit(unit_mass, unit_idx, unit_f, n_age, extra_axes=()):
+    """Scatter per-sub-bin masses onto SSP nodes with the (idx, f) shares (#2683).
+
+    ``unit_mass`` is ``(n_unit,)`` or ``(n_unit, n_met)``; returns ``(n_age,)`` or
+    ``(n_met, n_age)``.
+    """
+    if unit_mass.ndim == 1:
+        zeros = jnp.zeros(n_age, dtype=unit_mass.dtype)
+        return zeros.at[unit_idx].add(unit_mass * (1.0 - unit_f)).at[unit_idx + 1].add(
+            unit_mass * unit_f
+        )
+    zeros = jnp.zeros((unit_mass.shape[1], n_age), dtype=unit_mass.dtype)
+    return (
+        zeros.at[:, unit_idx]
+        .add(unit_mass.T * (1.0 - unit_f)[None, :])
+        .at[:, unit_idx + 1]
+        .add(unit_mass.T * unit_f[None, :])
+    )
+
+
+def _age_weights_hist(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
+    """Normalized SSP age weights of the histogram kernel (#2683).
+
+    The histogram counterpart of :func:`_age_weights_cic`, same arguments and
+    returns: see :func:`_hist_parcels` for the construction.
+    """
+    p = _hist_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
+    w = _deposit(p.unit_mass, p.unit_idx, p.unit_f, ssp_ages_yr.shape[0])
+    return w / jnp.maximum(jnp.sum(w), representable_denominator(1e-300)), p.total_mass
+
+
+def _joint_weights_hist_met_table(
+    age_yr, sfr, ssp_ages_yr, t_obs_gyr, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet
+):
+    """Histogram-kernel joint (met, age) weights for a per-age metallicity table (#2683).
+
+    The analog of :func:`_joint_weights_cic_met_table`: each integrand segment
+    carries the lognormal MDF centred on its own metallicity
+    (``lgmet_on_ssp_ages`` interpolated, linear in log-age, to the segment
+    centroid), the MDFs are summed inside each sub-bin mass-weighted, and the
+    sub-bin is deposited by :func:`_hist_parcels`. Same arguments and returns.
+    """
+    p = _hist_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
+    lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
+    lgmet_par = jnp.interp(p.seg_lg, lg_nodes, lgmet_on_ssp_ages)
+    met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_seg, n_met)
+    unit_met = jax.ops.segment_sum(met_w * p.seg_mass[:, None], p.seg_unit, num_segments=p.n_unit)
+    joint = _deposit(unit_met, p.unit_idx, p.unit_f, ssp_ages_yr.shape[0])
+    return joint / jnp.maximum(jnp.sum(joint), representable_denominator(1e-300)), p.total_mass
+
+
+#: Per age kernel: (age-weight function, per-age-metallicity joint-weight function),
+#: both with the arguments of :func:`_age_weights_cic` / :func:`_joint_weights_cic_met_table`.
+_AGE_KERNEL_FUNCTIONS = {
+    "cic": (_age_weights_cic, _joint_weights_cic_met_table),
+    "dsps": (_age_weights_hist, _joint_weights_hist_met_table),
+}
+
+
+def _kernel_extra_points(kernel, ssp_ages_yr):
+    """Exact integrand points the kernel needs: the sub-bin edges for ``dsps``, else None."""
+    return _hist_edges_yr(ssp_ages_yr) if kernel == "dsps" else None
 
 
 def _tabulated_sfh(params, t_obs_gyr):
@@ -1621,80 +1756,6 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
 
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, log10_lyc_luminosity
-
-#: Refinement factor of the DSPS histogram kernel's SFR table (#2683). The kernel
-#: reads log10 M(<t) at log-midpoint bin edges; with one table row per SSP node a
-#: bin edge inside the segment holding the SFH onset reads ~zero mass and the node
-#: containing the onset loses its whole weight (+2.3 % FUV, +1.2 % H on the
-#: delayed-tau fiducial). Subdividing each node interval 8-fold removes this; the
-#: residual (~0.7 % of mass per node) is the
-#: kernel's zeroth-order assignment of each parcel to one node.
-_DSPS_TABLE_REFINE = 8
-
-
-def _refined_dsps_lookbacks(ssp_ages_yr):
-    """Lookback points [yr] of the refined DSPS table, ascending, excluding 0.
-
-    Each interval of ``[0, ssp_ages_yr]`` is split uniformly into
-    :data:`_DSPS_TABLE_REFINE` parts (right endpoint included), so the SSP nodes
-    are members of the result and ``_DSPS_TABLE_REFINE = 1`` returns them
-    unchanged. The static shape is ``n * _DSPS_TABLE_REFINE``.
-    """
-    ages = jnp.asarray(ssp_ages_yr)
-    lo = jnp.concatenate([jnp.zeros((1,), ages.dtype), ages[:-1]])
-    frac = jnp.arange(1, _DSPS_TABLE_REFINE + 1, dtype=ages.dtype) / _DSPS_TABLE_REFINE
-    pts = lo[:, None] * (1.0 - frac[None, :]) + ages[:, None] * frac[None, :]
-    return pts.reshape(-1)
-
-
-def _refined_dsps_table(ssp_ages_yr, sfh_fn, sfh_kwargs, t_obs_gyr):
-    """DSPS (t, SFR) table on the refined lookback grid, with the young knot (#2683).
-
-    The ONE builder of the histogram kernel's input, called by
-    :meth:`StellarSEDComponent.apply` (delta and per-age-metallicity branches) and
-    the SED-free fast path, so the routes cannot drift apart (#982). The SFR is
-    ``sfh_fn`` evaluated at :func:`_refined_dsps_lookbacks`; for a field draw or a
-    tabulated history ``sfh_fn`` is the piecewise-linear interpolant of the nodes
-    (see :func:`_field_sfh_closure`), so the cloud-in-cell kernel and this table
-    integrate the same function. The lookback-0 knot (#538) copies the youngest
-    point, as :func:`_build_dsps_sfh_table` does.
-
-    Parameters
-    ----------
-    ssp_ages_yr : ndarray, shape (n,)
-        Ascending SSP lookback ages [yr].
-    sfh_fn : callable
-        ``sfh_fn(age_yr, **sfh_kwargs) -> SFR [Msun/yr]``.
-    sfh_kwargs : dict
-        Keyword arguments for ``sfh_fn``.
-    t_obs_gyr : float
-        Cosmic age at the observation redshift [Gyr].
-
-    Returns
-    -------
-    t_cosmic_asc, sfr_asc : ndarray, shape (n * _DSPS_TABLE_REFINE + 1,)
-        Strictly increasing cosmic time [Gyr] and the aligned SFR [Msun/yr].
-    lookback_yr : ndarray, shape (n * _DSPS_TABLE_REFINE,)
-        The refined lookback points (without the knot), ascending.
-    """
-    lookback_yr = _refined_dsps_lookbacks(ssp_ages_yr)
-    sfr = sfh_fn(lookback_yr, **sfh_kwargs)
-    t_cosmic_asc, sfr_asc, _ = _build_dsps_sfh_table(
-        lookback_yr, sfr, t_obs_gyr, add_young_knot=True
-    )
-    return t_cosmic_asc, sfr_asc, lookback_yr
-
-
-def _refined_dsps_lgmet(ssp_ages_yr, lgmet_on_ssp_ages, lookback_yr):
-    """Per-age log10 Z on the refined table, in the table's ascending-cosmic order (#2683).
-
-    Interpolates ``lgmet_on_ssp_ages`` (defined at the SSP nodes) onto
-    ``lookback_yr``, reverses to ascending cosmic time and appends the youngest
-    value for the lookback-0 knot, matching :func:`_refined_dsps_table`.
-    """
-    lg = jnp.interp(lookback_yr, jnp.asarray(ssp_ages_yr), lgmet_on_ssp_ages)
-    return jnp.concatenate([lg[::-1], lg[:1]])
-
 
 def _field_sfh_closure(sfh_lbt_grid, sfr_history):
     """Interp closure + lookback knots for a correlated-field history (#2684).
@@ -3015,33 +3076,13 @@ class StellarSEDComponent:
                 + LOG10_ZSUN
             )
 
-        # ── 6. CSP integral via DSPS ────────────────────────────────────
-        # We call DSPS directly and use ``result.weights``: the JOINT
-        # (n_met, n_age) probability distribution: instead of the
-        # separable approximation in compute_dsps_native_weights. The
-        # separable form (lgmet_w × age_w) gave the right marginals but
-        # the wrong product for non-trivial age-metallicity correlations,
-        # over-scaling the CSP SED by orders of magnitude.
-        with hold_x64_preference():
-            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
-
-        # NaN-safe cosmic-time prep mirroring
-        # :func:`compute_dsps_age_weights`: when SSP ages exceed
-        # ``t_obs`` (typical at z>0 with old SSPs), the implied cosmic
-        # time is negative. Bare ``jnp.clip(min=1e-3)`` collapses
-        # multiple such bins to the same boundary value, producing a
-        # degenerate ``gal_t_table`` that DSPS NaNs on. Instead, we
-        # build a strictly-monotonic ramp at the invalid end and zero
-        # the SFR there so those bins contribute nothing.
+        # ── 6. CSP age weights ──────────────────────────────────────────
+        # The joint (n_met, n_age) weights of the selected age kernel (below);
+        # the separable lgmet_w x age_w form is exact only for a delta or
+        # lognormal metallicity, the per-age table keeps the full joint.
+        # SSP ages older than the universe at ``t_obs`` carry no mass: the
+        # kernels zero the integrand there.
         ssp_age_gyr = ssp_ages_yr / 1e9
-        # Coarse (per-SSP-age) total formed mass: the conserved normalization
-        # basis (without the young-boundary knot) shared by every DSPS path
-        # below. Each path rebuilds its own (t, SFR) table: the non-parametric
-        # delta path with a dense integrand (#758), and both the parametric
-        # delta and per-age-metallicity paths with the young-boundary knot
-        # (#538). The knot's [0, age0] segment is excluded from this total, so it
-        # redistributes mass into the youngest bin without inflating it.
-        _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
 
         # Eager physicality guard: the masking above truncates any SFH mass at
         # lookback ages older than the universe at this redshift. When that
@@ -3094,146 +3135,54 @@ class StellarSEDComponent:
         # carries the instance-specific value.
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
-        _used_cic = False
         younger_fraction = None
         _age_kernel = _resolve_age_kernel(self.config)
+        # One integrand, two kernels (#2683). Both read the dense, edge-resolved
+        # integrand; the histogram kernel additionally takes its SSP bin edges as
+        # exact points so that each bin's mass is an exact integral. A field draw
+        # is the piecewise-linear interpolant of its own lookback nodes for both
+        # (#2684). The choice is explicit and selectable; see
+        # :func:`_resolve_age_kernel`.
+        _fine_age_yr, _fine_sfr = _cic_integrand(
+            ssp_ages_yr,
+            _age_sfh_fn,
+            sfh_kwargs,
+            sfh_spec.fn,
+            _age_tab_lbt_yr,
+            extra_points_yr=_kernel_extra_points(_age_kernel, ssp_ages_yr),
+        )
+        if self.config.age_boundaries_yr:
+            younger_fraction = self._boundary_fraction(
+                _age_kernel, _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
+            )
+        age_weights_fn, joint_met_table_fn = _AGE_KERNEL_FUNCTIONS[_age_kernel]
         if self.config.metallicity_model == "delta":
-            # Delta metallicity: separable joint weights. The age marginal
-            # comes from tengri's cloud-in-cell kernel on a dense integrand
-            # (#964) or from DSPS's histogram kernel on a table refined between
-            # the SSP nodes (#2683). A field draw is the piecewise-linear
-            # interpolant of its own lookback nodes for both (#2684). The choice
-            # is explicit and selectable; see :func:`_resolve_age_kernel`.
-            if _age_kernel == "cic":
-                _fine_age_yr, _fine_sfr = _cic_integrand(
-                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
-                )
-                if self.config.age_boundaries_yr:
-                    younger_fraction = self._boundary_fraction_cic(
-                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
-                    )
-                age_w_cic, total_mass = _age_weights_cic(
-                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
-                )
-                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
-                joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-                _used_cic = True
-            else:
-                # DSPS's kernel on the table refined between the SSP nodes
-                # (:func:`_refined_dsps_table`), plus the young-boundary knot so
-                # the youngest SSP bin captures the [0, age0] mass: the
-                # delayed-tau Q_H fix (#538). total_mass stays the conserved
-                # coarse value from above (the knot's segment is excluded), so
-                # mass conservation is unaffected.
-                _warn_if_dsps_kernel_truncates_history(
-                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, _age_tab_lbt_yr
-                )
-                gal_t_table, gal_sfr_table, _ = _refined_dsps_table(
-                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
-                )
-                if self.config.age_boundaries_yr:
-                    younger_fraction = self._boundary_fraction_dsps(
-                        gal_t_table, gal_sfr_table, ssp, t_obs_gyr
-                    )
-                dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
-                    **canonical_dsps_kwargs(
-                        gal_t_table=gal_t_table,
-                        gal_sfr_table=gal_sfr_table,
-                        gal_lgmet=log_z_abs_scalar,
-                        gal_lgmet_scatter=lgmet_scatter,
-                        ssp_lgmet=ssp.ssp_lgmet,
-                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                        ssp_flux=ssp_flux_for_csp,
-                        t_obs=t_obs_gyr,
-                    )
-                )
-                joint_weights = dsps_result.weights  # (n_met, n_age)
+            # Delta metallicity: separable joint weights, the age marginal of the
+            # selected kernel times the lognormal-MDF metallicity marginal.
+            age_w, total_mass = age_weights_fn(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
+            lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+            joint_weights = lgmet_w[:, None] * age_w[None, :]
         else:  # ramp / chem_evol, per-age metallicity table
-            if _age_kernel == "cic":
-                # CIC joint weights on the dense integrand (#964), so the
-                # per-age metallicity modes stay consistent with the delta
-                # path and their degenerate configurations (constant table,
-                # zero step, ...) reduce to it exactly.
-                _fine_age_yr, _fine_sfr = _cic_integrand(
-                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
-                )
-                if self.config.age_boundaries_yr:
-                    younger_fraction = self._boundary_fraction_cic(
-                        _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
-                    )
-                joint_weights, total_mass = _joint_weights_cic_met_table(
-                    _fine_age_yr,
-                    _fine_sfr,
-                    ssp_ages_yr,
-                    t_obs_gyr,
-                    lgmet_on_ssp_ages,
-                    lgmet_scatter,
-                    ssp.ssp_lgmet,
-                )
-                _used_cic = True
-            else:
-                with hold_x64_preference():
-                    from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
-
-                # DSPS's kernel on the refined table with the young-boundary knot
-                # (#538). The knot is the last ascending element
-                # (t_cosmic = t_obs), so the per-age metallicity table is
-                # extended by the youngest-age value.
-                _t_k, _sfr_k, _refined_lbt_yr = _refined_dsps_table(
-                    ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
-                )
-                _lgmet_k = _refined_dsps_lgmet(ssp_ages_yr, lgmet_on_ssp_ages, _refined_lbt_yr)
-                if self.config.age_boundaries_yr:
-                    younger_fraction = self._boundary_fraction_dsps(_t_k, _sfr_k, ssp, t_obs_gyr)
-                dsps_result = calc_rest_sed_sfh_table_met_table(
-                    **canonical_dsps_kwargs(
-                        gal_t_table=_t_k,
-                        gal_sfr_table=_sfr_k,
-                        gal_lgmet_table=_lgmet_k,
-                        gal_lgmet_scatter=lgmet_scatter,
-                        ssp_lgmet=ssp.ssp_lgmet,
-                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                        ssp_flux=ssp_flux_for_csp,
-                        t_obs=t_obs_gyr,
-                    )
-                )
-
-                # ``dsps_result.weights`` is the joint (n_met, n_age)
-                # probability distribution (sums to 1) over SSP grid points.
-                # The age axis is already aligned with tengri's ssp_flux
-                # ordering (ascending lookback age); no flip needed.
-                joint_weights = dsps_result.weights  # (n_met, n_age)
-
-        if not _used_cic:
-            # Youngest-bin edge-clip correction (#821) for the DSPS histogram
-            # kernel paths (GP-field, per-age metallicity): DSPS's log-midpoint
-            # age-bin edges put the youngest physical bin's lower edge at
-            # lookback e_lo > 0, clipping the most ionizing recent stars and
-            # biasing Q_H low (~4% on FSPS/MILES grids, up to ~31% for BPASS).
-            # Scale that weight column by the grid-only factor e_hi/(e_hi-e_lo)
-            # and renormalize. A no-op on grids with an age=0 template (BC03).
-            # The CIC kernel (#964) assigns the [0, age0] mass to the youngest
-            # node natively, so applying this there would double-count.
-            _young_mult = _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)
-            joint_weights = joint_weights * _young_mult[None, :]
+            # Joint weights of the selected kernel, so the per-age metallicity
+            # modes stay consistent with the delta path and their degenerate
+            # configurations (constant table, zero step, ...) reduce to it
+            # exactly (#964).
+            joint_weights, total_mass = joint_met_table_fn(
+                _fine_age_yr,
+                _fine_sfr,
+                ssp_ages_yr,
+                t_obs_gyr,
+                lgmet_on_ssp_ages,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
+            )
         # Guarded normalization: a degenerate SFH (empty star-formation
-        # window, e.g. reversed const bounds) yields all-zero CIC weights;
+        # window, e.g. reversed const bounds) yields all-zero weights;
         # 0/0 here would NaN the whole SED. Zero weights → zero SED is the
-        # honest answer (DSPS's kernel instead floors SFR to SFR_MIN and
-        # returns uniform-ish garbage weights for the same input).
+        # honest answer.
         joint_weights = joint_weights / jnp.maximum(
             joint_weights.sum(), representable_denominator(1e-300)
         )
-        if not _used_cic:
-            _warn_if_dsps_unresolved(
-                joint_weights,
-                ssp_ages_yr,
-                _age_sfh_fn,
-                sfh_kwargs,
-                sfh_spec.fn,
-                _age_tab_lbt_yr,
-                t_obs_gyr,
-            )
         # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
         # point every age kernel's total_mass converges to (after both the
         # "cic" and "dsps" branches above): the CIC weights already zero the
@@ -3894,29 +3843,32 @@ class StellarSEDComponent:
             derived=state.derived.with_(**derived_overrides),
         )
 
-    def _boundary_fraction_cic(self, fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr):
-        """Per-node younger-than-boundary mass fraction, cloud-in-cell kernel."""
-        contrib, idx, f, _, age = _cic_parcels(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
-        return age_boundary_younger_fraction_cic(
-            contrib,
-            idx,
-            f,
-            age,
-            ssp_ages_yr.shape[0],
+    def _boundary_fraction(self, kernel, fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr):
+        """Per-node younger-than-boundary mass fraction of the selected age kernel."""
+        n_age = ssp_ages_yr.shape[0]
+        if kernel == "cic":
+            contrib, idx, f, _, age = _cic_parcels(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
+            return age_boundary_younger_fraction_cic(
+                contrib,
+                idx,
+                f,
+                age,
+                n_age,
+                self.config.age_boundaries_yr,
+                self.config.age_boundary_width_dex,
+            )
+        p = _hist_parcels(fine_age_yr, fine_sfr, ssp_ages_yr, t_obs_gyr)
+        return age_boundary_younger_fraction_hist(
+            p.seg_mass,
+            p.seg_lo,
+            p.seg_hi,
+            p.seg_unit,
+            p.unit_idx,
+            p.unit_f,
+            p.n_unit,
+            n_age,
             self.config.age_boundaries_yr,
             self.config.age_boundary_width_dex,
-        )
-
-    def _boundary_fraction_dsps(self, gal_t_table, gal_sfr_table, ssp, t_obs_gyr):
-        """Per-node younger-than-boundary mass fraction, DSPS histogram kernel."""
-        return age_boundary_younger_fraction_dsps(
-            gal_t_table,
-            gal_sfr_table,
-            ssp.ssp_lg_age_gyr,
-            t_obs_gyr,
-            self.config.age_boundaries_yr,
-            self.config.age_boundary_width_dex,
-            _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr),
         )
 
     def compute_age_boundary_fractions(self, params, ssp_data=None):
@@ -4144,15 +4096,6 @@ class StellarSEDComponent:
                 effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
             )
 
-        # DSPS-histogram CSP weights: mirrors apply's DSPS path EXACTLY. The
-        # (met, age) weights come from the SAME DSPS function
-        # (``calc_ssp_weights_sfh_table_lognormal_mdf``) that apply's SED call uses
-        # internally; so the fast and exact line paths cannot diverge. ``total_mass``
-        # is the conserved coarse value (no young knot), matching apply §3.
-        #
-        # Reached by a GP-field SFH (the auto-selected kernel) and by any model
-        # that explicitly selects ``age_kernel="dsps"`` (#964).
-        #
         # The age-integrand function both kernels consume: the field draw as the
         # piecewise-linear interpolant of its own lookback nodes (#2684), the
         # same closure ``apply`` builds, else the registry/tabulated SFH.
@@ -4167,106 +4110,42 @@ class StellarSEDComponent:
             _age_sfh_fn, _age_tab_lbt_yr = _field_sfh_closure(sfh_lbt_grid, sfr_history)
         else:
             _age_sfh_fn, _age_tab_lbt_yr = sfh_fn, _tab_lbt_yr
-        if _age_kernel == "dsps":
-            if lgmet_on_ssp_ages is not None:
-                # The scalar-MDF DSPS call below has no per-age metallicity
-                # axis; feeding it ``log_z_abs_scalar=None`` would fail deep
-                # inside DSPS (or, worse, silently drop Z(t)). apply's
-                # ``calc_rest_sed_sfh_table_met_table`` arm covers this
-                # combination: the SED-free fast path does not.
-                raise NotImplementedError(
-                    "The SED-free fast path does not support the DSPS age "
-                    "kernel with a per-age metallicity table "
-                    f"(metallicity_model={self.config.metallicity_model!r}). "
-                    "Use age_kernel='cic' (the default), or call predict()/"
-                    "apply() instead of the line/nion fast path."
-                )
-            with hold_x64_preference():
-                from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
-
-            sfr_on_ssp = _age_sfh_fn(ssp_ages_yr, **sfh_kwargs)
-            _warn_if_dsps_kernel_truncates_history(
-                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, _age_tab_lbt_yr
+        # The SAME integrand builder and kernel functions apply uses, so the two
+        # integrands are identical point for point: the #982 contract, enforced by
+        # construction. Both kernels support every metallicity model (#2683).
+        _fine_age_yr, _fine_sfr = _cic_integrand(
+            ssp_ages_yr,
+            _age_sfh_fn,
+            sfh_kwargs,
+            sfh_spec.fn,
+            _age_tab_lbt_yr,
+            extra_points_yr=_kernel_extra_points(_age_kernel, ssp_ages_yr),
+        )
+        if self.config.age_boundaries_yr:
+            younger_fraction = self._boundary_fraction(
+                _age_kernel, _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
             )
-            _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
-            gal_t, gal_sfr, _ = _refined_dsps_table(
-                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, t_obs_gyr
-            )
-            if self.config.age_boundaries_yr:
-                younger_fraction = self._boundary_fraction_dsps(gal_t, gal_sfr, ssp, t_obs_gyr)
-            _dsps_args = canonical_dsps_kwargs(
-                gal_t=gal_t,
-                gal_sfr=gal_sfr,
-                gal_lgmet=log_z_abs_scalar,
-                gal_lgmet_scatter=lgmet_scatter,
-                ssp_lgmet=ssp.ssp_lgmet,
-                ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                t_obs=t_obs_gyr,
-            )
-            weights, _, _ = calc_ssp_weights_sfh_table_lognormal_mdf(
-                _dsps_args["gal_t"],
-                _dsps_args["gal_sfr"],
-                _dsps_args["gal_lgmet"],
-                _dsps_args["gal_lgmet_scatter"],
-                _dsps_args["ssp_lgmet"],
-                _dsps_args["ssp_lg_age_gyr"],
-                _dsps_args["t_obs"],
-            )
-            # #821 youngest-bin edge-clip correction: apply applies this for ALL
-            # DSPS-histogram-kernel paths (field / per-age metallicity); without it
-            # the youngest bin (which carries the ionizing, line-emitting stars) is
-            # clipped ~10% low. The CIC path (below) bakes it in instead.
-            weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
-            joint_weights = weights / jnp.maximum(weights.sum(), representable_denominator(1e-300))
-            _warn_if_dsps_unresolved(
-                joint_weights,
+        age_weights_fn, joint_met_table_fn = _AGE_KERNEL_FUNCTIONS[_age_kernel]
+        # Per-age metallicity -> the joint kernel apply uses (#964), which spreads
+        # each mass parcel over the metallicity axis with the MDF centered on that
+        # parcel's own Z. It normalizes internally.
+        if lgmet_on_ssp_ages is not None:
+            joint_weights, total_mass = joint_met_table_fn(
+                _fine_age_yr,
+                _fine_sfr,
                 ssp_ages_yr,
-                _age_sfh_fn,
-                sfh_kwargs,
-                sfh_spec.fn,
-                _age_tab_lbt_yr,
                 t_obs_gyr,
+                lgmet_on_ssp_ages,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
             )
         else:
-            # Delta + non-field CSP weights: mirrors apply's delta path EXACTLY
-            # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
-            # with the SFH's exact bin-edge knots injected for binned families) times
-            # the lognormal-MDF metallicity marginal. ``_age_weights_cic`` already
-            # applies the youngest-bin lookback correction and returns the conserved
-            # total_mass, so (unlike the DSPS histogram path) the caller must NOT
-            # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-            # The SAME builder apply uses, so the two integrands are identical point
-            # for point: the #982 contract, now enforced by construction.
-            _fine_age_yr, _fine_sfr = _cic_integrand(
-                ssp_ages_yr, _age_sfh_fn, sfh_kwargs, sfh_spec.fn, _age_tab_lbt_yr
+            age_w, total_mass = age_weights_fn(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
+            lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
+            joint_weights = lgmet_w[:, None] * age_w[None, :]
+            joint_weights = joint_weights / jnp.maximum(
+                joint_weights.sum(), representable_denominator(1e-300)
             )
-            if self.config.age_boundaries_yr:
-                younger_fraction = self._boundary_fraction_cic(
-                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
-                )
-
-            # Per-age metallicity → the joint CIC kernel apply uses (#964), which
-            # spreads each mass parcel over the metallicity axis with the MDF
-            # centered on that parcel's own Z. It normalizes internally.
-            if lgmet_on_ssp_ages is not None:
-                joint_weights, total_mass = _joint_weights_cic_met_table(
-                    _fine_age_yr,
-                    _fine_sfr,
-                    ssp_ages_yr,
-                    t_obs_gyr,
-                    lgmet_on_ssp_ages,
-                    lgmet_scatter,
-                    ssp.ssp_lgmet,
-                )
-            else:
-                age_w_cic, total_mass = _age_weights_cic(
-                    _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
-                )
-                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
-                joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
-                joint_weights = joint_weights / jnp.maximum(
-                    joint_weights.sum(), representable_denominator(1e-300)
-                )
 
         # Formed mass is pinned to ``10**log_total_mass`` here, at the ONE
         # point every age kernel's total_mass converges to (mirrors

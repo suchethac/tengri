@@ -72,7 +72,7 @@ import numpy as np
 
 __all__ = [
     "age_boundary_younger_fraction_cic",
-    "age_boundary_younger_fraction_dsps",
+    "age_boundary_younger_fraction_hist",
     "cic_cell_edges",
     "survival_cell_mean",
     "validate_age_boundaries",
@@ -269,112 +269,74 @@ def age_boundary_younger_fraction_cic(
     return _safe_fraction(young, total[None, :])
 
 
-def age_boundary_younger_fraction_dsps(
-    gal_t_table,
-    gal_sfr_table,
-    ssp_lg_age_gyr,
-    t_obs_gyr,
+def age_boundary_younger_fraction_hist(
+    seg_mass,
+    seg_lo,
+    seg_hi,
+    seg_unit,
+    unit_idx,
+    unit_f,
+    n_unit: int,
+    n_age: int,
     boundaries_yr: Sequence[float],
     width_dex: float,
-    youngest_multiplier,
 ):
-    r"""Per-node younger-than-boundary mass fraction for DSPS's histogram kernel.
+    r"""Per-node younger-than-boundary mass fraction for the histogram kernel.
 
-    DSPS assigns node :math:`a` the mass formed between the lookbacks of its
-    log-midpoint bin edges :math:`e_a < e_{a+1}`:
-    :math:`W_a = M_b(e_a) - M_b(e_{a+1})`, with :math:`M_b(x)` the mass formed
-    *before* lookback :math:`x` (a cumulative function interpolated in
-    :math:`\log_{10} M` against :math:`\log_{10} t`).  The young share of the
-    bin is the same differences of the same :math:`M_b`.
-
-    Step: :math:`M_b(e_a) - M_b(\mathrm{clip}(b, e_a, e_{a+1}))`.  Smooth,
-    by parts:
-    :math:`S(e_a) M_b(e_a) - S(e_{a+1}) M_b(e_{a+1}) - \int M_b\,\sigma(v)\sigma(-v)\,dv`,
-    integrated with the panel Gauss-Legendre rule of :func:`survival_cell_mean`.
+    The histogram kernel (``_hist_parcels``) integrates the history exactly over
+    each sub-bin of an SSP log-midpoint bin and deposits the sub-bin's mass by
+    its mean log-age between two nodes.  The young mass on a node is the *same*
+    kernel applied to the young part of each sub-bin: every integrand segment of
+    mass :math:`m_s` inside it contributes :math:`m_s \bar S_s`, where
+    :math:`\bar S_s` is the survival function averaged over the segment's own
+    cell (:func:`survival_cell_mean`), and the sub-bin's young mass is shared
+    onto nodes with the sub-bin's own ``(unit_idx, unit_f)``.  Numerator and denominator
+    therefore go through one kernel, as for the cloud-in-cell function.
 
     Parameters
     ----------
-    gal_t_table, gal_sfr_table : array_like
-        The (cosmic time [Gyr], SFR [Msun/yr]) table handed to DSPS.
-    ssp_lg_age_gyr : array_like, shape (n_age,)
-        ``log10`` SSP ages [Gyr].
-    t_obs_gyr : float
-        Cosmic age at the observation [Gyr].
+    seg_mass, seg_lo, seg_hi, seg_unit
+        Integrand-segment masses [Msun], lookback edges [yr] and the sub-bin
+        holding each segment, from ``_hist_parcels``.
+    unit_idx, unit_f
+        Per-sub-bin lower node and share on the upper node, from
+        ``_hist_parcels``.
+    n_unit : int
+        Number of sub-bins.
+    n_age : int
+        Number of SSP age nodes.
     boundaries_yr : sequence of float
         Static boundary ages [yr].
     width_dex : float
         Dispersal width [dex]; ``0`` is the hard step.
-    youngest_multiplier : array_like, shape (n_age,)
-        The #821 youngest-bin multiplier (``mult`` on the youngest finite
-        node, 1 elsewhere): DSPS clips that bin's lower edge at ``e_lo > 0``
-        and tengri restores the ``[0, e_lo]`` sliver at constant SFR.  The
-        restored mass is younger than ``b`` for the share of ``[0, e_lo]``
-        below ``b``.
 
     Returns
     -------
     ndarray, shape (n_boundary, n_age)
-        :math:`F_a(b_k)` in ``[0, 1]`` [dimensionless].
+        :math:`F_a(b_k)` in ``[0, 1]`` [dimensionless]; 0 where a node holds no
+        mass.
 
     Notes
     -----
-    **JIT/grad/vmap-compatible.**  Uses DSPS's private
-    ``_calc_logsm_table_from_sfh_table``, ``_get_lg_age_bin_edges`` and
-    ``_get_lgt_birth`` so the cumulative function is the one DSPS weights
-    from; a DSPS rename fails the tests loudly.
+    **JIT/grad/vmap-compatible.**  Segment sums via ``jax.ops.segment_sum``.
     """
-    from tengri._x64_hold import hold_x64_preference
-
-    with hold_x64_preference():
-        from dsps.constants import SFR_MIN
-        from dsps.sed.stellar_age_weights import (
-            _calc_logsm_table_from_sfh_table,
-            _get_lg_age_bin_edges,
-            _get_lgt_birth,
-        )
-
-    lgt_table = jnp.log10(gal_t_table)
-    logsm_table = _calc_logsm_table_from_sfh_table(gal_t_table, gal_sfr_table, SFR_MIN)
-    lg_edges = _get_lg_age_bin_edges(ssp_lg_age_gyr)  # (n_age + 1,), log10 Gyr
-
-    def mass_older_than(lg_x_gyr):
-        return 10.0 ** jnp.interp(_get_lgt_birth(t_obs_gyr, lg_x_gyr), lgt_table, logsm_table)
-
-    e_gyr = 10.0**lg_edges
-    m_edge = mass_older_than(lg_edges)  # (n_age + 1,)
-    total = m_edge[:-1] - m_edge[1:]
-    mult = jnp.asarray(youngest_multiplier)
-    extra = (mult - 1.0) * total
-    e_lo_yr = e_gyr[:-1] * 1e9
-    rows = []
-    for b in boundaries_yr:
-        b_gyr = b * 1e-9
-        if float(width_dex) == 0.0:
-            clipped = jnp.clip(b_gyr, e_gyr[:-1], e_gyr[1:])
-            core = m_edge[:-1] - mass_older_than(jnp.log10(clipped))
-        else:
-            c = float(width_dex) * math.log(10.0)
-            v_edge = jnp.clip(
-                jnp.log(jnp.maximum(e_gyr, jnp.finfo(e_gyr.dtype).tiny) / b_gyr) / c,
-                -_V_CLIP,
-                _V_CLIP,
-            )
-            s_edge = jax.nn.sigmoid(-v_edge)
-            v_a, v_z = v_edge[:-1], v_edge[1:]
-            frac = (jnp.arange(_N_PANEL, dtype=v_edge.dtype) + 0.5) / _N_PANEL
-            half = 0.5 / _N_PANEL
-            span = (v_z - v_a)[:, None, None]
-            v = (
-                v_a[:, None, None]
-                + span * frac[None, :, None]
-                + span * half * jnp.asarray(_GL_X, dtype=v_edge.dtype)[None, None, :]
-            )
-            m_v = mass_older_than(math.log10(b_gyr) + float(width_dex) * v)
-            dens = jax.nn.sigmoid(v) * jax.nn.sigmoid(-v)
-            by_parts = jnp.sum(m_v * dens * jnp.asarray(_GL_W, dtype=v_edge.dtype), axis=-1)
-            by_parts = jnp.sum(by_parts, axis=-1) * (v_z - v_a) * half
-            core = s_edge[:-1] * m_edge[:-1] - s_edge[1:] * m_edge[1:] - by_parts
-        s_ext = survival_cell_mean(jnp.zeros_like(e_lo_yr), e_lo_yr, b, width_dex)
-        young = core + extra * s_ext
-        rows.append(_safe_fraction(young, (total + extra)[None, :])[0])
-    return jnp.stack(rows)
+    s_bar = jnp.stack([survival_cell_mean(seg_lo, seg_hi, b, width_dex) for b in boundaries_yr])
+    young_bin = jax.vmap(lambda y: jax.ops.segment_sum(y, seg_unit, num_segments=n_unit))(
+        s_bar * seg_mass[None, :]
+    )
+    total_bin = jax.ops.segment_sum(seg_mass, seg_unit, num_segments=n_unit)
+    zeros = jnp.zeros((s_bar.shape[0], n_age), dtype=seg_mass.dtype)
+    young = (
+        zeros.at[:, unit_idx]
+        .add(young_bin * (1.0 - unit_f)[None, :])
+        .at[:, unit_idx + 1]
+        .add(young_bin * unit_f[None, :])
+    )
+    total = (
+        jnp.zeros(n_age, dtype=seg_mass.dtype)
+        .at[unit_idx]
+        .add(total_bin * (1.0 - unit_f))
+        .at[unit_idx + 1]
+        .add(total_bin * unit_f)
+    )
+    return _safe_fraction(young, total[None, :])
