@@ -173,6 +173,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._uses_radio = False
             self._radio_include_freefree = False
             self._radio_ir_window = "fir"
+            self._radio_sf_nu_ref = None
             self._radio_sfr_mode = "kranichstein"
             self._radio_agn_model = "wilman"
             self._uses_xray = False
