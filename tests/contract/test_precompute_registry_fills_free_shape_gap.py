@@ -41,7 +41,7 @@ def _missed(measured: str, detail: str) -> str:
 
 _UNMEASURED = f"not measured separately, same adapter module as dale2014; {_TRIWEIGHT}"
 UNWIRED: dict[str, str] = {
-    "dale2014": _missed("1.6e-2", "30 draws, alpha_dale free, z = 0.05, 80-500 um"),
+    "dale2014": _missed("7.0e-2", "30 draws, alpha_dale free, z = 0.05, 8-500 um"),
     "draine_li2007": _missed("4.3e-1", "30 draws, umin and qpah free, z = 0.05"),
     "dl07": "same adapter as draine_li2007",
     "draine_li2014": _UNMEASURED,
