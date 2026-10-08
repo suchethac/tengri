@@ -94,7 +94,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
                 "logZ_gas": met,
                 "logU": -2.0,
                 "fesc": 0.0,
-                "fesc_lya": 0.0,
+                "fesc_lya": 1.0,
             }
 
             dust_config = {
@@ -151,7 +151,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.908 seconds)
+   **Total running time of the script:** (1 minutes 13.984 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

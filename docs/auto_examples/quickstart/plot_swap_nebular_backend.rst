@@ -87,7 +87,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
             "neb_logU": tengri.Fixed(-2.5),
             "neb_logZ_gas": tengri.Fixed(-0.3),
             "neb_fesc": tengri.Fixed(0.0),
-            "neb_fesc_lya": tengri.Fixed(0.0),
+            "neb_fesc_lya": tengri.Fixed(1.0),
             "neb_dig_frac": tengri.Fixed(0.0),
         },
         redshift=tengri.Fixed(0.01),
@@ -135,7 +135,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.709 seconds)
+   **Total running time of the script:** (0 minutes 44.312 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:

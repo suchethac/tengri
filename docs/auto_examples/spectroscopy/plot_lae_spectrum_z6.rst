@@ -37,19 +37,8 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -109,7 +98,7 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
             "logU": -2.5,  # Low ionization parameter
             "logZ_gas": -1.0,  # Low metallicity: Z ~ 0.1 Zsun
             "fesc": 0.1,  # Hydrogen ionizing photon escape
-            "fesc_lya": 0.3,
+            "fesc_lya": 0.7,
         },  # Lyα escape fraction (realistic for LAE)
         igm={"type": "inoue14"},  # Inoue et al. 2014 IGM attenuation
         redshift=tengri.Fixed(6.0),
@@ -203,6 +192,11 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
     ax_lya.grid(True, alpha=0.3, which="major", axis="y")
 
     plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.486 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_lae_spectrum_z6.py:
