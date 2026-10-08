@@ -35,10 +35,12 @@ from tengri.utils.scale import log10_flux_scale as _log10_flux_scale, representa
 __all__ = [
     "PreintegratedGrid",
     "PreintegratedLines",
+    "edge_split",
     "interp_nd_pchip",
     "interp_nd_triweight",
     "lyc_augment_grid_for_step",
     "pchip_interp_1d",
+    "pchip_interp_local",
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
@@ -70,6 +72,48 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     t = np.where(span > 0, (xq - x0) / np.where(span > 0, span, 1.0), 0.0)
     y0, y1 = y[..., idx], y[..., idx + 1]
     return y0 + (y1 - y0) * t
+
+
+def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
+    """Split a quadrature at a wavelength: the part below it and the part above it.
+
+    Both halves come from ONE cumulative trapezoid, so ``below + above`` is the
+    whole integral and a template that does not reach across ``edge`` has
+    EXACTLY zero in the half it does not touch. The caller therefore never has
+    to recover a half as ``whole - other_half``: in a band wholly on one side of
+    the edge that difference is two equal numbers and returns rounding noise,
+    which is not zero and not the same in every compiled graph.
+
+    Parameters
+    ----------
+    integrand : ndarray, shape (..., m)
+        Integrand on ``grid`` [any units].
+    grid : ndarray, shape (m,)
+        Ascending quadrature nodes [Angstrom].
+    edge : float
+        Split wavelength, same frame as ``grid`` [Angstrom].
+
+    Returns
+    -------
+    below, above : ndarray, shape (...)
+        Integrals over ``grid <= edge`` and ``grid >= edge`` [integrand units x Angstrom].
+
+    Notes
+    -----
+    **JIT-compatible**: no; build-time numpy.
+    """
+    lead = integrand.shape[:-1]
+    if grid.size < 2:
+        return np.zeros(lead), np.zeros(lead)
+    if not np.any(grid < edge):
+        return np.zeros(lead), _np_trapezoid(integrand, grid, axis=-1)
+    cum = _cumtrapz_rows(integrand, grid)
+    total = cum[..., -1]
+    idx = int(np.searchsorted(grid, edge))
+    if idx >= grid.size:
+        return total, np.zeros(lead)
+    below = _interp_rows(np.array([edge]), grid, cum)[..., 0]
+    return below, total - below
 
 
 def subband_edges(
@@ -383,6 +427,17 @@ class PreintegratedGrid:
         apply the ``neb_fesc`` escape-fraction mask to the stellar
         photometric LUT the same way the dense path masks
         ``state.sed_intrinsic``.
+    nolyc_phot : jnp.ndarray or None
+        (*grid_dims, n_filters) [erg/s/Hz]. The other half of the same split:
+        the integral over rest-frame λ >= LYMAN_LIMIT_AA (911.76 Ångström), taken from the same
+        cumulative integral as ``lyc_phot`` so that ``lyc_phot + nolyc_phot`` is
+        the band integral and a band wholly on one side of the edge has
+        EXACTLY zero in the other half. The escape-fraction mask is then
+        ``nolyc_phot + fesc * lyc_phot``: an addition, where the equivalent
+        ``phot - (1 - fesc) * lyc_phot`` cancels two equal numbers in a band
+        wholly below the edge and leaves rounding noise (~1e-16 of the band, and
+        different noise in each compiled graph). ``None`` exactly when
+        ``lyc_phot`` is.
     axes : tuple[jnp.ndarray, ...]
         One array per grid dimension, giving node coordinates.
     edges : tuple[jnp.ndarray, ...]
@@ -413,6 +468,7 @@ class PreintegratedGrid:
     subband_waves: jnp.ndarray | None = None
     subband_waves_rest: jnp.ndarray | None = None
     lyc_phot: jnp.ndarray | None = None
+    nolyc_phot: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -640,6 +696,7 @@ def preintegrate_grid(
     eff_waves_obs = np.zeros(n_filters)
     phot_flat = np.zeros((n_grid_points, n_filters))
     lyc_phot_flat = np.zeros((n_grid_points, n_filters)) if lyc_gate else None
+    nolyc_phot_flat = np.zeros((n_grid_points, n_filters)) if lyc_gate else None
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
     K = int(n_subbands)
     K_sub = K + 1 if (K > 0 and lyc_gate) else K
@@ -692,12 +749,15 @@ def preintegrate_grid(
             )
             denom_q = _np_trapezoid(tw_grid_q, grid_q)
             num = _np_trapezoid(integrand_q, grid_q, axis=-1)
-            first_edge_idx = int(np.searchsorted(grid_q, lyc_wave_obs, side="left"))
-            ion_mask = np.arange(grid_q.shape[0]) <= first_edge_idx
-            lyc_num = _np_trapezoid(integrand_q[..., ion_mask], grid_q[ion_mask], axis=-1)
-            lyc_phot_flat[:, f_idx] = lyc_num / np.maximum(
-                denom_q, representable_denominator(1e-30)
-            )
+            # Both halves of the split from ONE cumulative integral on the
+            # edge-augmented grid: the below half is the cumulative value at the
+            # first copy of the zero-width edge pair (step-exact), the above half
+            # is total - below, and a band wholly on one side has exactly zero in
+            # the other half (no whole - other-half cancellation).
+            lyc_num, above_num = edge_split(integrand_q, grid_q, lyc_wave_obs)
+            norm = np.maximum(denom_q, representable_denominator(1e-30))
+            lyc_phot_flat[:, f_idx] = lyc_num / norm
+            nolyc_phot_flat[:, f_idx] = above_num / norm
         else:
             grid_q, integrand_q, tw_grid_q, denom_q = grid, integrand, tw_grid, denom
             num = _np_trapezoid(integrand, grid, axis=-1)
@@ -733,6 +793,7 @@ def preintegrate_grid(
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
     lyc_phot = jnp.array(lyc_phot_flat.reshape(*grid_dims, n_filters)) if lyc_gate else None
+    nolyc_phot = jnp.array(nolyc_phot_flat.reshape(*grid_dims, n_filters)) if lyc_gate else None
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
     if K > 0:
         sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K_sub))
@@ -766,6 +827,7 @@ def preintegrate_grid(
         subband_waves=sub_waves_j,
         subband_waves_rest=sub_waves_rest_j,
         lyc_phot=lyc_phot,
+        nolyc_phot=nolyc_phot,
     )
 
 
@@ -1246,6 +1308,88 @@ def pchip_interp_1d(
     return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
 
 
+def pchip_interp_local(x: jnp.ndarray, table, xq, *, reduce=None) -> jnp.ndarray:
+    """Monotone cubic (PCHIP) read of one query off a table's leading axis, 4-node stencil.
+
+    Gives the same value as :func:`pchip_interp_1d` applied column by column
+    (clamped outside ``[x[0], x[-1]]``) while touching only the four rows that
+    bracket ``xq``: the tangents of the two bracketing nodes depend only on
+    their neighbors, so the table is never contracted or differentiated
+    whole. That keeps the cost of a read independent of the node count, which
+    is what a free-redshift z-table of 250+ nodes needs.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 4``; need not be uniform.
+    table : array_like, shape (n, ...) or tuple of such
+        Node values; interpolation is over the leading axis. A tuple gives
+        several tables sharing the axis, which ``reduce`` combines.
+    xq : float
+        Query coordinate, same unit as ``x``.
+    reduce : callable, optional
+        Applied to the four bracketing rows of each table (arrays of shape
+        ``(4, ...)``) before the tangents are formed, and returning one array
+        of shape ``(4, ...)``. It lets a caller contract axes that do not
+        depend on ``x`` (population weights) first, so the cubic is formed on
+        the contracted quantity actually consumed and costs nothing per
+        contracted element. The interpolant is then the cubic of the reduced
+        node values.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        Interpolant at ``xq``, exact at every node, :math:`C^1` in ``xq``.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. The stencil start is an integer and
+    carries no tangent; the derivative flows through the Hermite basis and the
+    tangents (Fritsch & Carlson 1980 [1]_, as in :func:`pchip_interp_1d`).
+
+    References
+    ----------
+    .. [1] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+    """
+    n = x.shape[0]
+    if n < 4:
+        raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
+    xq_c = jnp.clip(xq, x[0], x[-1])
+    # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
+    # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
+    pos = jnp.searchsorted(x, xq_c) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - 4))
+    xs = jax.lax.dynamic_slice_in_dim(x, start, 4, axis=0)
+    tables = table if isinstance(table, tuple) else (table,)
+    rows = tuple(jax.lax.dynamic_slice_in_dim(t, start, 4, axis=0) for t in tables)
+    ys = reduce(*rows) if reduce is not None else rows[0]
+    # The cubic is positively homogeneous in the node values (secants, the
+    # harmonic-mean tangents and the endpoint caps all scale with y), so it is
+    # formed on each column divided by its own stencil maximum and scaled back:
+    # identical in exact arithmetic, value and gradient. Physical-unit tables sit
+    # at ~1e-13 to 1e-24, where the harmonic mean's reverse pass would square a
+    # ~1e21 reciprocal sum past float32's range and return NaN (#2749).
+    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    ys = ys / scale
+    jc = i - start  # the bracketing cell's lower node within the stencil
+    slopes = _pchip_slopes(xs, ys)
+    x0, x1 = xs[jc], xs[jc + 1]
+    h = x1 - x0
+    t = (xq_c - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return scale * (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * ys[jc]
+        + (t3 - 2.0 * t2 + t) * h * slopes[jc]
+        + (-2.0 * t3 + 3.0 * t2) * ys[jc + 1]
+        + (t3 - t2) * h * slopes[jc + 1]
+    )
+
+
 def interp_nd_pchip(
     grid: jnp.ndarray,
     axes: tuple[jnp.ndarray, ...],
@@ -1528,6 +1672,7 @@ def slice_fixed_axes(
         phot = preint.phot
         moment = preint.moment
         lyc_phot = preint.lyc_phot
+        nolyc_phot = preint.nolyc_phot
         sub_phot = preint.subband_phot
         sub_waves = preint.subband_waves
         sub_waves_rest = preint.subband_waves_rest
@@ -1565,6 +1710,9 @@ def slice_fixed_axes(
             if lyc_phot is not None:
                 lyc_phot = jnp.tensordot(w, lyc_phot, axes=([0], [axis_idx]))
 
+            if nolyc_phot is not None:
+                nolyc_phot = jnp.tensordot(w, nolyc_phot, axes=([0], [axis_idx]))
+
             if sub_phot is not None:
                 sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
                 sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
@@ -1601,6 +1749,7 @@ def slice_fixed_axes(
             subband_waves=sub_waves,
             subband_waves_rest=sub_waves_rest,
             lyc_phot=lyc_phot,
+            nolyc_phot=nolyc_phot,
         )
 
     # Handle PreintegratedLines (has line_filter_weights)

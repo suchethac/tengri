@@ -166,6 +166,7 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
     # Placeholder for grid data
     dust_grid = None
     disk_grid = None
+    norm_grid = np.zeros((n_r, n_tau, n_beta, n_gamma, n_oa, n_psy), dtype=np.float64)
 
     # CIGALE's SimpleDatabase keys the torus by the HALF-OPENING angle in
     # degrees [20, 40, 60]. fritz2006.py maps the user-facing "full opening
@@ -207,6 +208,13 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
                                 )
                                 disk_grid[i_r, i_tau, i_beta, i_gamma, i_oa, i_psy, :] = np.array(
                                     model.disk, dtype=np.float64
+                                )
+
+                                # The record's own scale (pcigale model.norm): CIGALE rescales
+                                # the face-on disc by norm(face-on)/norm(psi) before it enters
+                                # the intrinsic luminosities.
+                                norm_grid[i_r, i_tau, i_beta, i_gamma, i_oa, i_psy] = float(
+                                    model.norm
                                 )
 
                                 # Progress
@@ -251,6 +259,7 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
         # Write grid data (the primary output — dust is what we use for the torus block)
         g.create_dataset("dust", data=dust_grid, dtype=np.float32, compression="gzip")
         g.create_dataset("disk", data=disk_grid, dtype=np.float32, compression="gzip")
+        g.create_dataset("norm", data=norm_grid, dtype=np.float64, compression="gzip")
 
         # Metadata
         g.attrs["title"] = "Fritz et al. (2006) AGN torus SED grid"
@@ -263,6 +272,10 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
         g.attrs["disk_unit"] = (
             "W/nm, luminosity per unit wavelength, in the units of the "
             "unit-integral dust (pcigale model.disk)"
+        )
+        g.attrs["norm_unit"] = (
+            "per-record scale of the disk and dust spectra (pcigale model.norm), "
+            "parameter-shaped, no wavelength axis"
         )
         g.attrs["wavelength_unit"] = "Angstrom"
         g.attrs["opening_angle_unit"] = "degrees (half-opening angle, direct grid parameter)"
@@ -284,6 +297,64 @@ def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> 
     return out_path
 
 
+def add_norm_to_grid(path: Path | str) -> Path:
+    """Append the per-record ``norm`` dataset to an existing Fritz2006 grid file.
+
+    Reads ``model.norm`` from CIGALE's ``SimpleDatabase('fritz2006')`` at every node of the
+    file's own six axes and writes it as ``fritz2006/norm`` (float64, parameter-shaped, no
+    wavelength axis). Existing datasets are not touched.
+
+    Parameters
+    ----------
+    path : path-like
+        The grid file to extend.
+
+    Returns
+    -------
+    pathlib.Path
+        ``path``.
+
+    Raises
+    ------
+    RuntimeError
+        If ``pcigale`` is not importable.
+    """
+    from pcigale.data import SimpleDatabase as Database
+
+    path = Path(path)
+    with h5py.File(path, "a") as f:
+        g = f["fritz2006"]
+        if "norm" in g:
+            print(f"{path} already carries fritz2006/norm; nothing to do.")
+            return path
+        axes = [
+            np.asarray(g[k])
+            for k in (
+                "r_ratio_axis",
+                "tau_axis",
+                "beta_axis",
+                "gamma_axis",
+                "opening_angle_axis",
+                "psy_axis",
+            )
+        ]
+        norm = np.zeros([len(a) for a in axes], dtype=np.float64)
+        with Database("fritz2006") as db:
+            for idx in np.ndindex(*norm.shape):
+                r, tau, beta, gamma, oa, psy = (float(a[i]) for a, i in zip(axes, idx))
+                norm[idx] = float(
+                    db.get(
+                        r_ratio=r, tau=tau, beta=beta, gamma=gamma, opening_angle=oa, psy=psy
+                    ).norm
+                )
+        g.create_dataset("norm", data=norm, dtype=np.float64, compression="gzip")
+        g.attrs["norm_unit"] = (
+            "per-record scale of the disk and dust spectra (pcigale model.norm), "
+            "parameter-shaped, no wavelength axis"
+        )
+    return path
+
+
 def main() -> int:
     """CLI: build the Fritz2006 grid into ``--dest`` (or ``data/``)."""
     import argparse
@@ -301,9 +372,20 @@ def main() -> int:
         action="store_true",
         help="Rebuild even if the grid already exists.",
     )
+    parser.add_argument(
+        "--add-norm",
+        action="store_true",
+        help="Append the per-record norm dataset to the existing grid instead of rebuilding.",
+    )
     args = parser.parse_args()
     try:
-        build_fritz_grid(args.dest, force=args.force)
+        if args.add_norm:
+            import os
+
+            dest = args.dest or os.environ.get("TENGRI_DATA_DIR", "data")
+            add_norm_to_grid(Path(dest) / "fritz2006_torus_grid.h5")
+        else:
+            build_fritz_grid(args.dest, force=args.force)
     except RuntimeError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

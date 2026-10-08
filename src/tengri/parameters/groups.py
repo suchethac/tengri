@@ -113,6 +113,7 @@ from tengri.config.exceptions import (
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters._dust_keys import (
+    _SCREEN_DEFAULTS,
     DUST_TYPES_WITH_AGE_SPLIT,
     DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN,
     OVERRIDE_STEMS,
@@ -121,6 +122,7 @@ from tengri.parameters._dust_keys import (
     full_to_short,
     normalize_dust_group_keys,
     per_screen_keys,
+    reject_own_screen_keys,
     resolve_screen_choices,
     screen_keys,
     short_to_full,
@@ -4122,6 +4124,7 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     from tengri.components.dust.age_binned import (
         AgeBinnedDustComponent,
         AgeBinnedDustComponentConfig,
+        age_binned_nebular_mode,
         validate_screens,
     )
     from tengri.components.dust.laws._registry import law_kwarg_names
@@ -4129,8 +4132,19 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     screens = validate_screens(dust_atten_dict.get("screens"))
     result["dust_screens"] = screens
 
+    own = result.get("dust_nebular_screen") == "own"
+    law_neb = dust_atten_dict.get("law_neb") if own else None
+    if law_neb is not None:
+        valid_laws = _valid_dust_laws()
+        if law_neb not in valid_laws:
+            raise _unknown_name_error("dust law", law_neb, valid_laws, keyword="law_neb")
+        result["dust_law_neb"] = law_neb
     declared = AgeBinnedDustComponent(
-        config=AgeBinnedDustComponentConfig(screens=screens)
+        config=AgeBinnedDustComponentConfig(
+            screens=screens,
+            nebular_screen=age_binned_nebular_mode("own" if own else ""),
+            law_neb=law_neb,
+        )
     ).declared_parameters()
     declared_by_name = {d.name: d for d in declared}
 
@@ -4142,12 +4156,20 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
         )
     wildcard = dust_atten_dict[wildcard_keys_given[0]] if wildcard_keys_given else None
 
-    for i, (law, _lo, _hi) in enumerate(screens):
-        pairs = [(f"tau_{i}", f"dust_tau_{i}")]
-        for law_kw in sorted(law_kwarg_names(law)):
+    # (law, suffix) per parameter family: every screen, then the own nebular screen.
+    families = [(law, str(i)) for i, (law, _lo, _hi) in enumerate(screens)]
+    if own:
+        families.append((None, "neb"))
+    for law, suffix in families:
+        if law is None:
+            pairs = [("tau_neb", "dust_tau_neb")]
+            law = law_neb  # None -> no <shape>_neb names (the first screen's are read)
+        else:
+            pairs = [(f"tau_{suffix}", f"dust_tau_{suffix}")]
+        for law_kw in sorted(law_kwarg_names(law)) if law is not None else ():
             if law_kw == "redshift":
                 continue
-            pairs.append((f"{full_to_short(law_kw)}_{i}", f"{law_kw}_{i}"))
+            pairs.append((f"{full_to_short(law_kw)}_{suffix}", f"{law_kw}_{suffix}"))
 
         for short_key, full_name in pairs:
             decl = declared_by_name[full_name]
@@ -4352,6 +4374,21 @@ def _validate_lyc_escape_geometry(value: object) -> str:
     return value
 
 
+def _own_screen_keys_given(dust_atten_dict: dict, dust_type: str) -> list[str]:
+    """The keys of ``dust_atten_dict`` that only ``nebular_screen='own'`` reads.
+
+    ``tau_neb`` on every dust type; on ``age_binned`` also ``law_neb`` and the
+    ``<shape>_neb`` overrides (on ``two_component`` those keep their meaning of
+    retargeting the birth-cloud part of the nebular screen).
+    """
+    names = {"tau_neb", "dust_tau_neb"}
+    if dust_type == "age_binned":
+        names.add("law_neb")
+        for stem in OVERRIDE_STEMS:
+            names.update((f"{stem}_neb", short_to_full(f"{stem}_neb")))
+    return [k for k in dust_atten_dict if k in names]
+
+
 def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     """Translate dust_attenuation group to dust_model and law settings.
 
@@ -4390,6 +4427,15 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     )
     for _source, _choice in _screen_choices.items():
         result[f"dust_{_source}_screen"] = _choice
+
+    # tau_neb (and, on age_binned, law_neb and the <shape>_neb keys) are read
+    # only by nebular_screen='own'; refuse them with any other choice.
+    reject_own_screen_keys(
+        _screen_choices.get("nebular", _SCREEN_DEFAULTS["nebular"]),
+        _own_screen_keys_given(dust_atten_dict, dust_type),
+        dust_model=("off" if dust_type == "none" else dust_type),
+        surface="grammar",
+    )
 
     # 'none' (its 'off' synonym normalized above by _normalize_off_switch)
     # disables the dust block entirely; parity with neb/agn/radio/xray/igm/
@@ -5777,13 +5823,13 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
     "agn.nlr": frozenset({"type", "*", "all_params"}),
     "agn.blr": frozenset({"type", "*", "all_params"}),
     "agn.feii": frozenset({"type", "*", "all_params"}),
-    "agn.atten": frozenset({"type", "*", "all_params", "law"}),
+    "agn.atten": frozenset({"type", "*", "all_params", "law", "polar_law"}),
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*", "all_params"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
@@ -5929,7 +5975,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # and constrains single_component to a no-op value, so only a
         # two_component spec's non-default value is ever worth emitting.
         _Structural(
-            "nebular_screen", "dust_nebular_screen", "birth_cloud", only_types=("two_component",)
+            "nebular_screen",
+            "dust_nebular_screen",
+            "birth_cloud",
+            only_types=("two_component", "age_binned"),
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
@@ -5989,7 +6038,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # a patchy spec raised "Unknown key 'bubble_mpc' in group 'igm'".
         _Structural("patchy", "igm_patchy", False),
     ),
-    "agn": (_Structural("norm", "agn_norm", "cigale_joint"),),
+    "agn": (
+        _Structural("norm", "agn_norm", "cigale_joint"),
+        _Structural("polar_law", "agn_polar_law", "smc"),
+    ),
     "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
@@ -6604,7 +6656,9 @@ def _validate_user_keys(
         age_binned_param_names: frozenset[str] = frozenset()
         if top_key == "dust_attenuation" and top_val.get("type") == "age_binned":
             age_binned_param_names = _age_binned_param_names(
-                getattr(structural_params, "dust_screens", None) or ()
+                getattr(structural_params, "dust_screens", None) or (),
+                own=getattr(structural_params, "dust_nebular_screen", None) == "own",
+                law_neb=getattr(structural_params, "dust_law_neb", None),
             )
 
         _check_dict_keys(
@@ -6932,6 +6986,41 @@ def _agn_atten_ebv_retired_error(group: str, key: str) -> ValueError:
     )
 
 
+#: The retired Fritz viewing-elevation parameter (owner ruling, #2605): the model
+#: has one inclination for every torus, ``agn_cos_inc``, and the Fritz library's
+#: elevation above the equatorial plane is derived from it. A second,
+#: independent angle left a Fritz model type 2 by its library axis and type 1 by
+#: its disc screen at once.
+_AGN_FRITZ_PSY_KEYS: frozenset[str] = frozenset({"agn_fritz_psy", "fritz_psy"})
+
+
+def _agn_fritz_psy_retired_error(group: str, key: str) -> ValueError:
+    """The one message the retired ``agn_fritz_psy`` gets, wherever written.
+
+    Parameters
+    ----------
+    group : str
+        The group the key was found in (``'agn'``, ``'agn.torus'``, ...).
+    key : str
+        The spelling the caller wrote.
+
+    Returns
+    -------
+    ValueError
+        Naming the replacement parameter and the mapping.
+    """
+    return ValueError(
+        f"{key!r} (found in group {group!r}) is retired (#2605): the model has one "
+        f"inclination for every torus, 'agn_cos_inc' (cos i, i from the polar axis), and "
+        f"the Fritz library's viewing elevation above the equatorial plane is derived "
+        f"from it, psy = 90 deg - i (cos i = sin psy). The sightline is type 1 when "
+        f"i < agn_fritz_oa (the half-angle of the dust-free polar cone; full opening "
+        f"angle = 180 - 2 x agn_fritz_oa). Translate psy to an inclination:\n"
+        f"  agn={{'type': 'composable', ..., 'agn_cos_inc': Fixed(sin(psy))}}  "
+        f"# e.g. psy = 60 deg -> agn_cos_inc = 0.866"
+    )
+
+
 #: The retired absolute Lyman-continuum dust-absorption fraction (owner
 #: ruling #2436): declaring it as its own independent ``Uniform(0, 1)`` let a
 #: caller pick ``neb_fesc + neb_fdust > 1``, an impossible >100% of the
@@ -7100,6 +7189,10 @@ def _check_dict_keys(
         # was consolidated to the single surviving name agn_ebv.
         if key in _RETIRED_AGN_ATTEN_EBV:
             raise _agn_atten_ebv_retired_error(group, str(key))
+        # #2605 (owner ruling): the retired Fritz viewing elevation is
+        # intercepted in every group; the one inclination is agn_cos_inc.
+        if key in _AGN_FRITZ_PSY_KEYS or (key == "psy" and str(group).endswith("torus")):
+            raise _agn_fritz_psy_retired_error(group, str(key))
         # #2436 (owner ruling): the retired absolute neb_fdust is intercepted
         # before the generic resolver reaches it -- it was always written
         # under the 'neb' group, so no cross-group form is needed here.
@@ -7828,6 +7921,25 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
             )
 
         result[block_to_kwarg[block_name]] = block_type
+        if block_name == "atten" and "polar_law" in block_spec:
+            if block_type != "polar_dust":
+                raise ValueError(
+                    f"agn['atten']['polar_law'] sets the polar-dust extinction curve, but "
+                    f"the attenuation block is {block_type!r}; select "
+                    f"type='polar_dust' or drop 'polar_law'."
+                )
+            result["agn_polar_law"] = _check_polar_law(block_spec["polar_law"], "agn['atten']")
+
+    # Polar-dust extinction law (``agn['polar_law']``, or ``agn['atten']['polar_law']``):
+    # a static string, menu single-sourced from POLAR_LAWS.
+    if "polar_law" in agn_dict:
+        _law = _check_polar_law(agn_dict["polar_law"], "agn")
+        if result.get("agn_polar_law", _law) != _law:
+            raise ValueError(
+                f"agn['polar_law']={_law!r} and agn['atten']['polar_law']="
+                f"{result['agn_polar_law']!r} disagree; give the law once."
+            )
+        result["agn_polar_law"] = _law
 
     # Cross-block normalization policy (``agn['norm']``): menu single-sourced
     # from AGN_NORM_POLICIES so the grammar can't drift from the runner (#556).
@@ -7838,6 +7950,31 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
+
+
+def _check_polar_law(law: object, where: str) -> str:
+    """Validate a polar-dust extinction law name; raise naming the valid laws.
+
+    Parameters
+    ----------
+    law : object
+        The value written for ``polar_law``.
+    where : str
+        The grammar spelling it was found under, for the message.
+
+    Returns
+    -------
+    str
+        The validated law name.
+    """
+    from tengri.components.agn.polar_dust import POLAR_LAWS
+
+    if law not in POLAR_LAWS:
+        raise ValueError(
+            f"Unknown {where}['polar_law']={law!r}. Valid polar-dust extinction laws: "
+            f"{list(POLAR_LAWS)} ('smc' = Pei 1992 SMC Bar, the default)."
+        )
+    return str(law)
 
 
 def _partition_by_group(
@@ -7997,7 +8134,9 @@ def _dust_group_accepted_keys() -> frozenset[str]:
     return structural | param_short_forms
 
 
-def _age_binned_param_names(screens: tuple) -> frozenset[str]:
+def _age_binned_param_names(
+    screens: tuple, *, own: bool = False, law_neb: str | None = None
+) -> frozenset[str]:
     """Short + full per-screen key names for ``dust_attenuation={'type': 'age_binned'}``.
 
     One ``tau_i``/``dust_tau_i`` pair per screen, plus one
@@ -8013,6 +8152,11 @@ def _age_binned_param_names(screens: tuple) -> frozenset[str]:
         The validated screen tuple
         (:func:`tengri.components.dust.age_binned.validate_screens`), e.g.
         ``structural_params.dust_screens``.
+    own : bool, optional
+        ``nebular_screen='own'``: also admit ``tau_neb`` and, with an explicit
+        ``law_neb``, that law's ``<shape>_neb`` keys.
+    law_neb : str or None, optional
+        The own screen's explicit law.
 
     Returns
     -------
@@ -8034,6 +8178,11 @@ def _age_binned_param_names(screens: tuple) -> frozenset[str]:
             short_stem = full_to_short(law_kw)
             names.add(f"{short_stem}_{i}")
             names.add(f"{law_kw}_{i}")
+    if own:
+        names.update(("tau_neb", "dust_tau_neb"))
+        for law_kw in law_kwarg_names(law_neb) if law_neb is not None else ():
+            if law_kw != "redshift":
+                names.update((f"{full_to_short(law_kw)}_neb", f"{law_kw}_neb"))
     return frozenset(names)
 
 

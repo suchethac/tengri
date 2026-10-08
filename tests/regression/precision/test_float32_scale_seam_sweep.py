@@ -500,31 +500,52 @@ _AGN_MBH_DUST = {
 #: of the model: the photometry agrees with the variant that carries 200 points per decade
 #: shortward of 1000 A to 5e-7 and with the 40-per-decade variant to 1.8e-4 (the stellar
 #: dust-energy balance is integrated on the master grid).
+#: Re-captured for #2678 (``agn_log_lbol`` is the accretion power; the disc returns
+#: ``2 cos i D_nu + H_nu``): the tie normalizes that 30 deg shape on the SKIRTOR native grid,
+#: where the corona now weighs four times less relative to the disc than under
+#: ``(cos i / 2) D_nu + H_nu``, so the disc part of the tied shape rises by +0.25 % / +88 % /
+#: +102 % (mbh 6/8/10; the formula and the measured in-grid corona-to-disc ratios are beside
+#: ``_DISC_TIMES_ETA_T_REFERENCE``). The disc is 0.21 % / 5.2 % / 6.2 % of ``rest_sed_sum``,
+#: which moves by +5.1e-6 / +2.26 % / +2.35 % (at mbh 6 the product closes, 0.25 % x 0.0021;
+#: at 8 and 10 the corona's own bins mix in); the r-band photometry moves by +5.6e-6 /
+#: +2.9 % / +2.7 %.
+#: Re-captured for the SKIRTOR tie that normalizes the disc only and carries the corona on top
+#: (angle-integrated share ``f/(1 - f)`` of the tied disc's power, torus-screened; the formula and
+#: every measured input are beside ``_DISC_TIMES_ETA_T_REFERENCE`` in
+#: ``tests/regression/bug/test_bug_2601_skirtor_disc_tie.py``). The disc part of the tied
+#: disc rises by 1.00084 / 1.41163 / 1.51225 (mbh 6/8/10) and the corona is added; the disc
+#: sum changes by 0.084 % / 40.61 % / 49.11 % (measured sums 3.2340e+29 /
+#: 8.5090e+30 / 1.0286e+31). The first bin (0.01 A) is the corona alone, below the library
+#: range, and no longer vanishes. Predicted forward from the previous capture (rest_sed_sum
+#: 1.559372e+32 / 1.675785e+32 / 1.709509e+32) it agrees with these entries to
+#: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
+#: the three photometry entries are predicted through the same filter projection (band disc
+#: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
 #: Re-captured for the young-sliver integral (#2635): the [0, age0] sliver is
 #: integrated from the SFH instead of held at SFR(age0), which moves these
 #: references by up to 1.6e-6 relative (``rest_sed_0``, the most ill-conditioned
 #: key) and photometry by up to 9e-7.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.559360778233028e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.891357276939563e28,
-        "rest_sed_last": 8.775427454646825e21,
-        "photometry": (1.0994790350777986e-27, 1.5700112432007491e-27, 1.763223137306398e-27),
+        "rest_sed_sum": 1.5593714645789999e32,
+        "rest_sed_0": 102893812904440.97,
+        "rest_sed_mid": 2.8913766864426845e28,
+        "rest_sed_last": 8.775429561469894e21,
+        "photometry": (1.0994872257150453e-27, 1.5700113158280183e-27, 1.76322315786068e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6049263394709507e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 2.994003637320427e28,
-        "rest_sed_last": 8.79894535961485e21,
-        "photometry": (1.1410280777227556e-27, 1.5707872456140516e-27, 1.76344775710649e-27),
+        "rest_sed_sum": 1.675784505987193e32,
+        "rest_sed_0": 2.8226865115503544e16,
+        "rest_sed_mid": 3.1537080660626947e28,
+        "rest_sed_last": 8.838700522709745e21,
+        "photometry": (1.2055128625600212e-27, 1.5721005408209638e-27, 1.7638276709007876e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.6209139632449693e32,
-        "rest_sed_0": 0.0,
-        "rest_sed_mid": 3.019929865300121e28,
-        "rest_sed_last": 9.096643528959812e21,
-        "photometry": (1.148815536590372e-27, 1.5810541591631039e-27, 1.7660494424511744e-27),
+        "rest_sed_sum": 1.7095081559595516e32,
+        "rest_sed_0": 2.957413176061014e16,
+        "rest_sed_mid": 3.208030980153603e28,
+        "rest_sed_last": 9.756084861431804e21,
+        "photometry": (1.2203839576415823e-27, 1.5968719507867082e-27, 1.771579976268286e-27),
     },
 }
 

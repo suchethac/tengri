@@ -196,12 +196,21 @@ def test_spectral_index_def_on_l_nu_steep_continuum():
 
     Same line as the EW tests, measured with SpectralIndexDef using the standard
     windows (sidebands 25 A wide, centered 50 A from the line window center).
+
+    The reference is Trager et al. (1998, ApJS 116, 1, Eqs. 1-3) evaluated here in
+    numpy on F_lambda: the pseudo-continuum is the straight line through the two
+    sideband means at the sideband mid-wavelengths. On this lambda^-4 continuum that
+    line sits above the curved true continuum, so the index (-3.716 A) is 1.2 % smaller
+    in magnitude than the equivalent width against the exact power law (-3.760 A),
+    and differs from the constant mean-of-sidebands continuum of
+    ``equivalent_width`` (-3.752 A at the same 20 A windows).
     """
     from tengri.observation.spectral_indices import SpectralIndexDef, measure_index_jax
 
     wl_nm, llam = _gaussian_line_on_power_law(1.0, -4.0)
     wave_aa = jnp.asarray(wl_nm * 10.0)
     lnu = llam * wl_nm**2 * 1e7 / _C_NM
+    blue, red, feature = (6500.0, 6525.0), (6610.0, 6635.0), (6535.0, 6600.0)
 
     result = float(
         measure_index_jax(
@@ -210,12 +219,29 @@ def test_spectral_index_def_on_l_nu_steep_continuum():
             SpectralIndexDef(
                 name="halpha_lnu",
                 index_type="EW",
-                continuum=((6500.0, 6525.0), (6610.0, 6635.0)),
-                feature=(6535.0, 6600.0),
+                continuum=(blue, red),
+                feature=feature,
             ),
         )
     )
-    assert result == pytest.approx(-3.752, abs=5e-3)
+
+    wave = wl_nm * 10.0
+    flam = np.asarray(llam)
+
+    def _band_mean(lo, hi):
+        m = (wave >= lo) & (wave <= hi)
+        return np.trapezoid(flam[m], wave[m]) / (wave[m][-1] - wave[m][0])
+
+    blue_mid, red_mid = np.mean(blue), np.mean(red)
+    blue_mean, red_mean = _band_mean(*blue), _band_mean(*red)
+    in_feature = (wave >= feature[0]) & (wave <= feature[1])
+    pseudo = blue_mean + (red_mean - blue_mean) * (wave[in_feature] - blue_mid) / (
+        red_mid - blue_mid
+    )
+    lick = np.trapezoid(1.0 - flam[in_feature] / pseudo, wave[in_feature])
+
+    assert lick == pytest.approx(-3.716, abs=5e-3)
+    assert result == pytest.approx(lick, abs=1e-3)
 
 
 def test_equivalent_width_and_spectral_index_on_flat_continuum():

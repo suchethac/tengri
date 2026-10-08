@@ -78,13 +78,16 @@ def _met_truth():
 
 
 def _build_model(synthetic_ssp, simple_observation):
-    """A dpl-SFH photometry model with mass and metallicity free (D = 2).
+    """A dpl-SFH photometry model with mass, metallicity and diffuse dust free.
 
-    Two free parameters rather than one on purpose: at D = 1 the transform is a
-    scalar rescaling and cannot rotate, so a bug that dropped the off-diagonal
-    structure would pass. Mass and metallicity are the pair broadband photometry
-    genuinely couples, which is what gives the metric a non-trivial off-diagonal
-    to whiten.
+    ``D`` counts the sampled parameters after the stellar mass is profiled out
+    analytically (``profile_mass="auto"``), so metallicity and diffuse-dust
+    optical depth leave ``D = 2``. Two sampled parameters rather than one on
+    purpose: at ``D = 1`` the transform is a scalar rescaling and its condition
+    number is identically 1, so a bug that dropped the off-diagonal structure
+    would pass. Metallicity and dust optical depth are the pair broadband
+    photometry genuinely couples, which is what gives the metric a non-trivial
+    off-diagonal to whiten.
     """
     from tengri import Fixed, Parameters, SEDModel, Uniform
 
@@ -97,7 +100,7 @@ def _build_model(synthetic_ssp, simple_observation):
         sfh_dpl_beta=Fixed(2.0),
         sfh_dpl_tau_gyr=Fixed(3.0),
         dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
+        dust_tau_diff=_declared_prior("dust_tau_diff"),
         redshift=Fixed(0.1),
         mean_sfh_type="dpl",
     )

@@ -547,6 +547,12 @@ def project_spectrum_kernel_split(
     """
     from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
 
+    # A photoionized backend publishes ``lyc_transmission`` whenever it masked
+    # the Lyman continuum, so the SED is a step at the Lyman edge: read the
+    # straddling model cell as that step, as photometry does (#2447).
+    derived = getattr(state, "derived", None)
+    has_lyc_edge = derived is not None and derived.get("lyc_transmission") is not None
+
     if igm_trans is None:
         # No IGM component: T=1 everywhere, structurally -- #2589 has nothing
         # to improve on, so this is the pre-#2589 single-kernel path,
@@ -568,6 +574,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux_instrument_only = project_spectrum(
@@ -582,6 +589,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux = flux_stellar + flux_instrument_only
@@ -598,6 +606,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
         else:
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
@@ -616,6 +625,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -629,6 +639,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux = flux_stellar + flux_instrument_only
     else:
@@ -657,6 +668,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux_instrument_only = project_spectrum(
@@ -671,6 +683,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
             )
             flux = flux_stellar + flux_instrument_only
@@ -687,6 +700,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
         else:
             resolution_scaled = resolution / lsf_scale
@@ -702,6 +716,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -715,6 +730,7 @@ def project_spectrum_kernel_split(
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
+                has_lyc_edge=has_lyc_edge,
             )
             flux = flux_stellar + flux_instrument_only
 
@@ -2299,9 +2315,15 @@ class Observation:
                 )
                 neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
                 if neb_chunks is not None:
+                    neb_nodes = state.derived["nebular_subband_waves_rest_precomp"]
+                elif dust_mode == "none":
+                    # Unscreened: the grid's lines over their profiles + continuum.
+                    neb_chunks = state.derived.get("nebular_phot_lnu_subband_precomp")
+                    neb_nodes = state.derived.get("nebular_subband_waves_rest_precomp")
+                if neb_chunks is not None:
                     correction = correction + subband_igm_correction(
                         neb_chunks,
-                        state.derived["nebular_subband_waves_rest_precomp"],
+                        neb_nodes,
                         rest_t,
                         state.wave,
                         reach,

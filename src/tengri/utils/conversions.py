@@ -19,17 +19,16 @@ References
   (e.g., Rybicki & Lightman 1979, Radiative Processes in Astrophysics)
 - Cosmological flux-luminosity: f_ν = L_ν × (1+z) / (4π d_L²)
   (e.g., Hogg et al. 1999, AJ, 118, 1407)
-- Morton (1991) vacuum-air conversion: ApJS, 77, 119
-- Edlén (1953) air-vacuum conversion: JOSA, 43(5), 339
+- Morton (2000) / Ciddor (1996) vacuum-air conversion: see ``tengri.utils.air_vacuum``
 
 """
 
 from __future__ import annotations
 
 import jax.numpy as jnp
-import numpy as np
 from jax import jit
 
+from tengri.utils.air_vacuum import air_to_vac, vac_to_air
 from tengri.utils.physics_constants import (
     C_AA,
     JY_CGS,
@@ -608,73 +607,11 @@ def attenuation_to_tau(a_mag: jnp.ndarray) -> jnp.ndarray:
     return a_mag / (2.5 * jnp.log10(jnp.e))
 
 
-# ── Wavelength Conversions (numpy, not JIT) ───────────────────────
+# ── Wavelength Conversions ────────────────────────────────────────
+#
+# The one air <-> vacuum converter pair lives in ``tengri.utils.air_vacuum``
+# (IAU standard, Morton 2000 / Ciddor 1996). The long-standing names below are
+# the same function objects, kept so existing imports keep working.
 
-
-def vacuum_to_air(wavelength_aa: np.ndarray) -> np.ndarray:
-    """Convert vacuum wavelengths to air wavelengths.
-
-    Uses the Morton (1991) formula with 4 terms.
-
-    Parameters
-    ----------
-    wavelength_aa : np.ndarray
-        Vacuum wavelengths [Ångström].
-
-    Returns
-    -------
-    np.ndarray
-        Air wavelengths [Ångström].
-
-    Notes
-    -----
-    The refractive index of air is:
-        n = 1 + 2.735182e-4 + 131.4182 / λ² + 2.76249e8 / λ⁴
-    where λ is in Ångström.
-
-    This formula is valid for 2000 Å ≤ λ ≤ 100 μm.
-
-    Reference: Morton, D. C. (1991), ApJS, 77, 119.
-    """
-    wavelength_aa = np.asarray(wavelength_aa, dtype=np.float64)
-    inv_lambda_sq = 1.0 / (wavelength_aa**2)
-    n = 1.0 + 2.735182e-4 + 131.4182 * inv_lambda_sq + 2.76249e8 * inv_lambda_sq**2
-    return wavelength_aa / n
-
-
-def air_to_vacuum(wavelength_aa: np.ndarray) -> np.ndarray:
-    """Convert air wavelengths to vacuum wavelengths.
-
-    Uses the Edlén (1953) dispersion formula for standard air.
-
-    Parameters
-    ----------
-    wavelength_aa : np.ndarray
-        Air wavelengths [Ångström].
-
-    Returns
-    -------
-    np.ndarray
-        Vacuum wavelengths [Ångström].
-
-    Notes
-    -----
-    The refractive index of air is computed from the wavenumber σ = 1e4 / λ_air:
-        n = 1 + 6.4328e-5 + 2.94981e-2 / (146 - σ²) + 2.5540e-4 / (41 - σ²)
-
-    and λ_vac = n · λ_air. This is the Edlén (1953) formula for standard air
-    (15 °C, 760 mmHg): the same conversion used by IRAF/SDSS. The Edlén
-    (1966) revision differs negligibly for optical spectroscopy.
-
-    Reference: Edlén, B. (1953), "The Dispersion of Standard Air",
-    J. Opt. Soc. Am., 43(5), 339.
-    """
-    wavelength_aa = np.asarray(wavelength_aa, dtype=np.float64)
-
-    # Wavenumber in cm^-1 for air
-    sigma = 1e4 / wavelength_aa
-
-    # Refractive index (Edlén 1953)
-    n = 1.0 + 6.4328e-5 + 2.94981e-2 / (146.0 - sigma**2) + 2.5540e-4 / (41.0 - sigma**2)
-
-    return wavelength_aa * n
+vacuum_to_air = vac_to_air
+air_to_vacuum = air_to_vac

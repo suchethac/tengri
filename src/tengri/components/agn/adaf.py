@@ -32,7 +32,11 @@ References
 
 from __future__ import annotations
 
+from itertools import pairwise
+from typing import NamedTuple
+
 import jax.numpy as jnp
+import numpy as np
 from jax.scipy.special import i0 as _i0, i1 as _i1
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH, DEFAULT_AGN_LUM_RATIO
@@ -614,14 +618,276 @@ def _adaf_mdot_from_lbol(
     return jnp.clip(mdot, 1e-8, mdot_crit)
 
 
-#: Nodes of the fixed internal frequency grid that normalizes the spectrum.
-#: 8193 log nodes over [0.02 nu_min, 100 kT_e / h] ~ 1e7 - 1e22 Hz (15 decades, 35 in ln):
-#: d ln(nu) ~ 4e-3, so the trapezoid error on the continuous broken power law (a slope
-#: kink at nu_p) is ~1e-6.
-_NORM_N_NODES = 8193
+# ── Gauss-Legendre quadrature for the normalization integral ─────────────
+#
+# The spectrum is smooth in ln(nu) between its own breaks (nu_min, nu_p, 3 k T_e / h), so the
+# power is integrated by one 30-point Gauss-Legendre rule per segment between them, in
+# ln(nu), instead of a fixed grid; the bremsstrahlung tail has a closed form.
+
+_GL_ORDER = 30
+_GL_X_RAW, _GL_W_RAW = np.polynomial.legendre.leggauss(_GL_ORDER)  # on [-1, 1]
+_GL_X = (_GL_X_RAW + 1.0) / 2.0  # nodes on [0, 1]
+_GL_W = _GL_W_RAW / 2.0  # weights on [0, 1]
+
+
+def _segment_power(f, nu_a, nu_b, dtype):
+    r"""Gauss-Legendre integral of ``f(nu) d nu`` over ``[nu_a, nu_b]``, in ``ln(nu)``.
+
+    Parameters
+    ----------
+    f : callable
+        Integrand ``f(nu)``, smooth on the segment.
+    nu_a, nu_b : array_like, shape ()
+        Segment limits [Hz], ``nu_a < nu_b``.
+    dtype : dtype
+        Working dtype of the nodes and weights (float32 stays float32).
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int_{\nu_a}^{\nu_b} f\,d\nu` in the units of ``f`` times Hz.
+    """
+    log_a, log_b = jnp.log(nu_a), jnp.log(nu_b)
+    width = log_b - log_a
+    nu = jnp.exp(log_a + jnp.asarray(_GL_X, dtype=dtype) * width)
+    return width * jnp.sum(jnp.asarray(_GL_W, dtype=dtype) * f(nu) * nu)
 
 
 # ── Public spectrum ──────────────────────────────────────────────────────
+
+
+class AdafState(NamedTuple):
+    r"""Wavelength-independent part of :func:`adaf_spectrum`: the solved ADAF and its power.
+
+    All fields are scalars. The spectrum is
+
+    .. math::
+
+        L_\nu = \frac{\mathrm{numer}}{\max(\mathrm{integral}, \epsilon)}\,
+        \left[S(\nu) + B(\nu)\right],
+
+    with :math:`S` the synchrotron + Compton shape and :math:`B` the bremsstrahlung shape
+    (``_adaf_total``); ``integral`` is :math:`\int (S + B)\,d\nu` over the model's whole
+    support and ``numer`` the target power, so :math:`\int L_\nu d\nu = \mathrm{numer}`.
+    """
+
+    t_e: jnp.ndarray  # electron temperature [K]
+    alpha_c: jnp.ndarray  # Compton slope [dimensionless]
+    nu_p: jnp.ndarray  # self-absorption peak [Hz]
+    nu_min: jnp.ndarray  # low cutoff [Hz]
+    nu_max_c: jnp.ndarray  # Comptonization ceiling 3 k T_e / h [Hz]
+    l_nu_p: jnp.ndarray  # peak L_nu before normalization [erg/s/Hz]
+    l_brems0: jnp.ndarray  # bremsstrahlung level before normalization [erg/s/Hz]
+    numer: jnp.ndarray  # target power [erg/s]; [L_sun] in float32
+    integral: jnp.ndarray  # power of the unnormalized shape [erg/s]; [L_sun] in float32
+
+
+def _adaf_synch_compton(nu_, s):
+    """Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p), joined at nu_p."""
+    ratio = nu_ / s.nu_p
+    shape_sc = jnp.where(nu_ <= s.nu_p, ratio**0.4, ratio ** (-s.alpha_c))
+    shape_sc = (
+        shape_sc * jnp.exp(-s.nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0))
+    )
+    return s.l_nu_p * shape_sc
+
+
+def _adaf_brems(nu_, s):
+    """Bremsstrahlung: flat with an exponential cutoff at k T_e / h."""
+    return s.l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * s.t_e), 0.0, 500.0))
+
+
+def _adaf_total(nu_, s):
+    return _adaf_synch_compton(nu_, s) + _adaf_brems(nu_, s)
+
+
+def adaf_scalar_state(
+    agn_log_lbol: float,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_adaf_alpha: float = 0.3,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.1,
+    agn_log_lbol_shape: float | None = None,
+    *,
+    dtype=None,
+) -> AdafState:
+    r"""Solve the ADAF once: everything :func:`adaf_spectrum` needs that is not a wavelength.
+
+    Derives the accretion rate from the shape luminosity (Mahadevan Eq. 49), solves the
+    electron temperature (Eqs. 40/43), builds the spectrum's break frequencies and amplitudes
+    (Eqs. 21-23, 28, 30), and computes the power of that shape over the model's whole support,
+    so that the spectrum can be normalized without touching any wavelength grid.
+
+    The power is
+
+    .. math::
+
+        P = \sum_{k=1}^{4} \int_{\nu_k}^{\nu_{k+1}} S(\nu)\,d\nu
+          + L_{\rm br}\,\frac{k T_e}{h}
+            \left[e^{-h\nu_0/kT_e} - e^{-h\nu_4/kT_e}\right],
+
+    where :math:`S` is the synchrotron + Compton shape [erg/s/Hz], :math:`L_{\rm br}` the
+    bremsstrahlung level [erg/s/Hz], and the breaks are :math:`\nu_0 = 0.02\,\nu_{\min}`,
+    :math:`\nu_1 = \nu_{\min}`, :math:`\nu_2 = \nu_p`, :math:`\nu_3 = 3kT_e/h`,
+    :math:`\nu_4 = 100\,kT_e/h` [Hz]. The bremsstrahlung integral
+    :math:`\int L_{\rm br} e^{-h\nu/kT_e} d\nu` is closed-form (the exponent clip at 500
+    never binds below :math:`\nu_4`); each synchrotron + Compton segment is a 30-point
+    Gauss-Legendre rule in :math:`\ln\nu`. The only non-smooth point of :math:`S` inside the
+    support, the switch at :math:`\nu_p`, is a segment boundary. Measured against an
+    independent 2e6-node trapezoid over a wider span: 3.9e-12 relative (declared prior box
+    corners and 300 draws). The target power is
+    :math:`10^{\mathtt{agn\_log\_lbol}} L_\odot \times \mathtt{agn\_lum\_ratio}` [erg/s].
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)` the spectrum is normalized to (the float32
+        reference magnitude on the float32 path).
+    agn_lum_ratio : float, optional
+        Fraction of ``L_bol`` assigned to the ADAF [dimensionless]. Default
+        ``DEFAULT_AGN_LUM_RATIO``.
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Default ``DEFAULT_AGN_LOG_MBH``.
+    agn_adaf_alpha : float, optional
+        Viscosity parameter :math:`\alpha` [dimensionless]. Default 0.3.
+    agn_adaf_beta : float, optional
+        Gas-to-total pressure ratio :math:`\beta` [dimensionless]. Default 0.5.
+    agn_adaf_delta : float, optional
+        Electron viscous-heating fraction :math:`\delta` [dimensionless]. Default 0.1.
+    agn_log_lbol_shape : float or None, optional
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)` that sets the shape (``mdot``); ``None`` uses
+        ``agn_log_lbol``. The float32 AGN path passes the true value here and a low reference
+        in ``agn_log_lbol``.
+    dtype : dtype, optional
+        dtype of the wavelength arrays the state will be evaluated on. It selects the float32
+        bookkeeping that carries the power in :math:`L_\odot`. Default: the canonical float
+        dtype of the process (float64 under x64, float32 otherwise).
+
+    Returns
+    -------
+    AdafState
+        Scalar fields (shape ``()``); evaluate with :func:`adaf_spectrum_from_state`.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes; pure ``jnp`` with fixed-count unrolled solves and no
+    data-dependent control flow. The runner builds it once per composition and every disc
+    evaluation (caller grid, anchors, 5100 A, budget grids) reads the same state, so the
+    ``T_e`` solves are traced once. Retains the ``alpha_c = 1`` gradient kink of the ``T_e``
+    solve.
+
+    Implements the same model as Mahadevan (1997 [1]_); the normalization quadrature is
+    tengri's own.
+
+    References
+    ----------
+    .. [1] Mahadevan, R. 1997, "Scaling Laws for Advection-dominated Flows: Applications to
+       Low-Luminosity Galactic Nuclei", ApJ, 477, 585. arXiv:astro-ph/9609107.
+       https://doi.org/10.1086/303727
+    """
+    dtype = jnp.asarray(0.0).dtype if dtype is None else dtype
+    _f32 = dtype == jnp.float32
+    # Shape luminosity (mdot -> whole spectrum) vs normalization magnitude. They
+    # coincide by default (float64). On float32 the AGN component passes the true
+    # L_bol for the SHAPE while normalizing MAGNITUDE to a low reference, so the
+    # runner's ~1e40 L_lambda arithmetic stays in range (#1206).
+    _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
+    m = 10.0**agn_log_mbh
+    alpha, beta, delta = agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta
+
+    # mdot from the SHAPE luminosity (float32: pass it in L_sun so the ~1e44 erg/s
+    # l_bol_erg never forms).
+    if _f32:
+        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape, m, alpha, beta, delta, float32=True)
+    else:
+        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape * _LSUN_ERG, m, alpha, beta, delta)
+    t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
+    x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
+    alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
+    nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
+    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
+    l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
+
+    # Low cutoff at the largest-radius synchrotron frequency (nu ~ r^{-5/4});
+    # high cutoff at the Comptonization ceiling 3 k T_e / h.
+    nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
+    nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
+    shape = AdafState(
+        t_e, alpha_c, nu_p, nu_min, nu_max_c, l_nu_p, l_brems0, jnp.zeros(()), jnp.ones(())
+    )
+
+    # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
+    # reference on the float32 path). The integral uses Gauss-Legendre quadrature
+    # on segments defined by the spectrum's break frequencies (nu_p, Compton cutoff),
+    # NOT the caller's wavelength array. The spectrum support is [0.02 nu_min, 100 k T_e / h].
+    # Grid invariance: a caller grid that stops short of the X-ray (e.g., 912 A at z=0)
+    # would renormalize the truncated spectrum by ~1e3 if we integrated over the caller's grid.
+    nu_lo = 0.02 * nu_min
+    nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
+
+    # The power in synchrotron + Compton is Gauss-Legendre on the segments between the
+    # spectrum's own breaks; the bremsstrahlung power
+    #   int l_brems0 exp(-h nu / k T_e) d nu = l_brems0 (k T_e / h) [exp(-h nu_lo / k T_e)
+    #                                                              - exp(-h nu_hi / k T_e)]
+    # is exact. Float32 (#1206): the erg/s-scale integral (~1e43) overflows, so it is carried in
+    # L_sun, where only its ratio with 10**agn_log_lbol is formed.
+    unit = _LSUN_ERG if _f32 else 1.0
+    breaks = (nu_lo, nu_min, nu_p, nu_max_c, nu_hi)
+    int_synch_compton = sum(
+        _segment_power(lambda nu_: _adaf_synch_compton(nu_, shape) / unit, lo, hi, dtype)
+        for lo, hi in pairwise(breaks)
+    )
+    t_scale = _K_BOLTZ * t_e / _H_PLANCK
+    exp_lo = jnp.exp(-nu_lo / t_scale)
+    exp_hi = jnp.exp(-nu_hi / t_scale)
+    integral = int_synch_compton + (l_brems0 / unit) * t_scale * (exp_lo - exp_hi)
+
+    if _f32:
+        # ``integral`` is in L_sun, so the target power is too: 10**log_lbol * ratio.
+        numer = 10.0**agn_log_lbol * agn_lum_ratio
+    else:
+        numer = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    return shape._replace(numer=numer, integral=integral)
+
+
+def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.ndarray:
+    r""":func:`adaf_spectrum` on ``wavelength`` from a solved :class:`AdafState`.
+
+    .. math::
+
+        L_\nu(\nu) = \frac{P_{\rm target}}{\max(P_{\rm shape}, \epsilon)}
+        \left[S(\nu) + B(\nu)\right]
+
+    with :math:`P_{\rm target}` = ``state.numer``, :math:`P_{\rm shape}` = ``state.integral``
+    and :math:`\epsilon` the smallest representable denominator floor (``1e-100`` under x64;
+    ``representable_floor`` otherwise, #1492).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    state : AdafState
+        From :func:`adaf_scalar_state`, built with the dtype of ``wavelength``.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        :math:`L_\nu` [erg/s/Hz]. The wavelength grid enters only through :math:`\nu`; the
+        normalization does not depend on it.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+
+    References
+    ----------
+    .. [1] Mahadevan, R. 1997, ApJ, 477, 585. arXiv:astro-ph/9609107.
+       https://doi.org/10.1086/303727
+    """
+    nu = _wavelength_to_nu(wavelength)
+    scale = state.numer / jnp.maximum(state.integral, _representable_floor(1e-100))
+    return scale * _adaf_total(nu, state)
 
 
 def adaf_spectrum(
@@ -683,6 +949,14 @@ def adaf_spectrum(
 
     Notes
     -----
+    **Normalization**: the power of the shape is computed from the spectrum's own breaks, never
+    from ``wavelength``: closed-form bremsstrahlung plus a 30-point Gauss-Legendre rule in
+    :math:`\ln\nu` on each of the four segments between :math:`0.02\,\nu_{\min}`,
+    :math:`\nu_{\min}`, :math:`\nu_p`, :math:`3kT_e/h` and :math:`100\,kT_e/h` (see
+    :func:`adaf_scalar_state` for the equation), then divided out so
+    :math:`\int L_\nu d\nu = L_{\rm bol}\times` ``agn_lum_ratio`` over the model's whole
+    support. Composed as :func:`adaf_scalar_state` + :func:`adaf_spectrum_from_state`.
+
     **JIT-compatible**: yes, all-``jnp`` with fixed-count unrolled solves.
     Retains the ``alpha_c=1`` gradient kink of the underlying ``T_e`` solve.
     Valid in the ADAF regime ``mdot < mdot_crit ~ 0.28 alpha^2``; the derived
@@ -692,85 +966,14 @@ def adaf_spectrum(
     ----------
     .. [1] R. Mahadevan, ApJ, 477, 585 (1997). arXiv:astro-ph/9609107.
     """
-    nu = _wavelength_to_nu(wavelength)
-    _f32 = wavelength.dtype == jnp.float32
-    # Shape luminosity (mdot -> whole spectrum) vs normalization magnitude. They
-    # coincide by default (float64). On float32 the AGN component passes the true
-    # L_bol for the SHAPE while normalizing MAGNITUDE to a low reference, so the
-    # runner's ~1e40 L_lambda arithmetic stays in range (#1206).
-    _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
-    m = 10.0**agn_log_mbh
-    alpha, beta, delta = agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta
-
-    # mdot from the SHAPE luminosity (float32: pass it in L_sun so the ~1e44 erg/s
-    # l_bol_erg never forms).
-    if _f32:
-        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape, m, alpha, beta, delta, float32=True)
-    else:
-        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape * _LSUN_ERG, m, alpha, beta, delta)
-    t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
-    x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
-    alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
-    nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
-    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
-    l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
-
-    # Low cutoff at the largest-radius synchrotron frequency (nu ~ r^{-5/4});
-    # high cutoff at the Comptonization ceiling 3 k T_e / h.
-    nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
-    nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
-
-    def _total(nu_):
-        # Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p),
-        # joined continuously at nu_p (both = l_nu_p there).
-        ratio = nu_ / nu_p
-        shape_sc = jnp.where(nu_ <= nu_p, ratio**0.4, ratio ** (-alpha_c))
-        shape_sc = (
-            shape_sc * jnp.exp(-nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / nu_max_c, 0.0, 500.0))
-        )
-        # Bremsstrahlung: flat with an exponential cutoff at k T_e / h.
-        brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * t_e), 0.0, 500.0))
-        return l_nu_p * shape_sc + brems
-
-    total = _total(nu)
-
-    # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
-    # reference on the float32 path). The integral runs on a FIXED internal
-    # frequency grid spanning the model's own scales, never on the caller's
-    # wavelength array: the spectrum reaches the X-ray (3 k T_e / h ~ 1e19 Hz)
-    # and a caller grid that stops short of it would otherwise renormalize the
-    # truncated spectrum (a 912 A grid by a factor ~1e3), and any sampling would
-    # shift the quadrature. The span is [0.02 nu_min, 100 k T_e / h]: below
-    # 0.02 nu_min the exp(-nu_min / nu) factor is < e^-50, above 100 k T_e / h
-    # the cutoffs are < e^-33. It is ascending in nu (a descending trapezoid
-    # needs negation and is silently zeroed under MLX compile: jax-mps#232, #2295).
-    nu_lo = 0.02 * nu_min
-    nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
-    log_lo = jnp.log(nu_lo)
-    u = jnp.linspace(0.0, 1.0, _NORM_N_NODES, dtype=wavelength.dtype)
-    nu_int = jnp.exp(log_lo + u * (jnp.log(nu_hi) - log_lo))
-    total_int = _total(nu_int)
-    if _f32:
-        # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
-        # work the normalization in L_sun (total/L_sun keeps the integral in
-        # range) and order 10**log_lbol / integral before the ~1e28 shape.
-        integral = jnp.trapezoid(total_int / _LSUN_ERG, nu_int)
-        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
-        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there, in this,
-        # the float32 branch, the divide-by-zero guard guarded nothing. Returns
-        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
-        l_nu = (
-            (10.0**agn_log_lbol / jnp.maximum(integral, _representable_floor(1e-100)))
-            * agn_lum_ratio
-            * total
-        )
-    else:
-        integral = jnp.trapezoid(total_int, nu_int)
-        l_nu = (
-            10.0**agn_log_lbol
-            * _LSUN_ERG
-            * agn_lum_ratio
-            * total
-            / jnp.maximum(integral, _representable_floor(1e-100))
-        )
-    return l_nu
+    state = adaf_scalar_state(
+        agn_log_lbol,
+        agn_lum_ratio,
+        agn_log_mbh,
+        agn_adaf_alpha,
+        agn_adaf_beta,
+        agn_adaf_delta,
+        agn_log_lbol_shape,
+        dtype=wavelength.dtype,
+    )
+    return adaf_spectrum_from_state(wavelength, state)

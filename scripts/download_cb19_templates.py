@@ -140,12 +140,14 @@ _LINE_MAP: list[tuple[str, float, str]] = [
     ("CIII_1909A", 1908.73, "CIII_1909"),
     ("MgII_2796A", 2796.35, "MgII_2796"),
     ("MgII_2803A", 2803.53, "MgII_2803"),
-    # Optical
-    ("NeIII_3869A", 3869.06, "NeIII_3869"),
-    ("OII_3726A", 3726.03, "OII_3726"),
-    ("OII_3729A", 3728.82, "OII_3729"),
-    ("Hg_4340A", 4340.47, "HI_4340"),
-    ("HeII_4686A", 4685.68, "HeII_4686"),
+    # Optical. All entries are VACUUM wavelengths (the five Cloudy air labels
+    # 3726.03, 3728.82, 3869.06, 4340.47, 4685.68 were converted with
+    # tengri.utils.air_vacuum.air_to_vac).
+    ("NeIII_3869A", 3870.16, "NeIII_3869"),
+    ("OII_3726A", 3727.09, "OII_3726"),
+    ("OII_3729A", 3729.88, "OII_3729"),
+    ("Hg_4340A", 4341.68, "HI_4340"),
+    ("HeII_4686A", 4687.02, "HeII_4686"),
     ("Hb_4861A", 4862.68, "HI_4861"),  # reference line (ratio = 1.0)
     ("O3_4959A", 4960.30, "OIII_4959"),
     ("O3_5007A", 5008.24, "OIII_5007"),

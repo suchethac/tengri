@@ -124,29 +124,19 @@ class TestAstrodustHybridVsExact:
         exact_fn = create_astrodust_from_grid(templates)
         return templates, fw, ft, lookup, exact_fn
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "The shipped Astrodust template ships with only two qpah anchors "
-            "([3.79, 4.79]), but the hybrid path interpolates with the "
-            "C²-continuous triweight kernel (built for smooth VI / HMC "
-            "gradients in dust_emission_precompute._build_dl07_like_lookup). "
-            "Triweight needs a wider stencil — on a 2-point axis it produces "
-            "physically wrong values (≳200% error) at PAH-feature MIR bands. "
-            "Fix is upstream of this test: either widen the qpah grid in the "
-            "template HDF5 or fall back to linear interpolation on under-"
-            "resolved axes."
-        ),
-    )
     def test_astrodust_hybrid_matches_exact(self, setup):
         templates, fw, ft, lookup, exact_fn = setup
         umin_grid = templates["umin_grid"]
         qpah_grid = templates["qpah_grid"]
         wave = templates["wavelength_aa"]
 
-        # Original test points. Kept verbatim so when the upstream
-        # template grid is widened the xfail flips to xpass and the test
-        # body remains the canonical recovery check.
+        # Checks the precomputed hybrid lookup against full-wavelength
+        # evaluation at interior umin, both qpah anchors of the two-point
+        # Astrodust axis, and three L_absorbed values. Before #2727 the
+        # hybrid returned NaN in every band (the PDR luminosity weight was
+        # evaluated at its alpha=2 pole); with the pole-free weight the
+        # residual is <0.3% at these cells (<2% over umin/gamma/qpah probes),
+        # so the two-anchor qpah axis does not by itself break the agreement.
         for L_abs, umin, gamma, qpah in [
             (1e9, float(umin_grid[3]), 0.05, float(qpah_grid[-1])),
             (1e10, float(umin_grid[10]), 0.1, float(qpah_grid[-1])),

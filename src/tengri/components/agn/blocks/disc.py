@@ -16,10 +16,19 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn._nthcomp import load_nthcomp_table
-from tengri.components.agn.adaf import adaf_spectrum
-from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn.adaf import (
+    adaf_scalar_state,
+    adaf_spectrum_from_state,
+)
+from tengri.components.agn.blocks._protocol import (
+    register_agn_block,
+    register_disc_power,
+    register_disc_split,
+    register_disc_state,
+)
 from tengri.components.agn.disc import (
     kubota_done_disc,
+    kubota_done_disc_split,
     load_relagn_default_grid,
     multicolor_disc,
 )
@@ -42,6 +51,7 @@ from tengri.utils.physics_constants import L_SUN
 
 __all__ = [
     "adaf_disc_block",
+    "adaf_disc_power",
     "cigale_adaf_disc_block",
     "cigale_schartmann_disc_block",
     "cigale_schartmann_skirtor_attenuated_disc_block",
@@ -49,7 +59,10 @@ __all__ = [
     "kd18_agnfitter_disc_block",
     "kd18_agnfitter_warmindex_disc_block",
     "kubota_done_disc_block",
+    "kubota_done_disc_power",
+    "kubota_done_disc_split_block",
     "multicolor_disc_block",
+    "multicolor_disc_power",
     "relagn_disc_block",
     "richards2006_disc_block",
     "slone_netzer_disc_block",
@@ -99,6 +112,44 @@ def _cigale_disc_lambda(
     return s_per_aa * L_bol_erg
 
 
+@register_disc_state("adaf")
+def adaf_disc_state(
+    agn_log_lbol: float,
+    *,
+    dtype=None,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_adaf_alpha: float = 0.3,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.1,
+    agn_log_lbol_shape: float | None = None,
+    **_params,
+):
+    """The solved ADAF of :func:`adaf_disc_block`, once per composition.
+
+    Parameters are those of :func:`adaf_disc_block`; ``dtype`` is the dtype of the wavelength
+    arrays it will be evaluated on.
+
+    Returns
+    -------
+    AdafState
+        Scalars for ``adaf_disc_block(..., disc_state=...)``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+    """
+    return adaf_scalar_state(
+        agn_log_lbol,
+        1.0,
+        agn_log_mbh,
+        agn_adaf_alpha,
+        agn_adaf_beta,
+        agn_adaf_delta,
+        agn_log_lbol_shape,
+        dtype=dtype,
+    )
+
+
 @register_agn_block(
     "disc",
     "adaf",
@@ -115,6 +166,7 @@ def adaf_disc_block(
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
     agn_log_lbol_shape: float | None = None,
+    disc_state=None,
     **_params,
 ) -> Array:
     r"""Advection-dominated accretion flow (ADAF): faithful Mahadevan 1997.
@@ -152,6 +204,11 @@ def adaf_disc_block(
     agn_adaf_delta : float, optional
         Fraction of viscous energy heating electrons directly. Default ``0.1``.
 
+    disc_state : AdafState, optional
+        The solved ADAF from :func:`adaf_disc_state`; when given, the ``T_e`` solve and the
+        normalization integral are not repeated (the runner passes it to every evaluation of a
+        composition).
+
     Returns
     -------
     L_lambda : ndarray, shape (n_wave,)
@@ -162,17 +219,48 @@ def adaf_disc_block(
     .. [1] Mahadevan, R. 1997, ApJ, 477, 585. arXiv:astro-ph/9609107.
     """
     wave_aa = jnp.asarray(wavelength)
-    L_nu = adaf_spectrum(
-        wave_aa,
-        agn_log_lbol=agn_log_lbol,
-        agn_lum_ratio=1.0,
-        agn_log_mbh=agn_log_mbh,
-        agn_adaf_alpha=agn_adaf_alpha,
-        agn_adaf_beta=agn_adaf_beta,
-        agn_adaf_delta=agn_adaf_delta,
-        agn_log_lbol_shape=agn_log_lbol_shape,
-    )
+    if disc_state is None:
+        disc_state = adaf_disc_state(
+            agn_log_lbol,
+            dtype=wave_aa.dtype,
+            agn_log_mbh=agn_log_mbh,
+            agn_adaf_alpha=agn_adaf_alpha,
+            agn_adaf_beta=agn_adaf_beta,
+            agn_adaf_delta=agn_adaf_delta,
+            agn_log_lbol_shape=agn_log_lbol_shape,
+        )
+    L_nu = adaf_spectrum_from_state(wave_aa, disc_state)
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_disc_power("adaf")
+def adaf_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of :func:`adaf_disc_block`, in units of ``L_acc``.
+
+    :func:`~tengri.components.agn.adaf.adaf_spectrum` renormalizes the spectrum so that
+    :math:`\int L_\nu\,d\nu = 10^{\mathtt{agn\_log\_lbol}} L_\odot` over the model's whole
+    support, whatever wavelength grid the caller passes, so the power is the
+    normalization itself.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
+        fraction does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. The quadrature
+        that sets the normalization agrees with an independent composite Gauss-Legendre reference
+        to 4.7e-15, and the closed-form power with a dense integral of the block to 1.6e-9.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
 
 
 @register_agn_block(
@@ -547,6 +635,109 @@ def kubota_done_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
+@register_disc_split("kubota_done")
+def kubota_done_disc_split_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    *,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_ledd: float = -1.0,
+    agn_a_spin: float = 0.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_f_hard: float = 0.02,
+    agn_gamma_warm: float = 2.5,
+    agn_kt_warm: float = 0.2,
+    agn_gamma_hard: float = 1.8,
+    agn_kt_hot: float = 100.0,
+    agn_r_warm_ratio: float = 2.0,
+    agn_log_lbol_shape: float | None = None,
+    templates=None,
+    **_params,
+) -> tuple[Array, Array, Array]:
+    r"""The Kubota & Done (2018) block with its disc and corona apart.
+
+    Same arguments as :func:`kubota_done_disc_block`; the two returned spectra sum to its
+    output. The SKIRTOR tie normalizes the disc part to the library's disc power and
+    carries the corona on top.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`.
+
+    Returns
+    -------
+    L_lambda_disc : ndarray, shape (n_wave,)
+        Disc and warm-zone part :math:`2\cos i\,D_\lambda` [erg/s/Å].
+    L_lambda_corona : ndarray, shape (n_wave,)
+        Isotropic corona :math:`H_\lambda` [erg/s/Å].
+    corona_fraction : float
+        :math:`P_H/(P_D + P_H)` of the angle-integrated powers, in closed form
+        [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    References
+    ----------
+    .. [1] Kubota, A. & Done, C. 2018, MNRAS, 480, 1247,
+       https://doi.org/10.1093/mnras/sty1890.
+    """
+    wave_aa = jnp.asarray(wavelength)
+    _total, l_nu_disc, l_nu_hot, corona_fraction = kubota_done_disc_split(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_lum_ratio=1.0,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_ledd=agn_log_ledd,
+        agn_a_spin=agn_a_spin,
+        agn_cos_inc=agn_cos_inc,
+        agn_f_hard=agn_f_hard,
+        agn_gamma_warm=agn_gamma_warm,
+        agn_kt_warm=agn_kt_warm,
+        agn_gamma_hard=agn_gamma_hard,
+        agn_kt_hot=agn_kt_hot,
+        agn_r_warm_ratio=agn_r_warm_ratio,
+        agn_log_lbol_shape=agn_log_lbol_shape,
+        _template=templates,
+    )
+    to_lambda = _C_AA_PER_S / wave_aa**2
+    return l_nu_disc * to_lambda, l_nu_hot * to_lambda, corona_fraction
+
+
+@register_disc_power("kubota_done")
+def kubota_done_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of :func:`kubota_done_disc_block` at ``cos i = 0.5``, in units of ``L_acc``.
+
+    The disc is normalized so that its angle-integrated power is
+    :math:`L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot` (Kubota & Done 2018,
+    Sects. 2.1-2.2), and at
+    :math:`\cos i = 0.5` the line-of-sight spectrum :math:`2\cos i\,D_\nu`
+    (plus the corona) has exactly that power.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
+        fraction does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. A grid integral of
+        the spectrum on a dense grid gives 0.99927 of it at log M_BH = 8 (the cut corona tail).
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
+
+
 @register_agn_block(
     "disc",
     "multicolor",
@@ -613,6 +804,36 @@ def multicolor_disc_block(
         agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_disc_power("multicolor")
+def multicolor_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of :func:`multicolor_disc_block` at ``cos i = 0.5``, in units of ``L_acc``.
+
+    The disc is normalized so that its angle-integrated power is
+    :math:`L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot` (Shakura & Sunyaev 1973), and at
+    :math:`\cos i = 0.5` the line-of-sight spectrum :math:`2\cos i\,D_\nu`
+    has exactly that power.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
+        fraction does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. A grid integral of
+        the spectrum gives 1 - 1.2e-6 of it on a dense grid (3.3e-5 on the 13001-node
+        budget grid, a quadrature artifact).
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
 
 
 @register_agn_block(

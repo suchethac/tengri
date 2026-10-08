@@ -52,6 +52,10 @@ from tengri.components.dust.emission import (
     graybody as _graybody,
     modified_blackbody as _modified_blackbody,
 )
+from tengri.components.dust.emission.analytic._closures import (
+    _CASEY_LAMBDA_MIN_UM,
+)
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -123,16 +127,27 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 _CONTINUUM_LOG10_WAVE_AA_MIN = 2.0
 _CONTINUUM_LOG10_WAVE_AA_MAX = 11.0
 _CONTINUUM_N_WAVE = 2250
+_CASEY_REFINE_AA = (0.95e4, 1.05e4)
+_CASEY_REFINE_N = 500
 
 
 def _continuum_wave_rest() -> np.ndarray:
-    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
-    return np.logspace(
+    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders.
+
+    The log grid carries an extra geometric segment of ``_CASEY_REFINE_N`` points across
+    ``_CASEY_REFINE_AA``: ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the trapezoid cell that straddles the 1 um step has to be narrow (about
+    1 Angstrom here against 92 Angstrom on the log grid) for the band flux to approach the
+    continuum limit.
+    """
+    grid = np.logspace(
         _CONTINUUM_LOG10_WAVE_AA_MIN,
         _CONTINUUM_LOG10_WAVE_AA_MAX,
         _CONTINUUM_N_WAVE,
         dtype=np.float64,
     )
+    refine = np.geomspace(*_CASEY_REFINE_AA, _CASEY_REFINE_N, dtype=np.float64)
+    return np.unique(np.concatenate([grid, refine]))
 
 
 def _build_union_grid_with_fine_filters(
@@ -270,8 +285,12 @@ def _build_grid(
     filter_trans: list,
     redshift: float,
     closure_kwargs: dict[str, float] | None = None,
+    exact_nodes_aa: tuple[float, ...] = (),
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate a continuum closure over the Cartesian product of ``axes``.
+
+    ``exact_nodes_aa`` are rest wavelengths [Angstrom] added as nodes of the rest
+    grid, so that a hard bound of the closure falls on a node.
 
     The closure is evaluated on the union of the base rest grid and a fine grid
     across each filter, in batches, so no template interpolation enters the band
@@ -289,6 +308,9 @@ def _build_grid(
     wave_rest_base = _continuum_wave_rest()
     _validate_filter_coverage(filter_waves, redshift, wave_rest_base)
     wave_rest = _build_union_grid_with_fine_filters(filter_waves, redshift, wave_rest_base)
+    wave_rest = np.unique(
+        np.concatenate([wave_rest, np.asarray(exact_nodes_aa, dtype=np.float64)])
+    )
 
     mesh = np.meshgrid(*axes, indexing="ij")
     node_kwargs = {name: m.ravel() for name, m in zip(param_names, mesh)}
@@ -358,6 +380,7 @@ def _build_grid_casey2012(
         filter_waves,
         filter_trans,
         redshift,
+        exact_nodes_aa=(_CASEY_LAMBDA_MIN_UM * 1e4,),
     )
 
 
@@ -442,12 +465,15 @@ def _build_grid_pah_drude(
     )
 
 
-# Default node counts per axis. Measured over 200 seeded random points inside the declared
-# priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
-# PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
+# Default node counts per axis. Measured over 200 seeded RandomState(7) points inside the declared
+# priors against the exact closure on a rest grid converged at the 1 um step, the log band flux
+# interpolated with PCHIP agrees to <= 5.5e-4 in the 60-90, 250-500 and 750-950 um bands at
+# z = 0 (casey2012 also at z = 3) and, for casey2012, to <= 4.7e-4 in 8-24 and 24-40 um at z = 0
+# and 60-90 and 250-500 um at z = 3. dust_alpha_mir is interpolated in ln(alpha_mir): the band
+# flux is most curved at alpha_mir near 1, where the log spacing is finest.
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
-    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
+    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 28, "dust_lambda_0_um": 26},
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
@@ -455,15 +481,20 @@ _DEFAULT_NODES: dict[str, dict[str, int]] = {
 _FLOAT64_TINY = np.finfo(np.float64).tiny
 
 # Axes whose interpolation coordinate is the natural log of the parameter.
-_LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
+_LOG_AXIS_PARAMS = ("dust_T", "dust_alpha_mir", "dust_lambda_0_um")
 
 
-def _default_axis(param_name: str, n_nodes: int) -> np.ndarray:
-    """Node grid spanning the parameter's declared free prior: geometric for log axes."""
-    lo, hi = _get_param_bounds(param_name)
-    if param_name in _LOG_AXIS_PARAMS:
-        return np.geomspace(lo, hi, n_nodes, dtype=np.float64)
-    return np.linspace(lo, hi, n_nodes, dtype=np.float64)
+def _default_axis(
+    param_name: str, n_nodes: int, support: tuple[float, float] | None = None
+) -> np.ndarray:
+    """Default axis of ``param_name`` over its declared prior (see ``reach_axes``)."""
+    return reach_axes.default_axis(
+        param_name,
+        n_nodes,
+        support,
+        declared=_get_param_bounds(param_name),
+        log_axis=param_name in _LOG_AXIS_PARAMS,
+    )
 
 
 _CONTINUUM_BUILDERS = {
@@ -498,12 +529,16 @@ def precompute(
     ``ValueError`` naming the filter; below 100 A (0.01 um) the template is taken as
     zero: exact to double precision for the thermal models, and for ``pah_drude`` the Drude
     wings there are below 1.7e-14 of the peak (measured). Accuracy of :func:`build_lookup` at
-    the default nodes against the exact closure, maximum over 200 seeded random points inside
-    the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
-    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 5.3e-4. ``casey2012`` at 8-24 um is 2.7e-3 at
-    z = 0, and at z = 3 (observed bands) 3.6e-3 in 60-90 um and 6.8e-3 in 8-24 um, because
-    ln(band flux) bends sharply in ``dust_alpha_mir`` toward 1 (the normalization of the mid-IR
-    power law); its 250-500 um band is 4.1e-4 at z = 3.
+    the default nodes against the exact closure, maximum over 200 seeded ``RandomState(7)`` points
+    inside the declared priors, reference rest grid converged at the 1 um step (0.25 Angstrom
+    spacing there), bands 60-90 / 250-500 / 750-950 um at z = 0: ``modified_blackbody`` 3.3e-4,
+    3.4e-5, 3.3e-5; ``graybody`` 5.5e-4, 1.5e-4, 1.6e-4; ``casey2012`` 3.6e-4, 4.0e-4, 2.9e-4.
+    ``casey2012`` at z = 3 (observed bands) is 3.1e-4, 4.7e-4, 3.7e-4 in the same three bands, and
+    in the mid-IR 3.8e-4 (8-24 um) and 4.0e-4 (24-40 um) at z = 0, 3.1e-4 (60-90 um) and 4.7e-4
+    (250-500 um) at z = 3. ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the rest grid carries 500 points over 0.95-1.05 um (about 1 Angstrom against
+    92 Angstrom on the log grid) and the 1 um bound is a node; ``dust_alpha_mir`` is interpolated
+    in its natural log.
 
     Parameters
     ----------
@@ -519,17 +554,17 @@ def precompute(
         One of "modified_blackbody", "casey2012", "graybody", "pah_drude".
         Default: "modified_blackbody".
     T_grid : ndarray, optional
-        Temperature nodes [K]. If None, ``_DEFAULT_NODES`` geometric nodes spanning the
-        declared free prior (dust_T: 20-80 K).
+        Temperature nodes [K]. If None, geometric nodes over the declared free prior
+        (dust_T: 20-80 K) extended to the model's reach (see Notes).
     beta_grid : ndarray, optional
-        Emissivity-index nodes [dimensionless]. If None, linear nodes spanning the declared
-        free prior (dust_beta_ir: 1.0-2.5).
+        Emissivity-index nodes [dimensionless]. If None, linear nodes over the declared free
+        prior (dust_beta_ir: 1.0-2.5), extended likewise.
     alpha_mir_grid : ndarray, optional
-        Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, linear nodes
-        spanning the declared free prior (dust_alpha_mir: 1.0-3.0).
+        Mid-IR power-law slope nodes for casey2012 [dimensionless]. If None, linear nodes over
+        the declared free prior (dust_alpha_mir: 1.0-3.0), extended likewise.
     lambda_0_um_grid : ndarray, optional
-        Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None,
-        geometric nodes spanning the declared free prior (dust_lambda_0_um: 50-500 um).
+        Opacity pivot wavelength nodes for graybody and casey2012 [micron]. If None, geometric
+        nodes over the declared free prior (dust_lambda_0_um: 50-500 um), extended likewise.
 
     Returns
     -------
@@ -544,9 +579,34 @@ def precompute(
     .. [2] Smith, J. D., et al., "The mid-infrared emission of ultraluminous
            infrared galaxies," ApJ, 656, 770 (2007).
 
+    Raises
+    ------
+    ValueError
+        If a supplied node axis does not span what ``parameters`` lets the axis parameter reach
+        (``Fixed(v)``: ``v``; a free prior: its finite bounds), or a default axis would need a
+        non-positive node on a logarithmic axis.
+
+    Warns
+    -----
+    GridSupportWarning
+        Once per axis whose prior has an infinite bound: the nodes then span the declared range
+        and the lookup holds the edge value, with zero gradient, beyond it.
+    UserWarning
+        If a supplied node axis has fewer than 4 nodes (the PCHIP lookup degrades to a parabola
+        or a chord).
+
     Notes
     -----
     **JIT-compatible**: no, this is a build-time function using NumPy.
+
+    **Node axes.** The lookup holds the edge value beyond its nodes, so a default axis spans the
+    declared free prior extended to the range ``parameters`` can reach: ``Fixed(v)`` extends it
+    to include ``v``, a free prior with finite bounds to include them. The node count keeps the
+    declared density in the interpolation coordinate (``ln`` for dust_T and dust_lambda_0_um),
+    ``ceil(n_default * span_axis / span_declared)``, so the #2676 accuracy figures above carry
+    over. With ``parameters=None``, or priors inside the declared ranges, the axes are the
+    declared ones exactly. A supplied axis is used as given and is checked against the same
+    reach. Nothing here changes the exact closures.
     """
     if model == "pah_drude":
         preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift)
@@ -561,12 +621,16 @@ def precompute(
             "dust_alpha_mir": alpha_mir_grid,
             "dust_lambda_0_um": lambda_0_um_grid,
         }
-        axes = tuple(
-            _default_axis(name, _DEFAULT_NODES[model][name])
-            if supplied[name] is None
-            else supplied[name]
-            for name in axis_params
-        )
+        axes = []
+        for name in axis_params:
+            support = reach_axes.active_support(name, parameters, _get_param_bounds(name))
+            if supplied[name] is None:
+                axes.append(_default_axis(name, _DEFAULT_NODES[model][name], support))
+            else:
+                axis = np.asarray(supplied[name], dtype=np.float64)
+                reach_axes.check_user_axis(name, axis, support)
+                axes.append(axis)
+        axes = tuple(axes)
         preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
         result = {
             "grid_phot": preint.phot,
@@ -639,9 +703,9 @@ def build_lookup(
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
     below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 3e-4 to 5.3e-4; ``casey2012`` mid-IR 8-24 um 2.7e-3 at z = 0). A query outside
-    the node span is clamped to the edge node: the value is constant and the gradient zero
-    beyond it.
+    (``casey2012`` mid-IR at most 4.7e-4 in 8-24, 24-40 um at z = 0 and 60-90, 250-500 um at
+    z = 3). The coordinates are ln T, beta, ln alpha_mir and ln lambda_0. A query outside the node
+    span is clamped to the edge node: the value is constant and the gradient zero beyond it.
 
     Parameters
     ----------
@@ -676,6 +740,10 @@ def build_lookup(
     interpolation.
 
     **Gradient-safe**: yes, PCHIP kernel is fully differentiable.
+
+    A query outside the node span returns the edge value with exactly zero gradient (the
+    interpolation coordinate is clamped). :func:`precompute` spans the nodes over everything the
+    model can reach, so that happens only under an unbounded prior, which warns at build.
     """
     axis_params_names = tuple(
         name

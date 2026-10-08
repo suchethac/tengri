@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Fritz et al. (2006) smooth-dust AGN torus model.
+r"""Fritz et al. (2006) smooth-dust AGN torus model.
 
 Loads the full Fritz SED library (``create_fritz_from_grid``) and performs
 6D triweight kernel interpolation in JAX. Provides C²-continuous gradients for
@@ -12,8 +12,16 @@ dust torus SEDs parameterized by six dimensions:
 - tau: optical depth at 9.7 µm
 - beta: radial dust density power-law index
 - gamma: polar dust density gradient
-- opening_angle: dust torus half-opening angle [degrees]
-- psy: viewing angle from torus axis [degrees]; 0° = type-2, 90° = type-1 AGN
+- opening_angle: half-angle :math:`\theta_c` of the dust-free polar cone
+  [degrees], 20, 40 or 60; the torus's full opening angle is
+  :math:`\Theta = 180^\circ - 2\theta_c` (140, 100, 60 degrees)
+- psy: viewing elevation :math:`\psi` above the equatorial plane [degrees],
+  0.001 ... 89.99; the sightline reaches the nucleus directly (type 1) when
+  :math:`\psi > 90^\circ - \theta_c`
+
+In the composable AGN the library's ``psy`` is not a free parameter: the model
+has one inclination, ``agn_cos_inc`` (:math:`\cos i`, :math:`i` from the polar
+axis), and :func:`fritz_psy_from_cos_inc` derives :math:`\psi = 90^\circ - i`.
 
 All functions are pure JAX and JIT-compilable.
 
@@ -34,14 +42,18 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import L_SUN as _L_SUN
 from tengri.components.agn._template_grid import native_bolometric_nu
-from tengri.utils.grid_interp import interp_nd_triweight, resample_template
+from tengri.components.agn.skirtor import SkirtorDiscTie
+from tengri.config.exceptions import TengriIOError
+from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+from tengri.utils.scale import representable_denominator
 
 
 class FritzComponents(NamedTuple):
@@ -96,6 +108,12 @@ def _load_grid_arrays(grid_path: str):
         result["wave"] = np.array(f["fritz2006/wavelength_aa"][:])
         result["dust"] = np.array(f["fritz2006/dust"][:])
         result["disk"] = np.array(f["fritz2006/disk"][:])
+        # Per-record scale (pcigale ``model.norm``, 1e42-1e46: past float32), kept relative to
+        # its largest value, which is all the face-on/viewing-angle ratio needs. Absent from
+        # grids downloaded before it was added.
+        if "norm" in f["fritz2006"]:
+            norm = np.array(f["fritz2006/norm"][()], dtype=np.float64)
+            result["norm"] = norm / norm.max()
         result["axes"] = (
             np.array(f["fritz2006/r_ratio_axis"][:]),
             np.array(f["fritz2006/tau_axis"][:]),
@@ -106,6 +124,75 @@ def _load_grid_arrays(grid_path: str):
         )
 
     return result
+
+
+#: The library's ``psy`` axis extent [deg]: the grid stops at these values, and
+#: the exact endpoints 0 and 90 extrapolate.
+FRITZ_PSY_MIN = 0.001
+FRITZ_PSY_MAX = 89.99
+
+#: Largest :math:`\cos i` handed to ``arccos``: :math:`1 - 10^{-6}`, 0.08 degrees
+#: from the pole. At :math:`\cos i = 1` the slope of ``arccos`` is infinite and
+#: the clip's zero turns it into NaN in the backward pass; this cap is well
+#: inside the type-1 plateau of every library node.
+_COS_INC_FACE_ON_CAP = 1.0 - 1.0e-6
+
+
+def fritz_psy_from_cos_inc(cos_inc: float) -> jnp.ndarray:
+    r"""The Fritz library's viewing elevation for the model's one inclination.
+
+    Parameters
+    ----------
+    cos_inc : float
+        :math:`\cos i`, with :math:`i` the inclination from the polar axis
+        (1 = face-on). [dimensionless]
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`\psi = 90^\circ - i`, the elevation above the equatorial plane
+        that keys the library, held to the grid's extent
+        [:data:`FRITZ_PSY_MIN`, :data:`FRITZ_PSY_MAX`]. [deg]
+
+    Notes
+    -----
+    :math:`\cos i = \sin\psi`. The library is type 1 at
+    :math:`\psi > 90^\circ - \theta_c` (:math:`i < \theta_c`), where
+    :math:`\theta_c` is ``agn_fritz_oa`` [1]_.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes; the gradient is zero
+    beyond the grid extent, where the library is constant.
+
+    References
+    ----------
+    .. [1] J. Fritz, A. Franceschini and E. Hatziminaoglou, MNRAS, 366, 767
+       (2006). arXiv:astro-ph/0511428.
+    """
+    c = jnp.minimum(jnp.asarray(cos_inc), _COS_INC_FACE_ON_CAP)
+    psy = 90.0 - jnp.degrees(jnp.arccos(c))
+    return jnp.clip(psy, FRITZ_PSY_MIN, FRITZ_PSY_MAX)
+
+
+def _refuse_off_grid(name: str, value, axis) -> None:
+    """Raise if a concrete ``value`` lies outside the grid ``axis``.
+
+    Traced values, and a grid threaded through ``jit`` as an argument, cannot be
+    checked here (the builder's declared bounds refuse them at build time);
+    concrete ones would otherwise be clamped to the edge template without a word.
+    """
+    if isinstance(value, jax.core.Tracer):
+        return
+    try:
+        axis_np = np.asarray(axis)
+    except jax.errors.TracerArrayConversionError:
+        return
+    lo, hi = float(axis_np[0]), float(axis_np[-1])
+    v = float(value)
+    if not lo <= v <= hi:
+        raise ValueError(
+            f"{name}={v:g} is outside the Fritz2006 grid [{lo:g}, {hi:g}]; the "
+            f"interpolator would return the edge template unchanged."
+        )
 
 
 def _interpolate_and_normalize(
@@ -184,6 +271,8 @@ def _interpolate_and_normalize(
     """
     # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
     # Use index-space interpolation for correct gradients throughout the range.
+    _refuse_off_grid("agn_fritz_oa", point[4], axes[4])
+    _refuse_off_grid("agn_fritz_psy", point[5], axes[5])
     template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
     # Normalize on the template's native grid, before resampling, so the
     # result does not depend on the caller's wavelength sampling or range.
@@ -210,12 +299,21 @@ class FritzGrid(NamedTuple):
         The six parameter axes, in interpolation order.
     edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
+    disk : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave), optional
+        Tabulated accretion-disc SEDs on the same axes, in the library's own units relative
+        to the unit-integral ``dust``. Read by :func:`fritz_disc_dust_ratio` for the
+        disc/dust tie; ``None`` for a grid built without it.
+    norm : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy), optional
+        Each record's own scale (pcigale ``model.norm``) relative to the largest, with no
+        wavelength axis; ``None`` for a grid without it.
     """
 
     dust: jnp.ndarray
     wave_grid: jnp.ndarray
     axes: tuple[jnp.ndarray, ...]
     edges: tuple[jnp.ndarray, ...]
+    disk: jnp.ndarray | None = None
+    norm: jnp.ndarray | None = None
 
 
 @functools.cache
@@ -248,6 +346,8 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
             wave_grid=jnp.array(raw["wave"]),
             axes=axes,
             edges=tuple(edges_for_grid(ax) for ax in axes),
+            disk=jnp.array(raw["disk"]),
+            norm=jnp.array(raw["norm"]) if "norm" in raw else None,
         )
 
 
@@ -285,10 +385,12 @@ def fritz_sed_from_grid(
     agn_fritz_gamma : float
         Polar dust density gradient. Allowed: 0, 2, 4, 6.
     agn_fritz_oa : float
-        Dust torus half-opening angle [degrees]. Allowed: 60, 100, 140.
+        Half-angle of the dust-free polar cone [degrees]. Allowed: 20, 40, 60
+        (full torus opening angle 180 - 2 x half = 140, 100, 60).
     agn_fritz_psy : float
-        Viewing angle from torus axis [degrees]; 0 = type-2 (edge-on),
-        90 = type-1 (face-on).
+        Library viewing elevation above the equatorial plane [degrees], 0.001
+        to 89.99; type 1 when it exceeds 90 - ``agn_fritz_oa``. The composable
+        torus block derives it from ``agn_cos_inc`` (:func:`fritz_psy_from_cos_inc`).
 
     Returns
     -------
@@ -401,12 +503,13 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
             Polar dust density gradient. [dimensionless]
             Allowed values: 0, 2, 4, 6.
         agn_fritz_oa : float
-            Dust torus half-opening angle. [degrees]
-            Allowed values: 60, 100, 140.
+            Half-angle of the dust-free polar cone. [degrees]
+            Allowed values: 20, 40, 60 (full opening angle 180 - 2 x half).
+            Outside [20, 60] raises ``ValueError``.
         agn_fritz_psy : float
-            Viewing angle from torus axis. [degrees]
-            0° = type-2 AGN (edge-on), 90° = type-1 AGN (face-on).
-            Allowed values: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
+            Library viewing elevation above the equatorial plane. [degrees]
+            Grid nodes: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1,
+            89.99; type 1 when it exceeds 90 - ``agn_fritz_oa``.
 
         Returns
         -------
@@ -591,6 +694,162 @@ def load_fritz_default_grid() -> FritzGrid:
     return load_fritz_grid(_find_fritz_grid())
 
 
+def fritz_disc_dust_wave(template: FritzGrid | None = None):
+    """Wavelength axis of the Fritz library [Å], the axis the disc/dust tie integrates on.
+
+    Parameters
+    ----------
+    template : FritzGrid, optional
+        Library to read the axis from. Defaults to the packaged grid.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        The library's native wavelength axis [Å].
+    """
+    grid = load_fritz_default_grid() if template is None else template
+    return jnp.asarray(grid.wave_grid)
+
+
+def fritz_disc_dust_ratio(
+    wave: jnp.ndarray,
+    disc_lambda_unreddened: jnp.ndarray,
+    disc_ext_fac: jnp.ndarray,
+    *,
+    agn_fritz_r_ratio: float = 60.0,
+    agn_fritz_tau: float = 1.0,
+    agn_fritz_beta: float = -0.5,
+    agn_fritz_gamma: float = 4.0,
+    agn_fritz_oa: float = 60.0,
+    agn_fritz_psy: float = 0.001,
+    incl_wave: jnp.ndarray | None = None,
+    _template: FritzGrid | None = None,
+) -> SkirtorDiscTie:
+    r"""Disc-to-dust bolometric ratio of the Fritz library, the tie of CIGALE ``fritz2006``.
+
+    CIGALE's ``fritz2006`` module ties the accretion disc to the dust power ``agn_power`` the
+    way ``skirtor2016`` does: the analytic disc shape :math:`\hat s` (unit area on the library
+    axis) is scaled to the face-on library disc integral :math:`I_0 = \int D_0\,d\lambda`
+    (:math:`D_0` the :math:`\psi = 89.99^\circ` record), reweighted by the library ratio
+    :math:`D_\psi/D_0`, reddened, and divided by the dust integral of the viewing-angle record
+    :math:`U_\psi`:
+
+    .. math::
+
+        R = \frac{\int \hat s\, I_0\, (D_\psi/D_0)\, e\, d\lambda}{\int U_\psi\, d\lambda},
+        \qquad R_{\rm face\text{-}on} = \frac{I_0\, n_0/n_\psi}{\int U_\psi\, d\lambda},
+
+    so that the disc carries ``agn_power x R`` and the dust ``agn_power`` [1]_ [2]_. Here
+    :math:`e` is the line-of-sight reddening (1 without it) and :math:`n_0/n_\psi` the ratio of the
+    library records' own scales (``norm``; ``AGN1.disk *= AGN1.norm / fritz2006.norm`` in
+    CIGALE), which reaches the face-on reference only (it cancels in :math:`R`). A grid file
+    without ``norm`` raises.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid of ``disc_lambda_unreddened`` [Å].
+    disc_lambda_unreddened : ndarray, shape (n_wave,)
+        Analytic disc spectrum before reddening; only its shape is used. [erg/s/Å]
+    disc_ext_fac : ndarray, shape (n_wave,)
+        Reddening factor :math:`10^{-0.4 k E(B-V)}` (1 = none). [dimensionless]
+    agn_fritz_r_ratio, agn_fritz_tau, agn_fritz_beta, agn_fritz_gamma, agn_fritz_oa, agn_fritz_psy
+        Library coordinates, as the torus block reads them.
+    incl_wave : ndarray, shape (n_out,), optional
+        Grid ``incl_ratio`` is returned on [Å]. Defaults to ``wave``.
+
+    Returns
+    -------
+    tie : SkirtorDiscTie
+        The same record as for SKIRTOR: ``R``, ``incl_ratio`` (:math:`D_\psi/D_0` on
+        ``incl_wave``), ``R_faceon``, ``faceon_shape_native``, ``wave_native`` and
+        ``incl_native``.
+
+    Raises
+    ------
+    TengriIOError
+        If the grid carries no ``norm`` dataset (an older ``fritz2006_torus_grid.h5``).
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the records are interpolated node-exactly (PCHIP), as the
+    SKIRTOR tie does.
+
+    References
+    ----------
+    .. [1] Fritz, J., Franceschini, A. & Hatziminaoglou, E. 2006, MNRAS, 366, 767,
+       https://doi.org/10.1111/j.1365-2966.2006.09866.x
+    .. [2] Boquien, M. et al. 2019, A&A, 622, A103 (CIGALE ``fritz2006``),
+       https://doi.org/10.1051/0004-6361/201834156
+    """
+    grid = _template if _template is not None and _template.disk is not None else None
+    if grid is None:
+        grid = load_fritz_default_grid()
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    wave_grid = jnp.asarray(grid.wave_grid)
+
+    def _interp(table, psy):
+        point = (
+            agn_fritz_r_ratio,
+            agn_fritz_tau,
+            agn_fritz_beta,
+            agn_fritz_gamma,
+            agn_fritz_oa,
+            psy,
+        )
+        # Node-exact PCHIP, not the triweight smoother the torus block uses: the smoother
+        # does not pass through the grid nodes and moves the disk/dust integral ratio, which
+        # is what this tie reads, by several per cent even at a node.
+        return interp_nd_pchip(jnp.asarray(table), axes, tuple(jnp.asarray(c) for c in point))
+
+    disk_i_n = _interp(grid.disk, agn_fritz_psy)
+    dust_i_n = _interp(grid.dust, agn_fritz_psy)
+    disk_0_n = _interp(grid.disk, axes[5][-1])  # the face-on record, psi = 89.99 deg
+
+    disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
+    ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
+    int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
+    shape_n = disc_n / jnp.maximum(
+        jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
+    )
+    finite_mask = disk_0_n > 0
+    last_finite_idx = jnp.max(jnp.where(finite_mask, jnp.arange(disk_0_n.shape[0]), -1))
+    last_finite_ratio = jnp.where(
+        disk_0_n[last_finite_idx] > 0, disk_i_n[last_finite_idx] / disk_0_n[last_finite_idx], 1.0
+    )
+    incl_n = jnp.where(
+        finite_mask, disk_i_n / jnp.where(finite_mask, disk_0_n, 1.0), last_finite_ratio
+    )
+    int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), representable_denominator(1e-30))
+    # ``norm(face-on)/norm(psi)``: CIGALE's ``AGN1.disk *= AGN1.norm / fritz2006.norm``. It
+    # reaches the face-on reference only; ``R`` divides it back out.
+    if grid.norm is None:
+        raise TengriIOError(
+            "The Fritz (2006) grid file has no 'fritz2006/norm' dataset, which the tied disc "
+            "needs for the face-on reference norm(0)/norm(psi). Add it to the existing file with "
+            "`python scripts/build_fritz2006_grid.py --add-norm --dest <data directory>`."
+        )
+    norm_i = _interp(grid.norm, agn_fritz_psy)
+    norm_0 = _interp(grid.norm, axes[5][-1])
+    incl_norm_ratio = jnp.where(norm_i > 0.0, norm_0 / jnp.where(norm_i > 0.0, norm_i, 1.0), 1.0)
+    R = jnp.trapezoid(shape_n * int_disk0 * incl_n * ext_n, wave_grid) / int_dust
+    incl_ratio = resample_template(
+        wave if incl_wave is None else jnp.asarray(incl_wave),
+        wave_grid,
+        incl_n,
+        left=0.0,
+        right=last_finite_ratio,
+    )
+    return SkirtorDiscTie(
+        R=R,
+        incl_ratio=incl_ratio,
+        R_faceon=int_disk0 * incl_norm_ratio / int_dust,
+        faceon_shape_native=shape_n,
+        wave_native=wave_grid,
+        incl_native=incl_n,
+    )
+
+
 @functools.cache
 def _load_fritz_default():
     """Load Fritz2006 template grid from file (dust-only, the torus component)."""
@@ -632,11 +891,14 @@ def fritz_sed(*args, **kwargs):
         Polar dust density gradient [dimensionless]. Default: 4.0.
         Allowed: 0, 2, 4, 6.
     agn_fritz_oa : float, optional
-        Dust torus half-opening angle [degrees]. Default: 60.0.
-        Allowed: 60, 100, 140.
+        Half-angle of the dust-free polar cone [degrees]. Default: 60.0.
+        Allowed: 20, 40, 60 (full opening angle 180 - 2 x half = 140, 100,
+        60); outside [20, 60] raises ``ValueError``.
     agn_fritz_psy : float, optional
-        Viewing angle from torus axis [degrees]. Default: 0.001 (type-2).
-        Allowed: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
+        Library viewing elevation above the equatorial plane [degrees].
+        Default: 0.001 (type-2). Grid nodes: 0.001, 10.1, 20.1, 30.1, 40.1,
+        50.1, 60.1, 70.1, 80.1, 89.99; type 1 when it exceeds
+        90 - ``agn_fritz_oa``.
     _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.

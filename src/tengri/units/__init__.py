@@ -26,6 +26,7 @@ DeviceArray(3.6307805e-30, dtype=float64)
 
 from __future__ import annotations
 
+from tengri.utils.air_vacuum import air_to_vac, vac_to_air
 from tengri.utils.conversions import (
     air_to_vacuum,
     attenuation_to_tau,
@@ -76,6 +77,7 @@ __all__ = [
     "ab_to_vega",
     "absolute_ab_mag_to_lnu",
     "absolute_to_apparent",
+    "air_to_vac",
     "air_to_vacuum",
     "apparent_to_absolute",
     "attenuation_to_tau",
@@ -103,6 +105,7 @@ __all__ = [
     "surface_brightness_to_mag",
     "tau_to_attenuation",
     "ujy_to_fnu",
+    "vac_to_air",
     "vacuum_to_air",
     "vega_to_ab",
 ]

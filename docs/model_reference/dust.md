@@ -218,6 +218,18 @@ The Jones et al. (2017) THEMIS framework models amorphous hydrogenated carbon a-
 
 The Boquien and Salim (2021) templates add sSFR as a second axis alongside $L_{\rm TIR}$, capturing the observation that galaxies at fixed IR luminosity but higher sSFR have warmer dust and stronger MIR features. Templates are interpolated from a grid of 2584 star-forming galaxies; $L_{\rm TIR}$ is set by the energy balance and sSFR is computed from the SFH.
 
+(app-schreiber2016)=
+
+### Schreiber et al. (2018) Dust Library
+
+`dust_emission={'type': 'schreiber2016'}` evaluates the tabulated dust-continuum and PAH template library of Schreiber et al. (2018), as packaged by CIGALE under its `schreiber2016` module name. The library holds, for each dust temperature from 15 to 99 K in 1 K steps, the spectrum of one kilogram of dust as a dust continuum plus a PAH component. The two free parameters are $T_{\rm dust}$ and the PAH **mass** fraction $f_{\rm PAH}$ (Schreiber et al. 2018, Sect. 3.2). The two per-kilogram templates are mixed as $(1 - f_{\rm PAH})\,S^{\rm cont}_\nu + f_{\rm PAH}\,S^{\rm PAH}_\nu$ and the mixture is renormalized to $L_{\rm IR}$. Over the full tabulated range (1 to 3000 $\mu$m) the PAH template carries $R = 3.063$ to $3.065$ times the power of the continuum template per kilogram at every temperature, so a mass fraction $f_{\rm PAH}$ carries a power share $f R/(1 - f + f R)$; for $f_{\rm PAH} \gtrsim 0.2$ the $\nu L_\nu$ peak sits on the 7.7 $\mu$m PAH complex. Over 8 to 1000 $\mu$m alone the ratio is smaller (1.59 at 15 K, falling to 1.33 at 99 K) because part of the PAH power lies below 8 $\mu$m. At the three nodes (20 K, 0.05), (35 K, 0.2) and (50 K, 0.5) the six band powers between 3 and 1000 $\mu$m agree with CIGALE 2025.1 to better than $10^{-4}$.
+
+The template file `data/schreiber2016_templates.h5` is required: the model raises if it is missing and has no analytic substitute. The defaults are $T_{\rm dust} = 35$ K and $f_{\rm PAH} = 0.05$, the declared `dust_T` and `dust_f_pah` defaults this type resolves to (other types resolve their own: 30 K for `modified_blackbody`, 25 K for `schreiber2018`; CIGALE's own default is 20 K).
+
+**Temperature interpolation.** The templates are interpolated linearly between the 1 K nodes: the model is exact at a node, and its derivative with respect to `dust_T` is discontinuous at every node. For the 8 to 24 $\mu$m band power the slope jumps by a median of 42% across the 83 interior nodes, so a gradient-based sampler sees a kink at each integer temperature.
+
+**No CMB term.** This model has no CMB heating or contrast correction: the redshift is not used. The rest-frame contrast against the CMB (`cmb_contrast_factor`) is $0.94$, $0.83$ and $0.73$ at rest-frame 250, 500 and 1000 $\mu$m for $T_{\rm dust} = 35$ K at $z = 4$, and $0.79$, $0.64$ and $0.55$ at $z = 6$ (0.87, 0.71 and 0.59 at 25 K, $z = 4$). The sub-millimeter flux of a $z \gtrsim 4$ galaxy is therefore overestimated by these factors. The dust-emission types that apply the CMB heating and contrast corrections are `modified_blackbody` (alias `mbb`), `graybody` and `casey2012`; choose one of them for $z \gtrsim 4$ sub-millimeter fits.
+
 ## References
 
 Boquien, Médéric, and Samir Salim. 2021. "New dust emission templates for star-forming galaxies." 653: A149. <https://doi.org/10.1051/0004-6361/202140734>.
@@ -265,6 +277,8 @@ Narayanan, Desika, Romeel Davé, Benjamin D. Johnson, Robert Thompson, Charlie C
 Pei, Yichuan C. 1992. "Interstellar Dust from the Milky Way to the Magellanic Clouds." 395 (August): 130. <https://doi.org/10.1086/171637>.
 
 Salim, Samir, Médéric Boquien, and Janice C. Lee. 2018. "Dust Attenuation Curves in the Local Universe: Demographics and New Laws for Star-forming Galaxies and High-redshift Analogs." 859 (1): 11. <https://doi.org/10.3847/1538-4357/aabf3c>.
+
+Schreiber, Corentin, David Elbaz, Maurilio Pannella, Laure Ciesla, Tao Wang, and Maximilien Franco. 2018. "Dust temperature and mid-to-total infrared color distributions for star-forming galaxies at 0<z<4." 609: A30. <https://doi.org/10.1051/0004-6361/201731506>.
 
 Smith, J. D. T., B. T. Draine, D. A. Dale, et al. 2007. "The Mid-Infrared Spectrum of Star-forming Galaxies: Global Properties of Polycyclic Aromatic Hydrocarbon Emission." 656: 770--91. <https://doi.org/10.1086/510549>.
 

@@ -440,14 +440,13 @@ def test_untied_disc_is_screened(i_deg):
 @pytest.mark.parametrize("i_deg", _INCLINATIONS)
 @pytest.mark.parametrize("ebv", [0.0, 0.03, 0.3])
 def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
-    """The polar switch does not move the tie (tengri's own bookkeeping, not CIGALE parity).
+    """The polar switch keeps the AGN budget and divides disc and torus by one factor.
 
     ``torus + polar`` carries exactly the polar-off ``agn_power`` (the ``R_faceon``
     bookkeeping closes), E(B-V) = 0 leaves the disc untouched at every inclination, and for
-    i > 90 - oa (no line-of-sight reddening) the disc equals its polar-off value to 1e-3 at
-    any E(B-V). CIGALE instead divides the disc by (1 + polar share) through its joint
-    normalization 1/int(dust + polar), so with polar dust on its disc is lower than tengri's
-    by that factor; the difference is tracked in #2602 and is not pinned here.
+    i > 90 - oa (no line-of-sight reddening) the disc is the polar-off disc divided by
+    ``1 + polar share``, the factor the torus carries: CIGALE's joint normalization
+    ``1/int(dust + polar)`` scales the disc and the dust together (#2602).
     """
     # The budget closes exactly on the runner's fixed grids and is independent of the
     # caller's; it is summed here on a dense covering grid, since the quadrature error
@@ -459,8 +458,15 @@ def test_polar_dust_leaves_the_tie_unchanged(i_deg, ebv):
     )
     assert budget == pytest.approx(1.0, abs=1e-6)
     ratio = _power(on["disc"], _DENSE_WAVE) / _power(off["disc"], _DENSE_WAVE)
-    if ebv == 0.0 or i_deg in _TYPE2:
+    if ebv == 0.0:
         assert ratio == pytest.approx(1.0, abs=1e-3)
+    elif i_deg in _TYPE2:
+        # CIGALE's ``norm = 1/int(dust + polar)`` divides the disc by 1 + l_ext, with
+        # l_ext = polar/torus read off this run's own components.
+        expected = 1.0 / (
+            1.0 + _power(on["polar"], _DENSE_WAVE) / _power(on["torus"], _DENSE_WAVE)
+        )
+        assert ratio == pytest.approx(expected, rel=1e-6)
     else:
         assert 0.0 < ratio < 1.0 - 1e-3  # Type-1 sightline is reddened by the cone dust
 
@@ -606,13 +612,34 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: float64 rest-frame SED of that model (``fracAGN = 0.1``, i = 30 deg, SKIRTOR torus,
 #: ``agn_log_mbh`` 6 / 8 / 10) with the disc multiplied by eta(30 deg) T(lambda):
 #: ``(sum, first bin, middle bin, last bin)``, on the model's master grid (the disc's
-#: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, where the disc has no flux).
+#: native 0.01 A - 1e8 A axis; the first bin is the 0.01 A node, which now carries the corona).
+#: The tie normalizes the disc and warm zone ``2 cos i D_nu`` (both faces, ``c = cos 30``) to
+#: ``agn_power x R`` on the SKIRTOR native grid (10 A - 1e8 A); the corona ``H_nu`` rides on top
+#: with the angle-integrated share ``P_H = f/(1 - f) P_D,tied`` and the torus screen ``T``
+#: (``P_D,tied = (7/18) agn_power R_faceon``, ``f`` the closed-form corona share). Derivation,
+#: computed forward from measured inputs and not from these literals: with ``x = I_H/I_D`` the
+#: corona-to-disc power ratio in the library range along the line of sight (measured
+#: 0.00083 / 0.40815 / 0.50865), ``R_old``, ``R_new`` the tie ratios of the
+#: ``D + H`` and ``D`` shapes (measured 3.59271 / 3.60042 / 3.60015 and 3.59274 /
+#: 3.60933 / 3.60873), the disc part of the tied disc is multiplied by
+#: ``(R_new/R_old)(1 + x)`` = 1.00084 / 1.41163 / 1.51225, and the corona (not in the old disc
+#: at this level) is added as ``s_H H_nu T`` with
+#: ``s_H = (7/18) agn_power R_faceon / ((1 - f) L_acc)`` =
+#: 0.00606 / 0.01845 / 0.01988 (``f`` = 0.00629 / 0.67368 / 0.69723, ``agn_power`` the
+#: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
+#: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
+#: (sum, middle and last bin).
 #: Re-captured for the young-sliver integral (#2635): the stellar continuum moves by
-#: at most 2e-7 relative here.
+#: at most 2e-6 relative here.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.558675373659007e32, 0.0, 2.8901323885080472e28, 8.775294918338553e21),
-    8.0: (1.594577243391515e32, 0.0, 2.9710182189637216e28, 8.793842905198896e21),
-    10.0: (1.6071815469235262e32, 0.0, 2.9914482125157547e28, 9.028630048903484e21),
+    6.0: (1.558683789689726e32, 81149791730438.9, 2.8901476832907644e28, 8.77529657993752e21),
+    8.0: (1.650407636024945e32, 2.226182664115696e16, 3.096866084375964e28, 8.825196813793963e21),
+    10.0: (
+        1.6769966709957496e32,
+        2.3324382343678204e16,
+        3.1396728044848097e28,
+        9.54871503038833e21,
+    ),
 }
 
 

@@ -27,6 +27,12 @@ The script reads:
 
 And writes everything to a single flat-dict npz file.
 
+Wavelength convention: the npz stores Cloudy's AIR line wavelengths exactly as
+upstream ships them (``lineList_wav``, ``nn_line_wavelength``,
+``sorted_line_wavelength``; e.g. 6562.80, 5006.84). This script is the raw-data
+writer and does not convert. The conversion to vacuum happens once, at load, in
+``tengri.components.nebular.cue._load_cue_weights_eager``.
+
 References
 ----------
 - Li et al. 2025, Cue: https://github.com/yi-jia-li/cue
@@ -332,17 +338,19 @@ def convert(cue_dir: str, output_path: str) -> None:
     # The Li+2024 paper (arXiv:2405.04598 §2) describes the *intent* of vacuum,
     # but the .npy that the network actually consumes was never regenerated.
     # We read the .npy because indices must align with the network outputs.
-    # tengri's vacuum-only contract (CLAUDE.md) is enforced at the publication
-    # boundary in ``components/nebular/component.py`` instead — labels become
-    # vacuum where they exit the library, but the network-internal indexing
-    # against the .npy stays untouched.
+    # This script is the raw-data writer: the .npz STORES AIR wavelengths
+    # (lineList_wav, nn_line_wavelength, sorted_line_wavelength), unchanged
+    # from upstream. tengri's vacuum-only contract is enforced at LOAD:
+    # ``tengri.components.nebular.cue._load_cue_weights_eager`` converts them
+    # once with ``tengri.utils.air_vacuum.air_to_vac``. Do not convert here, or
+    # the loader would convert a second time.
     line_wav_path = cue_dir / "lineList_wav.npy"
     line_name_path = cue_dir / "lineList_replaceblnd_name.npy"
 
     if line_wav_path.exists():
         line_wav = np.load(str(line_wav_path))
         npz["lineList_wav"] = np.asarray(line_wav, dtype=np.float64)
-        print(f"  lineList_wav: {line_wav.shape} (air for optical; vacuumized at boundary)")
+        print(f"  lineList_wav: {line_wav.shape} (air for optical; converted to vacuum at load)")
     else:
         print(f"  WARNING: {line_wav_path} not found")
 
