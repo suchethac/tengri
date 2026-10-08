@@ -4138,7 +4138,7 @@ plt.show()
 # | 5 | attenuation applied | 0.1–1 µm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
 # | 6 | dust IR | 10–100 µm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 µm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
 # | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 µm), 1.0075× (3–8 µm), 1.0102× (10–1000 µm) |
-# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.34×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 0.99× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids; open differences) |
+# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids; open differences) |
 # | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
 # | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
