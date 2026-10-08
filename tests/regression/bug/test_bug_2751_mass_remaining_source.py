@@ -184,8 +184,8 @@ def test_age_beyond_one_node_raises(tmp_path):
 # ---------------------------------------------------------------------------
 def test_pending_grid_without_opt_in_raises_naming_table_and_opt_in(tmp_path):
     age = np.linspace(5.0, 10.0, 20) - 9.0
-    path = _write_grid(tmp_path / "fsps_pdva_miles_chabrier.h5", age, [-4.0, -2.0])
-    with pytest.raises(ValueError, match=r"mass_remaining_pdva_chabrier\.h5.*dsps_fit"):
+    path = _write_grid(tmp_path / "fsps_prsc_miles_kroupa.h5", age, [-4.0, -2.0])
+    with pytest.raises(ValueError, match=r"mass_remaining_prsc_kroupa\.h5.*dsps_fit"):
         _load_ssp_data(str(path))
 
 
@@ -367,7 +367,7 @@ def test_registry_pending_set_is_exactly_the_declared_one():
     pending_isoc = {
         e.isoc for e in mrt.MASS_REMAINING_REGISTRY.values() if e.source == mrt.PENDING
     }
-    assert pending_isoc == {"prsc", "pdva", "bsti", "bpss", "pgny_mist"}
+    assert pending_isoc == {"prsc", "bpss", "pgny_mist"}
     pending_prsc = {
         e.imf
         for e in mrt.MASS_REMAINING_REGISTRY.values()

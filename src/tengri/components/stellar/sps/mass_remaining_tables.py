@@ -90,8 +90,8 @@ def _p(isoc: str, imf: str) -> MassRemainingEntry:
 #: user-supplied grid. The canonical name is the file stem without the
 #: ``_wNE...`` suffix and with a leading ``ssp_`` read as ``fsps_``
 #: (:func:`canonical_grid_name`). PENDING rows name a table that has not been
-#: built (Padova, BaSTI and Geneva need an FSPS compiled with that isochrone set;
-#: ProGeny and BPASS need their own tables).
+#: built (PARSEC Kroupa and Salpeter await the PARSEC Chabrier decision; Geneva,
+#: ProGeny and BPASS need an FSPS build with that isochrone set or their own tables).
 MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     # MIST isochrones: companion tables built with python-fsps.
     "fsps_mist_miles_chabrier": _m("mist", "chabrier"),
@@ -114,25 +114,25 @@ MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     "fsps_prsc_miles_salpeter": _p("prsc", "salpeter"),
     "fsps_prsc_c3k_a_salpeter": _p("prsc", "salpeter"),
     "fsps_prsc_basel_salpeter": _p("prsc", "salpeter"),
-    # Padova: pending.
-    "fsps_pdva_miles_chabrier": _p("pdva", "chabrier"),
-    "fsps_pdva_c3k_a_chabrier": _p("pdva", "chabrier"),
-    "fsps_pdva_basel_chabrier": _p("pdva", "chabrier"),
-    "fsps_pdva_miles_kroupa": _p("pdva", "kroupa"),
-    "fsps_pdva_c3k_a_kroupa": _p("pdva", "kroupa"),
-    "fsps_pdva_basel_kroupa": _p("pdva", "kroupa"),
-    "fsps_pdva_miles_salpeter": _p("pdva", "salpeter"),
-    "fsps_pdva_basel_salpeter": _p("pdva", "salpeter"),
-    # BaSTI: pending.
-    "fsps_bsti_miles_chabrier": _p("bsti", "chabrier"),
-    "fsps_bsti_c3k_a_chabrier": _p("bsti", "chabrier"),
-    "fsps_bsti_basel_chabrier": _p("bsti", "chabrier"),
-    "fsps_bsti_miles_kroupa": _p("bsti", "kroupa"),
-    "fsps_bsti_c3k_a_kroupa": _p("bsti", "kroupa"),
-    "fsps_bsti_basel_kroupa": _p("bsti", "kroupa"),
-    "fsps_bsti_miles_salpeter": _p("bsti", "salpeter"),
-    "fsps_bsti_c3k_a_salpeter": _p("bsti", "salpeter"),
-    "fsps_bsti_basel_salpeter": _p("bsti", "salpeter"),
+    # Padova (Padova 2007 set, FSPS-built): companion tables from python-fsps.
+    "fsps_pdva_miles_chabrier": _m("pdva", "chabrier"),
+    "fsps_pdva_c3k_a_chabrier": _m("pdva", "chabrier"),
+    "fsps_pdva_basel_chabrier": _m("pdva", "chabrier"),
+    "fsps_pdva_miles_kroupa": _m("pdva", "kroupa"),
+    "fsps_pdva_c3k_a_kroupa": _m("pdva", "kroupa"),
+    "fsps_pdva_basel_kroupa": _m("pdva", "kroupa"),
+    "fsps_pdva_miles_salpeter": _m("pdva", "salpeter"),
+    "fsps_pdva_basel_salpeter": _m("pdva", "salpeter"),
+    # BaSTI (FSPS-built): companion tables from python-fsps.
+    "fsps_bsti_miles_chabrier": _m("bsti", "chabrier"),
+    "fsps_bsti_c3k_a_chabrier": _m("bsti", "chabrier"),
+    "fsps_bsti_basel_chabrier": _m("bsti", "chabrier"),
+    "fsps_bsti_miles_kroupa": _m("bsti", "kroupa"),
+    "fsps_bsti_c3k_a_kroupa": _m("bsti", "kroupa"),
+    "fsps_bsti_basel_kroupa": _m("bsti", "kroupa"),
+    "fsps_bsti_miles_salpeter": _m("bsti", "salpeter"),
+    "fsps_bsti_c3k_a_salpeter": _m("bsti", "salpeter"),
+    "fsps_bsti_basel_salpeter": _m("bsti", "salpeter"),
     # BC03 (Padova 1994, STELIB): companion read from the BC03 *.4color files.
     "bc03_pdva_stelib_chabrier": _m("bc03pdva94", "chabrier"),
     # Other codes: pending.

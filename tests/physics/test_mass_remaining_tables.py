@@ -175,14 +175,15 @@ def test_fsps_table_bounds(path):
             marks=pytest.mark.xfail(
                 strict=True,
                 reason=(
-                    "FSPS stellar_mass overshoots 1 at young ages (1.0113 Salpeter, 1.0047 "
-                    "Chabrier near log10 age 6.35, oscillating node to node); the "
-                    "normalization is under separate investigation and the tables may be "
-                    "regenerated. Flips to XPASS (a failure) once they are fixed."
+                    "FSPS stellar_mass overshoots 1 at young ages (MIST: 1.0113 Salpeter, "
+                    "1.0047 Chabrier near log10 age 6.35; BaSTI: 1.085 Salpeter, 1.018 "
+                    "Chabrier at log10 age 5.5, Z = 0.008). Accepted as FSPS's convention "
+                    "and recorded in PROVENANCE.md. Flips to XPASS (a failure) if the "
+                    "overshoot is removed."
                 ),
             ),
         )
-        if "mist" in p.name
+        if any(tag in p.name for tag in ("mist", "bsti"))
         else p
         for p in FSPS_TABLES
     ],

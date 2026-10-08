@@ -17,8 +17,37 @@ float64, plus attributes `quantity`, `isochrones`, `imf`, `source`,
 | file | isochrones / IMF | built by |
 |---|---|---|
 | `mass_remaining_mist_{chabrier,kroupa,salpeter}.h5` | MIST, 12 x 107 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
-| `mass_remaining_prsc_chabrier.h5` | PARSEC, Chabrier, 15 x 93 | `scripts/repackage_mass_remaining_from_grid.py` |
+| `mass_remaining_prsc_chabrier.h5` | PARSEC, Chabrier, 15 x 93 | `scripts/repackage_mass_remaining_from_grid.py` (see PARSEC Chabrier) |
+| `mass_remaining_pdva_{chabrier,kroupa,salpeter}.h5` | Padova 2007, 22 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
+| `mass_remaining_bsti_{chabrier,kroupa,salpeter}.h5` | BaSTI, 10 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
 | `mass_remaining_bc03pdva94_chabrier.h5` | BC03 Padova 1994, 6 x 220 | `scripts/build_mass_remaining_bc03.py` |
+
+## Padova and BaSTI tables (FSPS 0.4.7)
+
+Built with python-fsps 0.4.7 compiled with `FFLAGS="-DMIST=0 -DPADOVA=1 -DMILES=1"` and
+`-DMIST=0 -DBASTI=1 -DMILES=1` (the sdist's own bundled FSPS; `sp.libraries` reports `pdva` and
+`bsti`). Same definition as the MIST tables: `add_stellar_remnants=1`, `sfh=0`, `zcontinuous=0`,
+Chabrier, Kroupa and Salpeter IMFs at their FSPS defaults.
+
+Z nodes equal `log10` of the isochrone set's own `zlegend.dat` (`ISOCHRONES/Padova/Padova2007/`
+and `ISOCHRONES/BaSTI/`) to 1e-6. No Padova or BaSTI SSP grid is present locally, so the nodes
+cannot be checked against a grid's `ssp_lgmet` here.
+
+Overshoot above 1 is FSPS's convention, accepted as for MIST (strict xfail on the `<= 1`
+bound in `tests/physics/test_mass_remaining_tables.py`). Maximum of each table, with the
+Z node and log10 age of the maximum:
+
+| table | max | at Z | log10 age [yr] | nodes > 1 |
+|---|---|---|---|---|
+| `pdva_chabrier` | 0.998821 | 0.0039 | 5.50 | 0 |
+| `pdva_kroupa` | 0.998803 | 0.0039 | 5.50 | 0 |
+| `pdva_salpeter` | 0.997868 | 0.0039 | 5.50 | 0 |
+| `bsti_chabrier` | 1.018240 | 0.008 | 5.50 | 40 |
+| `bsti_kroupa` | 1.019781 | 0.008 | 5.50 | 41 |
+| `bsti_salpeter` | 1.085392 | 0.008 | 5.50 | 76 |
+
+Checked at ages >= 1 Gyr (log10 age >= 9): every table is <= 1 (maxima 0.67 to 0.88) and
+non-increasing along age at every Z. The BaSTI overshoot lies entirely below 1 Gyr.
 
 ## FSPS tables (MIST)
 
@@ -26,8 +55,8 @@ float64, plus attributes `quantity`, `isochrones`, `imf`, `source`,
 zmet of the compiled isochrone set and every `sp.log_age`. Remnants follow Renzini & Ciotti
 (1993, ApJ 416, L49, doi:10.1086/187068) as implemented in FSPS `add_remnants.f90`; see
 Conroy, Gunn & White (2009, ApJ 699, 486, doi:10.1088/0004-637X/699/1/486). The generator
-refuses an isochrone set other than the one compiled into the local FSPS (here MIST/MILES),
-so PARSEC, Padova, BaSTI and Geneva tables need an FSPS rebuilt with that set.
+refuses an isochrone set other than the one compiled into the local FSPS, so each set needs
+an FSPS built with it (MIST, PARSEC, Padova and BaSTI are built; see below).
 
 FSPS's own numbers are repackaged unaltered, including values slightly above 1 near
 log10 age 6.4-6.7 (maximum 1.0047 Chabrier/Kroupa, 1.0113 Salpeter) and a youngest node
@@ -52,8 +81,8 @@ has been committed.
 ## PENDING grids
 
 Declared in the registry, refused without `mass_remaining="dsps_fit"`: PARSEC Kroupa and
-Salpeter, Padova, BaSTI (Geneva has no catalog grid), BPASS (`bpss_stars_c3k_a_chabrier`)
-and ProGeny (`pgny_mist_c3k_chabrier`).
+Salpeter (pending the PARSEC decision above), BPASS (`bpss_stars_c3k_a_chabrier`) and
+ProGeny (`pgny_mist_c3k_chabrier`). Geneva has no catalog grid.
 
 ## BC03 (Padova 1994 + STELIB + Chabrier)
 

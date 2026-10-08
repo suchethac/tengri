@@ -92,8 +92,8 @@
   metallicity-independent sigmoid fit whatever its isochrones (a MIST grid lost the 0.03
   spread over Z at 10 Gyr; Kroupa and Salpeter grids read the fit's single column). Companion
   tables shipped as package data (MIST Chabrier/Kroupa/Salpeter from python-fsps, PARSEC
-  Chabrier, BC03 Padova 1994) are resolved through an explicit registry; a registered grid
-  with no table (PARSEC Kroupa/Salpeter, Padova, BaSTI, BPASS, ProGeny) raises a
+  Chabrier, Padova 2007 and BaSTI, all three IMFs for the last two; BC03 Padova 1994) are resolved through an explicit registry; a registered grid
+  with no table (PARSEC Kroupa/Salpeter, BPASS, ProGeny) raises a
   `ValueError` naming the missing table, and `load_ssp(..., mass_remaining="dsps_fit")` /
   `load_ssp_data(..., mass_remaining="dsps_fit")` is the explicit opt-in to the fit (an
   unregistered grid warns instead). `SSPData.mass_remaining_source` and `tengri.doctor()`
