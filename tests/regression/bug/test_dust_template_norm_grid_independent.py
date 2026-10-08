@@ -24,6 +24,7 @@ import pytest
 
 from tengri._data_setup import find_data_str
 from tengri.components.dust import emission_templates as et
+from tengri.components.dust.emission.analytic import _closures as _analytic
 
 pytestmark = pytest.mark.regression_bug
 
@@ -66,6 +67,23 @@ def _factories():
     """Model name -> (factory, kwargs for the closure at a fixed parameter point)."""
     return {
         "draine2021_pah_ir": (_draine2021_pah_ir_closure, {"dust_lgU": 1.0}),
+        "mbb_analytic": (
+            lambda: _analytic.modified_blackbody,
+            {"dust_T": 25.0, "dust_beta_ir": 1.8},
+        ),
+        "graybody_analytic": (
+            lambda: _analytic.graybody,
+            {"dust_T": 40.0, "dust_beta_ir": 1.5, "dust_lambda_0_um": 200.0},
+        ),
+        "casey2012_alpha1": (
+            lambda: _analytic.casey2012,
+            {
+                "dust_T": 40.0,
+                "dust_beta_ir": 1.5,
+                "dust_alpha_mir": 1.0,
+                "dust_lambda_0_um": 200.0,
+            },
+        ),
         "dale2014": (
             lambda: et.create_dale2014_from_grid(find_data_str("dale2014_templates.h5")),
             {"dust_alpha_dale": 2.0, "dust_frac_agn": 0.0},
