@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- **Flury+2024 infrared line wavelengths were stored 100 times too long, and the Synthesizer NLR line names did not match their wavelengths.** `scripts/build_flury2024_grids.py` read the digits of an infrared label as microns, but Flury's labels give hundredths of a micron (`O3_8836um` is 88.36 um = 8.836e5 A, `C2_15774um` is 157.74 um); the 23 `um` labels per grid sat at 8.836e7 A and so on, outside every filter. The parser now multiplies by 100 A per label unit, and the builder writes `schema_version = 2`; the Flury loaders (`_load_stellar_grid`, `_load_agn_grid`) refuse a file without it and name the rebuild command (`python scripts/build_flury2024_grids.py`). The rebuilt file differs from the old one only in the IR wavelengths (exactly 1/100). In the Synthesizer AGN-NLR/BLR grid `lines/id` is alphabetical while `lines/wavelength` is sorted and `lines/luminosity` follows the wavelengths, so `SynthesizerGridData.line_ids[i]` named a different line from `line_wavelengths_aa[i]` and `log_line_per_lbol[..., i]` (H-alpha/H-beta read 0.22 by id, 2.98 by wavelength). The ids are now reordered by the wavelength each id carries (`H 1 6562.80A`, `Fe 2 1.25668m`) and the pairing against `lines/wavelength` is checked; luminosities and wavelengths are untouched.
+
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows
