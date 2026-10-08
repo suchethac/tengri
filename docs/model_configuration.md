@@ -465,7 +465,7 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 **Structural keys:**
 - `'type'`: Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize.
+- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize. For `bell2003`, `'nu_ref'` sets where the q calibration anchors the synchrotron: `'1.4GHz'` (default, Bell 2003), `'21cm'` (1.42758 GHz, CIGALE's convention) or a frequency in Hz; `'freefree'` (`True`/`False`) overrides whether the radio block carries the Murphy et al. (2011) free-free term.
 - `'agn'`: AGN radio sub-block: `{'type': ...}` to customize.
 
 **Minimal example:**

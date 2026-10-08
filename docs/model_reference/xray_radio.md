@@ -75,7 +75,7 @@ $$ (eq-fir-radio)
 
 - `bell2003` (Bell 2003): constant $q_{\rm IR} = 2.64$, the calibration of the total 1.4 GHz luminosity (see the free-free section below).
 
-- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above.
+- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above. Because the nebular free-free is modelled rather than fixed at Bell's empirical 10 %, that total differs from the calibration by a few per cent (0.96 for a delayed-tau galaxy of 1 Gyr at 5 Gyr, 1.02 for constant star formation).
 
 - `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
 

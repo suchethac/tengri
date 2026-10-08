@@ -117,5 +117,7 @@ def test_one_thermal_term_in_the_built_model(ssp_data_bc03, backend):
         neb_ff = float(np.asarray(state.derived["sed_nebular"])[ref])
         assert neb_ff > 0.0
         # One thermal term: Bell's total with the nebular free-free in place of the
-        # split's 10 % share. The doubled model sat at (1.0 + neb/cal) = 1.06 and above.
-        assert 0.85 < (radio[ref] + neb_ff) / cal < 1.05
+        # split's 10 % share. The doubled model sat at (1.0 + neb/cal) = 1.06 and above;
+        # one thermal term gives 0.9 + neb/cal, 0.981 for this case (the modelled nebular
+        # free-free share is not Bell's empirical 10 %).
+        assert 0.95 < (radio[ref] + neb_ff) / cal < 1.00
