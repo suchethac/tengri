@@ -262,6 +262,11 @@ SIGNATURE_POLICY: KeyPolicy = {
         "the verdict that accompanies _dust_shape_table_cache; derived from the same keyed "
         "structure and read by no numerical path"
     ),
+    "_agn_band_table_cache": exclude("memo cache computed from keyed structure"),
+    "_agn_band_table_decline": exclude(
+        "the verdict that accompanies _agn_band_table_cache; derived from the same keyed "
+        "structure and read by no numerical path"
+    ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "

@@ -3151,6 +3151,7 @@ class SEDModel:
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
                 self._dust_shape_table_cache = None
+                self._agn_band_table_cache = None
                 self._xray_term_response_cache = None
                 self._radio_term_response_cache = None
 
@@ -3192,6 +3193,19 @@ class SEDModel:
                         stacklevel=2,
                     )
                     self._dust_shape_table_cache = None
+
+                try:
+                    self._agn_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp AGN band-table precompute failed ({e!r}); falling back "
+                        "to the exact per-call filter integral (correct, but without the "
+                        "precomputed-table speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._agn_band_table_cache = None
+                    self._agn_band_table_decline = f"the build raised {e!r}"
 
                 # Derive which emitters in the chain implement the emission_terms
                 # contract rather than hardcoding ("xray", "radio"). Any additive
@@ -10392,6 +10406,10 @@ class SEDModel:
             if blocks:
                 agn_templates["blocks"] = blocks
 
+            band_table = self._agn_band_table(cached)
+            if band_table is not None:
+                agn_templates["band_table"] = band_table
+
             if agn_templates:
                 result["agn"] = agn_templates
             break
@@ -11239,6 +11257,138 @@ class SEDModel:
         self._dust_shape_table_decline = reason
         self._dust_shape_table_cache = table
         return table
+
+    #: Per-axis node count of the composable AGN band table, by the number of free axes. The
+    #: build evaluates the recipe at every node of the cartesian product, so the count falls
+    #: with the dimension and more than four free axes is refused.
+    _AGN_TABLE_NODES: ClassVar[dict[int, int]] = {1: 33, 2: 17, 3: 11, 4: 7}
+
+    def _agn_band_table(self, chain):
+        """Registry-adapter band fluxes of the composable AGN over its free parameters.
+
+        The AGN component builds its whole SED through the block runner on every call and then
+        integrates it through each filter. The registry adapter ``composable_agn`` tabulates the
+        band fluxes (at the model redshift and at ``z = 0`` for the rest band) over the free
+        ``agn_*`` parameters at build, with every other parameter at its spec value, and the
+        component reads the table at the current parameters (``AGNSEDComponent._band_table_phot``)
+        scaled by ``agn_lum_ratio``, the one amplitude the runner applies linearly.
+
+        The SED the component still builds feeds ``sed_agn``, ``log_L_12um`` and the other
+        outputs, so a graph that does not consume them drops the SED build as dead code.
+
+        The axes are the prior bounds of each free parameter, or the grids given as
+        ``agn_axis_grids``. The adapter is built at one redshift, so the table is built only for
+        a single ``Fixed`` redshift. Returns ``{"ln_phot", "axes"}`` (arrays only, so it threads
+        through ``jit``), or ``None`` with the reason in ``_agn_band_table_decline``.
+        """
+        cached = getattr(self, "_agn_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        reason = self._agn_band_table_gate(chain)
+        if reason is None:
+            table, reason = self._build_agn_band_table(chain)
+
+        self._agn_band_table_decline = reason
+        self._agn_band_table_cache = table
+        return table
+
+    def _agn_band_table_gate(self, chain):
+        """Reason the composable AGN band table cannot represent this model, or ``None``."""
+        from tengri.components.agn.component import AGNSEDComponent
+
+        agn = next((c for c in chain if isinstance(c, AGNSEDComponent)), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fixed = self.spec.get_fixed_values()
+        ir_frac = fixed.get("agn_ir_frac")
+        free = sorted(p for p in self.spec.free_params if p.startswith("agn_"))
+        axes = [p for p in free if p != "agn_lum_ratio"]
+
+        if agn is None or getattr(agn.config, "model", None) != "composable":
+            return "the AGN is not a composable recipe"
+        if not self._approx.get("wave_precomp"):
+            return "WavePrecomp is off"
+        if getattr(st, "phot_fw_padded", None) is None:
+            return "no padded filter curves"
+        if self._response_z_nodes() is not None:
+            return "the registry adapter is built at one redshift and the redshift is not Fixed"
+        if self._agn_norm != "cigale_joint" or self._agn_polar_law != "smc":
+            return "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc'"
+        if ir_frac is None or float(ir_frac) != 0.0:
+            return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
+        if not axes:
+            return "no free AGN parameter besides agn_lum_ratio; there is nothing to tabulate"
+        if len(axes) > max(self._AGN_TABLE_NODES):
+            return (
+                f"{len(axes)} free AGN parameters exceed the {max(self._AGN_TABLE_NODES)}-axis cap"
+            )
+        from tengri.components.agn.blocks.composable_precompute import UNWIRED_AXES
+
+        unwired = [p for p in axes if p in UNWIRED_AXES]
+        if unwired:
+            return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
+        unbounded = [
+            p
+            for p in axes
+            if not all(np.isfinite(b) for b in self.spec.get_distribution(p).bounds)
+        ]
+        if unbounded:
+            return f"the priors of {unbounded} have no finite bounds to span with nodes"
+        return None
+
+    def _build_agn_band_table(self, chain):
+        """Run the ``composable_agn`` adapter over the free axes; ``(table, reason)``."""
+        from tengri.components.agn.blocks.recipe import Recipe
+        from tengri.components.agn.component import numeric_agn_kwargs
+        from tengri.forward.precompute import reach_axes, registry
+
+        module = registry.resolve("composable_agn")
+        fixed = self.spec.get_fixed_values()
+        axes_names = sorted(
+            p for p in self.spec.free_params if p.startswith("agn_") and p != "agn_lum_ratio"
+        )
+        user_grids = dict(getattr(self.spec, "agn_axis_grids", None) or {})
+        not_free = sorted(set(user_grids) - set(axes_names))
+        if not_free:
+            return None, (
+                f"agn_axis_grids names {not_free}, which are not free AGN parameters of this model"
+            )
+        n_nodes = self._AGN_TABLE_NODES[len(axes_names)]
+        axis_grids = {}
+        for name in axes_names:
+            bounds = tuple(float(b) for b in self.spec.get_distribution(name).bounds)
+            support = reach_axes.active_support(name, self.spec, bounds)
+            if name in user_grids:
+                axis = np.asarray(user_grids[name], dtype=np.float64)
+                reach_axes.check_user_axis(name, axis, support)
+            else:
+                axis = reach_axes.default_axis(name, n_nodes, support, declared=bounds)
+            axis_grids[name] = axis
+
+        agn_fixed = {k: v for k, v in fixed.items() if k.startswith("agn_") and np.ndim(v) == 0}
+        call_fixed = numeric_agn_kwargs(agn_fixed, agn_fixed.get("agn_torus_frac", 0.5))
+        fixed_values = {
+            k: float(v)
+            for k, v in call_fixed.items()
+            if k not in axis_grids and k != "agn_lum_ratio"
+        }
+        if "agn_log_lbol" in fixed:
+            fixed_values["agn_log_lbol"] = float(fixed["agn_log_lbol"])
+        redshift = float(fixed["redshift"])
+        preint = module.precompute(
+            [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
+            [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
+            redshift,
+            None,
+            recipe=Recipe.from_parameters(self.spec, axis_params=tuple(axes_names)),
+            axis_grids=axis_grids,
+            fixed_values=fixed_values,
+            wave_rest=np.asarray(self._rest_wavelength, dtype=np.float64),
+            extra_redshifts=(0.0,),
+        )
+        return module.table_arrays(preint, "composable_agn"), None
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.

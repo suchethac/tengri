@@ -514,11 +514,13 @@ class AGNSEDComponent(TemplateThreading):
         # Thread the SKIRTOR template as a JIT runtime input
         skirtor_template = None
         block_templates = None
+        band_table = None
         if template_data is not None and isinstance(template_data, dict):
             agn_data = template_data.get("agn")
             if agn_data is not None and isinstance(agn_data, dict):
                 skirtor_template = agn_data.get("skirtor")
                 block_templates = agn_data.get("blocks")
+                band_table = agn_data.get("band_table")
         # Build kwargs, adding _template for SKIRTOR threading if available.
         # The agn_kwargs dict is built in two passes:
         #   1. Explicit defaults for the AGN params the registered models
@@ -527,33 +529,7 @@ class AGNSEDComponent(TemplateThreading):
         #   2. Forward every additional ``agn_*`` key from ``params`` so
         #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
         #      reach the registered function via its ``**kwargs`` tail.
-        agn_kwargs = {
-            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
-            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
-            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
-            # CIGALE-coupled override: see ``agn_torus_frac_effective``
-            # block above. When ``agn_ir_frac > 0`` this carries the
-            # stellar-derived agn_power; otherwise it's the user value.
-            "agn_torus_frac": agn_torus_frac_effective,
-            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
-            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
-            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
-            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-        }
-        # Sweep every remaining ``agn_*`` key in params (skirtor / grahsp /
-        # kubota_done full-disc / cat3d_wind / radiation-physics extras)
-        # through to the model function. ``agn_log_lbol`` is passed
-        # explicitly below and so excluded here.
-        for key, val in params.items():
-            if key.startswith("agn_") and key != "agn_log_lbol" and key not in agn_kwargs:
-                agn_kwargs[key] = jnp.asarray(val)
+        agn_kwargs = numeric_agn_kwargs(params, agn_torus_frac_effective)
         # Composable-AGN block selectors are static Python strings (not
         # traced JAX values). They live on the config so the runner can
         # close over them at trace-build time and pick the right per-stage
@@ -700,32 +676,42 @@ class AGNSEDComponent(TemplateThreading):
             # dimming. The new helper returns the bare filter-integrated
             # rest-frame L_ν: matching the publish convention of
             # ``stellar_phot_lnu_precomp``.
-            agn_phot_lnu_precomp = jnp.asarray(
-                [
-                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            if band_table is not None:
+                # The registry table holds this recipe's band fluxes over its free axes at the
+                # model redshift and at z = 0. Reading it replaces the per-filter integrals; the
+                # SED above feeds only the outputs that need it, so a photometry-only graph drops
+                # the SED build as dead code.
+                agn_phot_lnu_precomp, agn_restband_lnu_precomp = self._band_table_phot(
+                    params, band_table
+                )
+            else:
+                agn_phot_lnu_precomp = jnp.asarray(
+                    [
+                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+                # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+                # z=0, so the filter sits in the REST frame and samples the rest SED at
+                # its own pivot, the SAME integral with redshift=0, not the observed-band
+                # value reused. Reusing it is what made the LUT report a different
+                # physical quantity from the exact path (769 % in des_g at z=0.5).
+                agn_restband_lnu_precomp = jnp.asarray(
+                    [
+                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
-            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
-            # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot, the SAME integral with redshift=0, not the observed-band
-            # value reused. Reusing it is what made the LUT report a different
-            # physical quantity from the exact path (769 % in des_g at z=0.5).
-            derived_overrides["agn_restband_lnu_precomp"] = jnp.asarray(
-                [
-                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            derived_overrides["agn_restband_lnu_precomp"] = agn_restband_lnu_precomp
 
         # Spectrum LUT family (SpectrumPrecomp): a spectrum pixel is a single
         # wavelength, so point-sampling the rest-frame AGN SED at the pixel
@@ -742,6 +728,80 @@ class AGNSEDComponent(TemplateThreading):
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
         )
+
+    @staticmethod
+    def _band_table_phot(
+        params: Mapping[str, Any], table: Mapping[str, Any]
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Band fluxes from the composable registry table at the current parameters.
+
+        Parameters
+        ----------
+        params : mapping
+            Parameters of the model; the table's axes and ``agn_lum_ratio`` are read from it.
+        table : mapping
+            The adapter's table arrays (``template_data["agn"]["band_table"]``).
+
+        Returns
+        -------
+        tuple of ndarray
+            ``(observed-band, rest-band)`` L_nu [erg/s/Hz], each of shape ``(n_filters,)``.
+        """
+        from tengri.forward.precompute import registry
+
+        module = registry.resolve("composable_agn")
+        values = [jnp.asarray(params[name]) for name in sorted(table["axes"])]
+        both = module.lookup_from_table(
+            table, "composable_agn", jnp.asarray(params.get("agn_lum_ratio", 1.0)), *values
+        )
+        n_filters = both.shape[-1] // 2
+        return both[:n_filters], both[n_filters:]
+
+
+def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:
+    """Numeric keyword arguments the registered AGN model is called with.
+
+    Two passes: explicit defaults for the parameters the registered models most commonly read
+    (so a missing key does not break multicolor / skirtor / kubota_done at trace time), then
+    every other ``agn_*`` key in ``params`` forwarded so block-specific parameters (skirtor,
+    grahsp, cat3d_wind, ...) reach the model function through its ``**kwargs`` tail.
+    ``agn_log_lbol`` is passed separately and so excluded.
+
+    Parameters
+    ----------
+    params : mapping
+        Parameters of the model, ``agn_*`` keys among them.
+    agn_torus_frac : float or ndarray
+        The torus fraction the model is called with: the user's value, or the stellar-derived one
+        when ``agn_ir_frac > 0`` [dimensionless].
+
+    Returns
+    -------
+    dict
+        ``{name: ndarray}``, shared by the per-call path and the build-time band table so both
+        call the model with the same defaults.
+    """
+    kwargs = {
+        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
+        "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
+        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+        "agn_torus_frac": jnp.asarray(agn_torus_frac),
+        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
+        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
+        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
+        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
+        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+    }
+    for key, val in params.items():
+        if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:
+            kwargs[key] = jnp.asarray(val)
+    return kwargs
 
 
 # Register in the unified component dispatch table so build_components resolves

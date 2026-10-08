@@ -5823,7 +5823,8 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
-    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "all_params", "norm", "polar_law", "axis_grids"})
+    | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*", "all_params"}),
     "agn.torus": frozenset({"type", "*", "all_params"}),
     "agn.nlr": frozenset({"type", "*", "all_params"}),
@@ -6041,6 +6042,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     "agn": (
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
+        _Structural("axis_grids", "agn_axis_grids", None),
     ),
     "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
     "foreground": (
@@ -7950,6 +7952,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         if _norm not in AGN_NORM_POLICIES:
             raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
+
+    # Node grids of the composable AGN band table (``agn['axis_grids']``): ``{parameter name:
+    # node values}`` for free AGN parameters. Parameters validates the container; the nodes are
+    # checked against the priors when WavePrecomp builds the table.
+    if "axis_grids" in agn_dict:
+        result["agn_axis_grids"] = agn_dict["axis_grids"]
 
 
 def _check_polar_law(law: object, where: str) -> str:

@@ -55,10 +55,36 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     edges_for_grid,
+    interp_nd_pchip,
     interp_nd_triweight,
 )
 
-__all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
+__all__ = [
+    "AXIS_PARAMS",
+    "UNWIRED_AXES",
+    "build_lookup",
+    "lookup_from_table",
+    "precompute",
+    "table_arrays",
+]
+
+#: Free parameters the table is not built over, with the measurement that excludes them. The
+#: table interpolates ``ln`` flux with PCHIP on uniform nodes; a parameter that moves the band
+#: fluxes through a feature narrower than the node spacing is not represented to a usable
+#: accuracy by any node count the build can afford.
+UNWIRED_AXES: dict[str, str] = {
+    "agn_cos_inc": (
+        "the band fluxes are not smooth in the inclination: kubota_done disc with skirtor torus, "
+        "agn_log_lbol and agn_cos_inc free over (44, 46.5) x (0.1, 0.9), max relative error of "
+        "the "
+        "total photometry over 24 draws is 2.6e-1 at 9 nodes, 8.8e-2 at 17 and 2.2e-2 at 33 "
+        "per axis"
+    ),
+}
+
+#: Smallest band flux kept when the table is stored as ``ln`` [erg/s/Hz]. A band the recipe
+#: leaves empty (no emission there at a node) stores ``ln(_PHOT_FLOOR)`` rather than ``-inf``.
+_PHOT_FLOOR = 1e-300
 
 #: Per-axis reparametrization applied ONLY to the coordinate the triweight
 #: kernel interpolates over, not to the physics evaluation (#1206 follow-up,
@@ -237,6 +263,7 @@ def precompute(
     fixed_values: Mapping[str, float] | None = None,
     wave_rest: np.ndarray | None = None,
     agn_log_lbol_default: float = DEFAULT_AGN_LOG_LBOL,
+    extra_redshifts: tuple[float, ...] = (),
 ) -> dict:
     r"""Build a preintegrated photometry grid for a composable AGN recipe.
 
@@ -272,6 +299,10 @@ def precompute(
         Default ``agn_log_lbol`` when not in ``fixed_values`` or
         ``axis_grids``. Defaults to the declared
         ``agn_log_lbol`` default.
+    extra_redshifts : tuple of float, optional
+        Further redshifts to integrate the same spectra at (for example ``0.0`` for the
+        rest-frame band). Their ``ln`` band fluxes are stored under ``_ln_phot_extra``, one array
+        per redshift and in order, without re-evaluating the recipe.
 
     Returns
     -------
@@ -392,12 +423,34 @@ def precompute(
         units="lnu",
     )
 
+    def _ln_band_flux(grid) -> np.ndarray:
+        return np.log(np.maximum(np.asarray(grid.phot), _PHOT_FLOOR))
+
+    extra_ln_phot = tuple(
+        _ln_band_flux(
+            precompute_template_photometry(
+                templates=spectra,
+                wave_rest=wave_rest,
+                filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
+                filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
+                axes=tuple(_interp_axis_values(name) for name in axis_names),
+                redshift=float(z_extra),
+                dl_cm=1.0,
+                energy_normalize=False,
+                units="lnu",
+            )
+        )
+        for z_extra in extra_redshifts
+    )
+
     result: dict[str, Any] = {
         "grid_phot": preint.phot,
         "axes": tuple(jnp.asarray(axis_grids[name]) for name in axis_names),
         "_preint": preint,
         "_axis_names": tuple(axis_names),
         "_interp_axis_transform": _transformed_axes,
+        "_ln_phot": _ln_band_flux(preint),
+        "_ln_phot_extra": extra_ln_phot,
     }
 
     # Auto-collapse Fixed axes (mirror qsogen_precompute).
@@ -521,3 +574,76 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         return scale * normed
 
     return ComposableLookup(_lookup_collapsed, axis_names=surviving_names)
+
+
+def table_arrays(preint: dict, model: str = "composable_agn") -> dict:
+    """The arrays a table lookup reads, as a pytree that can ride through ``jax.jit``.
+
+    Parameters
+    ----------
+    preint : dict
+        Output of :func:`precompute` with no axis collapsed (``parameters=None``).
+    model : str, optional
+        Registry key; the composable table is the same for every recipe.
+
+    Returns
+    -------
+    dict
+        ``{"ln_phot": (*n_axes, n_filters * (1 + n_extra)), "axes": {param_name: (n_nodes,)}}``;
+        the bands at each extra redshift follow the ones at the model redshift. The axes are
+        stored in sorted-name order (a ``jit`` boundary re-sorts dict keys), and ``ln_phot`` is
+        transposed to match, so a lookup takes its axis values in ``sorted(table["axes"])``
+        order.
+
+    Raises
+    ------
+    ValueError
+        If ``precompute`` collapsed an axis, because the collapse is a triweight average of the
+        linear flux and the table interpolates ``ln`` flux.
+    """
+    del model
+    if preint.get("_collapsed_axes"):
+        raise ValueError(
+            "composable_precompute.table_arrays needs the full grid; call precompute with "
+            "parameters=None and only the free parameters as axes."
+        )
+    names = tuple(preint["_axis_names"])
+    order = sorted(range(len(names)), key=names.__getitem__)
+    ln_phot = jnp.concatenate(
+        [jnp.asarray(preint["_ln_phot"]), *map(jnp.asarray, preint.get("_ln_phot_extra", ()))],
+        axis=-1,
+    )
+    return {
+        "ln_phot": jnp.transpose(ln_phot, (*order, ln_phot.ndim - 1)),
+        "axes": {names[i]: jnp.asarray(preint["axes"][i]) for i in order},
+    }
+
+
+def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
+    """Band fluxes [erg/s/Hz] from :func:`table_arrays` data; traceable under ``jax.jit``.
+
+    Interpolates ``ln`` flux with monotone cubic Hermite (PCHIP) on the node axes, so the
+    lookup passes through every node and keeps C1 gradients. A query outside the nodes is
+    clamped to the edge node (value held, gradient zero).
+
+    Parameters
+    ----------
+    table : dict
+        Output of :func:`table_arrays`.
+    model : str
+        Registry key (unused; the table carries its own axes).
+    amplitude : float
+        Factor multiplying the tabulated fluxes (the luminosity ratio the table was built at 1).
+    *axis_values : float
+        One query value per axis, in ``sorted(table["axes"])`` order.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        ``amplitude`` times the exponentiated interpolant.
+    """
+    del model
+    axes = tuple(table["axes"][name] for name in sorted(table["axes"]))
+    ln_phot = table["ln_phot"]
+    normed = jnp.exp(interp_nd_pchip(ln_phot, axes, tuple(axis_values)))
+    return amplitude * normed
