@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- A dust-free model whose nebular photometry is served by the `FeaturePrecomp` grid takes the IGM over each emission line's rendered profile and over the continuum's sub-band chunks, where it took the band-averaged transmission. With Ly-alpha inside a band that read 20-32 % bright against `approx=None` (Cue at its defaults, z = 5.75-9.5, NIRCam F090W/F115W); now 0.08 % worst in F090W over z = 5.5-7.0 and 0.15 % in F115W over z = 7.75-9.25, at fixed and free redshift.
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows
