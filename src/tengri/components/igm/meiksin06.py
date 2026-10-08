@@ -111,7 +111,10 @@ def igm_transmission_meiksin06(
     .igm_transmission`` [2]_). The forest (Eq. 5) and Lyman-limit-system (Eq. 7)
     terms are the same closed forms and agree with it to 1.3e-5 in T. The
     Lyman series differs in two ways, both blueward of Lyβ (redward of it the
-    two agree to 1e-10):
+    two agree to 1e-10). The paper does not say which redshift sets Eqs. 2-3;
+    the absorber-redshift reading here follows Table 1, whose ratios are
+    functions of z_n, and reproduces Table 2 (0.003283 against 0.003277 at
+    1730 A, z = 5, where the source-redshift reading gives 0.000909):
 
     - CIGALE evaluates ``tau_alpha`` for ``n >= 3`` at the source redshift; here
       it is evaluated at ``z_n``, since Table 1 gives ``tau_n / tau_alpha`` as

@@ -157,6 +157,7 @@ def test_difference_is_the_two_line_readings(z):
     paper = _paper_transmission(_WAVE_AA, z)
     source = _paper_transmission(_WAVE_AA, z, amplitude_at="source", branch_at="source")
     assert np.abs((t - p) - (paper - source)).max() < 3e-5
+    # Regression pin: the observed max |T - T_pcigale| on this grid, not a paper value.
     expected_max = {3.0: 0.0445, 5.0: 0.0469, 7.0: 0.0199}[z]
     assert np.abs(t - p).max() == pytest.approx(expected_max, abs=2e-4)
 
@@ -187,5 +188,6 @@ def test_issue_point_1730_angstrom_z5():
     lam = np.array([1730.0])
     t, p = float(_tengri(lam, 5.0)[0]), float(_pcigale(lam, 5.0)[0])
     assert t == pytest.approx(0.003277, rel=3e-3)
+    # Regression pin: pcigale 2025.1's observed output, not a paper value.
     assert p == pytest.approx(0.000909, rel=1e-3)
     assert t / p == pytest.approx(3.61, rel=1e-2)
