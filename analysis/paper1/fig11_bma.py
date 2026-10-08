@@ -56,7 +56,7 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _figure_style import CONFIG_COLORS
+from _figure_style import CONFIG_COLORS, EDGE_MARKERS, edge_side, robust_log_limits
 from _paths import repo_relative
 from paper1 import _bma_keys as bk
 
@@ -98,6 +98,12 @@ AXIS_TITLES: dict[str, str] = {
 #: only; the sidecar always records the unclipped weight and prior.
 LOG2_RATIO_CLIP = 3.0
 
+#: A set with more models than this is drawn in panel (b1) as its ``B1_TOP_MODELS``
+#: heaviest models plus one aggregated "Other" row; at ~6.5 pt a row needs ~0.13 in, which
+#: is what the panel height allows for about this many rows.
+B1_MAX_ROWS = 20
+B1_TOP_MODELS = 12
+
 #: Agreement required between a reported prior and the design prior [dimensionless].
 PRIOR_TOLERANCE = 1e-9
 
@@ -121,6 +127,10 @@ class DrawSummary:
     marginal_row_labels: dict[str, list[str]]  # axis -> row labels as drawn
     factorial_marginals: dict[str, Any]  # axis -> {value: {"prior", "weight", "log2_ratio"}}
     skipped_no_valid: list[int]  # galaxies with n_valid == 0 in the selected set, not drawn
+    b1_aggregated_models: list[str]  # models folded into the "Other" row of panel (b1)
+    b1_n_aggregated: int  # their count (0 when every model has its own row)
+    sfr_limits: list[float]  # panel (c2) y limits [dex]
+    sfr_out_of_range: list[dict[str, Any]]  # (c2) points pinned or with a cut interval
 
 
 # --- model identity and labels --------------------------------------------
@@ -274,7 +284,7 @@ def _draw_flow_panel(ax: plt.Axes) -> None:
         "Model weights",
         "BMA posterior",
     )
-    width, gap = 0.16, 0.05
+    width, gap = 0.165, 0.035
     x0 = (1.0 - (len(labels) * width + (len(labels) - 1) * gap)) / 2
     for i, label in enumerate(labels):
         x = x0 + i * (width + gap)
@@ -377,6 +387,7 @@ def _draw_weights_panel(
     list[tuple[str, str]],
     list[tuple[str, int]],
     list[int],
+    list[str],
 ]:
     """Draw panel (b1): per-galaxy BMA weights heatmap and excluded/invalid cells.
 
@@ -387,29 +398,36 @@ def _draw_weights_panel(
 
     A galaxy with no valid model in the set is left blank and reported, not drawn.
 
+    A set with more than ``B1_MAX_ROWS`` models shows the ``B1_TOP_MODELS`` with the largest
+    weight summed over galaxies and one final row, "Other (N models)", holding each galaxy's
+    remaining weight (see ``_split_rows``).
+
     Returns (galaxies, model_keys, row_labels, close_galaxies, excluded, hatched_cells,
-    skipped_galaxies).
+    skipped_galaxies, aggregated_model_keys). ``row_labels`` has one more entry than
+    ``model_keys`` when an "Other" row is drawn.
     """
     galaxies = sorted(int(gal_id) for gal_id in summary["galaxies"])
     cax.axis("off")
 
     if not any(selected_set in g.get("sets", {}) for g in summary["galaxies"].values()):
         ax.text(0.5, 0.5, f"No data for set: {selected_set}", ha="center", va="center")
-        return galaxies, [], [], [], [], [], []
+        return galaxies, [], [], [], [], [], [], []
 
     models_by_key, weights_by_gal, validity_by_gal, nuts_by_gal, close, excluded, skipped = (
         _collect_weight_set(summary, selected_set, galaxies)
     )
     if not models_by_key:
         ax.text(0.5, 0.5, "No valid model weights found", ha="center", va="center")
-        return galaxies, [], [], close, excluded, [], skipped
+        return galaxies, [], [], close, excluded, [], skipped, []
 
-    order = _row_order()
-    models = sorted(models_by_key.values(), key=lambda m: _model_sort_key(m, order))
-    keys = [m["model_key"] for m in models]
-    labels = [_model_label(m) for m in models]
+    shown, aggregated = _split_rows(models_by_key, weights_by_gal)
+    keys = [m["model_key"] for m in shown]
+    labels = [_model_label(m) for m in shown]
+    other_keys = [m["model_key"] for m in aggregated]
+    if other_keys:
+        labels.append(f"Other ({len(other_keys)} models)")
 
-    n_gal, n_mod = len(galaxies), len(keys)
+    n_gal, n_mod = len(galaxies), len(labels)
     heatmap = np.full((n_mod, n_gal), np.nan)
     hatched: list[tuple[str, int]] = []
     nuts_marks: list[tuple[int, int]] = []
@@ -425,6 +443,10 @@ def _draw_weights_panel(
                 heatmap[mod_idx, gal_idx] = weights_by_gal[gal_id].get(key, 0.0)
                 if nuts_by_gal[gal_id].get(key, False):
                     nuts_marks.append((mod_idx, gal_idx))
+        if other_keys and gal_id in weights_by_gal:
+            heatmap[n_mod - 1, gal_idx] = sum(
+                weights_by_gal[gal_id].get(k, 0.0) for k in other_keys
+            )
 
     cax.axis("on")
     im = ax.imshow(heatmap, cmap="YlOrRd", aspect="auto", vmin=0, vmax=1)
@@ -454,7 +476,28 @@ def _draw_weights_panel(
         fontsize=6,
         style="italic",
     )
-    return galaxies, keys, labels, close, excluded, hatched, skipped
+    return galaxies, keys, labels, close, excluded, hatched, skipped, other_keys
+
+
+def _split_rows(
+    models_by_key: dict[str, dict[str, Any]], weights_by_gal: dict[int, dict[str, float]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split a set's models into panel (b1) rows: (one row each, folded into "Other").
+
+    A set of at most ``B1_MAX_ROWS`` models keeps one row per model in enumeration order. A
+    larger set keeps the ``B1_TOP_MODELS`` with the largest weight summed over galaxies,
+    heaviest first (ties in enumeration order); the rest are returned for aggregation.
+    """
+    order = _row_order()
+    models = sorted(models_by_key.values(), key=lambda m: _model_sort_key(m, order))
+    if len(models) <= B1_MAX_ROWS:
+        return models, []
+    total = {
+        m["model_key"]: sum(w.get(m["model_key"], 0.0) for w in weights_by_gal.values())
+        for m in models
+    }
+    ranked = sorted(models, key=lambda m: -total[m["model_key"]])
+    return ranked[:B1_TOP_MODELS], ranked[B1_TOP_MODELS:]
 
 
 def _hatch_cell(ax: plt.Axes, col: int, row: int, *, linewidth: float) -> None:
@@ -621,18 +664,53 @@ def _draw_factorial_marginal_panel(
     return sidecar, list(dict.fromkeys(warnings)), row_labels
 
 
+def _out_of_range_record(
+    gal_id: int,
+    model_key: str,
+    percentiles: tuple[float, float, float],
+    ylim: list[float] | None,
+) -> dict[str, Any] | None:
+    """Sidecar record of a panel (c) point outside ``ylim``, else ``None``.
+
+    ``side`` is the edge a median outside the limits is pinned to (``None`` when the median is
+    inside); ``clipped_low`` / ``clipped_high`` flag a 16th / 84th percentile cut by the axes.
+    """
+    if ylim is None:
+        return None
+    p16, p50, p84 = percentiles
+    side = edge_side(ylim[0], p50, ylim)
+    clipped_low, clipped_high = bool(p16 < ylim[0]), bool(p84 > ylim[1])
+    if side is None and not (clipped_low or clipped_high):
+        return None
+    return {
+        "galaxy": gal_id,
+        "model": model_key,
+        "p16": float(p16),
+        "median": float(p50),
+        "p84": float(p84),
+        "side": side,
+        "clipped_low": clipped_low,
+        "clipped_high": clipped_high,
+    }
+
+
 def _draw_posterior_panel(
     ax: plt.Axes,
     summary: dict[str, Any],
     selected_set: str,
     quantity: str,  # "log_stellar_mass_survived" or "log_sfr_100myr"
-) -> list[str]:
+    ylim: list[float] | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
     """Draw panel (c): BMA vs single-config posteriors for a quantity.
 
-    Returns the configuration ids that were plotted, in first-drawn order.
+    With ``ylim`` the axis is fixed to it; a point whose median lies outside is drawn pinned
+    at the edge with a marker pointing out of the panel, and its error bar is clipped by the
+    axes. Returns the configuration ids plotted, in first-drawn order, and one record per
+    point that is pinned or has an interval cut by the axes (``_out_of_range_record``).
     """
     galaxies = sorted(int(gal_id) for gal_id in summary["galaxies"])
     drawn: list[str] = []
+    pinned: list[dict[str, Any]] = []
     order = _row_order()
 
     for gal_idx, gal_id in enumerate(galaxies):
@@ -648,34 +726,65 @@ def _draw_posterior_panel(
                 continue
             p16, p50, p84 = percentiles[quantity]
             dodge = -0.36 + 0.6 * m_idx / max(n_models - 1, 1)
+            side = None if ylim is None else edge_side(ylim[0], p50, ylim)
+            record = _out_of_range_record(gal_id, model["model_key"], (p16, p50, p84), ylim)
+            if record is not None:
+                pinned.append(record)
             ax.errorbar(
                 gal_idx + dodge,
                 p50,
                 yerr=[[p50 - p16], [p84 - p50]],
-                fmt=XLIKE_MARKERS.get(named, "o"),
+                fmt=XLIKE_MARKERS.get(named, "o") if side is None else "none",
                 markersize=3.5,
                 color=_get_model_color(named),
                 alpha=0.85,
                 linewidth=0.7,
                 capsize=1.5,
             )
+            if side is not None:
+                ax.plot(
+                    [gal_idx + dodge],
+                    [float(np.clip(p50, *ylim))],
+                    marker=EDGE_MARKERS[side],
+                    markersize=3.5,
+                    color=_get_model_color(named),
+                    alpha=0.85,
+                    linestyle="",
+                    clip_on=False,
+                    zorder=4,
+                )
             if named not in drawn:
                 drawn.append(named)
 
         bma = w_set.get("bma_percentiles", {})
         if quantity in bma:
             p16, p50, p84 = bma[quantity]
+            side = None if ylim is None else edge_side(ylim[0], p50, ylim)
+            record = _out_of_range_record(gal_id, "BMA", (p16, p50, p84), ylim)
+            if record is not None:
+                pinned.append(record)
             ax.errorbar(
                 gal_idx + 0.42,
                 p50,
                 yerr=[[p50 - p16], [p84 - p50]],
-                fmt="D",
+                fmt="D" if side is None else "none",
                 markersize=4,
                 color="black",
                 linewidth=1,
                 capsize=1.5,
                 zorder=10,
             )
+            if side is not None:
+                ax.plot(
+                    [gal_idx + 0.42],
+                    [float(np.clip(p50, *ylim))],
+                    marker=EDGE_MARKERS[side],
+                    markersize=4,
+                    color="black",
+                    linestyle="",
+                    clip_on=False,
+                    zorder=10,
+                )
 
     ax.set_xticks(np.arange(len(galaxies)))
     ax.set_xticklabels([str(g) for g in galaxies], fontsize=6, rotation=90)
@@ -689,7 +798,28 @@ def _draw_posterior_panel(
     else:
         ax.set_ylabel(quantity, fontsize=7)
     ax.tick_params(labelsize=6, length=2, pad=1.5)
-    return drawn
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    return drawn, pinned
+
+
+def _posterior_medians(summary: dict[str, Any], selected_set: str, quantity: str) -> list[float]:
+    """Every median panel (c) plots for ``quantity``: single-config models and the BMA."""
+    values: list[float] = []
+    for gal in summary["galaxies"].values():
+        w_set = gal.get("sets", {}).get(selected_set)
+        if w_set is None:
+            continue
+        for model in w_set.get("models", []):
+            if (
+                model.get("valid", True)
+                and _named_id(model)
+                and quantity in model.get("percentiles", {})
+            ):
+                values.append(model["percentiles"][quantity][1])
+        if quantity in w_set.get("bma_percentiles", {}):
+            values.append(w_set["bma_percentiles"][quantity][1])
+    return values
 
 
 def _config_legend_handles(named_ids: list[str]) -> list[Line2D]:
@@ -783,13 +913,13 @@ def build_figure(
         bottom=0.11,
     )
 
-    ax_flow = fig.add_subplot(gs[0, :])
+    ax_flow = fig.add_subplot(gs[0, 0])
     _draw_flow_panel(ax_flow)
 
     ax_weights = fig.add_subplot(gs[1, 0])
     cax_weights = fig.add_subplot(gs[1, 1])
-    galaxies, models, model_labels, close_gal, excluded, hatched, skipped = _draw_weights_panel(
-        ax_weights, cax_weights, summary, selected_set
+    galaxies, models, model_labels, close_gal, excluded, hatched, skipped, aggregated = (
+        _draw_weights_panel(ax_weights, cax_weights, summary, selected_set)
     )
 
     cax_marginal = fig.add_subplot(gs[2, 1])
@@ -801,8 +931,9 @@ def build_figure(
     ax_mass = fig.add_subplot(gs_c[0])
     ax_sfr = fig.add_subplot(gs_c[1])
     fig.add_subplot(gs[3, 1]).axis("off")
-    drawn = _draw_posterior_panel(ax_mass, summary, selected_set, "log_stellar_mass_survived")
-    _draw_posterior_panel(ax_sfr, summary, selected_set, "log_sfr_100myr")
+    drawn, _ = _draw_posterior_panel(ax_mass, summary, selected_set, "log_stellar_mass_survived")
+    sfr_limits = robust_log_limits(_posterior_medians(summary, selected_set, "log_sfr_100myr"))
+    _, sfr_out = _draw_posterior_panel(ax_sfr, summary, selected_set, "log_sfr_100myr", sfr_limits)
     fig.legend(
         handles=_config_legend_handles(drawn),
         loc="lower center",
@@ -846,6 +977,10 @@ def build_figure(
         marginal_row_labels=row_labels,
         factorial_marginals=factorial_marginals,
         skipped_no_valid=skipped,
+        b1_aggregated_models=aggregated,
+        b1_n_aggregated=len(aggregated),
+        sfr_limits=sfr_limits,
+        sfr_out_of_range=sfr_out,
     )
     return fig, draw_summary
 

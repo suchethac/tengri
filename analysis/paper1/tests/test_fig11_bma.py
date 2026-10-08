@@ -14,6 +14,7 @@ These tests pin the contract between the combiner and the figure.
 
 from __future__ import annotations
 
+import itertools
 import json
 import subprocess
 import sys
@@ -613,3 +614,180 @@ def test_every_axis_value_and_named_id_has_a_display_label():
         bk.display_label("ssp", "mist_c3k")
     with pytest.raises(ValueError, match="No display labels for axis"):
         bk.display_label("nonsense", "x")
+
+
+# --- panel (a) fit, panel (b1) aggregation, panel (c2) limits ---------------
+
+
+def _synthetic_set(set_name: str, n_gal: int = 3, sfr_by_model: dict | None = None) -> dict:
+    """A summary whose ``set_name`` holds every expected model with distinct, normalized weights."""
+    import numpy as np
+    from paper1 import _bma_keys as bk
+
+    keys = bk.expected_keys(set_name)
+    rng = np.random.default_rng(7)
+    galaxies = {}
+    for g in range(n_gal):
+        raw = rng.dirichlet(np.ones(len(keys)) * 0.3)
+        models = []
+        for key, weight in zip(keys, raw, strict=True):
+            sfr = (sfr_by_model or {}).get((g, key), [0.5, 1.0, 1.5])
+            models.append(
+                {
+                    "model_key": key,
+                    "weight": float(weight),
+                    "valid": True,
+                    "percentiles": {
+                        "log_stellar_mass_survived": [10.0, 10.5, 11.0],
+                        "log_sfr_100myr": sfr,
+                    },
+                }
+            )
+        galaxies[str(1000 + g)] = {
+            "sets": {
+                set_name: {
+                    "models": models,
+                    "n_valid": len(models),
+                    "close": True,
+                    "bma_percentiles": {
+                        "log_stellar_mass_survived": [10.0, 10.5, 11.0],
+                        "log_sfr_100myr": [0.5, 1.0, 1.5],
+                    },
+                }
+            }
+        }
+    return {"galaxies": galaxies}
+
+
+def _build(summary: dict, set_name: str):
+    import fig11_bma
+    import matplotlib.pyplot as plt
+
+    fig, drawn = fig11_bma.build_figure(summary, set_name)
+    return fig, drawn, plt
+
+
+def _b1_matrix(fig, n_rows: int):
+    """The weight heatmap of panel (b1): the image with ``n_rows`` rows and a 0..1 scale."""
+    for ax in fig.axes:
+        for im in ax.images:
+            if im.get_array().shape[0] == n_rows and im.get_clim() == (0.0, 1.0):
+                return ax, im.get_array()
+    raise AssertionError(f"no weight heatmap with {n_rows} rows")
+
+
+def test_flowchart_boxes_fit_inside_figure_and_axes():
+    from matplotlib.patches import FancyBboxPatch
+
+    fig, _, plt = _build(_synthetic_set("named_all"), "named_all")
+    fig.canvas.draw()
+    ax_flow, ax_b1 = fig.axes[0], fig.axes[1]
+    boxes = [p for p in ax_flow.patches if isinstance(p, FancyBboxPatch)]
+    assert len(boxes) == 5
+    fig_box, ax_box = fig.bbox, ax_flow.get_window_extent()
+    for patch in boxes:
+        ext = patch.get_window_extent()
+        assert ext.x0 >= fig_box.x0 and ext.x1 <= fig_box.x1
+        assert ext.x0 >= ax_box.x0 and ext.x1 <= ax_box.x1
+    centre = 0.5 * (boxes[0].get_window_extent().x0 + boxes[-1].get_window_extent().x1)
+    b1_box = ax_b1.get_window_extent()
+    assert centre == pytest.approx(0.5 * (b1_box.x0 + b1_box.x1), abs=2.0)
+    plt.close(fig)
+
+
+def test_large_set_aggregates_to_top_rows_plus_other():
+    import fig11_bma
+    import numpy as np
+
+    summary = _synthetic_set("factorial")
+    n_models = 100
+    fig, drawn, plt = _build(summary, "factorial")
+    k = fig11_bma.B1_TOP_MODELS
+    assert len(drawn.models_drawn) == k
+    assert drawn.model_labels[-1] == f"Other ({n_models - k} models)"
+    assert len(drawn.model_labels) == k + 1
+    assert drawn.b1_n_aggregated == n_models - k
+    assert len(set(drawn.models_drawn) | set(drawn.b1_aggregated_models)) == n_models
+    assert not set(drawn.models_drawn) & set(drawn.b1_aggregated_models)
+
+    totals = {
+        key: sum(
+            m["weight"]
+            for g in summary["galaxies"].values()
+            for m in g["sets"]["factorial"]["models"]
+            if m["model_key"] == key
+        )
+        for key in (*drawn.models_drawn, *drawn.b1_aggregated_models)
+    }
+    assert min(totals[key] for key in drawn.models_drawn) >= max(
+        totals[key] for key in drawn.b1_aggregated_models
+    )
+
+    _, matrix = _b1_matrix(fig, k + 1)
+    np.testing.assert_allclose(np.asarray(matrix).sum(axis=0), 1.0, atol=1e-9)
+    plt.close(fig)
+
+
+def test_large_set_row_labels_do_not_overlap():
+    fig, drawn, plt = _build(_synthetic_set("factorial"), "factorial")
+    fig.canvas.draw()
+    ax, _ = _b1_matrix(fig, len(drawn.model_labels))
+    boxes = [t.get_window_extent() for t in ax.get_yticklabels()]
+    assert len(boxes) == len(drawn.model_labels)
+    for upper, lower in itertools.pairwise(boxes):
+        assert upper.y0 >= lower.y1 - 0.5
+    plt.close(fig)
+
+
+@pytest.mark.parametrize("set_name", ["named_all", "named_grid"])
+def test_named_sets_keep_one_row_per_model(set_name):
+    from paper1 import _bma_keys as bk
+
+    n_models = len(bk.expected_keys(set_name))
+    fig, drawn, plt = _build(_synthetic_set(set_name), set_name)
+    assert len(drawn.models_drawn) == n_models == len(drawn.model_labels)
+    assert drawn.b1_n_aggregated == 0 and drawn.b1_aggregated_models == []
+    assert not any(label.startswith("Other") for label in drawn.model_labels)
+    _b1_matrix(fig, n_models)
+    plt.close(fig)
+
+
+def test_set_of_exactly_the_threshold_is_not_aggregated():
+    import fig11_bma
+
+    models = {f"m{i}": {"model_key": f"m{i}"} for i in range(fig11_bma.B1_MAX_ROWS)}
+    weights = {0: {k: 1.0 / len(models) for k in models}}
+    shown, folded = fig11_bma._split_rows(models, weights)
+    assert len(shown) == fig11_bma.B1_MAX_ROWS and folded == []
+
+
+def test_sfr_panel_ignores_floor_whisker_and_records_it():
+    import fig11_bma
+    from paper1 import _bma_keys as bk
+
+    victim = bk.expected_keys("named_all")[1]
+    summary = _synthetic_set("named_all", sfr_by_model={(1, victim): [-10.0, 0.4, 1.0]})
+    fig, drawn, plt = _build(summary, "named_all")
+    ax_sfr = fig.axes[-2]
+    lo, hi = ax_sfr.get_ylim()
+    assert lo > -10.0 and [lo, hi] == drawn.sfr_limits
+    records = [r for r in drawn.sfr_out_of_range if r["model"] == victim]
+    assert len(records) == 1
+    assert records[0]["galaxy"] == 1001 and records[0]["clipped_low"] is True
+    assert records[0]["side"] is None and records[0]["p16"] == -10.0
+    assert not fig11_bma._out_of_range_record(1, "x", (0.5, 1.0, 1.5), drawn.sfr_limits)
+    plt.close(fig)
+
+
+def test_sfr_median_outside_limits_is_pinned_and_recorded():
+    import fig11_bma
+    from paper1 import _bma_keys as bk
+
+    victim = bk.expected_keys("named_all")[2]
+    summary = _synthetic_set("named_all", sfr_by_model={(0, victim): [-11.0, -10.0, -9.0]})
+    fig, drawn, plt = _build(summary, "named_all")
+    record = next(r for r in drawn.sfr_out_of_range if r["model"] == victim)
+    assert record["side"] == "bottom" and record["median"] == -10.0
+    assert drawn.sfr_limits[0] > -10.0
+    assert fig11_bma._out_of_range_record(1, "m", (0.0, 1.0, 2.0), None) is None
+    plt.close(fig)

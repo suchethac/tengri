@@ -36,6 +36,7 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _adoption import RELAXED_CONFIGS, is_adopted
+from _figure_style import EDGE_MARKERS, edge_side, robust_log_limits
 from config_metadata import XLIKE_CONFIGS
 
 logger = logging.getLogger(__name__)
@@ -79,14 +80,6 @@ CODE_COLORS = {
 FIGURE_WIDTH = 7.0
 FIGURE_HEIGHT = 3.5
 PERCENTILES = (16.0, 50.0, 84.0)
-
-#: SFR-panel limits come from this central range of all plotted values [percent],
-#: padded by ``SFR_LIMIT_MARGIN`` [dex]; points outside are pinned at the edge.
-SFR_LIMIT_PERCENTILES = (2.0, 98.0)
-SFR_LIMIT_MARGIN = 0.5
-
-#: Marker pointing out of the panel for a point pinned at the left/right/bottom/top edge.
-EDGE_MARKERS = {"left": "<", "right": ">", "bottom": "v", "top": "^"}
 
 
 class PublishedValue(NamedTuple):
@@ -315,37 +308,19 @@ def _compute_stats(
 def _robust_sfr_limits(by_code: dict[str, list]) -> list[float]:
     """Common x/y limits [dex] from the bulk of all plotted published and tengri SFRs.
 
-    Uses the ``SFR_LIMIT_PERCENTILES`` range of every adopted published and
-    tengri-median log SFR, padded by ``SFR_LIMIT_MARGIN`` and rounded outward to
-    0.5 dex, so one outlier cannot set the scale. Both axes share the limits.
+    Both axes share the limits; see ``_figure_style.robust_log_limits``.
     """
-    values = [
-        v
-        for pairs in by_code.values()
-        for pub, ten in pairs
-        for v in (pub.logsfr, ten.log_sfr_p50)
-        if np.isfinite(v)
-    ]
-    if not values:
-        return [-1.0, 2.0]
-    lo, hi = np.percentile(values, SFR_LIMIT_PERCENTILES)
-    return [
-        float(np.floor((lo - SFR_LIMIT_MARGIN) * 2) / 2),
-        float(np.ceil((hi + SFR_LIMIT_MARGIN) * 2) / 2),
-    ]
+    return robust_log_limits(
+        [
+            v
+            for pairs in by_code.values()
+            for pub, ten in pairs
+            for v in (pub.logsfr, ten.log_sfr_p50)
+        ]
+    )
 
 
-def _edge_side(x: float, y: float, lim: list[float]) -> str | None:
-    """Edge a point outside ``lim`` is pinned to (the larger excursion), else ``None``."""
-    lo, hi = lim
-    excess = {
-        "left": lo - x,
-        "right": x - hi,
-        "bottom": lo - y,
-        "top": y - hi,
-    }
-    side, amount = max(excess.items(), key=lambda kv: kv[1])
-    return side if amount > 0 else None
+_edge_side = edge_side
 
 
 def _make_figure(

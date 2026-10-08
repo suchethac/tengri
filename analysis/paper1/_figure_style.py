@@ -14,6 +14,8 @@ forms of color blindness and in grayscale print.
 
 from __future__ import annotations
 
+import numpy as np
+
 #: The configurations Section 7 demonstrates, in the order it presents them.
 #:
 #: Configuration VI is deliberately NOT here (owner, 2026-09-28). Its row is
@@ -54,3 +56,42 @@ CONFIG_LABELS: dict[str, str] = {
 assert set(CONFIG_COLORS) == set(CONFIG_ORDER) | set(DEFERRED_CONFIGS), (
     "palette must cover every configuration that has cells, demonstrated or not"
 )
+
+
+#: SFR-panel limits come from this central range of all plotted values [percent],
+#: padded by ``SFR_LIMIT_MARGIN`` [dex]; points outside are pinned at the edge.
+SFR_LIMIT_PERCENTILES: tuple[float, float] = (2.0, 98.0)
+SFR_LIMIT_MARGIN = 0.5
+
+#: Marker pointing out of the panel for a point pinned at the left/right/bottom/top edge.
+EDGE_MARKERS = {"left": "<", "right": ">", "bottom": "v", "top": "^"}
+
+
+def robust_log_limits(values, default: tuple[float, float] = (-1.0, 2.0)) -> list[float]:
+    """Axis limits [dex] from the bulk of ``values``, so one outlier cannot set the scale.
+
+    Takes the ``SFR_LIMIT_PERCENTILES`` range of the finite values, pads it by
+    ``SFR_LIMIT_MARGIN`` and rounds outward to 0.5 dex. ``default`` is returned when no
+    value is finite.
+    """
+    finite = [v for v in values if np.isfinite(v)]
+    if not finite:
+        return list(default)
+    lo, hi = np.percentile(finite, SFR_LIMIT_PERCENTILES)
+    return [
+        float(np.floor((lo - SFR_LIMIT_MARGIN) * 2) / 2),
+        float(np.ceil((hi + SFR_LIMIT_MARGIN) * 2) / 2),
+    ]
+
+
+def edge_side(x: float, y: float, lim: list[float]) -> str | None:
+    """Edge a point outside ``lim`` is pinned to (the larger excursion), else ``None``."""
+    lo, hi = lim
+    excess = {
+        "left": lo - x,
+        "right": x - hi,
+        "bottom": lo - y,
+        "top": y - hi,
+    }
+    side, amount = max(excess.items(), key=lambda kv: kv[1])
+    return side if amount > 0 else None
