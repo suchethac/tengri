@@ -928,7 +928,7 @@ def multicolor_disc(
             return disc_u
         _nu_b = _wavelength_to_nu(jnp.asarray(_EUV_BAND_AA, dtype=nu.dtype))
         _tail_u = _euv_tail_lnu(
-            jnp.asarray(_EUV_BAND_AA),
+            device_table(_EUV_BAND_AA),
             _nu_b,
             _slope,
             _EUV_TAIL_FRAC * disc_u / _euv_tail_shape_integral(_slope),

@@ -37,6 +37,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.host_array import device_table
+
 #: Highest spin the tengri disc accepts (``agn_a_spin`` is clipped to [0, 0.998]).
 A_MAX = 0.998
 
@@ -201,9 +203,9 @@ def nt_h(log_x, a_spin):
     .. [2] D. N. Page and K. S. Thorne, ApJ, 191, 499 (1974).
        https://doi.org/10.1086/152990
     """
-    u = 0.5 * log_x * (jnp.asarray(_GL_T) + 1.0)
+    u = 0.5 * log_x * (device_table(_GL_T) + 1.0)
     g = nt_rt(jnp.exp(u), a_spin) * jnp.exp(-u)
-    return 0.5 * log_x * jnp.sum(jnp.asarray(_GL_W) * g)
+    return 0.5 * log_x * jnp.sum(device_table(_GL_W) * g)
 
 
 def nt_dh_dlogx(log_x, a_spin):

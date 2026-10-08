@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- **A dtype-free `jnp.asarray` on a module-level numpy constant no longer poisons the next x64 state (#2774).** The cosmology Gauss-Legendre nodes and weights, the non-thermal emissivity quadrature, the EUV band of the multicolor tail and the BLR line strengths go through `device_table`, which passes the canonical dtype explicitly. `tools/check_jnp_asarray_module_constants.py` (wired in CI) rejects a new dtype-free site.
+
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows

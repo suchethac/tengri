@@ -412,6 +412,9 @@ jobs:
       # risk floors and clip-then-power patterns in src/tengri. Ledger regenerated
       # with each new site; new sites (live count > ledger count) fail the check.
       - run: python tools/check_numeric_guards.py
+      # No dtype-free jnp.asarray on a module-level numpy constant (#2774): the
+      # cached buffer's dtype follows the x64 state of the first call.
+      - run: python tools/check_jnp_asarray_module_constants.py
       # Ensure figure placement in published notebooks is correct.
       - run: python tools/check_figure_placement.py
       # Verify that all published notebooks have every code cell executed.
