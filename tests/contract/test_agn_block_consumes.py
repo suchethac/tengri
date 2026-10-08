@@ -285,10 +285,14 @@ def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
     assert "qsogen" in AGN_BLOCKS["blr"]
 
 
-# The three variants whose NLR and BLR blocks are genuinely independent, i.e.
-# the two regions declare disjoint parameters and enabling both costs the union.
-# ``grahsp`` is deliberately absent — see the negative control below.
-_INDEPENDENT_NLR_BLR_VARIANTS = ["analytic", "synthesizer", "synthesizer_spectra"]
+# The variants whose NLR and BLR blocks are independent: the two regions declare
+# disjoint parameters and enabling both costs the union. ``grahsp`` is
+# deliberately absent (shared line knobs, see the negative control below).
+# The Synthesizer pair is handled separately: both regions forward the same
+# driver-disc mass and Eddington ratio to their backend (#2634), so they share
+# exactly that pair and nothing else.
+_INDEPENDENT_NLR_BLR_VARIANTS = ["analytic"]
+_SYNTHESIZER_SHARED_DRIVER = frozenset({"agn_log_mbh", "agn_log_ledd"})
 
 
 @pytest.mark.parametrize("variant", _INDEPENDENT_NLR_BLR_VARIANTS)
@@ -300,16 +304,25 @@ def test_independent_nlr_and_blr_consume_disjoint_params(variant):
     If they ever came to share a knob, one region would silently move the
     other's parameter and ``agn_active_param_set`` would under-count the
     free parameters for a unified AGN.
-
-    The assertion this replaced was ``assert (nlr | blr) == (nlr | blr)`` for
-    each of the three variants — the same expression on both sides, so it
-    held for any contents whatsoever and could only fail if ``|`` raised.
     """
     nlr = AGN_BLOCK_CONSUMES[("nlr", variant)]
     blr = AGN_BLOCK_CONSUMES[("blr", variant)]
     overlap = set(nlr) & set(blr)
     assert not overlap, f"{variant}: nlr and blr both consume {sorted(overlap)}"
     assert len(set(nlr) | set(blr)) == len(set(nlr)) + len(set(blr))
+
+
+@pytest.mark.parametrize("variant", ["synthesizer", "synthesizer_spectra"])
+def test_synthesizer_nlr_blr_share_only_the_driver_disc_pair(variant):
+    """The Synthesizer regions share the driver-disc pair and no other knob (#2634).
+
+    Both forward ``agn_log_mbh`` / ``agn_log_ledd`` to the same backend, so the
+    union counts that pair once. Every other consumed name stays region-owned.
+    """
+    nlr = set(AGN_BLOCK_CONSUMES[("nlr", variant)])
+    blr = set(AGN_BLOCK_CONSUMES[("blr", variant)])
+    assert nlr & blr == _SYNTHESIZER_SHARED_DRIVER, f"{variant}: shared {sorted(nlr & blr)}"
+    assert len(nlr | blr) == len(nlr) + len(blr) - len(_SYNTHESIZER_SHARED_DRIVER)
 
 
 def test_the_disjointness_check_is_not_vacuous():

@@ -300,8 +300,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     # test_agn_panchromatic_free_params_all_move_predict calls it a no-op.
     # Listing it would make a recipe free a dimension no fit can constrain.
     ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
-    ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
-    ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
+    # The Synthesizer NLR forwards the driver-disc mass and Eddington ratio to
+    # its backend as log_bh_mass / log_eddington (#2634), so both are live here
+    # although they are owned by agn.disc.
+    ("nlr", "synthesizer"): frozenset({"agn_nlr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf", "agn_log_mbh", "agn_log_ledd"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
     # Cue's five photoionization axes plus the covering fraction, all measured
     # live (agn_nlr_cf 8.5e-15, agn_nlr_alpha_pl 2.9e-15, agn_nlr_logZ
@@ -352,9 +355,12 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_fe2_strength",
         }
     ),
-    ("blr", "synthesizer"): frozenset({"agn_blr_cf"}),
-    ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
-    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms", "agn_grahsp_a_bc"}),
+    # Forwards agn_log_mbh / agn_log_ledd to its backend, as the NLR does (#2634).
+    ("blr", "synthesizer"): frozenset({"agn_blr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("blr", "grahsp"): frozenset(
+        {"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms", "agn_grahsp_a_bc"}
+    ),
     ("blr", "qsogen"): frozenset(),
     ("feii", "boroson_green"): frozenset(
         {

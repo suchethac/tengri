@@ -97,7 +97,6 @@ True
 from __future__ import annotations
 
 import difflib
-import inspect
 import warnings
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
@@ -6445,42 +6444,32 @@ def _agn_block_selection(agn_top: dict) -> dict[str, str]:
 
 
 def _agn_names_read_by_other_blocks(selection: Mapping[str, str], *, skip: str) -> frozenset[str]:
-    """Full ``agn_*`` names the selected blocks of every other category take as arguments.
+    """Full ``agn_*`` names the selected blocks of the other categories declare as reads.
 
-    A block reads a parameter another category owns only in the cross-category
-    cases the consumes table records. The Synthesizer NLR and BLR blocks forward
-    ``agn_log_mbh`` and ``agn_log_ledd`` to their backend (#2634), and that read
-    is absent from their table entry. The argument list of each selected block
-    is therefore the widest reading available for names owned elsewhere, and
-    only those names are exempt from the refusal below.
+    Reads only the consumes table (:data:`AGN_BLOCK_CONSUMES`), the same oracle
+    every other check uses. A signature is not consulted: a signature names
+    parameters a type does not use.
 
     Parameters
     ----------
     selection : mapping of str to str
-        Category -> selected block type.
+        Grammar category -> selected block type.
     skip : str
-        The category being validated; its own block is not consulted here.
+        The category being validated; its own row is not consulted here.
 
     Returns
     -------
     frozenset of str
-        Full parameter names read by other selected blocks.
+        Full parameter names read by the other selected blocks.
     """
-    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
 
     names: set[str] = set()
     for cat, block_type in selection.items():
-        if cat == skip or block_type == "none":
+        if cat == skip or block_type in (None, "none"):
             continue
-        fn = AGN_BLOCKS.get(_AGN_CONSUMES_CATEGORY.get(cat, cat), {}).get(block_type)
-        if fn is None:
-            continue
-        for param in inspect.signature(fn).parameters.values():
-            if param.kind not in (
-                param.VAR_KEYWORD,
-                param.VAR_POSITIONAL,
-            ) and param.name.startswith("agn_"):
-                names.add(param.name)
+        consumes_cat = _AGN_CONSUMES_CATEGORY.get(cat, cat)
+        names |= AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset())
     return frozenset(names)
 
 
@@ -6527,13 +6516,16 @@ def _reject_inert_agn_subblock_keys(
     declared = _agn_subblock_declared_params(category, block_type, selection=selection)
     if declared is None:
         return
-    other_reads = _agn_names_read_by_other_blocks(selection, skip=category)
+    # A selected block in another category may read this category's parameter
+    # (the Synthesizer NLR/BLR read agn_log_mbh / agn_log_ledd, #2634); the
+    # disc row alone cannot record that, so the other rows are consulted.
+    read_elsewhere = _agn_names_read_by_other_blocks(selection, skip=category)
     foreign = sorted(
         key
         for key in sub
         if key in spelling_to_full
         and spelling_to_full[key] not in declared
-        and spelling_to_full[key] not in other_reads
+        and spelling_to_full[key] not in read_elsewhere
     )
     if not foreign:
         return
