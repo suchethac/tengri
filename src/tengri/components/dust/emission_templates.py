@@ -36,7 +36,6 @@ import jax
 import jax.numpy as jnp
 
 from tengri._data_setup import find_data_str
-from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.dust._params import (
     DEFAULT_DUST_ALPHA,
     DEFAULT_DUST_ALPHA_DALE,
@@ -56,6 +55,7 @@ from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
 )
+from tengri.utils.template_grid import native_bolometric_nu
 
 # Upper bound of the U^-2 power-law radiation-field distribution used to
 # generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
