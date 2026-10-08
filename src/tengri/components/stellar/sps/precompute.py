@@ -1093,6 +1093,21 @@ def _compute_photometry_ztable(
         )
     eff_waves_obs = np.array(eff_waves_obs)
 
+    # z-independent filter curves, converted once (not per z).
+    filter_np = [(np.asarray(fw), np.asarray(ft)) for fw, ft in zip(filter_waves, filter_trans)]
+
+    # z-dependent scalars, batched over the whole grid in one call each: the
+    # luminosity distance and the IGM transmission. Eager per-z dispatch of
+    # these was the dominant cost of the build (#2769).
+    z_np = np.asarray(z_grid, dtype=np.float64)
+    dl_cm_all = np.asarray(jax.vmap(luminosity_distance)(jnp.asarray(z_np)))
+    if apply_igm:
+        from tengri.components.igm import igm_transmission
+
+        eff_waves_obs_jnp = jnp.asarray(eff_waves_obs)
+        igm_batch = jax.jit(jax.vmap(lambda z: igm_transmission(eff_waves_obs_jnp, z)))
+        igm_trans_all[:] = np.asarray(igm_batch(jnp.asarray(z_np)))
+
     for zi, z_val in enumerate(z_grid):
         z_val = float(z_val)
         wave_obs = wave_ssp_np * (1.0 + z_val)
@@ -1100,19 +1115,12 @@ def _compute_photometry_ztable(
         # Effective wavelengths: observed-frame are filter properties (z-independent)
         eff_waves_rest_all[zi] = eff_waves_obs / (1.0 + z_val)
 
-        # IGM transmission at effective observed wavelengths
-        if apply_igm:
-            from tengri.components.igm import igm_transmission
-
-            igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves_obs), z_val))
-
         # Pre-integrate SSP through each filter (vectorized over met × age)
         # on the union quadrature grid; SED nodes + filter nodes, with the
         # smooth transmission interpolated, never the SED point-sampled at
         # the filter table's nodes (#960). Matches lnu_filter_integral so
         # the LUT and exact paths agree.
-        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+        for f_idx, (fw_np, ft_np) in enumerate(filter_np):
             grid = np.sort(np.concatenate([wave_obs, fw_np]))
             # Transmission is identically zero outside the filter table's
             # support (left=0/right=0 below), so union-grid segments with
@@ -1200,7 +1208,7 @@ def _compute_photometry_ztable(
         # float64 and the linear value is correct here: it is the *storage* that
         # loses it: ~1e-57 casts to exactly 0.0 in a float32 array, so a linear
         # table is zeroed for every z above ~0 (#1859).
-        dl_cm = float(luminosity_distance(z_val))
+        dl_cm = float(dl_cm_all[zi])
         log10_flux_scale_all[zi] = float(_log10_flux_scale(z_val, dl_cm))
 
     return PhotometricZTable(
