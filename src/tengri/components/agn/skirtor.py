@@ -39,7 +39,12 @@ from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_L
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import (
+    interp_nd_pchip,
+    interp_nd_triweight,
+    loglog_integral,
+    resample_template,
+)
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -479,15 +484,19 @@ def _interpolate_and_normalize(
     )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
-    # over-normalize on truncated grids; trapezoid in λ matches the
-    # download script's normalization convention.
+    # over-normalize on truncated grids.
+    #
+    # The integral is the power-law (log-log) integral of the same interpolant
+    # ``resample_template`` builds, not a trapezoid over the native nodes. A
+    # trapezoid lays chords across the convex segments, so the resampled
+    # template would lose 0.4-0.5% of ``l_scale`` (#2319); the log-log integral
+    # is exact for the interpolant, so the resampled torus carries exactly
+    # ``l_scale`` on any caller grid fine enough to resolve it.
     #
     # ``wave_grid`` is monotonically ascending (set at load time in
-    # ``_load_grid_arrays``), so trapezoid integrates correctly without
-    # an explicit ``argsort``, the prior ``trapezoid(sed[idx_sort],
-    # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
-    # *descending* and needed reordering. Don't re-add a sort here.
-    integral_lam = jnp.trapezoid(template, wave_grid)
+    # ``_load_grid_arrays``), so the integral is positive without an explicit
+    # ``argsort``. Don't re-add a sort here.
+    integral_lam = loglog_integral(wave_grid, template)
     integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)

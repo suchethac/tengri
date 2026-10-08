@@ -296,3 +296,36 @@ def test_published_L_star_is_independent_of_caller_grid(name):
         assert ref > 0.0, f"{name}.{key}: non-positive reference {ref:.3e}"
         rel = abs(coarse[key] / ref - 1.0)
         assert rel < _RTOL, f"{name}.{key}: coarse-vs-fine L_* rel diff {rel:.3e}"
+
+
+# -- SKIRTOR torus carries its normalized power after resampling (#2319) ----------
+
+#: Caller grid of the reproducer: 0.1-1000 um, 2000 log points, resampled off the
+#: 136-node SKIRTOR template axis.
+_SKIRTOR_CALLER = np.geomspace(1.0e3, 1.0e7, 2000)
+
+
+@pytest.mark.parametrize("cos_inc", [1.0, float(np.cos(np.pi / 4.0)), 0.0])
+def test_skirtor_torus_integral_equals_its_target_on_caller_grid(cos_inc):
+    """The resampled torus integrates to its enforced bolometric power to 1e-4.
+
+    The target is ``10**log_lbol * L_sun * frac_agn``. The integral is taken on the
+    caller grid, the way a downstream consumer would integrate the SED.
+    """
+    from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
+    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+    from tengri.utils.physics_constants import L_SUN
+
+    grid = _DATA / "skirtor_templates_v3.h5"
+    if not grid.is_file():
+        pytest.skip(f"SKIRTOR v3 template grid unavailable ({grid})")
+    components = create_skirtor_components_from_grid(str(grid))
+    wave = jnp.asarray(_SKIRTOR_CALLER)
+    out = components(wave, agn_log_lbol=10.0, agn_cos_inc=cos_inc, frac_agn=0.5)
+    target = 10.0**10.0 * L_SUN * 0.5
+    nu = wavelength_to_nu(wave)
+    # The disc is hot and extends below this grid's 1000 A start, so only the torus
+    # dust, which the caller grid covers, is checked here.
+    power = float(np.asarray(jnp.abs(bolometric_integral_nu(out.dust, nu))))
+    rel = abs(power / target - 1.0)
+    assert rel < 1.0e-4, f"cos_inc={cos_inc:.3f} torus dust: rel error {rel:.3e}"
