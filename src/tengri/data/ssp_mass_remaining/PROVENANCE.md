@@ -21,6 +21,7 @@ float64, plus attributes `quantity`, `isochrones`, `imf`, `source`,
 | `mass_remaining_pdva_{chabrier,kroupa,salpeter}.h5` | Padova 2007, 22 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
 | `mass_remaining_bsti_{chabrier,kroupa,salpeter}.h5` | BaSTI, 10 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
 | `mass_remaining_bc03pdva94_chabrier.h5` | BC03 Padova 1994, 6 x 220 | `scripts/build_mass_remaining_bc03.py` |
+| `mass_remaining_pgny_mist_chabrier.h5` | ProGeny (MIST, C3K), Chabrier 0.1-100 Msun, 15 x 107 | `scripts/build_mass_remaining_pgny.py` (ProGeny `SMstar`) |
 
 ## Padova and BaSTI tables (FSPS 0.4.7)
 
@@ -118,7 +119,56 @@ PARSEC Kroupa and Salpeter use the same build; they have no hosted grid to compa
 ## PENDING grids
 
 Declared in the registry, refused without `mass_remaining="dsps_fit"`: BPASS
-(`bpss_stars_c3k_a_chabrier`) and ProGeny (`pgny_mist_c3k_chabrier`). Geneva has no catalog grid.
+(`bpss_stars_c3k_a_chabrier`). Geneva has no catalog grid.
+
+**BPASS stays PENDING.** The BPASS v2.2 manual defines the `starmass` column as the mass of
+living stars only, per 10^6 Msun formed; its remnant column is flagged untested by the BPASS
+team and exists only for binary files. A single-star remnant recipe does not apply to a binary
+population, so no table is built. The converter `scripts/convert_bpass_to_h5.py` also globs the
+`imf135_300` files while its docstring says Chabrier (lines 11, 137); the shipped grid is
+`imf_chab300`. That converter is not changed here.
+
+## ProGeny (MIST, C3K, Chabrier)
+
+`mass_remaining_pgny_mist_chabrier.h5` repackages ProGeny's own `SMstar` (ProGeny 0.8.3, R
+package `asgr/ProGeny`, `progenyMakeSSP`) for the grid `pgny_mist_c3k_chabrier.h5`. It is
+`SMstar = sum(Mass * IMFint)` over the isochrone's tracked points plus the remnants of stars
+above its top mass (`missing_func`, `rem_frac = 'get'`), capped at 1; `SMgas = 1 - SMstar`.
+That remnant treatment is ProGeny's, not Renzini & Ciotti (1993) as in FSPS.
+
+**Citation.** ProGeny I: Robotham & Bellstedt, arXiv:2410.17697, accepted to RASTI. ProGeny II:
+Bellstedt & Robotham, arXiv:2410.17698, accepted to MNRAS. The arXiv abstract pages give only
+the accepted status. The ADS journal volume and page were not verified: the ADS lookup did not
+complete from this session, so no volume or page is cited.
+
+**Input.** ProSpect speclib zip `speclib_folder.zip` (sha256
+`cfe8f25e08eb95d57c5f1df81b9a38974f67e54d3bf3877bddd0d0bf34eb24c7`, 3,882,516,554 bytes, the
+ProSpect `speclib_download` target), member `PG_Ch_Mi_C3K.fits`, sha256
+`2edafca0e6a1a0218a37a2adc73734a219827967ff5c5e2f9c128fafc8f530cb`, the `Zevo<i>` `SMstar`
+columns. The table records `input_sha256` of that member.
+
+**Builds.** The grid's spectra equal the older local copy `PG_Ch_Mi_C3K.fits` (sha256
+`2888bd86...`, ProSpect copy in `~/Downloads`) to 1.6e-7 after one constant factor 0.9999749,
+so the grid is that older build. The official 2025 member has different spectra (max abs
+difference 2.27 in `Zspec1`). The `SMstar` columns are identical in both builds (max |diff| =
+0.0 for all 15 Z), so the table holds for the grid's build as well.
+
+**Nodes.** Z and age axes equal the grid's `ssp_lgmet` and `ssp_lg_age_gyr` (+9, float32 values
+cast to float64) exactly: 15 metallicities, log10 Z = -5.69897 ... -1.44897; 107 ages, log10
+yr = 5.0 ... 10.3 at 0.05 dex.
+
+**Values.** Minimum 0.535122, maximum 1.000000 (no overshoot above 1); the youngest node (1e5
+yr) is 0.9903-1.0.
+
+**Monotonicity (measured, not assumed).** The table is not monotone and has no age after which
+it is. 137 of the 1590 age steps rise (15 Z x 106), at log10 age 5.05 to 10.30. The largest rise
+is +0.015739 at log10 age 9.55, Z index 13 (log10 Z = -1.44897). Rises above 1 Gyr are 29 steps,
+at Z index 0-3 and 13 only; the largest rise per 1-dex band: 0.00841 (5-6), 0.00754 (6-7), 0.01574
+(9-10). The FSPS rule (non-increasing above 1 Gyr) therefore does not hold. The rises are not
+smoothed or clamped. The test bounds them: maximum rise 0.0160, exact count 137, largest rise
+at 9.55 Gyr.
+
+**Nothing else is changed.** The MIST and PARSEC tables and the loader are unchanged.
 
 ## BC03 (Padova 1994 + STELIB + Chabrier)
 
