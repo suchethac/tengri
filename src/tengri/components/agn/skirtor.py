@@ -3,8 +3,8 @@
 
 Loads the full SKIRTOR SED library (``create_skirtor_from_grid``) and performs
 5D node-exact PCHIP interpolation in JAX.  Passes through every tabulated node and
-provides C¹-continuous gradients for inference (VI, MAP, NUTS).  Requires a prior download of the template
-grid (~1 GB).
+provides C¹-continuous gradients for inference (VI, MAP, NUTS).  Requires a prior
+download of the template grid (~1 GB).
 
 Supports two HDF5 layouts:
 
@@ -882,9 +882,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         )
         disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
         dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
-        total = _interpolate_and_normalize(
-            total_jax, wave_grid, axes, wavelength, point, l_scale
-        )
+        total = _interpolate_and_normalize(total_jax, wave_grid, axes, wavelength, point, l_scale)
         return SKIRTORComponents(disk=disk, dust=dust, total=total)
 
     return skirtor_components
