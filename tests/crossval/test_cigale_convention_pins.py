@@ -55,6 +55,24 @@ def _ew_pcigale_angstrom(wl_nm, llam):
     return module.EW(sed)["Halpha"] * 10.0
 
 
+def _window_average_conventions(wave, flam):
+    """(CIGALE-form, Lick-form) EW [A] of F_lambda, both on the line through the sideband means.
+
+    Windows [A]: blue 6500-6525, line 6535-6600, red 6610-6635. CIGALE: W (<F>/<C> - 1),
+    emission positive. Lick (Trager et al. 1998, Eq. 3): W (1 - <F/C>), absorption positive.
+    """
+    def mean(lo, hi, y):
+        m = (wave >= lo) & (wave <= hi)
+        return np.trapezoid(y[m], wave[m]) / (wave[m][-1] - wave[m][0])
+
+    f_b, f_r = mean(6500.0, 6525.0, flam), mean(6610.0, 6635.0, flam)
+    cont = f_b + (f_r - f_b) * (wave - 6512.5) / (6622.5 - 6512.5)
+    width = 65.0
+    cigale = width * (mean(6535.0, 6600.0, flam) / mean(6535.0, 6600.0, cont) - 1.0)
+    lick = width * (1.0 - mean(6535.0, 6600.0, flam / cont))
+    return cigale, lick
+
+
 @pytest.mark.parametrize(("amplitude", "slope"), _CASES)
 def test_equivalent_width_signs_and_continua(amplitude, slope):
     pytest.importorskip("pcigale")
@@ -66,10 +84,13 @@ def test_equivalent_width_signs_and_continua(amplitude, slope):
     wave_aa = jnp.asarray(wl_nm * 10.0)
 
     pcigale = _ew_pcigale_angstrom(wl_nm, llam)
+    # The index operator takes a flux density per unit frequency and converts it to F_lambda
+    # itself (Trager et al. 1998), so it is given L_nu; pcigale's input is L_lambda.
+    lnu = llam * wl_nm**2 * 1e7 / _C_NM
     lick = float(
         measure_index_jax(
             wave_aa,
-            jnp.asarray(llam),
+            jnp.asarray(lnu),
             SpectralIndexDef(
                 name="halpha_pcigale_windows",
                 index_type="EW",
@@ -78,7 +99,6 @@ def test_equivalent_width_signs_and_continua(amplitude, slope):
             ),
         )
     )
-    lnu = llam * wl_nm**2 * 1e7 / _C_NM
     diag = float(equivalent_width(wave_aa, jnp.asarray(lnu), 6563.0, 20.0, 50.0))
 
     # CIGALE: emission positive (the code, not its parameter help), linear continuum
@@ -86,9 +106,17 @@ def test_equivalent_width_signs_and_continua(amplitude, slope):
     assert pcigale == pytest.approx(truth, rel=3e-2)
     if slope == 0.0:
         assert pcigale == pytest.approx(truth, rel=1e-3)
-    # tengri SpectralIndexDef: Lick convention, absorption positive; same continuum as CIGALE here
-    # (sidebands symmetric about the line window), so the two are equal and opposite
-    assert lick == pytest.approx(-pcigale, rel=1e-3)
+    # tengri SpectralIndexDef: Lick convention, absorption positive, on the same F_lambda and the
+    # same straight-line continuum (sideband means at the sideband midpoints). The two differ in
+    # how the line window is averaged: CIGALE forms W (<F>/<C> - 1) (ratio of window means), the
+    # Lick index W (1 - <F/C>) (Trager et al. 1998, Eq. 3, mean of the ratio). They are equal and
+    # opposite on a flat continuum and differ at second order in the continuum slope across the
+    # window. Both are evaluated below from their definitions, on the fine input grid.
+    ref_pcigale, ref_lick = _window_average_conventions(wl_nm * 10.0, llam)
+    assert pcigale == pytest.approx(ref_pcigale, rel=1e-3)
+    assert lick == pytest.approx(ref_lick, rel=1e-3)
+    if slope == 0.0:
+        assert lick == pytest.approx(-pcigale, rel=1e-3)
     # tengri equivalent_width: emission positive, constant continuum from two sidebands
     assert np.sign(diag) == np.sign(truth)
     assert diag == pytest.approx(truth, rel=1e-2)
@@ -263,11 +291,11 @@ def test_equivalent_width_and_spectral_index_on_flat_continuum():
     # tengri equivalent_width
     tengri_ew = float(equivalent_width(wave_aa, jnp.asarray(lnu), 6563.0, 20.0, 50.0))
 
-    # tengri SpectralIndexDef on L_lambda (same as CIGALE input)
+    # tengri SpectralIndexDef on L_nu (converted to the F_lambda CIGALE is given)
     lick_llam = float(
         measure_index_jax(
             wave_aa,
-            jnp.asarray(llam),
+            jnp.asarray(lnu),
             SpectralIndexDef(
                 name="halpha_flat",
                 index_type="EW",
