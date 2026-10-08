@@ -342,6 +342,7 @@ class SEDModelState:
     radio_agn_model: str | None
     radio_include_freefree: bool | None
     radio_ir_window: str
+    radio_sf_nu_ref: float | None
     z_fixed: float | None
     dl_cm_fixed: float | None
     param_map: object

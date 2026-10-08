@@ -24,6 +24,7 @@ import pytest
 
 from tengri import FREE, Fixed, SEDModel
 from tengri.components.radio.component import IR_WINDOWS_AA, RadioSEDComponentConfig
+from tengri.components.radio.radio import NU_REF_21CM_HZ
 from tengri.parameters.groups import parse_groups
 from tengri.radio import radio_sfr_bell2003
 from tengri.utils.physics_constants import C_AA
@@ -39,8 +40,8 @@ def ssp():
     return _synthetic_ssp()
 
 
-def _build(ssp, obs, ir_window=None):
-    sf = {"type": "bell2003", "freefree": False}
+def _build(ssp, obs, ir_window=None, **sf_extra):
+    sf = {"type": "bell2003", "freefree": False, **sf_extra}
     if ir_window is not None:
         sf["ir_window"] = ir_window
     with warnings.catch_warnings():
@@ -135,3 +136,29 @@ def test_ir_window_changes_the_compile_signature(ssp, synthetic_tophat_obs):
     sig_total = _build(ssp, synthetic_tophat_obs).compile_signature()
     sig_tir = _build(ssp, synthetic_tophat_obs, "tir").compile_signature()
     assert sig_total != sig_tir
+
+
+def test_21cm_anchor_with_tir_window(ssp, synthetic_tophat_obs):
+    """nu_ref='21cm' + ir_window='tir': L_nu(c/0.21 m) = L(8-1000 um) / (3.75e12 * 10**q)."""
+    state = _state(_build(ssp, synthetic_tophat_obs, "tir", nu_ref="21cm"))
+    wave = np.asarray(state.wave)
+    sed_ir = np.asarray(state.derived["sed_dust_ir"])
+    lo, hi = IR_WINDOWS_AA["tir"]
+    sel = (wave > 1.0e3) & (wave < 5.0e8)
+    nu_dense = np.geomspace(C_AA / hi, C_AA / lo, 400001)
+    f_dense = np.interp(nu_dense, (C_AA / wave[sel])[::-1], sed_ir[sel][::-1])
+    l_tir = float(np.trapezoid(f_dense, nu_dense))
+    sed = np.asarray(state.derived["sed_radio"])
+    keep = sed > 0.0
+    got = np.exp(np.interp(np.log(C_AA / NU_REF_21CM_HZ), np.log(wave[keep]), np.log(sed[keep])))
+    assert got == pytest.approx(l_tir / (3.75e12 * 10.0**2.5), rel=2e-3)
+
+
+def test_combined_sf_settings_round_trip():
+    sf = {"type": "bell2003", "nu_ref": "21cm", "ir_window": "tir", "freefree": False}
+    base = dict(sfh={"type": "const", "all_params": FREE}, redshift=Fixed(0.1))
+    spec = parse_groups(radio={"sf": sf}, **base)
+    groups = spec.to_groups()
+    again = parse_groups(**groups)
+    assert (again.radio_ir_window, again.radio_sf_nu_ref) == ("tir", NU_REF_21CM_HZ)
+    assert groups["radio"]["sf"]["ir_window"] == "tir"

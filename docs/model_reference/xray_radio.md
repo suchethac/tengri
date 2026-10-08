@@ -75,7 +75,7 @@ $$ (eq-fir-radio)
 
 - `bell2003` (Bell 2003): constant $q_{\rm IR} = 2.64$, the calibration of the total 1.4 GHz luminosity (see the free-free section below).
 
-- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term.
+- `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above. Because the nebular free-free is modelled rather than fixed at Bell's empirical 10 %, that total differs from the calibration by a few per cent (0.96 for a delayed-tau galaxy of 1 Gyr at 5 Gyr, 1.02 for constant star formation).
 
 - `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
 
@@ -85,7 +85,7 @@ The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters 
 
 #### Normalization relative to CIGALE.
 
-CIGALE's `radio` module normalizes the star-forming synchrotron at the 21 cm wavelength ($\nu = 1.42758\,$GHz) with a default $q_{\rm IR} = 2.58$. tengri anchors at $1.4\,$GHz, the frequency at which Bell (2003) defines $q_{\rm IR}$, and its default is $q_{\rm IR} = 2.64$. At equal $L_{\rm IR}$ and $\alpha_{\rm SF}$ the tengri luminosity is the CIGALE one times the frequency-independent factor $10^{\,q_{\rm CIGALE} - q_{\rm IR}}\,(1.4/1.42758)^{\alpha_{\rm SF}}$, which is 0.857 at the defaults ($\alpha_{\rm SF} = 0.8$). Setting `radio_q_ir = 2.58` leaves the anchor factor alone: 0.985 at $\alpha_{\rm SF} = 0.8$, 0.988 at 0.6 and 0.981 at 1.0. The anchor frequency is not a model-grammar parameter.
+CIGALE's `radio` module normalizes the star-forming synchrotron at the 21 cm wavelength ($\nu = 1.42758\,$GHz) with a default $q_{\rm IR} = 2.58$. tengri anchors at $1.4\,$GHz, the frequency at which Bell (2003) defines $q_{\rm IR}$, and its default is $q_{\rm IR} = 2.64$. At equal $L_{\rm IR}$ and $\alpha_{\rm SF}$ the tengri luminosity is the CIGALE one times the frequency-independent factor $10^{\,q_{\rm CIGALE} - q_{\rm IR}}\,(1.4/1.42758)^{\alpha_{\rm SF}}$, which is 0.857 at the defaults ($\alpha_{\rm SF} = 0.8$). Setting `radio_q_ir = 2.58` leaves the anchor factor alone: 0.985 at $\alpha_{\rm SF} = 0.8$, 0.988 at 0.6 and 0.981 at 1.0. The anchor is a model-grammar key: `radio={'sf': {'type': 'bell2003', 'nu_ref': '21cm', 'freefree': False}}` normalizes at CIGALE's 1.42758 GHz (a number in Hz is also accepted; `'1.4GHz'`, the default, is Bell's). With that spelling and `radio_q_ir` set to CIGALE's value, tengri and the installed pcigale 2025.1 radio module agree to 2e-5 at 0.15, 1.4, 5 and 30 GHz (`tests/regression/radio/test_radio_21cm_anchor_2762.py`); without it the ratio is the constant 0.98451 at $\alpha_{\rm SF} = 0.8$. In $q_{\rm IR}$ the frequency is a property of the calibration: Bell (2003, Eq. 1) and Yun et al. (2001) measure $L_\nu$ at 1.4 GHz, Helou et al. (1985) at 1.49 GHz, so the default keeps Bell's. The key applies to `bell2003` only.
 
 #### Synchrotron suppression at low SFR.
 

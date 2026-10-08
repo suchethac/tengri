@@ -5366,6 +5366,34 @@ def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
     )
 
 
+def _parse_radio_nu_ref(value: object) -> float:
+    """Resolve ``radio['sf']['nu_ref']`` to a frequency [Hz] (#2762).
+
+    ``"21cm"`` is CIGALE's anchor (lambda = 21 cm, 1.42758 GHz); ``"1.4GHz"`` is
+    Bell (2003)'s; a positive finite number is a frequency in Hz.
+    """
+    import math
+
+    from tengri.components.radio.radio import _NU_REF_BELL2003_HZ, NU_REF_21CM_HZ
+
+    named = {"21cm": NU_REF_21CM_HZ, "1.4ghz": _NU_REF_BELL2003_HZ}
+    if isinstance(value, str):
+        key = value.replace(" ", "").lower()
+        if key not in named:
+            raise ValueError(
+                f"radio['sf']['nu_ref'] must be '21cm', '1.4GHz' or a frequency in Hz, "
+                f"got {value!r}"
+            )
+        return named[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(
+            f"radio['sf']['nu_ref'] must be a string or a number [Hz], got {type(value).__name__}"
+        )
+    if not (math.isfinite(value) and value > 0.0):
+        raise ValueError(f"radio['sf']['nu_ref'] must be finite and positive [Hz], got {value!r}")
+    return float(value)
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -5468,6 +5496,8 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                         keyword="ir_window",
                     )
                 result["radio_ir_window"] = ir_window_val
+            if "nu_ref" in sf_dict:
+                result["radio_sf_nu_ref"] = _parse_radio_nu_ref(sf_dict["nu_ref"])
         else:
             raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
 
@@ -5833,7 +5863,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
@@ -6058,6 +6088,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
         _Structural("ir_window", "radio_ir_window", "total"),
+        _Structural("nu_ref", "radio_sf_nu_ref", None),
     ),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
