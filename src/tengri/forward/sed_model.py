@@ -6782,9 +6782,6 @@ class SEDModel:
         two places, cannot disagree.
         """
         del wave_chunk_size  # see Parameters note
-        from tengri.cosmology import luminosity_distance
-        from tengri.observation.observation import project_spectrum_kernel_split
-        from tengri.observation.spectrum import resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
@@ -6794,11 +6791,57 @@ class SEDModel:
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
         refuse_fixed_overrides(self.spec, params)
-        state = self.predict_state(params)
-        z = self._get_redshift(params)
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        wave_rest = state.wave
-        igm_trans = state.derived.get("igm_transmission", None)
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool that selects the compiled
+        # kernel, not a branch on the sampled redshift.
+        conserving = (
+            bool(spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref()))
+            if spectroscopy is not None
+            else False
+        )
+        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving)
+        return kernel(
+            params,
+            jnp.asarray(wave_obs),
+            *self._resolve_threaded_data(None, None, None),
+        )
+
+    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving):
+        """Return (and cache) the JIT'd observed-frame spectrum projector for ``wave_obs``.
+
+        Mirrors :meth:`_get_or_build_predict_observables_jit`: the compiled function
+        is stored in the structural kernel cache keyed on :meth:`compile_signature`,
+        with the static resample flag appended to the key. The SSP grid, template
+        and z-table arrays and the observed grid ``wave_obs`` enter as runtime
+        arguments, so they are not baked into the HLO.
+
+        Parameters
+        ----------
+        conserving : bool
+            Static flux-conserving resample flag, from
+            :meth:`~tengri.observation.spectroscopy.Spectroscopy.resolve_conserving`.
+
+        Returns
+        -------
+        callable
+            ``fn(params, wave_obs, ssp_data, template_data, ztable_data)`` returning
+            ndarray, shape (n_pix,).
+
+        Notes
+        -----
+        **JIT-compatible**: the returned function is ``jax.jit``-wrapped and
+        differentiable in ``params``.
+        """
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        fn = cache.get(key)
+        if fn is not None:
+            return fn
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6809,42 +6852,60 @@ class SEDModel:
         sigma_lib_flat = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
-        # Per-wavelength SSP library LSF curve (#2518), same source
-        # (self.ssp_data) and same structural (pre-trace) None-check as
-        # _init_instrument / _get_or_build_predict_observables_jit.
-        sigma_lib_curve = self._sigma_lib_curve_for(self.ssp_data)
-        sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
-        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
-        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
-        # Static (pre-trace) resolution of the resample mode (#1166): the model
-        # grid is fixed, so this is a Python bool baked into the trace, not a
-        # branch on the sampled redshift.
-        conserving = (
-            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
-            if spectroscopy is not None
-            else False
-        )
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_scale_getter = self._get_lsf_scale
 
-        return project_spectrum_kernel_split(
-            state,
-            state.sed_intrinsic,
-            igm_trans,
-            wave_rest,
-            wave_obs,
-            z,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=self._get_sigma_v_kms(params),
-            lsf_scale=self._get_lsf_scale(params),
-            cal_coeffs=cal_coeffs,
-            cal_wave_range=cal_wave_range,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
+        # Warm the component-chain cache OUTSIDE the JIT trace (see
+        # _get_or_build_predict_observables_jit): precompute() runs numpy-level
+        # routines that cannot be traced.
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+
+        def _impl(params, wave_obs, ssp_data, template_data, ztable_data):
+            from tengri.cosmology import luminosity_distance
+            from tengri.observation.observation import project_spectrum_kernel_split
+            from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+            state = self.predict_state(
+                params,
+                ssp_data=ssp_data,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+            z = self._get_redshift(params)
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+            wave_rest = state.wave
+            igm_trans = state.derived.get("igm_transmission", None)
+            sigma_lib_curve = self._sigma_lib_curve_for(ssp_data)
+            sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
+            cal_coeffs = (
+                spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
+            )
+            return project_spectrum_kernel_split(
+                state,
+                state.sed_intrinsic,
+                igm_trans,
+                wave_rest,
+                wave_obs,
+                z,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_getter(params),
+                lsf_scale=lsf_scale_getter(params),
+                cal_coeffs=cal_coeffs,
+                cal_wave_range=cal_wave_range,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+
+        jit_fn = jax.jit(_impl)
+        cache[key] = jit_fn
+        return jit_fn
 
     def predict_magnitudes(self, params):
         """Deprecated. Use ``model.predict(params).magnitudes()``.
