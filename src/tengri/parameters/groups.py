@@ -6087,7 +6087,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     ),
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
-        _Structural("ir_window", "radio_ir_window", "total"),
+        _Structural("ir_window", "radio_ir_window", None),
         _Structural("nu_ref", "radio_sf_nu_ref", None),
     ),
     "foreground": (

@@ -143,21 +143,23 @@ Passing `freefree: True` explicitly keeps the term over its whole range on a neb
 
 #### Which infrared window `L_IR` is integrated over: `ir_window`
 
+Without the key, each model uses the window its own paper defines $q$ on: `bell2003` and `bell2003_split` (Bell 2003, total infrared 8--1000 $\mu$m), `delvecchio2021` (Delvecchio et al. 2021, $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) and `mccheyne2022` (McCheyne et al. 2022, $q_{\rm TIR}$ with $L_{\rm TIR}$ the 8--1000 $\mu$m MAGPHYS luminosity, their Sect. 5 and Eq. 4) all default to `'tir'`. An explicit `ir_window` always wins, so `'total'` gives CIGALE's convention.
+
 The q relations are written for different infrared luminosities. Helou et al. (1985) define $q$ on the far-infrared flux between 42.5 and 122.5 $\mu$m; Bell (2003) and the recent calibrations (for example Delvecchio et al. 2021, whose abstract defines $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) use the total infrared, 8--1000 $\mu$m. The `radio.sf` key `ir_window` selects the rest-wavelength window of the dust-emission SED that is integrated to form $L_{\rm IR}$, for every q-based star-formation model (`bell2003`, `bell2003_split`, `delvecchio2021`, `mccheyne2022`) and for the Murphy et al. (2011) free-free term, which is scaled by the same $L_{\rm IR}$:
 
-- **`'total'` (default).** $L_{\rm IR}$ is the dust power as the dust components publish it (`L_ir`), CIGALE's convention. No band integral is taken and the output is bit-identical to builds without the key.
-- **`'tir'`.** $L_{\rm IR} = \int_{8\,\mu{\rm m}}^{1000\,\mu{\rm m}} L_\nu\,d\nu$ of the re-emitted dust SED (`sed_dust_ir`).
-- **`'fir'`.** The same integral over 42.5--122.5 $\mu$m. Helou et al. (1985) define their FIR from the IRAS 60 and 100 $\mu$m fluxes, which approximates this band; the integral over it is what is evaluated here.
+- **`'total'`.** $L_{\rm IR}$ is the dust power as the dust components publish it (`L_ir`), CIGALE's convention. No band integral is taken. It is never the default of a q-based model; name it to reproduce CIGALE.
+- **`'tir'` (the default of every q-based model).** $L_{\rm IR} = \int_{8\,\mu{\rm m}}^{1000\,\mu{\rm m}} L_\nu\,d\nu$ of the re-emitted dust SED (`sed_dust_ir`).
+- **`'fir'`.** The same integral over 42.5--122.5 $\mu$m. Helou et al. (1985) define their FIR from the IRAS 60 and 100 $\mu$m fluxes, so 42.5--122.5 $\mu$m is the nominal IRAS band; the integral over it is what is evaluated here.
 
-The window edges need not fall on grid nodes: the SED is taken linear in frequency between nodes and each grid cell is clipped to the window, so the band is the requested one to the accuracy of the grid trapezoid. For the default delayed-$\tau$ galaxy the 8--1000 $\mu$m band holds 0.944 (DL14) and 0.958 (Casey 2012) of the dust power, so `'tir'` lowers the radio flux by 0.025 and 0.019 dex relative to `'total'`.
+The window edges need not fall on grid nodes: the SED is taken linear in frequency between nodes and each grid cell is clipped to the window, so the band is the requested one to the accuracy of the grid trapezoid. For the default delayed-$\tau$ galaxy the 8--1000 $\mu$m band holds 0.944 (DL14) and 0.958 (Casey 2012) of the dust power, so `'tir'` lowers the radio flux by 0.025 and 0.019 dex relative to `'total'`; this is the shift in the default output.
 
 ```python
 radio={"sf": {"type": "bell2003", "ir_window": "tir"}, "agn": {"type": "powerlaw"}}
 ```
 
-Any window other than `'total'` needs a `dust_emission` block (it reads `sed_dust_ir`) and raises a `ConfigError` otherwise. Under `diffuse_screen` the window is applied to the emergent (screened) dust SED. The derived property `q_ir` always reports the ratio of the total dust power `L_ir` to the 1.4 GHz luminosity, whatever window calibrated the model, so with `'tir'` it differs from the input `radio_q_ir` by the band fraction.
+A window named explicitly needs a `dust_emission` block (it reads `sed_dust_ir`) and raises a `ConfigError` without one; a model with no dust-emission SED and no `ir_window` key uses the published dust power. A rest wavelength grid that does not span the window (for `'tir'`, 8--1000 $\mu$m) also raises a `ConfigError`. Under `diffuse_screen` the window is applied to the emergent (screened) dust SED. The derived property `q_ir` always reports the ratio of the total dust power `L_ir` to the 1.4 GHz luminosity, whatever window calibrated the model, so with `'tir'` it differs from the input `radio_q_ir` by the band fraction.
 
-Defaults against the literature: every model's default is `'total'`, the dust power, whereas Bell (2003) and Delvecchio et al. (2021) define their q on the 8--1000 $\mu$m band; none of the four models is calibrated on the 42.5--122.5 $\mu$m window of Helou et al. (1985). `'tir'` is the literal reading for those two.
+Defaults against the literature: the four models default to the window of their own paper (all 8--1000 $\mu$m), none is calibrated on the 42.5--122.5 $\mu$m window of Helou et al. (1985), and CIGALE's total-dust-power convention needs `ir_window: 'total'`.
 
 ### AGN Radio Jets
 

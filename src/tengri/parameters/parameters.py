@@ -660,7 +660,7 @@ class Parameters:
         self.radio_sfr_mode = kwargs.pop("radio_sfr_mode", "bell2003")
         self.radio_agn_model = kwargs.pop("radio_agn_model", "powerlaw")
         self.radio_include_freefree = kwargs.pop("radio_include_freefree", None)
-        self.radio_ir_window = kwargs.pop("radio_ir_window", "total")
+        self.radio_ir_window = kwargs.pop("radio_ir_window", None)
         self.radio_sf_nu_ref = kwargs.pop("radio_sf_nu_ref", None)
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")

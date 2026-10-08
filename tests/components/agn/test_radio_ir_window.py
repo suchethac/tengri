@@ -3,8 +3,9 @@
 
 ``radio.sf.ir_window`` selects the rest-wavelength band of the dust-emission SED
 that is integrated to form the ``L_IR`` the q relations calibrate against:
-``"total"`` (default, the dust power as published), ``"tir"`` (8-1000 um, Bell
-2003 ApJ 586, 794) or ``"fir"`` (42.5-122.5 um, Helou et al. 1985 ApJ 298, L7).
+``"total"`` (the dust power as published, CIGALE's convention), ``"tir"`` (8-1000 um,
+Bell 2003 ApJ 586, 794; the default of every q-based model) or ``"fir"`` (42.5-122.5 um,
+Helou et al. 1985 ApJ 298, L7, nominal IRAS band).
 
 Reference solution: a modified blackbody whose band integral is evaluated by
 adaptive quadrature in frequency (``scipy.integrate.quad``), independent of the
@@ -125,13 +126,15 @@ def test_radio_luminosity_scales_with_the_windowed_ir(grid, window):
     assert _sf_1p4ghz(window, derived, jnp.asarray(wave)) == pytest.approx(expected, rel=1e-5)
 
 
-def test_default_total_uses_the_published_dust_power_unchanged(grid):
+def test_total_uses_the_published_dust_power_unchanged(grid):
     """ir_window='total' reads L_ir as published, with no band integral at all."""
     wave, derived, _ = _derived(grid)
     expected = _L_IR_TOTAL / (3.75e12 * 10.0**_Q_IR)
     assert _sf_1p4ghz("total", derived, jnp.asarray(wave)) == pytest.approx(expected, rel=1e-12)
-    # Without a wavelength grid or a dust SED, the default still works.
+    # The per-model default is 'tir'; with no dust-emission SED to integrate it falls
+    # back to the published dust power rather than refusing.
     comp = RadioSEDComponent()
+    assert comp.config.resolved_ir_window == "tir"
     inputs = comp.emitter_inputs({"L_ir": jnp.asarray(_L_IR_TOTAL)})
     assert float(inputs["L_ir"]) == _L_IR_TOTAL
     assert "log_L_ir" not in inputs
@@ -142,6 +145,16 @@ def test_windowed_ir_without_dust_emission_is_refused():
     comp = RadioSEDComponent(config=RadioSEDComponentConfig(ir_window="tir"))
     with pytest.raises(ConfigError, match="sed_dust_ir"):
         comp.emitter_inputs({"L_ir": jnp.asarray(1.0e44)}, jnp.logspace(3.0, 8.0, 50))
+
+
+def test_window_outside_the_wavelength_grid_is_refused(grid):
+    """A rest grid that stops short of 1000 um cannot hold the 8-1000 um band."""
+    wave, derived, _ = _derived(grid)
+    short = jnp.asarray(wave[wave < 5.0e6])
+    cut = {**derived, "sed_dust_ir": derived["sed_dust_ir"][: short.shape[0]]}
+    comp = RadioSEDComponent(config=RadioSEDComponentConfig(ir_window="tir"))
+    with pytest.raises(ConfigError, match="span"):
+        comp.emitter_inputs(cut, short)
 
 
 def test_unknown_window_is_refused_at_construction():

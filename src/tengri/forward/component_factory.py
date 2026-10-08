@@ -462,7 +462,7 @@ def build_components(
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
     radio_include_freefree: bool | None = None,
-    radio_ir_window: str = "total",
+    radio_ir_window: str | None = None,
     radio_sf_nu_ref: float | None = None,
     xray_model: str = "yang20",
     use_xray: bool = False,
@@ -570,10 +570,11 @@ def build_components(
         applies only from the SSP grid edge upward
         (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
         always wins.
-    radio_ir_window : str
+    radio_ir_window : str or None
         Rest-wavelength window of the dust-emission SED integrated to form the radio
-        block's ``L_IR``: ``"total"`` (default, the dust power as published), ``"tir"``
-        (8-1000 um) or ``"fir"`` (42.5-122.5 um). See
+        block's ``L_IR``: ``"total"`` (the dust power as published, CIGALE's convention),
+        ``"tir"`` (8-1000 um) or ``"fir"`` (42.5-122.5 um, nominal IRAS band). ``None``
+        (default) takes the selected star-formation model's own paper window. See
         :class:`RadioSEDComponentConfig` (``ir_window``, #2763).
 
     Returns
