@@ -208,6 +208,30 @@ class TestTemplateTemperature:
         assert np.isfinite(float(g))
 
 
+class TestFloat32:
+    def test_estimate_and_contrast_stay_finite_and_close_in_float32(self, wave):
+        from tengri.components.dust.emission._cmb import cmb_observed_emission
+
+        def run(x64):
+            with jax.enable_x64(x64):
+                dtype = jnp.float64 if x64 else jnp.float32
+                w = wave.astype(dtype)
+                nu = C_CGS / (w * AA_TO_CM)
+                lnu = (
+                    (nu / 1e12) ** BETA * planck_bnu(w, 30.0) * 1e30
+                )  # an erg/s/Hz-scale template
+                t = template_far_ir_temperature(w, lnu)
+                out = cmb_observed_emission(w, lnu, jnp.asarray(5.0, dtype), t)
+                return np.asarray(t, dtype=float), np.asarray(out, dtype=float)
+
+        t64, out64 = run(True)
+        t32, out32 = run(False)
+        assert np.isfinite(out32).all() and np.isfinite(t32)
+        assert t32 == pytest.approx(t64, rel=1e-3)
+        keep = out64 > 1e-6 * out64.max()
+        np.testing.assert_allclose(out32[keep], out64[keep], rtol=2e-3)
+
+
 # ── Components ─────────────────────────────────────────────────────────────
 
 ALL_TABULATED = (
