@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tengri.components.nebular._line_ingest import CLOUDY_LABEL_AIR_MAX_AA
+from tengri.components.nebular import _line_ingest
 from tengri.observation.eline_catalog import EMISSION_LINES
 from tengri.observation.line_measurement import DESI_LINES, LineDef
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
@@ -101,7 +101,7 @@ def test_cue_weights_arrays_are_the_vacuum_conversion_of_the_stored_air_labels()
     w = load_cue_weights(str(CUE_WEIGHTS))
     # Cloudy air-labels every line from 2000 A to 100 micron (Pa-alpha 18751.0, [Ne II]
     # 12.8101 micron), so the converted window is the Cloudy one, not the 1e4 A optical one.
-    optical = (raw >= 2000.0) & (raw <= CLOUDY_LABEL_AIR_MAX_AA)
+    optical = (raw >= 2000.0) & (raw <= _line_ingest.CLOUDY_LABEL_AIR_MAX_AA)
     assert optical.sum() > 50
     np.testing.assert_allclose(w.nn_line_wav[optical], air_to_vac(raw[optical]), rtol=0, atol=1e-9)
     np.testing.assert_array_equal(w.nn_line_wav[~optical], raw[~optical])

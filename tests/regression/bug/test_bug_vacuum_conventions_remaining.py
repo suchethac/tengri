@@ -30,11 +30,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.nebular._line_ingest import (
-    CLOUDY_LABEL_AIR_MAX_AA,
-    LABEL_AIR_MAX_AA,
-    catalog_air_to_vacuum,
-)
+from tengri.components.nebular import _line_ingest
+from tengri.components.nebular._line_ingest import LABEL_AIR_MAX_AA, catalog_air_to_vacuum
 from tengri.observation.eline_catalog import EMISSION_LINES
 from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.wavelength_conventions import SOURCES
@@ -146,7 +143,7 @@ _CLOUDY_IR = (
 def test_cloudy_infrared_labels_are_air_and_convert_to_the_vacuum_value():
     air = np.array([a for a, _ in _CLOUDY_IR])
     vac = np.array([v for _, v in _CLOUDY_IR])
-    got = catalog_air_to_vacuum(air, max_air_aa=CLOUDY_LABEL_AIR_MAX_AA)
+    got = catalog_air_to_vacuum(air, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA)
     assert np.max(np.abs(got / vac - 1.0)) < 1e-5
     assert np.min(np.abs(air / vac - 1.0)) > 2.5e-4  # unconverted they are 2.7e-4 short
     # the default (PyNeb/MAPPINGS) window stops at 1e4 A and leaves them alone
@@ -156,7 +153,7 @@ def test_cloudy_infrared_labels_are_air_and_convert_to_the_vacuum_value():
     # beyond the Cloudy cap nothing is converted (far-infrared labels not established)
     far = np.array([1.2e6, 1.576e6])
     np.testing.assert_array_equal(
-        catalog_air_to_vacuum(far, max_air_aa=CLOUDY_LABEL_AIR_MAX_AA), far
+        catalog_air_to_vacuum(far, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA), far
     )
 
 
@@ -251,14 +248,15 @@ def test_dn4000_integrates_the_vacuum_windows(lo, hi):
 
 
 def _expected_dn4000(lo: float, hi: float) -> float:
-    from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
+    """Dn4000 of the strip spectrum for the air_to_vac image of the published windows."""
+    blue, red = (air_to_vac(np.array(w)) for w in ((3850.0, 3950.0), (4000.0, 4100.0)))
 
     def mean(window):
-        a, b = window
+        a, b = (float(w) for w in window)
         overlap = max(0.0, min(b, hi) - max(a, lo))
         return 1.0 + 99.0 * overlap / (b - a)
 
-    return mean(DN4000_RED_AA) / mean(DN4000_BLUE_AA)
+    return mean(red) / mean(blue)
 
 
 def test_dn4000_equals_the_catalog_break_index():
