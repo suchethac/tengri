@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Both SFH age kernels build, conserve mass and agree for every SFH type (#2683, #2684).
 
-``age_kernel='cic'`` shares each mass parcel between the two bracketing SSP
-ages (first order, dense quadrature); ``'dsps'`` is the histogram kernel on a
-table refined 8-fold between nodes. For every SFH type the registry offers, at
-z in {0, 2.5} and default parameters, both kernels must build, form the declared
-mass, and agree in the four bands (FUV, u, r, H) to a stated bound. The common bound is
-0.5 %. A family exceeds it only where the histogram kernel's zeroth-order
-assignment of a parcel to one node is the cause; each such family carries its
-own measured bound and the physical reason, and must raise
-``DSPSUnresolvedHistoryWarning`` when the bound exceeds 2 %.
+``age_kernel='cic'`` shares each mass parcel of the dense, edge-resolved integrand
+between the two bracketing SSP ages (first order); ``'dsps'`` names the same
+integration (#2683), because the histogram assignment it once meant mis-places any
+structure narrower than the SSP node spacing and no table refinement removes it.
+For every SFH type the registry offers, at z in {0, 2.5} and default parameters,
+both kernels must build, form the declared mass, and agree in the four bands
+(FUV, u, r, H) to round-off. (Earlier bounds of 0.5-26 % per family, which
+documented the histogram kernel's placement error, are gone with it.)
 
 The class at the end repeats the checks on a 4-D alpha-enhanced SSP library: the
 alpha axis is collapsed before the age kernel runs, so the kernels see the same
@@ -27,14 +26,13 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tengri.components.stellar.component import DSPSUnresolvedHistoryWarning
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
 pytestmark = pytest.mark.conservation
 
 BANDS = ["galex_fuv", "sdss_u", "sdss_r", "2mass_h"]
-COMMON_BOUND = 0.005
+COMMON_BOUND = 1e-9
 ZS = (0.0, 2.5)
 
 #: The registry's own gate: these types are refused at build, on both kernels,
@@ -50,52 +48,6 @@ REFUSALS = {
     "field": "additive",
     "table": "runtime arrays",
 }
-
-#: z = 2.5 (age of the universe 2.58 Gyr): first-order sharing gives the 2.82 Gyr
-#: node, older than the universe, 0.67 % of the mass (parcels between 2.51 and
-#: 2.58 Gyr share with it); the histogram kernel assigns every parcel to the
-#: node whose log-midpoint bin holds it, so that node gets none. The two
-#: weight vectors differ only by that node (total variation 0.0067 for `const`)
-#: and the 0.73 % flux difference is the UV light of that mass. The effect is
-#: intrinsic to zeroth-order assignment; a knot at age(z) does not change it.
-_Z25_EDGE = 0.010
-_Z25_EXP = 0.015  # same edge, plus an exponential whose young end is brightest
-_EDGE_REASON = "histogram kernel gives the node above age(z) none of its first-order share"
-#: (family, z) -> (bound, reason) for cells above COMMON_BOUND.
-OWN_BOUNDS = {
-    **{
-        (f, 2.5): (_Z25_EDGE, _EDGE_REASON)
-        for f in (
-            "buat08",
-            "const",
-            "const_exp",
-            "continuity",
-            "continuity_flex",
-            "delayed",
-            "delayed_bq",
-            "dense_basis",
-            "dense_basis_pure",
-            "dexp",
-            "dirichlet",
-            "dpl",
-            "dpl_lookback",
-            "lnorm",
-            "psb_flex",
-            "psb_suess2022",
-        )
-    },
-    **{
-        (f, 2.5): (_Z25_EXP, _EDGE_REASON)
-        for f in ("declining_exp", "exp", "sfh2exp", "trunc_exp")
-    },
-    **{
-        (f, 2.5): (0.07, "a Gaussian-in-lookback peak narrower than the node spacing")
-        for f in ("norm", "snorm", "snorm_burst", "tsnorm", "tsnorm_burst")
-    },
-    ("periodic", 0.0): (0.30, "periodic bursts narrower than the node spacing"),
-    ("periodic", 2.5): (0.06, "periodic bursts narrower than the node spacing"),
-}
-
 
 def _unique_families():
     seen = {}
@@ -139,24 +91,19 @@ def test_kernels_agree_for_every_sfh_type(ssp, obs, family, z):
         with pytest.raises((ValueError, TypeError), match=REFUSALS[family]):
             _build(ssp, obs, "cic", z, {"type": family}).predict_photometry({})
         return
-    bound, reason = OWN_BOUNDS.get((family, z), (COMMON_BOUND, ""))
     out = {}
-    with warnings.catch_warnings(record=True) as rec:
-        warnings.simplefilter("always")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         for kernel in ("cic", "dsps"):
             m = _build(ssp, obs, kernel, z, {"type": family})
             out[kernel] = (_formed(m), np.asarray(m.predict_photometry({})))
     declared = out["cic"][0]
     assert abs(out["dsps"][0] - declared) <= 1e-8 * abs(declared), f"{family} z={z}: mass"
     err = np.abs(out["dsps"][1] / out["cic"][1] - 1.0)
-    assert np.all(err <= bound), (
-        f"{family} z={z}: |dsps/cic-1| in {BANDS} = {np.round(err * 100, 3)} % exceeds "
-        f"{bound * 100:.1f} % ({reason or 'common bound'})"
+    assert np.all(err <= COMMON_BOUND), (
+        f"{family} z={z}: |dsps/cic-1| in {BANDS} = {np.round(err * 100, 6)} % exceeds "
+        f"{COMMON_BOUND * 100:.0e} %"
     )
-    if bound > 0.02:
-        assert any(isinstance(r.message, DSPSUnresolvedHistoryWarning) for r in rec), (
-            f"{family} z={z}: unresolved structure ({reason}) did not warn"
-        )
 
 
 # --- 4-D alpha-enhanced library -------------------------------------------------
@@ -172,16 +119,6 @@ SFH_4D = {
     "continuity": {"type": "continuity"},
     "field": {"type": "delayed", "field": True},
 }
-#: delayed/continuity: the 3-D bound of that family at the same z; the field cell
-#: carries the cic/dsps bound of the field tests.
-#: (cell) -> (bound, reason): the delayed-tau with a 5 Gyr onset at z = 2.5 has its
-#: oldest parcels at the age of the universe (2.6 Gyr), between two SSP nodes; the
-#: 4-D result at [alpha/Fe] = 0 equals the 3-D one (test below), so this is the
-#: kernels' difference on that history, not a 4-D effect.
-OWN_4D = {("delayed_5gyr", 2.5): (0.017, "oldest parcels at the age of the universe")}
-BOUND_4D = {"delayed_5gyr": 0.005, "continuity": 0.005, "field": 0.005}
-
-
 @pytest.fixture(scope="module")
 def ssp4(ssp):
     """The shipped 3-D library with an alpha axis: flux x (1 + 0.4 [alpha/Fe]).
@@ -219,12 +156,7 @@ def test_4d_grid_both_kernels(ssp4, obs, name, z, alpha):
         out[kernel] = (_formed(m, p), phot)
     assert abs(out["dsps"][0] - out["cic"][0]) <= 1e-8 * abs(out["cic"][0])
     err = np.abs(out["dsps"][1] / out["cic"][1] - 1.0)
-    bound = max(
-        BOUND_4D[name],
-        OWN_BOUNDS.get((SFH_4D[name]["type"], z), (0.0, ""))[0],
-        OWN_4D.get((name, z), (0.0, ""))[0],
-    )
-    assert np.all(err <= bound), f"{name} z={z} alpha={alpha}: {np.round(err * 100, 3)} %"
+    assert np.all(err <= COMMON_BOUND), f"{name} z={z} alpha={alpha}: {np.round(err * 100, 6)} %"
 
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])
@@ -289,7 +221,7 @@ def test_4d_alpha_gradient_is_kernel_independent(ssp4, obs):
         g[kernel] = float(jax.grad(band)(0.1))
     assert np.isfinite(g["cic"]) and np.isfinite(g["dsps"])
     assert g["cic"] != 0.0 and g["dsps"] != 0.0, g
-    assert abs(g["dsps"] - g["cic"]) <= 0.05 * abs(g["cic"]), g
+    assert abs(g["dsps"] - g["cic"]) <= 1e-9 * abs(g["cic"]), g
 
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])

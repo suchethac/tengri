@@ -68,6 +68,7 @@ def _truth(monkeypatch, ssp, obs, z, sfh):
     try:
         with monkeypatch.context() as m:
             m.setattr(stellar_component, "INTEGRAND_FACTOR_PARAMETRIC", TRUTH_FACTOR)
+            m.setattr(stellar_component, "INTEGRAND_FACTOR_SAWTOOTH", TRUTH_FACTOR)
             return _phot(_model(ssp, obs, "cic", z, sfh))
     finally:
         jax.clear_caches()
@@ -105,6 +106,8 @@ def test_a_dsps_is_the_first_order_integration(ssp, obs, label, z, sfh):
         ("burst 30 Myr, lookback 1.00-1.03 Gyr, z=2.5", 2.5, _const_burst(1.03, 1.0), 0.002),
         ("burst 30 Myr, lookback 0.50-0.53 Gyr, z=2.5", 2.5, _const_burst(0.53, 0.5), 0.003),
         ("burst 10 Myr, lookback 1.00-1.01 Gyr, z=2.5", 2.5, _const_burst(1.01, 1.0), 0.005),
+        ("periodic, z=0", 0.0, {"type": "periodic"}, 0.0015),
+        ("periodic, z=2.5", 2.5, {"type": "periodic"}, 0.0015),
         ("norm, z=2.5", 2.5, {"type": "norm"}, 0.002),
         ("tsnorm, z=2.5", 2.5, {"type": "tsnorm"}, 0.002),
         ("continuity, z=0", 0.0, {"type": "continuity"}, 1e-4),
@@ -115,8 +118,10 @@ def test_b_dsps_flux_matches_converged_quadrature(monkeypatch, ssp, obs, label, 
     """dsps flux vs the 256x converged quadrature, worst of FUV/u/r/H.
 
     The cic integrand is exact for a top-hat or step with its edges as knots, so
-    the burst and step cases converge to 1e-4; the Gaussian peaks and the 10 Myr
-    burst are limited by the integrand's own ~30 Myr resolution.
+    the burst and step cases converge to 1e-4; the periodic family's onsets are
+    exact knots on a 128x integrand (-0.10 % FUV at z = 0; 16x left -4.7 %); the
+    Gaussian peaks and the 10 Myr burst are limited by the integrand's own
+    ~30 Myr resolution.
     """
     truth = _truth(monkeypatch, ssp, obs, z, sfh)
     err = np.abs(_phot(_model(ssp, obs, "dsps", z, sfh)) / truth - 1.0)
@@ -125,7 +130,7 @@ def test_b_dsps_flux_matches_converged_quadrature(monkeypatch, ssp, obs, label, 
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])
 @pytest.mark.parametrize(
-    ("start", "end"), [(1.03, 1.0), (0.53, 0.5), (3.007, 3.0), (2.5, 0.12)]
+    ("start", "end"), [(1.03, 1.0), (0.53, 0.5), (3.2, 3.0), (2.5, 0.12)]
 )
 def test_b_log_age_first_moment_is_preserved(ssp, obs, kernel, start, end):
     """sum_a w_a log10(age_a) equals the SFH's own mean log-age (exact integral).

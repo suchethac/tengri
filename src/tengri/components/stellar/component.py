@@ -232,6 +232,13 @@ def _sfh_bin_edges_yr(fn, sfh_kwargs):
     return sfh_bin_edges_yr(fn, sfh_kwargs)
 
 
+def _is_periodic(fn):
+    """Whether ``fn`` is the periodic SFH, whose bursts need a finer integrand (#2683)."""
+    from tengri.components.stellar.sfh.mean_sfh import periodic
+
+    return fn is periodic
+
+
 def _fast_path_unsupported_sfh_fns():
     """Map each unsupported SFH function to *why* the fast path refuses it (#950, #1395).
 
@@ -365,6 +372,15 @@ INTEGRAND_FACTOR_PARAMETRIC = 16
 #: ``WavePrecomp`` error that every fit surface accepts anyway (#1747). Worth
 #: 1.47x the FLOPs and 1.61x the bytes of the whole forward model.
 INTEGRAND_FACTOR_TABULATED = 8
+
+#: Same, for the **periodic** family (#2683): every burst onset is a jump followed
+#: by a decay over ``tau_bursts`` (20 Myr by default, 1 Myr at the prior's floor)
+#: that the 16x grid, 40 Myr wide at 5 Gyr, does not resolve. The onsets are exact
+#: knots (:func:`..sfh.nonparametric._periodic_edges_yr`), so the error converges
+#: monotonically, as ``(cell / tau)**2``; measured against a 2048x integrand at the
+#: default history, z = 0 FUV: -4.5 % at 16, -0.49 % at 64, -0.13 % at 128, -0.03 %
+#: at 256. 128 puts the default well under the 0.15 % every other family meets.
+INTEGRAND_FACTOR_SAWTOOTH = 128
 
 
 def _refine_sfh_table_ages(ssp_ages_yr, factor: int = INTEGRAND_FACTOR_PARAMETRIC):
@@ -616,7 +632,12 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     # shape: a table is piecewise-linear between knots #765 already injects, a
     # binned family is piecewise-constant with a step at every bin edge. See
     # :func:`_refine_sfh_table_ages` Notes for the measured error budget.
-    factor = INTEGRAND_FACTOR_TABULATED if tab_lbt_yr is not None else INTEGRAND_FACTOR_PARAMETRIC
+    if tab_lbt_yr is not None:
+        factor = INTEGRAND_FACTOR_TABULATED
+    elif _is_periodic(sfh_spec_fn):
+        factor = INTEGRAND_FACTOR_SAWTOOTH
+    else:
+        factor = INTEGRAND_FACTOR_PARAMETRIC
     fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr, factor=factor)
     hi_yr = ssp_ages_yr[-1]
     if tab_lbt_yr is not None:

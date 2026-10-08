@@ -5,10 +5,10 @@ The histogram kernel interpolates ``log10 M(<t)`` in ``log10 t`` and reads it at
 log-midpoint bin edges. Fed one SFR row per SSP node, the edge inside the table
 segment that holds the SFH onset reads ~zero mass and the node containing the
 onset loses its whole weight (+2.3 % FUV on the delayed-tau fiducial, a flux that
-jumps as the onset crosses a node, a staircase gradient). Fed a table refined
-8-fold between nodes it agrees with the first-order kernel (itself within 0.01 %
-of a converged quadrature for smooth histories) to the histogram kernel's own
-accuracy.
+jumps as the onset crosses a node, a staircase gradient). The kernel now
+integrates the first-order dense integrand (see test_bug_2683_followup_*), which
+is within 0.01 % of a converged quadrature for smooth histories; these tests pin
+the onset behaviour on the delayed-tau fiducial.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
-from tengri.components.stellar import component as stellar_component
 
 pytestmark = pytest.mark.regression_bug
 
@@ -164,14 +163,3 @@ def test_f_onset_scan_has_no_staircase(ssp, obs):
         f"largest step of dsps/cic {step.max() * 100:.3f} % at onset "
         f"{onsets[int(step.argmax())]:.3f} Gyr"
     )
-
-
-def test_g_table_contains_the_ssp_nodes_and_is_refined(ssp):
-    """The table grid is the SSP nodes subdivided _DSPS_TABLE_REFINE-fold."""
-    ages = (10.0 ** np.asarray(ssp.ssp_lg_age_gyr)) * 1e9
-    pts = np.asarray(stellar_component._refined_dsps_lookbacks(ages))
-    k = stellar_component._DSPS_TABLE_REFINE
-    assert k == 8
-    assert pts.shape == (ages.size * k,)
-    assert np.all(np.diff(pts) > 0)
-    np.testing.assert_array_equal(pts[k - 1 :: k], ages)
