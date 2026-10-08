@@ -30,7 +30,30 @@ import pytest
 pytestmark = pytest.mark.contract
 
 #: family -> "measured X vs stated Y" for a family whose table misses its stated accuracy.
+_TRIWEIGHT = "triweight smoother over a handful of linear-flux nodes"
+
+
+def _missed(measured: str, detail: str) -> str:
+    return (
+        f"measured {measured} (vs the 1e-3 the analytic adapters assert): {detail}; {_TRIWEIGHT}"
+    )
+
+
+_UNMEASURED = f"not measured separately, same adapter module as dale2014; {_TRIWEIGHT}"
 UNWIRED: dict[str, str] = {
+    "dale2014": _missed("1.6e-2", "30 draws, alpha_dale free, z = 0.05, 80-500 um"),
+    "draine_li2007": _missed("4.3e-1", "30 draws, umin and qpah free, z = 0.05"),
+    "dl07": "same adapter as draine_li2007",
+    "draine_li2014": _UNMEASURED,
+    "astrodust": _UNMEASURED,
+    "themis": _UNMEASURED,
+    "bosa": _UNMEASURED,
+    "radio_synchrotron": _missed("2.3e-2", "50 draws of alpha_sf, 0.3-10 GHz bands, z = 0.05"),
+    "radio_freefree": _missed("1.6e-2", "50 draws of alpha_ff"),
+    "radio_agn_jet": _missed("7.5e-2", "50 draws of alpha_agn"),
+    "xray_xrb": _missed("4.0e-2", "20 draws of both photon indices, 0.5-10 keV"),
+    "xray_corona_lopez24": _missed("5.5e-2", "20 draws, same bands"),
+    "xray_corona": f"not measured like for like (alpha_ox axis is converted); {_TRIWEIGHT}",
     "casey2012": (
         "measured 2.7e-3 (100 seeded draws, all four axes free, z = 0.05, 100-500 um, worst at "
         "alpha_mir ~ 1.15, T ~ 30 K) vs the adapter's 1e-3 contract; the 4-D lookup is also "
@@ -214,7 +237,13 @@ def test_free_shape_matches_exact_and_has_finite_gradients(key):
     assert any(float(g) != 0.0 for g in grads.values())
 
 
-@pytest.mark.parametrize("key", sorted(UNWIRED))
+def test_unwired_keys_are_registered_adapters():
+    from tengri.forward.precompute import registry
+
+    assert set(UNWIRED) <= set(registry.registered_components())
+
+
+@pytest.mark.parametrize("key", sorted(set(UNWIRED) & set(FAMILIES)))
 def test_unwired_family_is_not_engaged(key):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -237,3 +266,55 @@ def _wavepre():
     from tengri import WavePrecomp
 
     return WavePrecomp()
+
+
+def test_threaded_term_responses_follow_the_discovered_emitter_list(
+    synthetic_ssp, synthetic_tophat_obs, monkeypatch
+):
+    """The emitters whose term response is threaded are the ones the build loop discovered."""
+    from tengri import DEFAULT, Fixed, SEDModel, WavePrecomp
+    from tengri.forward import sed_model
+
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "other_params": Fixed(DEFAULT),
+        },
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}, "all_params": Fixed(DEFAULT)},
+        xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.1),
+        approx=WavePrecomp(),
+    )
+    chain = model._cached_component_chain
+    discovered = sed_model._chain_implements_emission_terms(chain)
+    threaded = model._template_data_for_jit() or {}
+    assert sorted(k for k in ("radio", "xray") if "term_band_response" in threaded.get(k, {})) == (
+        discovered
+    )
+
+    monkeypatch.setattr(sed_model, "_chain_implements_emission_terms", lambda chain: ["radio"])
+    fresh = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "other_params": Fixed(DEFAULT),
+        },
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}, "all_params": Fixed(DEFAULT)},
+        xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.1),
+        approx=WavePrecomp(),
+    )
+    data = fresh._template_data_for_jit() or {}
+    assert "term_band_response" in data.get("radio", {})
+    assert "xray" not in data

@@ -10470,7 +10470,7 @@ class SEDModel:
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's
         # one-term SED admits. Same exactness, same build-time integral.
-        for emitter in ("xray", "radio"):
+        for emitter in _chain_implements_emission_terms(cached):
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
