@@ -552,9 +552,9 @@ def _adaf_lnu_peak(t_e: jnp.ndarray, nu_p: jnp.ndarray, m: float) -> jnp.ndarray
         L_{\nu_p} = s_3\,T_e\,\nu_p^2\,m^2\,r_{\min}^2\ \mathrm{erg\,s^{-1}\,Hz^{-1}},
         \qquad s_3 = 1.05\times10^{-24}.
     """
-    # Formed in log10 (utils/scale.pow10). The linear product is finite when run eagerly, but
-    # under jit in float32 at (log M 6, alpha 0.1, beta 0.5, delta 0.5, log L 14) the
-    # downstream log_integral came out +inf and every spectrum point was NaN (#2783).
+    # Formed in log10 (utils/scale.pow10): under jit in float32 the intermediate nu_p^2 m^2
+    # (~5e39) exceeds the float32 maximum (3.4e38), while the product (~2e26) does not, so the
+    # linear form returned a non-finite log_integral at (log M 6, alpha 0.1, log L 14).
     log_l = (
         jnp.log10(1.05e-24 * _R_MIN**2)
         + jnp.log10(t_e)
