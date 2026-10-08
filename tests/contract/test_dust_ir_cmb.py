@@ -205,7 +205,10 @@ class TestTemplateTemperature:
 
     def test_gradient_is_finite(self, wave):
         g = jax.grad(lambda s: template_far_ir_temperature(wave, self._mbb(wave, 30.0) * s))(1.0)
+        # grad-assert: finite-only — the mean-frequency temperature is invariant under an
+        # overall scale of the spectrum, so the correct derivative is zero.
         assert np.isfinite(float(g))
+        assert float(g) == pytest.approx(0.0, abs=1e-6)
 
 
 class TestFloat32:
