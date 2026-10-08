@@ -191,6 +191,25 @@ class MappingsAGNGridData(NamedTuple):
 # ── HDF5 loaders ──────────────────────────────────────────────────
 
 
+#: Schema version of ``flury2024_grids.h5`` this loader reads. Version 2 is the first
+#: whose infrared line wavelengths are right: version 1 (no attribute) read the
+#: ``um`` label digits as microns, storing every IR line 100x too long.
+#: ``scripts/build_flury2024_grids.py`` writes the attribute; bump both together.
+FLURY_SCHEMA_VERSION = 2
+
+
+def _require_current_schema(f: h5py.File, filepath: str | Path) -> None:
+    """Refuse a Flury+2024 file built by an older ``build_flury2024_grids.py``."""
+    found = f.attrs.get("schema_version")
+    if found is None or int(found) != FLURY_SCHEMA_VERSION:
+        raise RuntimeError(
+            f"{filepath} has Flury+2024 schema version {found!r}, but this tengri reads "
+            f"version {FLURY_SCHEMA_VERSION} (version 1 stored every infrared line "
+            "wavelength 100x too long). Rebuild it with: "
+            f"python scripts/build_flury2024_grids.py --output {filepath}"
+        )
+
+
 def _load_stellar_grid(
     filepath: str | Path, model: str, density: str
 ) -> tuple[MappingsStellarGridData, list[str], int, int]:
@@ -215,6 +234,7 @@ def _load_stellar_grid(
 
     """
     with h5py.File(filepath, "r") as f:
+        _require_current_schema(f, filepath)
         grp = f[f"{model}/{density}"]
 
         zo_axis = jnp.array(grp["z_axis"][:])  # ζ_O
@@ -265,6 +285,7 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
 
     """
     with h5py.File(filepath, "r") as f:
+        _require_current_schema(f, filepath)
         grp = f[f"agn_oxaf/{density}"]
 
         line_wavelengths = jnp.array(catalog_air_to_vacuum(grp["line_wavelengths_aa"][:]))
