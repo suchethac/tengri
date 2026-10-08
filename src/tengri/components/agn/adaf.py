@@ -552,8 +552,9 @@ def _adaf_lnu_peak(t_e: jnp.ndarray, nu_p: jnp.ndarray, m: float) -> jnp.ndarray
         L_{\nu_p} = s_3\,T_e\,\nu_p^2\,m^2\,r_{\min}^2\ \mathrm{erg\,s^{-1}\,Hz^{-1}},
         \qquad s_3 = 1.05\times10^{-24}.
     """
-    # Formed in log10 (utils/scale.pow10): the erg/s/Hz product is ~1e25, and in float32 the
-    # reverse pass of the linear product returned NaN at the mass edge (#2783).
+    # Formed in log10 (utils/scale.pow10). The linear product is finite when run eagerly, but
+    # under jit in float32 at (log M 6, alpha 0.1, beta 0.5, delta 0.5, log L 14) the
+    # downstream log_integral came out +inf and every spectrum point was NaN (#2783).
     log_l = (
         jnp.log10(1.05e-24 * _R_MIN**2)
         + jnp.log10(t_e)
@@ -701,12 +702,13 @@ class AdafState(NamedTuple):
 
     .. math::
 
-        L_\nu = \exp\!\left[\ln P_{\rm target} - \ln P_{\rm shape} + \ln(S + B)\right],
+        L_\nu = r\,\exp\!\left[\ln P_{\rm bol} - \ln P_{\rm shape} + \ln(S + B)\right],
 
     with :math:`S` the synchrotron + Compton shape and :math:`B` the bremsstrahlung shape
     (``_adaf_log_total``); :math:`P_{\rm shape} = \int (S + B)\,d\nu` over the model's whole
-    support and :math:`P_{\rm target}` the target power, so :math:`\int L_\nu d\nu = P_{\rm
-    target}`. Both powers are carried as natural logarithms of erg/s (#2783).
+    support and :math:`P_{\rm bol}` the L_bol power, so :math:`\int L_\nu d\nu = r\,P_{\rm
+    bol}` with :math:`r` = ``lum_ratio``. Both powers are carried as natural logarithms of
+    erg/s (#2783).
     """
 
     t_e: jnp.ndarray  # electron temperature [K]
@@ -716,8 +718,9 @@ class AdafState(NamedTuple):
     nu_max_c: jnp.ndarray  # Comptonization ceiling 3 k T_e / h [Hz]
     l_nu_p: jnp.ndarray  # peak L_nu before normalization [erg/s/Hz]
     l_brems0: jnp.ndarray  # bremsstrahlung level before normalization [erg/s/Hz]
-    log_numer: jnp.ndarray  # ln of the target power [erg/s]; -inf for a zero target
+    log_numer: jnp.ndarray  # ln of the L_bol power 10**agn_log_lbol * L_sun [erg/s]
     log_integral: jnp.ndarray  # ln of the power of the unnormalized shape [erg/s]
+    lum_ratio: jnp.ndarray  # linear agn_lum_ratio multiplying the spectrum [dimensionless]
 
 
 def _adaf_log_synch_compton(nu_, s):
@@ -822,7 +825,7 @@ def adaf_scalar_state(
     Notes
     -----
     **Precision**: the bracket of the x_M solve, the peak luminosity and the normalization
-    powers are formed as sums of logs (:func:`_adaf_x_m`, :func:`_adaf_lnu_peak`,
+    powers are formed as sums of logs (:func:`_adaf_x_m`,
     :func:`_segment_log_power`), so pure float32 gives the same shape as float64 over the
     declared box to 1e-4 pointwise (#2783; ``tests/physics/agn/test_adaf_float32_shape.py``).
 
@@ -868,7 +871,7 @@ def adaf_scalar_state(
     # high cutoff at the Comptonization ceiling 3 k T_e / h.
     nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
     nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
-    shape = AdafState(t_e, alpha_c, nu_p, nu_min, nu_max_c, l_nu_p, l_brems0, 0.0, 0.0)
+    shape = AdafState(t_e, alpha_c, nu_p, nu_min, nu_max_c, l_nu_p, l_brems0, 0.0, 0.0, 1.0)
 
     # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
     # reference on the float32 path). The integral uses Gauss-Legendre quadrature
@@ -899,17 +902,10 @@ def adaf_scalar_state(
     )
     log_integral = logsumexp(jnp.stack([*log_segments, log_brems]))
 
-    # Target power 10**agn_log_lbol * L_sun * agn_lum_ratio [erg/s], as a log. A zero ratio
-    # is -inf, which the spectrum maps to an exact zero; the where keeps log(0) out of the
-    # derivative.
-    ratio_pos = agn_lum_ratio > 0.0
-    safe_ratio = jnp.where(ratio_pos, agn_lum_ratio, 1.0)
-    log_numer = jnp.where(
-        ratio_pos,
-        agn_log_lbol * _LN10 + _LOG_LSUN_ERG + jnp.log(safe_ratio),
-        -jnp.inf,
-    )
-    return shape._replace(log_numer=log_numer, log_integral=log_integral)
+    # L_bol power 10**agn_log_lbol * L_sun [erg/s] as a log. The ratio stays linear so a
+    # zero agn_lum_ratio gives an exact zero spectrum with the correct derivative (#2783).
+    log_numer = agn_log_lbol * _LN10 + _LOG_LSUN_ERG
+    return shape._replace(log_numer=log_numer, log_integral=log_integral, lum_ratio=agn_lum_ratio)
 
 
 def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.ndarray:
@@ -917,10 +913,11 @@ def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.n
 
     .. math::
 
-        L_\nu(\nu) = \exp\!\left[\ln P_{\rm target} - \ln P_{\rm shape}
+        L_\nu(\nu) = r\,\exp\!\left[\ln P_{\rm bol} - \ln P_{\rm shape}
         + \ln\left(S(\nu) + B(\nu)\right)\right]
 
-    with :math:`P_{\rm target}` = ``exp(state.log_numer)`` and :math:`P_{\rm shape}` =
+    with :math:`r` = ``state.lum_ratio`` (linear), :math:`P_{\rm bol}` = ``exp(state.log_numer)``
+    and :math:`P_{\rm shape}` =
     ``exp(state.log_integral)`` [erg/s]. The normalization is formed in log space, so no
     erg/s-scale linear product enters the float32 gradient (#2783).
 
@@ -947,12 +944,8 @@ def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.n
        https://doi.org/10.1086/303727
     """
     nu = _wavelength_to_nu(wavelength)
-    # A -inf log target (zero agn_lum_ratio) is an exact zero spectrum; the double where keeps
-    # the -inf out of the arithmetic, so the gradient stays finite there too.
-    numer_on = jnp.isfinite(state.log_numer)
-    log_numer = jnp.where(numer_on, state.log_numer, 0.0)
-    log_spec = log_numer - state.log_integral + _adaf_log_total(nu, state)
-    return jnp.where(numer_on, jnp.exp(log_spec), 0.0)
+    log_spec = state.log_numer - state.log_integral + _adaf_log_total(nu, state)
+    return state.lum_ratio * jnp.exp(log_spec)
 
 
 def adaf_spectrum(
