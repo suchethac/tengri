@@ -21,6 +21,8 @@ the output.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -214,3 +216,83 @@ def test_truncated_grid_matches_fine_grid(case):
     wave, idx = _grid(lo, hi, 450, case["probes"])
     err = _max_rel(_eval(case["fn"], wave, idx), case["fine"])
     assert err < _RTOL, f"{case['name']}: truncated-vs-fine max rel diff {err:.3e}"
+
+
+# -- published L_* diagnostics of the SEDModelComponent classes -----------------
+#
+# Each component publishes its bolometric luminosities from a fixed budget grid, so the
+# value must not move with how the caller samples wavelength. A coarse caller grid (60
+# log points over 0.1-1000 um, the span a catalog fit uses) and a fine one (6000 points)
+# must publish the same L_* to 1e-6.
+
+_L_COARSE = np.geomspace(1.0e3, 1.0e7, 60)  # 0.1-1000 um [A]
+_L_FINE = np.geomspace(1.0e3, 1.0e7, 6000)
+
+_DATA = Path(__file__).resolve().parents[2] / "data"
+
+
+def _make_published_component(name):
+    """Build one SEDModelComponent that reads its template library from ``data/``."""
+    from tengri.components.agn.cat3d_torus_model import CAT3DTorus, CAT3DTorusConfig
+    from tengri.components.agn.kd18_disc_model import KD18Disc
+    from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
+    from tengri.components.agn.silva04_model import Silva04Torus, Silva04TorusConfig
+    from tengri.components.agn.skirtor_agnfitter_model import (
+        SKIRTORAgnfitterTorus,
+        SKIRTORAgnfitterTorusConfig,
+    )
+    from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+
+    makers = {
+        "cat3d_wind": lambda: CAT3DTorus(
+            config=CAT3DTorusConfig(grid_path=str(_DATA / "cat3d_wind_torus_grid.h5"))
+        ),
+        "kd18_disc": KD18Disc,
+        "powerlaw_disc": PowerLawDisc,
+        "silva04": lambda: Silva04Torus(
+            config=Silva04TorusConfig(grid_path=str(_DATA / "silva04_torus_grid.h5"))
+        ),
+        "skirtor_agnfitter": lambda: SKIRTORAgnfitterTorus(
+            config=SKIRTORAgnfitterTorusConfig(
+                grid_path=str(_DATA / "skirtor_mean3p_torus_grid.h5")
+            )
+        ),
+        "skirtor": lambda: SKIRTORTorus(
+            config=SKIRTORTorusConfig(grid_path=str(_DATA / "skirtor_templates_v3.h5"))
+        ),
+    }
+    return makers[name]()
+
+
+def _published_luminosities(name, wave):
+    """The L_* dict a component publishes on ``wave``, at its declared default parameters."""
+    from tengri.forward.orchestrator import default_params_dict
+
+    comp = _make_published_component(name)
+    wave = jnp.asarray(wave)
+    try:
+        data = comp.load(wave)
+    except (FileNotFoundError, OSError) as err:
+        pytest.skip(f"{name}: template data unavailable ({err})")
+    object.__setattr__(comp, "data", data)
+    prefix = comp.parameter_prefix
+    p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
+    if "frac" not in p and "lum_ratio" in p:
+        p["frac"] = p["lum_ratio"]
+    _, published = comp.predict(p, jnp.zeros_like(wave), wave)
+    return {k: float(np.asarray(v)) for k, v in published.items() if k.startswith("L_")}
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["cat3d_wind", "kd18_disc", "powerlaw_disc", "silva04", "skirtor_agnfitter", "skirtor"],
+)
+def test_published_L_star_is_independent_of_caller_grid(name):
+    """Published L_* on a coarse caller grid equals the value on a fine grid to 1e-6."""
+    coarse = _published_luminosities(name, _L_COARSE)
+    fine = _published_luminosities(name, _L_FINE)
+    assert fine, f"{name}: publishes no L_* luminosity"
+    for key, ref in fine.items():
+        assert ref > 0.0, f"{name}.{key}: non-positive reference {ref:.3e}"
+        rel = abs(coarse[key] / ref - 1.0)
+        assert rel < _RTOL, f"{name}.{key}: coarse-vs-fine L_* rel diff {rel:.3e}"

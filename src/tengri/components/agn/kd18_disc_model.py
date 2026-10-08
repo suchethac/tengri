@@ -26,6 +26,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._template_grid import budget_bolometric_nu
 from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -293,30 +294,30 @@ class KD18Disc(SEDModelComponent):
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
 
         """
+
         # Call K&D18 disc model
-        sed_disc = _kubota_done_disc_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_lum_ratio=p["frac"],
-            agn_log_mbh=p["log_mbh"],
-            agn_log_ledd=p["log_ledd"],
-            agn_a_spin=p["a_spin"],
-            agn_cos_inc=p["cos_inc"],
-            agn_f_hard=p["f_hard"],
-            agn_gamma_warm=p["gamma_warm"],
-            agn_kt_warm=p["kt_warm"],
-            agn_gamma_hard=p["gamma_hard"],
-            agn_kt_hot=p["kt_hot"],
-            agn_r_warm_ratio=p["r_warm_ratio"],
-            n_radii=self.config.n_radii,
-            agn_self_consistent_gamma=self.config.self_consistent_gamma,
-        )
+        def _disc_sed(wavelength):
+            return _kubota_done_disc_fn(
+                wavelength=wavelength,
+                agn_log_lbol=p["log_lbol"],
+                agn_lum_ratio=p["frac"],
+                agn_log_mbh=p["log_mbh"],
+                agn_log_ledd=p["log_ledd"],
+                agn_a_spin=p["a_spin"],
+                agn_cos_inc=p["cos_inc"],
+                agn_f_hard=p["f_hard"],
+                agn_gamma_warm=p["gamma_warm"],
+                agn_kt_warm=p["kt_warm"],
+                agn_gamma_hard=p["gamma_hard"],
+                agn_kt_hot=p["kt_hot"],
+                agn_r_warm_ratio=p["r_warm_ratio"],
+                n_radii=self.config.n_radii,
+                agn_self_consistent_gamma=self.config.self_consistent_gamma,
+            )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_disc = bolometric_integral_nu(sed_disc, nu)
+        sed_disc = _disc_sed(wave)
+        # Published luminosity: the disc's own bolometric power, on the fixed budget grid
+        L_disc = budget_bolometric_nu(_disc_sed, dtype=wave.dtype)
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_disc

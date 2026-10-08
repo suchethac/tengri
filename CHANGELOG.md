@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- AGN `L_*` diagnostics published by the `cat3d_wind`, `kd18_disc`, `powerlaw_disc`, `silva04`, `skirtor_agnfitter` and `skirtor` components are integrated on a fixed budget grid, not the caller's wavelength array, so they no longer change with how the caller samples wavelength (#2745).
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows

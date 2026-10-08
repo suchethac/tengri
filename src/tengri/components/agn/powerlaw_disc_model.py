@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._template_grid import budget_bolometric_nu
 from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -178,20 +179,20 @@ class PowerLawDisc(SEDModelComponent):
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
 
         """
+
         # Call power-law disc model
-        sed_disc = _powerlaw_disc_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_lum_ratio=p["frac"],
-            agn_alpha=p["alpha"],
-            agn_T_max=p["T_max"],
-        )
+        def _disc_sed(wavelength):
+            return _powerlaw_disc_fn(
+                wavelength=wavelength,
+                agn_log_lbol=p["log_lbol"],
+                agn_lum_ratio=p["frac"],
+                agn_alpha=p["alpha"],
+                agn_T_max=p["T_max"],
+            )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_disc = bolometric_integral_nu(sed_disc, nu)
+        sed_disc = _disc_sed(wave)
+        # Published luminosity: the disc's own bolometric power, on the fixed budget grid
+        L_disc = budget_bolometric_nu(_disc_sed, dtype=wave.dtype)
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_disc
