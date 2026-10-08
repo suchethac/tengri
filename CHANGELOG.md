@@ -2,6 +2,8 @@
 
 ### Changed
 
+- **Population fits are excluded from every automated test run.** Tests that run a population (hierarchical) fit carry the `population_fit` marker, and the default `addopts` and every explicit `-m` selector in the CI workflow exclude it; run them by hand with `-m population_fit`.
+
 - **ADAF normalization (#2768).** `adaf_spectrum` normalizes with closed-form bremsstrahlung plus a 30-point Gauss-Legendre rule on each of the four segments between the spectrum's own breaks (`0.02 nu_min`, `nu_min`, `nu_p`, `3 k T_e / h`, `100 k T_e / h`) instead of an 8193-node trapezoid. ADAF SEDs move by 2.3e-6 to 2.7e-6 relative, the trapezoid's error against an independent dense reference (3.2e-6 measured there); the new normalization agrees with that reference to 3.9e-12 (declared prior box corners and 300 draws).
 
 - **The conserving line debit takes the ADAF disc's power in closed form (#2768).** The ADAF registers `adaf_disc_power` (`L_acc`, the quantity its spectrum is normalized to), as `multicolor` and `kubota_done` do (#2743), instead of being integrated on the 13001-node ledger grid. The debited fraction moves by up to 1.1e-3 relative (the ledger integral fell short of `L_acc` by 0 to 1.1e-3 across the prior box), and by more with `agn_ebv_disc > 0`, where the ledger power was the reddened disc and the debit is now of the intrinsic power.
