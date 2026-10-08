@@ -6805,6 +6805,7 @@ class SEDModel:
         kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving)
         return kernel(
             params,
+            self.spec.get_fixed_values(),
             jnp.asarray(wave_obs),
             *self._resolve_threaded_data(None, None, None),
         )
@@ -6865,25 +6866,29 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, wave_obs, ssp_data, template_data, ztable_data):
+        def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
             from tengri.cosmology import luminosity_distance
             from tengri.observation.observation import project_spectrum_kernel_split
             from tengri.observation.spectrum import resolve_sigma_lib_kms
 
+            # Merged view, as in predict_observables_jit: a Fixed value enters
+            # through the runtime fixed_values input, never a closure constant.
+            full = {**fixed_values, **params}
             state = self.predict_state(
                 params,
+                fixed_values=fixed_values,
                 ssp_data=ssp_data,
                 template_data=template_data,
                 ztable_data=ztable_data,
             )
-            z = self._get_redshift(params)
+            z = self._get_redshift(full)
             dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
             wave_rest = state.wave
             igm_trans = state.derived.get("igm_transmission", None)
             sigma_lib_curve = self._sigma_lib_curve_for(ssp_data)
             sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
             cal_coeffs = (
-                spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
+                spectroscopy.calibration_coeffs(full) if spectroscopy is not None else None
             )
             return project_spectrum_kernel_split(
                 state,
@@ -6895,8 +6900,8 @@ class SEDModel:
                 dl_cm,
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
-                sigma_v_kms=sigma_v_getter(params),
-                lsf_scale=lsf_scale_getter(params),
+                sigma_v_kms=sigma_v_getter(full),
+                lsf_scale=lsf_scale_getter(full),
                 cal_coeffs=cal_coeffs,
                 cal_wave_range=cal_wave_range,
                 conserving=conserving,
