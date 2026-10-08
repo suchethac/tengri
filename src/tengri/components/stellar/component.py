@@ -1544,6 +1544,7 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, log10_lyc_luminosity
 
+
 def _field_sfh_closure(sfh_lbt_grid, sfr_history):
     """Interp closure + lookback knots for a correlated-field history (#2684).
 

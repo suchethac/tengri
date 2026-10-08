@@ -129,9 +129,7 @@ def test_b_dsps_flux_matches_converged_quadrature(monkeypatch, ssp, obs, label, 
 
 
 @pytest.mark.parametrize("kernel", ["cic", "dsps"])
-@pytest.mark.parametrize(
-    ("start", "end"), [(1.03, 1.0), (0.53, 0.5), (3.2, 3.0), (2.5, 0.12)]
-)
+@pytest.mark.parametrize(("start", "end"), [(1.03, 1.0), (0.53, 0.5), (3.2, 3.0), (2.5, 0.12)])
 def test_b_log_age_first_moment_is_preserved(ssp, obs, kernel, start, end):
     """sum_a w_a log10(age_a) equals the SFH's own mean log-age (exact integral).
 

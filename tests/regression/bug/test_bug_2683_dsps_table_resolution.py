@@ -8,7 +8,7 @@ onset loses its whole weight (+2.3 % FUV on the delayed-tau fiducial, a flux tha
 jumps as the onset crosses a node, a staircase gradient). The kernel now
 integrates the first-order dense integrand (see test_bug_2683_followup_*), which
 is within 0.01 % of a converged quadrature for smooth histories; these tests pin
-the onset behaviour on the delayed-tau fiducial.
+the onset behavior on the delayed-tau fiducial.
 """
 
 from __future__ import annotations

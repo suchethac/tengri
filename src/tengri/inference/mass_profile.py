@@ -179,7 +179,8 @@ _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: mass-independent additive component. :func:`_linearity_max_deviation` takes
 #: ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear model
 #: is not refused under float32 roundoff alone. Set from measured separation
-#: between worst benign case (the coarse-grid histogram that preceded #2683, 6.097e-04 across prior)
+#: between worst benign case (the coarse-grid histogram kernel that preceded #2683,
+#: 6.097e-04 across prior)
 #: and genuine structural failure (mass-independent additive component, ~8.85):
 #: 1e-2 sits 16.4x above worst benign and 885x below genuine failure.
 _LINEARITY_TOL = 1e-2

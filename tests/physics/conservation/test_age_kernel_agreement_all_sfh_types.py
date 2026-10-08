@@ -49,6 +49,7 @@ REFUSALS = {
     "table": "runtime arrays",
 }
 
+
 def _unique_families():
     seen = {}
     for key, spec in SFH_REGISTRY.items():
@@ -119,6 +120,8 @@ SFH_4D = {
     "continuity": {"type": "continuity"},
     "field": {"type": "delayed", "field": True},
 }
+
+
 @pytest.fixture(scope="module")
 def ssp4(ssp):
     """The shipped 3-D library with an alpha axis: flux x (1 + 0.4 [alpha/Fe]).

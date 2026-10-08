@@ -10,8 +10,6 @@ formed mass equals the declaration on both.
 
 from __future__ import annotations
 
-import warnings
-
 import jax
 import numpy as np
 import pytest
