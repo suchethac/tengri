@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """pad_filters assembles in numpy and must reproduce the per-filter jnp scatter loop exactly."""
 
 import jax
