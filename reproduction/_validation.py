@@ -254,7 +254,7 @@ def band_average(
     ft: np.ndarray,
     *,
     weight: str = "photon",
-    integrate: str = "filter",
+    integrate: str = "sed",
 ) -> float:
     """Bandpass-averaged :math:`L_\\nu` [erg/s/Hz], or NaN if uncovered.
 
@@ -270,14 +270,14 @@ def band_average(
         Bandpass weight :math:`w(\\lambda)`: ``"photon"`` uses
         :math:`1/\\lambda` (default; tengri, DSPS, FSPS, prospector, bagpipes),
         ``"energy"`` uses :math:`1/\\lambda^2` (CIGALE, energy-type filters).
-    integrate : {"filter", "sed"}, optional
-        Quadrature nodes. ``"filter"`` (default) samples the spectrum at the
-        filter's own nodes, ``np.interp(fw, wave, L_nu)``. ``"sed"`` integrates on
-        the spectrum's own nodes inside the filter's extent, with the filter
-        interpolated onto them; the filter's nodes are added to the grid, so
+    integrate : {"sed", "filter"}, optional
+        Quadrature nodes. ``"sed"`` (default) integrates on the spectrum's own
+        nodes inside the filter's extent, with the filter interpolated onto them
+        (zero outside its support); the filter's nodes are added to the grid, so
         where the spectrum is the coarser of the two the filter shape is still
-        resolved. ``"sed"`` is exact for a spectrum sampled finer than the
-        filter and is the one to use when the spectrum carries emission lines.
+        resolved. ``"filter"`` samples the spectrum at the filter's own nodes,
+        ``np.interp(fw, wave, L_nu)``; it is kept only to reproduce old numbers
+        and aliases any feature narrower than the filter's node spacing.
 
     Returns
     -------
@@ -309,7 +309,7 @@ def band_average(
     With ``integrate="filter"`` a spectrum feature narrower than the filter's
     node spacing (an emission line against a 25 Angstrom grid) is sampled at
     whichever filter nodes fall near it, so the band value depends on where the
-    nodes sit.
+    nodes sit. The default avoids this, so an emission line contributes its flux.
     """
     if weight == "photon":
         w_exp = -1.0
@@ -317,8 +317,8 @@ def band_average(
         w_exp = -2.0
     else:
         raise ValueError(f"weight must be 'photon' or 'energy', got {weight!r}")
-    if integrate not in ("filter", "sed"):
-        raise ValueError(f"integrate must be 'filter' or 'sed', got {integrate!r}")
+    if integrate not in ("sed", "filter"):
+        raise ValueError(f"integrate must be 'sed' or 'filter', got {integrate!r}")
 
     wave = np.asarray(wave, float)
     L_nu = np.asarray(L_nu, float)
@@ -357,7 +357,7 @@ def _filter_rows_inner(
     *,
     filters: tuple[tuple[str, str], ...],
     weight: str,
-    integrate: str = "filter",
+    integrate: str = "sed",
 ) -> list[tuple[str, float, float, float, float]]:
     """Shared logic for filter_rows and filter_rows_native.
 
@@ -375,8 +375,8 @@ def _filter_rows_inner(
         ``(file stem, label)`` pairs.
     weight : {"photon", "energy"}
         Bandpass weight to pass to :func:`band_average`.
-    integrate : {"filter", "sed"}
-        Quadrature nodes, passed to :func:`band_average`.
+    integrate : {"sed", "filter"}, optional
+        Quadrature nodes, passed to :func:`band_average`; default ``"sed"``.
 
     Returns
     -------
@@ -400,7 +400,7 @@ def filter_rows(
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
     weight: str = "photon",
-    integrate: str = "filter",
+    integrate: str = "sed",
 ) -> list[tuple[str, float, float, float, float]]:
     """Band-average both SEDs through each filter and form the ratio.
 
@@ -421,8 +421,8 @@ def filter_rows(
         ``(file stem, label)`` pairs. Defaults to :data:`BROAD_FILTERS`.
     weight : {"photon", "energy"}, optional
         Passed to :func:`band_average`.
-    integrate : {"filter", "sed"}, optional
-        Passed to :func:`band_average`; default ``"filter"``.
+    integrate : {"sed", "filter"}, optional
+        Passed to :func:`band_average`; default ``"sed"``.
 
     Returns
     -------
@@ -444,7 +444,7 @@ def filter_rows_native(
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
     weight: str = "photon",
-    integrate: str = "filter",
+    integrate: str = "sed",
 ) -> list[tuple[str, float, float, float, float]]:
     """Band-average each SED on its own grid and form the ratio.
 
@@ -469,10 +469,10 @@ def filter_rows_native(
         Bandpass weight; defaults to ``"photon"`` (tengri, DSPS, FSPS,
         prospector). Both sides are integrated with the same weight and filter
         curves.
-    integrate : {"filter", "sed"}, optional
-        Passed to :func:`band_average`; default ``"filter"``. ``"sed"`` integrates
-        each side on its own nodes, which removes the dependence of an
-        emission-line band value on the filter's node positions.
+    integrate : {"sed", "filter"}, optional
+        Passed to :func:`band_average`; default ``"sed"``, which integrates each
+        side on its own nodes and removes the dependence of an emission-line band
+        value on the filter's node positions.
 
     Returns
     -------
@@ -564,7 +564,7 @@ def convention_sensitivity(
     L_ref: np.ndarray,
     *,
     filters: tuple[tuple[str, str], ...] = BROAD_FILTERS,
-    integrate: str = "filter",
+    integrate: str = "sed",
 ) -> float:
     """Largest band-ratio shift between the photon and energy conventions.
 
@@ -576,8 +576,8 @@ def convention_sensitivity(
         tengri and reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
     filters : tuple of (str, str), optional
         ``(file stem, label)`` pairs.
-    integrate : {"filter", "sed"}, optional
-        Passed to :func:`band_average`; default ``"filter"``.
+    integrate : {"sed", "filter"}, optional
+        Passed to :func:`band_average`; default ``"sed"``.
 
     Returns
     -------
