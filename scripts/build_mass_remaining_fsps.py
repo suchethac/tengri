@@ -81,7 +81,9 @@ def main() -> None:
     sps_home = os.environ["SPS_HOME"]
     import fsps
 
-    sp = fsps.StellarPopulation(imf_type=_IMF_TYPE[args.imf], sfh=0, add_stellar_remnants=1)
+    sp = fsps.StellarPopulation(
+        zcontinuous=0, imf_type=_IMF_TYPE[args.imf], sfh=0, add_stellar_remnants=1
+    )
     libraries = [_decode(x).lower() for x in sp.libraries]
     if _ISOC_LIBRARY_TOKEN[args.isoc] not in libraries:
         raise ValueError(
