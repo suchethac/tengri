@@ -21,7 +21,13 @@ import numpy as np
 
 from tengri.config.exceptions import GridSupportWarning
 
-__all__ = ["active_support", "check_user_axis", "declared_bounds", "default_axis"]
+__all__ = [
+    "active_support",
+    "check_user_axis",
+    "declared_bounds",
+    "default_axis",
+    "hull_axis",
+]
 
 
 def declared_bounds(declarations: Any, param_name: str) -> tuple[float, float]:
@@ -150,6 +156,60 @@ def default_axis(
         coordinate(declared_hi) - coordinate(declared_lo)
     )
     n_axis = max(n_nodes, int(np.ceil(n_nodes * stretch)))
+    if log_axis:
+        return np.geomspace(lo, hi, n_axis, dtype=np.float64)
+    return np.linspace(lo, hi, n_axis, dtype=np.float64)
+
+
+def hull_axis(
+    literal: np.ndarray, support: tuple[float, float] | None, *, log_axis: bool = False
+) -> np.ndarray:
+    """Literal default axis widened to include ``support``, at the literal's node density.
+
+    The axis is never narrowed. When ``support`` lies inside the literal range, or is None, the
+    literal is returned unchanged. Otherwise the axis spans the hull of the literal range and
+    ``support``, with the node count scaled by the span in the interpolation coordinate
+    (``ln`` on a logarithmic axis), ``ceil(n * span_hull / span_literal)``, never below ``n``.
+
+    Parameters
+    ----------
+    literal : array_like, shape (n,)
+        Default node values; the range they cover is the literal range.
+    support : tuple[float, float] or None
+        Reach from :func:`active_support`.
+    log_axis : bool
+        Geometric nodes and a ``ln`` interpolation coordinate when True.
+
+    Returns
+    -------
+    ndarray, shape (m,)
+        Node values, ``m >= n``.
+
+    Raises
+    ------
+    ValueError
+        If the literal spans no range, or ``log_axis`` and the extended lower bound is not
+        positive.
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    lit_lo, lit_hi = float(literal.min()), float(literal.max())
+    if not lit_hi > lit_lo:
+        raise ValueError("a default axis literal must span a non-zero range")
+    lo, hi = (
+        (lit_lo, lit_hi)
+        if support is None
+        else (
+            min(lit_lo, support[0]),
+            max(lit_hi, support[1]),
+        )
+    )
+    if (lo, hi) == (lit_lo, lit_hi):
+        return literal.copy()
+    if log_axis and lo <= 0.0:
+        raise ValueError(f"the axis reaches {lo:g}; a logarithmic node axis needs lo > 0.")
+    coordinate = np.log if log_axis else np.asarray
+    stretch = (coordinate(hi) - coordinate(lo)) / (coordinate(lit_hi) - coordinate(lit_lo))
+    n_axis = max(literal.size, int(np.ceil(literal.size * stretch)))
     if log_axis:
         return np.geomspace(lo, hi, n_axis, dtype=np.float64)
     return np.linspace(lo, hi, n_axis, dtype=np.float64)
