@@ -5,7 +5,8 @@ Implements the ``activategtorus`` module from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The infrared continuum is the sum of
 two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda`:
 a cool dust peak at :math:`\\lambda_{\\rm COOL}` and a hot dust peak at
-:math:`\\lambda_{\\rm HOT}`, each :math:`\\propto \\exp[-(\\log_{10}\\lambda - \\log_{10}\\lambda_0)^2 / (2W^2)]`, so the width
+:math:`\\lambda_{\\rm HOT}`, each
+:math:`\\propto \\exp[-(\\log_{10}\\lambda - \\log_{10}\\lambda_0)^2 / (2W^2)]`, so the width
 :math:`W` is the standard deviation in dex. (Upstream's code drops the 2 and its
 ``W`` is therefore :math:`\\sqrt{2}` times the standard deviation, contradicting its
 own parameter documentation and the paper; tengri uses the standard deviation.) The hot
@@ -95,7 +96,8 @@ def torus_dust_continuum(
         Cool component peak wavelength :math:`\lambda_{\rm COOL}` [um].
         Reasonable: 15-30 um.
     cool_width : float
-        Cool component log-normal standard deviation :math:`W_{\rm COOL}` [dex]. Reasonable: 0.2-0.65.
+        Cool component log-normal standard deviation :math:`W_{\rm COOL}` [dex].
+        Reasonable: 0.2-0.65.
     hot_lam_um : float
         Hot component peak wavelength [um]. Reasonable: 1-5.5 um.
     hot_width : float
@@ -229,8 +231,9 @@ def torus_mn12_continuum(
            \lambda_{\rm cut}}\right)^2\right)\right]
 
     where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12000\,\mathrm{nm}`
-    (:math:`\lambda L_\lambda(12\,\mu m) = 2.5 f_{\rm cov}\,\mathrm{l5100}`), :math:`\Delta(\lambda, T_{\rm tor}) =
-    (L_{\rm hi} - \langle L_\lambda \rangle) T_{\rm tor}` for :math:`T_{\rm tor} > 0`,
+    (:math:`\lambda L_\lambda(12\,\mu m) = 2.5 f_{\rm cov}\,\mathrm{l5100}`),
+    :math:`\Delta(\lambda, T_{\rm tor}) = (L_{\rm hi} - \langle L_\lambda \rangle) T_{\rm tor}`
+    for :math:`T_{\rm tor} > 0`,
     and :math:`\Delta = (L_{\rm lo} - \langle L_\lambda \rangle) |T_{\rm tor}|`
     for :math:`T_{\rm tor} < 0`.
 

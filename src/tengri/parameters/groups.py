@@ -6434,12 +6434,26 @@ def _agn_block_selection(agn_top: dict) -> dict[str, str]:
     -------
     dict of str to str
         The selected block type of every sub-block that declares a string ``'type'``.
+        A deprecated ``lines`` sub-block contributes its ``nlr`` and ``blr`` types,
+        expanded by the grammar's own :func:`expand_lines_alias`. An explicit
+        ``nlr`` / ``blr`` takes precedence; the grammar refuses the two together.
     """
+    from tengri.components.agn.blocks._aliases import expand_lines_alias
+
     selection: dict[str, str] = {}
     for cat in _AGN_SELECTABLE_CATEGORIES:
         sub = agn_top.get(cat)
         if isinstance(sub, dict) and isinstance(sub.get("type"), str):
             selection[cat] = sub["type"]
+    lines = agn_top.get("lines")
+    if isinstance(lines, dict) and isinstance(lines.get("type"), str):
+        try:
+            nlr_type, blr_type = expand_lines_alias(lines["type"])
+        except ValueError:
+            # An unknown alias is refused by the grammar with its own message.
+            return selection
+        selection.setdefault("nlr", nlr_type)
+        selection.setdefault("blr", blr_type)
     return selection
 
 

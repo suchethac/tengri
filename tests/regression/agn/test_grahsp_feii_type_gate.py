@@ -8,7 +8,7 @@ forest for every type, in the monolithic ``evaluate_grahsp_agn`` and in both com
 ``feii:grahsp`` / ``feii:grahsp_veroncetty`` blocks (found by the upstream crossval,
 ``tests/crossval/test_grahsp_vs_upstream_reference.py``).
 
-Buchner et al. 2024 (arXiv:2405.19297) §2.1.2 normalises the FeII template to the broad
+Buchner et al. 2024 (arXiv:2405.19297) §2.1.2 normalizes the FeII template to the broad
 H-beta luminosity ("relative to the Hbeta line luminosity", ``AFeII``), i.e. it is part of the
 broad-line component; the type switch itself is the upstream ``AGNtype`` parameter of
 ``activatelines`` (the paper text does not define it).

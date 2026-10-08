@@ -127,7 +127,10 @@ def test_torus_mn12_si_interpolation(fixture):
 
 
 def test_normalization_at_12um(fixture):
-    """Verify normalization at 12 µm: L_lambda(12 um) = 2.5*l5100*fcov/12000 nm (times the cutoff)."""
+    """Verify normalization at 12 um: L_lambda(12 um) = 2.5*l5100*fcov/12000 nm.
+
+    The cutoff multiplies this value.
+    """
     from tengri.components.agn.grahsp.torus import torus_mn12_continuum
 
     wave_nm = fixture["wave_mn12_nm"]
@@ -250,14 +253,26 @@ def test_torus_12um_luminosity_is_2p5_fcov_l5100(variant, tor_temp, fixture):
     wave_nm = np.union1d(np.logspace(2.5, 5.0, 400), [12000.0])
     if variant == "gaussian":
         out = torus_dust_continuum(
-            wave_nm=wave_nm, l5100=l5100, fcov=fcov, cool_lam_um=17.0, cool_width=0.45,
-            hot_lam_um=2.0, hot_width=0.5, hot_fcov=1.0,
+            wave_nm=wave_nm,
+            l5100=l5100,
+            fcov=fcov,
+            cool_lam_um=17.0,
+            cool_width=0.45,
+            hot_lam_um=2.0,
+            hot_width=0.5,
+            hot_fcov=1.0,
         )
     else:
         out = torus_mn12_continuum(
-            wave_nm=wave_nm, l5100=l5100, fcov=fcov, tor_temp=tor_temp, tor_cutoff_um=1.2,
-            mn12_wave_nm=fixture["wave_mn12_nm"], mn12_avg=fixture["mn12_avg"],
-            mn12_lo=fixture["mn12_lo"], mn12_hi=fixture["mn12_hi"],
+            wave_nm=wave_nm,
+            l5100=l5100,
+            fcov=fcov,
+            tor_temp=tor_temp,
+            tor_cutoff_um=1.2,
+            mn12_wave_nm=fixture["wave_mn12_nm"],
+            mn12_avg=fixture["mn12_avg"],
+            mn12_lo=fixture["mn12_lo"],
+            mn12_hi=fixture["mn12_hi"],
         )
     at_12um = float(np.interp(12000.0, wave_nm, np.asarray(out))) * 12000.0
     np.testing.assert_allclose(at_12um, 2.5 * fcov * l5100, rtol=1e-3)

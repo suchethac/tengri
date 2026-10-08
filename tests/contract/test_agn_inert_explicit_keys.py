@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Explicit AGN sub-block keys the selected block type never reads are refused.
 
 An explicit per-parameter key that the category owns but the selected type does
@@ -15,6 +16,8 @@ from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
+
+pytestmark = pytest.mark.contract
 
 _CENTERS = (1500.0, 5000.0, 2.0e4, 1.0e5, 2.5e5, 2.0e6)
 
@@ -90,7 +93,7 @@ def test_grahsp_torus_refuses_tor_temp_and_names_mn12(ssp, obs):
 
 def test_grahsp_torus_refuses_tau_skirtor_and_names_skirtor(ssp, obs):
     """``tau_skirtor`` is inert under ``torus:grahsp``; the SKIRTOR torus reads it."""
-    with pytest.raises(ValueError, match=r"skirtor") as info:
+    with pytest.raises(ValueError, match=r"read by 'skirtor'") as info:
         _build(
             ssp,
             obs,

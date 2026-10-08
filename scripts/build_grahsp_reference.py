@@ -28,7 +28,7 @@ Upstream sources (file:line for parameter ranges):
 Wavelength grid: 5000 log-spaced points 10 nm – 1e6 nm (float64, gzip).
 
 Gotchas (from probes/p5_recon/recon.md §Q3):
-  - Process-global memoisation (sed/utils.py): ONE parameter set per process.
+  - Process-global memoization (sed/utils.py): ONE parameter set per process.
     Anything that changes linewidth/ABC must subprocess.
   - Upstream default plslope=6.0 violates assert uvslope>plslope: always pass.
   - Pass name= to module constructors (py3.12 inspect.getfile bug).

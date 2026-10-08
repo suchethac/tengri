@@ -121,11 +121,19 @@ def test_log_gaussian_width_is_the_standard_deviation(width):
     from tengri.components.agn.grahsp.torus import torus_dust_continuum
 
     lam_um = 17.0
-    wave_nm = jnp.asarray([lam_um * 1000.0, lam_um * 1000.0 * 10.0**width, lam_um * 1000.0 * 10.0 ** (-2 * width)])
+    wave_nm = jnp.asarray(
+        [lam_um * 1000.0, lam_um * 1000.0 * 10.0**width, lam_um * 1000.0 * 10.0 ** (-2 * width)]
+    )
     out = np.asarray(
         torus_dust_continuum(
-            wave_nm=wave_nm, l5100=1.0, fcov=0.4, cool_lam_um=lam_um, cool_width=width,
-            hot_lam_um=2.0, hot_width=0.5, hot_fcov=0.0,
+            wave_nm=wave_nm,
+            l5100=1.0,
+            fcov=0.4,
+            cool_lam_um=lam_um,
+            cool_width=width,
+            hot_lam_um=2.0,
+            hot_width=0.5,
+            hot_fcov=0.0,
         )
     )
     np.testing.assert_allclose(out[1] / out[0], np.exp(-0.5), rtol=1e-12)

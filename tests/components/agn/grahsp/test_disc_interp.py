@@ -8,12 +8,12 @@ validation.
 
 from __future__ import annotations
 
-import numpy as np
-import pytest
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pytest
 
 pytestmark = pytest.mark.bounds
 
@@ -28,6 +28,7 @@ def fixture():
 @pytest.fixture(scope="module")
 def templates():
     from tengri.components.agn.grahsp.templates import load_grahsp_templates
+
     return load_grahsp_templates()
 
 
@@ -38,6 +39,7 @@ class TestNetzerDiscInterpNodeEquality:
     def test_netzer_disc_interp_exists(self, templates):
         """Check that netzer_disc_interp can be imported."""
         from tengri.components.agn.grahsp.disc import netzer_disc_interp
+
         assert callable(netzer_disc_interp)
 
     def test_all_16_nodes_exact_match(self, fixture, templates):
@@ -64,9 +66,9 @@ class TestNetzerDiscInterpNodeEquality:
         log_mdot_vals = np.log10(mdot_vals)
 
         # Test all 16 nodes
-        for m_idx, m_log in enumerate(m_vals):
-            for a_idx, a in enumerate(a_vals):
-                for mdot_idx, log_mdot_val in enumerate(log_mdot_vals):
+        for _m_idx, m_log in enumerate(m_vals):
+            for _a_idx, a in enumerate(a_vals):
+                for _mdot_idx, log_mdot_val in enumerate(log_mdot_vals):
                     # Reference: use select_disc_model with string labels
                     m_str = f"{int(m_log)}.0"  # m_log is already dex(Msun)
                     a_str = "0" if a < 0.5 else "0.998"  # Bundle format: "0" or "0.998"
@@ -295,13 +297,21 @@ class TestNetzerDiscInterpGradients:
 
         # Compare
         np.testing.assert_allclose(
-            grad_log_mbh, float(fd_log_mbh), rtol=1e-5, atol=0.0, err_msg="log_mbh gradient mismatch"
+            grad_log_mbh,
+            float(fd_log_mbh),
+            rtol=1e-5,
+            atol=0.0,
+            err_msg="log_mbh gradient mismatch",
         )
         np.testing.assert_allclose(
             grad_spin, float(fd_spin), rtol=1e-5, atol=0.0, err_msg="spin gradient mismatch"
         )
         np.testing.assert_allclose(
-            grad_log_mdot, float(fd_log_mdot), rtol=1e-5, atol=0.0, err_msg="log_mdot gradient mismatch"
+            grad_log_mdot,
+            float(fd_log_mdot),
+            rtol=1e-5,
+            atol=0.0,
+            err_msg="log_mdot gradient mismatch",
         )
 
     def test_clipping_at_grid_edges(self, templates):

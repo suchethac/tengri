@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """GRAHSP blocks declare their native wavelength support on the master grid (design T5).
 
 The GRAHSP bundle lives in ``data/grahsp/``, a directory the basename-only data locator
@@ -18,6 +19,8 @@ from tengri.forward.wavelength_extension import (
     native_wave_agn_feii,
     native_wave_agn_torus,
 )
+
+pytestmark = pytest.mark.contract
 
 _NM_TO_A = 10.0
 

@@ -21,7 +21,7 @@ from tests._data_skip import requires_grahsp
 
 @requires_grahsp
 class TestSbplDiscBitIdentityPin:
-    """Bit-identity pin for grahsp_sbpl_disc_block before helper extraction (Item D, design guard)."""
+    """Bit-identity pin for grahsp_sbpl_disc_block before helper extraction (Item D)."""
 
     @pytest.fixture
     def wave_nm(self):
@@ -38,7 +38,12 @@ class TestSbplDiscBitIdentityPin:
     _PIN_WAVE_AA = (912.0, 1216.0, 2500.0, 5100.0, 10000.0, 50000.0, 200000.0)
     _PINNED = (
         (
-            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=44.0, agn_grahsp_uvslope=0.0, agn_grahsp_plslope=-1.7),
+            dict(
+                agn_log_lbol=43.0,
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_uvslope=0.0,
+                agn_grahsp_plslope=-1.7,
+            ),
             (
                 "0x1.1bbd8ca8dd8aap+137",
                 "0x1.b6d611ed2248cp+136",
@@ -50,7 +55,12 @@ class TestSbplDiscBitIdentityPin:
             ),
         ),
         (
-            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=45.5, agn_grahsp_uvslope=-0.5, agn_grahsp_plslope=-1.5),
+            dict(
+                agn_log_lbol=43.0,
+                agn_grahsp_log_l5100=45.5,
+                agn_grahsp_uvslope=-0.5,
+                agn_grahsp_plslope=-1.5,
+            ),
             (
                 "0x1.028a4683dad67p+142",
                 "0x1.80f523536121fp+141",
@@ -62,7 +72,12 @@ class TestSbplDiscBitIdentityPin:
             ),
         ),
         (
-            dict(agn_log_lbol=43.0, agn_grahsp_log_l5100=42.5, agn_grahsp_uvslope=0.3, agn_grahsp_plslope=-1.9),
+            dict(
+                agn_log_lbol=43.0,
+                agn_grahsp_log_l5100=42.5,
+                agn_grahsp_uvslope=0.3,
+                agn_grahsp_plslope=-1.9,
+            ),
             (
                 "0x1.4fb59d8c3644cp+132",
                 "0x1.066594eea240bp+132",
@@ -181,24 +196,28 @@ class TestBalmercontinuumBlrGrahsp:
 
         # Component API reference
         sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_ref = (
+            np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Composable runner (all-grahsp)
-        l_nu_got = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_bc=0.0,
-            agn_grahsp_a_lines=1.0,
-            agn_grahsp_linewidth_kms=5000.0,
-            agn_type=1,
-        ))
+        l_nu_got = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_bc=0.0,
+                agn_grahsp_a_lines=1.0,
+                agn_grahsp_linewidth_kms=5000.0,
+                agn_type=1,
+            )
+        )
 
         np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-8)
 
@@ -210,24 +229,28 @@ class TestBalmercontinuumBlrGrahsp:
 
         # Component API reference
         sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_ref = (
+            np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Composable runner with a_bc=0.3
-        l_nu_got = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_bc=a_bc,
-            agn_grahsp_a_lines=1.0,
-            agn_grahsp_linewidth_kms=5000.0,
-            agn_type=1,
-        ))
+        l_nu_got = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_bc=a_bc,
+                agn_grahsp_a_lines=1.0,
+                agn_grahsp_linewidth_kms=5000.0,
+                agn_type=1,
+            )
+        )
 
         np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-8)
 
@@ -241,7 +264,9 @@ class TestBalmercontinuumBlrGrahsp:
             GRAHSPParams(l5100=1e44, a_bc=0.0, a_lines=1.0, linewidth_kms=5000.0),
             templates,
         )
-        l_nu_a0 = np.asarray(sed_a0.bbb_attenuated + sed_a0.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_a0 = (
+            np.asarray(sed_a0.bbb_attenuated + sed_a0.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Evaluate at a_bc=0.5
         sed_a5 = evaluate_grahsp_agn(
@@ -249,7 +274,9 @@ class TestBalmercontinuumBlrGrahsp:
             GRAHSPParams(l5100=1e44, a_bc=0.5, a_lines=1.0, linewidth_kms=5000.0),
             templates,
         )
-        l_nu_a5 = np.asarray(sed_a5.bbb_attenuated + sed_a5.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_a5 = (
+            np.asarray(sed_a5.bbb_attenuated + sed_a5.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         rel_change = np.abs((l_nu_a5 - l_nu_a0) / np.maximum(np.abs(l_nu_a0), 1e-300))
         max_rel = np.max(rel_change)
@@ -262,14 +289,22 @@ class TestBalmercontinuumBlrGrahsp:
         a_bc = 0.3
 
         # Type 1 (broad lines visible)
-        params_t1 = GRAHSPParams(l5100=1e44, a_bc=a_bc, a_lines=1.0, linewidth_kms=5000.0, agn_type=1)
+        params_t1 = GRAHSPParams(
+            l5100=1e44, a_bc=a_bc, a_lines=1.0, linewidth_kms=5000.0, agn_type=1
+        )
         sed_t1 = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_t1, templates)
-        l_nu_t1 = np.asarray(sed_t1.bbb_attenuated + sed_t1.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_t1 = (
+            np.asarray(sed_t1.bbb_attenuated + sed_t1.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Type 2 (Balmer suppressed)
-        params_t2 = GRAHSPParams(l5100=1e44, a_bc=a_bc, a_lines=1.0, linewidth_kms=5000.0, agn_type=2)
+        params_t2 = GRAHSPParams(
+            l5100=1e44, a_bc=a_bc, a_lines=1.0, linewidth_kms=5000.0, agn_type=2
+        )
         sed_t2 = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_t2, templates)
-        l_nu_t2 = np.asarray(sed_t2.bbb_attenuated + sed_t2.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_t2 = (
+            np.asarray(sed_t2.bbb_attenuated + sed_t2.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Type 2 should be less (Balmer removed)
         assert np.all(l_nu_t2 <= l_nu_t1), "Type 2 should suppress Balmer continuum"
@@ -281,12 +316,16 @@ class TestBalmercontinuumBlrGrahsp:
         # Reference: monolithic at a_bc=0
         params_a0 = GRAHSPParams(l5100=1e44, a_bc=0.0, a_lines=1.0, linewidth_kms=5000.0)
         sed_a0 = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_a0, templates)
-        l_nu_a0 = np.asarray(sed_a0.bbb_attenuated + sed_a0.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_a0 = (
+            np.asarray(sed_a0.bbb_attenuated + sed_a0.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Reference: monolithic at a_bc=0.5
         params_a5 = GRAHSPParams(l5100=1e44, a_bc=0.5, a_lines=1.0, linewidth_kms=5000.0)
         sed_a5 = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_a5, templates)
-        l_nu_a5 = np.asarray(sed_a5.bbb_attenuated + sed_a5.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_a5 = (
+            np.asarray(sed_a5.bbb_attenuated + sed_a5.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         rel_change = np.abs((l_nu_a5 - l_nu_a0) / np.maximum(np.abs(l_nu_a0), 1e-300))
         max_rel = np.max(rel_change)
@@ -325,25 +364,29 @@ class TestMN12TorusGrahsp:
 
         # Component API reference
         sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_ref = (
+            np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Composable runner with MN12 torus
-        l_nu_got = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp_mn12",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_fcov=0.4,
-            agn_grahsp_si=0.0,
-            agn_grahsp_tor_temp=0.0,
-            agn_grahsp_tor_cutoff_um=1.2,
-            agn_type=1,
-        ))
+        l_nu_got = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp_mn12",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_fcov=0.4,
+                agn_grahsp_si=0.0,
+                agn_grahsp_tor_temp=0.0,
+                agn_grahsp_tor_cutoff_um=1.2,
+                agn_type=1,
+            )
+        )
 
         np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-8)
 
@@ -351,7 +394,7 @@ class TestMN12TorusGrahsp:
         """Block with varied tor_temp, tor_cutoff_um, si parameters."""
         wave_aa = wave_nm * 10.0
         test_cases = [
-            (0.4, 1.5, 0.5),    # All nonzero
+            (0.4, 1.5, 0.5),  # All nonzero
             (-0.7, 1.0, -0.3),  # Negative si (exercises clipping)
         ]
 
@@ -367,29 +410,38 @@ class TestMN12TorusGrahsp:
 
             # Component API reference
             sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-            l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+            l_nu_ref = (
+                np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated)
+                * 0.1
+                * wave_aa**2
+                / C_AA
+            )
 
             # Composable runner
-            l_nu_got = np.asarray(composable_agn_l_nu(
-                jnp.asarray(wave_aa),
-                agn_log_lbol=44.0,
-                agn_disc_block="grahsp_sbpl",
-                agn_nlr_block="grahsp",
-                agn_blr_block="grahsp",
-                agn_feii_block="grahsp",
-                agn_torus_block="grahsp_mn12",
-                agn_attenuation_block="grahsp_biatten",
-                agn_grahsp_log_l5100=44.0,
-                agn_grahsp_fcov=0.4,
-                agn_grahsp_si=si,
-                agn_grahsp_tor_temp=tor_temp,
-                agn_grahsp_tor_cutoff_um=tor_cutoff_um,
-                agn_type=1,
-            ))
+            l_nu_got = np.asarray(
+                composable_agn_l_nu(
+                    jnp.asarray(wave_aa),
+                    agn_log_lbol=44.0,
+                    agn_disc_block="grahsp_sbpl",
+                    agn_nlr_block="grahsp",
+                    agn_blr_block="grahsp",
+                    agn_feii_block="grahsp",
+                    agn_torus_block="grahsp_mn12",
+                    agn_attenuation_block="grahsp_biatten",
+                    agn_grahsp_log_l5100=44.0,
+                    agn_grahsp_fcov=0.4,
+                    agn_grahsp_si=si,
+                    agn_grahsp_tor_temp=tor_temp,
+                    agn_grahsp_tor_cutoff_um=tor_cutoff_um,
+                    agn_type=1,
+                )
+            )
 
             np.testing.assert_allclose(
-                l_nu_got, l_nu_ref, rtol=1e-8,
-                err_msg=f"Failed for tor_temp={tor_temp}, tor_cutoff_um={tor_cutoff_um}, si={si}"
+                l_nu_got,
+                l_nu_ref,
+                rtol=1e-8,
+                err_msg=f"Failed for tor_temp={tor_temp}, tor_cutoff_um={tor_cutoff_um}, si={si}",
             )
 
     def test_liveness_tor_temp(self, wave_nm, templates):
@@ -399,18 +451,26 @@ class TestMN12TorusGrahsp:
         # Evaluate at tor_temp=0
         sed_t0 = evaluate_grahsp_agn(
             jnp.asarray(wave_nm),
-            GRAHSPParams(l5100=1e44, torus_model="mn12", tor_temp=0.0, tor_cutoff_um=1.2, fcov=0.4, si=0.0),
+            GRAHSPParams(
+                l5100=1e44, torus_model="mn12", tor_temp=0.0, tor_cutoff_um=1.2, fcov=0.4, si=0.0
+            ),
             templates,
         )
-        l_nu_t0 = np.asarray(sed_t0.bbb_attenuated + sed_t0.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_t0 = (
+            np.asarray(sed_t0.bbb_attenuated + sed_t0.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Evaluate at tor_temp=0.4
         sed_t4 = evaluate_grahsp_agn(
             jnp.asarray(wave_nm),
-            GRAHSPParams(l5100=1e44, torus_model="mn12", tor_temp=0.4, tor_cutoff_um=1.2, fcov=0.4, si=0.0),
+            GRAHSPParams(
+                l5100=1e44, torus_model="mn12", tor_temp=0.4, tor_cutoff_um=1.2, fcov=0.4, si=0.0
+            ),
             templates,
         )
-        l_nu_t4 = np.asarray(sed_t4.bbb_attenuated + sed_t4.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_t4 = (
+            np.asarray(sed_t4.bbb_attenuated + sed_t4.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         rel_change = np.abs((l_nu_t4 - l_nu_t0) / np.maximum(np.abs(l_nu_t0), 1e-300))
         max_rel = np.max(rel_change)
@@ -423,41 +483,45 @@ class TestMN12TorusGrahsp:
 
         # Same SED at different agn_cos_inc (torus inclination) should be equal
         # if the torus is self-contained (no mask)
-        l_nu_inc90 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp_mn12",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_fcov=0.4,
-            agn_grahsp_si=0.0,
-            agn_grahsp_tor_temp=0.0,
-            agn_grahsp_tor_cutoff_um=1.2,
-            agn_cos_inc=0.9,
-            agn_type=1,
-        ))
+        l_nu_inc90 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp_mn12",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_fcov=0.4,
+                agn_grahsp_si=0.0,
+                agn_grahsp_tor_temp=0.0,
+                agn_grahsp_tor_cutoff_um=1.2,
+                agn_cos_inc=0.9,
+                agn_type=1,
+            )
+        )
 
-        l_nu_inc10 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp_mn12",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_fcov=0.4,
-            agn_grahsp_si=0.0,
-            agn_grahsp_tor_temp=0.0,
-            agn_grahsp_tor_cutoff_um=1.2,
-            agn_cos_inc=0.1,
-            agn_type=1,
-        ))
+        l_nu_inc10 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp_mn12",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_fcov=0.4,
+                agn_grahsp_si=0.0,
+                agn_grahsp_tor_temp=0.0,
+                agn_grahsp_tor_cutoff_um=1.2,
+                agn_cos_inc=0.1,
+                agn_type=1,
+            )
+        )
 
         # Same output (torus is self-contained)
         np.testing.assert_allclose(l_nu_inc90, l_nu_inc10, rtol=1e-10)
@@ -489,23 +553,27 @@ class TestVetroncettyFeiiGrahsp:
 
         # Component API reference
         sed_ref = evaluate_grahsp_agn(jnp.asarray(wave_nm), params_obj, templates)
-        l_nu_ref = np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa ** 2 / C_AA
+        l_nu_ref = (
+            np.asarray(sed_ref.bbb_attenuated + sed_ref.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
 
         # Composable runner with VC04 FeII
-        l_nu_got = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp_veroncetty",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_feii=5.0,
-            agn_grahsp_a_lines=1.0,
-            agn_type=1,
-        ))
+        l_nu_got = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp_veroncetty",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_feii=5.0,
+                agn_grahsp_a_lines=1.0,
+                agn_type=1,
+            )
+        )
 
         np.testing.assert_allclose(l_nu_got, l_nu_ref, rtol=1e-8)
 
@@ -514,36 +582,40 @@ class TestVetroncettyFeiiGrahsp:
         wave_aa = wave_nm * 10.0
 
         # B&V (grahsp block)
-        l_nu_bv = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_feii=5.0,
-            agn_grahsp_a_lines=1.0,
-            agn_type=1,
-        ))
+        l_nu_bv = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_feii=5.0,
+                agn_grahsp_a_lines=1.0,
+                agn_type=1,
+            )
+        )
 
         # VC04 (grahsp_veroncetty block)
-        l_nu_vc = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp_veroncetty",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_feii=5.0,
-            agn_grahsp_a_lines=1.0,
-            agn_type=1,
-        ))
+        l_nu_vc = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp_veroncetty",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_feii=5.0,
+                agn_grahsp_a_lines=1.0,
+                agn_type=1,
+            )
+        )
 
         rel_change = np.abs((l_nu_vc - l_nu_bv) / np.maximum(np.abs(l_nu_bv), 1e-300))
         max_rel = np.max(rel_change)
@@ -555,36 +627,40 @@ class TestVetroncettyFeiiGrahsp:
         wave_aa = wave_nm * 10.0
 
         # Evaluate at a_feii=0
-        l_nu_a0 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp_veroncetty",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_feii=0.0,
-            agn_grahsp_a_lines=1.0,
-            agn_type=1,
-        ))
+        l_nu_a0 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp_veroncetty",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_feii=0.0,
+                agn_grahsp_a_lines=1.0,
+                agn_type=1,
+            )
+        )
 
         # Evaluate at a_feii=5
-        l_nu_a5 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_sbpl",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp_veroncetty",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_a_feii=5.0,
-            agn_grahsp_a_lines=1.0,
-            agn_type=1,
-        ))
+        l_nu_a5 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_sbpl",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp_veroncetty",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_a_feii=5.0,
+                agn_grahsp_a_lines=1.0,
+                agn_type=1,
+            )
+        )
 
         rel_change = np.abs((l_nu_a5 - l_nu_a0) / np.maximum(np.abs(l_nu_a0), 1e-300))
         max_rel = np.max(rel_change)
@@ -619,35 +695,44 @@ class TestNetzerDiscGrahsp:
     )
 
     def _runner_l_nu(self, wave_aa, m, a, mdot):
-        return np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=float(m),
-            agn_grahsp_netzer_spin=float(a),
-            agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
-            agn_type=1,
-        ))
+        return np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=float(m),
+                agn_grahsp_netzer_spin=float(a),
+                agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
+                agn_type=1,
+            )
+        )
 
     @staticmethod
     def _component_l_nu(wave_nm, templates, m, a, mdot):
-        """Component-API L_nu (disc + torus) at a Netzer grid node, from ``evaluate_grahsp_agn``."""
+        """Component-API L_nu (disc + torus) at a Netzer grid node.
+
+        Taken from ``evaluate_grahsp_agn``.
+        """
         wave_aa = wave_nm * 10.0
         sed = evaluate_grahsp_agn(
             jnp.asarray(wave_nm),
             GRAHSPParams(
-                l5100=1e44, disc_model="netzer", disc_m=m, disc_a=a, disc_mdot=mdot,
+                l5100=1e44,
+                disc_model="netzer",
+                disc_m=m,
+                disc_a=a,
+                disc_mdot=mdot,
             ),
             templates,
         )
         l_lambda = np.asarray(sed.bbb_attenuated + sed.torus_attenuated)
-        return l_lambda * 0.1 * wave_aa ** 2 / C_AA
+        return l_lambda * 0.1 * wave_aa**2 / C_AA
 
     def test_block_equality_netzer_default(self, wave_nm, templates, disc_block):
         """Runner at the default node equals the component API (rtol 1e-8, D3)."""
@@ -667,22 +752,36 @@ class TestNetzerDiscGrahsp:
             idx = select_disc_model(
                 templates.disc_m, templates.disc_a, templates.disc_mdot, m=m, a=a, mdot=mdot
             )
-            expected = np.asarray(floor_disc_xray(
-                jnp.asarray(wave_nm),
-                netzer_disc(jnp.asarray(wave_nm), 1e44, templates.disc_wave_nm,
-                            templates.disc_lumin[idx]),
-            )) * 0.1
-            got = np.asarray(disc_block(
-                jnp.asarray(wave_aa),
-                12.0,
-                agn_grahsp_log_l5100=44.0,
-                agn_grahsp_netzer_log_mbh=float(m),
-                agn_grahsp_netzer_spin=float(a),
-                agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
-                templates=templates,
-            ))
+            expected = (
+                np.asarray(
+                    floor_disc_xray(
+                        jnp.asarray(wave_nm),
+                        netzer_disc(
+                            jnp.asarray(wave_nm),
+                            1e44,
+                            templates.disc_wave_nm,
+                            templates.disc_lumin[idx],
+                        ),
+                    )
+                )
+                * 0.1
+            )
+            got = np.asarray(
+                disc_block(
+                    jnp.asarray(wave_aa),
+                    12.0,
+                    agn_grahsp_log_l5100=44.0,
+                    agn_grahsp_netzer_log_mbh=float(m),
+                    agn_grahsp_netzer_spin=float(a),
+                    agn_grahsp_netzer_log_mdot=float(np.log10(float(mdot))),
+                    templates=templates,
+                )
+            )
             np.testing.assert_allclose(
-                got, expected, rtol=1e-12, atol=0.0,
+                got,
+                expected,
+                rtol=1e-12,
+                atol=0.0,
                 err_msg=f"disc block, netzer node (m={m}, a={a}, mdot={mdot})",
             )
             np.testing.assert_allclose(
@@ -692,21 +791,28 @@ class TestNetzerDiscGrahsp:
                 err_msg=f"runner, netzer node (m={m}, a={a}, mdot={mdot})",
             )
 
-    def test_bolometric_normalisation_when_l5100_unset(self, wave_nm, templates, disc_block):
-        """With ``agn_grahsp_log_l5100=None`` the disc's bolometric integral is L_bol (rtol 1e-6)."""
+    def test_bolometric_normalization_when_l5100_unset(self, wave_nm, templates, disc_block):
+        """With ``agn_grahsp_log_l5100=None`` the disc's bolometric integral is L_bol.
+
+        Checked to rtol 1e-6.
+        """
         from tengri.components.agn.grahsp.bolometric import bolometric_luminosity_bbb
         from tengri.utils.physics_constants import L_SUN
 
         wave_fine = np.union1d(np.logspace(1.0, 4.5, 4000), [510.0])
-        out_aa = np.asarray(disc_block(
-            jnp.asarray(wave_fine * 10.0),
-            12.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=float(np.log10(0.3)),
-            templates=templates,
-        ))
-        l_bol = float(bolometric_luminosity_bbb(jnp.asarray(wave_fine), jnp.asarray(out_aa * 10.0)))
+        out_aa = np.asarray(
+            disc_block(
+                jnp.asarray(wave_fine * 10.0),
+                12.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=float(np.log10(0.3)),
+                templates=templates,
+            )
+        )
+        l_bol = float(
+            bolometric_luminosity_bbb(jnp.asarray(wave_fine), jnp.asarray(out_aa * 10.0))
+        )
         np.testing.assert_allclose(l_bol, 1e12 * L_SUN, rtol=1e-6)
 
     def test_liveness_log_mbh(self, wave_nm, disc_block):
@@ -714,38 +820,42 @@ class TestNetzerDiscGrahsp:
         wave_aa = wave_nm * 10.0
 
         # Evaluate at log_mbh=7.0
-        l_nu_m7 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=7.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
-            agn_type=1,
-        ))
+        l_nu_m7 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=7.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=np.log10(0.3),
+                agn_type=1,
+            )
+        )
 
         # Evaluate at log_mbh=8.0
-        l_nu_m8 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
-            agn_type=1,
-        ))
+        l_nu_m8 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=np.log10(0.3),
+                agn_type=1,
+            )
+        )
 
         rel_change = np.abs((l_nu_m8 - l_nu_m7) / np.maximum(np.abs(l_nu_m7), 1e-300))
         max_rel = np.max(rel_change)
@@ -757,38 +867,42 @@ class TestNetzerDiscGrahsp:
         wave_aa = wave_nm * 10.0
 
         # Evaluate at spin=0.0
-        l_nu_s0 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
-            agn_type=1,
-        ))
+        l_nu_s0 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=np.log10(0.3),
+                agn_type=1,
+            )
+        )
 
         # Evaluate at spin=0.998
-        l_nu_s1 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.998,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
-            agn_type=1,
-        ))
+        l_nu_s1 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.998,
+                agn_grahsp_netzer_log_mdot=np.log10(0.3),
+                agn_type=1,
+            )
+        )
 
         rel_change = np.abs((l_nu_s1 - l_nu_s0) / np.maximum(np.abs(l_nu_s0), 1e-300))
         max_rel = np.max(rel_change)
@@ -800,38 +914,42 @@ class TestNetzerDiscGrahsp:
         wave_aa = wave_nm * 10.0
 
         # Evaluate at log_mdot=log10(0.03)
-        l_nu_m03 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.03),
-            agn_type=1,
-        ))
+        l_nu_m03 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=np.log10(0.03),
+                agn_type=1,
+            )
+        )
 
         # Evaluate at log_mdot=log10(0.3)
-        l_nu_m3 = np.asarray(composable_agn_l_nu(
-            jnp.asarray(wave_aa),
-            agn_log_lbol=44.0,
-            agn_disc_block="grahsp_netzer",
-            agn_nlr_block="grahsp",
-            agn_blr_block="grahsp",
-            agn_feii_block="grahsp",
-            agn_torus_block="grahsp",
-            agn_attenuation_block="grahsp_biatten",
-            agn_grahsp_log_l5100=44.0,
-            agn_grahsp_netzer_log_mbh=8.0,
-            agn_grahsp_netzer_spin=0.0,
-            agn_grahsp_netzer_log_mdot=np.log10(0.3),
-            agn_type=1,
-        ))
+        l_nu_m3 = np.asarray(
+            composable_agn_l_nu(
+                jnp.asarray(wave_aa),
+                agn_log_lbol=44.0,
+                agn_disc_block="grahsp_netzer",
+                agn_nlr_block="grahsp",
+                agn_blr_block="grahsp",
+                agn_feii_block="grahsp",
+                agn_torus_block="grahsp",
+                agn_attenuation_block="grahsp_biatten",
+                agn_grahsp_log_l5100=44.0,
+                agn_grahsp_netzer_log_mbh=8.0,
+                agn_grahsp_netzer_spin=0.0,
+                agn_grahsp_netzer_log_mdot=np.log10(0.3),
+                agn_type=1,
+            )
+        )
 
         rel_change = np.abs((l_nu_m3 - l_nu_m03) / np.maximum(np.abs(l_nu_m03), 1e-300))
         max_rel = np.max(rel_change)

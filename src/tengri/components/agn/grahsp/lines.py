@@ -15,7 +15,7 @@ so a line of strength :math:`r_i` integrates to exactly
 :math:`\\lambda L_\\lambda` (erg/s) while the SED is :math:`L_\\lambda` (erg/s/nm);
 the 510 (= 5100 Å in nm) absorbs the :math:`\\lambda` factor.
 
-Upstream GRAHSP's ``activatelines`` normalises with :math:`\\sqrt{\\pi\\sigma^2}`
+Upstream GRAHSP's ``activatelines`` normalizes with :math:`\\sqrt{\\pi\\sigma^2}`
 instead, so every line it emits carries an extra factor :math:`\\sqrt{2}` (its
 H-beta broad line is 2.8 % of L5100, not the documented 2 %). tengri
 deliberately does not reproduce this.

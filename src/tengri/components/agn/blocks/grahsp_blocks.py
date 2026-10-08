@@ -282,8 +282,7 @@ def grahsp_netzer_disc_block(
         templates = load_grahsp_templates()
     if templates.disc_wave_nm is None:
         raise ValueError(
-            "GRAHSP template bundle lacks disc_wave_nm; regenerate with "
-            "tools/build_grahsp_hdf5.py"
+            "GRAHSP template bundle lacks disc_wave_nm; regenerate with tools/build_grahsp_hdf5.py"
         )
 
     # Interpolate disc spectrum at the given mass, spin, Eddington ratio.
@@ -443,12 +442,16 @@ def grahsp_blr_block(
         linewidth_kms=agn_grahsp_linewidth_kms,
         agn_type=agn_type,
     )
-    bc = balmer_continuum(
-        wave_nm=wave_nm,
-        l5100=l5100_disc,
-        a_bc=agn_grahsp_a_bc,
-        linewidth_kms=agn_grahsp_linewidth_kms,
-    ) if agn_type == 1 else jnp.zeros_like(wave_nm)
+    bc = (
+        balmer_continuum(
+            wave_nm=wave_nm,
+            l5100=l5100_disc,
+            a_bc=agn_grahsp_a_bc,
+            linewidth_kms=agn_grahsp_linewidth_kms,
+        )
+        if agn_type == 1
+        else jnp.zeros_like(wave_nm)
+    )
     return (broad + bc) * 0.1  # nm -> Å
 
 
@@ -535,8 +538,7 @@ def grahsp_veroncetty_feii_block(
         templates = load_grahsp_templates()
     if templates.feii_vc04_wave_nm is None:
         raise ValueError(
-            "GRAHSP template bundle lacks feii_vc04; regenerate with "
-            "tools/build_grahsp_hdf5.py"
+            "GRAHSP template bundle lacks feii_vc04; regenerate with tools/build_grahsp_hdf5.py"
         )
     feii = feii_forest(
         wave_nm=wave_nm,
@@ -629,7 +631,7 @@ def grahsp_mn12_torus_block(
     contribution is clipped so the total dust :math:`L_\lambda` stays
     non-negative (mirroring upstream behavior).
 
-    Normalisation: :math:`\lambda L_\lambda(12\,\mu m) = 2.5\, f_{\rm cov}\, l5100`,
+    Normalization: :math:`\lambda L_\lambda(12\,\mu m) = 2.5\, f_{\rm cov}\, l5100`,
     the same as the Gaussian torus. Upstream GRAHSP's MN12 torus is 510 times
     brighter than that relation; tengri deliberately does not reproduce this
     (see :func:`torus_mn12_continuum`).
@@ -648,8 +650,7 @@ def grahsp_mn12_torus_block(
         templates = load_grahsp_templates()
     if templates.torus_mn12_wave_nm is None:
         raise ValueError(
-            "GRAHSP template bundle lacks torus_mn12; regenerate with "
-            "tools/build_grahsp_hdf5.py"
+            "GRAHSP template bundle lacks torus_mn12; regenerate with tools/build_grahsp_hdf5.py"
         )
     cont = torus_mn12_continuum(
         wave_nm=wave_nm,

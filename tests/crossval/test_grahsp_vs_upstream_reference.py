@@ -6,7 +6,7 @@
 ``scripts/build_grahsp_reference.py``. Each set is evaluated here with tengri's public
 component API (``evaluate_grahsp_agn``) and compared component by component.
 
-Units and normalisation (read off the builder, not assumed)
+Units and normalization (read off the builder, not assumed)
 -----------------------------------------------------------
 * Wavelength: nm on both sides (``wavelength_unit`` root attribute; ``evaluate_grahsp_agn``
   takes ``wave_nm``).
@@ -29,12 +29,12 @@ Known upstream errors, applied here as explicit conversions (never in ``src/``)
   the paper's Eq. 2, so ``W_tengri = W_upstream / sqrt(2)`` (``UPSTREAM_WIDTH_TO_TENGRI``).
 * Torus, FeII and Balmer continuum are tabulated upstream and linearly interpolated onto the
   reference grid. The torus is therefore evaluated at upstream's 506 template nodes and
-  interpolated the same way (the 12 micron normalisation lies exactly on a node); evaluated
+  interpolated the same way (the 12 micron normalization lies exactly on a node); evaluated
   directly on the 5000-point grid it differs by 1.05e-2 dex from interpolation error alone.
 * Balmer continuum: tengri smooths with sigma = FWHM / 2.355 and keeps the redward tail; the
   two cannot be matched pointwise, so the 210-355 nm integral is compared.
 * Torus support: upstream is hard-zero outside 0.36-100 micron; compared inside 0.4-99 micron.
-* Lines: upstream evaluates the summed lines on 9 nodes per line (line centre +-3 FWHM, in
+* Lines: upstream evaluates the summed lines on 9 nodes per line (line center +-3 FWHM, in
   nm) and interpolates linearly; the table of line wavelengths it reads is float32. Tengri's
   lines are evaluated at the same nodes (built with the same float32 arithmetic from the same
   float32 wavelengths) and interpolated the same way, then compared point by point and per
@@ -182,7 +182,7 @@ def _templates():
 
 
 def _upstream_line_waves(templates) -> np.ndarray:
-    """Line centres as upstream reads them: float32 Angstrom table, times 0.1 in float32."""
+    """Line centers as upstream reads them: float32 Angstrom table, times 0.1 in float32."""
     angstrom = (np.asarray(templates.line_wave_nm) * 10.0).astype(np.float32)
     return angstrom * 0.1
 
@@ -272,7 +272,7 @@ def test_param_map_covers_every_reference_parameter():
 
 
 @pytest.mark.parametrize("name", PARAM_SETS)
-def test_l5100_normalisation(name):
+def test_l5100_normalization(name):
     """Upstream lambda L_lambda(510 nm) = 1 = tengri l5100 (the unit bridge, measured)."""
     case = load_case(name)
     upstream = 510.0 * np.interp(510.0, case.wave, _get(case, "agn.activate_Disk"))
@@ -333,7 +333,7 @@ def test_torus_shape(name):
 
 
 @pytest.mark.parametrize("name", PARAM_SETS)
-def test_torus_12um_normalisation(name):
+def test_torus_12um_normalization(name):
     """lambda L_lambda(12 um) = 2.5 * l5100 * fcov (Eq. fcov), asserted on both sides."""
     case = load_case(name)
     target = 2.5 * L5100_REFERENCE * case.up["fcov"]

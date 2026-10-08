@@ -154,7 +154,7 @@ def test_precompute_torus_model_is_honored_in_midIR():
     """Selecting ``torus_model`` reaches the precomputed torus: the mid-IR band changes.
 
     Both torus variants satisfy ``lambda*L_lambda(12 um) = 2.5 fcov l5100``, and the
-    mid-IR band (filter 1, ~4-20 um) is centred on 12 um, so the two agree there
+    mid-IR band (filter 1, ~4-20 um) is centered on 12 um, so the two agree there
     to within their shape differences (measured 0.5 %); the selector must still
     move it by more than numerical noise. This is a within-build comparison.
     """

@@ -15,7 +15,7 @@ and FeII:
    L_\\lambda(\\lambda) = \\frac{\\mathrm{l5100}}{510\\,\\mathrm{nm}} \\cdot T(\\lambda)
 
 where :math:`T(\\lambda)` is interpolated onto the user's wavelength grid and
-re-normalised to 1 at 510 nm on that interpolation.
+re-normalized to 1 at 510 nm on that interpolation.
 
 References
 ----------
@@ -45,7 +45,7 @@ def _resample_anchored(
 ) -> Array:
     r"""Resample a disc template so that :math:`\lambda L_\lambda(510\,\mathrm{nm}) = 1`.
 
-    The stored templates are normalised to 1 at 510 nm on a linear
+    The stored templates are normalized to 1 at 510 nm on a linear
     interpolation of their native grid; the log-space resampler used here
     differs from that by about 1e-3 at 510 nm. Dividing by the resampled value
     at 510 nm (and by 510 nm for the :math:`\lambda L_\lambda` convention)

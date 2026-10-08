@@ -72,9 +72,9 @@ def test_jit_full_pipeline():
 
 
 def test_monolith_lbol_is_the_accretion_luminosity_and_independent_of_fcov():
-    """``agn_log_lbol`` normalises the accretion (BBB) luminosity only.
+    """``agn_log_lbol`` normalizes the accretion (BBB) luminosity only.
 
-    The torus re-radiates absorbed accretion light, so adding it to the normalised
+    The torus re-radiates absorbed accretion light, so adding it to the normalized
     L_bol counts that light twice; the paper defines lumBolBBB (everything but the
     torus, above 91.2 nm) and lumBolTOR separately. The implied ``l5100`` must then
     not move with the torus covering factor.
@@ -93,7 +93,9 @@ def test_monolith_lbol_is_the_accretion_luminosity_and_independent_of_fcov():
             warnings.simplefilter("ignore")
             l_nu = np.asarray(compute_grahsp_sed(wave_aa, agn_log_lbol=45.0, agn_grahsp_fcov=fcov))
         unit = evaluate_grahsp_agn(wave_nm, GRAHSPParams(l5100=1.0, fcov=fcov))
-        unit_l_nu = np.asarray(unit.bbb_attenuated + unit.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        unit_l_nu = (
+            np.asarray(unit.bbb_attenuated + unit.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
         l5100 = l_nu / unit_l_nu
         np.testing.assert_allclose(l5100, l5100[0], rtol=1e-9)  # pure rescale
         np.testing.assert_allclose(l5100[0] * float(unit.l_bol_bbb), 1e45 * L_SUN, rtol=1e-9)

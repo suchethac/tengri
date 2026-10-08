@@ -751,7 +751,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_cool_width",
         Uniform(0.2, 0.65, default=0.45),
-        "GRAHSP cool dust log-Gaussian standard deviation [dex] (paper COOLwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
+        "GRAHSP cool dust log-Gaussian standard deviation [dex] "
+        "(paper COOLwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -765,7 +766,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_grahsp_hot_width",
         Uniform(0.2, 0.65, default=0.5),
-        "GRAHSP hot dust log-Gaussian standard deviation [dex] (paper HOTwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
+        "GRAHSP hot dust log-Gaussian standard deviation [dex] "
+        "(paper HOTwidth, W in exp[-x^2/(2 W^2)]). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),

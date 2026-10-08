@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Crossval test: upstream GRAHSP reference data file.
 
 Validates that data/grahsp_upstream_reference.h5 exists, carries provenance
@@ -5,12 +6,13 @@ attributes, and contains all expected contributions with finite values on a
 shared grid. The physics comparison against tengri is a separate notebook.
 """
 
-import json
 from pathlib import Path
 
 import h5py
 import numpy as np
 import pytest
+
+pytestmark = pytest.mark.crossval
 
 
 @pytest.fixture
@@ -46,7 +48,7 @@ def test_provenance_attributes(ref_file):
     # Verify upstream repo is the correct source
     repo = ref_file.attrs["upstream_repo"]
     if isinstance(repo, bytes):
-        repo = repo.decode('utf-8', errors='replace')
+        repo = repo.decode("utf-8", errors="replace")
     assert "JohannesBuchner/GRAHSP" in repo, f"Wrong upstream repo: {repo}"
 
     # Verify commit
@@ -55,10 +57,11 @@ def test_provenance_attributes(ref_file):
     # Verify build_command has no hardcoded machine paths
     build_cmd = ref_file.attrs["build_command"]
     if isinstance(build_cmd, bytes):
-        build_cmd = build_cmd.decode('utf-8', errors='replace')
+        build_cmd = build_cmd.decode("utf-8", errors="replace")
     assert "/Users/" not in build_cmd, f"build_command has hardcoded /Users/ path: {build_cmd}"
-    assert "<upstream>" in build_cmd and "<python>" in build_cmd, \
+    assert "<upstream>" in build_cmd and "<python>" in build_cmd, (
         f"build_command should use <upstream> and <python> placeholders: {build_cmd}"
+    )
 
 
 def test_shared_wavelength_grid(ref_file):
@@ -103,7 +106,9 @@ def test_parameter_sets(ref_file):
         for ds_name in grp:
             ds = grp[ds_name]
             assert len(ds.shape) == 1, f"{group_name}/{ds_name} should be 1D"
-            assert ds.shape[0] == len(grid), f"{group_name}/{ds_name} shape mismatch with wavelength grid"
+            assert ds.shape[0] == len(grid), (
+                f"{group_name}/{ds_name} shape mismatch with wavelength grid"
+            )
             assert ds.dtype == np.float64, f"{group_name}/{ds_name} should be float64"
 
 
@@ -150,7 +155,7 @@ def test_parameter_attributes(ref_file):
         grp = ref_file[group_name]
 
         # Should have at least one param_* attribute
-        param_attrs = [k for k in grp.attrs.keys() if k.startswith("param_")]
+        param_attrs = [k for k in grp.attrs if k.startswith("param_")]
         assert len(param_attrs) > 0, f"{group_name} has no parameter attributes"
 
 
@@ -166,10 +171,14 @@ def test_sweep_sets_differ_from_fiducial(ref_file):
         grp_attrs = dict(grp.attrs)
 
         # Extract parameter keys
-        fid_params = {k.replace("param_", ""): fiducial_attrs[k]
-                     for k in fiducial_attrs if k.startswith("param_")}
-        grp_params = {k.replace("param_", ""): grp_attrs[k]
-                     for k in grp_attrs if k.startswith("param_")}
+        fid_params = {
+            k.replace("param_", ""): fiducial_attrs[k]
+            for k in fiducial_attrs
+            if k.startswith("param_")
+        }
+        grp_params = {
+            k.replace("param_", ""): grp_attrs[k] for k in grp_attrs if k.startswith("param_")
+        }
 
         # Count differences
         diffs = [k for k in fid_params if fid_params.get(k) != grp_params.get(k)]
@@ -189,7 +198,9 @@ def test_attenuation_identity(ref_file):
         grp = ref_file[group_name]
 
         # Get parameters to check if attenuation should be zero
-        params = {k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")}
+        params = {
+            k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")
+        }
         ebv = params.get("ebv", 0.0)
         ebv_agn = params.get("ebv_agn", 0.0)
 
@@ -212,24 +223,31 @@ def test_attenuation_identity(ref_file):
 
             # When no attenuation, difference should be zero
             if ebv == 0.0 and ebv_agn == 0.0:
-                assert np.allclose(attenuation, 0, atol=tol), \
+                assert np.allclose(attenuation, 0, atol=tol), (
                     f"{group_name}/{atten_name} should be zero when ebv=ebv_agn=0"
+                )
 
-            # Attenuation factors (except where intrinsic is zero or very small) should be negative
-            # or zero (multiplicative: attenuated = intrinsic * factor, so attenuation = intrinsic * (factor - 1) ≤ 0)
-            # except for Si which can be negative for intrinsic too
+            # Attenuation factors (except where intrinsic is zero or very small) should be
+            # negative or zero (multiplicative: attenuated = intrinsic * factor, so
+            # attenuation = intrinsic * (factor - 1) <= 0), except for Si which can be
+            # negative for intrinsic too
             if "Si" not in contrib_name:
-                # For non-Si contributions, where intrinsic is significant, attenuation should be ≤ small positive value
+                # For non-Si contributions, where intrinsic is significant, attenuation
+                # should be at most a small positive value
                 significant = np.abs(intrinsic) > 1e-30
                 if np.any(significant):
-                    assert np.all(attenuation[significant] <= tol), \
-                        f"{group_name}/{atten_name} has unexpectedly positive values where intrinsic is large"
+                    assert np.all(attenuation[significant] <= tol), (
+                        f"{group_name}/{atten_name} has unexpectedly positive values "
+                        "where intrinsic is large"
+                    )
 
 
 def test_balmer_continuum_presence(ref_file):
     """BC (Balmer Continuum) present when ABC > 0, absent when ABC = 0."""
     fiducial_grp = ref_file["fiducial"]
-    fiducial_params = {k.replace("param_", ""): v for k, v in fiducial_grp.attrs.items() if k.startswith("param_")}
+    fiducial_params = {
+        k.replace("param_", ""): v for k, v in fiducial_grp.attrs.items() if k.startswith("param_")
+    }
 
     # Fiducial should have ABC = 0 and no BC
     assert fiducial_params.get("abc", 0.0) == 0.0, "Fiducial ABC should be 0"
@@ -243,11 +261,14 @@ def test_balmer_continuum_presence(ref_file):
             continue
 
         grp = ref_file[group_name]
-        params = {k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")}
+        params = {
+            k.replace("param_", ""): v for k, v in grp.attrs.items() if k.startswith("param_")
+        }
         abc_val = params.get("abc", 0.0)
 
         if abc_val > 0:
-            assert "agn.activate_BC" in grp, \
+            assert "agn.activate_BC" in grp, (
                 f"{group_name} has ABC={abc_val} > 0 but no BC contribution"
+            )
             bc = grp["agn.activate_BC"][:]
             assert np.any(bc > 0), f"{group_name} has BC contribution but all zeros"

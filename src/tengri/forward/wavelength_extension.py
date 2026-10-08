@@ -109,9 +109,6 @@ _GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
 
 # AGN torus templates --------------------------------------------------------
 _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
-    # GRAHSP bundle: read through load_grahsp_templates, see _GRAHSP_NATIVE_WAVE_NM.
-    # The empty candidate tuple declares support without a basename-locator file.
-    "grahsp_mn12": (),
     "skirtor": (
         ("skirtor_templates_v3.h5", "wavelength", 1.0),
         ("skirtor_templates_v2.h5", "wavelength", 1.0),
@@ -139,8 +136,6 @@ _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 
 # AGN disc templates ---------------------------------------------------------
 _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
-    # GRAHSP bundle: read through load_grahsp_templates, see _GRAHSP_NATIVE_WAVE_NM.
-    "grahsp_netzer": (),
     "relagn": (("relagn_disc_grid.h5", "wavelength_aa", 1.0),),
     # KD18 (Kubota & Done 2018) discs reach 0.062 A (200 keV) to 12.4 um; 28 per
     # cent of the bolometric energy lies below the SSP edge (91 A). The native axis

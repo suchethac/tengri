@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract test: every AGN menu citation resolves to a bibliography entry."""
 
 from __future__ import annotations
@@ -7,10 +8,14 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.contract
+
 
 def _parse_bib_entries() -> dict[tuple[str, str], str]:
     """Parse references.bib and extract (first_author_surname, year) -> entry_key."""
-    bib_path = Path(__file__).parent.parent.parent / "src" / "tengri" / "citations" / "references.bib"
+    bib_path = (
+        Path(__file__).parent.parent.parent / "src" / "tengri" / "citations" / "references.bib"
+    )
     content = bib_path.read_text()
 
     entries: dict[tuple[str, str], str] = {}
@@ -117,9 +122,7 @@ def test_agn_menu_citations_resolve_to_bib():
         if (author, year) not in bib_entries:
             # Find similar entries for the author
             similar = [
-                f"  - ({a}, {y}): {key}"
-                for (a, y), key in bib_entries.items()
-                if a == author
+                f"  - ({a}, {y}): {key}" for (a, y), key in bib_entries.items() if a == author
             ]
             similar_str = "\n".join(similar) if similar else "  (no entries for this author)"
 

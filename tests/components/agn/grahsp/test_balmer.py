@@ -47,7 +47,11 @@ def test_balmer_matches_upstream(fixture):
         # Same wave grid as upstream — should match to numerical precision.
         # atol: the Gaussian tail underflows toward 1e-275, where scipy and JAX erfc differ.
         np.testing.assert_allclose(
-            out, expected[i], rtol=1e-9, atol=1e-12 * float(np.max(expected[i])), err_msg=f"case {i}"
+            out,
+            expected[i],
+            rtol=1e-9,
+            atol=1e-12 * float(np.max(expected[i])),
+            err_msg=f"case {i}",
         )
 
 
@@ -104,7 +108,7 @@ def test_jit_compatible(fixture):
 
 
 def _bc_truncation_and_weight():
-    """Blackbody weight and truncation normalisation of the BC shape (module constants)."""
+    """Blackbody weight and truncation normalization of the BC shape (module constants)."""
     from tengri.components.agn.grahsp import balmer as m
 
     def weight(wave_nm):
@@ -130,7 +134,9 @@ def test_smoothing_conserves_the_truncation_energy(linewidth_kms):
 
     weight, trunc_edge, edge = _bc_truncation_and_weight()
     wave = np.linspace(250.0, 520.0, 400001)
-    out = np.asarray(balmer_continuum(wave_nm=wave, l5100=510.0, a_bc=1.0, linewidth_kms=linewidth_kms))
+    out = np.asarray(
+        balmer_continuum(wave_nm=wave, l5100=510.0, a_bc=1.0, linewidth_kms=linewidth_kms)
+    )
     shape = out * trunc_edge / weight(wave)  # (alpha x + beta)(1 - e^-1) convolved
     smoothed = float(np.sum(0.5 * (shape[1:] + shape[:-1]) * np.diff(wave)))
     x_a = 250.0 / edge

@@ -80,13 +80,14 @@ def _read_composable_params() -> set[str]:
                 continue
             sig = inspect.signature(block_fn)
             for param_name, param in sig.parameters.items():
-                if (
-                    param_name.startswith("agn_")
-                    and param.kind not in (Parameter.VAR_KEYWORD, Parameter.VAR_POSITIONAL)
+                if param_name.startswith("agn_") and param.kind not in (
+                    Parameter.VAR_KEYWORD,
+                    Parameter.VAR_POSITIONAL,
                 ):
                     read_params.add(param_name)
 
-            # Add sub-block companion params (e.g., fixed params that freeable wildcards co-declare)
+            # Add sub-block companion params (e.g., fixed params that freeable wildcards
+            # co-declare)
             try:
                 grammar_category = grammar_of.get(category, category)
                 declared = _agn_subblock_declared_params(
@@ -107,9 +108,11 @@ def test_every_declared_agn_param_has_a_composable_reader():
     read = _read_composable_params()
     inert = declared - read - set(_PENDING) - set(_MEASURED_INERT)
 
-    assert (
-        not inert
-    ), f"Declared agn_* parameters with no composable reader (accepted-but-inert): {sorted(inert)}. These are wired into the grammar but have zero effect on composable output. Check _PENDING and _MEASURED_INERT allowlists."
+    assert not inert, (
+        "Declared agn_* parameters with no composable reader (accepted-but-inert): "
+        f"{sorted(inert)}. These are wired into the grammar but have zero effect on "
+        "composable output. Check _PENDING and _MEASURED_INERT allowlists."
+    )
 
 
 def test_not_composable_allowlist_is_not_stale():
@@ -121,8 +124,7 @@ def test_not_composable_allowlist_is_not_stale():
     for name in _PENDING:
         assert name in declared, f"_PENDING entry {name!r} is no longer declared (stale)."
         assert name not in read, (
-            f"_PENDING entry {name!r} is now read by a composable block "
-            f"— remove it from _PENDING."
+            f"_PENDING entry {name!r} is now read by a composable block — remove it from _PENDING."
         )
 
     # _MEASURED_INERT entries should still be declared but not read
