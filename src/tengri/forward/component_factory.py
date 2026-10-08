@@ -462,6 +462,7 @@ def build_components(
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
     radio_include_freefree: bool | None = None,
+    radio_sf_nu_ref: float | None = None,
     xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
@@ -554,6 +555,10 @@ def build_components(
         If ``False`` no dust component is added (no attenuation, no IR).
     use_radio, use_xray, use_igm : bool
         Add the corresponding adapter to the chain.
+    radio_sf_nu_ref : float or None
+        Frequency [Hz] at which ``radio_q_ir`` anchors the ``bell2003`` synchrotron
+        (grammar key ``radio.sf.nu_ref``). ``None`` keeps Bell (2003)'s 1.4 GHz;
+        ``"21cm"`` in the grammar gives CIGALE's 1.42758 GHz (#2762).
     radio_include_freefree : bool or None
         Murphy+2011 thermal free-free inclusion. ``None`` (default) means "auto":
         ``False`` when the declared nebular backend carries a free-free continuum
@@ -851,6 +856,7 @@ def build_components(
                     # which is the non-thermal (CIGALE) reading of q (#2590).
                     q_is_total=radio_include_freefree is not False,
                     freefree_wave_min=freefree_wave_min,
+                    **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
                 ),
             )
         )

@@ -93,6 +93,10 @@ _ALPHA_SF_MCCHEYNE2022: float = 0.7  # McCheyne+2022, SEMPER Eq. 5
 # constants, not a single shared value, and the AGN jet has its own separate
 # reference frequency.
 _NU_REF_BELL2003_HZ: float = 1.4e9  # Bell (2003) calibration frequency
+# CIGALE's anchor: its radio module normalizes the star-formation synchrotron at
+# lambda = 21 cm exactly (``2.1e8`` nm), i.e. c / 0.21 m = 1.42758 GHz. Bell (2003)
+# and Yun et al. (2001) define q at 1.4 GHz; Helou et al. (1985) at 1.49 GHz.
+NU_REF_21CM_HZ: float = 299_792_458.0 / 0.21
 _NU_REF_DELVECCHIO2021_HZ: float = 1.4e9  # SEMPER Eq. 4 (1.4 GHz)
 _NU_REF_MCCHEYNE2022_HZ: float = 1.5e8  # SEMPER Eq. 5 (150 MHz)
 _NU_REF_AGN_HZ: float = 5.0e9  # AGN radio reference frequency [Hz] (5 GHz)
@@ -786,6 +790,7 @@ def _dispatch_sfr(
     apply_suppression: bool,
     log_L_ir: float | None = None,
     q_is_total: bool = False,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
 ) -> jnp.ndarray:
@@ -822,6 +827,9 @@ def _dispatch_sfr(
         Apply Bell+2003 synchrotron suppression.
     log_L_ir : float or None
         ``log10(L_ir)`` for the float32-safe path.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool
         Whether ``q_ir`` of the Bell mode calibrates the TOTAL 1.4 GHz luminosity
         (Bell 2003 Eq. 1). Then the synchrotron term is ``(1 - f_th)`` of the
@@ -854,12 +862,16 @@ def _dispatch_sfr(
         return radio_sfr_bell2003_split(wavelength, L_ir, q_ir, log_L_ir=log_L_ir)
     elif sfr_mode == "bell2003":
         thermal_ref = (
-            _thermal_at_nu_ref(_NU_REF_BELL2003_HZ, L_ir, T_e, alpha_ff, log_L_ir)
-            if q_is_total
-            else 0.0
+            _thermal_at_nu_ref(sf_nu_ref, L_ir, T_e, alpha_ff, log_L_ir) if q_is_total else 0.0
         )
         return radio_sfr_bell2003(
-            wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir, thermal_ref=thermal_ref
+            wavelength,
+            L_ir,
+            q_ir,
+            alpha_sf,
+            sf_nu_ref,
+            log_L_ir=log_L_ir,
+            thermal_ref=thermal_ref,
         )
     elif sfr_mode == "delvecchio2021":
         kw = {}
@@ -1123,6 +1135,7 @@ def radio_total_terms(
     log_L_agn_bol: float | None = None,
     log_nu_cut: float = 13.0,
     q_is_total: bool | None = None,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose radio emission into additive terms for precomputation.
@@ -1176,6 +1189,9 @@ def radio_total_terms(
         (delvecchio2021/mccheyne2022 modes). Default True.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool or None
         Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
         synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
@@ -1231,6 +1247,7 @@ def radio_total_terms(
         apply_suppression,
         log_L_ir=log_L_ir,
         q_is_total=include_freefree if q_is_total is None else q_is_total,
+        sf_nu_ref=sf_nu_ref,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
@@ -1272,6 +1289,7 @@ def radio_total(
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
     q_is_total: bool | None = None,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -1314,6 +1332,9 @@ def radio_total(
         Apply Bell+2003 synchrotron suppression (delvecchio/mccheyne modes).
     include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool or None
         Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
         synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
@@ -1360,6 +1381,7 @@ def radio_total(
         l_bband,
         log_nu_cut=log_nu_cut,
         q_is_total=q_is_total,
+        sf_nu_ref=sf_nu_ref,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1389,6 +1411,7 @@ def radio_total_dpl_terms(
     log_L_ir: float | None = None,
     log_L_agn_bol: float | None = None,
     q_is_total: bool | None = None,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose AGN double power-law radio emission into additive terms.
@@ -1452,6 +1475,9 @@ def radio_total_dpl_terms(
         (delvecchio2021/mccheyne2022 modes). Default True.
     include_freefree : bool
         Include thermal free-free (bremsstrahlung) component. Default True.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool or None
         Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
         synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
@@ -1502,6 +1528,7 @@ def radio_total_dpl_terms(
         apply_suppression,
         log_L_ir=log_L_ir,
         q_is_total=include_freefree if q_is_total is None else q_is_total,
+        sf_nu_ref=sf_nu_ref,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
@@ -1547,6 +1574,7 @@ def radio_total_dpl(
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
     q_is_total: bool | None = None,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission: star-forming + optional free-free + AGN double power-law.
@@ -1592,6 +1620,9 @@ def radio_total_dpl(
         Apply Bell+2003 synchrotron suppression.
     include_freefree : bool
         Add thermal free-free component (Murphy+2011). Default False.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool or None
         Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
         synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
@@ -1637,6 +1668,7 @@ def radio_total_dpl(
         alpha_ff,
         l_bband,
         q_is_total=q_is_total,
+        sf_nu_ref=sf_nu_ref,
     )
     return t["sf"] + t["ff"] + t["agn"]
 
@@ -1662,6 +1694,7 @@ def compute_radio_components(
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
     q_is_total: bool | None = None,
+    sf_nu_ref: float = _NU_REF_BELL2003_HZ,
     **_kwargs,
 ) -> dict:
     """Decompose total radio emission into physical components.
@@ -1698,6 +1731,9 @@ def compute_radio_components(
         Apply Bell+2003 synchrotron suppression.
     include_freefree : bool
         Include free-free component. Default True (diagnostic function).
+    sf_nu_ref : float
+        Frequency [Hz] at which ``q_ir`` anchors the ``bell2003`` synchrotron.
+        Default 1.4 GHz (Bell 2003). CIGALE anchors at 21 cm, ``NU_REF_21CM_HZ``.
     q_is_total : bool or None
         Whether ``q_ir`` (Bell mode) calibrates the total 1.4 GHz luminosity, so the
         synchrotron term gives up the Murphy+2011 thermal share. ``None`` (default)
@@ -1739,6 +1775,7 @@ def compute_radio_components(
         z_slope,
         apply_suppression,
         q_is_total=include_freefree if q_is_total is None else q_is_total,
+        sf_nu_ref=sf_nu_ref,
         T_e=T_e,
         alpha_ff=alpha_ff,
     )
