@@ -11,11 +11,11 @@ arithmetic (``single_index``): a constant mean-of-sidebands continuum on the
 array as given.
 
 Expected values are numpy implementations of the definition written here, and a
-closed form (a Gaussian line on a straight-line continuum). The 1 Å sigmoid
-window edges are a separate open decision (#2637) and are kept as they are, so
-two references are used: the definition evaluated with the *same* soft window
-weights (exactness cells) and the definition with hard windows (the "distance
-from Lick" cells, whose tolerance is the measured soft-edge effect).
+closed form (a Gaussian line on a straight-line continuum). Window edges are hard
+by default (#2637, Worthey et al. 1994), so the definition evaluated with hard
+windows is the reference of the default cells. The opt-in 1 Å sigmoid edge
+(``edge_width=1.0``) is checked against the definition evaluated with the *same*
+soft weights, and against the hard definition within its measured bias.
 """
 
 from __future__ import annotations
@@ -62,8 +62,8 @@ AGES_GYR = (1.0, 3.0, 10.0)
 
 #: Largest |soft-window reference - hard-window reference| over the three ages,
 #: per index [Å], times 1.25 and rounded up to 0.005. The reference differs only
-#: in the 1 Å sigmoid edges (#2637), which this fix does not change; the
-#: continuum and frame error the fix removes is 0.3-1.0 Å for HγA, HγF, Fe4383.
+#: in the 1 Å sigmoid edges, the opt-in ``edge_width=1.0`` of #2637 (the default
+#: is hard); the continuum and frame error #2690 removed is 0.3-1.0 Å for HγA, HγF, Fe4383.
 #: Re-measured when the Lick windows moved from their published air numbers to
 #: vacuum (every edge +1.1 to +1.8 Å): the soft edges now sit on different SSP
 #: pixels, so the (sampling-dependent) soft-vs-hard difference changed; the rule
@@ -80,6 +80,12 @@ EDGE_TOL_AA = {
     "Fe4383": 0.030,
     "Ca4227": 0.100,
 }
+
+#: Largest |tengri (hard windows) - numpy hard-window definition| over the 30 registry
+#: cells (10 indices x 3 ages) was 6.3e-6 Å and 6.3e-7 mag, rounded up to one digit. The two
+#: differ only in where the Lick line is sampled on the pixel straddling a window edge.
+HARD_TOL_AA = 1e-5
+HARD_TOL_MAG = 1e-6
 
 #: Same rule for the magnitude form of each index [mag].
 EDGE_TOL_MAG = {
@@ -286,18 +292,19 @@ def test_gaussian_on_a_straight_line_continuum_matches_the_closed_form(
 @pytest.mark.parametrize("kind", ["linear+", "-4", "3"])
 @pytest.mark.parametrize("grid_name", list(_GRIDS))
 @pytest.mark.parametrize("geometry", list(_GEOMETRIES))
-def test_default_ew_equals_the_definition_with_the_same_window_weights(
+def test_soft_edge_option_equals_the_definition_with_the_same_window_weights(
     geometry, grid_name, kind, amp
 ):
-    """Exactness on L_ν input: tengri == numpy Eqs. 1-2 with identical soft weights."""
+    """Opt-in ``edge_width=1.0``: tengri == numpy Eqs. 1-2 with identical soft weights."""
     idx = _GEOMETRIES[geometry]
     wave = _GRIDS[grid_name]()
     flam = _line_on_continuum(wave, kind, amp)
     lnu = flam * wave**2 / C_AA
-    got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
+    w, f = jnp.asarray(wave), jnp.asarray(lnu)
+    got = float(measure_index_jax(w, f, idx, edge_width=1.0))
     assert got == pytest.approx(lick_soft_reference(wave, flam, idx), abs=1e-9, rel=1e-9)
     mag_idx = dataclasses.replace(idx, units="mag")
-    mag = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mag_idx))
+    mag = float(measure_index_jax(w, f, mag_idx, edge_width=1.0))
     assert mag == pytest.approx(lick_soft_reference(wave, flam, idx, magnitude=True), abs=1e-10)
 
 
@@ -368,7 +375,19 @@ def test_registry_ew_matches_the_hard_window_lick_definition(ssp, grid, name, ag
     wave, lnu = _solar_spectrum(ssp, grid, age)
     got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
     ref = lick_hard_reference(wave, _flam(wave, lnu), idx)
-    assert abs(got - ref) < EDGE_TOL_AA[name], f"{name} {age} Gyr: {got:.4f} vs Lick {ref:.4f}"
+    assert abs(got - ref) < HARD_TOL_AA, f"{name} {age} Gyr: {got:.4f} vs Lick {ref:.4f}"
+
+
+@pytest.mark.parametrize("age", AGES_GYR)
+@pytest.mark.parametrize("name", EW_NAMES)
+def test_soft_edge_option_stays_within_its_documented_bias_of_the_hard_window(
+    ssp, grid, name, age
+):
+    idx = STANDARD_INDICES[name]
+    wave, lnu = _solar_spectrum(ssp, grid, age)
+    soft = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx, edge_width=1.0))
+    ref = lick_hard_reference(wave, _flam(wave, lnu), idx)
+    assert abs(soft - ref) < EDGE_TOL_AA[name], f"{name} {age} Gyr: {soft:.4f} vs Lick {ref:.4f}"
 
 
 @pytest.mark.parametrize("age", AGES_GYR)
@@ -378,42 +397,56 @@ def test_registry_mag_form_matches_the_hard_window_lick_definition(ssp, grid, na
     wave, lnu = _solar_spectrum(ssp, grid, age)
     got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
     ref = lick_hard_reference(wave, _flam(wave, lnu), idx, magnitude=True)
-    assert abs(got - ref) < EDGE_TOL_MAG[name], f"{name} {age} Gyr: {got:.5f} vs Lick {ref:.5f}"
+    assert abs(got - ref) < HARD_TOL_MAG, f"{name} {age} Gyr: {got:.5f} vs Lick {ref:.5f}"
+    soft = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx, edge_width=1.0))
+    assert abs(soft - ref) < EDGE_TOL_MAG[name]
 
 
 @pytest.mark.parametrize("age", AGES_GYR)
 @pytest.mark.parametrize("name", EW_NAMES)
-def test_registry_ew_equals_the_soft_window_reference_exactly(ssp, grid, name, age):
+def test_registry_ew_soft_option_equals_the_soft_window_reference_exactly(ssp, grid, name, age):
     idx = STANDARD_INDICES[name]
     wave, lnu = _solar_spectrum(ssp, grid, age)
-    got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
+    got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx, edge_width=1.0))
     ref = lick_soft_reference(wave, _flam(wave, lnu), idx)
     assert got == pytest.approx(ref, abs=1e-9, rel=1e-10)
 
 
+def mean_hard_exact_reference(wave, flux, idx):
+    """Constant mean-of-sidebands continuum, hard windows (exact top-hat means)."""
+    (b0, b1), (r0, r1) = idx.continuum
+    f0, f1 = idx.feature
+    cont = 0.5 * (_hard_mean(wave, flux, b0, b1) + _hard_mean(wave, flux, r0, r1))
+    return (f1 - f0) * (cont - _hard_mean(wave, flux, f0, f1)) / cont
+
+
 @pytest.mark.parametrize(
-    "name,age,old_minus_lick,resolved",
+    "name,age,min_gap",
     [
-        # HgA at 1 Gyr: a young population has a weak Hgamma line, so the sideband-line
-        # miss is only 0.260 A, 4.9x the measured soft-edge effect (0.053 A) and below the
-        # 5x separation bar. Its value is still pinned; only the separation is not claimed.
-        ("HgA", 1.0, 0.260, False),
-        ("Fe4383", 1.0, 0.425, True),
-        ("HgA", 10.0, 0.896, True),
-        ("Fe4383", 10.0, 0.392, True),
+        # Lower bounds on |constant continuum on L_ν - Lick|, each below the #2690 table value
+        # (HγA 0.260, Fe4383 0.425 at 1 Gyr; HγA 0.896, Fe4383 0.392 at 10 Gyr) by more than
+        # the edge effect that table carried (0.06 Å at most), so the table holds on hard windows.
+        ("HgA", 1.0, 0.2),
+        ("Fe4383", 1.0, 0.35),
+        ("HgA", 10.0, 0.8),
+        ("Fe4383", 10.0, 0.3),
     ],
 )
 def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
-    ssp, grid, name, age, old_minus_lick, resolved
+    ssp, grid, name, age, min_gap
 ):
-    """Constant continuum on L_ν (mean option) misses the Lick value by the #2690 table."""
+    """Constant continuum on L_ν (mean option) misses the Lick value by the #2690 table.
+
+    The mean option is checked against its own numpy definition (hard windows, the same
+    arithmetic written here) and then against the hard-window Lick definition.
+    """
     mean_idx = dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
     wave, lnu = _solar_spectrum(ssp, grid, age)
     old = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mean_idx))
+    assert old == pytest.approx(mean_hard_exact_reference(wave, lnu, mean_idx), abs=1e-9)
     ref = lick_hard_reference(wave, _flam(wave, lnu), STANDARD_INDICES[name])
-    assert old - ref == pytest.approx(old_minus_lick, abs=0.01)
-    if resolved:
-        assert abs(old - ref) > 5.0 * EDGE_TOL_AA[name]
+    assert abs(old - ref) > min_gap
+    assert abs(old - ref) > 5.0 * HARD_TOL_AA
 
 
 # ── (d) window-LUT path equals the exact path ──────────────────────
@@ -579,8 +612,8 @@ def test_model_ew_is_the_lick_definition_on_the_model_spectrum(dusty_model):
     rest = dusty_model.predict_rest_sed(params)
     wave, lnu = np.asarray(rest.wavelength, float), np.asarray(rest.sed, float)
     got = np.asarray(dusty_model.predict_spectral_indices(params, defs))
-    ref = np.array([lick_soft_reference(wave, _flam(wave, lnu), d) for d in defs])
-    np.testing.assert_allclose(got, ref, rtol=1e-8, atol=1e-8)
+    ref = np.array([lick_hard_reference(wave, _flam(wave, lnu), d) for d in defs])
+    np.testing.assert_allclose(got, ref, rtol=1e-8, atol=HARD_TOL_AA)
 
 
 # ── (e) the mean option reproduces BAGPIPES ────────────────────────
@@ -652,16 +685,20 @@ def test_break_indices_are_the_f_nu_window_mean_ratio(ssp, grid, name, age):
     idx = STANDARD_INDICES[name]
     wave, lnu = _solar_spectrum(ssp, grid, age)
     (b0, b1), (r0, r1) = idx.continuum
-    ref = _soft_mean(wave, lnu, r0, r1) / _soft_mean(wave, lnu, b0, b1)
+    ref = _hard_mean(wave, lnu, r0, r1) / _hard_mean(wave, lnu, b0, b1)
     got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
-    assert got == pytest.approx(ref, rel=1e-12)
+    assert got == pytest.approx(ref, rel=1e-9)
+    soft_ref = _soft_mean(wave, lnu, r0, r1) / _soft_mean(wave, lnu, b0, b1)
+    soft = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx, edge_width=1.0))
+    assert soft == pytest.approx(soft_ref, rel=1e-12)
     other = dataclasses.replace(idx, pseudo_continuum="mean")
     assert float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), other)) == got
 
 
 @pytest.mark.parametrize("name", SLOPE_NAMES)
 @pytest.mark.parametrize("age", AGES_GYR)
-def test_uv_slope_is_the_weighted_log_log_fit_of_f_nu(ssp, name, age):
+@pytest.mark.parametrize("edge_width", [0.0, 1.0], ids=["hard", "soft_option"])
+def test_uv_slope_is_the_weighted_log_log_fit_of_f_nu(ssp, name, age, edge_width):
     idx = STANDARD_INDICES[name]
     wave_all = np.asarray(ssp.ssp_wave, dtype=float)
     sel = (wave_all > 1000.0) & (wave_all < 3000.0)
@@ -669,11 +706,12 @@ def test_uv_slope_is_the_weighted_log_log_fit_of_f_nu(ssp, name, age):
     i_met = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - SOLAR_LGMET)))
     i_age = int(np.argmin(np.abs(np.asarray(ssp.ssp_lg_age_gyr) - np.log10(age))))
     lnu = np.asarray(ssp.ssp_flux, dtype=float)[i_met, i_age][sel]
-    w = _soft_weights(wave, *idx.feature)
+    lo, hi = idx.feature
+    w = (wave >= lo) * (wave <= hi) * 1.0 if edge_width == 0.0 else _soft_weights(wave, lo, hi)
     x, y = np.log(wave), np.log(np.maximum(lnu, 1e-50))
     sw, sx, sy = w.sum(), (w * x).sum(), (w * y).sum()
     slope = ((w * x * y).sum() - sx * sy / sw) / ((w * x * x).sum() - sx**2 / sw)
-    got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx))
+    got = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), idx, edge_width=edge_width))
     assert got == pytest.approx(slope - 2.0, rel=1e-9, abs=1e-9)
 
 
