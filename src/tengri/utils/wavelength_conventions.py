@@ -74,7 +74,7 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "break_indices",
         "src/tengri/utils/break_windows.py",
         "air",
-        "Balogh+1999 (ApJ 527, 54) Table 1 centres its [O II] window 3713-3741 on the air "
+        "Balogh+1999 (ApJ 527, 54) Table 1 centers its [O II] window 3713-3741 on the air "
         "name lambda3727 (vacuum doublet centroid 3728.5); Westfall+2019 (AJ 158, 231) "
         "Table 4 rows 44-45 list the D4000 (Bruzual 1983) and Dn4000 passbands as defined "
         "for air. FSPS allindices.dat holds Dn4000 but converts only its first 25 "
@@ -112,9 +112,11 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "blended-doublet label whose flux-weighted centroid is 2797.9 in air (2798.7 in "
         "vacuum, which would round to 2799) and MgII_2802A truncates the air 2802.71 "
         "(vacuum 2803.53 is 1.5 A away), so both read as air with residuals of "
-        "-0.47/+0.08/-0.70 A (Hgamma/MgII 2798/MgII 2802) after conversion, which is the label rounding; infrared labels "
-        "(Ne2_1281um ... C2_15774um, > 1e4 A) are the NIST VACUUM values (O3_8836um 88.36 "
-        "and C2_15774um 157.74, air would be 88.33 and 157.70) and are left alone",
+        "-0.47/+0.08/-0.70 A (Hgamma/MgII 2798/MgII 2802) after conversion, which is the "
+        "label rounding; infrared labels (Ne2_1281um ... C2_15774um, > 1e4 A) are the "
+        "NIST VACUUM values (O3_8836um 88.36 and C2_15774um 157.74, air would be 88.33 "
+        "and 157.70) and are left alone (the stored values are 100x the label, a "
+        "separate scale defect in scripts/build_flury2024_grids.py _parse_wavelength_aa)",
         "tengri.components.nebular.mappings_photo._load_agn_grid",
     ),
     WavelengthSource(
@@ -193,10 +195,11 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "Temple+2021 (MNRAS 508, 737, arXiv:2109.04472) Sec. 1: 'All emission lines are "
         "identified with their wavelengths in vacuum'; the 970-5100 A part is built from "
         "SDSS DR7 composites (SDSS wavelengths are vacuum) and an MFICA reconstruction of "
-        "the same spectra (App. B1-B2). Narrow-line template: Hbeta centroid 4862.4 vs "
-        "vacuum 4862.68 / air 4861.32; [OIII] 5007/4959 sit 0.8/0.65 A below the vacuum "
-        "values (the usual quasar [OIII] blueshift, Coatman+2019) rather than 0.6/0.7 A "
-        "above the air ones; the 69 km/s pixel is 1.15 A",
+        "the same spectra (App. B1-B2). The narrow-line template (1.15 A pixel at 5000 A) puts "
+        "Hbeta, [OIII] 5007 and [OIII] 4959 at 4861.61, 5007.36, 4959.48: 0.66-0.88 A "
+        "(50-66 km/s) below the vacuum lines, the usual blueshift of quasar narrow lines "
+        "against the systemic redshift, where an air frame would need a +18 to +32 km/s "
+        "redshift; that supports but does not by itself decide the frame",
         "tengri.components.agn.qsogen._load_emline_template_arrays",
     ),
     WavelengthSource(

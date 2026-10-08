@@ -3,7 +3,7 @@
 
 Bruzual (1983, ApJ 273, 105) defined ``D4000`` and Balogh et al. (1999, ApJ 527,
 54, Table 1) defined the narrow ``Dn4000`` on ground-based spectra, whose
-published wavelengths are air wavelengths: Balogh et al. centre their
+published wavelengths are air wavelengths: Balogh et al. center their
 [O II] window on the air name ``lambda3727`` (the vacuum doublet centroid is
 3728.5), and the SDSS-MaNGA pipeline paper (Westfall et al. 2019, AJ 158, 231,
 Table 4, rows 44-45) lists both break passbands as defined for air. Like the Lick

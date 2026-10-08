@@ -83,7 +83,7 @@ def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
         axes["hydrogen_density"] = np.array([100.0, 1000.0])
         lines = f.create_group("lines")
         lines["wavelength"] = labels
-        lines["luminosity"] = np.full(shape + (labels.size,), 1.0e30)
+        lines["luminosity"] = np.full((*shape, labels.size), 1.0e30)
         lines["id"] = np.array([f"line {i}" for i in range(labels.size)], dtype="S16")
         f.create_group("log10_specific_ionising_luminosity")["HI"] = np.full(shape, 43.0)
 
@@ -121,9 +121,10 @@ def test_nlr_grid_file_labels_are_air_in_the_real_synthesizer_file():
     for vac in _NLR_AIR_TO_VAC.values():
         assert np.min(np.abs(raw - vac)) > 0.5, vac  # ... and none of the vacuum values
     loaded = np.asarray(_load_synthesizer_nlr_grid(path).line_wavelengths_aa)
+    expected = np.where(raw >= 2000.0, air_to_vac(raw), raw)  # the file is air above 2000 A
+    np.testing.assert_allclose(loaded, expected, rtol=0, atol=1e-9)
     for air, vac in _NLR_AIR_TO_VAC.items():
-        assert np.min(np.abs(loaded - vac)) < 0.06, vac
-        assert np.min(np.abs(loaded - air)) > 0.5, air
+        assert abs(loaded[int(np.argmin(np.abs(raw - air)))] - vac) < 0.06, vac
 
 
 # ── 2. Labels above 10000 A: Cloudy air to 100 micron, Flury infrared vacuum ───────────────
@@ -149,10 +150,14 @@ def test_cloudy_infrared_labels_are_air_and_convert_to_the_vacuum_value():
     assert np.max(np.abs(got / vac - 1.0)) < 1e-5
     assert np.min(np.abs(air / vac - 1.0)) > 2.5e-4  # unconverted they are 2.7e-4 short
     # the default (PyNeb/MAPPINGS) window stops at 1e4 A and leaves them alone
-    np.testing.assert_array_equal(catalog_air_to_vacuum(air[air > LABEL_AIR_MAX_AA]), air[air > 1e4])
+    np.testing.assert_array_equal(
+        catalog_air_to_vacuum(air[air > LABEL_AIR_MAX_AA]), air[air > 1e4]
+    )
     # beyond the Cloudy cap nothing is converted (far-infrared labels not established)
     far = np.array([1.2e6, 1.576e6])
-    np.testing.assert_array_equal(catalog_air_to_vacuum(far, max_air_aa=CLOUDY_LABEL_AIR_MAX_AA), far)
+    np.testing.assert_array_equal(
+        catalog_air_to_vacuum(far, max_air_aa=CLOUDY_LABEL_AIR_MAX_AA), far
+    )
 
 
 def test_cue_infrared_labels_ingest_to_the_vacuum_value():
@@ -164,13 +169,22 @@ def test_cue_infrared_labels_ingest_to_the_vacuum_value():
     raw = np.load(path)["lineList_wav"]
     waves = load_cue_weights(str(path)).nn_line_wav
     for air, vac in _CLOUDY_IR:
-        assert np.min(np.abs(raw - air)) < 0.5 * air * 1e-5 + 0.011, air  # the file holds the label
+        assert np.min(np.abs(raw - air)) < 0.5 * air * 1e-5 + 0.011, (
+            air
+        )  # the file holds the label
         got = float(waves[int(np.argmin(np.abs(waves - vac)))])
         assert abs(got / vac - 1.0) < 1e-4, (air, got, vac)  # 2.7e-4 unconverted
     assert not np.any(np.abs(waves - 18751.0) < 0.5)  # the air Pa-alpha label is gone
 
 
 def test_flury_infrared_labels_are_the_vacuum_values_and_stay_put():
+    """The column names are NIST vacuum microns; the loader must not shift them as air.
+
+    ``O3_8836um`` is [O III] 88.36 micron: vacuum 88.3564, air 88.3323. (The stored value is
+    100x the name's micron because ``scripts/build_flury2024_grids.py::_parse_wavelength_aa``
+    reads the digits ``8836`` as microns; that scale defect is separate from the convention
+    and is not touched here.)
+    """
     path = DATA / "flury2024_grids.h5"
     if not path.is_file():
         pytest.skip("flury2024_grids.h5 not present")
@@ -182,11 +196,17 @@ def test_flury_infrared_labels_are_the_vacuum_values_and_stay_put():
         names = [n.decode() for n in grp["line_names"][:]]
         raw = grp["line_wavelengths_aa"][:].astype(np.float64)
     got = np.asarray(grid.line_wavelengths, dtype=np.float64)
-    # [O III] 88.36 and [C II] 157.74 micron are the NIST VACUUM values (air: 88.33, 157.70)
-    for name, vacuum_aa in (("O3_8836um", 883564.0), ("C2_15774um", 1577409.0), ("O4_2589um", 258903.0)):
+    for name, vacuum_um in (
+        ("O3_8836um", 88.3564),
+        ("C2_15774um", 157.741),
+        ("O4_2589um", 25.8903),
+    ):
+        label_um = float(name.split("_")[1][:-2]) / 100.0
+        air_um = vacuum_um / 1.000273
+        assert abs(label_um / vacuum_um - 1.0) < 1e-4, name  # the label is the vacuum value
+        assert abs(label_um / air_um - 1.0) > 2e-4, name  # and not the air one
         i = names.index(name)
-        assert abs(raw[i] / vacuum_aa - 1.0) < 3e-4, name
-        assert got[i] == pytest.approx(raw[i], rel=1e-6), name  # not shifted by 2.7e-4
+        assert got[i] == pytest.approx(raw[i], rel=1e-6), name  # untouched by the loader
     ir = raw > LABEL_AIR_MAX_AA
     assert ir.sum() == 35
     np.testing.assert_allclose(got[ir], raw[ir], rtol=1e-6)
@@ -259,31 +279,26 @@ def _qsogen_template() -> np.ndarray:
     return np.loadtxt(path)
 
 
-def test_qsogen_narrow_template_sits_on_the_vacuum_lines():
-    """Hbeta is 0.3 A from vacuum and 1.1 A from air; [O III] sits below the vacuum value.
+def test_qsogen_narrow_lines_show_the_usual_quasar_blueshift_against_the_vacuum_lines():
+    """Narrow Hbeta / [O III] sit 50-66 km/s below the vacuum lines.
 
-    The narrow-line template (column 5) has a 1.15 A pixel at 5000 A. Air would put
-    [O III] 5007/4959 a fraction of a pixel above 5006.84/4958.91 and Hbeta near
-    4861.3. The centroids are Hbeta 4862.4 (vacuum 4862.68), [O III] 5007.4 (vacuum
-    5008.24, air 5006.84) and 4959.5 (4960.29, 4958.91): a 0.8 A blueshift of the
-    narrow [O III], the usual quasar offset, against a +0.6 A redshift in air.
+    Supporting evidence only: the decision rests on the SDSS vacuum frame and Temple+2021
+    Sec. 1 (see the registry). The narrow-line template (column 5, 1.15 A pixel) centroids
+    are 4861.61, 5007.36, 4959.48; an air frame would need a +18 to +32 km/s redshift.
     """
     a = _qsogen_template()
     wave, narrow = a[:, 0], a[:, 5]
+    c_kms = 299792.458
 
     def centroid(center: float, half: float = 12.0) -> float:
         m = np.abs(wave - center) < half
         weight = np.clip(narrow[m] - np.median(narrow[np.abs(wave - center) < 40]), 0.0, None)
         return float((wave[m] * weight).sum() / weight.sum())
 
-    vac_hb = float(air_to_vac(4861.32))
-    air_hb = 4861.32
-    assert abs(centroid(vac_hb) - vac_hb) < abs(centroid(vac_hb) - air_hb) - 0.5
-    for air_line in (5006.84, 4958.91):
+    for air_line in (4861.32, 5006.84, 4958.91):
         vac_line = float(air_to_vac(air_line))
-        c = centroid(vac_line)
-        assert abs(c - vac_line) < 1.0, air_line
-        assert c < vac_line  # blueshifted narrow [O III], not an air-frame redshift
+        velocity = (centroid(vac_line) - vac_line) / vac_line * c_kms
+        assert -80.0 < velocity < -25.0, (air_line, velocity)
 
 
 def test_qsogen_template_wavelengths_are_used_unconverted():
@@ -328,7 +343,10 @@ def test_flury_mgii_and_hgamma_labels_read_as_air_labels():
     grid = _load_agn_grid(path, "cdn")
     with h5py.File(path) as f:
         names = [n.decode() for n in f["agn_oxaf/cdn/line_names"][:]]
-    got = {n: float(grid.line_wavelengths[names.index(n)]) for n in ("H1r_4340A", "MgII_2798A", "MgII_2802A")}
+    got = {
+        n: float(grid.line_wavelengths[names.index(n)])
+        for n in ("H1r_4340A", "MgII_2798A", "MgII_2802A")
+    }
     assert abs(got["H1r_4340A"] - EMISSION_LINES["Hgamma"][0]) < 0.55
     assert abs(got["MgII_2798A"] - 2798.74) < 0.55  # 2:1 flux-weighted vacuum doublet centroid
     assert abs(got["MgII_2802A"] - 2803.531) < 0.8  # truncated air label: 0.70 A, a label unit
