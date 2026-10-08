@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The declared ``lum_ratio`` drives the KD18 and power-law disc models.
 
 Both disc classes declare ``lum_ratio`` as a free parameter, but their ``predict`` once

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The AGN energy ledger closes: each published luminosity is the power of its spectrum.
 
 Every AGN component that publishes an ``L_*`` integrates the same SED it emits, on a
