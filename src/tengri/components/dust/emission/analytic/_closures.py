@@ -24,13 +24,11 @@ from tengri.components.dust._params import (
     DEFAULT_DUST_EPSILON_MBB,
     DEFAULT_DUST_ETA_BALANCE,
     DEFAULT_DUST_F_COLD,
-    DEFAULT_DUST_F_PAH,
     DEFAULT_DUST_L_AGN_IR,
     DEFAULT_DUST_LAMBDA_0_UM,
     DEFAULT_DUST_T_COLD,
     DEFAULT_DUST_T_WARM,
     MBB_T_K_DEFAULT,
-    SCHREIBER_T_K_DEFAULT,
 )
 from tengri.components.dust.emission._physics import (
     cmb_contrast_factor,
@@ -57,6 +55,11 @@ _X_MAX: float = 500.0
 # ``utils.blackbody._X_MIN``, which the sibling Planck closure has always
 # carried; this one clipped at 0.0 and could reach the pole (#1439).
 _X_MIN: float = 1e-10
+
+# casey2012 emission lower bound, a convention that follows the 1 um - 1 mm
+# range of CIGALE's casey2012 template. Casey (2012) sets no blue limit; the
+# bound removes the divergent blue tail of the mid-IR power law as alpha -> 1.
+_CASEY_LAMBDA_MIN_UM: float = 1.0
 
 
 def modified_blackbody(
@@ -413,13 +416,23 @@ def casey2012(
     :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every
     variable: :math:`T` = dust temperature [K], :math:`\beta` = emissivity
     index, :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
-    :math:`\lambda` = wavelength. The total frequency integral is
-    normalized to ``L_absorbed``.
+    :math:`\lambda` = wavelength.
+
+    Emission range: 1 µm rest-frame and longer, a convention that follows
+    the 1 µm–1 mm range of CIGALE's template (Casey 2012 sets no blue limit;
+    near-sublimation dust peaks at 2–3 µm in :math:`\nu L_\nu`, so 1 µm is not
+    itself a sublimation wavelength). Normalized to ``L_absorbed`` on the
+    supplied wavelength grid. The residual grid dependence is first order in
+    the width of the grid cell that straddles 1 µm: below 1e-3 in L_nu(350 µm)
+    on grids with cells of about 100 Å or finer there, and about 1e-2 at
+    :math:`\alpha = 1` for a 1000 Å cell.
 
     This matches CIGALE's ``casey2012`` module term by term (parity
     verified against pcigale 2025.1; #1004: the previous closure carried
     a spurious Wien factor that annihilated the power law, an inverted
-    power-law slope, and an optically-thin-only graybody).
+    power-law slope, and an optically-thin-only graybody). CIGALE's casey2012
+    template is defined on 1 µm–1 mm; Synthesizer normalizes on the
+    supplied grid.
 
     When ``redshift > 0``, the dust temperature is corrected for CMB
     heating (da Cunha et al. 2013 [2]_) and the observed flux is reduced
@@ -491,7 +504,11 @@ def casey2012(
     )
     shape = graybody + power_law
 
-    # Normalize so integral over frequency = L_absorbed
+    # Mask emission below the lower bound
+    lambda_min_aa = _CASEY_LAMBDA_MIN_UM * 1e4
+    shape = jnp.where(wavelength_aa >= lambda_min_aa, shape, 0.0)
+
+    # Normalize so integral over frequency = L_absorbed on the supplied grid
     # nu is descending (wave ascending), negate for positive integral
     integral = -jnp.trapezoid(shape, nu)
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
@@ -502,58 +519,6 @@ def casey2012(
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
 
     return result * contrast
-
-
-# ── Model 1c: Schreiber et al. (2016) dust continuum + PAH ────────
-
-
-def _drude_profile(
-    wavelength_aa: jnp.ndarray,
-    lambda0_aa: float,
-    fwhm_um: float,
-) -> jnp.ndarray:
-    r"""Drude profile for PAH emission feature.
-
-    Parameters
-    ----------
-    wavelength_aa : array_like, shape (n_wave,)
-        Wavelength grid in Ångstrom.
-    lambda0_aa : float
-        Center wavelength in Ångstrom.
-    fwhm_um : float
-        FWHM in micrometers.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Normalized Drude profile.
-
-    Notes
-    -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    The Drude profile is:
-
-    .. math::
-
-        D(\lambda) = \frac{2}{\pi} \frac{\gamma}{
-            (\lambda/\lambda_0 - \lambda_0/\lambda)^2 + \gamma^2}
-
-    where :math:`\gamma = \text{FWHM} / \lambda_0`.
-
-    """
-    lambda0_um = lambda0_aa / 1e4
-    fwhm_um_safe = jnp.maximum(fwhm_um, 1e-6)
-    gamma = fwhm_um_safe / lambda0_um
-
-    wavelength_um = wavelength_aa / 1e4
-    ratio = wavelength_um / lambda0_um
-
-    denominator = (ratio - 1.0 / ratio) ** 2 + gamma**2
-    return 2.0 / jnp.pi * gamma / denominator
-
-
-# ── Model 2: PAH Drude Profile Template ──
 
 
 def pah_drude(
@@ -571,9 +536,9 @@ def pah_drude(
     ``L_absorbed``: it is scaled by ``L_absorbed`` but deliberately leaves the
     bulk of the absorbed energy for a continuum component to carry. Select a
     full model (``dale2014``, ``draine_li2007/2014``, ``themis``,
-    ``modified_blackbody``, ``casey2012``, ``schreiber2018``) for an
+    ``modified_blackbody``, ``casey2012``, ``schreiber2016``) for an
     energy-conserving dust SED; ``pah_drude`` is intended as a diagnostic /
-    composition primitive (it backs the PAH term of ``schreiber2016``).
+    composition primitive.
 
     Parameters
     ----------
@@ -620,123 +585,6 @@ def pah_drude(
     lnu = L_absorbed * pah_llam * (wave_cm**2) / _C_CGS
 
     return lnu
-
-
-def schreiber2016(
-    wavelength_aa: jnp.ndarray,
-    L_absorbed: float,
-    dust_T: float = SCHREIBER_T_K_DEFAULT,
-    dust_f_pah: float = DEFAULT_DUST_F_PAH,
-    redshift: float = 0.0,
-    **_kwargs,
-) -> jnp.ndarray:
-    r"""Schreiber et al. (2016) 2-parameter dust emission model (analytic).
-
-    Mixes dust continuum and PAH emission by a fractional parameter.
-    The dust continuum is a modified blackbody (modified_blackbody with
-    beta=1.5). The PAH component is **approximated** as a sum of Drude profiles
-    at standard wavelengths (not the full Schreiber+ mid-IR aromatic forest).
-
-    For the CIGALE-faithful tabulated version with the real PAH feature forest,
-    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead:
-    this analytic model is the lightweight, grid-free approximation.
-
-    Parameters
-    ----------
-    wavelength_aa : array_like, shape (n_wave,)
-        Wavelength grid in Ångstrom (sorted ascending).
-    L_absorbed : float
-        Total absorbed luminosity. Unit-agnostic: the output L_nu will be
-        in the same units per Hz.
-    dust_T : float
-        Dust continuum temperature in Kelvin. Typical range: 15--60 K.
-        Default: read from ``SCHREIBER_T_K_DEFAULT`` (#2241); today 30.0.
-    dust_f_pah : float
-        Fractional contribution from PAH emission in [0, 1].
-        Default: read from the declared ``dust_f_pah`` (#2241); today 0.05.
-    redshift : float
-        Source redshift. When > 0, CMB heating correction is applied.
-        Default: 0.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Dust emission L_nu in ``[L_absorbed units] / Hz``.
-
-    Notes
-    -----
-    **JIT-compatible**: yes, all operations are ``jnp`` primitives.
-
-    The model composition is:
-
-    .. math::
-
-        L_\nu = (1 - f_{\rm PAH}) L_\nu^{\rm continuum} + f_{\rm PAH} L_\nu^{\rm PAH}
-
-    where:
-
-    - Dust continuum: modified blackbody with temperature T_dust and emissivity
-      index β = 1.5, using the same normalization as ``modified_blackbody``.
-    - PAH: sum of Drude profiles at standard rest wavelengths (3.3, 6.2, 7.7,
-      8.6, 11.3, 12.7 μm) with relative strengths from Smith et al. (2007).
-
-    The total integral over frequency is normalized to ``L_absorbed``.
-
-    References
-    ----------
-    .. [1] Schreiber, C., Elbaz, D., Sparre, M., et al., 2016,
-           A&A, 589, A35 (https://doi.org/10.1051/0004-6361/201527923)
-
-    .. [2] Smith, J. D. T., Draine, B. T., Dale, D. A., et al., 2007,
-           ApJ, 656, 770 (PAH profile templates).
-
-    """
-    # CMB correction (no-op at z=0)
-    T_eff = cmb_corrected_temperature(dust_T, redshift, 1.5)
-
-    wavelength_cm = wavelength_aa * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm  # Hz, descending
-
-    # ─ Dust continuum component (modified blackbody with beta=1.5) ─
-    nu_ref = _C_CGS / (250.0e-4)
-    emissivity = (nu / nu_ref) ** 1.5
-    bnu = planck_bnu(wavelength_aa, T_eff)
-    continuum = emissivity * bnu
-
-    # ─ PAH component (sum of Drude profiles) ─
-    # PAH features from Smith et al. (2007), with rest wavelengths and FWHM
-    pah_features = [
-        (33000.0, 0.05, 0.04),  # 3.3 μm, FWHM 0.05 μm, strength 0.04
-        (62000.0, 0.19, 0.14),  # 6.2 μm, FWHM 0.19 μm, strength 0.14
-        (77000.0, 0.47, 0.42),  # 7.7 μm, FWHM 0.47 μm, strength 0.42
-        (86000.0, 0.27, 0.11),  # 8.6 μm, FWHM 0.27 μm, strength 0.11
-        (113000.0, 0.18, 0.19),  # 11.3 μm, FWHM 0.18 μm, strength 0.19
-        (127000.0, 0.32, 0.10),  # 12.7 μm, FWHM 0.32 μm, strength 0.10
-    ]
-
-    pah_sum = jnp.zeros_like(wavelength_aa)
-    for lambda0_aa, fwhm_um, strength in pah_features:
-        drude = _drude_profile(wavelength_aa, lambda0_aa, fwhm_um)
-        pah_sum = pah_sum + strength * drude
-
-    # Normalize PAH to unit integral
-    pah_integral = -jnp.trapezoid(pah_sum, nu)
-    pah_normalized = jnp.where(pah_integral > 0.0, pah_sum / pah_integral, 0.0)
-
-    # ─ Mix components ─
-    f_pah_clipped = jnp.clip(dust_f_pah, 0.0, 1.0)
-    mixed_shape = (1.0 - f_pah_clipped) * continuum + f_pah_clipped * pah_normalized
-
-    # ─ Normalize total to L_absorbed ─
-    integral = -jnp.trapezoid(mixed_shape, nu)
-    norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
-
-    result = norm * mixed_shape
-
-    # CMB contrast
-    contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-    return result * contrast
 
 
 # ── Backward-compatible module-level aliases for direct imports ───

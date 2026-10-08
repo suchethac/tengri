@@ -62,6 +62,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.agn._params import PARAMS as AGN_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
@@ -238,7 +239,7 @@ def _load_stellar_grid(
         line_ratios = jnp.array(grp["line_ratios"][:])  # (N_z,N_a,N_s,N_u,N_n,N_lines)
 
         # Wavelengths stored in the top-level group per model/density sub-group
-        line_wavelengths = jnp.array(grp["line_wavelengths_aa"][:])
+        line_wavelengths = jnp.array(catalog_air_to_vacuum(grp["line_wavelengths_aa"][:]))
 
     grid_data = MappingsStellarGridData(
         line_wavelengths=line_wavelengths,
@@ -266,7 +267,7 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
     with h5py.File(filepath, "r") as f:
         grp = f[f"agn_oxaf/{density}"]
 
-        line_wavelengths = jnp.array(grp["line_wavelengths_aa"][:])
+        line_wavelengths = jnp.array(catalog_air_to_vacuum(grp["line_wavelengths_aa"][:]))
         zo_axis = jnp.array(grp["z_axis"][:])
         logU_axis = jnp.array(grp["logU_axis"][:])
         logmbh_axis = jnp.array(grp["logmbh_axis"][:])

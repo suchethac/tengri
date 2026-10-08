@@ -85,7 +85,7 @@ class TestLinesToSed:
         from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(4000.0, 7000.0, 500)
-        line_wav = jnp.array([4861.33, 6562.80])  # Hβ, Hα
+        line_wav = jnp.array([4862.68, 6564.61])  # Hβ, Hα
         line_lum = jnp.array([1.0, 2.86])  # Lsun
 
         result = lines_to_sed(line_wav, line_lum, wave_obs, fwhm_kms=200.0)
@@ -98,14 +98,14 @@ class TestLinesToSed:
         from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(6400.0, 6700.0, 1000)
-        line_wav = jnp.array([6562.80])
+        line_wav = jnp.array([6564.61])
         line_lum = jnp.array([1.0])
 
         result = lines_to_sed(line_wav, line_lum, wave_obs, fwhm_kms=200.0)
         peak_wave = float(wave_obs[jnp.argmax(result)])
 
         # Peak should be within 10 Å of Hα
-        assert abs(peak_wave - 6562.80) < 10.0
+        assert abs(peak_wave - 6564.61) < 10.0
 
 
 # ── Task 2: agn_nlr_emission return type fix ──────────────────────
@@ -256,7 +256,7 @@ class TestBuildLineDesignMatrix:
         )
 
         wave = jnp.linspace(4000.0, 7000.0, 300)
-        line_wav = jnp.array([4861.33, 6562.80])
+        line_wav = jnp.array([4862.68, 6564.61])
 
         A_old = build_eline_design_matrix(wave, line_wav, spectral_resolution=2000.0, redshift=0.0)
         A_new = build_line_design_matrix(wave, line_wav)
@@ -268,8 +268,8 @@ class TestBuildLineDesignMatrix:
         from tengri.observation.eline_marginalization import build_line_design_matrix
 
         wave = jnp.linspace(4000.0, 7000.0, 300)
-        narrow = jnp.array([4861.33, 6562.80])  # 2 narrow
-        broad = jnp.array([4861.33])  # 1 broad
+        narrow = jnp.array([4862.68, 6564.61])  # 2 narrow
+        broad = jnp.array([4862.68])  # 1 broad
 
         A_combined = build_line_design_matrix(wave, narrow, broad_wavelengths=broad)
 

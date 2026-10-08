@@ -298,6 +298,10 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "law_bc",
         "law_diff",
         "law_neb",
+        # agn.atten polar_law is a second spelling of agn.polar_law (one stored
+        # agn_polar_law); the table rule on 'agn' emits it back, and emitting it
+        # from the sub-block too would write the same setting twice.
+        "polar_law",
         "lyman_cutoff",
         "lyc_reprocessed_by",
         "lyc_in_energy_balance",

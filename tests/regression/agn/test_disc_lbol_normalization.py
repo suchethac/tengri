@@ -21,6 +21,7 @@ import pytest
 
 pytestmark = pytest.mark.regression_bug
 
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC
 from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
 from tengri.utils.physics_constants import L_SUN
 
@@ -36,16 +37,59 @@ def _l_bol_delivered(l_nu):
     return float(jnp.trapezoid(np.asarray(l_nu)[order], np.asarray(nu)[order]))
 
 
+def _p(disc_fn, log_lbol, cos_inc):
+    """Delivered power [erg/s] at ``cos_inc`` (M_BH = 1e8, a = 0)."""
+    l_nu = disc_fn(
+        _WAVE, agn_log_lbol=log_lbol, agn_log_mbh=8.0, agn_a_spin=0.0, agn_cos_inc=cos_inc
+    )
+    return _l_bol_delivered(l_nu)
+
+
 @pytest.mark.parametrize("disc_fn", [multicolor_disc, kubota_done_disc])
 @pytest.mark.parametrize("log_lbol", [11.0, 12.0, 12.4])
 def test_disc_delivers_requested_lbol(disc_fn, log_lbol):
-    """The integrated SED matches the requested L_bol to <1% (M_BH = 1e8)."""
-    l_nu = disc_fn(_WAVE, agn_log_lbol=log_lbol, agn_log_mbh=8.0, agn_a_spin=0.0)
-    ratio = _l_bol_delivered(l_nu) / (10.0**log_lbol * L_SUN)
+    """``agn_log_lbol`` is the accretion power: the SED integrates to it at cos i = 0.5.
+
+    The discs return ``L_nu(i) = 2 cos i D_nu + H_nu`` with
+    ``int (D_nu + H_nu) dnu = L_acc = 10**agn_log_lbol L_sun``, so the line-of-sight power
+    equals ``L_acc`` at ``cos i = 0.5`` (M_BH = 1e8), to <1%.
+    """
+    ratio = _p(disc_fn, log_lbol, 0.5) / (10.0**log_lbol * L_SUN)
     assert abs(ratio - 1.0) < 0.01, (
         f"{disc_fn.__name__} delivered L_bol ratio {ratio:.4f} (want 1.00 +/- 1%) "
-        f"at agn_log_lbol={log_lbol}"
+        f"at agn_log_lbol={log_lbol}, cos i = 0.5"
     )
+
+
+@pytest.mark.parametrize("log_lbol", [11.0, 12.0, 12.4])
+def test_multicolor_default_inclination_is_two_cos_i_times_lbol(log_lbol):
+    """A pure disc (no corona) integrates to ``2 cos i L_acc`` at the default inclination.
+
+    ``D_nu`` carries all of ``L_acc``, so ``int L_nu(i) dnu = 2 cos i L_acc``
+    (2 cos 30 deg = 1.732 at the default ``DEFAULT_AGN_COS_INC``), to the 1% of the
+    energy test above.
+    """
+    ratio = _p(multicolor_disc, log_lbol, DEFAULT_AGN_COS_INC) / (10.0**log_lbol * L_SUN)
+    assert ratio == pytest.approx(2.0 * DEFAULT_AGN_COS_INC, rel=0.01)
+
+
+@pytest.mark.parametrize("log_lbol", [11.0, 12.0, 12.4])
+def test_kubota_done_default_inclination_matches_disc_plus_corona_budget(log_lbol):
+    """``int L_nu(i) dnu = 2 cos i D + H`` with D, H measured from two evaluations.
+
+    ``P(c) = 2 c D + H`` is linear in ``c``: ``P(1) - P(0) = 2 D`` and ``P(0) = H``. The
+    parts close the budget, ``D + H = L_acc`` (1%), and the power at the default inclination
+    equals ``2 cos i D + H`` (the ratio to ``L_acc`` is ``(2 cos i D + H) / (D + H)``).
+    """
+    p0 = _p(kubota_done_disc, log_lbol, 0.0)
+    p1 = _p(kubota_done_disc, log_lbol, 1.0)
+    d_disc, h_corona = 0.5 * (p1 - p0), p0
+    l_acc = 10.0**log_lbol * L_SUN
+    assert (d_disc + h_corona) / l_acc == pytest.approx(1.0, abs=0.01)
+    expected = (2.0 * DEFAULT_AGN_COS_INC * d_disc + h_corona) / (d_disc + h_corona)
+    delivered = _p(kubota_done_disc, log_lbol, DEFAULT_AGN_COS_INC) / (d_disc + h_corona)
+    assert delivered == pytest.approx(expected, rel=1e-6)
+    assert 1.0 < delivered < 2.0 * DEFAULT_AGN_COS_INC
 
 
 @pytest.mark.parametrize("disc_fn", [multicolor_disc, kubota_done_disc])

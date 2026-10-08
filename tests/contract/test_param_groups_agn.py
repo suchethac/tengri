@@ -1731,15 +1731,24 @@ class TestAgnLogLbolFracAgnConflict:
         model = self._build(synthetic_ssp_wide, log_lbol=Fixed(12.0), norm="independent")
         assert model.spec.agn_model == "composable"
 
-    def test_non_skirtor_torus_does_not_raise(self, synthetic_ssp_wide):
-        """The joint coupling is a SKIRTOR mechanism; ``fritz`` is untouched.
+    def test_torus_without_the_disc_tie_does_not_raise(self, synthetic_ssp_wide):
+        """The joint coupling ties the SKIRTOR and Fritz discs; ``nenkova`` has no tie.
 
         Measured live: 2.51e5 relative across the prior.
         """
         model = self._build(
-            synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), torus="fritz"
+            synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), torus="nenkova"
         )
         assert model.spec.agn_model == "composable"
+
+    def test_fritz_torus_raises_like_skirtor(self, synthetic_ssp_wide):
+        """The Fritz disc is tied to its library like the SKIRTOR one, so the refusal applies."""
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match="agn_log_lbol"):
+            self._build(
+                synthetic_ssp_wide, log_lbol=Fixed(12.0), ir_frac=Fixed(0.3), torus="fritz"
+            )
 
     def test_active_nlr_block_does_not_raise(self, synthetic_ssp_wide):
         """An NLR block reads the disc luminosity, so the direction is live.

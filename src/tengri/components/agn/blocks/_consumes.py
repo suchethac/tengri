@@ -217,7 +217,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_fritz_beta",
             "agn_fritz_gamma",
             "agn_fritz_oa",
-            "agn_fritz_psy",
+            "agn_cos_inc",
             "agn_torus_frac",
         }
     ),

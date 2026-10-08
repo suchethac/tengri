@@ -78,8 +78,12 @@ def stellar_config_of(model):
     """
     from tengri.components.stellar.component import StellarSEDComponent
 
+    # The structural chain, not ``_build_component_chain``: the config is set at
+    # construction, and the full chain also runs every component's ``precompute``,
+    # which for a fast model re-integrates the whole stellar redshift table
+    # (about a minute) only for this caller to read one dataclass off the result.
     try:
-        chain = model._build_component_chain()
+        chain = model._build_chain_configs()
     except (AttributeError, IndexError):
         return None
     stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)

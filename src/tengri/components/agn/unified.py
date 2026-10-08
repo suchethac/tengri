@@ -1628,6 +1628,14 @@ def unified_nlr_blr(
 
     Notes
     -----
+    **Traced FeII width**: the FeII broadening is evaluated by a band-limited synthesis that is
+    valid for a width of 500 km/s or more. A concrete width (a Python or NumPy scalar, as every
+    model build passes: the width is a block keyword, not a fit parameter) below 500 km/s takes
+    the exact full-lattice convolution, with no lower limit. A *traced* width (``agn_blr_fwhm``)
+    below 500 km/s cannot raise inside a trace and returns NaN for the FeII spectrum and
+    power, rather than a silently low-passed spectrum, so the same value is finite eager
+    and NaN under ``jax.jit``. Keep a traced width >= 500 km/s.
+
     JIT/grad/vmap compatible when ``nlr_fn`` and ``blr_fn`` are JIT-compatible
     (the default analytic templates are; Cue-backed closures are also JIT-safe
     since the weights are closed over as static pytree leaves).

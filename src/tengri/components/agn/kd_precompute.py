@@ -42,6 +42,7 @@ from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
+    TWO_FACES as _TWO_FACES,
     ring_area as _ring_area,
 )
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
@@ -917,9 +918,7 @@ def _integrate_outer_zone(
         jax.vmap(_outer_ring_phot)(r_outer, t_outer, dr_outer), axis=0
     )  # (n_filters,)
 
-    outer_bol = jnp.sum(
-        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
-    )
+    outer_bol = jnp.sum(_SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer)
 
     return outer_phot, outer_bol
 
@@ -1016,15 +1015,7 @@ def _integrate_warm_zone(
         jax.vmap(_warm_ring_phot)(r_warm_grid, t_warm, dr_warm), axis=0
     )  # (n_filters,)
 
-    warm_bol = jnp.sum(
-        _SIGMA_SB
-        * t_warm**4
-        * 2.0
-        * jnp.pi
-        * r_warm_grid
-        * dr_warm
-        * jnp.maximum(agn_cos_inc, 0.01)
-    )
+    warm_bol = jnp.sum(_SIGMA_SB * t_warm**4 * 2.0 * jnp.pi * r_warm_grid * dr_warm)
 
     return warm_phot, warm_bol
 
@@ -1203,7 +1194,8 @@ def kubota_done_disc_preintegrated(
     #   L_bol = sum_rings(sigma * T^4 * dA) for disc zones + L_hot for corona.
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
-    l_bol_unnorm = outer_bol + warm_bol + l_hot_erg
+    # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
+    l_bol_unnorm = _TWO_FACES * (outer_bol + warm_bol) + l_hot_erg
     l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
     scale = l_bol_requested / jnp.maximum(l_bol_unnorm, representable_denominator(1e-100))
 

@@ -22,7 +22,11 @@ from tengri.components.agn.cat3d_wind_lowfwd import (
     cat3d_wind_lowfwd_sed,
     load_cat3d_wind_lowfwd_default_grid,
 )
-from tengri.components.agn.fritz import fritz_sed, load_fritz_default_grid
+from tengri.components.agn.fritz import (
+    fritz_psy_from_cos_inc,
+    fritz_sed,
+    load_fritz_default_grid,
+)
 from tengri.components.agn.nenkova_agnfitter import (
     load_nenkova_agnfitter_default_grid,
     nenkova_agnfitter_sed,
@@ -175,7 +179,7 @@ def fritz_torus_block(
     agn_fritz_beta: float = -0.5,
     agn_fritz_gamma: float = 4.0,
     agn_fritz_oa: float = 60.0,
-    agn_fritz_psy: float = 0.001,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     templates=None,
     **_params,
@@ -185,6 +189,11 @@ def fritz_torus_block(
     Six-dimensional template grid with triweight interpolation on
     ``(r_ratio, tau, beta, gamma, opening_angle, psy)``. The torus
     covering factor scales the template by ``agn_torus_frac × L_bol``.
+
+    The model has one inclination, ``agn_cos_inc``; the library's viewing
+    elevation above the equatorial plane is derived from it,
+    :math:`\psi = 90^\circ - i` (:func:`~tengri.components.agn.fritz.fritz_psy_from_cos_inc`),
+    so the torus SED, the disc screen and the polar-dust mask see one sightline.
 
     Parameters
     ----------
@@ -205,15 +214,15 @@ def fritz_torus_block(
         Polar dust density gradient [dimensionless].
         Default ``4.0``. Allowed: 0, 2, 4, 6.
     agn_fritz_oa : float, optional
-        Dust torus half-opening angle [degrees], as keyed in CIGALE's
-        ``SimpleDatabase`` (the user-facing "full opening angle" 60/100/140 is
-        mapped to this half-angle via ``(180 - oa) / 2`` in CIGALE).
-        Default ``60.0``. Allowed: 20, 40, 60.
-    agn_fritz_psy : float, optional
-        Viewing angle from torus axis [degrees].
-        Default ``0.001`` (type-2 edge-on).
-        Allowed: 0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99.
-        Values: 0° = type-2 AGN (edge-on), 90° = type-1 AGN (face-on).
+        Half-angle :math:`\theta_c` of the dust-free polar cone [degrees]; the
+        torus's full opening angle is :math:`\Theta = 180^\circ - 2\theta_c`
+        (140, 100, 60 degrees). Default ``60.0``. Allowed: 20, 40, 60; a value
+        outside [20, 60] is refused. The sightline is type 1 when the
+        inclination :math:`i < \theta_c`.
+    agn_cos_inc : float, optional
+        :math:`\cos i`, the model's one inclination from the polar axis
+        (1 = face-on). Defaults to the declared ``agn_cos_inc`` default,
+        ``cos(30 deg)``.
     agn_torus_frac : float, optional
         Covering factor [0, 1]. Default ``0.5``.
 
@@ -234,7 +243,7 @@ def fritz_torus_block(
         agn_fritz_beta=agn_fritz_beta,
         agn_fritz_gamma=agn_fritz_gamma,
         agn_fritz_oa=agn_fritz_oa,
-        agn_fritz_psy=agn_fritz_psy,
+        agn_fritz_psy=fritz_psy_from_cos_inc(agn_cos_inc),
         _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2

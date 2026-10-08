@@ -82,6 +82,14 @@ def boroson_green_feii_block(
 
     Notes
     -----
+    **Traced FeII width**: the FeII broadening is evaluated by a band-limited synthesis that is
+    valid for a width of 500 km/s or more. A concrete width (a Python or NumPy scalar, as every
+    model build passes: the width is a block keyword, not a fit parameter) below 500 km/s takes
+    the exact full-lattice convolution, with no lower limit. A *traced* width
+    below 500 km/s cannot raise inside a trace and returns NaN for the FeII spectrum and
+    power, rather than a silently low-passed spectrum, so the same value is finite eager
+    and NaN under ``jax.jit``. Keep a traced width >= 500 km/s.
+
     **JIT-compatible**: yes.
 
     **Upstream**: Boroson & Green (1992) empirical FeII model, templated
@@ -147,6 +155,14 @@ def boroson_green_feii_line_power(
 
     Notes
     -----
+    **Traced FeII width**: the FeII broadening is evaluated by a band-limited synthesis that is
+    valid for a width of 500 km/s or more. A concrete width (a Python or NumPy scalar, as every
+    model build passes: the width is a block keyword, not a fit parameter) below 500 km/s takes
+    the exact full-lattice convolution, with no lower limit. A *traced* width
+    below 500 km/s cannot raise inside a trace and returns NaN for the FeII spectrum and
+    power, rather than a silently low-passed spectrum, so the same value is finite eager
+    and NaN under ``jax.jit``. Keep a traced width >= 500 km/s.
+
     **JIT-compatible**: yes, pure ``jnp``; differentiable in all arguments.
     """
     del agn_log_lbol

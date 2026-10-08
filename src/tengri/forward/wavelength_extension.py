@@ -81,6 +81,7 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "astrodust": (("astrodust_templates.h5", "wavelength_um", 1e4),),
     "bosa": (("bosa_templates.h5", "wavelength_aa", 1.0),),
     "themis": (("themis_templates.h5", "wavelength_aa", 1.0),),
+    "schreiber2016": (("schreiber2016_templates.h5", "wavelength_aa", 1.0),),
     "schreiber2018": (("schreiber2018_templates.h5", "schreiber2018/wavelength", 1.0),),
     "dh02_ce01": (("dh02_ce01_grid.h5", "dh02_ce01/wavelength", 1.0),),
 }
@@ -97,7 +98,6 @@ _ANALYTIC_DUST_EMISSION = frozenset(
         "modified_blackbody",
         "casey2012",
         "pah_drude",
-        "schreiber2016",
         "energy_balance_split",
         "draine2021_pah",  # Alias for pah_drude
         "mbb",  # Alias for modified_blackbody

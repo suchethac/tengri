@@ -205,22 +205,28 @@ def test_cos_inc_gradient_is_right_at_the_prior_endpoints(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "The unified dispatch wrapper turns the face-on endpoint into a "
-        "non-finite gradient that the raw grid function does not have: "
-        "d/d(agn_cos_inc) at cos_inc=1.0 is +inf for agn_lum_ratio in "
-        "{0.1, 0.5, 1.0} and NaN for agn_lum_ratio=0.0, at every (a,fwd) "
-        "tried. The SED value there is finite (loss 150.037) and the limit "
-        "is well-behaved: -1.110820 (0.99), -1.055614 (0.999), -1.047113 "
-        "(0.9999), -1.046148 (0.999999). The raw path returns a finite "
-        "-1.176157 at the same point, so the wrapper introduces this."
-    ),
+@pytest.mark.parametrize(
+    "lum_ratio",
+    [
+        pytest.param(
+            0.0,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "agn_lum_ratio=0 gives an identically zero SED here, so the gradient "
+                    "is a finite 0.0 (it was NaN before the Type-1/2 weight stopped "
+                    "taking arccos at cos_inc=1) and the non-zero check cannot hold."
+                ),
+            ),
+        ),
+        0.1,
+        1.0,
+    ],
 )
-@pytest.mark.parametrize("lum_ratio", [0.0, 0.1, 1.0])
 def test_unified_face_on_gradient_is_finite(wavelength, lum_ratio) -> None:
-    """A non-finite gradient at a sampled parameter value poisons the fit.
+    """The unified wrapper's d/d(agn_cos_inc) at the face-on endpoint is finite and non-zero.
+
+    A non-finite gradient at a sampled parameter value poisons the fit.
 
     Nothing upstream warns, because the forward value is finite — the NaN
     only appears once the sampler applies the update, far from its cause.

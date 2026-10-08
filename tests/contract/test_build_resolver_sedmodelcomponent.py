@@ -97,9 +97,10 @@ class TestBuildResolverDustEmission:
     def test_ir_component_names_rejected_as_emission_types(self, ssp_data_bc03, component_name):
         """``*_ir`` SEDModelComponent names are not valid emission grammar —
         not the deleted duplicates (``dl07_ir``) nor the surviving unique
-        components (``schreiber2016_ir``/``draine2021_pah_ir``, still in
-        ``_REGISTRY``). They used to be silently accepted then fail at predict
-        (the removed #738 footgun).
+        components (``draine2021_pah_ir``, still in ``_REGISTRY``; the
+        ``schreiber2016_ir`` spelling was retired when the tabulated library
+        took the ``schreiber2016`` name, #2597). They used to be silently accepted
+        then fail at predict (the removed #738 footgun).
         """
         # dust_attenuation now requires an explicit law (laws are EXPLICIT,
         # not implied by a default) -- an empty dict raises on the

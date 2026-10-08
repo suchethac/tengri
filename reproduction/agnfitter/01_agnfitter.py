@@ -652,7 +652,7 @@ w_te16, L_te16, _ = _dust_emission_build("schreiber2016", 3.0, dust_T=35.0, dust
 w_ted, L_ted, _ = _dust_emission_build("dale2014", 3.0, dust_alpha_dale=1.5)
 w_s17ref, L_s17ref = A.cold_dust_template("S17", tdust=35.0, fpah=0.02)
 axR.loglog(w_s17ref, norm_peak(L_s17ref), "0.6", lw=2.0, alpha=0.6, label="AGNfitter-rX  S17 (ref)")
-axR.loglog(w_te16, norm_peak(L_te16), "C1-", lw=1.5, label="tengri  schreiber2016 (analytic)")
+axR.loglog(w_te16, norm_peak(L_te16), "C1-", lw=1.5, label="tengri  schreiber2016")
 axR.loglog(w_ted, norm_peak(L_ted), "C4-", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
 axR.set_xlim(1e4, 1e8)
 axR.set_xlabel(r"$\lambda$ [Å]")

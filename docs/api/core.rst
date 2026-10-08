@@ -231,7 +231,19 @@ hand-built definition — look the name up rather than redefining passbands.
 
 :func:`tengri.measure.spectral_index` is the exploratory surface;
 ``measure_index_jax`` is the JIT/vmap-safe one used inside inference. Both
-take a **rest-frame** wavelength axis.
+take a **rest-frame** wavelength axis and a flux density **per unit
+frequency** (:math:`L_\nu` or :math:`F_\nu`; pass an :math:`F_\lambda`
+spectrum as ``flux_lambda * wave_rest**2``).
+
+Lick equivalent widths follow Trager et al. (1998, ApJS 116, 1, Eqs. 1-3): the
+flux is converted to :math:`F_\lambda` inside the operator and the
+pseudo-continuum is the straight line through the mean :math:`F_\lambda` of
+the two sidebands at the sideband mid-wavelengths. Break indices (``Dn4000``,
+``D4000``) are ratios of :math:`F_\nu` window means. The
+``pseudo_continuum="mean"`` option of :class:`~tengri.SpectralIndexDef` selects
+the constant mean-of-sidebands arithmetic of
+``bagpipes.input.spectral_indices.single_index`` for comparison with
+BAGPIPES; it is not the Lick definition.
 
 .. autofunction:: tengri.measure_index_jax
 

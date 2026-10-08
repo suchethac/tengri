@@ -51,7 +51,7 @@ pytestmark = pytest.mark.regression_bug
 _C_KMS = 299792.458
 _FWHM_TO_SIGMA = 2.0 * np.sqrt(2.0 * np.log(2.0))  # dimensionless, ~2.3548
 _HALPHA_REST = 6564.61
-_HBETA_REST = 4861.35
+_HBETA_REST = 4862.68  # vacuum, = EMISSION_LINES["Hbeta"]
 _MILES_BARE = "data/fsps_prsc_miles_chabrier.h5"
 
 
@@ -235,7 +235,7 @@ def test_hbeta_width_invariant_to_sigma_v_and_library_curve(sigma_inst_kms, neb_
     resolution, since that resolution is the same constant nuisance factor
     at every sigma_v/library setting here.
 
-    H-beta 4861.35 A (rest), not H-alpha: the Cue/CloudyGrid catalog's
+    H-beta 4862.68 A vacuum (rest), not H-alpha: the Cue/CloudyGrid catalog's
     nearest line to H-alpha is [N II] 6548/6584 at only 16.6/20.0 A, close
     enough that a fit over a window wide enough for the LSF kernel also
     catches their wings. H-beta's nearest neighbor of comparable strength

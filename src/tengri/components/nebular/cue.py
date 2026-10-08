@@ -119,6 +119,7 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
+from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -288,9 +289,11 @@ class CueWeights(NamedTuple):
     line_wav_selections : tuple of ndarray
         Wavelength selection masks per sub-network.
     sorted_line_wav : ndarray, shape (n_lines_total,)
-        Sorted emission line wavelengths [Angstrom].
+        Sorted emission line wavelengths [Angstrom, vacuum]. The file stores
+        Cloudy air labels; the loader converts them once.
     nn_line_wav : ndarray, shape (n_nn_lines,)
-        Concatenated NN output wavelengths [Angstrom].
+        Concatenated NN output wavelengths [Angstrom, vacuum], converted from
+        the file's air labels at load.
     line_old_idx : ndarray
         Indices of CLOUDY/FSPS-matched (old) lines.
     cont_wav : ndarray, shape (n_wave_cont,)
@@ -540,14 +543,17 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         """Pad a 1D array to target shape."""
         return np.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
-    nn_line_wav = np.asarray(npz["nn_line_wavelength"])
+    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ...). Convert them
+    # exactly once, here; everything downstream is vacuum. The conversion is
+    # monotonic, so the sort order below is unchanged.
+    nn_line_wav = catalog_air_to_vacuum(npz["nn_line_wavelength"])
 
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
-        sorted_line_wav=np.asarray(npz["sorted_line_wavelength"]),
+        sorted_line_wav=catalog_air_to_vacuum(npz["sorted_line_wavelength"]),
         nn_line_wav=nn_line_wav,
         line_old_idx=np.asarray(npz["line_old_idx"]),
         cont_wav=np.asarray(npz["cont_wavelength"]),
@@ -826,7 +832,8 @@ def predict_all_lines(
     Returns
     -------
     wavelengths : array, shape (n_lines,)
-        Line wavelengths in Angstrom (sorted, vacuum) [Angstrom].
+        Line wavelengths in Angstrom (sorted, vacuum: converted from the
+        file's air labels at load) [Angstrom].
     luminosities : array, shape (n_lines,)
         Line luminosities in Lsun [Lsun].
 
@@ -1486,18 +1493,11 @@ class CueBackend:
         Returns
         -------
         ndarray, shape (n_lines,)
-            Rest-frame wavelengths [Angstrom], plain ``numpy``, in this
-            backend's **native** frame -- air, for cue's upstream ``.npy``
-            (see the vacuum-contract comment in
-            ``components/nebular/component.py``) -- the same frame
-            :meth:`_forward_lines` / :meth:`predict_nebular_line_luminosities`
-            return. **Not** the vacuum frame ``state.derived["line_waves"]``
-            holds: callers that need to compare against a vacuum target
-            (e.g. the #2239 warning seam) must apply
-            ``tengri.components.nebular._shared.nebular_line_waves_to_vacuum``
-            themselves, exactly as
-            :class:`~tengri.components.nebular.component.NebularSEDComponent`
-            does before publishing.
+            Rest-frame **vacuum** wavelengths [Angstrom], plain ``numpy``:
+            the same array :meth:`_forward_lines` and
+            :meth:`predict_nebular_line_luminosities` return and
+            ``state.derived["line_waves"]`` holds. The weights file stores
+            Cloudy air labels; they are converted once, at load.
 
         Notes
         -----
@@ -2055,6 +2055,98 @@ class CueBackend:
         ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
 
         """
+        # One split (lines + continuum from the same resolved params, so no double
+        # computation), then the lines are rendered onto the grid and added. The
+        # split is the single source of the SED's two halves: the fast nebular grid
+        # tabulates them separately from :meth:`predict_nebular_split`.
+        cont_lsun, line_wav, line_lum = self.predict_nebular_split(
+            ssp_wave=ssp_wave,
+            ssp_weights=ssp_weights,
+            ssp_log_ages_yr=ssp_log_ages_yr,
+            log_z=log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            neb_fesc=neb_fesc,
+            neb_fesc_lya=neb_fesc_lya,
+            neb_fdust_frac=neb_fdust_frac,
+            template_data=template_data,
+            **neb_params,
+        )
+
+        # Add emission lines via the shared renderer: velocity triweight when
+        # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the
+        # fixed-Å Gaussian / nearest-pixel delta fallbacks.
+        neb_sed = cont_lsun + render_nebular_lines(
+            line_wav, line_lum, ssp_wave, line_sigma_aa, line_sigma_kms
+        )
+
+        # Convert from internal Lsun/Hz to erg/s/Hz
+        return neb_sed * _LSUN_ERG
+
+    def predict_nebular_split(
+        self,
+        ssp_wave: jnp.ndarray | None = None,
+        ssp_weights: jnp.ndarray | None = None,
+        ssp_log_ages_yr: jnp.ndarray | None = None,
+        log_z: float | None = None,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        neb_fesc: float = 0.0,
+        neb_fesc_lya: float = 0.0,
+        neb_fdust_frac: float = 0.0,
+        template_data: Any | None = None,
+        **neb_params,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        r"""The two halves of :meth:`predict_nebular_sed`: continuum and line catalog.
+
+        The nebular SED is exactly
+
+        .. math::
+
+            L_\nu(\lambda) = \mathrm{cont}(\lambda) +
+            \sum_l L_l\,\phi_l(\lambda),
+
+        where ``cont`` is the emulator continuum linearly interpolated onto
+        ``ssp_wave`` (free-free tail past the last node) and :math:`\phi_l` the
+        unit-area line profile that :func:`render_nebular_lines` places at the
+        line's wavelength. Both halves are linear in :math:`Q_H`.
+        :meth:`predict_nebular_sed` is built from this method, so the two cannot
+        drift; the fast nebular grid tabulates the halves separately because a
+        line moves through a bandpass as :math:`(1+z)\lambda_0` while the
+        continuum is a smooth function of :math:`z` (the halves need different
+        redshift treatments).
+
+        Parameters
+        ----------
+        ssp_wave : array_like, shape (n_wave,)
+            Output wavelength grid [Angstrom].
+        ssp_weights, ssp_log_ages_yr, log_z, neb_logU, neb_logZ_gas
+            As :meth:`predict_nebular_sed`.
+        neb_fesc, neb_fesc_lya, neb_fdust_frac : float
+            Escape / dust-absorption fractions [dimensionless, in [0, 1]]. The
+            CIGALE k-factor is applied to both halves; ``neb_fesc_lya`` to the
+            Lyman-alpha line only.
+        template_data : Any or None
+            Cue weights threaded as a JIT argument (default ``self.weights``).
+        **neb_params
+            Cue-specific overrides (``gas_logn``, ``ionspec_*``, ...).
+
+        Returns
+        -------
+        cont : ndarray, shape (n_wave,)
+            Continuum on ``ssp_wave`` [Lsun/Hz].
+        line_wav : ndarray, shape (n_lines,)
+            Line centers **as the SED renders them** [Angstrom, vacuum]: the
+            network wavelengths converted from the file's air labels at load,
+            identical to the published catalog.
+        line_lum : ndarray, shape (n_lines,)
+            Integrated line luminosities [Lsun] (k-factor and Lyman-alpha escape
+            applied), all ~138 catalog lines.
+
+        Notes
+        -----
+        **JIT-compatible**: yes; ``jnp`` primitives only.
+        """
         # Resolve params once (avoids double computation for lines + continuum)
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
@@ -2087,17 +2179,8 @@ class CueBackend:
 
         # Interpolate continuum onto SSP grid; past the emulator's last node (1e8 Å)
         # continue as optically thin free-free (#2346).
-        neb_sed = interp_continuum_with_freefree_tail(ssp_wave, cont_wav, cont_lum)
-
-        # Add emission lines via the shared renderer: velocity triweight when
-        # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the
-        # fixed-Å Gaussian / nearest-pixel delta fallbacks.
-        neb_sed = neb_sed + render_nebular_lines(
-            line_wav, line_lum, ssp_wave, line_sigma_aa, line_sigma_kms
-        )
-
-        # Convert from internal Lsun/Hz to erg/s/Hz
-        return neb_sed * _LSUN_ERG
+        cont = interp_continuum_with_freefree_tail(ssp_wave, cont_wav, cont_lum)
+        return cont, line_wav, line_lum
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this backend's structure.

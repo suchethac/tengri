@@ -482,14 +482,17 @@ class TestDiscEnergyConservation:
     """∫ L_ν dν must equal L_bol × agn_lum_ratio (by normalization)."""
 
     @pytest.mark.parametrize(
-        "model_name,model_fn_kwargs",
+        "model_name,model_fn_kwargs,power_factor",
         [
-            ("powerlaw", {"agn_alpha": -1.0}),
-            ("multicolor", {"agn_log_mbh": 8.0}),
+            ("powerlaw", {"agn_alpha": -1.0}, 1.0),
+            # multicolor: L_nu(i) = 2 cos i D_nu, int D_nu dnu = L_acc: the line-of-sight power
+            # equals L_acc at cos i = 0.5 and 2 cos i L_acc elsewhere (1.732 at cos i = 0.866).
+            ("multicolor", {"agn_log_mbh": 8.0, "agn_cos_inc": 0.5}, 1.0),
+            ("multicolor", {"agn_log_mbh": 8.0, "agn_cos_inc": 0.866}, 2.0 * 0.866),
         ],
     )
-    def test_luminosity_integral(self, model_name, model_fn_kwargs):
-        """Integrated L_ν must equal L_bol to 20% (wavelength grid truncation)."""
+    def test_luminosity_integral(self, model_name, model_fn_kwargs, power_factor):
+        """Integrated L_ν must equal power_factor × L_bol to 20% (wavelength grid truncation)."""
         from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 
         fn = {"powerlaw": powerlaw_disc, "multicolor": multicolor_disc}[model_name]
@@ -504,7 +507,7 @@ class TestDiscEnergyConservation:
         l_bol_integrated = float(jnp.trapezoid(l_nu[sort_idx], nu[sort_idx]))
         # L_nu is erg/s/Hz (CGS), integral is erg/s → compare in erg/s
         _LSUN = 3.828e33
-        l_bol_expected = 10.0**agn_log_lbol * agn_lum_ratio * _LSUN
+        l_bol_expected = power_factor * 10.0**agn_log_lbol * agn_lum_ratio * _LSUN
 
         np.testing.assert_allclose(
             l_bol_integrated,
