@@ -12,6 +12,7 @@ import functools
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 # FilterConvention + the bandpass weight live in a leaf module so the exact
 # kernel here and the build-time preintegration (utils.grid_interp) share one
@@ -490,15 +491,20 @@ def pad_filters(filter_waves: list, filter_trans: list):
     Not JIT-compatible (uses Python list operations and loops).
 
     """
+    # Assemble in numpy and convert once: the per-filter scatter used to compile
+    # one XLA kernel per distinct filter length. The arrays keep the dtypes the
+    # old jnp path produced (canonical float and int for the active x64 mode).
+    float_dtype = jax.dtypes.canonicalize_dtype(np.float64)
+    int_dtype = jax.dtypes.canonicalize_dtype(np.int64)
     max_len = max(len(fw) for fw in filter_waves)
-    fw_padded = jnp.zeros((len(filter_waves), max_len))
-    ft_padded = jnp.zeros((len(filter_trans), max_len))
-    n_valid = jnp.array([len(fw) for fw in filter_waves])
+    fw_padded = np.zeros((len(filter_waves), max_len), dtype=float_dtype)
+    ft_padded = np.zeros((len(filter_trans), max_len), dtype=float_dtype)
     for i, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         n = len(fw)
-        fw_padded = fw_padded.at[i, :n].set(fw)
-        ft_padded = ft_padded.at[i, :n].set(ft)
-    return fw_padded, ft_padded, n_valid
+        fw_padded[i, :n] = np.asarray(fw)
+        ft_padded[i, :n] = np.asarray(ft)
+    n_valid = np.asarray([len(fw) for fw in filter_waves], dtype=int_dtype)
+    return jnp.asarray(fw_padded), jnp.asarray(ft_padded), jnp.asarray(n_valid)
 
 
 FILTER_COUNT_BUCKETS: tuple[int, ...] = (4, 6, 8, 10, 12, 16, 20)
