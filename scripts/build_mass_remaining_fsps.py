@@ -35,8 +35,9 @@ import numpy as np
 #: python-fsps ``imf_type`` for each IMF name.
 _IMF_TYPE = {"salpeter": 0, "chabrier": 1, "kroupa": 2}
 
-#: Table ``isochrones`` code -> the token python-fsps reports in ``libraries``.
-_ISOC_LIBRARY_TOKEN = {"mist": "mist", "prsc": "parsec", "pdva": "padova", "bsti": "basti"}
+#: Table ``isochrones`` code -> the token python-fsps reports in ``libraries``
+#: (FSPS names the PARSEC, Padova and BaSTI sets by these codes).
+_ISOC_LIBRARY_TOKEN = {"mist": "mist", "prsc": "prsc", "pdva": "pdva", "bsti": "bsti"}
 
 _CITATION = (
     "Conroy, Gunn & White 2009, ApJ 699, 486 (doi:10.1088/0004-637X/699/1/486); "
