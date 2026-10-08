@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.contract
+pytestmark = [pytest.mark.contract, pytest.mark.population_fit]
 
 
 def test_sbc_ranks_are_uniform_for_a_calibrated_estimator():

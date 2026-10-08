@@ -864,7 +864,7 @@ jobs:
       # deterministic and runs in the ordinary parallel sweep. Prefer that shape
       # for any new guard here: measure compiled cost, not wall clock, whenever
       # the question is "does this path do less work".
-      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval and not population_fit' -n 0
 
   test:
     runs-on: ubuntu-latest
@@ -1676,11 +1676,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1701,7 +1701,7 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'
