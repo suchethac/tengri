@@ -1526,7 +1526,19 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
     "bins": {"short_doc": "Per-bin metallicities (pairs with continuity SFH)"},
     "bins_continuity": {"short_doc": "Cumulative delta-log-Z steps"},
     "chem_evol": {"short_doc": "Gas-regulator model (Z derived from SFH)"},
-    "table": {"short_doc": "User-provided Z(t)"},
+    # Standalone ``met={'type': 'table'}`` refuses at build (#2425): the grammar
+    # cannot pin the table, and the runtime ``met_history`` channel needs
+    # ``sfh={'type': 'table'}``. Not production; the use string is not a call.
+    "table": {
+        "short_doc": (
+            "User-provided Z(t) [not builder-available: refuses at build without a Z(t) source]"
+        ),
+        "status": "experimental",
+        "use": (
+            "not builder-available: met={'type': 'table'} needs a Z(t) source; "
+            "use sfh={'type': 'table'} with params['met_history']"
+        ),
+    },
     "massmap_lin": {"short_doc": "Linear metallicity tied to cumulative mass formed"},
     "massmap_box": {"short_doc": "Closed-box metallicity tied to cumulative mass formed"},
 }
@@ -1573,7 +1585,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
             "status": meta.get("status", "production"),
             "citation": meta.get("citation", ""),
             "short_doc": meta.get("short_doc", ""),
-            "use": _usage_hint(name, "metallicity_mode"),
+            "use": meta.get("use") or _usage_hint(name, "metallicity_mode"),
         }
         params = tuple(getattr(MET_REGISTRY[name], "params", {}) or ())
         if params:

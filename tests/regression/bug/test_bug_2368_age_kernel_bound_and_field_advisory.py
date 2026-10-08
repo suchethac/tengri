@@ -60,7 +60,7 @@ def _build_field(ssp, kernel):
             observation=obs,
             redshift=Fixed(0.1),
             sfh=sfh,
-            met={"type": "table"},
+            met={"type": "delta"},
             neb={"type": "ssp"},
         )
     return model, w
