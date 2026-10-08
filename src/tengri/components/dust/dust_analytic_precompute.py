@@ -39,7 +39,6 @@ References
 from __future__ import annotations
 
 import dataclasses
-import warnings
 from typing import Any
 
 import jax
@@ -56,7 +55,7 @@ from tengri.components.dust.emission import (
 from tengri.components.dust.emission.analytic._closures import (
     _CASEY_LAMBDA_MIN_UM,
 )
-from tengri.config.exceptions import GridSupportWarning
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -471,80 +470,17 @@ _FLOAT64_TINY = np.finfo(np.float64).tiny
 _LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
 
 
-def _active_support(param_name: str, parameters: Any) -> tuple[float, float] | None:
-    """Range of ``param_name`` the model can reach, or None when it is not bounded by the model.
-
-    ``Fixed(v)`` gives ``(v, v)`` and a free parameter its prior's finite ``bounds``. ``None``
-    means no model, a parameter the model does not declare, or a prior with an infinite bound; the
-    last warns once, because the nodes then span the declared range and the lookup holds the edge
-    value beyond it.
-    """
-    if parameters is None:
-        return None
-    fixed = parameters.get_fixed_values()
-    if param_name in fixed:
-        return (fixed[param_name], fixed[param_name])
-    if param_name not in parameters.free_params:
-        return None
-    lo, hi = parameters.get_distribution(param_name).bounds
-    if lo is not None and hi is not None and np.isfinite(lo) and np.isfinite(hi):
-        return (float(lo), float(hi))
-    declared = _get_param_bounds(param_name)
-    warnings.warn(
-        f"{param_name} has an unbounded prior; the nodes span its declared range "
-        f"[{declared[0]:g}, {declared[1]:g}] and the lookup holds the edge value, with zero "
-        f"gradient, beyond it. Give the prior finite bounds to widen the nodes.",
-        GridSupportWarning,
-        stacklevel=3,
-    )
-    return None
-
-
 def _default_axis(
     param_name: str, n_nodes: int, support: tuple[float, float] | None = None
 ) -> np.ndarray:
-    """Node grid over the declared prior extended to ``support``, at the declared node density.
-
-    Geometric for the log axes, linear otherwise. The count scales with the span in the
-    interpolation coordinate (``ln`` for :data:`_LOG_AXIS_PARAMS`),
-    ``ceil(n_nodes * span_axis / span_declared)``, never below ``n_nodes``, so the node spacing
-    that the #2676 accuracy figures were measured at is kept when the support is wider. With
-    ``support`` None, or inside the declared prior, the axis is the declared one exactly.
-    """
-    declared_lo, declared_hi = _get_param_bounds(param_name)
-    lo, hi = declared_lo, declared_hi
-    if support is not None:
-        lo, hi = min(lo, support[0]), max(hi, support[1])
-    log_axis = param_name in _LOG_AXIS_PARAMS
-    if log_axis and lo <= 0.0:
-        raise ValueError(f"{param_name} reaches {lo:g}; a logarithmic node axis needs lo > 0.")
-    coordinate = np.log if log_axis else np.asarray
-    stretch = (coordinate(hi) - coordinate(lo)) / (
-        coordinate(declared_hi) - coordinate(declared_lo)
+    """Default axis of ``param_name`` over its declared prior (see ``reach_axes``)."""
+    return reach_axes.default_axis(
+        param_name,
+        n_nodes,
+        support,
+        declared=_get_param_bounds(param_name),
+        log_axis=param_name in _LOG_AXIS_PARAMS,
     )
-    n_axis = max(n_nodes, int(np.ceil(n_nodes * stretch)))
-    if log_axis:
-        return np.geomspace(lo, hi, n_axis, dtype=np.float64)
-    return np.linspace(lo, hi, n_axis, dtype=np.float64)
-
-
-def _check_user_axis(
-    param_name: str, axis: np.ndarray, support: tuple[float, float] | None
-) -> None:
-    """Refuse a user-supplied axis that does not span the model's reach; warn below 4 nodes."""
-    if support is not None and (axis.min() > support[0] or axis.max() < support[1]):
-        raise ValueError(
-            f"{param_name} nodes span [{axis.min():g}, {axis.max():g}] but the model reaches "
-            f"[{support[0]:g}, {support[1]:g}]; the lookup would hold the edge value with zero "
-            f"gradient beyond the nodes. Supply nodes covering the support."
-        )
-    if axis.size < 4:
-        warnings.warn(
-            f"{param_name} has {axis.size} nodes; the PCHIP lookup degrades to a parabola or a "
-            f"chord below 4.",
-            UserWarning,
-            stacklevel=3,
-        )
 
 
 _CONTINUUM_BUILDERS = {
@@ -670,12 +606,12 @@ def precompute(
         }
         axes = []
         for name in axis_params:
-            support = _active_support(name, parameters)
+            support = reach_axes.active_support(name, parameters, _get_param_bounds(name))
             if supplied[name] is None:
                 axes.append(_default_axis(name, _DEFAULT_NODES[model][name], support))
             else:
                 axis = np.asarray(supplied[name], dtype=np.float64)
-                _check_user_axis(name, axis, support)
+                reach_axes.check_user_axis(name, axis, support)
                 axes.append(axis)
         axes = tuple(axes)
         preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
