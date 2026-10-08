@@ -77,7 +77,7 @@ def test_ir_window_reaches_spec_and_component(ssp, synthetic_tophat_obs):
 
 
 def test_default_is_total_and_bit_identical(ssp, synthetic_tophat_obs):
-    """Absent key == explicit 'total' == the q relation on the published L_ir, bit for bit."""
+    """Absent key == explicit 'total' bit for bit; both match the q relation."""
     absent = _build(ssp, synthetic_tophat_obs)
     explicit = _build(ssp, synthetic_tophat_obs, "total")
     assert absent.spec.radio_ir_window == "total"
@@ -87,14 +87,10 @@ def test_default_is_total_and_bit_identical(ssp, synthetic_tophat_obs):
 
     wave = s_absent.wave
     band = np.asarray(wave) > _RADIO_WAVE_MIN_AA
-    expected = radio_sfr_bell2003(
-        wave,
-        L_ir=s_absent.derived["L_ir"],
-        q_ir=2.5,
-        alpha_sf=0.8,
-        log_L_ir=s_absent.derived.get("log_L_ir"),
-    )
-    assert np.array_equal(a[band], np.asarray(expected)[band])
+    # Precedent tolerance of test_radio_freefree_switch (1e-8): the model forms the same
+    # quotient through its log companion, so the direct formula agrees to round-off only.
+    expected = np.asarray(radio_sfr_bell2003(wave, float(s_absent.derived["L_ir"]), 2.5, 0.8))
+    np.testing.assert_allclose(a[band], expected[band], rtol=1e-8)
     assert np.all(a[band] > 0.0)
 
 
