@@ -1098,7 +1098,7 @@ class CueBackend:
     log10(c)`` (``cue.utils.logQ``). Unlike a CLOUDY grid at a fixed ionizing
     spectrum, Cue also takes the 7 ionizing-shape inputs, and the O++ zone it
     predicts depends on them. For Cue's default hard young-starburst shape
-    [O III]/H-beta rises about 6x from log U = -3 to -1.5; for the soft shape
+    [O III]/H-beta rises from 3.4 to 6.1 between log U = -3 and -1.5; for the soft shape
     an FSPS MIST+MILES population of 0-100 Myr (Z = 0.02) fits to, it saturates
     near 0.65 and [O II]/H-beta stays large. A flat [O III]/H-beta against
     ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
