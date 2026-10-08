@@ -421,32 +421,35 @@ def mean_hard_exact_reference(wave, flux, idx):
 
 
 @pytest.mark.parametrize(
-    "name,age,min_gap",
+    "name,age,gap",
     [
-        # Lower bounds on |constant continuum on L_ν - Lick|, each below the #2690 table value
-        # (HγA 0.260, Fe4383 0.425 at 1 Gyr; HγA 0.896, Fe4383 0.392 at 10 Gyr) by more than
-        # the edge effect that table carried (0.06 Å at most), so the table holds on hard windows.
-        ("HgA", 1.0, 0.2),
-        ("Fe4383", 1.0, 0.35),
-        ("HgA", 10.0, 0.8),
-        ("Fe4383", 10.0, 0.3),
+        # Signed gap (constant continuum on L_nu, "mean" option) - (Lick straight-line
+        # pseudo-continuum on F_lambda), both on hard windows, from the numpy references below.
+        ("HgA", 1.0, 0.307473),
+        ("Fe4383", 1.0, 0.404708),
+        ("HgA", 10.0, 0.991276),
+        ("Fe4383", 10.0, 0.430232),
     ],
 )
-def test_the_previous_arithmetic_fails_the_sweep_by_the_issue_amounts(
-    ssp, grid, name, age, min_gap
+def test_the_mean_continuum_gap_to_the_lick_index_is_pinned_on_hard_windows(
+    ssp, grid, name, age, gap
 ):
-    """Constant continuum on L_ν (mean option) misses the Lick value by the #2690 table.
+    """The mean option and the Lick index differ by a fixed signed amount on hard windows.
 
-    The mean option is checked against its own numpy definition (hard windows, the same
-    arithmetic written here) and then against the hard-window Lick definition.
+    The mean option is pinned to its numpy definition (1e-9), the numpy-vs-numpy gap to the
+    values above (1e-6), and the code-vs-code gap to the same values (1e-4).
     """
     mean_idx = dataclasses.replace(STANDARD_INDICES[name], pseudo_continuum="mean")
     wave, lnu = _solar_spectrum(ssp, grid, age)
-    old = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mean_idx))
-    assert old == pytest.approx(mean_hard_exact_reference(wave, lnu, mean_idx), abs=1e-9)
-    ref = lick_hard_reference(wave, _flam(wave, lnu), STANDARD_INDICES[name])
-    assert abs(old - ref) > min_gap
-    assert abs(old - ref) > 5.0 * HARD_TOL_AA
+    mean_code = float(measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), mean_idx))
+    lick_code = float(
+        measure_index_jax(jnp.asarray(wave), jnp.asarray(lnu), STANDARD_INDICES[name])
+    )
+    mean_ref = mean_hard_exact_reference(wave, lnu, mean_idx)
+    lick_ref = lick_hard_reference(wave, _flam(wave, lnu), STANDARD_INDICES[name])
+    assert mean_code == pytest.approx(mean_ref, abs=1e-9)
+    assert mean_ref - lick_ref == pytest.approx(gap, abs=1e-6)
+    assert mean_code - lick_code == pytest.approx(gap, abs=1e-4)
 
 
 # ── (d) window-LUT path equals the exact path ──────────────────────
