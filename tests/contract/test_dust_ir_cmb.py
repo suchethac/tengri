@@ -614,3 +614,18 @@ class TestThroughTheModel:
         )
         g = jax.grad(lambda z: lut.predict_photometry({"redshift": z})[4])(4.4)
         assert np.isfinite(float(g)) and float(g) != 0.0
+
+
+@pytest.mark.parametrize("name", ["modified_blackbody", "graybody", "casey2012"])
+def test_direct_parameters_path_refuses_cmb_on_an_analytic_type(synthetic_ssp_wide, name):
+    # Bypassing the grammar (flat Parameters kwargs) must not double-apply the CMB.
+    from tengri.parameters.parameters import Parameters
+
+    spec = Parameters(
+        dust_emission=name,
+        dust_model="two_component",
+        dust_ir_cmb=True,
+        redshift=Fixed(4.0),
+    )
+    with pytest.raises(ValueError, match="refusing to apply it twice"):
+        SEDModel(spec, ssp_data=synthetic_ssp_wide)

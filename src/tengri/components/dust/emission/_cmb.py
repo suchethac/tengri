@@ -168,11 +168,16 @@ def template_far_ir_temperature(
     with the same band cut applied to the reference spectrum, so the cut
     cancels for a template that is a modified blackbody with this ``beta``
     (the estimate recovers its temperature). The result is the temperature of
-    the cold, equilibrium-dominated emission; it is not a mass-weighted
-    temperature, and the warm stochastic emission longward of 50 micron biases
-    it high by a few K. It sets the contrast factor, which is insensitive to a
-    few K for :math:`T_{\rm d} \gg T_{\rm CMB}(z)` and so matters only where
-    the dust is cold enough for the CMB to matter at all.
+    the far-IR emission; it is not a mass-weighted temperature, and the warm
+    stochastic emission longward of 50 micron biases it high by a few K.
+
+    Approximation of Eq. 18 in da Cunha et al. (2013): exact for a
+    single-temperature modified blackbody (temperature recovered to < 0.03 %);
+    for a two-temperature mixture the mean-frequency temperature leans to the
+    hot component while the CMB penalty is set by the cold one, so the detected
+    flux is overestimated by about 5-15 % at z = 4 and 20-100 % at z = 6 when a
+    20-25 K cold component carries a large share (2-8 % when it is a 5 % hot
+    component).
 
     Implements the estimate from the template's own far-IR moment rather than a
     catalog of per-model temperatures, so one definition serves every library.

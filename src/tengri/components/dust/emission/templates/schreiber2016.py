@@ -63,6 +63,13 @@ class Schreiber2016IRSEDComponent(EmissionComponent):
     and 1000 micron. See :doc:`/model_reference/dust` for the equations and
     ``tengri.components.dust.emission._component_base`` for the wrapper.
 
+    **CMB boost**: the Schreiber libraries follow Sect. 2.2 of da Cunha et al.
+    (2013) and include the heated-dust luminosity boost
+    :math:`[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}`. The default-on analytic
+    models (``modified_blackbody``, ``graybody``, ``casey2012``) omit it, an
+    under-prediction of up to about 1.8x for 20 K dust at z = 6 (1.03x for
+    35 K); tracked in #2806.
+
     References
     ----------
     .. [1] Schreiber, C., Elbaz, D., Pannella, M., Ciesla, L., Wang, T., &
