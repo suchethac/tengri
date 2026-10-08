@@ -1,8 +1,16 @@
 ## [Unreleased]
 
+### Fixed
+
+- **Precompute tables span their parameters' reach.** The default node axes of the disc, GRAHSP, QSOgen, K&D, radio and X-ray precompute adapters come from one reach-axis rule (`forward/precompute/reach_axes.py`) instead of literal ranges, so a Fixed value or a widened prior is covered rather than clipped with zero gradient (#2737). The `powerlaw_disc` template is per L_sun (it had been built at 10 L_sun and scaled again at runtime, a factor 10^10), and the `ss_disc` template is scaled by the bolometric power in erg/s (it had been scaled without the L_sun = 3.828e33 erg/s factor). `ss_disc` node density is set so the off-node PCHIP error resolves, and `cigale_disc` is rebuilt from the exact CIGALE discs. Default axes that a parameter reaches widen to the hull of their literal range and that reach (`hull_axis`), keeping the literal node density; user-supplied axes that do not cover the reach are refused.
+
+- **The `powerlaw_disc` and `ss_disc` precompute tables span the parameter's reach (#2737, part).** The default `agn_alpha`, `agn_log_mbh` and `agn_log_lbol` axes come from the shared reach-axis rule (`forward/precompute/reach_axes.py`) instead of literals, so a widened prior is covered rather than clipped. The `powerlaw_disc` template is per L_sun (it had been built at 10 L_sun and scaled again at runtime, a factor 10^10), the `ss_disc` template is scaled by the bolometric power in erg/s (it had been scaled without the L_sun = 3.828e33 erg/s factor), and both tables are interpolated with node-exact PCHIP in place of the triweight smoother, which did not reproduce its own nodes. At `agn_alpha` = -2.7 under a widened Uniform(-3, 0.5) prior the table now agrees with the exact closure to 6e-3 relative. The `ss_disc` widened-mbh accuracy is not yet within tolerance (see the issue).
+
 ### Changed
 
 - **Free-redshift `WavePrecomp` builds 2.3x faster (#2769).** The sub-band quadrature and the Lyman-edge split read each template row against node weights built once from the 1-D quadrature grid (one matrix product per filter) instead of a cumulative sum over every row, and the per-redshift IGM, luminosity-distance and band-factor evaluations run as one compiled call over the z grid. Cold free-z build (7 GALEX+SDSS bands, `WavePrecomp(n_z=250)`, two-component dust, Inoue IGM, precompute cache off), interleaved runs: 199 / 190 s to 89 / 78 s wall, 169 to 73 s CPU. The quadrature rule is unchanged; a sub-band integral is no longer the difference of two running totals, which removes a cancellation error of up to 2.5e-7 relative in faint (Lyman-side) sub-bands of the free-z tables (2.6e-5 on a row falling 12 dex, against a 50-digit reference that the new values match to 1e-16). Table values elsewhere and the photometry move by at most 1e-14.
+
+- **Population fits are excluded from every automated test run.** Tests that run a population (hierarchical) fit carry the `population_fit` marker, and the default `addopts` and every explicit `-m` selector in the CI workflow exclude it; run them by hand with `-m population_fit`.
 
 - **ADAF normalization (#2768).** `adaf_spectrum` normalizes with closed-form bremsstrahlung plus a 30-point Gauss-Legendre rule on each of the four segments between the spectrum's own breaks (`0.02 nu_min`, `nu_min`, `nu_p`, `3 k T_e / h`, `100 k T_e / h`) instead of an 8193-node trapezoid. ADAF SEDs move by 2.3e-6 to 2.7e-6 relative, the trapezoid's error against an independent dense reference (3.2e-6 measured there); the new normalization agrees with that reference to 3.9e-12 (declared prior box corners and 300 draws).
 
@@ -30,6 +38,7 @@
 
 ### Fixed
 
+- A dust-free model whose nebular photometry is served by the `FeaturePrecomp` grid takes the IGM over each emission line's rendered profile and over the continuum's sub-band chunks, where it took the band-averaged transmission. With Ly-alpha inside a band that read 20-32 % bright against `approx=None` (Cue at its defaults, z = 5.75-9.5, NIRCam F090W/F115W); now 0.08 % worst in F090W over z = 5.5-7.0 and 0.15 % in F115W over z = 7.75-9.25, at fixed and free redshift.
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 
 - **Every wavelength is vacuum, converted once at ingestion**: the Lick/Lick-IDS windows
