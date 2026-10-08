@@ -87,6 +87,19 @@
 - The polar absorbed power is formed as `L_nu (1 - exp(-tau))` rather than clipped with `maximum(., 0)`: the clip tied its two arguments at E(B-V) = 0, the lower edge of the prior, and halved the polar and torus gradients there (#2744)
 - The Fritz docstrings list the grid half-angles 20 / 40 / 60 deg (they said 60 / 100 / 140, the full angles of another convention) (#2605)
 
+- **Surviving mass comes from each SSP grid's own isochrones, IMF and metallicity, or the
+  load refuses (#2751):** a grid without its own `ssp_mass_remaining` used to receive DSPS's
+  metallicity-independent sigmoid fit whatever its isochrones (a MIST grid lost the 0.03
+  spread over Z at 10 Gyr; Kroupa and Salpeter grids read the fit's single column). Companion
+  tables shipped as package data (MIST Chabrier/Kroupa/Salpeter from python-fsps, PARSEC
+  Chabrier, BC03 Padova 1994) are resolved through an explicit registry; a registered grid
+  with no table (PARSEC Kroupa/Salpeter, Padova, BaSTI, BPASS, ProGeny) raises a
+  `ValueError` naming the missing table, and `load_ssp(..., mass_remaining="dsps_fit")` /
+  `load_ssp_data(..., mass_remaining="dsps_fit")` is the explicit opt-in to the fit (an
+  unregistered grid warns instead). `SSPData.mass_remaining_source` and `tengri.doctor()`
+  report the source. A grid's t = 0 node is exactly 1; metallicity-node mismatches and ages
+  more than one table node beyond the table raise.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a
