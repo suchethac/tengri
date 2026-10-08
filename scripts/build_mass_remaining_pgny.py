@@ -43,8 +43,9 @@ from astropy.io import fits
 NODE_ATOL = 1e-6
 
 _CITATION = (
-    "Robotham & Bellstedt 2024, ProGeny I, RASTI 4, 19 (arXiv:2410.17697); "
-    "Bellstedt & Robotham 2024, ProGeny II, MNRAS 540, 2703 (arXiv:2410.17698)"
+    "Robotham & Bellstedt, ProGeny I, accepted to RASTI (arXiv:2410.17697, "
+    "doi:10.48550/arXiv.2410.17697); Bellstedt & Robotham, ProGeny II, accepted to MNRAS "
+    "(arXiv:2410.17698, doi:10.48550/arXiv.2410.17698)"
 )
 _REMNANT = (
     "ProGeny progenyMakeSSP rem_frac='get': tracked remnants are in the isochrone "
@@ -107,26 +108,51 @@ def read_progeny_smstar(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]
     return z_abs, age_yr, smstar
 
 
+def grid_axes(grid: Path) -> tuple[np.ndarray, np.ndarray]:
+    """The grid's own nodes as float64: ``(log10 Z absolute, log10 age [yr])``.
+
+    The grid stores ``ssp_lgmet`` and ``ssp_lg_age_gyr`` as float32; the table stores
+    these exact values (cast to float64), so the axes match the grid bit for bit.
+
+    Parameters
+    ----------
+    grid : Path
+        SSP grid HDF5 file.
+
+    Returns
+    -------
+    lgmet : ndarray, shape (n_z,)
+        log10 of the absolute metal mass fraction [dex].
+    lg_age_yr : ndarray, shape (n_age,)
+        log10 of the SSP age [log10 yr].
+    """
+    with h5py.File(grid, "r") as f:
+        lgmet = np.asarray(f["ssp_lgmet"][:], dtype=np.float64)
+        lg_age_gyr = np.asarray(f["ssp_lg_age_gyr"][:], dtype=np.float64)
+    return lgmet, lg_age_gyr + 9.0
+
+
 def check_grid_nodes(z_abs: np.ndarray, age_yr: np.ndarray, grid: Path) -> None:
-    """Refuse a table whose nodes differ from the grid's ``ssp_lgmet`` / ``ssp_lg_age_gyr``.
+    """Refuse a table whose ProGeny nodes differ from the grid's nodes.
+
+    ProSpect stores the nodes in float32 as well; they must agree with the grid's to
+    float32 round-off (``NODE_ATOL`` dex). The table itself takes the grid's values.
 
     Parameters
     ----------
     z_abs : ndarray, shape (n_z,)
-        Table metallicities [absolute Z].
+        ProGeny metallicities [absolute Z].
     age_yr : ndarray, shape (n_age,)
-        Table ages [yr].
+        ProGeny ages [yr].
     grid : Path
         SSP grid HDF5 file.
 
     Raises
     ------
     ValueError
-        A node differs by more than ``NODE_ATOL`` [dex] in log10.
+        A ProGeny node differs from the grid's by more than ``NODE_ATOL`` [dex].
     """
-    with h5py.File(grid, "r") as f:
-        lgmet = np.array(f["ssp_lgmet"][:], dtype=np.float64)
-        lg_age_yr = np.array(f["ssp_lg_age_gyr"][:], dtype=np.float64) + 9.0
+    lgmet, lg_age_yr = grid_axes(grid)
     if lgmet.shape != z_abs.shape or not np.allclose(
         lgmet, np.log10(z_abs), rtol=0.0, atol=NODE_ATOL
     ):
@@ -154,19 +180,20 @@ def main() -> None:
 
     z_abs, age_yr, smstar = read_progeny_smstar(args.input)
     check_grid_nodes(z_abs, age_yr, args.grid)
+    lgmet, lg_age_yr = grid_axes(args.grid)
     input_sha = _sha256(args.input)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(args.out, "w") as f:
-        f.create_dataset("log10_age_yr", data=np.log10(age_yr))
-        f.create_dataset("log10_z_abs", data=np.log10(z_abs))
+        f.create_dataset("log10_age_yr", data=lg_age_yr)
+        f.create_dataset("log10_z_abs", data=lgmet)
         f.create_dataset("mass_remaining", data=smstar)
         f.attrs["quantity"] = "living stars + remnants per unit formed mass"
-        f.attrs["isochrones"] = "pgny_mist (MIST isochrones via ProGeny)"
-        f.attrs["imf"] = "chabrier (0.1-100 Msun)"
+        f.attrs["isochrones"] = "pgny_mist (MIST isochrones as tabulated by ProGeny)"
+        f.attrs["imf"] = "chabrier"
         f.attrs["source"] = (
-            "ProGeny SMstar, ProSpect speclib PG_Ch_Mi_C3K.fits (ProGeny code 0.8.3 "
-            "consulted, asgr/ProGeny)"
+            "ProGeny SMstar (ProGeny 0.8.3, asgr/ProGeny), ProSpect speclib "
+            "PG_Ch_Mi_C3K.fits (official zip member, 2025)"
         )
         f.attrs["remnant_prescription"] = _REMNANT
         f.attrs["citation"] = _CITATION

@@ -81,6 +81,15 @@ def test_mist_grid_resolves_to_its_companion_table(tmp_path, imf, library):
     np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0.0)
 
 
+def test_progeny_grid_resolves_to_its_companion_table(tmp_path):
+    """The ProGeny MIST Chabrier grid takes the ProGeny companion, at its nodes, and says so."""
+    table_file = "mass_remaining_pgny_mist_chabrier.h5"
+    path, _, _, tab = _grid_on_table(tmp_path, "pgny_mist_c3k_chabrier.h5", table_file)
+    ssp = _load_ssp_data(str(path), mass_remaining="table")
+    assert ssp.mass_remaining_source == f"companion:{table_file}"
+    np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0.0)
+
+
 @pytest.mark.parametrize("imf", ["chabrier", "kroupa", "salpeter"])
 def test_surviving_mass_varies_with_metallicity(tmp_path, imf):
     """Spread over Z at log10 age 10 is >= 0.01 (measured ~0.03); the fit gave 0."""
@@ -348,7 +357,7 @@ def test_registry_pending_set_is_exactly_the_declared_one():
     pending_isoc = {
         e.isoc for e in mrt.MASS_REMAINING_REGISTRY.values() if e.source == mrt.PENDING
     }
-    assert pending_isoc == {"prsc", "pdva", "bsti", "bpss", "pgny_mist"}
+    assert pending_isoc == {"prsc", "pdva", "bsti", "bpss"}
     pending_prsc = {
         e.imf
         for e in mrt.MASS_REMAINING_REGISTRY.values()

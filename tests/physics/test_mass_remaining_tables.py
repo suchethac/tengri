@@ -20,7 +20,9 @@ import pytest
 TABLE_DIR = Path(__file__).resolve().parents[2] / "src" / "tengri" / "data" / "ssp_mass_remaining"
 BC03 = TABLE_DIR / "mass_remaining_bc03pdva94_chabrier.h5"
 H5_TABLES = [BC03]
-FSPS_TABLES = sorted(p for p in TABLE_DIR.glob("mass_remaining_*.h5") if p != BC03)
+PGNY = TABLE_DIR / "mass_remaining_pgny_mist_chabrier.h5"
+PGNY_GRID = Path(__file__).resolve().parents[2] / "data" / "pgny_mist_c3k_chabrier.h5"
+FSPS_TABLES = sorted(p for p in TABLE_DIR.glob("mass_remaining_*.h5") if p not in (BC03, PGNY))
 
 # BC03's own M* is not strictly non-increasing: it rises by up to 0.0195 between adjacent
 # nodes at log10 age 6.0-6.5 and by <= 7e-4 above 1 Gyr. Bound the rises, do not smooth.
@@ -182,7 +184,7 @@ def test_fsps_table_bounds(path):
                 ),
             ),
         )
-        if "mist" in p.name
+        if p.name.startswith("mass_remaining_mist_")
         else p
         for p in FSPS_TABLES
     ],
@@ -192,3 +194,92 @@ def test_fsps_table_is_a_fraction_of_formed_mass(path):
     """Surviving mass is a fraction of the formed mass: values in (0, 1]."""
     _, _, mass, _ = _load(path)
     assert np.all(mass > 0.0) and np.all(mass <= 1.0)
+
+
+# ProGeny (MIST isochrones, C3K atmospheres, Chabrier 0.1-100 Msun): ProGeny's own SMstar,
+# repackaged unaltered (#2751). It is NOT monotone in age, and no age after which it is
+# monotone exists in this table: 137 of 1590 age steps rise (log10 age 5.05 to 10.30, at
+# 14 of 15 Z), the largest +0.01574 at log10 age 9.55 (index 13). Rises are bounded, not
+# smoothed. The values never exceed 1 (no overshoot); the youngest node (1e5 yr) is
+# 0.9903-1.000.
+PGNY_MAX_RISE = 0.0160
+PGNY_RISING_STEPS = 137
+PGNY_YOUNGEST_MIN = 0.99
+
+
+def _pgny_load():
+    log_age, log_z, mass, attrs = _load(PGNY)
+    return log_age, log_z, mass, attrs
+
+
+@pytest.mark.bounds
+def test_pgny_table_bounds():
+    """ProGeny table: shapes, increasing axes, values in (0, 1], bounded rises, attributes."""
+    log_age, log_z, mass, attrs = _pgny_load()
+    assert mass.shape == (15, 107) and mass.dtype == np.float64
+    assert np.all(np.diff(log_age) > 0.0) and np.all(np.diff(log_z) > 0.0)
+    assert np.all(mass > 0.0) and np.all(mass <= 1.0)
+    assert np.all(mass[:, 0] >= PGNY_YOUNGEST_MIN)
+    rise = np.diff(mass, axis=1)
+    assert rise.max() <= PGNY_MAX_RISE
+    assert int((rise > 0.0).sum()) == PGNY_RISING_STEPS
+    assert attrs["imf"] == "chabrier" and attrs["isochrones"].startswith("pgny_mist")
+    i13 = int(np.argmin(np.abs(log_age - 10.11)))
+    assert np.all(mass[:, i13] >= 0.4) and np.all(mass[:, i13] <= 0.8)
+    for key in (
+        "quantity",
+        "isochrones",
+        "imf",
+        "source",
+        "remnant_prescription",
+        "citation",
+        "generator",
+        "generator_args",
+        "input_sha256",
+    ):
+        assert key in attrs, key
+
+
+@pytest.mark.bounds
+def test_pgny_rising_steps_are_where_the_table_measures_them():
+    """The largest rise is +0.01574 at log10 age 9.55, Z index 13; no age is monotone tail."""
+    log_age, _, mass, _ = _pgny_load()
+    rise = np.diff(mass, axis=1)
+    iz, ia = np.unravel_index(int(np.argmax(rise)), rise.shape)
+    assert iz == 13 and log_age[ia + 1] == pytest.approx(9.55, abs=1e-5)
+    assert rise[iz, ia] == pytest.approx(0.015739, abs=1e-6)
+    rising_ages = log_age[1:][(rise > 0.0).any(axis=0)]
+    assert rising_ages.min() == pytest.approx(5.05, abs=1e-5)
+    assert rising_ages.max() == pytest.approx(10.30, abs=1e-5)
+
+
+@pytest.mark.bounds
+@pytest.mark.skipif(not PGNY_GRID.exists(), reason="pgny grid is local data (gitignored)")
+def test_pgny_nodes_equal_the_grid_nodes_exactly():
+    """Z and age axes equal the grid's own float32 nodes, cast to float64, exactly."""
+    log_age, log_z, _, _ = _pgny_load()
+    with h5py.File(PGNY_GRID, "r") as f:
+        grid_lgmet = np.asarray(f["ssp_lgmet"][:], dtype=np.float64)
+        grid_lg_age_yr = np.asarray(f["ssp_lg_age_gyr"][:], dtype=np.float64) + 9.0
+    np.testing.assert_array_equal(log_z, grid_lgmet)
+    np.testing.assert_array_equal(log_age, grid_lg_age_yr)
+
+
+@pytest.mark.bounds
+def test_pgny_value_pinned_at_the_lowest_z_and_10_gyr():
+    """Living stars + remnants at log10 Z = -5.69897, log10 age = 10 is 0.5635842152250559.
+
+    The value is ProGeny's ``SMstar`` at that node, repackaged. Regenerate it with::
+
+        python scripts/build_mass_remaining_pgny.py \\
+            --input PG_Ch_Mi_C3K.fits --grid data/pgny_mist_c3k_chabrier.h5 \\
+            --out src/tengri/data/ssp_mass_remaining/mass_remaining_pgny_mist_chabrier.h5
+
+    where ``PG_Ch_Mi_C3K.fits`` is the member of the ProSpect speclib zip (sha256
+    2edafca0e6a1a0218a37a2adc73734a219827967ff5c5e2f9c128fafc8f530cb).
+    """
+    log_age, log_z, mass, _ = _pgny_load()
+    iz = int(np.argmin(np.abs(log_z + 5.69897)))
+    ia = int(np.argmin(np.abs(log_age - 10.0)))
+    assert abs(log_z[iz] + 5.69897) < 1e-5 and abs(log_age[ia] - 10.0) < 1e-6
+    assert mass[iz, ia] == pytest.approx(0.5635842152250559, abs=1e-10)

@@ -92,7 +92,7 @@ def _p(isoc: str, imf: str) -> MassRemainingEntry:
 #: ``_wNE...`` suffix and with a leading ``ssp_`` read as ``fsps_``
 #: (:func:`canonical_grid_name`). PENDING rows name a table that has not been
 #: built (Padova, BaSTI and Geneva need an FSPS compiled with that isochrone set;
-#: ProGeny and BPASS need their own tables).
+#: BPASS needs a remnant recipe, see its row).
 MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     # MIST isochrones: companion tables built with python-fsps.
     "fsps_mist_miles_chabrier": _m("mist", "chabrier"),
@@ -136,9 +136,12 @@ MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     "fsps_bsti_basel_salpeter": _p("bsti", "salpeter"),
     # BC03 (Padova 1994, STELIB): companion read from the BC03 *.4color files.
     "bc03_pdva_stelib_chabrier": _m("bc03pdva94", "chabrier"),
-    # Other codes: pending.
+    # ProGeny (MIST, C3K, Chabrier): ProGeny's own SMstar, repackaged unaltered.
+    "pgny_mist_c3k_chabrier": _m("pgny_mist", "chabrier"),
+    # BPASS: PENDING. The BPASS starmass column is living stars only (manual v2.2),
+    # and its remnant column is flagged untested by the BPASS team; no single-star
+    # remnant recipe applies to a binary population. Not built; see PROVENANCE.md.
     "bpss_stars_c3k_a_chabrier": _p("bpss", "chabrier"),
-    "pgny_mist_c3k_chabrier": _p("pgny_mist", "chabrier"),
     # Test placeholder grid (``synthetic`` attribute): hand-made table in the file.
     "fsps_prsc_bc03_chabrier": MassRemainingEntry("synthetic", "chabrier", EMBEDDED),
 }
