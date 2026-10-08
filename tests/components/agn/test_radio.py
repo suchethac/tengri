@@ -287,14 +287,21 @@ class TestDelvecchio2021:
 class TestMcCheyne2022:
     """Tests for radio_sfr_mccheyne2022."""
 
+    def test_spectral_index_is_the_table3_value(self):
+        """S ∝ nu^-0.60 between 150 MHz and 1.4 GHz (McCheyne+2022 Table 3, alpha = -0.60)."""
+        nu_150, nu_14 = 1.5e8, 1.4e9
+        L_150 = radio_sfr_mccheyne2022(_WAVE_150MHZ, _L_IR, log_mstar=10.45, redshift=0.0)
+        L_14 = radio_sfr_mccheyne2022(_WAVE_14GHZ, _L_IR, log_mstar=10.45, redshift=0.0)
+        assert float(L_14[0] / L_150[0]) == pytest.approx((nu_14 / nu_150) ** -0.60, rel=1e-9)
+
     def test_q_at_fiducial_mass_z0(self):
-        """At log(M★)=10, z=0: q = q0 + mass_slope × 0 = 1.98."""
+        """At the joint-fit pivot log(M★)=10.45, z=0: q = q0 = 1.98 (McCheyne+2022 Sect. 5.2)."""
         expected_q = 1.98
         L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
         L = radio_sfr_mccheyne2022(
             _WAVE_150MHZ,
             _L_IR,
-            log_mstar=10.0,
+            log_mstar=10.45,
             redshift=0.0,
             apply_suppression=False,
         )
@@ -348,15 +355,15 @@ class TestMcCheyne2022:
         assert float(L_hi_q0[0]) > float(L_lo_q0[0]), "Lower q0 → more L_radio"
 
     def test_spectral_index_0p7_default(self):
-        """At 150 MHz reference, extrapolating to 1.4 GHz with α=0.7."""
+        """At 150 MHz reference, extrapolating to 1.4 GHz with alpha=0.60 (Table 3)."""
         L_150mhz = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=10.45, redshift=0.0, apply_suppression=False
         )
         L_14ghz = radio_sfr_mccheyne2022(
-            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_14GHZ, _L_IR, log_mstar=10.45, redshift=0.0, apply_suppression=False
         )
-        # At 1.4 GHz: L = L_ref * (1.4e9 / 1.5e8)^{-0.7}
-        expected_ratio = (1.5e8 / 1.4e9) ** (-0.7)  # > 1 (150 MHz brighter)
+        # At 1.4 GHz: L = L_ref * (1.4e9 / 1.5e8)^{-0.60}
+        expected_ratio = (1.5e8 / 1.4e9) ** (-0.60)  # > 1 (150 MHz brighter)
         actual_ratio = float(L_150mhz[0] / L_14ghz[0])
         assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
             f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"

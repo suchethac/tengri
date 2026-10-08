@@ -18,10 +18,10 @@ code under test:
 
 * Delvecchio+2021, arXiv:2010.05510, Eq. 5 (multi-parametric q_IR(M*, z) fit, 1.4 GHz,
   AGN-corrected total radio), coefficients 2.646 +/- 0.024, -0.023 +/- 0.008, 0.148 +/- 0.013.
-* McCheyne+2022, A&A 662, A100 (150 MHz). The paper body was not readable from this
-  environment, so the constants asserted here are the ones the code documents
-  (q0 = 1.98 at log M* = 10, z = 0; mass slope -0.22; z exponent +0.02). The test pins the
-  construction, not the constants; see the report for the open coefficient check.
+* McCheyne+2022, A&A 662, A100, Sect. 5.2 joint fit (150 MHz): q_TIR = 1.98 (1+z)^0.02
+  - 0.22 (log M* - 10.45), valid for z < 0.4 and M* > 10^10.45. The text was read from the
+  paper's Leiden accepted manuscript as quoted in the tengri issue thread (#2805); the
+  public path below grids M* outside that validity range as a formula check only.
 * Murphy+2011 Eqs. 4 and 11 for the free-free term (3.88e-44 Msun/yr per erg/s of L_IR,
   2.174e27 erg/s/Hz per Msun/yr at 1 GHz, nu^-0.1 at T_e = 1e4 K).
 """
@@ -33,6 +33,7 @@ import pytest
 
 import tengri
 from tengri.config.exceptions import ConfigError
+from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 pytestmark = pytest.mark.regression_bug
 
@@ -48,7 +49,8 @@ _MODES = {
         1.4e9,
     ),
     "mccheyne2022": (
-        lambda logm, z: 1.98 * (1.0 + z) ** 0.02 - 0.22 * (logm - 10.0),
+        # McCheyne+2022 Sect. 5.2 joint fit, pivot log M* = 10.45 (paper text, Eq. 4 definition)
+        lambda logm, z: 1.98 * (1.0 + z) ** 0.02 - 0.22 * (logm - 10.45),
         1.5e8,
     ),
 }
@@ -121,25 +123,17 @@ def _l_nu_at(state, key, nu):
 
 
 def _radio_ir_input(state):
-    """The IR luminosity the radio block receives, read from the published state.
-
-    The radio component takes ``state.derived["L_ir"]`` as its input. The expected total is
-    computed from this same value, so the identity total = L_IR,in / (3.75e12 10^q) holds
-    whichever IR window feeds it (the TIR-window default is a separate change).
-    """
+    """The IR luminosity [erg/s] the radio block receives, read from the published state."""
+    # The windowed IR input is published as radio_L_ir_input [L_sun] when present.
+    if "radio_L_ir_input" in state.derived:
+        return float(np.asarray(state.derived["radio_L_ir_input"])) * _L_SUN
     return float(np.asarray(state.derived["L_ir"]))
 
 
-def _public_ratio(ssp, mode, neb, log_total_mass, age, z):
-    """(sed_radio + sed_nebular)(nu_ref) over the paper calibration, read off the state."""
-    q_of, nu_ref = _MODES[mode]
+def _public_state(ssp, mode, neb, log_total_mass, age, z):
+    """Build the public model for one mode and return (state, logM*, L_IR,in)."""
     st = _build(ssp, mode, log_total_mass=log_total_mass, age=age, z=z, neb=neb)
-    l_ir = _radio_ir_input(st)
-    logm = float(np.asarray(st.derived["log_mstar"]))
-    total = _l_nu_at(st, "sed_radio", nu_ref)
-    if neb == "cue":
-        total += _l_nu_at(st, "sed_nebular", nu_ref)
-    return total / _total_ref(q_of(logm, z), l_ir), logm, l_ir
+    return st, float(np.asarray(st.derived["log_mstar"])), _radio_ir_input(st)
 
 
 def _cases():
@@ -153,30 +147,54 @@ def _cases():
 @pytest.mark.parametrize(("mode", "logm", "z", "age"), list(_cases()))
 def test_radio_block_alone_reproduces_the_total_calibration(ssp_data_fsps, mode, logm, z, age):
     """No nebular: sed_radio at nu_ref is the paper's total, thermal term included."""
-    ratio, got_logm, l_ir = _public_ratio(
+    q_of, nu_ref = _MODES[mode]
+    st, got_logm, l_ir = _public_state(
         ssp_data_fsps, mode, "none", logm + _LOG_TOTAL_MASS_OFFSET, age, z
     )
     assert got_logm == pytest.approx(logm, abs=0.3)  # realized M*; the offset depends on age
-    assert ratio == pytest.approx(1.0, abs=1e-3), (
-        f"{mode} logM*={got_logm:.3f} z={z} L_IR={l_ir:.3g}: total/calibration = {ratio:.5f}"
+    total = _total_ref(q_of(got_logm, z), l_ir)
+    got = _l_nu_at(st, "sed_radio", nu_ref)
+    assert got / total == pytest.approx(1.0, abs=1e-3), (
+        f"{mode} logM*={got_logm:.3f} z={z} L_IR={l_ir:.3g}: total/calibration = {got / total:.5f}"
     )
 
 
 @pytest.mark.parametrize(("mode", "logm", "z", "age"), list(_cases()))
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Cue's own free-free at nu_ref (0.1167 of the total at 1.4 GHz) differs from "
-        "Murphy's fixed share (0.1335): the fixed-share subtraction leaves a residual of "
-        "about -1.7 % at 1.4 GHz. Exact closure needs the nebular continuum as thermal_ref, "
-        "which the shared helper's contract does not take. Tracked for the owner."
-    ),
-)
-def test_radio_plus_cue_nebular_reproduces_the_total_calibration(
+def test_radio_block_with_cue_nebular_is_the_total_minus_the_murphy_share(
     ssp_data_fsps, mode, logm, z, age
 ):
-    ratio, _, _ = _public_ratio(ssp_data_fsps, mode, "cue", logm + _LOG_TOTAL_MASS_OFFSET, age, z)
-    assert ratio == pytest.approx(1.0, abs=1e-3)
+    """Cue on: the radio block keeps (1 - f_th) of the calibration, f_th the Murphy share."""
+    q_of, nu_ref = _MODES[mode]
+    st, got_logm, l_ir = _public_state(
+        ssp_data_fsps, mode, "cue", logm + _LOG_TOTAL_MASS_OFFSET, age, z
+    )
+    total = _total_ref(q_of(got_logm, z), l_ir)
+    murphy = _murphy_ff(nu_ref, l_ir)
+    got = _l_nu_at(st, "sed_radio", nu_ref)
+    assert got == pytest.approx(total - murphy, rel=1e-3)
+
+
+@pytest.mark.parametrize(("mode", "logm", "z", "age"), list(_cases()))
+def test_radio_plus_cue_nebular_is_the_fixed_share_residual_band(
+    ssp_data_fsps, mode, logm, z, age
+):
+    """Sum over the calibration = (1 - f_th) + L_ff,neb / L_cal at nu_ref.
+
+    The radio block subtracts the Murphy share f_th; the nebular backend adds its own
+    free-free, which differs from f_th. The residual is therefore L_ff,neb(nu_ref) over the
+    calibration, published by the nebular continuum, not a free fit.
+    """
+    q_of, nu_ref = _MODES[mode]
+    st, got_logm, l_ir = _public_state(
+        ssp_data_fsps, mode, "cue", logm + _LOG_TOTAL_MASS_OFFSET, age, z
+    )
+    total = _total_ref(q_of(got_logm, z), l_ir)
+    murphy = _murphy_ff(nu_ref, l_ir)
+    neb_ff = _l_nu_at(st, "sed_nebular", nu_ref)
+    summed = _l_nu_at(st, "sed_radio", nu_ref) + neb_ff
+    assert summed == pytest.approx(total - murphy + neb_ff, rel=1e-3)
+    # The residual is measured, not zero: Cue's share differs from Murphy's.
+    assert 0.0 < neb_ff / total < 0.3
 
 
 # ---- negative synchrotron: the refusal covers the new modes ---------------------------

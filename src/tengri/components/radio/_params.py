@@ -202,12 +202,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(-0.023),
         "Delvecchio+2021 FIRRC redshift exponent on (1+z) (slight decline with z)",
     ),
-    # McCheyne+2022 (150 MHz, A&A 662, A100; constants not verified against the body):
-    #   q(M*, z) = q0 (1+z)^z_slope + mass_slope * (logM* - 10)
+    # McCheyne+2022 (150 MHz, A&A 662, A100, Sect. 5.2 joint fit; pivot log M* = 10.45):
+    #   q(M*, z) = q0 (1+z)^z_slope + mass_slope * (logM* - 10.45)
     ParamDeclaration(
         "radio_mcch_q0",
         Fixed(1.98),
-        "McCheyne+2022 FIRRC normalization q0 at logM*=10, z=0 (150 MHz)",
+        "McCheyne+2022 FIRRC normalization q0 at logM*=10.45, z=0 (150 MHz)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         # As above but centered on the 150 MHz normalization (1.98 rather than
@@ -219,7 +219,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "radio_mcch_mass_slope",
         Fixed(-0.22),
-        "McCheyne+2022 FIRRC mass slope dq/dlogM* (added; <0 = massive -> more radio)",
+        "McCheyne+2022 FIRRC mass slope dq/dlogM* about logM*=10.45 "
+        "(added; <0 = massive -> more radio)",
     ),
     ParamDeclaration(
         "radio_mcch_z_slope",

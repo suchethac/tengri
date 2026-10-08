@@ -134,7 +134,7 @@ class TestRadioAbsoluteValues:
         )
 
     def test_delvecchio_mass_scaling_absolute(self):
-        """Delvecchio+2021: Δlog(L) = 0.468 per 2 dex in M* at fixed L_IR."""
+        """Delvecchio+2021 Eq. 5: Δlog(L) = 2 x 0.148 = 0.296 per 2 dex in M* at fixed L_IR."""
         from tengri.components.radio import radio_sfr_delvecchio2021
 
         wave = jnp.array([_C_AA / 1.4e9])
@@ -152,7 +152,7 @@ class TestRadioAbsoluteValues:
 
         np.testing.assert_allclose(
             np.log10(l_m11 / l_m9),
-            0.468,
+            0.296,
             atol=0.05,
             err_msg="Delvecchio mass scaling mismatch",
         )

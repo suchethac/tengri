@@ -4,17 +4,23 @@ Radio blocks: which q_IR calibration, and which AGN synchrotron shape
 
 The radio group is two independent choices — a star-forming block tied to the
 FIR-radio correlation, and an AGN block — so this compares them one at a time
-on the same galaxy.
+on the same galaxy (a constant-SFH galaxy with log total mass 10.5 at z = 0.05).
 
-(Left) The three q_IR calibrations, with AGN radio off. They disagree most
-where the correlation is least constrained: ~50% at 150 MHz, the LOFAR band
-that ``mccheyne2022`` was fit in, converging to a few percent by 10 GHz. The
-mass- and redshift-dependent calibrations sit below the fixed-q one for this
-galaxy, which is the whole point of preferring them.
+(Left) The three star-forming blocks, with AGN radio off, normalized to
+``bell2003``. ``delvecchio2021`` is 0.88, 1.09 and 1.21 times ``bell2003`` at
+150 MHz, 1.4 GHz and 10 GHz. ``mccheyne2022`` is 0.78, 1.17 and 1.48 times it
+at the same frequencies. The two mass- and redshift-dependent calibrations sit
+below the fixed-q one at 150 MHz and above it at 1.4 GHz and 10 GHz. Their
+largest-to-smallest ratio across the three blocks is 29 % at 150 MHz, 17 % at
+1.4 GHz and 49 % at 10 GHz, so the spread is largest at the high-frequency end.
 
-(Right) The AGN blocks, on a radio-loud AGN. ``dpl`` bends — it is a broken
-double power-law with an exponential aging cutoff — while ``powerlaw`` keeps
-one slope, so they separate toward high frequency rather than in normalization.
+(Right) The AGN blocks, on a radio-loud AGN (``loudness`` = 2) with ``bell2003``
+star formation. ``dpl`` bends: it is a broken double power law with an
+exponential synchrotron-aging cutoff. ``powerlaw`` keeps one slope. The two
+cross near 5 GHz, where their ratio is 1.00. Below that ``dpl`` is lower (0.16
+at 150 MHz, 0.55 at 1.4 GHz) and above it higher (1.30 at 10 GHz, 1.81 at
+100 GHz). The AGN block therefore changes the spectral shape, not only the
+normalization.
 ``none`` is star-forming synchrotron alone.
 
 ``loudness`` is ``log10(L_5GHz / L_B)``, so 0 is the radio-quiet boundary and
@@ -52,7 +58,7 @@ DUST = {
 }
 # dale2014_cigale: this example enables the radio component, and plain
 # dale2014 embeds its own SF radio continuum — the pair is refused at
-# build as a double-count (#1970).
+# build as a double-count.
 DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.Fixed(tengri.DEFAULT)}
 AGN = {
     "type": "composable",

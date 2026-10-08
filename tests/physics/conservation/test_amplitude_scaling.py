@@ -143,7 +143,7 @@ class TestRadioVariantCrossCheck:
         )
 
     def test_delvecchio_mass_dependence(self):
-        """Delvecchio+2021: q_IR DECREASES with log M★ (mass_slope=+0.234)."""
+        """Delvecchio+2021 Eq. 5: q_IR DECREASES with log M★ (mass_slope=+0.148)."""
         from tengri.components.radio.radio import radio_sfr_delvecchio2021
 
         L_IR = 1e10 * LSUN_ERG
@@ -154,11 +154,10 @@ class TestRadioVariantCrossCheck:
             np.array(radio_sfr_delvecchio2021(self.WL, L_ir=L_IR, log_mstar=11.0, redshift=0.0))[0]
         )
         assert L_hi > L_lo, "Massive galaxies should have more radio per L_IR (q_IR-)"
-        # Expected ratio ~ 10^(2 · 0.234) = 2.95 for pure q shift, but the
-        # low-SFR suppression multiplier inflates it at 10^9 Msun; allow a
-        # wider window.
+        # Total-radio construction (no n(L) factor): the ratio is the pure q shift,
+        # 10^(2 x 0.148) = 1.980 (Delvecchio+2021 Eq. 5 mass slope).
         ratio = L_hi / L_lo
-        assert 2.0 < ratio < 6.0, f"L(M11)/L(M9) = {ratio:.2f}"
+        assert ratio == pytest.approx(10.0 ** (2 * 0.148), rel=1e-6), f"L(M11)/L(M9) = {ratio:.4f}"
 
 
 # ── Chemical evolution ────────────────────────────────────────────
