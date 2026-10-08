@@ -1175,6 +1175,14 @@ class NebularSEDComponent(TemplateThreading):
                 derived_overrides["nebular_line_phot_waves_rest"] = jnp.asarray(
                     grid.sed_line_waves
                 )
+                if grid.cont_subband_frac is not None:
+                    # The observed sub-bands at the EVALUATION redshift: each SED
+                    # line spread over its rendered profile, plus the continuum's
+                    # chunks. A dust screen reads them, and so does the IGM, which
+                    # steps across Ly-alpha inside a band.
+                    phi_sub, lam_sub = nebular_subband_decomposition(packed, z, grid)
+                    derived_overrides["nebular_phot_lnu_subband_precomp"] = phi_sub
+                    derived_overrides["nebular_subband_waves_rest_precomp"] = lam_sub
                 derived_overrides["nebular_phot_lnu_precomp"] = line_bands.sum(axis=0) + cont_band
             else:
                 derived_overrides["nebular_phot_lnu_precomp"] = mix_dig_grid_reconstruction(
@@ -1205,16 +1213,11 @@ class NebularSEDComponent(TemplateThreading):
                 # integrate an all-zero shock SED over every filter on each call;
                 # ``sed_shock`` is absent, as it is when no shock component runs.
                 derived_overrides.pop("sed_shock", None)
-                # Per-subband nebular photometry (observed and rest frames)
-                if grid.serves_split_bands:
-                    # The observed sub-bands at the EVALUATION redshift: one chunk per
-                    # SED line (at its rest wavelength) plus the continuum's chunks.
-                    # The ``log_phot_subband_per_qh`` channel is the reference
-                    # redshift's and is not read here.
-                    phi_sub, lam_sub = nebular_subband_decomposition(packed, z, grid)
-                    derived_overrides["nebular_phot_lnu_subband_precomp"] = phi_sub
-                    derived_overrides["nebular_subband_waves_rest_precomp"] = lam_sub
-                else:
+                # Per-subband nebular photometry (observed and rest frames). A split
+                # table published the observed chunks above at the evaluation
+                # redshift; its ``log_phot_subband_per_qh`` channel is the reference
+                # redshift's and is not read.
+                if not grid.serves_split_bands:
                     derived_overrides["nebular_phot_lnu_subband_precomp"] = (
                         mix_dig_grid_reconstruction(
                             reconstruct_nebular_phot_subband,
