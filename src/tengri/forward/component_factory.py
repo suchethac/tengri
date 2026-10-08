@@ -851,29 +851,43 @@ def build_components(
                 # unstamped grid keeps the term over its whole range.
                 freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
-        components.append(
-            _resolve_registry_component(
-                "radio",
-                "radio",
-                config=RadioSEDComponentConfig(
-                    sfr_mode=radio_sfr_mode,
-                    agn_radio_model=radio_agn_model,
-                    include_freefree=include_freefree,
-                    # q calibrates the total unless the user pinned ``freefree: False``,
-                    # which is the non-thermal (CIGALE) reading of q (#2590).
-                    q_is_total=radio_include_freefree is not False,
-                    freefree_wave_min=freefree_wave_min,
-                    ir_window=radio_ir_window,
-                    # One owner of the thermal emission: the split's own 10 % law
-                    # gives way to a nebular continuum that carries free-free (#2764).
-                    split_thermal=not (
-                        radio_sfr_mode == "bell2003_split"
-                        and nebular_backend_carries_freefree(nebular_backend)
-                    ),
-                    **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
-                ),
-            )
+        radio_config = RadioSEDComponentConfig(
+            sfr_mode=radio_sfr_mode,
+            agn_radio_model=radio_agn_model,
+            include_freefree=include_freefree,
+            # q calibrates the total unless the user pinned ``freefree: False``,
+            # which is the non-thermal (CIGALE) reading of q (#2590).
+            q_is_total=radio_include_freefree is not False,
+            freefree_wave_min=freefree_wave_min,
+            ir_window=radio_ir_window,
+            # One owner of the thermal emission: the split's own 10 % law
+            # gives way to a nebular continuum that carries free-free (#2764).
+            split_thermal=not (
+                radio_sfr_mode == "bell2003_split"
+                and nebular_backend_carries_freefree(nebular_backend)
+            ),
+            **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
         )
+        if (
+            radio_ir_window is None
+            and radio_config.resolved_ir_window != "total"
+            and dust_emission_model is None
+        ):
+            import warnings
+
+            from tengri.config.exceptions import AdvisoryWarning
+
+            warnings.warn(
+                f"radio: the {radio_sfr_mode!r} model defaults to ir_window="
+                f"{radio_config.resolved_ir_window!r}, but there is no dust_emission block to "
+                "integrate, so the published total dust power L_ir is used instead. Add a "
+                "dust_emission block, or set radio={'sf': {'ir_window': 'total'}} explicitly "
+                "to silence this.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
+        components.append(_resolve_registry_component("radio", "radio", config=radio_config))
+
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 

@@ -122,8 +122,8 @@ def test_default_radio_is_the_q_relation_on_the_independent_tir(ssp, synthetic_t
     assert np.array_equal(a, np.asarray(explicit.derived["sed_radio"]))
     band = np.asarray(absent.wave) > _RADIO_WAVE_MIN_AA
     expected = np.asarray(radio_sfr_bell2003(absent.wave, band_l_ir(absent, "tir"), 2.5, 0.8))
-    # Two integrals of one piecewise-linear SED (edge-exact cell sum vs dense resampling).
-    np.testing.assert_allclose(a[band], expected[band], rtol=1e-5)
+    # Measured gap 3.1e-10: dense resampling of the SED vs the edge-exact cell integral.
+    np.testing.assert_allclose(a[band], expected[band], rtol=1e-8)
     assert np.all(a[band] > 0.0)
 
 
@@ -149,7 +149,7 @@ def test_tir_scales_the_radio_flux_by_the_band_fraction(ssp, synthetic_tophat_ob
     band = wave > _RADIO_WAVE_MIN_AA
     ratio = np.asarray(tir.derived["sed_radio"])[band] / np.asarray(tot.derived["sed_radio"])[band]
     assert 0.5 < l_tir / l_ir < 1.0  # the 8-1000 um band holds only part of the dust power
-    np.testing.assert_allclose(ratio, l_tir / l_ir, rtol=2e-3)
+    np.testing.assert_allclose(ratio, l_tir / l_ir, rtol=1e-8)
 
 
 def test_unknown_window_raises_at_grammar(ssp, synthetic_tophat_obs):
@@ -182,7 +182,7 @@ def test_21cm_anchor_with_tir_window(ssp, synthetic_tophat_obs):
     sed = np.asarray(state.derived["sed_radio"])
     keep = sed > 0.0
     got = np.exp(np.interp(np.log(C_AA / NU_REF_21CM_HZ), np.log(wave[keep]), np.log(sed[keep])))
-    assert got == pytest.approx(band_l_ir(state, "tir") / (3.75e12 * 10.0**2.5), rel=2e-3)
+    assert got == pytest.approx(band_l_ir(state, "tir") / (3.75e12 * 10.0**2.5), rel=1e-6)
 
 
 def test_combined_sf_settings_round_trip():
@@ -201,7 +201,7 @@ def test_published_radio_l_ir_input_follows_the_window(ssp, synthetic_tophat_obs
 
     tir = _state(_build(ssp, synthetic_tophat_obs, "tir"))
     got = float(tir.derived["radio_L_ir_input"])
-    assert got == pytest.approx(band_l_ir(tir, "tir") / L_SUN, rel=2e-3)
+    assert got == pytest.approx(band_l_ir(tir, "tir") / L_SUN, rel=1e-8)
     assert float(tir.derived["radio_log_L_ir_input"]) == pytest.approx(np.log10(got), abs=1e-9)
 
     tot = _state(_build(ssp, synthetic_tophat_obs, "total"))
@@ -210,3 +210,32 @@ def test_published_radio_l_ir_input_follows_the_window(ssp, synthetic_tophat_obs
     )
     default = _state(_build(ssp, synthetic_tophat_obs))
     assert float(default.derived["radio_L_ir_input"]) == got
+
+
+def _build_attenuation_only(ssp, obs, **sf_extra):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(0.0),
+            sfh={"type": "const", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti"},
+            radio={"sf": {"type": "bell2003", **sf_extra}, "agn": {"type": "none"}},
+        )
+    return [w for w in caught if "ir_window" in str(w.message)]
+
+
+def test_defaulted_window_without_dust_emission_warns_once_at_build(ssp, synthetic_tophat_obs):
+    from tengri.config.exceptions import AdvisoryWarning
+
+    hits = _build_attenuation_only(ssp, synthetic_tophat_obs)
+    assert len(hits) == 1
+    assert issubclass(hits[0].category, AdvisoryWarning)
+    msg = str(hits[0].message)
+    assert "'tir'" in msg and "total dust power L_ir" in msg
+    assert "dust_emission" in msg and "ir_window': 'total'" in msg
+
+
+def test_explicit_total_window_without_dust_emission_is_silent(ssp, synthetic_tophat_obs):
+    assert _build_attenuation_only(ssp, synthetic_tophat_obs, ir_window="total") == []

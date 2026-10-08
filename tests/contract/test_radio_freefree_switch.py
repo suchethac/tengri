@@ -178,7 +178,7 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
     np.testing.assert_allclose(
         sed_radio_no_ff[radio_mask],
         synchrotron_only[radio_mask],
-        rtol=1e-5,  # two integrals of the same piecewise-linear SED (edge-exact vs dense)
+        rtol=1e-8,  # measured gap 3.1e-10: dense resampling vs the edge-exact cell integral
         err_msg="freefree=False must produce synchrotron only (no thermal term)",
     )
 
