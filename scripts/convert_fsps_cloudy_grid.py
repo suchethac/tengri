@@ -19,6 +19,17 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+# FSPS's solar metallicity depends on the isochrone the grid was built with
+# (FSPS's isochrone-specific Z_sun). Written to the root ``zsun`` attribute so
+# the loader can convert the relative log_met axis to absolute log10(Z).
+ZSUN_BY_ISOC: dict[str, float] = {
+    "mist": 0.0142,
+    "prsc": 0.01524,
+    "pdva": 0.019,
+    "bpss": 0.020,
+}
+_ZSUN_OTHER: float = 0.020  # any isochrone not listed above (BPASS and others)
+
 
 def parse_header(line: str) -> dict:
     """Parse FSPS CLOUDY grid header line.
@@ -191,6 +202,8 @@ def convert(
     else:
         line_names = [f"line_{wl:.1f}A" for wl in lines_grid["wavelength"]]
 
+    zsun = ZSUN_BY_ISOC.get(isoc, _ZSUN_OTHER)
+
     # Write HDF5
     print(f"Writing: {output_path}")
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
@@ -206,8 +219,8 @@ def convert(
         lines_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         lines_axes.create_dataset("log_met", data=lines_grid["logZ"])
         lines_axes["log_met"].attrs["description"] = (
-            "log10(Z / Z_sun) as tabulated by FSPS (Byler et al. 2017); "
-            "tengri's loader adds LOG10_ZSUN"
+            f"log10(Z / Z_sun), Z_sun = {zsun} for isochrone {isoc} "
+            "(FSPS / Byler et al. 2017 axis); the root attribute 'zsun' gives Z_sun"
         )
         lines_axes.create_dataset("log_U", data=lines_grid["logU"])
         lines_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
@@ -240,8 +253,8 @@ def convert(
         cont_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         cont_axes.create_dataset("log_met", data=cont_grid["logZ"])
         cont_axes["log_met"].attrs["description"] = (
-            "log10(Z / Z_sun) as tabulated by FSPS (Byler et al. 2017); "
-            "tengri's loader adds LOG10_ZSUN"
+            f"log10(Z / Z_sun), Z_sun = {zsun} for isochrone {isoc} "
+            "(FSPS / Byler et al. 2017 axis); the root attribute 'zsun' gives Z_sun"
         )
         cont_axes.create_dataset("log_U", data=cont_grid["logU"])
         cont_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
@@ -262,6 +275,7 @@ def convert(
         f.attrs["source"] = "FSPS (Conroy & Gunn 2010)"
         f.attrs["cloudy_reference"] = "Byler et al. 2017"
         f.attrs["isoc_type"] = isoc
+        f.attrs["zsun"] = zsun
         f.attrs["dust_variant"] = dust_variant
         f.attrs["cloudy_dust"] = dust_variant == "WD"
         f.attrs["axes_match"] = axes_match
