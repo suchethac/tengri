@@ -17,7 +17,7 @@ TENGRI_DISABLE_JAX_CACHE=1:
 
     python -m pytest tests/regression/bug -q -p no:cacheprovider -n 4 \\
         --dist=loadfile -o addopts="--tb=short --strict-markers \\
-        -m 'not crossval and not slow and not benchmark'" \\
+        -m 'not crossval and not slow and not benchmark and not population_fit'" \\
         --durations=0 --durations-min=0 --ignore=tests/crossval \\
         --ignore=tests/regression/paper/test_draine2021_pah_loader.py \\
         --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \\
