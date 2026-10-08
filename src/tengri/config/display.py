@@ -34,13 +34,13 @@ def method_recommendation(model: SEDModel) -> tuple[str, str]:
     d = model.spec.n_free
     if model.spec.stochastic:
         d_total = d + model.spec.n_grid
-        return "vi", f"D={d_total}, stochastic, geoVI default"
+        return "vi", f"D={d_total}, stochastic, geoVI recommended"
     elif d <= 15:
         return "laplace", f"D={d}, smooth, instant Gaussian approximation"
     elif d <= 50:
         return "vi_linear", f"D={d}, smooth, fast VI"
     else:
-        return "vi", f"D={d}, moderate-high, geoVI default"
+        return "vi", f"D={d}, moderate-high, geoVI recommended"
 
 
 # ── tree() ────────────────────────────────────────────────────────

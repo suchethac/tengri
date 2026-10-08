@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- The inference docstrings and the `[inference]` config comment state the real defaults: `Fitter.run`, `fit_batch`, `ForwardModel.fit` and `SEDModel.fit` default to `mcmc_nuts_fast`, not `vi`, and the `method` key in `defaults.toml` is the default of the module-level `fit_model` only (`"auto"`, which dispatches on dimension). Documentation pages that named geoVI as the default now say so only where it is the method being described (#2340).
+
 - The Cue nebular emulator is described as trained on Cloudy 22.00 in the anatomy and menu notebooks and the ProSpect-R reproduction, where they said Cloudy 17.03 / 17.
 
 - CLOUDY grids converted from FSPS record the isochrone's solar metallicity. `scripts/convert_fsps_cloudy_grid.py` writes the root attribute `zsun` (MIST 0.0142, PARSEC 0.01524, Padova 0.019, BPASS and others 0.020) and describes the `log_met` axes as log10(Z / Z_sun). `load_cloudy_grid` converts the axis with that value; a file without the attribute is read with the MIST value and warns once, naming the file. Grid files already shipped are unchanged and keep the MIST conversion (#2633).
