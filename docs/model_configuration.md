@@ -504,6 +504,7 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 - `'type'`: AGN mode: `'composable'` (six independent emitters), `'legacy'` (single monolithic AGN), or `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'norm'`: Across-component normalization: `'cigale_joint'` (default, CIGALE-style energy conservation across disc/torus/polar) or `'independent'` (each component on its own scale).
+- `'polar_law'`: Extinction curve of the polar dust: `'smc'` (default, Pei 1992), `'calzetti'`, `'gaskell'` or `'bongiorno'` (CIGALE's `extinction_law = 0`: the Bongiorno et al. 2012 power law above 100 nm with the Weingartner & Draine 2001 SMC-bar shape below it). Also accepted inside `'atten'`.
 - `'disc'`: AGN accretion disk sub-block (with `'type'`, `'all_params'`, parameters).
 - `'torus'`: Infrared-obscured torus sub-block (with `'type'`, `'all_params'`, parameters).
 - `'nlr'`: Narrow-line region sub-block (with `'type'`, `'all_params'`, parameters).

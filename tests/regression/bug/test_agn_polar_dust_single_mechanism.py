@@ -53,7 +53,6 @@ _TORUS_KWARGS = {
         agn_fritz_beta=-0.5,
         agn_fritz_gamma=4.0,
         agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,
     ),
 }
 

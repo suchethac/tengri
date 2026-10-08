@@ -68,19 +68,27 @@ from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     DISC_POWER_BLOCKS,
     DISC_SPLIT_BLOCKS,
+    DISC_STATE_BLOCKS,
     LINE_ENERGY_BLOCKS,
     resolve_agn_block,
 )
 from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
-    sigmoid_visibility_mask,
     split_lines_result,
 )
 from tengri.components.agn.blocks.torus_screen import (
-    TORUS_SCREEN_PARAMS,
+    TORUS_SCREEN_BLOCKS,
+    polar_follow_opening_angle,
+    torus_screen_geometry,
     torus_screen_transmission,
 )
-from tengri.components.agn.fritz import FritzGrid, fritz_disc_dust_ratio, fritz_disc_dust_wave
+from tengri.components.agn.fritz import (
+    FritzGrid,
+    fritz_disc_dust_ratio,
+    fritz_disc_dust_wave,
+    fritz_psy_from_cos_inc,
+)
+from tengri.components.agn.polar_dust import resolve_polar_opening_angle, type1_weight
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import (
     SKIRTORBundle,
@@ -137,14 +145,14 @@ _TIE_FINE_NODES = 4001
 #: and ``fritz2006``).
 _TIE_TORI: tuple[str, ...] = ("skirtor", "fritz")
 
-#: The Fritz library coordinates the tie reads off the model, as the torus block does.
+#: The Fritz library coordinates the tie reads off the model, as the torus block does; the
+#: viewing elevation ``psy`` is not one of them, it is derived from ``agn_cos_inc``.
 _FRITZ_LIBRARY_PARAMS: tuple[str, ...] = (
     "agn_fritz_r_ratio",
     "agn_fritz_tau",
     "agn_fritz_beta",
     "agn_fritz_gamma",
     "agn_fritz_oa",
-    "agn_fritz_psy",
 )
 
 #: Mean of the library disc's anisotropy over the viewing hemisphere, in units of its face-on
@@ -740,6 +748,17 @@ agn_torus_block, agn_attenuation_block : str
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
+    # A disc whose scalar solve does not depend on the wavelength (the ADAF's electron
+    # temperature) is solved once here; the grid, the anchors, the 5100 A reference and the
+    # budget grids below all read the same state.
+    _disc_state_fn = DISC_STATE_BLOCKS.get(agn_disc_block)
+    if _disc_state_fn is not None:
+        _disc_state = _disc_state_fn(agn_log_lbol_eval, dtype=wave.dtype, **params)
+        _disc_raw = disc_fn
+
+        def disc_fn(wavelength, **kwargs):
+            return _disc_raw(wavelength, disc_state=_disc_state, **kwargs)
+
     L_lambda_disc = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol_eval,
@@ -931,6 +950,7 @@ agn_torus_block, agn_attenuation_block : str
                 incl_wave=wave,
                 _template=_library,
                 **{k: params[k] for k in _FRITZ_LIBRARY_PARAMS if k in params},
+                agn_fritz_psy=fritz_psy_from_cos_inc(_cos_inc),
             )
         _disc_R = _disc_tie.R
         _disc_incl = _disc_tie.incl_ratio
@@ -1276,12 +1296,12 @@ agn_torus_block, agn_attenuation_block : str
             _corona_scale = (
                 _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
             ) / _p_disc_model
-            _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
+            _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
             _corona_screen = torus_screen_transmission(
                 wave,
                 cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-                oa_deg=params.get(_oa_key, 40.0),
-                tau_v=params.get(_tau_key, 7.0),
+                oa_deg=_corona_oa,
+                tau_v=_corona_tau_v,
             )
             _disc_scaled = _disc_scaled + _corona_part * _corona_screen * _corona_scale
         _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
@@ -1347,18 +1367,23 @@ agn_torus_block, agn_attenuation_block : str
     # and the screen is its only obscuration.
     _lines_mask = 1.0
     _disc_mask = 1.0
-    if agn_torus_block in TORUS_SCREEN_PARAMS:
-        _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
+    if agn_torus_block in TORUS_SCREEN_BLOCKS:
+        # One inclination, one opening angle: the same agn_cos_inc and the torus's
+        # own angle feed this screen, the Fritz library's viewing elevation and
+        # the polar-dust mask below.
+        _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
         _screen = torus_screen_transmission(
             wave,
             cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-            oa_deg=params.get(_oa_key, 40.0),
-            tau_v=params.get(_tau_key, 7.0),
+            oa_deg=_screen_oa,
+            tau_v=_screen_tau_v,
         )
         _lines_mask = _screen
         _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
-        _lines_mask = sigmoid_visibility_mask(
+        # The generic tori read the same Type-1/2 weight, one width in cos i, as the dusty-
+        # screen tori and the polar mask: Type 1 iff i < 90 - agn_theta_torus.
+        _lines_mask = type1_weight(
             params.get("agn_cos_inc", 0.86602540378443864),
             params.get("agn_theta_torus", 30.0),
         )
@@ -1370,8 +1395,21 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_central = L_lambda_central + L_lambda_lines_iso
 
     # Stage 5: attenuation factor (multiplicative; host/foreground screen).
+    # The polar cone follows the selected torus's own opening angle unless
+    # ``agn_polar_oa`` is given (declared default 0 = follow); its Type-1/2
+    # boundary and cone share then read the same angle as the torus screen above.
+    _atten_params = params
+    if agn_attenuation_block == "polar_dust":
+        _atten_params = {
+            **params,
+            "agn_polar_oa": resolve_polar_opening_angle(
+                params.get("agn_polar_oa", 0.0),
+                polar_follow_opening_angle(agn_torus_block, params),
+            ),
+            "agn_polar_geometry": "fritz" if agn_torus_block == "fritz" else "skirtor",
+        }
     atten_fn = resolve_agn_block("attenuation", agn_attenuation_block)
-    factor = atten_fn(wave, **params)
+    factor = atten_fn(wave, **_atten_params)
 
     # Convert to L_nu [erg/s/Hz] using L_nu = L_lambda * lambda^2 / c.
     _conv = wave**2 / C_AA_PER_S
@@ -1434,7 +1472,7 @@ agn_torus_block, agn_attenuation_block : str
         # applies is decided by the traced ``agn_ir_frac > 0``. A concrete value picks
         # one in Python; a traced one selects with ``lax.cond``, so a gradient evaluates
         # only the taken branch (under ``vmap`` both run and the result is selected).
-        _polar_params = {k: v for k, v in params.items() if k != "agn_polar_reference"}
+        _polar_params = {k: v for k, v in _atten_params.items() if k != "agn_polar_reference"}
 
         def _polar_bolometric():
             return polar_dust_reemission_lnu(
@@ -1462,11 +1500,15 @@ agn_torus_block, agn_attenuation_block : str
             # between an 8-1e8 A and a 500-1e8 A grid, neither of which
             # truncates the SKIRTOR templates at all.
             _polar_disc_face_on = _disc_shape_faceon * (_agn_power * _disc_R_faceon)
+            # The Fritz disc is isotropic (hemisphere mean 1, ``_TIE_HEMISPHERE_MEAN``), so
+            # its face-on power IS its bolometric power and the cone share is CIGALE
+            # ``fritz2006``'s ``1 - cos(half)`` of it; only the SKIRTOR disc needs the
+            # face-on frame (``g`` referenced to ``int L(theta=0)``, 18/7 off bolometric).
             return polar_dust_reemission_lnu(
                 wave,
                 _polar_disc_face_on,
                 l_in_wavelength=_disc_wave_native,
-                agn_polar_reference="face_on",
+                agn_polar_reference="bolometric" if agn_torus_block == "fritz" else "face_on",
                 return_absorbed=True,
                 **_polar_params,
             )
@@ -1553,11 +1595,27 @@ agn_torus_block, agn_attenuation_block : str
             # rescale is 0/0. Documented value: factor 1.0, which leaves the
             # zero re-emission exactly zero.
             _polar_live = _polar_power > 0.0
+            # With an empty torus budget (``torus='none'``) the polar share of the budget is
+            # zero at every E(B-V), so the factor is 0 there as well: 1.0 would hand the
+            # graybody's own derivative to a component sum that is identically zero.
             L_nu_reemit = L_nu_reemit * jnp.where(
                 _polar_live,
                 _agn_dust_budget * _share / jnp.where(_polar_live, _polar_power, 1.0),
-                1.0,
+                jnp.where(_agn_dust_budget > 0.0, 1.0, 0.0),
             )
+            # CIGALE adds the polar graybody to the AGN dust BEFORE the unit-integral
+            # normalization (skirtor2016.py ``norm = 1/int dust``) and the disc is
+            # scaled by that same ``norm``, so on the R-tied path the disc is divided
+            # by ``1 + l_ext`` just as the torus is: the torus share ``1 - share`` IS
+            # that factor (``budget / (budget + polar)``). Without it the disc kept the
+            # whole ``agn_power x R`` while the dust gave up the polar share, and the
+            # AGN total grew with E(B-V) instead of staying at ``agn_power``.
+            if _disc_R is not None:
+                _disc_polar_norm = jnp.where(_agn_fracAGN > 0.0, _torus_factor, 1.0)
+                L_lambda_central = L_lambda_central + (_disc_polar_norm - 1.0) * (
+                    L_lambda_disc * _disc_mask
+                )
+                L_lambda_disc = L_lambda_disc * _disc_polar_norm
         else:
             _torus_factor = 1.0
         L_lambda_total = L_lambda_central * factor + L_lambda_torus * _torus_factor

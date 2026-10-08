@@ -102,7 +102,7 @@ _ALIASES: dict[str, tuple[str, str]] = {
     # Surviving mass, bounded above by the formed mass of the same contract, so
     # the formed-mass prior is the right ceiling for it too.
     "stellar_mass": (r"^sfh_.*_log_total_mass$", "pow10"),
-    # ``adaf_spectrum`` re-binds ``agn_log_lbol`` under a local name
+    # ``adaf_scalar_state`` re-binds ``agn_log_lbol`` under a local name
     # (components/agn/adaf.py).
     "_lbol_shape": (r"^agn_log_lbol$", "pow10"),
 }
@@ -179,7 +179,7 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "(``utils.scale.apply_log10_scale``, #1388).",
         (
             "tengri.components.agn._template_grid:torus_lnu_from_grid",
-            "tengri.components.agn.adaf:adaf_spectrum",
+            "tengri.components.agn.adaf:adaf_scalar_state",
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
             "tengri.components.agn.blocks.nlr:nlr_analytic_block",

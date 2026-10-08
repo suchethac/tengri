@@ -3315,8 +3315,8 @@ m_fritz_sweep = SEDModel.build(
         "torus": {
             "type": "fritz",
             "fritz_tau": Uniform(0.1, 10.0, default=1.0),
-            "fritz_oa": Uniform(20.0, 80.0, default=60.0),
-            "fritz_psy": Uniform(0.001, 89.99, default=45.0),
+            "fritz_oa": Uniform(20.0, 60.0, default=60.0),
+            "agn_cos_inc": Uniform(0.0, 1.0, default=0.7071),
             "fritz_r_ratio": Fixed(60.0),
             "fritz_beta": Fixed(-0.5),
             "fritz_gamma": Fixed(4.0),
@@ -3344,7 +3344,8 @@ for _tau, _oa, _psy in _fritz_grid:
             **p_fritz_sweep,
             "agn_fritz_tau": jnp.float64(_tau),
             "agn_fritz_oa": jnp.float64(_oa_half),
-            "agn_fritz_psy": jnp.float64(_psy),
+            # One inclination: the library elevation psi = 90 deg - i, cos i = sin psi.
+            "agn_cos_inc": jnp.float64(np.sin(np.radians(_psy))),
         }
     )
     _w_t_9f = np.asarray(_pred_9f.sed.components["wavelength"])

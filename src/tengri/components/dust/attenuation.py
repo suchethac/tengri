@@ -2279,7 +2279,8 @@ def wd01_smcbar(wavelength: jnp.ndarray) -> jnp.ndarray:
     References
     ----------
     .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
-       and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
+       and Extinction in the Milky Way, Large Magellanic Cloud, and Small
+       Magellanic Cloud," ApJ, 548, 296 (2001).
        arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
     .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
        "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
@@ -2323,7 +2324,8 @@ def wd01_mwrv31(wavelength: jnp.ndarray) -> jnp.ndarray:
     References
     ----------
     .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
-       and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
+       and Extinction in the Milky Way, Large Magellanic Cloud, and Small
+       Magellanic Cloud," ApJ, 548, 296 (2001).
        arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
     .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
        "Synthesizer: a Software Package for Synthetic Astronomical Observables,"

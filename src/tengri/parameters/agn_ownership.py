@@ -115,7 +115,6 @@ _AGN_PARTITION = {
     "agn_fritz_beta": "agn.torus",
     "agn_fritz_gamma": "agn.torus",
     "agn_fritz_oa": "agn.torus",
-    "agn_fritz_psy": "agn.torus",
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
     # R50 (#2214): "agn_alpha_ion" sat here, a second name for the Feltre NLR

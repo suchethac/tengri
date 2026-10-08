@@ -389,6 +389,7 @@ def build_components(
     agn_feii_block: str = "none",
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
+    agn_polar_law: str = "smc",
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -805,6 +806,7 @@ def build_components(
                     agn_torus_block=agn_torus_block,
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
+                    agn_polar_law=agn_polar_law,
                 ),
             )
         )

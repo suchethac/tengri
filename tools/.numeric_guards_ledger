@@ -31,7 +31,7 @@ src/tengri/components/agn/fracagn.py | jnp.maximum with floor 1e-100 < 1e-20 -> 
 src/tengri/components/agn/kd_precompute.py | jnp.clip with floor 0.0 < 1e-20 -> 6
 src/tengri/components/agn/kd_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 3
 src/tengri/components/agn/nlr_gaussian_precompute.py | jnp.maximum with floor 1e-30 < 1e-20 -> 1
-src/tengri/components/agn/polar_dust.py | jnp.maximum with floor 0.0 < 1e-20 -> 3
+src/tengri/components/agn/polar_dust.py | jnp.maximum with floor 0.0 < 1e-20 -> 2
 src/tengri/components/agn/qsogen.py | jnp.clip with floor 0.0 < 1e-20 -> 10
 src/tengri/components/agn/qsogen.py | jnp.maximum with floor 0.0 < 1e-20 -> 1
 src/tengri/components/agn/qsogen.py | jnp.maximum with floor 1e-30 < 1e-20 -> 2

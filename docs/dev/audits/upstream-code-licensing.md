@@ -63,7 +63,11 @@ forces structural rewriting and gives natural distance from upstream code. Where
 - **`components/agn/polar_dust.py`** — Calzetti+2000, Gaskell+2004, and
   Yang+2020 extinction/anisotropy formulae implemented from the published
   equations. JAX-native (`jnp.where`, `jax.nn.sigmoid`, `jnp.trapezoid`).
-  No CIGALE code structure carried across.
+  No CIGALE code structure carried across. The SMC-mixture opacity its
+  Bongiorno law takes its shape from below 100 nm
+  (`components/agn/_polar_smc_opacity.py`) is Draine's public tabulation
+  of the Weingartner & Draine (2001) SMC-bar model, not CIGALE's
+  `extFun_SMC.dat` (owner ruling 2026-10-08).
 - **`analysis/diagnostics/lines.py`** — Steidel+1996 EW formula and
   standard Gaussian line-flux physics. FastSpecFit citation is
   attribution for methodology, not bulk code transfer.
