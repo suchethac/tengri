@@ -128,16 +128,18 @@ class TestDelvecchio2021:
     """Tests for radio_sfr_delvecchio2021."""
 
     def test_q_at_fiducial_mass_z0(self):
-        """At log(M★)=10, z=0: q = q0 × 1^z_slope - 0 = 2.646 (Delvecchio+2021 Eq. 5)."""
+        """At log(M★)=10 and z at the domain edge 0.1: q = 2.646 (1.1)^-0.023 (Eq. 5).
+
+        z = 0 is outside the calibrated 0.1 < z < 4.5, so the relation is held at z = 0.1.
+        """
         # L_1.4GHz = L_IR / (3.75e12 × 10^q)
-        # At log(M★)=10, z=0: q = 2.646
-        expected_q = 2.646
+        expected_q = 2.646 * 1.1 ** (-0.023)
         L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
         L = radio_sfr_delvecchio2021(
             _WAVE_14GHZ,
             _L_IR,
             log_mstar=10.0,
-            redshift=0.0,
+            redshift=0.1,
             apply_suppression=False,
         )
         # L at 1.4 GHz (nu_ref) equals L_ref_expected: (nu/nu_ref)^-alpha = 1 at nu_ref
@@ -323,12 +325,12 @@ class TestMcCheyne2022:
         )
 
     def test_mass_slope_magnitude(self):
-        """Δq over 2 dex M★ = 2 × |mass_slope| = 0.44."""
+        """Δq over 2 dex M★ = 2 × |mass_slope| = 0.44 (inside the 10.45 domain edge)."""
         L_m10 = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=10.5, redshift=0.0, apply_suppression=False
         )
         L_m12 = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=12.5, redshift=0.0, apply_suppression=False
         )
         delta_log_L = float(jnp.log10(L_m12[0]) - jnp.log10(L_m10[0]))
         # mass_slope = -0.22, so Δq = -0.22 * 2 = -0.44 → ΔlogL = +0.44

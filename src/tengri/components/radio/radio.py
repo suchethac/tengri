@@ -456,6 +456,81 @@ def sfr_from_lir(
     raise ValueError(f"Unknown calibration {calibration!r}. Choose 'murphy2011'.")
 
 
+#: Calibrated domain of each total-q relation, and its pivot and sign. Outside the domain the
+#: relation is held at the nearest edge (see :func:`firrc_total_q`); it is not extrapolated.
+#: ``mass`` is (low, high) in log10(M*/Msun), ``None`` for an open side; ``z`` is (low, high).
+FIRRC_TOTAL_Q_DOMAIN: dict[str, dict] = {
+    # Delvecchio+2021 Sect. 2: 0.1 < z < 4.5 and 10^8 < M* < 10^12 (the fit sample).
+    "delvecchio2021": {
+        "pivot": 10.0,
+        "sign": -1.0,  # q = q0 (1+z)^zs - (log M* - 10) m
+        "mass": (8.0, 12.0),
+        "z": (0.1, 4.5),
+        "nu_ref": _NU_REF_DELVECCHIO2021_HZ,
+    },
+    # McCheyne+2022 Sect. 5.2 joint fit: M* > 10^10.45 and z < 0.4 (no upper mass bound).
+    "mccheyne2022": {
+        "pivot": _LOG_MSTAR_PIVOT_MCCHEYNE2022,
+        "sign": 1.0,  # q = q0 (1+z)^zs + m (log M* - 10.45)
+        "mass": (10.45, None),
+        "z": (0.0, 0.4),
+        "nu_ref": _NU_REF_MCCHEYNE2022_HZ,
+    },
+}
+
+
+def firrc_total_q(
+    mode: str,
+    q0,
+    mass_slope,
+    z_slope,
+    log_mstar,
+    redshift,
+):
+    r"""Total-calibrated q of a mass- and redshift-dependent FIRRC mode, on its domain.
+
+    .. math::
+
+        q = q_0 (1+z)^{z_{\rm slope}} + s\, m_{\rm slope}\, (\log M_\star - p)
+
+    with pivot :math:`p` and sign :math:`s` from :data:`FIRRC_TOTAL_Q_DOMAIN`. The arguments
+    are held at the sample edge outside the calibrated domain, ``jnp.clip``, so the relation
+    is never extrapolated: ``q`` is constant in ``log M*`` below the mass edge and in ``z``
+    beyond the redshift edges, and the gradient with respect to them is zero there. The same
+    function evaluates the forward model and the build-time refusal, so they cannot drift.
+
+    Parameters
+    ----------
+    mode : str
+        ``"delvecchio2021"`` or ``"mccheyne2022"``.
+    q0, mass_slope, z_slope : float or array
+        The FIRRC parameters.
+    log_mstar : float or array
+        log10(M* / Msun).
+    redshift : float or array
+        Redshift.
+
+    Returns
+    -------
+    float or array
+        q, dimensionless.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure JAX function.
+
+    **Approximation flag:** q is held at the sample edge outside the calibrated domain
+    (Delvecchio+2021 Sect. 2: 8 < log M* < 12, 0.1 < z < 4.5; McCheyne+2022 Sect. 5.2:
+    log M* > 10.45, z < 0.4). The relation is not extrapolated there.
+    """
+    dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+    lo, hi = dom["mass"]
+    m = jnp.maximum(log_mstar, lo) if hi is None else jnp.clip(log_mstar, lo, hi)
+    z_lo, z_hi = dom["z"]
+    z = jnp.clip(redshift, z_lo, z_hi)
+    return q0 * (1.0 + z) ** z_slope + dom["sign"] * mass_slope * (m - dom["pivot"])
+
+
 def radio_sfr_delvecchio2021(
     wavelength: jnp.ndarray,
     L_ir: float,
@@ -570,7 +645,7 @@ def radio_sfr_delvecchio2021(
     nu = _C_AA / wavelength
 
     # Mass- and redshift-dependent q (Delvecchio+2021 Eq. 5, total 1.4 GHz)
-    q_ir = q0 * (1.0 + redshift) ** z_slope - (log_mstar - 10.0) * mass_slope
+    q_ir = firrc_total_q("delvecchio2021", q0, mass_slope, z_slope, log_mstar, redshift)
 
     # Calibrated total at nu_ref (Eq. 1). float32-safe (#1206): form from
     # log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
@@ -689,9 +764,7 @@ def radio_sfr_mccheyne2022(
     nu = _C_AA / wavelength
 
     # Mass- and redshift-dependent q at 150 MHz (McCheyne+2022, total)
-    q_ir = q0 * (1.0 + redshift) ** z_slope + mass_slope * (
-        log_mstar - _LOG_MSTAR_PIVOT_MCCHEYNE2022
-    )
+    q_ir = firrc_total_q("mccheyne2022", q0, mass_slope, z_slope, log_mstar, redshift)
 
     # Calibrated total at nu_ref. float32-safe (#1206): form from log10(L_IR)
     # when supplied so the ~1e43 linear L_IR never materializes.

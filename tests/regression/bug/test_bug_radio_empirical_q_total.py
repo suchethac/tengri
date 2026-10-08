@@ -28,6 +28,7 @@ code under test:
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -42,15 +43,27 @@ _LOG_M_GRID = (9.5, 10.0, 10.5, 11.0)
 _Z_GRID = (0.0, 1.0)
 _LOG_TOTAL_MASS_OFFSET = 0.2246  # log_total_mass - log_mstar at age 5 Gyr, measured
 
+
 # (sfr_mode, paper q(M*, z), nu_ref [Hz], synchrotron index used by the mode)
+def _edge(x, lo, hi):
+    """Hold x at the calibrated edge outside [lo, hi] (the relation is not extrapolated)."""
+    return min(max(x, lo), hi) if hi is not None else max(x, lo)
+
+
 _MODES = {
+    # Delvecchio+2021 Eq. 5, held on the Sect. 2 domain 8 < log M* < 12, 0.1 < z < 4.5.
     "delvecchio2021": (
-        lambda logm, z: 2.646 * (1.0 + z) ** (-0.023) - 0.148 * (logm - 10.0),
+        lambda logm, z: (
+            2.646 * (1.0 + _edge(z, 0.1, 4.5)) ** (-0.023)
+            - 0.148 * (_edge(logm, 8.0, 12.0) - 10.0)
+        ),
         1.4e9,
     ),
+    # McCheyne+2022 Sect. 5.2 joint fit, pivot log M* = 10.45, held on M* > 10^10.45, z < 0.4.
     "mccheyne2022": (
-        # McCheyne+2022 Sect. 5.2 joint fit, pivot log M* = 10.45 (paper text, Eq. 4 definition)
-        lambda logm, z: 1.98 * (1.0 + z) ** 0.02 - 0.22 * (logm - 10.45),
+        lambda logm, z: (
+            1.98 * (1.0 + _edge(z, 0.0, 0.4)) ** 0.02 - 0.22 * (_edge(logm, 10.45, None) - 10.45)
+        ),
         1.5e8,
     ),
 }
@@ -236,15 +249,27 @@ def test_delvecchio_q0_reaching_log_mstar_8_is_refused_naming_the_corner(ssp_dat
         )
 
 
-def test_mccheyne_q0_reaching_low_mass_is_refused(ssp_data_fsps):
-    """Review reproducer, McCheyne side: the mass term raises q at low M*."""
-    with pytest.raises(ConfigError, match=r"radio_mcch_q0=3, log M\* = .*q_\* = "):
+def test_mccheyne_q0_above_the_limit_is_refused_at_the_domain_edge(ssp_data_fsps):
+    """McCheyne is held at z = 0.4 and M* = 10^10.45 outside its domain, so the worst corner
+    is q0 (1.4)^0.02 at the domain edge. q0 = 3.5 is above q* = 3.4175 (150 MHz) there."""
+    with pytest.raises(ConfigError, match=r"radio_mcch_q0=3\.5, log M\* = .*q_\* = "):
         _build_radio_box(
             ssp_data_fsps,
             "mccheyne2022",
-            sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.0)},
+            sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.5)},
             log_total_mass=tengri.Uniform(8.0, 12.5),
         )
+
+
+def test_mccheyne_low_mass_and_high_z_are_held_so_the_declared_box_builds(ssp_data_fsps):
+    """Positive control: the held worst corner (q0 3.0 at z = 0.4, M* = 10^10.45) is below q*."""
+    _build_radio_box(
+        ssp_data_fsps,
+        "mccheyne2022",
+        sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.0)},
+        log_total_mass=tengri.Uniform(8.0, 12.5),
+        z=tengri.Uniform(0.0, 20.0),
+    )
 
 
 def test_delvecchio_q0_with_a_galaxy_mass_box_above_the_fit_builds(ssp_data_fsps):
@@ -294,3 +319,163 @@ def test_no_built_corner_of_the_box_has_negative_sed_radio(ssp_data_fsps, mode, 
                     f"min sed_radio {sed[band].min():.3e}"
                 )
     assert built >= 1
+
+
+# ---- domain hold: the relations are held at the calibrated edges, never extrapolated ---------
+
+_WAVE_1P4 = jnp.array([_C_AA / 1.4e9])
+_WAVE_150MHZ = jnp.array([_C_AA / 1.5e8])
+_L_IR = 1.0e44  # erg/s
+
+
+def _delv_L(log_mstar, z):
+    from tengri.components.radio import radio_sfr_delvecchio2021
+
+    return float(
+        radio_sfr_delvecchio2021(
+            _WAVE_1P4, _L_IR, log_mstar=log_mstar, redshift=z, apply_suppression=False
+        )[0]
+    )
+
+
+def _mcch_L(log_mstar, z):
+    from tengri.components.radio import radio_sfr_mccheyne2022
+
+    return float(
+        radio_sfr_mccheyne2022(
+            _WAVE_150MHZ, _L_IR, log_mstar=log_mstar, redshift=z, apply_suppression=False
+        )[0]
+    )
+
+
+@pytest.mark.parametrize("logm", [6.5, 7.0, 7.9])
+def test_delvecchio_below_the_mass_domain_is_held_at_log_mstar_8(logm):
+    """Below 10^8 the relation is held at the sample edge (q independent of M* there)."""
+    assert _delv_L(logm, 1.0) == pytest.approx(_delv_L(8.0, 1.0), rel=1e-12)
+
+
+@pytest.mark.parametrize("z", [0.0, 0.05, 5.0, 20.0])
+def test_delvecchio_outside_the_redshift_domain_is_held_at_the_edge(z):
+    """Outside 0.1 < z < 4.5 the relation is held at the nearest redshift edge."""
+    edge = 0.1 if z < 0.1 else 4.5
+    assert _delv_L(10.0, z) == pytest.approx(_delv_L(10.0, edge), rel=1e-12)
+
+
+@pytest.mark.parametrize("logm", [9.0, 10.0, 10.45])
+def test_mccheyne_below_the_mass_domain_is_held_at_10_45(logm):
+    assert _mcch_L(logm, 0.2) == pytest.approx(_mcch_L(10.45, 0.2), rel=1e-12)
+
+
+@pytest.mark.parametrize("z", [0.5, 1.0, 20.0])
+def test_mccheyne_above_the_redshift_domain_is_held_at_0_4(z):
+    assert _mcch_L(11.0, z) == pytest.approx(_mcch_L(11.0, 0.4), rel=1e-12)
+
+
+@pytest.mark.parametrize("logm,z", [(9.0, 1.0), (10.5, 2.0), (11.5, 0.3)])
+def test_inside_the_domain_the_delvecchio_total_is_the_paper_eq5(logm, z):
+    """Inside the domain the total is L_IR / (3.75e12 10^q) with Eq. 5 q, unchanged."""
+    q = 2.646 * (1.0 + z) ** (-0.023) - 0.148 * (logm - 10.0)
+    assert _delv_L(logm, z) == pytest.approx(_L_IR / (3.75e12 * 10.0**q), rel=1e-9)
+
+
+@pytest.mark.parametrize("logm,z", [(10.8, 0.1), (11.2, 0.3), (12.0, 0.4)])
+def test_inside_the_domain_the_mccheyne_total_is_the_joint_fit(logm, z):
+    q = 1.98 * (1.0 + z) ** 0.02 - 0.22 * (logm - 10.45)
+    assert _mcch_L(logm, z) == pytest.approx(_L_IR / (3.75e12 * 10.0**q), rel=1e-9)
+
+
+@pytest.mark.parametrize("log_mstar,z", [(7.0, 0.0), (9.0, 1.0), (12.5, 5.0)])
+def test_delvecchio_gradient_is_finite_and_zero_outside_the_domain(log_mstar, z):
+    import jax
+
+    from tengri.components.radio import radio_sfr_delvecchio2021
+
+    def total(lm, zz):
+        return jnp.sum(
+            radio_sfr_delvecchio2021(
+                _WAVE_1P4, _L_IR, log_mstar=lm, redshift=zz, apply_suppression=False
+            )
+        )
+
+    g_m, g_z = jax.grad(total, argnums=(0, 1))(jnp.asarray(log_mstar), jnp.asarray(z))
+    assert np.isfinite(float(g_m)) and np.isfinite(float(g_z))
+    if log_mstar < 8.0 or log_mstar > 12.0:
+        assert float(g_m) == 0.0
+    if z < 0.1 or z > 4.5:
+        assert float(g_z) == 0.0
+
+
+@pytest.mark.parametrize("log_mstar,z", [(7.0, 0.0), (10.0, 0.2), (11.0, 1.0)])
+def test_mccheyne_gradient_is_finite_and_zero_outside_the_domain(log_mstar, z):
+    import jax
+
+    from tengri.components.radio import radio_sfr_mccheyne2022
+
+    def total(lm, zz):
+        return jnp.sum(
+            radio_sfr_mccheyne2022(
+                _WAVE_150MHZ, _L_IR, log_mstar=lm, redshift=zz, apply_suppression=False
+            )
+        )
+
+    g_m, g_z = jax.grad(total, argnums=(0, 1))(jnp.asarray(log_mstar), jnp.asarray(z))
+    assert np.isfinite(float(g_m)) and np.isfinite(float(g_z))
+    if log_mstar < 10.45:
+        assert float(g_m) == 0.0
+    if z > 0.4:
+        assert float(g_z) == 0.0
+
+
+def test_delvecchio_warns_when_the_declared_support_leaves_its_domain(ssp_data_fsps):
+    """A formed-mass prior below 10^8 is held at the edge and announced at build."""
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _build_radio_box(
+            ssp_data_fsps,
+            "delvecchio2021",
+            sf={"radio_delv_q0": tengri.Fixed(2.646)},
+            log_total_mass=tengri.Uniform(7.5, 12.0),
+            z=tengri.Fixed(1.0),
+        )
+    msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+    assert any("held at the sample edge" in m and "log M* down to" in m for m in msgs), msgs
+
+
+def test_mccheyne_warns_when_the_redshift_support_leaves_its_domain(ssp_data_fsps):
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _build_radio_box(
+            ssp_data_fsps,
+            "mccheyne2022",
+            sf={"radio_mcch_q0": tengri.Fixed(1.98)},
+            log_total_mass=tengri.Fixed(11.0),
+            z=tengri.Uniform(0.0, 1.0),
+        )
+    msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+    assert any("held at the sample edge" in m and "z up to 1" in m for m in msgs), msgs
+
+
+def test_no_domain_warning_inside_the_calibrated_domain(ssp_data_fsps):
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _build_radio_box(
+            ssp_data_fsps,
+            "delvecchio2021",
+            sf={"radio_delv_q0": tengri.Fixed(2.646)},
+            log_total_mass=tengri.Uniform(9.0, 11.5),
+            z=tengri.Fixed(1.0),
+        )
+        _build_radio_box(
+            ssp_data_fsps,
+            "mccheyne2022",
+            sf={"radio_mcch_q0": tengri.Fixed(1.98)},
+            log_total_mass=tengri.Uniform(10.8, 11.5),
+            z=tengri.Fixed(0.2),
+        )
+    assert not [w for w in caught if "held at the sample edge" in str(w.message)]
