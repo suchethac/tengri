@@ -141,7 +141,7 @@ class TestBug361C_cb19_per_line_variation:
             neb_logU=-3.0,
             neb_logZ_gas=-1.7,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
         )
         # At least half the 10 emission lines should produce a unique
         # luminosity. ([N II] 6548 ≈ [O I] 6300 in the synthetic by
@@ -167,7 +167,7 @@ class TestBug361C_cb19_per_line_variation:
             neb_logU=-3.0,
             neb_logZ_gas=-1.7,
             neb_fesc=0.0,
-            neb_fesc_lya=0.0,
+            neb_fesc_lya=1.0,
         )
         # Hα = 6564.61, Hβ = 4862.68 (vacuum)
         i_ha = int(jnp.argmin(jnp.abs(waves - 6564.61)))

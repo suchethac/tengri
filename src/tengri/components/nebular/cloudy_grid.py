@@ -751,7 +751,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
@@ -772,7 +772,7 @@ class CloudyGridBackend:
         absolute (f_esc, f_dust) shares derived from (neb_fesc,
         neb_fdust_frac) via lyc_shares (#2436).
         Ly-alpha (1215.67 A) is treated separately: after k_factor scaling,
-        its luminosity is additionally multiplied by (1 - neb_fesc_lya) to
+        its luminosity is additionally multiplied by neb_fesc_lya to
         account for resonant scattering that suppresses Ly-alpha escape
         independently of the general ionizing photon and dust budget.
 
@@ -867,7 +867,7 @@ class CloudyGridBackend:
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
         # Apply differential Ly-alpha escape fraction via the shared helper.
-        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        # This multiplies Lyα by neb_fesc_lya after k_factor was already applied.
         total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
@@ -991,7 +991,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
@@ -1088,7 +1088,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,

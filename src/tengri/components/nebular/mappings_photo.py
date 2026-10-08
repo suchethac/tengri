@@ -552,7 +552,7 @@ class MappingsPhotoStellarBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute emission line luminosities from MAPPINGS V stellar grid.
@@ -653,7 +653,7 @@ class MappingsPhotoStellarBackend:
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
         # Apply differential Ly-alpha escape via the shared helper. This multiplies
-        # Lyα by (1 - neb_fesc_lya) after the general escape factor was already applied.
+        # Lyα by neb_fesc_lya after the general escape factor was already applied.
         total_line_lum = apply_lya_escape(total_line_lum, grid.line_wavelengths, neb_fesc_lya)
 
         return grid.line_wavelengths, total_line_lum
@@ -820,7 +820,7 @@ class MappingsPhotoStellarBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 2.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,
@@ -1111,7 +1111,7 @@ class MappingsPhotoAGNBackend:
         neb_logZ_gas: float | None = None,
         neb_logn: float = 3.0,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         **_kwargs,

@@ -149,7 +149,7 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
             "all_params": tengri.Fixed(tengri.DEFAULT),
             "neb_logU": -2.5,
             "neb_fesc": 0.0,
-            "neb_fesc_lya": 0.0,
+            "neb_fesc_lya": 1.0,
         },
         redshift=tengri.Fixed(0.0),
     )

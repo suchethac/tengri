@@ -248,15 +248,15 @@ class TestCB19BackendMocked:
         np.testing.assert_allclose(np.array(lums), 0.0, atol=1e-30)
 
     def test_fesc_lya_only_suppresses_lya(self, backend_with_fake_grid):
-        """neb_fesc_lya=1.0 with neb_fesc=0.0 suppresses Ly-alpha only."""
+        """neb_fesc_lya=0.0 with neb_fesc=0.0 suppresses Ly-alpha only."""
         backend = backend_with_fake_grid
         ssp_weights = jnp.ones(3)
         ssp_log_ages = jnp.array([7.0, 7.5, 8.0])
         waves, lums_nofesc = backend.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages, log_z=-1.848, neb_fesc=0.0, neb_fesc_lya=0.0
+            ssp_weights, ssp_log_ages, log_z=-1.848, neb_fesc=0.0, neb_fesc_lya=1.0
         )
         _, lums_lya_fesc = backend.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages, log_z=-1.848, neb_fesc=0.0, neb_fesc_lya=1.0
+            ssp_weights, ssp_log_ages, log_z=-1.848, neb_fesc=0.0, neb_fesc_lya=0.0
         )
         lya_idx = int(jnp.argmin(jnp.abs(waves - 1215.67)))
         # Ly-alpha should be zeroed
@@ -1049,7 +1049,7 @@ class TestHbFracWiring:
             "neb_logU": -3.0,
             "neb_logZ_gas": 0.0,
             "neb_fesc": 0.0,
-            "neb_fesc_lya": 0.0,
+            "neb_fesc_lya": 1.0,
             "neb_fdust_frac": 0.0,
             "neb_log_nH": 2.0,
             "neb_co": -0.36,
