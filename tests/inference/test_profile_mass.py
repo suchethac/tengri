@@ -281,13 +281,14 @@ class TestGuards:
 
         Issue #2359: the refusal message previously hardcoded 'photometry' regardless
         of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
-        blamed an AGN continuum even when the stochastic SFH was the real cause. The
-        measured deviations do not distinguish the two: O(1) for a mass-independent
-        component, O(1e-5) for the coarse age kernel. The alternative cause is the coarse
-        age kernel (age_kernel="dsps"), measured to cost roughly 1e-5 of mass-linearity.
-        The probe evaluates only one parameter set (every other free parameter at its prior
-        median, stochastic field latents at zero), so the message must say so and present
-        both causes rather than naming one confidently.
+        blamed an AGN continuum even when the stochastic SFH was the real cause.
+
+        It also used to offer the coarse histogram age kernel (age_kernel="dsps") as the
+        alternative cause, measured then at roughly 1e-5 of mass-linearity. Since #2683
+        both kernel names select one cloud-in-cell integration whose normalized weights are
+        scaled by the formed mass, so the age integral is proportional to round-off
+        (1e-13 measured, either name): the message must rule the age integration out
+        rather than send the reader to a kernel that no longer differs.
         """
         model = _agn_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
@@ -311,9 +312,15 @@ class TestGuards:
             f"reason contains old hardcoded blame phrase: {reason}"
         )
 
-        # 3. The reason must mention BOTH candidate causes: AGN continuum and age kernel.
+        # 3. The reason names the additive component this model carries, and rules the
+        #    age integration out as a cause instead of blaming a kernel choice (#2683).
         assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
-        assert "dsps" in reason, f"reason does not mention the coarse age kernel (dsps): {reason}"
+        assert "age integration is not a candidate cause" in reason, (
+            f"reason does not rule out the age integration: {reason}"
+        )
+        assert "dsps" not in reason and "coarse age kernel" not in reason, (
+            f"reason still blames an age-kernel choice, which no longer differs: {reason}"
+        )
 
         # 4. The reason must still report the measured number and tolerance.
         assert "max|ratio(+1 dex) - 10|" in reason, (
