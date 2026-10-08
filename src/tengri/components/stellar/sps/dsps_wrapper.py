@@ -27,6 +27,7 @@ from jax import dtypes as jax_dtypes
 
 from tengri._cache_keys import KeyPolicy, baked, content
 from tengri._x64_hold import hold_x64_preference
+from tengri.config.exceptions import SSPMassRemainingFallbackWarning
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -689,7 +690,18 @@ def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPDa
                     dtype=dtype if dtype is not None else jnp.result_type(float),
                 )
             else:
-                # Fall back to DSPS sigmoid (metallicity-independent)
+                import warnings
+
+                # Fall back to DSPS sigmoid (metallicity-independent). Said out
+                # loud: the grid's own surviving mass is absent (#2751).
+                warnings.warn(
+                    f"SSP grid {fp.name!r} has no ssp_mass_remaining table and no "
+                    "reference table matches it; the surviving-mass fraction falls "
+                    "back to the metallicity-independent DSPS Chabrier sigmoid fit "
+                    "to FSPS, not the library's own stellar mass loss.",
+                    SSPMassRemainingFallbackWarning,
+                    stacklevel=2,
+                )
                 mass_remaining = _synthesize_mass_remaining(
                     filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
                 )
