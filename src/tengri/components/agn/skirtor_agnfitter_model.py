@@ -38,6 +38,7 @@ from tengri.components.agn.skirtor_agnfitter import create_skirtor_agnfitter_fro
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
+from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["SKIRTORAgnfitterTorus"]
 
@@ -295,11 +296,11 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
             agn_torus_frac=p["torus_frac"],
         )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_torus = bolometric_integral_nu(sed_torus, nu)
+        # Published bolometric torus luminosity, the closed form of the template
+        # normalization: the shape is divided by its integral over its own native
+        # grid and multiplied by l_scale = 10^log_lbol L_sun * torus_frac, so the
+        # integral over any caller grid would only re-sample that same value.
+        L_torus = 10.0 ** p["log_lbol"] * _L_SUN * p["torus_frac"]
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_torus

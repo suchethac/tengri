@@ -25,11 +25,13 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
+from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["SKIRTORTorus"]
 
@@ -65,6 +67,14 @@ _POLAR_BETA_PRIOR = declared_prior(_AGN_PARAMS, "agn_polar_beta")
 #: FAVOR of agn_band_frac, the name with exactly one consumer: this class).
 _TORUS_FRAC_PRIOR = declared_prior(_AGN_PARAMS, "agn_torus_frac")
 _DELTA_PRIOR = declared_prior(_AGN_PARAMS, "agn_delta")
+
+#: Fixed wavelength grid [Angstrom] on which the disc chain's integrals and point
+#: diagnostics are taken, so published luminosities never depend on the caller's
+#: wave. Spans the SKIRTOR template support (10 A - 1e8 A) and contains the 2500 A,
+#: 6 um and 12 um nodes exactly.
+_PUBLICATION_WAVE = np.unique(
+    np.concatenate([np.geomspace(10.0, 1.0e8, 4000), [2500.0, 6.0e4, 1.2e5]])
+)
 
 
 @dataclass(frozen=True)
@@ -457,95 +467,91 @@ class SKIRTORTorus(SEDModelComponent):
 
         skirtor_fn = self.data
 
-        # Call SKIRTOR interpolator to get separate components
-        components = skirtor_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_tau_skirtor=p["tau_skirtor"],
-            agn_p_skirtor=p["p_skirtor"],
-            agn_q_skirtor=p["q_skirtor"],
-            agn_oa_skirtor=p["oa_skirtor"],
-            agn_radius_ratio=p["radius_ratio"],
-            agn_cos_inc=p["cos_inc"],
-            frac_agn=p["torus_frac"],
-        )
+        def _components(wave_eval):
+            return skirtor_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=p["log_lbol"],
+                agn_tau_skirtor=p["tau_skirtor"],
+                agn_p_skirtor=p["p_skirtor"],
+                agn_q_skirtor=p["q_skirtor"],
+                agn_oa_skirtor=p["oa_skirtor"],
+                agn_radius_ratio=p["radius_ratio"],
+                agn_cos_inc=p["cos_inc"],
+                frac_agn=p["torus_frac"],
+            )
 
-        # Unpack components
-        sed_disc_template = components.disk
-        sed_torus_dust = components.dust
-
-        # Compute derived quantities from disc
-        nu = wavelength_to_nu(wave)
-
-        # L_agn_disc: bolometric luminosity of the intrinsic disc. Preserved
-        # across the disc-shape selection below so frac_agn / energy balance is
-        # unaffected by disk_type / delta (only the SED *shape* changes).
-        L_agn_disc = bolometric_integral_nu(sed_disc_template, nu)
-
-        # --- CIGALE disc-shape selection (skirtor2016.py:324-339) -----------
-        # CIGALE builds the disc analytically and selects its shape via
-        # ``disk_type`` and re-tilts it via ``delta``. tengri's grid carries the
-        # SKIRTOR *intrinsic* disc, so we re-tilt the tabulated disc by the
-        # ratio  (selected analytic disc) / (SKIRTOR analytic disc, delta=0).
-        # At disk_type=0, delta=0 this ratio is identically 1 -> the tabulated
-        # disc is reproduced bit-for-bit. The disc bolometric luminosity is then
-        # restored to L_agn_disc so only the spectral shape is modified.
-        #
-        # ``disk_type`` is a STATIC structural choice (resolved at trace time, no
-        # branch on a traced value); ``delta`` is a differentiable free param.
+        # CIGALE disc-shape selection (skirtor2016.py:324-339) -- the tabulated
+        # SKIRTOR disc is re-tilted by (selected analytic disc) / (SKIRTOR analytic
+        # disc, delta=0). The ratio is 1 at disk_type=0, delta=0. ``disk_type`` is a
+        # STATIC structural choice; ``delta`` is a differentiable free param.
         disk_type = int(self.config.disk_type)  # static
         delta = p["delta"]
-        wave_nm = wave / 10.0  # disc_cigale functions take nm
-        if disk_type == 0:
-            shape_sel = skirtor_disk_spectrum(wave_nm, delta=delta)
-        elif disk_type == 1:
-            shape_sel = schartmann2005_disk_spectrum(wave_nm, delta=delta)
-        elif disk_type == 2:
-            shape_sel = adaf_disk_spectrum(wave_nm, delta=delta)
-        else:
-            raise ValueError(
-                f"disk_type must be 0 (SKIRTOR), 1 (Schartmann2005), or 2 "
-                f"(ADAF/Lopez24); got {disk_type!r}."
-            )
-        shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
-        # Re-tilt factor (unit-area / lambda-vs-nu normalizations cancel in the
-        # ratio). Floor the denominator to stay finite where the disc is ~0.
-        retilt = shape_sel / jnp.maximum(shape_ref, representable_denominator(1e-100))
-        sed_disc = sed_disc_template * retilt
-        # Restore the disc bolometric luminosity (shape-only change).
-        L_retilt_safe = bolometric_integral_nu(sed_disc, nu, floor=1e-100)
-        sed_disc = sed_disc * (L_agn_disc / L_retilt_safe)
 
-        # L_2500_30deg: specific luminosity at 2500 Å (for α_OX)
-        L_2500 = jnp.interp(2500.0, wave, sed_disc)
+        def _retilt(wave_eval):
+            wave_nm = wave_eval / 10.0  # disc_cigale functions take nm
+            if disk_type == 0:
+                shape_sel = skirtor_disk_spectrum(wave_nm, delta=delta)
+            elif disk_type == 1:
+                shape_sel = schartmann2005_disk_spectrum(wave_nm, delta=delta)
+            elif disk_type == 2:
+                shape_sel = adaf_disk_spectrum(wave_nm, delta=delta)
+            else:
+                raise ValueError(
+                    f"disk_type must be 0 (SKIRTOR), 1 (Schartmann2005), or 2 "
+                    f"(ADAF/Lopez24); got {disk_type!r}."
+                )
+            shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
+            # Floor the denominator to stay finite where the disc is ~0.
+            return shape_sel / jnp.maximum(shape_ref, representable_denominator(1e-100))
 
-        # L_6um and L_12um: mid-IR diagnostics
-        L_6um = jnp.interp(60000.0, wave, sed_disc + sed_torus_dust)  # 6 um = 60000 A
-        L_12um = jnp.interp(120000.0, wave, sed_disc + sed_torus_dust)  # 12 um = 120000 A
+        # Each template is normalized on its own native grid to l_scale (see
+        # ``_interpolate_and_normalize``), so the disc and torus-dust bolometric
+        # luminosities are the closed form l_scale = 10^log_lbol L_sun * torus_frac.
+        l_scale = 10.0 ** p["log_lbol"] * _L_SUN * p["torus_frac"]
+        L_agn_disc = l_scale
+        L_agn_torus = l_scale
 
-        # L_agn_torus: bolometric torus dust luminosity
-        L_agn_torus = bolometric_integral_nu(sed_torus_dust, nu)
+        # Every integral and every point diagnostic of the disc chain is taken on the
+        # fixed publication grid, never on the caller's ``wave``: the caller's SED is
+        # then the same function of wavelength on any grid, and so are the published
+        # values. The re-tilt keeps the disc bolometric at L_agn_disc (shape-only change).
+        wave_pub = jnp.asarray(_PUBLICATION_WAVE, dtype=wave.dtype)
+        nu_pub = wavelength_to_nu(wave_pub)
+        comp_pub = _components(wave_pub)
+        sed_disc_pub_raw = comp_pub.disk * _retilt(wave_pub)
+        L_retilt_pub = bolometric_integral_nu(sed_disc_pub_raw, nu_pub, floor=1e-100)
+        disc_renorm = L_agn_disc / L_retilt_pub
+        sed_disc_pub = sed_disc_pub_raw * disc_renorm
+        dust_pub = comp_pub.dust
 
-        # Apply polar dust (Type 1 only): extinction of disc, reemission
-        sed_disc_polar, l_abs = polar_dust_extinction(
-            sed_disc,
-            wave,
-            p["cos_inc"],
-            p["oa_skirtor"],
-            p["polar_ebv"],
-            law="smc",
-        )
+        # Caller-grid SED: pointwise in wavelength, scaled by the publication-grid factor.
+        comp_caller = _components(wave)
+        sed_disc = comp_caller.disk * _retilt(wave) * disc_renorm
+        sed_torus_dust = comp_caller.dust
+
+        # Polar dust (Type 1 only): the absorbed luminosity is integrated on the
+        # publication grid; the caller-grid disc is extincted pointwise, and its
+        # graybody re-emission is normalized to that publication-grid absorbed power.
+        polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
+        _, l_abs_pub = polar_dust_extinction(sed_disc_pub, wave_pub, *polar_args, law="smc")
+        L_agn_polar_dust = bolometric_integral_nu(l_abs_pub, nu_pub)
+        sed_disc_polar, _ = polar_dust_extinction(sed_disc, wave, *polar_args, law="smc")
         sed_polar_reemit = polar_dust_emission(
-            bolometric_integral_nu(l_abs, nu),
+            L_agn_polar_dust,
             wave,
             temperature=p["polar_T"],
             beta=p["polar_beta"],
             lambda_0=2e6,
         )
-        L_agn_polar_dust = bolometric_integral_nu(sed_polar_reemit, nu)
 
         # Total SED: attenuated disc + torus + polar reemission
         sed_out = sed_in + sed_disc_polar + sed_torus_dust + sed_polar_reemit
+
+        # Point diagnostics at 2500 A, 6 um and 12 um: each is a node of the
+        # publication grid, so the value is the node value (no interpolation).
+        L_2500 = jnp.interp(2500.0, wave_pub, sed_disc_pub)
+        L_6um = jnp.interp(60000.0, wave_pub, sed_disc_pub + dust_pub)  # 6 um = 60000 A
+        L_12um = jnp.interp(120000.0, wave_pub, sed_disc_pub + dust_pub)  # 12 um = 120000 A
 
         published = {
             "L_agn_disc": L_agn_disc,

@@ -30,6 +30,7 @@ from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
+from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["KD18Disc"]
 
@@ -312,11 +313,9 @@ class KD18Disc(SEDModelComponent):
             agn_self_consistent_gamma=self.config.self_consistent_gamma,
         )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_disc = bolometric_integral_nu(sed_disc, nu)
+        # Published bolometric disc luminosity, the closed form the disc is
+        # normalized to: L_bol * agn_lum_ratio, independent of the caller's grid.
+        L_disc = 10.0 ** p["log_lbol"] * _L_SUN * p["frac"]
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_disc

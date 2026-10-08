@@ -214,3 +214,122 @@ def test_truncated_grid_matches_fine_grid(case):
     wave, idx = _grid(lo, hi, 450, case["probes"])
     err = _max_rel(_eval(case["fn"], wave, idx), case["fine"])
     assert err < _RTOL, f"{case['name']}: truncated-vs-fine max rel diff {err:.3e}"
+
+
+# -- published L_* diagnostics (#2745) -------------------------------------------------
+#
+# The ``outputs`` a component publishes are part of its physics: a published
+# bolometric luminosity is an integral over the component's own support, not over
+# whatever wavelength array the caller passed. Each published key is evaluated on
+# three grids and must agree to the same 1e-6 as the SED tests above.
+
+_PUB_DENSE = np.geomspace(10.0, 1.0e7, 4000)  # 10 A - 1 mm, dense log grid
+_PUB_COARSE = np.geomspace(10.0, 1.0e7, 40)  # 40-point grid
+# Filter-effective-wavelength-like grid, 12 points [A].
+_PUB_FILTERS = np.array(
+    [
+        *(1528.0, 2271.0, 3551.0, 4686.0, 6166.0, 7480.0, 8932.0, 12350.0, 16620.0, 21590.0),
+        33526.0,
+        46028.0,
+    ]
+)
+_PUB_GRIDS = (_PUB_DENSE, _PUB_COARSE, _PUB_FILTERS)
+
+
+def _data_file(name):
+    from tengri._data_setup import find_data
+
+    found = find_data(name)
+    if found is None:
+        pytest.skip(f"template data unavailable ({name})")
+    return str(found)
+
+
+def _component_publisher(module, cls_name, cfg_name, key, grid_file=None):
+    """Return ``fn(wave) -> published[key]`` for one SEDModelComponent class."""
+    import importlib
+
+    mod = importlib.import_module(f"tengri.components.agn.{module}")
+    cls = getattr(mod, cls_name)
+    cfg_cls = getattr(mod, cfg_name)
+    kwargs = {} if grid_file is None else {"grid_path": _data_file(grid_file)}
+    comp = cls(config=cfg_cls(**kwargs))
+    # Frozen dataclasses refuse plain assignment; the pipeline stores ``data`` the same way.
+    object.__setattr__(comp, "data", comp.load(jnp.asarray(_PUB_DENSE)))
+    prefix = comp.parameter_prefix
+    params = {
+        (decl.name[len(prefix) :] if decl.name.startswith(prefix) else decl.name): jnp.asarray(
+            decl.prior.default, dtype=jnp.float64
+        )
+        for decl in comp.declared_parameters()
+    }
+
+    # The pipeline hands the disc block its luminosity fraction as ``frac``.
+    if "lum_ratio" in params:
+        params["frac"] = params.pop("lum_ratio")
+
+    def fn(wave):
+        wave = jnp.asarray(wave)
+        _, published = comp.predict(params, jnp.zeros_like(wave), wave)
+        return float(published[key])
+
+    return fn
+
+
+_SKIRTOR = ("skirtor_model", "SKIRTORTorus", "SKIRTORTorusConfig")
+_PUBLISHED_CASES = {
+    "silva04_torus.L_agn_torus": (
+        "silva04_model",
+        "Silva04Torus",
+        "Silva04TorusConfig",
+        "L_agn_torus",
+        "silva04_torus_grid.h5",
+    ),
+    "cat3d_torus.L_agn_torus": (
+        "cat3d_torus_model",
+        "CAT3DTorus",
+        "CAT3DTorusConfig",
+        "L_agn_torus",
+        "cat3d_wind_torus_grid.h5",
+    ),
+    "skirtor_agnfitter_torus.L_agn_torus": (
+        "skirtor_agnfitter_model",
+        "SKIRTORAgnfitterTorus",
+        "SKIRTORAgnfitterTorusConfig",
+        "L_agn_torus",
+        "skirtor_mean3p_torus_grid.h5",
+    ),
+    "powerlaw_disc.L_agn_disc": (
+        "powerlaw_disc_model",
+        "PowerLawDisc",
+        "PowerLawDiscConfig",
+        "L_agn_disc",
+        None,
+    ),
+    "kd18_disc.L_agn_disc": ("kd18_disc_model", "KD18Disc", "KD18DiscConfig", "L_agn_disc", None),
+    "skirtor.L_agn_disc": (*_SKIRTOR, "L_agn_disc", "skirtor_templates_v3.h5"),
+    "skirtor.L_agn_torus": (*_SKIRTOR, "L_agn_torus", "skirtor_templates_v3.h5"),
+    "skirtor.L_agn_polar_dust": (*_SKIRTOR, "L_agn_polar_dust", "skirtor_templates_v3.h5"),
+    "skirtor.L_2500_30deg": (*_SKIRTOR, "L_2500_30deg", "skirtor_templates_v3.h5"),
+    "skirtor.L_6um": (*_SKIRTOR, "L_6um", "skirtor_templates_v3.h5"),
+    "skirtor.L_12um": (*_SKIRTOR, "L_12um", "skirtor_templates_v3.h5"),
+}
+
+
+@pytest.fixture(scope="module", params=sorted(_PUBLISHED_CASES))
+def published_case(request):
+    try:
+        fn = _component_publisher(*_PUBLISHED_CASES[request.param])
+    except (FileNotFoundError, ImportError, OSError) as err:
+        pytest.skip(f"{request.param}: template data unavailable ({err})")
+    return {"name": request.param, "values": [fn(grid) for grid in _PUB_GRIDS]}
+
+
+def test_published_luminosity_independent_of_caller_grid(published_case):
+    """Dense, 40-point and filter-wavelength grids publish the same L_* to 1e-6."""
+    ref, *others = published_case["values"]
+    name = published_case["name"]
+    assert np.isfinite(ref) and ref > 0.0, f"{name}: dense-grid value {ref}"
+    for label, val in zip(("coarse-40", "filter-12"), others, strict=True):
+        err = abs(val / ref - 1.0)
+        assert err < _RTOL, f"{name} {label}: rel diff {err:.3e} (dense {ref:.6e})"
