@@ -2,6 +2,8 @@
 
 ### Changed
 
+- **`rest_uv_color` is declared as what it computes (#2611).** The value is the AB U-V color between rectangular top-hats, 3200–3900 Å minus 5000–5800 Å, on rest-frame L_nu. The catalog, accessors and docs said FUV−NUV or f_1500 − f_2300. No number changes. A rest-frame UVJ from filter curves is not part of this change.
+
 - **NUTS records the metric that ran (#2484).** `posterior.diagnostics["mass_matrix"]` is `"dense"` or `"diag"`. A `dense_mass_matrix=True` request above D=30 still falls back to diagonal with its warning, and the record now says so.
 
 - **`neb_fesc_lya` means the escape fraction (#2607).** `apply_lya_escape` multiplied Lyα by `1 - neb_fesc_lya`, so the parameter named as an escape fraction was a suppression fraction. The code now multiplies Lyα by `neb_fesc_lya`, the declared default is 1 (no extra scaling), and the prior stays [0, 1]. The default output is unchanged. **Fitted values change meaning:** a stored `neb_fesc_lya = v` now means `1 - v` under the old convention, so any result that set or fitted `neb_fesc_lya` must be re-read as `1 - v`. ADR-0014 and the parity table are updated to match.

@@ -836,6 +836,10 @@ def compute_irx(
 def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Rest-frame U-V color from rectangular band approximations.
 
+    Definition: the AB color between two rectangular top-hats on the rest-frame
+    :math:`L_\\nu`, 3200–3900 Å (U) minus 5000–5800 Å (V). It is not FUV−NUV and
+    not f_1500 − f_2300.
+
     Uses approximate Johnson U (3200–3900 Å) and V (5000–5800 Å)
     bands. Sufficient for UVJ classification; for precision photometry
     use :meth:`~tengri.SEDModel.predict_magnitudes` with loaded

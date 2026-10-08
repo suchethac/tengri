@@ -4817,7 +4817,7 @@ def _nuv_flux_intrinsic_fn(state, params):
 
 
 def _rest_uv_color_fn(state, params):
-    """Rest-frame UV color (FUV–NUV) [AB mag]."""
+    """Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å on L_nu."""
     from tengri.utils.sed_quantities import compute_rest_uv_color
 
     sed = state.sed_intrinsic
@@ -5052,7 +5052,7 @@ _SED_PROPERTIES = {
     "rest_uv_color": Property(
         units="AB mag",
         group="sed",
-        doc="Rest-frame UV color (FUV–NUV)",
+        doc="Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å",
         fn=_rest_uv_color_fn,
     ),
 }
