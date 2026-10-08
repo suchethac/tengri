@@ -207,6 +207,10 @@ SIGNATURE_POLICY: KeyPolicy = {
         "thermal free-free on/off changes the emitted radio SED; set by the grammar's "
         "radio.sf.freefree key and routed to RadioSEDComponentConfig.include_freefree"
     ),
+    "_radio_ir_window": content(
+        "IR band the radio L_IR is integrated over changes the emitted radio SED; set by the "
+        "grammar's radio.sf.ir_window key and routed to RadioSEDComponentConfig.ir_window"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),

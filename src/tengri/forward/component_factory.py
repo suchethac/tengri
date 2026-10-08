@@ -462,6 +462,7 @@ def build_components(
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
     radio_include_freefree: bool | None = None,
+    radio_ir_window: str = "total",
     xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
@@ -564,6 +565,11 @@ def build_components(
         applies only from the SSP grid edge upward
         (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
         always wins.
+    radio_ir_window : str
+        Rest-wavelength window of the dust-emission SED integrated to form the radio
+        block's ``L_IR``: ``"total"`` (default, the dust power as published), ``"tir"``
+        (8-1000 um) or ``"fir"`` (42.5-122.5 um). See
+        :class:`RadioSEDComponentConfig` (``ir_window``, #2763).
 
     Returns
     -------
@@ -851,6 +857,7 @@ def build_components(
                     # which is the non-thermal (CIGALE) reading of q (#2590).
                     q_is_total=radio_include_freefree is not False,
                     freefree_wave_min=freefree_wave_min,
+                    ir_window=radio_ir_window,
                 ),
             )
         )

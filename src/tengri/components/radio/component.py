@@ -112,6 +112,21 @@ SF_RADIO_MODELS: tuple[str, ...] = (
 )
 
 
+# Rest-wavelength windows [Angstrom] over which the dust-emission SED is
+# integrated to form the ``L_IR`` that the q-based star-formation models
+# calibrate against. ``"total"`` (default) is the dust power itself,
+# ``L_ir`` as the dust components publish it (CIGALE's convention, no band
+# integral). ``"tir"`` is the total infrared 8-1000 um of Bell (2003) and the
+# recent q_IR calibrations (Delvecchio et al. 2021). ``"fir"`` is the
+# 42.5-122.5 um far-infrared band of Helou et al. (1985).
+IR_WINDOWS_AA: dict[str, tuple[float, float] | None] = {
+    "total": None,
+    "tir": (8.0e4, 1.0e7),
+    "fir": (4.25e5, 1.225e6),
+}
+IR_WINDOWS: tuple[str, ...] = tuple(IR_WINDOWS_AA)
+
+
 @dataclass(frozen=True)
 class RadioSEDComponentConfig(SEDComponentConfig):
     r"""Frozen knobs for :class:`RadioSEDComponent`.
@@ -144,6 +159,16 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         the non-thermal term alone and the synchrotron carries all of it (CIGALE's
         convention). ``None`` (default) follows the resolved ``include_freefree``;
         the factory sets it ``False`` only for an explicit ``freefree: False``.
+    ir_window : str
+        Rest-wavelength window of the dust-emission SED that is integrated to
+        form the ``L_IR`` the q-based star-formation models (``"bell2003"``,
+        ``"bell2003_split"``, ``"delvecchio2021"``, ``"mccheyne2022"``) and the
+        thermal free-free term calibrate against. One of :data:`IR_WINDOWS`:
+        ``"total"`` (default) uses the dust power ``L_ir`` as published,
+        bit-identical to earlier releases; ``"tir"`` integrates 8-1000 um (Bell
+        2003); ``"fir"`` integrates 42.5-122.5 um (Helou et al. 1985). Any value
+        other than ``"total"`` reads ``sed_dust_ir`` (the dust-emission block)
+        and raises at evaluation when it is absent.
     agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS`:
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
@@ -183,12 +208,17 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     q_is_total: bool | None = None
     agn_radio_model: str = "powerlaw"
     freefree_wave_min: float | None = None
+    ir_window: str = "total"
 
     def __post_init__(self) -> None:
         if self.agn_radio_model not in AGN_RADIO_MODELS:
             raise ValueError(
                 f"Unknown agn_radio_model {self.agn_radio_model!r}. "
                 f"Choose one of {AGN_RADIO_MODELS}."
+            )
+        if self.ir_window not in IR_WINDOWS:
+            raise ValueError(
+                f"Unknown ir_window {self.ir_window!r}. Choose one of {IR_WINDOWS}."
             )
         # ``sfr_mode`` went unchecked here while its AGN sibling was validated.
         # A typo did still raise, but only later and further away: inside
@@ -367,7 +397,9 @@ class RadioSEDComponent(TemplateThreading):
         },
     )
 
-    def emitter_inputs(self, derived: Mapping[str, Any]) -> dict[str, jnp.ndarray]:
+    def emitter_inputs(
+        self, derived: Mapping[str, Any], wave: jnp.ndarray | None = None
+    ) -> dict[str, jnp.ndarray]:
         """Read this emitter's cross-component scalars off the derived state.
 
         Parameters
@@ -375,6 +407,9 @@ class RadioSEDComponent(TemplateThreading):
         derived : mapping
             ``state.derived``. Missing keys take the documented fallbacks, a model
             with no dust block publishes no ``L_ir``, and radio must still build.
+        wave : array_like, optional
+            Rest wavelength grid [Angstrom] of ``derived["sed_dust_ir"]``. Required
+            when ``config.ir_window`` is not ``"total"``, ignored otherwise.
 
         Returns
         -------
@@ -395,10 +430,45 @@ class RadioSEDComponent(TemplateThreading):
         log_L_ir = derived.get("log_L_ir")
         if log_L_ir is not None:
             inputs["log_L_ir"] = jnp.asarray(log_L_ir)
+        if self.config.ir_window != "total":
+            inputs.update(self._windowed_l_ir(derived, wave))
         log_L_agn_bol = derived.get("log_L_agn_bol")
         if log_L_agn_bol is not None:
             inputs["log_L_agn_bol"] = jnp.asarray(log_L_agn_bol)
         return inputs
+
+    def _windowed_l_ir(
+        self, derived: Mapping[str, Any], wave: jnp.ndarray | None
+    ) -> dict[str, jnp.ndarray]:
+        r"""``L_ir`` / ``log_L_ir`` re-formed over ``config.ir_window``.
+
+        Integrates the dust-emission SED ``derived["sed_dust_ir"]`` over the window
+        (edge-exact, :func:`tengri.utils.sed_quantities.log10_band_luminosity`)
+        and returns it as the ``L_ir`` [erg/s] and ``log_L_ir`` [dex] the radio
+        kernels read, so every consumer of ``L_ir`` (the three SF calibrations,
+        the free-free term, the band-response amplitudes of the LUT path) sees
+        the same windowed luminosity. The log companion is always returned:
+        the linear value is ~1e43 erg/s and overflows float32.
+
+        Raises
+        ------
+        ConfigError
+            If ``sed_dust_ir`` or the wavelength grid is unavailable.
+        """
+        from tengri.config.exceptions import ConfigError
+        from tengri.utils.scale import pow10
+        from tengri.utils.sed_quantities import log10_band_luminosity
+
+        sed_ir = derived.get("sed_dust_ir")
+        if sed_ir is None or wave is None:
+            raise ConfigError(
+                f"radio: ir_window={self.config.ir_window!r} integrates the dust-emission "
+                "SED over that band, but no dust-emission block published 'sed_dust_ir'. "
+                "Add dust_emission, or leave ir_window at 'total'."
+            )
+        lo_aa, hi_aa = IR_WINDOWS_AA[self.config.ir_window]
+        log_l = log10_band_luminosity(jnp.asarray(sed_ir), jnp.asarray(wave), lo_aa, hi_aa)
+        return {"L_ir": pow10(log_l), "log_L_ir": log_l}
 
     def _window_freefree(
         self, terms: dict[str, jnp.ndarray], wave: jnp.ndarray
@@ -668,7 +738,7 @@ class RadioSEDComponent(TemplateThreading):
         # lives in RadioSEDComponentConfig.__post_init__.
         wave = state.wave
         z = jnp.asarray(require_redshift(params, "components.radio.component.apply"))
-        inputs = self.emitter_inputs(state.derived)
+        inputs = self.emitter_inputs(state.derived, wave)
 
         def _emit(w):
             t = self.emission_terms(params, w, **inputs)

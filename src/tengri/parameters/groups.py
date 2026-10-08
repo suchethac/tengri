@@ -5455,6 +5455,16 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                         f"radio['sf']['freefree'] must be bool, got {type(freefree_val).__name__}"
                     )
                 result["radio_include_freefree"] = freefree_val
+            # Optional 'ir_window' string key (#2763): the IR band L_IR is integrated over.
+            if "ir_window" in sf_dict:
+                from tengri.components.radio.component import IR_WINDOWS
+
+                ir_window_val = sf_dict["ir_window"]
+                if ir_window_val not in IR_WINDOWS:
+                    raise _unknown_name_error(
+                        "radio sf ir_window", ir_window_val, frozenset(IR_WINDOWS), keyword="ir_window"
+                    )
+                result["radio_ir_window"] = ir_window_val
         else:
             raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
 
@@ -5820,7 +5830,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params", "freefree"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
@@ -6042,7 +6052,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("norm", "agn_norm", "cigale_joint"),
         _Structural("polar_law", "agn_polar_law", "smc"),
     ),
-    "radio.sf": (_Structural("freefree", "radio_include_freefree", None),),
+    "radio.sf": (
+        _Structural("freefree", "radio_include_freefree", None),
+        _Structural("ir_window", "radio_ir_window", "total"),
+    ),
     "foreground": (
         # The MW screen declares no fitted parameters, so its group never
         # entered the per-group emit loop at all: see the no-parameter pass
