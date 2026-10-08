@@ -79,13 +79,13 @@ _ALPHA_SF_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_alpha_sf")
 # Declared default from _params.py: AGN radio loudness (radio-quiet default)
 _LOUDNESS_DEFAULT: float = declared_default(_RADIO_PARAMS, "radio_loudness")
 
-# Delvecchio+2021 and McCheyne+2022 each cite their OWN consensus spectral
-# index (Novak+2017 / SEMPER) rather than the registry default above -- a
-# single shared constant would silently overwrite one calibration's cited
-# value with the other's (round-2 fix, ruling R8, supersedes the blanket
-# "unify everyone to 0.8" reading of R2). Declared once each, not as bare
-# literals in the signatures below.
-_ALPHA_SF_DELVECCHIO2021: float = 0.7  # Novak+2017 consensus, SEMPER Eq. 4
+# Delvecchio+2021 and McCheyne+2022 each cite their OWN spectral index from
+# their own paper rather than the registry default above -- a single shared
+# constant would silently overwrite one calibration's cited value with the
+# other's. Declared once each, not as bare literals in the signatures below.
+# Delvecchio+2021 Sect. 3.3 and Appendix B.1: rest 1.4 GHz conversion with
+# alpha = -0.75 +/- 0.1 (sign: S ∝ nu^alpha, here S ∝ nu^-0.75)
+_ALPHA_SF_DELVECCHIO2021: float = 0.75
 _ALPHA_SF_MCCHEYNE2022: float = 0.60  # McCheyne+2022 Table 3: alpha_150^325 = -0.60, S ∝ nu^-0.60
 # Pivot of the McCheyne+2022 joint (redshift and mass) fit, Sect. 5.2 (log M* [Msun]).
 _LOG_MSTAR_PIVOT_MCCHEYNE2022: float = 10.45
@@ -511,7 +511,7 @@ def radio_sfr_delvecchio2021(
         rest 8-1000 um luminosity; the two agree to the 0.94-0.96 band fraction noted in
         :func:`radio_sfr_bell2003`.
     log_mstar : float
-        log10(M★ / M⊙). Fit sample: the M⋆-selected bins of the paper (about 9 to 12).
+        log10(M★ / M⊙). Fit sample: the M⋆-selected bins of the paper (8 to 12).
     redshift : float
         Galaxy redshift [dimensionless]. Fit sample: 0.1 < z < 4.5.
     q0 : float
@@ -522,7 +522,8 @@ def radio_sfr_delvecchio2021(
     z_slope : float
         Power-law exponent on (1+z) [dimensionless]. Default -0.023.
     alpha_sf : float
-        Synchrotron spectral index [dimensionless]. Default 0.7 (Novak+2017, SEMPER).
+        Synchrotron spectral index, S ∝ nu^-alpha [dimensionless]. Default 0.75, the
+        paper's alpha = -0.75 +/- 0.1 for the 1.4 GHz conversion (Delvecchio+2021 Sect. 3.3).
     nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz (calibration frequency).
     apply_suppression : bool
@@ -545,7 +546,8 @@ def radio_sfr_delvecchio2021(
     **JIT-compatible**: yes, pure JAX function.
 
     Approximation of the Delvecchio et al. (2021) Eq. 5 fit: the redshift dependence is
-    the power law the paper reports, valid over 0.1 < z < 4.5 and about 9 < log M* < 12.
+    the power law the paper reports, valid over 0.1 < z < 4.5 and 8 < log M* < 12 (the
+    paper's M*-selected sample).
     Outside that range the fit is an extrapolation. The fit is the AGN-corrected median
     total-radio relation; its scatter (about 0.2 dex) is not modelled.
 

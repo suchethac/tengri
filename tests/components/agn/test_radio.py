@@ -205,15 +205,15 @@ class TestDelvecchio2021:
         )
         assert float(L_hi[0]) > float(L_lo[0]), "Lower q0 should give higher L_radio"
 
-    def test_spectral_index_0p7_default(self):
-        """Default alpha_sf=0.7: S(150MHz)/S(1.4GHz) ≈ (150/1400)^{-0.7} ≈ 5.9."""
+    def test_spectral_index_default_0p75(self):
+        """Default alpha=0.75 (Delvecchio+2021 Sect. 3.3): 150 MHz to 1.4 GHz ratio."""
         L_14ghz = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_150mhz = radio_sfr_delvecchio2021(
             _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
-        expected_ratio = (150.0e6 / 1.4e9) ** (-0.7)  # ≈ 5.87
+        expected_ratio = (150.0e6 / 1.4e9) ** (-0.75)
         actual_ratio = float(L_150mhz[0] / L_14ghz[0])
         assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
             f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
@@ -354,7 +354,7 @@ class TestMcCheyne2022:
         )
         assert float(L_hi_q0[0]) > float(L_lo_q0[0]), "Lower q0 → more L_radio"
 
-    def test_spectral_index_0p7_default(self):
+    def test_spectral_index_default_0p60(self):
         """At 150 MHz reference, extrapolating to 1.4 GHz with alpha=0.60 (Table 3)."""
         L_150mhz = radio_sfr_mccheyne2022(
             _WAVE_150MHZ, _L_IR, log_mstar=10.45, redshift=0.0, apply_suppression=False

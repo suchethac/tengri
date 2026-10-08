@@ -6,13 +6,15 @@ The radio group is two independent choices — a star-forming block tied to the
 FIR-radio correlation, and an AGN block — so this compares them one at a time
 on the same galaxy (a constant-SFH galaxy with log total mass 10.5 at z = 0.05).
 
-(Left) The three star-forming blocks, with AGN radio off, normalized to
-``bell2003``. ``delvecchio2021`` is 0.88, 1.09 and 1.21 times ``bell2003`` at
+(Left) The four star-forming blocks, with AGN radio off, normalized to
+``bell2003``. The ``bell2003_split`` curve is the AGNfitter-rX split and is not
+quoted. ``delvecchio2021`` is 0.88, 1.09 and 1.21 times ``bell2003`` at
 150 MHz, 1.4 GHz and 10 GHz. ``mccheyne2022`` is 0.78, 1.17 and 1.48 times it
 at the same frequencies. The two mass- and redshift-dependent calibrations sit
 below the fixed-q one at 150 MHz and above it at 1.4 GHz and 10 GHz. Their
-largest-to-smallest ratio across the three blocks is 29 % at 150 MHz, 17 % at
-1.4 GHz and 49 % at 10 GHz, so the spread is largest at the high-frequency end.
+largest-to-smallest ratio across the three total-q blocks (``bell2003``,
+``delvecchio2021``, ``mccheyne2022``) is 29 % at 150 MHz, 17 % at 1.4 GHz and 49 % at
+10 GHz, so the spread is largest at the high-frequency end.
 
 (Right) The AGN blocks, on a radio-loud AGN (``loudness`` = 2) with ``bell2003``
 star formation. ``dpl`` bends: it is a broken double power law with an

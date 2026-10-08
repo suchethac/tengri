@@ -178,36 +178,45 @@ def test_radio_block_with_cue_nebular_is_the_total_minus_the_murphy_share(
 def test_radio_plus_cue_nebular_is_the_fixed_share_residual_band(
     ssp_data_fsps, mode, logm, z, age
 ):
-    """Sum over the calibration = (1 - f_th) + L_ff,neb / L_cal at nu_ref.
+    """The Cue free-free share, measured over the 32 cases, sets the residual band.
 
-    The radio block subtracts the Murphy share f_th; the nebular backend adds its own
-    free-free, which differs from f_th. The residual is therefore L_ff,neb(nu_ref) over the
-    calibration, published by the nebular continuum, not a free fit.
+    The radio block removes Murphy's fixed share f_th of the calibration (asserted by the
+    test above); the nebular backend adds its own free-free share L_ff,neb / L_cal. The sum is
+    therefore (1 - f_th) + L_ff,neb / L_cal, and the residual from the calibration is
+    L_ff,neb / L_cal - f_th. Cue's share follows the ionizing photon rate per unit L_IR, so it
+    falls with stellar age (0.115 at 1 Gyr, 0.061 at 5 Gyr for delvecchio2021 at log M* 10,
+    z 0) and moves with z. Measured over the 32 cases (16 per mode), L_ff,neb / L_cal lies in
+    [0.0125, 0.136]; the Murphy share f_th is 0.094 to 0.161 for delvecchio2021 (1.4 GHz) and
+    0.027 to 0.063 for mccheyne2022 (150 MHz). The band below is the measured range, widened
+    by 0.001 on each side.
     """
     q_of, nu_ref = _MODES[mode]
     st, got_logm, l_ir = _public_state(
         ssp_data_fsps, mode, "cue", logm + _LOG_TOTAL_MASS_OFFSET, age, z
     )
     total = _total_ref(q_of(got_logm, z), l_ir)
-    murphy = _murphy_ff(nu_ref, l_ir)
     neb_ff = _l_nu_at(st, "sed_nebular", nu_ref)
-    summed = _l_nu_at(st, "sed_radio", nu_ref) + neb_ff
-    assert summed == pytest.approx(total - murphy + neb_ff, rel=1e-3)
-    # The residual is measured, not zero: Cue's share differs from Murphy's.
-    assert 0.0 < neb_ff / total < 0.3
+    assert 0.0115 <= neb_ff / total <= 0.137
 
 
-# ---- negative synchrotron: the refusal covers the new modes ---------------------------
+# ---- negative synchrotron: the refusal evaluates the declared box ----------------------
 
 
-def _build_radio_box(ssp, mode, sf=None):
+def _build_radio_box(ssp, mode, sf=None, log_total_mass=None, z=None, neb=None):
+    """Build one radio-only box. ``sf`` overrides the radio ``sf`` group; the SFH mass and
+    redshift default to Fixed(DEFAULT) and Fixed(0). ``neb`` adds a nebular backend."""
     return tengri.SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT)},
+        sfh={
+            "type": "const",
+            "log_total_mass": log_total_mass or tengri.Fixed(tengri.DEFAULT),
+            "all_params": tengri.Fixed(tengri.DEFAULT),
+        },
         dust_attenuation={"type": "two_component", "law": "calzetti"},
         dust_emission={"type": "draine_li2014"},
         radio={"sf": {"type": mode, **(sf or {})}, "agn": {"type": "none"}},
-        redshift=tengri.Fixed(0.0),
+        redshift=z if z is not None else tengri.Fixed(0.0),
+        **({"neb": neb} if neb is not None else {}),
     )
 
 
@@ -216,18 +225,72 @@ def test_declared_free_box_of_the_new_modes_builds(ssp_data_fsps, mode):
     _build_radio_box(ssp_data_fsps, mode, sf={"all_params": tengri.FREE})
 
 
-def test_delvecchio_q0_above_the_limit_is_refused_at_build(ssp_data_fsps):
-    with pytest.raises(ConfigError, match=r"q_\*"):
+def test_delvecchio_q0_reaching_log_mstar_8_is_refused_naming_the_corner(ssp_data_fsps):
+    """Review reproducer: q0 up to 3.25 with a formed-mass prior reaching low mass."""
+    with pytest.raises(ConfigError, match=r"radio_delv_q0=3\.25, log M\* = .*q_\* = "):
         _build_radio_box(
             ssp_data_fsps,
             "delvecchio2021",
-            sf={"radio_delv_q0": tengri.Uniform(1.8, 3.6)},
+            sf={"radio_delv_q0": tengri.Uniform(1.0, 3.25)},
+            log_total_mass=tengri.Uniform(8.0, 12.5),
         )
 
 
-def test_mccheyne_default_box_is_below_its_limit(ssp_data_fsps):
+def test_mccheyne_q0_reaching_low_mass_is_refused(ssp_data_fsps):
+    """Review reproducer, McCheyne side: the mass term raises q at low M*."""
+    with pytest.raises(ConfigError, match=r"radio_mcch_q0=3, log M\* = .*q_\* = "):
+        _build_radio_box(
+            ssp_data_fsps,
+            "mccheyne2022",
+            sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.0)},
+            log_total_mass=tengri.Uniform(8.0, 12.5),
+        )
+
+
+def test_delvecchio_q0_with_a_galaxy_mass_box_above_the_fit_builds(ssp_data_fsps):
+    """Positive control: the same q0 support with the mass box inside the fit sample builds."""
     _build_radio_box(
         ssp_data_fsps,
-        "mccheyne2022",
-        sf={"radio_mcch_q0": tengri.Uniform(1.0, 3.0)},
+        "delvecchio2021",
+        sf={"radio_delv_q0": tengri.Uniform(1.8, 3.25)},
+        log_total_mass=tengri.Uniform(10.0, 12.0),
     )
+
+
+@pytest.mark.parametrize("neb", ["none", "cue"])
+@pytest.mark.parametrize("mode", list(_MODES))
+def test_no_built_corner_of_the_box_has_negative_sed_radio(ssp_data_fsps, mode, neb):
+    """Every corner of a small (q0, log M*, z) grid that builds gives sed_radio >= 0.
+
+    With a free-free nebular (``cue``) the radio block's own free-free is off, so
+    ``sed_radio`` is the synchrotron term alone and a negative synchrotron shows directly.
+    Without a nebular the radio block's free-free can hide it, so both are checked.
+    """
+    q_name = {"delvecchio2021": "radio_delv_q0", "mccheyne2022": "radio_mcch_q0"}[mode]
+    q_lo, q_hi = (1.8, 3.25) if mode == "delvecchio2021" else (1.0, 3.0)
+    neb_group = _NEBULAR[neb]
+    built = 0
+    for q0 in (q_lo, q_hi):
+        for logm in (8.0, 9.5, 11.5):  # 8.0: the lowest log M* the fit sample reaches
+            for z in (0.0, 1.0):
+                try:
+                    model = _build_radio_box(
+                        ssp_data_fsps,
+                        mode,
+                        sf={q_name: tengri.Fixed(q0)},
+                        log_total_mass=tengri.Fixed(logm + _LOG_TOTAL_MASS_OFFSET),
+                        z=tengri.Fixed(z),
+                        neb=neb_group,
+                    )
+                except ConfigError:
+                    continue  # refused at build: the corner is outside the valid box
+                built += 1
+                st = model.predict_state({})
+                wnu = _C_AA / np.asarray(st.wave, dtype=np.float64)
+                sed = np.asarray(st.derived["sed_radio"], dtype=np.float64)
+                band = (wnu > 5.0e7) & (wnu < 2.0e10)
+                assert sed[band].min() >= 0.0, (
+                    f"{mode} neb={neb} q0={q0} logM*={logm} z={z}: "
+                    f"min sed_radio {sed[band].min():.3e}"
+                )
+    assert built >= 1

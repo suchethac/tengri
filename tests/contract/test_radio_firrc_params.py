@@ -65,7 +65,7 @@ class TestFirrcParamRegistry:
         assert float(priors["radio_delv_q0"].value) == pytest.approx(2.646)
         assert float(priors["radio_delv_mass_slope"].value) == pytest.approx(0.148)
         assert float(priors["radio_delv_z_slope"].value) == pytest.approx(-0.023)
-        # McCheyne+2022 constants as carried by the code (not verified; see radio.py).
+        # McCheyne+2022 joint fit, Sect. 5.2 (pivot 10.45 is in radio.py).
         assert float(priors["radio_mcch_q0"].value) == pytest.approx(1.98)
         assert float(priors["radio_mcch_mass_slope"].value) == pytest.approx(-0.22)
         assert float(priors["radio_mcch_z_slope"].value) == pytest.approx(0.02)

@@ -155,7 +155,7 @@ class TestRadioVariantCrossCheck:
         )
         assert L_hi > L_lo, "Massive galaxies should have more radio per L_IR (q_IR-)"
         # Total-radio construction (no n(L) factor): the ratio is the pure q shift,
-        # 10^(2 x 0.148) = 1.980 (Delvecchio+2021 Eq. 5 mass slope).
+        # 10^(2 x 0.148) = 10^0.296 = 1.977 (Delvecchio+2021 Eq. 5 mass slope).
         ratio = L_hi / L_lo
         assert ratio == pytest.approx(10.0 ** (2 * 0.148), rel=1e-6), f"L(M11)/L(M9) = {ratio:.4f}"
 

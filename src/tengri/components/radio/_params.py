@@ -187,9 +187,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # because _RADIO_SF_PARAMS_BY_MODE routes this triplet only under
         # ``radio_sfr_mode="delvecchio2021"`` -- the McCheyne triplet stays
         # pinned, and vice versa, so only one calibration is ever freed.
-        # The upper bound keeps the synchrotron non-negative: at log M* = 9.5 (the
-        # low-mass end of the fit) q = q0 + 0.074, which must stay below q_* = 3.364
-        # (T_e = 2e4 K, alpha_ff = 0), so q0 <= 3.25 leaves margin. See radio_q_total_limit.
+        # The build refuses a declared box whose worst (q0, log M*, z) corner gives q above
+        # q_* (see _validate_radio_q_total_support). This upper bound is not narrowed for the
+        # stellar-mass floor; that prior-support question is open for the owner.
         free_prior=Uniform(1.8, 3.25, "Delvecchio+2021 FIRRC q0", default=2.646),
     ),
     ParamDeclaration(
