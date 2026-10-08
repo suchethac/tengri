@@ -127,13 +127,23 @@ def test_draine2021_pah_is_not_a_silent_no_op():
 )
 def test_draine2021_pah_energy_balance():
     """The emitted IR SED re-radiates the absorbed luminosity: the frequency
-    integral of L_nu recovers L_ir to within a few percent (grid-edge losses)."""
-    sed = _draine_port_sed()
-    nu = C_AA / np.asarray(_WAVE)
+    integral of L_nu recovers L_ir on the template's own support.
+
+    The template is normalized on its native wavelength grid, so the identity
+    is measured on a log grid spanning that support (1 micron to 8 mm), not on
+    the 512-point linear caller grid, whose far-IR trapezoid carries a ~7 percent
+    discretization error that the caller-grid normalization used to hide.
+    """
+    comp = _REGISTRY["draine2021_pah_ir"]()
+    native_wave = jnp.asarray(np.geomspace(1.0e4, 8.0e7, 20000))
+    comp.data = comp.load(native_wave)
+    sed_out, _ = comp.predict({"lgU": 1.0}, jnp.zeros_like(native_wave), native_wave, L_ir=_L_IR)
+    sed = np.asarray(sed_out, dtype=np.float64)
+    nu = C_AA / np.asarray(native_wave)
     l_emitted = float(-np.trapezoid(sed, nu))
-    assert l_emitted == pytest.approx(_L_IR, rel=0.05)
+    assert l_emitted == pytest.approx(_L_IR, rel=1.0e-4)
     # Peaks in the IR (not UV) — a dust re-emission sanity check.
-    peak_wave = float(np.asarray(_WAVE)[int(np.argmax(sed))])
+    peak_wave = float(np.asarray(native_wave)[int(np.argmax(sed))])
     assert peak_wave > 1.0e5
 
 
