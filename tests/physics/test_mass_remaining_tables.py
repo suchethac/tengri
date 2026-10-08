@@ -176,14 +176,15 @@ def test_fsps_table_bounds(path):
                 strict=True,
                 reason=(
                     "FSPS stellar_mass overshoots 1 at young ages (MIST: 1.0113 Salpeter, "
-                    "1.0047 Chabrier near log10 age 6.35; BaSTI: 1.085 Salpeter, 1.018 "
+                    "1.0047 Chabrier near log10 age 6.35; PARSEC: 1.024 Salpeter, 1.007 "
+                    "Chabrier; BaSTI: 1.085 Salpeter, 1.018 "
                     "Chabrier at log10 age 5.5, Z = 0.008). Accepted as FSPS's convention "
                     "and recorded in PROVENANCE.md. Flips to XPASS (a failure) if the "
                     "overshoot is removed."
                 ),
             ),
         )
-        if any(tag in p.name for tag in ("mist", "bsti"))
+        if any(tag in p.name for tag in ("mist", "bsti", "prsc"))
         else p
         for p in FSPS_TABLES
     ],

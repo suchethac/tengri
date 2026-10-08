@@ -17,7 +17,7 @@ float64, plus attributes `quantity`, `isochrones`, `imf`, `source`,
 | file | isochrones / IMF | built by |
 |---|---|---|
 | `mass_remaining_mist_{chabrier,kroupa,salpeter}.h5` | MIST, 12 x 107 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
-| `mass_remaining_prsc_chabrier.h5` | PARSEC, Chabrier, 15 x 93 | `scripts/repackage_mass_remaining_from_grid.py` (see PARSEC Chabrier) |
+| `mass_remaining_prsc_{chabrier,kroupa,salpeter}.h5` | PARSEC, 15 x 93 | `scripts/build_mass_remaining_fsps.py` (python-fsps; see PARSEC) |
 | `mass_remaining_pdva_{chabrier,kroupa,salpeter}.h5` | Padova 2007, 22 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
 | `mass_remaining_bsti_{chabrier,kroupa,salpeter}.h5` | BaSTI, 10 x 94 | `scripts/build_mass_remaining_fsps.py` (python-fsps) |
 | `mass_remaining_bc03pdva94_chabrier.h5` | BC03 Padova 1994, 6 x 220 | `scripts/build_mass_remaining_bc03.py` |
@@ -65,24 +65,60 @@ log10 age 6.4-6.7 (maximum 1.0047 Chabrier/Kroupa, 1.0113 Salpeter) and a younge
 The MIST Chabrier table is bit-identical (max |diff| = 0) to the earlier
 `data/fsps_mass_remaining_chabrier.h5` and `fsps_mist_chabrier.dat`, which it replaces.
 
-## PARSEC Chabrier
+## PARSEC (Chabrier, Kroupa, Salpeter)
 
-The table of `data/fsps_prsc_miles_chabrier.h5` (`ssp_mass_remaining`, python-fsps,
-PARSEC isochrones, Chabrier IMF) repackaged as a companion, so that every PARSEC + Chabrier
-grid (C3K, BaSeL, the wNE post-processed grids that drop the table) resolves to it. The
-companion is authoritative; the grid's embedded table is not cross-checked against it.
-Measured: the embedded table equals this companion at every node (max |diff| = 0). A table
-rebuilt with the local FSPS PARSEC build does NOT reproduce it (max |diff| 0.13 where the
-embedded value is below 1), and neither do the remnant, zcontinuous or IMF-limit variants
-tried. The grid's spectra match that build (zcontinuous=0, relative 1e-7). The companion is
-kept until the discrepancy is resolved. PARSEC Kroupa and Salpeter are PENDING: no table
-has been committed.
+Built with python-fsps 0.4.7 compiled with `FFLAGS="-DMIST=0 -DPARSEC=1 -DMILES=1"` (`sp.libraries`
+= `prsc, miles, DL07`) with the committed generator, `add_stellar_remnants=1`, `sfh=0`,
+`zcontinuous=0`. Z nodes equal log10 of `ISOCHRONES/PARSEC/zlegend.dat` (15 nodes).
+
+**Why this build.** The hosted grid `data/fsps_prsc_miles_chabrier.h5` records no FSPS version,
+options or builder (only `python-fsps` in its description). Its spectra are reproduced by this
+build with `zcontinuous=0`: relative difference between `ssp_flux` (Lsun/Hz/Msun) and FSPS's
+spectrum at 3 metallicity nodes (log10 Z = -4.00 index 0, -1.854 index 9, -1.222 index 14) times
+5 ages (grid nodes nearest 3 Myr, 10 Myr, 100 Myr, 1 Gyr, 10 Gyr), wavelength grids identical
+(5994 nodes): max 9.7e-8 over all 15 cases. `zcontinuous=1` does not match (solar 0.1 to 0.4, top
+Z far off).
+
+**The hosted grid's embedded `ssp_mass_remaining` is not reproduced** by that build. Measured
+max |embedded - table| where embedded < 1 (table max):
+
+| variant | max diff |
+|---|---|
+| remnants=1, zcontinuous=0 (shipped) | 0.132 (table max 1.0073) |
+| remnants=0, zcontinuous=0 | 0.192 |
+| remnants=1, zcontinuous=1 | 0.034 (closest) |
+| remnants=0, zcontinuous=1 | 0.147 |
+| imf_upper_limit 100 / 150 | 0.129 / 0.137 |
+| imf_lower_limit 0.1 / 0.01 | 0.118 / 0.174 |
+
+Grid ages equal FSPS's native `log_age`, so no interpolation variant applies. The embedded table
+is therefore inconsistent with the grid's own spectra; the rebuild is the one consistent with
+them, and tengri ships it. The committed repacked companion of the earlier release (which equalled
+the embedded table exactly) is replaced.
+
+**Effect on the default grid (`fsps_prsc_miles_chabrier`).** Surviving mass changes from the
+repack to the rebuild by: at 10 Gyr, solar Z (log10 Z = -1.854): 0.5549 -> 0.5717 (+0.0168,
++3.0%); at ages >= 1 Gyr, max |change| 0.037; overall max |change| 0.132 at top Z, log10 age
+6.15 (1.000 -> 0.868).
+
+**Overshoot above 1.** Maxima (Z = 0.0001, the lowest node): chabrier 1.007344 at log age 5.65 (161 nodes > 1), kroupa 1.007195 at 5.65 (163), salpeter 1.024055 at 6.25 (236). Accepted as FSPS's convention; strict xfail on the <= 1 bound as for MIST and BaSTI. Every PARSEC table is <= 1 and non-increasing from 1 Gyr (maxima 0.68 to 0.84).
+
+**Top-Z truncation (Z = 0.0600, zlegend index 14).** `ISOCHRONES/PARSEC/isoc_z0.0600.dat` has
+Mini capped at 12.01 Msun for every log age from 5.50 to 7.10 (343 rows at 5.50; the Z = 0.0200 file
+reaches 300 Msun at the same ages). The cap falls with age (7.97 Msun at log 7.5, 1.14 at 9.9). So
+young top-Z SSPs contain no stars above about 12 Msun, in both the spectra (which match the same
+build) and the surviving mass. The flat 0.868 at young ages at top Z is that truncation together
+with the remnant term, which `add_remnants.f90` ties to the largest living mass.
+
+Measurement and checks: `tmp/scripts/L1/check/` (not in the repo). The grid's spectra were not
+re-checked in the test suite (no python-fsps in the shared venv).
+
+PARSEC Kroupa and Salpeter use the same build; they have no hosted grid to compare against.
 
 ## PENDING grids
 
-Declared in the registry, refused without `mass_remaining="dsps_fit"`: PARSEC Kroupa and
-Salpeter (pending the PARSEC decision above), BPASS (`bpss_stars_c3k_a_chabrier`) and
-ProGeny (`pgny_mist_c3k_chabrier`). Geneva has no catalog grid.
+Declared in the registry, refused without `mass_remaining="dsps_fit"`: BPASS
+(`bpss_stars_c3k_a_chabrier`) and ProGeny (`pgny_mist_c3k_chabrier`). Geneva has no catalog grid.
 
 ## BC03 (Padova 1994 + STELIB + Chabrier)
 

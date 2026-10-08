@@ -123,12 +123,14 @@ def test_prsc_chabrier_registered_grids_take_the_companion_not_the_embedded_tabl
         np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), tab, rtol=1e-12, atol=0)
 
 
-def test_prsc_chabrier_embedded_table_equals_the_committed_companion():
-    """Characterization of the shipped PARSEC grid's embedded table (read-only).
+def test_prsc_grid_embedded_table_differs_from_its_companion():
+    """The hosted PARSEC grid's embedded table is not the FSPS rebuild (read-only).
 
-    Measured: the embedded table equals the committed repacked companion at every node
-    (max |diff| = 0). A rebuild from the local FSPS PARSEC build does NOT reproduce it,
-    and no tested FSPS variant does either. This pins the shipped state only.
+    Measured with the committed generator (zcontinuous=0, remnants=1, local PARSEC build):
+    max |embedded - companion| = 0.1324 over the 1395 nodes, at the top metallicity node.
+    No tested FSPS variant (remnants 0/1, zcontinuous 0/1, IMF limits) reproduces the
+    embedded table, the closest at 0.034 (zcontinuous=1). The grid's spectra match the
+    same build to 9.7e-8, so the embedded table is the inconsistent one. See PROVENANCE.md.
     """
     if not PRSC_GRID.exists():
         pytest.skip(f"{PRSC_GRID.name} is not present")
@@ -138,7 +140,19 @@ def test_prsc_chabrier_embedded_table_equals_the_committed_companion():
         embedded = np.asarray(f["ssp_mass_remaining"][...], dtype=np.float64)
     comp = load_companion_table("mass_remaining_prsc_chabrier.h5", "prsc", "chabrier")
     assert embedded.shape == comp.table.shape
-    np.testing.assert_allclose(embedded, comp.table, rtol=0.0, atol=1e-12)
+    assert float(np.max(np.abs(embedded - comp.table))) == pytest.approx(0.1324, abs=1e-3)
+
+
+def test_prsc_grid_resolves_to_the_companion_not_its_embedded_table():
+    """The loader ignores the hosted grid's embedded table for a registered grid (#2751)."""
+    if not PRSC_GRID.exists():
+        pytest.skip(f"{PRSC_GRID.name} is not present")
+    from tengri.components.stellar.sps.mass_remaining_tables import load_companion_table
+
+    comp = load_companion_table("mass_remaining_prsc_chabrier.h5", "prsc", "chabrier")
+    ssp = _load_ssp_data(str(PRSC_GRID))
+    assert ssp.mass_remaining_source == "companion:mass_remaining_prsc_chabrier.h5"
+    np.testing.assert_allclose(np.asarray(ssp.ssp_mass_remaining), comp.table, rtol=1e-12, atol=0)
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +198,8 @@ def test_age_beyond_one_node_raises(tmp_path):
 # ---------------------------------------------------------------------------
 def test_pending_grid_without_opt_in_raises_naming_table_and_opt_in(tmp_path):
     age = np.linspace(5.0, 10.0, 20) - 9.0
-    path = _write_grid(tmp_path / "fsps_prsc_miles_kroupa.h5", age, [-4.0, -2.0])
-    with pytest.raises(ValueError, match=r"mass_remaining_prsc_kroupa\.h5.*dsps_fit"):
+    path = _write_grid(tmp_path / "bpss_stars_c3k_a_chabrier.h5", age, [-4.0, -2.0])
+    with pytest.raises(ValueError, match=r"mass_remaining_bpss_chabrier\.h5.*dsps_fit"):
         _load_ssp_data(str(path))
 
 
@@ -367,13 +381,7 @@ def test_registry_pending_set_is_exactly_the_declared_one():
     pending_isoc = {
         e.isoc for e in mrt.MASS_REMAINING_REGISTRY.values() if e.source == mrt.PENDING
     }
-    assert pending_isoc == {"prsc", "bpss", "pgny_mist"}
-    pending_prsc = {
-        e.imf
-        for e in mrt.MASS_REMAINING_REGISTRY.values()
-        if e.source == mrt.PENDING and e.isoc == "prsc"
-    }
-    assert pending_prsc == {"kroupa", "salpeter"}
+    assert pending_isoc == {"bpss", "pgny_mist"}
     bc03 = mrt.MASS_REMAINING_REGISTRY["bc03_pdva_stelib_chabrier"]
     assert bc03.source == "mass_remaining_bc03pdva94_chabrier.h5"
 

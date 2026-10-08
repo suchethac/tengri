@@ -90,8 +90,8 @@ def _p(isoc: str, imf: str) -> MassRemainingEntry:
 #: user-supplied grid. The canonical name is the file stem without the
 #: ``_wNE...`` suffix and with a leading ``ssp_`` read as ``fsps_``
 #: (:func:`canonical_grid_name`). PENDING rows name a table that has not been
-#: built (PARSEC Kroupa and Salpeter await the PARSEC Chabrier decision; Geneva,
-#: ProGeny and BPASS need an FSPS build with that isochrone set or their own tables).
+#: built (Geneva, ProGeny and BPASS need an FSPS build with that isochrone set or
+#: their own tables).
 MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     # MIST isochrones: companion tables built with python-fsps.
     "fsps_mist_miles_chabrier": _m("mist", "chabrier"),
@@ -103,17 +103,16 @@ MASS_REMAINING_REGISTRY: dict[str, MassRemainingEntry] = {
     "fsps_mist_miles_salpeter": _m("mist", "salpeter"),
     "fsps_mist_c3k_a_salpeter": _m("mist", "salpeter"),
     "fsps_mist_basel_salpeter": _m("mist", "salpeter"),
-    # PARSEC, Chabrier: companion repackaged from the table the grid carries.
+    # PARSEC (FSPS-built, the local build whose spectra the hosted grid reproduces).
     "fsps_prsc_miles_chabrier": _m("prsc", "chabrier"),
     "fsps_prsc_c3k_a_chabrier": _m("prsc", "chabrier"),
     "fsps_prsc_basel_chabrier": _m("prsc", "chabrier"),
-    # PARSEC, Kroupa and Salpeter: pending.
-    "fsps_prsc_miles_kroupa": _p("prsc", "kroupa"),
-    "fsps_prsc_c3k_a_kroupa": _p("prsc", "kroupa"),
-    "fsps_prsc_basel_kroupa": _p("prsc", "kroupa"),
-    "fsps_prsc_miles_salpeter": _p("prsc", "salpeter"),
-    "fsps_prsc_c3k_a_salpeter": _p("prsc", "salpeter"),
-    "fsps_prsc_basel_salpeter": _p("prsc", "salpeter"),
+    "fsps_prsc_miles_kroupa": _m("prsc", "kroupa"),
+    "fsps_prsc_c3k_a_kroupa": _m("prsc", "kroupa"),
+    "fsps_prsc_basel_kroupa": _m("prsc", "kroupa"),
+    "fsps_prsc_miles_salpeter": _m("prsc", "salpeter"),
+    "fsps_prsc_c3k_a_salpeter": _m("prsc", "salpeter"),
+    "fsps_prsc_basel_salpeter": _m("prsc", "salpeter"),
     # Padova (Padova 2007 set, FSPS-built): companion tables from python-fsps.
     "fsps_pdva_miles_chabrier": _m("pdva", "chabrier"),
     "fsps_pdva_c3k_a_chabrier": _m("pdva", "chabrier"),
