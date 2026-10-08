@@ -264,10 +264,42 @@ def _make_published_component(name):
     return makers[name]()
 
 
+def _grahsp_published(wave):
+    """GRAHSP publishes through the ForwardState adapter, at its fiducial parameters."""
+    from tengri.components.agn.grahsp import GRAHSPSEDComponent
+    from tengri.protocols.component import ForwardState
+
+    comp = GRAHSPSEDComponent()
+    params = {
+        "agn_grahsp_l5100": jnp.array(1.0e44),
+        "agn_grahsp_uvslope": jnp.array(0.0),
+        "agn_grahsp_plslope": jnp.array(-1.7),
+        "agn_grahsp_plbendloc_nm": jnp.array(100.0),
+        "agn_grahsp_plbendwidth": jnp.array(1.0),
+        "agn_grahsp_cutoff_nm": jnp.array(10000.0),
+        "agn_grahsp_a_lines": jnp.array(1.0),
+        "agn_grahsp_a_feii": jnp.array(5.0),
+        "agn_grahsp_linewidth_kms": jnp.array(5000.0),
+        "agn_grahsp_fcov": jnp.array(0.4),
+        "agn_grahsp_si": jnp.array(0.0),
+        "agn_grahsp_cool_lam_um": jnp.array(17.0),
+        "agn_grahsp_cool_width": jnp.array(0.45),
+        "agn_grahsp_hot_lam_um": jnp.array(2.0),
+        "agn_grahsp_hot_width": jnp.array(0.5),
+        "agn_grahsp_hot_fcov": jnp.array(1.0),
+        "agn_grahsp_ebv": jnp.array(0.05),
+        "agn_grahsp_ebv_agn": jnp.array(0.05),
+    }
+    out = comp.apply(ForwardState(wave=jnp.asarray(wave)), params)
+    return {k: float(np.asarray(v)) for k, v in out.derived.items() if k.startswith("L_")}
+
+
 def _published_luminosities(name, wave):
     """The L_* dict a component publishes on ``wave``, at its declared default parameters."""
     from tengri.forward.orchestrator import default_params_dict
 
+    if name == "grahsp":
+        return _grahsp_published(wave)
     comp = _make_published_component(name)
     wave = jnp.asarray(wave)
     try:
@@ -285,7 +317,15 @@ def _published_luminosities(name, wave):
 
 @pytest.mark.parametrize(
     "name",
-    ["cat3d_wind", "kd18_disc", "powerlaw_disc", "silva04", "skirtor_agnfitter", "skirtor"],
+    [
+        "cat3d_wind",
+        "kd18_disc",
+        "powerlaw_disc",
+        "silva04",
+        "skirtor_agnfitter",
+        "skirtor",
+        "grahsp",
+    ],
 )
 def test_published_L_star_is_independent_of_caller_grid(name):
     """Published L_* on a coarse caller grid equals the value on a fine grid to 1e-6."""
