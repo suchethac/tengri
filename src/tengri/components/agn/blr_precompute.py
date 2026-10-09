@@ -45,7 +45,7 @@ from tengri.components.agn.blr import (
     _BLR_LINE_STRENGTHS,
     _BLR_LINE_WAVELENGTHS,
 )
-from tengri.utils.host_array import host_array
+from tengri.utils.host_array import device_table, host_array
 
 # The Fe II pseudo-continuum used to be a small set of discrete Gaussian
 # groups (``_FE2_GROUPS``) suitable for delta-function preintegration. It
@@ -164,7 +164,7 @@ def precompute(
 
     return {
         "line_wavelengths_obs": jnp.asarray(line_wavelengths_obs),
-        "line_strengths": jnp.asarray(_BLR_LINE_STRENGTHS),
+        "line_strengths": device_table(_BLR_LINE_STRENGTHS),
         "feii_centers": jnp.asarray(feii_centers_obs),
         "feii_sigmas_rest": jnp.asarray(feii_sigmas_rest),
         "feii_strengths": jnp.asarray(feii_strengths),

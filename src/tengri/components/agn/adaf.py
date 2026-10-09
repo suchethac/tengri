@@ -32,6 +32,7 @@ References
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 from typing import NamedTuple
 
@@ -50,7 +51,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
-from tengri.utils.scale import representable_floor as _representable_floor
+from tengri.utils.scale import representable_exponent, representable_floor as _representable_floor
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -90,7 +91,7 @@ def _bessel_k0e_k1e(x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
     unused branch of the ``jnp.where`` never overflows or produces a non-finite
     value that could poison the gradient.
     """
-    x = jnp.asarray(x, dtype=jnp.float64)
+    x = jnp.asarray(x)
 
     # Small-argument branch (0 < x <= 2): A&S 9.8.5 / 9.8.7. Clip so the
     # discarded branch stays finite for large x (i0/i1 grow ~ e^x).
@@ -147,6 +148,25 @@ def _bessel_k0e_k1e(x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
     return jnp.where(small, k0e_small, k0e_large), jnp.where(small, k1e_small, k1e_large)
 
 
+def _log_bessel_k2(x: jnp.ndarray) -> jnp.ndarray:
+    r"""Natural log of the modified Bessel function ``K_2(x)``, for ``x > 0``.
+
+    Formed as ``ln(K_2(x) e^x) - x`` so the result stays representable where
+    ``K_2(x)`` itself underflows (``x`` above ~90 in float32).
+
+    Parameters
+    ----------
+    x : array_like
+        Argument, ``x > 0``.
+
+    Returns
+    -------
+    ndarray
+        ``ln K_2(x)``.
+    """
+    return jnp.log(_bessel_k2e(x)) - x
+
+
 def _bessel_k2e(x: jnp.ndarray) -> jnp.ndarray:
     r"""Exponentially-scaled modified Bessel function ``K_2(x) e^x``.
 
@@ -192,7 +212,7 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
     -----
     **JIT/grad-safe**: yes.
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     x = 1.0 / theta  # = 1/theta_e
     # g = (2 + 2 theta + 1/theta) e^{-x} / K_2(x) = numerator / (K_2(x) e^x).
     return (2.0 + 2.0 * theta + 1.0 / theta) / _bessel_k2e(x)
@@ -284,7 +304,7 @@ def _adaf_amplification(t_e: jnp.ndarray) -> jnp.ndarray:
 
     :math:`A = 1 + 4\theta_e + 16\theta_e^2`, with :math:`\theta_e = kT_e/m_ec^2`.
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     return 1.0 + 4.0 * theta + 16.0 * theta**2
 
 
@@ -354,10 +374,17 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
     """
     n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
     r_cm = _R_MIN * _R_SCHW_PER_M * m
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
-    x_arg = 1.0 / theta
-    k2 = _bessel_k2e(x_arg) * jnp.exp(-x_arg)  # unscaled K_2(1/theta_e)
-    ln_c = jnp.log(2.49e-10 * (4.0 * jnp.pi * n_e * r_cm / b_field) / (theta**3 * k2))
+    ln_theta = jnp.log(_THETA_PER_TE) + jnp.log(jnp.asarray(t_e))
+    # ln of 2.49e-10 * 4 pi n_e R / B / (theta^3 K_2(1/theta)), formed term by term so
+    # that K_2 (which underflows for 1/theta above ~90) never appears unscaled.
+    ln_c = (
+        jnp.log(2.49e-10 * 4.0 * jnp.pi)
+        + jnp.log(n_e)
+        + jnp.log(r_cm)
+        - jnp.log(b_field)
+        - 3.0 * ln_theta
+        - _log_bessel_k2(jnp.exp(-ln_theta))
+    )
 
     def _log_h_and_dlogh(y):
         xm = y**3
@@ -437,25 +464,37 @@ def _adaf_electron_temperature(
     only the slope jumps.
     """
     tau_es = _adaf_tau_es(mdot, alpha)
-    t_e = jnp.asarray(2.0e9, dtype=jnp.float64)
+    ln_tau = jnp.log(tau_es)
+    ln_lo, ln_hi = math.log(1e8), math.log(5e11)
+    # The fixed point runs on ln T_e; the clip range [1e8, 5e11] K is ln_lo..ln_hi.
+    log_t_e = jnp.zeros_like(ln_tau) + math.log(2.0e9)
     for _ in range(8):
+        t_e = jnp.exp(log_t_e)
         x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
         alpha_c = _adaf_alpha_c(tau_es, t_e)
-        # Eq. 40 (alpha_c > 1).
-        t_e_40 = (
-            1.1e9
-            * (2000.0 * delta) ** (1.0 / 7.0)
-            * (x_m / 300.0) ** (-3.0 / 7.0)
-            * (alpha / 0.3) ** (3.0 / 14.0)
-            * ((1.0 - beta) / 0.5) ** (-1.0 / 14.0)
-            * m ** (1.0 / 14.0)
-            * mdot ** (-1.0 / 14.0)
+        # Eq. 40 (alpha_c > 1), in ln.
+        log_t_40 = (
+            math.log(1.1e9)
+            + jnp.log(2000.0 * delta) / 7.0
+            - (3.0 / 7.0) * (jnp.log(x_m) - math.log(300.0))
+            + (3.0 / 14.0) * jnp.log(alpha / 0.3)
+            - (1.0 / 14.0) * jnp.log((1.0 - beta) / 0.5)
+            + jnp.log(m) / 14.0
+            - jnp.log(mdot) / 14.0
         )
-        # Eq. 43 (alpha_c < 1).
-        sqrt_arg = jnp.maximum(4.0 * tau_es ** (-1.0 / jnp.maximum(alpha_c, 1e-3)) - 3.0, 0.0)
-        t_e_43 = jnp.maximum(0.744e9 * (jnp.sqrt(sqrt_arg) - 1.0), 1e8)
-        t_e = jnp.clip(jnp.where(alpha_c > 1.0, t_e_40, t_e_43), 1e8, 5e11)
-    return t_e
+        # Eq. 43 (alpha_c < 1), in ln: T_e = 0.744e9 (sqrt(4q - 3) - 1), q = tau^(-1/alpha_c).
+        # With e = q - 1 > 0, sqrt(4q-3) - 1 = 4e / (sqrt(4e+1) + 1), so the difference of
+        # nearly equal square roots is never formed and q is never exponentiated.
+        ln_q = -ln_tau / jnp.maximum(alpha_c, 1e-3)
+        q_above_one = ln_q > 0.0
+        ln_q = jnp.where(q_above_one, ln_q, 1.0)
+        log_e = ln_q + jnp.log1p(-jnp.exp(-ln_q))  # ln(q - 1)
+        log_4e1 = math.log(4.0) + log_e + jnp.log1p(jnp.exp(-log_e) / 4.0)  # ln(4e + 1)
+        log_sqrt_plus_one = 0.5 * log_4e1 + jnp.log1p(jnp.exp(-0.5 * log_4e1))
+        log_d = math.log(4.0) + log_e - log_sqrt_plus_one  # ln(sqrt(4e+1) - 1)
+        log_t_43 = jnp.where(q_above_one, jnp.maximum(math.log(0.744e9) + log_d, ln_lo), ln_lo)
+        log_t_e = jnp.clip(jnp.where(alpha_c > 1.0, log_t_40, log_t_43), ln_lo, ln_hi)
+    return jnp.exp(log_t_e)
 
 
 # ── Spectral component amplitudes (Mahadevan Eqs. 21-23, 28, 30) ──────────
@@ -486,7 +525,7 @@ def _adaf_F_theta(t_e: jnp.ndarray) -> jnp.ndarray:
     ndarray
         ``F(theta_e)`` [dimensionless].
     """
-    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    theta = _THETA_PER_TE * jnp.asarray(t_e)
     # Clip each branch's argument so the discarded jnp.where branch stays finite.
     th_lo = jnp.clip(theta, 1e-8, 1.0)
     f_lo = 4.0 * (2.0 * th_lo / jnp.pi**3) ** 0.5 * (
@@ -687,14 +726,22 @@ def _adaf_synch_compton(nu_, s):
     ratio = nu_ / s.nu_p
     shape_sc = jnp.where(nu_ <= s.nu_p, ratio**0.4, ratio ** (-s.alpha_c))
     shape_sc = (
-        shape_sc * jnp.exp(-s.nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0))
+        shape_sc
+        * jnp.exp(-s.nu_min / nu_)
+        * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, representable_exponent(500.0, base=math.e)))
     )
     return s.l_nu_p * shape_sc
 
 
 def _adaf_brems(nu_, s):
     """Bremsstrahlung: flat with an exponential cutoff at k T_e / h."""
-    return s.l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * s.t_e), 0.0, 500.0))
+    return s.l_brems0 * jnp.exp(
+        -jnp.clip(
+            _H_PLANCK * nu_ / (_K_BOLTZ * s.t_e),
+            0.0,
+            representable_exponent(500.0, base=math.e),
+        )
+    )
 
 
 def _adaf_total(nu_, s):

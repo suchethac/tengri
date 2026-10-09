@@ -1771,11 +1771,16 @@ def compute_dsps_met_table_weights(
     # joint (n_met, n_age) ``result.weights`` directly. DSPS aligns its
     # weights' age axis with the SSP grid (lookback-time ascending);
     # no axis flips required to dot with ``ssp_flux``.
-    total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
+    # Age weights come from the SFH-only path, not from the marginal of the
+    # joint: summing the joint over metallicity reintroduces roundoff, so the
+    # total mass would drift with lgmet_table at the 1e-11 level. The joint
+    # is used only for the metallicity-marginalized flux below.
+    age_weights_msun = compute_dsps_age_weights(
+        sfr_on_ssp_ages, ssp_ages_yr, ssp_lg_age_gyr, t_obs_gyr
+    )
 
     joint = result.weights  # (n_met, n_age) sum=1
     age_weights_norm = joint.sum(axis=0)  # (n_age,) sum=1
-    age_weights_msun = age_weights_norm * jnp.maximum(total_mass, 0.0)
 
     weighted_ssp = jnp.einsum("ma,maw->aw", joint, ssp_flux)  # (n_age, n_wave) per Msun_formed
     age_weights_safe = jnp.maximum(age_weights_norm, 1e-30)

@@ -46,6 +46,7 @@ import jax.numpy as jnp
 
 from tengri._completion import curated_dir
 from tengri._x64_hold import hold_x64_preference
+from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import (
     C_CGS,
     C_KM_S,
@@ -490,8 +491,8 @@ def _comoving_distance_mpc_jax(z: float, cosmo, ogamma0: float, ode0: float) -> 
     # Map Gauss-Legendre nodes from [-1, 1] to [0, z]. Converted to a JAX
     # array here (not at module scope) so the dtype follows the caller's
     # current jax_enable_x64 state rather than the state at import time.
-    gl_nodes = jnp.asarray(_GL_NODES_512_NP)
-    gl_weights = jnp.asarray(_GL_WEIGHTS_512_NP)
+    gl_nodes = device_table(_GL_NODES_512_NP)
+    gl_weights = device_table(_GL_WEIGHTS_512_NP)
     # z' = z * (1 + u) / 2, so dz'/du = z/2
     z_prime = z * (1.0 + gl_nodes) / 2.0
     e_z_prime = _e_of_z(z_prime, cosmo, ogamma0, ode0)
@@ -560,8 +561,8 @@ def _age_gyr_jax(z: float, cosmo, ogamma0: float, ode0: float) -> float:
     """
     # Converted to a JAX array here (not at module scope), same rationale
     # as _comoving_distance_mpc_jax above.
-    gl_nodes = jnp.asarray(_GL_NODES_512_NP)
-    gl_weights = jnp.asarray(_GL_WEIGHTS_512_NP)
+    gl_nodes = device_table(_GL_NODES_512_NP)
+    gl_weights = device_table(_GL_WEIGHTS_512_NP)
     a_z = 1.0 / (1.0 + z)
     a_nodes = a_z * (1.0 + gl_nodes) / 2.0
     z_prime = 1.0 / a_nodes - 1.0
