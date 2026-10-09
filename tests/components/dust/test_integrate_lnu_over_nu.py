@@ -54,9 +54,14 @@ def test_batched_leading_axes():
 
 
 def test_consumers_share_the_one_implementation():
-    """Both former call sites import THE canonical helper (no local copies)."""
+    """The PAH call site imports THE canonical helper (no local copies).
+
+    astrodust normalizes on its own native grid (owner ruling 2026-10-09) through
+    ``native_bolometric_nu``, so it no longer uses the evaluation-grid quadrature.
+    """
+    from tengri.components.agn._template_grid import native_bolometric_nu
     from tengri.components.dust import draine2021_pah_ir
     from tengri.components.dust.emission.templates import astrodust
 
     assert draine2021_pah_ir.integrate_lnu_over_nu is integrate_lnu_over_nu
-    assert astrodust.integrate_lnu_over_nu is integrate_lnu_over_nu
+    assert astrodust.native_bolometric_nu is native_bolometric_nu

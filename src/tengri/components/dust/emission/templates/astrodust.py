@@ -35,12 +35,13 @@ from typing import Any, ClassVar
 import jax
 import jax.numpy as jnp
 
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.dust.astrodust_hd23 import (
+    _UM_TO_AA,
     load_astrodust_hd23_or_raise,
     resample_lnu_on_aa_grid,
 )
 from tengri.components.dust.emission._component_base import EmissionComponent
-from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
 
@@ -308,10 +309,26 @@ class AstrodustIRSEDComponent(EmissionComponent):
         lnu_template = lnu_template * unit_scale
         spd_aa = spd_aa * unit_scale
 
+        # Normalization integral per lgU row, on the template's OWN native
+        # grid (the published microns nodes), never on the caller's grid. The
+        # thermal rows and the spinning term are both linear in the lookup, so
+        # interpolating these row integrals in lgU is the integral of the
+        # interpolated spectrum exactly.
+        native_aa = jnp.asarray(templates.wavelength_um) * _UM_TO_AA
+        thermal_integral = jax.vmap(lambda row: native_bolometric_nu(row * unit_scale, native_aa))(
+            lnu_um
+        )
+        if self.config.spinning_dust:
+            spin_integral = native_bolometric_nu(spd_um * unit_scale, native_aa)
+        else:
+            spin_integral = jnp.zeros((), dtype=thermal_integral.dtype)
+        native_integral = thermal_integral + spin_integral
+
         return {
             "lgU_grid": jnp.asarray(templates.lgU),
             "lnu_template": lnu_template,
             "lnu_spinning": spd_aa,
+            "lnu_native_integral": native_integral,
         }
 
     def predict(
@@ -382,10 +399,10 @@ class AstrodustIRSEDComponent(EmissionComponent):
         # Assemble combined spectrum: thermal + spinning dust
         combined_spectrum = L_nu_thermal + lnu_spinning
 
-        # Renormalize on the evaluation grid AFTER resampling and assembly, with
-        # the shared quadrature, so the published spectrum integrates to L_ir
-        # exactly regardless of the native template grid spacing.
-        t_integral = integrate_lnu_over_nu(combined_spectrum, jnp.asarray(wave))
+        # Normalize on the template's native grid (precomputed per lgU row at
+        # load time), so the published spectrum does not depend on the caller's
+        # wavelength sampling.
+        t_integral = jnp.interp(lgU_clipped, lgU_grid, data["lnu_native_integral"])
         norm = jnp.where(t_integral > 0.0, L_ir / t_integral, 0.0)
 
         sed_emission = norm * combined_spectrum
