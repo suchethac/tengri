@@ -36,6 +36,7 @@ import numpy as np
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -159,6 +160,27 @@ def _build_grid_grahsp(
     )
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -205,10 +227,10 @@ def precompute(
         Keys: ``grid_phot``, ``axes``, ``_preint``,
         optionally ``_collapsed_axes``.
     """
-    if plslope_grid is None:
-        plslope_grid = np.array([-2.5, -1.7, -1.0], dtype=np.float64)
-    if ebv_grid is None:
-        ebv_grid = np.array([0.0, 0.05, 0.1, 0.3, 1.0], dtype=np.float64)
+    plslope_grid = _axis(
+        "agn_grahsp_plslope", plslope_grid, np.array([-2.5, -1.7, -1.0]), parameters
+    )
+    ebv_grid = _axis("agn_grahsp_ebv", ebv_grid, np.array([0.0, 0.05, 0.1, 0.3, 1.0]), parameters)
 
     preint = _build_grid_grahsp(
         filter_waves,
