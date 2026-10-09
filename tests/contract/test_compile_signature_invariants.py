@@ -203,6 +203,10 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._cached_full_state_chain = None
             self._dust_band_response_cache = None
             self._dust_band_response_decline = None
+            self._cloudy_band_table_cache = None
+            self._cloudy_band_table_decline = None
+            self._shock_band_table_cache = None
+            self._shock_band_table_decline = None
             self._energy_balance_lut_cache = None
             self._index_window_lut_cache = None
             self._line_window_lut_cache = None
