@@ -76,51 +76,30 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     settings. The `sfh` group takes `'bin_edges_gyr'` (non-parametric bin
     layout) and `'age_kernel'` (below).
 - **`sfh={'age_kernel': ...}`** picks how the SFH is integrated onto the SSP
-  age grid — the one place the two implementations differ numerically:
-  - `'cic'` (the default) evaluates the SFH on a 16x denser integrand and
-    splits each `SFR(t)·dt` parcel between its bracketing SSP nodes with
-    log-age cloud-in-cell weights (first order; ≤ 0.01 % in flux of a
-    converged quadrature for smooth histories).
-  - `'dsps'` is DSPS's histogram kernel: each parcel goes wholly to one node.
-    It is fed an SFR table refined 8-fold between the SSP nodes ([#2683]), so
-    its output differs from a code that feeds the same kernel a table with one
-    row per node. It agrees with `'cic'` to < 0.1 % in flux for smooth and
-    step-like families at z = 0 (delayed-tau, onset 5.0 Gyr: −0.05 / −0.06 /
-    −0.04 / −0.03 % in FUV / u / r / H); at z = 2.5 the oldest parcels sit at
-    the age of the universe between two nodes and the kernels differ by
-    0.5–1.4 %: `'cic'` shares those parcels onto the bracketing nodes (the
-    interpolating reference), `'dsps'` puts them wholly on the younger one
-    because the cell's log-age midpoint lies beyond the age of the universe,
-    so no table knot removes the difference. Structure narrower than the local node spacing (a burst of a few
-    Myr to tens of Myr, periodic bursts) is placed on the nearest node and
-    raises `DSPSUnresolvedHistoryWarning`; use `'cic'` there.
-  - Both kernels accept every SFH type. A correlated-field draw defines the SFR
-    at its own lookback nodes and the history between nodes is the linear
-    interpolation of the draw; `'cic'` takes the nodes as exact knots and
-    `'dsps'` samples the same interpolant on its refined table ([#2684]).
-    Leaving the kernel unset selects `'cic'` for every SFH type. It is the
-    accurate kernel for field and rough histories: `'dsps'` differs there by up
-    to 16 % in the FUV and 9 % in r-band flux. The `'cic'` integrand resolves
-    structure down to ~30 Myr; a 10 Myr burst is not converged (age-weight TV
-    0.015).
-  - It is **not** a speed knob, and `'dsps'` is the slower of the two.
-    Measured on `predict_photometry` gradients (interleaved reps, medians, an
-    A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact
-    path** and **13 % faster under `WavePrecomp()`**.
-
-    The cause is **not** that DSPS does more arithmetic — by compiled-HLO cost
-    analysis it does ~1 % *fewer* FLOPs and touches fewer bytes. It compiles to
-    **twice as many `while` loops** (14 vs 7 exact, 13 vs 6 under WavePrecomp)
-    and ~40 % more fusion regions: sequential, latency-bound work that does not
-    vectorize. Precompute shrinks the vectorizable part (cic fusions 356 → 212)
-    but leaves the loops alone (dsps whiles 14 → 13), so DSPS's fixed
-    sequential share grows and the gap widens. This is a **CPU wall-clock**
-    effect driven by op structure, so the ordering is not guaranteed to hold on
-    GPU — re-measure there rather than assuming.
-
-    Do **not** judge this by micro-benchmarking
-    `compute_dsps_age_weights` — that helper has no call sites on the model
-    path, so its timing says nothing about `apply()`.
+  age grid. The two names select one integration ([#2683]):
+  - `'cic'` (the default) evaluates the SFH on a 16x denser integrand (a binned
+    SFH's edges and a field's or table's nodes are exact knots) and splits each
+    `SFR(t)·dt` parcel between its bracketing SSP nodes with log-age
+    cloud-in-cell weights (first order; ≤ 0.01 % in flux of a converged
+    quadrature for smooth histories). Time parameters move mass continuously, so
+    every onset, edge and burst-age gradient is finite and non-zero.
+  - `'dsps'` is accepted for fits that name it and gives the same weights to
+    round-off. DSPS's own histogram assigns each parcel wholly to the node whose
+    log-midpoint bin holds it: a 30 Myr burst at z = 2.5 is 14-19 % off in the
+    FUV, a periodic SFH 26 %, Gaussian-in-lookback peaks 5.6 %, and a table of
+    fixed rows cannot see an onset or step edge between them (a staircase onset
+    gradient, a zero `psb_flex` `tflex` gradient). Refining the table 8-fold
+    ([#2723]) fixed the lost onset node and left the rest; first-order sharing
+    of the exact integrand is the exact answer, so the zeroth-order definition
+    is not offered. For raw-DSPS parity feed DSPS its own table.
+  - Both accept every SFH type. A correlated-field draw defines the SFR at its
+    own lookback nodes and the history between nodes is the linear
+    interpolation of the draw ([#2684]). The integrand resolves structure down
+    to ~30 Myr; a 10 Myr burst is not converged (age-weight TV 0.015).
+  - It is **not** a speed knob: the two names are one code path. (Before
+    [#2683], when `'dsps'` was DSPS's histogram, it was the slower of the two:
+    it compiled to twice as many `while` loops, which `WavePrecomp` cannot
+    shrink.)
 
 [#964]: https://github.com/suchethac/tengri/issues/964
 - **Sub-blocks** nest a dict with its own `'type'`/`'all_params'`/per-param keys:

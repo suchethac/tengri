@@ -28,6 +28,16 @@ _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 
+#: Relative objective-decrease tolerance handed to scipy's L-BFGS-B as ``ftol``,
+#: set at float64 round-off so the gradient tolerance ``tol`` (``gtol``) is the
+#: criterion that ends a fit. scipy's default (2.2e-9) stops a slow descent along
+#: a weakly constrained direction while the gradient is still large, and reports
+#: success: on the minimal recipe the unprofiled MAP stopped at grad norm 0.057
+#: (tol 1e-5), 1.4e-3 above the joint minimum, with ``sfh_tsnorm_trunc`` 0.19 off
+#: it; at this ftol it reaches grad norm 1.1e-5 and agrees with the profiled MAP
+#: to 3.7e-4.
+_SCIPY_FTOL = 1e-15
+
 # Short-form name aliases used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
@@ -350,7 +360,7 @@ def _run_map_scipy(
         method=scipy_method,
         jac=True,
         callback=callback,
-        options={"maxiter": n_steps, "gtol": tol},
+        options={"maxiter": n_steps, "gtol": tol, "ftol": _SCIPY_FTOL},
     )
     wall_time = time.time() - t0
 
@@ -788,9 +798,11 @@ def run_map(
         quasi-Newton).
     tol : float
         Gradient norm tolerance for convergence (quasi-Newton only): scipy's
-        ``gtol`` on the single-start path, ``jax.scipy.optimize.minimize``'s
-        ``tol`` on the vmapped multi-start path. Ignored for optax, which has
-        no analogous stopping criterion (see ``rtol``/``patience`` instead).
+        ``gtol`` on the single-start path (where the relative-decrease test
+        ``ftol`` is held at round-off, :data:`_SCIPY_FTOL`, so ``tol`` is what
+        ends the fit), ``jax.scipy.optimize.minimize``'s ``tol`` on the vmapped
+        multi-start path. Ignored for optax, which has no analogous stopping
+        criterion (see ``rtol``/``patience`` instead).
     verbose : bool
         Print progress summary.
     verbose_steps : bool

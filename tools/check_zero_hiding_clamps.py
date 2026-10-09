@@ -197,7 +197,7 @@ from collections.abc import Sequence
 #: and in erg/s on float64, with ``numer`` in the matching unit, so one division serves both.
 #: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
 #: and still counted.
-EXPECTED_SITES = 84
+EXPECTED_SITES = 83
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

@@ -179,9 +179,11 @@ _QUAD_HALF_WIDTH_SIGMAS = 8.0
 #: mass-independent additive component. :func:`_linearity_max_deviation` takes
 #: ``max(_LINEARITY_TOL, 1e4 * eps(dtype))`` so the same exactly-linear model
 #: is not refused under float32 roundoff alone. Set from measured separation
-#: between worst benign case (coarse ``dsps`` kernel, 6.097e-04 across prior)
-#: and genuine structural failure (mass-independent additive component, ~8.85):
-#: 1e-2 sits 16.4x above worst benign and 885x below genuine failure.
+#: between the worst benign case (6.097e-04 across the prior, from the coarse-grid
+#: histogram age kernel that #2683 removed; the age integration is now
+#: proportional to round-off, 1e-13) and genuine structural failure
+#: (mass-independent additive component, ~8.85): 1e-2 sits 16.4x above that
+#: benign case and 885x below genuine failure.
 _LINEARITY_TOL = 1e-2
 
 #: ``fitter.data_type`` values the exact chi^2(M) quadratic covers: photometry
@@ -808,11 +810,10 @@ def _linearity_refusal_reason(
         )
 
     tail = (
-        " At magnitudes within a few orders of the tolerance the cause is usually "
-        "conditioning in the mass direction instead, typically the coarse age kernel (set "
-        'age_kernel="dsps", which integrates on the SSP lookback grid rather than a refined '
-        'one; the default "cic" is 16x-refined), which costs up to roughly 1e-3 at the '
-        "sharpest SFH shapes."
+        " The stellar age integration is not a candidate cause: both age kernels share "
+        "one cloud-in-cell integration whose weights are normalized and scaled by the "
+        "formed mass, so it is proportional to the mass to round-off (measured 1e-13 on "
+        "parametric and field histories), whatever the integrand resolution."
     )
     return head + why + tail
 

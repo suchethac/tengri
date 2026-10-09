@@ -2505,10 +2505,10 @@ class SEDModel:
            sample. Derived quantities are now computed from the SED's own age
            weights, so every value agrees to machine precision.
 
-           To change how the CSP is integrated, use the knob that does reach it:
-           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964). ``tengri.list_age_kernels()``
-           is the live menu. Unlike this argument, that one measurably moves the
-           SED, 0.19% across SDSS *ugriz* for a double-power-law history.
+           The age-weight kernel that does reach the CSP is
+           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964); since #2683 both names
+           select the same integration, so it moves no output either.
+           ``tengri.list_age_kernels()`` is the live menu.
 
     Attributes
     ----------

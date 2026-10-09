@@ -525,9 +525,9 @@ def build_components(
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
     age_kernel : str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
-        ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
-        auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
-        for the accuracy/cost tradeoff (#964).
+        ``"dsps"`` (the same integration under its historical name, #2683), or
+        ``None`` (default) to auto-select. See
+        :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`.
     nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit

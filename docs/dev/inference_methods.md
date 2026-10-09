@@ -1727,12 +1727,12 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
   place for a coarse age kernel, measuring 7.527e-10 against 2.879e-06 for the worst of nine
   on one fixture -- a factor of 3,800. A deviation of order 1
   indicates a mass-independent additive component (e.g. an unmasked AGN continuum on
-  either channel); a deviation within a few orders of the tolerance more often indicates
-  the coarse age kernel instead. `age_kernel="dsps"` integrates the SFH on the SSP lookback
-  grid rather than a refined one (the default `"cic"` is 16x-refined). That costs mass-linearity:
-  typically well below 1e-5, but reaching roughly 1e-3 at the sharpest SFH shapes in the prior.
-  `field=True` forces that kernel (issue #1470), so a stochastic SFH reaches it without asking.
-  A refusal at this magnitude does not by itself imply any additive component.
+  either channel). Until #2683 a deviation within a few orders of the tolerance more often
+  came from the coarse-grid histogram age kernel (`age_kernel="dsps"`, forced by
+  `field=True`), which cost up to roughly 1e-3 of mass-linearity at the sharpest SFH shapes.
+  Both kernel names now select one cloud-in-cell integration whose normalized weights are
+  scaled by the formed mass, so the age integral is proportional to round-off (measured
+  1.3e-13 on the minimal recipe and 7.1e-13 on a `dpl` field history, for either name).
 
 #### The probe answers three questions, not two (2026-09-17)
 

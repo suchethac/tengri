@@ -50,7 +50,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.stellar.sfh.mean_sfh import window_weight
+from tengri.components.stellar.sfh.mean_sfh import periodic, window_weight
 from tengri.utils.host_array import device_table, host_array
 
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
@@ -1209,7 +1209,57 @@ def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
         return _psb_flex_edges_yr(sfh_kwargs)
     if fn is continuity or fn is dirichlet:
         return device_table(DEFAULT_BIN_EDGES_GYR) * 1e9
+    if fn is periodic:
+        return _periodic_edges_yr(sfh_kwargs)
     return None
+
+
+#: Burst onsets :func:`periodic` gets exact knots for (#2683): the registry's
+#: ``delta_bursts_gyr`` floor of 10 Myr and ``age_gyr`` ceiling of 13 Gyr allow
+#: 1300 onsets; the margin covers a ``Fixed`` age a little beyond the ceiling. A
+#: static count keeps the integrand's shape fixed under ``jit`` / ``vmap``.
+PERIODIC_MAX_ONSETS = 1400
+
+
+def _periodic_edges_yr(sfh_kwargs: dict) -> jnp.ndarray:
+    """Every discontinuity of :func:`periodic`, as lookback times [yr] (#2683).
+
+    The sawtooth jumps at each burst onset, lookback ``age - k * delta``, and a
+    rectangular burst (``burst_type == 2``) drops again ``tau`` later. Sampled on
+    the dense log grid those jumps fall between nodes and the quadrature smears
+    them: the far-UV flux of the default history was 4.7 % low at z = 0 and the
+    flux a staircase in ``delta``. As exact knots, the integral is continuous in
+    every parameter.
+
+    Onsets that do not exist (``age - k * delta <= 0``, for ``k`` up to
+    :data:`PERIODIC_MAX_ONSETS`) are moved to distinct points just beyond the
+    formation age, where the SFR is zero, so no knot is duplicated (a duplicated
+    knot has a zero-width cell, and the cell-averaged window then zeroes its SFR).
+
+    The burst ends, ``tau`` after each onset, are discontinuities of the
+    rectangular burst only. The exponential and delayed bursts are smooth there,
+    so for them the ends are parked beyond the formation age as well: a knot at
+    ``onset - tau`` moves with ``tau`` and, wherever ``tau`` is a multiple of
+    ``delta``, lands exactly on a later onset knot. The sort then pairs a knot
+    that moves with ``tau`` and one that does not in an order no perturbation
+    produces, and the ``tau`` gradient there was off the central difference by 16-230 %
+    (#2683).
+    """
+    delta = sfh_kwargs["delta_bursts_yr"]
+    tau = sfh_kwargs["tau_bursts_yr"]
+    age = sfh_kwargs["age_yr"]
+    rectangular = sfh_kwargs["burst_type"] == 2
+    k = jnp.arange(PERIODIC_MAX_ONSETS, dtype=jnp.result_type(delta, age))
+    onset = age - k * delta
+    end = onset - tau
+    dead_onset = age * (1.0 + 1e-3 * (k + 1.0) / PERIODIC_MAX_ONSETS)
+    dead_end = age * (1.0 + 2e-3 * (k + 1.0) / PERIODIC_MAX_ONSETS)
+    return jnp.concatenate(
+        [
+            jnp.where(onset > 0.0, onset, dead_onset),
+            jnp.where(rectangular & (end > 0.0), end, dead_end),
+        ]
+    )
 
 
 def _psb_flex_edges_yr(sfh_kwargs: dict) -> jnp.ndarray:

@@ -1767,19 +1767,28 @@ def compute_dsps_met_table_weights(
         t_obs=t_obs_gyr,
     )
 
-    # See ``compute_dsps_native_weights`` for the rationale: use the
-    # joint (n_met, n_age) ``result.weights`` directly. DSPS aligns its
-    # weights' age axis with the SSP grid (lookback-time ascending);
-    # no axis flips required to dot with ``ssp_flux``.
+    # The joint weights factor exactly as (age marginal) x (per-age metallicity
+    # distribution), so each factor is taken from DSPS on its own. DSPS aligns
+    # both age axes with the SSP grid (lookback-time ascending); no flips.
+    #
+    # Mass per age bin is the SFH's age marginal ``result.age_weights``, which
+    # does not depend on the metallicity table: lgmet chooses templates, it does
+    # not move mass, so d(mass)/d(lgmet) is exactly zero. Summing the joint
+    # weights over metallicity instead returns the same marginal only to
+    # round-off (DSPS normalizes each per-age MDF and then the whole matrix), and
+    # that round-off has a non-zero lgmet gradient.
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
 
-    joint = result.weights  # (n_met, n_age) sum=1
-    age_weights_norm = joint.sum(axis=0)  # (n_age,) sum=1
+    age_weights_norm = result.age_weights  # (n_age,), DSPS normalizes it to sum 1
     age_weights_msun = age_weights_norm * jnp.maximum(total_mass, 0.0)
 
-    weighted_ssp = jnp.einsum("ma,maw->aw", joint, ssp_flux)  # (n_age, n_wave) per Msun_formed
-    age_weights_safe = jnp.maximum(age_weights_norm, 1e-30)
-    ssp_flux_at_z = weighted_ssp / age_weights_safe[:, None]
+    # Per-age metallicity distribution, each column normalized to one: the
+    # flux of one solar mass formed at that age. DSPS places a column whose
+    # lognormal falls wholly off the grid on the nearest node, so no column sum
+    # is zero.
+    met_w = result.lgmet_weights  # (n_met, n_age)
+    met_w = met_w / met_w.sum(axis=0, keepdims=True)
+    ssp_flux_at_z = jnp.einsum("ma,maw->aw", met_w, ssp_flux)  # (n_age, n_wave) per Msun
 
     return age_weights_msun, ssp_flux_at_z
 
