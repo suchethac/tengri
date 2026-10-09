@@ -549,3 +549,86 @@ def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, m
     assert np.max(np.abs(a)) > 0.0
     err = np.max(np.abs(b - a)) / np.max(np.abs(a))
     assert err <= 1e-10, err
+
+
+# ── 7. The public predict_spectrum path crops for a Fixed redshift (#2832) ──
+
+
+def _igm_model_for_public_path(ssp, wave_obs, redshift):
+    """A photometry-and-spectroscopy IGM model with the given redshift spec."""
+    import warnings
+
+    spec = Spectroscopy(wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0)
+    obs = Observation(spectroscopy=spec)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        base = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
+            neb={"type": "none"},
+            igm={"type": "inoue14"},
+            redshift=redshift,
+        )
+        merged = base.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0))
+        return SEDModel(merged, ssp, observation=obs)
+
+
+def _public_params(model, sigma_v):
+    p = dict(model.spec.sample(jax.random.PRNGKey(5)))
+    p["sfh_dpl_log_total_mass"] = jnp.asarray(10.0)
+    p["dust_tau_bc"] = jnp.asarray(0.0)
+    p["dust_tau_diff"] = jnp.asarray(0.0)
+    p["sigma_v_kms"] = jnp.asarray(sigma_v)
+    return p
+
+
+def test_fixed_redshift_public_predict_spectrum_crops_and_matches_full_grid(
+    synthetic_ssp_wide, monkeypatch
+):
+    """Fixed(z) + IGM: model.predict_spectrum(p) takes the cropped pass; equals the full grid."""
+    z = 0.73
+    wave_obs = jnp.linspace(2600.0, 4200.0, 240)
+    model = _igm_model_for_public_path(synthetic_ssp_wide, wave_obs, Fixed(z))
+    assert model.z_fixed == pytest.approx(z)
+    p = _public_params(model, 300.0)
+
+    calls = []
+    real = spectrum_mod.broaden_velocity_only_window
+
+    def spy(*args, **kwargs):
+        calls.append(args[4:6])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    public = np.asarray(model.predict_spectrum(p))
+    assert len(calls) >= 1, "the public predict_spectrum path did not take the cropped pass"
+    lo, hi = calls[0]
+    assert (lo, hi) != (0, synthetic_ssp_wide.ssp_wave.shape[0]), "the crop removed nothing"
+    # The explicit wave_obs path passes no window: it is the full-grid reference.
+    full = np.asarray(model.predict_spectrum(p, wave_obs=wave_obs))
+    assert np.max(np.abs(public)) > 0.0
+    err = np.max(np.abs(public - full)) / np.max(np.abs(public))
+    assert err <= 1e-10, err
+
+
+def test_free_redshift_public_predict_spectrum_never_crops(synthetic_ssp_wide, monkeypatch):
+    """A free redshift has no single value, so the public path keeps the full grid."""
+    wave_obs = jnp.linspace(2600.0, 4200.0, 240)
+    model = _igm_model_for_public_path(synthetic_ssp_wide, wave_obs, Uniform(0.6, 0.9))
+    assert model.z_fixed is None
+    p = _public_params(model, 300.0)
+    p["redshift"] = jnp.asarray(0.75)
+
+    calls = []
+    real = spectrum_mod.broaden_velocity_only_window
+
+    def spy(*args, **kwargs):
+        calls.append(args)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    out = np.asarray(model.predict_spectrum(p))
+    assert np.all(np.isfinite(out))
+    assert calls == []
