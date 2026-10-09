@@ -30,7 +30,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _interp_index_weight,
     interp_continuum_with_freefree_tail,
@@ -230,10 +232,12 @@ def build_cloudy_band_table(
         cont_u=cu,
         line_z=lz,
         line_u=lu,
-        log_cont=log_cont,
-        log_lines=_to_log(np.stack(line_tab)),
-        line_coeff=coeff,
-        lya_mask=_lya_mask(line_wave),
+        # Device arrays: the table rides in the jitted template data every call,
+        # and a host array there is re-transferred each time (~5 MB here).
+        log_cont=jnp.asarray(log_cont),
+        log_lines=jnp.asarray(_to_log(np.stack(line_tab))),
+        line_coeff=jnp.asarray(coeff),
+        lya_mask=jnp.asarray(_lya_mask(line_wave)),
         line_sigma_kms=float(line_sigma_kms),
         redshift=float(redshift),
     )
@@ -311,3 +315,68 @@ def contract_cloudy_band_table(
     lum = lum * (1.0 - fesc_lya * jnp.asarray(table.lya_mask))
     line_band = jnp.einsum("j,jcf->cf", lum, jnp.asarray(table.line_coeff))
     return cont_band + line_band
+
+
+def table_covers(table: CloudyBandTable, z_range, u_range) -> bool:
+    """Whether the table's (Z_gas, logU) axes contain both closed ranges.
+
+    Parameters
+    ----------
+    table : CloudyBandTable
+    z_range, u_range : (float, float)
+        Absolute log10 Z_gas and log10 U ranges the model can reach.
+
+    Returns
+    -------
+    bool
+        True when every node of both the continuum and the line axes spans
+        the requested range. Outside the axes the per-call path clips while
+        the table would too, so a model that reaches past them must decline.
+    """
+    z_axis = np.concatenate([table.cont_z, table.line_z])
+    u_axis = np.concatenate([table.cont_u, table.line_u])
+    return bool(
+        z_axis.min() <= z_range[0]
+        and z_axis.max() >= z_range[1]
+        and u_axis.min() <= u_range[0]
+        and u_axis.max() >= u_range[1]
+    )
+
+
+def runtime_age_weights(backend, ssp_log_ages_yr, ssp_weights, log_z, neb_fesc, neb_fdust_frac):
+    """Per-young-age weights ``w_i * Q_H(log_z, age_i) * k_factor``, shape (n_young,).
+
+    Mirrors the age weighting of ``CloudyGridBackend.predict_nebular_split``
+    (same young-bin selection, same Q_H lookup, same ``lyc_shares`` k-factor),
+    so the table contraction is the per-call sum regrouped.
+    """
+    young = np.asarray(backend._young_idx)
+    ages = jnp.asarray(ssp_log_ages_yr)[young]
+    weights = jnp.asarray(ssp_weights)[young]
+    qh = jax.vmap(lambda a: backend._get_qh_at(log_z, a))(ages)
+    _, f_dust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
+    k_factor = lyc_dust_escape_factor(neb_fesc, f_dust)
+    return weights * qh * k_factor
+
+
+def table_band_photometry(
+    table: CloudyBandTable,
+    backend,
+    ssp_log_ages_yr,
+    ssp_weights,
+    log_z,
+    log_z_gas,
+    neb_logu,
+    neb_fesc,
+    neb_fdust_frac,
+    neb_fesc_lya,
+):
+    """Observed and rest band L_nu of the CLOUDY nebular emission, shape (2, n_filt).
+
+    The runtime entry point: age weights from the SSP layout and Q_H, then the
+    contraction of :func:`contract_cloudy_band_table`.
+    """
+    aw = runtime_age_weights(
+        backend, ssp_log_ages_yr, ssp_weights, log_z, neb_fesc, neb_fdust_frac
+    )
+    return contract_cloudy_band_table(table, aw, log_z_gas, neb_logu, neb_fesc_lya)
