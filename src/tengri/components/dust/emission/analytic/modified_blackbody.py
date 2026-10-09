@@ -18,6 +18,7 @@ from tengri.components.dust._params import (
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 from tengri.parameters.resolve import require_redshift
+from tengri.utils.scale import representable_floor
 
 __all__ = ["ModifiedBlackbodyIRSEDComponent"]
 
@@ -84,7 +85,9 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
 
         The registry table is built at the closure default of ``epsilon_mbb``.
         """
-        return jnp.clip(p["epsilon_mbb"], 0.0, 1.0) / min(max(DEFAULT_DUST_EPSILON_MBB, 0.0), 1.0)
+        return jnp.clip(p["epsilon_mbb"], representable_floor(0.0), 1.0) / min(
+            max(DEFAULT_DUST_EPSILON_MBB, 0.0), 1.0
+        )
 
     def predict(
         self,
