@@ -367,16 +367,19 @@ def build_catalog_mcmc_engine(
     precondition: bool | float | None = None,
     precondition_floor: float = PRIOR_METRIC_FLOOR,
     precondition_max_condition: float = MAX_METRIC_CONDITION,
+    flat_logdensity=None,
+    substitute=None,
 ):
     """Build a vmap-safe per-galaxy NUTS/HMC/ChEES sampling callable.
 
     Parameters
     ----------
-    fitter : Fitter
+    fitter : Fitter or None
         A template :class:`~tengri.inference.fitter.Fitter` for the shared
         model. Only its structure is used, its log-posterior and the shared
         ``_jit_inputs`` are captured; per-galaxy ``data``/``noise`` are supplied
-        at call time so the compiled program is reused across galaxies.
+        at call time so the compiled program is reused across galaxies. May be
+        None when ``flat_logdensity`` is given; it is then never read.
     sampler : {"nuts", "hmc", "chees"}
         Which BlackJAX sampler to vectorize.
     n_warmup : int
@@ -447,6 +450,16 @@ def build_catalog_mcmc_engine(
     precondition_floor, precondition_max_condition : float, optional
         Eigenvalue floor and condition-number cap on the metric, as for
         :func:`~tengri.inference.preconditioning.prepare_preconditioning`.
+    flat_logdensity : tuple or None, optional
+        ``(log_posterior_flat_2arg, unravel_fn, init_flat, template_data_args)``,
+        the same four values :func:`~tengri.inference.backends.mcmc._shared._get_flat_logdensity`
+        returns for a fitter. When given, ``fitter`` is not read. Used by callers
+        whose per-galaxy observation is not a Fitter's ``data``.
+    substitute : callable or None, optional
+        Replaces the default per-galaxy ``data_args`` builder. It takes
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err)`` and
+        returns the ``data_args`` pytree that ``log_posterior_flat_2arg`` receives.
+        When None, the builder from the fitter's template is used.
 
     Returns
     -------
@@ -484,13 +497,21 @@ def build_catalog_mcmc_engine(
         )
     ensemble_size = _resolve_chees_ensemble(n_ensemble, n_chains) if sampler == "chees" else 0
 
-    init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-    log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
-        fitter, init_params
-    )
+    if flat_logdensity is not None:
+        log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = flat_logdensity
+    elif fitter is None:
+        raise ValueError(
+            "build_catalog_mcmc_engine needs a fitter or a flat_logdensity; both are None"
+        )
+    else:
+        init_params = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+        log_posterior_flat_2arg, unravel_fn, _init_flat, template_data_args = _get_flat_logdensity(
+            fitter, init_params
+        )
     n_chain = n_burnin + n_samples
 
-    substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
+    if substitute is None:
+        substitute = _make_substitute(template_data_args, thread_redshift, thread_line_fluxes)
 
     # Resolved ONCE, at build time, from a concrete Python value: the whitening
     # strength is static, so ``strength is None`` below is a trace-time branch and
