@@ -20,6 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import FREE, Fixed, Observation, SEDModel, Spectroscopy, Uniform
 from tengri.observation import spectrum as spectrum_mod
 from tengri.observation.spectrum import (
     _C_KM_S,
@@ -362,6 +363,7 @@ def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch)
         resolution=_R_SCALAR,
         sigma_lib_kms=0.0,
         sigma_v_kms=150.0,
+        window_z=1.0,
     )
     assert calls == [window]
 
@@ -417,3 +419,133 @@ def test_lsf_pad_pixels_concrete_and_traced_branches():
 
     jax.make_jaxpr(probe)(jnp.asarray(wave))
     assert seen == [min(n - 1, max(64, n // 16))]
+
+
+# ── 6. The window_z plumbing (#2832) ──
+
+
+def _kernel_split_inputs(n: int = 4000, z: float = 1.0):
+    wave_rest = np.geomspace(1000.0, 20000.0, n)
+    wave_obs = np.linspace(3600.0, 9824.0, 1500)
+    sed = (
+        1.0e20
+        * (wave_rest / 5000.0) ** -1.5
+        * (1.0 + 0.5 * np.exp(-0.5 * ((wave_rest - 2800.0) / 4.0) ** 2))
+    )
+    return wave_rest, wave_obs, sed, z
+
+
+def _kernel_split(sed, wave_rest, wave_obs, z, **kwargs):
+    from tengri.observation.observation import project_spectrum_kernel_split
+    from tengri.protocols.component import ForwardState
+
+    n = sed.size
+    state = ForwardState(
+        wave=jnp.asarray(wave_rest),
+        sed_intrinsic=jnp.asarray(sed),
+        derived={"sed_nebular": jnp.zeros(n), "sed_shock": jnp.zeros(n)},
+    )
+    dl_cm = float(np.sqrt((1.0 + z) / (4.0 * np.pi)))
+    return np.asarray(
+        project_spectrum_kernel_split(
+            state,
+            jnp.asarray(sed),
+            jnp.ones(n),
+            jnp.asarray(wave_rest),
+            jnp.asarray(wave_obs),
+            z,
+            dl_cm,
+            resolution=_R_SCALAR,
+            sigma_lib_kms=0.0,
+            sigma_v_kms=150.0,
+            **kwargs,
+        )
+    )
+
+
+@pytest.mark.parametrize("z", [1.0, 3.0])
+def test_window_z_cropped_split_matches_full_grid(z, monkeypatch):
+    """A concrete window_z crops the rest pass; the observed flux is unchanged to 1e-10."""
+    wave_rest, wave_obs, sed, _ = _kernel_split_inputs(z=z)
+    calls = []
+    real = spectrum_mod.broaden_velocity_only_window
+
+    def spy(*args, **kwargs):
+        calls.append(args[4:6])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    full = _kernel_split(sed, wave_rest, wave_obs, z, window_z=None)
+    assert calls == [], "window_z=None must keep the full-grid pass"
+    cropped = _kernel_split(sed, wave_rest, wave_obs, z, window_z=z)
+    assert len(calls) == 1, "a concrete window_z must run the cropped pass"
+    lo, hi = calls[0]
+    assert (lo, hi) != (0, wave_rest.size)
+    err = np.max(np.abs(cropped - full)) / np.max(np.abs(full))
+    assert err <= 1e-10, err
+
+
+def test_window_z_wrong_redshift_is_not_interchangeable():
+    """A window built at a different redshift changes the answer, so window_z must be z.
+
+    Measured: a window at z = 1 applied to a z = 3 spectrum is off by 2.4e-5 relative,
+    which is why the observation layer keys the window to the Fixed redshift and not to
+    the lower bound of a free redshift prior.
+    """
+    wave_rest, wave_obs, sed, _ = _kernel_split_inputs(z=3.0)
+    full = _kernel_split(sed, wave_rest, wave_obs, 3.0, window_z=None)
+    wrong = _kernel_split(sed, wave_rest, wave_obs, 3.0, window_z=1.0)
+    assert np.max(np.abs(wrong - full)) / np.max(np.abs(full)) > 1e-8
+
+
+def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, monkeypatch):
+    """Observation.predict(window_z=z) on a Fixed-z SEDModel with IGM: crop equals full."""
+    import warnings
+
+    from tengri.parameters.resolve import merge_fixed_params
+
+    z = 1.0
+    wave_obs = jnp.linspace(2000.0, 3200.0, 300)
+    spec = Spectroscopy(wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0)
+    obs = Observation(spectroscopy=spec)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        base = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
+            neb={"type": "none"},
+            igm={"type": "inoue14"},
+            redshift=Fixed(z),
+        )
+        merged = base.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0))
+        model = SEDModel(merged, synthetic_ssp_wide, observation=obs)
+    p = dict(model.spec.sample(jax.random.PRNGKey(11)))
+    p["sfh_dpl_log_total_mass"] = jnp.asarray(10.0)
+    p["dust_tau_bc"] = jnp.asarray(0.0)
+    p["dust_tau_diff"] = jnp.asarray(0.0)
+    p["sigma_v_kms"] = jnp.asarray(300.0)
+
+    state = model.predict_state(p)
+    full_params = merge_fixed_params(model.spec, p)
+    kwargs = model._observation_predict_kwargs(p)
+    calls = []
+    real = spectrum_mod.broaden_velocity_only_window
+
+    def spy(*args, **kw):
+        calls.append(args[4:6])
+        return real(*args, **kw)
+
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    base_out = model.observation.predict(state, full_params, wave_obs=wave_obs, **kwargs)
+    assert calls == []
+    crop_out = model.observation.predict(
+        state, full_params, wave_obs=wave_obs, window_z=z, **kwargs
+    )
+    assert len(calls) == 1, "the cropped rest-grid pass did not run"
+    a = np.asarray(base_out["spec_fnu"])
+    b = np.asarray(crop_out["spec_fnu"])
+    assert np.max(np.abs(a)) > 0.0
+    err = np.max(np.abs(b - a)) / np.max(np.abs(a))
+    assert err <= 1e-10, err

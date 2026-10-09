@@ -340,6 +340,7 @@ def project_spectrum_kernel_split(
     cal_wave_range: tuple[float, float] | None = None,
     conserving: bool = False,
     resolution_matrix: object | None = None,
+    window_z: float | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -493,6 +494,11 @@ def project_spectrum_kernel_split(
     resolution_matrix : BandedMatrix or None
         Banded instrument-response operator; when given, replaces the
         Gaussian LSF (see the banded case above).
+    window_z : float or None, optional
+        Concrete redshift at which the rest-grid sigma_v pass is cropped to the
+        observed window (#2832). It must equal ``redshift`` at run time: the caller
+        asserts this, because a traced ``redshift`` cannot be checked here. ``None``
+        (or a traced grid) keeps the full-grid pass.
 
     Returns
     -------
@@ -657,10 +663,12 @@ def project_spectrum_kernel_split(
             _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
         # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
-        # with a concrete redshift and grids, broaden the rest-frame window the observed
-        # range maps into, leaving the rest unbroadened. A traced redshift or grid keeps
-        # the full-grid pass.
-        window = rest_grid_observed_window(wave_rest, wave_obs, redshift)
+        # with a concrete ``window_z`` and concrete grids, broaden the rest-frame window the
+        # observed range maps into, leaving the rest unbroadened. ``window_z=None`` or a
+        # traced grid keeps the full-grid pass.
+        window = (
+            None if window_z is None else rest_grid_observed_window(wave_rest, wave_obs, window_z)
+        )
         if window is None:
             sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
         else:
@@ -1369,6 +1377,7 @@ class Observation:
         resample_z_ref: float | None = None,
         conserving: bool | None = None,
         observables_type=None,
+        window_z: float | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -1434,6 +1443,10 @@ class Observation:
             :func:`build_observables_class`. When ``None``, returns a dict
             (backward-compat). When provided, populates and returns an instance
             of this class.
+        window_z : float or None, optional
+            Concrete redshift for the rest-grid sigma_v window (see
+            :func:`project_spectrum_kernel_split`, #2832). It must equal the
+            redshift of ``state``; ``None`` keeps the full-grid pass.
 
         Returns
         -------
@@ -1555,6 +1568,7 @@ class Observation:
                 cal_wave_range=cal_wave_range,
                 conserving=conserving,
                 resolution_matrix=self.spectroscopy.resolution_matrix,
+                window_z=window_z,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.
