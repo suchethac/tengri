@@ -10,6 +10,10 @@
 
 - **The dust-emission goldens are regenerated for the native-grid normalization.** Ten frozen goldens (nine tabulated templates, `draine2021_pah_ir`, and the three analytic closures above) encoded the old caller-grid normalization and are rewritten. Each change is the per-model factor described in the commit that regenerated them.
 
+- **The schreiber2018 golden is regenerated and guarded.** The frozen file predated the native-grid normalization and no test read it. It is now read by `TestSchreiber2018GridPort`. The change is one constant per model (1.0466432589673538 on the templates it was frozen with) plus a shape residual of at most 6e-4 of the peak, which comes from the template library revision of 2026-09-12.
+
+- **The dale2014 free-alpha table is wired (WavePrecomp).** With `dust_alpha_dale` free, the band fluxes are tabulated on the library's alpha nodes from the closure itself, and the lookup interpolates linearly in alpha. The table reproduces the closure to 2.9e-4 over 8-500 um at z = 0.05 (30 draws), down from 7.0e-2. The table is sampled on a fine grid, not the library's native grid, whose far-IR trapezoid was 8 % high at 500 um. The jitted predict is about 10x faster than the exact per-call filter integral.
+
 - Internal: the native-grid integral helper moved to `tengri.utils.template_grid` as `native_nu_integral`; `emission_templates` imports it under its previous private name.
 
 - **The template dust precompute axes name the parameters their components declare (#2324).** The dale2014 adapter labelled its axis `dust_alpha`, which no component declares (the component's parameter is `dust_alpha_dale`), and the astrodust adapter labelled its axes `dust_qpah` and `dust_umin`, which the astrodust component does not declare (it declares `dust_lgU`). A contract test now checks every `AXIS_PARAMS` name against the component's declared parameters. The template dust models stay on the per-call filter integral with free shape parameters: the dale2014 table was measured at 7.0e-2 (8 to 500 micron bands) against the 1e-3 contract and is not wired.

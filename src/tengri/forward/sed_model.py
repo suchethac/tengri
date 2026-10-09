@@ -11191,7 +11191,7 @@ class SEDModel:
         at the current shape parameters (``EmissionComponent._shape_table_phot``).
 
         The adapter is built at one redshift, so the table is built only for a single ``Fixed``
-        redshift. Returns ``{"ln_phot", "axes"}`` (arrays only, so it threads through ``jit``),
+        redshift. Returns ``{"phot", "axes"}`` (arrays only, so it threads through ``jit``),
         or ``None`` with the reason in ``_dust_shape_table_decline``.
         """
         cached = getattr(self, "_dust_shape_table_cache", "unset")

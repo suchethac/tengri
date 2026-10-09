@@ -35,6 +35,7 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
+    interp_nd_pchip,
     interp_nd_triweight,
     preintegrate_grid,
     slice_fixed_axes,
@@ -965,6 +966,176 @@ def build_dale2014_photometry_lookup(precomp: dict, grid_arrays: tuple | None = 
     return phot_fn
 
 
+# ── Free-shape table (WavePrecomp, registry) ───────────────────────
+
+
+def _dale2014_path() -> str:
+    """Path of the dale2014 template library, searched in the closure's order."""
+    from tengri._data_setup import find_data_str
+
+    for fname in ("dale2014_templates.h5", "dale2014_templates_v2.h5"):
+        path = find_data_str(fname)
+        if path is not None:
+            return path
+    raise ValueError("dale2014 templates are not on disk")
+
+
+#: Log-spaced points on the library's span at which the free-shape table's spectra are sampled.
+_SHAPE_EVAL_POINTS = 4000
+
+
+def _shape_templates(model: str) -> dict:
+    """Raw template arrays of ``model`` for the free-shape table; the loader is the bespoke one."""
+    from tengri.components.dust.emission_templates import load_dale2014_templates
+
+    if model != "dale2014":
+        raise ValueError(f"no free-shape table for dust model {model!r}")
+    return load_dale2014_templates(_dale2014_path())
+
+
+def _dale2014_node_spectra(alpha_nodes: np.ndarray, wave_aa: np.ndarray) -> np.ndarray:
+    """Dale SF spectra at each alpha node, taken from the registered closure itself.
+
+    Row ``k`` is the closure's emission at ``L_absorbed = 1`` on the template's native grid, so
+    the table's nodes are the closure's own normalized spectra and not a re-derivation of them.
+
+    Parameters
+    ----------
+    alpha_nodes : ndarray, shape (n_alpha,)
+        Radiation-field slopes [dimensionless] at which the closure is evaluated.
+    wave_aa : ndarray, shape (n_wave,)
+        Native template wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_alpha, n_wave)
+        Closure L_nu [L_nu units per unit L_absorbed].
+    """
+    from tengri.components.dust.emission_templates import create_dale2014_from_grid
+
+    closure = create_dale2014_from_grid(_dale2014_path())
+    wave = jnp.asarray(wave_aa)
+    return np.stack(
+        [
+            np.asarray(closure(wave, 1.0, dust_alpha_dale=float(a)), dtype=np.float64)
+            for a in alpha_nodes
+        ]
+    )
+
+
+def precompute_shape(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    parameters: Any,
+    *,
+    model: str,
+) -> dict:
+    """Band fluxes of a template dust model over its free shape axes, for a linear lookup.
+
+    The axis is the library's own alpha grid. Each node is the closure's emission at that alpha,
+    integrated through the filters, so the table holds the closure's values at its nodes and
+    linear interpolation in alpha reproduces the closure between them.
+
+    Parameters
+    ----------
+    filter_waves, filter_trans : list of array_like
+        Filter curves (observed frame) [Angstrom], [dimensionless].
+    redshift : float
+        Source redshift [dimensionless].
+    parameters : Parameters or None
+        Parameter specification; a ``Fixed`` shape axis is rejected.
+    model : str
+        Dust emission model key (``"dale2014"``).
+
+    Returns
+    -------
+    dict
+        ``"_preint"`` (PreintegratedGrid), ``"_phot"`` (ndarray, linear flux),
+        ``"_collapsed_axes"``.
+    """
+    from tengri.forward.precompute.templates import collapse_fixed_axes
+
+    templates = _shape_templates(model)
+    native = np.asarray(templates["wavelength_aa"], dtype=np.float64)
+    alpha = np.asarray(templates["alpha_grid"], dtype=np.float64)
+    # The band integrals need a grid finer than the library's: on the native grid the far-IR
+    # trapezoid is 8 % high at 500 um. The closure normalizes on the native grid either way.
+    wave = np.logspace(np.log10(native[0]), np.log10(native[-1]), _SHAPE_EVAL_POINTS)
+    preint = preintegrate_grid(
+        templates=_dale2014_node_spectra(alpha, wave),
+        wave_rest=wave,
+        filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
+        filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(alpha,),
+        energy_normalize=False,
+    )
+    _, _, fixed = collapse_fixed_axes(preint, AXIS_PARAMS[model], parameters, origin=model)
+    if fixed:
+        raise ValueError(f"{model} free-shape table cannot collapse a Fixed shape axis")
+    return {
+        "_preint": preint,
+        "_phot": np.asarray(preint.phot, dtype=np.float64),
+        "_collapsed_axes": {},
+    }
+
+
+def table_arrays(preint: dict, model: str) -> dict:
+    """The arrays a lookup of ``model`` reads, as a pytree that rides through ``jax.jit``.
+
+    Parameters
+    ----------
+    preint : dict
+        Output of :func:`precompute_shape`.
+    model : str
+        Template dust model name.
+
+    Returns
+    -------
+    dict
+        ``{"phot": (*n_axes, n_filters), "axes": {param_name: (n_nodes,)}}``.
+    """
+    collapsed = preint.get("_collapsed_axes", {})
+    names = tuple(n for i, n in enumerate(AXIS_PARAMS[model]) if i not in collapsed)
+    return {
+        "phot": jnp.asarray(preint["_phot"]),
+        "axes": {n: jnp.asarray(ax) for n, ax in zip(names, preint["_preint"].axes)},
+    }
+
+
+def lookup_from_table(table: dict, model: str, L_absorbed, *free_axis_values):
+    """Band-averaged L_nu [erg/s/Hz] from :func:`table_arrays` data; traceable under ``jax.jit``.
+
+    Linear in the axis: the closure is linear in alpha to ~2e-5 between library nodes. A
+    monotone cubic in ln flux misses the 1e-3 contract at the same nodes (3e-3).
+
+    Parameters
+    ----------
+    table : dict
+        Output of :func:`table_arrays`.
+    model : str
+        Template dust model name.
+    L_absorbed : float
+        Amplitude multiplying the unit-luminosity band fluxes [erg/s].
+    *free_axis_values : float
+        Values of the table's axes, in ``AXIS_PARAMS[model]`` order.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        ``L_absorbed`` times the linear interpolant of the band fluxes.
+    """
+    names = tuple(n for n in AXIS_PARAMS[model] if n in table["axes"])
+    axes = tuple(table["axes"][n] for n in names)
+    phot = table["phot"]
+    if not axes:
+        return L_absorbed * phot.ravel()
+    query = tuple(free_axis_values)
+    return L_absorbed * interp_nd_pchip(phot, axes, query, kinds=("linear",) * len(axes))
+
+
 # ── Protocol-shaped entry points (new in restructure) ─────────────
 
 
@@ -1018,7 +1189,8 @@ def precompute(
     redshift: float,
     parameters: Any,
     *,
-    model_name: str,
+    model_name: str | None = None,
+    model: str | None = None,
     templates: dict | None = None,
     grid: np.ndarray | None = None,
     axes: tuple[np.ndarray, ...] | None = None,
@@ -1068,6 +1240,10 @@ def precompute(
 
     **Gradient-safe**: no, precomputation is an offline preparation step.
     """
+    if model is not None:
+        return precompute_shape(filter_waves, filter_trans, redshift, parameters, model=model)
+    if model_name is None:
+        raise ValueError("precompute requires model_name (or model for a free-shape table)")
     if model_name in ("draine_li2007", "dl07"):
         if templates is None:
             raise ValueError("DL07 precompute requires 'templates' dict")
