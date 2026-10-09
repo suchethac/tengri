@@ -98,7 +98,7 @@ from __future__ import annotations
 
 import difflib
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
@@ -6418,6 +6418,173 @@ def _reject_foreign_variant_keys(
     )
 
 
+#: The composable AGN sub-block categories that carry a block type (``'type'``).
+_AGN_SELECTABLE_CATEGORIES: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii", "atten")
+
+
+def _agn_block_selection(agn_top: dict) -> dict[str, str]:
+    """Category -> block type for each composable AGN sub-block dict that names a type.
+
+    Parameters
+    ----------
+    agn_top : dict
+        The user's ``agn`` group dict.
+
+    Returns
+    -------
+    dict of str to str
+        The selected block type of every sub-block that declares a string ``'type'``.
+        A deprecated ``lines`` sub-block contributes its ``nlr`` and ``blr`` types,
+        expanded by the grammar's own :func:`expand_lines_alias`. An explicit
+        ``nlr`` / ``blr`` takes precedence; the grammar refuses the two together.
+    """
+    from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+    selection: dict[str, str] = {}
+    for cat in _AGN_SELECTABLE_CATEGORIES:
+        sub = agn_top.get(cat)
+        if isinstance(sub, dict) and isinstance(sub.get("type"), str):
+            selection[cat] = sub["type"]
+    lines = agn_top.get("lines")
+    if isinstance(lines, dict) and isinstance(lines.get("type"), str):
+        try:
+            nlr_type, blr_type = expand_lines_alias(lines["type"])
+        except ValueError:
+            # An unknown alias is refused by the grammar with its own message.
+            return selection
+        selection.setdefault("nlr", nlr_type)
+        selection.setdefault("blr", blr_type)
+    return selection
+
+
+def _agn_names_read_by_other_blocks(selection: Mapping[str, str], *, skip: str) -> frozenset[str]:
+    """Full ``agn_*`` names the selected blocks of the other categories declare as reads.
+
+    Reads only the consumes table (:data:`AGN_BLOCK_CONSUMES`), the same oracle
+    every other check uses. A signature is not consulted: a signature names
+    parameters a type does not use.
+
+    Parameters
+    ----------
+    selection : mapping of str to str
+        Grammar category -> selected block type.
+    skip : str
+        The category being validated; its own row is not consulted here.
+
+    Returns
+    -------
+    frozenset of str
+        Full parameter names read by the other selected blocks.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    names: set[str] = set()
+    for cat, block_type in selection.items():
+        if cat == skip or block_type in (None, "none"):
+            continue
+        consumes_cat = _AGN_CONSUMES_CATEGORY.get(cat, cat)
+        names |= AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset())
+    return frozenset(names)
+
+
+def _reject_inert_agn_subblock_keys(
+    category: str,
+    sub: dict,
+    selection: Mapping[str, str],
+    param_partition: dict[str, str],
+) -> None:
+    """Raise on an explicit key that the selected AGN block type never reads.
+
+    The key must belong to ``agn.<category>`` and be absent from the selected
+    type's declared reads (:func:`_agn_subblock_declared_params`), and no other
+    selected block may take it as an argument. Such a key is accepted and then
+    dropped without effect, which is a silent failure (design G3).
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key: ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``, ``"feii"`` or ``"atten"``.
+    sub : dict
+        The user's sub-block dict, with a string ``'type'``.
+    selection : mapping of str to str
+        The whole composable selection, for the selection-conditioned reads.
+    param_partition : dict
+        Full parameter name -> owning group.
+
+    Raises
+    ------
+    ParameterError
+        Naming the refused keys, the selected type, and the block types that do
+        read each key.
+    """
+    block_type = sub.get("type")
+    if not isinstance(block_type, str):
+        return
+    group = f"agn.{category}"
+    spelling_to_full = {
+        spelling: name
+        for name, owner in param_partition.items()
+        if owner == group
+        for spelling in _name_spellings([name])
+    }
+    declared = _agn_subblock_declared_params(category, block_type, selection=selection)
+    if declared is None:
+        return
+    # A selected block in another category may read this category's parameter
+    # (the Synthesizer NLR/BLR read agn_log_mbh / agn_log_ledd, #2634); the
+    # disc row alone cannot record that, so the other rows are consulted.
+    read_elsewhere = _agn_names_read_by_other_blocks(selection, skip=category)
+    foreign = sorted(
+        key
+        for key in sub
+        if key in spelling_to_full
+        and spelling_to_full[key] not in declared
+        and spelling_to_full[key] not in read_elsewhere
+    )
+    if not foreign:
+        return
+    readers: dict[str, list[str]] = {}
+    for key in foreign:
+        full = spelling_to_full[key]
+        readers[key] = sorted(
+            other
+            for other in _agn_registered_block_types(category)
+            if other != block_type
+            and full
+            in (_agn_subblock_declared_params(category, other, selection=selection) or frozenset())
+        )
+    clauses = []
+    for key in foreign:
+        who = ", ".join(repr(t) for t in readers[key]) or "no registered type of this category"
+        clauses.append(f"{key!r} is read by {who}")
+    many = len(foreign) > 1
+    noun, pronoun = ("keys", "them") if many else ("key", "it")
+    offending = ", ".join(repr(k) for k in foreign)
+    raise ParameterError(
+        f"agn {category!r} type {block_type!r} does not read the {noun} {offending}, "
+        f"so writing {pronoun} here would be silently ignored. {'; '.join(clauses)}. "
+        f"Select a block that reads the {noun}, or drop {pronoun}."
+    )
+
+
+def _agn_registered_block_types(category: str) -> tuple[str, ...]:
+    """Registered block types of one composable AGN category, sorted.
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key, as in :data:`_AGN_SELECTABLE_CATEGORIES`.
+
+    Returns
+    -------
+    tuple of str
+        The registered type names, the way the grammar spells them.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    return tuple(sorted(AGN_BLOCKS.get(_AGN_CONSUMES_CATEGORY.get(category, category), {})))
+
+
 def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     """Name the laws (or radio AGN models) that read a key the selected one does not.
 
@@ -6707,6 +6874,7 @@ def _validate_user_keys(
                 "entries."
             )
         elif top_key == "agn":
+            agn_selection = _agn_block_selection(top_val)
             for sub_name in _AGN_SUBBLOCK_KEYS:
                 sub = top_val.get(sub_name)
                 if not isinstance(sub, dict):
@@ -6715,6 +6883,8 @@ def _validate_user_keys(
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
                 sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                if sub_name in _AGN_SELECTABLE_CATEGORIES:
+                    _reject_inert_agn_subblock_keys(sub_name, sub, agn_selection, param_partition)
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(

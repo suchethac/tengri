@@ -4723,6 +4723,7 @@ class SEDModel:
             agn_model=getattr(self, "_agn_model", None),
             agn_torus_block=getattr(self, "_agn_torus_block", None),
             agn_disc_block=getattr(self, "_agn_disc_block", None),
+            agn_feii_block=getattr(self, "_agn_feii_block", None),
         )
 
         # Analytic radio/X-ray wings: only used when those components are

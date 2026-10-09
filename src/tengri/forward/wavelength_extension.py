@@ -406,17 +406,70 @@ def native_wave_nebular(model: str | None) -> np.ndarray | None:
     return wave
 
 
+# GRAHSP template axes ------------------------------------------------------
+# The GRAHSP bundle sits in ``data/grahsp/``, which the basename-only locator
+# cannot resolve (``find_data_str('grahsp/...')`` returns None), so these
+# declarations read it through :func:`load_grahsp_templates`. Keys are
+# ``(grammar category, block type)``; values are the bundle attributes whose
+# union is the block's native axis, in nm (converted to A here).
+_GRAHSP_NATIVE_WAVE_NM: dict[tuple[str, str], tuple[str, ...]] = {
+    ("torus", "grahsp_mn12"): ("torus_mn12_wave_nm", "torus_mn12_si_wave_nm"),
+    ("disc", "grahsp_netzer"): ("disc_wave_nm",),
+    ("feii", "grahsp_veroncetty"): ("feii_vc04_wave_nm",),
+    ("feii", "grahsp"): ("feii_wave_nm",),
+}
+
+
+def _grahsp_native_wave(category: str, block: str) -> np.ndarray | None:
+    """Native grid [Å] of one GRAHSP block: the sorted union of its bundle axes.
+
+    Parameters
+    ----------
+    category : str
+        Grammar category (``"torus"``, ``"disc"`` or ``"feii"``).
+    block : str
+        Block type registered under that category.
+
+    Returns
+    -------
+    ndarray, shape (n_node,) or None
+        Strictly positive, finite, sorted and unique [Å]; ``None`` when the block
+        has no declaration or the bundle lacks every listed axis.
+    """
+    attrs = _GRAHSP_NATIVE_WAVE_NM.get((category, block))
+    if attrs is None:
+        return None
+    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+
+    templates = load_grahsp_templates()
+    parts = [
+        np.asarray(getattr(templates, attr)) * 10.0
+        for attr in attrs
+        if getattr(templates, attr, None) is not None
+    ]
+    if not parts:
+        return None
+    wave = np.concatenate(parts)
+    wave = wave[np.isfinite(wave) & (wave > 0.0)]
+    if wave.size == 0:
+        return None
+    return np.unique(wave)
+
+
 def native_wave_agn_torus(block: str | None) -> np.ndarray | None:
     """Native wavelength grid [Å] for an AGN torus block selection.
 
     Template blocks return their file's grid; analytic torus blocks return the
     synthetic 1 µm – 1 cm grid so the master union grid reaches the submm
-    (#2564). Grid-less blocks (``"none"``) return ``None``.
+    (#2564). Grid-less blocks (``"none"``) return ``None``. The GRAHSP MN12
+    torus declares its continuum and silicate nodes together.
     """
     if not block or block in _GRIDLESS_TORUS:
         return None
     if block in _ANALYTIC_TORUS:
         return np.asarray(_ANALYTIC_TORUS_WAVE_AA)
+    if ("torus", block) in _GRAHSP_NATIVE_WAVE_NM:
+        return _grahsp_native_wave("torus", block)
     candidates = _AGN_TORUS_TEMPLATES.get(block)
     if candidates is None:
         logger.debug("No native-grid declaration for torus block %r", block)
@@ -453,6 +506,8 @@ def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
         return _disc_log_grid(
             lo, hi, euv_pts=_DISC_PTS_PER_DECADE_EUV_BY_BLOCK.get(block, _DISC_PTS_PER_DECADE_EUV)
         )
+    if ("disc", block) in _GRAHSP_NATIVE_WAVE_NM:
+        return _grahsp_native_wave("disc", block)
     candidates = _AGN_DISC_TEMPLATES.get(block)
     if candidates is None:
         return None
@@ -460,6 +515,19 @@ def native_wave_agn_disc(block: str | None) -> np.ndarray | None:
     if wave is not None and block in _DISC_DENSIFIED:
         wave = np.unique(np.concatenate([wave, _disc_log_grid(wave.min(), wave.max())]))
     return wave
+
+
+def native_wave_agn_feii(block: str | None) -> np.ndarray | None:
+    """Native wavelength grid [Å] for an AGN FeII block selection.
+
+    Only the GRAHSP FeII templates declare an axis: the Véron-Cetty et al. (2004)
+    template has nodes at about 0.1 nm spacing, far finer than the SSP grid, and
+    without them the forest is aliased by linear resampling. Every other FeII
+    block (and ``"none"``) returns ``None``.
+    """
+    if not block or block == "none":
+        return None
+    return _grahsp_native_wave("feii", block)
 
 
 def native_wave_agn_model(model: str | None) -> np.ndarray | None:
@@ -485,6 +553,7 @@ def collect_native_wavelength_grids(
     agn_model: str | None = None,
     agn_torus_block: str | None = None,
     agn_disc_block: str | None = None,
+    agn_feii_block: str | None = None,
 ) -> list[np.ndarray]:
     """Gather every attached component's native wavelength grid.
 
@@ -499,6 +568,7 @@ def collect_native_wavelength_grids(
         native_wave_agn_model(agn_model),
         native_wave_agn_torus(agn_torus_block),
         native_wave_agn_disc(agn_disc_block),
+        native_wave_agn_feii(agn_feii_block),
     ):
         if w is not None and w.size > 0:
             grids.append(w)

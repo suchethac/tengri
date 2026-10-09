@@ -252,11 +252,11 @@ def torus_upstream(wave_torus_nm, wave_si_nm, params):
     lum5100A = p["lum5100A"]
 
     l_torus = 2.5 * lum5100A * fcov  # at 12 um (lambda * L_lambda)
-    cool_spectrum = np.exp(-(((log_wave - logCOOLlam) / COOLwidth) ** 2))
+    cool_spectrum = np.exp(-0.5 * ((log_wave - logCOOLlam) / COOLwidth) ** 2)  # W = sigma (upstream drops the 1/2)
     hot_spectrum = (
         HOTfcov
         * 10 ** (logCOOLlam - logHOTlam)
-        * np.exp(-(((log_wave - logHOTlam) / HOTwidth) ** 2))
+        * np.exp(-0.5 * ((log_wave - logHOTlam) / HOTwidth) ** 2)
     )
     total_spectrum = cool_spectrum + hot_spectrum
     torus_spectrum = l_torus / 12000.0 * total_spectrum / total_spectrum[norm_index]
@@ -398,7 +398,11 @@ def parse_mor_netzer_lines(path: Path):
 
 
 def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, agn_type=1):
-    """Reproduce activatelines.add_lines for a flat user-provided wave grid."""
+    """activatelines.add_lines on a flat user-provided wave grid, with a unit-area Gaussian.
+
+    Upstream normalizes with sqrt(pi sigma^2), making every line sqrt(2) too strong;
+    tengri uses sqrt(2 pi sigma^2), so each line integrates to its tabulated flux.
+    """
     l_agn = lum5100A / 510.0  # W/nm
     l_broad = 0.02 * l_agn * A_lines  # H-beta broad scale [erg/s] / [W/nm]
     l_narrow = 0.002 * l_agn * A_lines
@@ -408,7 +412,7 @@ def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, 
     for _name, lam0, broad, sy2, liner in lines_rows:
         width_nm = lam0 * (line_width_kms * 1000.0) / cst.c
         sigma = width_nm * FWHM_TO_SIGMA
-        norm_factor = 510.0 / np.sqrt(np.pi * sigma**2)
+        norm_factor = 510.0 / np.sqrt(2.0 * np.pi * sigma**2)  # unit-area Gaussian (upstream uses pi, not 2 pi)
         shape = np.exp(-0.5 * (wave_nm_grid - lam0) ** 2 / sigma**2)
         if agn_type == 1:
             bl_lumin += l_broad * broad * shape * norm_factor
@@ -421,7 +425,7 @@ def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, 
 
 
 def feii_upstream(wave_nm_grid, feii_template_path, lum5100A, A_lines, A_FeII):
-    """Upstream FeII pipeline: L_nu -> L_lambda -> de-redshift -> normalise at 4575 Å rest."""
+    """Upstream FeII pipeline: L_nu -> L_lambda -> de-redshift -> normalize at 4575 Å rest."""
     from scipy import constants as cst
 
     arr = np.loadtxt(StringIO(feii_template_path.read_text()))
@@ -487,54 +491,47 @@ def make_lines_fixture():
 
 
 def balmer_upstream(wave_nm, lum5100A, ABC, linewidth_kms):
-    """Reproduce activatelines.ActivateLines BC shape for a single param set.
+    """activatelines.ActivateLines BC shape for a single param set, physically corrected.
 
-    Implements Balmer continuum from Grandi (1982) with Gaussian convolution
-    as per upstream ``activatelines.py`` lines 137-175.
+    Grandi (1982) continuum with the Balmer edge smoothed by a Gaussian
+    (upstream ``activatelines.py`` lines 137-175). Upstream uses the line FWHM as the
+    Gaussian standard deviation and drops the smeared tail above the edge; here the
+    standard deviation is ``FWHM / (2 sqrt(2 ln 2))`` and the tail is kept, so the
+    smoothing conserves the emitted energy.
     """
-    from scipy.special import erf
+    from scipy.special import erfc
 
-    # Balmer edge and physical constants
     BE_wave = 364.6
     BC_tau = 1.0
     BC_T = 15000.0
     h_c_per_k_B = 1.439e7  # nm * K
 
-    # Only evaluate on wavelengths <= Balmer edge
-    wave_edge = wave_nm[wave_nm <= BE_wave]
-
-    # Black body at each wavelength
-    black_body = wave_edge ** (-5) / np.expm1(h_c_per_k_B / (BC_T * wave_edge))
+    black_body = wave_nm ** (-5) / np.expm1(h_c_per_k_B / (BC_T * wave_nm))
     black_body0 = BE_wave ** (-5) / np.expm1(h_c_per_k_B / (BC_T * BE_wave))
 
-    # Optical depth truncation
-    x = wave_edge / BE_wave
+    x = wave_nm / BE_wave
     truncation = -np.expm1(-BC_tau * x**3)
     truncation0 = -np.expm1(-BC_tau)
 
-    # Gaussian convolution (upstream eqs. lines 159-170)
     alpha = 1.8
     beta = -0.8
-    sigma = (linewidth_kms * 1000.0) / cst.c  # km/s / (m/s) = dimensionless
-    z = (x - 1.0) * 2.0 ** (-0.5) / sigma  # Correct upstream formula
+    sigma = (linewidth_kms * 1000.0) / cst.c / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    z = (x - 1.0) * 2.0 ** (-0.5) / sigma
 
-    term_b = 0.5 * (1.0 - erf(z))
-    term_a1 = 0.5 * x
-    term_a2 = -0.5 * x * erf(z)
+    term_b = 0.5 * erfc(z)
+    term_a12 = 0.5 * x * erfc(z)
     term_a3 = -sigma * (2.0 * np.pi) ** (-0.5) * np.exp(-(z**2))
 
-    convolved = (beta * term_b + alpha * (term_a1 + term_a2 + term_a3)) * (1.0 - np.exp(-1.0))
+    convolved = (beta * term_b + alpha * (term_a12 + term_a3)) * (1.0 - np.exp(-1.0))
 
     # Use convolved above 250 nm, raw truncation below
-    truncation_convolved = np.where(wave_edge > 250.0, convolved, truncation)
+    truncation_convolved = np.where(wave_nm > 250.0, convolved, truncation)
 
-    # Normalised BC shape
     BC_shape = (black_body / black_body0) * (truncation_convolved / truncation0)
 
-    # Scale by luminosity
     l_agn = lum5100A / 510.0
     l_bc = l_agn * ABC
-    return l_bc * BC_shape, wave_edge
+    return l_bc * BC_shape, wave_nm
 
 
 def make_balmer_fixture():
@@ -564,11 +561,7 @@ def make_balmer_fixture():
         bc_spectra.append(bc_shape)
         params_list.append((p["lum5100A"], p["ABC"], p["linewidth_kms"]))
 
-    # Pad spectra to full wave grid (upstream only evaluates up to 364.6 nm)
-    # Fill beyond Balmer edge with zeros
-    bc_spectra_padded = np.zeros((len(cases), len(wave_nm)))
-    for i, spec in enumerate(bc_spectra):
-        bc_spectra_padded[i, : len(spec)] = spec
+    bc_spectra_padded = np.asarray(bc_spectra)
 
     np.savez(
         FIXTURE_DIR / "balmer.npz",
@@ -586,6 +579,122 @@ def make_balmer_fixture():
     return len(wave_nm), len(cases)
 
 
+# ---------------------------------------------------------------------------
+# 6. Netzer accretion disc (activatedisk.py template grid), lambda*L_lambda(5100 A) = l5100
+# ---------------------------------------------------------------------------
+
+
+def make_netzer_disc_fixture():
+    """Netzer disc spectra on the template's native grid, in tengri's convention.
+
+    Upstream ``activatedisk`` returns ``l5100 * T(lambda)`` with ``T(510 nm) = 1``,
+    i.e. it scales ``L_lambda(510 nm)``, which is 510 times brighter than its
+    stated ``lambda*L_lambda(5100 A)``. tengri's convention is
+    ``lambda*L_lambda(5100 A) = l5100`` (as for the power-law disc, torus and
+    lines), so the oracle is ``l5100 / 510 * T(lambda) / T(510 nm)`` with
+    ``T(510 nm)`` from log-log interpolation of the native template (the
+    stored normalization used a linear interpolation).
+    """
+    import h5py
+
+    with h5py.File(REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5", "r") as h:
+        wave_nm = np.asarray(h["netzer_disc/wave_nm"][:], dtype=np.float64)
+        lumin = np.asarray(h["netzer_disc/lumin"][:], dtype=np.float64)
+        m_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/m"][:]]
+        a_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/a"][:]]
+        mdot_lab = [x.decode() if isinstance(x, bytes) else str(x) for x in h["netzer_disc/mdot"][:]]
+    cases = [
+        (l5100, idx)
+        for l5100 in (1.0e43, 1.0e44)
+        for idx in (0, 2, 10, 15)
+    ]
+    spectra = np.zeros((len(cases), wave_nm.size))
+    params = np.empty((len(cases), 5, 2), dtype=object)
+    j = int(np.searchsorted(wave_nm, 510.0))  # bracketing native nodes j-1, j
+    frac = np.log(510.0 / wave_nm[j - 1]) / np.log(wave_nm[j] / wave_nm[j - 1])
+    for i, (l5100, idx) in enumerate(cases):
+        lo, hi = lumin[idx, j - 1], lumin[idx, j]
+        t_510 = np.exp((1.0 - frac) * np.log(lo) + frac * np.log(hi))
+        spectra[i] = (l5100 / 510.0) * lumin[idx] / t_510
+        params[i] = [
+            ["l5100", l5100],
+            ["model_idx", idx],
+            ["M", m_lab[idx]],
+            ["a", a_lab[idx]],
+            ["Mdot", mdot_lab[idx]],
+        ]
+    np.savez(
+        FIXTURE_DIR / "netzer_disc.npz",
+        wave_disc_nm=wave_nm,
+        disc_spectra=spectra,
+        params=params,
+    )
+    return len(cases), wave_nm.size
+
+
+# ---------------------------------------------------------------------------
+# 7. Mor & Netzer 2012 template torus (activatetorus.py), lambda*L_lambda(12 um) = 2.5 fcov l5100
+# ---------------------------------------------------------------------------
+
+
+def make_torus_mn12_fixture():
+    """MN12 template torus + Si feature on the native template grids.
+
+    Upstream ``activatetorus`` uses ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
+    per nm, 510 times brighter than the Netzer relation
+    ``lambda*L_lambda(12 um) = 2.5 * fcov * l5100`` that its log-Gaussian sibling
+    (``activategtorus``) satisfies. tengri uses ``l_torus = 2.5 * l5100 * fcov / 12000``
+    per nm, so the templates (which are 1 at 12 um) give the Netzer relation.
+    """
+    import h5py
+
+    with h5py.File(REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5", "r") as h:
+        g = h["torus_mn12"]
+        wave_nm = np.asarray(g["wave_nm"][:], dtype=np.float64)
+        avg = np.asarray(g["avg"][:], dtype=np.float64)
+        lo = np.asarray(g["lo"][:], dtype=np.float64)
+        hi = np.asarray(g["hi"][:], dtype=np.float64)
+        si_wave_nm = np.asarray(g["si_wave_nm"][:], dtype=np.float64)
+        si_lumin = np.asarray(g["si_lumin"][:], dtype=np.float64)
+    cases = [
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=0.0, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=0.5, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=1.0e36, fcov=0.4, tor_temp=-0.5, tor_cutoff_um=1.2, si=0.5),
+        dict(l5100=2.0e36, fcov=0.5, tor_temp=0.2, tor_cutoff_um=1.7, si=-0.3),
+    ]
+    torus = np.zeros((len(cases), wave_nm.size))
+    si_spec = np.zeros((len(cases), si_wave_nm.size))
+    for i, p in enumerate(cases):
+        l_torus = 2.5 * p["l5100"] * p["fcov"] / 12000.0
+        t = p["tor_temp"]
+        dev = (hi - avg) * t if t > 0 else (lo - avg) * (-t)
+        cutoff = 1.0 - np.exp(-((wave_nm / 1000.0 / p["tor_cutoff_um"]) ** 2))
+        torus[i] = l_torus * (avg + dev) * cutoff
+        si_spec[i] = l_torus * si_lumin * p["si"]
+    np.savez(
+        FIXTURE_DIR / "torus_mn12.npz",
+        wave_mn12_nm=wave_nm,
+        wave_si_nm=si_wave_nm,
+        mn12_avg=avg,
+        mn12_lo=lo,
+        mn12_hi=hi,
+        mn12_si_lumin=si_lumin,
+        params=np.array(
+            [(p["l5100"], p["fcov"], p["tor_temp"], p["tor_cutoff_um"], p["si"]) for p in cases],
+            dtype=[
+                ("l5100", "f8"),
+                ("fcov", "f8"),
+                ("tor_temp", "f8"),
+                ("tor_cutoff_um", "f8"),
+                ("si", "f8"),
+            ],
+        ),
+        torus_spectra_native=torus,
+        si_spectra_native=si_spec,
+    )
+    return len(cases), wave_nm.size
+
+
 def main():
     n_wave_sbpl, n_cases = make_sbpl_fixture()
     print(f"  sbpl_bbb.npz: {n_cases} cases x {n_wave_sbpl} wavelengths")
@@ -597,6 +706,10 @@ def main():
     print(f"  lines.npz: 3 cases x {n_lines} lines")
     n_wave_balmer, n_cases_balmer = make_balmer_fixture()
     print(f"  balmer.npz: {n_cases_balmer} cases x {n_wave_balmer} wavelengths")
+    n_cases_disc, n_wave_disc = make_netzer_disc_fixture()
+    print(f"  netzer_disc.npz: {n_cases_disc} cases x {n_wave_disc} wavelengths")
+    n_cases_mn12, n_wave_mn12 = make_torus_mn12_fixture()
+    print(f"  torus_mn12.npz: {n_cases_mn12} cases x {n_wave_mn12} wavelengths")
 
 
 if __name__ == "__main__":

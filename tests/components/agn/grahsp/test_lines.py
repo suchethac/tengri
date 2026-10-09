@@ -127,3 +127,35 @@ def test_jit_compatible(line_table):
     chex.assert_shape(bl, (1000,))
     chex.assert_tree_all_finite(bl)
     chex.assert_tree_all_finite(nl)
+
+
+@pytest.mark.parametrize(
+    ("agn_type", "component", "ratio"),
+    [(1, "broad", 0.02), (1, "narrow", 0.002), (2, "narrow", 0.002), (3, "narrow", 0.002)],
+)
+def test_line_integral_is_the_tabulated_flux(agn_type, component, ratio):
+    """A unit-strength line integrates to ratio * l5100 [erg/s] (physics, independent of upstream).
+
+    H-beta carries 2 % (broad) or 0.2 % (narrow) of lambda*L_lambda(5100 A); the profile
+    must be a unit-area Gaussian, so the wavelength integral of L_lambda is that flux.
+    """
+    from tengri.components.agn.grahsp.lines import gaussian_lines
+
+    l5100, a_lines, width_kms, lam0 = 1.0e44, 1.7, 5000.0, 486.1
+    sigma = lam0 * width_kms / 299792.458 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    grid = np.linspace(lam0 - 12 * sigma, lam0 + 12 * sigma, 20001)
+    one = np.array([1.0])
+    bl, nl = gaussian_lines(
+        wave_nm=grid,
+        line_wave_nm=np.array([lam0]),
+        line_broad=one,
+        line_narrow_sy2=one,
+        line_narrow_liner=one,
+        l5100=l5100,
+        a_lines=a_lines,
+        linewidth_kms=width_kms,
+        agn_type=agn_type,
+    )
+    out = np.asarray(bl if component == "broad" else nl)
+    integral = float(np.sum(0.5 * (out[1:] + out[:-1]) * np.diff(grid)))
+    np.testing.assert_allclose(integral, ratio * l5100 * a_lines, rtol=1e-6)

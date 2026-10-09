@@ -69,6 +69,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_uvslope",
         }
     ),
+    ("disc", "grahsp_netzer"): frozenset(
+        {
+            "agn_grahsp_log_l5100",
+            "agn_grahsp_netzer_log_mbh",
+            "agn_grahsp_netzer_spin",
+            "agn_grahsp_netzer_log_mdot",
+        }
+    ),
     ("disc", "kubota_done"): frozenset(
         {
             "agn_a_spin",
@@ -144,6 +152,9 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_hot_width",
             "agn_grahsp_si",
         }
+    ),
+    ("torus", "grahsp_mn12"): frozenset(
+        {"agn_grahsp_fcov", "agn_grahsp_si", "agn_grahsp_tor_temp", "agn_grahsp_tor_cutoff_um"}
     ),
     # The gray Type-1/2 visibility mask (runner Stage 4.5) applies to the
     # physical-decomposition tori, so agn_cos_inc + agn_theta_torus move predict
@@ -289,8 +300,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     # test_agn_panchromatic_free_params_all_move_predict calls it a no-op.
     # Listing it would make a recipe free a dimension no fit can constrain.
     ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
-    ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
-    ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
+    # The Synthesizer NLR forwards the driver-disc mass and Eddington ratio to
+    # its backend as log_bh_mass / log_eddington (#2634), so both are live here
+    # although they are owned by agn.disc.
+    ("nlr", "synthesizer"): frozenset({"agn_nlr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf", "agn_log_mbh", "agn_log_ledd"}),
     ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
     # Cue's five photoionization axes plus the covering fraction, all measured
     # live (agn_nlr_cf 8.5e-15, agn_nlr_alpha_pl 2.9e-15, agn_nlr_logZ
@@ -341,9 +355,12 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_fe2_strength",
         }
     ),
-    ("blr", "synthesizer"): frozenset({"agn_blr_cf"}),
-    ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
-    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    # Forwards agn_log_mbh / agn_log_ledd to its backend, as the NLR does (#2634).
+    ("blr", "synthesizer"): frozenset({"agn_blr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf", "agn_log_mbh", "agn_log_ledd"}),
+    ("blr", "grahsp"): frozenset(
+        {"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms", "agn_grahsp_a_bc"}
+    ),
     ("blr", "qsogen"): frozenset(),
     ("feii", "boroson_green"): frozenset(
         {
@@ -353,6 +370,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
+    ("feii", "grahsp_veroncetty"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
     # QSOgen Balmer continuum (Temple+2021), registered in #1488 but never
     # added here, so the block's own enabling knob was invisible to the
     # top-level ``agn={'all_params': FREE}`` wildcard scope: selectable,

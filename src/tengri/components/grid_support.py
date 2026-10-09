@@ -75,6 +75,27 @@ def _kd18_agnfitter_warmindex_support() -> dict[str, tuple[float, float]]:
     return kd18_agnfitter_warmindex_grid_support()
 
 
+def _grahsp_netzer_support() -> dict[str, tuple[float, float]]:
+    """Support of the GRAHSP Netzer disc grid, from the 16 template labels.
+
+    Each axis is the extent of its labels: ``log_mbh`` from the black-hole masses,
+    ``spin`` from the spins, and ``log_mdot`` as the log of the accretion rates.
+    The labels are read from the bundle (``load_grahsp_templates``), so the
+    extent follows the shipped grid rather than a hand-typed copy.
+    """
+    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+
+    templates = load_grahsp_templates()
+    log_mbh = [float(label) for label in templates.disc_m]
+    spin = [float(label) for label in templates.disc_a]
+    log_mdot = [math.log10(float(label)) for label in templates.disc_mdot]
+    return {
+        "agn_grahsp_netzer_log_mbh": (min(log_mbh), max(log_mbh)),
+        "agn_grahsp_netzer_spin": (min(spin), max(spin)),
+        "agn_grahsp_netzer_log_mdot": (min(log_mdot), max(log_mdot)),
+    }
+
+
 def _dust_emission_support(name: str) -> GridSupportFn:
     """Build an accessor for one template-backed dust emission model."""
 
@@ -267,6 +288,7 @@ GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
     ("agn.disc", "slone_netzer"): _slone_netzer_support,
     ("agn.disc", "kd18_agnfitter"): _kd18_agnfitter_support,
     ("agn.disc", "kd18_agnfitter_warmindex"): _kd18_agnfitter_warmindex_support,
+    ("agn.disc", "grahsp_netzer"): _grahsp_netzer_support,
     ("neb", "cloudy"): _cloudy_grid_support,
     ("neb", "cb19"): _cb19_grid_support,
     ("neb", "mappings"): _mappings_stellar_grid_support,

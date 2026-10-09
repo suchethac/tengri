@@ -68,6 +68,9 @@ data/synthesizer_grids
 # again (a self-referential symlink slipped in via #1035).
 reproduction/cigale/_drivers/data
 data/*.h5
+# The GRAHSP upstream reference is committed on purpose: crossval reads it and
+# scripts/build_grahsp_reference.py writes it.
+!data/grahsp_upstream_reference.h5
 # ── The two SSP grids the gallery needs, committed on purpose (#1146) ──
 # CI could not execute a single example without these, so a broken example
 # shipped next to a stale figure (see tools/run_gallery_examples.py). The wNE
