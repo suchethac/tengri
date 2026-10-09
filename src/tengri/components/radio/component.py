@@ -154,6 +154,16 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         bit-identically. Physical-aging kernels ``"JP"``, ``"KP"``,
         ``"tribble"`` are reserved names rejected at construction with a
         :class:`ValueError`; the physics lands in a follow-up PR.
+    sf_nu_ref : float
+        Frequency [Hz] at which ``radio_q_ir`` anchors the ``"bell2003"`` synchrotron.
+        Default 1.4 GHz, where Bell (2003) defines q. CIGALE anchors at 21 cm
+        (1.42758 GHz); ``radio.sf.nu_ref = "21cm"`` selects that point (#2762).
+    split_thermal : bool
+        ``"bell2003_split"`` only. ``True`` (default) keeps the split's own 10 %
+        thermal power law. ``False`` drops it because the nebular continuum
+        already carries the free-free; the synchrotron stays 90 % of the Bell
+        total, so one component owns the thermal emission (#2764). The build sets
+        it ``False`` beside a ``"cue"`` or ``"cloudy_grid"`` nebular backend.
     freefree_wave_min : float or None
         Rest wavelength [Angstrom] below which the thermal free-free term is
         zero; the term is on at and above it. ``None`` (default) leaves the term on its own lower
@@ -185,6 +195,8 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     q_is_total: bool | None = None
     agn_radio_model: str = "powerlaw"
     freefree_wave_min: float | None = None
+    sf_nu_ref: float = 1.4e9
+    split_thermal: bool = True
 
     def __post_init__(self) -> None:
         if self.agn_radio_model not in AGN_RADIO_MODELS:
@@ -236,6 +248,21 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             )
         if self.q_is_total is None:
             object.__setattr__(self, "q_is_total", bool(self.include_freefree))
+        # Reference frequency of the bell2003 synchrotron anchor (#2762)
+        if isinstance(self.sf_nu_ref, bool) or not isinstance(self.sf_nu_ref, (int, float)):
+            raise TypeError(
+                f"sf_nu_ref must be a real number [Hz], got {type(self.sf_nu_ref).__name__}"
+            )
+        if not (math.isfinite(self.sf_nu_ref) and self.sf_nu_ref > 0.0):
+            raise ValueError(f"sf_nu_ref must be finite and positive [Hz], got {self.sf_nu_ref!r}")
+        if self.sf_nu_ref != 1.4e9 and self.sfr_mode != "bell2003":
+            from tengri.config.exceptions import ConfigError
+
+            raise ConfigError(
+                f"radio: a reference frequency (sf_nu_ref={self.sf_nu_ref!r} Hz) applies to "
+                f"sfr_mode='bell2003' only, got {self.sfr_mode!r}; the other star-formation "
+                "relations are anchored at the frequency their calibration was published at."
+            )
         # Validate freefree_wave_min
         if self.freefree_wave_min is not None:
             if isinstance(self.freefree_wave_min, bool) or not isinstance(
@@ -513,6 +540,8 @@ class RadioSEDComponent(TemplateThreading):
                 apply_suppression=False,
                 log_L_ir=_log_L_ir,
                 q_is_total=self.config.q_is_total,
+                sf_nu_ref=self.config.sf_nu_ref,
+                split_thermal=self.config.split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
@@ -547,6 +576,8 @@ class RadioSEDComponent(TemplateThreading):
                     z_slope=firrc_z_slope,
                     include_freefree=self.config.include_freefree,
                     q_is_total=self.config.q_is_total,
+                    sf_nu_ref=self.config.sf_nu_ref,
+                    split_thermal=self.config.split_thermal,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                     l_bband=L_4400_intrinsic,
@@ -578,6 +609,8 @@ class RadioSEDComponent(TemplateThreading):
                 z_slope=firrc_z_slope,
                 include_freefree=self.config.include_freefree,
                 q_is_total=self.config.q_is_total,
+                sf_nu_ref=self.config.sf_nu_ref,
+                split_thermal=self.config.split_thermal,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                 l_bband=L_4400_intrinsic,
