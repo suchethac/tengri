@@ -5112,6 +5112,33 @@ def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
     if "diffuse_screen" in dust_emis_dict:
         result["dust_ir_diffuse_screen"] = bool(dust_emis_dict["diffuse_screen"])
 
+    # Opt-in CMB heating / contrast (da Cunha et al. 2013, #2766) of the
+    # tabulated emission models. Off by default (bit-identical to today). The
+    # analytic models (modified_blackbody, graybody, casey2012) always apply it,
+    # so asking for it again is refused rather than silently ignored.
+    if "cmb" in dust_emis_dict:
+        cmb = dust_emis_dict["cmb"]
+        if not isinstance(cmb, bool):
+            raise ValueError(
+                f"dust_emission cmb must be True or False, got {cmb!r} ({type(cmb).__name__})."
+            )
+        if cmb:
+            if emission_type is None:
+                raise ValueError(
+                    "dust_emission={'cmb': True} requires a dust_emission type to be "
+                    "specified. Set dust_emission={'type': ...} (a tabulated model such as "
+                    "'schreiber2016', 'draine_li2007', 'dale2014') or set cmb=False."
+                )
+            if not getattr(_dust_emission_component_class(emission_type), "cmb_supported", False):
+                raise ValueError(
+                    f"dust_emission={{'type': {emission_type!r}, 'cmb': True}} is refused: "
+                    f"{emission_type!r} has no CMB option. The analytic models "
+                    "(modified_blackbody, graybody, casey2012) apply the da Cunha et al. "
+                    "(2013) heating and contrast unconditionally; the tabulated models "
+                    "take cmb=True. Drop the key or pick a tabulated type."
+                )
+        result["dust_ir_cmb"] = cmb
+
 
 # Backend *implementations* are named after their physics (BakedInBackend,
 # CloudyGridBackend) and the internal NebularConfig.backend enum spells two of
@@ -5835,6 +5862,11 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # dust emission (#2533). Applied by the emission component's apply()
             # method when diffuse_screen=True.
             "diffuse_screen",
+            # Opt-in CMB contrast (and, for the single-temperature Schreiber
+            # libraries, CMB heating) of the tabulated dust-emission models
+            # (da Cunha et al. 2013, #2766). Applied inside the emission
+            # component's predict() when cmb=True.
+            "cmb",
         }
     ),
     # "grid" is NOT here (#2220 follow-up): it is legal only for the neb
@@ -6028,6 +6060,10 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # Plain boolean, valid for every emission type (not restricted via
         # only_types), so a straight default comparison round-trips it.
         _Structural("diffuse_screen", "dust_ir_diffuse_screen", False),
+        # Opt-in CMB heating / contrast (da Cunha+2013) of a tabulated emission
+        # model (#2766). Plain boolean; the parser refuses it for a type that
+        # does not declare ``cmb_supported``, so a default comparison suffices.
+        _Structural("cmb", "dust_ir_cmb", False),
         # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
         # so it has no attribute for this table to target; it is covered by the
         # test's hand_written allowlist instead. log_L_ir (dust_log_L_ir) is the

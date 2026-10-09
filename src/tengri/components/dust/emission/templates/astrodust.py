@@ -154,6 +154,8 @@ class AstrodustIRSEDComponent(EmissionComponent):
     #: component and ``predict`` resolves per call (#1738).
     resolves_templates_at_trace_time: ClassVar[bool] = True
 
+    cmb_supported: ClassVar[bool] = True
+
     # Free parameter (user-facing name, prefix-stripped): starlight intensity.
     lgU = Uniform(
         -3.0,

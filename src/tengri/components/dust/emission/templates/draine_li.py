@@ -112,6 +112,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "draine_li2007"
 
     # Free parameters (user-facing names, prefix-stripped)
@@ -225,6 +226,7 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "draine_li2014"
 
     # Free parameters (user-facing names, prefix-stripped)

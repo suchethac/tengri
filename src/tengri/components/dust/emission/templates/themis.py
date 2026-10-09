@@ -53,6 +53,7 @@ class ThemisIRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "themis"
 
     # Free parameters (user-facing names, prefix-stripped)

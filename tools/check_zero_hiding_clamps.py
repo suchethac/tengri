@@ -197,7 +197,13 @@ from collections.abc import Sequence
 #: and in erg/s on float64, with ``numer`` in the matching unit, so one division serves both.
 #: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
 #: and still counted.
-EXPECTED_SITES = 84
+#:
+#: 84 -> 85 with #2766: ``cmb_luminosity_boost`` (components/dust/emission/_cmb.py) forms
+#: ``(T_eff / jnp.maximum(T_dust, 1.0)) ** (4 + beta)``. A scale floor: ``T_dust`` is the declared
+#: ``dust_T`` (prior 20-80 K, validated > 0) and the Schreiber libraries that apply the boost
+#: tabulate 15-99 K, so the 1 K floor never binds for a valid model; it only keeps a traced
+#: zero from producing inf.
+EXPECTED_SITES = 85
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

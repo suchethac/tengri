@@ -56,6 +56,7 @@ class BosaIRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "bosa"
 
     # Free parameters (user-facing names, prefix-stripped)
