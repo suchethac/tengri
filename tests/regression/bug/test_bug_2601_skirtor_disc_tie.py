@@ -629,19 +629,16 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
+#: Re-captured for the young-sliver integral (#2635): the stellar continuum moves by
+#: at most 2e-6 relative here.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
-    8.0: (
-        1.6504080200641076e32,
-        2.226186048596356e16,
-        3.0968665997787287e28,
-        8.825196951058274e21,
-    ),
+    6.0: (1.558683789689726e32, 81149791730438.9, 2.8901476832907644e28, 8.77529657993752e21),
+    8.0: (1.650407636024945e32, 2.226182664115696e16, 3.096866084375964e28, 8.825196813793963e21),
     10.0: (
-        1.6769970954584036e32,
-        2.3324417803895464e16,
-        3.1396733849669233e28,
-        9.548716267622313e21,
+        1.6769966709957496e32,
+        2.3324382343678204e16,
+        3.1396728044848097e28,
+        9.54871503038833e21,
     ),
 }
 

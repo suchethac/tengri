@@ -30,6 +30,8 @@ from astropy.cosmology import Planck18
 
 from tengri import DEFAULT, ConfigError, Fixed, SEDModel, Uniform
 from tengri.components.stellar.component import SFHBeforeBigBangWarning, StellarSEDComponent
+from tengri.cosmology import age_at_z
+from tests._cosmic_time import assert_grid_ends_at_age_of_universe
 
 pytestmark = pytest.mark.conservation
 
@@ -92,28 +94,33 @@ def test_mass_formed_inside_age_at_z(family, z, synthetic_ssp_wide):
         f"{family} z={z}: formed mass {formed:.6e} vs declared {1e10:.6e}"
     )
 
-    inside = lbt_yr <= age_yr
+    # The published grid ends AT age(z): older nodes collapse onto it (zero-width
+    # cells) and the half-cell that ends at age(z) belongs to the support. A mask
+    # against the independent cosmology's age (1.5e-7 smaller than tengri's) would
+    # drop that half-cell and read 5e-4 of the mass as missing.
+    tengri_age_yr = assert_grid_ends_at_age_of_universe(lbt_yr, sfr, z)
+    assert abs(tengri_age_yr / age_yr - 1.0) < 1e-6
     mass_all = float(np.trapezoid(sfr, lbt_yr))
-    mass_inside = float(np.trapezoid(np.where(inside, sfr, 0.0), lbt_yr))
-    assert mass_inside == pytest.approx(mass_all, rel=1e-9), (
-        f"{family} z={z}: mass inside age(z) {mass_inside:.6e} vs all lookback {mass_all:.6e}"
+    assert mass_all == pytest.approx(formed, rel=1e-9), (
+        f"{family} z={z}: integral over [0, age(z)] {mass_all:.6e} vs formed {formed:.6e}"
     )
-    max_outside = float(np.max(np.abs(np.where(inside, 0.0, sfr))))
-    assert max_outside == 0.0, f"{family} z={z}: SFR beyond age(z): {max_outside:.4e}"
 
 
 @pytest.mark.parametrize("z", (0.5, 2.0))
 @pytest.mark.parametrize("family", _FAMILIES)
 def test_tx_axis_scales_with_age_at_z(family, z, synthetic_ssp_wide):
-    """The oldest star formation sits at 0.9-1.0 x age(z), not at a fixed z = 0 age."""
+    """The oldest SFR sits at 0.9-1.0 x age(z) (last node AT age(z)), not at a fixed z=0 age."""
     state = _build(synthetic_ssp_wide, z, family).predict_state({})
     lbt_yr = np.asarray(state.derived["sfh_grid_lbt_yr"])
     sfr = np.asarray(state.derived["sfr_history"])
     age_yr = _age_yr(z)
 
     assert np.any(sfr > 0.0), f"{family} z={z}: no SFR > 0"
+    # The grid ends at age(z) (a node sits there, tengri's own age to 1e-12), so the
+    # oldest SFR may sit exactly AT age(z) but never beyond it.
+    tengri_age_yr = float(age_at_z(z)) * 1e9
     oldest = float(np.max(lbt_yr[sfr > 0.0]))
-    assert 0.9 * age_yr <= oldest <= age_yr, (
+    assert 0.9 * age_yr <= oldest <= tengri_age_yr * (1.0 + 1e-12), (
         f"{family} z={z}: oldest SFR at {oldest / 1e9:.3f} Gyr, age(z) = {age_yr / 1e9:.3f} Gyr"
     )
 
@@ -184,7 +191,9 @@ def test_composite_member_gets_age_at_z(z, synthetic_ssp_wide):
 
     formed = 10.0 ** float(state.derived["log_mstar_formed"])
     assert formed == pytest.approx(10.0**10.0, rel=_RTOL_MASS)
-    assert float(np.max(lbt_yr[sfr > 0.0])) <= age_yr
+    # The published grid ends AT tengri's age(z) (older nodes collapse onto it).
+    tengri_age_yr = assert_grid_ends_at_age_of_universe(lbt_yr, sfr, z)
+    assert float(np.max(lbt_yr[sfr > 0.0])) <= tengri_age_yr * (1.0 + 1e-12)
 
 
 @pytest.mark.parametrize("z", _REDSHIFTS)
@@ -239,8 +248,10 @@ def test_free_redshift_uses_each_samples_age(family, synthetic_ssp_wide):
         lbt_yr = np.asarray(state.derived["sfh_grid_lbt_yr"])
         sfr = np.asarray(state.derived["sfr_history"])
         age_yr = _age_yr(z)
+        # The last node sits AT tengri's age(z) (1e-12), 1.5e-7 above the independent value.
+        tengri_age_yr = assert_grid_ends_at_age_of_universe(lbt_yr, sfr, z)
         oldest = float(np.max(lbt_yr[sfr > 0.0]))
-        assert 0.9 * age_yr <= oldest <= age_yr, (
+        assert 0.9 * age_yr <= oldest <= tengri_age_yr * (1.0 + 1e-12), (
             f"{family} z={z}: oldest SFR at {oldest / 1e9:.3f} Gyr, "
             f"age(z) = {age_yr / 1e9:.3f} Gyr"
         )

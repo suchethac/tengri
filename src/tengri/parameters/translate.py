@@ -551,6 +551,11 @@ def _recognized_param_keys(param_map):
     recognized.update(_REVERSE_ALIASES.keys())
     recognized.update({"sfh_field_xi", "psd_xi"})
     recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
+    # Optional runtime scalars for the tabulated SFH (#2621): an age cut and
+    # a declared formed mass, both read directly from ``params`` like
+    # ``sfh_t_gyr``/``sfh_sfr`` above (the "table" family has no declared
+    # registry params -- the table IS the SFH).
+    recognized.update({"sfh_table_age_gyr", "sfh_table_log_total_mass"})
     recognized.update(int_name for _, (int_name, _, _) in param_map.items())
     return recognized
 
