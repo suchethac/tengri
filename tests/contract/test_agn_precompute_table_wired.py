@@ -353,3 +353,74 @@ def test_unwired_family_is_not_engaged(key):
         warnings.simplefilter("ignore")
         model = _model(FAMILIES[key], _wavepre())
     assert _band_table(model) is None, f"{key} is recorded as unwired: {UNWIRED[key]}"
+
+
+def _fixed_model(approx, *, agn_extra=None):
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+
+    agn = {
+        "type": "composable",
+        "all_params": Fixed(DEFAULT),
+        "disc": {"type": "kubota_done"},
+        "torus": {"type": "skirtor"},
+    }
+    if agn_extra:
+        agn.update(agn_extra)
+    return SEDModel.build(
+        ssp_data=_ssp(),
+        observation=Observation(
+            photometry=Photometry(filters=tuple(_tophat(c) for c in _BANDS_AA))
+        ),
+        redshift=Fixed(0.1),
+        approx=approx,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        agn=agn,
+    )
+
+
+@pytest.mark.parametrize("lum_ratio", [1.0, 0.5])
+def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
+    """A fully Fixed AGN holds one exact row of band fluxes, scaled by agn_lum_ratio.
+
+    The row is one evaluation of the recipe at the fixed agn_log_lbol, through the same
+    registry adapter and filter integrals as the table. The whole-model photometry is not
+    compared with exact (WavePrecomp's stellar floor); the table is compared with the per-call
+    WavePrecomp path, which it reproduces at 1e-10.
+    """
+    from tengri import Fixed
+
+    extra = {"agn_lum_ratio": Fixed(lum_ratio)} if lum_ratio != 1.0 else None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        table = _fixed_model(_wavepre(), agn_extra=extra)
+        per_call = _fixed_model(_wavepre(), agn_extra=extra)
+    per_call._agn_band_table_cache = None
+    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert _band_table(per_call) is None
+    params = dict(table.spec.sample(jax.random.PRNGKey(0)))
+    before = len(integral_spy)
+    got = np.asarray(table.predict_photometry(params))
+    assert len(integral_spy) == before, "predict integrated the AGN SED through the filters"
+    np.testing.assert_allclose(got, np.asarray(per_call.predict_photometry(params)), rtol=1e-10)
+
+
+def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
+    """The compiled photometry of a fully Fixed AGN has no AGN SED build (flops, not a spy)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        table = _fixed_model(_wavepre())
+        per_call = _fixed_model(_wavepre())
+    per_call._agn_band_table_cache = None
+    params = dict(table.spec.sample(jax.random.PRNGKey(0)))
+
+    def flops(model):
+        cost = jax.jit(model.predict_photometry).lower(params).compile().cost_analysis()
+        return float((cost[0] if isinstance(cost, list) else cost)["flops"])
+
+    assert flops(table) < 0.1 * flops(per_call)

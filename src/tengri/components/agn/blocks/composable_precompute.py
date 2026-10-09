@@ -637,7 +637,10 @@ def lookup_from_table(table: dict, model: str, amplitude, *axis_values):
         ``amplitude`` times the exponentiated interpolant.
     """
     del model
-    axes = tuple(table["axes"][name] for name in sorted(table["axes"]))
     ln_phot = table["ln_phot"]
+    if not table["axes"]:
+        # A constant table (a fully Fixed recipe): one row of band fluxes, no interpolation.
+        return amplitude * jnp.exp(ln_phot)
+    axes = tuple(table["axes"][name] for name in sorted(table["axes"]))
     normed = jnp.exp(interp_nd_pchip(ln_phot, axes, tuple(axis_values)))
     return amplitude * normed

@@ -11318,8 +11318,6 @@ class SEDModel:
             return "the table is evaluated under agn_norm='cigale_joint' and polar_law='smc'"
         if ir_frac is None or float(ir_frac) != 0.0:
             return "agn_ir_frac is not Fixed at 0, so the torus fraction follows the stellar dust"
-        if not axes:
-            return "no free AGN parameter besides agn_lum_ratio; there is nothing to tabulate"
         if len(axes) > max(self._AGN_TABLE_NODES):
             return (
                 f"{len(axes)} free AGN parameters exceed the {max(self._AGN_TABLE_NODES)}-axis cap"
@@ -11355,7 +11353,10 @@ class SEDModel:
             return None, (
                 f"agn_axis_grids names {not_free}, which are not free AGN parameters of this model"
             )
-        n_nodes = self._AGN_TABLE_NODES[len(axes_names)]
+        # A fully Fixed AGN has no free axis: its band fluxes are one exact evaluation at the
+        # fixed agn_log_lbol, held as a single node (the table is then a constant row).
+        fixed_only = not axes_names
+        n_nodes = 1 if fixed_only else self._AGN_TABLE_NODES[len(axes_names)]
         axis_grids = {}
         for name in axes_names:
             bounds = tuple(float(b) for b in self.spec.get_distribution(name).bounds)
@@ -11376,19 +11377,31 @@ class SEDModel:
         }
         if "agn_log_lbol" in fixed:
             fixed_values["agn_log_lbol"] = float(fixed["agn_log_lbol"])
+        if fixed_only:
+            from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+
+            lbol = float(fixed.get("agn_log_lbol", DEFAULT_AGN_LOG_LBOL))
+            axis_grids = {"agn_log_lbol": np.asarray([lbol], dtype=np.float64)}
+            fixed_values.pop("agn_log_lbol", None)
         redshift = float(fixed["redshift"])
         preint = module.precompute(
             [np.asarray(w, dtype=np.float64) for w in self.filter_waves],
             [np.asarray(t, dtype=np.float64) for t in self.filter_trans],
             redshift,
             None,
-            recipe=Recipe.from_parameters(self.spec, axis_params=tuple(axes_names)),
+            recipe=Recipe.from_parameters(
+                self.spec, axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names)
+            ),
             axis_grids=axis_grids,
             fixed_values=fixed_values,
             wave_rest=np.asarray(self._rest_wavelength, dtype=np.float64),
             extra_redshifts=(0.0,),
         )
-        return module.table_arrays(preint, "composable_agn"), None
+        table = module.table_arrays(preint, "composable_agn")
+        if fixed_only:
+            # One node per axis and no free axis: the table is the single row of band fluxes.
+            table = {"ln_phot": jnp.reshape(table["ln_phot"], (-1,)), "axes": {}}
+        return table, None
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
