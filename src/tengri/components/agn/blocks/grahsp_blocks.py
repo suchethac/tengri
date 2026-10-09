@@ -116,10 +116,24 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     if agn_grahsp_log_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
         from tengri.components.agn.grahsp.bolometric import (
+            NORMALIZATION_GRID_NM,
             bolometric_luminosity_bbb,
         )
 
-        l_bol_unit = bolometric_luminosity_bbb(wave_nm, L_lambda_unit_nm)
+        norm_wave_nm = jnp.asarray(NORMALIZATION_GRID_NM)
+        L_lambda_norm_nm = floor_disc_xray(
+            norm_wave_nm,
+            sbpl_bbb(
+                wave_nm=norm_wave_nm,
+                l5100=1.0,
+                uvslope=agn_grahsp_uvslope,
+                plslope=agn_grahsp_plslope,
+                plbendloc_nm=agn_grahsp_plbendloc_nm,
+                plbendwidth=agn_grahsp_plbendwidth,
+                cutoff_nm=agn_grahsp_cutoff_nm,
+            ),
+        )
+        l_bol_unit = bolometric_luminosity_bbb(norm_wave_nm, L_lambda_norm_nm)
         # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
         # log10(target) - log10(l_bol_unit). Never materializes the linear
         # target (~1e42-1e47, #1206 §D).

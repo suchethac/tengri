@@ -24,10 +24,12 @@ References
 from __future__ import annotations
 
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 __all__ = [
     "LYMAN_LIMIT_NM",
+    "NORMALIZATION_GRID_NM",
     "agn_fraction_dale",
     "bolometric_luminosity_bbb",
     "bolometric_luminosity_torus",
@@ -37,6 +39,17 @@ __all__ = [
 
 LYMAN_LIMIT_NM: float = 91.2
 """Lyman limit at 91.2 nm: lower bound for ``lumBolBBB`` integration."""
+
+NORMALIZATION_GRID_NM: np.ndarray = np.geomspace(LYMAN_LIMIT_NM, 1.0e10, 20000)
+"""Fixed log grid [nm] on which the unit-l5100 bolometric is normalized.
+
+The bolometric correction (the integral of the unit-l5100 SED above the Lyman limit,
+and the torus integral) is a property of the model and its parameters alone. It is
+taken on this grid, never on the caller's wavelength grid: the BBB tail falls as
+about lambda^-0.7 so a grid stopping at 1e4 nm misses 4 per cent of it. The grid
+reaches 1e10 nm (the tail beyond is below 1e-5 relative) and resolves the narrowest
+emission line (0.6 nm sampling at H-beta).
+"""
 
 
 def _trapz_above(
