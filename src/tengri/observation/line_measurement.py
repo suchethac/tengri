@@ -50,13 +50,18 @@ import jax.numpy as jnp
 from tengri.observation.spectral_indices import (
     WindowPoints,
     _window_mean_flux,
-    soft_window_ssp_integral,
-    soft_window_ssp_points,
     stack_window_points,
     window_means_with_dust,
+    window_ssp_integral,
+    window_ssp_points,
 )
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tengri.utils.scale import apply_log10_scale
+
+#: Sigmoid edge width [Å] of the emission-line flux windows. The hard-window ruling
+#: of #2637 covers the Lick / break / EW spectral indices; line-flux windows keep
+#: their 1 Å soft edge until they are audited separately.
+LINE_WINDOW_EDGE_WIDTH = 1.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -178,9 +183,9 @@ def measure_line_flux_jax(wave, sed_lnu, line_def, log10_four_pi_dl2):
     """
     (blo, bhi), (rlo, rhi) = line_def.continuum
     flo, fhi = line_def.feature
-    f_blue = _window_mean_flux(wave, sed_lnu, blo, bhi)
-    f_red = _window_mean_flux(wave, sed_lnu, rlo, rhi)
-    f_feat = _window_mean_flux(wave, sed_lnu, flo, fhi)
+    f_blue = _window_mean_flux(wave, sed_lnu, blo, bhi, LINE_WINDOW_EDGE_WIDTH)
+    f_red = _window_mean_flux(wave, sed_lnu, rlo, rhi, LINE_WINDOW_EDGE_WIDTH)
+    f_feat = _window_mean_flux(wave, sed_lnu, flo, fhi, LINE_WINDOW_EDGE_WIDTH)
     lam_c = 0.5 * (flo + fhi)
     cont = _continuum_at(lam_c, 0.5 * (blo + bhi), 0.5 * (rlo + rhi), f_blue, f_red)
     return _line_flux_from_means(f_feat, cont, lam_c, fhi - flo, log10_four_pi_dl2)
@@ -221,7 +226,9 @@ class LineWindowPrecomputation:
     points: WindowPoints
 
 
-def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1.0):
+def precompute_line_windows(
+    ssp_wave, ssp_flux, line_defs, edge_width: float = LINE_WINDOW_EDGE_WIDTH
+):
     """Precompute SSP window integrals for a set of :class:`LineDef`.
 
     Parameters
@@ -232,8 +239,8 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
         SSP spectra [erg/s/Hz/Msun].
     line_defs : sequence of LineDef
         Lines to precompute.
-    edge_width : float, default 1.0
-        Sigmoid edge width [Å], MUST match :func:`_window_mean_flux`.
+    edge_width : float, default ``LINE_WINDOW_EDGE_WIDTH`` (1.0)
+        Sigmoid edge width [Å], MUST match the width the exact line-flux path uses.
 
     Returns
     -------
@@ -258,8 +265,8 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
         key = (round(float(lo), 4), round(float(hi), 4))
         if key in unique:
             return unique[key]
-        integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
-        pw, pi = soft_window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
+        integral, norm = window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pw, pi = window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
         pt_waves.append(pw)
         pt_integrands.append(pi)
         integrals.append(integral)
