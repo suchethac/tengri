@@ -81,3 +81,19 @@ def test_astrodust_emits_declared_power_on_converged_grid():
     wave = np.geomspace(1e3, 1e8, CONVERGED_N)
     power = _emitted_power_erg_s(_astrodust_spectrum(wave, 1e44), wave)
     assert power == pytest.approx(1e44, rel=1e-4)
+
+
+def test_grahsp_normalization_is_grid_independent():
+    _check_grid_independence(lambda w: _grahsp_spectrum(w, 12.0), 912.0, 1e8)
+
+
+def test_grahsp_emits_declared_bolometric_power_on_converged_grid():
+    # lumBolBBB is the integral above the Lyman limit (912 A): the declared
+    # power is 10**agn_log_lbol L_sun, emitted above 912 A on a grid that
+    # reaches the converged tail (1e11 A).
+    wave = np.geomspace(912.0, 1e11, 100_000)
+    declared = 10.0**12.0 * 3.828e33
+    lnu = _grahsp_spectrum(wave, 12.0)
+    above_lyman = wave >= 912.0
+    power = _emitted_power_erg_s(np.where(above_lyman, lnu, 0.0), wave)
+    assert power == pytest.approx(declared, rel=1e-4)
