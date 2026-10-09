@@ -311,3 +311,43 @@ class TestThemisGridPort:
 
         # Assert exact match (same closure)
         np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
+
+
+class TestSchreiber2018GridPort:
+    """Bit-exact regression for schreiber2018 SEDModelComponent."""
+
+    def test_schreiber2018_bit_exact(
+        self,
+        golden_data: dict,
+        golden_dir: Path,
+        wave_grid: jnp.ndarray,
+        L_ir: float,
+    ):
+        """Schreiber2018 component matches the frozen golden exactly."""
+        from tengri.components.sed_model_component import _REGISTRY
+
+        # Skip if golden is missing or was skipped
+        templates = golden_data.get("templates", {})
+        if "schreiber2018" not in templates:
+            pytest.skip("schreiber2018 golden data not available")
+
+        golden_npy = golden_dir / "schreiber2018.npy"
+        if not golden_npy.exists():
+            pytest.skip(f"Golden file not found: {golden_npy}")
+
+        # Load component and golden
+        assert "schreiber2018" in _REGISTRY
+        comp_cls = _REGISTRY["schreiber2018"]
+        comp = comp_cls()
+        golden = np.load(golden_npy)
+
+        # Extract params from golden
+        params = templates["schreiber2018"]["params"]
+        p_stripped = {k.replace("dust_", ""): v for k, v in params.items()}
+
+        # Predict
+        sed_in = jnp.zeros_like(wave_grid)
+        sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
+
+        # Assert exact match (same closure)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
