@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Masked lookups interpolate between populated brackets (#2575).
 
-``interp_nd_triweight(..., population_mask=...)`` renormalised over the populated cells
+``interp_nd_triweight(..., population_mask=...)`` renormalized over the populated cells
 by snapping to the nearest populated node. A query that straddles a masked gap then
 returned a value from the wrong side of the gap, or NaN, although the populated nodes
 either side of it bracket the query.
@@ -59,7 +59,7 @@ def _interp(grid, mask_nb, point):
 def test_density_gap_gives_linear_bracket_value():
     """Density nodes 2 and 3 are masked everywhere; n = 0.45 sits between 0.2 and 0.8.
 
-    The query is off-centre so that a symmetric kernel average cannot hit the answer.
+    The query is off-center so that a symmetric kernel average cannot hit the answer.
 
     The field is 2 n + 1, linear along density, so the bracket interpolant is exact:
     f(0.45) = 1.9. Snapping to the nearest populated node gives 1.4 or 2.6.
