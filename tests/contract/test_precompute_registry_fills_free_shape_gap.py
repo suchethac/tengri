@@ -41,7 +41,6 @@ def _missed(measured: str, detail: str) -> str:
 
 _UNMEASURED = f"not measured separately, same adapter module as dale2014; {_TRIWEIGHT}"
 UNWIRED: dict[str, str] = {
-    "dale2014": _missed("1.6e-2", "30 draws, alpha_dale free, z = 0.05, 80-500 um"),
     "draine_li2007": _missed("4.3e-1", "30 draws, umin and qpah free, z = 0.05"),
     "dl07": "same adapter as draine_li2007",
     "draine_li2014": _UNMEASURED,
@@ -88,6 +87,8 @@ def _tophat(center_aa, frac_width=0.18, n=48):
 
 #: 100 um to 500 um: the bands the thermal dust emission dominates.
 _FAR_IR_AA = (1.0e5, 1.6e5, 2.5e5, 5.0e5)
+#: 8 um to 500 um, observed-frame band centers: the Dale SED spans the mid- to far-IR.
+_DALE_BANDS_AA = (8.0e4, 1.6e5, 2.5e5, 5.0e5, 1.0e6, 2.5e6, 5.0e6)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -110,10 +111,11 @@ _DUST_SHAPE_PRIORS = {
         "alpha_mir": (1.0, 3.0),
         "lambda_0_um": (50.0, 500.0),
     },
+    "dale2014": {"alpha_dale": (0.0625, 4.0)},
 }
 
 
-def _dust_model(model_key: str, approx, *, free: bool, ssp=None):
+def _dust_model(model_key: str, approx, *, free: bool, ssp=None, bands_aa=_FAR_IR_AA):
     from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 
     emission = {"type": model_key, "all_params": Fixed(DEFAULT)}
@@ -123,7 +125,7 @@ def _dust_model(model_key: str, approx, *, free: bool, ssp=None):
     return SEDModel.build(
         ssp_data=ssp if ssp is not None else _ssp(),
         observation=Observation(
-            photometry=Photometry(filters=tuple(_tophat(c) for c in _FAR_IR_AA))
+            photometry=Photometry(filters=tuple(_tophat(c) for c in bands_aa))
         ),
         redshift=Fixed(0.05),
         approx=approx,
@@ -156,6 +158,15 @@ FAMILIES: dict[str, Family] = {
         ("casey2012", "8.0e-4"),
     )
 }
+# Dale2014: 30 seeded draws of alpha_dale over the template library's span, z = 0.05, 8-500 um.
+# Measured 2.9e-4 at the library's nodes and between them (the residual is the shared
+# preintegration quadrature at 8 um, present at the nodes too).
+FAMILIES["dale2014"] = Family(
+    "dale2014",
+    lambda approx, *, free: _dust_model("dale2014", approx, free=free, bands_aa=_DALE_BANDS_AA),
+    rtol=1e-3,
+    stated="2.9e-4",
+)
 
 
 def _wired():

@@ -54,6 +54,7 @@ from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
 )
+from tengri.utils.template_grid import native_nu_integral as _native_nu_integral
 
 # Upper bound of the U^-2 power-law radiation-field distribution used to
 # generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
@@ -273,12 +274,13 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
 
         # Convert L_lambda -> L_nu: L_nu = L_lambda * lambda^2 / c
         wavelength_cm = wavelength_aa * _AA_TO_CM
-        nu = _C_CGS / wavelength_cm
         sed_lnu = sed_llam * (wavelength_cm**2) / _C_CGS
 
-        # Renormalize so that integral(L_nu, d_nu) = L_absorbed
-        # nu is descending (wavelength ascending), so negate
-        integral = -jnp.trapezoid(sed_lnu, nu)
+        # Renormalize so that integral(L_nu, d_nu) = L_absorbed, with the
+        # integral taken on the template's own grid: the emitted power is then
+        # independent of the caller's wavelength sampling.
+        native_lnu = template * (tmpl_wave * _AA_TO_CM) ** 2 / _C_CGS
+        integral = _native_nu_integral(native_lnu, tmpl_wave)
         norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
         return norm * sed_lnu
@@ -502,8 +504,7 @@ def dl14_sed_from_grid(
     # Must normalize AFTER resampling to ensure the delivered SED integrates
     # to L_absorbed regardless of the native template grid spacing.
     # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
-    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-    eval_integral = -jnp.trapezoid(sed, nu)
+    eval_integral = _native_nu_integral(template, tmpl_wave)
     norm = jnp.where(eval_integral > 0.0, L_absorbed / eval_integral, 0.0)
 
     return norm * sed
@@ -725,8 +726,7 @@ def dale2014_emission_lnu(
     # the normalization the mixing equation above is written in, and it is the
     # one that must hold exactly for f_AGN = 0 to re-emit exactly L_absorbed.
     sed_sf = resample_template(wavelength_aa, wavelength_grid, template_sf, left=0.0, right=0.0)
-    nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-    sf_integral = -jnp.trapezoid(sed_sf, nu)
+    sf_integral = _native_nu_integral(template_sf, wavelength_grid)
     norm = jnp.where(sf_integral > 0.0, 1.0 / sf_integral, 0.0)
 
     if has_qso:
@@ -1257,9 +1257,8 @@ def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
 
         # Renormalize the frequency integral to L_absorbed (nu descending for
         # ascending wavelength, so negate for a positive integral).
-        wave_cm = wavelength_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm
-        integral = -jnp.trapezoid(mixed, nu)
+        native_mixed = (1.0 - f_pah) * dust_T_template + f_pah * pah_T_template
+        integral = _native_nu_integral(native_mixed, tmpl_wave)
         norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
         return norm * mixed
 
@@ -1471,8 +1470,7 @@ def create_schreiber2016_from_grid(grid_path: str | dict) -> Callable:
 
         # Renormalize the frequency integral to L_absorbed (nu descending for
         # ascending wavelength, so negate for a positive integral).
-        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-        integral = -jnp.trapezoid(mixed, nu)
+        integral = _native_nu_integral(mixed_t, tmpl_wave)
         norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
         return norm * mixed
 
@@ -1872,10 +1870,9 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
             wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0
         )
 
-        # Normalize via frequency integral (energy balance)
-        wave_cm = wavelength_aa * _AA_TO_CM
-        nu = _C_CGS / wave_cm
-        integral = -jnp.trapezoid(sed, nu)
+        # Normalize via the frequency integral on the template's own grid
+        # (energy balance, independent of the caller's wavelength sampling)
+        integral = _native_nu_integral(template_interp, wavelength_grid)
 
         # log-domain rescale: equal to (L_absorbed / integral) * sed to fp
         # roundoff, but never materializes L_absorbed (~1e43, inf in float32).
@@ -2112,8 +2109,7 @@ def create_astrodust_from_grid(
         # integrates to L_absorbed regardless of the native template grid spacing.
         # Use the same log-wavelength integration as the component-level normalization
         # for consistency across different astrodust calling paths.
-        nu_lnu = (_C_CGS / (wavelength_aa * _AA_TO_CM)) * sed
-        t_integral = jnp.trapezoid(nu_lnu, jnp.log(wavelength_aa))
+        t_integral = _native_nu_integral(template, tmpl_wave)
         norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
@@ -2392,11 +2388,9 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # Interpolate onto target wavelength grid FIRST
         sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # Normalize to enforce energy balance: ∫L_nu dnu = L_absorbed.
-        # Must normalize AFTER resampling to ensure the delivered SED integrates
-        # to L_absorbed regardless of the native template grid spacing.
-        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-        t_integral = -jnp.trapezoid(sed, nu)
+        # Normalize to enforce energy balance: ∫L_nu dnu = L_absorbed, with the
+        # integral on the template's own grid (independent of the caller's grid).
+        t_integral = _native_nu_integral(template, tmpl_wave)
 
         # No CMB contrast factor here; see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -3376,8 +3370,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # Energy balance: renormalize to unit frequency integral on the
         # evaluation grid AFTER resampling to ensure the delivered SED
         # integrates to L_absorbed regardless of the native template grid spacing.
-        nu = _C_CGS / (wavelength_aa * _AA_TO_CM)
-        t_integral = -jnp.trapezoid(sed, nu)
+        t_integral = _native_nu_integral(template, tmpl_wave)
         norm = jnp.where(t_integral > 0.0, L_absorbed / t_integral, 0.0)
 
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
