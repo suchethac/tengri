@@ -19,6 +19,7 @@ the blue end (#2712), and a prime pixel count ran at a slow transform length
 from __future__ import annotations
 
 import re
+from unittest import mock
 
 import jax
 import jax.numpy as jnp
@@ -726,25 +727,96 @@ def test_apply_lsf_low_resolution_is_not_truncated():
     assert _rel_err(out, _ref_real_space(spec, sigma_kms / _C_KM_S / dln)) <= 1e-6
 
 
-def test_sigma_bound_is_exact_when_concrete_and_maximal_when_traced():
-    concrete = spectrum_mod._lsf_sigma_bound_kms(30.0, None, None)
-    assert concrete == pytest.approx(_C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * 30.0))
-    # sigma_lib only subtracts, so a concrete sigma_lib gives the exact quadrature.
-    # R = 300 gives sigma_inst = 424 km/s, above sigma_lib = 70 km/s. At R = 3000
-    # (sigma_inst = 42) the deficit clamps to zero, which the next check covers.
-    lib = spectrum_mod._lsf_sigma_bound_kms(300.0, 70.0, 0.0)
-    inst = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * 300.0)
-    assert lib == pytest.approx(np.sqrt(inst**2 - 70.0**2))
-    assert spectrum_mod._lsf_sigma_bound_kms(3000.0, 70.0, 0.0) == 0.0
-    assert spectrum_mod._lsf_sigma_bound_kms(None, None, 0.0) == 0.0
-    seen = []
+def test_sigma_bound_floors_each_component_at_max_sigma_and_ignores_tracing():
+    """Each component counts as max(its value, 2000) and a traced one as 2000 (#2832)."""
+    cap = spectrum_mod._LSF_MAX_SIGMA_KMS
+    # A wide concrete instrument term is exact: R = 30 gives sigma_inst = 4244 km/s.
+    wide = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * 30.0)
+    assert spectrum_mod._lsf_sigma_bound_kms(30.0, None) == pytest.approx(wide)
+    # A narrow concrete component counts as the cap, so R = 3000 and sigma_v = 0 give
+    # the quadrature of two caps. sigma_lib is not an argument: it is never subtracted.
+    assert spectrum_mod._lsf_sigma_bound_kms(3000.0, 0.0) == pytest.approx(np.hypot(cap, cap))
+    assert spectrum_mod._lsf_sigma_bound_kms(None, 60.0) == pytest.approx(cap)
+    assert spectrum_mod._lsf_sigma_bound_kms(None, 3000.0) == pytest.approx(3000.0)
+    assert spectrum_mod._lsf_sigma_bound_kms(None, 0.0) == pytest.approx(cap)
+    # A traced component is the cap, so the traced bound equals the concrete one whenever
+    # every concrete component is at or below the cap.
+    traced_both = jax.jit(lambda r, s: spectrum_mod._lsf_sigma_bound_kms(r, s) * jnp.ones(()))
+    assert float(traced_both(3000.0, 0.0)) == pytest.approx(np.hypot(cap, cap))
+    assert float(traced_both(jnp.asarray(3000.0), 60.0)) == pytest.approx(np.hypot(cap, cap))
 
-    def probe(s):
-        seen.append(spectrum_mod._lsf_sigma_bound_kms(None, None, s))
-        return s
 
-    jax.make_jaxpr(probe)(jnp.asarray(60.0))
-    assert seen == [spectrum_mod._LSF_MAX_SIGMA_KMS]
+def _run_recording_padding(call):
+    """Run ``call()`` and return ``(result, paddings)``: every padding it resolved, in order."""
+    resolved = []
+    original = spectrum_mod._lsf_pad_pixels
+
+    def recording(*args, **kwargs):
+        pad = original(*args, **kwargs)
+        resolved.append(pad)
+        return pad
+
+    with mock.patch.object(spectrum_mod, "_lsf_pad_pixels", recording):
+        result = call()
+    return result, resolved
+
+
+def _expected_pad(wave, n, sigma_kms, n_bins=None):
+    """Padding from the rule: 5 sigma at the path's pixel scale, floored at 256."""
+    w = np.asarray(wave, dtype=np.float64)
+    if n_bins is None:
+        dln = np.log(w[1] / w[0])
+    else:
+        dln_grid = np.gradient(np.log(w))
+        width = n / n_bins
+        means = []
+        for k in range(n_bins):
+            center = (k + 0.5) * width
+            mask = np.abs(np.arange(n) - center) < width
+            means.append((dln_grid * mask).sum() / mask.sum())
+        dln = min(means)
+    return max(int(np.ceil(5.0 * sigma_kms / (_C_KM_S * dln))), 256)
+
+
+@pytest.mark.parametrize("path", ["constant", "variable", "velocity"])
+def test_padding_does_not_depend_on_tracing(path):
+    """Concrete and jitted calls pad by the same h and give the same output (#2832).
+
+    R = 3000 (sigma_inst 42 km/s) and sigma_v = 60 km/s are both below the 2000 km/s
+    cap, so each counts as the cap whether it is traced or not.
+    """
+    n = 7909
+    spec = jnp.asarray(_spectrum_with_edge_features(n))
+    log_wave = np.geomspace(3600.0, 9824.0, n)
+    lin_wave = np.linspace(3600.0, 9824.0, n)
+    cap = spectrum_mod._LSF_MAX_SIGMA_KMS
+    if path == "constant":
+
+        def run(r, s):
+            return apply_lsf(spec, log_wave, r, sigma_v_kms=s)
+
+        expected = _expected_pad(log_wave, n, np.hypot(cap, cap))
+    elif path == "variable":
+
+        def run(r, s):
+            return apply_lsf(spec, lin_wave, r, sigma_v_kms=s)
+
+        expected = _expected_pad(lin_wave, n, np.hypot(cap, cap), 16)
+    else:
+
+        def run(r, s):
+            del r
+            return broaden_velocity_only(spec, lin_wave, s)
+
+        expected = _expected_pad(lin_wave, n, cap, 16)
+
+    args = (3000.0, 60.0)
+    out_c, pads_c = _run_recording_padding(lambda: run(*args))
+    out_t, pads_t = _run_recording_padding(lambda: jax.jit(run)(*args))
+    assert pads_c == [expected], "concrete padding must follow the rule"
+    assert pads_t == pads_c, "a traced call must pad exactly as the concrete one"
+    out_c, out_t = np.asarray(out_c), np.asarray(out_t)
+    assert np.max(np.abs(out_t - out_c)) <= 1e-14 * np.max(np.abs(out_c))
 
 
 @pytest.mark.parametrize("resolution", [10.0, 30.0, 100.0, 300.0])

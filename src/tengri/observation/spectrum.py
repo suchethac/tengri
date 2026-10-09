@@ -200,9 +200,10 @@ _LSF_KERNEL_HALF_WIDTH_SIGMAS = 5.0
 #: bound is 265 pixels, so the floor adds nothing there.
 _LSF_RINGING_FLOOR_PIXELS = 256
 
-#: Bound [km/s] on any component of the Gaussian sigma that is traced at trace time.
-#: A traced sigma has no value to read, so the padding assumes it is at most this
-#: (#2832). A concrete sigma is measured, so this bound only applies to traced ones.
+#: Per-component bound [km/s] on the Gaussian sigma (#2832). A traced component has no
+#: value to read, so it is assumed to be at most this. A concrete component uses the
+#: larger of its measured value and this, so every component at or below it gets the
+#: same padding whether or not it is traced.
 _LSF_MAX_SIGMA_KMS = 2000.0
 
 
@@ -257,24 +258,22 @@ def _is_traced(x) -> bool:
     return isinstance(x, jax.core.Tracer)
 
 
-def _lsf_sigma_bound_kms(resolution=None, sigma_lib_kms=None, sigma_v_kms=None) -> float:
+def _lsf_sigma_bound_kms(resolution=None, sigma_v_kms=None) -> float:
     """Upper bound [km/s] on the Gaussian sigma the convolution uses (#2832).
 
-    The kernel's sigma is ``sqrt(max(sigma_inst**2 - sigma_lib**2, 0) + sigma_v**2)``
-    with ``sigma_inst = c / (2.3548 R)``, the same quadrature as :func:`apply_lsf`.
-    When every input is concrete, the bound is the exact maximum of that sigma over
-    pixels. When an input is traced, it is assumed to be at most
-    :data:`_LSF_MAX_SIGMA_KMS`; the concrete components are measured and combined in
-    quadrature with it. ``sigma_lib`` only subtracts, so the traced branch drops it,
-    which keeps the bound an upper one.
+    The bound is the quadrature sum of one bound per kernel component. Each
+    component's bound is the larger of :data:`_LSF_MAX_SIGMA_KMS` and its concrete
+    value, the maximum over pixels for the instrument term. A traced component
+    contributes :data:`_LSF_MAX_SIGMA_KMS`. For components at or below that cap, the
+    bound depends only on which inputs are traced, not on their values, so the padding
+    is the same whether or not they are traced. The library dispersion is not
+    subtracted: dropping it keeps the bound an upper one.
 
     Parameters
     ----------
-    resolution : float, array or None
+    resolution : float, array, tracer or None
         Spectral resolution R, or None when there is no instrument term.
-    sigma_lib_kms : float, array or None
-        Library dispersion [km/s], or None.
-    sigma_v_kms : float, array or None
+    sigma_v_kms : float, array, tracer or None
         Intrinsic velocity dispersion [km/s], or None.
 
     Returns
@@ -286,38 +285,21 @@ def _lsf_sigma_bound_kms(resolution=None, sigma_lib_kms=None, sigma_v_kms=None) 
     -----
     Private helper, evaluated at trace time from the raw inputs of a public call.
     """
-    inputs = (resolution, sigma_lib_kms, sigma_v_kms)
-    if not any(_is_traced(x) for x in inputs):
-        sigma_inst = (
-            np.zeros(1)
-            if resolution is None
-            else _C_KM_S / (_FWHM_TO_SIGMA * np.atleast_1d(np.asarray(resolution, np.float64)))
-        )
-        lib = (
-            np.zeros(1)
-            if sigma_lib_kms is None
-            else np.atleast_1d(np.asarray(sigma_lib_kms, np.float64))
-        )
-        v = (
-            np.zeros(1)
-            if sigma_v_kms is None
-            else np.atleast_1d(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))
-        )
-        eff = np.sqrt(np.maximum(sigma_inst**2 - lib**2, 0.0) + v**2)
-        return float(np.max(eff))
     squares = 0.0
     if resolution is not None:
         if _is_traced(resolution):
-            squares += _LSF_MAX_SIGMA_KMS**2
+            inst = _LSF_MAX_SIGMA_KMS
         else:
             r = np.atleast_1d(np.asarray(resolution, np.float64))
-            squares += float(np.max(_C_KM_S / (_FWHM_TO_SIGMA * r))) ** 2
+            inst = max(float(np.max(_C_KM_S / (_FWHM_TO_SIGMA * r))), _LSF_MAX_SIGMA_KMS)
+        squares += inst**2
     if sigma_v_kms is not None:
         if _is_traced(sigma_v_kms):
-            squares += _LSF_MAX_SIGMA_KMS**2
+            vel = _LSF_MAX_SIGMA_KMS
         else:
             v = np.atleast_1d(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))
-            squares += float(np.max(v)) ** 2
+            vel = max(float(np.max(v)), _LSF_MAX_SIGMA_KMS)
+        squares += vel**2
     return math.sqrt(squares)
 
 
@@ -708,8 +690,9 @@ def broaden_velocity_only(
         Piecewise-constant segment count (see :func:`_apply_lsf_variable_r`).
     pad_pixels : int or None, optional
         Static padding [pixels] per side. ``None`` derives it from the grid and the
-        sigma: a concrete sigma is measured, and a traced sigma is assumed to be at
-        most ``_LSF_MAX_SIGMA_KMS`` (2000 km/s). A traced grid pads by ``n - 1``.
+        sigma: the padding follows :func:`_lsf_sigma_bound_kms`, which counts a
+        traced sigma and a concrete one below ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) as
+        2000 km/s, so tracing does not change it. A traced grid pads by ``n - 1``.
         An explicit value is used as given.
 
     Returns
@@ -721,7 +704,11 @@ def broaden_velocity_only(
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes. The convolution is padded by a
     margin set from the grid (:func:`_lsf_pad_pixels`), so the kernel never wraps
-    from one spectrum edge onto the other (#2712, #2832).
+    from one spectrum edge onto the other (#2712, #2832). The margin depends on the
+    sigma's bound (:func:`_lsf_sigma_bound_kms`), never on whether ``sigma_v_kms`` is
+    traced: a traced sigma counts as 2000 km/s, and a concrete one counts as the
+    larger of 2000 km/s and its value. A traced sigma above 2000 km/s is therefore
+    under-padded; pass ``pad_pixels`` for such a kernel.
     """
     if _is_concrete_nonpositive(sigma_v_kms):
         return flux
@@ -973,11 +960,11 @@ def apply_lsf(
         (``sigma_lib_kms``). Default 0.0 (no extra broadening).
     pad_pixels : int or None, optional
         Static padding [pixels] per side (keyword-only). ``None`` derives it from the
-        sigma of this call: the exact maximum over pixels when every input is
-        concrete, and otherwise each traced input is assumed to be at most
-        ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) and combined in quadrature with the
-        concrete ones. A traced grid pads by ``n - 1``. An explicit value is used as
-        given, so it must cover 5 sigma of the kernel to be exact.
+        bound of :func:`_lsf_sigma_bound_kms`: each component counts as the larger of
+        ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) and its concrete value, and a traced
+        component counts as 2000 km/s. For components up to 2000 km/s the padding does
+        not depend on tracing. A traced grid pads by ``n - 1``. An explicit value is
+        used as given, so it must cover 5 sigma of the kernel to be exact.
 
     Returns
     -------
@@ -1007,7 +994,11 @@ def apply_lsf(
     **Boundary handling**: the convolution runs on a reflecting (symmetric) margin of
     :func:`_lsf_pad_pixels` pixels per side (5 sigma of the kernel at the pixel scale
     the kernel uses, and at least 256 pixels for sub-pixel kernels), so the kernel
-    does not wrap from one spectrum edge onto the other (#2712, #2832).
+    does not wrap from one spectrum edge onto the other (#2712, #2832). The sigma is
+    bounded per component, each at least 2000 km/s, and the bounds are combined in
+    quadrature; the library dispersion is not subtracted. Every component at or
+    below 2000 km/s gets the same padding whether or not it is traced, so the same
+    call pads the same way under ``jax.jit``.
 
     See Also
     --------
@@ -1041,7 +1032,7 @@ def apply_lsf(
     # Clamp non-negative (priors enforce this; clamp keeps trace-safe path
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
-    sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_lib_kms, sigma_v_kms)
+    sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
     sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
     resolution = jnp.asarray(resolution)
