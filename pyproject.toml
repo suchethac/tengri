@@ -252,7 +252,7 @@ pythonpath = ["src"]
 # `physics` (1) were all unregistered, so `-m unit` had always matched zero
 # tests while 157 files declared it. Registered below; the flag keeps the class
 # from recurring.
-addopts = "--tb=short --strict-markers -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
+addopts = "--tb=short --strict-markers -m 'not crossval and not slow and not benchmark and not population_fit' -n auto --dist=loadfile"
 # `xfail_strict` is the `--strict-markers` argument one level down. Pytest's
 # default is False, which means a test marked `xfail` that *starts passing*
 # reports XPASS -- and XPASS counts as a pass. The run stays green and nobody
@@ -286,6 +286,7 @@ markers = [
     "physics: cross-cut tag for a test whose subject is physical correctness",
     "owner_blocked: marked xfail pending owner physics adjudication (#1728)",
     "oom: test allocates more memory than CI runners have; excluded from CI, run manually",
+    "population_fit: runs a population (hierarchical) fit; excluded from every automated run, run by hand with -m population_fit",
 ]
 
 [tool.jupytext]
