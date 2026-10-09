@@ -192,8 +192,17 @@ def _is_log_uniform(wave) -> bool:
 #: Truncating a Gaussian at 5 sigma drops about 6e-7 of its weight.
 _LSF_KERNEL_HALF_WIDTH_SIGMAS = 5.0
 
-#: Largest total Gaussian sigma [km/s] that the padding from :func:`_lsf_pad_pixels`
-#: covers. A wider kernel is truncated at that padding.
+#: Minimum padding [pixels] per side (#2832). The kernel is sampled in Fourier space,
+#: so for a sub-pixel sigma its spatial tails (the ringing of the Nyquist cut) decay
+#: only as h**-2 and are not covered by 5 sigma. Measured against a converged
+#: reference (sigma_pix 0.28 and 0.66): h = 8 gives 3e-4, 64 gives 4e-6, 128 gives
+#: 9e-7, 256 gives 1.5e-7. At the production grid (n = 7909, 2000 km/s) the 5-sigma
+#: bound is 265 pixels, so the floor adds nothing there.
+_LSF_RINGING_FLOOR_PIXELS = 256
+
+#: Bound [km/s] on any component of the Gaussian sigma that is traced at trace time.
+#: A traced sigma has no value to read, so the padding assumes it is at most this
+#: (#2832). A concrete sigma is measured, so this bound only applies to traced ones.
 _LSF_MAX_SIGMA_KMS = 2000.0
 
 
@@ -243,8 +252,95 @@ def _next_fast_fft_len(n: int) -> int:
         m += 1
 
 
-def _lsf_pad_pixels(wave, n: int) -> int:
-    """Kernel padding [pixels] on each side of an ``n``-pixel spectrum.
+def _is_traced(x) -> bool:
+    """Whether ``x`` is a tracer, so its value is unknown at trace time."""
+    return isinstance(x, jax.core.Tracer)
+
+
+def _lsf_sigma_bound_kms(resolution=None, sigma_lib_kms=None, sigma_v_kms=None) -> float:
+    """Upper bound [km/s] on the Gaussian sigma the convolution uses (#2832).
+
+    The kernel's sigma is ``sqrt(max(sigma_inst**2 - sigma_lib**2, 0) + sigma_v**2)``
+    with ``sigma_inst = c / (2.3548 R)``, the same quadrature as :func:`apply_lsf`.
+    When every input is concrete, the bound is the exact maximum of that sigma over
+    pixels. When an input is traced, it is assumed to be at most
+    :data:`_LSF_MAX_SIGMA_KMS`; the concrete components are measured and combined in
+    quadrature with it. ``sigma_lib`` only subtracts, so the traced branch drops it,
+    which keeps the bound an upper one.
+
+    Parameters
+    ----------
+    resolution : float, array or None
+        Spectral resolution R, or None when there is no instrument term.
+    sigma_lib_kms : float, array or None
+        Library dispersion [km/s], or None.
+    sigma_v_kms : float, array or None
+        Intrinsic velocity dispersion [km/s], or None.
+
+    Returns
+    -------
+    float
+        Sigma bound [km/s].
+
+    Notes
+    -----
+    Private helper, evaluated at trace time from the raw inputs of a public call.
+    """
+    inputs = (resolution, sigma_lib_kms, sigma_v_kms)
+    if not any(_is_traced(x) for x in inputs):
+        sigma_inst = (
+            np.zeros(1)
+            if resolution is None
+            else _C_KM_S / (_FWHM_TO_SIGMA * np.atleast_1d(np.asarray(resolution, np.float64)))
+        )
+        lib = (
+            np.zeros(1)
+            if sigma_lib_kms is None
+            else np.atleast_1d(np.asarray(sigma_lib_kms, np.float64))
+        )
+        v = (
+            np.zeros(1)
+            if sigma_v_kms is None
+            else np.atleast_1d(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))
+        )
+        eff = np.sqrt(np.maximum(sigma_inst**2 - lib**2, 0.0) + v**2)
+        return float(np.max(eff))
+    squares = 0.0
+    if resolution is not None:
+        if _is_traced(resolution):
+            squares += _LSF_MAX_SIGMA_KMS**2
+        else:
+            r = np.atleast_1d(np.asarray(resolution, np.float64))
+            squares += float(np.max(_C_KM_S / (_FWHM_TO_SIGMA * r))) ** 2
+    if sigma_v_kms is not None:
+        if _is_traced(sigma_v_kms):
+            squares += _LSF_MAX_SIGMA_KMS**2
+        else:
+            v = np.atleast_1d(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))
+            squares += float(np.max(v)) ** 2
+    return math.sqrt(squares)
+
+
+def _variable_min_dln(w: np.ndarray, n: int, n_bins: int) -> float:
+    """Smallest bin-mean ``d ln lambda`` over the piecewise bins (#2832).
+
+    Each bin's kernel reads ``d ln lambda`` averaged over the pixels within one bin
+    width of its center (:func:`_bin_sigma_and_dln`). The smallest such mean sets the
+    widest kernel in pixels, so it is the scale the padding must cover. A single
+    near-duplicate pixel barely moves a bin mean, so it does not shrink the padding.
+    """
+    dln = np.gradient(np.log(w))
+    width = n / n_bins
+    pix = np.arange(n, dtype=np.float64)
+    centers = (np.arange(n_bins) + 0.5) * width
+    mask = np.abs(pix[None, :] - centers[:, None]) < width
+    counts = np.maximum(mask.sum(axis=1), 1.0)
+    means = (mask * dln[None, :]).sum(axis=1) / counts
+    return float(np.min(means))
+
+
+def _lsf_pad_pixels(wave, n: int, sigma_kms: float, n_bins: int | None = None) -> int:
+    """Kernel padding [pixels] per side, from the sigma the kernel uses (#2832).
 
     Parameters
     ----------
@@ -252,37 +348,47 @@ def _lsf_pad_pixels(wave, n: int) -> int:
         Wavelength grid [Angstrom].
     n : int
         Number of pixels.
+    sigma_kms : float
+        Upper bound on the Gaussian sigma [km/s], from :func:`_lsf_sigma_bound_kms`.
+    n_bins : int or None, optional
+        Piecewise bin count of the variable path. ``None`` is the constant and
+        velocity path, which reads the first pair ``d ln lambda`` as its pixel scale.
 
     Returns
     -------
     int
-        Padding per side [pixels], in ``[0, n - 1]``.
+        Padding per side [pixels]: ``ceil(5 sigma / (c d ln lambda))``, floored at
+        :data:`_LSF_RINGING_FLOOR_PIXELS`.
 
     Notes
     -----
-    A concrete grid gives ``h = ceil(5 * 2000 / (c * min d ln lambda))`` clipped to
-    ``[8, n - 1]``: the margin then holds 5 sigma of the widest kernel
-    (:data:`_LSF_MAX_SIGMA_KMS`) at the finest pixel scale. ``d ln lambda`` is
-    invariant under ``lambda -> (1 + z) lambda``, so the rest grid and the observed
-    grid give the same padding.
-
-    A traced grid has no values to inspect at trace time, so it takes the fallback
-    ``min(n - 1, max(64, n // 16))``. That fallback is for traced grids only; a
-    concrete grid never uses it.
-
-    Private helper. Static, so it is evaluated at trace time.
+    The padding is 5 sigma of the kernel in pixels, at the pixel scale the kernel
+    actually uses: the first pair for the constant path, the smallest bin-mean
+    ``d ln lambda`` for the variable path (:func:`_variable_min_dln`). A traced grid
+    has no pixel scale to read, so the exact choice ``n - 1`` is used. Symmetric
+    padding accepts any width, so the padding is never capped below the kernel.
     """
     n = int(n)
     if n <= 1:
         return 0
-    if isinstance(wave, jax.core.Tracer):
-        return min(n - 1, max(64, n // 16))
-    w = np.asarray(wave, dtype=np.float64)
-    dln_min = float(np.min(np.diff(np.log(w))))
-    if not dln_min > 0.0:
+    if _is_traced(wave):
         return n - 1
-    half = math.ceil(_LSF_KERNEL_HALF_WIDTH_SIGMAS * _LSF_MAX_SIGMA_KMS / (_C_KM_S * dln_min))
-    return int(min(max(half, 8), n - 1))
+    w = np.asarray(wave, dtype=np.float64)
+    if n_bins is None:
+        dln = float(np.log(w[1] / w[0]))
+    else:
+        dln = _variable_min_dln(w, n, n_bins)
+    if not dln > 0.0:
+        return n - 1
+    half = math.ceil(_LSF_KERNEL_HALF_WIDTH_SIGMAS * float(sigma_kms) / (_C_KM_S * dln))
+    return int(max(half, _LSF_RINGING_FLOOR_PIXELS))
+
+
+def _resolve_pad(pad_pixels, wave, n, sigma_bound, n_bins=None) -> int:
+    """The explicit ``pad_pixels`` override if given, else the padding from the grid."""
+    if pad_pixels is not None:
+        return int(pad_pixels)
+    return _lsf_pad_pixels(wave, n, sigma_bound, n_bins)
 
 
 def _gaussian_fft_convolve(spectrum: jnp.ndarray, sigma_pix, pad: int) -> jnp.ndarray:
@@ -561,6 +667,8 @@ def broaden_velocity_only(
     wave: jnp.ndarray,
     sigma_v_kms: jnp.ndarray | float,
     n_bins: int = 16,
+    *,
+    pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Convolve ``flux`` with the galaxy's own velocity dispersion alone (#2589).
 
@@ -598,6 +706,11 @@ def broaden_velocity_only(
         keeps the ``jnp.where`` guard, so it stays jit/grad-safe.
     n_bins : int, default 16
         Piecewise-constant segment count (see :func:`_apply_lsf_variable_r`).
+    pad_pixels : int or None, optional
+        Static padding [pixels] per side. ``None`` derives it from the grid and the
+        sigma: a concrete sigma is measured, and a traced sigma is assumed to be at
+        most ``_LSF_MAX_SIGMA_KMS`` (2000 km/s). A traced grid pads by ``n - 1``.
+        An explicit value is used as given.
 
     Returns
     -------
@@ -606,14 +719,16 @@ def broaden_velocity_only(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes. The convolution is zero-padded
-    by a margin set from the grid (:func:`_lsf_pad_pixels`), so the kernel never wraps
-    from one spectrum edge onto the other (#2712).
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The convolution is padded by a
+    margin set from the grid (:func:`_lsf_pad_pixels`), so the kernel never wraps
+    from one spectrum edge onto the other (#2712, #2832).
     """
     if _is_concrete_nonpositive(sigma_v_kms):
         return flux
     sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
-    pad = _lsf_pad_pixels(wave, flux.shape[0])
+    pad = _resolve_pad(
+        pad_pixels, wave, flux.shape[0], _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins
+    )
     broadened = _apply_lsf_variable_r(
         flux, wave, jnp.broadcast_to(sigma_v, flux.shape), n_bins, pad=pad
     )
@@ -667,7 +782,7 @@ def broaden_velocity_only_window(
     if lo >= hi:
         return flux
     sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
-    pad = _lsf_pad_pixels(wave, n_pix)
+    pad = _lsf_pad_pixels(wave, n_pix, _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins)
     broadened = _apply_lsf_variable_r(
         flux,
         wave,
@@ -717,7 +832,7 @@ def rest_grid_observed_window(wave_rest, wave_obs, redshift) -> tuple[int, int] 
     step = float(np.max(np.diff(wo))) if wo.size > 1 else 0.0
     lam_lo = (float(wo.min()) - step) / (1.0 + z)
     lam_hi = (float(wo.max()) + step) / (1.0 + z)
-    pad = _lsf_pad_pixels(wr, n_wave)
+    pad = _lsf_pad_pixels(wr, n_wave, _LSF_MAX_SIGMA_KMS)
     lo = int(np.searchsorted(wr, lam_lo, side="right")) - 1 - pad
     hi = int(np.searchsorted(wr, lam_hi, side="left")) + 1 + pad
     return max(lo, 0), min(hi, n_wave)
@@ -788,6 +903,8 @@ def apply_lsf(
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
     sigma_v_kms: float = 0.0,
+    *,
+    pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Apply wavelength-dependent Line Spread Function with library resolution subtraction.
 
@@ -854,6 +971,13 @@ def apply_lsf(
         from stellar dynamics, distinct from instrument LSF
         (``resolution``) and from the SSP-library template resolution
         (``sigma_lib_kms``). Default 0.0 (no extra broadening).
+    pad_pixels : int or None, optional
+        Static padding [pixels] per side (keyword-only). ``None`` derives it from the
+        sigma of this call: the exact maximum over pixels when every input is
+        concrete, and otherwise each traced input is assumed to be at most
+        ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) and combined in quadrature with the
+        concrete ones. A traced grid pads by ``n - 1``. An explicit value is used as
+        given, so it must cover 5 sigma of the kernel to be exact.
 
     Returns
     -------
@@ -880,9 +1004,10 @@ def apply_lsf(
     the reciprocal. Measured recovery of a requested 200 km/s on
     ``linspace(3000, 10000)``: 0.991 at the default ``n_bins=16``.
 
-    **Boundary handling**: the convolution runs on a symmetric margin of
-    :func:`_lsf_pad_pixels` pixels per side (5 sigma of the widest kernel), so the
-    kernel does not wrap from one spectrum edge onto the other (#2712, #2832).
+    **Boundary handling**: the convolution runs on a reflecting (symmetric) margin of
+    :func:`_lsf_pad_pixels` pixels per side (5 sigma of the kernel at the pixel scale
+    the kernel uses, and at least 256 pixels for sub-pixel kernels), so the kernel
+    does not wrap from one spectrum edge onto the other (#2712, #2832).
 
     See Also
     --------
@@ -916,6 +1041,7 @@ def apply_lsf(
     # Clamp non-negative (priors enforce this; clamp keeps trace-safe path
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
+    sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_lib_kms, sigma_v_kms)
     sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
     resolution = jnp.asarray(resolution)
@@ -947,13 +1073,13 @@ def apply_lsf(
     # conserves flux exactly and a zero-width kernel is still the identity.
     if resolution.ndim == 0 and sigma_lib_kms.ndim == 0 and _is_log_uniform(wave_obs):
         # Scalar R and scalar σ_lib on a log-uniform grid: one FFT, and the scale is exact.
-        pad = _lsf_pad_pixels(wave_obs, spectrum.shape[0])
+        pad = _resolve_pad(pad_pixels, wave_obs, spectrum.shape[0], sigma_bound)
         return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms, pad=pad)
 
     # Per-pixel R, or per-pixel σ_lib, or a grid whose pixel scale varies:
     # piecewise-constant in all three.
     sigma_per_pixel = jnp.broadcast_to(jnp.atleast_1d(sigma_eff_kms), spectrum.shape)
-    pad = _lsf_pad_pixels(wave_obs, spectrum.shape[0])
+    pad = _resolve_pad(pad_pixels, wave_obs, spectrum.shape[0], sigma_bound, n_bins)
     return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins, pad=pad)
 
 
@@ -973,6 +1099,7 @@ def project_spectrum(
     conserving: bool = False,
     resolution_matrix: object | None = None,
     has_lyc_edge: bool = False,
+    lsf_pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -1046,6 +1173,11 @@ def project_spectrum(
         edge, not a ramp across the model cell straddling it. The resampler
         then reads the cell with the step model of :mod:`tengri.components.lyc`,
         as photometry does (#2447). Static. Default ``False``.
+
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] per side for the LSF (see :func:`apply_lsf`). ``None``
+        derives it from the grid and the sigma. Used on the observed grid; the
+        conserving path's LSF on the model grid is not affected.
 
     Returns
     -------
@@ -1143,7 +1275,9 @@ def project_spectrum(
         # the identity, so existing fits are unchanged.
         from tengri.observation.banded import banded_matvec
 
-        flux = broaden_velocity_only(flux, wave_obs, sigma_v_kms, n_bins)
+        flux = broaden_velocity_only(
+            flux, wave_obs, sigma_v_kms, n_bins, pad_pixels=lsf_pad_pixels
+        )
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
     elif resolution is not None:
         flux = apply_lsf(
@@ -1153,6 +1287,7 @@ def project_spectrum(
             sigma_lib_kms=sigma_lib_kms,
             n_bins=n_bins,
             sigma_v_kms=sigma_v_kms,
+            pad_pixels=lsf_pad_pixels,
         )
     if cal_coeffs is not None:
         wmin, wmax = (
@@ -1570,7 +1705,8 @@ def velocity_broaden(
 
     """
     _require_log_uniform_grid(wave, "velocity_broaden")
-    pad = _lsf_pad_pixels(wave, flux.shape[0])
+    sigma_bound = _lsf_sigma_bound_kms(sigma_v_kms=sigma_km_s)
+    pad = _lsf_pad_pixels(wave, flux.shape[0], sigma_bound)
     return _velocity_broaden_impl(flux, wave, sigma_km_s, pad=pad)
 
 

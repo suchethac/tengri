@@ -1,14 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Padded, fast-length, windowed LSF convolution and the rest-grid sigma_v crop (#2832).
 
-The three Gaussian FFT sites in ``observation/spectrum.py`` convolve circularly
-over the raw array length, so the kernel wraps from the red end onto the blue
-end (#2712), and a prime pixel count runs at a slow transform length (#2832).
-The reference throughout is the same convolution applied to a spectrum
-symmetric-padded by a converged margin, then cropped, which is free of
-wrap-around. The piecewise path's bins are defined from the pixel count of the
-array itself, so the reference keeps that geometry and changes only the
-convolution's boundary handling.
+The three Gaussian FFT sites in ``observation/spectrum.py`` convolve
+circularly over the raw array length, so the kernel wrapped from the red end onto
+the blue end (#2712), and a prime pixel count ran at a slow transform length
+(#2832). Three kinds of reference are used:
+
+- ``_ref_real_space_*``: a real-space sampled Gaussian, written with ``np.convolve``
+  on a reflecting (symmetric) extension of the spectrum. It shares no code with the
+  FFT path and is the independent check, valid where sigma_pix >= 3.
+- ``_ref_gaussian_conv`` / ``_ref_variable_conv``: the same Fourier kernel on a
+  convolution with a reflecting (symmetric) boundary over a margin of 16 n, which is
+  converged for these kernels. They check the Fourier path at any sigma.
+- Layout comparisons force the full-length transform and compare it with the
+  windowed one on the same padding.
 """
 
 from __future__ import annotations
@@ -43,15 +48,13 @@ _R_SCALAR = 3000.0
 def _rel_tol(n: int) -> float:
     """Tolerance relative to max|flux| for a grid of ``n`` pixels.
 
-    The margin is the 5-sigma padding of :func:`_lsf_pad_pixels`. On the production
-    grid (n = 7909, R = 3000, sigma about 1.1 px) the result agrees with the
-    converged reference to 1.3e-8 (constant R) and 2.2e-8 (variable R) on this steep
-    spectrum; doubling the margin brings both under 1e-8 (3e-9 and 8.6e-9). The
-    residue is the old frequency-sampled kernel's tail beyond the margin, so the
-    production grid is held to 1e-7. The n = 1000 grid samples the LSF at sigma of
-    about 0.1 to 0.2 px, where the tail is larger: even a full-length margin (n - 1
-    pixels, the largest the implementation uses) misses 1e-8 there, so that grid is
-    held to 1e-5 (measured 8e-6 at the 5-sigma margin).
+    On the production grid (n = 7909, R = 3000, sigma about 1.1 px) the result agrees
+    with the converged reference to 1.3e-8 (constant R) and 2.2e-8 (variable R) on
+    this steep spectrum at the padding of :func:`_lsf_pad_pixels`. The residue is the
+    Fourier kernel's tail beyond that padding, so the production grid is held to
+    1e-7. The n = 1000 grid samples the LSF at sigma of about 0.1 to 0.2 px, where
+    the ringing tail is larger: even a full-length margin (n - 1 pixels) misses 1e-8
+    there, so that grid is held to 1e-5.
     """
     return 1e-7 if n >= 5000 else 1e-5
 
@@ -70,8 +73,46 @@ def _spectrum_with_edge_features(n: int) -> np.ndarray:
     return flux
 
 
+def _ref_real_space(spec: np.ndarray, sigma_pix: float) -> np.ndarray:
+    """Real-space sampled Gaussian on a reflecting (symmetric) boundary.
+
+    Independent of the FFT path: the taps are the Gaussian sampled at integers,
+    truncated at 8 sigma and normalized, applied with ``np.convolve`` in ``valid``
+    mode to a spectrum padded by reflection. The sampled and Fourier kernels agree
+    to about 1e-10 for sigma_pix >= 3, so this is only used there.
+    """
+    half = int(np.ceil(8.0 * sigma_pix))
+    t = np.arange(-half, half + 1, dtype=np.float64)
+    taps = np.exp(-(t**2) / (2.0 * sigma_pix**2))
+    taps /= taps.sum()
+    return np.convolve(np.pad(spec, half, mode="symmetric"), taps, mode="valid")
+
+
+def _ref_real_space_variable(spec, wave, sigma_eff, n_bins=16):
+    """Piecewise-bin real-space reference: the bin geometry of the full array."""
+    n = spec.size
+    dln_local = np.gradient(np.log(wave))
+    width = n / n_bins
+    half_w = 0.75 * width
+    pix = np.arange(n, dtype=np.float64)
+    acc = np.zeros(n)
+    total = np.zeros(n)
+    for k in range(n_bins):
+        center = (k + 0.5) * width
+        mask = (np.abs(pix - center) < width).astype(np.float64)
+        count = max(mask.sum(), 1.0)
+        sigma_mean = (sigma_eff * mask).sum() / count
+        dln_mean = (dln_local * mask).sum() / count
+        sigma_pix = (sigma_mean / _C_KM_S) / dln_mean
+        dist = np.abs(pix - center) / half_w
+        weight = np.where(dist < 1.0, 0.5 * (1.0 + np.cos(np.pi * dist)), 0.0)
+        acc += weight * _ref_real_space(spec, sigma_pix)
+        total += weight
+    return acc / np.maximum(total, 1e-30)
+
+
 def _ref_gaussian_conv(spec: np.ndarray, sigma_pix: float) -> np.ndarray:
-    """Gaussian FFT convolution on a converged symmetric margin, cropped."""
+    """Fourier Gaussian convolution on a reflecting boundary over a 16 n margin."""
     n = spec.size
     margin = _REF_MARGIN_FACTOR * n
     padded = np.pad(spec, margin, mode="symmetric")
@@ -85,7 +126,7 @@ def _ref_gaussian_conv(spec: np.ndarray, sigma_pix: float) -> np.ndarray:
 def _ref_variable_conv(
     spec: np.ndarray, wave: np.ndarray, sigma_eff: np.ndarray, n_bins: int = 16
 ) -> np.ndarray:
-    """Piecewise-bin convolution with the full-array bin geometry and a converged margin."""
+    """Piecewise-bin Fourier convolution, full-array bin geometry, reflecting boundary."""
     n = spec.size
     dln_local = np.gradient(np.log(wave))
     width = n / n_bins
@@ -247,15 +288,15 @@ def test_windowed_path_uses_short_transforms_on_large_array():
     n = 7909
     wave = np.linspace(3600.0, 9824.0, n)
     spec = jnp.asarray(_spectrum_with_edge_features(n))
-    resolution = jnp.asarray(np.full(n, _R_SCALAR))
-    jaxpr = str(
-        jax.make_jaxpr(lambda s: apply_lsf(spec, jnp.asarray(wave), resolution, sigma_v_kms=s))(
-            60.0
-        )
-    )
+    # Built outside the trace: a resolution created inside make_jaxpr is a tracer, and
+    # its sigma is then bounded as traced, as it would be for a fitted resolution.
+    resolution = np.full(n, _R_SCALAR)
+    wave_j = jnp.asarray(wave)
+    jaxpr = str(jax.make_jaxpr(lambda s: apply_lsf(spec, wave_j, resolution, sigma_v_kms=s))(60.0))
     lengths = [int(m) for m in re.findall(r"fft_lengths=\((\d+)", jaxpr)]
     assert lengths, "no FFT in the traced LSF"
-    full = spectrum_mod._next_fast_fft_len(n + 2 * spectrum_mod._lsf_pad_pixels(wave, n))
+    pad = spectrum_mod._lsf_pad_pixels(wave, n, spectrum_mod._LSF_MAX_SIGMA_KMS, 16)
+    full = spectrum_mod._next_fast_fft_len(n + 2 * pad)
     assert max(lengths) < full, (max(lengths), full)
 
 
@@ -406,19 +447,19 @@ def test_lsf_pad_pixels_concrete_and_traced_branches():
     n = 7909
     wave = np.geomspace(3600.0, 9824.0, n)
     dln = np.log(wave[1] / wave[0])
-    expected = int(np.ceil(5.0 * 2000.0 / (_C_KM_S * dln)))
-    assert spectrum_mod._lsf_pad_pixels(wave, n) == expected
-    assert spectrum_mod._lsf_pad_pixels(jnp.asarray(wave), n) == expected
-    assert 8 <= expected <= n - 1
+    five_sigma = int(np.ceil(5.0 * 2000.0 / (_C_KM_S * dln)))
+    expected = max(five_sigma, spectrum_mod._LSF_RINGING_FLOOR_PIXELS)
+    assert spectrum_mod._lsf_pad_pixels(wave, n, 2000.0) == expected
+    assert spectrum_mod._lsf_pad_pixels(jnp.asarray(wave), n, 2000.0) == expected
 
     seen = []
 
     def probe(w):
-        seen.append(spectrum_mod._lsf_pad_pixels(w, n))
+        seen.append(spectrum_mod._lsf_pad_pixels(w, n, 2000.0))
         return w
 
     jax.make_jaxpr(probe)(jnp.asarray(wave))
-    assert seen == [min(n - 1, max(64, n // 16))]
+    assert seen == [n - 1], "a traced grid has no pixel scale, so the exact choice is n - 1"
 
 
 # ── 6. The window_z plumbing (#2832) ──
@@ -632,3 +673,216 @@ def test_free_redshift_public_predict_spectrum_never_crops(synthetic_ssp_wide, m
     out = np.asarray(model.predict_spectrum(p))
     assert np.all(np.isfinite(out))
     assert calls == []
+
+
+# ── 8. Padding from the kernel's own sigma and pixel scale (#2832) ──
+
+
+def _log_grid_and_spectrum(n: int = 2000):
+    wave = np.geomspace(3600.0, 9824.0, n)
+    x = np.arange(n, dtype=np.float64)
+    spec = 1.0e3 * np.exp(-3.0 * x / n) + 300.0 * np.exp(-0.5 * ((x - 10) / 1.5) ** 2)
+    spec += 200.0 * (x > n // 2)
+    return wave, spec
+
+
+def _rel_err(out, ref):
+    return float(np.max(np.abs(np.asarray(out) - ref)) / np.max(np.abs(ref)))
+
+
+@pytest.mark.parametrize("sigma_pix", [3.0, 5.0, 8.0])
+def test_three_sites_match_independent_real_space_reference(sigma_pix):
+    """All three FFT sites agree with a real-space sampled Gaussian to 1e-10 (sigma_pix >= 3)."""
+    wave, spec = _log_grid_and_spectrum()
+    dln = np.log(wave[1] / wave[0])
+    sigma_kms = sigma_pix * dln * _C_KM_S
+    resolution = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * sigma_kms)
+    ref = _ref_real_space(spec, sigma_pix)
+    out_v = velocity_broaden(jnp.asarray(spec), jnp.asarray(wave), sigma_kms)
+    assert _rel_err(out_v, ref) <= 1e-10
+    out_c = apply_lsf(jnp.asarray(spec), jnp.asarray(wave), float(resolution))
+    assert _rel_err(out_c, ref) <= 1e-10
+    out_b = apply_lsf(jnp.asarray(spec), jnp.asarray(wave), np.full(wave.size, resolution))
+    ref_b = _ref_real_space_variable(spec, wave, np.full(wave.size, sigma_kms))
+    assert _rel_err(out_b, ref_b) <= 1e-10
+
+
+@pytest.mark.parametrize("sigma_kms", [3000.0, 5000.0, 10000.0])
+def test_wide_kernels_are_not_truncated_by_a_fixed_bound(sigma_kms):
+    """A velocity sigma beyond the old 2000 km/s bound is still exact (was 3e-4 to 0.12)."""
+    wave, spec = _log_grid_and_spectrum()
+    sigma_pix = sigma_kms / _C_KM_S / np.log(wave[1] / wave[0])
+    out = velocity_broaden(jnp.asarray(spec), jnp.asarray(wave), sigma_kms)
+    assert _rel_err(out, _ref_real_space(spec, sigma_pix)) <= 1e-6
+
+
+def test_apply_lsf_low_resolution_is_not_truncated():
+    """R = 30 (sigma about 4244 km/s) was 7e-3 off under the fixed 2000 km/s bound."""
+    wave, spec = _log_grid_and_spectrum()
+    dln = np.log(wave[1] / wave[0])
+    resolution = 30.0
+    sigma_kms = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * resolution)
+    out = apply_lsf(jnp.asarray(spec), jnp.asarray(wave), resolution)
+    assert _rel_err(out, _ref_real_space(spec, sigma_kms / _C_KM_S / dln)) <= 1e-6
+
+
+def test_sigma_bound_is_exact_when_concrete_and_maximal_when_traced():
+    concrete = spectrum_mod._lsf_sigma_bound_kms(30.0, None, None)
+    assert concrete == pytest.approx(_C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * 30.0))
+    # sigma_lib only subtracts, so a concrete sigma_lib gives the exact quadrature.
+    # R = 300 gives sigma_inst = 424 km/s, above sigma_lib = 70 km/s. At R = 3000
+    # (sigma_inst = 42) the deficit clamps to zero, which the next check covers.
+    lib = spectrum_mod._lsf_sigma_bound_kms(300.0, 70.0, 0.0)
+    inst = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * 300.0)
+    assert lib == pytest.approx(np.sqrt(inst**2 - 70.0**2))
+    assert spectrum_mod._lsf_sigma_bound_kms(3000.0, 70.0, 0.0) == 0.0
+    assert spectrum_mod._lsf_sigma_bound_kms(None, None, 0.0) == 0.0
+    seen = []
+
+    def probe(s):
+        seen.append(spectrum_mod._lsf_sigma_bound_kms(None, None, s))
+        return s
+
+    jax.make_jaxpr(probe)(jnp.asarray(60.0))
+    assert seen == [spectrum_mod._LSF_MAX_SIGMA_KMS]
+
+
+@pytest.mark.parametrize("resolution", [10.0, 30.0, 100.0, 300.0])
+def test_traced_grid_is_exact(resolution):
+    """A traced grid pads by n - 1, which is exact: no ringing or truncation is lost."""
+    wave, spec = _log_grid_and_spectrum()
+    sigma_kms = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * resolution)
+    sigma_pix = sigma_kms / _C_KM_S / np.log(wave[1] / wave[0])
+    ref = _ref_real_space(spec, sigma_pix)
+    spec_j = jnp.asarray(spec)
+    wave_j = jnp.asarray(wave)
+
+    traced = jax.jit(lambda w: apply_lsf(spec_j, w, resolution))(wave_j)
+    assert _rel_err(traced, ref) <= 1e-9
+    # The explicit override with the same width is the same computation.
+    override = apply_lsf(spec_j, wave_j, resolution, pad_pixels=wave.size - 1)
+    assert _rel_err(override, np.asarray(traced)) <= 1e-12
+
+
+def test_pad_pixels_override_is_taken_literally():
+    wave, spec = _log_grid_and_spectrum()
+    resolution = 300.0
+    sigma_kms = _C_KM_S / (spectrum_mod._FWHM_TO_SIGMA * resolution)
+    sigma_pix = sigma_kms / _C_KM_S / np.log(wave[1] / wave[0])
+    ref = _ref_real_space(spec, sigma_pix)
+    narrow = apply_lsf(jnp.asarray(spec), jnp.asarray(wave), resolution, pad_pixels=8)
+    assert _rel_err(narrow, ref) > 1e-5, "an 8-pixel override must be used as given"
+
+
+def test_project_spectrum_threads_lsf_pad_pixels():
+    wave, spec = _log_grid_and_spectrum()
+    obs = jnp.asarray(wave)
+    rest = jnp.asarray(wave)
+    default = project_spectrum(jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0)
+    same = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=wave.size - 1
+    )
+    assert _rel_err(same, np.asarray(default)) <= 1e-12
+    narrow = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8
+    )
+    assert _rel_err(narrow, np.asarray(default)) > 1e-5
+
+
+def test_near_duplicate_pixel_keeps_padding_and_result():
+    """One near-duplicate pixel must not shrink the variable path's speedup (#2832)."""
+    n = 7909
+    clean = np.linspace(3600.0, 9824.0, n)
+    dup = clean.copy()
+    dup[3001] = dup[3000] + 1e-3
+    assert np.all(np.diff(dup) > 0)
+    sigma = 2000.0
+    h_clean = spectrum_mod._lsf_pad_pixels(clean, n, sigma, 16)
+    h_dup = spectrum_mod._lsf_pad_pixels(dup, n, sigma, 16)
+    assert h_dup == h_clean
+    assert spectrum_mod._variable_r_layout(n, 16, h_dup, None).windowed
+    spec = _spectrum_with_edge_features(n)
+    resolution = np.full(n, _R_SCALAR)
+    out = apply_lsf(jnp.asarray(spec), jnp.asarray(dup), jnp.asarray(resolution))
+    ref = _ref_variable_conv(spec, dup, _sigma_inst_kms(resolution))
+    assert _rel_err(out, ref) <= 1e-7
+
+
+def test_variable_padding_uses_the_smallest_bin_mean_pixel_scale():
+    n = 7909
+    wave = np.linspace(3600.0, 9824.0, n)
+    dln = np.gradient(np.log(wave))
+    width = n / 16
+    means = []
+    for k in range(16):
+        c = (k + 0.5) * width
+        mask = np.abs(np.arange(n) - c) < width
+        means.append((dln * mask).sum() / mask.sum())
+    expected = int(np.ceil(5.0 * 2000.0 / (_C_KM_S * min(means))))
+    assert spectrum_mod._lsf_pad_pixels(wave, n, 2000.0, 16) == expected
+
+
+@pytest.mark.parametrize(
+    ("sigma_pix", "n_bins", "tol"),
+    [
+        (3.0, 16, 1e-10),
+        (3.0, 64, 1e-10),
+        (5.0, 64, 1e-10),
+        (1.1, 16, 1e-6),
+        (1.1, 64, 1e-6),
+        (0.3, 16, 5e-6),
+        (0.3, 64, 5e-6),
+        (0.14, 64, 5e-6),
+    ],
+)
+def test_windowed_and_full_layouts_agree_on_a_rough_spectrum(sigma_pix, n_bins, tol, monkeypatch):
+    """Rough spectrum (white noise plus lines): windowed vs full-length transforms.
+
+    Both use the same padding, so the gap is the Fourier kernel's ringing tail beyond
+    that padding. It is below 1e-10 for sigma_pix >= 3 (measured 2e-12 at 3). Below 3
+    it is 1.3e-7 to 1.2e-6 (measured at 0.14, 0.3, 1.1 and 64 bins), so the bounds
+    are 1e-6 for 1.1 and 5e-6 for the sub-pixel cases.
+    """
+    n = 7909
+    wave = np.linspace(3600.0, 9824.0, n)
+    rng = np.random.default_rng(1)
+    x = np.arange(n, dtype=np.float64)
+    rough = rng.normal(size=n) * 5.0 + 1.0 + 3.0 * np.exp(-3.0 * x / n)
+    rough += 200.0 * np.exp(-0.5 * ((x - 3000) / 1.5) ** 2)
+    dln = np.mean(np.diff(np.log(wave)))
+    sigma_kms = sigma_pix * dln * _C_KM_S
+    sigma = jnp.full(n, sigma_kms)
+    pad = spectrum_mod._lsf_pad_pixels(wave, n, sigma_kms, n_bins)
+    fn = spectrum_mod._apply_lsf_variable_r.__wrapped__
+    windowed = np.asarray(fn(jnp.asarray(rough), jnp.asarray(wave), sigma, n_bins, pad=pad))
+    orig = spectrum_mod._variable_r_layout
+
+    def full_only(n_pix, nb, pad_, ids):
+        layout = orig(n_pix, nb, pad_, ids)
+        if not layout.windowed:
+            return layout
+        seg_full = spectrum_mod._next_fast_fft_len(n_pix + 2 * pad_)
+        return spectrum_mod._BinLayout(
+            False, layout.centers, layout.half_w, layout.bin_width, None, n_pix, seg_full, pad_
+        )
+
+    monkeypatch.setattr(spectrum_mod, "_variable_r_layout", full_only)
+    full = np.asarray(fn(jnp.asarray(rough), jnp.asarray(wave), sigma, n_bins, pad=pad))
+    assert _rel_err(windowed, full) <= tol
+
+
+def test_ringing_floor_matches_its_measurement():
+    """The floor is the padding at which sub-pixel kernels reach 1e-7 (measured 1.5e-7).
+
+    The reference is the Fourier-kernel convolution: the sampled Gaussian used for the
+    sigma_pix >= 3 checks is not the same kernel at sigma_pix below 1.
+    """
+    wave, spec = _log_grid_and_spectrum()
+    dln = np.log(wave[1] / wave[0])
+    for sigma_kms in (42.4, 100.0):
+        sigma_pix = sigma_kms / _C_KM_S / dln
+        ref = _ref_gaussian_conv(spec, sigma_pix)
+        out = spectrum_mod._gaussian_fft_convolve(
+            jnp.asarray(spec), sigma_pix, spectrum_mod._LSF_RINGING_FLOOR_PIXELS
+        )
+        assert _rel_err(out, ref) <= 2e-7

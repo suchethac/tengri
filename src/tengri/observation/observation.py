@@ -341,6 +341,7 @@ def project_spectrum_kernel_split(
     conserving: bool = False,
     resolution_matrix: object | None = None,
     window_z: float | None = None,
+    lsf_pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -494,6 +495,11 @@ def project_spectrum_kernel_split(
     resolution_matrix : BandedMatrix or None
         Banded instrument-response operator; when given, replaces the
         Gaussian LSF (see the banded case above).
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] for the observed-grid LSF (see
+        :func:`~tengri.observation.spectrum.apply_lsf`). ``None`` derives it from the
+        grid and the kernel sigma. The rest-grid sigma_v pass always derives its own
+        padding from the rest grid.
     window_z : float or None, optional
         Concrete redshift at which the rest-grid sigma_v pass is cropped to the
         observed window (#2832). It must equal ``redshift`` at run time: the caller
@@ -582,6 +588,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -597,6 +604,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -614,6 +622,7 @@ def project_spectrum_kernel_split(
                 resolution=None,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -633,6 +642,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -647,6 +657,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=0.0,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -688,6 +699,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -703,6 +715,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -720,6 +733,7 @@ def project_spectrum_kernel_split(
                 resolution=None,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -736,6 +750,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -750,6 +765,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=0.0,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,

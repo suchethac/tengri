@@ -406,8 +406,13 @@ def test_spectrum_paths_agree_when_exact(ssp, case):
     wave, _ = CASES[case]
     p = dict(m.spec.sample(KEY))
     ref = np.asarray(m.predict_spectrum(p, wave_obs=jnp.asarray(wave)))
+    # The paths pad the LSF from different static knowledge (#2832). The explicit grid
+    # has a concrete sigma_v = 0 and pads by 256 px; the closure traces sigma_v and
+    # lsf_scale, bounds each at 2000 km/s, and pads by 357 px. Both paddings cover the
+    # kernel, and they differ by the sub-pixel ringing tail beyond 256 px, measured at
+    # 1.1e-8 of peak, so agreement is held to 1e-7 rather than the 1e-10 of the rest.
     for other in (m.predict_spectrum(p), m.predict(p).spectrum()):
-        np.testing.assert_allclose(np.asarray(other), ref, rtol=1e-10, atol=1e-10 * ref.max())
+        np.testing.assert_allclose(np.asarray(other), ref, rtol=1e-7, atol=1e-7 * ref.max())
 
 
 def test_auto_equals_conserving_on_coarse_pixels_and_differs_from_point(ssp):

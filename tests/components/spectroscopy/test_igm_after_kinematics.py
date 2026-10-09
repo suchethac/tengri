@@ -85,15 +85,15 @@ def _numpy_log_gaussian_convolve(
     ``velocity_broaden``, ``broaden_velocity_only``) -- for the physical-order
     reference of test (a). Exact on a grid uniform in ln(lambda).
 
-    The spectrum is symmetric-padded by a margin of n // 4 pixels (about 1000
-    sigma_pix here) before the FFT, then cropped, so the result is a linear
-    convolution with a symmetric edge. A plain circular FFT wraps the red-end flux
-    onto the blue edge: on this grid the red end is bright, so the reference was
-    the wrong side of the comparison at both ends (up to 0.07 of peak at z = 3,
-    within about 4 sigma_pix of the ends; the interior agrees to 1e-15 either way).
-    The circular reference was therefore wrong, not the pipeline: the pipeline's
-    symmetric-margin convolution (#2832, #2712) is the one that matches a linear
-    convolution to 1e-15 at every pixel.
+    The spectrum is extended by reflection (a symmetric boundary) by n // 4 pixels,
+    the Fourier kernel is applied on that extension, and the result is cropped. The
+    margin is about 440 sigma_pix for the widest stage here (sigma_v = 300 km/s) and
+    several thousand for the narrowest, so the kernel's tails are inside it.
+    A circular FFT instead wraps the red-end flux onto the blue edge. On this grid the
+    red end is bright, so the circular result is off by up to 0.07 of peak at z = 3,
+    within about 4 sigma_pix of the ends; the interior agrees to 1e-15 either way.
+    The reflecting-boundary reference matches the convolution pipeline to 1e-15 at
+    every pixel (#2832, #2712).
     """
     if sigma_kms <= 0.0:
         return np.asarray(flux).copy()
