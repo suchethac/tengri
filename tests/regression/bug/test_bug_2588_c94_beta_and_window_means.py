@@ -30,7 +30,7 @@ from tengri.observation.spectral_indices import (
     _window_mean_flux,
     measure_index_jax,
     precompute_index_windows,
-    soft_window_ssp_integral,
+    window_ssp_integral,
 )
 from tengri.utils.sed_quantities import compute_dn4000
 
@@ -409,7 +409,7 @@ _WINDOWS = [(3850.0, 3950.0), (4000.0, 4100.0), (5160.0, 5192.0), (4847.0, 4876.
 def test_soft_window_integral_matches_exact_window_mean(lo, hi):
     """LUT mean (integral / norm) equals `_window_mean_flux` on a non-uniform grid."""
     wave, flux = _nonuniform_ssp()
-    integral, norm = soft_window_ssp_integral(jnp.asarray(wave), jnp.asarray(flux), lo, hi)
+    integral, norm = window_ssp_integral(jnp.asarray(wave), jnp.asarray(flux), lo, hi)
     for i in range(flux.shape[0]):
         for j in range(flux.shape[1]):
             exact = float(_window_mean_flux(jnp.asarray(wave), jnp.asarray(flux[i, j]), lo, hi))
@@ -438,7 +438,7 @@ def test_soft_window_integral_matches_exact_on_miles_grid(lo, hi):
     ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
     wave = jnp.asarray(ssp.ssp_wave)
     flux = jnp.asarray(ssp.ssp_flux[:2, :3])
-    integral, norm = soft_window_ssp_integral(wave, flux, lo, hi)
+    integral, norm = window_ssp_integral(wave, flux, lo, hi)
     for i in range(2):
         for j in range(3):
             exact = float(_window_mean_flux(wave, flux[i, j], lo, hi))
