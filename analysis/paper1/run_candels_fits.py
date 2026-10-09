@@ -1,7 +1,11 @@
 """Run 20×6 grid of NUTS fits: 20 galaxies × 6 SED configurations.
 
-CLI: python run_candels_fits.py [--only-missing] [--jobs N] [--profile-mass {auto,on,off}]
-     [--retune-attempts N]
+CLI: python run_candels_fits.py [--suite {grid,xlike}] [--only-missing] [--jobs N]
+     [--profile-mass {auto,on,off}] [--retune-attempts N]
+
+``--suite`` selects which configuration suite to run (default: grid).
+Grid suite runs the six demonstration configurations (I, II, III, IV, V, VI);
+xlike suite runs the five cross-code configurations (cigale_like, prospector_like, etc).
 
 ``--only-missing`` is the second pass: it skips a cell whose JSON already records
 ``adoption_pass: true`` and reuses that JSON for the summary. Without it every cell
@@ -17,8 +21,8 @@ Default: auto (the library's own default for intelligent margin selection).
 ``--retune-attempts`` is passed through to every fit_one cell.
 Default: 2 (the two-rung ladder: 0.85, then 0.95).
 
-Logs output to results/fits/<ID>_<config>.log.
-Aggregates diagnostics into results/fit_summary.json.
+Grid suite logs to results/fits/<ID>_<config>.log and aggregates to results/fit_summary.json.
+Xlike suite logs to results/fits_xlike/<ID>_<config>.log and aggregates to results/fit_summary_xlike.json.
 Prints summary table.
 """
 
@@ -31,14 +35,62 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from .config_metadata import XLIKE_CONFIGS, XLIKE_KEYS
 from .configs import CONFIGS as CONFIGS_REGISTRY
 from .fit_one import ESS_FLOOR
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SuiteConfig:
+    """Configuration for a fitting suite (grid or xlike).
+
+    Attributes:
+        name: Suite identifier (grid or xlike)
+        configs: Dictionary of config_key -> config metadata
+        config_keys: Ordered list of config keys
+        results_dir_name: Subdirectory name under results/
+        summary_filename: Name of the summary JSON file
+    """
+
+    name: str
+    configs: dict
+    config_keys: list[str]
+    results_dir_name: str
+    summary_filename: str
+
+    def get_results_dir(self, paper1_root: Path) -> Path:
+        """Get the full path to this suite's results directory."""
+        return paper1_root / "results" / self.results_dir_name
+
+    def get_summary_json(self, paper1_root: Path) -> Path:
+        """Get the full path to this suite's summary JSON file."""
+        return paper1_root / "results" / self.summary_filename
+
+
+# Suite configurations: one frozen config per suite, defined here
+SUITE_CONFIGS = {
+    "grid": SuiteConfig(
+        name="grid",
+        configs=CONFIGS_REGISTRY,
+        config_keys=sorted(CONFIGS_REGISTRY.keys()),
+        results_dir_name="fits",
+        summary_filename="fit_summary.json",
+    ),
+    "xlike": SuiteConfig(
+        name="xlike",
+        configs=XLIKE_CONFIGS,
+        config_keys=XLIKE_KEYS,
+        results_dir_name="fits_xlike",
+        summary_filename="fit_summary_xlike.json",
+    ),
+}
 
 
 def fit_one_cell_command(
@@ -123,22 +175,27 @@ def load_selected_galaxies() -> tuple[list[int], dict[int, str]]:
 # Load 20 selected galaxies and their type labels
 GALAXIES, GALAXY_LABELS = load_selected_galaxies()
 
-# Six model configurations, derived from configs registry
-CONFIGS = sorted(CONFIGS_REGISTRY.keys())
 
+# Model dimensions: derive from suite configs if available, otherwise use known values
+def get_config_dimensions(suite_config: SuiteConfig) -> dict[str, int]:
+    """Get free parameter count per configuration, with fallback to known values.
 
-# Model dimensions: derive from configs.CONFIGS if available, otherwise use known values
-def get_config_dimensions() -> dict[str, int]:
-    """Get free parameter count per configuration, with fallback to known values."""
+    Args:
+        suite_config: The suite configuration (grid or xlike)
+
+    Returns:
+        Dictionary mapping config_key -> free parameter count
+    """
     dimensions = {}
-    # Measured 2026-09-20 at z=1.0 against the locked suite by building each
-    # configuration and reading spec.free_params. II and III are None because
-    # their libraries (fsps_prsc_c3k_a_chabrier, fsps_mist_miles_chabrier) were
-    # not on the machine that measured the rest; a cell JSON carries the real
-    # count, so the summary should be rebuilt from disk once the grid has run
-    # rather than trusting this table. The previous literals here were carried
-    # over from the superseded suite and were wrong for every row.
-    known_dimensions: dict[str, int | None] = {
+    # Grid suite: Measured 2026-09-20 at z=1.0 against the locked suite by
+    # building each configuration and reading spec.free_params. II and III are
+    # None because their libraries (fsps_prsc_c3k_a_chabrier,
+    # fsps_mist_miles_chabrier) were not on the machine that measured the rest;
+    # a cell JSON carries the real count, so the summary should be rebuilt from
+    # disk once the grid has run rather than trusting this table. The previous
+    # literals here were carried over from the superseded suite and were wrong
+    # for every row.
+    grid_known_dimensions: dict[str, int | None] = {
         "I": 10,
         "II": None,
         "III": None,
@@ -147,19 +204,21 @@ def get_config_dimensions() -> dict[str, int]:
         "VI": 11,
     }
 
-    for cfg_key in CONFIGS:
-        if CONFIGS_REGISTRY[cfg_key]["n_free"] is not None:
-            dimensions[cfg_key] = CONFIGS_REGISTRY[cfg_key]["n_free"]
+    for cfg_key in suite_config.config_keys:
+        if suite_config.configs[cfg_key]["n_free"] is not None:
+            dimensions[cfg_key] = suite_config.configs[cfg_key]["n_free"]
         else:
-            # Fallback to the measured table. 0 for a row nobody has measured:
-            # a wrong integer reads as a real dimension in the summary and in
-            # anything that quotes it, where a 0 is visibly a placeholder.
-            dimensions[cfg_key] = known_dimensions.get(cfg_key) or 0
+            # Fallback to the measured table for grid suite. 0 for a row
+            # nobody has measured: a wrong integer reads as a real dimension
+            # in the summary and in anything that quotes it, where a 0 is
+            # visibly a placeholder.
+            if suite_config.name == "grid":
+                dimensions[cfg_key] = grid_known_dimensions.get(cfg_key) or 0
+            else:
+                # For xlike suite, use 0 as placeholder for any unmeasured dimension
+                dimensions[cfg_key] = 0
 
     return dimensions
-
-
-CONFIG_DIMENSIONS = get_config_dimensions()
 
 
 def default_jobs() -> int:
@@ -222,15 +281,16 @@ def cell_is_adopted(json_path: Path) -> bool:
     return ess_min is not None and float(ess_min) >= ESS_FLOOR
 
 
-def aggregate_summary(results_dir: Path) -> dict:
+def aggregate_summary(results_dir: Path, suite_config: SuiteConfig) -> dict:
     """Rebuild fit_summary.json from the cell JSONs on disk without running fits.
 
-    Iterates over GALAXIES × CONFIGS; for each cell reads the JSON file if it
-    exists (adopted or not); appends every JSON that exists to the fits list;
-    cells with no JSON go to the failed list.
+    Iterates over GALAXIES × suite_config.config_keys; for each cell reads the
+    JSON file if it exists (adopted or not); appends every JSON that exists to
+    the fits list; cells with no JSON go to the failed list.
 
     Args:
         results_dir: Directory containing cell JSON files
+        suite_config: The suite configuration (grid or xlike)
 
     Returns:
         Summary dict with the same shape as main() writes today.
@@ -238,8 +298,10 @@ def aggregate_summary(results_dir: Path) -> dict:
     all_diagnostics = []
     failed_fits = []
 
+    config_dimensions = get_config_dimensions(suite_config)
+
     for gal_id in GALAXIES:
-        for config_key in CONFIGS:
+        for config_key in suite_config.config_keys:
             cell_json = results_dir / f"{gal_id}_{config_key}.json"
             diagnostics = read_cell_json(cell_json)
 
@@ -251,16 +313,16 @@ def aggregate_summary(results_dir: Path) -> dict:
     summary_dict = {
         "metadata": {
             "n_galaxies": len(GALAXIES),
-            "n_configs": len(CONFIGS),
-            "total_fits": len(GALAXIES) * len(CONFIGS),
+            "n_configs": len(suite_config.config_keys),
+            "total_fits": len(GALAXIES) * len(suite_config.config_keys),
             "successful_fits": len(all_diagnostics),
             "failed_fits": len(failed_fits),
             "adopted_fits": sum(1 for row in all_diagnostics if row.get("adoption_pass")),
             "summary_only": True,
         },
         "galaxy_list": GALAXIES,
-        "config_list": CONFIGS,
-        "config_dimensions": CONFIG_DIMENSIONS,
+        "config_list": suite_config.config_keys,
+        "config_dimensions": config_dimensions,
         "fits": all_diagnostics,
         "failed": [{"gal_id": gid, "config": cfg} for gid, cfg in failed_fits],
     }
@@ -713,6 +775,17 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description="Run the 20x6 grid of CANDELS NUTS fits")
     parser.add_argument(
+        "--suite",
+        type=str,
+        default="grid",
+        choices=list(SUITE_CONFIGS.keys()),
+        help=(
+            "Configuration suite to run (default: grid). "
+            "Grid: six demonstration configurations (I, II, III, IV, V, VI). "
+            "Xlike: five cross-code configurations (cigale_like, prospector_like, etc)."
+        ),
+    )
+    parser.add_argument(
         "--only-missing",
         action="store_true",
         help=(
@@ -758,6 +831,9 @@ def build_parser() -> argparse.ArgumentParser:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the driver's command line.
 
+    ``--suite`` selects the configuration suite to run (default: grid). Each
+    suite has its own set of valid configurations.
+
     ``--only-missing`` is opt-in: without it the driver runs every cell, exactly
     as it always has.
 
@@ -775,7 +851,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="I,II,...",
         help=(
             "Restrict the run to these configurations (comma-separated). Without "
-            "it every configuration runs, interleaved galaxy-major. Concurrency is "
+            "it every configuration in the selected suite runs. Concurrency is "
             "one global --jobs, but the configurations do not cost the same memory: "
             "the reinsertion peak is set by chunk width, so the lightest per-draw "
             "payload can hold the widest chunk and the largest working set. Run a "
@@ -799,15 +875,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
 
+    # Get the suite configuration for the selected suite
+    suite_config = SUITE_CONFIGS[args.suite]
+
     # Resolve the cell restrictions here, before any mode branches, so a typo is
     # rejected whatever else was asked for. An unrecognized name that quietly
     # selected nothing would look exactly like a finished run in the log.
-    run_configs = list(CONFIGS)
+    run_configs = list(suite_config.config_keys)
     if args.configs is not None:
         requested = [c.strip() for c in args.configs.split(",") if c.strip()]
-        unknown = [c for c in requested if c not in CONFIGS]
+        unknown = [c for c in requested if c not in suite_config.config_keys]
         if unknown:
-            parser.error(f"unknown configuration(s) {unknown}; known: {list(CONFIGS)}")
+            parser.error(
+                f"unknown configuration(s) {unknown} for --suite {args.suite}; "
+                f"known: {list(suite_config.config_keys)}"
+            )
         run_configs = requested
 
     run_galaxies = list(GALAXIES)
@@ -826,6 +908,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     # Carry the resolved selection on the namespace: these are locals of
     # parse_args, and main() is a separate function.
+    args.suite_config = suite_config
     args.run_configs = run_configs
     args.run_galaxies = run_galaxies
 
@@ -833,7 +916,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None):
-    """Run 3×3 grid of fits and aggregate results."""
+    """Run fits for the selected suite and aggregate results."""
     args = parse_args(argv)
 
     logging.basicConfig(
@@ -841,19 +924,21 @@ def main(argv: list[str] | None = None):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    results_dir = Path(__file__).parent / "results" / "fits"
+    suite_config = args.suite_config
+    paper1_root = Path(__file__).parent
+    results_dir = suite_config.get_results_dir(paper1_root)
+    summary_json_path = suite_config.get_summary_json(paper1_root)
     results_dir.mkdir(parents=True, exist_ok=True)
 
     # --summary-only: rebuild from disk without running fits
     if args.summary_only:
-        summary_dict = aggregate_summary(results_dir)
+        summary_dict = aggregate_summary(results_dir, suite_config)
         print_summary_table(summary_dict["fits"])
 
-        summary_json = results_dir.parent / "fit_summary.json"
-        with open(summary_json, "w") as f:
+        with open(summary_json_path, "w") as f:
             json.dump(summary_dict, f, indent=2)
 
-        logger.info(f"\nSummary saved to {summary_json}")
+        logger.info(f"\nSummary saved to {summary_json_path}")
         return 0
 
     # Cell restrictions were resolved and validated at parse time.
@@ -876,7 +961,7 @@ def main(argv: list[str] | None = None):
     )
     all_cells = [(gal_id, config_key) for gal_id in run_galaxies for config_key in run_configs]
     logger.info(
-        f"Running {len(all_cells)} cells: "
+        f"Running {len(all_cells)} cells ({suite_config.name} suite): "
         f"{len(run_galaxies)} galaxies x {len(run_configs)} configurations "
         f"{list(run_configs)} at --jobs {args.jobs}"
     )
@@ -894,11 +979,12 @@ def main(argv: list[str] | None = None):
     print_summary_table(all_diagnostics)
 
     # Aggregate and save to summary JSON
+    config_dimensions = get_config_dimensions(suite_config)
     summary_dict = {
         "metadata": {
             "n_galaxies": len(GALAXIES),
-            "n_configs": len(CONFIGS),
-            "total_fits": len(GALAXIES) * len(CONFIGS),
+            "n_configs": len(suite_config.config_keys),
+            "total_fits": len(GALAXIES) * len(suite_config.config_keys),
             "successful_fits": len(all_diagnostics),
             "failed_fits": len(failed_fits),
             # A cell can finish (exit 0, NPZ and JSON written) without clearing
@@ -908,17 +994,16 @@ def main(argv: list[str] | None = None):
             "only_missing": args.only_missing,
         },
         "galaxy_list": GALAXIES,
-        "config_list": CONFIGS,
-        "config_dimensions": CONFIG_DIMENSIONS,
+        "config_list": suite_config.config_keys,
+        "config_dimensions": config_dimensions,
         "fits": all_diagnostics,
         "failed": [{"gal_id": gid, "config": cfg} for gid, cfg in failed_fits],
     }
 
-    summary_json = results_dir.parent / "fit_summary.json"
-    with open(summary_json, "w") as f:
+    with open(summary_json_path, "w") as f:
         json.dump(summary_dict, f, indent=2)
 
-    logger.info(f"\nSummary saved to {summary_json}")
+    logger.info(f"\nSummary saved to {summary_json_path}")
 
     # Report failures
     if failed_fits:

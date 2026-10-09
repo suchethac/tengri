@@ -1,0 +1,7 @@
+2026-09-25 00:24:36,869 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 4.860e-30 erg/s/cm2/Hz
+2026-09-25 00:24:51,225 - __main__ - INFO - Galaxy 15336 (z=1.036): 14 detected bands
+2026-09-25 00:24:51,225 - __main__ - INFO - Config II: 7 free parameters
+2026-09-25 00:24:51,225 - __main__ - INFO - Attempt 1/3: target_accept 0.85, warmup 150, diagonal mass
+2026-09-25 00:26:57,775 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 6 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-09-25 00:33:13,914 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (376.1s). Step size: 0.1156. Divergent in the final warmup window: 0%
+2026-09-25 00:59:03,183 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 1925.4s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.4, at cap on 0% of iterations (max_num_doublings=10)

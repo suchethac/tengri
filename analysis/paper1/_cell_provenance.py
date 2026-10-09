@@ -23,10 +23,22 @@ the live SFH registry by
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+
+ANALYSIS_DIR = Path(__file__).resolve().parent
+if str(ANALYSIS_DIR) not in sys.path:
+    sys.path.insert(0, str(ANALYSIS_DIR))
+
+try:
+    from ._paths import repo_relative
+except ImportError:
+    # When this module is imported as a script, relative imports fail.
+    # Fall back to importing from the analysis directory.
+    from _paths import repo_relative
 
 # SFH registry name -> the parameter prefix its free parameters carry.
 # Verified against tengri.list_sfh_models() by the test named above.
@@ -206,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(text)
     payload = {
-        "results_dir": str(args.results_dir),
+        "results_dir": repo_relative(args.results_dir),
         "mismatches": [m.describe() for m in mismatches],
         "notes": notes,
     }

@@ -41,11 +41,13 @@ from pathlib import Path
 
 import jax
 import numpy as np
-from configs import config_I, config_II, config_III, load_ssp_for
-from fit_one import PPD_N_DRAWS, _atomic_replace_write, iter_draws
-from run_candels_fits import CONFIGS as CONFIG_KEYS, GALAXIES
 
 from tengri import Observation, Photometry
+
+from . import configs as _configs
+from .configs import load_ssp_for
+from .fit_one import PPD_N_DRAWS, _atomic_replace_write, iter_draws
+from .run_candels_fits import CONFIGS as CONFIG_KEYS, GALAXIES
 
 jax.config.update("jax_enable_x64", True)
 
@@ -55,7 +57,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_OUT_DIR = Path(__file__).parent / "results" / "fits"
 
 #: Configuration key -> model builder, the same dispatch ``fit_one.run_fit`` uses.
-CONFIG_BUILDERS = {"I": config_I, "II": config_II, "III": config_III}
+#: Derived from the grid's own key list rather than restated -- the literal
+#: three-entry map this replaces was written for a three-configuration paper
+#: and never grew with the table.
+CONFIG_BUILDERS = {key: getattr(_configs, f"config_{key}") for key in CONFIG_KEYS}
 
 
 def default_cells() -> list[tuple[int, str]]:

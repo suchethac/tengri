@@ -194,6 +194,11 @@ ALLOWED_PHRASES = (
     # to ordinary prose uses of the word elsewhere -- scoped to the full
     # compound identifier instead, per the ALLOWED_TOKENS note above.
     "edd_labelling",
+    # External data-contract filename: art_sedfitting BEAGLE data release keeps
+    # the British spelling in the FITS file name.
+    "BEAGLE_summary_catalogue_z1",
+    "BEAGLE_summary_catalogue_z3",
+    "BEAGLE_summary_catalogue",  # used in test assertions checking for this filename
 )
 
 
