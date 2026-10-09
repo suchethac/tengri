@@ -53,11 +53,13 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.flatten_util import ravel_pytree
 
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
 )
+from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import (
     _unstandardize_parameters,
@@ -383,3 +385,209 @@ def fit_spectra_map_vmap(
         "nlp": nlp,
         "loss_history": [b["trace"] for b in buckets],
     }
+
+
+def _bucket_catalog_inputs(model, spec, batch, *, conserving: bool):
+    """Flat log-density and per-galaxy substitution for one bucket's catalog sampler.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model (see :func:`batched_neg_log_posterior`).
+    spec : SpectroBatchSpec
+        Static key of the bucket.
+    batch : SpectroBatch
+        The bucket's galaxies, with a leading batch axis.
+    conserving : bool
+        Flux-conserving pixel integral, passed to the forward pass.
+
+    Returns
+    -------
+    flat : tuple
+        ``(log_post_2arg, unravel_fn, init_flat, template_data_args)`` in the form
+        :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`
+        takes as ``flat_logdensity``. ``log_post_2arg(x, data_args)`` is the
+        log-posterior of the standardized latents ``x`` for the galaxy in
+        ``data_args["obs"]``.
+    substitute : callable
+        ``(data, noise, presence, redshift, line_flux_obs, line_flux_err) ->
+        {"obs": data}``, the per-galaxy ``data_args`` the engine substitutes.
+
+    Notes
+    -----
+    Build-time helper, not JIT-compatible. The unravel order is that of
+    :func:`jax.flatten_util.ravel_pytree` on one galaxy's latents, which sorts the
+    names, so every flat position maps back to the same named latent.
+    """
+    nlp = batched_neg_log_posterior(model, spec, conserving=conserving)
+    init_one = {n: v[0] for n, v in init_unbounded_batch(model, 1, jax.random.PRNGKey(0)).items()}
+    init_flat, unravel_fn = ravel_pytree(init_one)
+
+    def log_post_2arg(position, data_args):
+        return -nlp(unravel_fn(position), data_args["obs"])
+
+    def substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err):
+        return {"obs": data}
+
+    return (log_post_2arg, unravel_fn, init_flat, {"obs": batch.galaxy(0)}), substitute
+
+
+def _flat_rows(latents: dict) -> jax.Array:
+    """Stack a dict of ``(n_gal,)`` latents into ``(n_gal, D)`` flat rows."""
+    return jax.vmap(lambda d: ravel_pytree(d)[0])(latents)
+
+
+def _bucket_starts(model, n_gal: int, key, map_params, index: np.ndarray) -> jax.Array:
+    """Flat sampler start, ``(n_gal, D)``, for one bucket.
+
+    With ``map_params`` the MAP values of this bucket's galaxies are standardized
+    back to latents. A row that is not finite falls back to a prior draw, so a
+    failed MAP never starts a chain at NaN.
+    """
+    prior_rows = _flat_rows(init_unbounded_batch(model, n_gal, key))
+    if map_params is None:
+        return prior_rows
+    mapped = {
+        n: model.spec.get_distribution(n).standardize(
+            jnp.asarray(np.asarray(map_params[n])[index])
+        )
+        for n in _free_latent_names(model)
+    }
+    map_rows = _flat_rows(mapped)
+    keep = jnp.all(jnp.isfinite(map_rows), axis=1, keepdims=True)
+    return jnp.where(keep, map_rows, prior_rows)
+
+
+def fit_spectra_catalog_mcmc(
+    model,
+    batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
+    *,
+    conserving: bool,
+    sampler: str = "nuts",
+    n_warmup: int = 200,
+    n_burnin: int = 0,
+    n_samples: int = 200,
+    seed: int = 0,
+    init: str = "map",
+    map_steps: int = 200,
+    **engine_kwargs,
+) -> dict[str, Any]:
+    """Sample every galaxy's spectrum posterior with the catalog MCMC engine.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model with a free redshift (see
+        :func:`~tengri.forward.batched_spectrum.check_template_model`).
+    batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
+        Output of :func:`~tengri.observation.batched.build_spectro_batches`.
+    conserving : bool
+        Flux-conserving pixel integral.
+    sampler : {"nuts", "hmc", "chees"}, optional
+        Sampler handed to
+        :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`.
+        Default ``"nuts"``.
+    n_warmup : int, optional
+        Adaptation steps, run per galaxy. Default 200.
+    n_burnin : int, optional
+        Post-warmup draws discarded per galaxy. Default 0.
+    n_samples : int, optional
+        Draws kept per galaxy. Default 200.
+    seed : int, optional
+        PRNG seed for the MAP, the prior starts and the sampler. Default 0.
+    init : {"map", "prior"}, optional
+        ``"map"`` warm-starts every galaxy from :func:`fit_spectra_map_vmap`;
+        ``"prior"`` draws starts from :func:`init_unbounded_batch`. Default
+        ``"map"``.
+    map_steps : int, optional
+        Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
+    **engine_kwargs
+        Further keyword arguments of ``build_catalog_mcmc_engine``, such as
+        ``target_accept_rate`` or ``use_dense``.
+
+    Returns
+    -------
+    dict
+        ``"draws"``: dict of str to ndarray, shape ``(N, n_draws)``. The physical
+        posterior draws of each free parameter other than redshift, in the
+        original catalog order (``N`` is the total galaxy count).
+        ``"divergences"``: ndarray of int, shape ``(N,)``. Divergent transitions
+        per galaxy, in the same order.
+
+    Raises
+    ------
+    NotImplementedError
+        If the model's SFH is stochastic.
+    ValueError
+        If the template fails :func:`check_template_model`, ``batches`` is empty,
+        the model has no free parameter other than redshift, or ``init`` is not
+        ``"map"`` or ``"prior"``.
+
+    Notes
+    -----
+    Build-time Python driver, not JIT-compatible; the per-galaxy sampler is.
+    Each bucket compiles once for its :class:`SpectroBatchSpec`. Every galaxy
+    adapts its own step size and mass matrix, so a galaxy's draws do not depend on
+    the galaxies it was batched with. The sampled space is the standardized latent
+    space of :func:`batched_neg_log_posterior`, whose prior is iid N(0, 1), and the
+    draws are unstandardized to physical values only on return.
+    """
+    _refuse_stochastic(model)
+    check_template_model(model)
+    if init not in ("map", "prior"):
+        raise ValueError(f"init must be 'map' or 'prior', got {init!r}")
+    if not batches:
+        raise ValueError("batches is empty; build it with build_spectro_batches")
+    if not _free_latent_names(model):
+        raise ValueError("the model has no free parameter other than redshift to sample")
+
+    map_params = None
+    if init == "map":
+        map_params = fit_spectra_map_vmap(
+            model, batches, conserving=conserving, n_steps=map_steps, seed=seed
+        )["params"]
+
+    bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
+    per_bucket = []
+    for (spec, batch, index), bucket_key in zip(batches, bucket_keys):
+        index = np.asarray(index, dtype=int)
+        n_gal = int(batch.z.shape[0])
+        flat, substitute = _bucket_catalog_inputs(model, spec, batch, conserving=conserving)
+        unravel_fn = flat[1]
+        start_key, sample_key = jax.random.split(bucket_key)
+        starts = _bucket_starts(model, n_gal, start_key, map_params, index)
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            sampler,
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            flat_logdensity=flat,
+            substitute=substitute,
+            **engine_kwargs,
+        )
+
+        def one_galaxy(xs, run_one=run_one):
+            x0, gal_key, obs = xs
+            return run_one(x0, gal_key, obs, None, None, None, None, None)
+
+        positions, divergent = jax.lax.map(
+            one_galaxy, (starts, jax.random.split(sample_key, n_gal), batch)
+        )
+        n_draws = positions.shape[1]
+        latents = jax.vmap(unravel_fn)(positions.reshape(-1, positions.shape[-1]))
+        physical = _to_physical(model, latents)
+        per_bucket.append(
+            {
+                "index": index,
+                "draws": {n: np.asarray(v).reshape(n_gal, n_draws) for n, v in physical.items()},
+                "divergences": np.asarray(divergent).sum(axis=1),
+            }
+        )
+
+    catalog_index = np.concatenate([b["index"] for b in per_bucket])
+    order = np.argsort(catalog_index, kind="stable")
+    names = _free_latent_names(model)
+    draws = {n: np.concatenate([b["draws"][n] for b in per_bucket], axis=0)[order] for n in names}
+    divergences = np.concatenate([b["divergences"] for b in per_bucket])[order]
+    return {"draws": draws, "divergences": divergences}

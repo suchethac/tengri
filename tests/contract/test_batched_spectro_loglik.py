@@ -288,3 +288,107 @@ def test_stochastic_sfh_raises_not_implemented(synthetic_ssp, mock):
         batched_log_likelihood(stochastic, spec, conserving=True)
     with pytest.raises(NotImplementedError, match="stochastic"):
         fit_spectra_map_vmap(stochastic, [(spec, batch, index)], conserving=True, n_steps=2)
+
+
+# ── (7) Three free physical parameters: no mixing across names ─────────────
+
+_DUST = "dust_tau_diff"
+_BETA = "sfh_dpl_beta"
+_MULTI = (_MASS, _BETA, _DUST)
+_MULTI_PHYS = {
+    _MASS: [10.05, 10.35, 9.75],
+    _BETA: [1.4, 2.1, 2.6],
+    _DUST: [0.2, 0.7, 1.2],
+}
+
+
+def _multi_template(ssp, wave, resolution):
+    """Free-redshift template with mass, the DPL beta and a power-law tau_diff free."""
+    spectroscopy = Spectroscopy(wave_obs=jnp.asarray(wave), resample="conserving", **resolution)
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(spectroscopy=spectroscopy),
+        sfh={
+            "type": "dpl",
+            "all_params": Fixed(DEFAULT),
+            _MASS: Uniform(8.0, 12.0),
+            "beta": Uniform(1.0, 3.0),
+        },
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Uniform(0.0, 2.0),
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(0.0, 0.5),
+    )
+
+
+def _multi_reference_loglik(ref_model, g, n):
+    """Per-galaxy Gaussian log-likelihood of ``ref_model`` at a physical parameter dict."""
+    flux, sigma = jnp.asarray(g["flux"]), jnp.asarray(g["sigma"])
+
+    def loglik(p):
+        pred = ref_model.predict_spectrum({**{k: p[k] for k in _MULTI}, "redshift": g["z"]})
+        r = (flux - pred[:n]) / sigma
+        return -0.5 * jnp.sum(r * r)
+
+    return loglik
+
+
+@pytest.fixture(scope="module")
+def multi_template(synthetic_ssp, mock):
+    return _multi_template(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
+
+
+def test_multi_parameter_value_and_grad_match_per_galaxy_reference(
+    synthetic_ssp, multi_template, bucket, mock
+):
+    spec, batch = bucket
+    loglik = batched_log_likelihood(multi_template, spec, conserving=True)
+    phys = {k: jnp.asarray(v) for k, v in _MULTI_PHYS.items()}
+    values, grads = jax.vmap(jax.value_and_grad(loglik))(phys, batch)
+
+    for i, g in enumerate(mock):
+        ref_model = _multi_template(synthetic_ssp, g["wave"], {"resolution_matrix": g["bm"]})
+        ref = _multi_reference_loglik(ref_model, g, g["wave"].size)
+        p_i = {k: phys[k][i] for k in _MULTI}
+        v_ref, g_ref = jax.value_and_grad(ref)(p_i)
+        np.testing.assert_allclose(np.asarray(values[i]), float(v_ref), rtol=1e-9, atol=0.0)
+        for k in _MULTI:
+            np.testing.assert_allclose(
+                np.asarray(grads[k][i]), float(g_ref[k]), rtol=1e-9, atol=0.0, err_msg=k
+            )
+    assert np.any(np.asarray(grads[_DUST]) != 0.0)
+
+
+def test_multi_parameter_neg_log_posterior_grad_matches_reference(
+    synthetic_ssp, multi_template, bucket, mock
+):
+    spec, batch = bucket
+    nlp = batched_neg_log_posterior(multi_template, spec, conserving=True)
+    xi = {
+        _MASS: jnp.asarray([0.1, -0.2, 0.3]),
+        _BETA: jnp.asarray([-0.4, 0.2, 0.5]),
+        _DUST: jnp.asarray([0.6, -0.3, -0.1]),
+    }
+    values, grads = jax.vmap(jax.value_and_grad(nlp))(xi, batch)
+    dists = {k: multi_template.spec.get_distribution(k) for k in _MULTI}
+
+    for i, g in enumerate(mock):
+        ref_model = _multi_template(synthetic_ssp, g["wave"], {"resolution_matrix": g["bm"]})
+        ref = _multi_reference_loglik(ref_model, g, g["wave"].size)
+
+        def ref_nlp(x, ref=ref):
+            theta = {k: dists[k].unstandardize(x[k]) for k in _MULTI}
+            return -ref(theta) + 0.5 * sum(x[k] ** 2 for k in _MULTI)
+
+        x_i = {k: xi[k][i] for k in _MULTI}
+        v_ref, g_ref = jax.value_and_grad(ref_nlp)(x_i)
+        np.testing.assert_allclose(np.asarray(values[i]), float(v_ref), rtol=1e-9, atol=0.0)
+        for k in _MULTI:
+            np.testing.assert_allclose(
+                np.asarray(grads[k][i]), float(g_ref[k]), rtol=1e-9, atol=0.0, err_msg=k
+            )
