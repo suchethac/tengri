@@ -76,6 +76,9 @@ from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
     split_lines_result,
 )
+from tengri.components.agn.blocks.torus_library_transmission import (
+    library_torus_transmission,
+)
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_BLOCKS,
     polar_follow_opening_angle,
@@ -1344,10 +1347,11 @@ agn_torus_block, agn_attenuation_block : str
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays
     # visible at all inclinations. Each torus carries ONE obscuration model (no
-    # double-counting): dusty-screen tori (fritz/skirtor, #294) apply a
-    # wavelength-dependent screen; every other non-"none" torus applies the gray
-    # geometric visibility mask, the same one the monolithic ``unified_nlr_blr``
-    # uses: so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
+    # double-counting): dusty-screen tori (fritz/skirtor, #294) apply the library's
+    # own line-of-sight disc as a wavelength-dependent transmission; every other
+    # non-"none" torus applies the gray geometric visibility mask, the same one
+    # the monolithic ``unified_nlr_blr`` uses: so a composable disc+torus+NLR+BLR
+    # reproduces its Type-1/2 geometry.
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
     # default-inclination models are unchanged. Static dispatch on the torus name
     # is JIT-safe.
@@ -1358,8 +1362,8 @@ agn_torus_block, agn_attenuation_block : str
     # IDENTICAL factors to each term: multiplication distributes over the sum,
     # so the two formulations agree to floating-point reassociation.
     #
-    # The broad lines and FeII always carry the torus screen. The disc carries it
-    # unless it is tied to the SKIRTOR template (fracAGN > 0 on the R-tie path):
+    # The broad lines and FeII carry the torus transmission. The disc carries it
+    # unless it is tied to the library template (fracAGN > 0 on the R-tie path):
     # there the disc is ``agn_power x disk(i)/disk(0) x analytic shape`` and the
     # library ratio disk(i)/disk(0) already is the torus extinction (about 3e-3 of
     # the face-on disc at i = 70 deg), so a second screen would remove the same
@@ -1369,15 +1373,26 @@ agn_torus_block, agn_attenuation_block : str
     _disc_mask = 1.0
     if agn_torus_block in TORUS_SCREEN_BLOCKS:
         # One inclination, one opening angle: the same agn_cos_inc and the torus's
-        # own angle feed this screen, the Fritz library's viewing elevation and
-        # the polar-dust mask below.
+        # own angle feed this transmission, the Fritz library's viewing elevation and
+        # the polar-dust mask below. The library's own line-of-sight disc is the
+        # transmission wherever the library carries a disc column; the analytic
+        # screen is the fallback for a grid without one.
         _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
-        _screen = torus_screen_transmission(
+        _cos_inc_screen = params.get("agn_cos_inc", 0.86602540378443864)
+        _screen = library_torus_transmission(
+            agn_torus_block,
             wave,
-            cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-            oa_deg=_screen_oa,
-            tau_v=_screen_tau_v,
+            cos_inc=_cos_inc_screen,
+            params=params,
+            library=_templates_for("torus", agn_torus_block),
         )
+        if _screen is None:
+            _screen = torus_screen_transmission(
+                wave,
+                cos_inc=_cos_inc_screen,
+                oa_deg=_screen_oa,
+                tau_v=_screen_tau_v,
+            )
         _lines_mask = _screen
         _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
     elif agn_torus_block not in _SELF_CONTAINED_TORI:

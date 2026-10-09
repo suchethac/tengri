@@ -45,8 +45,14 @@ from tengri.components.agn.blocks.atten import (
     polar_dust_reemission_lnu,
 )
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.fritz import load_fritz_default_grid
 from tengri.components.agn.polar_dust import polar_dust_extinction
+from tengri.components.agn.skirtor import (
+    load_skirtor_disc_atten_grid,
+    skirtor_disc_attenuation_from_grid,
+)
 from tengri.components.dust.attenuation import smc
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA
 from tests._data_skip import DATA_DIR
 
@@ -122,26 +128,62 @@ def _skirtor(i_deg, oa, tau=7.0, **extra):
     )
 
 
-def _screen_weight(run, i_deg, tau_a, tau_b):
-    """Type-2 weight of the torus screen at ``i_deg`` as the runner applies it.
+def _library_weight(run, i_deg, ratio_at_v):
+    """Type-2 weight of the torus at ``i_deg``, recovered from the library's own ratio at V.
 
-    The screen is ``exp(-tau_V k/k_V w)``, so two optical depths at one inclination give
-    ``ln(L_a/L_b) = -(tau_a - tau_b) w`` at V with the disc itself canceling; dividing by the
-    same ratio at ``i = 89`` deg (``w = 1`` there) removes the unit of ``tau_V`` and leaves ``w``.
+    On the untied path the disc at V is ``disc(0) R**w2``, with ``R = disk(i)/disk(0)`` read
+    from the library and ``w2`` one minus the Type-1 weight. The disc at ``i = 0`` is
+    unscreened, so ``w2 = ln(disc(i)/disc(0)) / ln R``.
     """
+    disc_i = _at(run(i_deg)["disc"], _V)
+    disc_0 = _at(run(0.0)["disc"], _V)
+    return float(np.log(disc_i / disc_0) / np.log(ratio_at_v(i_deg)))
 
-    def ln_ratio(i):
-        return np.log(_at(run(i, tau_a)["disc"], _V) / _at(run(i, tau_b)["disc"], _V))
 
-    return ln_ratio(i_deg) / ln_ratio(89.0)
+def _skirtor_library_ratio_at_v(i_deg, oa, tau):
+    """SKIRTOR ``disk(i)/disk(0)`` at V, read from the shipped disc column (runner defaults)."""
+    grid = load_skirtor_disc_atten_grid()
+    ratio = skirtor_disc_attenuation_from_grid(
+        grid,
+        jnp.asarray([_V]),
+        agn_tau_skirtor=tau,
+        agn_p_skirtor=1.0,
+        agn_q_skirtor=1.0,
+        agn_oa_skirtor=oa,
+        agn_radius_ratio=20.0,
+        agn_cos_inc=_cos(i_deg),
+    )
+    return float(np.asarray(ratio)[0])
+
+
+def _fritz_library_ratio_at_v(i_deg, half, tau):
+    """Fritz ``disk(psi)/disk(89.99 deg)`` at V, read from the packaged disc column."""
+    grid = load_fritz_default_grid()
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    table = jnp.asarray(grid.disk)
+
+    def disk_at(psy):
+        point = (60.0, tau, -0.5, 4.0, half, psy)  # r_ratio, beta, gamma: runner defaults
+        return np.asarray(interp_nd_pchip(table, axes, point))
+
+    ratio = disk_at(90.0 - i_deg) / disk_at(float(axes[5][-1]))
+    return float(np.interp(_V, np.asarray(grid.wave_grid), ratio))
 
 
 def _fritz_screen_weight(i_deg, half):
-    return _screen_weight(lambda i, tau: _fritz(i, half, tau), i_deg, 0.1, 0.3)
+    return _library_weight(
+        lambda i: _fritz(i, half, 0.3),
+        i_deg,
+        lambda i: _fritz_library_ratio_at_v(i, half, 0.3),
+    )
 
 
 def _skirtor_screen_weight(i_deg, oa):
-    return _screen_weight(lambda i, tau: _skirtor(i, oa, tau), i_deg, 3.0, 7.0)
+    return _library_weight(
+        lambda i: _skirtor(i, oa, 7.0),
+        i_deg,
+        lambda i: _skirtor_library_ratio_at_v(i, oa, 7.0),
+    )
 
 
 _EBV = 0.3

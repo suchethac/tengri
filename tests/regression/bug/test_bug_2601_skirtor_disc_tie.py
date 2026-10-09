@@ -44,6 +44,11 @@ import pytest
 
 from tengri.components.agn import disc_cigale as DC
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.polar_dust import _type1_mask
+from tengri.components.agn.skirtor import (
+    load_skirtor_disc_atten_grid,
+    skirtor_disc_attenuation_from_grid,
+)
 from tengri.components.dust.attenuation import smc
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
@@ -281,6 +286,34 @@ def _screen(wave_aa, i_deg, oa=40.0, tau_v=7.0):
     return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
 
 
+def _library_transmission(wave_aa, i_deg):
+    """Line-of-sight transmission of the untied torus, read from the SKIRTOR disc column.
+
+    ``R = disk(i)/disk(0)`` from the shipped library (fiducial t = 7, p = q = 1, oa = 40,
+    R = 20), held at the library's 10 A edge below its grid. The Type-2 weight ``w2`` (one
+    minus the polar cone's Type-1 weight) applies on the logarithm, ``T = R exp((w2-1) ln R)``,
+    and linearly where ``R`` is exactly zero.
+    """
+    grid = load_skirtor_disc_atten_grid()
+    wave_grid = np.asarray(grid.wave_grid)
+    wave_held = np.clip(np.asarray(wave_aa, float), wave_grid[0], wave_grid[-1])
+    ratio = np.asarray(
+        skirtor_disc_attenuation_from_grid(
+            grid,
+            jnp.asarray(wave_held),
+            agn_tau_skirtor=7.0,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=40.0,
+            agn_radius_ratio=20.0,
+            agn_cos_inc=_COS[i_deg],
+        )
+    )
+    w2 = 1.0 - float(_type1_mask(_COS[i_deg], 40.0))
+    log_blend = ratio * np.exp((w2 - 1.0) * np.log(np.maximum(ratio, 1e-30)))
+    return np.where(ratio > 0.0, log_blend, (1.0 - w2) + w2 * ratio)
+
+
 # ----------------------------------------------------------------------------------
 # 1. library facts and CIGALE formula transcription
 # ----------------------------------------------------------------------------------
@@ -399,13 +432,13 @@ def test_broad_lines_screened_identically_tied_and_untied(i_deg):
     wave = np.asarray(_WAVE)
     j = int(np.argmin(np.abs(wave - 5000.0)))
     assert face_on[j] > 0.0
-    expected = _screen(wave[j : j + 1], i_deg)[0] / _screen(wave[j : j + 1], 0)[0]
+    expected = _library_transmission(wave[j : j + 1], i_deg)[0]
     assert tied[j] / face_on[j] == pytest.approx(expected, rel=1e-6), (
         f"i={i_deg}: lines(i)/lines(0) at {wave[j]:.0f} A = {tied[j] / face_on[j]:.6e}, "
-        f"screen transmission ratio {expected:.6e} (T(5000 A) = {_screen([5000.0], i_deg)[0]:.4e})"
+        f"library line-of-sight transmission {expected:.6e}"
     )
     bright = face_on > 1e-3 * face_on.max()
-    expected_all = _screen(wave[bright], i_deg) / _screen(wave[bright], 0)
+    expected_all = _library_transmission(wave[bright], i_deg)
     np.testing.assert_allclose(tied[bright] / face_on[bright], expected_all, rtol=1e-6)
 
 
@@ -428,9 +461,11 @@ def test_untied_disc_is_screened(i_deg):
     Expected: the face-on disc (screen at i = 0 divided out) times the documented screen at i.
     """
     wave = np.asarray(_WAVE)
-    face_on = _run(0, frac=0.0)[1]["disc"] / _screen(wave, 0)
+    face_on = _run(0, frac=0.0)[1]["disc"] / _library_transmission(wave, 0)
     got = _run(i_deg, frac=0.0)[1]["disc"]
-    np.testing.assert_allclose(got, face_on * _screen(wave, i_deg), rtol=1e-9, atol=0.0)
+    np.testing.assert_allclose(
+        got, face_on * _library_transmission(wave, i_deg), rtol=1e-9, atol=0.0
+    )
     assert _power(got) > 0.0
 
 

@@ -27,6 +27,11 @@ import pytest
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.components.agn import disc as disc_module
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.components.agn.polar_dust import _type1_mask
+from tengri.components.agn.skirtor import (
+    load_skirtor_disc_atten_grid,
+    skirtor_disc_attenuation_from_grid,
+)
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -307,13 +312,31 @@ def test_skirtor_tie_removes_the_discs_own_inclination_law():
         assert _power(tied, _SKIRTOR_WAVE) == pytest.approx(reference, rel=3e-3)
 
 
-def _screen_30deg(wave_aa, oa=40.0, tau_v=7.0):
-    """Torus screen at i = 30 deg from its documented formula (``torus_screen.py``)."""
-    from tengri.components.dust.attenuation import smc
+def _library_transmission_30deg(wave_aa, oa=40.0, tau=7.0):
+    """Untied SKIRTOR transmission at i = 30 deg, from the shipped disc column.
 
-    w = 0.5 * (1 + np.tanh(0.5 * (np.sin(np.radians(oa)) - _COS[30]) / 0.025))
-    k = np.asarray(smc(jnp.asarray(np.append(np.asarray(wave_aa, float), 5500.0))))
-    return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
+    ``R = disk(i)/disk(0)`` at the 10 A library edge and above, blended by the Type-2 weight
+    ``w2`` as ``R**w2``. The Type-1 weight at this inclination is 1 - 1.3e-4, so the
+    transmission is unity wherever the library ratio is unity.
+    """
+    grid = load_skirtor_disc_atten_grid()
+    wave_grid = np.asarray(grid.wave_grid)
+    held = np.clip(np.asarray(wave_aa, float), wave_grid[0], wave_grid[-1])
+    ratio = np.asarray(
+        skirtor_disc_attenuation_from_grid(
+            grid,
+            jnp.asarray(held),
+            agn_tau_skirtor=tau,
+            agn_p_skirtor=1.0,
+            agn_q_skirtor=1.0,
+            agn_oa_skirtor=oa,
+            agn_radius_ratio=20.0,
+            agn_cos_inc=_COS[30],
+        )
+    )
+    w2 = 1.0 - float(_type1_mask(_COS[30], oa))
+    log_blend = ratio * np.exp((w2 - 1.0) * np.log(np.maximum(ratio, 1e-30)))
+    return np.where(ratio > 0.0, log_blend, (1.0 - w2) + w2 * ratio)
 
 
 def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
@@ -322,7 +345,9 @@ def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
     bare = _disc_lnu("kubota_done", cos30, _SKIRTOR_WAVE)
     half = _disc_lnu("kubota_done", 0.5, _SKIRTOR_WAVE)  # D_nu + H_nu, the cos i = 0.5 spectrum
     screened = _skirtor("kubota_done", cos30, agn_ir_frac=0.0, agn_norm="independent")["disc"]
-    np.testing.assert_allclose(screened, bare * _screen_30deg(_SKIRTOR_WAVE), rtol=1e-6)
+    np.testing.assert_allclose(
+        screened, bare * _library_transmission_30deg(_SKIRTOR_WAVE), rtol=1e-6
+    )
     # optical/UV is disc dominated: 2 cos 30 D_nu with D_nu the cos i = 0.5 spectrum
     optical = (_SKIRTOR_WAVE > 1000.0) & (_SKIRTOR_WAVE < 2.0e4)
     np.testing.assert_allclose(bare[optical], 2.0 * cos30 * half[optical], rtol=2e-3)
