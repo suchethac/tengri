@@ -1551,7 +1551,9 @@ def _compute_zone_luminosities(
     log10_l_edd : float
         log10 Eddington luminosity. [log10(erg s^-1)]
     l_bol_erg : float
-        Requested bolometric luminosity [erg s^-1].
+        Bolometric power the spectra are normalized to, at unit ``agn_lum_ratio``
+        [erg s^-1] (L_sun on the float32 path). The caller applies ``agn_lum_ratio``
+        linearly to the returned spectra; no ratio enters the logarithm here (#2767).
     agn_self_consistent_gamma : bool
         If True, derive gamma_hard self-consistently from Beloborodov (1999).
 
@@ -1566,8 +1568,8 @@ def _compute_zone_luminosities(
           are multiplied by; independent of ``agn_cos_inc``. Informative only: the spectra
           are scaled through ``log10_scale``, never by this linear factor [dimensionless]
         - l_nu_disc : Disc and warm-zone part of the line-of-sight spectrum, ``2 cos i D_ν``,
-          scaled [erg s^-1 Hz^-1]
-        - l_nu_hot : Corona ``H_ν``, isotropic, scaled [erg s^-1 Hz^-1]
+          normalized [erg s^-1 Hz^-1]
+        - l_nu_hot : Corona ``H_ν``, isotropic, normalized [erg s^-1 Hz^-1]
         - corona_fraction : ``H / (D + H)``, the share of the accretion power the corona
           carries, in closed form from the radial integration (no spectral grid)
           [dimensionless]
@@ -2233,12 +2235,13 @@ def kubota_done_disc(
         agn_a_spin=agn_a_spin,
     )
 
-    # Normalization magnitude from agn_log_lbol (the reference on the float32
-    # path); pass it in L_sun there so the zone helper's ``scale`` is a clean ratio.
-    if _f32:
-        l_bol_requested = 10.0**agn_log_lbol * agn_lum_ratio  # L_sun
-    else:
-        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    # Normalize at UNIT agn_lum_ratio: the exponent carries agn_log_lbol only (in L_sun on the
+    # float32 path, so the zone helper's ``scale`` is a clean ratio). The ratio then multiplies
+    # the spectra linearly below. Folding log10(agn_lum_ratio) into the exponent gave
+    # log10(0) = -inf and a 0 * inf = NaN reverse pass at ratio 0 (#2767); the SED is linear in
+    # the ratio, so this form is the same physics at every ratio, with an exact zero and
+    # gradient at 0.
+    l_bol_unit = 10.0**agn_log_lbol if _f32 else 10.0**agn_log_lbol * _LSUN_ERG
 
     l_nu_total, _scale, l_nu_disc, l_nu_hot, corona_fraction, _log10_scale = (
         _compute_zone_luminosities(
@@ -2256,7 +2259,7 @@ def kubota_done_disc(
             agn_kt_hot,
             agn_f_hard,
             log10_l_edd,
-            l_bol_requested,
+            l_bol_unit,
             agn_self_consistent_gamma,
             float32=_f32,
             agn_log_mbh=agn_log_mbh,
@@ -2265,6 +2268,9 @@ def kubota_done_disc(
             nthcomp_table=_template,
         )
     )
+    l_nu_total = l_nu_total * agn_lum_ratio
+    l_nu_disc = l_nu_disc * agn_lum_ratio
+    l_nu_hot = l_nu_hot * agn_lum_ratio
 
     if _return_parts:
         return l_nu_total, l_nu_disc, l_nu_hot, corona_fraction

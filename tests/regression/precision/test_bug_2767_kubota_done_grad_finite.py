@@ -12,7 +12,7 @@ The reproducer evaluates the rest-frame SED over the black-hole-mass range and t
 the declared prior box, and differentiates it with respect to ``agn_log_mbh`` and
 ``agn_log_lbol`` under ``jit(grad)``, once in float32 and once in float64. It requires the
 float32 values to be finite and to agree with float64, and the gradients to be finite,
-non-trivial and to agree with float64 to 1e-3 (the tolerance the neighbouring float32 gradient
+non-trivial and to agree with float64 to 1e-3 (the tolerance the neighboring float32 gradient
 guards use).
 """
 

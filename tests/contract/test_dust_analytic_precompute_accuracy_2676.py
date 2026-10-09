@@ -17,6 +17,11 @@ pytestmark = pytest.mark.contract
 
 # Exact-closure reference grid [Angstrom]: 0.01 um to 10 m, finer than the builders' grid.
 WIDE = np.geomspace(1e2, 1e11, 72000)
+# Continuum-limit reference grid for casey2012: WIDE plus 8000 points over 0.9-1.1 um (0.25
+# Angstrom spacing at the 1 um step, against 2.9 Angstrom on WIDE). casey2012 is zero below 1 um
+# and normalized on the grid it is evaluated on, so the trapezoid cell at the step sets the band
+# flux to first order in its width.
+WIDE_CONVERGED = np.unique(np.concatenate([WIDE, np.linspace(0.9e4, 1.1e4, 8000)]))
 
 
 def _get_param_bounds(param_name: str) -> tuple[float, float]:
@@ -41,12 +46,12 @@ def tophat(lo_um, hi_um):
     )
 
 
-def exact(model, kw, fw, ft, z=0.0):
-    """Exact closure at redshift ``z``: integrate the model on an ultra-fine rest grid."""
+def exact(model, kw, fw, ft, z=0.0, wide=WIDE):
+    """Exact closure at redshift ``z``: integrate the model on the rest grid ``wide``."""
     from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
-    s = np.asarray(M[model](jnp.asarray(WIDE), 1.0, redshift=z, **kw), dtype=float)
-    return np.trapezoid(np.interp(fw / (1 + z), WIDE, s) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
+    s = np.asarray(M[model](jnp.asarray(wide), 1.0, redshift=z, **kw), dtype=float)
+    return np.trapezoid(np.interp(fw / (1 + z), wide, s) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
 
 
 def lookup(model, kw, fw, ft, **grids):
@@ -361,3 +366,65 @@ def test_off_node_accuracy_far_ir_at_z3(model):
         for b, f, lkp in zip(bands, filters, got):
             ratio = lkp / exact(model, kw, *f, z)
             assert abs(ratio - 1.0) < 1e-3, f"{model} z=3 point {kw}, band {b}: ratio {ratio:.6f}"
+
+
+# Worst points of the 200-point set at the origin/main node counts, per band
+# (8-24 um z=0, 24-40 um z=0, 60-90 um z=3, 250-500 um z=3).
+_CASEY_WORST_POINTS = (
+    {
+        "dust_T": 65.86694039491042,
+        "dust_beta_ir": 1.954949242778371,
+        "dust_alpha_mir": 1.1414627378157898,
+        "dust_lambda_0_um": 314.3541764398587,
+    },
+    {
+        "dust_T": 20.954624674666388,
+        "dust_beta_ir": 2.3033277384649917,
+        "dust_alpha_mir": 1.2581468015755068,
+        "dust_lambda_0_um": 220.62578820187835,
+    },
+    {
+        "dust_T": 61.801754131364774,
+        "dust_beta_ir": 1.6405802395205915,
+        "dust_alpha_mir": 1.2691409172893753,
+        "dust_lambda_0_um": 199.11074493308254,
+    },
+    {
+        "dust_T": 70.26214388463012,
+        "dust_beta_ir": 1.2460498104750752,
+        "dust_alpha_mir": 1.0294372121615194,
+        "dust_lambda_0_um": 277.99476454653933,
+    },
+)
+
+
+def test_casey2012_mid_ir_accuracy_default_grids():
+    """casey2012 band fluxes at the default nodes: 8-24, 24-40 um at z=0; 60-90, 250-500 um at z=3.
+
+    Reference: ``exact`` on ``WIDE_CONVERGED``, the continuum limit at the 1 um step, with a rest
+    spacing of 0.25 Angstrom at 1 um (the value is unchanged to 3e-11 at 0.0625 Angstrom). Points:
+    the four worst points of the origin/main node counts plus 200 seeded ``RandomState(7)`` points
+    inside the declared priors. The maximum relative error in each band is below 1e-3.
+    """
+    from tengri.components.dust import dust_analytic_precompute as adapter
+
+    names = adapter.AXIS_PARAMS["casey2012"]
+    cases = ((0.0, ((8, 24), (24, 40))), (3.0, ((60, 90), (250, 500))))
+    rng = np.random.RandomState(7)
+    points = list(_CASEY_WORST_POINTS)
+    points += [{n: rng.uniform(*_get_param_bounds(n)) for n in names} for _ in range(200)]
+
+    for z, bands in cases:
+        filters = [tophat(*b) for b in bands]
+        res = adapter.precompute(
+            [f[0] for f in filters], [f[1] for f in filters], z, None, model="casey2012"
+        )
+        lookup_fn = adapter.build_lookup(res, model="casey2012")
+        worst = np.zeros(len(bands))
+        for kw in points:
+            got = np.asarray(lookup_fn(1.0, *[kw[n] for n in names]))
+            for j, (f, lkp) in enumerate(zip(filters, got)):
+                ref = exact("casey2012", kw, *f, z=z, wide=WIDE_CONVERGED)
+                worst[j] = max(worst[j], abs(lkp / ref - 1.0))
+        for b, w in zip(bands, worst):
+            assert w < 1e-3, f"casey2012 z={z:g} band {b} um: max |lookup/exact - 1| = {w:.3e}"

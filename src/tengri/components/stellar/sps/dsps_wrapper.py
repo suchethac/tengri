@@ -1774,7 +1774,7 @@ def compute_dsps_met_table_weights(
     # Age weights come from the SFH-only path, not from the marginal of the
     # joint: summing the joint over metallicity reintroduces roundoff, so the
     # total mass would drift with lgmet_table at the 1e-11 level. The joint
-    # is used only for the metallicity-marginalised flux below.
+    # is used only for the metallicity-marginalized flux below.
     age_weights_msun = compute_dsps_age_weights(
         sfr_on_ssp_ages, ssp_ages_yr, ssp_lg_age_gyr, t_obs_gyr
     )

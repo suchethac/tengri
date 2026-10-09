@@ -833,9 +833,9 @@ def test_closed_form_power_differs_from_the_grid_integral_by_the_measured_amount
 
     That is how far the debit moves from the grid evaluation: the lines' share of the disc
     rises by that fraction. kubota_done's is the grid's quadrature residual now that the
-    corona carries its counted power and the disc its complement (#2733, measured at log M = 8; it was 7.26e-4 when
-    a single scale left the corona 3.7 % short). The bound is the measured one with 20 %
-    headroom.
+    corona carries its counted power and the disc its complement (#2733, measured at
+    log M = 8; it was 7.26e-4 when a single scale left the corona 3.7 % short). The bound
+    is the measured one with 20 % headroom.
     """
     if disc == "kubota_done":
         grid = np.asarray(runner_module._KUBOTA_LEDGER_WAVE)
