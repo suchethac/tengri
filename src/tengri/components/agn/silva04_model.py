@@ -28,11 +28,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._publication import emitted_bolometric, publication_wave
 from tengri.components.agn.silva04 import create_silva04_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
-from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["Silva04Torus"]
 
@@ -246,21 +246,20 @@ class Silva04Torus(SEDModelComponent):
 
         silva04_fn = self.data
 
-        # Call Silva+04 interpolator
-        sed_torus = silva04_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_log_nh_silva=p["log_nh_silva"],
-            agn_torus_frac=p["torus_frac"],
-        )
+        def _torus(wave_eval):
+            return silva04_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=p["log_lbol"],
+                agn_log_nh_silva=p["log_nh_silva"],
+                agn_torus_frac=p["torus_frac"],
+            )
 
-        # Published bolometric torus luminosity, the closed form of the template
-        # normalization: the shape is divided by its integral over its own native
-        # grid and multiplied by l_scale = 10^log_lbol L_sun * torus_frac, so the
-        # integral over any caller grid would only re-sample that same value.
-        L_torus = 10.0 ** p["log_lbol"] * _L_SUN * p["torus_frac"]
+        # Published L_agn_torus: the integral of the emitted torus SED over the full emission
+        # range, on the fixed publication grid. The caller's wave never enters it.
+        wave_pub = publication_wave(wave.dtype)
+        L_torus = emitted_bolometric(_torus(wave_pub), wave_pub)
 
         # Add to intrinsic SED
-        sed_out = sed_in + sed_torus
+        sed_out = sed_in + _torus(wave)
 
         return sed_out, {"L_agn_torus": L_torus}

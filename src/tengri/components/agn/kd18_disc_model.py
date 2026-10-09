@@ -26,11 +26,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._publication import emitted_bolometric, publication_wave
 from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
-from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["KD18Disc"]
 
@@ -125,7 +125,8 @@ class KD18Disc(SEDModelComponent):
     Cross-component outputs
     -----------------------
     L_agn_disc : erg/s
-        Bolometric luminosity contribution from all three zones.
+        Integral over the full emission range of the emitted, inclination-projected SED
+        (all three zones), evaluated on the publication grid.
 
     Notes
     -----
@@ -294,30 +295,33 @@ class KD18Disc(SEDModelComponent):
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
 
         """
-        # Call K&D18 disc model
-        sed_disc = _kubota_done_disc_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_lum_ratio=p["frac"],
-            agn_log_mbh=p["log_mbh"],
-            agn_log_ledd=p["log_ledd"],
-            agn_a_spin=p["a_spin"],
-            agn_cos_inc=p["cos_inc"],
-            agn_f_hard=p["f_hard"],
-            agn_gamma_warm=p["gamma_warm"],
-            agn_kt_warm=p["kt_warm"],
-            agn_gamma_hard=p["gamma_hard"],
-            agn_kt_hot=p["kt_hot"],
-            agn_r_warm_ratio=p["r_warm_ratio"],
-            n_radii=self.config.n_radii,
-            agn_self_consistent_gamma=self.config.self_consistent_gamma,
-        )
 
-        # Published bolometric disc luminosity, the closed form the disc is
-        # normalized to: L_bol * agn_lum_ratio, independent of the caller's grid.
-        L_disc = 10.0 ** p["log_lbol"] * _L_SUN * p["frac"]
+        def _kubota(wave_eval):
+            return _kubota_done_disc_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=p["log_lbol"],
+                agn_lum_ratio=p["lum_ratio"],
+                agn_log_mbh=p["log_mbh"],
+                agn_log_ledd=p["log_ledd"],
+                agn_a_spin=p["a_spin"],
+                agn_cos_inc=p["cos_inc"],
+                agn_f_hard=p["f_hard"],
+                agn_gamma_warm=p["gamma_warm"],
+                agn_kt_warm=p["kt_warm"],
+                agn_gamma_hard=p["gamma_hard"],
+                agn_kt_hot=p["kt_hot"],
+                agn_r_warm_ratio=p["r_warm_ratio"],
+                n_radii=self.config.n_radii,
+                agn_self_consistent_gamma=self.config.self_consistent_gamma,
+            )
+
+        # Published L_agn_disc: the integral of the emitted, inclination-projected SED over
+        # the full emission range, evaluated on the fixed publication grid. The caller's
+        # wave never enters it.
+        wave_pub = publication_wave(wave.dtype)
+        L_disc = emitted_bolometric(_kubota(wave_pub), wave_pub)
 
         # Add to intrinsic SED
-        sed_out = sed_in + sed_disc
+        sed_out = sed_in + _kubota(wave)
 
         return sed_out, {"L_agn_disc": L_disc}

@@ -20,13 +20,14 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._publication import emitted_bolometric
 from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
-from tengri.utils.physics_constants import L_SUN as _L_SUN
 
 __all__ = ["PowerLawDisc"]
 
@@ -42,6 +43,10 @@ _LOG_LBOL_PRIOR = declared_prior(_AGN_PARAMS, "agn_log_lbol")
 _ALPHA_PRIOR = declared_prior(_AGN_PARAMS, "agn_alpha")
 _T_MAX_PRIOR = declared_prior(_AGN_PARAMS, "agn_T_max")
 _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
+
+#: Log-uniform grid over the normalization band [Angstrom] (10 A to 1e8 A), on which the
+#: published bolometric luminosity is integrated.
+_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 8000)
 
 
 @dataclass(frozen=True)
@@ -179,20 +184,24 @@ class PowerLawDisc(SEDModelComponent):
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
 
         """
-        # Call power-law disc model
-        sed_disc = _powerlaw_disc_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_lum_ratio=p["frac"],
-            agn_alpha=p["alpha"],
-            agn_T_max=p["T_max"],
-        )
 
-        # Published bolometric disc luminosity, the closed form the disc is
-        # normalized to: L_bol * agn_lum_ratio, independent of the caller's grid.
-        L_disc = 10.0 ** p["log_lbol"] * _L_SUN * p["frac"]
+        def _powerlaw(wave_eval):
+            return _powerlaw_disc_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=p["log_lbol"],
+                agn_lum_ratio=p["lum_ratio"],
+                agn_alpha=p["alpha"],
+                agn_T_max=p["T_max"],
+            )
+
+        # Published L_agn_disc: the integral of the emitted SED over the band the disc is
+        # normalized on (10 A to 1e8 A). The emitted power-law tail is not integrable beyond
+        # that band (L_nu nu ~ const at long wavelength), so the band is part of the
+        # definition. It is evaluated on a fixed grid, never the caller's wave.
+        wave_band = jnp.asarray(_PUBLISHED_BAND_AA, dtype=wave.dtype)
+        L_disc = emitted_bolometric(_powerlaw(wave_band), wave_band)
 
         # Add to intrinsic SED
-        sed_out = sed_in + sed_disc
+        sed_out = sed_in + _powerlaw(wave)
 
         return sed_out, {"L_agn_disc": L_disc}
