@@ -890,7 +890,7 @@ def doctor() -> str:
             lines.append(f"    ({len(found)} SSP grids visible)")
         from tengri.components.stellar.sps.mass_remaining_tables import describe_source
 
-        lines.append("  Surviving-mass source per grid (#2751):")
+        lines.append("  Surviving-mass source per grid:")
         for path in found:
             lines.append(f"    {path.name}: {describe_source(path.stem)}")
 

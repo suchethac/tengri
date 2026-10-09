@@ -113,6 +113,8 @@
 
 - **The default grid's surviving mass changes (#2751):** `fsps_prsc_miles_chabrier` now takes the surviving-mass table rebuilt with the local FSPS PARSEC build, which reproduces the grid's spectra to 1e-7; the table that shipped with the grid is not reproduced by that build. Measured change: +0.017 (+3.0%) at 10 Gyr, solar Z (0.555 to 0.572); largest change at any node 0.132 at the top metallicity, log10 age 6.15 (1.000 to 0.868, the truncation of the PARSEC Z = 0.06 isochrone at 12 Msun). Fits that use the default grid move accordingly.
 
+- **BPASS grids require the explicit opt-in (#2800):** `bpss_stars_c3k_a_chabrier` has no surviving-mass table, so `load_ssp` refuses it unless `mass_remaining="dsps_fit"` is passed. Paper I configuration V passes that opt-in; its numbers are unchanged.
+
 - **Kubota-Done warm and hot Comptonization no longer rounds its template coordinates to
   float32 (#2739):** the nthcomp interpolation located `gamma`, `kTe` and `kTbb` in float32
   (relative 6e-8), so a 1e-16 difference between `jax.jit` and eager evaluation flipped a

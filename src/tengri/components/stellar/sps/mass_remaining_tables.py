@@ -1,4 +1,4 @@
-"""Surviving-mass fractions from each SSP grid's own isochrones (#2751).
+"""Surviving-mass fractions from each SSP grid's own isochrones.
 
 ``ssp_mass_remaining[i_Z, i_age]`` is the fraction of the mass formed in a
 single-age population that is, at that age, in living stars plus stellar
@@ -262,17 +262,16 @@ def _grid_ages_to_table(
     Raises
     ------
     ValueError
-        An age is NaN or ``+inf``, or lies beyond the table range by more than
-        one table node.
+        An age is NaN or ``+inf``, or lies more than ``AGE_NODE_ATOL`` [dex] from
+        a node of the table.
 
     Notes
     -----
     * A t = 0 node (``-inf``) is 1.0 by definition: no star has evolved.
-    * A grid age within ``AGE_NODE_ATOL`` of a table node takes that node's value
-      with no interpolation (grids and tables round log ages differently).
-    * Otherwise linear interpolation in log10 age. A grid age beyond an end of
-      the table by at most one table node (the spacing of the end interval) is
-      clamped to the edge value; further out raises.
+    * Every other grid age must sit on a table node to ``AGE_NODE_ATOL`` [dex]. A
+      registered grid is built on its isochrone set's nodes, so an off-node age
+      means the grid and the table are not the same set, and nothing is
+      interpolated for it.
     """
     age = np.asarray(lg_age_yr, dtype=np.float64)
     if np.any(np.isnan(age)) or np.any(age == np.inf):
@@ -280,23 +279,19 @@ def _grid_ages_to_table(
     zero = np.isneginf(age)
     finite = np.where(zero, table_age[0], age)
 
-    lo_node = table_age[1] - table_age[0]
-    hi_node = table_age[-1] - table_age[-2]
-    below = table_age[0] - finite - lo_node
-    above = finite - table_age[-1] - hi_node
-    bad = (below > AGE_NODE_ATOL) | (above > AGE_NODE_ATOL)
-    if np.any(bad):
+    nearest = np.abs(finite[:, None] - table_age[None, :]).argmin(axis=1)
+    offset = np.abs(finite - table_age[nearest])
+    off_node = (offset > AGE_NODE_ATOL) & ~zero
+    if np.any(off_node):
         raise ValueError(
-            f"{label}: grid ages {np.unique(finite[bad]).tolist()} [log10 yr] lie more than "
-            f"one table node beyond the table range [{table_age[0]}, {table_age[-1]}]"
+            f"{label}: grid ages {np.unique(finite[off_node]).tolist()} [log10 yr] are more "
+            f"than {AGE_NODE_ATOL} dex from the table's nodes "
+            f"[{table_age[0]}, ..., {table_age[-1]}]; the grid and the table are not on the "
+            "same isochrone age set."
         )
 
-    nearest = np.abs(finite[:, None] - table_age[None, :]).argmin(axis=1)
-    on_node = np.abs(finite - table_age[nearest]) <= AGE_NODE_ATOL
     out = np.empty((table.shape[0], age.shape[0]), dtype=np.float64)
-    for i_z in range(table.shape[0]):
-        interp = np.interp(finite, table_age, table[i_z])
-        out[i_z] = np.where(on_node, table[i_z, nearest], interp)
+    out[:] = table[:, nearest]
     out[:, zero] = 1.0
     return out
 
@@ -434,7 +429,7 @@ def resolve_mass_remaining(
     why = (
         "has an [alpha/Fe] axis, which the (n_met, n_age) table cannot serve"
         if has_alpha_axis
-        else "has no surviving-mass table yet"
+        else "has no surviving-mass table shipped with this package"
     )
     raise ValueError(
         f"'{stem}' {why} (missing {missing}, isochrones {entry.isoc!r}, IMF {entry.imf!r}). "

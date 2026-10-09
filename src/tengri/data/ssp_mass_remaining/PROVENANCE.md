@@ -3,11 +3,12 @@
 `ssp_mass_remaining[Z, age]` is the fraction of the mass formed in a single-age
 population that is in living stars plus stellar remnants (per 1 Msun formed,
 dimensionless). It depends on the isochrones, the IMF and the metallicity, not on the
-spectral library. `load_ssp_data` resolves it per grid from the grid's own table, else
-the companion table named in `MASS_REMAINING_REGISTRY`
-(`tengri/components/stellar/sps/mass_remaining_tables.py`), and refuses otherwise;
-DSPS's metallicity-independent fit is used only with `mass_remaining="dsps_fit"` (or,
-with a warning, for a grid the registry does not name). `SSPData.mass_remaining_source`
+spectral library. For a grid named in `MASS_REMAINING_REGISTRY`
+(`tengri/components/stellar/sps/mass_remaining_tables.py`), `load_ssp_data` uses the
+companion table the registry names, whatever table the grid file itself carries, and
+refuses if that table is missing (PENDING). An embedded table is used only for an
+unregistered grid. DSPS's metallicity-independent fit is used only with
+`mass_remaining="dsps_fit"` (or, with a warning, for an unregistered grid with no table). `SSPData.mass_remaining_source`
 records the outcome and `tengri.doctor()` lists it per grid.
 
 File format: `log10_age_yr` (n_age,), `log10_z_abs` (n_z,), `mass_remaining` (n_z, n_age)
@@ -29,6 +30,15 @@ Built with python-fsps 0.4.7 compiled with `FFLAGS="-DMIST=0 -DPADOVA=1 -DMILES=
 `-DMIST=0 -DBASTI=1 -DMILES=1` (the sdist's own bundled FSPS; `sp.libraries` reports `pdva` and
 `bsti`). Same definition as the MIST tables: `add_stellar_remnants=1`, `sfh=0`, `zcontinuous=0`,
 Chabrier, Kroupa and Salpeter IMFs at their FSPS defaults.
+
+**Rebuilding.** `scripts/build_fsps_isochrone_env.sh --isoc {padova,basti} --venv DIR` makes
+the environment (`SPS_HOME` names a python-fsps source checkout; the compiled Fortran is the
+sdist's bundled FSPS, whose sdist sha256 begins `e8df7ce9`), then
+`DIR/bin/python scripts/build_mass_remaining_fsps.py --isoc ... --imf ...` writes the table.
+Each table records its build in its attributes: `source` (python-fsps version),
+`fsps_build_flags` (the isochrone switch), `fsps_source_sha256` (checksum of the bundled
+`libfsps/src/*.f90`) and `source_commit` (the `SPS_HOME` commit, which identifies only the
+checkout, not the compiled Fortran).
 
 Z nodes equal `log10` of the isochrone set's own `zlegend.dat` (`ISOCHRONES/Padova/Padova2007/`
 and `ISOCHRONES/BaSTI/`) to 1e-6. No Padova or BaSTI SSP grid is present locally, so the nodes
@@ -59,7 +69,7 @@ Conroy, Gunn & White (2009, ApJ 699, 486, doi:10.1088/0004-637X/699/1/486). The 
 refuses an isochrone set other than the one compiled into the local FSPS, so each set needs
 an FSPS built with it (MIST, PARSEC, Padova and BaSTI are built; see below).
 
-FSPS's own numbers are repackaged unaltered, including values slightly above 1 near
+Values are kept exactly as the source gives them, including values slightly above 1 near
 log10 age 6.4-6.7 (maximum 1.0047 Chabrier/Kroupa, 1.0113 Salpeter) and a youngest node
 (1e5 yr) of 0.983-1.011.
 
@@ -111,8 +121,9 @@ young top-Z SSPs contain no stars above about 12 Msun, in both the spectra (whic
 build) and the surviving mass. The flat 0.868 at young ages at top Z is that truncation together
 with the remnant term, which `add_remnants.f90` ties to the largest living mass.
 
-Measurement and checks: `tmp/scripts/L1/check/` (not in the repo). The grid's spectra were not
-re-checked in the test suite (no python-fsps in the shared venv).
+The spectra comparison above was a one-off check against the hosted grid, made outside the
+repository with the same build; the test suite does not repeat it, since python-fsps is not in
+the shared environment.
 
 PARSEC Kroupa and Salpeter use the same build; they have no hosted grid to compare against.
 
@@ -138,8 +149,7 @@ That remnant treatment is ProGeny's, not Renzini & Ciotti (1993) as in FSPS.
 
 **Citation.** ProGeny I: Robotham & Bellstedt, arXiv:2410.17697, accepted to RASTI. ProGeny II:
 Bellstedt & Robotham, arXiv:2410.17698, accepted to MNRAS. The arXiv abstract pages give only
-the accepted status. The ADS journal volume and page were not verified: the ADS lookup did not
-complete from this session, so no volume or page is cited.
+the accepted status, so no journal volume or page is cited.
 
 **Input.** ProSpect speclib zip `speclib_folder.zip` (sha256
 `cfe8f25e08eb95d57c5f1df81b9a38974f67e54d3bf3877bddd0d0bf34eb24c7`, 3,882,516,554 bytes, the
@@ -168,7 +178,8 @@ at Z index 0-3 and 13 only; the largest rise per 1-dex band: 0.00841 (5-6), 0.00
 smoothed or clamped. The test bounds them: maximum rise 0.0160, exact count 137, largest rise
 at 9.55 Gyr.
 
-**Nothing else is changed.** The MIST and PARSEC tables and the loader are unchanged.
+This table is independent of the isochrone tables above; it is built from ProGeny's own
+output and does not use the FSPS build.
 
 ## BC03 (Padova 1994 + STELIB + Chabrier)
 

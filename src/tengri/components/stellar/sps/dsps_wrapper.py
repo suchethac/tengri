@@ -537,8 +537,7 @@ def load_ssp_data(
         If ``mass_remaining`` is not a known mode, or the surviving-mass table
         cannot be resolved honestly (see :func:`resolve_mass_remaining`):
         a registered grid with no table, a metallicity-node mismatch with the
-        companion table, ages beyond the table, or an embedded table that
-        disagrees with its companion.
+        companion table, or ages that do not match the companion table's nodes.
 
     Notes
     -----
