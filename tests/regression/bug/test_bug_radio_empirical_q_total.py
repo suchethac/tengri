@@ -282,6 +282,14 @@ def test_delvecchio_q0_with_a_galaxy_mass_box_above_the_fit_builds(ssp_data_fsps
     )
 
 
+def _declared_q0_bounds(q_name):
+    """The (low, high) support of a q0 parameter's declared free prior."""
+    from tengri.components.radio._params import PARAMS
+
+    decl = next(d for d in PARAMS if d.name == q_name)
+    return decl.free_prior.bounds
+
+
 @pytest.mark.parametrize("neb", ["none", "cue"])
 @pytest.mark.parametrize("mode", list(_MODES))
 def test_no_built_corner_of_the_box_has_negative_sed_radio(ssp_data_fsps, mode, neb):
@@ -292,7 +300,8 @@ def test_no_built_corner_of_the_box_has_negative_sed_radio(ssp_data_fsps, mode, 
     Without a nebular the radio block's free-free can hide it, so both are checked.
     """
     q_name = {"delvecchio2021": "radio_delv_q0", "mccheyne2022": "radio_mcch_q0"}[mode]
-    q_lo, q_hi = (1.8, 3.25) if mode == "delvecchio2021" else (1.0, 3.0)
+    # The corners are the declared free-prior bounds of q0, read from PARAMS.
+    q_lo, q_hi = _declared_q0_bounds(q_name)
     neb_group = _NEBULAR[neb]
     built = 0
     for q0 in (q_lo, q_hi):

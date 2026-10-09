@@ -83,6 +83,17 @@ $$ (eq-fir-radio)
 
 For both mass/redshift modes $q_{\rm IR}$ calibrates the **total** luminosity at the mode's own reference frequency, $L^{\rm tot}_{\nu_{\rm ref}} = L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\cdot10^{q_{\rm IR}})$, exactly as for `bell2003`: the synchrotron term is the total minus the Murphy et al. (2011) free-free term at $\nu_{\rm ref}$, and no Bell $n(L)$ factor multiplies it (the mass and luminosity trend is already in $q_{\rm IR}$). The build evaluates the worst corner of the declared box, over $q_0$, the mass and redshift slopes, the redshift, and the stellar mass the radio block reads, and refuses the box if $q$ there exceeds $q_\ast$ at $\nu_{\rm ref}$ (the same limit as for `bell2003`). The lowest reachable $\log M_\star$ is the SFH `log_total_mass` floor plus $\log_{10}$ of the smallest SSP mass-remaining fraction (a conservative bound).
 
+#### Calibrated domain of the mass and redshift relations.
+
+Each relation is an empirical linear fit, valid only over the sample it was fitted to. Outside that sample it is not extrapolated: its mass and redshift arguments are held at the nearest edge, so the relation is constant beyond the edge and its gradient with respect to those arguments is zero there.
+
+- `delvecchio2021`: $0.1 < z < 4.5$ and $10^8 < M_\star/M_\odot < 10^{12}$ (Delvecchio et al. 2021, Sect. 2).
+- `mccheyne2022`: $M_\star > 10^{10.45}\,M_\odot$ and $z < 0.4$ (McCheyne et al. 2022, Sect. 5.2, the joint fit). No upper mass bound is stated.
+
+If a declared prior on the stellar mass or the redshift reaches outside these ranges, the build issues a warning that names the range and the calibration. It is not an error: the relation is held at the edge there. A default galaxy at $z = 0$ therefore warns in `delvecchio2021`, because $z = 0$ lies below the calibrated range, and its $q_{\rm IR}$ is the value at $z = 0.1$.
+
+The build refuses a declared box only when its worst corner makes the synchrotron term negative. For the default free priors of both modes that worst corner stays below $q_\ast$, so those boxes build.
+
 The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters in all mass/redshift-dependent modes, enabling hierarchical inference over galaxy populations.
 
 #### Normalization relative to CIGALE.
