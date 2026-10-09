@@ -3152,6 +3152,7 @@ class SEDModel:
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
                 self._cloudy_band_table_cache = None
+                self._shock_band_table_cache = None
                 self._xray_term_response_cache = None
                 self._radio_term_response_cache = None
 
@@ -3195,6 +3196,18 @@ class SEDModel:
                         stacklevel=2,
                     )
                     self._cloudy_band_table_cache = None
+
+                try:
+                    self._shock_band_table(chain)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp shock line-band precompute failed ({e!r}); falling "
+                        "back to the exact per-call filter integral (correct, but without "
+                        "the precomputed-coefficient speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    self._shock_band_table_cache = None
 
                 # Derive which emitters in the chain implement the emission_terms
                 # contract rather than hardcoding ("xray", "radio"). Any additive
@@ -10421,6 +10434,11 @@ class SEDModel:
         if cloudy_band is not None:
             result["nebular_band_table"] = cloudy_band
 
+        # ── Composable shock line-band coefficients (WavePrecomp, #2324) ──
+        shock_band = self._shock_band_table(cached)
+        if shock_band is not None:
+            result["shock_band_table"] = shock_band
+
         # ── Component template libraries, keyed [namespace][component name] ──
         #
         # A template-backed component that reads its library inside ``predict``
@@ -11263,6 +11281,50 @@ class SEDModel:
         self._cloudy_band_table_decline = reason
         self._cloudy_band_table_cache = table
         return table
+
+    def _shock_band_refusal(self, shock, stellar) -> str | None:
+        """Why the shock line-band coefficients must not engage, or None (#2324)."""
+        if not self._approx.get("wave_precomp"):
+            return "approx=WavePrecomp() not enabled"
+        if shock is None:
+            return "no composable shock component"
+        if "redshift" not in self.spec.fixed_params:
+            return "redshift is free (the band coefficients are built at one redshift)"
+        st = getattr(stellar, "_state", None)
+        if st is None or getattr(st, "phot_fw_padded", None) is None:
+            return "the photometry filter cache is absent (no WavePrecomp filters)"
+        return None
+
+    def _shock_band_table(self, chain):
+        """Build-time shock line-band coefficients through the registry, memoized.
+
+        Records why it declined in ``_shock_band_table_decline``. Returns None when
+        it does not engage.
+        """
+        cached = getattr(self, "_shock_band_table_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.nebular.shock_model import ShockNebular
+        from tengri.forward.precompute.registry import resolve
+
+        shock = next((c for c in chain if isinstance(c, ShockNebular)), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        coeff = None
+        reason = self._shock_band_refusal(shock, stellar)
+        if reason is None:
+            st = stellar._state
+            coeff = resolve("mappings_shock").shock_band_coefficients(
+                st.phot_fw_padded,
+                st.phot_ft_padded,
+                float(self.spec.fixed_value("redshift")),
+                self._rest_wavelength,
+            )
+            if coeff is None:
+                reason = "the MAPPINGS V line grid is absent, so the line list is not fixed"
+        self._shock_band_table_decline = reason
+        self._shock_band_table_cache = coeff
+        return coeff
 
     def _additive_term_band_response(self, chain, name):
         r"""Build-time per-filter response of each rank-1 term of an additive emitter.
