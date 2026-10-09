@@ -791,6 +791,13 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # A menu cell prints the registry through tengri.list_*() at render time, so a
+      # declaration edit leaves the published output quoting retired text (#2396:
+      # nb03 still printed the pre-#2158 agn_grahsp_a_bc declaration). Compares every
+      # registry row and parameter name quoted in the executed notebook outputs with
+      # tengri.list_all(). Needs tengri importable, so it lives here. Clean on main,
+      # so it runs --strict.
+      - run: python tools/check_rendered_registry_strings.py --strict
       # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
       # one asks the converse — whether every symbol tengri EXPORTS is named in
       # the docs — because the two failure modes are independent and only the
