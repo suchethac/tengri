@@ -389,10 +389,16 @@ class TestProfileMassPosteriorIdentitySmoke:
         forward = ForwardModel.build(sed=model)
         _truth, flux, noise = _mock(model, seed=seed, snr=30.0)
 
+        # 400 warmup steps, not 100: at 100 the unprofiled chain of seed 3 left
+        # warmup unadapted (28 divergences, mass percentiles pinned at
+        # 9.79-9.80 dex) and the KS test compared a stuck chain, not a posterior.
+        # At 400 the same fit has no divergence and the two posteriors agree
+        # (KS p = 0.38). Which seeds hit that depended on the MAP start point,
+        # so it moved when the MAP optimizer began converging (#2683).
         fit_kw = dict(
             method="mcmc_nuts",
             dense_mass_matrix=False,
-            n_warmup=100,
+            n_warmup=400,
             n_samples=200,
             n_chains=1,
         )
@@ -432,6 +438,8 @@ class TestProfileMassPosteriorIdentitySmoke:
             f"  Profiled percentiles:                {perc_on}.\n"
             f"  Difference:                          {perc_diff}.\n"
             f"  Two-sample KS p-value: {ks_pvalue:.4f}.\n"
+            f"  Divergences: unprofiled {post_off.diagnostics.get('n_divergent')}, "
+            f"profiled {post_on.diagnostics.get('n_divergent')}.\n"
         )
 
         # Loose smoke-test thresholds
