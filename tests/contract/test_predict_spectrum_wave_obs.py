@@ -168,3 +168,43 @@ def test_fixed_value_change_is_not_served_by_cached_kernel(synthetic_ssp_wide):
     np.testing.assert_allclose(np.asarray(spec_b), np.asarray(reference_b), rtol=1e-13)
     scale = float(np.max(np.abs(np.asarray(spec_b))))
     assert float(np.max(np.abs(np.asarray(spec_a) - np.asarray(spec_b)))) > 1e-3 * scale
+
+
+def test_linear_explicit_grid_uses_nonuniform_lsf(synthetic_ssp_wide):
+    """A concrete linear ``wave_obs`` gets the same LSF as the state path.
+
+    A traced grid is assumed log-uniform (constant-R FFT LSF), so the kernel keeps
+    ``wave_obs`` concrete. A second linear grid of the same length checks the cache
+    is keyed on grid content, not just shape.
+    """
+    from tengri import Spectroscopy
+
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=np.linspace(4000.0, 8500.0, 300), resolution=300.0)
+    )
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+    )
+    model = SEDModel(
+        model.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0)),
+        synthetic_ssp_wide,
+        observation=obs,
+    )
+    p = {name: 0.5 for name in model.spec.free_params}
+    p["sigma_v_kms"] = 300.0
+    for lo, hi in ((4000.0, 5200.0), (4100.0, 5400.0)):
+        w = jnp.linspace(lo, hi, 300)
+        np.testing.assert_allclose(
+            np.asarray(model.predict_spectrum(p, wave_obs=w)),
+            np.asarray(model._spectrum_via_state(p, wave_obs=w)),
+            rtol=1e-12,
+        )

@@ -58,6 +58,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import hashlib
 import inspect
 import pathlib
 import types
@@ -6802,34 +6803,43 @@ class SEDModel:
             if spectroscopy is not None
             else False
         )
-        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving)
-        return kernel(
-            params,
-            self.spec.get_fixed_values(),
-            jnp.asarray(wave_obs),
-            *self._resolve_threaded_data(None, None, None),
+        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        args = (
+            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
+            if traced_grid
+            else (params, self.spec.get_fixed_values())
         )
+        return kernel(*args, *self._resolve_threaded_data(None, None, None))
 
-    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving):
+    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving, wave_obs):
         """Return (and cache) the JIT'd observed-frame spectrum projector for ``wave_obs``.
 
         Mirrors :meth:`_get_or_build_predict_observables_jit`: the compiled function
         is stored in the structural kernel cache keyed on :meth:`compile_signature`,
-        with the static resample flag appended to the key. The SSP grid, template
-        and z-table arrays and the observed grid ``wave_obs`` enter as runtime
-        arguments, so they are not baked into the HLO.
+        with the static resample flag and the content of ``wave_obs`` appended to the
+        key. The SSP grid, template and z-table arrays enter as runtime arguments,
+        so they are not baked into the HLO. A concrete ``wave_obs`` is a compile-time
+        constant of the kernel: the LSF selection (``_is_log_uniform``) must see the
+        real grid, since a traced grid is assumed log-uniform and would take the
+        constant-R FFT path on a linear grid.
 
         Parameters
         ----------
         conserving : bool
             Static flux-conserving resample flag, from
             :meth:`~tengri.observation.spectroscopy.Spectroscopy.resolve_conserving`.
+        wave_obs : array-like
+            Observed-frame grid, shape (n_pix,). If it is a tracer (the caller is
+            jitting over the grid) the kernel takes it as a runtime argument.
 
         Returns
         -------
         callable
-            ``fn(params, wave_obs, ssp_data, template_data, ztable_data)`` returning
-            ndarray, shape (n_pix,).
+            ``fn(params, fixed_values, ssp_data, template_data, ztable_data)`` for a
+            concrete grid, or ``fn(params, fixed_values, wave_obs, ssp_data,
+            template_data, ztable_data)`` for a traced one; returns ndarray,
+            shape (n_pix,).
 
         Notes
         -----
@@ -6839,7 +6849,14 @@ class SEDModel:
         from tengri.inference._model_cache import _default_owner
 
         cache = _default_owner.get_structural_kernel(self.compile_signature())
-        key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        if traced_grid:
+            w_np = None
+            key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        else:
+            w_np = np.asarray(wave_obs, dtype=np.float64)
+            digest = hashlib.sha1(w_np.tobytes()).hexdigest()
+            key = ("predict_spectrum_on_grid_jit", bool(conserving), w_np.shape, digest)
         fn = cache.get(key)
         if fn is not None:
             return fn
@@ -6908,7 +6925,15 @@ class SEDModel:
                 resolution_matrix=resolution_matrix,
             )
 
-        jit_fn = jax.jit(_impl)
+        if traced_grid:
+            jit_fn = jax.jit(_impl)
+        else:
+            w_const = jnp.asarray(w_np)
+
+            def _impl_const(params, fixed_values, ssp_data, template_data, ztable_data):
+                return _impl(params, fixed_values, w_const, ssp_data, template_data, ztable_data)
+
+            jit_fn = jax.jit(_impl_const)
         cache[key] = jit_fn
         return jit_fn
 
