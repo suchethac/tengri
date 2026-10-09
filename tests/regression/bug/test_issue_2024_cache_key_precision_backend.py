@@ -253,9 +253,10 @@ def test_schema_version_bumps_prevent_collisions():
     the default z grid gained nodes at each band's Lyman-limit crossings (#2749,
     again with no request field changing); and 6→7 for the ``ssp_phot_nolyc_table``
     payload (the above-edge half of the Lyman-limit split, built from the same
-    cumulative integral).
+    cumulative integral); 7→8 when the sub-band integrals moved off differences
+    of that running total onto node weights (#2769).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 7, (
+    assert pc._ZTABLE_CACHE_VERSION == 8, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
     assert sc._CACHE_VERSION == 3, (

@@ -69,6 +69,43 @@ def _transmission(igm_model, wave_rest, z):
     )
 
 
+def _transmission_table(igm_model, wave_rest, z_grid):
+    """:func:`_transmission` on every z node, one jitted ``vmap`` over z.
+
+    Batching the z axis replaces ``n_z`` eager op-by-op evaluations with one
+    compiled call. Each row equals :func:`_transmission` at that node to
+    floating-point roundoff.
+
+    Parameters
+    ----------
+    igm_model : str
+        Transmission law passed to :func:`igm_absorption`.
+    wave_rest : ndarray, shape (n_wave,)
+        Rest-frame wavelengths [Angstrom].
+    z_grid : ndarray, shape (n_z,)
+        Redshift nodes [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_z, n_wave)
+        IGM transmission [dimensionless, 0-1], float64.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.components.igm import igm_absorption
+
+    wave_rest_j = jnp.asarray(wave_rest, dtype=jnp.float64)
+
+    def _one(z):
+        return igm_absorption(
+            wave_rest_j * (1.0 + z), z, igm_patchy=False, igm_model=igm_model, use_dla=False
+        )
+
+    table = jax.jit(jax.vmap(_one))(jnp.asarray(z_grid, dtype=jnp.float64))
+    return np.asarray(table, dtype=np.float64)
+
+
 def _absorbed_filters(transmission, wave_rest, z, filter_waves):
     """Indices of filters whose support reaches wavelengths the IGM absorbs.
 
@@ -86,7 +123,7 @@ def _absorbed_filters(transmission, wave_rest, z, filter_waves):
 
 
 def subband_fold(
-    ssp_data, filters, z, *, igm_model, n_subbands, lyc_gate, convention
+    ssp_data, filters, z, *, igm_model, n_subbands, lyc_gate, convention, transmission=None
 ) -> SubbandFold:
     """Exact-to-bare ratio of the sub-band integrals, and the with-IGM nodes, at one z.
 
@@ -107,6 +144,10 @@ def subband_fold(
         Whether that table carries the forced Lyman-limit edge (``K + 1`` chunks).
     convention : FilterConvention
         Bandpass weight of that table.
+    transmission : array_like, shape (n_wave,), optional
+        IGM transmission on ``ssp_data.ssp_wave`` at ``z`` [dimensionless]. When
+        None it is evaluated here; :func:`subband_fold_table` passes precomputed
+        rows so the z axis is batched once rather than per node.
 
     Returns
     -------
@@ -127,33 +168,34 @@ def subband_fold(
     shape = (*templates.shape[:-1], len(filters), n_chunks)
     ratio = np.ones(shape, dtype=np.float64)
     nodes = np.full(shape, np.nan, dtype=np.float64)
-    transmission = _transmission(igm_model, wave_rest, z)
+    if transmission is None:
+        transmission = _transmission(igm_model, wave_rest, z)
+    else:
+        transmission = np.asarray(transmission, dtype=np.float64)
     reached = _absorbed_filters(transmission, wave_rest, z, filter_waves)
     if not reached:
         return SubbandFold(ratio, nodes)
 
-    def _quadrature(templates_in):
-        # dl_cm is a constant factor of both integrals and cancels in the ratio.
-        grid = preintegrate_grid(
-            templates=templates_in,
-            wave_rest=wave_rest,
-            filter_waves=[filter_waves[i] for i in reached],
-            filter_trans=[filter_trans[i] for i in reached],
-            redshift=z,
-            dl_cm=1.0,
-            axes=(np.asarray(ssp_data.ssp_lgmet), np.asarray(ssp_data.ssp_lg_age_gyr)),
-            taylor=False,
-            n_subbands=n_subbands,
-            convention=convention,
-            lyc_gate=lyc_gate,
-        )
-        return (
-            np.asarray(grid.subband_phot, dtype=np.float64),
-            np.asarray(grid.subband_waves_rest, dtype=np.float64),
-        )
-
-    bare, bare_nodes = _quadrature(templates)
-    folded, folded_nodes = _quadrature(templates * transmission)
+    # Bare and folded templates share every filter, union grid, weight and
+    # partition, so one quadrature over a stacked leading axis yields both.
+    stacked = np.stack([templates, templates * transmission])
+    grid = preintegrate_grid(
+        templates=stacked,
+        wave_rest=wave_rest,
+        filter_waves=[filter_waves[i] for i in reached],
+        filter_trans=[filter_trans[i] for i in reached],
+        redshift=z,
+        dl_cm=1.0,  # constant factor of both integrals, cancels in the ratio
+        axes=(),  # runtime interpolation axes; unused by the sub-band outputs
+        taylor=False,
+        n_subbands=n_subbands,
+        convention=convention,
+        lyc_gate=lyc_gate,
+    )
+    sub_phot = np.asarray(grid.subband_phot, dtype=np.float64)
+    sub_nodes = np.asarray(grid.subband_waves_rest, dtype=np.float64)
+    bare, folded = sub_phot[0], sub_phot[1]
+    bare_nodes, folded_nodes = sub_nodes[0], sub_nodes[1]
     ratio[..., reached, :] = np.where(bare != 0.0, folded / np.where(bare != 0.0, bare, 1.0), 0.0)
     nodes[..., reached, :] = np.where(folded != 0.0, folded_nodes, bare_nodes)
     return SubbandFold(ratio, nodes)
@@ -201,6 +243,7 @@ def subband_fold_table(
     if cached is not None:
         return SubbandFold(*np.asarray(cached))
 
+    transmissions = _transmission_table(igm_model, np.asarray(ssp_data.ssp_wave), z_grid)
     folds = [
         subband_fold(
             ssp_data,
@@ -210,8 +253,9 @@ def subband_fold_table(
             n_subbands=n_subbands,
             lyc_gate=lyc_gate,
             convention=convention,
+            transmission=transmission_z,
         )
-        for z in z_grid
+        for z, transmission_z in zip(z_grid, transmissions)
     ]
     # One array on disk: (2, n_z, ...) = (ratio, nodes).
     table = np.stack([np.stack([f.ratio for f in folds]), np.stack([f.nodes_rest for f in folds])])
