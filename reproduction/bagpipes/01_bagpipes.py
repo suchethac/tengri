@@ -190,7 +190,7 @@ print(
 # `model_galaxy(components)` samples its spectrum at $R_{\rm other} = 20$ outside the spectroscopic
 # range, in 2.5 % steps. The stellar grid is point-sampled onto that grid and each emission
 # line falls in one pixel, so a band average of it depends on the grid. The driver instead
-# builds every BAGPIPES model with `spec_wavs` spanning the 1000-30000 Å comparison range at
+# builds every BAGPIPES model with `spec_wavs` spanning the 1000–30000 Å comparison range at
 # $R_{\rm spec} = 1000$ and with $R_{\rm other} = 100$ elsewhere, and raises if the returned grid has
 # a median $\lambda/\Delta\lambda$ below 1000 over that range. All band averages on this page
 # integrate each SED on its own wavelength nodes through the same photon-weighted filter
@@ -883,7 +883,7 @@ caveat(
 # ## §4 Composite stellar SED
 #
 # Stellar light from the delayed-$\tau$ history convolved with the BC03+MILES Kroupa SSPs, with no dust
-# or nebular emission, normalized to $10^{10}\,M_\odot$ formed. The ratio panel is shown at $\pm 2$ % over 100 Å to 10 µm, the range where the stellar SED is compared.
+# or nebular emission, normalized to $10^{10}\,M_\odot$ formed. The ratio panel is shown at $\pm 2$ % over 100 Å to 10 μm, the range where the stellar SED is compared.
 
 # %%
 w_b, L_b = B.stellar_only_lnu(
@@ -1217,7 +1217,7 @@ caveat(
 # $\delta = 0$, each normalized at 5500 Å. BAGPIPES's `Salim` is tengri's `salim_sbl18`. Charlot & Fall
 # (2000) is a two-component prescription in BAGPIPES and is not a single-screen law, so it is not
 # compared here. BAGPIPES re-emits the absorbed light in the infrared whenever a `dust` block is present, so its
-# curve, read from a spectrum ratio, is shown to 1.2 µm; the infrared emission is compared in §8.
+# curve, read from a spectrum ratio, is shown to 1.2 μm; the infrared emission is compared in §8.
 
 # %%
 from tengri.dust import list_laws
@@ -1308,9 +1308,9 @@ caveat(
 # ## §7 Attenuated SED and the `eta` mapping
 #
 # BAGPIPES's `{"type": "Calzetti", "Av": A_V}` is one screen of optical depth
-# $\tau_V = A_V \ln 10 / 2.5$ on the whole stellar continuum, which tengri reproduces with
-# `tau_diff` $= \tau_V$ and `tau_bc = 0`. With `eta` $\neq 1$ BAGPIPES attenuates stars
-# younger than `t_bc` by an extra $(\eta - 1) A_V$, mapped to `tau_bc` $= (\eta - 1)\,\tau_V$.
+# $\τ_V = A_V \ln 10 / 2.5$ on the whole stellar continuum, which tengri reproduces with
+# `tau_diff` $= \τ_V$ and `tau_bc = 0`. With `eta` $\neq 1$ BAGPIPES attenuates stars
+# younger than `t_bc` by an extra $(\eta - 1) A_V$, mapped to `tau_bc` $= (\eta - 1)\,\τ_V$.
 
 # %%
 from tengri.components.dust.two_component import DustSEDComponentConfig
@@ -1386,7 +1386,7 @@ caveat(
 # ### $A_V$, curve family and `eta`
 #
 # Calzetti $A_V \in \{0.3, 1, 3\}$, power-law slopes $n \in \{0.5, 0.7, 1\}$ (Charlot & Fall 2000, $\eta = 1$),
-# Salim $(\delta, B)$ pairs and Cardelli, with the nebular block on and the fiducial history, shown to 2.5 µm (the infrared emission BAGPIPES adds at longer
+# Salim $(\delta, B)$ pairs and Cardelli, with the nebular block on and the fiducial history, shown to 2.5 μm (the infrared emission BAGPIPES adds at longer
 # wavelengths is compared in §8).
 
 # %%
@@ -1675,7 +1675,7 @@ caveat(
 # Absorbed stellar light is re-emitted through Draine & Li (2007) templates with parameters
 # $(q_{\rm PAH}, U_{\min}, \gamma)$. tengri conserves energy by construction: the printed
 # $L_{\rm IR}$ equals $L_{\rm abs}$. The sweep varies each parameter around the fiducial with the nebular
-# block on in both codes, and the band ratios use the thirteen bands of the helper's IR ladder, 3.4-863 µm.
+# block on in both codes, and the band ratios use the thirteen bands of the helper's IR ladder, 3.4–863 μm.
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -3062,7 +3062,7 @@ caveat(
 #
 # tengri configured as above, overlaid on BAGPIPES's full output at the fiducial parameters. The residual panel
 # is sized to the continuum claim, and emission lines fall outside it; the optical normalization is the median
-# of tengri/BAGPIPES over 1000-10000 Å with its 16-84 % spread.
+# of tengri/BAGPIPES over 1000–10000 Å with its 16–84 % spread.
 
 # %%
 import chex

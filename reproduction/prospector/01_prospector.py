@@ -858,10 +858,10 @@ save_fig("prospector_02e_sfh_ift_field.png")
 #
 # Stellar SED from τ-delayed SFH convolved with MIST+MILES SSPs, with no dust
 # or nebular. The printed optical ratio matches to unity to ≤0.2%: both engines
-# use the same dense convolution. Two historical offsets were fixed: the DSPS
-# age-weight handoff lost 3.8% of the oldest mass (+1.2% optical bias; fixed
-# #964), and the repackaged grid's FSPS-native L⊙ units were converted with the
-# IAU constant (0.29%; rescaled at SSP load, #969).
+# use the same dense convolution. Two offsets are corrected in this path: the DSPS
+# age-weight handoff lost 3.8% of the oldest mass (+1.2% optical bias), and the
+# repackaged grid's FSPS-native L⊙ units are converted with the IAU constant
+# (0.29%, rescaled at SSP load).
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0, add_neb_emission=True, gas_logu=-2.0, gas_logz=0.0)
@@ -1861,7 +1861,7 @@ save_fig("prospector_08b_neb_logu_logz.png")
 # interpolates the same FSPS CLUMPY template library
 # (`Nenkova08_y010_torusg_n10_q2.0`) with a differentiable triweight kernel in
 # `agn_tau` (a fitted parameter, not frozen). At matched bolometric luminosity
-# both trace the same templates: mid-IR peak and 10 µm silicate feature
+# both trace the same templates: mid-IR peak and 10 μm silicate feature
 # coincide.
 
 # %% [markdown]
@@ -1959,7 +1959,7 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 #
 # The peak wavelength agrees to the printed digit from `agn_tau = 30` upward.
 # What remains is a trend with optical depth rather than a normalization
-# offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30-80, and falls
+# offset: tengri is 1.32× at `agn_tau = 5`, crosses unity near 30–80, and falls
 # to 0.95× at 150. An optically thin clumpy torus distributes its emission over
 # fewer, hotter sightlines, and the two codes integrate that geometry
 # differently. The disagreement is in the shape, not in the energy budget.
@@ -2221,12 +2221,12 @@ plt.show()
 # |---|---|---|---|---|
 # | SFH families | §2 cont'd | 8 | 17.3 % of peak | SFR(t), 2–95 % of age (sfh=4 τ=0.3, age=1) |
 # | logzsol | §3b | 4 | 0.996× | UV-to-NIR bands |
-# | Dust types | §4b | 11 | 1.21× (WG00) | A(λ)/A_V, 1216-10000 Å |
+# | Dust types | §4b | 11 | 1.21× (WG00) | A(λ)/A_V, 1216–10000 Å |
 # | A_V + birth cloud | §5b | 5 | 0.78× (birth cloud) | UV-to-NIR bands |
-# | DL07 grid | §6b | 4 | 0.89× | broadband, 3.4-863 µm |
+# | DL07 grid | §6b | 4 | 0.89× | broadband, 3.4–863 μm |
 # | gas_logU × gas_logZ | §8b | 9 | 0.45× ([O III]/Hβ) | line ratios to Hβ |
 # | agn_tau | §9b | 5 | 1.32×→0.95× with optical depth | mid/far-IR bands |
-# | IGM z sweep | §12b | 4 | 1.035× | T(λ), 850-1216 Å |
+# | IGM z sweep | §12b | 4 | 1.035× | T(λ), 850–1216 Å |
 #
 # At matched parameters, FSPS-via-Prospector and tengri agree wherever they
 # evaluate the same mathematics: the SSP grid, the SFH shape, the attenuation

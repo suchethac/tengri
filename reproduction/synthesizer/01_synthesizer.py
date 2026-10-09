@@ -522,7 +522,7 @@ _law_pairs = [
 # both read the same `dust_extinction` grain tables, so agreement is
 # near-exact. `MWN18` (fixed Milky Way curve) against `narayanan_z` at
 # z = 0, 2, 6 — tengri's law evolves with redshift while Synthesizer's does not,
-# so the residual grows with z by construction, reaching 2× at 0.1 µm (far-UV)
+# so the residual grows with z by construction, reaching 2× at 0.1 μm (far-UV)
 # at z = 0 while all other cases stay within ±10 %. `ParametricLi08` against
 # `li08`, both at a Calzetti-like node — independent parameterizations of
 # the same functional family. `Calzetti2000(ampl=...)` against `noll09` at
@@ -658,7 +658,7 @@ save_fig("synthesizer_05_dust_applied.png")
 # Synthesizer re-emits absorbed stellar UV/optical through Draine & Li (2007)
 # templates, enforcing energy balance internally. tengri uses the same DL07
 # grid with the same energy-balance constraint. Isolated dust IR emission at
-# matched `(q_PAH, U_min)` — both peak near ~140 µm for `U_min = 1`.
+# matched `(q_PAH, U_min)` — both peak near ~140 μm for `U_min = 1`.
 
 # %%
 QPAH_FRAC = 0.025  # Synthesizer fraction; ≈ tengri qpah = 2.5
@@ -2140,7 +2140,7 @@ print(
 # ### §12b z sweep
 #
 # Inoue+2014 and Madau+1995 at z = 2, 3, 5, 7, each evaluated on a shared
-# rest-frame grid (700-1300 Å, mapped through `(1+z)` to the observed frame
+# rest-frame grid (700–1300 Å, mapped through `(1+z)` to the observed frame
 # per model) so every redshift reads on one axis. Both codes agree on
 # Inoue+2014 to numerical precision at every z. The Madau+1995 curves differ
 # only at the Lyman-series edges: tengri places each line at its vacuum wavelength
