@@ -49,7 +49,7 @@ If you keep the same scouts for too many rounds, they become **stale**: the pin 
 
 ## The Default Strategy
 
-When you call `fitter.run("vi")` (the default), this is what happens internally:
+When you call `fitter.run("vi")`, this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   ← fresh curved scouts (establish)
@@ -77,7 +77,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 
 ```python
 # Just works. Uses the optimal schedule internally.
-# vi (NIFTy geoVI) is the default.
+# vi (NIFTy geoVI); the Fitter.run default is mcmc_nuts_fast.
 result = fitter.run("vi", n_iterations=15)
 ```
 

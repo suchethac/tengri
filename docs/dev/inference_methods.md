@@ -45,7 +45,7 @@ tengri provides five families of inference methods to explore this posterior:
 |--------|-----------------|----------------------|---------------|----------|
 | **MAP** | `map` | — | Point estimate | Initialization, quick look |
 | **Variational (linear)** | `vi_linear` | `mgvi`, `native_mgvi`, `fast_mgvi`, `nifty_mgvi` | Approximate Gaussian | Very high D (>10^5), speed |
-| **Variational (nonlinear)** | `vi` (default) | `native_geovi`, `geovi`, `fast_geovi`, `native_evi`, `evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
+| **Variational (nonlinear)** | `vi` | `native_geovi`, `geovi`, `fast_geovi`, `native_evi`, `evi`, `nifty_geovi` | Non-Gaussian VI | Most problems |
 | **Hybrid** | `vi` → `.refine("mcmc_nuts")` | `geovi_nuts`, `mgvi_nuts` | VI optimization + MCMC samples | Best of both worlds |
 | **MCMC (high-D)** | `mcmc_raytrace` | `raytrace` | Exact posterior | Validation, high-D |
 | **MCMC (low-D)** | `mcmc_nuts` | `nuts` | Exact posterior | Gold standard, D ≤ 30 |
@@ -594,7 +594,7 @@ adjustment cannot fully compensate. The KL value plateaus or slowly drifts.
 The optimal strategy combines both: deterministic refinement (update) for stability,
 with periodic fresh samples (resample) to prevent staleness.
 
-When you call `fitter.run("vi")` (the default), this is what happens internally:
+When you call `fitter.run("vi")`, this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   <-- fresh curved scouts (establish)
@@ -1549,11 +1549,11 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ```
 Need a point estimate?          --> fitter.run("map")
-Need speed, D < 50?             --> fitter.run("native_geovi")   (default)
+Need speed, D < 50?             --> fitter.run("native_geovi")
 Need speed, D > 1000?           --> fitter.run("native_mgvi")
 Need accuracy, D < 20?          --> fitter.run("nuts")
 Need accuracy, D > 20?          --> fitter.run("raytrace")
-Need speed + accuracy?          --> fitter.run("native_geovi")   (default, nonlinear draws)
+Need speed + accuracy?          --> fitter.run("native_geovi")   (nonlinear draws)
 Need exact samples + speed?     --> fitter.run("geovi_nuts")
 Catalog of 100+ galaxies?       --> fitter.compile(); fitter.fit_batch(galaxies)
 Hierarchical (shared PSD)?      --> hfitter.run("native_geovi")

@@ -12752,7 +12752,7 @@ class SEDModel:
         noise : array, optional
             1-sigma uncertainties matching ``data``.
         method : str
-            Inference method. Default ``"vi"`` (geoVI variational inference).
+            Inference method. Default ``"mcmc_nuts_fast"`` (four NUTS chains).
             Any canonical name accepted by ``Fitter.run()`` works here:
             ``"vi"``, ``"vi_linear"``, ``"mcmc"``, ``"mcmc_raytrace"``,
             ``"mcmc_nuts"``, ``"map"``, ``"laplace"``, ``"auto"``, etc.

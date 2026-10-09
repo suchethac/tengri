@@ -108,7 +108,10 @@ apply_igm = true
 # ─────────────────────────────────────────────────────────────────────────────
 
 [inference]
-# Default method for model.fit() and fitter.run()
+# Default method for the module-level fit_model() when its method argument is
+# omitted. Fitter.run(), ForwardModel.fit() and SEDModel.fit() default to
+# DEFAULT_METHOD = "mcmc_nuts_fast" (tengri.inference._backend_registry), not to
+# this value.
 #
 # Run `tengri.list_inference_methods()` for the live list — it is generated
 # from the backend registry and cannot go stale. Four of the fifteen names
@@ -123,8 +126,8 @@ apply_igm = true
 #           "mcmc" | "mcmc_ess" | "map" | "laplace" | "nss"
 #
 # "auto" dispatch (controlled by mcmc_auto_d below):
-#   D <= mcmc_auto_d → "mcmc_nuts"    (exact NUTS, good for low-D models)
-#   D >  mcmc_auto_d → "vi"           (NIFTy geoVI, fast for high-D)
+#   D <= mcmc_auto_d → "mcmc_nuts"        (exact NUTS, good for low-D models)
+#   D >  mcmc_auto_d → "vi_nonlinear_fast" (NIFTy geoVI, fast for high-D)
 method = "auto"
 
 # "auto" dimensionality threshold:

@@ -38,6 +38,14 @@
 
 ### Fixed
 
+- The inference docstrings and the `[inference]` config comment state the real defaults: `Fitter.run`, `fit_batch`, `ForwardModel.fit` and `SEDModel.fit` default to `mcmc_nuts_fast`, not `vi`, and the `method` key in `defaults.toml` is the default of the module-level `fit_model` only (`"auto"`, which dispatches on dimension). Documentation pages that named geoVI as the default now say so only where it is the method being described (#2340).
+
+- The Cue nebular emulator is described as trained on Cloudy 22.00 in the anatomy and menu notebooks and the ProSpect-R reproduction, where they said Cloudy 17.03 / 17.
+
+- CLOUDY grids converted from FSPS record the isochrone's solar metallicity. `scripts/convert_fsps_cloudy_grid.py` writes the root attribute `zsun` (MIST 0.0142, PARSEC 0.01524, Padova 0.019, BPASS and others 0.020) and describes the `log_met` axes as log10(Z / Z_sun). `load_cloudy_grid` converts the axis with that value; a file without the attribute is read with the MIST value and warns once, naming the file. Grid files already shipped are unchanged and keep the MIST conversion (#2633).
+
+- The reproduction band average (`reproduction/_validation.py::band_average`, and through it `filter_rows`, `filter_rows_native` and `convention_sensitivity`) integrates on the spectrum's own nodes with the filter interpolated onto them, zero outside its support, instead of sampling the spectrum at the filter's coarse nodes. Emission lines now contribute their flux rather than aliasing against the filter's 25 Angstrom spacing: a 1 Angstrom line between two SDSS nodes was missed entirely. `integrate="filter"` remains as an explicit opt-in that reproduces the old numbers. Band tables in the reproduction notebooks and `validate_matched_physics.py` scripts move where they carry emission lines (#2680).
+
 - A dust-free model whose nebular photometry is served by the `FeaturePrecomp` grid takes the IGM over each emission line's rendered profile and over the continuum's sub-band chunks, where it took the band-averaged transmission. With Ly-alpha inside a band that read 20-32 % bright against `approx=None` (Cue at its defaults, z = 5.75-9.5, NIRCam F090W/F115W); now 0.08 % worst in F090W over z = 5.5-7.0 and 0.15 % in F115W over z = 7.75-9.25, at fixed and free redshift.
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 

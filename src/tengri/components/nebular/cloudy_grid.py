@@ -195,15 +195,43 @@ class CloudyGridData(NamedTuple):
     cont_log_U: jnp.ndarray  # (n_logU,) shared with lines
 
 
+_ZSUN_FALLBACK: float = 0.0142  # MIST solar metallicity, for files written without ``zsun``
+_ZSUN_WARNED: set[str] = set()  # files already warned about, so each warns once
+
+
+def _log10_zsun(f: h5py.File, filepath: str) -> float:
+    """Return log10 of the Z_sun that a grid file's ``log_met`` axes are relative to.
+
+    The root ``zsun`` attribute is authoritative: the converter writes the
+    isochrone's own solar metallicity. A file without it is read as the MIST
+    value (0.0142) and a warning naming the file is emitted once per file.
+    """
+    if "zsun" in f.attrs:
+        return float(np.log10(float(f.attrs["zsun"])))
+    if filepath not in _ZSUN_WARNED:
+        _ZSUN_WARNED.add(filepath)
+        warnings.warn(
+            f"{filepath}: no 'zsun' attribute; assuming Z_sun = {_ZSUN_FALLBACK} "
+            "(MIST). Regenerate the grid with scripts/convert_fsps_cloudy_grid.py "
+            "to record the isochrone's own Z_sun.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return _LOG10_ZSUN
+
+
 def load_cloudy_grid(filepath: str) -> CloudyGridData:
     """Load a tengri-format CLOUDY grid HDF5 file.
 
     Following FSPS convention, stores luminosities in log10 space
     for interpolation accuracy. A floor of 10^{-95} prevents log(0).
 
-    Metallicity axes are converted from log10(Z/Zsun) (FSPS convention
+    Metallicity axes are converted from log10(Z/Z_sun) (FSPS convention
     in the HDF5 file) to absolute log10(Z) at load time, matching the
-    SSP metallicity grid convention used by DSPS.
+    SSP metallicity grid convention used by DSPS. The Z_sun is the root
+    ``zsun`` attribute written by ``scripts/convert_fsps_cloudy_grid.py``
+    (it depends on the isochrone). A file without the attribute is read
+    with Z_sun = 0.0142 and a one-time warning naming the file.
 
     Parameters
     ----------
@@ -232,8 +260,9 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
         cont_lum_log = np.log10(cont_lum_raw + _LOG_FLOOR)
 
         # Convert metallicity from log10(Z/Zsun) → absolute log10(Z)
-        line_log_met_abs = np.array(f["lines/axes/log_met"][:]) + _LOG10_ZSUN
-        cont_log_met_abs = np.array(f["continuum/axes/log_met"][:]) + _LOG10_ZSUN
+        log10_zsun = _log10_zsun(f, filepath)
+        line_log_met_abs = np.array(f["lines/axes/log_met"][:]) + log10_zsun
+        cont_log_met_abs = np.array(f["continuum/axes/log_met"][:]) + log10_zsun
 
         return CloudyGridData(
             line_wavelengths=jnp.array(f["lines/wavelength"][:]),
