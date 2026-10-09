@@ -545,7 +545,12 @@ def project_spectrum_kernel_split(
            Redshift z ~ 3: Survey Description and Full Data Set."
            ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
-    from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
+    from tengri.observation.spectrum import (
+        broaden_velocity_only,
+        broaden_velocity_only_window,
+        project_spectrum,
+        rest_grid_observed_window,
+    )
 
     # A photoionized backend publishes ``lyc_transmission`` whenever it masked
     # the Lyman continuum, so the SED is a step at the Lyman edge: read the
@@ -651,7 +656,17 @@ def project_spectrum_kernel_split(
         sed_stellar_rest, sed_instrument_only_rest = (
             _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
+        # with a concrete redshift and grids, broaden the rest-frame window the observed
+        # range maps into, leaving the rest unbroadened. A traced redshift or grid keeps
+        # the full-grid pass.
+        window = rest_grid_observed_window(wave_rest, wave_obs, redshift)
+        if window is None:
+            sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        else:
+            sed_stellar_v = broaden_velocity_only_window(
+                sed_stellar_rest, wave_rest, sigma_v_kms, n_bins, *window
+            )
         sed_stellar = sed_stellar_v * igm_trans
         sed_instrument_only = sed_instrument_only_rest * igm_trans
 
