@@ -128,6 +128,44 @@ _MM83_C2 = host_array(
 )
 
 
+def wabs_cross_section(E_keV: jnp.ndarray) -> jnp.ndarray:
+    r"""Morrison & McCammon (1983) photoelectric cross-section per hydrogen atom.
+
+    .. math::
+
+        \sigma(E) = (c_0 + c_1 E + c_2 E^2)\,E^{-3} \times 10^{-24}\ {\rm cm^2}
+
+    with :math:`E` in keV and the coefficients of Table 2 for the segment containing
+    :math:`E` (0.03 to 10 keV). Above 10 keV the last segment is extrapolated.
+
+    Parameters
+    ----------
+    E_keV : array_like, shape (n,)
+        Photon energy [keV], at least 0.03.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        :math:`\sigma` [cm^2].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The table is checked against two independent public
+    implementations in ``tests/regression/bug/test_bug_2760_*``.
+
+    References
+    ----------
+    .. [1] R. Morrison and D. McCammon, ApJ, 270, 119 (1983), Table 2.
+       https://doi.org/10.1086/161102
+    """
+    E = jnp.asarray(E_keV)
+    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E, side="right") - 1, 0, 13)
+    c0 = jnp.take(device_table(_MM83_C0), idx)
+    c1 = jnp.take(device_table(_MM83_C1), idx)
+    c2 = jnp.take(device_table(_MM83_C2), idx)
+    return (c0 + c1 * E + c2 * E**2) / jnp.maximum(E, 1e-30) ** 3 * 1e-24
+
+
 def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     r"""Photoelectric absorption transmission ``T(E) = exp(−σ(E)·N_H)``.
 
@@ -189,15 +227,7 @@ def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     # T → 1 naturally). A hard upper cutoff would create a spurious
     # discontinuity at exactly E = 10 keV under floating round-trip.
     in_range = E >= 0.030
-
-    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E, side="right") - 1, 0, 13)
-    c0 = jnp.take(device_table(_MM83_C0), idx)
-    c1 = jnp.take(device_table(_MM83_C1), idx)
-    c2 = jnp.take(device_table(_MM83_C2), idx)
-    sigma_e3 = c0 + c1 * E + c2 * E**2  # 10⁻²⁴ cm² · keV³
-    sigma = sigma_e3 / jnp.maximum(E, 1e-30) ** 3 * 1e-24  # cm²
-
-    tau = sigma * 10.0**log_nh
+    tau = wabs_cross_section(E) * 10.0**log_nh
     return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
 
 

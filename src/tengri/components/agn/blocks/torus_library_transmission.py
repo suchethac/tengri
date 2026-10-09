@@ -50,8 +50,8 @@ torus without a disc column (the SKIRTOR v2 grid).
 Where the library's face-on disc is zero (the long-wavelength tail) there is no library
 sightline: the transmission is unity and the disc factor is :math:`2\cos i`.
 
-Below the library's shortest tabulated wavelength (10 A for both libraries) the ratio is held
-at its value at that edge.
+Below the library's shortest tabulated wavelength (10 A for both libraries) the X-rays are
+photoelectrically absorbed (see :func:`library_torus_sightline`).
 """
 
 from __future__ import annotations
@@ -71,9 +71,18 @@ from tengri.components.agn.skirtor import (
     SKIRTORDiscAttenGrid,
     load_skirtor_disc_atten_grid,
 )
+from tengri.components.xray.xray import wabs_cross_section
 from tengri.config.exceptions import TengriIOError
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import HC_KEV_ANGSTROM
+from tengri.utils.scale import representable_floor
+
+#: Hydrogen column per magnitude of V-band extinction [cm^-2 mag^-1] (Guver & Ozel 2009).
+NH_PER_AV = 2.21e21
+
+#: V-band wavelength [Angstrom] at which the sightline's own extinction is read.
+_V_WAVE = 5500.0
 
 #: Upper clip of a line-of-sight ratio.
 _RATIO_CLIP = 1.5
@@ -304,14 +313,14 @@ def _fritz_disk_grid(library) -> FritzGrid | None:
     return grid if grid.disk is not None else None
 
 
-def library_torus_sightline(
+def _library_sightline(
     torus_block: str,
     wavelength,
     *,
     cos_inc: float,
     params: dict,
     library=None,
-) -> LibrarySightline | None:
+) -> tuple[LibrarySightline, float] | None:
     r"""The library's normalized line of sight, as the transmission and the disc factor.
 
     Parameters
@@ -350,6 +359,7 @@ def library_torus_sightline(
         grid = _skirtor_disc_grid(library)
         if grid is None:
             return None
+        wave_min = jnp.asarray(grid.wave_grid)[0]
         ratio, live = skirtor_line_of_sight_ratio(
             grid,
             wavelength,
@@ -366,6 +376,7 @@ def library_torus_sightline(
         fgrid = _fritz_disk_grid(library)
         if fgrid is None:
             return None
+        wave_min = jnp.asarray(fgrid.wave_grid)[0]
         ratio, live = fritz_line_of_sight_ratio(
             fgrid,
             wavelength,
@@ -385,7 +396,79 @@ def library_torus_sightline(
         transmission=jnp.where(live, transmission, 1.0),
         disc_factor=jnp.where(live, disc_factor, 2.0 * c),
     )
-    return sight
+    return sight, wave_min
+
+
+def library_torus_sightline(
+    torus_block: str,
+    wavelength,
+    *,
+    cos_inc: float,
+    params: dict,
+    library=None,
+) -> LibrarySightline | None:
+    r"""The library's line of sight with X-rays photoelectrically absorbed below its grid.
+
+    Parameters
+    ----------
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    cos_inc : float
+        Cosine of the inclination from the polar axis; 1 = face-on.
+    params : dict
+        The runner's parameter dict (torus geometry and grid coordinates).
+    library : SKIRTORBundle or FritzGrid, optional
+        The torus's pre-loaded template library, threaded through JIT as an
+        argument so its disc column and ``norm`` are not baked into the graph. When
+        omitted, the packaged library is read from its cached loader.
+
+    Returns
+    -------
+    LibrarySightline or None
+        ``None`` when the torus has no library disc column (SKIRTOR v2 grid) or is not a
+        library torus, so the caller keeps the analytic screen.
+
+    Notes
+    -----
+    Implements :math:`T = R_n/\eta` and :math:`2\cos i\,R_n/\eta` of the module
+    docstring; the library is read as in CIGALE's ``skirtor2016`` and ``fritz2006``
+    (Boquien et al. 2019, A&A 622, A103), with the per-record ``norm`` of the library files.
+
+    Below the library's shortest wavelength (10 A, 1.24 keV) the transmission is
+    :math:`\exp(-\sigma(E)\,N_{\rm H})` with the Morrison & McCammon (1983) cross-section
+    :math:`\sigma` (:func:`~tengri.components.xray.xray.wabs_cross_section`; above 10 keV the
+    last segment is extrapolated), the column :math:`N_{\rm H} = 2.21\times10^{21}\,{\rm
+    cm^{-2}}\,A_V` (Guver & Ozel 2009, MNRAS, 400, 2050) and
+    :math:`A_V = -2.5\log_{10} T(5500\,\mathrm{\AA})` from this sightline's own :math:`T`,
+    floored at zero (a Type-1 :math:`T > 1` has no column). The disc factor there is
+    :math:`2\cos i` times that transmission.
+
+    **JIT-compatible**: yes. **Gradient-safe**: yes in float32 as well; the ratio is the
+    exponential of a difference of logarithms, and ``disc_factor`` has no quotient by
+    :math:`\eta`.
+    """
+    wave = jnp.asarray(wavelength)
+    extended = jnp.concatenate([wave, jnp.full((1,), _V_WAVE, dtype=wave.dtype)])
+    found = _library_sightline(
+        torus_block, extended, cos_inc=cos_inc, params=params, library=library
+    )
+    if found is None:
+        return None
+    sight, wave_min = found
+    a_v_raw = -2.5 * jnp.log10(jnp.maximum(sight.transmission[-1], representable_floor(1.0e-30)))
+    a_v = jnp.where(a_v_raw > 0.0, a_v_raw, 0.0)
+    n_h = NH_PER_AV * a_v
+    below = wave < wave_min
+    energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
+    t_x = jnp.exp(-wabs_cross_section(energy) * n_h)
+    c = jnp.asarray(cos_inc)
+    return LibrarySightline(
+        ratio=sight.ratio[:-1],
+        transmission=jnp.where(below, t_x, sight.transmission[:-1]),
+        disc_factor=jnp.where(below, 2.0 * c * t_x, sight.disc_factor[:-1]),
+    )
 
 
 def library_torus_transmission(

@@ -49,6 +49,9 @@ from tengri.components.dust.attenuation import smc
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
+from tests.regression.bug.test_bug_2760_torus_screen_is_library_sightline import (
+    mm83_below_edge_reference,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -304,8 +307,10 @@ def _library_transmission(wave_aa, i_deg):
     oa = 40, R = 20), node-exact PCHIP in the logarithms, a power law between library nodes and
     held at the library's 10 A edge below its grid; ``T = R_n / eta`` with
     ``eta = c (1 + 2c)/3`` and ``c`` floored at cos 85 deg by a softplus of width 0.01 (so the
-    edge-on value is finite). Where the face-on disc is absent, ``T = 1``. This replaces the
-    previous logistic Type-1/Type-2 blend ``T = R exp((w2 - 1) ln R)``, which had no ``norm``.
+    edge-on value is finite). Where the face-on disc is absent, ``T = 1``. Below the library's
+    10 A edge: Morrison & McCammon (1983) absorption of the column 2.21e21 A_V (A_V from T at
+    V). This replaces the previous logistic Type-1/Type-2 blend ``T = R exp((w2 - 1) ln R)``,
+    which had no ``norm``.
     """
     axes, wave_native, log_disk, log_norm = _library_logs()
     cos = _COS[i_deg]
@@ -325,7 +330,11 @@ def _library_transmission(wave_aa, i_deg):
     ratio = np.minimum(np.exp(drift_q), 1.5)
     c_eff = 0.0871557427476582 + 0.01 * np.logaddexp(0.0, (cos - 0.0871557427476582) / 0.01)
     eta = c_eff * (1.0 + 2.0 * c_eff) / 3.0
-    return np.where(live_q, ratio / eta, 1.0)
+    t_lib = np.where(live_q, ratio / eta, 1.0)
+    if np.min(wave_aa) >= wave_native[0]:
+        return t_lib
+    t_v = float(_library_transmission(np.array([5500.0]), i_deg)[0])
+    return mm83_below_edge_reference(wave_aa, wave_native[0], t_v, t_lib)
 
 
 # ----------------------------------------------------------------------------------

@@ -309,3 +309,120 @@ def test_cos_law_disc_set_matches_the_blocks_response_to_inclination():
         if np.all(half > 0.0) and np.allclose(full / half, 2.0, rtol=1e-2):
             carries_law.add(name)
     assert carries_law == set(_COS_LAW_DISC_BLOCKS)
+
+
+# ----------------------------------------------------------------------------------
+# X-rays: Morrison & McCammon (1983) photoelectric absorption, N_H from the library's A_V
+# ----------------------------------------------------------------------------------
+# Table 2 of Morrison & McCammon (1983, ApJ 270, 119) as published in two independent public
+# implementations, which agree on all 42 coefficients and 15 edges: SOXS
+# (lynx-x-ray-observatory/soxs, soxs/spectra/foreground_absorption.py, ``wabs_cross_section``)
+# and cgm_toolkit (ethlau/cgm_toolkit, cgm_toolkit/xray_emissivity.py, ``wabs``). A third
+# transcription (jracusin/Judy-code, idl.lib/grbs/wabs.pro) prints c2 = -476.0 for the
+# 0.1 to 0.284 keV segment, against -476.1 in both of the above and in this repository.
+_MM83_EDGES = np.array(
+    [
+        0.03,
+        0.1,
+        0.284,
+        0.4,
+        0.532,
+        0.707,
+        0.867,
+        1.303,
+        1.84,
+        2.471,
+        3.21,
+        4.038,
+        7.111,
+        8.331,
+        10.0,
+    ]
+)
+_MM83_C0 = np.array(
+    [17.3, 34.6, 78.1, 71.4, 95.5, 308.9, 120.6, 141.3, 202.7, 342.7, 352.2, 433.9, 629.0, 701.2]
+)
+_MM83_C1 = np.array(
+    [608.1, 267.9, 18.8, 66.8, 145.8, -380.6, 169.3, 146.8, 104.7, 18.7, 18.7, -2.4, 30.9, 25.2]
+)
+_MM83_C2 = np.array(
+    [-2150.0, -476.1, 4.3, -51.4, -61.1, 294.0, -47.7, -31.5, -17.0, 0.0, 0.0, 0.75, 0.0, 0.0]
+)
+_HC_KEV_AA = 12.39841984
+_NH_PER_AV = 2.21e21  # [cm^-2 mag^-1] Guver & Ozel 2009
+_XRAY_WAVE = np.array([_HC_KEV_AA / 2.0, _HC_KEV_AA / 5.0, _HC_KEV_AA / 9.0])  # 2, 5, 9 keV
+
+
+def _sigma_mm83(energy_kev):
+    """Cross-section [cm^2] from the table above; the last segment extends beyond 10 keV."""
+    e = np.asarray(energy_kev, dtype=float)
+    k = np.clip(np.searchsorted(_MM83_EDGES, e, side="right") - 1, 0, 13)
+    return (_MM83_C0[k] + _MM83_C1[k] * e + _MM83_C2[k] * e**2) / e**3 * 1e-24
+
+
+def mm83_below_edge_reference(wave_aa, edge_aa, t_v, library_value):
+    """``library_value`` above ``edge_aa``; below it exp(-sigma N_H), N_H = 2.21e21 A_V cm^-2.
+
+    ``A_V = -2.5 log10 t_v`` floored at zero; ``sigma`` is the Morrison & McCammon (1983)
+    table of this file.
+    """
+    w = np.asarray(wave_aa, float)
+    below = w < edge_aa
+    a_v = max(-2.5 * np.log10(max(t_v, 1e-30)), 0.0)
+    t_x = np.exp(-_sigma_mm83(_HC_KEV_AA / np.where(below, w, 1.0)) * _NH_PER_AV * a_v)
+    return np.where(below, t_x, library_value)
+
+
+def test_mm83_table_matches_the_two_public_implementations():
+    from tengri.components.xray.xray import wabs_cross_section
+
+    mid = 0.5 * (_MM83_EDGES[:-1] + _MM83_EDGES[1:])
+    energies = np.concatenate([mid, _MM83_EDGES[1:-1] * 1.0001, [12.0, 30.0]])
+    got = np.asarray(wabs_cross_section(jnp.asarray(energies)))
+    np.testing.assert_allclose(got, _sigma_mm83(energies), rtol=1e-12)
+
+
+def _type2_sightline(wave, i_deg=75.0, torus="skirtor"):
+    params = _SKIRTOR_PARAMS if torus == "skirtor" else {"agn_fritz_oa": 20.0}
+    return library_torus_sightline(
+        torus, jnp.asarray(wave), cos_inc=float(np.cos(np.radians(i_deg))), params=params
+    )
+
+
+@pytest.mark.parametrize("torus", ["skirtor", "fritz"])
+def test_type2_xray_transmission_is_photoelectric_absorption_of_the_library_column(torus):
+    """exp(-sigma N_H) with N_H = 2.21e21 A_V and A_V = -2.5 log10 T(5500 A), to 1e-6.
+
+    The X-rays are less absorbed than the optical (T_X > T_V) and absorbed (T_X < 1).
+    """
+    i_deg = 75.0 if torus == "skirtor" else 80.0
+    sight = _type2_sightline(_XRAY_WAVE, i_deg, torus)
+    t_v = float(_type2_sightline([_V_WAVE], i_deg, torus).transmission[0])
+    a_v = -2.5 * np.log10(t_v)
+    expected = np.exp(-_sigma_mm83(_HC_KEV_AA / _XRAY_WAVE) * _NH_PER_AV * a_v)
+    np.testing.assert_allclose(np.asarray(sight.transmission), expected, rtol=1e-6)
+    assert np.all(np.asarray(sight.transmission) < 1.0)
+    assert np.all(np.asarray(sight.transmission) > t_v)
+    np.testing.assert_allclose(
+        np.asarray(sight.disc_factor),
+        2.0 * np.cos(np.radians(i_deg)) * np.asarray(sight.transmission),
+        rtol=1e-12,
+    )
+
+
+def test_type1_sightline_has_no_xray_column():
+    sight = library_torus_sightline(
+        "skirtor", jnp.asarray(_XRAY_WAVE), cos_inc=1.0, params=_SKIRTOR_PARAMS
+    )
+    np.testing.assert_allclose(np.asarray(sight.transmission), 1.0, atol=1e-12)
+
+
+def test_xray_transmission_gradient_wrt_inclination_is_finite_and_nonzero():
+    def t_x(cos_inc):
+        return library_torus_sightline(
+            "skirtor", jnp.asarray(_XRAY_WAVE), cos_inc=cos_inc, params=_SKIRTOR_PARAMS
+        ).transmission[0]
+
+    g = jax.grad(t_x)(jnp.asarray(float(np.cos(np.radians(75.0)))))
+    assert np.isfinite(float(g))
+    assert float(g) != 0.0

@@ -28,6 +28,9 @@ from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.components.agn import disc as disc_module
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.utils.physics_constants import C_AA, L_SUN
+from tests.regression.bug.test_bug_2760_torus_screen_is_library_sightline import (
+    mm83_below_edge_reference,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -336,7 +339,11 @@ def _library_transmission_30deg(wave_aa, oa=40.0, tau=7.0):
     ratio = np.minimum(np.exp(np.interp(held, np.log(wave), drift)), 1.5)
     live_q = np.interp(held, np.log(wave), live) > 0.5
     eta = cos * (1.0 + 2.0 * cos) / 3.0
-    return np.where(live_q, ratio / eta, 1.0)
+    t_lib = np.where(live_q, ratio / eta, 1.0)
+    if np.min(wave_aa) >= wave[0]:
+        return t_lib
+    t_v = float(_library_transmission_30deg(np.array([5500.0]), oa, tau)[0])
+    return mm83_below_edge_reference(wave_aa, wave[0], t_v, t_lib)
 
 
 def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
