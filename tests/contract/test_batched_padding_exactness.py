@@ -11,10 +11,10 @@ The oracle does not depend on the padding rule. For each combination the
 padding is forced through (no template, so no refusal), and the real-pixel
 error is measured. Then:
 
-* if the forced error is at most 1e-12 of the peak, the template-checked build
+* if the forced error is at most 1e-10 of the peak, the template-checked build
   must succeed and match;
 * otherwise the template-checked build must raise ``ValueError`` naming the
-  padding, which is only correct if the forced error is above 1e-12.
+  padding, which is only correct if the forced error is above 1e-10.
 
 A combination that neither matches nor raises fails the test.
 """
@@ -35,7 +35,9 @@ from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
 
 pytestmark = pytest.mark.contract
 
-_TOL = 1e-12
+# Exact paths measure 1e-15 to 1e-12 of peak (float64 roundoff, machine dependent);
+# the smallest inexact one is 3e-7, so 1e-10 separates them with margin on both sides.
+_TOL = 1e-10
 _N_REAL = 300
 _N_MAX = 512
 _Z = 2.5
