@@ -39,7 +39,12 @@ from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_L
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import (
+    interp_nd_pchip,
+    interp_nd_triweight,
+    loglog_integral,
+    resample_template,
+)
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -479,15 +484,19 @@ def _interpolate_and_normalize(
     )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
-    # over-normalize on truncated grids; trapezoid in λ matches the
-    # download script's normalization convention.
+    # over-normalize on truncated grids.
+    #
+    # The integral is the power-law (log-log) integral of the same interpolant
+    # ``resample_template`` builds, not a trapezoid over the native nodes. A
+    # trapezoid lays chords across the convex segments, so the resampled
+    # template would lose 0.4-0.5% of ``l_scale`` (#2319); the log-log integral
+    # is exact for the interpolant, so the resampled torus carries exactly
+    # ``l_scale`` on any caller grid fine enough to resolve it.
     #
     # ``wave_grid`` is monotonically ascending (set at load time in
-    # ``_load_grid_arrays``), so trapezoid integrates correctly without
-    # an explicit ``argsort``, the prior ``trapezoid(sed[idx_sort],
-    # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
-    # *descending* and needed reordering. Don't re-add a sort here.
-    integral_lam = jnp.trapezoid(template, wave_grid)
+    # ``_load_grid_arrays``), so the integral is positive without an explicit
+    # ``argsort``. Don't re-add a sort here.
+    integral_lam = loglog_integral(wave_grid, template)
     integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
@@ -1099,7 +1108,11 @@ def skirtor_disc_dust_ratio(
     # Bring the analytic disc shape + reddening onto the native grid.
     disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
     ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
-    int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
+    # The bolometric integrals of the polar reference are the power-law integrals of the
+    # same interpolant ``resample_template`` builds, not a trapezoid over the 136 native
+    # nodes (#2322). That is the converged value: a 4000-node trapezoid of the resampled
+    # templates sits 1.5e-6 from it, and a trapezoid over the native nodes 6e-5.
+    int_disk0 = loglog_integral(wave_grid, disk_0_n)
     shape_n = disc_n / jnp.maximum(
         jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
     )
@@ -1128,8 +1141,8 @@ def skirtor_disc_dust_ratio(
     )
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
-    int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    R = jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    int_dust = jnp.maximum(loglog_integral(wave_grid, dust_i_n), 1e-30)
+    R = loglog_integral(wave_grid, sk_disk_reddened) / int_dust
     # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust, the ratio the
     # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
     # distinct from ``R`` (the reddened, inclination-weighted *observed* disc

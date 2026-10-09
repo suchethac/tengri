@@ -59,13 +59,12 @@ from typing import Any
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
+from tengri.components.agn._template_grid import BUDGET_WAVE
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
-from tengri.components.agn.grahsp.bolometric import (
-    bolometric_luminosity_bbb,
-    bolometric_luminosity_torus,
-)
+from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import (
@@ -419,42 +418,29 @@ class GRAHSPSEDComponent:
             disc_mdot=templates.disc_mdot,
         )
 
-    def apply(
+    def _sed_parts(
         self,
-        state: ForwardState,
+        wave_nm: Array,
         params: Mapping[str, Array],
-        templates_state: GRAHSPSEDComponentState | None = None,
-        ssp_data: Any | None = None,
-        template_data: Any | None = None,
-        ztable_data: Any | None = None,
-    ) -> ForwardState:
-        r"""Add GRAHSP AGN emission to ``state.sed_intrinsic``.
-
-        ``ssp_data`` is accepted for Protocol uniformity but unused: this
-        component reads only from ``state`` and ``params``.
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array, Array, Array]:
+        r"""Intrinsic and attenuated AGN :math:`L_\lambda` [erg/s/nm] on ``wave_nm``.
 
         Parameters
         ----------
-        state : ForwardState
-            ``state.wave`` is rest-frame Å.
+        wave_nm : array_like, shape (n_wave,)
+            Rest-frame wavelength [nm]. Any grid: the published bolometric luminosities
+            evaluate this on the fixed budget grid.
         params : mapping
             ``agn_grahsp_*`` keys.
-        templates_state : GRAHSPSEDComponentState, optional
-            Pre-loaded template tensors. If ``None``, a fresh bundle is
-            loaded (eager file I/O: avoid in JITed paths).
+        templates_state : GRAHSPSEDComponentState
+            Pre-loaded template tensors.
 
         Returns
         -------
-        ForwardState
-            Updated with ``sed_intrinsic`` augmented and ``derived``
-            keys ``sed_grahsp``, ``L_agn_bol``, ``L_agn_torus``.
+        tuple of ndarray, each shape (n_wave,)
+            ``(bbb_intrinsic, torus_intrinsic, bbb_total, torus_total)`` [erg/s/nm].
         """
-        if templates_state is None:
-            templates_state = self.precompute()
-
-        wave_angstrom = state.wave
-        wave_nm = wave_angstrom * 0.1
-
         cfg = self.config
         l5100 = jnp.asarray(params["agn_grahsp_l5100"])
         zeros = jnp.zeros_like(wave_nm)
@@ -603,17 +589,82 @@ class GRAHSPSEDComponent:
             bbb_total = bbb_intrinsic
             torus_total = torus_intrinsic
 
-        # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
+        return bbb_intrinsic, torus_intrinsic, bbb_total, torus_total
+
+    def _published_bolometric(
+        self,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+        dtype,
+    ) -> tuple[Array, Array, Array]:
+        r"""Published ``L_agn_bol``, ``L_agn_torus`` and ``L_agn_absorbed`` [erg/s].
+
+        Each is integrated on the fixed :data:`BUDGET_WAVE` grid, so the value depends on
+        the component's parameters alone and not on the caller's wavelength array.
+        ``L_agn_bol`` is the BBB power above the Lyman limit (intrinsic, before
+        attenuation); ``L_agn_absorbed`` is the intrinsic-minus-attenuated power.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. **Gradient-safe**: yes.
+        """
+        wave_b = jnp.asarray(BUDGET_WAVE, dtype=dtype)
+        wave_b_nm = wave_b * 0.1
+        nu_b = wavelength_to_nu(wave_b)
+        to_nu = wave_b_nm**2 / _C_NM_PER_S
+        bbb_i, torus_i, bbb_t, torus_t = self._sed_parts(wave_b_nm, params, templates_state)
+        above_lyman = wave_b_nm >= LYMAN_LIMIT_NM
+        L_bol_bbb = jnp.abs(
+            bolometric_integral_nu(jnp.where(above_lyman, bbb_i * to_nu, 0.0), nu_b)
+        )
+        L_bol_torus = jnp.abs(bolometric_integral_nu(torus_i * to_nu, nu_b))
+        L_absorbed = jnp.abs(
+            bolometric_integral_nu(((bbb_i - bbb_t) + (torus_i - torus_t)) * to_nu, nu_b)
+        )
+        return L_bol_bbb, L_bol_torus, L_absorbed
+
+    def apply(
+        self,
+        state: ForwardState,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState | None = None,
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
+        ztable_data: Any | None = None,
+    ) -> ForwardState:
+        r"""Add GRAHSP AGN emission to ``state.sed_intrinsic``.
+
+        ``ssp_data`` is accepted for Protocol uniformity but unused: this
+        component reads only from ``state`` and ``params``.
+
+        Parameters
+        ----------
+        state : ForwardState
+            ``state.wave`` is rest-frame Å.
+        params : mapping
+            ``agn_grahsp_*`` keys.
+        templates_state : GRAHSPSEDComponentState, optional
+            Pre-loaded template tensors. If ``None``, a fresh bundle is
+            loaded (eager file I/O: avoid in JITed paths).
+
+        Returns
+        -------
+        ForwardState
+            Updated with ``sed_intrinsic`` augmented and ``derived``
+            keys ``sed_grahsp``, ``L_agn_bol``, ``L_agn_torus``.
+        """
+        if templates_state is None:
+            templates_state = self.precompute()
+
+        wave_nm = state.wave * 0.1
+        _, _, bbb_total, torus_total = self._sed_parts(wave_nm, params, templates_state)
         L_lambda_total = bbb_total + torus_total
         L_nu = L_lambda_total * wave_nm**2 / _C_NM_PER_S
 
-        # Bolometric quantities (computed from L_lambda on the nm grid).
-        L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
-        L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
-        # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
-        # Reported but NOT injected into the Dale 2014 dust-emission loop;
-        # GRAHSP's torus already empirically captures dust re-radiation.
-        L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
+        # Published bolometric luminosities come from the fixed budget grid (#2745).
+        L_bol_BBB, L_bol_torus, L_agn_absorbed = self._published_bolometric(
+            params, templates_state, state.wave.dtype
+        )
 
         return state.add_intrinsic(L_nu).with_(
             derived=state.derived.with_(

@@ -38,6 +38,14 @@
 
 ### Fixed
 
+- The SKIRTOR polar absorbed fraction is the exact integral, not a 136-node trapezoid. `R` and `R_faceon` integrate the polar reference and the reddened disc and the dust with the log-log integral of the same interpolant the templates are resampled with, so they match a converged 40000-node integral to 1.9e-8 (the trapezoid was 6e-5 off). The polar `l_ext` share moves by that amount (#2322).
+
+- GRAHSP publishes `L_agn_bol`, `L_agn_torus` and `L_agn_absorbed` from the fixed budget grid instead of a trapezoid over the caller's wavelength array. On a 60-point against a 6000-point caller grid the BBB value had moved by 14 % (#2745).
+
+- The `kd18_disc` and `powerlaw_disc` components read their declared `lum_ratio`. The disc `predict` read a `frac` key that no caller supplied, so every `apply` through the component raised `KeyError: 'frac'` and the parameter could not reach the model.
+
+- AGN `L_*` diagnostics published by the `cat3d_wind`, `kd18_disc`, `powerlaw_disc`, `silva04`, `skirtor_agnfitter` and `skirtor` components are integrated on a fixed budget grid, not the caller's wavelength array, so they no longer change with how the caller samples wavelength (#2745).
+- The SKIRTOR torus is renormalized with the log-log integral of the template interpolant rather than a trapezoid over the native nodes, so the resampled torus carries its full normalized power at every inclination (0.37-0.59 % was lost before; the loss depended on inclination) (#2319).
 - A dust-free model whose nebular photometry is served by the `FeaturePrecomp` grid takes the IGM over each emission line's rendered profile and over the continuum's sub-band chunks, where it took the band-averaged transmission. With Ly-alpha inside a band that read 20-32 % bright against `approx=None` (Cue at its defaults, z = 5.75-9.5, NIRCam F090W/F115W); now 0.08 % worst in F090W over z = 5.5-7.0 and 0.15 % in F115W over z = 7.75-9.25, at fixed and free redshift.
 - `d/d(agn_cos_inc)` at the face-on endpoint (`agn_cos_inc = 1`) is finite for the generic-torus unified models: the Type-1/2 line and disc weight is the cos i sigmoid (`type1_weight`) in place of a sigmoid of `arccos(cos i)`, whose infinite slope at the pole made the gradient `+inf` (`NaN` where the SED vanished), as `cat3d_wind` showed.
 

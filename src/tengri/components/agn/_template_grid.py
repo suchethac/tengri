@@ -31,13 +31,20 @@ from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 __all__ = [
+    "BUDGET_WAVE",
     "TorusTemplateGrid",
     "analytic_bolometric_nu",
+    "budget_bolometric_nu",
     "native_bolometric_nu",
     "native_bolometric_nu_np",
     "scale_to_lbol_native",
     "torus_lnu_from_grid",
 ]
+
+#: Fixed wavelength grid [Angstrom] on which a published bolometric ``L_*`` is integrated.
+#: It spans every AGN disc, torus and graybody support (1000 log points per decade, the
+#: resolution the budgets are defined at) and never depends on the caller's wavelength array.
+BUDGET_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
 
 
 class TorusTemplateGrid(NamedTuple):
@@ -255,6 +262,39 @@ def analytic_bolometric_nu(
     """
     wave = jnp.asarray(np.geomspace(wave_lo, wave_hi, n_nodes))
     return _bolometric_integral_nu(shape_fn(wave), _wavelength_to_nu(wave), floor=floor)
+
+
+def budget_bolometric_nu(
+    sed_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    dtype=None,
+) -> jnp.ndarray:
+    r"""Bolometric power of a component's SED, integrated on the fixed :data:`BUDGET_WAVE`.
+
+    Published ``L_*`` diagnostics use this instead of a trapezoid over the caller's
+    wavelength array, so the value depends on the component's parameters alone.
+
+    Parameters
+    ----------
+    sed_fn : callable
+        Maps a rest-frame wavelength array [Angstrom], shape (n,), to the component's
+        :math:`L_\nu` [erg/s/Hz], shape (n,). It must not close over the caller's grid.
+    dtype : dtype, optional
+        Dtype of the budget grid (follow the caller's float precision).
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`|\int L_\nu\,d\nu|` [erg/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (the grid is a trace-time constant).
+    **Gradient-safe**: yes.
+    """
+    from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
+
+    wave = jnp.asarray(BUDGET_WAVE, dtype=dtype)
+    return jnp.abs(bolometric_integral_nu(sed_fn(wave), wavelength_to_nu(wave)))
 
 
 def torus_lnu_from_grid(

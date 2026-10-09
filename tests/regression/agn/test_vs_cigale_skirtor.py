@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.grid_interp import loglog_integral
 from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.regression_paper
@@ -426,8 +427,10 @@ class TestStoredInclinationNormIsApplied:
             disk0 = np.asarray(f["spectra/disk_emission"][(*idx, j_0)])
             dust_i = np.asarray(f["spectra/dust_emission"][(*idx, j_i)])
             norm = np.asarray(f["spectra/norm"][idx])
-        int_disk0 = float(np.trapezoid(disk0, x=wl))
-        int_dust_i = float(np.trapezoid(dust_i, x=wl))
+        # The power-law integral of the same interpolant the loader resamples with: the
+        # converged value of the polar reference (#2322), not a trapezoid over 136 nodes.
+        int_disk0 = float(loglog_integral(jnp.asarray(wl), jnp.asarray(disk0)))
+        int_dust_i = float(loglog_integral(jnp.asarray(wl), jnp.asarray(dust_i)))
         ratio = float(norm[j_0] / norm[j_i])
         return int_disk0, int_dust_i, ratio, int_disk0 * ratio / int_dust_i
 
@@ -490,13 +493,18 @@ class TestStoredInclinationNormIsApplied:
         was -- the polar share at i=0 is a shipped number (0.200204) that no
         inclination normalization may move.
         """
-        _d0, _di, ratio, _r = self._file_derivation(i_deg)
+        _d0, dust_i, ratio, _r = self._file_derivation(i_deg)
+        _d0, dust_0, _n, _r0 = self._file_derivation(0)
+        # The dust templates are unit-normalized by the file's trapezoid convention, not
+        # by the exact power-law integral the polar reference uses, so their integrals
+        # differ across inclination by the quadrature term. The expected ratio carries it.
+        expected = ratio * dust_0 / dust_i
         face_on = float(self._tie(1.0).R_faceon)
         got = float(self._tie(float(np.cos(np.deg2rad(i_deg)))).R_faceon)
-        assert got / face_on == pytest.approx(ratio, rel=1e-6, abs=0.0), (
+        assert got / face_on == pytest.approx(expected, rel=1e-6, abs=0.0), (
             f"R_faceon(i={i_deg})/R_faceon(0) = {got / face_on:.9f} but the file's "
-            f"norm(0)/norm(i) = {ratio:.9f}. Before the fix this ratio was 1.0 at "
-            "every inclination."
+            f"norm(0)/norm(i) x dust(0)/dust(i) = {expected:.9f}. Before the fix this "
+            "ratio was 1.0 at every inclination."
         )
 
     def test_polar_share_tracks_cigale_across_inclination(self):
