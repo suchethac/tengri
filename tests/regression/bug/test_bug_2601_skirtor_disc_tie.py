@@ -686,19 +686,22 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: 0.00606 / 0.01845 / 0.01988 (``f`` = 0.00629 / 0.67368 / 0.69723, ``agn_power`` the
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
-#: (sum, middle and last bin).
+#: (sum, middle and last bin). The corona's screen is now the library's line of sight
+#: (T = R_n/eta, 1.007 at V for this cell) rather than the analytic screen (1 on Type 1): the
+#: sum and middle bin move by 1.0e-5 and 1.0e-5 (log M_BH 8) and 4.1e-5 and 4.6e-5 (log M_BH
+#: 10) relative; the first and last bins and log M_BH 6 (corona share 0.1 %) do not move.
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
     8.0: (
-        1.6504080200641076e32,
+        1.6504247577992576e32,
         2.226186048596356e16,
-        3.0968665997787287e28,
+        3.096897978073241e28,
         8.825196951058274e21,
     ),
     10.0: (
-        1.6769970954584036e32,
+        1.67706543442163e32,
         2.3324417803895464e16,
-        3.1396733849669233e28,
+        3.1398186271622387e28,
         9.548716267622313e21,
     ),
 }

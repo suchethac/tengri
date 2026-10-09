@@ -51,6 +51,7 @@ from tengri.components.dust.attenuation import smc
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA
 from tests._data_skip import DATA_DIR
+from tests._torus_sightline_reference import fritz_transmission
 
 pytestmark = pytest.mark.regression_bug
 
@@ -1218,7 +1219,6 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
     that against CIGALE.
     """
     from tengri.components.agn.blocks import _protocol as protocol
-    from tengri.components.agn.blocks.torus_screen import torus_screen_transmission
     from tengri.utils.physics_constants import L_SUN
 
     mbh = 8.0
@@ -1229,11 +1229,7 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
         _FRITZ_WAVE, _LOG_LBOL, agn_log_mbh=mbh
     )
     cos_inc = _cos_of_psy(psy)
-    screen = np.asarray(
-        torus_screen_transmission(
-            _FRITZ_WAVE, cos_inc=cos_inc, oa_deg=90.0 - _FRITZ_HALF, tau_v=_FRITZ_TIE_TAU
-        )
-    )
+    screen = fritz_transmission(wave, psy, oa=_FRITZ_HALF, tau=_FRITZ_TIE_TAU)
     tied = comps["disc"] * C_AA / wave**2  # L_lambda [erg/s/A]
     b = tied[below] / (np.asarray(h_lam)[below] * screen[below])
     np.testing.assert_allclose(b, b[0], rtol=1e-9)  # one scale: b H T

@@ -754,6 +754,20 @@ agn_torus_block, agn_attenuation_block : str
         found = template_state.get(f"{category}/{name}")
         return _legacy_grahsp if found is None else found
 
+    _sightline_cache: dict = {}
+
+    def _library_sightline():
+        """The library torus's line of sight on ``wave``, built once (``None``: no disc column)."""
+        if "sight" not in _sightline_cache:
+            _sightline_cache["sight"] = library_torus_sightline(
+                agn_torus_block,
+                wave,
+                cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+                params=params,
+                library=_templates_for("torus", agn_torus_block),
+            )
+        return _sightline_cache["sight"]
+
     disc_templates = _templates_for("disc", agn_disc_block)
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
@@ -1300,19 +1314,25 @@ agn_torus_block, agn_attenuation_block : str
             # tied disc's 4 pi power, the face-on library power ``agn_power x R_faceon`` times
             # the library disc's hemisphere mean. The corona then scales by
             # ``P_D,tied / P_D,model`` with ``P_D,model = (1 - f) L_acc``, and on the line of
-            # sight it carries only the torus screen: the same transmission on a Type-2
-            # sightline as the dusty torus gives any source behind it, unity on a Type-1 one.
+            # sight it carries only the torus screen: the library's line of sight (``T = R_n/eta``,
+            # with the X-rays photoelectrically absorbed below its grid), the same transmission
+            # any source behind the torus takes, unity face-on. The analytic screen remains only
+            # for a torus without a disc column.
             _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
             _corona_scale = (
                 _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
             ) / _p_disc_model
-            _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
-            _corona_screen = torus_screen_transmission(
-                wave,
-                cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
-                oa_deg=_corona_oa,
-                tau_v=_corona_tau_v,
-            )
+            _corona_sight = _library_sightline()
+            if _corona_sight is None:
+                _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
+                _corona_screen = torus_screen_transmission(
+                    wave,
+                    cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+                    oa_deg=_corona_oa,
+                    tau_v=_corona_tau_v,
+                )
+            else:
+                _corona_screen = _corona_sight.transmission
             _disc_scaled = _disc_scaled + _corona_part * _corona_screen * _corona_scale
         _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
@@ -1386,13 +1406,7 @@ agn_torus_block, agn_attenuation_block : str
         # screen is the fallback for a grid without one.
         _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
         _cos_inc_screen = params.get("agn_cos_inc", 0.86602540378443864)
-        _sight = library_torus_sightline(
-            agn_torus_block,
-            wave,
-            cos_inc=_cos_inc_screen,
-            params=params,
-            library=_templates_for("torus", agn_torus_block),
-        )
+        _sight = _library_sightline()
         if _sight is None:
             # A torus without a disc column (SKIRTOR v2) has no library sightline: the
             # analytic screen is its only obscuration.

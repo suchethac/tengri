@@ -51,6 +51,15 @@ from tengri.components.agn.blocks.torus_library_transmission import (
 )
 from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
 from tests._data_skip import DATA_DIR
+from tests._torus_sightline_reference import (
+    HC_KEV_AA,
+    MM83_C0,
+    MM83_C1,
+    MM83_C2,
+    MM83_EDGES,
+    NH_PER_AV,
+    sigma_mm83,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -314,42 +323,12 @@ def test_cos_law_disc_set_matches_the_blocks_response_to_inclination():
 # ----------------------------------------------------------------------------------
 # X-rays: Morrison & McCammon (1983) photoelectric absorption, N_H from the library's A_V
 # ----------------------------------------------------------------------------------
-# Table 2 of Morrison & McCammon (1983, ApJ 270, 119) as published in two independent public
-# implementations, which agree on all 42 coefficients and 15 edges: SOXS
-# (lynx-x-ray-observatory/soxs, soxs/spectra/foreground_absorption.py, ``wabs_cross_section``)
-# and cgm_toolkit (ethlau/cgm_toolkit, cgm_toolkit/xray_emissivity.py, ``wabs``). A third
-# transcription (jracusin/Judy-code, idl.lib/grbs/wabs.pro) prints c2 = -476.0 for the
-# 0.1 to 0.284 keV segment, against -476.1 in both of the above and in this repository.
-_MM83_EDGES = np.array(
-    [
-        0.03,
-        0.1,
-        0.284,
-        0.4,
-        0.532,
-        0.707,
-        0.867,
-        1.303,
-        1.84,
-        2.471,
-        3.21,
-        4.038,
-        7.111,
-        8.331,
-        10.0,
-    ]
-)
-_MM83_C0 = np.array(
-    [17.3, 34.6, 78.1, 71.4, 95.5, 308.9, 120.6, 141.3, 202.7, 342.7, 352.2, 433.9, 629.0, 701.2]
-)
-_MM83_C1 = np.array(
-    [608.1, 267.9, 18.8, 66.8, 145.8, -380.6, 169.3, 146.8, 104.7, 18.7, 18.7, -2.4, 30.9, 25.2]
-)
-_MM83_C2 = np.array(
-    [-2150.0, -476.1, 4.3, -51.4, -61.1, 294.0, -47.7, -31.5, -17.0, 0.0, 0.0, 0.75, 0.0, 0.0]
-)
-_HC_KEV_AA = 12.39841984
-_NH_PER_AV = 2.21e21  # [cm^-2 mag^-1] Guver & Ozel 2009
+# The Morrison & McCammon (1983) table lives in tests/_torus_sightline_reference.py with its
+# provenance (SOXS and cgm_toolkit agree on all 42 coefficients; Judy-code prints -476.0 once).
+_HC_KEV_AA = HC_KEV_AA
+_NH_PER_AV = NH_PER_AV
+_sigma_mm83 = sigma_mm83
+_MM83_EDGES, _MM83_C0, _MM83_C1, _MM83_C2 = MM83_EDGES, MM83_C0, MM83_C1, MM83_C2
 _XRAY_WAVE = np.array([_HC_KEV_AA / 2.0, _HC_KEV_AA / 5.0, _HC_KEV_AA / 9.0])  # 2, 5, 9 keV
 
 
@@ -426,3 +405,59 @@ def test_xray_transmission_gradient_wrt_inclination_is_finite_and_nonzero():
     g = jax.grad(t_x)(jnp.asarray(float(np.cos(np.radians(75.0)))))
     assert np.isfinite(float(g))
     assert float(g) != 0.0
+
+
+# ----------------------------------------------------------------------------------
+# The tied corona takes the same library sightline
+# ----------------------------------------------------------------------------------
+def _tied_disc_component(i_deg: float, monkeypatch=None, unscreened: bool = False) -> np.ndarray:
+    """The tied kubota_done disc + corona component at X-ray wavelengths [erg/s/Hz]."""
+    import tengri.components.agn.blocks.runner as runner
+
+    if unscreened:
+        real = runner.library_torus_sightline
+
+        def open_sightline(*args, **kwargs):
+            sight = real(*args, **kwargs)
+            one = jnp.ones_like(sight.transmission)
+            return sight._replace(transmission=one)
+
+        monkeypatch.setattr(runner, "library_torus_sightline", open_sightline)
+    _, comps = compose_l_nu(
+        jnp.asarray(_XRAY_WAVE),
+        _LOG_LBOL,
+        agn_disc_block="kubota_done",
+        agn_nlr_block="none",
+        agn_blr_block="none",
+        agn_feii_block="none",
+        agn_torus_block="skirtor",
+        agn_attenuation_block="none",
+        agn_norm="cigale_joint",
+        agn_ir_frac=0.3,
+        agn_cos_inc=float(np.cos(np.radians(i_deg))),
+        return_components=True,
+        **_SKIRTOR_PARAMS,
+    )
+    return np.asarray(comps["disc"])
+
+
+def test_tied_corona_is_absorbed_on_a_type2_sightline(monkeypatch):
+    """The tied X-ray corona is dimmed by exp(-sigma N_H) of the library column at i = 75 deg.
+
+    The same composition is run once with the sightline's transmission forced to 1: the ratio
+    is the transmission the corona took (the tied thin disc is negligible at 2 to 9 keV).
+    """
+    i_deg = 75.0
+    screened = _tied_disc_component(i_deg)
+    open_ = _tied_disc_component(i_deg, monkeypatch, unscreened=True)
+    t_v = float(_type2_sightline([_V_WAVE], i_deg).transmission[0])
+    expected = np.exp(-_sigma_mm83(_HC_KEV_AA / _XRAY_WAVE) * _NH_PER_AV * (-2.5 * np.log10(t_v)))
+    assert np.all(open_ > 0.0)
+    np.testing.assert_allclose(screened / open_, expected, rtol=1e-6)
+    assert np.all(expected < 0.99)
+
+
+def test_tied_corona_is_unchanged_face_on(monkeypatch):
+    screened = _tied_disc_component(0.0)
+    open_ = _tied_disc_component(0.0, monkeypatch, unscreened=True)
+    np.testing.assert_allclose(screened, open_, rtol=1e-12)

@@ -41,10 +41,10 @@ from tengri.components.agn.blocks import _protocol as protocol, runner as runner
 from tengri.components.agn.blocks._protocol import LINE_ENERGY_BLOCKS, resolve_agn_block
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.components.agn.disc import kubota_done_disc
-from tengri.components.dust.attenuation import smc
 from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
+from tests._torus_sightline_reference import fritz_transmission, skirtor_transmission
 
 pytestmark = pytest.mark.regression_bug
 
@@ -168,15 +168,19 @@ def library():
     return _load_library(30)
 
 
-def _screen(wave_aa, i_deg, oa=40.0, tau_v=7.0):
-    """Torus screen from its documented formula (``torus_screen.py``).
+def _screen(wave_aa, i_deg, oa=40.0):
+    """Torus transmission of the SKIRTOR library at the fiducial cell (``T = R_n/eta``).
 
-    ``T = exp(-min(tau, 50))``, ``tau = tau_V k(lambda)/k(V) w``,
-    ``w = sigmoid((sin(oa) - cos i)/0.025)`` with the SMC curve normalized at V (5500 A).
+    The library's normalized inclination ratio over the disc anisotropy, X-rays absorbed below
+    the library's 10 A edge (``tests/_torus_sightline_reference.py``); it replaces the analytic
+    ``exp(-tau_V k(lambda)/k(V) w)`` screen, which the runner no longer applies to a library torus.
     """
-    w = 0.5 * (1 + np.tanh(0.5 * (np.sin(np.radians(oa)) - np.cos(np.radians(i_deg))) / 0.025))
-    k = np.asarray(smc(jnp.asarray(np.append(np.asarray(wave_aa, float), 5500.0))))
-    return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
+    return skirtor_transmission(wave_aa, float(np.cos(np.radians(i_deg))), oa=oa)
+
+
+def _fritz_screen(wave_aa, psy_deg, oa=60.0, tau=1.0):
+    """Torus transmission of the Fritz library (``T = R_n``) at elevation ``psy_deg``."""
+    return fritz_transmission(wave_aa, psy_deg, oa=oa, tau=tau)
 
 
 def _incl_on(library, wave):
@@ -333,8 +337,8 @@ def test_tied_corona_per_unit_intrinsic_disc_power_is_the_same_at_every_type_1_i
 def test_type_2_corona_is_screened_like_any_source_behind_the_torus():
     """At i = 70 deg the tied corona is ``b H T(70 deg)`` with the torus screen ``T`` (1e-9).
 
-    ``T`` is the screen formula of ``torus_screen.py`` (unity on Type 1, tau_V = 7 beyond the
-    torus edge); the decomposition residual vanishes only if the corona carries exactly that.
+    ``T`` is the library transmission of the torus (``_screen``); the decomposition residual
+    vanishes only if the corona carries exactly that.
     """
     _, b, resid, _ = _corona_coefficients(8.0, 70)
     assert resid < 1e-9
@@ -618,7 +622,7 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
     _, comps = _run("kubota_done", "fritz", mbh=disc_mbh, cos_inc=_cos_of_psy(70.1), **kwargs)
     below = np.asarray(_WAVE) < 9.0
     _, h_lam = _kubota_parts(_WAVE, disc_mbh)
-    screen = _screen(_WAVE, 90.0 - 70.1, oa=90.0 - 60.0, tau_v=1.0)  # oa = 90 - cone half-angle
+    screen = _fritz_screen(_WAVE, 70.1)
     tied = comps["disc"] * C_AA / np.asarray(_WAVE, float) ** 2
     b = tied[below] / (h_lam[below] * screen[below])
     np.testing.assert_allclose(b, b[0], rtol=1e-9)
