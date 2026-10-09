@@ -186,19 +186,20 @@ def test_t_zero_node_is_one_not_extrapolated(tmp_path):
     np.testing.assert_allclose(mr[:, 1:], tab, rtol=1e-12, atol=0.0)
 
 
-def test_age_within_one_node_beyond_the_table_is_clamped(tmp_path):
-    age, logz, tab = _table("mass_remaining_mist_chabrier.h5")
+def test_age_one_node_beyond_the_table_raises(tmp_path):
+    """A registered grid's age must sit on a table node; no clamping to the edge value."""
+    age, logz, _ = _table("mass_remaining_mist_chabrier.h5")
     extra = age[-1] + 0.5 * (age[-1] - age[-2])
     path = _write_grid(tmp_path / "fsps_mist_miles_chabrier.h5", np.r_[age, extra] - 9.0, logz)
-    mr = np.asarray(_load_ssp_data(str(path)).ssp_mass_remaining)
-    np.testing.assert_array_equal(mr[:, -1], tab[:, -1])
+    with pytest.raises(ValueError, match="dex from the table"):
+        _load_ssp_data(str(path))
 
 
-def test_age_beyond_one_node_raises(tmp_path):
+def test_age_far_beyond_the_table_raises(tmp_path):
     age, logz, _ = _table("mass_remaining_mist_chabrier.h5")
     extra = age[-1] + 3.0 * (age[-1] - age[-2])
     path = _write_grid(tmp_path / "fsps_mist_miles_chabrier.h5", np.r_[age, extra] - 9.0, logz)
-    with pytest.raises(ValueError, match="more than one table node beyond"):
+    with pytest.raises(ValueError, match="dex from the table"):
         _load_ssp_data(str(path))
 
 
