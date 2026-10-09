@@ -6,9 +6,11 @@ photoelectric N_H from Morrison & McCammon 1983 + Compton scattering +
 HMXB/LMXB scaling) already landed via PR #325. This test pins the
 user-visible ``"yang20"`` alias.
 
-Gap 2 (IGM Meiksin 2006): new component, implementing Meiksin (2006)
-exactly as CIGALE's ``pcigale.sed_modules.redshifting.igm_transmission``
-evaluates it. The
+Gap 2 (IGM Meiksin 2006): new component, implementing Meiksin (2006) with
+every Lyman-series line at its absorber redshift, as the paper's Table 1
+defines. CIGALE's ``pcigale.sed_modules.redshifting.igm_transmission``
+evaluates the n >= 3 lines at the source redshift instead; the size of
+that difference is pinned in tests/crossval/test_2785_meiksin06_vs_pcigale.py. The
 diffuse Lyman-alpha forest continuum + LLS damping replaces
 Inoue+2014's binary step structure with a smooth ramp -- exactly
 what the §12 reproduction notebook needs.
