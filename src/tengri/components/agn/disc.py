@@ -54,6 +54,7 @@ from tengri.components.agn._nt_emissivity import (
 from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
+    nthcomp_norm_grid as _nthcomp_norm_grid,
 )
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
@@ -1093,6 +1094,25 @@ def _warm_comptonization_lnu(
     return b_nu * enhancement
 
 
+#: Gauss-Legendre order of the radial ring rule in ``ln r``, per zone. The disc and warm
+#: integrals are smooth in ``ln r`` on each zone, so the rule converges well before this order.
+_RING_GL_ORDER = 64
+_RING_GL_T, _RING_GL_W = np.polynomial.legendre.leggauss(_RING_GL_ORDER)
+
+
+def _log_r_gauss_legendre(log_lo, log_hi):
+    """Gauss-Legendre nodes ``log10 r`` on ``[log_lo, log_hi]`` and their ``d(log10 r)`` weights.
+
+    The rule replaces a uniform rectangle sum, whose O(1 %) error on the zone power fed the
+    normalization (#2733). Returned in ``log10`` units, matching the zone grids.
+    """
+    half = 0.5 * (log_hi - log_lo)
+    mid = 0.5 * (log_hi + log_lo)
+    nodes = mid + half * device_table(_RING_GL_T)
+    weights = half * device_table(_RING_GL_W)
+    return nodes, weights
+
+
 # Fixed internal frequency grid for corona normalization.
 # Matches RELAGN (scotthgn/RELAGN) default: [1e-4, 1e4] keV → [2.418e13, 2.418e21] Hz.
 # Using a fixed grid makes the normalization integral grid-independent,
@@ -1519,7 +1539,8 @@ def _compute_zone_luminosities(
     agn_cos_inc : float
         Cosine of inclination angle [dimensionless, 0–1].
     n_radii : int
-        Number of radial integration points per zone [dimensionless].
+        Kept for call compatibility and not used: each zone is integrated with the fixed
+        Gauss-Legendre rule ``_RING_GL_ORDER`` in ``ln r``, so the result does not depend on it.
     agn_gamma_warm : float
         Photon index of warm Comptonization [dimensionless, ~1.5–3.5].
     agn_kt_warm : float
@@ -1544,11 +1565,11 @@ def _compute_zone_luminosities(
     tuple
         (l_nu_total, scale, l_nu_disc, l_nu_hot, corona_fraction, log10_scale) where:
 
-        - l_nu_total : Total L_ν(i) = 2 cos i D_ν + H_ν, normalized to ``l_bol_erg``
-          [erg s^-1 Hz^-1]
-        - scale : Normalization factor with ``scale * (D + H) = l_bol_erg``, the accretion
-          power; independent of ``agn_cos_inc``. Informative only: the spectra are scaled
-          through ``log10_scale``, never by this linear factor [dimensionless]
+        - l_nu_total : Total L_ν(i) = 2 cos i D_ν + H_ν, scaled so that its power at
+          ``cos i = 0.5`` is ``l_bol_erg`` [erg s^-1 Hz^-1]
+        - scale : Disc scale ``(l_bol_erg - l_hot) / D``, the factor the disc and warm zones
+          are multiplied by; independent of ``agn_cos_inc``. Informative only: the spectra
+          are scaled through ``log10_scale``, never by this linear factor [dimensionless]
         - l_nu_disc : Disc and warm-zone part of the line-of-sight spectrum, ``2 cos i D_ν``,
           normalized [erg s^-1 Hz^-1]
         - l_nu_hot : Corona ``H_ν``, isotropic, normalized [erg s^-1 Hz^-1]
@@ -1563,10 +1584,11 @@ def _compute_zone_luminosities(
     -----
     **JIT-compatible**: yes, uses ``jax.vmap`` for radial integration.
 
-    **Energy conservation**: The normalization integral is computed analytically
-    from the radial integration (σ T^4 × dA) rather than spectrally, making the
-    result grid-independent. This fixes a long-standing bug where the corona's
-    optical flux varied by 2–4× depending on wavelength grid extent.
+    **Energy conservation**: The corona carries its counted power ``l_hot`` exactly; the
+    disc and warm zones carry ``l_bol - l_hot``. The disc power is the radial integral of the
+    zone rings (Gauss-Legendre in ``ln r``, independent of ``n_radii``), and the warm shape is
+    normalized by its own integral, so the spectra integrate to their counted powers on any
+    grid that covers the template band.
 
     References
     ----------
@@ -1576,14 +1598,13 @@ def _compute_zone_luminosities(
     # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
     log_r_warm = jnp.log10(r_warm_cm)
     log_r_out = jnp.log10(r_out_cm)
-    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
+    log_r_outer, d_log_r_outer = _log_r_gauss_legendre(log_r_warm, log_r_out)
     r_outer = 10.0**log_r_outer
 
     r_ratio_outer = r_outer / r_isco_cm
     rt_outer = jnp.maximum(_nt_rt(r_ratio_outer, agn_a_spin), 1e-30) ** 0.25
     t_outer = t_in * r_ratio_outer ** (-0.75) * rt_outer
 
-    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
     dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
 
     # The Planck prefactor 2 h nu (nu/c)^2 reaches ~4e11 at 0.1 A and a ring area reaches
@@ -1614,14 +1635,13 @@ def _compute_zone_luminosities(
         )
 
     log_r_hot = jnp.log10(r_hot_cm)
-    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
+    log_r_warm_grid, d_log_r_warm = _log_r_gauss_legendre(log_r_hot, log_r_warm)
     r_warm_grid = 10.0**log_r_warm_grid
 
     r_ratio_warm = r_warm_grid / r_isco_cm
     rt_warm = jnp.maximum(_nt_rt(r_ratio_warm, agn_a_spin), 1e-30) ** 0.25
     t_warm = t_in * r_ratio_warm ** (-0.75) * rt_warm
 
-    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
     # Ring areas are carried relative to the largest one, as in the outer zone, and the scale is
@@ -1630,6 +1650,8 @@ def _compute_zone_luminosities(
     r_warm_ref = jax.lax.stop_gradient(jnp.max(r_warm_grid))
     dr_warm_ref = jax.lax.stop_gradient(jnp.max(dr_warm))
     log10_warm_area_ref = _log10_ring_area_unit(r_warm_ref, dr_warm_ref)
+
+    nu_norm = device_table(_nthcomp_norm_grid())
 
     def _warm_ring(r_cm, t_ring, dr_ring):
         """Comptonized L_nu of one warm-zone annulus, in units of the largest ring area."""
@@ -1641,6 +1663,18 @@ def _compute_zone_luminosities(
         shape = _nthcomp_lnu_interp(
             nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table, unit=_NTHCOMP_UNIT
         )
+        # The template is normalized by its own integral over its band, so the ring carries
+        # exactly ``p_plain`` (the template's own normalization is ~0.5 % off, #2733).
+        shape_band = _nthcomp_lnu_interp(
+            nu_norm,
+            agn_gamma_warm,
+            agn_kt_warm,
+            kTbb_keV,
+            _template=nthcomp_table,
+            unit=_NTHCOMP_UNIT,
+        )
+        # The ring sum is multiplied by ``_NTHCOMP_UNIT`` at the end, so the shape carries 1/unit.
+        shape = shape / (jnp.trapezoid(shape_band, nu_norm) * _NTHCOMP_UNIT)
         # The normalized ``shape`` (per ``_NTHCOMP_UNIT``) is folded in before the area, so the
         # ring's bolometric power is never formed on its own.
         return (shape * p_plain) * _ring_area_relative(
@@ -1686,7 +1720,8 @@ def _compute_zone_luminosities(
     # thermal-Comptonization relation Gamma = sqrt(9/4 + 4/y) - 1/2
     # (Sunyaev & Titarchuk 1980), i.e. y_warm = 4 / [(Gamma_warm + 1/2)^2 - 9/4].
     # This sets the low-energy rollover so the corona cannot leak into the IR/radio.
-    t_seed_nt = t_warm[0]  # T_NT(R_hot): first (innermost) warm-zone annulus
+    x_hot = r_hot_cm / r_isco_cm
+    t_seed_nt = t_in * x_hot ** (-0.75) * jnp.maximum(_nt_rt(x_hot, agn_a_spin), 1e-30) ** 0.25
     y_warm_denom = jnp.maximum((agn_gamma_warm + 0.5) ** 2 - 2.25, 1e-3)
     y_warm = jnp.clip(4.0 / y_warm_denom, 0.0, 10.0)
     t_seed_hot = t_seed_nt * jnp.exp(y_warm)
@@ -1729,24 +1764,36 @@ def _compute_zone_luminosities(
     )
     log10_disc_power = math.log10(_TWO_FACES) + log10_weighted_sum(log10_rings, 1.0)
     log10_hot_power = jnp.log10(jnp.maximum(l_hot_erg, _representable_floor(1e-100)))
-    log10_unnorm = jnp.maximum(
-        log10_add(log10_disc_power, log10_hot_power),
+    # The corona carries its counted power exactly, ``l_hot_erg``. The disc and warm zones carry
+    # the rest of the accretion power, ``L_bol - l_hot``, so the disc gets its own scale. The
+    # Page-Thorne disc-frame dissipation of the disc is 1.019 eta Mdot c^2 (see
+    # ``_nt_emissivity``), so a single scale over both zones would take the corona's share away
+    # from its counted power (#2733). The log10 difference is formed with the signed log-add, so
+    # no unnormalized ~1e28 spectrum is formed in float32 (#2767).
+    # Units: the shape powers (disc, corona) are in the shape's own luminosity units, and
+    # ``l_bol_erg`` is the output magnitude, which the float32 path sets to a reference. The
+    # common factor ``k = L_ref / L_shape`` takes the shapes to the output magnitude; within the
+    # shape, the disc carries ``L_shape - l_hot``. The corona carries ``k * l_hot`` exactly.
+    log10_bol_shape = agn_log_lbol_shape if float32 else agn_log_lbol_shape + _LOG10_LSUN_ERG
+    log10_k = jnp.log10(l_bol_erg) - log10_bol_shape
+    log10_budget_disc = jnp.maximum(
+        log10_add(log10_bol_shape, log10_hot_power, sign_b=-1.0),
         jnp.log10(_representable_denominator(1e-100)),
     )
-    log10_scale = jnp.log10(l_bol_erg) - log10_unnorm
+    log10_scale = log10_k + log10_budget_disc - log10_disc_power
     scale = _pow10(log10_scale)
 
     # Applied once, to spectra whose own peak is factored out, so no unnormalized ~1e28 spectrum
     # (or the cotangent that would multiply it in reverse mode) is formed in float32 (#2767).
     l_nu_disc_norm = apply_log10_scale(l_nu_disc, log10_scale)
-    l_nu_hot_norm = apply_log10_scale(hot_shape, log10_hot_amplitude + log10_scale)
+    l_nu_hot_norm = apply_log10_scale(hot_shape, log10_hot_amplitude + log10_k)
 
     return (
         l_nu_disc_norm + l_nu_hot_norm,
         scale,
         l_nu_disc_norm,
         l_nu_hot_norm,
-        _pow10(log10_hot_power - log10_unnorm),
+        _pow10(log10_hot_power - log10_bol_shape),
         log10_scale,
     )
 

@@ -827,13 +827,15 @@ def test_line_debit_is_lines_over_the_closed_form_disc_power(disc):
     assert _debit_fraction(disc) == pytest.approx(_line_power(disc) / _L_ACC, rel=1e-12)
 
 
-@pytest.mark.parametrize(("disc", "bound"), [("kubota_done", 7.1e-4), ("multicolor", 3.3e-5)])
+@pytest.mark.parametrize(("disc", "bound"), [("kubota_done", 8.7e-6), ("multicolor", 3.3e-5)])
 def test_closed_form_power_differs_from_the_grid_integral_by_the_measured_amount(disc, bound):
-    """Budget-grid integral of the disc: 1 - 7.26e-4 (kubota_done), 1 - 3.3e-5 (multicolor).
+    """Budget-grid integral of the disc: 1 - 8.7e-6 (kubota_done), 1 - 3.3e-5 (multicolor).
 
     That is how far the debit moves from the grid evaluation: the lines' share of the disc
-    rises by that fraction. ``kubota_done``'s is the corona's cut tail (the 0.99927 of the
-    quadrature); the bound is the measured one with 20 % headroom.
+    rises by that fraction. kubota_done's is the grid's quadrature residual now that the
+    corona carries its counted power and the disc its complement (#2733, measured at
+    log M = 8; it was 7.26e-4 when a single scale left the corona 3.7 % short). The bound
+    is the measured one with 20 % headroom.
     """
     if disc == "kubota_done":
         grid = np.asarray(runner_module._KUBOTA_LEDGER_WAVE)

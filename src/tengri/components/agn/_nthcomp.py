@@ -484,6 +484,17 @@ def _nthcomp_interp_jvp(unit: float, primals: tuple, tangents: tuple) -> tuple:
     return primal_out, tangent_out
 
 
+def nthcomp_norm_grid(n_points: int = 4000) -> np.ndarray:
+    """Log-spaced frequency grid spanning the full band of the nthcomp templates [Hz].
+
+    The template shape is normalized by its own integral over this band (the band is where
+    the template is defined, and its tails are negligible), so the warm zone carries exactly
+    its counted power, whatever the (Gamma, kTe, kTbb) of the ring.
+    """
+    nu = np.asarray(_get_nu_jax(), dtype=float)
+    return np.geomspace(nu[0], nu[-1], n_points)
+
+
 def nthcomp_lnu_interp(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
