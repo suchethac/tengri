@@ -585,6 +585,32 @@ class SynthesizerGridData:
     nebular_per_lbol: jnp.ndarray | None = None
 
 
+#: Angstrom per unit of the wavelength suffix of a Cloudy line id.
+_CLOUDY_ID_UNIT_AA = {"A": 1.0, "m": 1.0e4, "c": 1.0e8}
+
+
+def _synthesizer_line_ids_by_wavelength(ids, wavelengths) -> tuple[str, ...]:
+    """Line ids reordered to follow ``lines/wavelength`` (and ``lines/luminosity``).
+
+    The Synthesizer line tables store ``lines/id`` alphabetically but
+    ``lines/wavelength`` sorted by wavelength, and the luminosities follow the
+    wavelength order. Each id carries its own catalog wavelength (``H 1 6562.80A``,
+    ``Fe 2 1.25668m``), so the ids sorted by that wavelength line up with the stored
+    wavelengths; the pairing is checked, not assumed.
+    """
+    names = [i.decode() if isinstance(i, bytes) else str(i) for i in ids]
+    own = np.array(
+        [float(n.split()[-1][:-1]) * _CLOUDY_ID_UNIT_AA[n.split()[-1][-1]] for n in names]
+    )
+    order = np.argsort(own, kind="stable")
+    if not np.allclose(own[order], np.asarray(wavelengths, dtype=np.float64), rtol=1e-6, atol=0.0):
+        raise ValueError(
+            "Synthesizer lines/id wavelengths do not match lines/wavelength after sorting; "
+            "cannot pair line names with the stored wavelengths and luminosities."
+        )
+    return tuple(names[k] for k in order)
+
+
 def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
     """Load Synthesizer CLOUDY c23.01 AGN NLR grid from HDF5.
 
@@ -646,8 +672,8 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         # Load emission lines
         line_wav = jnp.array(f["lines"]["wavelength"][:])
         line_lum = jnp.array(f["lines"]["luminosity"][:])  # (2,2,2,2,2,2,215)
-        line_ids = tuple(
-            i.decode() if isinstance(i, bytes) else str(i) for i in f["lines"]["id"][:]
+        line_ids = _synthesizer_line_ids_by_wavelength(
+            f["lines"]["id"][:], f["lines"]["wavelength"][:]
         )
 
         # Load log10(specific ionizing luminosity for HI)

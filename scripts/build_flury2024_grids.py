@@ -28,7 +28,7 @@ Output HDF5 structure
 ---------------------
   data/flury2024_grids.h5
   ├── line_names           (N_lines,)           str — PyNeb format
-  ├── line_wavelengths_aa  (N_lines,)           float32 — vacuum Å
+  ├── line_wavelengths_aa  (N_lines,)           float32 — label wavelength Å (air; vacuum at load)
   ├── sb99/
   │   ├── cpr/
   │   │   ├── z_axis       (N_z,)              ζ_O (solar-relative metallicity)
@@ -99,13 +99,29 @@ _PARAM_COLS_STELLAR = {"id", "z", "logu", "age", "sfh", "logq", "logn", "logHB"}
 _PARAM_COLS_AGN = {"id", "z", "logu", "mbh", "edd", "lum", "logn", "logHB"}
 
 
+#: Schema of the written file. Version 1 stored every infrared line 100x too long
+#: (the ``um`` digits were read as microns); version 2 reads them as hundredths of
+#: a micron. ``tengri.components.nebular.mappings_photo.FLURY_SCHEMA_VERSION`` is the
+#: version the loader requires; bump both together.
+_SCHEMA_VERSION = 2
+
+#: Angstrom per label unit of a ``um`` label: Flury's infrared labels give the
+#: wavelength in hundredths of a micron (``O3_8836um`` = 88.36 um, ``C2_15774um``
+#: = 157.74 um), and 1 um = 1e4 A.
+_AA_PER_UM_LABEL_UNIT = 1.0e4 / 100.0
+
+
 def _parse_wavelength_aa(col: str) -> float | None:
-    """Parse wavelength in Å from a PyNeb-format column name.
+    """Parse the label wavelength in Å from a PyNeb-format column name.
 
     Handles:
-      ``O3_5007A``    → 5007.0 Å
-      ``Ar2_0698um``  → 6980.0 Å
-      ``C2_158um``    → 1_580_000.0 Å  (far-IR, kept for completeness)
+      ``O3_5007A``     → 5007.0 Å
+      ``Ar2_0698um``   → 6.98 µm = 69_800.0 Å
+      ``O3_8836um``    → 88.36 µm = 883_600.0 Å
+      ``C2_15774um``   → 157.74 µm = 1_577_400.0 Å
+
+    The ``um`` digits are hundredths of a micron, not microns. The label is
+    a rounded wavelength; the loader applies the air/vacuum convention.
 
     Returns None if the column is a parameter column or unparseable.
     """
@@ -114,7 +130,7 @@ def _parse_wavelength_aa(col: str) -> float | None:
     suffix = col.split("_", 1)[1]  # "5007A" or "0698um"
     try:
         if suffix.endswith("um"):
-            return float(suffix[:-2]) * 1e4  # μm → Å
+            return float(suffix[:-2]) * _AA_PER_UM_LABEL_UNIT
         elif suffix.endswith("A"):
             return float(suffix[:-1])
         else:
@@ -387,6 +403,7 @@ def _write_hdf5(
         f.attrs["zenodo_doi"] = "10.5281/zenodo.14140949"
         f.attrs["arxiv"] = "2412.06763"
         f.attrs["mappings_version"] = "5.2.1"
+        f.attrs["schema_version"] = _SCHEMA_VERSION
 
         for key, data in grids.items():
             # key: "sb99-cpr", "bpass-cdn", "agn-oxaf-cpr", ...
