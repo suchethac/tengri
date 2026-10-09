@@ -70,7 +70,6 @@ model = tengri.SEDModel.build(
         "disc": {
             "type": "multicolor",
             "all_params": tengri.Fixed(tengri.DEFAULT),
-            "log_ledd": -1.0,
         },
         "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
         # ``agn_fe2_strength`` is owned by the ``feii`` sub-block, not

@@ -400,7 +400,7 @@ def parse_mor_netzer_lines(path: Path):
 def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, agn_type=1):
     """activatelines.add_lines on a flat user-provided wave grid, with a unit-area Gaussian.
 
-    Upstream normalises with sqrt(pi sigma^2), making every line sqrt(2) too strong;
+    Upstream normalizes with sqrt(pi sigma^2), making every line sqrt(2) too strong;
     tengri uses sqrt(2 pi sigma^2), so each line integrates to its tabulated flux.
     """
     l_agn = lum5100A / 510.0  # W/nm
@@ -425,7 +425,7 @@ def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, 
 
 
 def feii_upstream(wave_nm_grid, feii_template_path, lum5100A, A_lines, A_FeII):
-    """Upstream FeII pipeline: L_nu -> L_lambda -> de-redshift -> normalise at 4575 Å rest."""
+    """Upstream FeII pipeline: L_nu -> L_lambda -> de-redshift -> normalize at 4575 Å rest."""
     from scipy import constants as cst
 
     arr = np.loadtxt(StringIO(feii_template_path.read_text()))
@@ -593,7 +593,7 @@ def make_netzer_disc_fixture():
     ``lambda*L_lambda(5100 A) = l5100`` (as for the power-law disc, torus and
     lines), so the oracle is ``l5100 / 510 * T(lambda) / T(510 nm)`` with
     ``T(510 nm)`` from log-log interpolation of the native template (the
-    stored normalisation used a linear interpolation).
+    stored normalization used a linear interpolation).
     """
     import h5py
 
