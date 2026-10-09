@@ -33,7 +33,7 @@ L_ABS = 1.0e44  # erg/s
 # Template support of the libraries, widened: resample_template is zero outside it.
 FULL_RANGE_AA = (1.0e2, 1.0e9)
 # Band-flux nodes: rest-frame 10, 25, 50 micron, +-0.1 dex top-hats.
-BAND_CENTRES_AA = (1.0e5, 2.5e5, 5.0e5)
+BAND_CENTERS_AA = (1.0e5, 2.5e5, 5.0e5)
 BAND_HALF_DEX = 0.1
 
 
@@ -156,8 +156,8 @@ def _band_fluxes(wave_aa: np.ndarray, lnu: np.ndarray) -> np.ndarray:
     nu = C_AA_PER_S / wave_aa
     order = np.argsort(nu)
     out = []
-    for centre in BAND_CENTRES_AA:
-        weight = (np.abs(np.log10(wave_aa / centre)) < BAND_HALF_DEX).astype(float)
+    for center in BAND_CENTERS_AA:
+        weight = (np.abs(np.log10(wave_aa / center)) < BAND_HALF_DEX).astype(float)
         out.append(float(np.trapezoid((lnu * weight)[order], nu[order])))
     return np.asarray(out)
 

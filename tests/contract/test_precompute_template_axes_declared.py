@@ -4,7 +4,7 @@
 ``AXIS_PARAMS`` in ``dust_emission_precompute`` is matched against the component's full
 parameter names (``parameter_prefix`` + the declared attribute). A label that names no declared
 parameter cannot be collapsed or looked up, and the failure is silent: the axis is never
-selected. ``dale2014`` was labelled ``dust_alpha`` while its parameter is ``dust_alpha_dale``.
+selected. ``dale2014`` was labeled ``dust_alpha`` while its parameter is ``dust_alpha_dale``.
 """
 
 from __future__ import annotations
