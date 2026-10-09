@@ -2315,9 +2315,15 @@ class Observation:
                 )
                 neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
                 if neb_chunks is not None:
+                    neb_nodes = state.derived["nebular_subband_waves_rest_precomp"]
+                elif dust_mode == "none":
+                    # Unscreened: the grid's lines over their profiles + continuum.
+                    neb_chunks = state.derived.get("nebular_phot_lnu_subband_precomp")
+                    neb_nodes = state.derived.get("nebular_subband_waves_rest_precomp")
+                if neb_chunks is not None:
                     correction = correction + subband_igm_correction(
                         neb_chunks,
-                        state.derived["nebular_subband_waves_rest_precomp"],
+                        neb_nodes,
                         rest_t,
                         state.wave,
                         reach,

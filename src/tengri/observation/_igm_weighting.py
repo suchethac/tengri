@@ -37,7 +37,11 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-__all__ = ["igm_weighted_parts", "spectral_igm_correction", "subband_igm_correction"]
+__all__ = [
+    "igm_weighted_parts",
+    "spectral_igm_correction",
+    "subband_igm_correction",
+]
 
 
 def _sum_seds(*seds):
@@ -92,7 +96,9 @@ def igm_weighted_parts(derived, dust_mode: str) -> list[tuple]:
         if bucket is not None:
             parts.append((get("dust_attenuation_precomp") * bucket, _sum_seds(sed_neb, sed_shock)))
     else:
-        if neb is not None:
+        # The nebular grid serves its band flux as sub-band chunks instead, which
+        # :func:`subband_igm_correction` weights.
+        if neb is not None and get("nebular_phot_lnu_subband_precomp") is None:
             parts.append((neb, sed_neb))
         if shock is not None:
             parts.append((shock, sed_shock))
