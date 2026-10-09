@@ -117,7 +117,8 @@ def test_curve_attached_only_when_wavelengths_match_the_library_reference_grid(t
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        ssp = load_ssp_data(str(path))
+        # BPASS's surviving mass is pending (#2800): the fixture takes DSPS's fit explicitly.
+        ssp = load_ssp_data(str(path), mass_remaining="dsps_fit")
     assert ssp.ssp_resolution_kms is None
 
 
