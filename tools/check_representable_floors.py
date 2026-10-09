@@ -87,7 +87,9 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # and the multicolor bolometric, #2572) deleted one ``jnp.maximum(..., 1e-100)`` floor
 # outright (five ``disc.py`` sites before, four now); the other 23 are unchanged. A deletion,
 # not a migration.
-_PINNED = 23
+# 23 -> 22: one sub-subnormal guard floor was migrated away; the census now measures 22.
+# The count went down, so this locks in the improvement rather than re-pinning.
+_PINNED = 22
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
