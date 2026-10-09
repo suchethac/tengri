@@ -10119,6 +10119,9 @@ class SEDModel:
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
         resample_z_ref = self._resample_z_ref()
+        # Concrete redshift for the rest-grid window (#2832): the fixed value only.
+        # A free or catalog redshift has no single value, so it stays None.
+        window_z = None if self.z_fixed is None else float(self.z_fixed)
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -10206,6 +10209,7 @@ class SEDModel:
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
+                    window_z=window_z,
                     observables_type=observables_type,
                 )
             if use_lut:

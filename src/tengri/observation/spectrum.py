@@ -14,7 +14,9 @@ for instruments with variable spectral resolution (e.g., JWST NIRSpec PRISM).
 
 from __future__ import annotations
 
+import math
 from functools import partial
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -184,11 +186,231 @@ def _is_log_uniform(wave) -> bool:
     return bool(float(np.ptp(dln) / abs(mean)) <= _LOG_UNIFORM_RTOL)
 
 
-@jax.jit
+# ── Padded, fast-length, windowed Gaussian convolution (#2832) ─────
+
+#: Kernel half-width, in Gaussian sigmas, kept as padding beyond each spectrum edge.
+#: Truncating a Gaussian at 5 sigma drops about 6e-7 of its weight.
+_LSF_KERNEL_HALF_WIDTH_SIGMAS = 5.0
+
+#: Minimum padding [pixels] per side (#2832). The kernel is sampled in Fourier space,
+#: so for a sub-pixel sigma its spatial tails (the ringing of the Nyquist cut) decay
+#: only as h**-2 and are not covered by 5 sigma. Measured against a converged
+#: reference (sigma_pix 0.28 and 0.66): h = 8 gives 3e-4, 64 gives 4e-6, 128 gives
+#: 9e-7, 256 gives 1.5e-7. At the production grid (n = 7909, 2000 km/s) the 5-sigma
+#: bound is 265 pixels, so the floor adds nothing there.
+_LSF_RINGING_FLOOR_PIXELS = 256
+
+#: Per-component bound [km/s] on the Gaussian sigma (#2832). A traced component has no
+#: value to read, so it is assumed to be at most this. A concrete component uses the
+#: larger of its measured value and this, so every component at or below it gets the
+#: same padding whether or not it is traced.
+_LSF_MAX_SIGMA_KMS = 2000.0
+
+
+class _BinLayout(NamedTuple):
+    """Static (NumPy) layout of the piecewise bins of :func:`_apply_lsf_variable_r`.
+
+    ``windowed`` selects short per-bin transforms over each bin's own window;
+    otherwise every bin is transformed at the full padded length. ``sym`` is the
+    symmetric margin added to the spectrum on each side.
+    """
+
+    windowed: bool
+    centers: np.ndarray
+    half_w: float
+    bin_width: float
+    core_start: np.ndarray | None
+    core_len: int
+    seg_len: int
+    sym: int
+
+
+def _next_fast_fft_len(n: int) -> int:
+    """Smallest integer ``>= n`` whose only prime factors are 2, 3 and 5.
+
+    Parameters
+    ----------
+    n : int
+        Lower bound on the transform length.
+
+    Returns
+    -------
+    int
+        The smallest 5-smooth integer that is at least ``n``.
+
+    Notes
+    -----
+    Private helper. Pure Python and static, evaluated at trace time.
+    """
+    m = max(int(n), 1)
+    while True:
+        k = m
+        for p in (2, 3, 5):
+            while k % p == 0:
+                k //= p
+        if k == 1:
+            return m
+        m += 1
+
+
+def _is_traced(x) -> bool:
+    """Whether ``x`` is a tracer, so its value is unknown at trace time."""
+    return isinstance(x, jax.core.Tracer)
+
+
+def _lsf_sigma_bound_kms(resolution=None, sigma_v_kms=None) -> float:
+    """Upper bound [km/s] on the Gaussian sigma the convolution uses (#2832).
+
+    The bound is the quadrature sum of one bound per kernel component. Each
+    component's bound is the larger of :data:`_LSF_MAX_SIGMA_KMS` and its concrete
+    value, the maximum over pixels for the instrument term. A traced component
+    contributes :data:`_LSF_MAX_SIGMA_KMS`. For components at or below that cap, the
+    bound depends only on which inputs are traced, not on their values, so the padding
+    is the same whether or not they are traced. The library dispersion is not
+    subtracted: dropping it keeps the bound an upper one.
+
+    Parameters
+    ----------
+    resolution : float, array, tracer or None
+        Spectral resolution R, or None when there is no instrument term.
+    sigma_v_kms : float, array, tracer or None
+        Intrinsic velocity dispersion [km/s], or None.
+
+    Returns
+    -------
+    float
+        Sigma bound [km/s].
+
+    Notes
+    -----
+    Private helper, evaluated at trace time from the raw inputs of a public call.
+    """
+    squares = 0.0
+    if resolution is not None:
+        if _is_traced(resolution):
+            inst = _LSF_MAX_SIGMA_KMS
+        else:
+            r = np.atleast_1d(np.asarray(resolution, np.float64))
+            inst = max(float(np.max(_C_KM_S / (_FWHM_TO_SIGMA * r))), _LSF_MAX_SIGMA_KMS)
+        squares += inst**2
+    if sigma_v_kms is not None:
+        if _is_traced(sigma_v_kms):
+            vel = _LSF_MAX_SIGMA_KMS
+        else:
+            v = np.atleast_1d(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))
+            vel = max(float(np.max(v)), _LSF_MAX_SIGMA_KMS)
+        squares += vel**2
+    return math.sqrt(squares)
+
+
+def _variable_min_dln(w: np.ndarray, n: int, n_bins: int) -> float:
+    """Smallest bin-mean ``d ln lambda`` over the piecewise bins (#2832).
+
+    Each bin's kernel reads ``d ln lambda`` averaged over the pixels within one bin
+    width of its center (:func:`_bin_sigma_and_dln`). The smallest such mean sets the
+    widest kernel in pixels, so it is the scale the padding must cover. A single
+    near-duplicate pixel barely moves a bin mean, so it does not shrink the padding.
+    """
+    dln = np.gradient(np.log(w))
+    width = n / n_bins
+    pix = np.arange(n, dtype=np.float64)
+    centers = (np.arange(n_bins) + 0.5) * width
+    mask = np.abs(pix[None, :] - centers[:, None]) < width
+    counts = np.maximum(mask.sum(axis=1), 1.0)
+    means = (mask * dln[None, :]).sum(axis=1) / counts
+    return float(np.min(means))
+
+
+def _lsf_pad_pixels(wave, n: int, sigma_kms: float, n_bins: int | None = None) -> int:
+    """Kernel padding [pixels] per side, from the sigma the kernel uses (#2832).
+
+    Parameters
+    ----------
+    wave : array_like, shape (n,), or tracer
+        Wavelength grid [Angstrom].
+    n : int
+        Number of pixels.
+    sigma_kms : float
+        Upper bound on the Gaussian sigma [km/s], from :func:`_lsf_sigma_bound_kms`.
+    n_bins : int or None, optional
+        Piecewise bin count of the variable path. ``None`` is the constant and
+        velocity path, which reads the first pair ``d ln lambda`` as its pixel scale.
+
+    Returns
+    -------
+    int
+        Padding per side [pixels]: ``ceil(5 sigma / (c d ln lambda))``, floored at
+        :data:`_LSF_RINGING_FLOOR_PIXELS`.
+
+    Notes
+    -----
+    The padding is 5 sigma of the kernel in pixels, at the pixel scale the kernel
+    actually uses: the first pair for the constant path, the smallest bin-mean
+    ``d ln lambda`` for the variable path (:func:`_variable_min_dln`). A traced grid
+    has no pixel scale to read, so the exact choice ``n - 1`` is used. Symmetric
+    padding accepts any width, so the padding is never capped below the kernel.
+    """
+    n = int(n)
+    if n <= 1:
+        return 0
+    if _is_traced(wave):
+        return n - 1
+    w = np.asarray(wave, dtype=np.float64)
+    if n_bins is None:
+        dln = float(np.log(w[1] / w[0]))
+    else:
+        dln = _variable_min_dln(w, n, n_bins)
+    if not dln > 0.0:
+        return n - 1
+    half = math.ceil(_LSF_KERNEL_HALF_WIDTH_SIGMAS * float(sigma_kms) / (_C_KM_S * dln))
+    return int(max(half, _LSF_RINGING_FLOOR_PIXELS))
+
+
+def _resolve_pad(pad_pixels, wave, n, sigma_bound, n_bins=None) -> int:
+    """The explicit ``pad_pixels`` override if given, else the padding from the grid."""
+    if pad_pixels is not None:
+        return int(pad_pixels)
+    return _lsf_pad_pixels(wave, n, sigma_bound, n_bins)
+
+
+def _gaussian_fft_convolve(spectrum: jnp.ndarray, sigma_pix, pad: int) -> jnp.ndarray:
+    """Gaussian convolution on a symmetric margin, transformed at a fast length.
+
+    Parameters
+    ----------
+    spectrum : array, shape (n,)
+        Input spectrum.
+    sigma_pix : float or array
+        Gaussian sigma [pixels].
+    pad : int
+        Symmetric margin per side [pixels] (static).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Convolved spectrum, cropped to the original ``n`` pixels.
+
+    Notes
+    -----
+    The zero tail between the margin and the fast transform length is harmless:
+    the margin holds the kernel reach, so no core pixel sees the wrap.
+    """
+    n = spectrum.shape[0]
+    length = _next_fast_fft_len(n + 2 * pad)
+    padded = jnp.pad(spectrum, pad, mode="symmetric")
+    freq = jnp.fft.rfftfreq(length)
+    kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+    conv = jnp.fft.irfft(jnp.fft.rfft(padded, n=length) * kernel_ft, n=length)
+    return conv[pad : pad + n]
+
+
+@partial(jax.jit, static_argnames=("pad",))
 def _apply_lsf_constant_r(
     spectrum: jnp.ndarray,
     wave_obs: jnp.ndarray,
     sigma_eff_kms: float,
+    *,
+    pad: int,
 ) -> jnp.ndarray:
     """FFT convolution in log-wavelength space for constant R.
 
@@ -208,6 +430,8 @@ def _apply_lsf_constant_r(
         precondition binds only direct callers of this helper.
     sigma_eff_kms : float
         Effective velocity dispersion [km/s] (after library subtraction).
+    pad : int
+        Symmetric margin per side [pixels] (static), from :func:`_lsf_pad_pixels`.
 
     Returns
     -------
@@ -216,27 +440,119 @@ def _apply_lsf_constant_r(
 
     Notes
     -----
-    JIT-compatible: yes. Private helper for apply_lsf.
-
+    JIT-compatible: yes. Private helper for apply_lsf. Gradient-safe: yes.
     """
     sigma_v = sigma_eff_kms / _C_KM_S
     dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
     sigma_pix = sigma_v / dlnwave
-
-    n = spectrum.shape[0]
-    freq = jnp.fft.rfftfreq(n)
-    kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
-
-    flux_ft = jnp.fft.rfft(spectrum)
-    return jnp.fft.irfft(flux_ft * kernel_ft, n=n)
+    return _gaussian_fft_convolve(spectrum, sigma_pix, pad)
 
 
-@partial(jax.jit, static_argnums=(3,))
+def _raised_cos_weight(pos, center, half_w):
+    """Raised-cosine bin weight: 1 at ``center``, zero beyond ``half_w``."""
+    dist = jnp.abs(pos - center) / half_w
+    return jnp.where(dist < 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * dist)), 0.0)
+
+
+def _bin_sigma_and_dln(sigma_eff_kms, dlnwave_local, pix_idx, center, bin_width):
+    """Mean sigma and mean d ln lambda over the pixels within one bin width of ``center``.
+
+    The two clamps are written out at each use rather than hoisted into a shared
+    name: the zero-hiding audit (``tools/check_zero_hiding_clamps.py``) matches the
+    division syntactically, and a hoisted clamp would drop out of its inventory.
+    """
+    bin_mask = jnp.where(jnp.abs(pix_idx - center) < bin_width, 1.0, 0.0)
+    n_in_bin = jnp.sum(bin_mask)
+    sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(n_in_bin, 1.0)
+    dlnwave_mean = jnp.sum(dlnwave_local * bin_mask) / jnp.maximum(n_in_bin, 1.0)
+    return sigma_mean, dlnwave_mean
+
+
+def _variable_r_layout(n_pix: int, n_bins: int, pad: int, bin_ids) -> _BinLayout:
+    """Static bin geometry for the piecewise path, from ``n_pix`` and ``n_bins`` only.
+
+    Bins are the uniform pixel split of the spectrum. A bin's raised-cosine weight is
+    nonzero only within ``0.75`` of a bin width of its center, so the windowed path
+    transforms just that core plus ``pad`` pixels of margin, at a fast length.
+    """
+    width = n_pix / n_bins
+    half_w = 0.75 * width
+    all_centers = (np.arange(n_bins) + 0.5) * width
+    ids = np.arange(n_bins) if bin_ids is None else np.asarray(bin_ids, dtype=int)
+    centers = all_centers[ids]
+    core_len = math.ceil(1.5 * width) + 2
+    seg_win = _next_fast_fft_len(core_len + 2 * pad)
+    seg_full = _next_fast_fft_len(n_pix + 2 * pad)
+    if centers.size == 0 or seg_win >= seg_full:
+        return _BinLayout(False, centers, half_w, width, None, n_pix, seg_full, pad)
+    core_start = np.floor(centers - half_w).astype(int) - 1
+    seg_start = core_start - pad
+    sym = max(0, -int(seg_start.min()), int((seg_start + seg_win).max()) - n_pix)
+    return _BinLayout(True, centers, half_w, width, core_start, core_len, seg_win, sym)
+
+
+def _full_length_bins(spectrum, sigma_eff_kms, dlnwave_local, pix_idx, layout, pad):
+    """Sum of the selected bins, each transformed over the whole padded spectrum."""
+    n_pix = spectrum.shape[0]
+    length = layout.seg_len
+    flux_ft = jnp.fft.rfft(jnp.pad(spectrum, pad, mode="symmetric"), n=length)
+    freq = jnp.fft.rfftfreq(length)
+
+    def _convolve_bin(acc, center):
+        sigma_mean, dlnwave_mean = _bin_sigma_and_dln(
+            sigma_eff_kms, dlnwave_local, pix_idx, center, layout.bin_width
+        )
+        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave_mean
+        kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+        conv = jnp.fft.irfft(flux_ft * kernel_ft, n=length)[pad : pad + n_pix]
+        return acc + _raised_cos_weight(pix_idx, center, layout.half_w) * conv, None
+
+    acc, _ = jax.lax.scan(_convolve_bin, jnp.zeros(n_pix), jnp.asarray(layout.centers))
+    return acc
+
+
+def _windowed_bins(spectrum, sigma_eff_kms, dlnwave_local, pix_idx, layout, pad):
+    """Sum of the selected bins, each transformed over its own window and margin."""
+    n_pix = spectrum.shape[0]
+    sym = layout.sym
+    seg_len = layout.seg_len
+    core_len = layout.core_len
+    padded = jnp.pad(spectrum, sym, mode="symmetric")
+    freq = jnp.fft.rfftfreq(seg_len)
+    core_offsets = jnp.arange(core_len, dtype=jnp.float64)
+    xs = (
+        jnp.asarray(layout.centers),
+        jnp.asarray(layout.core_start - pad + sym),
+        jnp.asarray(layout.core_start + sym),
+        jnp.asarray(layout.core_start.astype(np.float64)),
+    )
+
+    def _window_bin(acc, x):
+        center, seg_pos, core_pos, core_pix0 = x
+        seg = jax.lax.dynamic_slice(padded, (seg_pos,), (seg_len,))
+        sigma_mean, dlnwave_mean = _bin_sigma_and_dln(
+            sigma_eff_kms, dlnwave_local, pix_idx, center, layout.bin_width
+        )
+        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave_mean
+        kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
+        conv = jnp.fft.irfft(jnp.fft.rfft(seg) * kernel_ft, n=seg_len)[pad : pad + core_len]
+        contrib = _raised_cos_weight(core_pix0 + core_offsets, center, layout.half_w) * conv
+        current = jax.lax.dynamic_slice(acc, (core_pos,), (core_len,))
+        return jax.lax.dynamic_update_slice(acc, current + contrib, (core_pos,)), None
+
+    acc, _ = jax.lax.scan(_window_bin, jnp.zeros(n_pix + 2 * sym), xs)
+    return acc[sym : sym + n_pix]
+
+
+@partial(jax.jit, static_argnames=("n_bins", "pad", "bin_ids"))
 def _apply_lsf_variable_r(
     spectrum: jnp.ndarray,
     wave_obs: jnp.ndarray,
     sigma_eff_kms: jnp.ndarray,
     n_bins: int = 16,
+    *,
+    pad: int,
+    bin_ids: tuple[int, ...] | None = None,
 ) -> jnp.ndarray:
     """Piecewise-constant LSF convolution for variable R.
 
@@ -259,6 +575,12 @@ def _apply_lsf_variable_r(
     n_bins : int, optional
         Number of piecewise-constant segments. More bins gives better
         accuracy but requires more FFTs. Typical: 10–20. Default 16.
+    pad : int
+        Symmetric margin per side [pixels] (static), from :func:`_lsf_pad_pixels`.
+    bin_ids : tuple of int or None, optional
+        Static subset of bin indices to sum (static). ``None`` sums all bins. A
+        subset is exact on every pixel that all of its bins touch, and is used by
+        :func:`broaden_velocity_only_window`; elsewhere the result is not meaningful.
 
     Returns
     -------
@@ -267,77 +589,59 @@ def _apply_lsf_variable_r(
 
     Notes
     -----
-    JIT-compatible: yes, `n_bins` is a static argument.
-    Gradient-safe: yes. Private helper for apply_lsf.
+    JIT-compatible: yes, ``n_bins``, ``pad`` and ``bin_ids`` are static. Gradient-safe:
+    yes. Private helper for apply_lsf.
 
+    Each bin's transform is short: only its window (the pixels where its weight is
+    nonzero) plus ``pad`` pixels of margin on each side, at a fast length. When that
+    saves nothing, every bin is transformed over the whole padded spectrum instead.
     """
     n_pix = spectrum.shape[0]
+    layout = _variable_r_layout(n_pix, n_bins, pad, bin_ids)
     # Local pixel scale, not the blue-end value for the whole array. Each bin
     # already convolves with its own sigma; giving it its own d(ln lambda) as
     # well is what lets this path serve a grid that is not log-uniform, where a
     # single global scale under-broadened by wave[0]/lambda (#1791). On a
     # log-uniform grid jnp.gradient returns that same constant, so nothing moves.
     dlnwave_local = jnp.gradient(jnp.log(wave_obs))
-    freq = jnp.fft.rfftfreq(n_pix)
-    flux_ft = jnp.fft.rfft(spectrum)
-
-    # Pixel indices for bin edges (uniform split)
-    bin_edges = jnp.linspace(0, n_pix, n_bins + 1)
-    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-    bin_width = bin_edges[1] - bin_edges[0]
-
-    # Pixel index array
     pix_idx = jnp.arange(n_pix, dtype=jnp.float64)
-
-    def _convolve_bin(carry, bin_center):
-        r"""Convolve with the mean sigma for one bin, weighted by overlap."""
-        # Pixel index of bin center
-        center = bin_center
-        half_w = bin_width * 0.75  # overlap region for blending
-
-        # Smooth weight: raised cosine (1 at center, 0 outside)
-        dist = jnp.abs(pix_idx - center) / half_w
-        weight = jnp.where(dist < 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * dist)), 0.0)
-
-        # Mean sigma in this bin (weighted by the bin window)
-        bin_mask = jnp.where(
-            jnp.abs(pix_idx - center) < bin_width,
-            1.0,
-            0.0,
-        )
-        # Both clamps written out rather than hoisted into a shared name: XLA
-        # common-subexpression-eliminates them, and tools/check_zero_hiding_clamps.py
-        # matches the division syntactically, so hoisting would retire a site from
-        # that audit while the clamp is still there, shrinking the inventory
-        # silently is the one thing that guard exists to prevent.
-        n_in_bin = jnp.sum(bin_mask)
-        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(n_in_bin, 1.0)
-        dlnwave_mean = jnp.sum(dlnwave_local * bin_mask) / jnp.maximum(n_in_bin, 1.0)
-
-        # FFT convolution with this sigma, at this bin's own pixel scale
-        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave_mean
-        kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
-        convolved = jnp.fft.irfft(flux_ft * kernel_ft, n=n_pix)
-
-        return carry + weight * convolved, None
-
-    # Accumulate weighted contributions from all bins
-    result = jnp.zeros(n_pix)
-    result, _ = jax.lax.scan(_convolve_bin, result, bin_centers)
+    if layout.windowed:
+        result = _windowed_bins(spectrum, sigma_eff_kms, dlnwave_local, pix_idx, layout, pad)
+    else:
+        result = _full_length_bins(spectrum, sigma_eff_kms, dlnwave_local, pix_idx, layout, pad)
 
     # Normalize by total weight at each pixel
-    def _weight_bin(carry, bin_center):
-        r"""Accumulate raised-cosine overlap weights for all bins at each pixel."""
-        center = bin_center
-        half_w = bin_width * 0.75
-        dist = jnp.abs(pix_idx - center) / half_w
-        weight = jnp.where(dist < 1.0, 0.5 * (1.0 + jnp.cos(jnp.pi * dist)), 0.0)
-        return carry + weight, None
-
-    total_weight, _ = jax.lax.scan(_weight_bin, jnp.zeros(n_pix), bin_centers)
+    centers = jnp.asarray(layout.centers)
+    total_weight = jnp.sum(
+        _raised_cos_weight(pix_idx[None, :], centers[:, None], layout.half_w), axis=0
+    )
     total_weight = jnp.maximum(total_weight, 1e-30)
 
     return result / total_weight
+
+
+def _is_concrete_nonpositive(sigma) -> bool:
+    """Whether ``sigma`` is a concrete scalar that is ``<= 0``, known at trace time (#2832).
+
+    Python and NumPy scalars and 0-d NumPy arrays are concrete. A tracer or a jax
+    array is not, even when its value happens to be known, so the static skip never
+    depends on a runtime value.
+    """
+    if isinstance(sigma, (jax.core.Tracer, jax.Array)):
+        return False
+    if isinstance(sigma, (int, float, np.generic, np.ndarray)):
+        arr = np.asarray(sigma)
+        return arr.ndim == 0 and bool(arr <= 0)
+    return False
+
+
+def _bins_touching(n_pix: int, n_bins: int, lo: int, hi: int) -> tuple[int, ...]:
+    """Indices of the bins whose weight window meets the pixel range ``[lo, hi)``."""
+    width = n_pix / n_bins
+    half_w = 0.75 * width
+    centers = (np.arange(n_bins) + 0.5) * width
+    keep = (centers + half_w >= lo) & (centers - half_w <= hi)
+    return tuple(int(k) for k in np.flatnonzero(keep))
 
 
 def broaden_velocity_only(
@@ -345,6 +649,8 @@ def broaden_velocity_only(
     wave: jnp.ndarray,
     sigma_v_kms: jnp.ndarray | float,
     n_bins: int = 16,
+    *,
+    pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Convolve ``flux`` with the galaxy's own velocity dispersion alone (#2589).
 
@@ -376,11 +682,18 @@ def broaden_velocity_only(
     wave : ndarray, shape (n,)
         Wavelength grid [Angstrom]. Any strictly increasing grid.
     sigma_v_kms : float or ndarray
-        Velocity dispersion [km/s]. Non-positive is the identity
-        (``jnp.where`` guard, not a Python branch, so this stays
-        jit/grad-safe for a traced ``sigma_v_kms``).
+        Velocity dispersion [km/s]. Non-positive is the identity. A concrete
+        non-positive scalar (Python, NumPy, or 0-d NumPy) returns ``flux`` unchanged
+        before any array work and emits no FFT (#2832). A traced or jax-array sigma
+        keeps the ``jnp.where`` guard, so it stays jit/grad-safe.
     n_bins : int, default 16
         Piecewise-constant segment count (see :func:`_apply_lsf_variable_r`).
+    pad_pixels : int or None, optional
+        Static padding [pixels] per side. ``None`` derives it from the grid and the
+        sigma: the padding follows :func:`_lsf_sigma_bound_kms`, which counts a
+        traced sigma and a concrete one below ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) as
+        2000 km/s, so tracing does not change it. A traced grid pads by ``n - 1``.
+        An explicit value is used as given.
 
     Returns
     -------
@@ -389,14 +702,127 @@ def broaden_velocity_only(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes.
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The convolution is padded by a
+    margin set from the grid (:func:`_lsf_pad_pixels`), so the kernel never wraps
+    from one spectrum edge onto the other (#2712, #2832). The margin depends on the
+    sigma's bound (:func:`_lsf_sigma_bound_kms`), never on whether ``sigma_v_kms`` is
+    traced: a traced sigma counts as 2000 km/s, and a concrete one counts as the
+    larger of 2000 km/s and its value. A traced sigma above 2000 km/s is therefore
+    under-padded; pass ``pad_pixels`` for such a kernel.
     """
+    if _is_concrete_nonpositive(sigma_v_kms):
+        return flux
     sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
-    return jnp.where(
-        sigma_v > 0.0,
-        _apply_lsf_variable_r(flux, wave, jnp.broadcast_to(sigma_v, flux.shape), n_bins),
-        flux,
+    pad = _resolve_pad(
+        pad_pixels, wave, flux.shape[0], _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins
     )
+    broadened = _apply_lsf_variable_r(
+        flux, wave, jnp.broadcast_to(sigma_v, flux.shape), n_bins, pad=pad
+    )
+    return jnp.where(sigma_v > 0.0, broadened, flux)
+
+
+def broaden_velocity_only_window(
+    flux: jnp.ndarray,
+    wave: jnp.ndarray,
+    sigma_v_kms: jnp.ndarray | float,
+    n_bins: int,
+    lo: int,
+    hi: int,
+) -> jnp.ndarray:
+    r""":func:`broaden_velocity_only` exact on the pixel range ``[lo, hi)`` only (#2832).
+
+    Pixels in ``[lo, hi)`` equal the full-grid :func:`broaden_velocity_only` result to
+    floating-point precision: every bin that touches them is summed, with the bin
+    geometry of the full grid. Pixels outside the range are returned unbroadened. Use
+    it when only that range is read downstream, as the rest-grid pass of the IGM
+    branch does for the observed window.
+
+    Parameters
+    ----------
+    flux : ndarray, shape (n,)
+        Spectrum to broaden [erg/s/Hz or erg/s/cm^2/Hz].
+    wave : ndarray, shape (n,)
+        Wavelength grid [Angstrom], the full grid of ``flux``.
+    sigma_v_kms : float or ndarray
+        Velocity dispersion [km/s], handled as in :func:`broaden_velocity_only`.
+    n_bins : int
+        Piecewise-constant segment count of the full grid.
+    lo, hi : int
+        Pixel range ``[lo, hi)`` that must be exact, static Python ints.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Broadened spectrum on ``[lo, hi)``, the input elsewhere.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, for a concrete ``wave``, ``lo`` and ``hi``. **Gradient-safe**:
+    yes. The bin subset is static, so only the bins that touch ``[lo, hi)`` are
+    transformed.
+    """
+    if _is_concrete_nonpositive(sigma_v_kms):
+        return flux
+    n_pix = flux.shape[0]
+    lo, hi = max(int(lo), 0), min(int(hi), n_pix)
+    if lo >= hi:
+        return flux
+    sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
+    pad = _lsf_pad_pixels(wave, n_pix, _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins)
+    broadened = _apply_lsf_variable_r(
+        flux,
+        wave,
+        jnp.broadcast_to(sigma_v, flux.shape),
+        n_bins,
+        pad=pad,
+        bin_ids=_bins_touching(n_pix, n_bins, lo, hi),
+    )
+    windowed = jnp.concatenate([flux[:lo], broadened[lo:hi], flux[hi:]])
+    return jnp.where(sigma_v > 0.0, windowed, flux)
+
+
+def rest_grid_observed_window(wave_rest, wave_obs, redshift) -> tuple[int, int] | None:
+    r"""Rest-grid pixel range that the observed grid reads, or ``None`` if not static (#2832).
+
+    The observed window is :math:`[\lambda_{\rm obs,min}, \lambda_{\rm obs,max}]
+    / (1 + z)` widened by one largest observed pixel. The result is padded by
+    :func:`_lsf_pad_pixels` rest pixels on each side, so interpolation and flux
+    integration at the window edges also read exact values.
+
+    Parameters
+    ----------
+    wave_rest : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame wavelength grid [Angstrom].
+    redshift : float
+        Source redshift z.
+
+    Returns
+    -------
+    tuple[int, int] or None
+        ``(lo, hi)`` with ``0 <= lo <= hi <= n_wave``, or ``None`` when any argument is
+        a tracer, in which case the window cannot be read at trace time.
+
+    Notes
+    -----
+    Private helper. Build-time (NumPy). Its result is a static slice, so the caller
+    must treat a ``None`` as "use the full grid".
+    """
+    if any(isinstance(x, jax.core.Tracer) for x in (wave_rest, wave_obs, redshift)):
+        return None
+    wr = np.asarray(wave_rest, dtype=np.float64)
+    wo = np.asarray(wave_obs, dtype=np.float64)
+    z = float(np.asarray(redshift, dtype=np.float64))
+    n_wave = wr.shape[0]
+    step = float(np.max(np.diff(wo))) if wo.size > 1 else 0.0
+    lam_lo = (float(wo.min()) - step) / (1.0 + z)
+    lam_hi = (float(wo.max()) + step) / (1.0 + z)
+    pad = _lsf_pad_pixels(wr, n_wave, _LSF_MAX_SIGMA_KMS)
+    lo = int(np.searchsorted(wr, lam_lo, side="right")) - 1 - pad
+    hi = int(np.searchsorted(wr, lam_hi, side="left")) + 1 + pad
+    return max(lo, 0), min(hi, n_wave)
 
 
 def resolve_sigma_lib_kms(
@@ -464,6 +890,8 @@ def apply_lsf(
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
     sigma_v_kms: float = 0.0,
+    *,
+    pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Apply wavelength-dependent Line Spread Function with library resolution subtraction.
 
@@ -530,6 +958,13 @@ def apply_lsf(
         from stellar dynamics, distinct from instrument LSF
         (``resolution``) and from the SSP-library template resolution
         (``sigma_lib_kms``). Default 0.0 (no extra broadening).
+    pad_pixels : int or None, optional
+        Static padding [pixels] per side (keyword-only). ``None`` derives it from the
+        bound of :func:`_lsf_sigma_bound_kms`: each component counts as the larger of
+        ``_LSF_MAX_SIGMA_KMS`` (2000 km/s) and its concrete value, and a traced
+        component counts as 2000 km/s. For components up to 2000 km/s the padding does
+        not depend on tracing. A traced grid pads by ``n - 1``. An explicit value is
+        used as given, so it must cover 5 sigma of the kernel to be exact.
 
     Returns
     -------
@@ -556,9 +991,14 @@ def apply_lsf(
     the reciprocal. Measured recovery of a requested 200 km/s on
     ``linspace(3000, 10000)``: 0.991 at the default ``n_bins=16``.
 
-    **Boundary handling**: FFT convolution wraps at the edges (circular convolution).
-    For small spectra (N < 1000 pixels) or incomplete coverage, consider padding
-    before calling this function.
+    **Boundary handling**: the convolution runs on a reflecting (symmetric) margin of
+    :func:`_lsf_pad_pixels` pixels per side (5 sigma of the kernel at the pixel scale
+    the kernel uses, and at least 256 pixels for sub-pixel kernels), so the kernel
+    does not wrap from one spectrum edge onto the other (#2712, #2832). The sigma is
+    bounded per component, each at least 2000 km/s, and the bounds are combined in
+    quadrature; the library dispersion is not subtracted. Every component at or
+    below 2000 km/s gets the same padding whether or not it is traced, so the same
+    call pads the same way under ``jax.jit``.
 
     See Also
     --------
@@ -592,6 +1032,7 @@ def apply_lsf(
     # Clamp non-negative (priors enforce this; clamp keeps trace-safe path
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
+    sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
     sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
     resolution = jnp.asarray(resolution)
@@ -623,12 +1064,14 @@ def apply_lsf(
     # conserves flux exactly and a zero-width kernel is still the identity.
     if resolution.ndim == 0 and sigma_lib_kms.ndim == 0 and _is_log_uniform(wave_obs):
         # Scalar R and scalar σ_lib on a log-uniform grid: one FFT, and the scale is exact.
-        return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms)
+        pad = _resolve_pad(pad_pixels, wave_obs, spectrum.shape[0], sigma_bound)
+        return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms, pad=pad)
 
     # Per-pixel R, or per-pixel σ_lib, or a grid whose pixel scale varies:
     # piecewise-constant in all three.
     sigma_per_pixel = jnp.broadcast_to(jnp.atleast_1d(sigma_eff_kms), spectrum.shape)
-    return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins)
+    pad = _resolve_pad(pad_pixels, wave_obs, spectrum.shape[0], sigma_bound, n_bins)
+    return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins, pad=pad)
 
 
 def project_spectrum(
@@ -647,6 +1090,7 @@ def project_spectrum(
     conserving: bool = False,
     resolution_matrix: object | None = None,
     has_lyc_edge: bool = False,
+    lsf_pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -720,6 +1164,11 @@ def project_spectrum(
         edge, not a ramp across the model cell straddling it. The resampler
         then reads the cell with the step model of :mod:`tengri.components.lyc`,
         as photometry does (#2447). Static. Default ``False``.
+
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] per side for the LSF (see :func:`apply_lsf`). ``None``
+        derives it from the grid and the sigma. Used on the observed grid; the
+        conserving path's LSF on the model grid is not affected.
 
     Returns
     -------
@@ -817,7 +1266,9 @@ def project_spectrum(
         # the identity, so existing fits are unchanged.
         from tengri.observation.banded import banded_matvec
 
-        flux = broaden_velocity_only(flux, wave_obs, sigma_v_kms, n_bins)
+        flux = broaden_velocity_only(
+            flux, wave_obs, sigma_v_kms, n_bins, pad_pixels=lsf_pad_pixels
+        )
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
     elif resolution is not None:
         flux = apply_lsf(
@@ -827,6 +1278,7 @@ def project_spectrum(
             sigma_lib_kms=sigma_lib_kms,
             n_bins=n_bins,
             sigma_v_kms=sigma_v_kms,
+            pad_pixels=lsf_pad_pixels,
         )
     if cal_coeffs is not None:
         wmin, wmax = (
@@ -1244,20 +1696,25 @@ def velocity_broaden(
 
     """
     _require_log_uniform_grid(wave, "velocity_broaden")
-    return _velocity_broaden_impl(flux, wave, sigma_km_s)
+    sigma_bound = _lsf_sigma_bound_kms(sigma_v_kms=sigma_km_s)
+    pad = _lsf_pad_pixels(wave, flux.shape[0], sigma_bound)
+    return _velocity_broaden_impl(flux, wave, sigma_km_s, pad=pad)
 
 
-@jax.jit
+@partial(jax.jit, static_argnames=("pad",))
 def _velocity_broaden_impl(
     flux: jnp.ndarray,
     wave: jnp.ndarray,
     sigma_km_s: float,
+    *,
+    pad: int,
 ) -> jnp.ndarray:
     """FFT convolution for :func:`velocity_broaden`, with the check already done.
 
     Split out so the grid check runs on concrete values: the public function was
     itself ``@jax.jit``, which makes ``wave`` a tracer inside it, and a guard that
-    can never see its argument is not a guard (#1742).
+    can never see its argument is not a guard (#1742). ``pad`` is the static kernel
+    margin from :func:`_lsf_pad_pixels` (#2832).
     """
     sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
@@ -1268,16 +1725,7 @@ def _velocity_broaden_impl(
     # Gaussian kernel width in pixels
     sigma_pix = sigma_v / dlnwave
 
-    # Build Gaussian kernel in Fourier space (faster than real-space)
-    n = len(flux)
-    freq = jnp.fft.rfftfreq(n)
-    kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
-
-    # FFT convolution
-    flux_ft = jnp.fft.rfft(flux)
-    broadened = jnp.fft.irfft(flux_ft * kernel_ft, n=n)
-
-    return broadened
+    return _gaussian_fft_convolve(flux, sigma_pix, pad)
 
 
 # ── Speed of light in Angstrom/s (for frequency conversions) ──────
