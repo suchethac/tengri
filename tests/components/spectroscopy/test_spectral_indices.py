@@ -21,6 +21,7 @@ from tengri.observation.spectral_indices import (
     SpectralIndexDef,
     measure_index_jax,
 )
+from tengri.utils.air_vacuum import air_to_vac
 from tests._grad_parity import assert_grad_matches_fd
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -225,8 +226,14 @@ class TestStandardCatalog:
     def test_d4000_wide_exists(self):
         assert "D4000" in STANDARD_INDICES
         d4000 = STANDARD_INDICES["D4000"]
-        assert d4000.continuum[0] == (3750.0, 3950.0)
-        assert d4000.continuum[1] == (4050.0, 4250.0)
+        # Bruzual (1983) published 3750-3950 / 4050-4250 in air; the catalog stores the
+        # vacuum edges (air_to_vac of the published numbers, +1.07 to +1.20 A).
+        np.testing.assert_allclose(
+            d4000.continuum,
+            air_to_vac(np.array([[3750.0, 3950.0], [4050.0, 4250.0]])),
+            rtol=0,
+            atol=1e-9,
+        )
 
     def test_dn4000_narrow_removed(self):
         assert "Dn4000_narrow" not in STANDARD_INDICES

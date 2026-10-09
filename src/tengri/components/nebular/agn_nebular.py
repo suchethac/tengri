@@ -159,7 +159,10 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LSUN_ERG,
 )
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import (
+    CLOUDY_LABEL_AIR_MAX_AA,
+    catalog_air_to_vacuum,
+)
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 from tengri.protocols.component import declared_default
 
@@ -644,7 +647,12 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         logn_axis = jnp.log10(nH)
 
         # Load emission lines
-        line_wav = jnp.array(f["lines"]["wavelength"][:])
+        # ``lines/wavelength`` holds Cloudy c23.01's line labels: AIR above 2000
+        # Angstrom (H-alpha 6562.80, [O III] 5006.84, Pa-alpha 18751.0). Convert
+        # them once, here; everything downstream is vacuum.
+        line_wav = jnp.array(
+            catalog_air_to_vacuum(f["lines"]["wavelength"][:], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA)
+        )
         line_lum = jnp.array(f["lines"]["luminosity"][:])  # (2,2,2,2,2,2,215)
         line_ids = tuple(
             i.decode() if isinstance(i, bytes) else str(i) for i in f["lines"]["id"][:]

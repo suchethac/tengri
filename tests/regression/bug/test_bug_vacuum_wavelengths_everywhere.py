@@ -120,7 +120,10 @@ def test_fsps_ssp_is_vacuum():
 def test_sweep_every_source_declares_a_convention_and_is_registered():
     from tengri.observation.spectral_indices import STANDARD_INDICES
 
-    assert all(s.convention in {"vacuum", "air", "mixed"} and s.evidence for s in SOURCES)
+    assert all(
+        s.convention in {"vacuum", "air", "mixed", "unestablished"} and s.evidence for s in SOURCES
+    )
+    assert all(s.reason for s in SOURCES if s.convention == "unestablished")
     registered = {s.path for s in SOURCES}
     for path in sorted(DATA.glob("*.h5")):
         if not path.exists() or path.suffix != ".h5":
@@ -133,9 +136,9 @@ def test_sweep_every_source_declares_a_convention_and_is_registered():
             assert f"data/{path.name}" in registered, f"{path.name}: undeclared line wavelengths"
     for s in SOURCES:
         assert (ROOT / s.path).exists() or s.path.startswith("data/"), s.path
-        if s.convention != "vacuum":
+        if s.convention not in {"vacuum", "unestablished"}:
             assert "." in s.ingest
-    assert {"lick_indices"} <= {s.name for s in SOURCES if s.convention == "air"}
+    assert {"lick_indices", "break_indices"} <= {s.name for s in SOURCES if s.convention == "air"}
     assert set(STANDARD_INDICES)  # the Lick subset is covered by test_lick_*
 
 
