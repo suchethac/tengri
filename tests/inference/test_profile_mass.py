@@ -43,6 +43,11 @@ _MASS_NAME = "sfh_tsnorm_log_total_mass"
 #: problems, so the difference is set by optimizer tolerance and the
 #: Occam-factor term, not by a shared fixed point. The bar sits above the
 #: measured maximum with margin; a 1e-3 bar failed on this draw (#2424).
+#: Most of that spread was the unprofiled L-BFGS-B stopping on scipy's
+#: relative-decrease test far from its minimum (seed 5 later read 0.19 on
+#: sfh_tsnorm_trunc at grad norm 0.057); with the gradient tolerance binding
+#: (``map_dispatch._SCIPY_FTOL``) seeds 0-5 measure 0.024, 0.012, 3.6e-3,
+#: 2.8e-3, 7.9e-4 and 3.7e-4, the remainder the estimators' own difference.
 _MAP_PARITY_BAR = 0.1
 _SPEC_WAVE = jnp.linspace(4000.0, 7000.0, 40)
 
@@ -359,6 +364,17 @@ class TestMapParity:
 
         assert post_on.diagnostics["profile_mass_resolved"] is True
         assert post_off.diagnostics["profile_mass_resolved"] is False
+
+        # Both optimizers reached their stationary points. scipy's default
+        # relative-decrease test once stopped the unprofiled fit at grad norm
+        # 0.057 while reporting success, 1.4e-3 above the joint minimum the
+        # profiled MAP had found, which is the whole of the parity gap it left.
+        for label, post in (("unprofiled", post_off), ("profiled", post_on)):
+            grad_norm = post.diagnostics["grad_norm"]
+            # grad-assert: finite-only — a stationary point is the claim; zero is the ideal value
+            assert np.isfinite(grad_norm) and grad_norm < 1e-4, (
+                f"{label} MAP stopped at grad norm {grad_norm:.3g}, not at a minimum"
+            )
 
         for name in post_off.params:
             if name == _MASS_NAME:
