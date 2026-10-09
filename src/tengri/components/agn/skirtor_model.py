@@ -28,16 +28,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import (
-    PUBLICATION_HI_AA,
-    PUBLICATION_LO_AA,
-    PUBLICATION_NODES,
-    emitted_bolometric,
-)
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
+from tengri.utils.physics_constants import C_AA
 
 __all__ = ["SKIRTORTorus"]
 
@@ -83,6 +78,70 @@ _DELTA_PRIOR = declared_prior(_AGN_PARAMS, "agn_delta")
 _DISC_BREAKPOINTS_AA = (80.0, 100.0, 1.0e3, 5.0e4, 1.0e7)
 
 
+#: Polar-integrand breakpoints [Angstrom] besides the template nodes: the SMC extinction curve
+#: switches from cubic to linear at x = 1000 / nm = 3.69 (lambda = 1000 / 3.69 nm) and the cubic
+#: crosses zero (the max(., 0) clamp) at the root of its polynomial in x.
+_SMC_CUBIC_LINEAR_AA = 10.0 * 1000.0 / 3.69
+_SMC_ZERO_CROSSING_AA = (
+    10.0
+    * 1000.0
+    / float(
+        max(
+            (
+                r.real
+                for r in np.roots([0.0296, -0.3774, 1.5848, -0.8175])
+                if abs(r.imag) < 1e-12 and r.real > 0
+            ),
+        )
+    )
+)
+_POLAR_BREAKPOINTS_AA = (
+    80.0,
+    100.0,
+    1.0e3,
+    _SMC_CUBIC_LINEAR_AA,
+    _SMC_ZERO_CROSSING_AA,
+    5.0e4,
+    1.0e7,
+)
+#: Gauss-Legendre nodes per polar segment (smallest order at 1e-8; see the ``_polar_quadrature``).
+_POLAR_GL_ORDER: int = 4
+
+
+def _polar_quadrature(native_wave, dtype):
+    """Gauss-Legendre nodes and weights in ln(lambda) for the polar absorbed power.
+
+    Segments run between every template node and every polar breakpoint in [80 A, 1e7 A],
+    where the disc is nonzero. Returned weights include the ln(lambda) measure, so
+    ``sum(w * L_nu * c / lambda)`` is the bolometric integral over the segments.
+
+    Parameters
+    ----------
+    native_wave : array_like, shape (n_native,)
+        The SKIRTOR template's own wavelength nodes [Angstrom].
+    dtype : dtype
+        Floating dtype of the returned arrays.
+
+    Returns
+    -------
+    lam : ndarray, shape (n_segment * n_gl,)
+        Quadrature wavelengths [Angstrom].
+    weight : ndarray, shape (n_segment * n_gl,)
+        Weights in d(ln lambda) [dimensionless].
+    """
+    brk = np.unique(
+        np.concatenate(
+            [np.asarray(native_wave, dtype=np.float64), np.asarray(_POLAR_BREAKPOINTS_AA)]
+        )
+    )
+    brk = brk[(brk >= 80.0) & (brk <= 1.0e7)]
+    x, w = np.polynomial.legendre.leggauss(_POLAR_GL_ORDER)
+    la, lb = np.log(brk[:-1]), np.log(brk[1:])
+    lam = np.exp(la[:, None] + 0.5 * (x[None, :] + 1.0) * (lb - la)[:, None])
+    weight = 0.5 * (lb - la)[:, None] * w[None, :]
+    return jnp.asarray(lam.ravel(), dtype=dtype), jnp.asarray(weight.ravel(), dtype=dtype)
+
+
 def _native_publication_nodes(native_wave) -> np.ndarray:
     """Template nodes, disc breakpoints and edges, and the diagnostic wavelengths, ascending.
 
@@ -103,18 +162,6 @@ def _native_publication_nodes(native_wave) -> np.ndarray:
 def _native_publication_wave(native_wave, dtype) -> jnp.ndarray:
     """Publication nodes as a JAX array of the requested dtype."""
     return jnp.asarray(_native_publication_nodes(native_wave), dtype=dtype)
-
-
-def _polar_publication_wave(native_wave, dtype) -> jnp.ndarray:
-    """Dense log-uniform grid united with the native publication nodes, ascending.
-
-    The polar absorbed power is an analytic extinction curve times the disc, so it needs
-    dense nodes; the disc's edges and breakpoints still have to be nodes, or the jump at
-    the 80 A edge is not resolved.
-    """
-    dense = np.geomspace(PUBLICATION_LO_AA, PUBLICATION_HI_AA, PUBLICATION_NODES)
-    nodes = np.unique(np.concatenate([dense, _native_publication_nodes(native_wave)]))
-    return jnp.asarray(nodes, dtype=dtype)
 
 
 _DISC_EDGE_NODES_AA = tuple(
@@ -575,18 +622,19 @@ class SKIRTORTorus(SEDModelComponent):
         L_agn_disc = native_bolometric_nu(sed_disc_pub, wave_pub)
         L_agn_torus = native_bolometric_nu(dust_pub, wave_pub)
 
-        # Polar dust (Type 1 only). The absorbed fraction is an analytic extinction curve, not a
-        # power law between nodes, so its integral runs on the dense publication grid.
-        wave_dense = _polar_publication_wave(skirtor_fn.native_wave, wave.dtype)
-        comp_dense = _components(wave_dense)
-        sed_disc_dense = comp_dense.disk * _retilt(wave_dense) * disc_renorm
+        # Polar dust (Type 1 only). The absorbed power integrates the disc through an analytic
+        # extinction curve. Its non-smooth points are segment boundaries: every template node
+        # (the emitted disc changes slope there), the disc's breakpoints and edges, the SMC
+        # cubic-to-linear switch and the cubic's zero crossing. Each segment is integrated by
+        # Gauss-Legendre in ln(lambda), which converges to 1e-8 at a few nodes per segment.
         polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
-        _, l_abs_dense = polar_dust_extinction(sed_disc_dense, wave_dense, *polar_args, law="smc")
-        L_abs_pub = emitted_bolometric(l_abs_dense, wave_dense)
+        lam_pol, wq = _polar_quadrature(skirtor_fn.native_wave, wave.dtype)
+        comp_pol = _components(lam_pol)
+        sed_disc_pol = comp_pol.disk * _retilt(lam_pol) * disc_renorm
+        _, l_abs_pol = polar_dust_extinction(sed_disc_pol, lam_pol, *polar_args, law="smc")
+        L_abs_pub = jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
         polar_emit_kwargs = {"temperature": p["polar_T"], "beta": p["polar_beta"], "lambda_0": 2e6}
-        L_agn_polar_dust = emitted_bolometric(
-            polar_dust_emission(L_abs_pub, wave_dense, **polar_emit_kwargs), wave_dense
-        )
+        L_agn_polar_dust = L_abs_pub
 
         # Caller-grid SED: the same pointwise functions, scaled by the publication factor.
         comp_caller = _components(wave)
