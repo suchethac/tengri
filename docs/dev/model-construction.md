@@ -103,6 +103,11 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     to 16 % in the FUV and 9 % in r-band flux. The `'cic'` integrand resolves
     structure down to ~30 Myr; a 10 Myr burst is not converged (age-weight TV
     0.015).
+  - A star formed before the oldest SSP template (PARSEC's 12.589 Gyr is
+    younger than the 13.787 Gyr universe at `z = 0`) is assigned to that
+    template by both kernels, which sample the history out to `age(z)`; the
+    formed mass is conserved and one `SFHBeyondOldestTemplateWarning` is raised
+    per build when the redshift range reaches such ages ([#2714]).
   - It is **not** a speed knob, and `'dsps'` is the slower of the two.
     Measured on `predict_photometry` gradients (interleaved reps, medians, an
     A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact

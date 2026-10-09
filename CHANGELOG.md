@@ -189,6 +189,8 @@
   unknown-key error.
   A hand-built parameter dict passed to the radio component or to `tengri.pipeline` for
   the power-law model needs `radio_log_nu_cut` (13.0 is the declared default).
+- Stars formed before the oldest SSP template are the oldest template: both age kernels sample the history out to `age(z)` and assign parcels older than the last node to it, instead of dropping them and rescaling every younger node (PARSEC at `z = 0`: the oldest node held 5.5 % of a constant history's mass instead of 11.9 %, the nodes younger than 1 Gyr 7.50 % instead of 6.99 %; FUV x0.9325, r x0.9499). One `SFHBeyondOldestTemplateWarning` per build names the grid's oldest node and `age(z)` (#2714)
+- The `age_kernel='cic'` gradient of a binned history's free bin edge (`tflex_gyr`, `tlast_gyr` of `psb_flex` / `psb_suess2022`, the flex ratios of `continuity_flex`) is continuous through dense-grid knots: a dense node lying inside the ±1e-6 bracket of knots injected at an edge split the jump in two cells and halved the edge's derivative, so the dense nodes inside a bracket are moved just outside it (AD was 28.5 % / 47 % off the finite difference at 1.0000 / 1.2065 Gyr, now below 2e-5; ln F_r moves by 3e-14 through a coincidence) (#2715)
 
 - Casey (2012) dust emission emits from 1 µm rest-frame and longer, normalized
   to L_absorbed on the supplied wavelength grid. The residual grid
