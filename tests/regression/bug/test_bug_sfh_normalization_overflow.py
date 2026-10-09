@@ -71,7 +71,7 @@ def _mass(fn, edges_yr, **kw):
     return float(jnp.sum(sfr * jnp.asarray(widths))), sfr
 
 
-def _grads_finite(fn, edges_yr, ratio_names, ratio_vals, **fixed):
+def _grads_finite(fn, edges_yr, ratio_names, ratio_vals, *, edges_saturate=False, **fixed):
     mid = 0.5 * (edges_yr[1:] + edges_yr[:-1])
     widths = edges_yr[1:] - edges_yr[:-1]
     wt = jnp.asarray(widths * mid / np.sum(widths * mid))
@@ -82,8 +82,14 @@ def _grads_finite(fn, edges_yr, ratio_names, ratio_vals, **fixed):
         return jnp.sum(sfr * wt)
 
     g_r, g_m = jax.grad(objective, argnums=(0, 1))(jnp.asarray(ratio_vals), jnp.asarray(LOG_M))
-    assert np.all(np.isfinite(np.asarray(g_r)))
-    assert np.isfinite(float(g_m))
+    # grad-assert: finite-only — with edges_saturate the flex bin edges sit at their limits, so the
+    # objective is flat in the ratios there and a zero ratio gradient is correct; otherwise the
+    # non-zero half is asserted on the next line.
+    assert np.all(np.isfinite(np.asarray(g_r))), "a ratio gradient overflowed or is NaN"
+    if not edges_saturate:
+        assert np.any(np.asarray(g_r) != 0.0), "the ratios lost all influence on the SFR"
+    assert np.isfinite(float(g_m)), "the mass gradient overflowed or is NaN"
+    assert float(g_m) != 0.0, "the SFR no longer scales with log_total_mass"
 
 
 CONT_EDGES_GYR = np.array([0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0])  # 6 bins, 5 ratios
@@ -233,6 +239,7 @@ class TestContinuityFlex:
                 _flex_edges([mag * FLEX_SCALE] * 3),
                 FLEX_NAMES,
                 [0.0, *([mag * FLEX_SCALE] * 3), 0.0],
+                edges_saturate=True,
             )
 
     def test_moderate_ratios_match_naive_formula(self):
