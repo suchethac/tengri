@@ -299,6 +299,12 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Mass- and redshift-dependent IR-radio correlation at 1.4 GHz,
+  ``delvecchio2021``. Delvecchio et al. (2021),
+  [doi:10.1051/0004-6361/202039647](https://doi.org/10.1051/0004-6361/202039647).
+- Joint redshift and stellar-mass IR-radio correlation at 150 MHz,
+  ``mccheyne2022``. McCheyne et al. (2022),
+  [doi:10.1051/0004-6361/202141307](https://doi.org/10.1051/0004-6361/202141307).
 - Total-infrared SFR calibration cited for comparison in ``sfr_from_lir``'s
   docstring (tengri's own default calibration is Murphy et al. 2011).
   Kennicutt (1998),
