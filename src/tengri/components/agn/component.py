@@ -602,8 +602,6 @@ class AGNSEDComponent(TemplateThreading):
             # nu L_nu at 12 and 6 um of the AGN's own emission: disc + torus +
             # polar dust of the runner's rescaled components (erg/s/Hz ~1e30,
             # representable in float32); the nu multiply is added in log space.
-            mir_sed = agn_components["disc"] + agn_components["torus"] + agn_components["polar"]
-            mir_log_scale = 0.0
         else:
             lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
             if use_ref:
@@ -633,10 +631,13 @@ class AGNSEDComponent(TemplateThreading):
             # A monolithic model has no sub-blocks: nu L_nu comes from the whole
             # SED, measured on the reference-scale spectrum with the true scale
             # added in log space.
-            mir_sed, mir_log_scale = L_agn_unit, offset
 
-        log_L_12um = log10_nu_lnu_at(wave, mir_sed, 1.2e5, mir_log_scale)
-        log_L_6um = log10_nu_lnu_at(wave, mir_sed, 6.0e4, mir_log_scale)
+        # Point diagnostics: the emitted 6 and 12 um values, from a second evaluation of the
+        # same chain at exactly those wavelengths. The chain's normalization does not depend
+        # on the wave, so these are the emitted values, not an interpolation of the caller's grid.
+        log_L_6um, log_L_12um = _mir_point_logs(
+            self.config.model, agn_fn, agn_kwargs, agn_log_lbol, wave.dtype
+        )
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
@@ -751,5 +752,59 @@ class AGNSEDComponent(TemplateThreading):
 # top-level dispatch is a single registered component, exactly like the other
 # composite domain (nebular).
 from tengri.components.sed_model_component import _REGISTRY
+
+#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
+_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
+
+
+def _mir_point_logs(model, agn_fn, agn_kwargs, agn_log_lbol, dtype):
+    """``log10(nu L_nu)`` of the AGN's emitted disc + torus + polar SED at 6 and 12 um.
+
+    The chain is evaluated exactly at the two diagnostic wavelengths, so each value is the
+    emitted SED at that wavelength and does not depend on the caller's wavelength grid.
+
+    Parameters
+    ----------
+    model : str
+        AGN model name; ``"composable"`` takes the per-block components.
+    agn_fn : callable
+        The registered AGN function.
+    agn_kwargs : Mapping
+        Keyword arguments the AGN function was called with on the caller's grid.
+    agn_log_lbol : float or array
+        Input AGN ``log10(L_bol / L_sun)``.
+    dtype : dtype
+        Floating dtype of the wavelength grid.
+
+    Returns
+    -------
+    tuple of ndarray, scalar
+        ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
+    """
+    diag_wave = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=dtype)
+    if model == "composable":
+        _, _, _, comps = agn_fn(
+            diag_wave,
+            agn_log_lbol=agn_log_lbol,
+            return_l2500=True,
+            return_components=True,
+            **agn_kwargs,
+        )
+        lnu = comps["disc"] + comps["torus"] + comps["polar"]
+        scale = 0.0
+    else:
+        lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, diag_wave)
+        kwargs = dict(agn_kwargs)
+        if use_ref:
+            kwargs["agn_log_lbol_shape"] = jnp.asarray(agn_log_lbol)
+        if model in monolithic_models_with_line_components():
+            lnu = agn_fn(diag_wave, agn_log_lbol=lbol_eval, return_components=True, **kwargs)[0]
+        else:
+            lnu = agn_fn(diag_wave, agn_log_lbol=lbol_eval, **kwargs)
+        scale = offset
+    log_6um = log10_nu_lnu_at(diag_wave, lnu, _MIR_DIAGNOSTIC_AA[0], scale)
+    log_12um = log10_nu_lnu_at(diag_wave, lnu, _MIR_DIAGNOSTIC_AA[1], scale)
+    return log_6um, log_12um
+
 
 _REGISTRY["agn"] = AGNSEDComponent
