@@ -36,9 +36,9 @@
 #
 # | AGNfitter-rX component | tengri spelling | Agreement | Section |
 # |---|---|---|---|
-# | Host stars (GA) | `sfh={'type': 'declining_exp'}`, BC03 grid | shape and light per formed mass match; surviving-mass tables differ 12% | 1.1-1.3 |
+# | Host stars (GA) | `sfh={'type': 'declining_exp'}`, BC03 grid | shape and light per formed mass match; surviving-mass tables differ 12% | 1.1–1.3 |
 # | Host attenuation | `dust_attenuation={'law': 'calzetti'}` | matched inside the calibrated range; upstream tails differ | 1.4 |
-# | Cold dust (SB) | `dust_emission={'type': 'schreiber2018'}`, `'dh02_ce01'` | matched at template nodes | 1.5-1.6 |
+# | Cold dust (SB) | `dust_emission={'type': 'schreiber2018'}`, `'dh02_ce01'` | matched at template nodes | 1.5–1.6 |
 # | Accretion disc (BBB) | `agn={'disc': ...}`: `richards2006`, `slone_netzer`, `kd18_agnfitter`, `qsogen` with `blr` and `feii` | matched at nodes; THB21 is a template against a model | 2.1 |
 # | Disc reddening | `agn_ebv_disc`, `atten` | same law, one constant factor apart | 2.2 |
 # | Torus (TO) | `silva04`, `nenkova_agnfitter*`, `skirtor*`, `cat3d_wind*` | node-exact at table nodes (CAT3D low-wind: 10% between nodes); amplitude convention differs by design | 3 |
@@ -327,13 +327,13 @@ for _z in _ax_m["metal"]:
 
 # %% [markdown]
 # **Result.** The single-metallicity template is the BC03 solar one: against the Z = 1 node it
-# differs by 0.0023 dex, against the others by 0.057-0.092 dex, so every tengri host on this page
+# differs by 0.0023 dex, against the others by 0.057–0.092 dex, so every tengri host on this page
 # sits at $Z = 0.02$ (`met_logzsol` = 0.149). At that metallicity the median shape residual is
 # 0.0125 dex, and at most 0.012 dex across the four BC03_metal nodes; it is the difference between
 # the two BC03 editions, not of the SFH form. The last two table columns separate the absolute
-# scale. Per unit present mass tengri sits 8-14% below the template at 5500 Å (0.864-0.921); per
-# unit formed mass the two agree to 1-3% (0.990-1.029). The offset therefore sits in the
-# surviving fraction (tengri 0.611, template 0.533-0.547), not in the light; §1.3 measures it at
+# scale. Per unit present mass tengri sits 8–14% below the template at 5500 Å (0.864–0.921); per
+# unit formed mass the two agree to 1–3% (0.990–1.029). The offset therefore sits in the
+# surviving fraction (tengri 0.611, template 0.533–0.547), not in the light; §1.3 measures it at
 # the fiducial node.
 
 # %% [markdown]
@@ -391,7 +391,7 @@ print(
 
 # %% [markdown]
 # **Result.** tengri's own 10-Myr SFR matches the template's tabulated SFR at the same formed mass
-# to 0.5-0.7% at all four ages (ratios 1.0048-1.0068), against a window factor of 1.0050, so the
+# to 0.5–0.7% at all four ages (ratios 1.0048–1.0068), against a window factor of 1.0050, so the
 # two histories agree to 0.2%. The formed mass closes to 1.0000 at every age, and the template's SFR
 # is monotonically declining, as printed.
 
@@ -457,9 +457,9 @@ print(
 )
 
 # %% [markdown]
-# **Result.** Per unit formed mass the two SEDs agree to 0.2% at 0.3, 1 and 2 µm and to 2.9% at
-# 5500 Å (ratios 1.0000, 0.9987, 0.9998 and 1.0292); per unit present mass tengri sits 8-11% below
-# (0.894-0.921). The disagreement is in the surviving fraction, 0.6104 for tengri against 0.5464 for
+# **Result.** Per unit formed mass the two SEDs agree to 0.2% at 0.3, 1 and 2 μm and to 2.9% at
+# 5500 Å (ratios 1.0000, 0.9987, 0.9998 and 1.0292); per unit present mass tengri sits 8–11% below
+# (0.894–0.921). The disagreement is in the surviving fraction, 0.6104 for tengri against 0.5464 for
 # the template (a ratio of 1.117), not in the light. The cause is the mass-loss table. The BC03 SSP
 # file that tengri reads carries none (printed), so tengri uses the DSPS Chabrier fit to FSPS,
 # which is the same at every metallicity (0.598 for an SSP at 5 Gyr), while the template's fraction
@@ -480,18 +480,18 @@ print(
 # \quad (\lambda < 0.63\,\mu{\rm m}),$$
 # $$k'(\lambda) = 2.659\,(-1.857 + 1.040\,x) + R_V \quad (\lambda \ge 0.63\,\mu{\rm m}),$$
 #
-# with $x = 1/\lambda_{\mu{\rm m}}$, $R_V = 4.05$ and $\tau_V = R_V\,E(B{-}V)/1.086$ (`calzetti` ignores
+# with $x = 1/\lambda_{\mu{\rm m}}$, $R_V = 4.05$ and $\τ_V = R_V\,E(B{-}V)/1.086$ (`calzetti` ignores
 # `dust_Rv`; set `dust_tau_v`). Left: inside the
-# calibrated range (0.12-2.2 µm, shaded) tengri follows the analytic curve. Right: outside it
+# calibrated range (0.12–2.2 μm, shaded) tengri follows the analytic curve. Right: outside it
 # the codes diverge; the reference is upstream's own evaluation (`GALAXYred_Calzetti`),
 # reproduced by the driver on the grid the fit uses.
 #
-# **Caveat:** below 0.12 µm upstream extrapolates linearly from two grid points and adds a
+# **Caveat:** below 0.12 μm upstream extrapolates linearly from two grid points and adds a
 # second $R_V$, and in the near infrared its linear branch turns negative, which *brightens* the
 # template (the crossing and the size of both tails are printed). The comparison is therefore
 # made inside the calibrated range only. tengri's tails are a choice, not a measurement. The
 # two-screen Charlot & Fall (2000) law has no working upstream counterpart: the function is
-# defined but never called, and its wavelength argument mixes µm with Å.
+# defined but never called, and its wavelength argument mixes μm with Å.
 #
 # **Verification Status:** CROSSVAL; Attenuation law library
 
@@ -581,7 +581,7 @@ print(
 # %% [markdown]
 # **Result.** Inside the calibrated range tengri follows the analytic curve to the residual
 # printed (mag per unit $E(B{-}V)$). Outside it the two codes part, as the table shows: upstream's
-# extrapolation below 0.12 µm and its negative infrared branch are not physical, and tengri's curve is
+# extrapolation below 0.12 μm and its negative infrared branch are not physical, and tengri's curve is
 # held at zero there, so only the calibrated range is a meaningful comparison.
 
 # %% [markdown]
@@ -752,7 +752,7 @@ for tau_v_try in [0.1, 2.0, 40.0]:
 # terms as `ymodel` does: the GA template at the present mass that holds tengri's formed mass (§1.3), reddened by
 # upstream's Calzetti evaluation (§1.4), plus the S17 template. The starburst amplitude is a
 # free parameter of the fit, so the matched input is the infrared luminosity: S17 is scaled until
-# its 8-1000 µm power equals tengri's realized $L_{\rm TIR}$, and what is tested is the dust
+# its 8–1000 μm power equals tengri's realized $L_{\rm TIR}$, and what is tested is the dust
 # shape. The galaxy term has no free scale.
 #
 # **Caveat:** tengri evaluates dust emission on the model wavelength grid, which is sparse in the
@@ -825,14 +825,14 @@ for _lab, _lo, _hi, _why in [
 
 # %% [markdown]
 # **Result.** The total infrared power is matched by construction. The stellar bands, which test the
-# formed-mass mapping of §1.3 and the Calzetti curve together, agree to 0.3% (0.1-1 µm) and 0.1%
-# (1-3 µm). The infrared sub-band rows test the S17 shape at fixed $L_{\rm IR}$: 0.994 at 8-30 µm,
-# where the model grid has 220 points, and 1.000 at 30-1000 µm.
+# formed-mass mapping of §1.3 and the Calzetti curve together, agree to 0.3% (0.1–1 μm) and 0.1%
+# (1–3 μm). The infrared sub-band rows test the S17 shape at fixed $L_{\rm IR}$: 0.994 at 8–30 μm,
+# where the model grid has 220 points, and 1.000 at 30–1000 μm.
 
 # %% [markdown]
 # ## 2 Accretion disc
 #
-# The paper's disc conclusion rests on one spectral feature: the Hα + [N II] bump near 0.7 µm,
+# The paper's disc conclusion rests on one spectral feature: the Hα + [N II] bump near 0.7 μm,
 # carried only by the semi-empirical THB21 library. This section tests whether tengri's discs
 # reproduce the four AGNfitter-rX libraries at matched parameters, then the reddening that both
 # codes apply to the disc.
@@ -989,7 +989,7 @@ print("§2.1  disc composable menu:", sorted(r["name"] for r in tengri.list_agn_
 
 # %% [markdown]
 # **Result.** R06 and SN12 agree with their references (maximum 0.000 dex) and KD18 to 0.002 dex; the
-# per-node tables are in §8.1. Only THB21 carries the 0.7 µm Hα + [N II] bump, and tengri reproduces
+# per-node tables are in §8.1. Only THB21 carries the 0.7 μm Hα + [N II] bump, and tengri reproduces
 # its position. With each curve on its own grid, the continuum-subtracted line power relative to
 # $\nu L_\nu$ at 2500 Å is 1.34 times the template's and the equivalent width 1.31 times. The cause is
 # that the template is a fixed table with unrecorded generating parameters while tengri's `blr` runs
@@ -1245,12 +1245,12 @@ print(
 )
 
 # %% [markdown]
-# **Reading the sampling tables.** Each block ends at its own template limit (S04 at 948 µm, NK08
-# at 1000 µm, SKIRTOR at $10^4$ µm, CAT3D at $3.6\times10^4$ µm); the model holds no torus flux beyond
+# **Reading the sampling tables.** Each block ends at its own template limit (S04 at 948 μm, NK08
+# at 1000 μm, SKIRTOR at $10^4$ μm, CAT3D at $3.6\times10^4$ μm); the model holds no torus flux beyond
 # it, which is outside every band fitted here. Integrated over the full band from its own nodes
 # (plus the band edges), every block reproduces the reference band power to 0.6% or better, SKIRTOR
-# included (0.994-1.000) despite its 68 points above 10 µm. The sampling therefore costs no
-# broadband flux at these bands. The floor set by the reference sampling is 1-2% (the reference at half
+# included (0.994–1.000) despite its 68 points above 10 μm. The sampling therefore costs no
+# broadband flux at these bands. The floor set by the reference sampling is 1–2% (the reference at half
 # its sampling against itself), and bounds how closely any peak-normalized case can agree.
 
 # %% [markdown]
@@ -1428,10 +1428,10 @@ print(
 # **Result.** The tabulated blocks reproduce their reference nodes: S04, NK08, the averaged SKIRTOR and
 # the high-wind CAT3D nodes agree to 1% at worst (0.0098, 0.0073, 0.0002, 0.0074), and the five
 # further reductions to 1e-3 dex in the median (0.00096). The low-wind half of the CAT3D union has a
-# median of 1.4e-4 and a maximum of 0.104 at 1.45 µm. §8.3 shows that this is interpolation between
+# median of 1.4e-4 and a maximum of 0.104 at 1.45 μm. §8.3 shows that this is interpolation between
 # sparse reference nodes (the reference spaces its nodes 0.085 dex apart there, tengri 0.0015 dex),
 # where the reference is at 0.014 of its peak: at each reference node tengri equals the reference to
-# four digits, and the 1-5 µm band power agrees to 1.7%. The full unaveraged SKIRTOR grid differs
+# four digits, and the 1–5 μm band power agrees to 1.7%. The full unaveraged SKIRTOR grid differs
 # from the averaged reference by construction: it carries the clumpiness and radial structure that
 # the average removes, which shifts the IR peak (printed). The union of the two tengri CAT3D blocks
 # covers the one upstream library, and the polar wind that CAT3D-Wind is for supplies the
@@ -1518,7 +1518,7 @@ plt.show()
 # extension. Right: what tengri's *defaults* add, none of which AGNfitter-rX has an analog for:
 # the Yang et al. (2022) viewing-angle anisotropy, a default absorbing column, and a host
 # X-ray-binary floor (`xray_xrb`, Mineo et al. 2014). The table gives the ratio in a hard window
-# (0.5-100 keV) and a soft one (0.2-0.5 keV), across $\Delta\alpha_{\rm ox}$ and $\Gamma$, with
+# (0.5–100 keV) and a soft one (0.2–0.5 keV), across $\Delta\alpha_{\rm ox}$ and $\Gamma$, with
 # the column at its default and switched off.
 
 # %%
@@ -1624,7 +1624,7 @@ for _nh, _st in _xray_stats.items():
 # **Result.** With anisotropy and absorption off, the power law, the cutoff and the 2 keV anchor agree
 # to 0.9% (median ratio 1.0094, maximum 0.0094) in both windows, and the ratio does not depend on
 # $\Delta\alpha_{\rm ox}$ or $\Gamma$ (the range columns collapse to one value). The default
-# absorbing column lowers the 0.2-0.5 keV median ratio to 0.776 and leaves 0.5-100 keV at 1.0091; the
+# absorbing column lowers the 0.2–0.5 keV median ratio to 0.776 and leaves 0.5–100 keV at 1.0091; the
 # default face-on anisotropy multiplies the corona by 1.072 (§6). Both are tengri choices, not
 # discrepancies. Set `xray_log_nh` to 0 in the build for the unabsorbed corona; in a composable build
 # the anisotropy follows `agn_cos_inc` (shared with the torus; 1 at 30°), and `apply_anisotropy=False`
@@ -1698,11 +1698,11 @@ plt.show()
 # %% [markdown]
 # Star-formation radio. AGNfitter-rX's `S17_radio` joins the Schreiber et al. (2018) dust SED to
 # a radio tail calibrated with the infrared-radio correlation of Bell (2003), split 90% non-thermal
-# and 10% thermal at 1.4 GHz (paper pp. 3-4). The correlation parameter is
+# and 10% thermal at 1.4 GHz (paper pp. 3–4). The correlation parameter is
 #
 # $$q_{\rm IR} = \log_{10}\!\left[\frac{L_{\rm IR}}{(3.75\times10^{12}\,{\rm Hz})\,L_{\nu,1.4\,{\rm GHz}}}\right],$$
 #
-# with $L_{\rm IR}$ the 8-1000 µm luminosity. The paper adopts $q_{\rm IR} = 2.64 \pm 0.26$ and then
+# with $L_{\rm IR}$ the 8–1000 μm luminosity. The paper adopts $q_{\rm IR} = 2.64 \pm 0.26$ and then
 # the conservative value $2.64 + \sigma$; the cell measures the value the repackaged template
 # actually embeds and prints its difference from that. tengri's `radio_sfr_bell2003_split` is the
 # matching mode and is run at the measured value. tengri's *default* architecture (`radio_sfr_bell2003` plus a separately
@@ -1780,7 +1780,7 @@ print(
 # **Result.** The SPL and DPL AGN radio agree with the upstream equations to 1.0e-4 and 5.0e-5, and
 # the parameter grids of §8.4 stay within 1.4e-4. The star-formation radio in the parity mode, run at
 # the $q_{\rm IR} = 2.915$ the template embeds (0.015 above the paper's quoted 2.90), follows the
-# template over 1.1-30 GHz to 0.09%. Users who keep tengri's default $q_{\rm IR}$ get the factor
+# template over 1.1–30 GHz to 0.09%. Users who keep tengri's default $q_{\rm IR}$ get the factor
 # printed above, 1.884, at 1.4 GHz.
 
 # %% [markdown]
@@ -1911,7 +1911,7 @@ for _group, _rows in (("upstream behavior tengri does not reproduce", _UPSTREAM)
 # must carry: the surviving mass fraction (12%), the qsogen reddening law, the
 # Hα + [N II] line strength of the THB21 template, the corona anchor and its face-on anisotropy,
 # and the torus amplitude. The CAT3D low-wind entry is an interpolation excursion that moves the
-# 1-5 µm band power by under 2%. The terms AGNfitter-rX does not model at all (host nebular emission,
+# 1–5 μm band power by under 2%. The terms AGNfitter-rX does not model at all (host nebular emission,
 # IGM) are switched off on this page, so the comparison is like for like.
 
 # %% [markdown]
@@ -2235,7 +2235,7 @@ print(
 #
 # SN12 at four nodes of AGNfitter-rX's $(\log M_{\rm BH}, \dot M/\dot M_{\rm Edd})$ table (axes
 # printed in the table) and KD18 at four $(\log M_{\rm BH}, \log\lambda_{\rm Edd})$ nodes, anchored at
-# 2500 Å and compared over 1200 Å-1 µm.
+# 2500 Å and compared over 1200 Å-1 μm.
 
 # %%
 print(
@@ -2285,7 +2285,7 @@ node_exact_verdict([r for r in _win_9c5 if "full grid" not in r["label"]], "§8.
 # ones). The sweep runs $f_{\rm wd}$ across the union axis `cat3d_union_axes()` at fixed
 # inclination and `a`, choosing the tengri block by the half of the axis a node belongs to; four
 # `(incl, a, f_wd)` index triples then vary inclination and the radial index together with the wind
-# fraction. The shaded band marks the 1.5-5 µm near-infrared excess the paper attributes to polar
+# fraction. The shaded band marks the 1.5–5 μm near-infrared excess the paper attributes to polar
 # wind dust.
 
 # %%
@@ -2356,7 +2356,7 @@ save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
 # $\log\nu_{\rm cut} \in \{12, 13, 14\}$, and the double power law at
 # $\log\nu_t \in \{9.5, 10, 10.5\}$ with $\alpha_1 = -0.75$, $\alpha_2 = -0.1$,
 # $\log\nu_{\rm cut} = 13$, each against the driver's equations, normalized at 5 GHz over
-# 0.1-300 GHz. The default nodes are in section 5.
+# 0.1–300 GHz. The default nodes are in section 5.
 
 # %%
 print("§8.4  SPL alpha x log_nu_cut grid (0.1-300 GHz, norm. at 5 GHz):")
@@ -2394,7 +2394,7 @@ print(f"§8.4  worst over the full grid: max|ratio-1| = {max(_spl_grid_worst, _d
 # Every AGNfitter-rX curve is upstream's own template or equation read through the driver, never
 # a tengri output. The amplitudes $10^N$ are free parameters of upstream's fit, so each is set from
 # a matched input: GA from the present mass that holds tengri's formed mass (§1.3), with no free scale; SB so its
-# 8-1000 µm power equals tengri's realized $L_{\rm TIR}$; BB so $L_\nu(2500\,{\rm Å})$ equals tengri's
+# 8–1000 μm power equals tengri's realized $L_{\rm TIR}$; BB so $L_\nu(2500\,{\rm Å})$ equals tengri's
 # disc plus lines; TO so its integral equals tengri's torus power; RAD so the DPL equals tengri's
 # jet at 5 GHz. The test is absolute scale for GA and shape for the rest. The BBB term is upstream's
 # disc cut at 200 eV plus its $\alpha_{\rm ox}$ power law, with a hard step and no EUV bridge, which
@@ -2550,17 +2550,17 @@ print(
 
 # %% [markdown]
 # **Result.** The translated model reproduces the AGNfitter-rX sum component by component. The host
-# at the matched formed mass closes to 0.1% (GA 1.001 at 0.3-1 µm, 0.999 at 1-3 µm), the cold dust to
+# at the matched formed mass closes to 0.1% (GA 1.001 at 0.3–1 μm, 0.999 at 1–3 μm), the cold dust to
 # 0.1% (SB 1.000 and 0.999), the torus to 0.1% (TO 1.000 and 1.000), the jet to 0.3% (RAD 1.003), and
-# the disc shape at 0.1-1 µm to 2% (BB 1.016). Over 4e14-8e14 Hz the optical normalization ratio has a
-# median of 1.024 (16-84%: 0.996-1.046), and from radio to UV the fractional residual has a median of
+# the disc shape at 0.1–1 μm to 2% (BB 1.016). Over 4e14–8e14 Hz the optical normalization ratio has a
+# median of 1.024 (16–84%: 0.996–1.046), and from radio to UV the fractional residual has a median of
 # +0.003 (-0.009 to +0.021). The corona is the one component that does not close, 0.915 at 2 keV,
 # and the step-by-step table accounts for it: tengri anchors its corona on the disc continuum, which
 # is 0.770 of the disc plus lines at 2500 Å from which the upstream amplitude is set (a factor
 # 0.846), and the face-on anisotropy multiplies it by 1.072; the product, 0.915, equals the measured
 # ratio. The resulting $\alpha_{\rm ox}$ is -1.342 for tengri against -1.327 upstream. The absorbing
 # column is switched off in this model, as §4 advises; against the default it raises the 2 keV
-# corona by 0.4% and the 0.2-0.5 keV median by 30% (printed).
+# corona by 0.4% and the 0.2–0.5 keV median by 30% (printed).
 
 # %%
 _opt_band = (nu_grid > 4e14) & (nu_grid < 8e14) & np.isfinite(_resid)
@@ -2609,12 +2609,12 @@ for _blk, _sec, _n, _w, _met in _SUMMARY:
 #   inside its calibrated range; upstream's own tails are not reproduced. Cold dust (S17, DH02_CE01)
 #   and the host composite agree in template shape.
 # - **§2 Accretion disc.** R06, SN12 and the grid-tabulated KD18 discs agree at nodes (at most
-#   0.002 dex for KD18). Only THB21 carries the 0.7 µm bump; tengri reproduces its position with a
+#   0.002 dex for KD18). Only THB21 carries the 0.7 μm bump; tengri reproduces its position with a
 #   line power 1.34 times the template's. The Prevot disc screen is the same law one constant factor
 #   (1.1020) apart; qsogen's own curve is a different law.
 # - **§3 Torus.** The tabulated blocks reproduce their reference nodes to 1% at worst. The low-wind
 #   half of the CAT3D union reaches 10% between sparse reference nodes and agrees at them. Every
-#   block reproduces the reference band power from 3 to 1000 µm to 0.6%, SKIRTOR's 68 far-infrared
+#   block reproduces the reference band power from 3 to 1000 μm to 0.6%, SKIRTOR's 68 far-infrared
 #   points included. The inclination-dependent torus power differs by design.
 # - **§4 X-ray corona.** Power law, cutoff and 2 keV anchor agree to 0.9% with anisotropy and
 #   absorption off; tengri's defaults add both.
@@ -2664,7 +2664,7 @@ for _blk, _sec, _n, _w, _met in _SUMMARY:
 # - Just, D. W., et al. 2007, ApJ 665, 1004 [`just2007x`]; Lusso, E. &
 #   Risaliti, G. 2016, ApJ 819, 154 [`lusso2016tight`]; 2017, A&A 602, A79
 #   [`lusso2017quasars`] — α_ox–L₂₅₀₀.
-# - Stern, D. 2015, ApJ 807, 129 — 6 µm ↔ 2–10 keV relation behind the
+# - Stern, D. 2015, ApJ 807, 129 — 6 μm ↔ 2–10 keV relation behind the
 #   AGNfitter-rX X-ray prior [`stern2015`].
 # - Yang, G., et al. 2022, ApJ 927, 192 — X-ray viewing-angle anisotropy
 #   [`yang2022cigale`].

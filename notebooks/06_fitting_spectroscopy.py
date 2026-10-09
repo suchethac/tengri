@@ -251,7 +251,7 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# The fit takes 35 seconds, with max R-hat 1.000. Spectroscopy alone recovers
+# The fit takes 35 seconds, with max R-hat 1.000. Spectroscopy alone constrains
 # stellar age, metallicity, and mass sharply from the absorption features, but dust
 # normalization remains loose. [`07_joint_photo_spec`](07_joint_photo_spec.py)
 # adds broadband photometry, which fixes dust and tightens convergence.

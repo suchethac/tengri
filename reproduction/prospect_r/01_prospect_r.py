@@ -815,7 +815,7 @@ _assert_comparable(L_p5, L_t_atten, name="§5 dust applied")
 # ## §5 cont'd — pow, bump, τ_screen
 #
 # Two curve sweeps and an applied-SED sweep. The two curve sweeps compare the Charlot & Fall screen power law's slope (`pow`) and the
-# noll09 bump strength (`Eb`) as `A(λ)/A_V` over 1216-3000 Å. The slope sweep is an exact match (same functional form
+# noll09 bump strength (`Eb`) as `A(λ)/A_V` over 1216–3000 Å. The slope sweep is an exact match (same functional form
 # on both sides); the bump sweep differs at the ~10–40% level since the two bump normalizations are not identical. The
 # applied sweep varies both optical depths (`τ_screen`, `τ_birth`) together and reads the result off the UV-to-NIR
 # bandpasses: all six combinations differ, with birth-cloud depth dominating the residual over screen depth.
@@ -1479,7 +1479,7 @@ nuLnu_t = L_t9 * U.C_ANGSTROM_PER_S / w_t9
 # Six SKIRTOR nodes sweep opening angle `ct`, inclination `an`, and optical depth `ta` against ProSpect's
 # `SKIRTOR_interp`, plus three Fritz et al. (2006) nodes against `Fritz_interp`. Tengri has an exact composable
 # equivalent for the latter (`torus={"type": "fritz"}`), matching ProSpect's `AGNct`/`AGNrm`/`AGNan`/`AGNta`/`AGNal`/
-# `AGNbe` one-to-one (`AGNal`→`gamma`, `AGNbe`→`beta`). Both curves are peak-normalized over 1–100 µm, so the
+# `AGNbe` one-to-one (`AGNal`→`gamma`, `AGNbe`→`beta`). Both curves are peak-normalized over 1–100 μm, so the
 # comparison is shape, not normalization. SKIRTOR tracks ProSpect near its default inclination and diverges at the
 # grazing an=0° node, where the raw template's edge-on disc term is small on both sides. Fritz sits at a stable ~0.3×:
 # the composable torus block pairs with tengri's own disc rather than ProSpect's combined template, as with the
@@ -1890,16 +1890,16 @@ plt.show()
 #
 # | Block | § | Cases | Worst tengri/ProSpect | Where |
 # |---|---|---|---|---|
-# | SFH families | §2 cont'd | 7 (dtau, snorm_burst, snorm_trunc) | 1.00–1.75× median | window, 2-99%/2-80% of age |
+# | SFH families | §2 cont'd | 7 (dtau, snorm_burst, snorm_trunc) | 1.00–1.75× median | window, 2–99%/2–80% of age |
 # | Stellar SED | §3 | 1 (single point) | u band 1.326× | UV-to-NIR bands |
-# | Attenuation curves | §5 cont'd | 6 (pow, Eb) | 0.90–1.07× median | A(λ)/A_V, 1216-3000 Å |
+# | Attenuation curves | §5 cont'd | 6 (pow, Eb) | 0.90–1.07× median | A(λ)/A_V, 1216–3000 Å |
 # | Attenuation applied | §5 cont'd | 6 (τ_screen×τ_birth) | 0.99–1.00× median (bands to 0.66×) | UV_TO_NIR bands |
 # | Dust IR | §6 cont'd | 4 (α) | 0.74–0.79× median | IR_BANDS |
 # | Nebular | §8 cont'd | 6 (logU×Z_gas) | line-ratio dependent | Hα, Hβ, [O III], [O II] |
-# | AGN SKIRTOR | §9 cont'd | 6 (ct,an,ta) | 1.02–1.49× median | peak-norm, 1-100 µm |
-# | AGN Fritz | §9 cont'd | 3 (ct,an,ta,al,be) | 0.28–0.35× median | peak-norm, 1-100 µm |
+# | AGN SKIRTOR | §9 cont'd | 6 (ct,an,ta) | 1.02–1.49× median | peak-norm, 1–100 μm |
+# | AGN Fritz | §9 cont'd | 3 (ct,an,ta,al,be) | 0.28–0.35× median | peak-norm, 1–100 μm |
 # | Radio | §11 cont'd | 6 (q_IR×α_SF) | 0.57–1.94× (band ratios) | VLA/ALMA bands |
-# | IGM | §12 cont'd | 4 (z) | ~1.00× median | T(λ), 850-1216 Å |
+# | IGM | §12 cont'd | 4 (z) | ~1.00× median | T(λ), 850–1216 Å |
 #
 # ProSpect's defining feature is metallicity history tied to cumulative stellar mass formed (§2b), which is
 # reproduced by tengri's `massmap_lin` mode: the two agree to a couple of percent at half-mass. The one genuine

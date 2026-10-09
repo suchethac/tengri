@@ -830,11 +830,9 @@ jobs:
       - run: python tools/check_harness_parity.py
       # Docs-prose voice guard (#2326): the enforcement NAMING_CONTRACT names
       # for confusable codepoints in published docs, plus notation canon and
-      # dev-detail leakage. Runs in its default warn-only mode (exit 0): the
-      # tree currently carries 24 violations, so --strict waits on a docs
-      # cleanup; wiring it makes the report visible and keeps the guard from
-      # rotting unrun, which is the defect #2326 is about.
-      - run: python tools/check_docs_voice.py
+      # dev-detail leakage. Strict since #2413 cleared its standing findings,
+      # so a PR that reintroduces the class fails here.
+      - run: python tools/check_docs_voice.py --strict
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
