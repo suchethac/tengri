@@ -46,6 +46,7 @@ References
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import jax.numpy as jnp
@@ -54,7 +55,9 @@ import numpy as np
 from tengri.components.xray.xray import (
     xray_agn_corona as _xray_corona,
     xray_agn_corona_lopez24 as _xray_corona_lopez24,
+    xray_hotgas as _xray_hotgas,
     xray_xrb as _xray_xrb,
+    xray_xrb_terms as _xray_xrb_terms,
 )
 from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
@@ -326,3 +329,138 @@ def build_lookup(preint: dict, *, model: str = "xray_corona"):
     if model not in AXIS_PARAMS:
         raise ValueError(f"Unknown X-ray model: {model!r}")
     return build_template_photometry_lookup(preint["_preint"])
+
+
+#: Shape parameters each X-ray term's table depends on, per term and registry key. The term's own
+#: axis is one of them; any other listed parameter that is free declines the table. The hot-gas
+#: term has no shape parameter: its photon index and cutoff are fixed inside the component.
+TERM_SHAPE_PARAMS: dict[str, dict[str, tuple[str, ...]]] = {
+    "xray_xrb": {
+        "hmxb": ("xray_gamma_hmxb", "xray_E_cut"),
+        "lmxb": ("xray_gamma_lmxb", "xray_E_cut"),
+        "hotgas": (),
+    },
+    "xray_corona": {"agn": ("xray_gamma_agn", "xray_E_cut", "xray_log_nh")},
+    "xray_corona_lopez24": {"agn": ("xray_gamma_agn", "xray_E_cut", "xray_log_nh")},
+}
+
+#: The table axis of each term: a parameter name, or None for a term with no shape axis.
+TERM_AXIS: dict[str, dict[str, str | None]] = {
+    "xray_xrb": {"hmxb": "xray_gamma_hmxb", "lmxb": "xray_gamma_lmxb", "hotgas": None},
+    "xray_corona": {"agn": "xray_gamma_agn"},
+    "xray_corona_lopez24": {"agn": "xray_gamma_agn"},
+}
+
+#: Reference luminosity of the unit-amplitude shape evaluations; the table is normalized at
+#: ``lam_ref``, so any positive value cancels.
+_L_2500_UNIT = 1.0e30  # erg/s/Hz
+
+
+def _term_shape_fn(term: str, model: str, fixed: Mapping[str, float], wave: Any):
+    """Unit-amplitude shape of one X-ray term as a function of its axis value (or ``()``).
+
+    Uses the component's own spectral functions with the amplitude-carrying inputs set to unity.
+    """
+    if model == "xray_xrb":
+        if term == "hotgas":
+            return lambda values: _xray_hotgas(wave, sfr=1.0)
+        free_slot = "gamma_hmxb" if term == "hmxb" else "gamma_lmxb"
+        held_slot = "gamma_lmxb" if term == "hmxb" else "gamma_hmxb"
+        held_param = "xray_gamma_lmxb" if term == "hmxb" else "xray_gamma_hmxb"
+
+        # The other photon index is not read by this term. A free one is absent from ``fixed``,
+        # so it takes the midpoint of its literal grid; the value cannot reach the term.
+        held_default = float(np.mean(_DEFAULT_GRIDS["xray_xrb"][1 if term == "hmxb" else 0]))
+        held_value = float(fixed[held_param]) if held_param in fixed else held_default
+
+        def _xrb(values):
+            gammas = {free_slot: float(values[0]), held_slot: held_value}
+            return _xray_xrb_terms(
+                wave,
+                sfr=1.0,
+                stellar_mass=1.0e10,
+                E_cut=float(fixed["xray_E_cut"]),
+                **gammas,
+            )[term]
+
+        return _xrb
+    if model == "xray_corona":
+        return lambda values: _xray_corona(
+            wave,
+            l_2500_30deg_erg_hz=_L_2500_UNIT,
+            gamma=float(values[0]),
+            E_cut=float(fixed["xray_E_cut"]),
+            delta_alpha_ox=0.0,
+            apply_anisotropy=False,
+            log_nh=float(fixed["xray_log_nh"]),
+        )
+    return lambda values: _xray_corona_lopez24(
+        wave,
+        log_l_12um_erg=_LOG_L12_REF,
+        alpha_irx=0.3,
+        gamma=float(values[0]),
+        E_cut=float(fixed["xray_E_cut"]),
+        apply_anisotropy=False,
+        log_nh=float(fixed["xray_log_nh"]),
+    )
+
+
+def term_shape_table(
+    *,
+    wave: Any,
+    filter_waves_padded: Any,
+    filter_trans_padded: Any,
+    redshift: float,
+    parameters: Any,
+    model: str,
+    term: str,
+) -> dict | None:
+    """Shape-only band table of one X-ray term, built through the shared normalizer.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom] the term is evaluated on at predict.
+    filter_waves_padded, filter_trans_padded : ndarray, shape (n_filters, max_len)
+        Padded observed-frame filter curves.
+    redshift : float
+        The single ``Fixed`` redshift [dimensionless].
+    parameters : Parameters
+        Model spec; supplies the free set and the fixed values of the non-axis shape parameters.
+    model : str
+        Registry key: ``"xray_xrb"``, ``"xray_corona"`` or ``"xray_corona_lopez24"``.
+    term : str
+        The emitter term: ``"hmxb"``, ``"lmxb"``, ``"hotgas"`` (under ``"xray_xrb"``) or
+        ``"agn"`` (under a corona key).
+
+    Returns
+    -------
+    dict or None
+        :func:`tengri.components._term_shape_table.build_term_shape_table` output, or ``None``
+        when a non-axis shape parameter of this term is free (the table would be wrong).
+
+    Notes
+    -----
+    **JIT-compatible**: no, build-time NumPy and JAX integrals.
+    """
+    from tengri.components._term_shape_table import build_term_shape_table
+
+    axis = TERM_AXIS[model][term]
+    free = set(parameters.free_params)
+    if free & (set(TERM_SHAPE_PARAMS[model][term]) - ({axis} if axis else set())):
+        return None
+    fixed = parameters.get_fixed_values()
+    if axis is None:
+        axes: dict[str, np.ndarray] = {}
+    else:
+        slot = AXIS_PARAMS[model].index(axis)
+        literal = _DEFAULT_GRIDS[model][slot]
+        axes = {axis: _axis(axis, None, literal, parameters)}
+    return build_term_shape_table(
+        _term_shape_fn(term, model, fixed, jnp.asarray(wave)),
+        axes,
+        wave,
+        filter_waves_padded,
+        filter_trans_padded,
+        redshift,
+    )

@@ -130,6 +130,8 @@ def lookup_term_shape(table: Mapping[str, Any], params: Mapping[str, Any]) -> jn
     **JIT-compatible**: yes; the table arrays are traced template data.
     """
     names = tuple(table["axes"])
+    if not names:
+        return jnp.exp(table["ln_R"])
     axes = tuple(table["axes"][n] for n in names)
     point = tuple(jnp.asarray(params[n]) for n in names)
     return jnp.exp(interp_nd_pchip(table["ln_R"], axes, point))

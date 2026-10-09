@@ -328,6 +328,7 @@ def term_shape_table(
     redshift: float,
     parameters: Any,
     model: str,
+    term: str | None = None,
 ) -> dict | None:
     """Shape-only band table of one radio term, built through the shared normalizer.
 
@@ -343,6 +344,9 @@ def term_shape_table(
         Model spec; supplies the free set and the fixed values of the non-axis shape parameters.
     model : str
         Registry key: ``"radio_synchrotron"``, ``"radio_freefree"`` or ``"radio_agn_jet"``.
+    term : str, optional
+        The emitter term the table serves. Accepted for the call shared with the X-ray
+        adapter; each radio key carries exactly one term, so it is not read.
 
     Returns
     -------

@@ -48,9 +48,6 @@ UNWIRED: dict[str, str] = {
     "astrodust": _UNMEASURED,
     "themis": _UNMEASURED,
     "bosa": _UNMEASURED,
-    "xray_xrb": _missed("4.0e-2", "20 draws of both photon indices, 0.5-10 keV"),
-    "xray_corona_lopez24": _missed("5.5e-2", "20 draws, same bands"),
-    "xray_corona": f"not measured like for like (alpha_ox axis is converted); {_TRIWEIGHT}",
     "casey2012": (
         "measured 2.7e-3 (100 seeded draws, all four axes free, z = 0.05, 100-500 um, worst at "
         "alpha_mir ~ 1.15, T ~ 30 K) vs the adapter's 1e-3 contract; the 4-D lookup is also "
@@ -469,4 +466,160 @@ def test_radio_fixed_shape_keeps_exact_table_and_skips_registry(key, resolve_spy
     data = model._template_data_for_jit() or {}
     assert "term_band_response" in data.get("radio", {})
     assert "term_shape_table" not in data.get("radio", {})
+    assert key not in resolve_spy
+
+
+# ── X-ray term families: shape-only tables (#2324) ──────────────────────────────────────────
+#: registry key -> the free shape parameters of its family, each with its prior.
+XRAY_SHAPE_PRIORS: dict[str, dict[str, tuple[float, float]]] = {
+    "xray_xrb": {"xray_gamma_hmxb": (1.7, 2.3), "xray_gamma_lmxb": (1.4, 1.9)},
+    "xray_corona": {"xray_gamma_agn": (1.5, 2.3)},
+    "xray_corona_lopez24": {"xray_gamma_agn": (1.5, 2.3)},
+}
+
+#: X-ray bands at 2 to 20 Angstrom (about 0.6 to 6 keV): the bands the X-ray terms dominate.
+_XRAY_AA = (2.0, 6.0, 20.0)
+
+
+def _xray_ssp():
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
+
+    wave = jnp.logspace(-1.0, 12.0, 2000)
+    ages = jnp.linspace(-3.0, 1.14, 25)
+    lgmet = jnp.array([-2.5, -1.85, -1.2])
+    flux = (
+        ((5000.0 / wave) ** 2)[None, None, :]
+        * (1.0 + 0.15 * (ages - ages.mean()))[None, :, None]
+        * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    )
+    return SSPData(
+        ssp_wave=wave, ssp_flux=jnp.abs(flux) + 1e-12, ssp_lg_age_gyr=ages, ssp_lgmet=lgmet
+    )
+
+
+def _agn_composable() -> dict:
+    """A composable AGN supplying the corona's disc luminosity."""
+    from tengri import DEFAULT, Fixed
+
+    return {
+        "type": "composable",
+        "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+        "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+        "blr": {"type": "analytic", "all_params": Fixed(DEFAULT), "agn_log_lbol": 13.0},
+        "nlr": {"type": "none"},
+        "feii": {"type": "none"},
+        "atten": {"type": "none"},
+    }
+
+
+def _xray_model(key: str, approx, *, free: bool):
+    """A model whose X-ray term family ``key`` is live (the corona families carry an AGN)."""
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+
+    xray_type = "lopez24" if key == "xray_corona_lopez24" else "yang20"
+    xray = {"type": xray_type, "all_params": Fixed(DEFAULT)}
+    if free:
+        for name, (lo, hi) in XRAY_SHAPE_PRIORS[key].items():
+            xray[name] = Uniform(lo, hi)
+    return SEDModel.build(
+        ssp_data=_xray_ssp(),
+        observation=Observation(
+            photometry=Photometry(filters=tuple(_tophat(c) for c in _XRAY_AA))
+        ),
+        redshift=Fixed(0.05),
+        approx=approx,
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+            "tau_diff": 0.5,
+        },
+        dust_emission={"type": "modified_blackbody", "all_params": Fixed(DEFAULT)},
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "none"},
+        # The XRB family has no AGN: its terms then dominate, so its gradients are measurable.
+        **({} if key == "xray_xrb" else {"agn": _agn_composable()}),
+        xray=xray,
+    )
+
+
+def _xray_term_table(model) -> dict | None:
+    data = model._template_data_for_jit() or {}
+    return data.get("xray", {}).get("term_shape_table")
+
+
+def _xray_photometry(model, params) -> np.ndarray:
+    """The X-ray emission photometry alone, eager, from the component's derived output."""
+    state = model.predict_state(params, template_data=model._template_data_for_jit())
+    return np.asarray(state.derived["xray_phot_lnu_precomp"])
+
+
+def _dense_xray_photometry(model, params, monkeypatch) -> np.ndarray:
+    """The same photometry with the shape-table branch off. Call before the model has predicted."""
+    from tengri.components.xray import component as xray_component
+
+    monkeypatch.setattr(xray_component, "_term_shape_response", lambda *a, **k: None)
+    return _xray_photometry(model, params)
+
+
+@pytest.mark.parametrize("key", sorted(XRAY_SHAPE_PRIORS))
+def test_xray_free_shape_builds_term_table_and_predict_does_not_integrate(
+    key, resolve_spy, integral_spy
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = _xray_model(key, _wavepre(), free=True)
+    assert key in resolve_spy, f"WavePrecomp never asked the registry for {key}"
+    assert _xray_term_table(model) is not None
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    before = len(integral_spy)
+    jax.block_until_ready(model.predict_photometry(params))
+    assert len(integral_spy) == before, "predict integrated the filters per call"
+
+
+@pytest.mark.parametrize("key", sorted(XRAY_SHAPE_PRIORS))
+def test_xray_free_shape_term_matches_dense_precomp_within_1e3(key, integral_spy, monkeypatch):
+    """The X-ray term from its shape tables against the same model's per-call integral."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        table_model = _xray_model(key, _wavepre(), free=True)
+        dense_model = _xray_model(key, _wavepre(), free=True)
+    assert _xray_term_table(table_model) is not None, "the registry table was not engaged"
+    for seed in (11, 12, 13):
+        params = dict(table_model.spec.sample(jax.random.PRNGKey(seed)))
+        got = _xray_photometry(table_model, params)
+        before = len(integral_spy)
+        want = _dense_xray_photometry(dense_model, params, monkeypatch)
+        assert len(integral_spy) > before, "the dense reference did not integrate per call"
+        np.testing.assert_allclose(got, want, rtol=1e-3, atol=0.0)
+
+
+@pytest.mark.parametrize("key", sorted(XRAY_SHAPE_PRIORS))
+def test_xray_free_shape_term_has_finite_nonzero_gradients(key):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = _xray_model(key, _wavepre(), free=True)
+    params = dict(model.spec.sample(jax.random.PRNGKey(11)))
+    free = {k: v for k, v in params.items() if k in model.spec.free_params}
+    fixed = {k: v for k, v in params.items() if k not in free}
+
+    def loss(theta):
+        state = model.predict_state(
+            {**fixed, **theta}, template_data=model._template_data_for_jit()
+        )
+        return jnp.sum(jnp.log(state.derived["xray_phot_lnu_precomp"]))
+
+    grads = jax.grad(loss)(free)
+    assert all(bool(jnp.isfinite(g)) for g in grads.values())
+    assert any(float(g) != 0.0 for g in grads.values())
+
+
+@pytest.mark.parametrize("key", sorted(XRAY_SHAPE_PRIORS))
+def test_xray_fixed_shape_keeps_exact_table_and_skips_registry(key, resolve_spy):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = _xray_model(key, _wavepre(), free=False)
+    data = model._template_data_for_jit() or {}
+    assert "term_band_response" in data.get("xray", {})
+    assert "term_shape_table" not in data.get("xray", {})
     assert key not in resolve_spy

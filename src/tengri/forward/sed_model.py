@@ -11504,6 +11504,7 @@ class SEDModel:
                     redshift=redshift,
                     parameters=self.spec,
                     model=key,
+                    term=term,
                 )
                 if term_table is None:
                     tables = None
