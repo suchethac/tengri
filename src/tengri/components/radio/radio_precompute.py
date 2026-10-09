@@ -41,6 +41,7 @@ References
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import jax.numpy as jnp
@@ -287,3 +288,90 @@ def build_lookup(preint: dict, *, model: str = "radio_synchrotron"):
     if model not in AXIS_PARAMS:
         raise ValueError(f"Unknown radio model: {model!r}")
     return build_template_photometry_lookup(preint["_preint"])
+
+
+#: Shape parameters each radio term's table depends on, per registry key. A free one outside
+#: the table's own axis declines the table: its shape would move under a fixed table.
+TERM_SHAPE_PARAMS: dict[str, tuple[str, ...]] = {
+    "radio_synchrotron": ("radio_alpha_sf",),
+    "radio_freefree": ("radio_alpha_ff", "radio_T_e"),
+    "radio_agn_jet": ("radio_alpha_agn", "radio_log_nu_cut"),
+}
+
+
+def _term_shape_fn(model: str, fixed: Mapping[str, float], wave: Any):
+    """Unit-amplitude shape of one term as a function of its axis value(s).
+
+    The amplitude-carrying inputs are set to 1: the table is normalized at ``lam_ref``, so
+    any scale cancels. Shape parameters outside the axis are read from ``fixed``.
+    """
+    if model == "radio_synchrotron":
+        return lambda values: _radio_synchrotron(wave, L_ir=1.0, alpha_sf=float(values[0]))
+    if model == "radio_freefree":
+        return lambda values: _radio_freefree(
+            wave, 1.0, T_e=float(fixed["radio_T_e"]), alpha_ff=float(values[0])
+        )
+    return lambda values: _radio_agn(
+        wave,
+        1.0,
+        radio_loudness=0.0,
+        alpha_agn=float(values[0]),
+        log_nu_cut=float(fixed["radio_log_nu_cut"]),
+    )
+
+
+def term_shape_table(
+    *,
+    wave: Any,
+    filter_waves_padded: Any,
+    filter_trans_padded: Any,
+    redshift: float,
+    parameters: Any,
+    model: str,
+) -> dict | None:
+    """Shape-only band table of one radio term, built through the shared normalizer.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom] the term is evaluated on at predict.
+    filter_waves_padded, filter_trans_padded : ndarray, shape (n_filters, max_len)
+        Padded observed-frame filter curves.
+    redshift : float
+        The single ``Fixed`` redshift [dimensionless].
+    parameters : Parameters
+        Model spec; supplies the free set and the fixed values of the non-axis shape parameters.
+    model : str
+        Registry key: ``"radio_synchrotron"``, ``"radio_freefree"`` or ``"radio_agn_jet"``.
+
+    Returns
+    -------
+    dict or None
+        :func:`tengri.components._term_shape_table.build_term_shape_table` output, or ``None``
+        when a shape parameter other than the axis is free (the table would be wrong).
+
+    Notes
+    -----
+    **JIT-compatible**: no, build-time NumPy and JAX integrals.
+    """
+    from tengri.components._term_shape_table import build_term_shape_table
+
+    axis = AXIS_PARAMS[model][0]
+    free = set(parameters.free_params)
+    if free & (set(TERM_SHAPE_PARAMS[model]) - {axis}):
+        return None
+    fixed = parameters.get_fixed_values()
+    literal = {
+        "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
+        "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
+        "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
+    }[model]
+    nodes = _axis(axis, None, literal, parameters)
+    return build_term_shape_table(
+        _term_shape_fn(model, fixed, jnp.asarray(wave)),
+        {axis: nodes},
+        wave,
+        filter_waves_padded,
+        filter_trans_padded,
+        redshift,
+    )

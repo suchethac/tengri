@@ -55,7 +55,10 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components._term_response import term_band_response as _term_band_response
+from tengri.components._term_response import (
+    term_band_response as _term_band_response,
+    term_shape_response as _term_shape_response,
+)
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import (
     radio_freefree,
@@ -585,6 +588,36 @@ class RadioSEDComponent(TemplateThreading):
             wave,
         )
 
+    #: Term order of :meth:`emission_terms`, the order the shape-only tables are read in.
+    TERM_NAMES: ClassVar[tuple[str, ...]] = ("sf", "ff", "agn")
+
+    def term_shape_keys(self) -> dict[str, str]:
+        """Registry key of each term whose shape-only band table this emitter can use.
+
+        Empty when the emitter has no such table: the ``sfr_mode`` shape is not the
+        bell2003 one the adapter tabulates, the free-free window is set (the adapter's
+        shape carries no window), or the AGN model is the double power law. A model with
+        an empty map keeps the dense per-call filter integral.
+
+        Returns
+        -------
+        dict of str to str
+            ``{term: registry key}`` in :attr:`TERM_NAMES` order.
+
+        Notes
+        -----
+        **JIT-compatible**: no, configuration read.
+        """
+        if self.config.sfr_mode != "bell2003" or self.config.freefree_wave_min is not None:
+            return {}
+        if self.config.agn_radio_model not in ("powerlaw", "none"):
+            return {}
+        return {
+            "sf": "radio_synchrotron",
+            "ff": "radio_freefree",
+            "agn": "radio_agn_jet",
+        }
+
     def precompute(
         self,
         ssp_data: Any | None = None,
@@ -691,6 +724,16 @@ class RadioSEDComponent(TemplateThreading):
 
             # Compute precomputed photometry if band response is available.
             precomputed = None
+            shape = None
+            if band is None:
+                # A shape parameter is free: the exact response has no constant to hold, so
+                # each term's band flux comes from its shape-only table at the current shape,
+                # times the term evaluated at its own reference wavelength (the amplitude).
+                shape = _term_shape_response(template_data, "radio", params, self.TERM_NAMES)
+            if shape is not None:
+                ref = self.emission_terms(params, shape["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())])
+                precomputed = amps @ shape["R"]
             if band is not None:
                 # Exact fast path. Radio is a sum of rank-1 terms; SF synchrotron,
                 # free-free, AGN jet: each a scalar amplitude times a spectral shape

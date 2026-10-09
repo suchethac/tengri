@@ -267,6 +267,10 @@ SIGNATURE_POLICY: KeyPolicy = {
         "memo cache computed from keyed structure; pattern matches all additive "
         "emitters (radio, xray, and any new ones)"
     ),
+    "_*_term_shape_cache": exclude(
+        "memo cache computed from keyed structure; pattern matches the shape-only term "
+        "table of every additive emitter (radio, xray, and any new ones)"
+    ),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_property_catalog": exclude("memo cache computed from keyed structure"),

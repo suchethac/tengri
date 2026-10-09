@@ -3210,6 +3210,18 @@ class SEDModel:
                         )
                         setattr(self, f"_{_emitter}_term_response_cache", None)
 
+                    try:
+                        self._additive_term_shape_table(chain, _emitter)
+                    except Exception as e:
+                        warnings.warn(
+                            f"WavePrecomp {_emitter} term shape-table precompute failed "
+                            f"({e!r}); falling back to the exact per-call filter integral "
+                            "(correct, but without the precomputed-table speedup).",
+                            UserWarning,
+                            stacklevel=2,
+                        )
+                        setattr(self, f"_{_emitter}_term_shape_cache", None)
+
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
         # first-order Taylor projection about each filter's effective
@@ -10474,6 +10486,9 @@ class SEDModel:
             term_response = self._additive_term_band_response(cached, emitter)
             if term_response is not None:
                 result.setdefault(emitter, {})["term_band_response"] = term_response
+            term_shape = self._additive_term_shape_table(cached, emitter)
+            if term_shape is not None:
+                result.setdefault(emitter, {})["term_shape_table"] = term_shape
 
         return result if result else None
 
@@ -11429,6 +11444,73 @@ class SEDModel:
             "S_ref": values["S_ref"],
             "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
         }
+
+    def _additive_term_shape_table(self, chain, name):
+        r"""Shape-only band tables of an additive emitter, built through its registry adapters.
+
+        :meth:`_additive_term_band_response` needs every emitter parameter fixed. With a shape
+        parameter free the component integrates the filters on every call. Each term of the
+        emitter that has a registry adapter (``TERM_SHAPE_KEYS`` of the component, via
+        ``term_shape_keys()``) gets a table of its shape-only band flux over that shape, built by
+        the adapter at build time (see :mod:`tengri.components._term_shape_table`). The amplitude
+        is not tabulated: the component multiplies each table by the term at its own reference
+        wavelength, so FIRRC, redshift evolution and suppression stay exact.
+
+        Returns ``{term: table}`` for every term, or ``None`` when the emitter declares no such
+        table, no parameter of it is free, the all-fixed exact response applies, the redshift is
+        not ``Fixed``, or any term's adapter declines. The reason is not recorded: the caller falls
+        back to the dense per-call integral.
+
+        Notes
+        -----
+        **JIT-compatible**: no, build-time; the returned arrays are threaded into the JIT.
+        """
+        cache_attr = f"_{name}_term_shape_cache"
+        cached = getattr(self, cache_attr, "unset")
+        if cached != "unset":
+            return cached
+
+        table = None
+        comp = next((c for c in chain if getattr(c, "name", "") == name), None)
+        keys = comp.term_shape_keys() if hasattr(comp, "term_shape_keys") else {}
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+        free = set(self.spec.free_params)
+        prefix = f"{name}_"
+
+        if (
+            keys
+            and any(p.startswith(prefix) for p in free)
+            and self._approx.get("wave_precomp")
+            and fw_pad is not None
+            and ft_pad is not None
+            and self._response_z_nodes() is None
+            and self._additive_term_band_response(chain, name) is None
+        ):
+            from tengri.forward.precompute import registry
+
+            redshift = float(self.spec.get_fixed_values()["redshift"])
+            tables = {}
+            for term, key in keys.items():
+                module = registry.resolve(key)
+                term_table = module.term_shape_table(
+                    wave=self._rest_wavelength,
+                    filter_waves_padded=fw_pad,
+                    filter_trans_padded=ft_pad,
+                    redshift=redshift,
+                    parameters=self.spec,
+                    model=key,
+                )
+                if term_table is None:
+                    tables = None
+                    break
+                tables[term] = term_table
+            table = tables
+
+        setattr(self, cache_attr, table)
+        return table
 
     #: Provenance tags that mean a caller asked for this parameter's value.
     #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent:

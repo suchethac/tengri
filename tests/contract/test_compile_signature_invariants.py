@@ -1012,6 +1012,10 @@ _DYNAMIC_SETATTR_ALLOWLIST = {
         "setattr(self, f'_{name}_term_response_cache', ...): covered by "
         "pattern '_*_term_response_cache' in SIGNATURE_POLICY"
     ),
+    "_additive_term_shape_table": (
+        "setattr(self, f'_{name}_term_shape_cache', ...): covered by "
+        "pattern '_*_term_shape_cache' in SIGNATURE_POLICY"
+    ),
 }
 
 
