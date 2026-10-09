@@ -424,3 +424,93 @@ def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
         return float((cost[0] if isinstance(cost, list) else cost)["flops"])
 
     assert flops(table) < 0.1 * flops(per_call)
+
+
+#: Torus families whose free torus parameters the table is admitted over (measured table vs
+#: per-call WavePrecomp, 24 draws, 33 nodes (1 axis) / 17 nodes per axis (2 axes): silva04
+#: 1.0e-15 (T_torus), 2.6e-16 (cos_inc); nenkova 8.1e-16, 2.6e-16; cat3d_wind 8.1e-16, 1.0e-9).
+#: fritz is not measured: its grid file in this checkout lacks the norm dataset.
+TORUS_AXES = {
+    "silva04": ("agn_T_torus", "agn_cos_inc"),
+    "nenkova": ("agn_T_torus", "agn_cos_inc"),
+    "cat3d_wind": ("agn_T_torus", "agn_cos_inc"),
+}
+
+
+def _torus_model(torus: str, param: str, approx):
+    from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
+
+    tor = {"type": torus}
+    agn = {
+        "type": "composable",
+        "all_params": Fixed(DEFAULT),
+        "disc": {"type": "kubota_done"},
+        "torus": tor,
+        "agn_log_lbol": Uniform(8.0, 14.0),
+    }
+    if param == "agn_T_torus":
+        tor["agn_T_torus"] = Uniform(100.0, 1500.0)
+    else:
+        agn[param] = Uniform(0.1, 0.9)
+    return SEDModel.build(
+        ssp_data=_ssp(),
+        observation=Observation(
+            photometry=Photometry(filters=tuple(_tophat(c) for c in _BANDS_AA))
+        ),
+        redshift=Fixed(0.1),
+        approx=approx,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        agn=agn,
+    )
+
+
+@pytest.mark.parametrize("torus", sorted(TORUS_AXES))
+@pytest.mark.parametrize("param", ["agn_T_torus", "agn_cos_inc"])
+def test_torus_axis_table_matches_per_call_integral_path(torus, param):
+    """The torus's free T_torus and cos_inc are tabulated and reproduce the per-call path at 1e-8."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        table = _torus_model(torus, param, _wavepre())
+        per_call = _torus_model(torus, param, _wavepre())
+    per_call._agn_band_table_cache = None
+    assert _band_table(table) is not None, table._agn_band_table_decline
+    params = dict(table.spec.sample(jax.random.PRNGKey(0)))
+    np.testing.assert_allclose(
+        np.asarray(table.predict_photometry(params)),
+        np.asarray(per_call.predict_photometry(params)),
+        rtol=1e-8,
+    )
+
+
+@pytest.mark.parametrize(
+    "block, reason_key",
+    [("fritz", "torus/fritz"), ("cue", "nlr/cue")],
+)
+def test_unwired_block_is_declined_with_its_reason(block, reason_key):
+    """A block the table cannot be built for is declined by the gate, with the recorded reason."""
+    from tengri.components.agn.blocks.composable_precompute import UNWIRED_BLOCKS
+
+    assert reason_key in UNWIRED_BLOCKS
+    category = reason_key.split("/")[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if category == "torus":
+            model = _torus_model(block, "agn_cos_inc", _wavepre())
+        else:
+            model = _fixed_model(
+                _wavepre(), agn_extra={"nlr": {"type": block}, "agn_log_lbol": _free_lbol()}
+            )
+    assert _band_table(model) is None
+    assert f"{reason_key} is not tabulated" in model._agn_band_table_decline
+
+
+def _free_lbol():
+    from tengri import Uniform
+
+    return Uniform(8.0, 14.0)

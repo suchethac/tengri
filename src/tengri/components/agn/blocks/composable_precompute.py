@@ -62,6 +62,7 @@ from tengri.utils.grid_interp import (
 __all__ = [
     "AXIS_PARAMS",
     "UNWIRED_AXES",
+    "UNWIRED_BLOCKS",
     "build_lookup",
     "lookup_from_table",
     "precompute",
@@ -75,6 +76,29 @@ __all__ = [
 #: admitted (kubota_done + skirtor; the AGN table against the per-call integral is 8e-11 at 17
 #: nodes per axis, see ``tests/contract/test_agn_precompute_table_wired.py``).
 UNWIRED_AXES: dict[str, str] = {}
+
+#: Blocks the table is not built over, keyed ``"<category>/<name>"`` (``category`` one of the
+#: composable stages). A block that is absent here is admitted: its table matches the per-call
+#: WavePrecomp integral to roundoff (measured 0 to 4e-16 at 33 nodes, agn_log_lbol over (8, 14),
+#: for every disc, nlr, blr, feii, torus and attenuation block that builds in this checkout, and
+#: 1e-9 at most for the torus T_torus and cos_inc axes). The entries here are the blocks whose
+#: table cannot be built in this checkout, so there is no measured number: the exact path is used.
+UNWIRED_BLOCKS: dict[str, str] = {
+    "disc/grahsp_sbpl": "the table build raises TypeError ('GRAHSPTemplates' is not callable)",
+    "nlr/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
+    "blr/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
+    "feii/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
+    "torus/grahsp": "the table build raises TypeError (custom_jvp argument is not a JAX value)",
+    "attenuation/grahsp_biatten": (
+        "the table build raises TypeError (custom_jvp argument is not a JAX value)"
+    ),
+    "nlr/cue": "its data file is not in this checkout (FileNotFoundError)",
+    "nlr/synthesizer": "the Synthesizer NLR grid is not in this checkout",
+    "nlr/synthesizer_spectra": "the Synthesizer NLR grid is not in this checkout",
+    "blr/synthesizer": "the Synthesizer BLR grid is not in this checkout",
+    "blr/synthesizer_spectra": "the Synthesizer BLR grid is not in this checkout",
+    "torus/fritz": "its Fritz grid lacks the fritz2006/norm dataset (TengriIOError)",
+}
 
 #: Smallest band flux kept when the table is stored as ``ln`` [erg/s/Hz]. A band the recipe
 #: leaves empty (no emission there at a node) stores ``_LN_PHOT_FLOOR`` rather than ``-inf``.

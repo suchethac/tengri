@@ -11322,11 +11322,25 @@ class SEDModel:
             return (
                 f"{len(axes)} free AGN parameters exceed the {max(self._AGN_TABLE_NODES)}-axis cap"
             )
-        from tengri.components.agn.blocks.composable_precompute import UNWIRED_AXES
+        from tengri.components.agn.blocks.composable_precompute import (
+            UNWIRED_AXES,
+            UNWIRED_BLOCKS,
+        )
 
         unwired = [p for p in axes if p in UNWIRED_AXES]
         if unwired:
             return f"{unwired[0]} is not tabulated: {UNWIRED_AXES[unwired[0]]}"
+        for category, attr in (
+            ("disc", "agn_disc_block"),
+            ("nlr", "agn_nlr_block"),
+            ("blr", "agn_blr_block"),
+            ("feii", "agn_feii_block"),
+            ("torus", "agn_torus_block"),
+            ("attenuation", "agn_attenuation_block"),
+        ):
+            key = f"{category}/{getattr(agn.config, attr, 'none')}"
+            if key in UNWIRED_BLOCKS:
+                return f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
         unbounded = [
             p
             for p in axes
