@@ -122,6 +122,7 @@ def test_kubota_done_forward_is_finite_and_accurate_in_float32(float64_reference
     for point, v64 in ref.items():
         v32 = got[point]
         assert np.isfinite(v32), f"float32 forward value is non-finite at {point} (f64={v64})"
+        assert v32 != 0.0, f"float32 forward value collapsed to zero at {point} (f64={v64})"
         rel = abs(v32 - v64) / abs(v64)
         assert rel < 1e-3, f"float32 forward disagrees with float64 by {rel:.2e} at {point}"
 

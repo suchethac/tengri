@@ -79,6 +79,7 @@ def test_adaf_shape_float32_matches_float64(point):
     """The float32 ADAF shape matches float64 to the disc-shape tolerance."""
     ref, f32 = _shape_pair(point)
     assert np.all(np.isfinite(f32)), f"non-finite float32 ADAF shape at {point}"
+    assert np.any(f32 != 0.0), f"float32 ADAF shape collapsed to zero at {point}"
     peak = np.abs(ref).max()
     live = np.abs(ref) > 1e-6 * peak
     rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
