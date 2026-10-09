@@ -281,7 +281,7 @@ class KD18Disc(SEDModelComponent):
             - gamma_hard: hard X-ray index
             - kt_hot: hot corona temperature (keV)
             - r_warm_ratio: R_warm / R_hot
-            - frac: disc luminosity fraction
+            - lum_ratio: disc luminosity fraction of L_bol [dimensionless]
 
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.

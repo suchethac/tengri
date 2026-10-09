@@ -390,6 +390,28 @@ def test_single_published_independent_of_caller_grid(single_case):
             assert err < _RTOL, f"{single_case['name']} {label}: rel diff {err:.3e}"
 
 
+@pytest.mark.parametrize("name", ["powerlaw_disc.L_agn_disc", "kd18_disc.L_agn_disc"])
+def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
+    """``apply`` on the real pipeline path, given only declared parameters, publishes L_agn_disc.
+
+    The disc's luminosity fraction is ``lum_ratio``; a read of an undeclared ``frac`` raised
+    ``KeyError`` here, which the contract tests (they pass only ``lum_ratio`` to ``predict``)
+    could not see.
+    """
+    from tengri.protocols import ForwardState
+
+    module, cls_name, cfg_name, grid_file, key, _ = _SINGLE[name]
+    comp, params = _load_component(module, cls_name, cfg_name, grid_file)
+    prefix = comp.parameter_prefix
+    wave = jnp.asarray(_PUB_DENSE)
+    state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave), derived={})
+    out = comp.apply(state, {prefix + k: v for k, v in params.items()})
+    published = float(out.derived[key])
+    direct = _publisher(comp, params, key)(_PUB_DENSE)
+    assert np.isfinite(published) and published > 0.0
+    assert published == pytest.approx(direct, rel=1e-12)
+
+
 def test_kd18_float32_frac_zero_is_zero_not_nan():
     """KD18 at lum_ratio = 0 publishes exactly 0.0 in float32; no corner gives NaN."""
     with jax.enable_x64(False):
@@ -435,14 +457,70 @@ def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
             assert err < _RTOL, f"SKIRTOR {key} {overrides}: published-vs-emitted rel {err:.3e}"
 
 
-def _skirtor_emitted_pieces(comp, params, wave):
+def _skirtor_with_disk_type(disk_type, overrides):
+    """SKIRTOR component with the given static ``disk_type`` and its declared defaults."""
+    from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+
+    try:
+        grid = _data_file("skirtor_templates_v3.h5")
+        comp = SKIRTORTorus(config=SKIRTORTorusConfig(grid_path=grid, disk_type=disk_type))
+        object.__setattr__(comp, "data", comp.load(jnp.asarray(_PUB_DENSE)))
+    except (FileNotFoundError, ImportError, OSError) as err:
+        pytest.skip(f"SKIRTOR templates unavailable ({err})")
+    params = {
+        d.name[len(comp.parameter_prefix) :]: jnp.asarray(d.prior.default, dtype=jnp.float64)
+        for d in comp.declared_parameters()
+    }
+    params.update({k: jnp.asarray(v, dtype=jnp.float64) for k, v in overrides.items()})
+    return comp, params
+
+
+@pytest.mark.parametrize("disk_type", [1, 2])
+@pytest.mark.parametrize(
+    "overrides",
+    [{"delta": 0.3, "polar_ebv": 0.0}, {"delta": 0.3, "polar_ebv": 0.2, "cos_inc": 0.3}],
+)
+def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
+    """Schartmann (1) and ADAF (2) discs: published L equal integrals of the emitted SED.
+
+    These discs have breakpoints of their own (disc_cigale), so the publication nodes and the
+    polar segments must contain them, or the closed form and the quadrature miss the kinks.
+    The emitted SED itself is integrated on a dense grid: with no polar dust it carries
+    exactly the published disc plus torus, with polar dust the published polar power is the
+    absorbed disc power that the emitted re-emission carries.
+    """
+    comp, params = _skirtor_with_disk_type(disk_type, overrides)
+    pub = {
+        key: _publisher(comp, params, key)(_PUB_COARSE)
+        for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+    }
+    pieces = _skirtor_emitted_pieces(comp, params, _WIDE, disk_type=disk_type)
+    for key, piece in (("L_agn_disc", "disc"), ("L_agn_torus", "dust")):
+        err = abs(pub[key] / _ln_nu_integral(pieces[piece], _WIDE) - 1.0)
+        assert err < _RTOL, f"disk_type={disk_type} {overrides} {key}: rel {err:.3e}"
+    sed = _emitter(comp, params)(_WIDE)
+    total = _ln_nu_integral(sed, _WIDE)
+    if float(params["polar_ebv"]) == 0.0:
+        err = abs(total / (pub["L_agn_disc"] + pub["L_agn_torus"]) - 1.0)
+        assert err < _RTOL, f"disk_type={disk_type} {overrides} SED total: rel {err:.3e}"
+        assert pub["L_agn_polar_dust"] == 0.0
+    else:
+        err = abs(pub["L_agn_polar_dust"] / pieces["polar_absorbed"] - 1.0)
+        assert err < _RTOL, f"disk_type={disk_type} {overrides} polar absorbed: rel {err:.3e}"
+
+
+def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
     """Emitted SKIRTOR disc, dust and polar-reemission SEDs, from the component's own functions.
 
     The disc is re-tilted by the CIGALE shape ratio and renormalized by the ratio of two
     integrals over the analytic disc's support, on a wide grid, so it matches the component's
     publication-grid factor to the quadrature error of that grid.
     """
-    from tengri.components.agn.disc_cigale import skirtor_disk_spectrum
+    from tengri.components.agn.disc_cigale import (
+        adaf_disk_spectrum,
+        schartmann2005_disk_spectrum,
+        skirtor_disk_spectrum,
+    )
     from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
 
     p = {k: float(v) for k, v in params.items()}
@@ -459,7 +537,8 @@ def _skirtor_emitted_pieces(comp, params, wave):
         frac_agn=p["torus_frac"],
     )
     wave_nm = w / 10.0
-    shape_sel = skirtor_disk_spectrum(wave_nm, delta=p["delta"])
+    shape_fn = (skirtor_disk_spectrum, schartmann2005_disk_spectrum, adaf_disk_spectrum)[disk_type]
+    shape_sel = shape_fn(wave_nm, delta=p["delta"])
     shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
     retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
     support = (shape_ref > 0.0).astype(w.dtype)
@@ -475,7 +554,12 @@ def _skirtor_emitted_pieces(comp, params, wave):
     polar = polar_dust_emission(
         l_abs_total, w, temperature=p["polar_T"], beta=p["polar_beta"], lambda_0=2e6
     )
-    return {"disc": np.asarray(disc), "dust": np.asarray(comps.dust), "polar": np.asarray(polar)}
+    return {
+        "disc": np.asarray(disc),
+        "dust": np.asarray(comps.dust),
+        "polar": np.asarray(polar),
+        "polar_absorbed": l_abs_total,
+    }
 
 
 def test_skirtor_delta0_sed_is_the_tabulated_disc_and_torus():
@@ -502,6 +586,21 @@ def test_skirtor_delta0_sed_is_the_tabulated_disc_and_torus():
     )
     expected = np.asarray(comps.disk + comps.dust)
     np.testing.assert_allclose(np.asarray(sed), expected, rtol=1e-12, atol=0.0)
+
+
+def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
+    """The ADAF disc's limits move with delta; the published disc and polar power stay finite."""
+    comp, params = _skirtor_with_disk_type(2, {"delta": 0.3, "polar_ebv": 0.2, "cos_inc": 0.3})
+    wave = jnp.asarray(_PUB_COARSE)
+
+    def published(delta, key):
+        p = {**params, "delta": delta}
+        _, pub = comp.predict(p, jnp.zeros_like(wave), wave)
+        return pub[key]
+
+    for key in ("L_agn_disc", "L_agn_polar_dust"):
+        grad = jax.grad(published)(jnp.asarray(0.3), key)
+        assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
 
 
 def test_skirtor_emitted_sed_independent_of_caller_grid():
