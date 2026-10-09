@@ -204,8 +204,10 @@ def spectral_index(wave_rest, flux, index_def):
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes, the window edges are soft
-    sigmoids, so the measurement is differentiable w.r.t. ``flux``.
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The window edges are hard
+    (an exact top-hat integral with partial-pixel weights, Worthey et al. 1994),
+    which is linear in the flux and so exactly differentiable w.r.t. ``flux``; the
+    edges are catalog constants, not parameters.
 
     Delegates to :func:`~tengri.observation.spectral_indices.measure_index_jax`;
     this is the same operator :meth:`SEDModel.predict_spectral_indices` applies
