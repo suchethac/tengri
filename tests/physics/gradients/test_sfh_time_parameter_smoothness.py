@@ -41,6 +41,30 @@ N_POINTS = 201
 PROBE_BANDS = ["sdss_g", "sdss_r", "sdss_i", "2mass_j"]
 _AGE_KERNELS = ("cic", "dsps")
 
+#: Non-zero SFR ratios for the post-starburst ladders. At the registry defaults
+#: every ratio is 0, so every bin forms stars at one rate and moving an edge
+#: between two equal bins moves no mass: the summed photometry changed by
+#: ~1e-9 per sweep step, alternating in sign, and the statistic measured
+#: quadrature round-off on a physically flat direction rather than the edge
+#: (#2683). These values give every edge a real step, as
+#: ``tests/regression/bug/test_bug_2683_followup_gradient.py`` does.
+_PSB_FLEX_STEPS = {
+    "ratio_young": Fixed(0.6),
+    "ratio_flex_0": Fixed(0.5),
+    "ratio_flex_1": Fixed(-0.4),
+    "ratio_flex_2": Fixed(0.3),
+    "ratio_flex_3": Fixed(-0.5),
+    "ratio_old_0": Fixed(0.3),
+    "ratio_old_1": Fixed(-0.2),
+    "ratio_old_2": Fixed(0.2),
+}
+_PSB2022_STEPS = {
+    "ratio_young": Fixed(0.6),
+    "ratio_old_0": Fixed(0.3),
+    "ratio_old_1": Fixed(-0.2),
+    "ratio_old_2": Fixed(0.2),
+}
+
 #: (family, short param name, sweep window [Gyr], extra Fixed overrides needed
 #: to make the swept boundary visible in the photometry, or to keep a
 #: declared ordering constraint satisfied against the parameter the sweep
@@ -78,10 +102,10 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
     ("buat08", "age_gyr", (1.3, 1.5), {}),
     ("psb", "age_gyr", (2.0, 2.2), {"burstage_gyr": Fixed(0.1)}),
     ("psb", "burstage_gyr", (0.05, 0.25), {"age_gyr": Fixed(5.0)}),
-    ("psb_suess2022", "tflex_gyr", (1.3, 1.5), {"tlast_gyr": Fixed(0.5)}),
-    ("psb_suess2022", "tlast_gyr", (0.05, 0.25), {"tflex_gyr": Fixed(2.0)}),
-    ("psb_flex", "tflex_gyr", (1.3, 1.5), {"tlast_gyr": Fixed(0.5)}),
-    ("psb_flex", "tlast_gyr", (0.05, 0.25), {"tflex_gyr": Fixed(2.0)}),
+    ("psb_suess2022", "tflex_gyr", (1.3, 1.5), {"tlast_gyr": Fixed(0.5), **_PSB2022_STEPS}),
+    ("psb_suess2022", "tlast_gyr", (0.05, 0.25), {"tflex_gyr": Fixed(2.0), **_PSB2022_STEPS}),
+    ("psb_flex", "tflex_gyr", (1.3, 1.5), {"tlast_gyr": Fixed(0.5), **_PSB_FLEX_STEPS}),
+    ("psb_flex", "tlast_gyr", (0.05, 0.25), {"tflex_gyr": Fixed(2.0), **_PSB_FLEX_STEPS}),
     # `top_hat` is registered but not yet validated against the DSPS forward
     # path, so `SEDModel.build` refuses it; excluded rather than xfailed,
     # since it is not reachable through the public builder at all.
@@ -91,54 +115,49 @@ _CASES: tuple[tuple[str, str, tuple[float, float], dict], ...] = (
 #: a family can be smooth in one parameter or kernel and not another, so a
 #: whole-family skip would hide passing cases. The two kernel names integrate
 #: the same function since #2683, so every row is identical for ``cic`` and
-#: ``dsps`` and each gap is listed for both. Local step excess (see
-#: :func:`tests._step_excess.local_step_excess`) on the MILES grid, measured
-#: at #2683:
+#: ``dsps`` and each gap is listed for both. Both remaining gaps are the
+#: model's own definition, not the quadrature: :func:`mean_sfh.periodic` (CIGALE
+#: ``sfhperiodic``) switches every burst on with a jump in SFR at its onset,
+#: lookback ``age - k * delta``. Whenever an onset crosses lookback zero, a new
+#: burst starts forming the youngest, brightest stars, so the photometry is
+#: continuous but its derivative jumps (a kink), and it then rises by several
+#: per cent per Myr. The autodiff gradient matches the finite difference across
+#: the kink (to 7 % at the steepest step, 2e-4 in the median), so the gradient
+#: is the function's; no knot or sub-bin integration removes a kink the history
+#: itself has. Local step excess on the MILES grid, ``origin/main`` (cic / dsps)
+#: against this branch, measured at #2683:
 #:
-#: * ``periodic.age_gyr`` (14.6): differentiable everywhere --
-#:   confirmed by a finite-difference/autodiff comparison at the exact
-#:   worst point a coarse sweep finds, converging cleanly from
-#:   ``|FD/AD - 1| = 0.83`` at ``h = 1e-3`` Gyr to ``4.9e-6`` at ``h = 1e-6``
-#:   -- but the transition width at young lookback times is set by the local
-#:   age-grid spacing there (order 1e5-1e6 yr), far narrower than the
-#:   default burst period (``delta_bursts_gyr = 0.1`` Gyr), so a coarse
-#:   sweep or a sampler step comparable to the burst period reads it as a
-#:   step. See the module docstring of ``mean_sfh.periodic`` for the
-#:   burst-cycle blend this affects.
-#: * ``periodic.delta_bursts_gyr`` (9.3): every burst is a hard
-#:   rectangular/triangular/exponential pulse in lookback time (see the
-#:   module docstring of ``mean_sfh.periodic`` for the pulse shapes);
-#:   sweeping the spacing moves each pulse's edges across the age grid. The
-#:   onsets are exact knots on a 128x integrand since #2683 (the integral is
-#:   accurate to 0.1 %), so the statistic reads the burst edges crossing
-#:   grid cells, not the quadrature.
-#: * ``psb_suess2022.tlast_gyr`` (5.6), ``psb_flex.tflex_gyr`` (7.0) and
-#:   ``psb_flex.tlast_gyr`` (4.6): ``_piecewise_constant_sfr_smooth``'s
-#:   partial-cell weight resolves some but not every CIC cell at that edge.
-#:   The converged finite difference agrees with the autodiff gradient to
-#:   0.5 % at the points tested
-#:   (``tests/regression/bug/test_bug_2683_followup_gradient.py``), so the
-#:   gradient is not a staircase; the statistic reads a few cells at the
-#:   threshold. ``psb_flex.tlast_gyr`` read 3.8 on the whole-sweep median,
-#:   which a jump on a sloped curve understates.
+#: * ``periodic.age_gyr`` (6.9 / 7.6 on main, 14.6 here): the sweep crosses
+#:   ``age = 14 * delta = 1.4`` Gyr, where the 15th burst switches on; every
+#:   step above 4 lies in 1.400-1.407 Gyr. Main sampled the onset on the dense
+#:   grid and smeared the kink over a cell, which read lower; the onset is an
+#:   exact knot here.
+#: * ``periodic.delta_bursts_gyr`` (9.1 / 9.3 on main, 9.3 here): the largest
+#:   steps sit at ``delta = age / k`` (0.249, 0.237, 0.227, 0.217, 0.208, 0.199
+#:   Gyr for ``k`` = 20-25), each an onset crossing lookback zero. Between them
+#:   a 1 Myr step in ``delta`` moves the youngest onset by ``k`` Myr, so the
+#:   sweep also undersamples the photometry's own oscillation.
 #:
-#: Not gaps: ``periodic.tau_bursts_gyr`` (1.13) and
-#: ``tsnorm_burst.burst_age_gyr`` (1.14) are smooth; the whole-sweep median
-#: read them at 4.3 and 5.0 because their slope varies that much across the
-#: window. The ``tau_bursts`` finite differences match the autodiff gradient
-#: to 6e-5 at all 201 points, and 4.32 at a 512x integrand against 4.33 at
-#: 128x shows the curvature is the physics, not the quadrature.
+#: Not gaps, and smooth on this branch (local excess):
+#:
+#: * ``psb_flex`` / ``psb_suess2022`` ``tflex`` and ``tlast`` (1.0-1.1, both
+#:   kernels): swept with non-zero SFR ratios (``_PSB_FLEX_STEPS``,
+#:   ``_PSB2022_STEPS``). With those ratios main's ``dsps`` histogram reads
+#:   2.5e9-2.0e10 on all four rows (``cic`` 1.0-1.1), the staircase #2683 removed.
+#:   At the default all-zero ratios these rows had measured round-off on a flat
+#:   direction (see ``_PSB_FLEX_STEPS``), not an edge: the 4.6-7.0 they read
+#:   there, on main's ``cic`` as here, was noise.
+#: * ``periodic.tau_bursts_gyr`` (1.13) and ``tsnorm_burst.burst_age_gyr``
+#:   (1.14): the whole-sweep median read them at 4.3 and 5.0 because their
+#:   slope varies that much across the window. The ``tau_bursts`` finite
+#:   differences match the autodiff gradient to 6e-5 at all 201 points, and
+#:   4.32 at a 512x integrand against 4.33 at 128x shows the curvature is the
+#:   physics, not the quadrature.
 _KNOWN_GAPS = {
     ("periodic", "age_gyr", "cic"),
     ("periodic", "age_gyr", "dsps"),
     ("periodic", "delta_bursts_gyr", "cic"),
     ("periodic", "delta_bursts_gyr", "dsps"),
-    ("psb_suess2022", "tlast_gyr", "cic"),
-    ("psb_suess2022", "tlast_gyr", "dsps"),
-    ("psb_flex", "tflex_gyr", "cic"),
-    ("psb_flex", "tflex_gyr", "dsps"),
-    ("psb_flex", "tlast_gyr", "cic"),
-    ("psb_flex", "tlast_gyr", "dsps"),
 }
 
 
