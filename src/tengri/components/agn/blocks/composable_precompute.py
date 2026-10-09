@@ -77,8 +77,9 @@ __all__ = [
 UNWIRED_AXES: dict[str, str] = {}
 
 #: Smallest band flux kept when the table is stored as ``ln`` [erg/s/Hz]. A band the recipe
-#: leaves empty (no emission there at a node) stores ``ln(_PHOT_FLOOR)`` rather than ``-inf``.
-_PHOT_FLOOR = 1e-300
+#: leaves empty (no emission there at a node) stores ``_LN_PHOT_FLOOR`` rather than ``-inf``.
+#: Held in log space: the flux floor 1e-300 is exactly 0.0 in float32, so it is written as ln.
+_LN_PHOT_FLOOR = -690.7755278982137  # ln(1e-300)
 
 #: Per-axis reparametrization applied ONLY to the coordinate the triweight
 #: kernel interpolates over, not to the physics evaluation (#1206 follow-up,
@@ -418,7 +419,10 @@ def precompute(
     )
 
     def _ln_band_flux(grid) -> np.ndarray:
-        return np.log(np.maximum(np.asarray(grid.phot), _PHOT_FLOOR))
+        phot = np.asarray(grid.phot, dtype=np.float64)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ln_phot = np.log(phot)
+        return np.where(phot > 0.0, np.maximum(ln_phot, _LN_PHOT_FLOOR), _LN_PHOT_FLOOR)
 
     extra_ln_phot = tuple(
         _ln_band_flux(
