@@ -35,6 +35,7 @@ References
 .. [4] Boquien et al. 2019, A&A, 622, A103 (CIGALE ``skirtor2016``).
 """
 
+import functools
 import warnings
 
 import jax
@@ -44,12 +45,8 @@ import pytest
 
 from tengri.components.agn import disc_cigale as DC
 from tengri.components.agn.blocks.runner import compose_l_nu
-from tengri.components.agn.polar_dust import _type1_mask
-from tengri.components.agn.skirtor import (
-    load_skirtor_disc_atten_grid,
-    skirtor_disc_attenuation_from_grid,
-)
 from tengri.components.dust.attenuation import smc
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
 
@@ -286,32 +283,49 @@ def _screen(wave_aa, i_deg, oa=40.0, tau_v=7.0):
     return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
 
 
-def _library_transmission(wave_aa, i_deg):
-    """Line-of-sight transmission of the untied torus, read from the SKIRTOR disc column.
+@functools.cache
+def _library_logs():
+    """Raw SKIRTOR columns and their logarithms (fiducial record of the runner defaults)."""
+    from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
 
-    ``R = disk(i)/disk(0)`` from the shipped library (fiducial t = 7, p = q = 1, oa = 40,
-    R = 20), held at the library's 10 A edge below its grid. The Type-2 weight ``w2`` (one
-    minus the polar cone's Type-1 weight) applies on the logarithm, ``T = R exp((w2-1) ln R)``,
-    and linearly where ``R`` is exactly zero.
-    """
-    grid = load_skirtor_disc_atten_grid()
-    wave_grid = np.asarray(grid.wave_grid)
-    wave_held = np.clip(np.asarray(wave_aa, float), wave_grid[0], wave_grid[-1])
-    ratio = np.asarray(
-        skirtor_disc_attenuation_from_grid(
-            grid,
-            jnp.asarray(wave_held),
-            agn_tau_skirtor=7.0,
-            agn_p_skirtor=1.0,
-            agn_q_skirtor=1.0,
-            agn_oa_skirtor=40.0,
-            agn_radius_ratio=20.0,
-            agn_cos_inc=_COS[i_deg],
-        )
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    return (
+        tuple(jnp.asarray(a) for a in raw["axes"]),
+        np.asarray(raw["wave"], dtype=float),
+        jnp.asarray(np.log(np.maximum(np.asarray(raw["disk"], dtype=float), 1e-35))),
+        jnp.asarray(np.log(np.maximum(np.asarray(raw["norm"], dtype=float), 1e-35))),
     )
-    w2 = 1.0 - float(_type1_mask(_COS[i_deg], 40.0))
-    log_blend = ratio * np.exp((w2 - 1.0) * np.log(np.maximum(ratio, 1e-30)))
-    return np.where(ratio > 0.0, log_blend, (1.0 - w2) + w2 * ratio)
+
+
+def _library_transmission(wave_aa, i_deg):
+    """Obscuration of the untied torus: the library's normalized ratio over the disc anisotropy.
+
+    ``R_n = disk_i norm_i / (disk_0 norm_0)`` from the shipped library (fiducial t = 7, p = q = 1,
+    oa = 40, R = 20), node-exact PCHIP in the logarithms, a power law between library nodes and
+    held at the library's 10 A edge below its grid; ``T = R_n / eta`` with
+    ``eta = c (1 + 2c)/3`` and ``c`` floored at cos 85 deg by a softplus of width 0.01 (so the
+    edge-on value is finite). Where the face-on disc is absent, ``T = 1``. This replaces the
+    previous logistic Type-1/Type-2 blend ``T = R exp((w2 - 1) ln R)``, which had no ``norm``.
+    """
+    axes, wave_native, log_disk, log_norm = _library_logs()
+    cos = _COS[i_deg]
+    geometry = (7.0, 1.0, 1.0, 40.0, 20.0)
+
+    def at(table, c):
+        return np.asarray(
+            interp_nd_pchip(table, axes, tuple(jnp.asarray(v) for v in (*geometry, c)))
+        )
+
+    drift = at(log_disk, cos) - at(log_disk, 1.0) + (at(log_norm, cos) - at(log_norm, 1.0))
+    live = (at(log_disk, 1.0) > np.log(1e-35) + 1.0).astype(float)
+    held = np.clip(np.asarray(wave_aa, float), wave_native[0], wave_native[-1])
+    lx = np.log(wave_native)
+    drift_q = np.interp(np.log(held), lx, drift)
+    live_q = np.interp(np.log(held), lx, live) > 0.5
+    ratio = np.minimum(np.exp(drift_q), 1.5)
+    c_eff = 0.0871557427476582 + 0.01 * np.logaddexp(0.0, (cos - 0.0871557427476582) / 0.01)
+    eta = c_eff * (1.0 + 2.0 * c_eff) / 3.0
+    return np.where(live_q, ratio / eta, 1.0)
 
 
 # ----------------------------------------------------------------------------------

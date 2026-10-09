@@ -77,7 +77,7 @@ from tengri.components.agn.blocks.masking import (
     split_lines_result,
 )
 from tengri.components.agn.blocks.torus_library_transmission import (
-    library_torus_transmission,
+    library_torus_sightline,
 )
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_BLOCKS,
@@ -147,6 +147,13 @@ _TIE_FINE_NODES = 4001
 #: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
 #: and ``fritz2006``).
 _TIE_TORI: tuple[str, ...] = ("skirtor", "fritz")
+
+#: Disc blocks whose spectrum carries the ``2 cos i`` inclination law (``agn_log_lbol`` is the
+#: accretion power, #2678). Behind a library torus they take the library's combined factor
+#: ``2 cos i R_n/eta`` in place of (their own law x the transmission); every other disc is
+#: isotropic and takes the transmission. A contract test pins the set to the blocks' response
+#: to ``agn_cos_inc``.
+_COS_LAW_DISC_BLOCKS: frozenset[str] = frozenset({"multicolor", "relagn", "kubota_done"})
 
 #: The Fritz library coordinates the tie reads off the model, as the torus block does; the
 #: viewing elevation ``psy`` is not one of them, it is derived from ``agn_cos_inc``.
@@ -1379,22 +1386,62 @@ agn_torus_block, agn_attenuation_block : str
         # screen is the fallback for a grid without one.
         _screen_oa, _screen_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
         _cos_inc_screen = params.get("agn_cos_inc", 0.86602540378443864)
-        _screen = library_torus_transmission(
+        _sight = library_torus_sightline(
             agn_torus_block,
             wave,
             cos_inc=_cos_inc_screen,
             params=params,
             library=_templates_for("torus", agn_torus_block),
         )
-        if _screen is None:
+        if _sight is None:
+            # A torus without a disc column (SKIRTOR v2) has no library sightline: the
+            # analytic screen is its only obscuration.
             _screen = torus_screen_transmission(
                 wave,
                 cos_inc=_cos_inc_screen,
                 oa_deg=_screen_oa,
                 tau_v=_screen_tau_v,
             )
-        _lines_mask = _screen
-        _disc_mask = _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
+            _lines_mask = _screen
+            _disc_mask = (
+                _screen if _disc_R is None else jnp.where(_agn_fracAGN > 0.0, 1.0, _screen)
+            )
+        else:
+            _lines_mask = _sight.transmission
+            if agn_disc_block in _COS_LAW_DISC_BLOCKS:
+                # The library's T = R_n/eta diverges as eta -> 0 at i = 90 deg, while the disc
+                # carries its own 2 cos i: the product 2 cos i R_n/eta is finite. So the disc
+                # is read at the angle-integrated reference (2 cos i = 1) and takes the
+                # combined factor in place of (its own law x T); a corona stays isotropic and
+                # takes T.
+                _ref = {**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE}
+                _ebv = jnp.asarray(params.get("agn_ebv_disc", 0.0))
+                _split_ref = DISC_SPLIT_BLOCKS.get(agn_disc_block)
+                if _split_ref is None:
+                    _d_ref = disc_fn(
+                        wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **_ref
+                    )
+                    _h_ref = 0.0
+                else:
+                    _d_ref, _h_ref, _ = _split_ref(
+                        wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **_ref
+                    )
+                _disc_lib = (
+                    redden_disc(wave, _d_ref, _ebv) * _sight.disc_factor
+                    + redden_disc(wave, _h_ref, _ebv) * _sight.transmission
+                ) * _disc_scalar
+                L_lambda_disc = (
+                    _disc_lib
+                    if _disc_R is None
+                    else jnp.where(_agn_fracAGN > 0.0, L_lambda_disc, _disc_lib)
+                )
+                _disc_mask = 1.0
+            else:
+                _disc_mask = (
+                    _sight.transmission
+                    if _disc_R is None
+                    else jnp.where(_agn_fracAGN > 0.0, 1.0, _sight.transmission)
+                )
     elif agn_torus_block not in _SELF_CONTAINED_TORI:
         # The generic tori read the same Type-1/2 weight, one width in cos i, as the dusty-
         # screen tori and the polar mask: Type 1 iff i < 90 - agn_theta_torus.

@@ -27,11 +27,6 @@ import pytest
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.components.agn import disc as disc_module
 from tengri.components.agn.blocks.runner import compose_l_nu
-from tengri.components.agn.polar_dust import _type1_mask
-from tengri.components.agn.skirtor import (
-    load_skirtor_disc_atten_grid,
-    skirtor_disc_attenuation_from_grid,
-)
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -313,30 +308,35 @@ def test_skirtor_tie_removes_the_discs_own_inclination_law():
 
 
 def _library_transmission_30deg(wave_aa, oa=40.0, tau=7.0):
-    """Untied SKIRTOR transmission at i = 30 deg, from the shipped disc column.
+    """Untied SKIRTOR transmission ``T = R_n/eta`` at i = 30 deg, from the shipped columns.
 
-    ``R = disk(i)/disk(0)`` at the 10 A library edge and above, blended by the Type-2 weight
-    ``w2`` as ``R**w2``. The Type-1 weight at this inclination is 1 - 1.3e-4, so the
-    transmission is unity wherever the library ratio is unity.
+    ``R_n = disk_i norm_i/(disk_0 norm_0)`` (node-exact PCHIP of the logarithms, a power law
+    between library nodes, held at the 10 A edge); ``eta = c (1 + 2c)/3``. It replaces the
+    previous ``R**w2`` (no ``norm``, logistic Type-1/Type-2 weight).
     """
-    grid = load_skirtor_disc_atten_grid()
-    wave_grid = np.asarray(grid.wave_grid)
-    held = np.clip(np.asarray(wave_aa, float), wave_grid[0], wave_grid[-1])
-    ratio = np.asarray(
-        skirtor_disc_attenuation_from_grid(
-            grid,
-            jnp.asarray(held),
-            agn_tau_skirtor=tau,
-            agn_p_skirtor=1.0,
-            agn_q_skirtor=1.0,
-            agn_oa_skirtor=oa,
-            agn_radius_ratio=20.0,
-            agn_cos_inc=_COS[30],
+    from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
+    from tengri.utils.grid_interp import interp_nd_pchip
+
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    axes = tuple(jnp.asarray(a) for a in raw["axes"])
+    wave = np.asarray(raw["wave"], dtype=float)
+    log_disk = jnp.asarray(np.log(np.maximum(np.asarray(raw["disk"], dtype=float), 1e-35)))
+    log_norm = jnp.asarray(np.log(np.maximum(np.asarray(raw["norm"], dtype=float), 1e-35)))
+    geometry = (tau, 1.0, 1.0, oa, 20.0)
+
+    def at(table, c):
+        return np.asarray(
+            interp_nd_pchip(table, axes, tuple(jnp.asarray(v) for v in (*geometry, c)))
         )
-    )
-    w2 = 1.0 - float(_type1_mask(_COS[30], oa))
-    log_blend = ratio * np.exp((w2 - 1.0) * np.log(np.maximum(ratio, 1e-30)))
-    return np.where(ratio > 0.0, log_blend, (1.0 - w2) + w2 * ratio)
+
+    cos = _COS[30]
+    drift = at(log_disk, cos) - at(log_disk, 1.0) + (at(log_norm, cos) - at(log_norm, 1.0))
+    live = (at(log_disk, 1.0) > np.log(1e-35) + 1.0).astype(float)
+    held = np.log(np.clip(np.asarray(wave_aa, float), wave[0], wave[-1]))
+    ratio = np.minimum(np.exp(np.interp(held, np.log(wave), drift)), 1.5)
+    live_q = np.interp(held, np.log(wave), live) > 0.5
+    eta = cos * (1.0 + 2.0 * cos) / 3.0
+    return np.where(live_q, ratio / eta, 1.0)
 
 
 def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
