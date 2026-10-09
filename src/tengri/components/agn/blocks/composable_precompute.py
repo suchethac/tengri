@@ -71,16 +71,10 @@ __all__ = [
 #: Free parameters the table is not built over, with the measurement that excludes them. The
 #: table interpolates ``ln`` flux with PCHIP on uniform nodes; a parameter that moves the band
 #: fluxes through a feature narrower than the node spacing is not represented to a usable
-#: accuracy by any node count the build can afford.
-UNWIRED_AXES: dict[str, str] = {
-    "agn_cos_inc": (
-        "the band fluxes are not smooth in the inclination: kubota_done disc with skirtor torus, "
-        "agn_log_lbol and agn_cos_inc free over (44, 46.5) x (0.1, 0.9), max relative error of "
-        "the "
-        "total photometry over 24 draws is 2.6e-1 at 9 nodes, 8.8e-2 at 17 and 2.2e-2 at 33 "
-        "per axis"
-    ),
-}
+#: accuracy by any node count the build can afford. Empty: agn_log_lbol and agn_cos_inc are both
+#: admitted (kubota_done + skirtor; the AGN table against the per-call integral is 8e-11 at 17
+#: nodes per axis, see ``tests/contract/test_agn_precompute_table_wired.py``).
+UNWIRED_AXES: dict[str, str] = {}
 
 #: Smallest band flux kept when the table is stored as ``ln`` [erg/s/Hz]. A band the recipe
 #: leaves empty (no emission there at a node) stores ``ln(_PHOT_FLOOR)`` rather than ``-inf``.
