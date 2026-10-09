@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **CLOUDY nebular band table, measured (#2324).** `components/nebular/cloudy_band_table.py` tabulates the CLOUDY photoionised band projection per SSP age on the grid's own (Z_gas, logU) nodes: continuum bands and per-line luminosities with fixed-width line band coefficients, contracted over ages at runtime. Against the per-call path the worst relative band error is 1.7e-4 at five seeded draws (neb_logU, neb_logZ_gas and metallicity in their priors, delayed-tau SFH, z = 0.1), build 3.5 s. Not yet wired into the registry or `apply()`. cb19 is skipped (placeholder grid).
+
 ### Fixed
 
 - **Precompute tables span their parameters' reach.** The default node axes of the disc, GRAHSP, QSOgen, K&D, radio and X-ray precompute adapters come from one reach-axis rule (`forward/precompute/reach_axes.py`) instead of literal ranges, so a Fixed value or a widened prior is covered rather than clipped with zero gradient (#2737). The `powerlaw_disc` template is per L_sun (it had been built at 10 L_sun and scaled again at runtime, a factor 10^10), and the `ss_disc` template is scaled by the bolometric power in erg/s (it had been scaled without the L_sun = 3.828e33 erg/s factor). `ss_disc` node density is set so the off-node PCHIP error resolves, and `cigale_disc` is rebuilt from the exact CIGALE discs. Default axes that a parameter reaches widen to the hull of their literal range and that reach (`hull_axis`), keeping the literal node density; user-supplied axes that do not cover the reach are refused.
