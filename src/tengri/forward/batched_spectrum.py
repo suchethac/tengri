@@ -23,7 +23,7 @@ The template model must have its redshift free. A fixed redshift is baked
 into the model's luminosity distance and into the stellar redshift
 interpolation, so a per-galaxy ``obs.z`` could not reach them. The per-galaxy
 redshift enters through the parameter dictionary instead, and any ``redshift``
-key in ``params`` is ignored in favour of ``obs.z``.
+key in ``params`` is ignored in favor of ``obs.z``.
 
 Flux-conserving mode
 --------------------

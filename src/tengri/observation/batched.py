@@ -470,7 +470,7 @@ def pad_wave(wave, n_max: int, grid_kind: str = "nonuniform") -> np.ndarray:
     Build-time NumPy helper. Padded pixels carry a zero mask. Whether the
     extension changes the likelihood is decided by :func:`padding_exact`, not
     here: a flux-conserving pixel integral takes the upper edge of the last real
-    pixel from its padded neighbour, which only a linear extension leaves
+    pixel from its padded neighbor, which only a linear extension leaves
     unchanged.
     """
     if grid_kind not in ("nonuniform", "log_uniform"):
@@ -631,7 +631,7 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
       ``sigma_v`` is never on the observed grid. Point sampling applies the
       Gaussian LSF to the observed grid, so it is not exact.
     * Flux-conserving sampling takes the upper edge of the last real pixel from
-      its padded neighbour. A linear extension reproduces the edge exactly; a
+      its padded neighbor. A linear extension reproduces the edge exactly; a
       geometric one does not, so a log-uniform grid is refused under it.
     """
     if spec.offsets is not None:
