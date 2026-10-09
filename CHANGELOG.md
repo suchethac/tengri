@@ -31,6 +31,11 @@
 
 - The polar-dust extinction curve is selectable: `agn={'polar_law': 'calzetti'}` (or `agn={'atten': {'type': 'polar_dust', 'polar_law': ...}}`) takes `smc` (Pei 1992, the default), `calzetti`, `gaskell` or `bongiorno` (CIGALE's `extinction_law = 0`: the power law 1.39 lambda_um^-1.2 above 100 nm and the shape of the Weingartner & Draine (2001) SMC-bar dust-mixture extinction below it, matched at 100 nm, the splice CIGALE makes with its own SMC-mixture table; the two shapes, relative to 100 nm, agree within 5.5 per cent above 35 nm, within 15.5 per cent between 10 and 35 nm, and 19 per cent at 1 nm); an unknown name raises naming the four, and `spec.summary()` shows the law (#2602)
 - **`register_disc_state` / `DISC_STATE_BLOCKS` (#2768).** A disc block whose scalar solve does not depend on the wavelength registers it (`fn(agn_log_lbol, *, dtype, **params) -> state`) and accepts `disc_state=`; the composable runner solves once per composition and hands the state to every evaluation of the disc (caller grid, anchors, 5100 A, budget grids). The ADAF is the first user (`adaf_scalar_state`, `adaf_spectrum_from_state`, `AdafState`).
+- Experimental `lyu2018`, `lyu2018_wdd`, and `lyu2018_hdd` AGN templates,
+  Haro 11 infrared emission, and the luminosity-dependent `rieke2009`
+  normal-SFG templates, with public-source provenance records. The Rieke shape
+  selector `dust_log_L_ir_template` is separate from the total IR amplitude
+  `dust_log_L_ir`; see the [template guide](docs/model_reference/lyu_templates.md).
 
 - `radio={'sf': {'type': 'bell2003', 'nu_ref': '21cm'}}` anchors the star-formation synchrotron at CIGALE's 21 cm point, 1.42758 GHz, instead of Bell (2003)'s 1.4 GHz (a frequency in Hz is also accepted; `'1.4GHz'` is the default). q is defined at the frequency its luminosity is measured at (Bell 2003 Eq. 1 and Yun et al. 2001: 1.4 GHz; Helou et al. 1985: 1.49 GHz) and pcigale's radio module writes the same relation at lambda = 21 cm exactly, so at equal q and alpha tengri's default was the pcigale flux times (1.4/1.42758)^alpha = 0.98451 at alpha = 0.8, at every frequency. With `nu_ref: '21cm'` and `freefree: False` the two agree to 2e-5 (pcigale 2025.1, 0.15 to 30 GHz); the default fluxes are unchanged. Applies to `bell2003` only. (#2762)
 

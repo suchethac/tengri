@@ -101,6 +101,8 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     "schreiber2016": ["schreiber2018"],
     "pah_drude": ["smith2007"],
     "bosa": ["cigale"],
+    "haro11": ["lyu_rieke_alberts2016"],
+    "rieke2009": ["rieke2009", "lyu2022"],
     None: [],
 }
 
@@ -200,6 +202,14 @@ SSP_LIBRARY_CITATIONS: dict[str, list[str]] = {
     "stelib": ["stelib"],
 }
 
+
+# Self-contained AGN templates, keyed by ``agn={'type': ...}``.
+AGN_MODEL_CITATIONS: dict[str, list[str]] = {
+    "lyu2018": ["lyu_rieke_shi2017", "lyu_rieke2018"],
+    "lyu2018_wdd": ["lyu_rieke_shi2017", "lyu_rieke2018"],
+    "lyu2018_hdd": ["lyu_rieke_shi2017", "lyu_rieke2018"],
+    None: [],
+}
 
 # AGN components: keyed by AGNConfig.disc / torus / blr values.
 AGN_DISC_CITATIONS: dict[str, list[str]] = {
@@ -384,6 +394,7 @@ def register_function_citations(qualname: str, keys: list[str]) -> None:
 __all__ = [
     "AGN_BLR_CITATIONS",
     "AGN_DISC_CITATIONS",
+    "AGN_MODEL_CITATIONS",
     "AGN_NLR_CITATIONS",
     "AGN_TORUS_CITATIONS",
     "BACKEND_CITATIONS",

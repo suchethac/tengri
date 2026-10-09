@@ -46,6 +46,9 @@ from tengri.parameters._dust_keys import OVERRIDE_STEMS, SCREENS, short_to_full
 from tengri.parameters.priors import Fixed, Gaussian, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
+RIEKE2009_LOG_L_IR_TEMPLATE_RANGE = (9.75, 13.0)
+RIEKE2009_LOG_L_IR_TEMPLATE_DEFAULT = 11.25
+
 PARAMS: tuple[ParamDeclaration, ...] = (
     # The three Casey (2012) graybody + mid-IR power-law parameters. Their
     # defaults are that paper's central values (T=35 K mid-range, beta=1.60,
@@ -379,6 +382,24 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0.0 and hi <= 1.0,
         "must be in [0, 1]",
         free_prior=Uniform(0.0, 1.0, "MBB fraction of L_dust", default=1.0),
+    ),
+    ParamDeclaration(
+        "dust_log_L_ir_template",
+        Fixed(RIEKE2009_LOG_L_IR_TEMPLATE_DEFAULT),
+        "Rieke normal-SFG template selector, log10(L_IR,template/L_sun); this chooses "
+        "the spectral shape and is independent of the total dust IR budget.",
+        lambda lo, hi: (
+            lo >= RIEKE2009_LOG_L_IR_TEMPLATE_RANGE[0]
+            and hi <= RIEKE2009_LOG_L_IR_TEMPLATE_RANGE[1]
+        ),
+        "must remain within the public template range [9.75, 13.0]",
+        units="dex",
+        free_prior=Uniform(
+            *RIEKE2009_LOG_L_IR_TEMPLATE_RANGE,
+            "Rieke normal-SFG template selector",
+            units="dex",
+            default=RIEKE2009_LOG_L_IR_TEMPLATE_DEFAULT,
+        ),
     ),
     ParamDeclaration(
         "dust_log_L_ir",
@@ -885,6 +906,8 @@ __all__ = [
     "KRIEK_CONROY_BUMP_STRENGTH_DEFAULT",
     "MBB_T_K_DEFAULT",
     "PARAMS",
+    "RIEKE2009_LOG_L_IR_TEMPLATE_DEFAULT",
+    "RIEKE2009_LOG_L_IR_TEMPLATE_RANGE",
     "SCHREIBER2018_T_K_DEFAULT",
     "SCHREIBER_T_K_DEFAULT",
     "SINGLE_COMPONENT_PARAMS",

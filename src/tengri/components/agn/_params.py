@@ -101,6 +101,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be within the CLUMPY grid extent [5, 150]",
     ),
     ParamDeclaration(
+        "agn_lyu2018_tau_v",
+        Uniform(0.0, 10.0, default=0.0),
+        "Lyu2018 polar-dust optical depth; an integrated template parameter, "
+        "not the observer's line-of-sight optical depth",
+        lambda lo, hi: lo >= 0.0 and hi <= 10.0,
+        "must be within the public template range [0, 10]",
+        units="dimensionless",
+    ),
+    ParamDeclaration(
         "agn_torus_frac",
         Uniform(0.0, 1.0, default=0.5),
         "AGN torus covering factor: L_AGN / L_total in a configurable band "

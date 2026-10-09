@@ -6584,7 +6584,17 @@ def _validate_user_keys(
             # with advice that fits a monolithic build.
             monolithic_agn_model = _monolithic_agn_type(top_val)
             if monolithic_agn_model is not None:
-                param_names = param_names | _monolithic_agn_top_level_names(monolithic_agn_model)
+                monolithic_names = _monolithic_agn_top_level_names(monolithic_agn_model)
+                from tengri.components.agn.lyu2018 import LYU2018_AGN_FAMILIES
+
+                if monolithic_agn_model in LYU2018_AGN_FAMILIES:
+                    # These templates have only the two explicit forward
+                    # parameters. In particular, agn_lum_ratio would otherwise
+                    # be accepted from the broader AGN parameter partition but
+                    # ignored by the family wrapper.
+                    param_names = monolithic_names
+                else:
+                    param_names = param_names | monolithic_names
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission

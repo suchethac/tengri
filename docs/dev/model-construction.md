@@ -190,6 +190,35 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   `star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
   `stochastic_sfh_jwst`, `mock_recovery_minimal`.
 
+### Lyu AGN and infrared templates
+
+The experimental `agn` types `lyu2018`, `lyu2018_wdd`, and `lyu2018_hdd` select
+the NORMAL, WDD, and HDD public template families. Each uses
+`agn_lyu2018_tau_v` over `[0, 10]`. `agn_log_lbol` scales the finite 0.01–1000
+μm integral of the family’s tau=0 reference spectrum; it is not a calibration
+of the central engine's physical bolometric luminosity. The family-specific
+tau=0 frequency integral stays fixed as tau changes.
+
+The experimental `dust_emission` types `haro11` and `rieke2009` select public
+galaxy infrared templates. `haro11` is zero at wavelengths up to 5 μm. Its
+valid source rows are normalized over the full model wavelength grid.
+`rieke2009` selects the luminosity-dependent normal star-forming-galaxy (SFG)
+library. `dust_log_L_ir_template` chooses its shape, while `dust_log_L_ir`
+supplies the total IR amplitude. The shape selector is not an amplitude.
+
+An active `dust_attenuation` group can supply the infrared budget to either
+emitter. If `dust_log_L_ir` is undeclared, the model uses
+`L_ir = dust_eta_balance * L_absorbed` (with `dust_eta_balance=1` by default).
+Explicitly declaring
+`dust_log_L_ir` sets the emission amplitude instead; it does not disable the
+attenuation screen or remove the `L_absorbed` diagnostic. When attenuation is
+disabled, an emission component requires an explicit `dust_log_L_ir` because
+there is no absorbed-light budget. The `L_ir` normalization covers the full
+model wavelength grid; `L_TIR` is a separate integral over 8–1000 μm.
+
+The user-facing guide, with a configuration example, is
+[`../model_reference/lyu_templates.md`](../model_reference/lyu_templates.md).
+
 ### The expert escape hatch
 
 The flat-kwarg `Parameters(...)` constructor is still supported and is what the

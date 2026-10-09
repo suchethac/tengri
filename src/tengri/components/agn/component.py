@@ -101,8 +101,9 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         AGN model registry key. One of ``"multicolor_agn"`` (Kubota & Done
         outer-zone disc + 2-T torus), ``"kubota_done_full"`` (full 3-zone
         disc), ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
-        ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``, or
-        ``"composable"`` (block-composed via the selectors below).
+        ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``, the
+        experimental ``"lyu2018"``, ``"lyu2018_wdd"``, or ``"lyu2018_hdd"``,
+        or ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block,
     agn_torus_block, agn_attenuation_block : str
@@ -157,6 +158,7 @@ class AGNSEDComponentState(SEDComponentState):
     filter_waves: Any | None = None
     filter_trans: Any | None = None
     skirtor_templates: Any | None = None
+    lyu2018_templates: Any | None = None
     #: ``{"<category>/<name>": pytree}`` for every selected block that
     #: declared a ``template_loader``. See ``collect_block_templates``.
     block_templates: Any | None = None
@@ -361,6 +363,7 @@ class AGNSEDComponent(TemplateThreading):
         filter_waves = None
         filter_trans = None
         skirtor_templates = None
+        lyu2018_templates = None
 
         if approx.get("wave_precomp") and filters is not None:
             filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
@@ -382,6 +385,12 @@ class AGNSEDComponent(TemplateThreading):
                 # will fall back to lazy loading.
                 pass
 
+        from tengri.components.agn.lyu2018 import LYU2018_AGN_FAMILIES, load_lyu2018_templates
+
+        if self.config.model in LYU2018_AGN_FAMILIES:
+            family = LYU2018_AGN_FAMILIES[self.config.model]
+            lyu2018_templates = load_lyu2018_templates(family)
+
         # Composable-block template libraries. Driven by the block recipe, NOT
         # by ``config.model``: ``composable`` is the default in the build
         # grammar, so a gate on ``model == "skirtor"`` publishes nothing for
@@ -393,6 +402,7 @@ class AGNSEDComponent(TemplateThreading):
             filter_waves=filter_waves,
             filter_trans=filter_trans,
             skirtor_templates=skirtor_templates,
+            lyu2018_templates=lyu2018_templates,
             block_templates=block_templates,
         )
 
@@ -513,12 +523,16 @@ class AGNSEDComponent(TemplateThreading):
 
         # Thread the SKIRTOR template as a JIT runtime input
         skirtor_template = None
+        lyu2018_templates = None
         block_templates = None
         if template_data is not None and isinstance(template_data, dict):
             agn_data = template_data.get("agn")
             if agn_data is not None and isinstance(agn_data, dict):
                 skirtor_template = agn_data.get("skirtor")
+                lyu2018_templates = agn_data.get("lyu2018")
                 block_templates = agn_data.get("blocks")
+        if lyu2018_templates is None and self._state is not None:
+            lyu2018_templates = self._state.lyu2018_templates
         # Build kwargs, adding _template for SKIRTOR threading if available.
         # The agn_kwargs dict is built in two passes:
         #   1. Explicit defaults for the AGN params the registered models
@@ -569,6 +583,8 @@ class AGNSEDComponent(TemplateThreading):
         agn_kwargs["agn_polar_law"] = self.config.agn_polar_law
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
+        if lyu2018_templates is not None:
+            agn_kwargs["templates"] = lyu2018_templates
         # Per-block template libraries for the composable runner. The runner
         # reads this under the name ``template_state`` and hands each stage
         # its OWN family's bundle; without it every template-backed block

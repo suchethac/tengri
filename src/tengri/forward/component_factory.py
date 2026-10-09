@@ -696,50 +696,38 @@ def build_components(
             _resolve_registry_component("dust_attenuation", atten_type, config=atten_config)
         )
 
-        # Energy-balanced IR re-emission. The two-component attenuator re-emits
-        # inside its own apply(); the single-screen path (single_component AND
-        # wg00 alike) publishes L_ir (absorbed UV/optical/NIR luminosity) and
-        # relies on a downstream emission component to re-radiate it, without
-        # one, L_ir is computed but never re-emitted, silently dropping the
-        # dust IR (#565). The emission component reads L_ir as an optional
-        # input and produces sed_dust_ir; the topological sort places it after
-        # attenuation. Route through the same single dispatch seam.
-        #
-        # WG00 used to be excluded here ("keeps its historical behavior of
-        # appending no separate emission component"): a user who built
-        # dust_attenuation={'type': 'wg00', ...} alongside an EXPLICIT
-        # dust_emission={'type': ..., ...} had that emission request silently
-        # ignored -- wg00_model.py computed L_ir/L_absorbed correctly but
-        # nothing ever consumed them, exactly the #565 defect this block
-        # already fixes for single_component/two_component, left open for the
-        # third type. No test pinned the exclusion (a wg00 build with a
-        # dust_emission model configured had no coverage), and a user who does
-        # not configure dust_emission is unaffected either way (the
-        # `dust_emission_model is not None` guard below still gates it off,
-        # matching every other attenuation type's default). Also the reason
-        # dust_eta_balance's wiring in wg00_model.py could not be verified live
-        # by measurement: L_ir had no downstream consumer to move.
-        if dust_emission_model is not None:
-            # Astrodust+PAH (HD23) supports optional spinning-dust (AME) emission
-            # and phase-mix configuration. Other dust-emission models do not.
-            emission_config = None
-            emission_kwargs = {}
-            if dust_emission_model == "astrodust":
-                from tengri.components.dust.emission.templates.astrodust import (
-                    AstrodustIRConfig,
-                )
+    # Attenuation supplies the IR luminosity when active. Standalone emission
+    # needs an explicit dust_log_L_ir and publishes the same L_ir fields.
+    if dust_emission_model is not None:
+        if not use_dust:
+            if not dust_log_l_ir_requested:
+                from tengri.config.exceptions import ParameterError
 
-                emission_config = AstrodustIRConfig(
-                    spinning_dust=astrodust_spinning_dust,
-                    f_cnm=astrodust_f_cnm,
+                raise ParameterError(
+                    "dust_emission requires an explicit dust_log_L_ir when "
+                    "dust_attenuation is disabled."
                 )
+            from tengri.components.dust.ir_budget import DustIRBudgetComponent
 
-            emission_component = _resolve_registry_component(
-                "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
+            components.append(DustIRBudgetComponent())
+
+        # Astrodust+PAH (HD23) supports optional spinning-dust (AME) emission
+        # and phase-mix configuration. Other dust-emission models do not.
+        emission_config = None
+        if dust_emission_model == "astrodust":
+            from tengri.components.dust.emission.templates.astrodust import AstrodustIRConfig
+
+            emission_config = AstrodustIRConfig(
+                spinning_dust=astrodust_spinning_dust,
+                f_cnm=astrodust_f_cnm,
             )
-            # Set the opt-in diffuse-screen attenuation flag (#2533)
-            emission_component.diffuse_screen = dust_ir_diffuse_screen
-            components.append(emission_component)
+
+        emission_component = _resolve_registry_component(
+            "dust_emission", dust_emission_model, config=emission_config
+        )
+        # Set the opt-in diffuse-screen attenuation flag (#2533)
+        emission_component.diffuse_screen = dust_ir_diffuse_screen
+        components.append(emission_component)
 
     # 3. Nebular (optional)
     if nebular_backend is not None:

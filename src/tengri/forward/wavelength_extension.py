@@ -84,6 +84,8 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "schreiber2016": (("schreiber2016_templates.h5", "wavelength_aa", 1.0),),
     "schreiber2018": (("schreiber2018_templates.h5", "schreiber2018/wavelength", 1.0),),
     "dh02_ce01": (("dh02_ce01_grid.h5", "dh02_ce01/wavelength", 1.0),),
+    "haro11": (("haro11.h5", "wavelength_aa", 1.0),),
+    "rieke2009": (("rieke2009.h5", "wavelength_aa", 1.0),),
 }
 
 # Analytic dust-emission models, no template file, but their emission still
@@ -266,8 +268,9 @@ _NEBULAR_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 
 
 _AGN_MODEL_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
-    # QSOgen / GRAHSP / Richards2006 are analytic, they evaluate on whatever
-    # wavelength grid they're handed. Nothing to declare here yet.
+    "lyu2018": (("lyu2018_agn.h5", "families/norm/wavelength_aa", 1.0),),
+    "lyu2018_wdd": (("lyu2018_agn.h5", "families/wdd/wavelength_aa", 1.0),),
+    "lyu2018_hdd": (("lyu2018_agn.h5", "families/hdd/wavelength_aa", 1.0),),
 }
 
 

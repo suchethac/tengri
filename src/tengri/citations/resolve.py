@@ -225,6 +225,7 @@ _REGISTRY_NAMESPACE_TABLES: tuple[tuple[str, str], ...] = (
     ("RADIO_MODEL_CITATIONS", "radio model"),
     ("DUST_LAW_CITATIONS", "dust law"),
     ("DUST_EMISSION_CITATIONS", "dust_emission type"),
+    ("AGN_MODEL_CITATIONS", "agn model type"),
     ("DUST_MODEL_CITATIONS", "dust_attenuation type"),
     ("NEBULAR_BACKEND_CITATIONS", "nebular type"),
     ("AGN_DISC_CITATIONS", "agn.disc type"),

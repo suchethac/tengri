@@ -216,27 +216,25 @@ def package_data_dirs() -> list[Path]:
     Returns
     -------
     list of pathlib.Path
-        ``<source-root>/data`` and the bare ``<source-root>``, where the source
-        root is resolved from this module's own location. For a ``src/`` layout
-        checkout that is the repository root; for an installed wheel it is
-        whatever sits above ``site-packages/tengri`` and simply will not
-        contain the files, which is harmless; callers test the file they want.
+        ``<source-root>/data``, ``<source-root>``, and the bundled Lyu2018
+        template directory beside this module.
 
     Notes
     -----
     This is the cwd-independent half of :func:`data_dirs`. It matters when the
-    process runs from an unrelated working directory: the ancestor walk finds
-    nothing, but a source checkout still has its ``data/`` beside the package.
+    process runs from an unrelated working directory. The bundled Lyu2018
+    templates are appended as a package-local source in both checkouts/wheels.
 
     Anchored via :func:`source_tree_root` (the one sanctioned package anchor),
     so the path is fixed no matter which component calls it. That is the
     property the per-module ``parents[N]`` locators lacked.
     """
     # Obtain source root via source_tree_root(), which holds the one anchor.
-    # Whether or not pyproject.toml exists, we return the path (callers test
-    # file existence to detect source tree vs. installed wheel).
+    # Keep the established source-root search order. The Lyu2018 files are the
+    # only templates stored below package data rather than the root data dir.
     root = source_tree_root()
-    return [root / "data", root]
+    lyu2018_data = Path(__file__).resolve().parent / "data" / "lyu2018"
+    return [root / "data", root, lyu2018_data]
 
 
 def download_dir() -> Path:

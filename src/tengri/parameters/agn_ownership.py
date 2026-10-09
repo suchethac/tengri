@@ -52,6 +52,7 @@ _AGN_PARTITION = {
     "agn_lum_ratio": "agn",
     "agn_log_lbol": "agn",
     "agn_cos_inc": "agn",
+    "agn_lyu2018_tau_v": "agn",
     # Disc physics (Task 16, item 1 addendum -- Task 5 review): these eleven
     # names were misclassified "agn" (shared) even though every one is read
     # ONLY by disc block functions (adaf/disc_precompute/disc.py, kd18_*,

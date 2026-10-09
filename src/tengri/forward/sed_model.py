@@ -10306,6 +10306,10 @@ class SEDModel:
 
         from tengri.components.agn.blocks._protocol import collect_block_templates
         from tengri.components.agn.component import AGNSEDComponent
+        from tengri.components.agn.lyu2018 import (
+            LYU2018_AGN_FAMILIES,
+            load_lyu2018_templates,
+        )
         from tengri.components.nebular.component import NebularSEDComponent
 
         result = {}
@@ -10368,6 +10372,15 @@ class SEDModel:
                     skirtor = None
             if skirtor is not None:
                 agn_templates["skirtor"] = skirtor
+
+            model_name = getattr(component.config, "model", None)
+            if model_name in LYU2018_AGN_FAMILIES:
+                lyu2018 = (
+                    component._state.lyu2018_templates if component._state is not None else None
+                )
+                if lyu2018 is None:
+                    lyu2018 = load_lyu2018_templates(LYU2018_AGN_FAMILIES[model_name])
+                agn_templates["lyu2018"] = lyu2018
 
             # Composable-block template libraries, keyed "<category>/<name>".
             # Driven by the *resolved recipe*, so any block that declares a

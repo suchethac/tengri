@@ -220,6 +220,8 @@ the forward model, and listed oldest first within each group.
   [arXiv:astro-ph/0608003](https://arxiv.org/abs/astro-ph/0608003).
 - PAH emission feature spectra as Drude profiles. Smith et al. (2007),
   [arXiv:astro-ph/0610913](https://arxiv.org/abs/astro-ph/0610913).
+- Luminosity-dependent star-forming-galaxy infrared templates. Rieke et al.
+  (2009), [doi:10.1088/0004-637X/692/1/556](https://doi.org/10.1088/0004-637X/692/1/556).
 - Thermal continuum emission from dust grains. Draine (2011),
   *Physics of the Interstellar and Intergalactic Medium*, Ch. 22.
 - Modified-blackbody plus power-law FIR SED model. Casey (2012),
@@ -234,6 +236,8 @@ the forward model, and listed oldest first within each group.
   (2014), [arXiv:1402.1495](https://arxiv.org/abs/1402.1495).
 - Updated Draine & Li templates calibrated on Andromeda. Draine et al.
   (2014), [arXiv:1306.2304](https://arxiv.org/abs/1306.2304).
+- Haro 11 host-galaxy infrared template. Lyu, Rieke & Alberts (2016),
+  [doi:10.3847/0004-637X/816/2/85](https://doi.org/10.3847/0004-637X/816/2/85).
 - Tabulated dust-continuum and PAH template library (T_dust, PAH mass
   fraction). Schreiber et al. (2018),
   [arXiv:1710.10276](https://arxiv.org/abs/1710.10276),
@@ -246,6 +250,8 @@ the forward model, and listed oldest first within each group.
 - PAHspec emission grid over grain size distribution, ionization, and
   starlight intensity. Draine et al. (2021),
   [doi:10.3847/1538-4357/abff51](https://doi.org/10.3847/1538-4357/abff51).
+- Modified Rieke star-forming-galaxy templates and fitting setup. Lyu et al.
+  (2022), [doi:10.3847/1538-4357/ac9e5d](https://doi.org/10.3847/1538-4357/ac9e5d).
 - Astrodust plus PAH unified grain model. Hensley & Draine (2023),
   [arXiv:2208.12365](https://arxiv.org/abs/2208.12365).
 
@@ -279,6 +285,11 @@ the forward model, and listed oldest first within each group.
   [doi:10.1111/j.1365-2966.2011.20060.x](https://doi.org/10.1111/j.1365-2966.2011.20060.x).
 - Thin and slim accretion-disc bolometric relation. Netzer & Trakhtenbrot
   (2014), [arXiv:1311.4215](https://arxiv.org/abs/1311.4215).
+- Intrinsic infrared SED families used in the public reddened AGN templates.
+  Lyu, Rieke & Shi (2017),
+  [doi:10.3847/1538-4357/835/2/257](https://doi.org/10.3847/1538-4357/835/2/257).
+- NORMAL, WDD, and HDD polar-dust AGN template families. Lyu & Rieke (2018),
+  [doi:10.3847/1538-4357/aae075](https://doi.org/10.3847/1538-4357/aae075).
 - AGNSED: accretion disc with warm and hot Comptonization. Kubota & Done
   (2018), [arXiv:1804.00171](https://arxiv.org/abs/1804.00171).
 - Mid-IR--X-ray luminosity correlation behind the AGNfitter-rX informative

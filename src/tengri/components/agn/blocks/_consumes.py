@@ -46,6 +46,7 @@ rationale -- also stale (measured, this checkout).
 from __future__ import annotations
 
 from tengri.components.agn._params import PARAMS
+from tengri.components.agn.lyu2018 import LYU2018_AGN_FAMILIES
 
 #: All declared AGN parameter names (the full superset).
 ALL_AGN_PARAMS: frozenset[str] = frozenset(pd.name for pd in PARAMS)
@@ -393,6 +394,9 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
 
 #: Monolithic (non-composable) AGN model -> the agn_* params it consumes.
 AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
+    "lyu2018": frozenset({"agn_lyu2018_tau_v"}),
+    "lyu2018_wdd": frozenset({"agn_lyu2018_tau_v"}),
+    "lyu2018_hdd": frozenset({"agn_lyu2018_tau_v"}),
     "adaf": frozenset({"agn_ir_frac", "agn_log_ledd", "agn_log_mbh", "agn_torus_frac"}),
     "kubota_done": frozenset(
         {
@@ -509,6 +513,8 @@ def agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
         consumed = AGN_MODEL_CONSUMES.get(model)
         if consumed is None:
             return ALL_AGN_PARAMS  # unknown monolithic model: safe over-free
+        if model in LYU2018_AGN_FAMILIES:
+            return monolithic_agn_declared_params(model)
         return AGN_SHARED_PARAMS | consumed
 
     active: set[str] = set(AGN_SHARED_PARAMS)
@@ -582,6 +588,8 @@ def monolithic_agn_declared_params(model: str) -> frozenset[str]:
         signature_names = {
             name for name in inspect.signature(fn).parameters if name.startswith("agn_")
         } & ALL_AGN_PARAMS
+        if model in LYU2018_AGN_FAMILIES:
+            return frozenset(signature_names)
         return frozenset(AGN_SHARED_PARAMS | signature_names)
 
     preset = _AGN_PRESETS.get(model)

@@ -128,6 +128,8 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | `dh02_ce01` cold dust | Dale & Helou 2002; Chary & Elbaz 2001 | AGNfitter-rX grid | `tests/crossval/test_dh02_ce01_vs_agnfitter.py` | CROSSVAL |
 | Schreiber 2018 IR library | Schreiber et al. 2018 | AGNfitter-rX grid | `tests/crossval/test_schreiber2018_vs_agnfitter.py` | NOT RUN — `importorskip` |
 | MAGPHYS-family IR templates | da Cunha et al. 2008 | none | test file removed in #1955 (was a stub: magphys_dc08 never implemented) | NOT RUN — model not implemented |
+| Haro 11 infrared template | Lyu, Rieke & Alberts 2016 | none | `tests/contract/test_agn_lyu2018.py` | PENDING — one fixed comparison is recorded below |
+| Rieke 2009 normal-SFG templates | Rieke et al. 2009; Lyu et al. 2022 | none | `tests/contract/test_rieke2009_template.py` | PENDING — contract coverage, no independent numerical comparison |
 
 ### Nebular and shocks
 
@@ -156,6 +158,7 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | AGN components vs analytic formulas | multiple | none | `tests/crossval/test_agn_exact_crossval.py` | PARTIAL (7/57) |
 | QSOgen + SKIRTOR model crossval | Stalevski et al. 2016 | none | `tests/crossval/test_agn_models_crossval.py` | PARTIAL (10/20) — mostly broken |
 | unified_nlr_blr / QSOgen / SKIRTOR physics | multiple | none | `tests/crossval/test_agn_advanced_physics.py` | PARTIAL (6/15) |
+| Lyu 2018 NORMAL/WDD/HDD AGN templates | Lyu, Rieke & Shi 2017; Lyu & Rieke 2018 | none | `tests/contract/test_agn_lyu2018.py` | PENDING — contract coverage; one NORMAL fixed comparison is recorded below |
 
 ### IGM, radio, X-ray
 
@@ -179,6 +182,27 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | Photometric filter convention | — | CIGALE (energy-type filters) | `tests/crossval/test_filter_convention_parity.py` | PARTIAL (3/47) |
 | Derived physical quantities | published scaling relations | none | `tests/crossval/test_derived_physics_crossval.py`, `tests/crossval/test_quantities_crossval.py` | PARTIAL (2/12, 4/14) |
 | NIFTy geoVI inference | Arras et al. 2022 | NIFTy-PPL/NIFTy | `tests/crossval/test_geovi_crossval.py` | PARTIAL (6/8) — NIFTy API drift |
+
+### Lyu template reproduction record
+
+The recorded fixed example in `reproduction/lyu2018/compare_fsps.py` compares a
+solar-metallicity, zero-redshift delayed-τ model (age 5 Gyr, τ=1 Gyr, formed
+mass `10^10 Msun`) using the Lyu 2018 NORMAL template at τV=5 and Haro 11.
+The stellar reference came from live `python-fsps`; NumPy independently
+interpolated and normalized the public AGN and Haro 11 template tables. Across
+23 broadband bands, the median / 95th-percentile / maximum absolute fractional
+residuals were 0.000278% / 0.003798% / 0.003970%. Across 4,312 optical samples
+from 3,500–9,000 Å, they were 0.002145% / 0.003064% / 0.003612%. These values
+describe this matched forward-model example only. Prospector was not run, the
+photometry is synthetic, and the comparison does not cover WDD/HDD, other
+parameters, or fitting against observations.
+
+The separate synthetic HMC and NUTS runs each used one chain, 100 warmup steps,
+and 50 retained draws. All four fitted parameters had finite, varying samples;
+both runs reported zero warmup and sampling divergences, and NUTS used at most
+four of six allowed tree doublings. This shows that the fitting code executed
+for this example. These short chains do not establish convergence, posterior
+accuracy, or agreement with an external fitting code.
 
 ## Running the suite
 

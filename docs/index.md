@@ -158,6 +158,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    model_configuration
    components
    model_reference/index
+   model_reference/lyu_templates
    units
    method_selection
    performance/index

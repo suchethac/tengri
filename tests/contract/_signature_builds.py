@@ -159,7 +159,11 @@ def build_agn_dust_emission():
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         neb={"type": "none"},
         agn={"type": "composable", "all_params": Fixed(DEFAULT)},
-        dust_emission={"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        dust_emission={
+            "type": "dale2014",
+            "log_L_ir": Fixed(11.0),
+            "all_params": Fixed(DEFAULT),
+        },
         redshift=Fixed(0.1),
     )
 

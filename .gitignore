@@ -218,6 +218,7 @@ _galrun/
 !data/qsogen_detailed_reference.npz
 !data/external_sed_reference.npz
 !data/feltre_grid.h5
+!src/tengri/data/lyu2018/*.h5
 !data/mappings_templates.h5
 !data/schreiber2018_templates.h5
 !data/bpss_stars_c3k_a_chabrier.h5

@@ -145,6 +145,12 @@ from tengri.components.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
+from tengri.components.agn.lyu2018 import (
+    LYU2018_AGN_FAMILIES,
+    lyu2018_agn,
+    lyu2018_hdd_agn,
+    lyu2018_wdd_agn,
+)
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.reddening import redden_disc as _redden_disc
 from tengri.components.agn.silva04 import silva04_sed
@@ -333,15 +339,22 @@ _SELF_CONTAINED_AGN_MODELS: dict[str, dict[str, str]] = {
         "citation": "Kauffmann et al. 2025 (GRAHSP)",
         "_description": "self-contained GRAHSP AGN model (torus_model/disc_model selectors)",
     },
+    **{
+        name: {
+            "citation": "Lyu, Rieke & Shi 2017; Lyu & Rieke 2018",
+            "_description": f"Lyu2018 {family.upper()} polar-dust AGN template",
+            "_status": "experimental",
+        }
+        for name, family in LYU2018_AGN_FAMILIES.items()
+    },
 }
 
 
 def monolithic_agn_model_names() -> frozenset[str]:
     """Every non-composable AGN model name ``agn={'type': ...}`` accepts.
 
-    The two halves of the monolithic menu: the deprecated preset names, which
-    route through the composable runner with fixed block selectors, and the
-    self-contained models, which resolve to their own forward function.
+    Deprecated preset names, experimental self-contained template names, and
+    self-contained compatibility models.
 
     Returns
     -------
@@ -379,26 +392,31 @@ def monolithic_models_with_line_components() -> frozenset[str]:
 def _resolve_monolithic_model(name: str) -> Callable | None:
     """Return the monolithic forward function for a self-contained model.
 
-    Some deprecated model names are backed by self-contained forward functions
-    that carry structural variant selectors (``torus_model``, ``disc_model``,
-    raw radiative-transfer templates) which have no composable-block
-    equivalent. For those the deprecated name resolves to the monolithic
-    function directly rather than a composable preset, so every parameter still
-    reaches the physics. Returns ``None`` for all other names.
+    Lyu names and a few deprecated names use self-contained forward functions
+    that have no composable-block equivalent. Lyu names resolve directly to
+    their template family without a warning. Deprecated names with structural
+    selectors or raw radiative-transfer templates also resolve directly, with
+    a warning. Returns ``None`` for all other names.
 
     Parameters
     ----------
     name : str
-        Deprecated AGN model name.
+        Self-contained AGN model name.
 
     Returns
     -------
     callable or None
-        The monolithic forward function (with a deprecation warning already
-        emitted), or ``None`` if ``name`` is not a self-contained model.
+        The self-contained forward function, or ``None`` if ``name`` does not
+        identify a self-contained model.
     """
     if name not in _SELF_CONTAINED_AGN_MODELS:
         return None
+    if name in LYU2018_AGN_FAMILIES:
+        return {
+            "norm": lyu2018_agn,
+            "wdd": lyu2018_wdd_agn,
+            "hdd": lyu2018_hdd_agn,
+        }[LYU2018_AGN_FAMILIES[name]]
     if name == "skirtor_stalevski":
         warnings.warn(
             "AGN model 'skirtor_stalevski' is deprecated. It returns the raw "
@@ -430,34 +448,31 @@ def _resolve_monolithic_model(name: str) -> Callable | None:
 def resolve_agn_model(name: str) -> Callable:
     """Retrieve a registered AGN model by name.
 
-    All monolithic AGN models have been migrated to composable presets. This
-    function accepts old model names (with deprecation warning) and routes them
-    through the composable runner with the appropriate block selectors.
+    This function resolves composable presets, experimental self-contained
+    template models, and compatibility names retained from older releases.
 
     Parameters
     ----------
     name : str
-        Model name. Both old monolithic names (deprecated) and ``"composable"``
-        are supported.
+        Model name, including ``"composable"``, experimental Lyu template
+        names, and supported preset names.
 
     Returns
     -------
     callable
-        Either the composable runner (for new code) or a preset-routed wrapper
-        for deprecated names.
+        A forward function for the selected model.
 
     Notes
     -----
     **JIT-compatible**: no, performs dictionary lookup at initialization time.
-    Old monolithic model names still work but emit DeprecationWarning.
+    Deprecated compatibility names emit ``DeprecationWarning``.
     """
     if name == "composable":
         return AGN_MODELS["composable"]
 
-    # Self-contained / un-composable models: the deprecated name returns the
-    # monolithic forward function *directly*, not a composable preset, because
-    # it carries structural variant selectors that do not map to the composable
-    # disc/torus/lines block grammar:
+    # Self-contained models return their forward function directly. Lyu names
+    # select a public template family; the deprecated models below also carry
+    # structural variant selectors that do not map to the composable grammar:
     #   * skirtor_stalevski, the raw Stalevski (2016) SKIRTOR radiative-transfer
     #     *total* (disc + torus + scattering computed jointly), physically NOT a
     #     disc-block + torus-block sum (see test_skirtor_stalevski.py).
@@ -472,10 +487,10 @@ def resolve_agn_model(name: str) -> Callable:
         return monolithic
 
     if name not in _AGN_PRESETS:
-        deprecated = sorted(monolithic_agn_model_names())
+        monolithic = sorted(monolithic_agn_model_names())
         raise ValueError(
             f"Unknown AGN model '{name}'. Available: 'composable', "
-            f"or any of the deprecated monolithic names: {deprecated}"
+            f"or any of the self-contained and deprecated monolithic names: {monolithic}"
         )
 
     # Route deprecated monolithic names through composable with presets

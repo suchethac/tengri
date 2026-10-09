@@ -789,7 +789,7 @@ def _monolithic_agn_model_rows() -> list[dict]:
             {
                 "name": name,
                 "kind": "agn_model",
-                "status": "deprecated",
+                "status": meta.get("_status", "deprecated"),
                 "citation": meta["citation"],
                 "short_doc": meta["_description"],
                 "use": _usage_hint(name, "agn_model"),
@@ -1132,6 +1132,16 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "status": "experimental",
         "citation": "Schreiber et al. 2018 (A&A 609, A30)",
         "short_doc": "Tabulated Schreiber+2018 library, AGNfitter-rX packaging; (T_dust, f_PAH)",
+    },
+    "haro11": {
+        "status": "experimental",
+        "citation": "Lyu, Rieke & Alberts 2016 (ApJ 816, 85)",
+        "short_doc": "Public Haro 11 infrared template above 5 μm",
+    },
+    "rieke2009": {
+        "status": "experimental",
+        "citation": "Rieke et al. 2009 (ApJ 692, 556); Lyu et al. 2022 (ApJ 941, 191)",
+        "short_doc": "Public normal-SFG templates with a selectable IR-luminosity shape",
     },
     "schreiber2016": {
         "status": "production",

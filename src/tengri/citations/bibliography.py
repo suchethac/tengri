@@ -455,6 +455,12 @@ class Bibliography:
         if model_config is None:
             return bib
 
+        agn_model = getattr(model_config, "agn_model", None)
+        if agn_model is not None:
+            from tengri.citations.associations import AGN_MODEL_CITATIONS
+
+            bib.add(*AGN_MODEL_CITATIONS.get(agn_model, []))
+
         dust = getattr(model_config, "dust", None)
         if dust is not None:
             model = getattr(dust, "model", None)
