@@ -41,6 +41,7 @@ from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tengri.components.radio.component import RadioSEDComponentConfig
 from tengri.config.exceptions import ConfigError
 from tengri.radio import radio_sfr_bell2003
+from tests._radio_band import band_l_ir
 
 pytestmark = pytest.mark.contract
 
@@ -159,7 +160,8 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
     params_default = model_default.spec.sample(jax.random.PRNGKey(0))
     state_default = model_default.predict_state(params_default)
 
-    L_ir = float(state_no_ff.derived["L_ir"])
+    # bell2003 defaults to Bell's window: L_IR is the 8-1000 um TIR, formed independently here
+    L_ir = band_l_ir(state_no_ff)
     # radio_q_ir / radio_alpha_sf are Fixed (see _build_radio_model), so they
     # are absent from spec.sample()'s free-only output (#2296); read the
     # pinned values directly.
@@ -176,7 +178,7 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
     np.testing.assert_allclose(
         sed_radio_no_ff[radio_mask],
         synchrotron_only[radio_mask],
-        rtol=1e-8,
+        rtol=1e-8,  # measured gap 3.1e-10: dense resampling vs the edge-exact cell integral
         err_msg="freefree=False must produce synchrotron only (no thermal term)",
     )
 

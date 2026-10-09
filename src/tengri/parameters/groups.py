@@ -5483,6 +5483,19 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                         f"radio['sf']['freefree'] must be bool, got {type(freefree_val).__name__}"
                     )
                 result["radio_include_freefree"] = freefree_val
+            # Optional 'ir_window' string key (#2763): the IR band L_IR is integrated over.
+            if "ir_window" in sf_dict:
+                from tengri.components.radio.component import IR_WINDOWS
+
+                ir_window_val = sf_dict["ir_window"]
+                if ir_window_val not in IR_WINDOWS:
+                    raise _unknown_name_error(
+                        "radio sf ir_window",
+                        ir_window_val,
+                        frozenset(IR_WINDOWS),
+                        keyword="ir_window",
+                    )
+                result["radio_ir_window"] = ir_window_val
             if "nu_ref" in sf_dict:
                 result["radio_sf_nu_ref"] = _parse_radio_nu_ref(sf_dict["nu_ref"])
         else:
@@ -5850,7 +5863,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "nu_ref"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
@@ -6074,6 +6087,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     ),
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
+        _Structural("ir_window", "radio_ir_window", None),
         _Structural("nu_ref", "radio_sf_nu_ref", None),
     ),
     "foreground": (
@@ -8870,7 +8884,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # from the round-trip entirely. The MW foreground screen (#297) is the
     # standing case: it has three settings and no fitted parameters.
     for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
-        if group_name in result:
+        # A dotted name (``radio.sf``) lives NESTED under its parent: testing the
+        # flat key never matched, so a spec whose sub-block had already been
+        # emitted grew a stray top-level ``'radio.sf'`` that ``parse_groups``
+        # refuses on the way back in.
+        parent, _, subkey = group_name.partition(".")
+        if (subkey and subkey in result.get(parent, {})) or (not subkey and group_name in result):
             continue
         type_value = _extract_group_type(group_name, spec)
         pending: dict = {} if type_value is None else {"type": type_value}
@@ -8879,7 +8898,10 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Emit the group only when a setting actually fired: a bare type is
         # the business of the block above, which knows which are non-default.
         if len(pending) > n_before:
-            result[group_name] = pending
+            if subkey:
+                result.setdefault(parent, {})[subkey] = pending
+            else:
+                result[group_name] = pending
 
     # Handle top-level settings. No `apply_igm`: the igm group carries
     # activation on its own (``type: "none"`` when off, omitted when off and

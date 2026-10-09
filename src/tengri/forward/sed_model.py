@@ -3065,6 +3065,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
@@ -4691,6 +4692,7 @@ class SEDModel:
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
+            self._radio_ir_window = getattr(spec, "radio_ir_window", None)
             self._radio_sf_nu_ref = getattr(spec, "radio_sf_nu_ref", None)
 
         self._uses_xray = getattr(spec, "xray", False)
@@ -11719,6 +11721,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),

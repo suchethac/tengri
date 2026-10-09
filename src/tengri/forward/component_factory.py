@@ -462,6 +462,7 @@ def build_components(
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
     radio_include_freefree: bool | None = None,
+    radio_ir_window: str | None = None,
     radio_sf_nu_ref: float | None = None,
     xray_model: str = "yang20",
     use_xray: bool = False,
@@ -569,6 +570,12 @@ def build_components(
         applies only from the SSP grid edge upward
         (``RadioSEDComponentConfig.freefree_wave_min``, #2574). Explicit ``True``/``False``
         always wins.
+    radio_ir_window : str or None
+        Rest-wavelength window of the dust-emission SED integrated to form the radio
+        block's ``L_IR``: ``"total"`` (the dust power as published, CIGALE's convention),
+        ``"tir"`` (8-1000 um) or ``"fir"`` (42.5-122.5 um, nominal IRAS band). ``None``
+        (default) takes the selected star-formation model's own paper window. See
+        :class:`RadioSEDComponentConfig` (``ir_window``, #2763).
 
     Returns
     -------
@@ -844,28 +851,43 @@ def build_components(
                 # unstamped grid keeps the term over its whole range.
                 freefree_wave_min = float(jnp.max(jnp.asarray(ssp_data.ssp_wave)))
 
-        components.append(
-            _resolve_registry_component(
-                "radio",
-                "radio",
-                config=RadioSEDComponentConfig(
-                    sfr_mode=radio_sfr_mode,
-                    agn_radio_model=radio_agn_model,
-                    include_freefree=include_freefree,
-                    # q calibrates the total unless the user pinned ``freefree: False``,
-                    # which is the non-thermal (CIGALE) reading of q (#2590).
-                    q_is_total=radio_include_freefree is not False,
-                    freefree_wave_min=freefree_wave_min,
-                    # One owner of the thermal emission: the split's own 10 % law
-                    # gives way to a nebular continuum that carries free-free (#2764).
-                    split_thermal=not (
-                        radio_sfr_mode == "bell2003_split"
-                        and nebular_backend_carries_freefree(nebular_backend)
-                    ),
-                    **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
-                ),
-            )
+        radio_config = RadioSEDComponentConfig(
+            sfr_mode=radio_sfr_mode,
+            agn_radio_model=radio_agn_model,
+            include_freefree=include_freefree,
+            # q calibrates the total unless the user pinned ``freefree: False``,
+            # which is the non-thermal (CIGALE) reading of q (#2590).
+            q_is_total=radio_include_freefree is not False,
+            freefree_wave_min=freefree_wave_min,
+            ir_window=radio_ir_window,
+            # One owner of the thermal emission: the split's own 10 % law
+            # gives way to a nebular continuum that carries free-free (#2764).
+            split_thermal=not (
+                radio_sfr_mode == "bell2003_split"
+                and nebular_backend_carries_freefree(nebular_backend)
+            ),
+            **({} if radio_sf_nu_ref is None else {"sf_nu_ref": radio_sf_nu_ref}),
         )
+        if (
+            radio_ir_window is None
+            and radio_config.resolved_ir_window != "total"
+            and dust_emission_model is None
+        ):
+            import warnings
+
+            from tengri.config.exceptions import AdvisoryWarning
+
+            warnings.warn(
+                f"radio: the {radio_sfr_mode!r} model defaults to ir_window="
+                f"{radio_config.resolved_ir_window!r}, but there is no dust_emission block to "
+                "integrate, so the published total dust power L_ir is used instead. Add a "
+                "dust_emission block, or set radio={'sf': {'ir_window': 'total'}} explicitly "
+                "to silence this.",
+                AdvisoryWarning,
+                stacklevel=2,
+            )
+        components.append(_resolve_registry_component("radio", "radio", config=radio_config))
+
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 

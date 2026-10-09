@@ -141,6 +141,26 @@ For the default spelling the synchrotron term would turn negative for $q_{\rm IR
 
 Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
 
+#### Which infrared window `L_IR` is integrated over: `ir_window`
+
+Without the key, each model uses the window its own paper defines $q$ on: `bell2003` and `bell2003_split` (Bell 2003, total infrared 8--1000 $\mu$m), `delvecchio2021` (Delvecchio et al. 2021, $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) and `mccheyne2022` (McCheyne et al. 2022, $q_{\rm TIR}$ with $L_{\rm TIR}$ the 8--1000 $\mu$m MAGPHYS luminosity, their Sect. 5 and Eq. 4) all default to `'tir'`. An explicit `ir_window` always wins, so `'total'` gives CIGALE's convention.
+
+The q relations are written for different infrared luminosities. Helou et al. (1985) define $q$ on the far-infrared flux between 42.5 and 122.5 $\mu$m; Bell (2003) and the recent calibrations (for example Delvecchio et al. 2021, whose abstract defines $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) use the total infrared, 8--1000 $\mu$m. The `radio.sf` key `ir_window` selects the rest-wavelength window of the dust-emission SED that is integrated to form $L_{\rm IR}$, for every q-based star-formation model (`bell2003`, `bell2003_split`, `delvecchio2021`, `mccheyne2022`) and for the Murphy et al. (2011) free-free term, which is scaled by the same $L_{\rm IR}$:
+
+- **`'total'`.** $L_{\rm IR}$ is the dust power as the dust components publish it (`L_ir`), CIGALE's convention. No band integral is taken. It is never the default of a q-based model; name it to reproduce CIGALE.
+- **`'tir'` (the default of every q-based model).** $L_{\rm IR} = \int_{8\,\mu{\rm m}}^{1000\,\mu{\rm m}} L_\nu\,d\nu$ of the re-emitted dust SED (`sed_dust_ir`).
+- **`'fir'`.** The same integral over 42.5--122.5 $\mu$m. Helou et al. (1985) define their FIR from the IRAS 60 and 100 $\mu$m fluxes, so 42.5--122.5 $\mu$m is the nominal IRAS band; the integral over it is what is evaluated here.
+
+The window edges need not fall on grid nodes: the SED is taken linear in frequency between nodes and each grid cell is clipped to the window, so the band is the requested one to the accuracy of the grid trapezoid. For the default delayed-$\tau$ galaxy the 8--1000 $\mu$m band holds 0.944 (DL14) and 0.958 (Casey 2012) of the dust power, so `'tir'` lowers the radio flux by 0.025 and 0.019 dex relative to `'total'`; this is the shift in the default output.
+
+```python
+radio={"sf": {"type": "bell2003", "ir_window": "tir"}, "agn": {"type": "powerlaw"}}
+```
+
+A window named explicitly needs a `dust_emission` block (it reads `sed_dust_ir`) and raises a `ConfigError` without one; a model with no dust-emission SED and no `ir_window` key uses the published dust power. A rest wavelength grid that does not span the window (for `'tir'`, 8--1000 $\mu$m) also raises a `ConfigError`. Under `diffuse_screen` the window is applied to the emergent (screened) dust SED. The derived property `q_ir` always reports the ratio of the total dust power `L_ir` to the 1.4 GHz luminosity, whatever window calibrated the model, so with `'tir'` it differs from the input `radio_q_ir` by the band fraction.
+
+Defaults against the literature: the four models default to the window of their own paper (all 8--1000 $\mu$m), none is calibrated on the 42.5--122.5 $\mu$m window of Helou et al. (1985), and CIGALE's total-dust-power convention needs `ir_window: 'total'`.
+
 ### AGN Radio Jets
 
 For radio-quiet AGN, a simple power law $L_\nu \propto \nu^{-\alpha_{\rm AGN}}$ ($\alpha_{\rm AGN} = 0.7$) is sufficient. It is normalized through the radio loudness `radio_loudness` $= \log_{10}[L_\nu(5\,{\rm GHz})/L_\nu(4400\,\text{\AA})]$, the B-band ratio. $L_\nu(4400\,\text{\AA})$ is the intrinsic accretion-disc luminosity that a composable AGN model publishes at its 30° reference inclination; the other AGN models publish no disc luminosity, and the radio block then uses $L_{\rm bol}/(5.15\,\nu_B)$, a bolometric correction of 5.15 at 4400 Å. The power law is multiplied by $\exp(-\nu/\nu_{\rm cut})$ with `radio_log_nu_cut` $= \log_{10}(\nu_{\rm cut}/{\rm Hz}) = 13$ by default, the synchrotron-aging cutoff of AGNfitter-rX; `radio_log_nu_cut = 40` removes it. At the default the cutoff lowers the jet by the factors 0.997, 0.990 and 0.970 at 30, 100 and 300 GHz, and by 0.9995 at the 5 GHz anchor of the loudness.
