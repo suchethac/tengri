@@ -122,6 +122,7 @@ def cmb_heating_luminosity_boost(
     ----------
     .. [1] da Cunha et al. 2013, ApJ, 766, 13. https://doi.org/10.1088/0004-637X/766/1/13
     """
+    # Scale floor: dust_T has prior 20-80 K (library 15-99 K); the 1 K floor never binds.
     return (T_eff / jnp.maximum(T_dust, 1.0)) ** (4.0 + beta)
 
 
