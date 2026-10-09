@@ -36,7 +36,7 @@ PUBLICATION_HI_AA: float = 1.0e10
 PUBLICATION_NODES: int = 8000
 
 
-def publication_wave(dtype, extra_aa=()) -> jnp.ndarray:
+def publication_wave(dtype, extra_aa=(), n_nodes: int = PUBLICATION_NODES) -> jnp.ndarray:
     """Fixed publication wavelength grid, ascending, with diagnostic nodes included.
 
     Parameters
@@ -45,13 +45,15 @@ def publication_wave(dtype, extra_aa=()) -> jnp.ndarray:
         Floating dtype of the returned array (the caller's wavelength dtype).
     extra_aa : sequence of float, optional
         Diagnostic wavelengths [Angstrom] that must be grid nodes exactly.
+    n_nodes : int, optional
+        Number of log-uniform nodes; the coarsest count that meets the identity tolerance.
 
     Returns
     -------
     ndarray, shape (n_pub,)
         Ascending wavelengths [Angstrom], independent of any caller grid.
     """
-    nodes = np.geomspace(PUBLICATION_LO_AA, PUBLICATION_HI_AA, PUBLICATION_NODES)
+    nodes = np.geomspace(PUBLICATION_LO_AA, PUBLICATION_HI_AA, n_nodes)
     nodes = np.unique(np.concatenate([nodes, np.asarray(extra_aa, dtype=np.float64)]))
     return jnp.asarray(nodes, dtype=dtype)
 

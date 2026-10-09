@@ -27,6 +27,10 @@ import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._publication import emitted_bolometric, publication_wave
+
+#: Coarsest log-uniform grid whose emitted-SED integral meets 1e-6 against a 200000-node
+#: reference over 1e-3 A to 1e10 A (measured: 1000 nodes give -7e-8).
+_KD18_PUBLICATION_NODES: int = 1000
 from tengri.components.agn.disc import kubota_done_disc as _kubota_done_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -318,7 +322,7 @@ class KD18Disc(SEDModelComponent):
         # Published L_agn_disc: the integral of the emitted, inclination-projected SED over
         # the full emission range, evaluated on the fixed publication grid. The caller's
         # wave never enters it.
-        wave_pub = publication_wave(wave.dtype)
+        wave_pub = publication_wave(wave.dtype, n_nodes=_KD18_PUBLICATION_NODES)
         L_disc = emitted_bolometric(_kubota(wave_pub), wave_pub)
 
         # Add to intrinsic SED

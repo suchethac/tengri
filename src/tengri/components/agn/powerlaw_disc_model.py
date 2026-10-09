@@ -46,7 +46,7 @@ _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
 #: Log-uniform grid over the normalization band [Angstrom] (10 A to 1e8 A), on which the
 #: published bolometric luminosity is integrated.
-_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 8000)
+_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 500)
 
 
 @dataclass(frozen=True)
@@ -181,7 +181,10 @@ class PowerLawDisc(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + disc contribution).
-            - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
+            - published: {"L_agn_disc": bolometric disc luminosity [erg/s], the integral of the
+              emitted SED over the normalization band 10 A - 1e8 A}. The band is part of the
+              definition: the emitted power-law tail (L_nu nu ~ const at long wavelength) does
+              not converge beyond it, so the integral would depend on an arbitrary upper limit.
 
         """
 

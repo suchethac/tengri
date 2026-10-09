@@ -28,7 +28,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import emitted_bolometric, publication_wave
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.cat3d_wind import create_cat3d_wind_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -280,10 +280,10 @@ class CAT3DTorus(SEDModelComponent):
                 agn_torus_frac=p["torus_frac"],
             )
 
-        # Published L_agn_torus: the integral of the emitted torus SED over the full emission
-        # range, on the fixed publication grid. The caller's wave never enters it.
-        wave_pub = publication_wave(wave.dtype)
-        L_torus = emitted_bolometric(_torus(wave_pub), wave_pub)
+        # Published L_agn_torus: the exact integral of the emitted torus SED. The template is
+        # a log-log power law between its native nodes, so the integral is closed form on them.
+        native = jnp.asarray(cat3d_fn.native_wave, dtype=wave.dtype)
+        L_torus = native_bolometric_nu(_torus(native), native)
 
         # Add to intrinsic SED
         sed_out = sed_in + _torus(wave)

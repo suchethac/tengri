@@ -153,7 +153,10 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     # ``jnp.asarray`` of a numpy array inside the closure body is safe in
     # either context: a DeviceArray when called eagerly, a JIT constant
     # when called under trace.
-    return functools.partial(silva04_sed_from_grid, load_silva04_grid(grid_path))
+    grid = load_silva04_grid(grid_path)
+    sed_fn = functools.partial(silva04_sed_from_grid, grid)
+    sed_fn.native_wave = np.asarray(grid.wave_grid)
+    return sed_fn
 
 
 @functools.cache
