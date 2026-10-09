@@ -248,7 +248,6 @@ _galrun/
 !data/dale2014_templates_cigale.h5
 !data/dl07_templates_v2.h5
 !data/dl14_templates.h5
-!data/fsps_mass_remaining_chabrier.h5
 !data/fsps_nebular_reference.npz
 !data/fsps_spectrum_reference.npz
 !data/qsogen_cont_bb_only.npz
@@ -324,3 +323,6 @@ docs/_generated/
 # The mass-reinsertion lock file (TENGRI_REINSERT_LOCK): runtime coordination
 # between concurrent fits, not a result.
 analysis/paper1/results/fits/.reinsert.lock
+
+# Package-data surviving-mass tables (repackaged BC03 column; tiny, shipped in the wheel)
+!src/tengri/data/ssp_mass_remaining/*.h5
