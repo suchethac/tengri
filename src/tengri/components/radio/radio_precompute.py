@@ -51,6 +51,7 @@ from tengri.components.radio.radio import (
     radio_freefree as _radio_freefree,
     radio_sfr_bell2003 as _radio_synchrotron,
 )
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     collapse_fixed_axes,
@@ -172,6 +173,27 @@ _BUILDERS = {
 }
 
 
+def _axis(
+    param_name: str,
+    supplied: Any,
+    literal: np.ndarray,
+    parameters: Any,
+) -> np.ndarray:
+    """Node axis of ``param_name``: the supplied one checked against the reach, or the hull.
+
+    The default is ``literal`` widened to the parameter's reach (``reach_axes.hull_axis``).
+    """
+    literal = np.asarray(literal, dtype=np.float64)
+    support = reach_axes.active_support(
+        param_name, parameters, (float(literal.min()), float(literal.max()))
+    )
+    if supplied is None:
+        return reach_axes.hull_axis(literal, support)
+    axis = np.asarray(supplied, dtype=np.float64)
+    reach_axes.check_user_axis(param_name, axis, support)
+    return axis
+
+
 def precompute(
     filter_waves: list,
     filter_trans: list,
@@ -214,13 +236,12 @@ def precompute(
     if model not in _BUILDERS:
         raise ValueError(f"Unknown radio model: {model!r}. Expected one of {sorted(_BUILDERS)}.")
 
-    if alpha_grid is None:
-        defaults = {
-            "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
-            "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
-            "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
-        }
-        alpha_grid = defaults[model]
+    literal_grids = {
+        "radio_synchrotron": np.linspace(0.5, 1.0, 8, dtype=np.float64),
+        "radio_freefree": np.linspace(-0.2, 0.0, 6, dtype=np.float64),
+        "radio_agn_jet": np.linspace(0.4, 1.2, 8, dtype=np.float64),
+    }
+    alpha_grid = _axis(AXIS_PARAMS[model][0], alpha_grid, literal_grids[model], parameters)
 
     preint = _BUILDERS[model](filter_waves, filter_trans, redshift, alpha_grid)
     result = {

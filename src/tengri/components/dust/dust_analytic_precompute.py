@@ -39,7 +39,6 @@ References
 from __future__ import annotations
 
 import dataclasses
-import warnings
 from typing import Any
 
 import jax
@@ -56,7 +55,7 @@ from tengri.components.dust.emission import (
 from tengri.components.dust.emission.analytic._closures import (
     _CASEY_LAMBDA_MIN_UM,
 )
-from tengri.config.exceptions import GridSupportWarning
+from tengri.forward.precompute import reach_axes
 from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
@@ -128,16 +127,27 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 _CONTINUUM_LOG10_WAVE_AA_MIN = 2.0
 _CONTINUUM_LOG10_WAVE_AA_MAX = 11.0
 _CONTINUUM_N_WAVE = 2250
+_CASEY_REFINE_AA = (0.95e4, 1.05e4)
+_CASEY_REFINE_N = 500
 
 
 def _continuum_wave_rest() -> np.ndarray:
-    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders."""
-    return np.logspace(
+    """Rest-frame wavelength grid [Angstrom] for the thermal-continuum precompute builders.
+
+    The log grid carries an extra geometric segment of ``_CASEY_REFINE_N`` points across
+    ``_CASEY_REFINE_AA``: ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the trapezoid cell that straddles the 1 um step has to be narrow (about
+    1 Angstrom here against 92 Angstrom on the log grid) for the band flux to approach the
+    continuum limit.
+    """
+    grid = np.logspace(
         _CONTINUUM_LOG10_WAVE_AA_MIN,
         _CONTINUUM_LOG10_WAVE_AA_MAX,
         _CONTINUUM_N_WAVE,
         dtype=np.float64,
     )
+    refine = np.geomspace(*_CASEY_REFINE_AA, _CASEY_REFINE_N, dtype=np.float64)
+    return np.unique(np.concatenate([grid, refine]))
 
 
 def _build_union_grid_with_fine_filters(
@@ -455,12 +465,15 @@ def _build_grid_pah_drude(
     )
 
 
-# Default node counts per axis. Measured over 200 seeded random points inside the declared
-# priors in the 60-90, 250-500 and 750-950 um bands, the log band flux interpolated with
-# PCHIP agrees with the exact closure to <= 6e-4 at these counts (far-IR bands, z = 0).
+# Default node counts per axis. Measured over 200 seeded RandomState(7) points inside the declared
+# priors against the exact closure on a rest grid converged at the 1 um step, the log band flux
+# interpolated with PCHIP agrees to <= 5.5e-4 in the 60-90, 250-500 and 750-950 um bands at
+# z = 0 (casey2012 also at z = 3) and, for casey2012, to <= 4.7e-4 in 8-24 and 24-40 um at z = 0
+# and 60-90 and 250-500 um at z = 3. dust_alpha_mir is interpolated in ln(alpha_mir): the band
+# flux is most curved at alpha_mir near 1, where the log spacing is finest.
 _DEFAULT_NODES: dict[str, dict[str, int]] = {
     "modified_blackbody": {"dust_T": 49, "dust_beta_ir": 12},
-    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 21, "dust_lambda_0_um": 26},
+    "casey2012": {"dust_T": 41, "dust_beta_ir": 8, "dust_alpha_mir": 28, "dust_lambda_0_um": 26},
     "graybody": {"dust_T": 41, "dust_beta_ir": 10, "dust_lambda_0_um": 30},
 }
 
@@ -468,83 +481,20 @@ _DEFAULT_NODES: dict[str, dict[str, int]] = {
 _FLOAT64_TINY = np.finfo(np.float64).tiny
 
 # Axes whose interpolation coordinate is the natural log of the parameter.
-_LOG_AXIS_PARAMS = ("dust_T", "dust_lambda_0_um")
-
-
-def _active_support(param_name: str, parameters: Any) -> tuple[float, float] | None:
-    """Range of ``param_name`` the model can reach, or None when it is not bounded by the model.
-
-    ``Fixed(v)`` gives ``(v, v)`` and a free parameter its prior's finite ``bounds``. ``None``
-    means no model, a parameter the model does not declare, or a prior with an infinite bound; the
-    last warns once, because the nodes then span the declared range and the lookup holds the edge
-    value beyond it.
-    """
-    if parameters is None:
-        return None
-    fixed = parameters.get_fixed_values()
-    if param_name in fixed:
-        return (fixed[param_name], fixed[param_name])
-    if param_name not in parameters.free_params:
-        return None
-    lo, hi = parameters.get_distribution(param_name).bounds
-    if lo is not None and hi is not None and np.isfinite(lo) and np.isfinite(hi):
-        return (float(lo), float(hi))
-    declared = _get_param_bounds(param_name)
-    warnings.warn(
-        f"{param_name} has an unbounded prior; the nodes span its declared range "
-        f"[{declared[0]:g}, {declared[1]:g}] and the lookup holds the edge value, with zero "
-        f"gradient, beyond it. Give the prior finite bounds to widen the nodes.",
-        GridSupportWarning,
-        stacklevel=3,
-    )
-    return None
+_LOG_AXIS_PARAMS = ("dust_T", "dust_alpha_mir", "dust_lambda_0_um")
 
 
 def _default_axis(
     param_name: str, n_nodes: int, support: tuple[float, float] | None = None
 ) -> np.ndarray:
-    """Node grid over the declared prior extended to ``support``, at the declared node density.
-
-    Geometric for the log axes, linear otherwise. The count scales with the span in the
-    interpolation coordinate (``ln`` for :data:`_LOG_AXIS_PARAMS`),
-    ``ceil(n_nodes * span_axis / span_declared)``, never below ``n_nodes``, so the node spacing
-    that the #2676 accuracy figures were measured at is kept when the support is wider. With
-    ``support`` None, or inside the declared prior, the axis is the declared one exactly.
-    """
-    declared_lo, declared_hi = _get_param_bounds(param_name)
-    lo, hi = declared_lo, declared_hi
-    if support is not None:
-        lo, hi = min(lo, support[0]), max(hi, support[1])
-    log_axis = param_name in _LOG_AXIS_PARAMS
-    if log_axis and lo <= 0.0:
-        raise ValueError(f"{param_name} reaches {lo:g}; a logarithmic node axis needs lo > 0.")
-    coordinate = np.log if log_axis else np.asarray
-    stretch = (coordinate(hi) - coordinate(lo)) / (
-        coordinate(declared_hi) - coordinate(declared_lo)
+    """Default axis of ``param_name`` over its declared prior (see ``reach_axes``)."""
+    return reach_axes.default_axis(
+        param_name,
+        n_nodes,
+        support,
+        declared=_get_param_bounds(param_name),
+        log_axis=param_name in _LOG_AXIS_PARAMS,
     )
-    n_axis = max(n_nodes, int(np.ceil(n_nodes * stretch)))
-    if log_axis:
-        return np.geomspace(lo, hi, n_axis, dtype=np.float64)
-    return np.linspace(lo, hi, n_axis, dtype=np.float64)
-
-
-def _check_user_axis(
-    param_name: str, axis: np.ndarray, support: tuple[float, float] | None
-) -> None:
-    """Refuse a user-supplied axis that does not span the model's reach; warn below 4 nodes."""
-    if support is not None and (axis.min() > support[0] or axis.max() < support[1]):
-        raise ValueError(
-            f"{param_name} nodes span [{axis.min():g}, {axis.max():g}] but the model reaches "
-            f"[{support[0]:g}, {support[1]:g}]; the lookup would hold the edge value with zero "
-            f"gradient beyond the nodes. Supply nodes covering the support."
-        )
-    if axis.size < 4:
-        warnings.warn(
-            f"{param_name} has {axis.size} nodes; the PCHIP lookup degrades to a parabola or a "
-            f"chord below 4.",
-            UserWarning,
-            stacklevel=3,
-        )
 
 
 _CONTINUUM_BUILDERS = {
@@ -579,13 +529,16 @@ def precompute(
     ``ValueError`` naming the filter; below 100 A (0.01 um) the template is taken as
     zero: exact to double precision for the thermal models, and for ``pah_drude`` the Drude
     wings there are below 1.7e-14 of the peak (measured). Accuracy of :func:`build_lookup` at
-    the default nodes against the exact closure, maximum over 200 seeded random points inside
-    the declared priors, z = 0, bands 60-90 / 250-500 / 750-950 um: ``modified_blackbody``
-    3.5e-4, ``graybody`` 2.9e-4, ``casey2012`` 8.0e-4 (60-90 um), 6.7e-4 (250-500 um), 7.0e-4
-    (750-950 um). ``casey2012`` at 8-24 um is 1.6e-3 at z = 0; at z = 3 (observed bands) it is
-    2.0e-3 in 60-90 um, 7.0e-4 in 250-500 um, 6.8e-4 in 750-950 um and 7.6e-4 in 8-24 um. The
-    1 um lower bound of ``casey2012`` is a node of the rest grid, so its normalization has
-    no cell straddling the bound.
+    the default nodes against the exact closure, maximum over 200 seeded ``RandomState(7)`` points
+    inside the declared priors, reference rest grid converged at the 1 um step (0.25 Angstrom
+    spacing there), bands 60-90 / 250-500 / 750-950 um at z = 0: ``modified_blackbody`` 3.3e-4,
+    3.4e-5, 3.3e-5; ``graybody`` 5.5e-4, 1.5e-4, 1.6e-4; ``casey2012`` 3.6e-4, 4.0e-4, 2.9e-4.
+    ``casey2012`` at z = 3 (observed bands) is 3.1e-4, 4.7e-4, 3.7e-4 in the same three bands, and
+    in the mid-IR 3.8e-4 (8-24 um) and 4.0e-4 (24-40 um) at z = 0, 3.1e-4 (60-90 um) and 4.7e-4
+    (250-500 um) at z = 3. ``casey2012`` is zero below 1 um and normalized on the grid it is
+    evaluated on, so the rest grid carries 500 points over 0.95-1.05 um (about 1 Angstrom against
+    92 Angstrom on the log grid) and the 1 um bound is a node; ``dust_alpha_mir`` is interpolated
+    in its natural log.
 
     Parameters
     ----------
@@ -670,12 +623,12 @@ def precompute(
         }
         axes = []
         for name in axis_params:
-            support = _active_support(name, parameters)
+            support = reach_axes.active_support(name, parameters, _get_param_bounds(name))
             if supplied[name] is None:
                 axes.append(_default_axis(name, _DEFAULT_NODES[model][name], support))
             else:
                 axis = np.asarray(supplied[name], dtype=np.float64)
-                _check_user_axis(name, axis, support)
+                reach_axes.check_user_axis(name, axis, support)
                 axes.append(axis)
         axes = tuple(axes)
         preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
@@ -750,9 +703,9 @@ def build_lookup(
     to 10 m, so no template interpolation enters the band integral. A band whose
     rest-frame red edge lies beyond 10 m is refused at build time with ``ValueError``;
     below 100 A the template is taken as zero. Accuracy figures are those of :func:`precompute`
-    (far-IR 2.9e-4 to 8.0e-4; ``casey2012`` mid-IR 8-24 um 1.6e-3 at z = 0). A query outside
-    the node span is clamped to the edge node: the value is constant and the gradient zero
-    beyond it.
+    (``casey2012`` mid-IR at most 4.7e-4 in 8-24, 24-40 um at z = 0 and 60-90, 250-500 um at
+    z = 3). The coordinates are ln T, beta, ln alpha_mir and ln lambda_0. A query outside the node
+    span is clamped to the edge node: the value is constant and the gradient zero beyond it.
 
     Parameters
     ----------
