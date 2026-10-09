@@ -46,10 +46,10 @@ def template(synthetic_ssp, mock):
 
 
 @pytest.fixture(scope="module")
-def two_buckets(mock):
+def two_buckets(mock, template):
     """Galaxies 0, 2, 1 in that record order: buckets at n_max 384 and 512."""
     records = [_record(mock[i]) for i in _MOCK_SEED_ORDER]
-    batches = build_spectro_batches(records, quantum=128)
+    batches = build_spectro_batches(records, quantum=128, model=template)
     assert [spec.n_max for spec, _, _ in batches] == [384, 512]
     return batches
 
@@ -57,9 +57,9 @@ def two_buckets(mock):
 def test_flat_logdensity_equals_negative_batched_neg_log_posterior(template, two_buckets):
     rng = np.random.default_rng(7)
     for spec, batch, _index in two_buckets:
-        flat, substitute = _bucket_catalog_inputs(template, spec, batch, conserving=True)
+        flat, substitute = _bucket_catalog_inputs(template, spec, batch)
         log_post_2arg, unravel, init_flat, _template_args = flat
-        nlp = batched_neg_log_posterior(template, spec, conserving=True)
+        nlp = batched_neg_log_posterior(template, spec)
         for row in range(batch.z.shape[0]):
             obs = batch.galaxy(row)
             data_args = substitute(obs, None, None, None, None, None)
@@ -77,7 +77,6 @@ def test_nuts_draws_come_back_in_original_galaxy_order(template, mock, two_bucke
     result = fit_spectra_catalog_mcmc(
         template,
         two_buckets,
-        conserving=True,
         sampler="nuts",
         n_warmup=30,
         n_burnin=0,
@@ -98,3 +97,38 @@ def test_nuts_draws_come_back_in_original_galaxy_order(template, mock, two_bucke
 def test_engine_without_fitter_or_flat_logdensity_raises():
     with pytest.raises(ValueError, match="fitter"):
         build_catalog_mcmc_engine(None, "nuts", n_warmup=2, n_burnin=0, n_samples=2)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_batch_size_does_not_change_the_draws(template, two_buckets, batch_size):
+    """lax.map(batch_size=...) vmaps chunks of galaxies; the draws must not move."""
+    kwargs = dict(sampler="nuts", n_warmup=20, n_burnin=0, n_samples=20, init="prior", seed=0)
+    serial = fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
+    chunked = fit_spectra_catalog_mcmc(template, two_buckets, batch_size=batch_size, **kwargs)
+    np.testing.assert_allclose(
+        np.asarray(chunked["draws"][_MASS]),
+        np.asarray(serial["draws"][_MASS]),
+        rtol=1e-8,
+        atol=0.0,
+    )
+    np.testing.assert_array_equal(chunked["divergences"], serial["divergences"])
+
+
+def test_batch_size_reaches_lax_map(template, two_buckets, monkeypatch):
+    """batch_size must be the lax.map chunk size, not a dropped keyword."""
+    import jax
+
+    seen = []
+    original = jax.lax.map
+
+    def recording(f, xs, *args, **kwargs):
+        seen.append(kwargs.get("batch_size"))
+        return original(f, xs, *args, **kwargs)
+
+    monkeypatch.setattr(jax.lax, "map", recording)
+    kwargs = dict(sampler="nuts", n_warmup=4, n_burnin=0, n_samples=4, init="prior", seed=0)
+    fit_spectra_catalog_mcmc(template, two_buckets, batch_size=2, **kwargs)
+    assert seen == [2, 2]
+    seen.clear()
+    fit_spectra_catalog_mcmc(template, two_buckets, **kwargs)
+    assert seen == [None, None]

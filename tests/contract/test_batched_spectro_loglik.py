@@ -94,9 +94,11 @@ def template(synthetic_ssp, mock):
 
 
 @pytest.fixture(scope="module")
-def bucket(mock):
+def bucket(mock, template):
     """All three galaxies padded into one bucket of 420 pixels."""
-    [(spec, batch, index)] = build_spectro_batches([_record(g) for g in mock], quantum=420)
+    [(spec, batch, index)] = build_spectro_batches(
+        [_record(g) for g in mock], quantum=420, model=template
+    )
     np.testing.assert_array_equal(index, [0, 1, 2])
     return spec, batch
 
@@ -114,7 +116,7 @@ def _pad_mask(mock, n_max):
 
 def test_batched_value_and_grad_match_per_galaxy_reference(template, bucket, mock):
     spec, batch = bucket
-    loglik = batched_log_likelihood(template, spec, conserving=True)
+    loglik = batched_log_likelihood(template, spec)
     # Offset from the truth so that the gradient is nonzero.
     masses = jnp.asarray([m + 0.05 for m in _TRUE_MASS])
     values, grads = jax.vmap(jax.value_and_grad(loglik))({_MASS: masses}, batch)
@@ -139,7 +141,7 @@ def test_batched_value_and_grad_match_per_galaxy_reference(template, bucket, moc
 def test_single_galaxy_loglik_differences_match_fitter(synthetic_ssp, template, bucket, mock):
     spec, batch = bucket
     g = mock[0]
-    loglik = batched_log_likelihood(template, spec, conserving=True)
+    loglik = batched_log_likelihood(template, spec)
     obs = batch.galaxy(0)
 
     # The existing fit path needs a fixed redshift, so build the per-galaxy model that way.
@@ -167,7 +169,7 @@ def test_single_galaxy_loglik_differences_match_fitter(synthetic_ssp, template, 
 
 def test_padded_pixels_do_not_change_value_or_gradient(template, bucket, mock):
     spec, batch = bucket
-    loglik = batched_log_likelihood(template, spec, conserving=True)
+    loglik = batched_log_likelihood(template, spec)
     params = {_MASS: jnp.asarray(list(_TRUE_MASS))}
     pad = _pad_mask(mock, spec.n_max)
 
@@ -192,8 +194,8 @@ def test_padded_pixels_do_not_change_value_or_gradient(template, bucket, mock):
 
 def test_neg_log_posterior_equals_minus_loglik_plus_prior(template, bucket):
     spec, batch = bucket
-    loglik = batched_log_likelihood(template, spec, conserving=True)
-    nlp = batched_neg_log_posterior(template, spec, conserving=True)
+    loglik = batched_log_likelihood(template, spec)
+    nlp = batched_neg_log_posterior(template, spec)
     obs = batch.galaxy(1)
 
     xi = jnp.asarray(0.37)
@@ -235,12 +237,12 @@ def test_map_descends_and_recovers_mass_in_catalog_order(template, mock):
     # is therefore not sorted, so a missing permutation returns the wrong galaxies.
     order = [0, 2, 1]
     records = [_record(mock[i]) for i in order]
-    batches = build_spectro_batches(records, quantum=128)
+    batches = build_spectro_batches(records, quantum=128, model=template)
     assert [spec.n_max for spec, _, _ in batches] == [384, 512]
     bucket_order = np.concatenate([np.asarray(index) for _, _, index in batches])
     assert not np.all(np.diff(bucket_order) > 0)
 
-    result = fit_spectra_map_vmap(template, batches, conserving=True, n_steps=150)
+    result = fit_spectra_map_vmap(template, batches, n_steps=150)
 
     assert len(result["loss_history"]) == 2
     assert result["loss_history"][0].shape == (150, 2)
@@ -282,12 +284,12 @@ def test_stochastic_sfh_raises_not_implemented(synthetic_ssp, mock):
         redshift=Uniform(0.0, 0.5),
     )
     assert stochastic.spec.stochastic
-    [(spec, batch, index)] = build_spectro_batches([_record(mock[0])])
+    [(spec, batch, index)] = build_spectro_batches([_record(mock[0])], model=stochastic)
 
     with pytest.raises(NotImplementedError, match="stochastic"):
-        batched_log_likelihood(stochastic, spec, conserving=True)
+        batched_log_likelihood(stochastic, spec)
     with pytest.raises(NotImplementedError, match="stochastic"):
-        fit_spectra_map_vmap(stochastic, [(spec, batch, index)], conserving=True, n_steps=2)
+        fit_spectra_map_vmap(stochastic, [(spec, batch, index)], n_steps=2)
 
 
 # ── (7) Three free physical parameters: no mixing across names ─────────────
@@ -347,7 +349,7 @@ def test_multi_parameter_value_and_grad_match_per_galaxy_reference(
     synthetic_ssp, multi_template, bucket, mock
 ):
     spec, batch = bucket
-    loglik = batched_log_likelihood(multi_template, spec, conserving=True)
+    loglik = batched_log_likelihood(multi_template, spec)
     phys = {k: jnp.asarray(v) for k, v in _MULTI_PHYS.items()}
     values, grads = jax.vmap(jax.value_and_grad(loglik))(phys, batch)
 
@@ -368,7 +370,7 @@ def test_multi_parameter_neg_log_posterior_grad_matches_reference(
     synthetic_ssp, multi_template, bucket, mock
 ):
     spec, batch = bucket
-    nlp = batched_neg_log_posterior(multi_template, spec, conserving=True)
+    nlp = batched_neg_log_posterior(multi_template, spec)
     xi = {
         _MASS: jnp.asarray([0.1, -0.2, 0.3]),
         _BETA: jnp.asarray([-0.4, 0.2, 0.5]),

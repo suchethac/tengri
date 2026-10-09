@@ -346,3 +346,123 @@ def test_rest_wave_range_counts_padded_tail():
     build_spectro_batches([gal], rest_wave_range=(1000.0, 7000.0))
     with pytest.raises(ValueError, match="rest"):
         build_spectro_batches([gal], quantum=128, rest_wave_range=(1000.0, 7000.0))
+
+
+# ── (7) Padding follows the grid's spacing law ───────────────────────────
+
+
+def test_pad_wave_log_uniform_stays_log_uniform():
+    wave = np.geomspace(3600.0, 9800.0, 300)
+    padded = pad_wave(wave, 384, "log_uniform")
+    np.testing.assert_array_equal(padded[:300], wave)
+    assert classify_grid(padded) == "log_uniform"
+
+
+def test_pad_wave_nonuniform_extends_linearly():
+    wave = _linear_grid(300)
+    padded = pad_wave(wave, 360, "nonuniform")
+    np.testing.assert_allclose(np.diff(padded[299:]), wave[-1] - wave[-2])
+
+
+def test_pad_wave_rejects_unknown_grid_kind():
+    with pytest.raises(ValueError, match="grid_kind"):
+        pad_wave(_linear_grid(10), 12, "banded")
+
+
+# ── (8) Per-wavelength data converts to F_nu with the tengri converter ───
+
+
+def test_from_flambda_matches_hand_calculation():
+    from tengri.utils.physics_constants import C_AA
+
+    wave = np.array([4000.0, 5000.0, 6000.0])
+    flux_lambda = np.array([1e-17, 2e-17, 3e-17])
+    sigma_lambda = np.array([1e-18, 2e-18, 3e-18])
+    rec = GalaxySpectrum.from_flambda(
+        wave,
+        flux_lambda,
+        1.0 / sigma_lambda**2,
+        resolution=3000.0,
+        z=0.1,
+    )
+    # F_nu = F_lambda * lambda^2 / c, with c in Angstrom/s.
+    expected_flux = flux_lambda * wave**2 / C_AA
+    expected_sigma = sigma_lambda * wave**2 / C_AA
+    np.testing.assert_allclose(rec.flux, expected_flux, rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(1.0 / np.asarray(rec.ivar) ** 0.5, expected_sigma, rtol=1e-12)
+    assert rec.flux[1] == pytest.approx(2e-17 * 5000.0**2 / 2.99792458e18, rel=1e-12)
+
+
+def test_from_flambda_converts_photometry_at_the_filter_pivot():
+    from tengri.utils.physics_constants import C_AA
+
+    rec = GalaxySpectrum.from_flambda(
+        np.linspace(4000.0, 7000.0, 50),
+        np.ones(50) * 1e-17,
+        np.ones(50) * 1e36,
+        resolution=3000.0,
+        z=0.1,
+        phot_flux_lambda=np.array([1e-17]),
+        phot_err_lambda=np.array([2e-18]),
+        phot_wave_eff=np.array([5000.0]),
+    )
+    np.testing.assert_allclose(rec.phot_flux, [1e-17 * 5000.0**2 / C_AA], rtol=1e-12)
+    np.testing.assert_allclose(rec.phot_err, [2e-18 * 5000.0**2 / C_AA], rtol=1e-12)
+
+
+def test_from_flambda_photometry_needs_its_pivot():
+    with pytest.raises(ValueError, match="phot_wave_eff"):
+        GalaxySpectrum.from_flambda(
+            np.linspace(4000.0, 7000.0, 50),
+            np.ones(50),
+            np.ones(50),
+            resolution=3000.0,
+            z=0.1,
+            phot_flux_lambda=np.array([1e-17]),
+            phot_err_lambda=np.array([2e-18]),
+        )
+
+
+# ── (9) Non-finite pixels never enter the mask ───────────────────────────
+
+
+@pytest.mark.parametrize("bad", ["inf_ivar", "nan_flux", "nan_ivar"])
+def test_non_finite_pixel_is_masked_out_by_the_builder(bad):
+    n = 300
+    ivar = np.full(n, 4.0)
+    flux = np.linspace(1.0, 2.0, n)
+    if bad == "inf_ivar":
+        ivar[10] = np.inf
+    elif bad == "nan_flux":
+        flux[10] = np.nan
+    else:
+        ivar[10] = np.nan
+    gal = GalaxySpectrum(wave=_linear_grid(n), flux=flux, ivar=ivar, resolution=3000.0, z=0.1)
+    [(_, batch, _)] = build_spectro_batches([gal])
+    assert float(batch.pix_mask[0, 10]) == 0.0
+    assert float(batch.sigma[0, 10]) == 1.0
+    assert float(batch.flux[0, 10]) == 0.0
+    assert np.all(np.isfinite(np.asarray(batch.sigma)))
+    assert np.all(np.isfinite(np.asarray(batch.flux)))
+
+
+def test_non_finite_photometry_is_not_present():
+    gal = GalaxySpectrum(
+        wave=_linear_grid(300),
+        flux=np.ones(300),
+        ivar=np.full(300, 4.0),
+        resolution=3000.0,
+        z=0.1,
+        phot_flux=np.array([1.0, np.nan, 3.0]),
+        phot_err=np.array([0.1, 0.1, np.inf]),
+    )
+    [(_, batch, _)] = build_spectro_batches([gal])
+    np.testing.assert_array_equal(np.asarray(batch.phot_presence[0]), [1.0, 0.0, 0.0])
+
+
+def test_builder_pads_a_log_uniform_grid_geometrically():
+    wave = np.geomspace(3600.0, 9800.0, 300)
+    gal = GalaxySpectrum(wave=wave, flux=np.ones(300), ivar=np.ones(300), resolution=3000.0, z=0.1)
+    [(spec, batch, _)] = build_spectro_batches([gal], quantum=128)
+    assert spec.n_max == 384
+    assert classify_grid(np.asarray(batch.wave[0])) == "log_uniform"

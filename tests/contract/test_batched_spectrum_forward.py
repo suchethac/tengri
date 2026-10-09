@@ -98,10 +98,11 @@ def test_identity_single_galaxy_matches_own_model(synthetic_ssp, single_model):
     z = 0.05
     bm = _banded(wave)["resolution_matrix"]
     spec, sb, _ = build_spectro_batches(
-        [GalaxySpectrum(wave=wave, flux=np.ones(160), ivar=np.ones(160), resolution=bm, z=z)]
+        [GalaxySpectrum(wave=wave, flux=np.ones(160), ivar=np.ones(160), resolution=bm, z=z)],
+        model=single_model,
     )[0]
     params = _base_params(single_model)
-    out = predict_batched_observables(single_model, params, sb.galaxy(0), spec, conserving=True)
+    out = predict_batched_observables(single_model, params, sb.galaxy(0), spec)
     ref = single_model.predict_spectrum({**params, "redshift": z})
     np.testing.assert_allclose(np.asarray(out["spec_fnu"]), np.asarray(ref), rtol=1e-12, atol=0.0)
 
@@ -113,15 +114,15 @@ def test_batch_matches_per_galaxy_reference_and_pads_to_zero(synthetic_ssp, gala
         GalaxySpectrum(wave=g["wave"], flux=f, ivar=np.ones_like(f), resolution=g["bm"], z=g["z"])
         for g, f in zip(galaxies, fluxes)
     ]
-    buckets = build_spectro_batches(records, quantum=420)
+    template = _free_z_model(synthetic_ssp, galaxies[0]["wave"], _banded(galaxies[0]["wave"]))
+    buckets = build_spectro_batches(records, quantum=420, model=template)
     assert len(buckets) == 1
     spec, batch, index = buckets[0]
     assert spec.n_max == 420
     np.testing.assert_array_equal(index, [0, 1, 2])
 
-    template = _free_z_model(synthetic_ssp, galaxies[0]["wave"], _banded(galaxies[0]["wave"]))
     params = _base_params(template)
-    predict = make_batched_predict(template, spec, conserving=True)
+    predict = make_batched_predict(template, spec)
     out = np.asarray(predict(_stack(params, 3), batch)["spec_fnu"])
     assert out.shape == (3, 420)
 
@@ -142,12 +143,11 @@ def test_gaussian_resolution_uses_variable_path(synthetic_ssp):
             wave=wave, flux=np.ones(200), ivar=np.ones(200), resolution=resolution, z=0.05
         )
     ]
-    spec, batch, _ = build_spectro_batches(records)[0]
-    assert spec.grid_kind == "nonuniform"
-
     template = _free_z_model(synthetic_ssp, wave, {"resolution": resolution})
+    spec, batch, _ = build_spectro_batches(records, model=template)[0]
+    assert spec.grid_kind == "nonuniform"
     params = _base_params(template)
-    predict = make_batched_predict(template, spec, conserving=True)
+    predict = make_batched_predict(template, spec)
     out = np.asarray(predict(_stack(params, 1), batch)["spec_fnu"])[0]
 
     ref = np.asarray(template.predict_spectrum({**params, "redshift": 0.05}))
@@ -163,12 +163,11 @@ def test_gaussian_padded_pixels_are_exactly_zero(synthetic_ssp):
         )
         for w in waves
     ]
-    spec, batch, _ = build_spectro_batches(records, quantum=260)[0]
-    assert spec.n_max == 260 and spec.grid_kind == "nonuniform"
-
     template = _free_z_model(synthetic_ssp, waves[1], {"resolution": 800.0})
+    spec, batch, _ = build_spectro_batches(records, quantum=260, model=template)[0]
+    assert spec.n_max == 260 and spec.grid_kind == "nonuniform"
     params = _base_params(template)
-    predict = make_batched_predict(template, spec, conserving=True)
+    predict = make_batched_predict(template, spec)
     out = np.asarray(predict(_stack(params, 2), batch)["spec_fnu"])
 
     ref = np.asarray(
@@ -192,10 +191,10 @@ def test_gradient_matches_per_galaxy_reference(synthetic_ssp, galaxies):
         )
         for g in galaxies
     ]
-    spec, batch, _ = build_spectro_batches(records, quantum=420)[0]
     template = _free_z_model(synthetic_ssp, galaxies[0]["wave"], _banded(galaxies[0]["wave"]))
+    spec, batch, _ = build_spectro_batches(records, quantum=420, model=template)[0]
     params = _base_params(template)
-    predict = make_batched_predict(template, spec, conserving=True)
+    predict = make_batched_predict(template, spec)
 
     def batched_loss(log_mass_per_galaxy):
         # One entry per galaxy, so each gradient entry is that galaxy's own

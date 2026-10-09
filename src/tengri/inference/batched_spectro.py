@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Batched spectroscopic log-likelihood and vmapped MAP across galaxies (#2833).
+"""Batched spectroscopic log-likelihood and vmapped MAP across galaxies.
 
 :mod:`tengri.forward.batched_spectrum` evaluates one galaxy's spectrum from a
 :class:`~tengri.observation.batched.SpectroBatch` slice. This module adds the
@@ -58,6 +58,7 @@ from jax.flatten_util import ravel_pytree
 from tengri.forward.batched_spectrum import (
     check_template_model,
     predict_batched_observables,
+    require_model_spec,
 )
 from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
@@ -65,7 +66,7 @@ from tengri.inference.loss_functions import (
     _unstandardize_parameters,
     standardized_neg_log_prior,
 )
-from tengri.observation.batched import SpectroBatch, SpectroBatchSpec, require_spec
+from tengri.observation.batched import SpectroBatch, SpectroBatchSpec
 from tengri.parameters.priors import Gaussian
 
 _REDSHIFT = "redshift"
@@ -99,7 +100,7 @@ def _prepare_template(model) -> Any:
 
 
 def batched_log_likelihood(
-    model, spec: SpectroBatchSpec, *, conserving: bool
+    model, spec: SpectroBatchSpec
 ) -> Callable[[dict, SpectroBatch], jax.Array]:
     """Return the one-galaxy Gaussian log-likelihood as a pure JAX function.
 
@@ -109,9 +110,8 @@ def batched_log_likelihood(
         Template model with a free redshift (see
         :func:`~tengri.forward.batched_spectrum.check_template_model`).
     spec : SpectroBatchSpec
-        Static bucket key of the batch the function will receive.
-    conserving : bool
-        Flux-conserving pixel integral, passed to the forward pass.
+        Static bucket key of the batch the function will receive. Its
+        ``conserving`` flag selects the pixel integral.
 
     Returns
     -------
@@ -138,13 +138,11 @@ def batched_log_likelihood(
     exactly zero to the value and to every gradient. The template's component
     chain is built here, outside the trace.
     """
-    require_spec(spec)
     threaded = _prepare_template(model)
+    require_model_spec(model, spec)
 
     def loglik(params: dict, obs: SpectroBatch) -> jax.Array:
-        out = predict_batched_observables(
-            model, params, obs, spec, conserving=conserving, threaded=threaded
-        )
+        out = predict_batched_observables(model, params, obs, spec, threaded=threaded)
         total = diag_gaussian_log_prob(out["spec_fnu"], obs.flux, obs.sigma, presence=obs.pix_mask)
         if spec.has_phot:
             total = total + diag_gaussian_log_prob(
@@ -156,7 +154,7 @@ def batched_log_likelihood(
 
 
 def batched_neg_log_posterior(
-    model, spec: SpectroBatchSpec, *, conserving: bool
+    model, spec: SpectroBatchSpec
 ) -> Callable[[dict, SpectroBatch], jax.Array]:
     """Return the one-galaxy negative log-posterior in standardized space.
 
@@ -166,8 +164,6 @@ def batched_neg_log_posterior(
         Template model (see :func:`batched_log_likelihood`).
     spec : SpectroBatchSpec
         Static bucket key of the batch the function will receive.
-    conserving : bool
-        Flux-conserving pixel integral, passed to the forward pass.
 
     Returns
     -------
@@ -190,7 +186,7 @@ def batched_neg_log_posterior(
     :func:`~tengri.inference.loss_functions._unstandardize_parameters`, and only
     the free names are passed on, so fixed values never reach the forward pass.
     """
-    loglik = batched_log_likelihood(model, spec, conserving=conserving)
+    loglik = batched_log_likelihood(model, spec)
     free_names = _free_latent_names(model)
     fixed_values = dict(model.spec.get_fixed_values())
 
@@ -272,13 +268,14 @@ def _to_physical(model, params_unbounded_batch: dict) -> dict:
     return jax.vmap(one)(params_unbounded_batch)
 
 
-def _fit_bucket(model, spec, batch, *, conserving, n_steps, learning_rate, key):
-    """Run Adam on one bucket, returning final latents, final nlp and the loss trace."""
-    import optax
+def _slice_tree(tree, start: int, stop: int):
+    """Return ``tree`` with every leaf sliced along its leading batch axis."""
+    return jax.tree_util.tree_map(lambda a: a[start:stop], tree)
 
-    nlp = batched_neg_log_posterior(model, spec, conserving=conserving)
-    n_gal = int(batch.z.shape[0])
-    init = init_unbounded_batch(model, n_gal, key)
+
+def _fit_chunk(nlp, batch, init, *, n_steps, learning_rate):
+    """Run Adam on one chunk of galaxies from the given latents."""
+    import optax
 
     optimizer = optax.adam(learning_rate)
     opt_state = jax.vmap(optimizer.init)(init)
@@ -296,14 +293,44 @@ def _fit_bucket(model, spec, batch, *, conserving, n_steps, learning_rate, key):
     return params_final, final_nlp, loss_trace
 
 
+def _fit_bucket(model, spec, batch, *, n_steps, learning_rate, key, chunk_size):
+    """Run Adam on one bucket, returning final latents, final nlp and the loss trace.
+
+    The initial latents are drawn for the whole bucket and then sliced, so the
+    result does not depend on ``chunk_size``. Each chunk is a separate ``vmap``
+    of at most ``chunk_size`` galaxies, which bounds the peak memory of the
+    gradient.
+    """
+    nlp = batched_neg_log_posterior(model, spec)
+    n_gal = int(batch.z.shape[0])
+    init = init_unbounded_batch(model, n_gal, key)
+    step = n_gal if chunk_size is None else int(chunk_size)
+    parts = []
+    for start in range(0, n_gal, step):
+        stop = min(start + step, n_gal)
+        parts.append(
+            _fit_chunk(
+                nlp,
+                _slice_tree(batch, start, stop),
+                _slice_tree(init, start, stop),
+                n_steps=n_steps,
+                learning_rate=learning_rate,
+            )
+        )
+    params_final = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs), *[p[0] for p in parts])
+    final_nlp = jnp.concatenate([p[1] for p in parts])
+    loss_trace = jnp.concatenate([p[2] for p in parts], axis=1)
+    return params_final, final_nlp, loss_trace
+
+
 def fit_spectra_map_vmap(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
     *,
-    conserving: bool,
     n_steps: int = 500,
     learning_rate: float = 0.05,
     seed: int = 0,
+    chunk_size: int | None = None,
 ) -> dict[str, Any]:
     """Batched MAP fit of spectra across galaxies, one Adam scan per bucket.
 
@@ -313,15 +340,18 @@ def fit_spectra_map_vmap(
         Template model with a free redshift (see
         :func:`~tengri.forward.batched_spectrum.check_template_model`).
     batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
-        Output of :func:`~tengri.observation.batched.build_spectro_batches`.
-    conserving : bool
-        Flux-conserving pixel integral.
+        Output of :func:`~tengri.observation.batched.build_spectro_batches` built
+        with ``model=model``.
     n_steps : int, optional
         Adam iterations per bucket. Default 500.
     learning_rate : float, optional
         Adam learning rate in standardized space. Default 0.05.
     seed : int, optional
         PRNG seed for the initial latents. Default 0.
+    chunk_size : int, optional
+        Galaxies per ``vmap`` call within a bucket. ``None`` (default) maps the
+        whole bucket at once. Smaller chunks bound the peak memory of the gradient
+        on a device with little of it; the result does not depend on this value.
 
     Returns
     -------
@@ -340,18 +370,22 @@ def fit_spectra_map_vmap(
     NotImplementedError
         If the model's SFH is stochastic.
     ValueError
-        If the template fails :func:`check_template_model`.
+        If the template fails :func:`check_template_model`, ``batches`` is empty,
+        or ``chunk_size`` is not a positive integer.
 
     Notes
     -----
     **JIT-compatible**: no; this is a Python driver. Each bucket compiles once for
-    its :class:`SpectroBatchSpec`. Results are returned in the catalog order by
-    permuting with the concatenated bucket index arrays.
+    its :class:`SpectroBatchSpec` (and once more for a shorter final chunk).
+    Results are returned in the catalog order by permuting with the concatenated
+    bucket index arrays.
     """
     _refuse_stochastic(model)
     check_template_model(model)
     if not batches:
         raise ValueError("batches is empty; build it with build_spectro_batches")
+    if chunk_size is not None and (not isinstance(chunk_size, int) or chunk_size < 1):
+        raise ValueError(f"chunk_size must be a positive integer or None, got {chunk_size!r}")
 
     base_key = jax.random.PRNGKey(seed)
     bucket_keys = jax.random.split(base_key, len(batches))
@@ -361,10 +395,10 @@ def fit_spectra_map_vmap(
             model,
             spec,
             batch,
-            conserving=conserving,
             n_steps=n_steps,
             learning_rate=learning_rate,
             key=key,
+            chunk_size=chunk_size,
         )
         buckets.append(
             {
@@ -387,7 +421,7 @@ def fit_spectra_map_vmap(
     }
 
 
-def _bucket_catalog_inputs(model, spec, batch, *, conserving: bool):
+def _bucket_catalog_inputs(model, spec, batch):
     """Flat log-density and per-galaxy substitution for one bucket's catalog sampler.
 
     Parameters
@@ -398,8 +432,6 @@ def _bucket_catalog_inputs(model, spec, batch, *, conserving: bool):
         Static key of the bucket.
     batch : SpectroBatch
         The bucket's galaxies, with a leading batch axis.
-    conserving : bool
-        Flux-conserving pixel integral, passed to the forward pass.
 
     Returns
     -------
@@ -419,7 +451,7 @@ def _bucket_catalog_inputs(model, spec, batch, *, conserving: bool):
     :func:`jax.flatten_util.ravel_pytree` on one galaxy's latents, which sorts the
     names, so every flat position maps back to the same named latent.
     """
-    nlp = batched_neg_log_posterior(model, spec, conserving=conserving)
+    nlp = batched_neg_log_posterior(model, spec)
     init_one = {n: v[0] for n, v in init_unbounded_batch(model, 1, jax.random.PRNGKey(0)).items()}
     init_flat, unravel_fn = ravel_pytree(init_one)
 
@@ -462,7 +494,6 @@ def fit_spectra_catalog_mcmc(
     model,
     batches: Sequence[tuple[SpectroBatchSpec, SpectroBatch, np.ndarray]],
     *,
-    conserving: bool,
     sampler: str = "nuts",
     n_warmup: int = 200,
     n_burnin: int = 0,
@@ -470,6 +501,7 @@ def fit_spectra_catalog_mcmc(
     seed: int = 0,
     init: str = "map",
     map_steps: int = 200,
+    batch_size: int | None = None,
     **engine_kwargs,
 ) -> dict[str, Any]:
     """Sample every galaxy's spectrum posterior with the catalog MCMC engine.
@@ -480,9 +512,8 @@ def fit_spectra_catalog_mcmc(
         Template model with a free redshift (see
         :func:`~tengri.forward.batched_spectrum.check_template_model`).
     batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
-        Output of :func:`~tengri.observation.batched.build_spectro_batches`.
-    conserving : bool
-        Flux-conserving pixel integral.
+        Output of :func:`~tengri.observation.batched.build_spectro_batches` built
+        with ``model=model``.
     sampler : {"nuts", "hmc", "chees"}, optional
         Sampler handed to
         :func:`~tengri.inference.backends.mcmc.catalog.build_catalog_mcmc_engine`.
@@ -501,6 +532,13 @@ def fit_spectra_catalog_mcmc(
         ``"map"``.
     map_steps : int, optional
         Adam steps of the MAP warm start. Ignored when ``init="prior"``. Default 200.
+    batch_size : int, optional
+        Galaxies run together per ``jax.lax.map`` step, under one ``vmap``
+        (passed as ``batch_size`` to ``lax.map``). ``None`` (default) runs the
+        galaxies one at a time. On a CPU a small value or ``None`` is right: a wide
+        ``vmap`` of NUTS trees waits for its deepest tree and costs memory. On a
+        GPU a large value is what buys parallel throughput. The draws do not
+        depend on this value, up to floating-point reduction order.
     **engine_kwargs
         Further keyword arguments of ``build_catalog_mcmc_engine``, such as
         ``target_accept_rate`` or ``use_dense``.
@@ -543,16 +581,14 @@ def fit_spectra_catalog_mcmc(
 
     map_params = None
     if init == "map":
-        map_params = fit_spectra_map_vmap(
-            model, batches, conserving=conserving, n_steps=map_steps, seed=seed
-        )["params"]
+        map_params = fit_spectra_map_vmap(model, batches, n_steps=map_steps, seed=seed)["params"]
 
     bucket_keys = jax.random.split(jax.random.PRNGKey(seed), len(batches))
     per_bucket = []
     for (spec, batch, index), bucket_key in zip(batches, bucket_keys):
         index = np.asarray(index, dtype=int)
         n_gal = int(batch.z.shape[0])
-        flat, substitute = _bucket_catalog_inputs(model, spec, batch, conserving=conserving)
+        flat, substitute = _bucket_catalog_inputs(model, spec, batch)
         unravel_fn = flat[1]
         start_key, sample_key = jax.random.split(bucket_key)
         starts = _bucket_starts(model, n_gal, start_key, map_params, index)
@@ -572,7 +608,9 @@ def fit_spectra_catalog_mcmc(
             return run_one(x0, gal_key, obs, None, None, None, None, None)
 
         positions, divergent = jax.lax.map(
-            one_galaxy, (starts, jax.random.split(sample_key, n_gal), batch)
+            one_galaxy,
+            (starts, jax.random.split(sample_key, n_gal), batch),
+            batch_size=batch_size,
         )
         n_draws = positions.shape[1]
         latents = jax.vmap(unravel_fn)(positions.reshape(-1, positions.shape[-1]))
