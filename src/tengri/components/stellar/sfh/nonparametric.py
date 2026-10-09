@@ -47,11 +47,18 @@ References
 
 from __future__ import annotations
 
+import math
+
 import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.stellar.sfh.mean_sfh import window_weight
 from tengri.utils.host_array import device_table, host_array
+from tengri.utils.scale import (
+    log10_weighted_sum,
+    pow10,
+    representable_floor,
+)
 
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
 DEFAULT_BIN_EDGES_GYR = host_array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
@@ -166,13 +173,80 @@ def _piecewise_constant_sfr_smooth(age_yr, bin_edges_yr, sfr_bins, n_bins):
 # ── Continuity SFH (Leja+2019) ────────────────────────────────────
 
 
+def _normalized_bin_sfr(log_sfr, bin_widths_yr, log_total_mass):
+    r"""Scale per-bin log10 SFR so the bins form ``10**log_total_mass`` [Msun].
+
+    Parameters
+    ----------
+    log_sfr : array_like, shape (n_bins,)
+        Unnormalized log10 SFR in each bin [dex]; any additive constant is
+        removed by the normalization.
+    bin_widths_yr : array_like, shape (n_bins,)
+        Bin widths [yr].
+    log_total_mass : float
+        log10 of the total mass formed [Msun].
+
+    Returns
+    -------
+    ndarray, shape (n_bins,)
+        SFR in each bin [Msun/yr].
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+
+    .. math::
+
+        \mathrm{SFR}_i = 10^{\,s_i + m_* - L}, \qquad
+        L = \log_{10}\sum_j \Delta t_j \, 10^{s_j}
+
+    where :math:`s_i` is ``log_sfr`` [dex], :math:`\Delta t_j` the bin width
+    [yr] and :math:`m_*` is ``log_total_mass`` [dex Msun]. The sum is a base-10
+    log-sum-exp, so no bin is exponentiated at its own magnitude: cumulative
+    ratios of a few hundred dex (reachable under the untruncated Student-t
+    ratio prior) neither overflow to ``inf/inf = NaN`` nor underflow to an
+    all-zero history. A zero-width bin is held at the smallest normal width.
+    """
+    log_w = log_sfr + jnp.log10(jnp.maximum(bin_widths_yr, representable_floor(0.0)))
+    return pow10(log_sfr + log_total_mass - log10_weighted_sum(log_w, 1.0))
+
+
+def _continuity_flex_log_widths(flex_ratios: list, t_flex_yr: float) -> jnp.ndarray:
+    r"""log10 flex-bin widths [dex yr] from the ``flex_*`` log ratios.
+
+    Parameters
+    ----------
+    flex_ratios : list of float or traced scalar
+        ``flex_0 ... flex_{N-1}`` [dimensionless]; empty for one flat bin.
+    t_flex_yr : float
+        Total flex-zone span :math:`T_{\rm flex}` [yr].
+
+    Returns
+    -------
+    ndarray, shape (N+1,)
+        :math:`\log_{10}\Delta t_i = \log_{10}T_{\rm flex} + c_i - L(c)`,
+        with :math:`c_i` the cumulative sum of the ratios (:math:`c_0 = 0`) and
+        :math:`L` the base-10 log-sum-exp; the widths sum to ``t_flex_yr``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. Shared by :func:`continuity_flex` and
+    :func:`_continuity_flex_edges_yr` so both read one set of edges.
+    """
+    if flex_ratios:
+        c = jnp.concatenate([jnp.zeros(1), jnp.cumsum(jnp.array(flex_ratios))])
+    else:
+        c = jnp.zeros(1)
+    return math.log10(t_flex_yr) + c - log10_weighted_sum(c, 1.0)
+
+
 def continuity(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     bin_edges_gyr: jnp.ndarray | None = None,
     **ratio_kwargs,
 ) -> jnp.ndarray:
-    """Non-parametric piecewise-constant SFH with continuity prior (Leja+2019).
+    r"""Non-parametric piecewise-constant SFH with continuity prior (Leja+2019).
 
     A flexible non-parametric model that divides the age range into N bins
     and parameterizes relative SFR changes between adjacent bins. The continuity
@@ -210,6 +284,19 @@ def continuity(
 
     A Student-t(df=2, scale=0.3) prior is applied to each ratio (via
     :func:`continuity_prior_logp`) to penalize sharp jumps.
+
+    The bin rates are normalized in log space,
+
+    .. math::
+
+        \mathrm{SFR}_i = 10^{\,s_i + m_* - L}, \qquad
+        L = \log_{10}\sum_j \Delta t_j \, 10^{s_j},
+
+    with :math:`s_i` the cumulative log10 SFR [dex], :math:`\Delta t_j` the bin
+    widths [yr] and :math:`m_*` = ``log_total_mass`` [dex Msun], so a cumulative
+    ratio of several hundred dex stays finite and forms exactly
+    ``10**log_total_mass`` (see :func:`_normalized_bin_sfr`). Gradients with
+    respect to the ratios and ``log_total_mass`` are finite.
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = device_table(DEFAULT_BIN_EDGES_GYR)
@@ -241,9 +328,7 @@ def continuity(
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(bin_edges_gyr) * 1e9  # Gyr -> yr
-    sfr_unnorm = 10.0**log_sfr
-    mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
-    sfr_bins = sfr_unnorm * 10.0**log_total_mass / mass_unnorm
+    sfr_bins = _normalized_bin_sfr(log_sfr, bin_widths_yr, log_total_mass)
 
     # Piecewise-constant (step function); Leja+2019 ApJ 876 3 defines the continuity
     # SFH as step functions, not linearly interpolated.  Use bin EDGES (not centers)
@@ -811,9 +896,7 @@ def psb_continuity(
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(all_edges_gyr) * 1e9
-    sfr_unnorm = 10.0**log_sfr_bins
-    mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
-    sfr_bins_norm = sfr_unnorm * (10.0**log_total_mass) / (mass_unnorm + 1e-30)
+    sfr_bins_norm = _normalized_bin_sfr(log_sfr_bins, bin_widths_yr, log_total_mass)
 
     # Piecewise-constant lookup. This function is not registered under any
     # SFH type name (`psb_continuity_flex` is the registered generalization,
@@ -979,6 +1062,64 @@ def psb_continuity_flex(
 
 # ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────
 
+#: Narrowest bin, as a fraction of its upper edge, that the SFH integrand resolves.
+#: The stellar integrand brackets every bin edge with knots at ``1 +/- 1e-6``
+#: (``_inject_edge_knots``); a bin must be wider than the span those knots cover.
+_MIN_REL_BIN_WIDTH = 1e-5
+
+
+def _rates_from_resolved_masses(edges_yr: jnp.ndarray, log_mass: jnp.ndarray) -> jnp.ndarray:
+    r"""Per-bin SFR [Msun/yr] that forms each bin's mass over the edges the integrator sees.
+
+    Parameters
+    ----------
+    edges_yr : array_like, shape (n_bins+1,)
+        Ascending bin edges [yr]; ``edges_yr[0] = 0``.
+    log_mass : array_like, shape (n_bins,)
+        log10 of the mass each bin is declared to form [dex Msun].
+
+    Returns
+    -------
+    ndarray, shape (n_bins,)
+        SFR [Msun/yr] per bin; ``sum(sfr * diff(edges_yr)) = sum(10**log_mass)``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes; static shapes, ``jnp`` primitives only.
+
+    A bin is *unresolved* when its realized width ``diff(edges_yr)`` is below
+    :data:`_MIN_REL_BIN_WIDTH` of its upper edge. Such a bin is at or below the
+    float spacing of the edge itself (width exactly zero once it underflows) and
+    narrower than the :math:`\pm 10^{-6}` knots the stellar integrand places
+    around every edge, so no piecewise-constant rate over it can be summed or
+    integrated: ``rate = mass / width`` either overflows or multiplies a zero
+    width. Its mass is instead handed to the nearest resolved bin by index (the
+    younger on a tie) and spread over that bin's width plus the unresolved
+    widths it absorbs, which are contiguous with it. The total formed mass is
+    therefore ``sum(10**log_mass)`` for every input, where a rate-clamped
+    bookkeeping dropped the mass of every unresolved bin (measured: -11 % at
+    flex ratios of 30 dex). The unresolved bin itself is served the absorbing
+    bin's rate, so no sample ever reads a zero or overflowed rate. Bins that
+    are resolved are never altered.
+    """
+    n_bins = log_mass.shape[0]
+    width = edges_yr[1:] - edges_yr[:-1]
+    resolved = width > _MIN_REL_BIN_WIDTH * edges_yr[1:]
+    idx = jnp.arange(n_bins)
+    dist = jnp.where(resolved[None, :], jnp.abs(idx[:, None] - idx[None, :]), n_bins + 1)
+    owner = jnp.argmin(dist, axis=1)  # (n_bins,) resolved bin that absorbs bin i
+    member = owner[None, :] == idx[:, None]  # [j, i]: bin i is absorbed by bin j
+    # An unresolved row absorbs nothing; keep its own term so no row is empty.
+    member = member | (jnp.eye(n_bins, dtype=bool) & ~resolved[:, None])
+    log_mass_owner = log10_weighted_sum(
+        jnp.broadcast_to(log_mass[None, :], (n_bins, n_bins)), member.astype(log_mass.dtype)
+    )
+    width_owner = jnp.sum(jnp.where(member, width[None, :], 0.0), axis=1)
+    safe_width = jnp.where(resolved, width_owner, 1.0)
+    rate_owner = pow10(jnp.where(resolved, log_mass_owner - jnp.log10(safe_width), 0.0))
+    return rate_owner[owner]
+
+
 # Anchor bin edges [t_young_end_gyr, t_old_start_gyr, t_max_gyr].
 # ContinuityFlex anchor defaults:
 #   young bin [0, 10^7.5 yr] = [0, 31.6 Myr], old bin [10^9.7, 10^10.136 yr] = [5.01, 13.7 Gyr].
@@ -1056,6 +1197,20 @@ def continuity_flex(
         {\\rm SFR}_{\\rm young} = s_{\\rm young}\\,M_{\\rm bin}/\\Delta t_0, \\quad
         {\\rm SFR}_{\\rm old} = s_{\\rm old}\\,M_{\\rm bin}/\\Delta t_N.
 
+    All of this is evaluated in log space (``log10_weighted_sum`` over the
+    cumulative ratios and the anchor terms), so cumulative ratios of several
+    hundred dex stay finite in float64 (about 38 dex in float32).
+
+    **Formed mass is** ``10**log_total_mass`` **at every ratio.** Each bin's mass
+    is carried in log space and turned into a rate over the width the integrand
+    resolves (:func:`_rates_from_resolved_masses`). A bin narrower than
+    ``_MIN_REL_BIN_WIDTH`` (1e-5) of its upper edge -- width exactly zero once
+    it underflows -- cannot hold a piecewise-constant rate, so its mass is
+    handed to the nearest resolved bin, which spreads it over its own width plus
+    the unresolved widths it absorbs. Resolved bins are unchanged, and no rate is
+    clipped: an unresolved bin is never the source of an overflowing exponent.
+    Equal mass per flex bin then holds exactly only among resolved bins.
+
     Implements the ContinuityFlex prior of Leja et al. 2019 [1]_ as it is built
     in Prospector (Johnson et al. 2021 [2]_).
 
@@ -1094,43 +1249,44 @@ def continuity_flex(
     # Auto-detect n_flex_ratios from flex_* kwargs
     n_flex_ratios = sum(1 for k in ratio_kwargs if k.startswith("flex_"))
 
-    # Flex bin widths via constant-mass-per-bin constraint
-    if n_flex_ratios > 0:
-        flex_ratios_log = jnp.array(
-            [ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)]
-        )
-        sfr_ratios = jnp.power(10.0, flex_ratios_log)
-        cumprod_prefixed = jnp.concatenate([jnp.ones(1), jnp.cumprod(sfr_ratios)])
-    else:
-        cumprod_prefixed = jnp.ones(1)
+    # Flex bin widths via constant-mass-per-bin constraint, in log space
+    log_dt_flex = _continuity_flex_log_widths(
+        [ratio_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)],
+        t_old_start_yr - t_young_end_yr,
+    )
+    dt_flex_yr = pow10(log_dt_flex)
+    n_flex_bins = log_dt_flex.shape[0]  # N+1 flex bins for N ratios
 
-    n_flex_bins = cumprod_prefixed.shape[0]  # N+1 flex bins for N ratios
-    T_flex_yr = t_old_start_yr - t_young_end_yr
-    denom_flex = jnp.sum(cumprod_prefixed)
-    dt_flex_yr = T_flex_yr * cumprod_prefixed / (denom_flex + 1e-30)
-
-    dt0_yr = dt_flex_yr[0]  # first flex bin width (reference for young anchor)
-    dtN_yr = dt_flex_yr[-1]  # last flex bin width (reference for old anchor)
+    ratio_young = ratio_kwargs.get("ratio_young", 0.0)
+    ratio_old = ratio_kwargs.get("ratio_old", 0.0)
+    log_dt0 = log_dt_flex[0]  # reference width for the young anchor
+    log_dtN = log_dt_flex[-1]  # reference width for the old anchor
     dt_young_yr = t_young_end_yr  # young anchor bin: [0, t_young_end]
     dt_old_yr = t_max_yr - t_old_start_yr  # old anchor bin: [t_old_start, t_max]
 
-    syoung = jnp.power(10.0, ratio_kwargs.get("ratio_young", 0.0))
-    sold = jnp.power(10.0, ratio_kwargs.get("ratio_old", 0.0))
-
     # Equal mass per flex bin; anchor masses scale by ratio * dt / dt_reference
-    denom_mass = (
-        float(n_flex_bins)
-        + syoung * dt_young_yr / (dt0_yr + 1e-30)
-        + sold * dt_old_yr / (dtN_yr + 1e-30)
+    log_denom_mass = log10_weighted_sum(
+        jnp.stack(
+            [
+                jnp.asarray(math.log10(float(n_flex_bins))),
+                ratio_young + math.log10(dt_young_yr) - log_dt0,
+                ratio_old + math.log10(dt_old_yr) - log_dtN,
+            ]
+        ),
+        1.0,
     )
-    mbin = jnp.power(10.0, log_total_mass) / (denom_mass + 1e-30)
+    log_mbin = log_total_mass - log_denom_mass
 
-    sfr_flex = mbin / (dt_flex_yr + 1e-30)  # (n_flex_bins,)
-    sfr_young = syoung * mbin / (dt0_yr + 1e-30)  # scalar
-    sfr_old = sold * mbin / (dtN_yr + 1e-30)  # scalar
-
-    # All bins in order from youngest to oldest: young, flex[0..N], old
-    sfr_bins = jnp.concatenate([jnp.array([sfr_young]), sfr_flex, jnp.array([sfr_old])])
+    # Per-bin formed mass [dex Msun], youngest to oldest: young, flex[0..N], old.
+    # Mass is carried in log space, so a bin whose width underflows keeps a
+    # finite mass here; its rate is never formed from the underflowed width.
+    log_mass_bins = jnp.concatenate(
+        [
+            jnp.reshape(ratio_young + log_mbin + math.log10(dt_young_yr) - log_dt0, (1,)),
+            jnp.broadcast_to(log_mbin, log_dt_flex.shape),
+            jnp.reshape(ratio_old + log_mbin + math.log10(dt_old_yr) - log_dtN, (1,)),
+        ]
+    )
 
     # Bin edges: [0, t_young_end, flex_interior..., t_old_start, t_max] (yr)
     flex_interior_edges_yr = t_young_end_yr + jnp.cumsum(dt_flex_yr)
@@ -1141,6 +1297,7 @@ def continuity_flex(
             jnp.array([t_max_yr]),
         ]
     )
+    sfr_bins = _rates_from_resolved_masses(all_edges_yr, log_mass_bins)
 
     n_bins_total = n_flex_bins + 2  # young + flex bins + old
     return _piecewise_constant_sfr(age_yr, all_edges_yr, sfr_bins, n_bins_total)
@@ -1163,16 +1320,12 @@ def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarr
     t_old_start_yr = float(bin_edges_gyr[1]) * 1e9
     t_max_yr = float(bin_edges_gyr[2]) * 1e9
     n_flex_ratios = sum(1 for k in sfh_kwargs if k.startswith("flex_"))
-    if n_flex_ratios > 0:
-        flex_ratios_log = jnp.array(
-            [sfh_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)]
+    dt_flex_yr = pow10(
+        _continuity_flex_log_widths(
+            [sfh_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)],
+            t_old_start_yr - t_young_end_yr,
         )
-        sfr_ratios = jnp.power(10.0, flex_ratios_log)
-        cumprod_prefixed = jnp.concatenate([jnp.ones(1), jnp.cumprod(sfr_ratios)])
-    else:
-        cumprod_prefixed = jnp.ones(1)
-    T_flex_yr = t_old_start_yr - t_young_end_yr
-    dt_flex_yr = T_flex_yr * cumprod_prefixed / (jnp.sum(cumprod_prefixed) + 1e-30)
+    )
     flex_interior_edges_yr = t_young_end_yr + jnp.cumsum(dt_flex_yr)
     return jnp.concatenate(
         [jnp.array([0.0, t_young_end_yr]), flex_interior_edges_yr, jnp.array([t_max_yr])]
