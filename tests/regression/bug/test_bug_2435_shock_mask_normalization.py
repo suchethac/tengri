@@ -64,8 +64,9 @@ from tengri.components.nebular.shock import _load_mappings_grids, shock_line_rat
 #: dilution factor ran from 0.88 down to 0.0037.
 _POPULATED = ((0.01, 0.0), (1.0, 0.0), (1.0, 2.0), (10.0, 1.0), (100.0, 0.0))
 
-#: A (B, log n) pair with no populated cell in kernel range. Before the fix every line
-#: here came back as -0.0; the honest answer is "no data", not "zero emission".
+#: A (B, log n) pair whose density node is unpopulated at B = 100 uG. Before the fix every
+#: line here came back as -0.0. Under the #2575 bracket semantics it holds the nearest
+#: populated density node, B = 100 uG, log n = 0.
 _UNPOPULATED = (100.0, -1.0)
 
 _VELOCITIES = (200.0, 300.0, 500.0)
@@ -147,20 +148,23 @@ def test_line_to_line_ratios_are_unmoved(mappings_grid, velocity):
     assert hg_hb == pytest.approx(_CASE_B_HG_HB, rel=0.03)
 
 
-def test_unpopulated_region_returns_nan_not_zero(mappings_grid):
-    """No populated cell in range is "no data", and must say so.
+# owner ruling 2026-10-09 (#2575): bracket interpolation supersedes the #2435 mask semantics
+def test_unpopulated_region_holds_nearest_populated_node(mappings_grid):
+    """An unpopulated density node returns the nearest populated node, not NaN or zero.
 
-    Returning zeros is a silent wrong answer: it is indistinguishable from a real
-    prediction of no line emission, and it made ``ratio / r_ha`` in
-    ``_shock_line_arrays`` a 0/0.
+    The #2435 semantics returned NaN for any query whose kernel stencil held no populated
+    cell. Under the #2575 ruling a query with populated cells on one side holds the
+    nearest populated node, so the answer is finite and equals the populated node's
+    value. Zeros stay forbidden: Hb is 1 at every populated cell, so it must read 1 here.
     """
     b_field, log_density = _UNPOPULATED
     ratios = shock_line_ratios(400.0, shock_log_density=log_density, shock_b_over_sqrt_n=b_field)
+    populated = shock_line_ratios(400.0, shock_log_density=0.0, shock_b_over_sqrt_n=b_field)
     values = jnp.stack([jnp.asarray(v) for v in ratios.values()])
-    assert bool(jnp.all(jnp.isnan(values))), (
-        "an entirely unpopulated query must be NaN; zeros read as a physical "
-        "prediction of no emission"
-    )
+    assert bool(jnp.all(jnp.isfinite(values))), "an unpopulated density node must hold data"
+    assert float(ratios["Hb_4861A"]) == pytest.approx(1.0, rel=1e-6)
+    for name, value in ratios.items():
+        assert float(value) == pytest.approx(float(populated[name]), rel=1e-6), name
 
 
 def test_gradient_is_finite_and_live_at_populated_points(mappings_grid):
