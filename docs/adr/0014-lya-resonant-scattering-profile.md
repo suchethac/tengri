@@ -79,7 +79,7 @@ class EmissionLines(NamedTuple):
 
 ### Composition with `fesc_lya`
 
-`neb_fesc_lya` continues to scale the *integrated* Lyα luminosity: the profile is computed first (shape from N_HI / v_outflow), then renormalized so its integral equals the scalar `(1 − fesc_lya) × L_lya_intrinsic`. This keeps the existing energy-balance contract; only the *shape* is new.
+`neb_fesc_lya` continues to scale the *integrated* Lyα luminosity: the profile is computed first (shape from N_HI / v_outflow), then renormalized so its integral equals the scalar `neb_fesc_lya × L_lya_intrinsic` (#2607: the escape fraction multiplies Lyα; 1 leaves it unattenuated, 0 removes it). This keeps the existing energy-balance contract; only the *shape* is new.
 
 ### Dust attenuation
 
@@ -104,7 +104,7 @@ Profile-bearing entries flow through `attenuate_emission()` exactly like the exi
 
 - Default behavior unchanged (`type='delta'`).
 - Users wanting profile fitting opt in via the new `lya_profile={...}` block.
-- Existing `neb_fesc_lya` parameter unchanged in meaning.
+- Existing `neb_fesc_lya` parameter: the escape fraction, default 1 (#2607). Fitted values stored before the fix mean `1 - value` now.
 
 ## Implementation phasing
 

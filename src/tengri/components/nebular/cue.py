@@ -1446,7 +1446,7 @@ class CueBackend:
         # default below.
         cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
         neb_fesc=0.0,
-        neb_fesc_lya=0.0,
+        neb_fesc_lya=1.0,
         neb_fdust_frac=0.0,
         template_data=None,
     ):
@@ -1486,7 +1486,7 @@ class CueBackend:
         k = lyc_dust_escape_factor(neb_fesc, _f_dust)
         lum = lum * k
         # Apply Lyα-specific resonant scattering escape via the shared helper.
-        # This multiplies Lyα by (1 - neb_fesc_lya) after k_factor was already applied.
+        # This multiplies Lyα by neb_fesc_lya after k_factor was already applied.
         lum = apply_lya_escape(lum, wav, neb_fesc_lya)
         if cloudyfsps_only:
             old_idx = weights.line_old_idx
@@ -1749,7 +1749,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
@@ -1845,7 +1845,7 @@ class CueBackend:
         ``ionspec_*`` are specified explicitly, they take precedence
         over SSP-derived values. Useful for direct parameter fitting.
 
-        **Escape fraction**: When ``neb_fesc > 0`` or ``neb_fesc_lya > 0``,
+        **Escape fraction**: When ``neb_fesc > 0`` or ``neb_fesc_lya < 1``,
         line luminosities are suppressed proportionally. This approximation
         assumes optically thin escape (energy-conserving).
 
@@ -2000,7 +2000,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
@@ -2070,7 +2070,7 @@ class CueBackend:
         absorbs, #2436). Both reduce nebular emission (lines + continuum) via
         the CIGALE k-factor (Inoue 2011), accounting for the recombination
         coefficient ratio (alpha_1 / alpha_B).
-        ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
+        ``neb_fesc_lya`` applies additional Ly-alpha-specific scaling.
 
         """
         # One split (lines + continuum from the same resolved params, so no double
@@ -2110,7 +2110,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 0.0,
+        neb_fesc_lya: float = 1.0,
         neb_fdust_frac: float = 0.0,
         template_data: Any | None = None,
         **neb_params,

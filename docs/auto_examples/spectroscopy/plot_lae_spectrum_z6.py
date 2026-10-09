@@ -64,7 +64,7 @@ model = tengri.SEDModel.build(
         "logU": -2.5,  # Low ionization parameter
         "logZ_gas": -1.0,  # Low metallicity: Z ~ 0.1 Zsun
         "fesc": 0.1,  # Hydrogen ionizing photon escape
-        "fesc_lya": 0.3,
+        "fesc_lya": 0.7,
     },  # Lyα escape fraction (realistic for LAE)
     igm={"type": "inoue14"},  # Inoue et al. 2014 IGM attenuation
     redshift=tengri.Fixed(6.0),

@@ -30,7 +30,7 @@ that identical parameter choices produce equivalent SEDs (parity test via
 | **Nebular emission** | CLOUDY grids (Byler+17) | `NebularConfig.backend` | `"cloudy"` / `"cue"` | `Byler_2017` / `Li_2024a` | synthesizer uses `NebularGrid` (CLOUDY+Byler); tengri uses Cue NN emulator (equivalent via validation) |
 | **Nebular metallicity** | SSP Z; grid-dependent | `neb_logZ_gas` via `Parameters` | `Fixed(-0.3)` | n/a | Synthesizer uses CLOUDY grid axis log(Z); tengri param is log10(Z_gas/Zsun) (grain-depleted; P-6) |
 | **Nebular ionization** | log10(U) = -3.0 (HII region) | `neb_logU` | `Fixed(-3.0)` | n/a | synthesizer's NebularEmission default |
-| **Nebular Lyα escape** | f_esc,Lyα = 0.0 (fixed) | `neb_fesc_lya` | `Fixed(0.0)` | n/a | No resonant scattering (simplified) |
+| **Nebular Lyα escape** | f_esc,Lyα = 0.0 (fixed) | `neb_fesc_lya` | `Fixed(1.0)` | n/a | No resonant scattering (simplified) |
 | **Nebular ionizing escape** | f_esc = 0.0 (bound) | `neb_fesc` | `Fixed(0.0)` | n/a | P-9: must be wired to nebular continuum calculation |
 | **AGN disc** | Shakura-Sunyaev (multicolor) | `AGNConfig.disc` | `"multicolor"` | `Shakura_1973` | Multi-color disc (Mitsuda 1984 / Kubota 2018 approximation); standard Eddington-limited |
 | **AGN torus** | SKIRTOR (clumpy) | `AGNConfig.torus` | `"skirtor"` | `Stalevski_2016` | 3D radiative transfer; precomputed templates at various inclinations; science-grade |
@@ -76,7 +76,7 @@ Each parameter below can be passed to `Parameters(sfh_dpl_alpha=...)` or set via
 | `neb_logU` | `log_ionization_parameter` | log10(U), [-5, 0] | `Fixed(-3.0)` | Ionization parameter; higher U → harder ionizing spectrum ionizes more ions. |
 | `neb_logZ_gas` | `metallicity` (gas-phase in CLOUDY) | log10(Z_gas/Zsun) | `Fixed(-0.3)` | Gas-phase metallicity (excludes grain-depleted metals; P-6). Default is Fixed but a `_NEBULAR_PARAMS` comment notes "will be overridden to match met_logzsol if not set". |
 | `neb_fesc` | `fesc` (ionizing photon) | fraction, [0, 1] | `Fixed(0.0)` | Ionizing photon escape fraction; P-9 verified wired into Cue's gradient at `cue.py:1172,1519`. |
-| `neb_fesc_lya` | `fesc_lya` | fraction, [0, 1] | `Fixed(0.0)` | Lyα resonant scattering escape; 0 = Lyα stays in nebula. |
+| `neb_fesc_lya` | `fesc_lya` | fraction, [0, 1] | `Fixed(1.0)` | Lyα escape fraction: Lyα is multiplied by it; 1 = unattenuated, 0 = Lyα removed. |
 | `neb_dig_frac` | `dig_fraction` | fraction, [0, 1] | `Fixed(0.0)` | DIG (diffuse ionized gas) fraction; Tacchella et al. 2022 decomposition. |
 | `noise_frac_cal` | (photometric calibration) | [0, 0.1] fraction | registry | Fractional systematic error. |
 | `noise_dof` | (Student-t robust noise dof) | [2, ∞) | registry | If using outlier-robust likelihood (`Hogg_2010` MISSING from bib). |

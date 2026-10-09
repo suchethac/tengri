@@ -202,8 +202,10 @@ DUST_EMISSION_MODELS["graybody"] = graybody
 DUST_EMISSION_MODELS["modified_blackbody"] = modified_blackbody
 DUST_EMISSION_MODELS["casey2012"] = casey2012
 DUST_EMISSION_MODELS["pah_drude"] = pah_drude
-# Deprecated alias: draine2021_pah resolves to the canonical pah_drude (#693).
-DUST_EMISSION_MODELS["draine2021_pah"] = pah_drude
+# ``draine2021_pah`` is deliberately absent. The build grammar resolves it to
+# the tabulated Draine+2021 component (``forward/component_factory.py``
+# ``_EMISSION_TYPE_ALIASES``); a closure here would evaluate a different model
+# under the same name (#2765). ``pah_drude`` stays reachable under its own name.
 
 
 def draine_li2007(*args, **kwargs):

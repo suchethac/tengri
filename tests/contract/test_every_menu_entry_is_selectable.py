@@ -62,6 +62,9 @@ ALLOWED_REFUSALS = (
     # because it composes into custom models but refused as a model's only dust
     # emitter — standalone it re-emits a measured 1.8925e-04 of L_ir.
     "is a PAH building block, not an energy-balanced dust emission model",
+    # ``met={'type': 'table'}`` with no Z(t) source refuses at build (#2425); the
+    # grammar carries no table, so it builds only under ``sfh={'type': 'table'}``.
+    "requires met_table_log_age_yr",
 )
 
 #: Wordings that mark a ``ValueError`` as *absent data* rather than a refusal.

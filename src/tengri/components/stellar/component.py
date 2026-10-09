@@ -1503,11 +1503,7 @@ def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab
         met_log_age_yr = jnp.log10(jnp.maximum(tab_lbt_yr, 1.0))
         met_log_z_abs = jnp.asarray(params["met_history"])[tab_order] + LOG10_ZSUN
     else:
-        raise ValueError(
-            "metallicity_model='table' requires met_table_log_age_yr "
-            "+ met_table_log_z_abs on StellarSEDComponentConfig, or "
-            "the runtime params['met_history'] array (#996)."
-        )
+        raise ValueError(METALLICITY_TABLE_SOURCE_MESSAGE)
     lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
         ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
     )
@@ -1862,6 +1858,17 @@ def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     return pow10(_integrate_nion_log10(sed_lnu, wave))
 
 
+#: Raised at build (config construction) and at predict when a tabulated
+#: metallicity has no source. The runtime ``met_history`` channel needs
+#: ``sfh_model='table'`` (#996), which is why the message names it.
+METALLICITY_TABLE_SOURCE_MESSAGE = (
+    "metallicity_model='table' requires met_table_log_age_yr "
+    "+ met_table_log_z_abs on StellarSEDComponentConfig, or the runtime "
+    "params['met_history'] array (#996). That array is read only with "
+    "sfh_model='table', so with any other SFH the table must be given here."
+)
+
+
 @dataclass(frozen=True)
 class StellarSEDComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`StellarSEDComponent`.
@@ -2010,6 +2017,8 @@ class StellarSEDComponentConfig(SEDComponentConfig):
             validate_age_boundaries(self.age_boundaries_yr, self.age_boundary_width_dex),
         )
 
+        self._validate_table_metallicity_source()
+
         if self.sps_backend != "dsps":
             warnings.warn(
                 f"StellarSEDComponentConfig.sps_backend={self.sps_backend!r} is "
@@ -2037,6 +2046,22 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         if self.sfh_model not in _NONPARAM_NAMES:
             return {}
         return {"bin_edges_gyr": jnp.asarray(self.sfh_bin_edges_gyr)}
+
+    def _validate_table_metallicity_source(self):
+        """Refuse ``metallicity_model='table'`` with no Z(t) source it can ever read.
+
+        The table is either pinned on the config at build, or it arrives as
+        ``params['met_history']`` at runtime. That runtime channel exists only
+        with ``sfh_model='table'`` (#996), so any other SFH with no build-time
+        table can never predict. Refusing here, at build, is the #2425 fix.
+        """
+        if self.metallicity_model != "table":
+            return
+        if self.met_table_log_age_yr is not None and self.met_table_log_z_abs is not None:
+            return
+        if self.sfh_model == "table":
+            return
+        raise ValueError(METALLICITY_TABLE_SOURCE_MESSAGE)
 
     def _validate_bin_edges(self):
         """Refuse an edge array this SFH cannot use (see the registry validator)."""
@@ -4792,7 +4817,7 @@ def _nuv_flux_intrinsic_fn(state, params):
 
 
 def _rest_uv_color_fn(state, params):
-    """Rest-frame UV color (FUV–NUV) [AB mag]."""
+    """Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å on L_nu."""
     from tengri.utils.sed_quantities import compute_rest_uv_color
 
     sed = state.sed_intrinsic
@@ -5027,7 +5052,7 @@ _SED_PROPERTIES = {
     "rest_uv_color": Property(
         units="AB mag",
         group="sed",
-        doc="Rest-frame UV color (FUV–NUV)",
+        doc="Rest-frame U-V color [AB mag]: top-hats 3200–3900 Å minus 5000–5800 Å",
         fn=_rest_uv_color_fn,
     ),
 }

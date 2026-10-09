@@ -9167,7 +9167,8 @@ class SEDModel:
               (intrinsic SED). NaN if unavailable.
             - ``nuv_flux_intrinsic`` : float. NUV flux, dust-free. NaN
               if unavailable.
-            - ``rest_uv_color`` : float. Rest-frame UV color (f_1500 − f_2300).
+            - ``rest_uv_color`` : float. U-V AB color: top-hats 3200–3900 Å
+              minus 5000–5800 Å on rest-frame L_nu.
             - ``luminosity_weighted_age_gyr`` : float. Luminosity-weighted
               age [Gyr] (∫L_λ age dλ / ∫L_λ dλ).
             - ``luminosity_weighted_metallicity`` : float. Luminosity-weighted
