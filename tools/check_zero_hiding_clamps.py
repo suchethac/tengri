@@ -197,7 +197,14 @@ from collections.abc import Sequence
 #: and in erg/s on float64, with ``numer`` in the matching unit, so one division serves both.
 #: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
 #: and still counted.
-EXPECTED_SITES = 84
+#:
+#: 84 -> 83 with #2783: the ``adaf_spectrum_from_state`` normalization no longer divides by
+#: ``jnp.maximum(integral, representable_floor(1e-100))``. It forms the same ratio in log space,
+#: ``exp(log numer - log integral + log(S + B))``, with ``log_integral`` a ``logsumexp`` of the
+#: segment and bremsstrahlung log powers, so the denominator is never clamped and never divided.
+#: A removal, not a relabel: a zero power would now show as -inf in the log, not as a floored
+#: quotient.
+EXPECTED_SITES = 83
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
