@@ -22,6 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.stellar.component import _cic_integrand, _cic_parcels
 from tengri.components.stellar.sfh.nonparametric import (
     _continuity_flex_edges_yr,
     continuity,
@@ -285,3 +286,93 @@ class TestContinuityFlexEdges:
         cum = np.concatenate([[1.0], np.cumprod(10.0**vals)])
         naive = T_Y + np.cumsum((T_O - T_Y) * cum / cum.sum())
         np.testing.assert_allclose(_flex_edges(vals)[2:-1], naive, rtol=1e-12)
+
+
+# (ratio_young, flex_0, flex_1, flex_2, ratio_old) as multiples of a magnitude
+# r. With both anchors suppressed (-r) the flex bins carry the mass, and a sign
+# change in the cumulative ratio collapses a bin that still owns an equal share:
+# the pre-fix formed mass was short by one share per collapsed bin.
+MASS_PATTERNS = {
+    "anchors_down_flex_mixed": (-1.0, -1.0, 1.0, 1.0, -1.0),
+    "anchors_down_flex_down_up": (-1.0, -1.0, -1.0, 1.0, -1.0),
+    "anchors_down_flex_up_down": (-1.0, 1.0, -1.0, 1.0, -1.0),
+    "anchors_up": (1.0, 1.0, 1.0, 1.0, 1.0),
+    "uneven": (-0.3, 1.0, -0.37, 0.61, -1.0),
+}
+MASS_MAGNITUDES = (10.0, 30.0, 100.0, 450.0)
+SSP_AGES_YR = np.logspace(6.0, 10.14, 80)
+T_OBS_GYR = 13.8
+
+
+def _flex_mass_kwargs(pattern, mag):
+    return dict(zip(FLEX_NAMES, (mag * c for c in MASS_PATTERNS[pattern]), strict=True))
+
+
+def _edge_mass(kw):
+    """sum(SFR * dt) over the function's own edges: bookkeeping mass [Msun]."""
+    edges = np.asarray(_continuity_flex_edges_yr(kw), dtype=np.float64)
+    mid = 0.5 * (edges[1:] + edges[:-1])
+    sfr = np.asarray(continuity_flex(jnp.asarray(mid), log_total_mass=LOG_M, **kw), np.float64)
+    return float(np.sum(sfr * np.diff(edges)))
+
+
+def _integrated_mass(kw):
+    """Mass of the dense integrand the stellar component builds its age weights from."""
+    ssp = jnp.asarray(SSP_AGES_YR)
+    sfh_kwargs = {"log_total_mass": LOG_M, **kw}
+
+    def fn(age, **k):
+        return continuity_flex(age, **k)
+
+    age, sfr = _cic_integrand(ssp, fn, sfh_kwargs, continuity_flex, None)
+    contrib, *_ = _cic_parcels(age, sfr, ssp, T_OBS_GYR)
+    return float(jnp.sum(contrib))
+
+
+class TestContinuityFlexFormedMass:
+    @pytest.mark.parametrize("mag", MASS_MAGNITUDES)
+    @pytest.mark.parametrize("pattern", sorted(MASS_PATTERNS))
+    def test_edge_bookkeeping_mass_exact(self, pattern, mag):
+        assert _edge_mass(_flex_mass_kwargs(pattern, mag)) == pytest.approx(10.0**LOG_M, rel=1e-10)
+
+    @pytest.mark.parametrize("mag", MASS_MAGNITUDES)
+    @pytest.mark.parametrize("pattern", sorted(MASS_PATTERNS))
+    def test_integrand_mass_exact(self, pattern, mag):
+        got = _integrated_mass(_flex_mass_kwargs(pattern, mag))
+        assert got == pytest.approx(10.0**LOG_M, rel=1e-5)
+
+    @pytest.mark.parametrize("mag", [5.0, 15.0])
+    @pytest.mark.parametrize("pattern", sorted(MASS_PATTERNS))
+    def test_float32_edge_mass(self, pattern, mag):
+        with _x64(True):
+            kw = _flex_mass_kwargs(pattern, mag)
+            assert _edge_mass(kw) == pytest.approx(10.0**LOG_M, rel=1e-4)
+
+    def test_resolved_bins_keep_their_rate(self):
+        """Merging touches only unresolved bins: moderate ratios are the naive formula."""
+        vals = [0.3, 0.2, -0.1, 0.15, -0.25]
+        kw = dict(zip(FLEX_NAMES, vals, strict=True))
+        assert _edge_mass(kw) == pytest.approx(10.0**LOG_M, rel=1e-12)
+
+    def test_unresolved_bin_is_served_a_finite_rate(self):
+        kw = _flex_mass_kwargs("anchors_down_flex_mixed", 30.0)
+        edges = np.asarray(_continuity_flex_edges_yr(kw), dtype=np.float64)
+        mid = 0.5 * (edges[1:] + edges[:-1])
+        sfr = np.asarray(continuity_flex(jnp.asarray(mid), log_total_mass=LOG_M, **kw))
+        assert np.all(np.isfinite(sfr))
+        assert np.all(sfr > 0.0)
+
+    def test_narrow_but_resolved_bins_are_not_merged(self):
+        """Bins ~1e-4 of their edge wide are in support: each keeps M_bin / dt."""
+        vals = [0.0, -4.0, 0.0, 0.0, 0.0]
+        kw = dict(zip(FLEX_NAMES, vals, strict=True))
+        edges = _flex_edges(vals[1:4])
+        mid = 0.5 * (edges[1:] + edges[:-1])
+        got = np.asarray(continuity_flex(jnp.asarray(mid), LOG_M, **kw))
+        cum = np.concatenate([[1.0], np.cumprod(10.0 ** np.asarray(vals[1:4]))])
+        dt = (T_O - T_Y) * cum / cum.sum()
+        assert dt[1] / edges[3] < 1e-3  # would be absorbed by a coarser floor
+        denom = len(dt) + T_Y / dt[0] + (T_MAX - T_O) / dt[-1]
+        mbin = 10.0**LOG_M / denom
+        naive = np.concatenate([[mbin / dt[0]], mbin / dt, [mbin / dt[-1]]])
+        np.testing.assert_allclose(got, naive, rtol=1e-6)
