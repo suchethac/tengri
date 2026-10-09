@@ -55,8 +55,9 @@ from tengri.utils.scale import representable_denominator, representable_floor
 #: float32 floor of the continuum denominator).
 _LAMBDA_REF_AA = 5000.0
 
-#: Distance from the feature window [Å] beyond which the 1 Å sigmoid window weight is
-#: below 1e-17 (40 edge widths).
+#: Distance from the feature window [Å] beyond which the Lick pseudo-continuum line is
+#: not extrapolated. A hard window reaches at most one pixel past its edge; the opt-in
+#: 1 Å sigmoid edge has weight below 1e-17 beyond 40 edge widths.
 _EDGE_REACH_AA = 40.0
 
 #: Allowed values of :attr:`SpectralIndexDef.pseudo_continuum`.
@@ -402,6 +403,7 @@ def measure_index_jax(
     wave_rest: jnp.ndarray,
     flux: jnp.ndarray,
     index_def: SpectralIndexDef | CompositeIndexDef,
+    edge_width: float = 0.0,
 ) -> jnp.ndarray:
     r"""Measure a spectral index on a rest-frame spectrum.
 
@@ -422,6 +424,13 @@ def measure_index_jax(
     index_def : SpectralIndexDef or CompositeIndexDef
         Atomic index (EW or break) or a composite that combines several
         atomic measurements via a user-provided function.
+    edge_width : float, default 0.0
+        Window-edge softening [Å]. ``0`` (default) integrates over exactly the
+        catalog bounds, the Worthey et al. (1994) and Balogh et al. (1999)
+        definition. A positive value opts into sigmoid edges of that width, which
+        make the measurement a smooth function of the pixel-to-window assignment
+        (needed only if the rest-frame grid itself moves under the gradient, e.g.
+        a free redshift) at the price of a 0.01-0.1 Å bias in a Lick EW.
 
     Returns
     -------
@@ -431,30 +440,81 @@ def measure_index_jax(
 
     Notes
     -----
-    **JIT-compatible**: yes, uses soft sigmoid edges for differentiability
-    rather than hard window boundaries.
+    **JIT-compatible**: yes.
 
-    **Gradient-safe**: yes, fully differentiable w.r.t. flux.
+    **Gradient-safe**: yes, differentiable w.r.t. flux. Window edges are hard: a
+    window mean is the exact integral of the piecewise-linear interpolant of the
+    spectrum over :math:`[\lambda_{\rm lo}, \lambda_{\rm hi}]`, with the
+    partial pixel at each edge weighted by the overlap. That integral is linear
+    in the flux, so the flux gradient is exact and needs no smoothing. The edges
+    are catalog constants, not parameters, so no gradient is taken through them.
 
-    An EW index integrates :math:`1 - F_\lambda/F_{C\lambda}` over the soft
-    feature window (weights :math:`w`, normalized so :math:`\int w\,d\lambda`
-    stands for the window width :math:`W`): ``W (1 - <F/F_C>_w)``.
+    An EW index integrates :math:`1 - F_\lambda/F_{C\lambda}` over the feature
+    window (node weights :math:`w_p`, :math:`\sum_p w_p = W` the window width):
+    ``W (1 - <F/F_C>_w)``.
 
     """
     if isinstance(index_def, CompositeIndexDef):
-        atomic_values = tuple(measure_index_jax(wave_rest, flux, c) for c in index_def.components)
+        atomic_values = tuple(
+            measure_index_jax(wave_rest, flux, c, edge_width) for c in index_def.components
+        )
         return index_def.combiner(*atomic_values)
     if index_def.index_type == "break":
-        return _measure_break(wave_rest, flux, index_def)
+        return _measure_break(wave_rest, flux, index_def, edge_width)
     elif index_def.index_type == "slope":
-        return _measure_slope(wave_rest, flux, index_def)
+        return _measure_slope(wave_rest, flux, index_def, edge_width)
     else:
-        return _measure_ew(wave_rest, flux, index_def)
+        return _measure_ew(wave_rest, flux, index_def, edge_width)
 
 
-def _soft_window(wave: jnp.ndarray, lo: float, hi: float, edge_width: float = 1.0) -> jnp.ndarray:
-    """Soft top-hat weights with sigmoid edges (differentiable window boundaries)."""
-    return jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+def _trapezoid_node_weights(wave: jnp.ndarray) -> jnp.ndarray:
+    """Trapezoid node weights: ``sum(w * f)`` is ``jnp.trapezoid(f, wave)``."""
+    half = 0.5 * jnp.diff(wave)
+    zero = jnp.zeros((1,), dtype=half.dtype)
+    return jnp.concatenate([half, zero]) + jnp.concatenate([zero, half])
+
+
+def _hard_window_node_weights(wave: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
+    """Node weights whose weighted sum is the exact integral over ``[lo, hi]``.
+
+    The spectrum is the piecewise-linear interpolant through the nodes. On each
+    segment ``[w_i, w_{i+1}]`` clipped to the window, the integral of the
+    interpolant is ``f_i * ell * (w_{i+1} - m) / dl + f_{i+1} * ell * (m - w_i) / dl``
+    with ``ell`` the clipped length, ``m`` its midpoint and ``dl`` the segment
+    length. Summing the two terms per node gives weights that depend on the grid
+    and the window only, so the integral is linear in the flux. Pixels wholly
+    inside the window carry their trapezoid weight and a pixel straddling an edge
+    carries the overlap fraction. A window outside the grid has zero weight.
+    """
+    left, right = wave[:-1], wave[1:]
+    seg_len = jnp.maximum(right - left, representable_denominator(1e-12))
+    a = jnp.clip(left, lo, hi)
+    b = jnp.clip(right, lo, hi)
+    ell = b - a
+    mid = 0.5 * (a + b)
+    w_left = ell * (right - mid) / seg_len
+    w_right = ell * (mid - left) / seg_len
+    zero = jnp.zeros((1,), dtype=w_left.dtype)
+    return jnp.concatenate([w_left, zero]) + jnp.concatenate([zero, w_right])
+
+
+def window_node_weights(
+    wave: jnp.ndarray, lo: float, hi: float, edge_width: float = 0.0
+) -> jnp.ndarray:
+    """Node weights ``w_p`` of a window integral ``∫_window f dλ ≈ Σ_p w_p f_p``.
+
+    ``edge_width == 0`` (default) is the hard window of Worthey et al. (1994) and
+    Balogh et al. (1999): exact over ``[lo, hi]`` for a piecewise-linear spectrum,
+    partial pixels at the edges weighted by overlap. ``edge_width > 0`` is the
+    opt-in soft window, the sigmoid top-hat ``σ((λ-lo)/e) σ((hi-λ)/e)`` times the
+    trapezoid weight.
+
+    The window bounds are constants of the index definition, never parameters.
+    """
+    if edge_width <= 0.0:
+        return _hard_window_node_weights(wave, lo, hi)
+    soft = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+    return soft * _trapezoid_node_weights(wave)
 
 
 def _to_flam(wave: jnp.ndarray, flux_nu: jnp.ndarray) -> jnp.ndarray:
@@ -466,14 +526,21 @@ def _to_flam(wave: jnp.ndarray, flux_nu: jnp.ndarray) -> jnp.ndarray:
     return flux_nu * (_LAMBDA_REF_AA / wave) ** 2
 
 
-def _window_mean_flux(
-    wave: jnp.ndarray, flux: jnp.ndarray, lo: float, hi: float, edge_width: float = 1.0
-) -> jnp.ndarray:
-    """Wavelength-averaged flux in a window: ∫(flux·dλ) / ∫dλ.
+def _weighted_mean(values: jnp.ndarray, weights: jnp.ndarray) -> jnp.ndarray:
+    """``Σ w v / Σ w``, or 0 for an empty window (no grid coverage)."""
+    den = jnp.sum(weights)
+    ok = den > 1e-20
+    return jnp.where(ok, jnp.sum(values * weights) / jnp.where(ok, den, 1.0), 0.0)
 
-    Uses soft sigmoid edges for differentiability. The weight function is the
-    edge sigmoid product, which is integrated with dλ to give the correct
-    wavelength mean on any grid (uniform or clustered).
+
+def _window_mean_flux(
+    wave: jnp.ndarray, flux: jnp.ndarray, lo: float, hi: float, edge_width: float = 0.0
+) -> jnp.ndarray:
+    """Wavelength-averaged flux in a window: ∫(flux·dλ) / ∫dλ over ``[lo, hi]``.
+
+    The integral runs over exactly the window (see :func:`window_node_weights`),
+    the mean flux of Worthey et al. (1994, Eq. 1) and Balogh et al. (1999), on any
+    grid (uniform or clustered).
 
     Parameters
     ----------
@@ -483,23 +550,16 @@ def _window_mean_flux(
         Flux density array (any consistent units)
     lo, hi : float
         Window edges [Å]
-    edge_width : float
-        Sigmoid edge width [Å]. Default 1.0.
+    edge_width : float, default 0.0
+        ``0`` is the hard window. A positive value opts into sigmoid edges of
+        that width [Å].
 
     Returns
     -------
     float
-        Mean flux: ∫(flux·w·dλ) / ∫(w·dλ), where w is the sigmoid edge product.
+        Mean flux; 0 if the window lies outside the grid.
     """
-    weights = _soft_window(wave, lo, hi, edge_width)
-
-    # Trapezoid mean: ∫(flux·w·dλ) / ∫(w·dλ), the same on any grid
-    num = jnp.trapezoid(flux * weights, wave)
-    den = jnp.trapezoid(weights, wave)
-
-    # Avoid division by zero; use a safe denominator
-    ok = den > 1e-20
-    return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
+    return _weighted_mean(flux, window_node_weights(wave, lo, hi, edge_width))
 
 
 # ── Single-sourced index arithmetic ───────────────────────────────
@@ -587,55 +647,65 @@ def _ew_from_means(
     return ew
 
 
-def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+def _measure_break(
+    wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef, edge_width: float = 0.0
+) -> jnp.ndarray:
     """Compute spectral break ratio (red window mean flux / blue window mean flux)."""
     blue_lo, blue_hi = idx.continuum[0]
     red_lo, red_hi = idx.continuum[1]
-    f_blue = _window_mean_flux(wave, flux, blue_lo, blue_hi)
-    f_red = _window_mean_flux(wave, flux, red_lo, red_hi)
+    f_blue = _window_mean_flux(wave, flux, blue_lo, blue_hi, edge_width)
+    f_red = _window_mean_flux(wave, flux, red_lo, red_hi, edge_width)
     return _break_from_means(f_blue, f_red)
 
 
-def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+def _measure_ew(
+    wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef, edge_width: float = 0.0
+) -> jnp.ndarray:
     """Equivalent (or magnitude) index on the reconstructed spectrum.
 
     ``pseudo_continuum="linear"``: Lick definition on F_λ; the feature-window
-    mean of ``F_λ/F_C`` is integrated on the grid with the soft window weights.
+    mean of ``F_λ/F_C`` is integrated on the grid with the window node weights.
     ``"mean"``: BAGPIPES' constant-continuum arithmetic on ``flux`` as given.
     """
     feat_lo, feat_hi = idx.feature
     feat_width = feat_hi - feat_lo
     if idx.pseudo_continuum == "mean":
-        cont_fluxes = [_window_mean_flux(wave, flux, lo, hi) for lo, hi in idx.continuum]
-        feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi)
+        cont_fluxes = [
+            _window_mean_flux(wave, flux, lo, hi, edge_width) for lo, hi in idx.continuum
+        ]
+        feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi, edge_width)
         return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
     flam = _to_flam(wave, flux)
     (b_lo, b_hi), (r_lo, r_hi) = idx.continuum
     f_c = _lick_continuum(
         wave,
         _lick_geometry(idx),
-        _window_mean_flux(wave, flam, b_lo, b_hi),
-        _window_mean_flux(wave, flam, r_lo, r_hi),
+        _window_mean_flux(wave, flam, b_lo, b_hi, edge_width),
+        _window_mean_flux(wave, flam, r_lo, r_hi, edge_width),
     )
-    weights = _soft_window(wave, feat_lo, feat_hi)
-    den = jnp.trapezoid(weights, wave)
-    ok = den > 1e-20
-    ratio = jnp.where(ok, jnp.trapezoid(weights * flam / f_c, wave) / jnp.where(ok, den, 1.0), 0.0)
+    weights = window_node_weights(wave, feat_lo, feat_hi, edge_width)
+    ratio = _weighted_mean(flam / f_c, weights)
     return _index_from_ratio(ratio, feat_width, idx.units)
 
 
-def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+def _measure_slope(
+    wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef, edge_width: float = 0.0
+) -> jnp.ndarray:
     """Power-law spectral slope β over the feature window (e.g. UV slope).
 
     Fits ``f_λ ∝ λ^β``. With the SED in f_ν units, β = d ln(f_ν)/d ln(λ) − 2
     (Calzetti+1994 convention, matches
-    :func:`tengri.utils.sed_quantities.compute_uv_slope_beta`). Uses a soft
-    sigmoid window (differentiable) for the weights, then analytic weighted
-    least squares in log-log space.
+    :func:`tengri.utils.sed_quantities.compute_uv_slope_beta`). Pixels inside
+    ``[lo, hi]`` enter the analytic least-squares fit in log-log space with unit
+    weight (a per-pixel fit, as Calzetti et al. 1994 Eq. 3), pixels outside with
+    none; the fit is differentiable w.r.t. the flux. A positive ``edge_width``
+    opts into sigmoid edges.
     """
     lo, hi = idx.feature
-    edge_width = 1.0
-    w = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+    if edge_width <= 0.0:
+        w = ((wave >= lo) & (wave <= hi)).astype(flux.dtype)
+    else:
+        w = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
     log_wave = jnp.log(jnp.maximum(wave, 1.0))
     log_fnu = jnp.log(jnp.maximum(flux, 1e-50))
 
@@ -670,8 +740,8 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
 # ``measure_index_jax`` path for them.
 
 
-#: Sigmoid edge widths either side of a window beyond which its soft weight is
-#: below 1e-13 of unity, smaller than a float64 trapezoid sum resolves.
+#: Opt-in soft windows only: edge widths either side of a window beyond which its
+#: sigmoid weight is below 1e-13 of unity, smaller than a float64 sum resolves.
 WINDOW_SUPPORT_EDGES: float = 30.0
 
 
@@ -718,7 +788,7 @@ class IndexWindowPrecomputation:
     ----------
     window_integrals : ndarray, shape (n_met, n_age, n_window)
         :math:`\\int \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)\\,d\\lambda`, the
-        soft-window trapezoid integral of each SSP spectrum
+        window integral of each SSP spectrum (hard edges by default)
         [erg/s/Hz/Msun · Å] on the SSP wave grid.
     window_norms : ndarray, shape (n_window,)
         :math:`\\int W_w(\\lambda)\\,d\\lambda`, window width, so
@@ -758,14 +828,15 @@ def _round_window(lo: float, hi: float) -> tuple[float, float]:
     return (round(float(lo), 4), round(float(hi), 4))
 
 
-def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0):
-    """Soft top-hat window integral of every SSP spectrum over ``[lo, hi]``.
+def window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 0.0):
+    """Window integral of every SSP spectrum over ``[lo, hi]``.
 
     The shared window-integral primitive for both the spectral-index LUT
     (:func:`precompute_index_windows`) and the emission-line-flux LUT
     (:func:`tengri.observation.line_measurement.precompute_line_windows`), so the
-    two precomputes integrate the SSP grid identically. Uses the same sigmoid
-    edges as :func:`_window_mean_flux` (``mean = integral / norm``).
+    two precomputes integrate the SSP grid identically. Uses the same node
+    weights as :func:`_window_mean_flux` (``mean = integral / norm``): by default
+    the hard window, exact over ``[lo, hi]`` for a piecewise-linear spectrum.
 
     Parameters
     ----------
@@ -775,31 +846,34 @@ def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0
         SSP spectra [erg/s/Hz/Msun].
     lo, hi : float
         Window bounds [Å].
-    edge_width : float, default 1.0
-        Sigmoid edge width [Å].
+    edge_width : float, default 0.0
+        ``0`` is the hard window; a positive value opts into sigmoid edges of that
+        width [Å].
 
     Returns
     -------
     integral : ndarray, shape (n_met, n_age)
-        :math:`\\int \\mathrm{SSP}(\\lambda)\\,W(\\lambda)\\,d\\lambda` (trapezoid).
+        :math:`\\int \\mathrm{SSP}(\\lambda)\\,W(\\lambda)\\,d\\lambda`.
     norm : ndarray, shape ()
-        :math:`\\int W(\\lambda)\\,d\\lambda` (trapezoid).
+        :math:`\\int W(\\lambda)\\,d\\lambda` (the window width when the window lies
+        inside the grid).
     """
-    w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid((hi - ssp_wave) / edge_width)
-    # Δλ-weighted, as in _window_mean_flux: mean = integral / norm on any grid.
-    integral = jnp.trapezoid(ssp_flux * w, ssp_wave, axis=-1)  # (n_met, n_age)
-    return integral, jnp.maximum(jnp.trapezoid(w, ssp_wave), 1e-10)
+    w = window_node_weights(ssp_wave, lo, hi, edge_width)
+    integral = jnp.sum(ssp_flux * w, axis=-1)  # (n_met, n_age)
+    return integral, jnp.maximum(jnp.sum(w), 1e-10)
 
 
-def soft_window_ssp_points(
-    ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0, support: float = WINDOW_SUPPORT_EDGES
+def window_ssp_points(
+    ssp_wave, ssp_flux, lo, hi, edge_width: float = 0.0, support: float = WINDOW_SUPPORT_EDGES
 ):
-    """Per-grid-point SSP integrand of a soft window, trapezoid-weighted.
+    """Per-grid-point SSP integrand of a window, node-weighted.
 
     Summing the returned integrand over points reproduces
-    :func:`soft_window_ssp_integral` (to the ``support`` truncation, below float64
-    resolution at the default). Keeping the points separate lets the caller
-    multiply the dust transmission in at each wavelength, as the exact path does.
+    :func:`window_ssp_integral`. A hard window keeps exactly the nodes with
+    nonzero weight (the pixels inside plus the one straddling each edge); a soft
+    window keeps nodes within ``support`` edge widths, below float64 resolution.
+    Keeping the points separate lets the caller multiply the dust transmission in
+    at each wavelength, as the exact path does.
 
     Returns
     -------
@@ -807,16 +881,15 @@ def soft_window_ssp_points(
     integrand : ndarray, shape (n_met, n_age, n_point)
     """
     wave_np = np.asarray(ssp_wave, dtype=float)
-    keep = np.nonzero(
-        (wave_np >= lo - support * edge_width) & (wave_np <= hi + support * edge_width)
-    )[0]
-    dl = np.diff(wave_np)
-    trapz_w = np.zeros_like(wave_np)
-    trapz_w[:-1] += 0.5 * dl
-    trapz_w[1:] += 0.5 * dl
+    w_all = window_node_weights(jnp.asarray(ssp_wave), lo, hi, edge_width)
+    if edge_width <= 0.0:
+        keep = np.nonzero(np.asarray(w_all) > 0.0)[0]
+    else:
+        keep = np.nonzero(
+            (wave_np >= lo - support * edge_width) & (wave_np <= hi + support * edge_width)
+        )[0]
     wave_k = jnp.asarray(ssp_wave)[keep]
-    w = jax.nn.sigmoid((wave_k - lo) / edge_width) * jax.nn.sigmoid((hi - wave_k) / edge_width)
-    return wave_k, jnp.asarray(ssp_flux)[..., keep] * (w * jnp.asarray(trapz_w)[keep])
+    return wave_k, jnp.asarray(ssp_flux)[..., keep] * w_all[keep]
 
 
 def stack_window_points(waves: list, integrands: list, n_met: int, n_age: int, dtype):
@@ -839,7 +912,7 @@ def window_point_terms(joint_weights, transmission_at_points, points: WindowPoin
     :math:`\\sum_a T(a,\\lambda_p) \\sum_m w_{ma}\\,\\mathrm{SSP}_{ma}(\\lambda_p)
     W(\\lambda_p)\\Delta\\lambda_p`: the per-point terms whose segment sum is the window
     integral (:func:`window_means_with_dust`). Each term already carries the
-    trapezoid and soft-edge weight, so a measurement that needs the spectrum
+    window node weight, so a measurement that needs the spectrum
     point by point (the Lick continuum, :func:`measure_indices_from_point_terms`)
     takes them as they are.
 
@@ -898,7 +971,7 @@ def precompute_index_windows(
     ssp_wave: jnp.ndarray,
     ssp_flux: jnp.ndarray,
     index_defs,
-    edge_width: float = 1.0,
+    edge_width: float = 0.0,
 ) -> IndexWindowPrecomputation:
     """Precompute SSP window integrals for break / EW indices.
 
@@ -911,9 +984,10 @@ def precompute_index_windows(
     index_defs : sequence of SpectralIndexDef
         The indices to precompute. Slope indices are recorded as sentinels
         (no window integrals) so the caller falls back to the exact path.
-    edge_width : float, default 1.0
-        Sigmoid edge width [Å], MUST match :func:`_window_mean_flux` so the
-        LUT and exact paths agree.
+    edge_width : float, default 0.0
+        Window-edge softening [Å], MUST match the ``edge_width`` of
+        :func:`measure_index_jax` so the LUT and exact paths agree. ``0`` is the
+        hard window.
 
     Returns
     -------
@@ -940,8 +1014,8 @@ def precompute_index_windows(
         key = _round_window(lo, hi)
         if key in unique:
             return unique[key]
-        integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
-        pw, pi = soft_window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
+        integral, norm = window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        pw, pi = window_ssp_points(ssp_wave, ssp_flux, lo, hi, edge_width)
         pt_waves.append(pw)
         pt_integrands.append(pi)
         integrals.append(integral)  # (n_met, n_age)
@@ -1043,7 +1117,7 @@ def measure_indices_from_windows(
 def _lick_ew_from_points(flam_terms, wave, window, flam_means, norms, cont_slots, feat, meta):
     """Lick EW from F_λ point terms: the point-wise twin of :func:`_measure_ew`.
 
-    ``flam_terms`` are the F_λ integrand terms (trapezoid and soft-edge weight
+    ``flam_terms`` are the F_λ integrand terms (window node weight
     included) at the window grid points ``wave``; the continuum is
     :func:`_lick_continuum` evaluated at each feature point.
     """
@@ -1075,7 +1149,7 @@ def measure_indices_from_point_terms(
     point_terms : ndarray, shape (n_point,)
         Output of :func:`window_point_terms` (times any overall scale): the
         attenuated, SFH-weighted :math:`L_\\nu` integrand at each of
-        ``precomp.points.waves``, trapezoid and soft-edge weight included.
+        ``precomp.points.waves``, window node weight included.
     precomp : IndexWindowPrecomputation
         The build-time window recipe.
 
