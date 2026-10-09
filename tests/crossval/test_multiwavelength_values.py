@@ -134,7 +134,7 @@ class TestRadioAbsoluteValues:
         )
 
     def test_delvecchio_mass_scaling_absolute(self):
-        """Delvecchio+2021: Δlog(L) = 0.468 per 2 dex in M* at fixed L_IR."""
+        """Delvecchio+2021 Eq. 5: Δlog(L) = 2 x 0.148 = 0.296 per 2 dex in M* at fixed L_IR."""
         from tengri.components.radio import radio_sfr_delvecchio2021
 
         wave = jnp.array([_C_AA / 1.4e9])
@@ -152,8 +152,12 @@ class TestRadioAbsoluteValues:
 
         np.testing.assert_allclose(
             np.log10(l_m11 / l_m9),
-            0.468,
-            atol=0.05,
+            0.296,
+            # The Eq. 5 form is exactly linear in log M* and the radio block adds no n(L)
+            # term, so the two-point difference is 2 x 0.148 to float64 rounding. 1e-6 is
+            # far above that rounding, and far below the 0.004 that a 0.148 -> 0.150 slope
+            # change would produce (the earlier 0.05 accepted slopes 0.123-0.173).
+            atol=1e-6,
             err_msg="Delvecchio mass scaling mismatch",
         )
 

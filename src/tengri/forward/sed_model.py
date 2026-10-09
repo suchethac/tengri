@@ -1618,60 +1618,224 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
-def _upper_support(spec, name: str) -> float | None:
-    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
-    dists = getattr(spec, "_distributions", {})
-    dist = dists.get(name)
+def _support_bounds(spec, name: str) -> tuple[float, float] | None:
+    """``(lo, hi)`` support of ``name`` in ``spec`` (Fixed value or prior bounds)."""
+    dist = getattr(spec, "_distributions", {}).get(name)
     if dist is None:
         return None
     if dist.is_fixed:
         value = dist.value
-        return float(value) if isinstance(value, (int, float)) else None
-    return float(dist.bounds[1])
+        return (float(value), float(value)) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[0]), float(dist.bounds[1])
+
+
+#: Total-calibrated SF radio modes: the q parameter, its mass and redshift slopes, and the
+#: domain, pivot and sign of the relation
+#: (:data:`~tengri.components.radio.radio.FIRRC_TOTAL_Q_DOMAIN`).
+#: ``bell2003`` has no mass or redshift term; its q is a constant.
+_TOTAL_Q_MODES = {
+    "bell2003": {"q0": "radio_q_ir", "nu_ref": 1.4e9},
+    "delvecchio2021": {
+        "q0": "radio_delv_q0",
+        "mass_slope": "radio_delv_mass_slope",
+        "z_slope": "radio_delv_z_slope",
+    },
+    "mccheyne2022": {
+        "q0": "radio_mcch_q0",
+        "mass_slope": "radio_mcch_mass_slope",
+        "z_slope": "radio_mcch_z_slope",
+    },
+}
+
+
+def _radio_mass_floor(spec) -> tuple[float, float]:
+    """Lowest and highest ``log M*`` the radio block can read from the declared supports.
+
+    The radio component reads ``log_mstar``, the *surviving* stellar mass when the SSP
+    carries a mass-remaining table, else the formed mass. The formed mass is
+    ``10**log_total_mass`` of the SFH (the maximum over the SFH components' lower bounds
+    bounds the sum from below). The surviving mass is at least ``min(ssp_mass_remaining)``
+    times the formed mass, so the lowest reachable ``log M*`` is that floor plus
+    ``log10(min ssp_mass_remaining)``, a conservative bound. The upper bound is the
+    formed-mass upper bound, since the surviving fraction is at most one. With no SFH mass
+    parameter the radio component's own fallback, ``log M* = 10``, applies.
+    """
+    mass_bounds = [
+        b
+        for name in getattr(spec, "_distributions", {})
+        if name.startswith("sfh_") and name.endswith("_log_total_mass")
+        for b in [_support_bounds(spec, name)]
+        if b is not None
+    ]
+    if not mass_bounds:
+        return 10.0, 10.0
+    lo = max(b[0] for b in mass_bounds)
+    hi = max(b[1] for b in mass_bounds)
+    ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
+    remaining = getattr(ssp, "ssp_mass_remaining", None)
+    offset = 0.0
+    if remaining is not None:
+        frac_min = float(np.min(np.asarray(remaining)))
+        if frac_min > 0.0:
+            offset = float(np.log10(frac_min))
+    return lo + offset, hi
+
+
+def _radio_q_worst_corner(spec, mode: str) -> tuple[float, dict[str, float]]:
+    """Largest ``q`` over the declared box, evaluated with the shared domain-held relation.
+
+    The box is q0, the mass slope, ``z_slope``, the redshift and the mass the radio block
+    reads (:func:`_radio_mass_floor`). ``q`` is monotone in each argument over the box: q0
+    enters with a positive coefficient, ``(1+z)^zs`` is monotone in ``z`` and ``zs``, and the
+    mass term is linear in ``log M*``. The domain hold (``jnp.clip`` inside
+    :func:`~tengri.components.radio.radio.firrc_total_q`) is monotone too, so the maximum is
+    at a corner of the box. The corners use the same function as the forward model.
+    """
+    import itertools
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, firrc_total_q
+
+    mode_def = _TOTAL_Q_MODES[mode]
+    q0_b = _support_bounds(spec, mode_def["q0"])
+    if q0_b is None:
+        return float("nan"), {}
+    m_b = _support_bounds(spec, mode_def["mass_slope"]) or (0.0, 0.0)
+    zs_b = _support_bounds(spec, mode_def["z_slope"]) or (0.0, 0.0)
+    z_b = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    worst = (-np.inf, {})
+    for q0, m, zs, z, logm in itertools.product(
+        sorted(set(q0_b)),
+        sorted(set(m_b)),
+        sorted(set(zs_b)),
+        sorted(set(z_b)),
+        sorted({mass_lo, mass_hi}),
+    ):
+        q = float(firrc_total_q(mode, q0, m, zs, logm, z))
+        if q > worst[0]:
+            # Report the arguments the relation actually uses, after the domain hold.
+            dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+            lo, hi = dom["mass"]
+            logm_eff = max(logm, lo) if hi is None else min(max(logm, lo), hi)
+            z_eff = min(max(z, dom["z"][0]), dom["z"][1])
+            worst = (q, {"q0": q0, "logm": logm_eff, "z": z_eff, "m": m, "zs": zs})
+    return worst
 
 
 def _validate_radio_q_total_support(spec) -> None:
-    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+    """Refuse a declared box whose worst corner makes the total-calibrated synchrotron negative.
 
-    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
-    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
-    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
-    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
-    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
-    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
-    non-thermal term) or to the other star-formation radio modes.
+    The Bell (2003) modes calibrate the total at 1.4 GHz with ``radio_q_ir``. The
+    Delvecchio+2021 and McCheyne+2022 modes calibrate the total at their own reference
+    frequencies (1.4 GHz and 150 MHz) with ``q(M*, z)``, held at the calibrated domain
+    edges. The synchrotron term is the total minus the Murphy+2011 free-free luminosity at
+    that frequency, which is negative once q exceeds
+    :func:`~tengri.components.radio.radio.radio_q_total_limit` (3.5145 at 1.4 GHz, 1e4 K,
+    alpha_ff = -0.1). The check takes the worst q over every declared support that feeds
+    it, through the same relation the forward model evaluates. The limit is the smallest
+    over the ``radio_T_e`` and ``radio_alpha_ff`` supports. It does not apply to
+    ``freefree: False``, which calibrates the non-thermal term alone.
 
     Raises
     ------
     ConfigError
-        If the support of ``radio_q_ir`` reaches the limit at the support of the
-        electron temperature.
+        If the worst corner of the declared box exceeds the limit. The message names the
+        corner (q0, log M*, z) and q*.
     """
     if not getattr(spec, "radio", False):
         return
-    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in _TOTAL_Q_MODES:
         return
     if getattr(spec, "radio_include_freefree", None) is False:
         return
-    q_hi = _upper_support(spec, "radio_q_ir")
-    t_hi = _upper_support(spec, "radio_T_e")
-    a_hi = _upper_support(spec, "radio_alpha_ff")
-    if q_hi is None or t_hi is None or a_hi is None:
-        return
-    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, radio_q_total_limit
     from tengri.config.exceptions import ConfigError
 
-    q_star = radio_q_total_limit(t_hi, a_hi)
-    if q_hi > q_star:
+    mode_def = _TOTAL_Q_MODES[mode]
+    nu_ref = mode_def["nu_ref"] if mode == "bell2003" else FIRRC_TOTAL_Q_DOMAIN[mode]["nu_ref"]
+    t_bounds = _support_bounds(spec, "radio_T_e")
+    a_bounds = _support_bounds(spec, "radio_alpha_ff")
+    if t_bounds is None or a_bounds is None:
+        return
+    q_star = min(radio_q_total_limit(t, a, nu_ref) for t in t_bounds for a in a_bounds)
+    if mode == "bell2003":
+        q_hi = _support_bounds(spec, mode_def["q0"])
+        if q_hi is None or q_hi[1] <= q_star:
+            return
+        q_worst, corner = q_hi[1], {"q0": q_hi[1], "logm": None, "z": None}
+    else:
+        q_worst, corner = _radio_q_worst_corner(spec, mode)
+        if not np.isfinite(q_worst) or q_worst <= q_star:
+            return
+    if q_worst > q_star:
+        where = (
+            f"{mode_def['q0']}={corner['q0']:g}"
+            if corner.get("logm") is None
+            else (
+                f"{mode_def['q0']}={corner['q0']:g}, log M* = {corner['logm']:.3f} "
+                f"(after the domain hold), z = {corner['z']:g}"
+            )
+        )
+        hint = (
+            f"Use radio_q_ir <= {q_star:.4f} (or a lower radio_T_e upper bound)"
+            if mode == "bell2003"
+            else "Narrow the q0, mass or redshift support to put the worst corner below q_*"
+        )
         raise ConfigError(
-            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
-            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
-            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
-            "total minus the Murphy+2011 free-free luminosity, "
-            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
-            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
-            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
-            "term alone."
+            f"radio sf={mode!r}: the worst corner of the declared support gives "
+            f"q = {q_worst:.4f} at {where}, above q_* = {q_star:.4f} at "
+            f"{nu_ref / 1e9:g} GHz (smallest over the radio_T_e and radio_alpha_ff "
+            "supports), so the total-calibrated synchrotron would be negative there. "
+            f"{hint}, or pass freefree=False to calibrate the non-thermal term alone."
+        )
+
+
+def _validate_radio_firrc_domain(spec) -> None:
+    """Warn when the realized mass or redshift support leaves a calibrated domain (not an error).
+
+    Outside its calibrated domain a total-q relation is held at the nearest edge, not
+    extrapolated (:func:`~tengri.components.radio.radio.firrc_total_q`). This warning names
+    the range the declared support reaches beyond the calibration sample, so the held value
+    is not silent.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in ("delvecchio2021", "mccheyne2022"):
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    import warnings
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN
+
+    dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+    name = {
+        "delvecchio2021": "Delvecchio+2021 (Sect. 2)",
+        "mccheyne2022": "McCheyne+2022 (Sect. 5.2)",
+    }[mode]
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    z_lo, z_hi = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    lo, hi = dom["mass"]
+    reasons = []
+    if mass_lo < lo:
+        reasons.append(f"log M* down to {mass_lo:.2f} (calibrated from {lo:g})")
+    if hi is not None and mass_hi > hi:
+        reasons.append(f"log M* up to {mass_hi:.2f} (calibrated to {hi:g})")
+    zlo, zhi = dom["z"]
+    if z_lo < zlo:
+        reasons.append(f"z down to {z_lo:g} (calibrated from {zlo:g})")
+    if z_hi > zhi:
+        reasons.append(f"z up to {z_hi:g} (calibrated to {zhi:g})")
+    if reasons:
+        warnings.warn(
+            f"radio sf={mode!r}: the declared support reaches "
+            + "; ".join(reasons)
+            + f". The {name} relation is held at the sample edge there and is not "
+            "extrapolated, so q is constant beyond that edge.",
+            UserWarning,
+            stacklevel=2,
         )
 
 
@@ -12536,6 +12700,7 @@ class SEDModel:
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
+        _validate_radio_firrc_domain(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

@@ -174,11 +174,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # inactive model. Only the active ``sfr_mode``'s triplet is consumed; the
     # other three stay Fixed no-ops (mirrors the DPL-param pattern above).
     #
-    # Delvecchio+2021 (1.4 GHz; SEMPER Eq. 4):
+    # Delvecchio+2021 (1.4 GHz total radio; arXiv:2010.05510 Eq. 5):
     #   q(M*, z) = q0 (1+z)^z_slope - (logM* - 10) * mass_slope
     ParamDeclaration(
         "radio_delv_q0",
-        Fixed(2.743),
+        Fixed(2.646),
         "Delvecchio+2021 FIRRC normalization q0 at logM*=10, z=0 (1.4 GHz)",
         lambda lo, hi: lo > 0,
         "must be > 0",
@@ -187,35 +187,43 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # because _RADIO_SF_PARAMS_BY_MODE routes this triplet only under
         # ``radio_sfr_mode="delvecchio2021"`` -- the McCheyne triplet stays
         # pinned, and vice versa, so only one calibration is ever freed.
-        free_prior=Uniform(1.8, 3.5, "Delvecchio+2021 FIRRC q0", default=2.743),
+        # Free prior: q0_pub +/- 2 sigma_q with q0_pub = 2.646 (arXiv:2010.05510 Eq. 5) and
+        # sigma_q = 0.22 dex, the intrinsic IRRC scatter the paper quotes (Sect. 4.2 Gaussian
+        # fits 0.20 and 0.23 dex; Sect. 4.3 "constant IRRC scatter of 0.21-0.22 dex").
+        # The build refuses a box whose worst (q0, log M*, z) corner is above q_*.
+        free_prior=Uniform(2.206, 3.086, "Delvecchio+2021 FIRRC q0", default=2.646),
     ),
     ParamDeclaration(
         "radio_delv_mass_slope",
-        Fixed(0.234),
+        Fixed(0.148),
         "Delvecchio+2021 FIRRC mass slope dq/dlogM* (subtracted; >0 = massive -> more radio)",
     ),
     ParamDeclaration(
         "radio_delv_z_slope",
-        Fixed(-0.025),
+        Fixed(-0.023),
         "Delvecchio+2021 FIRRC redshift exponent on (1+z) (slight decline with z)",
     ),
-    # McCheyne+2022 (150 MHz; SEMPER Eq. 5):
-    #   q(M*, z) = q0 (1+z)^z_slope + mass_slope * (logM* - 10)
+    # McCheyne+2022 (150 MHz, A&A 662, A100, Sect. 5.2 joint fit; pivot log M* = 10.45):
+    #   q(M*, z) = q0 (1+z)^z_slope + mass_slope * (logM* - 10.45)
     ParamDeclaration(
         "radio_mcch_q0",
         Fixed(1.98),
-        "McCheyne+2022 FIRRC normalization q0 at logM*=10, z=0 (150 MHz)",
+        "McCheyne+2022 FIRRC normalization q0 at logM*=10.45, z=0 (150 MHz)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         # As above but centered on the 150 MHz normalization (1.98 rather than
-        # 2.743); the low-frequency q0 sits lower because synchrotron dominates
+        # 2.646); the low-frequency q0 sits lower because synchrotron dominates
         # further above the thermal component there.
-        free_prior=Uniform(1.0, 3.0, "McCheyne+2022 FIRRC q0", default=1.98),
+        # Free prior: q0_pub +/- 2 sigma_q with q0_pub = 1.98 (McCheyne+2022 Sect. 5.2) and
+        # sigma_q = 0.3 dex. McCheyne's comment quotes no intrinsic scatter, so 0.3 dex is a
+        # modeling choice (typical far-infrared radio correlation scatter).
+        free_prior=Uniform(1.38, 2.58, "McCheyne+2022 FIRRC q0", default=1.98),
     ),
     ParamDeclaration(
         "radio_mcch_mass_slope",
         Fixed(-0.22),
-        "McCheyne+2022 FIRRC mass slope dq/dlogM* (added; <0 = massive -> more radio)",
+        "McCheyne+2022 FIRRC mass slope dq/dlogM* about logM*=10.45 "
+        "(added; <0 = massive -> more radio)",
     ),
     ParamDeclaration(
         "radio_mcch_z_slope",

@@ -128,16 +128,18 @@ class TestDelvecchio2021:
     """Tests for radio_sfr_delvecchio2021."""
 
     def test_q_at_fiducial_mass_z0(self):
-        """At log(M★)=10, z=0: q = q0 × 1^z_slope - 0 = 2.743."""
+        """At log(M★)=10 and z at the domain edge 0.1: q = 2.646 (1.1)^-0.023 (Eq. 5).
+
+        z = 0 is outside the calibrated 0.1 < z < 4.5, so the relation is held at z = 0.1.
+        """
         # L_1.4GHz = L_IR / (3.75e12 × 10^q)
-        # At log(M★)=10, z=0: q = 2.743
-        expected_q = 2.743
+        expected_q = 2.646 * 1.1 ** (-0.023)
         L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
         L = radio_sfr_delvecchio2021(
             _WAVE_14GHZ,
             _L_IR,
             log_mstar=10.0,
-            redshift=0.0,
+            redshift=0.1,
             apply_suppression=False,
         )
         # L at 1.4 GHz (nu_ref) equals L_ref_expected: (nu/nu_ref)^-alpha = 1 at nu_ref
@@ -159,31 +161,31 @@ class TestDelvecchio2021:
         )
 
     def test_q_mass_dependence_correct_magnitude(self):
-        """Δq over 2 dex in M★ should be 2 × mass_slope = 0.468."""
+        """Δq over 2 dex in M★ should be 2 × mass_slope = 0.296."""
         L_m10 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_m12 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
         )
-        # L ∝ 10^(-q), so Δlog(L) = Δq = 2 × 0.234 = 0.468
+        # L ∝ 10^(-q), so Δlog(L) = Δq = 2 × 0.148 = 0.296
         delta_log_L = jnp.log10(L_m12[0]) - jnp.log10(L_m10[0])
-        assert abs(float(delta_log_L) - 0.468) < 0.01, (
-            f"Δlog(L) = {float(delta_log_L):.4f} expected 0.468"
+        assert abs(float(delta_log_L) - 0.296) < 0.01, (
+            f"Δlog(L) = {float(delta_log_L):.4f} expected 0.296"
         )
 
     def test_z_evolution_mild(self):
-        """z_slope = -0.025: q decreases mildly from z=0 to z=4."""
+        """z_slope = -0.023: q decreases mildly from z=0 to z=4."""
         L_z0 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_z4 = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=4.0, apply_suppression=False
         )
-        # q(z=4) = 2.743 * 5^(-0.025) ≈ 2.743 * 0.9604 ≈ 2.634
-        # Δq ≈ 0.109 → L_z4 / L_z0 ≈ 10^0.109 ≈ 1.285
+        # q(z=4) = 2.646 * 5^(-0.023) ≈ 2.646 * 0.9637 ≈ 2.550
+        # Δq ≈ 0.096 → L_z4 / L_z0 ≈ 10^0.096 ≈ 1.247
         ratio = float(L_z4[0] / L_z0[0])
-        assert 1.2 < ratio < 1.4, f"z=4 / z=0 radio ratio {ratio:.3f}, expected ~1.28"
+        assert 1.2 < ratio < 1.4, f"z=4 / z=0 radio ratio {ratio:.3f}, expected ~1.25"
 
     def test_hierarchical_param_q0_increases_L(self):
         """Higher q0 → higher q → lower L_radio (L ∝ 10^{-q})."""
@@ -205,15 +207,15 @@ class TestDelvecchio2021:
         )
         assert float(L_hi[0]) > float(L_lo[0]), "Lower q0 should give higher L_radio"
 
-    def test_spectral_index_0p7_default(self):
-        """Default alpha_sf=0.7: S(150MHz)/S(1.4GHz) ≈ (150/1400)^{-0.7} ≈ 5.9."""
+    def test_spectral_index_default_0p75(self):
+        """Default alpha=0.75 (Delvecchio+2021 Sect. 3.3): 150 MHz to 1.4 GHz ratio."""
         L_14ghz = radio_sfr_delvecchio2021(
             _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
         L_150mhz = radio_sfr_delvecchio2021(
             _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
         )
-        expected_ratio = (150.0e6 / 1.4e9) ** (-0.7)  # ≈ 5.87
+        expected_ratio = (150.0e6 / 1.4e9) ** (-0.75)
         actual_ratio = float(L_150mhz[0] / L_14ghz[0])
         assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
             f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
@@ -287,14 +289,21 @@ class TestDelvecchio2021:
 class TestMcCheyne2022:
     """Tests for radio_sfr_mccheyne2022."""
 
+    def test_spectral_index_is_the_table3_value(self):
+        """S ∝ nu^-0.60 between 150 MHz and 1.4 GHz (McCheyne+2022 Table 3, alpha = -0.60)."""
+        nu_150, nu_14 = 1.5e8, 1.4e9
+        L_150 = radio_sfr_mccheyne2022(_WAVE_150MHZ, _L_IR, log_mstar=10.45, redshift=0.0)
+        L_14 = radio_sfr_mccheyne2022(_WAVE_14GHZ, _L_IR, log_mstar=10.45, redshift=0.0)
+        assert float(L_14[0] / L_150[0]) == pytest.approx((nu_14 / nu_150) ** -0.60, rel=1e-9)
+
     def test_q_at_fiducial_mass_z0(self):
-        """At log(M★)=10, z=0: q = q0 + mass_slope × 0 = 1.98."""
+        """At the joint-fit pivot log(M★)=10.45, z=0: q = q0 = 1.98 (McCheyne+2022 Sect. 5.2)."""
         expected_q = 1.98
         L_ref_expected = _L_IR / (3.75e12 * 10.0**expected_q)
         L = radio_sfr_mccheyne2022(
             _WAVE_150MHZ,
             _L_IR,
-            log_mstar=10.0,
+            log_mstar=10.45,
             redshift=0.0,
             apply_suppression=False,
         )
@@ -316,12 +325,12 @@ class TestMcCheyne2022:
         )
 
     def test_mass_slope_magnitude(self):
-        """Δq over 2 dex M★ = 2 × |mass_slope| = 0.44."""
+        """Δq over 2 dex M★ = 2 × |mass_slope| = 0.44 (inside the 10.45 domain edge)."""
         L_m10 = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=10.5, redshift=0.0, apply_suppression=False
         )
         L_m12 = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=12.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=12.5, redshift=0.0, apply_suppression=False
         )
         delta_log_L = float(jnp.log10(L_m12[0]) - jnp.log10(L_m10[0]))
         # mass_slope = -0.22, so Δq = -0.22 * 2 = -0.44 → ΔlogL = +0.44
@@ -347,16 +356,16 @@ class TestMcCheyne2022:
         )
         assert float(L_hi_q0[0]) > float(L_lo_q0[0]), "Lower q0 → more L_radio"
 
-    def test_spectral_index_0p7_default(self):
-        """At 150 MHz reference, extrapolating to 1.4 GHz with α=0.7."""
+    def test_spectral_index_default_0p60(self):
+        """At 150 MHz reference, extrapolating to 1.4 GHz with alpha=0.60 (Table 3)."""
         L_150mhz = radio_sfr_mccheyne2022(
-            _WAVE_150MHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_150MHZ, _L_IR, log_mstar=10.45, redshift=0.0, apply_suppression=False
         )
         L_14ghz = radio_sfr_mccheyne2022(
-            _WAVE_14GHZ, _L_IR, log_mstar=10.0, redshift=0.0, apply_suppression=False
+            _WAVE_14GHZ, _L_IR, log_mstar=10.45, redshift=0.0, apply_suppression=False
         )
-        # At 1.4 GHz: L = L_ref * (1.4e9 / 1.5e8)^{-0.7}
-        expected_ratio = (1.5e8 / 1.4e9) ** (-0.7)  # > 1 (150 MHz brighter)
+        # At 1.4 GHz: L = L_ref * (1.4e9 / 1.5e8)^{-0.60}
+        expected_ratio = (1.5e8 / 1.4e9) ** (-0.60)  # > 1 (150 MHz brighter)
         actual_ratio = float(L_150mhz[0] / L_14ghz[0])
         assert abs(actual_ratio - expected_ratio) / expected_ratio < 0.01, (
             f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
@@ -467,7 +476,7 @@ class TestRadioTotalDispatcher:
             q0=2.5,
             apply_suppression=False,
         )
-        # q0=2.5 < 2.743 default → L should be higher (L ∝ 10^{-q})
+        # q0=2.5 < 2.646 default → L should be higher (L ∝ 10^{-q})
         assert float(L_override[0]) > float(L_default[0])
 
     def test_total_dpl_bell2003_backward_compat(self):

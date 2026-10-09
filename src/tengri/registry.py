@@ -1377,11 +1377,11 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
     },
     ("sf", "delvecchio2021"): {
-        "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",
+        "citation": "Delvecchio+2021 total-radio FIRRC (Eq. 5, arXiv:2010.05510)",
         "short_doc": "Mass- and z-dependent q_IR at 1.4 GHz",
     },
     ("sf", "mccheyne2022"): {
-        "citation": "McCheyne+2022 FIRRC (SEMPER Eq. 5, arXiv:2503.20525)",
+        "citation": "McCheyne+2022 FIRRC (A&A 662, A100)",
         "short_doc": "Mass- and z-dependent q_IR at 150 MHz (LOFAR)",
     },
     ("agn", "none"): {

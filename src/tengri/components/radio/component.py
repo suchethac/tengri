@@ -136,13 +136,15 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         together with ``sfr_mode="bell2003_split"`` raises
         :class:`~tengri.config.exceptions.ConfigError` (see below).
     q_is_total : bool or None
-        Whether ``radio_q_ir`` of ``sfr_mode="bell2003"`` calibrates the TOTAL
-        1.4 GHz luminosity (Bell 2003 Eq. 1). ``True``: the synchrotron term is
-        ``(1 - f_th)`` of the calibrated total, ``f_th`` the Murphy+2011 free-free
-        share at 1.4 GHz, whichever component supplies the thermal term (this
-        block's own, or the nebular continuum). ``False``: ``radio_q_ir`` calibrates
-        the non-thermal term alone and the synchrotron carries all of it (CIGALE's
-        convention). ``None`` (default) follows the resolved ``include_freefree``;
+        Whether the q calibration of a total-q mode is the TOTAL luminosity at its
+        reference frequency. The three total-q modes are ``sfr_mode="bell2003"``
+        (``radio_q_ir``, 1.4 GHz, Bell 2003 Eq. 1), ``"delvecchio2021"`` (1.4 GHz) and
+        ``"mccheyne2022"`` (150 MHz). ``True``: the synchrotron term is the calibrated
+        total minus the Murphy+2011 free-free term at the same frequency, whichever
+        component supplies the thermal term (this block's own, or the nebular
+        continuum). ``False``: the calibration is the non-thermal term alone and the
+        synchrotron carries all of it (CIGALE's convention). ``"bell2003_split"`` does
+        not use this flag. ``None`` (default) follows the resolved ``include_freefree``;
         the factory sets it ``False`` only for an explicit ``freefree: False``.
     agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS`:
@@ -535,7 +537,7 @@ class RadioSEDComponent(TemplateThreading):
                 q0=firrc_q0,
                 mass_slope=firrc_mass_slope,
                 z_slope=firrc_z_slope,
-                apply_suppression=True,
+                apply_suppression=False,
                 log_L_ir=_log_L_ir,
                 q_is_total=self.config.q_is_total,
                 sf_nu_ref=self.config.sf_nu_ref,
