@@ -624,7 +624,7 @@ def radio_sfr_delvecchio2021(
     the power law the paper reports, valid over 0.1 < z < 4.5 and 8 < log M* < 12 (the
     paper's M*-selected sample).
     Outside that range the fit is an extrapolation. The fit is the AGN-corrected median
-    total-radio relation; its scatter (about 0.2 dex) is not modelled.
+    total-radio relation; its scatter (about 0.2 dex) is not modeled.
 
     The "total at nu_ref" construction and the thermal subtraction follow the
     #2590 convention used by the Bell (2003) modes (see
@@ -633,7 +633,7 @@ def radio_sfr_delvecchio2021(
     With the nebular backend supplying a free-free continuum, the radio block still removes
     the Murphy share ``f_th`` of the calibrated total, so the summed SED at ``nu_ref`` is
     the calibration times ``1 - f_th`` plus the nebular free-free, which differs from
-    ``f_th`` by the backend's own share. The residual is the modelling choice documented
+    ``f_th`` by the backend's own share. The residual is the modeling choice documented
     for the Bell modes; it is not a fit.
 
     References

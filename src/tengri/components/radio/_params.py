@@ -216,7 +216,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # further above the thermal component there.
         # Free prior: q0_pub +/- 2 sigma_q with q0_pub = 1.98 (McCheyne+2022 Sect. 5.2) and
         # sigma_q = 0.3 dex. McCheyne's comment quotes no intrinsic scatter, so 0.3 dex is a
-        # modelling choice (typical far-infrared radio correlation scatter).
+        # modeling choice (typical far-infrared radio correlation scatter).
         free_prior=Uniform(1.38, 2.58, "McCheyne+2022 FIRRC q0", default=1.98),
     ),
     ParamDeclaration(
