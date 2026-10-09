@@ -966,8 +966,8 @@ def multicolor_disc(
         _excess_u = _tail_u - _wien_u  # the tail's excess over the Wien form; >= 0 by definition
         return disc_u + jnp.trapezoid(jnp.where(_excess_u > 0.0, _excess_u, 0.0), _nu_b)
 
-    # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
-    # ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
+    # Renormalize to the unit-ratio L_bol; agn_lum_ratio then multiplies the spectrum
+    # (the MAGNITUDE is set by ``agn_log_lbol`` (the reference on the float32 path) NOT the shape
     # luminosity above). ``agn_log_lbol`` is the angle-integrated accretion power, so the
     # normalization is the blended power at ``_COS_INC_ISOTROPIC_REFERENCE`` (where a
     # ``2 cos i`` disc radiates its angle-integrated power), and the spectrum, which is
@@ -980,7 +980,9 @@ def multicolor_disc(
         # true-shape disc to a 1e10 erg/s reference) is needed. Normalize the
         # integrand so the trapezoid stays in range, and take the exponent
         # against the normalized integral, so neither side is ever formed.
-        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_lum_ratio)
+        # Unit agn_lum_ratio in the exponent: log10(0) is -inf and its reverse pass is NaN at
+        # ratio 0 (#2767). The ratio multiplies the returned spectrum linearly below.
+        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG
         # stop_gradient: factorization constant, canceled by the peak the
         # returned ``_l_hat`` is divided by (#1436).
         _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_intrinsic)))
@@ -1028,14 +1030,15 @@ def multicolor_disc(
         # ``(l/p) * s`` back into ``l * (s/p)``, which reinstates the ~1e64
         # inner product this factorization exists to avoid (the same reason the
         # stellar component's barriers are load-bearing, #1436).
-        return jax.lax.optimization_barrier(_l_hat) * _scale_hat
+        return jax.lax.optimization_barrier(_l_hat) * _scale_hat * agn_lum_ratio
 
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    # Unit-ratio normalization, then the ratio multiplies linearly (same design as kubota_done).
+    l_bol_unit = 10.0**agn_log_lbol * _LSUN_ERG
     l_nu_total = _blended_bol(1.0, _COS_INC_ISOTROPIC_REFERENCE)
     l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
-    scale = l_bol_requested / l_nu_total_safe
+    scale = l_bol_unit / l_nu_total_safe
 
-    return l_nu_intrinsic * scale
+    return l_nu_intrinsic * scale * agn_lum_ratio
 
 
 # ── Model 3: Kubota & Done (2018) 3-zone disc ─────────────────────

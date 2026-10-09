@@ -10,7 +10,7 @@ multiplies the spectrum by ``agn_lum_ratio`` linearly. The ratio then enters wit
 logarithm, so at 0 the SED is exactly 0 and the derivative with respect to the ratio is the
 SED at unit ratio, which is the true value.
 
-For both models, in float32 and float64, this checks:
+For the kubota_done, multicolor_disc and ADAF models, in float32 and float64, this checks:
 
 (a) the SED at ratio 0 is exactly 0;
 (b) ``jax.grad`` with respect to ``agn_lum_ratio`` and ``agn_log_lbol`` at ratio 0 is finite;
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.regression_bug
 _WAVE = np.geomspace(200.0, 1.0e7, 3000)
 _LOG_LBOL = 11.0
 _LOG_MBH = 8.0
-_MODELS = ("kubota_done", "adaf")
+_MODELS = ("kubota_done", "multicolor", "adaf")
 _DTYPES = (jnp.float32, jnp.float64)
 
 #: Central-difference step and the rtol it must meet, per dtype.
@@ -53,6 +53,19 @@ _GOLDEN = {
             1.8893992069754992e26,
             5.367659904144678e24,
             1.4736381577320894e23,
+        ),
+    },
+    "multicolor": {
+        "sum": 5.958577707758368e31,
+        "pts": (
+            1.4235669566768029e26,
+            3.8925519395876026e27,
+            6.1891594078450125e28,
+            5.657572510354477e28,
+            4.87558154880109e27,
+            1.5664276642823378e26,
+            4.437008816797985e24,
+            1.2175515723209214e23,
         ),
     },
     "adaf": {
@@ -79,6 +92,8 @@ def _sed(name, ratio, log_lbol, dtype):
     """The model's L_nu on ``_WAVE`` at the given ratio and log L_bol, in ``dtype``."""
     if name == "kubota_done":
         from tengri.components.agn.disc import kubota_done_disc as model
+    elif name == "multicolor":
+        from tengri.components.agn.disc import multicolor_disc as model
     else:
         from tengri.components.agn.adaf import adaf_spectrum as model
     w = jnp.asarray(_WAVE, dtype=dtype)
@@ -110,7 +125,11 @@ def test_gradient_at_zero_ratio_is_finite(name, dtype):
             jnp.asarray(0.0, dtype=dtype), jnp.asarray(_LOG_LBOL, dtype=dtype)
         )
     assert np.isfinite(float(g_ratio)), f"d/d(agn_lum_ratio) at 0 is {float(g_ratio)}"
+    assert float(g_ratio) != 0.0, "d/d(agn_lum_ratio) at 0 collapsed to zero"
+    # grad-assert: finite-only — at ratio 0 the SED is identically zero for every log L_bol, so
+    # d/d(agn_log_lbol) is exactly 0 by construction; the exact-zero check below pins that value.
     assert np.isfinite(float(g_lbol)), f"d/d(agn_log_lbol) at ratio 0 is {float(g_lbol)}"
+    assert float(g_lbol) == 0.0, f"d/d(agn_log_lbol) at ratio 0 must be exactly 0, got {g_lbol}"
 
 
 @pytest.mark.parametrize("dtype", _DTYPES, ids=["f32", "f64"])
