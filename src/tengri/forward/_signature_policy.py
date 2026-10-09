@@ -207,6 +207,10 @@ SIGNATURE_POLICY: KeyPolicy = {
         "thermal free-free on/off changes the emitted radio SED; set by the grammar's "
         "radio.sf.freefree key and routed to RadioSEDComponentConfig.include_freefree"
     ),
+    "_radio_sf_nu_ref": content(
+        "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
+        "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"
+    ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
     "_uses_xray": content("whether X-ray emission is attached"),
@@ -257,10 +261,19 @@ SIGNATURE_POLICY: KeyPolicy = {
         "was refused, recorded for precompute_report. Derived from the same keyed "
         "structure as the cache, and read by no numerical path"
     ),
+    "_dust_shape_table_cache": exclude("memo cache computed from keyed structure"),
+    "_dust_shape_table_decline": exclude(
+        "the verdict that accompanies _dust_shape_table_cache; derived from the same keyed "
+        "structure and read by no numerical path"
+    ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
     "_*_term_response_cache": exclude(
         "memo cache computed from keyed structure; pattern matches all additive "
         "emitters (radio, xray, and any new ones)"
+    ),
+    "_*_term_shape_cache": exclude(
+        "memo cache computed from keyed structure; pattern matches the shape-only term "
+        "table of every additive emitter (radio, xray, and any new ones)"
     ),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),

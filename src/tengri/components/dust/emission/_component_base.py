@@ -196,6 +196,15 @@ class EmissionComponent(SEDModelComponent):
     #: silently wrong SED rather than an obviously broken one.
     factors_l_ir: ClassVar[bool] = True
 
+    #: Registry key (``forward/precompute/registry.py``) of the precompute adapter that
+    #: tabulates this model's band fluxes over its shape axes; ``None`` for a model with no
+    #: adapter. Read when shape parameters are free and no exact band-response table exists.
+    precompute_key: ClassVar[str | None] = None
+
+    #: Free parameters (full names) that scale the emission without changing its shape, handled
+    #: by :meth:`lookup_amplitude` instead of a table axis.
+    lookup_amplitude_params: ClassVar[tuple[str, ...]] = ()
+
     def _factor_l_ir(
         self, state: ForwardState, input_kwargs: dict[str, Any]
     ) -> tuple[dict[str, Any], jnp.ndarray | None]:
@@ -513,10 +522,12 @@ class EmissionComponent(SEDModelComponent):
 
         # Try to get band response (exact for linear models)
         band_response = None
+        shape_table = None
         if isinstance(template_data, dict):
             _dir = template_data.get("dust_ir")
             if isinstance(_dir, dict):
                 band_response = _dir.get("emission_band_response")
+                shape_table = _dir.get("emission_shape_table")
 
         # Project emission onto filters
         if band_response is not None:
@@ -534,6 +545,10 @@ class EmissionComponent(SEDModelComponent):
                     ),
                 )
             phot_lnu = L_ir * response
+        elif shape_table is not None and self.precompute_key is not None:
+            # Free shape parameters: the registry adapter tabulated the band fluxes over the
+            # shape axes at build, so the per-call filter integral is replaced by a lookup.
+            phot_lnu = self._shape_table_phot(p, shape_table, L_ir)
         elif getattr(self, "fast_emission", False):
             # Approximate path: sample at effective wavelength
             phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
@@ -555,6 +570,54 @@ class EmissionComponent(SEDModelComponent):
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
 
         return {"dust_emission_phot_lnu_precomp": phot_lnu}
+
+    def lookup_amplitude(self, p: Mapping[str, jnp.ndarray]) -> jnp.ndarray:
+        """Factor the registry table does not carry, multiplying ``L_ir`` (1 by default).
+
+        The table is built at the closure's default for every parameter that is not a shape
+        axis; a component whose emission is linear in such a parameter returns its ratio to
+        that default here.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+
+        Returns
+        -------
+        ndarray
+            Dimensionless multiplier.
+        """
+        return jnp.asarray(1.0)
+
+    def _shape_table_phot(
+        self, p: Mapping[str, jnp.ndarray], table: Mapping[str, Any], L_ir: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Band fluxes from the registry adapter's table at the current shape parameters.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        table : mapping
+            The adapter's table arrays (``dust_ir["emission_shape_table"]``).
+        L_ir : ndarray
+            Amplitude the exact band-response branch multiplies [erg/s, or 1 when factored].
+
+        Returns
+        -------
+        ndarray, shape (n_filter,)
+            Photometric L_nu [erg/s/Hz].
+        """
+        from tengri.forward.precompute import registry
+
+        module = registry.resolve(self.precompute_key)
+        prefix_len = len(self.parameter_prefix)
+        names = [n for n in module.AXIS_PARAMS[self.precompute_key] if n in table["axes"]]
+        values = [p[n[prefix_len:]] for n in names]
+        return module.lookup_from_table(
+            table, self.precompute_key, L_ir * self.lookup_amplitude(p), *values
+        )
 
     def _apply_spectrum_precomp(
         self,

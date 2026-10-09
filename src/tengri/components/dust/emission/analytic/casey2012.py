@@ -70,6 +70,10 @@ class Casey2012IRSEDComponent(EmissionComponent):
 
     name: str = "casey2012"
 
+    # Unwired: with all four shape axes free the registry table misses its 1e-3 contract
+    # (2.7e-3 measured near alpha_mir ~ 1.15) and its 4-D lookup is slower than the integral.
+    precompute_key: ClassVar[str | None] = None
+
     # Free parameters (user-facing names, prefix-stripped). ``T``/``beta_ir``
     # read the same module constants as the closure's own signature defaults
     # (#2241), so the two cannot drift from each other; see

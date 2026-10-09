@@ -172,6 +172,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_lbol_is_user_fixed = False
             self._uses_radio = False
             self._radio_include_freefree = False
+            self._radio_sf_nu_ref = None
             self._radio_sfr_mode = "kranichstein"
             self._radio_agn_model = "wilman"
             self._uses_xray = False
@@ -202,6 +203,8 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._cached_full_state_chain = None
             self._dust_band_response_cache = None
             self._dust_band_response_decline = None
+            self._dust_shape_table_cache = None
+            self._dust_shape_table_decline = None
             self._energy_balance_lut_cache = None
             self._index_window_lut_cache = None
             self._line_window_lut_cache = None
@@ -1009,6 +1012,10 @@ _DYNAMIC_SETATTR_ALLOWLIST = {
     "_additive_term_band_response": (
         "setattr(self, f'_{name}_term_response_cache', ...): covered by "
         "pattern '_*_term_response_cache' in SIGNATURE_POLICY"
+    ),
+    "_additive_term_shape_table": (
+        "setattr(self, f'_{name}_term_shape_cache', ...): covered by "
+        "pattern '_*_term_shape_cache' in SIGNATURE_POLICY"
     ),
 }
 
