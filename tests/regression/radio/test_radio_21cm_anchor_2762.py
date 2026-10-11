@@ -20,6 +20,7 @@ import warnings
 import jax
 import numpy as np
 import pytest
+from tests._radio_band import band_l_ir
 
 from tengri import FREE, Fixed, SEDModel
 from tengri.components.radio import radio as R
@@ -94,19 +95,20 @@ def _radio_at(model, nu):
     wave, sed = np.asarray(state.wave), np.asarray(state.derived["sed_radio"])
     keep = sed > 0.0  # the radio block is zero shortward of 1 mm
     value = np.exp(np.interp(np.log(_C_AA / nu), np.log(wave[keep]), np.log(sed[keep])))
-    return value, float(state.derived["L_ir"])
+    return value, float(state.derived["L_ir"]), band_l_ir(state, "tir")
 
 
 @pytest.mark.parametrize("spelling", ["21cm", "21 cm", _NU_21CM])
 def test_build_spelling_anchors_at_21cm(synthetic_ssp_wide, synthetic_tophat_obs, spelling):
     model = _build(synthetic_ssp_wide, synthetic_tophat_obs, nu_ref=spelling)
-    got, l_ir = _radio_at(model, _NU_21CM)
-    assert got == pytest.approx(l_ir / (3.75e12 * 10.0**_Q), rel=1e-4)
+    got, _, l_tir = _radio_at(model, _NU_21CM)
+    # bell2003 defaults to its paper's window: q is on the 8-1000 um TIR (Bell 2003)
+    assert got == pytest.approx(l_tir / (3.75e12 * 10.0**_Q), rel=1e-4)
 
 
 def test_build_default_anchors_at_1p4_ghz(synthetic_ssp_wide, synthetic_tophat_obs):
-    got, l_ir = _radio_at(_build(synthetic_ssp_wide, synthetic_tophat_obs), 1.4e9)
-    assert got == pytest.approx(l_ir / (3.75e12 * 10.0**_Q), rel=1e-4)
+    got, _, l_tir = _radio_at(_build(synthetic_ssp_wide, synthetic_tophat_obs), 1.4e9)
+    assert got == pytest.approx(l_tir / (3.75e12 * 10.0**_Q), rel=1e-4)
 
 
 def test_build_rejects_bad_spelling(synthetic_ssp_wide, synthetic_tophat_obs):
@@ -121,8 +123,10 @@ def test_matches_pcigale_radio_module(synthetic_ssp_wide, synthetic_tophat_obs):
     from pcigale.sed_modules import radio as pcigale_radio
 
     nu = np.array([0.15e9, 1.4e9, 5e9, 30e9])
-    anchored, l_ir = _radio_at(
-        _build(synthetic_ssp_wide, synthetic_tophat_obs, nu_ref="21cm"), nu[0]
+    # pcigale feeds its radio module the TOTAL dust luminosity (``dust.luminosity``), so
+    # the parity comparison pins ir_window='total'; tengri's default is Bell's 8-1000 um TIR.
+    anchored, l_ir, _ = _radio_at(
+        _build(synthetic_ssp_wide, synthetic_tophat_obs, nu_ref="21cm", ir_window="total"), nu[0]
     )
     sed = SED()
     sed.add_info("dust.luminosity", l_ir / 1e7, True, unit="W")
@@ -134,10 +138,13 @@ def test_matches_pcigale_radio_module(synthetic_ssp_wide, synthetic_tophat_obs):
     c_nm = _C_M * 1e9
     lnu = sed.luminosities["radio.sf_nonthermal"] * w**2 / c_nm * 1e7  # erg/s/Hz
     pc = np.interp(c_nm / nu, w, lnu)
-    default_model = _build(synthetic_ssp_wide, synthetic_tophat_obs)
+    default_model = _build(synthetic_ssp_wide, synthetic_tophat_obs, ir_window="total")
+    anchored_model = _build(
+        synthetic_ssp_wide, synthetic_tophat_obs, nu_ref="21cm", ir_window="total"
+    )
     for f, ref in zip(nu, pc, strict=True):
-        a, _ = _radio_at(_build(synthetic_ssp_wide, synthetic_tophat_obs, nu_ref="21cm"), f)
-        d, _ = _radio_at(default_model, f)
+        a, _, _ = _radio_at(anchored_model, f)
+        d, _, _ = _radio_at(default_model, f)
         assert a / ref == pytest.approx(1.0, abs=2e-5)
         assert d / ref == pytest.approx((1.4e9 / _NU_21CM) ** _ALPHA, abs=2e-5)
     assert anchored > 0.0

@@ -567,19 +567,36 @@ class AGNSEDComponent(TemplateThreading):
             # The composable runner (compose_l_nu) performs the reference
             # factoring AND the ``agn_log_lbol_shape`` hand-off itself;
             # injecting the kwarg here as well would duplicate its hand-off.
-            L_agn, L_2500_intrinsic, L_4400_intrinsic, agn_components = agn_fn(
-                wave,
+            # The two diagnostic wavelengths ride along on the same single evaluation (a second
+            # evaluation of the chain would embed every block's constants in the graph twice).
+            # Every block is pointwise in wavelength, so the values at the caller's nodes are
+            # those of a caller-only evaluation.
+            wave_ext, to_caller, to_diag = _with_diagnostic_nodes(wave)
+            L_agn_ext, L_2500_intrinsic, L_4400_intrinsic, comps_ext = agn_fn(
+                wave_ext,
                 agn_log_lbol=agn_log_lbol,
                 return_l2500=True,
                 return_components=True,
                 **agn_kwargs,
             )
+            n_ext = wave_ext.shape[0]
+            L_agn = jnp.take(L_agn_ext, to_caller, axis=-1)
+            agn_components = {
+                key: (
+                    jnp.take(val, to_caller, axis=-1)
+                    if getattr(val, "ndim", 0) >= 1 and val.shape[-1] == n_ext
+                    else val
+                )
+                for key, val in comps_ext.items()
+            }
+            mir_lnu = jnp.take(
+                comps_ext["disc"] + comps_ext["torus"] + comps_ext["polar"], to_diag, axis=-1
+            )
+            mir_logs = _mir_logs(jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=wave.dtype), mir_lnu, 0.0)
             agn_lines_for_kernel = agn_components["lines"]
             # nu L_nu at 12 and 6 um of the AGN's own emission: disc + torus +
             # polar dust of the runner's rescaled components (erg/s/Hz ~1e30,
             # representable in float32); the nu multiply is added in log space.
-            mir_sed = agn_components["disc"] + agn_components["torus"] + agn_components["polar"]
-            mir_log_scale = 0.0
         else:
             lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, wave)
             if use_ref:
@@ -609,10 +626,16 @@ class AGNSEDComponent(TemplateThreading):
             # A monolithic model has no sub-blocks: nu L_nu comes from the whole
             # SED, measured on the reference-scale spectrum with the true scale
             # added in log space.
-            mir_sed, mir_log_scale = L_agn_unit, offset
 
-        log_L_12um = log10_nu_lnu_at(wave, mir_sed, 1.2e5, mir_log_scale)
-        log_L_6um = log10_nu_lnu_at(wave, mir_sed, 6.0e4, mir_log_scale)
+        # Point diagnostics: the emitted 6 and 12 um values, from a second evaluation of the
+        # same chain at exactly those wavelengths. The chain's normalization does not depend
+        # on the wave, so these are the emitted values, not an interpolation of the caller's grid.
+        if self.config.model == "composable":
+            log_L_6um, log_L_12um = mir_logs
+        else:
+            log_L_6um, log_L_12um = _mir_point_logs(
+                self.config.model, agn_fn, agn_kwargs, agn_log_lbol, wave.dtype
+            )
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
@@ -811,5 +834,73 @@ def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, j
 # top-level dispatch is a single registered component, exactly like the other
 # composite domain (nebular).
 from tengri.components.sed_model_component import _REGISTRY
+
+#: Wavelengths [Angstrom] at which the composable AGN publishes its 6 and 12 um diagnostics.
+_MIR_DIAGNOSTIC_AA = (6.0e4, 1.2e5)
+
+
+def _with_diagnostic_nodes(wave):
+    """``wave`` with the diagnostic wavelengths added, ascending, and the index maps back.
+
+    Returns
+    -------
+    wave_ext : ndarray, shape (n_wave + 2,)
+        Ascending merge of the caller's grid and the 6 and 12 um diagnostic nodes [Angstrom].
+    to_caller : ndarray of int, shape (n_wave,)
+        Positions in ``wave_ext`` of the caller's nodes, in the caller's order.
+    to_diag : ndarray of int, shape (2,)
+        Positions in ``wave_ext`` of the diagnostic nodes.
+    """
+    n = wave.shape[0]
+    stacked = jnp.concatenate([wave, jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=wave.dtype)])
+    order = jnp.argsort(stacked)
+    position = jnp.argsort(order)
+    return stacked[order], position[:n], position[n:]
+
+
+def _mir_logs(diag_wave, lnu, scale):
+    """``log10(nu L_nu)`` at the 6 and 12 um diagnostic nodes of ``lnu`` on ``diag_wave``."""
+    return (
+        log10_nu_lnu_at(diag_wave, lnu, _MIR_DIAGNOSTIC_AA[0], scale),
+        log10_nu_lnu_at(diag_wave, lnu, _MIR_DIAGNOSTIC_AA[1], scale),
+    )
+
+
+def _mir_point_logs(model, agn_fn, agn_kwargs, agn_log_lbol, dtype):
+    """``log10(nu L_nu)`` of a monolithic AGN's emitted SED at 6 and 12 um.
+
+    The model is evaluated exactly at the two diagnostic wavelengths, so each value is the
+    emitted SED at that wavelength and does not depend on the caller's wavelength grid. (The
+    composable runner gets the same values from its single evaluation.)
+
+    Parameters
+    ----------
+    model : str
+        AGN model name (monolithic).
+    agn_fn : callable
+        The registered AGN function.
+    agn_kwargs : Mapping
+        Keyword arguments the AGN function was called with on the caller's grid.
+    agn_log_lbol : float or array
+        Input AGN ``log10(L_bol / L_sun)``.
+    dtype : dtype
+        Floating dtype of the wavelength grid.
+
+    Returns
+    -------
+    tuple of ndarray, scalar
+        ``(log_L_6um, log_L_12um)`` [dex, log10(erg/s/Hz) + log10(Hz)].
+    """
+    diag_wave = jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=dtype)
+    lbol_eval, use_ref, offset = reference_evaluation(agn_log_lbol, diag_wave)
+    kwargs = dict(agn_kwargs)
+    if use_ref:
+        kwargs["agn_log_lbol_shape"] = jnp.asarray(agn_log_lbol)
+    if model in monolithic_models_with_line_components():
+        lnu = agn_fn(diag_wave, agn_log_lbol=lbol_eval, return_components=True, **kwargs)[0]
+    else:
+        lnu = agn_fn(diag_wave, agn_log_lbol=lbol_eval, **kwargs)
+    return _mir_logs(diag_wave, lnu, offset)
+
 
 _REGISTRY["agn"] = AGNSEDComponent

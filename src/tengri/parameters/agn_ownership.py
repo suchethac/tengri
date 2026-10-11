@@ -189,6 +189,9 @@ _AGN_PARTITION = {
     "agn_cigale_disk_delta": "agn.disc",  # skirtor/schartmann2005 disc slope
     "agn_grahsp_cutoff_nm": "agn.disc",
     "agn_grahsp_log_l5100": "agn.disc",
+    "agn_grahsp_netzer_log_mbh": "agn.disc",
+    "agn_grahsp_netzer_spin": "agn.disc",
+    "agn_grahsp_netzer_log_mdot": "agn.disc",
     "agn_grahsp_plbendloc_nm": "agn.disc",
     "agn_grahsp_plbendwidth": "agn.disc",
     "agn_grahsp_plslope": "agn.disc",
@@ -226,13 +229,10 @@ _AGN_PARTITION = {
     # at the agn top level is the spelling every caller and the #2189 guard
     # already use.
     "agn_ir_frac": "agn",
-    # The three self-contained-GRAHSP knobs: no composable block reads them
-    # (grep-verified across blocks/), only the monolithic grahsp forward
-    # function, where every parameter is written flat at the agn level (R27).
-    # A sub-block owner would name a sub-block that never runs for them.
-    "agn_grahsp_a_bc": "agn",
-    "agn_grahsp_tor_temp": "agn",
-    "agn_grahsp_tor_cutoff_um": "agn",
+    # GRAHSP variant parameters, owned by their respective blocks (issue #985).
+    "agn_grahsp_a_bc": "agn.blr",
+    "agn_grahsp_tor_temp": "agn.torus",
+    "agn_grahsp_tor_cutoff_um": "agn.torus",
 }
 
 
@@ -551,6 +551,43 @@ def agn_cross_category_claims(selection: Mapping[str, str] | None) -> dict[str, 
     return claims
 
 
+def _first_unowned_reader(name: str, category: str, selection: Mapping[str, str] | None) -> bool:
+    """True when ``category`` is the one selected block that claims a shared unowned name.
+
+    A name owned by a category that is absent or does not read it can be read by several
+    selected blocks at once (the Synthesizer NLR and BLR both forward ``agn_log_mbh``).
+    Ownership must stay unique, so the claim goes to the first such reader in pipeline
+    order. Reads are unaffected: the consumes table still lists every reader.
+
+    Parameters
+    ----------
+    name : str
+        Full ``agn_*`` parameter name.
+    category : str
+        The grammar category asking for the claim.
+    selection : mapping of str to str or None
+        Grammar category -> selected block type.
+
+    Returns
+    -------
+    bool
+        Whether ``category`` is the first selected reader of ``name`` (excluding its owner).
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    owner = _agn_param_group(name)[len("agn.") :]
+    for cat in _AGN_CONSUMES_CATEGORY:
+        if cat == owner:
+            continue
+        block_type = (selection or {}).get(cat)
+        if not block_type or block_type == "none":
+            continue
+        consumes_cat = _AGN_CONSUMES_CATEGORY.get(cat, cat)
+        if name in AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset()):
+            return cat == category
+    return False
+
+
 def _agn_subblock_companion_params(
     category: str, block_type: str, *, selection: Mapping[str, str] | None = None
 ) -> frozenset[str]:
@@ -615,7 +652,8 @@ def _agn_subblock_companion_params(
         owner_category = _agn_param_group(name)[len("agn.") :]
         owner_type = selection.get(owner_category)
         if not owner_type or owner_type == "none":
-            out.add(name)
+            if _first_unowned_reader(name, category, selection):
+                out.add(name)
             continue
         owner_consumes_cat = _AGN_CONSUMES_CATEGORY.get(owner_category, owner_category)
         # The owner keeps the name when it reads it itself, and equally when it
@@ -627,7 +665,8 @@ def _agn_subblock_companion_params(
             continue
         if name in _agn_own_side_companion_params(owner_category, owner_type, selection):
             continue
-        out.add(name)
+        if _first_unowned_reader(name, category, selection):
+            out.add(name)
 
     return frozenset(out)
 

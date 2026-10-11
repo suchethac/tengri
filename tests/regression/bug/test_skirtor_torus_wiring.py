@@ -70,6 +70,7 @@ from tengri.components.agn.skirtor import (
     create_skirtor_components_from_grid,
 )
 from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+from tengri.config.exceptions import ParameterError
 from tengri.protocols.component import declared_prior
 
 pytestmark = pytest.mark.regression_bug
@@ -505,31 +506,23 @@ def test_skirtor_polar_t_polar_beta_live_only_with_atten_polar_dust(ssp):
         assert name in p_live, f"{name} not free under atten='polar_dust' (wiring gap)"
         v0 = jnp.asarray(p_live[name])
         g = float(jax.grad(lambda v, name=name: _obj_live({**p_live, name: v}))(v0))
+        assert np.isfinite(g), f"atten='polar_dust': {name} has a non-finite gradient"
         assert g != 0.0, f"atten='polar_dust': {name} has zero gradient"
 
-    # Explicit short-key priors under atten='none': the names are declared
-    # (the short-key path is independent of block-selection scoping), but
-    # nothing on the composable path reads them when polar_dust is not the
-    # selected attenuation block -- inert, not merely "not offered".
-    inert_model = _skirtor_composable_model(
-        ssp,
-        atten={
-            "type": "none",
-            "all_params": tengri.Fixed(tengri.DEFAULT),
-            "polar_T": tengri.FREE,
-            "polar_beta": tengri.FREE,
-        },
-    )
-    p_inert = dict(inert_model.spec.sample(jax.random.PRNGKey(0)))
-
-    def _obj_inert(pd):
-        return jnp.sum(jnp.abs(inert_model.predict(pd).rest_sed()))
-
-    for name in ("agn_polar_T", "agn_polar_beta"):
-        assert name in p_inert, f"{name} not free under atten='none' (short-key wiring gap)"
-        v0 = jnp.asarray(p_inert[name])
-        g = float(jax.grad(lambda v, name=name: _obj_inert({**p_inert, name: v}))(v0))
-        assert g == 0.0, f"atten='none': {name} has NONZERO gradient (0.0 expected -- inert)"
+    # Explicit short-key priors under atten='none' are inert: nothing on the
+    # composable path reads them when polar_dust is not the selected attenuation
+    # block. The grammar refuses an explicit key no selected block reads, so the
+    # inert verdict is the refusal itself, naming the block that does read it.
+    with pytest.raises(ParameterError, match=r"polar_dust"):
+        _skirtor_composable_model(
+            ssp,
+            atten={
+                "type": "none",
+                "all_params": tengri.Fixed(tengri.DEFAULT),
+                "polar_T": tengri.FREE,
+                "polar_beta": tengri.FREE,
+            },
+        )
 
 
 class TestSkirtorRadiusRatioGridNodes:
