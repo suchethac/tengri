@@ -521,6 +521,14 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
+#: Re-captured for #2837's torus transmission T = R_n/eta (commits 266a1663c and
+#: c70f75e88: the disc behind a library torus is dimmed by the library's own line of
+#: sight; 8176402fc and 227e7a0a4 carry the X-ray column on that sightline). At mbh
+#: 8 / 10, rest_sed_sum moves 1.675785e+32 -> 1.675806e+32 (+1.27e-5) and
+#: 1.709509e+32 -> 1.709595e+32 (+5.07e-5), rest_sed_mid by +1.26e-5 / +5.75e-5,
+#: photometry (band 0) by +1.45e-5 / +6.19e-5. rest_sed_0 moves 1.3e-10 and the
+#: mbh 6 row 6e-11, which the rtol of 1e-6 absorbs, so mbh 6 is re-written at its
+#: recorded values.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
         "rest_sed_sum": 1.5593717102152515e32,
@@ -530,18 +538,18 @@ _REF_F64_AGN_BLACK_HOLE_MASS = {
         "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6757849286069842e32,
-        "rest_sed_0": 2.8226908028998744e16,
-        "rest_sed_mid": 3.1537086678827116e28,
+        "rest_sed_sum": 1.6758061789587808e32,
+        "rest_sed_0": 2.822690803280568e16,
+        "rest_sed_mid": 3.1537484878080124e28,
         "rest_sed_last": 8.838700680503838e21,
-        "photometry": (1.2055131101702632e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
+        "photometry": (1.2055305555190998e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.709508629849637e32,
-        "rest_sed_0": 2.9574176722363988e16,
-        "rest_sed_mid": 3.2080316645611165e28,
+        "rest_sed_sum": 1.709595368848167e32,
+        "rest_sed_0": 2.9574176726352624e16,
+        "rest_sed_mid": 3.2082159809319677e28,
         "rest_sed_last": 9.756086413931552e21,
-        "photometry": (1.220384227860453e-27, 1.596873080026319e-27, 1.7715814700124443e-27),
+        "photometry": (1.2204597532859522e-27, 1.596873331747033e-27, 1.7715814756737012e-27),
     },
 }
 
