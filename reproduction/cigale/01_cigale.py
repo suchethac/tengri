@@ -810,7 +810,7 @@ V.print_window_table(
 # |---|---|
 # | 912–1200 Å | 1.060× |
 # | 1200–3000 Å | 1.034× |
-# | 0.3–1 µm | 1.002× |
+# | 0.3–1 μm | 1.002× |
 # | stellar L_bol | 1.016× |
 # | Q_H (λ < 911.76 Å) | 1.150× |
 #
@@ -1030,7 +1030,7 @@ for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_3b:
 # `calzetti` does not, which is an 8.4 % gap below 1500 Å between two laws
 # that are not the same law. `modified_CF00` needs two curves on each side:
 # CIGALE attenuates young stars through the birth cloud *and* the ISM
-# (`Av_BC = Av_ISM(1−µ)/µ = 1.53` at the defaults), so a single
+# (`Av_BC = Av_ISM(1−μ)/μ = 1.53` at the defaults), so a single
 # (λ/5500 Å)^−0.7 is the wrong object to compare it against.
 #
 # **The one real convention difference is the Leitherer↔Calzetti crossover.**
@@ -1498,7 +1498,7 @@ V.print_window_table(_rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, m
 # §4 measures them agreeing to 0.000 % away from the 1500–1800 Å crossover,
 # and the absorbed fractions they produce are printed below (0.359 for CIGALE, 0.357 for tengri).
 # Since the IR is normalized to that anchor, it appears in the printed
-# 10–100 µm median as a floor under whatever the templates themselves do.
+# 10–100 μm median as a floor under whatever the templates themselves do.
 #
 # **Lyman continuum.** tengri's attenuation curves polynomial-extend
 # through the FUV; CIGALE zeros attenuation below 912 Å, and the models here
@@ -1633,8 +1633,8 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # to unit luminosity over its full native grid (~60 nm onward), where ~46 %
 # of the quasar energy is the UV/optical accretion-disc continuum below the
 # dust grid's blue edge. Only its ~0.42 IR share enters the dust mixing, and
-# tengri carries that same partition. The cell prints the 3–8 µm and
-# 8–1000 µm median ratio at each $f_{\rm AGN}$, so the question of whether
+# tengri carries that same partition. The cell prints the 3–8 μm and
+# 8–1000 μm median ratio at each $f_{\rm AGN}$, so the question of whether
 # the mid-IR lift drifts with $f_{\rm AGN}$ is answered by three numbers
 # rather than by eye.
 #
@@ -1647,7 +1647,7 @@ plt.close(fig)  # superseded by §6c's IR-library grids, which replace this pane
 # the two must be reconciled before interpolation or the wrong grain model
 # is selected. One input is *not* matched and cannot be: CIGALE's own DustEM
 # run used `umax = 1e7`, a slightly hotter PDR. The cell prints both an
-# 8–30 µm and an 8–1000 µm ratio at each α, so a redistribution of the IR
+# 8–30 μm and an 8–1000 μm ratio at each α, so a redistribution of the IR
 # within the band can be told apart from a change in its total.
 
 # %%
@@ -1841,8 +1841,8 @@ plt.show()
 # α_mir=2.0); `schreiber2016` at T ∈ {25, 35, 50} K;
 # `dale2014` (CIGALE's own grid, via `dale2014_cigale`) at α ∈ {0.5, 2, 4}. One tengri build per
 # family, swept knob(s) free, via `predict_rest_sed`. `IR_BANDS` rows plus
-# the 8–1000 µm L_ν ratio locate each family's shape. Both implementations are normalized
-# on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 µm L_ν ratios printed
+# the 8–1000 μm L_ν ratio locate each family's shape. Both implementations are normalized
+# on the same absorbed stellar energy (`L_absorbed`), and the 8–1000 μm L_ν ratios printed
 # below lie between 1.009× and 1.021× across the sweep. The filter-by-filter tables show
 # where shapes differ: `dl2014` at α=1 has a worst filter ratio of 1.370× with 7 of 13
 # bands outside 5%, and every other row has none outside 5% (`f_pah` matches CIGALE's 0.05
@@ -1851,7 +1851,7 @@ plt.show()
 # each temperature (the library tabulates 15–99 K; pcigale accepts 15–60 K), mixed
 # by the PAH mass fraction `f_pah` as pcigale does and normalized to the absorbed
 # energy. At T = 25, 35 and 50 K
-# its 8–1000 µm ratio is 1.010× each time, and its filter-by-filter median is 1.009×,
+# its 8–1000 μm ratio is 1.010× each time, and its filter-by-filter median is 1.009×,
 # 1.009× and 1.010× with worst cases of 1.015×, 1.015× and 1.032×.
 
 # %%
@@ -2538,7 +2538,7 @@ save_fig("cigale_08b_neb_grid.png")
 # geometry.
 #
 # **Polar-dust extinction law.** CIGALE's `law=0` is the Bongiorno et al. (2012)
-# power law `k = 1.39 (λ/µm)^−1.2` above 100 nm, with the SMC-bar shape of
+# power law `k = 1.39 (λ/μm)^−1.2` above 100 nm, with the SMC-bar shape of
 # Weingartner & Draine (2001) below it. tengri's `polar_law="bongiorno"` is that
 # curve and is what the builds here use. tengri's default, `polar_law="smc"`
 # (Pei 1992), is a different curve; §9d prints how far apart they are.
@@ -2765,7 +2765,7 @@ save_fig("cigale_09_agn_skirtor.png")
 # tengri / CIGALE median in three AGN-dominated bands (disc UV, torus mid-IR,
 # polar/FIR) and then component by component as integrated luminosities. A band
 # ratio locates a residual in wavelength but cannot say which component carries
-# it, since at 100 µm all three overlap; the component ladder can. Both codes
+# it, since at 100 μm all three overlap; the component ladder can. Both codes
 # publish disc, torus and polar dust separately. The printed ladder gives the
 # three luminosity ratios (about 1 % each), the emergent disc shape deviation and
 # each code's polar share.
@@ -3053,10 +3053,10 @@ save_fig("cigale_09b_disc_skirtor.png")
 #
 # **The extinction curve.** With `polar_law="bongiorno"` the two curves coincide
 # above 100 nm (the printed A(λ)/E(B−V) ratios are 1.000 at 2500 Å, 5500 Å and
-# 1 µm) and differ only in the sub-100 nm SMC-bar shape (0.985 at 912 Å); the
+# 1 μm) and differ only in the sub-100 nm SMC-bar shape (0.985 at 912 Å); the
 # curve term is 0.975828× (−2.42 %). The default `polar_law="smc"` is a different
 # curve (A(λ)/E(B−V) ratios 1.076, 1.011, 0.972 and 1.207 at 912 Å, 2500 Å,
-# 5500 Å and 1 µm) and its curve term is 0.943527× (−5.65 %). Use
+# 5500 Å and 1 μm) and its curve term is 0.943527× (−5.65 %). Use
 # `polar_law="bongiorno"` to compare with CIGALE's default polar dust.
 #
 # The two terms multiply to 1.016639× with `polar_law="bongiorno"`: tengri sets
@@ -4133,11 +4133,11 @@ plt.show()
 # |---|---|---|
 # | 1 | SSP | median residual 2.0–2.2e-8 at every age (float32 round-trip) |
 # | 2 | SFH | `delayed` median 1.00002×; `sfh2exp` median 1.00015×, 2 of 1969 points beyond 1 % (burst step); §2c median 1.000× except periodic exponential 0.999× and rectangular 0.993× |
-# | 3 | stellar SED | 912–1200 Å 1.060×, 1200–3000 Å 1.034×, 0.3–1 µm 1.002×, L_bol 1.016×, Q_H 1.150× (age-binning convention); §3b band medians 0.999–1.020×, worst band 0.837× |
+# | 3 | stellar SED | 912–1200 Å 1.060×, 1200–3000 Å 1.034×, 0.3–1 μm 1.002×, L_bol 1.016×, Q_H 1.150× (age-binning convention); §3b band medians 0.999–1.020×, worst band 0.837× |
 # | 4 | attenuation laws | max \|Δ\| 0.252 % (calzleit), 0.247 % (starburst + bump), 0.000 % (CF00); 0.000 % outside the 1500–1800 Å crossover |
-# | 5 | attenuation applied | 0.1–1 µm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
-# | 6 | dust IR | 10–100 µm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 µm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
-# | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 µm), 1.0075× (3–8 µm), 1.0102× (10–1000 µm) |
+# | 5 | attenuation applied | 0.1–1 μm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
+# | 6 | dust IR | 10–100 μm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
+# | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 μm), 1.0075× (3–8 μm), 1.0102× (10–1000 μm) |
 # | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids; open differences) |
 # | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
 # | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
