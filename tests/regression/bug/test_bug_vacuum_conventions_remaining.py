@@ -68,7 +68,13 @@ def _nlr_grid_file() -> Path | None:
 
 
 def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
-    """A 2x2x2x2x2x2 Synthesizer-layout NLR grid carrying ``labels`` as lines/wavelength."""
+    """A 2x2x2x2x2x2 Synthesizer-layout NLR grid carrying ``labels`` as lines/wavelength.
+
+    As in the real grid, each id carries its own label wavelength (``X 1 6562.80A``), which
+    the loader pairs with lines/wavelength, so ``labels`` must be ascending.
+    """
+    labels = np.asarray(labels, dtype=np.float64)
+    assert np.all(np.diff(labels) > 0), "lines/wavelength must be strictly ascending"
     shape = (2,) * 6
     with h5py.File(path, "w") as f:
         axes = f.create_group("axes")
@@ -81,7 +87,7 @@ def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
         lines = f.create_group("lines")
         lines["wavelength"] = labels
         lines["luminosity"] = np.full((*shape, labels.size), 1.0e30)
-        lines["id"] = np.array([f"line {i}" for i in range(labels.size)], dtype="S16")
+        lines["id"] = np.array([f"X 1 {w:.2f}A" for w in labels], dtype="S32")
         f.create_group("log10_specific_ionising_luminosity")["HI"] = np.full(shape, 43.0)
 
 
@@ -91,7 +97,8 @@ def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
 def test_nlr_grid_labels_are_air_and_land_on_the_vacuum_lines(tmp_path):
     from tengri.components.nebular.agn_nebular import _load_synthesizer_nlr_grid
 
-    labels = np.array([1215.67, 1640.4, *_NLR_AIR_TO_VAC.keys()])
+    # ascending, as in the real file
+    labels = np.sort(np.array([1215.67, 1640.4, *_NLR_AIR_TO_VAC.keys()]))
     _write_minimal_nlr_grid(tmp_path / "nlr.hdf5", labels)
     got = np.asarray(_load_synthesizer_nlr_grid(tmp_path / "nlr.hdf5").line_wavelengths_aa)
 
@@ -100,8 +107,10 @@ def test_nlr_grid_labels_are_air_and_land_on_the_vacuum_lines(tmp_path):
         value = got[int(np.argmin(np.abs(labels - air)))]
         assert abs(value - vac) < 0.06, (air, value, vac)
     # the catalog entries Halpha / [O III] are the same vacuum lines
-    assert abs(got[2] - EMISSION_LINES["Halpha"][0]) < 0.02
-    assert abs(got[3] - EMISSION_LINES["OIII5007"][0]) < 0.02
+    halpha = got[int(np.argmin(np.abs(labels - 6562.80)))]
+    oiii = got[int(np.argmin(np.abs(labels - 5006.84)))]
+    assert abs(halpha - EMISSION_LINES["Halpha"][0]) < 0.02
+    assert abs(oiii - EMISSION_LINES["OIII5007"][0]) < 0.02
 
 
 def test_nlr_grid_file_labels_are_air_in_the_real_synthesizer_file():

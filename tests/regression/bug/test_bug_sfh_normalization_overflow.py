@@ -324,7 +324,7 @@ def _integrated_mass(kw):
     def fn(age, **k):
         return continuity_flex(age, **k)
 
-    age, sfr = _cic_integrand(ssp, fn, sfh_kwargs, continuity_flex, None)
+    age, sfr = _cic_integrand(ssp, fn, sfh_kwargs, continuity_flex, None, T_OBS_GYR)
     contrib, *_ = _cic_parcels(age, sfr, ssp, T_OBS_GYR)
     return float(jnp.sum(contrib))
 
