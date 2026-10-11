@@ -35,6 +35,7 @@ from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _interp_index_weight,
+    apply_lya_escape,
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
 )
@@ -68,8 +69,10 @@ class CloudyBandTable(NamedTuple):
     line_coeff : ndarray, shape (n_lines, 2, n_filt)
         Band of a unit-luminosity line through each filter, both frames
         [erg/s/Hz per Lsun].
-    lya_mask : ndarray, shape (n_lines,)
-        One-hot on the line nearest Ly-alpha.
+    line_wavelengths : ndarray, shape (n_lines,)
+        Rest-frame line wavelengths [Angstrom]; the Ly-alpha escape is applied
+        through :func:`~tengri.components.nebular._shared.apply_lya_escape` on
+        these, the same helper the per-call backend uses.
     line_sigma_kms : float
         Velocity width the line coefficients were rendered at.
     redshift : float
@@ -84,7 +87,7 @@ class CloudyBandTable(NamedTuple):
     log_cont: np.ndarray
     log_lines: np.ndarray
     line_coeff: np.ndarray
-    lya_mask: np.ndarray
+    line_wavelengths: np.ndarray
     line_sigma_kms: float
     redshift: float
 
@@ -104,14 +107,6 @@ def _band_both_frames(sed, wave, filter_waves, filter_trans, redshift):
     obs = _band_row(sed, wave, filter_waves, filter_trans, redshift)
     rest = _band_row(sed, wave, filter_waves, filter_trans, 0.0)
     return jnp.stack([obs, rest])
-
-
-def _lya_mask(line_wavelengths: np.ndarray) -> np.ndarray:
-    """One-hot mask on the line nearest Ly-alpha (as ``apply_lya_escape``)."""
-    mask = np.zeros(line_wavelengths.shape[0])
-    if line_wavelengths.size:
-        mask[int(np.argmin(np.abs(line_wavelengths - _LYA_WAVE)))] = 1.0
-    return mask
 
 
 def _line_band_coefficients(
@@ -237,7 +232,7 @@ def build_cloudy_band_table(
         log_cont=jnp.asarray(log_cont),
         log_lines=jnp.asarray(_to_log(np.stack(line_tab))),
         line_coeff=jnp.asarray(coeff),
-        lya_mask=jnp.asarray(_lya_mask(line_wave)),
+        line_wavelengths=np.asarray(line_wave),
         line_sigma_kms=float(line_sigma_kms),
         redshift=float(redshift),
     )
@@ -249,6 +244,17 @@ def _bilinear_log(log_tab, z_axis, u_axis, z, u, axis: int):
     The Z axis of ``log_tab`` is ``axis`` and the U axis is ``axis + 1``.
     Query points are clipped to the node range, as ``_interp_index_weight``
     does. Trailing and leading dimensions are carried through.
+
+    Scheme: linear weights in (log Z, log U), the (Z, U) restriction of the
+    default ``grid_interp="linear"`` path of
+    ``CloudyGridBackend._make_interp_fn`` (``_trilinear_interp`` in
+    ``cloudy_grid.py``), which interpolates log10 values. The table holds the
+    band of each node (line luminosities for lines), not the luminosity behind
+    the continuum band, so the continuum interpolates log10(band) where the
+    backend interpolates log10(luminosity); the difference is inside the
+    band-table accuracy bar. With ``grid_interp="triweight"`` the age axis
+    follows the backend but this (Z, U) contraction stays linear, so the table
+    does not reproduce that mode.
     """
     iz, wz = _interp_index_weight(z, z_axis)
     iu, wu = _interp_index_weight(u, u_axis)
@@ -312,7 +318,7 @@ def contract_cloudy_band_table(
         axis=1,
     )  # (n_young, n_lines)
     lum = jnp.einsum("i,ij->j", aw, lines)
-    lum = lum * (1.0 - fesc_lya * jnp.asarray(table.lya_mask))
+    lum = apply_lya_escape(lum, jnp.asarray(table.line_wavelengths), fesc_lya)
     line_band = jnp.einsum("j,jcf->cf", lum, jnp.asarray(table.line_coeff))
     return cont_band + line_band
 

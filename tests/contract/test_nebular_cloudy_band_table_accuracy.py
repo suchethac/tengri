@@ -78,7 +78,7 @@ def setup():
     }
 
 
-def _per_call_bands(s, log_z, log_z_gas, log_u):
+def _per_call_bands(s, log_z, log_z_gas, log_u, fesc_lya=0.0):
     """Observed and rest band L_nu of the per-call path, shape (2, n_filt)."""
     from tengri.observation.photometry import lnu_filter_integral
 
@@ -91,7 +91,7 @@ def _per_call_bands(s, log_z, log_z_gas, log_u):
         neb_logU=log_u,
         neb_logZ_gas=log_z_gas,
         neb_fesc=0.0,
-        neb_fesc_lya=0.0,
+        neb_fesc_lya=fesc_lya,
         neb_fdust_frac=0.0,
         line_sigma_kms=_LINE_SIGMA_KMS,
         template_data=None,
@@ -111,7 +111,7 @@ def _per_call_bands(s, log_z, log_z_gas, log_u):
     return np.asarray(jnp.stack([obs, rest]))
 
 
-def _table_bands(s, log_z, log_z_gas, log_u):
+def _table_bands(s, log_z, log_z_gas, log_u, fesc_lya=0.0):
     """Observed and rest band L_nu from the band table, shape (2, n_filt)."""
     from tengri.components.nebular.cloudy_band_table import contract_cloudy_band_table
 
@@ -119,7 +119,29 @@ def _table_bands(s, log_z, log_z_gas, log_u):
     young = np.asarray(backend._young_idx)
     qh = jnp.stack([backend._get_qh_at(log_z, jnp.asarray(a)) for a in s["ages_log"][young]])
     age_weights = s["weights"][young] * qh
-    return np.asarray(contract_cloudy_band_table(s["table"], age_weights, log_z_gas, log_u, 0.0))
+    return np.asarray(
+        contract_cloudy_band_table(s["table"], age_weights, log_z_gas, log_u, fesc_lya)
+    )
+
+
+def _worst_relative_error(s, fesc_lya):
+    """Worst relative band error of the table over the five seeded draws."""
+    from tengri.parameters.translate import LOG10_ZSUN
+
+    rng = np.random.default_rng(20241009)
+    worst = 0.0
+    for _ in range(_N_DRAWS):
+        met = rng.uniform(-1.3, 0.2)
+        gas = rng.uniform(-1.3, 0.2)
+        log_u = rng.uniform(-5.0, 0.0)
+        log_z = met + LOG10_ZSUN
+        log_z_gas = gas + LOG10_ZSUN
+        exact = _per_call_bands(s, log_z, log_z_gas, log_u, fesc_lya)
+        approx = _table_bands(s, log_z, log_z_gas, log_u, fesc_lya)
+        scale = np.max(np.abs(exact))
+        rel = np.abs(approx - exact) / np.maximum(np.abs(exact), 1e-6 * scale)
+        worst = max(worst, float(rel.max()))
+    return worst
 
 
 @_SKIP
@@ -131,20 +153,22 @@ def test_band_table_build_within_budget(setup):
 @_SKIP
 def test_band_table_matches_per_call_path_at_seeded_draws(setup):
     """Worst relative band error over five seeded draws is below 1e-3."""
-    from tengri.parameters.translate import LOG10_ZSUN
-
-    rng = np.random.default_rng(20241009)
-    worst = 0.0
-    for _ in range(_N_DRAWS):
-        met = rng.uniform(-1.3, 0.2)
-        gas = rng.uniform(-1.3, 0.2)
-        log_u = rng.uniform(-5.0, 0.0)
-        log_z = met + LOG10_ZSUN
-        log_z_gas = gas + LOG10_ZSUN
-        exact = _per_call_bands(setup, log_z, log_z_gas, log_u)
-        approx = _table_bands(setup, log_z, log_z_gas, log_u)
-        scale = np.max(np.abs(exact))
-        rel = np.abs(approx - exact) / np.maximum(np.abs(exact), 1e-6 * scale)
-        worst = max(worst, float(rel.max()))
+    worst = _worst_relative_error(setup, fesc_lya=0.0)
     assert np.isfinite(worst)
     assert worst < _TOL, f"worst relative band error {worst:.3e} exceeds {_TOL:.0e}"
+
+
+# 0.5 is the owner's check point, but (1 - f) == f there, so a table that used
+# f_esc instead of (1 - f_esc) would still pass at 0.5. 0.2 separates the two.
+@_SKIP
+@pytest.mark.parametrize("fesc_lya", [0.2, 0.5])
+def test_band_table_matches_per_call_path_with_lya_escape(setup, fesc_lya):
+    """The Ly-alpha escape convention is the per-call one at nonzero neb_fesc_lya.
+
+    The table applies Ly-alpha through the same ``apply_lya_escape`` the
+    per-call backend uses, so it cannot drift from it. The worst relative band
+    error stays under the same 1e-3 bar as the zero-escape case.
+    """
+    worst = _worst_relative_error(setup, fesc_lya=fesc_lya)
+    assert np.isfinite(worst)
+    assert worst < _TOL, f"worst relative band error at fesc_lya={fesc_lya} is {worst:.3e}"
