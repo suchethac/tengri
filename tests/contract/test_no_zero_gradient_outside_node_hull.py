@@ -269,7 +269,10 @@ CENSUS: dict[str, str] = {
     "components/stellar/component.py": "fitted-fixed (z-table, numerical gap 0.001 in z)",
     "components/_z_response.py": "fitted-fixed (z-table read, extrapolate flag)",
     "components/_term_response.py": "fitted-fixed (redshift table read)",
-    "components/radio/component.py": "fitted-fixed (redshift table read, IR-window fraction)",
+    "components/radio/component.py": (
+        "fitted-ok (IR-window fraction z-table: one node at Fixed z; for free z the nodes span "
+        "the redshift prior padded 1%, so the read stays inside the grid, default hold-edge)"
+    ),
     "components/dust/emission/_component_base.py": "fitted-fixed (redshift table read)",
     "components/dust/energy_balance_precompute.py": "fitted-fixed (redshift table read)",
     "components/nebular/nebular_band_z.py": "fitted-fixed (redshift table read)",
