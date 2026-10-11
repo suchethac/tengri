@@ -21,7 +21,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
+from tengri.components.agn import powerlaw_disc_model
+from tengri.components.agn._phys import (
+    COS_INC_ISOTROPIC_REFERENCE,
+    bolometric_integral_nu,
+    wavelength_to_nu,
+)
 from tengri.components.agn._template_grid import BUDGET_WAVE
 from tengri.components.agn.grahsp import GRAHSPSEDComponent, GRAHSPSEDComponentConfig
 from tengri.forward.orchestrator import default_params_dict
@@ -49,13 +54,17 @@ KNOWN_LEAKS = {
 }
 
 _TORUS_KEYS = ("L_agn_torus",)
-_DISC_KEYS = ("L_agn_disc",)
 
-#: Component -> (published keys whose sum the spectrum integrates to).
+#: Component -> (published keys whose sum the spectrum integrates to). The keys are the
+#: definitions of agn_log_lbol (owner ruling #2678): L_agn_disc is the angle-integrated
+#: accretion power, and the line-of-sight disc luminosity is the derived L_agn_disc_los
+#: (#2848). The inclined spectrum of KD18 therefore integrates to L_agn_disc_los, and its
+#: angle-integrated power is checked separately below. PowerLaw has no inclination; its
+#: L_agn_disc is the integral over its normalization band (#2848).
 _SEDMODEL_LEDGER = {
     "cat3d_wind": _TORUS_KEYS,
-    "kd18_disc": _DISC_KEYS,
-    "powerlaw_disc": _DISC_KEYS,
+    "kd18_disc": ("L_agn_disc_los",),
+    "powerlaw_disc": ("L_agn_disc",),
     "silva04": _TORUS_KEYS,
     "skirtor_agnfitter": _TORUS_KEYS,
     # The spectrum is the attenuated disc plus torus plus polar re-emission. The disc
@@ -118,8 +127,11 @@ def _make_component(name):
     return makers[name]()
 
 
-def _predict(name, wave):
-    """Spectrum and published L_* of one SEDModelComponent on ``wave``, at defaults."""
+def _predict(name, wave, overrides=None):
+    """Spectrum and published L_* of one SEDModelComponent on ``wave``, at defaults.
+
+    ``overrides`` replaces named parameters (bare names, without the component prefix).
+    """
     comp = _make_component(name)
     wave = jnp.asarray(wave)
     try:
@@ -129,6 +141,8 @@ def _predict(name, wave):
     object.__setattr__(comp, "data", data)
     prefix = comp.parameter_prefix
     p = {k.removeprefix(prefix): v for k, v in default_params_dict([comp]).items()}
+    for key, value in (overrides or {}).items():
+        p[key] = jnp.asarray(value, dtype=wave.dtype)
     sed, published = comp.predict(p, jnp.zeros_like(wave), wave)
     return sed, {k: float(np.asarray(v)) for k, v in published.items() if k.startswith("L_")}
 
@@ -153,18 +167,52 @@ def _rel(a, b):
     return abs(a / b - 1.0)
 
 
+def _ledger_grid(name):
+    """Grid on which the spectrum of ``name`` is integrated for its ledger key.
+
+    PowerLaw's emitted tail diverges beyond its normalization band, so its ledger is the
+    integral over that band. The band is read from the model, not restated here.
+    """
+    if name == "powerlaw_disc":
+        band = powerlaw_disc_model._PUBLISHED_BAND_AA
+        return np.geomspace(float(band[0]), float(band[-1]), 4 * BUDGET_WAVE.size)
+    return _CONVERGED
+
+
 @pytest.mark.parametrize("name", sorted(_SEDMODEL_LEDGER))
 def test_spectrum_integrates_to_its_published_luminosity(name):
-    """The spectrum on a converged grid carries the published power to 1e-4."""
+    """The spectrum on its ledger grid carries the key's own published power to 1e-4."""
     keys = _SEDMODEL_LEDGER[name]
-    sed, published = _predict(name, _CONVERGED)
+    grid = _ledger_grid(name)
+    sed, published = _predict(name, grid)
     target = sum(published[k] for k in keys)
     assert target > 0.0, f"{name}: non-positive published target {target:.3e}"
-    spectrum = _power(sed, _CONVERGED)
+    spectrum = _power(sed, grid)
     rel = _rel(spectrum, target)
     assert rel < _LEDGER_RTOL, (
         f"{name}: spectrum {spectrum:.9e} erg/s vs {' + '.join(keys)} = {target:.9e} erg/s, "
         f"rel {rel:.3e}"
+    )
+
+
+def test_kd18_angle_integrated_disc_power_is_the_emitted_spectrum_at_half_cos_i():
+    """L_agn_disc (angle-integrated, #2678) is the spectrum at 2 cos i = 1 (#2848).
+
+    At cos i = 0.5 the inclined spectrum is the angle-integrated emission, so its power on
+    the converged grid equals the published angle-integrated L_agn_disc to 1e-4. The
+    published value does not depend on cos i, so the reference inclination is the one the
+    model defines.
+    """
+    sed, published = _predict(
+        "kd18_disc", _CONVERGED, overrides={"cos_inc": COS_INC_ISOTROPIC_REFERENCE}
+    )
+    target = published["L_agn_disc"]
+    assert target > 0.0, f"kd18_disc: non-positive L_agn_disc {target:.3e}"
+    spectrum = _power(sed, _CONVERGED)
+    rel = _rel(spectrum, target)
+    assert rel < _LEDGER_RTOL, (
+        f"kd18_disc at cos i = 0.5: spectrum {spectrum:.9e} erg/s vs L_agn_disc "
+        f"{target:.9e} erg/s, rel {rel:.3e}"
     )
 
 
