@@ -688,7 +688,20 @@ _GRAHSP_KEYS = ("L_agn_bol", "L_agn_torus", "L_agn_absorbed")
 _GRAHSP_EDGES_AA = [
     x for e in (124.0, 912.0, 2500.0, 3646.0, 11000.0) for x in (e * (1 - 1e-9), e, e * (1 + 1e-9))
 ]
-_GRAHSP_WIDE = np.unique(np.concatenate([np.geomspace(100.0, 1.0e9, 1_200_000), _GRAHSP_EDGES_AA]))
+
+
+def _grahsp_feii_nodes_aa():
+    """FeII template nodes [Angstrom]: the template is piecewise linear, so its kinks are nodes."""
+    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+
+    return 10.0 * np.asarray(load_grahsp_templates().feii_wave_nm, dtype=float)
+
+
+_GRAHSP_WIDE = np.unique(
+    np.concatenate(
+        [np.geomspace(100.0, 1.0e9, 1_200_000), _GRAHSP_EDGES_AA, _grahsp_feii_nodes_aa()]
+    )
+)
 _GRAHSP_RTOL = 1.0e-6
 
 
@@ -785,3 +798,57 @@ def test_grahsp_published_L_equals_dense_integral_of_emitted_sed():
         assert ref[key] > 0.0, f"{key}: reference is not positive"
         err = abs(pub[key] / ref[key] - 1.0)
         assert err < _GRAHSP_RTOL, f"GRAHSP {key}: published-vs-emitted rel {err:.3e}"
+
+
+def _grahsp_binding_params(comp):
+    """Declared defaults with a corner where the emitted max(si, -torus) clip binds."""
+    params = _grahsp_params(comp)
+    params.update(
+        {
+            "agn_grahsp_si": jnp.asarray(-4.0, dtype=jnp.float64),
+            "agn_grahsp_cool_lam_um": jnp.asarray(30.0, dtype=jnp.float64),
+            "agn_grahsp_cool_width": jnp.asarray(0.2, dtype=jnp.float64),
+            "agn_grahsp_hot_lam_um": jnp.asarray(1.0, dtype=jnp.float64),
+            "agn_grahsp_hot_width": jnp.asarray(0.2, dtype=jnp.float64),
+            "agn_grahsp_hot_fcov": jnp.asarray(0.04, dtype=jnp.float64),
+        }
+    )
+    return params
+
+
+def test_grahsp_published_L_identity_where_si_clip_binds():
+    """At a corner where the emitted max(si, -torus) binds, published L_* match the dense integral.
+
+    The clip is a kink of the emitted torus term; the published values carry its correction
+    over the Si windows. This test fails if that correction is dropped, and the corner is one
+    where the emitted torus+Si reaches zero (the clip is active).
+    """
+    full = _grahsp_comp()
+    tpl = full.precompute()
+    params = _grahsp_binding_params(full)
+    W = _GRAHSP_WIDE
+
+    torus_att = _grahsp_comp(
+        include_bbb=False, include_lines=False, include_feii=False, include_balmer=False
+    )
+    torus_int = _grahsp_comp(
+        include_bbb=False,
+        include_lines=False,
+        include_feii=False,
+        include_balmer=False,
+        apply_attenuation=False,
+    )
+    pub_torus = _grahsp_published(torus_att, params, _PUB_FILTERS, tpl)["L_agn_torus"]
+    ref_torus = _ln_nu_integral(_grahsp_sed(torus_int, params, W, tpl), W)
+    assert abs(pub_torus / ref_torus - 1.0) < _GRAHSP_RTOL, (
+        f"L_agn_torus at the binding corner: rel {pub_torus / ref_torus - 1:.3e}"
+    )
+
+    full_int = _grahsp_comp(apply_attenuation=False)
+    pub_abs = _grahsp_published(full, params, _PUB_FILTERS, tpl)["L_agn_absorbed"]
+    ref_abs = _ln_nu_integral(
+        _grahsp_sed(full_int, params, W, tpl) - _grahsp_sed(full, params, W, tpl), W
+    )
+    assert abs(pub_abs / ref_abs - 1.0) < _GRAHSP_RTOL, (
+        f"L_agn_absorbed at the binding corner: rel {pub_abs / ref_abs - 1:.3e}"
+    )

@@ -52,12 +52,16 @@ All free parameters carry the ``agn_grahsp_`` prefix
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
+from jax.scipy.special import erfc
 
 from tengri.components.agn.grahsp.attenuation import PREVOT_DEFAULTS, attenuation_factors
 from tengri.components.agn.grahsp.balmer import (
@@ -68,13 +72,27 @@ from tengri.components.agn.grahsp.balmer import (
 from tengri.components.agn.grahsp.bbb import XRAY_FLOOR_NM, floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
-from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
+from tengri.components.agn.grahsp.lines import (
+    _HBETA_BROAD_RATIO,
+    _HBETA_NARROW_RATIO,
+    _LAMBDA_5100_NM,
+    feii_forest,
+    gaussian_lines,
+)
 from tengri.components.agn.grahsp.publication import (
     PUBLICATION_HI_NM,
+    WINDOW_SIGMA,
     gauss_legendre_segments,
     linewidth_sigma_nm,
     publication_breakpoints,
     window_edges,
+)
+from tengri.components.agn.grahsp.published import (
+    feii_segment_product,
+    line_expectation,
+    log_breaks,
+    log_gaussian_expectation,
+    lognormal_c0,
 )
 from tengri.components.agn.grahsp.templates import (
     GRAHSPTemplates,
@@ -82,6 +100,7 @@ from tengri.components.agn.grahsp.templates import (
 )
 from tengri.components.agn.grahsp.torus import (
     SI_DEFAULTS,
+    _log_gaussian_pair,
     si_feature,
     torus_dust_continuum,
     torus_mn12_continuum,
@@ -105,6 +124,17 @@ __all__ = [
 
 # Speed of light in nm * Hz (== c in nm / s) for L_lambda <-> L_nu conversion.
 _C_NM_PER_S: float = 2.99792458e17  # 1e9 * 2.998e8
+
+#: Gauss-Legendre segments per decade for the smooth BBB quadrature (published L_* only).
+SBPL_PER_DECADE: int = 20
+#: Breakpoints per decade for the Balmer continuum quadrature (published L_* only).
+BALMER_PER_DECADE: int = 20
+#: Gauss-Legendre points per side of the log-normal torus expectation (published L_* only).
+LOG_GL_ORDER: int = 16
+#: Gauss-Hermite points per line and per Si feature (published L_* only).
+LINE_GH_ORDER: int = 13
+#: Upper edge of the Balmer quadrature [nm]; its edge window ends below ~400 nm for any width.
+_BALMER_HI_NM: float = 600.0
 
 
 @dataclass(frozen=True)
@@ -193,6 +223,47 @@ class GRAHSPSEDComponentState(SEDComponentState):
     disc_m: tuple[str, ...] | None = None
     disc_a: tuple[str, ...] | None = None
     disc_mdot: tuple[str, ...] | None = None
+
+
+def _sign_change_roots(fn, lo: Array, hi: Array, iterations: int = 4) -> Array:
+    r"""Regula-falsi roots of ``fn`` on the intervals ``[lo, hi]`` with a sign change.
+
+    Intervals without a sign change return their midpoint, so the split is harmless there.
+    Used to place the kinks of :math:`\max(0,-f)` at the crossings of :math:`f`; the roots are
+    stopped from the gradient, because :math:`\max(0,-f)` is continuous there.
+
+    Parameters
+    ----------
+    fn : callable
+        ``fn(wave_nm) -> ndarray`` (vectorized).
+    lo, hi : array_like, shape (n,)
+        Interval ends [nm], ascending.
+    iterations : int, optional
+        Regula-falsi steps.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        The crossing estimates [nm], inside ``[lo, hi]``.
+    """
+    lo = jax.lax.stop_gradient(lo)
+    hi = jax.lax.stop_gradient(hi)
+    f_lo = fn(lo)
+    f_hi = fn(hi)
+    crosses = f_lo * f_hi < 0.0
+    safe = jnp.where(crosses, f_hi - f_lo, 1.0)
+    root = jnp.where(crosses, lo - f_lo * (hi - lo) / safe, 0.5 * (lo + hi))
+    a, b, fa, fb = lo, hi, f_lo, f_hi
+    for _ in range(iterations):
+        f_root = fn(root)
+        left = fa * f_root < 0.0
+        b = jnp.where(left, root, b)
+        fb = jnp.where(left, f_root, fb)
+        a = jnp.where(left, a, root)
+        fa = jnp.where(left, fa, f_root)
+        denom = jnp.where(crosses, fb - fa, 1.0)
+        root = jnp.where(crosses, a - fa * (b - a) / denom, 0.5 * (lo + hi))
+    return root
 
 
 @dataclass(frozen=True)
@@ -707,6 +778,8 @@ class GRAHSPSEDComponent:
         configuration. **Gradient-safe**: yes. ``L_agn_absorbed`` is exactly zero when
         ``apply_attenuation`` is off.
         """
+        if self._default_published_path():
+            return self._published_default(params, templates_state)
         breaks = self._publication_breaks(params, templates_state)
         lam_nm, weight_nm = gauss_legendre_segments(breaks)
         bbb_i, torus_i = self._pieces(lam_nm, params, templates_state)
@@ -719,6 +792,310 @@ class GRAHSPSEDComponent:
         else:
             L_absorbed = jnp.sum(weight_nm * (bbb_i + torus_i) * (1.0 - factor_agn))
         return {"L_agn_bol": L_bol, "L_agn_torus": L_torus, "L_agn_absorbed": L_absorbed}
+
+    def _published_default(
+        self,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> dict[str, Array]:
+        """Published L_* on the default pieces: closed forms and fixed-node quadrature."""
+        absorbed = (
+            self._published_absorbed(params, templates_state)
+            if self.config.apply_attenuation
+            else jnp.zeros(())
+        )
+        return {
+            "L_agn_bol": self._published_bol(params, templates_state),
+            "L_agn_torus": self._published_torus(params),
+            "L_agn_absorbed": absorbed,
+        }
+
+    def _default_published_path(self) -> bool:
+        """True when the closed-form path covers the configuration (default torus, BBB, FeII)."""
+        cfg = self.config
+        return (
+            cfg.torus_model == "gaussian"
+            and cfg.disc_model is None
+            and cfg.feii_template == "bruhweiler2008"
+        )
+
+    def _sbpl_at(self, wave_nm: Array, params: Mapping[str, Array]) -> Array:
+        """Intrinsic smooth-bending power-law BBB [erg/s/nm], floored at the X-ray edge."""
+        spec = sbpl_bbb(
+            wave_nm=wave_nm,
+            l5100=jnp.asarray(params["agn_grahsp_l5100"]),
+            uvslope=jnp.asarray(params["agn_grahsp_uvslope"]),
+            plslope=jnp.asarray(params["agn_grahsp_plslope"]),
+            plbendloc_nm=jnp.asarray(params["agn_grahsp_plbendloc_nm"]),
+            plbendwidth=jnp.asarray(params["agn_grahsp_plbendwidth"]),
+            cutoff_nm=jnp.asarray(params.get("agn_grahsp_cutoff_nm", 10000.0)),
+        )
+        return floor_disc_xray(wave_nm, spec)
+
+    def _balmer_breaks(self, lo_nm: float, params: Mapping[str, Array]) -> Array:
+        """Breakpoints [nm] of the Balmer continuum: log grid, the 250 nm switch, the edge."""
+        linewidth = jnp.asarray(params["agn_grahsp_linewidth_kms"])
+        edge = jnp.asarray([_BALMER_EDGE_NM])
+        windows = window_edges(edge, linewidth_sigma_nm(edge, linewidth))
+        fixed = jnp.asarray(log_breaks(lo_nm, _BALMER_HI_NM, BALMER_PER_DECADE))
+        breaks = jnp.sort(
+            jnp.concatenate([fixed, jnp.asarray([_BC_CONVOLUTION_THRESHOLD_NM]), windows])
+        )
+        return jnp.clip(breaks, lo_nm, _BALMER_HI_NM)
+
+    def _balmer_at(self, wave_nm: Array, params: Mapping[str, Array]) -> Array:
+        """Intrinsic Balmer continuum [erg/s/nm] (type 1 only; the caller gates it)."""
+        return balmer_continuum(
+            wave_nm=wave_nm,
+            l5100=jnp.asarray(params["agn_grahsp_l5100"]),
+            a_bc=jnp.asarray(params.get("agn_grahsp_a_bc", 0.0)),
+            linewidth_kms=jnp.asarray(params["agn_grahsp_linewidth_kms"]),
+        )
+
+    def _line_terms(
+        self,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array, Array]:
+        """Line centers [nm], sigmas [nm] and Lambda_5100-scaled amplitudes [erg/s].
+
+        Each line contributes ``amplitude * G(lambda; center, sigma)`` with G of unit area, as
+        :func:`gaussian_lines` evaluates it: the amplitude is ``510 nm * line_lumin``.
+        """
+        cfg = self.config
+        l_agn = jnp.asarray(params["agn_grahsp_l5100"]) / _LAMBDA_5100_NM
+        a_lines = jnp.asarray(params["agn_grahsp_a_lines"])
+        l_broad = _HBETA_BROAD_RATIO * l_agn * a_lines
+        l_narrow = _HBETA_NARROW_RATIO * l_agn * a_lines
+        if cfg.agn_type == 1:
+            lumin = (
+                l_broad * templates_state.line_broad + l_narrow * templates_state.line_narrow_sy2
+            )
+        elif cfg.agn_type == 2:
+            lumin = l_narrow * templates_state.line_narrow_sy2
+        else:
+            lumin = l_narrow * templates_state.line_narrow_liner
+        centers = jnp.asarray(templates_state.line_wave_nm)
+        sigmas = linewidth_sigma_nm(centers, jnp.asarray(params["agn_grahsp_linewidth_kms"]))
+        return centers, sigmas, _LAMBDA_5100_NM * lumin
+
+    def _feii_amplitude(self, params: Mapping[str, Array]) -> Array:
+        """FeII forest amplitude a_FeII * L_Hbeta,broad [erg/s/nm per unit template]."""
+        l_agn = jnp.asarray(params["agn_grahsp_l5100"]) / _LAMBDA_5100_NM
+        l_broad = _HBETA_BROAD_RATIO * l_agn * jnp.asarray(params["agn_grahsp_a_lines"])
+        return jnp.asarray(params["agn_grahsp_a_feii"]) * l_broad
+
+    def _torus_terms(self, params: Mapping[str, Array]) -> tuple[Array, Array, Array, Array]:
+        r"""Closed-form amplitudes and log-centers of the two log-normal torus components.
+
+        With :math:`K = (\lambda L_{12\,\mu m})/(12000\,\mathrm{nm})/T(12\,\mu\mathrm{m})` the
+        torus normalization, the cool component integrates to :math:`K\,\lambda_{\rm COOL}\,
+        C_0(W_{\rm COOL})` and the hot to :math:`K\,f_{\rm hot}\,\lambda_{\rm COOL}\,
+        C_0(W_{\rm HOT})` (see :mod:`~tengri.components.agn.grahsp.published`).
+
+        Returns
+        -------
+        amp_cool, amp_hot : ndarray
+            Closed-form integrals of the components [erg/s].
+        mu_cool, mu_hot : ndarray
+            :math:`\log_{10}` of the component peak wavelengths [um].
+        """
+        cool_lam = jnp.asarray(params["agn_grahsp_cool_lam_um"])
+        hot_lam = jnp.asarray(params["agn_grahsp_hot_lam_um"])
+        w_cool = jnp.asarray(params["agn_grahsp_cool_width"])
+        w_hot = jnp.asarray(params["agn_grahsp_hot_width"])
+        fhot = jnp.asarray(params["agn_grahsp_hot_fcov"])
+        l_torus = (
+            2.5 * jnp.asarray(params["agn_grahsp_l5100"]) * jnp.asarray(params["agn_grahsp_fcov"])
+        )
+        mu_cool = jnp.log10(cool_lam)
+        mu_hot = jnp.log10(hot_lam)
+        spec12 = _log_gaussian_pair(jnp.log10(12.0), mu_cool, w_cool, mu_hot, w_hot, fhot)
+        scale = (l_torus / 12000.0) / spec12
+        amp_cool = scale * cool_lam * lognormal_c0(w_cool)
+        amp_hot = scale * fhot * cool_lam * lognormal_c0(w_hot)
+        return amp_cool, amp_hot, mu_cool, mu_hot
+
+    def _si_terms(self, params: Mapping[str, Array]) -> tuple[Array, Array, Array, Array]:
+        """Si feature: prefactor, closed-form integral, feature centers [nm] and sigmas [nm].
+
+        The feature is ``l_torus/12000 * si * (A_em G_em - A_ab G_ab)`` with unit-peak Gaussians
+        G and amplitudes from :data:`SI_DEFAULTS`, so with unit-area G the closed integral is
+        ``l_torus/12000 * si * sqrt(2 pi) * (A_em sigma_em - A_ab sigma_ab)``.
+        """
+        l_torus = (
+            2.5 * jnp.asarray(params["agn_grahsp_l5100"]) * jnp.asarray(params["agn_grahsp_fcov"])
+        )
+        pref = (l_torus / 12000.0) * jnp.asarray(params["agn_grahsp_si"])
+        em_amp = SI_DEFAULTS["si_em_ampl"]
+        ab_amp = em_amp * SI_DEFAULTS["si_ratio"]
+        centers = jnp.asarray([SI_DEFAULTS["si_em_lam_nm"], SI_DEFAULTS["si_abs_lam_nm"]])
+        sigmas = jnp.asarray([SI_DEFAULTS["si_em_width_nm"], SI_DEFAULTS["si_abs_width_nm"]])
+        # Amplitude vector: (+A_em, -A_ab) times the unit-area Gaussian integral sqrt(2 pi) s.
+        signed = jnp.asarray([em_amp, -ab_amp]) * math.sqrt(2.0 * math.pi) * sigmas
+        return pref, jnp.sum(signed) * pref, centers, sigmas
+
+    def _published_bol(self, params, templates_state) -> Array:
+        """Intrinsic BBB + lines + FeII + Balmer above the Lyman limit [erg/s], exact pieces."""
+        cfg = self.config
+        type1 = cfg.agn_type == 1
+        total = jnp.zeros(())
+        if cfg.include_bbb:
+            lam, w = gauss_legendre_segments(
+                jnp.asarray(log_breaks(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, SBPL_PER_DECADE))
+            )
+            total = total + jnp.sum(w * self._sbpl_at(lam, params))
+        if cfg.include_balmer and type1:
+            lam, w = gauss_legendre_segments(self._balmer_breaks(LYMAN_LIMIT_NM, params))
+            total = total + jnp.sum(w * self._balmer_at(lam, params))
+        if cfg.include_feii and type1:
+            wave = jnp.asarray(templates_state.feii_wave_nm)
+            total = total + self._feii_amplitude(params) * jnp.trapezoid(
+                templates_state.feii_lumin, wave
+            )
+        if cfg.include_lines:
+            centers, sigmas, amps = self._line_terms(params, templates_state)
+            cut = 0.5 * erfc((LYMAN_LIMIT_NM - centers) / (math.sqrt(2.0) * sigmas))
+            total = total + jnp.sum(amps * cut)
+        return total
+
+    def _published_torus(self, params) -> Array:
+        """Intrinsic torus continuum + Si feature over (0, inf) [erg/s].
+
+        The torus and Si terms are closed-form integrals; the emitted ``max(si, -torus)`` clip
+        adds its correction :meth:`_si_clip_correction`, which binds inside the declared prior
+        box (corner si = -4, cool peak 30 um, width 0.2 dex).
+        """
+        cfg = self.config
+        if not cfg.include_torus:
+            return jnp.zeros(())
+        amp_cool, amp_hot, _, _ = self._torus_terms(params)
+        total = amp_cool + amp_hot
+        if cfg.include_si:
+            total = total + self._si_terms(params)[1]
+            total = total + self._si_clip_correction(params)
+        return total
+
+    def _si_clip_correction(
+        self,
+        params: Mapping[str, Array],
+        weight_fn=None,
+    ) -> Array:
+        r"""Integral of the Si clip correction :math:`\int\max(0,-(T+S))\,h\,\mathrm{d}\lambda`.
+
+        The emitted torus term uses :math:`\max(\mathrm{si}, -\mathrm{torus})`, which equals
+        :math:`\mathrm{si}+\max(0,-\mathrm{torus}-\mathrm{si})`. Both terms carry the factor
+        :math:`l_{\rm torus}/12000`, so the correction is :math:`(l_{\rm torus}/12000)` times the
+        dimensionless integral of :math:`\max(0,-(T+S))`, where :math:`T` is the torus shape
+        normalized to unity at 12 um and :math:`S` the Si shape per unit ``si``. It is nonzero
+        only inside the Si feature windows, and is integrated by Gauss-Legendre on each window
+        split into segments of one sigma (the clip is a kink of the integrand, so each segment
+        must hold at most one crossing).
+
+        Parameters
+        ----------
+        params : mapping
+            ``agn_grahsp_*`` keys.
+        weight_fn : callable, optional
+            ``weight_fn(wave_nm) -> ndarray`` multiplying the integrand (e.g. 1 - attenuation).
+
+        Returns
+        -------
+        ndarray, shape ()
+            The correction [erg/s].
+        """
+        l_torus = (
+            2.5 * jnp.asarray(params["agn_grahsp_l5100"]) * jnp.asarray(params["agn_grahsp_fcov"])
+        )
+        si = jnp.asarray(params["agn_grahsp_si"])
+        centers = np.asarray([SI_DEFAULTS["si_em_lam_nm"], SI_DEFAULTS["si_abs_lam_nm"]])
+        sigmas = np.asarray([SI_DEFAULTS["si_em_width_nm"], SI_DEFAULTS["si_abs_width_nm"]])
+        offsets = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
+        breaks = jnp.sort(jnp.asarray((centers[:, None] + sigmas[:, None] * offsets).ravel()))
+        cool_lam = jnp.asarray(params["agn_grahsp_cool_lam_um"])
+        hot_lam = jnp.asarray(params["agn_grahsp_hot_lam_um"])
+        w_cool = jnp.asarray(params["agn_grahsp_cool_width"])
+        w_hot = jnp.asarray(params["agn_grahsp_hot_width"])
+        fhot = jnp.asarray(params["agn_grahsp_hot_fcov"])
+        mu_cool, mu_hot = jnp.log10(cool_lam), jnp.log10(hot_lam)
+        spec12 = _log_gaussian_pair(jnp.log10(12.0), mu_cool, w_cool, mu_hot, w_hot, fhot)
+        em_amp = SI_DEFAULTS["si_em_ampl"]
+        ab_amp = em_amp * SI_DEFAULTS["si_ratio"]
+
+        def net_shape(lam):
+            """Torus shape plus Si shape (dimensionless); the clip acts where it is negative."""
+            torus_shape = (
+                _log_gaussian_pair(jnp.log10(lam / 1000.0), mu_cool, w_cool, mu_hot, w_hot, fhot)
+                / spec12
+            )
+            g_em = jnp.exp(-0.5 * ((lam - centers[0]) / sigmas[0]) ** 2)
+            g_ab = jnp.exp(-0.5 * ((lam - centers[1]) / sigmas[1]) ** 2)
+            return torus_shape + si * (em_amp * g_em - ab_amp * g_ab)
+
+        lo, hi = breaks[:-1], breaks[1:]
+        split = _sign_change_roots(net_shape, lo, hi)
+        # lo, split, hi per interval: ascending, each crossing a segment boundary.
+        lam, weight = gauss_legendre_segments(jnp.stack([lo, split, hi], axis=1).ravel())
+        crossing = jnp.maximum(0.0, -net_shape(lam))
+        if weight_fn is not None:
+            crossing = crossing * weight_fn(lam)
+        return (l_torus / 12000.0) * jnp.sum(weight * crossing)
+
+    def _published_absorbed(self, params, templates_state) -> Array:
+        """Intrinsic-minus-attenuated AGN-side power, fixed-node quadrature [erg/s]."""
+        cfg = self.config
+        type1 = cfg.agn_type == 1
+
+        def h_fn(wave_nm):
+            return 1.0 - self._attenuation(wave_nm, params)
+
+        total = jnp.zeros(())
+        if cfg.include_bbb:
+            lam, w = gauss_legendre_segments(
+                jnp.asarray(
+                    log_breaks(
+                        XRAY_FLOOR_NM,
+                        PUBLICATION_HI_NM,
+                        SBPL_PER_DECADE,
+                        extra=(PREVOT_DEFAULTS["lam_break_nm"],),
+                    )
+                )
+            )
+            total = total + jnp.sum(w * self._sbpl_at(lam, params) * h_fn(lam))
+        if cfg.include_balmer and type1:
+            lam, w = gauss_legendre_segments(self._balmer_breaks(XRAY_FLOOR_NM, params))
+            total = total + jnp.sum(w * self._balmer_at(lam, params) * h_fn(lam))
+        if cfg.include_feii and type1:
+            total = total + self._feii_amplitude(params) * feii_segment_product(
+                h_fn,
+                templates_state.feii_wave_nm,
+                templates_state.feii_lumin,
+            )
+        if cfg.include_lines:
+            centers, sigmas, amps = self._line_terms(params, templates_state)
+            total = total + jnp.sum(amps * line_expectation(h_fn, centers, sigmas, LINE_GH_ORDER))
+        if cfg.include_torus:
+            amp_cool, amp_hot, mu_cool, mu_hot = self._torus_terms(params)
+            split = PREVOT_DEFAULTS["lam_break_nm"]
+            total = total + amp_cool * log_gaussian_expectation(
+                h_fn, mu_cool, params["agn_grahsp_cool_width"], split, LOG_GL_ORDER
+            )
+            total = total + amp_hot * log_gaussian_expectation(
+                h_fn, mu_hot, params["agn_grahsp_hot_width"], split, LOG_GL_ORDER
+            )
+            if cfg.include_si:
+                pref, _, centers, sigmas = self._si_terms(params)
+                total = total + self._si_clip_correction(params, weight_fn=h_fn)
+                em_ab = jnp.asarray(
+                    [
+                        SI_DEFAULTS["si_em_ampl"],
+                        -SI_DEFAULTS["si_em_ampl"] * SI_DEFAULTS["si_ratio"],
+                    ]
+                )
+                weighted = em_ab * math.sqrt(2.0 * math.pi) * sigmas
+                expect = line_expectation(h_fn, centers, sigmas, LINE_GH_ORDER)
+                total = total + pref * jnp.sum(weighted * expect)
+        return total
 
     def _publication_breaks(
         self,
