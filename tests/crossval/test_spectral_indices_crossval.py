@@ -2,9 +2,10 @@
 """Cross-validation: spectral index measurement against Bagpipes.
 
 Measures Dn4000 and HdA on synthetic spectra using both Tengri's
-soft-sigmoid JAX measurement and Bagpipes' hard-mask numpy measurement.
-Agreement is expected to ~1% on dense grids (soft sigmoid edges converge
-to hard masks as pixel spacing → 0).
+hard-window JAX measurement (windows exact over [lo, hi], #2637) and
+Bagpipes' per-pixel hard-mask numpy measurement. Agreement is expected to
+~1% on dense grids (the two differ only in how a window mean treats the
+pixels near its edges).
 
 Bagpipes' ``single_index`` is not the Lick definition: it takes a constant
 continuum, the mean of the two sideband means, on the array it is given.
@@ -200,9 +201,16 @@ class TestSpectralIndexDataConvenience:
 
 C_AA = 2.99792458e18  # speed of light [Å/s]
 _SSP_CASES = [("HgA", 1.0), ("HgA", 10.0), ("Fe4383", 1.0), ("Fe4383", 10.0), ("Hbeta", 3.0)]
-#: |Tengri "mean" - Bagpipes| <= 0.157 Å on these cases (1 Å soft edges and trapezoid
-#: means against hard masks and per-pixel means); tolerance 1.25 x, rounded up.
+#: |Tengri "mean" - Bagpipes| <= 0.170 Å on these cases. Both use hard windows on the same
+#: (vacuum) edge numbers; the residual is the window-mean estimator only: tengri integrates
+#: the window exactly (trapezoid, partial edge pixels by overlap), Bagpipes averages the
+#: pixels strictly inside it. :func:`_bagpipes_arithmetic_hard` pins tengri to that
+#: arithmetic at 1e-5 Å; this tolerance is the pixel-sampling gap to the real code.
+#: Tolerance 1.18 x the largest gap, as before the hard-window change.
 _BAGPIPES_MEAN_TOL_AA = 0.2
+#: tengri runs the measurement in float32: its EW differs from the float64 numpy definition by
+#: <= 1.9e-6 Å here (relative 3e-7 of the largest EW, 5.9 Å); 1e-5 is 5x that.
+_FLOAT32_TOL_AA = 1e-5
 
 
 def _ssp_flam(age_gyr: float):
@@ -234,32 +242,21 @@ def _lick_hard(wave, flam, idx) -> float:
     return float(np.trapezoid(1.0 - v / line, x))
 
 
-def _lick_soft(wave, flam, idx) -> float:
-    """Trager et al. 1998 Eqs. 1-2 with tengri's own 1 A sigmoid window edges (#2637).
+def _bagpipes_arithmetic_hard(wave, flam, idx) -> float:
+    """Bagpipes' EW arithmetic (constant continuum, mean of sideband means) on exact hard windows.
 
-    The same definition as :func:`_lick_hard`; only the window weights differ. tengri's
-    edges are soft so the windows stay differentiable, and an external code's are hard.
-    The two are the same index up to an edge term of order (pi^2/6) * edge^2 * |g'| per
-    window edge (g = 1 - F/continuum), which is largest where an edge sits on the wing of
-    a Balmer line: 0.11 A for HgA at 10 Gyr. A tengri-vs-external comparison therefore
-    cannot be tighter than that, so each side is checked against the definition with its
-    own edges, both tightly.
+    The same arithmetic as ``single_index`` with each window mean taken as the exact
+    integral over ``[lo, hi]`` (flux interpolated at the bounds) instead of the mean of
+    the pixels strictly inside it. It isolates the estimator difference from the definition.
     """
 
-    def weights(lo, hi):
-        sig = lambda x: 0.5 * (1.0 + np.tanh(0.5 * x))  # noqa: E731
-        return sig(wave - lo) * sig(hi - wave)
-
     def mean(lo, hi):
-        w = weights(lo, hi)
-        return np.trapezoid(flam * w, wave) / np.trapezoid(w, wave)
+        x = np.concatenate(([lo], wave[(wave > lo) & (wave < hi)], [hi]))
+        return np.trapezoid(np.interp(x, wave, flam), x) / (hi - lo)
 
-    (b0, b1), (r0, r1) = idx.continuum
-    f0, f1 = idx.feature
-    f_b, f_r = mean(b0, b1), mean(r0, r1)
-    line = f_b + (f_r - f_b) * (wave - 0.5 * (b0 + b1)) / (0.5 * (r0 + r1) - 0.5 * (b0 + b1))
-    w = weights(f0, f1)
-    return float((f1 - f0) * (1.0 - np.trapezoid(w * flam / line, wave) / np.trapezoid(w, wave)))
+    f_cont = 0.5 * (mean(*idx.continuum[0]) + mean(*idx.continuum[1]))
+    f_lo, f_hi = idx.feature
+    return float((f_hi - f_lo) * (1.0 - mean(f_lo, f_hi) / f_cont))
 
 
 class TestLickDefinitionVsBagpipes:
@@ -273,12 +270,20 @@ class TestLickDefinitionVsBagpipes:
         assert_allclose(float(tengri_val), float(bp_val), atol=_BAGPIPES_MEAN_TOL_AA)
 
     @pytest.mark.parametrize("name,age", _SSP_CASES)
+    def test_mean_option_is_bagpipes_arithmetic_on_hard_windows(self, name, age):
+        """The Bagpipes gap is the window-mean estimator alone: same arithmetic, exact means."""
+        wave, _, flam = _ssp_flam(age)
+        tengri_val = float(measure_index_jax(jnp.array(wave), jnp.array(flam), _mean_def(name)))
+        expected = _bagpipes_arithmetic_hard(wave, flam, STANDARD_INDICES[name])
+        assert tengri_val == pytest.approx(expected, abs=_FLOAT32_TOL_AA)
+
+    @pytest.mark.parametrize("name,age", _SSP_CASES)
     def test_default_is_the_published_definition_not_bagpipes(self, name, age):
-        """Default (from L_ν) equals the numpy Lick definition with tengri's own soft edges."""
+        """Default (from L_ν) equals the numpy Lick definition on exact hard windows (#2637)."""
         wave, lnu, flam = _ssp_flam(age)
         idx = STANDARD_INDICES[name]
         tengri_val = float(measure_index_jax(jnp.array(wave), jnp.array(lnu), idx))
-        assert tengri_val == pytest.approx(_lick_soft(wave, flam, idx), abs=1e-6)
+        assert tengri_val == pytest.approx(_lick_hard(wave, flam, idx), abs=_FLOAT32_TOL_AA)
 
     @pytest.mark.parametrize("name,min_gap", [("HgA", 0.5), ("Fe4383", 0.1)])
     def test_bagpipes_misses_the_published_definition_on_an_old_population(self, name, min_gap):
@@ -293,9 +298,9 @@ class TestLickDefinitionVsBagpipes:
         pcigale EW is emission-positive with the continuum interpolated linearly between
         the sideband centers and integrates (line − cont)/cont over the feature window,
         so pcigale_ew == the numpy hard-window definition (abs=0.02 Å: pcigale's window
-        parameters are in nm to 0.001, i.e. 0.01 Å), and tengri_default == the same definition
-        with tengri's 1 Å soft edges (abs=1e-6 Å). Like for like on both sides: the windows are
-        the same vacuum numbers handed to pcigale.
+        parameters are in nm to 0.001, i.e. 0.01 Å), and tengri_default == the same hard-window
+        definition (abs=1e-5 Å, float32 rounding of the JAX path). Like for like on both sides:
+        the windows are the same vacuum numbers handed to pcigale.
 
         Also asserts that the OLD arithmetic (pseudo_continuum="mean" on L_ν) differs from
         −pcigale_ew by more than 0.2 Å for HgA at 10 Gyr.
@@ -359,9 +364,9 @@ class TestLickDefinitionVsBagpipes:
             assert pcigale_aa == pytest.approx(_lick_hard(wave, flam, idx), abs=0.02), (
                 f"{name} {age} Gyr: pcigale {pcigale_aa:.4f} A vs the hard-window definition"
             )
-            assert tengri_default == pytest.approx(_lick_soft(wave, flam, idx), abs=1e-6), (
-                f"{name} {age} Gyr: tengri {tengri_default:.4f} A vs the soft-edge definition"
-            )
+            assert tengri_default == pytest.approx(
+                _lick_hard(wave, flam, idx), abs=_FLOAT32_TOL_AA
+            ), f"{name} {age} Gyr: tengri {tengri_default:.4f} A vs the hard-window definition"
         old = {(n, a): m for n, a, _, _, m in measured_values}
         ref = {(n, a): -10.0 * p for n, a, _, p, _ in measured_values}
         assert abs(old[("HgA", 10.0)] - ref[("HgA", 10.0)]) > 0.2
