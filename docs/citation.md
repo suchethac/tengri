@@ -306,6 +306,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Far-infrared band (42.5-122.5 um) definition of the IR-radio ratio q, the
+  ``ir_window='fir'`` option. Helou (1985),
+  [doi:10.1086/184556](https://doi.org/10.1086/184556).
 - Mass- and redshift-dependent IR-radio correlation at 1.4 GHz,
   ``delvecchio2021``. Delvecchio et al. (2021),
   [doi:10.1051/0004-6361/202039647](https://doi.org/10.1051/0004-6361/202039647).
