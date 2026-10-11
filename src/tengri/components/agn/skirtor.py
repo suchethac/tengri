@@ -1113,8 +1113,11 @@ def skirtor_disc_dust_ratio(
     # nodes (#2322). That is the converged value: a 4000-node trapezoid of the resampled
     # templates sits 1.5e-6 from it, and a trapezoid over the native nodes 6e-5.
     int_disk0 = loglog_integral(wave_grid, disk_0_n)
+    # The shape is unit-normalized with the same log-log integral it is integrated with.
+    # A trapezoid normalization here left ``loglog(shape_n)`` 0.39 % off unity, so R at
+    # i = 0 read 4.40727 against R_faceon 4.42464 (#2319, #2322).
     shape_n = disc_n / jnp.maximum(
-        jnp.trapezoid(disc_n, wave_grid), representable_denominator(1e-30)
+        loglog_integral(wave_grid, disc_n), representable_denominator(1e-30)
     )
     disk_analytic = shape_n * int_disk0
     # CIGALE nan_to_num: continue the inclination ratio smoothly where the

@@ -629,19 +629,28 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
+#: Re-captured on the #2319/#2322 tree. Two changes move them, both intended: the SKIRTOR
+#: torus is renormalized to ``agn_power`` after resampling (#2319; agn_power rises by
+#: 1/0.996328 - 1 = 0.367 %), so the tie that scales the disc to ``agn_power x R`` moves the
+#: disc up with it; and ``R``'s shape is unit-normalized with the same log-log integral it is
+#: integrated with (a trapezoid there left ``R`` 0.39 % low at i = 0, 4.40727 against
+#: ``R_faceon`` 4.42464), a +6e-6 move on ``R``. Relative change against the previous pins,
+#: in (sum, first bin, middle bin, last bin) order: +2.1e-4 / +3.78e-3 / +6.2e-6 / +1.3e-5
+#: at 6; +4.1e-4 / +3.78e-3 / +2.6e-4 / +3.4e-5 at 8; +4.6e-4 / +3.78e-3 / +3.1e-4 /
+#: +3.2e-4 at 10. The first bin is disc-dominated and carries the full 0.378 % move.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
+    6.0: (1.5590146411586656e32, 81456333180922.34, 2.8901657433420926e28, 8.775409571423144e21),
     8.0: (
-        1.6504080200641076e32,
-        2.226186048596356e16,
-        3.0968665997787287e28,
-        8.825196951058274e21,
+        1.651083868465166e32,
+        2.2345920173419612e16,
+        3.097662493903965e28,
+        8.825497664879295e21,
     ),
     10.0: (
-        1.6769970954584036e32,
-        2.3324417803895464e16,
-        3.1396733849669233e28,
-        9.548716267622313e21,
+        1.6777737806589375e32,
+        2.3412489655389012e16,
+        3.1406320010925746e28,
+        9.551744308606772e21,
     ),
 }
 

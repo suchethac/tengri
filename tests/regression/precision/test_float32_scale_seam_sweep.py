@@ -521,27 +521,34 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
+#: Re-captured for the AGN energy ledger (#2319, #2322). The SKIRTOR torus is renormalized
+#: to ``agn_power`` after resampling (#2319), so the tied disc, which scales to
+#: ``agn_power x R``, rises with it: the first wavelength bin moves +3.78e-3 at every mass,
+#: and the sum, middle and last bins move by at most 2.1e-4 / 5.3e-4 (sum, 6 / 10),
+#: 3.8e-4 (middle, 10) and 3.9e-4 (last, 10) relative to the previous pins. The
+#: polar absorbed fraction is the exact native-grid integral (#2322). Re-pinned on the
+#: merged tree.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593717102152515e32,
-        "rest_sed_0": 102893969334605.2,
-        "rest_sed_mid": 2.8913768894385195e28,
-        "rest_sed_last": 8.775429623072713e21,
-        "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
+        "rest_sed_sum": 1.5597048871938065e32,
+        "rest_sed_0": 103282491889080.52,
+        "rest_sed_mid": 2.891399341610083e28,
+        "rest_sed_last": 8.775543050159757e21,
+        "photometry": (1.09949670872385e-27, 1.572672452521002e-27, 1.766846595556518e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6757849286069842e32,
-        "rest_sed_0": 2.8226908028998744e16,
-        "rest_sed_mid": 3.1537086678827116e28,
-        "rest_sed_last": 8.838700680503838e21,
-        "photometry": (1.2055131101702632e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
+        "rest_sed_sum": 1.6765562753943534e32,
+        "rest_sed_0": 2.833349144183903e16,
+        "rest_sed_mid": 3.154718468285848e28,
+        "rest_sed_last": 8.839052207827421e21,
+        "photometry": (1.2059215639452793e-27, 1.5747695428505443e-27, 1.767453384412419e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.709508629849637e32,
-        "rest_sed_0": 2.9574176722363988e16,
-        "rest_sed_mid": 3.2080316645611165e28,
-        "rest_sed_last": 9.756086413931552e21,
-        "photometry": (1.220384227860453e-27, 1.596873080026319e-27, 1.7715814700124443e-27),
+        "rest_sed_sum": 1.7104078714116382e32,
+        "rest_sed_0": 2.9685847355356204e16,
+        "rest_sed_mid": 3.2092479636921812e28,
+        "rest_sed_last": 9.759896053530577e21,
+        "photometry": (1.2208494377716458e-27, 1.5996343822383441e-27, 1.7752349250931748e-27),
     },
 }
 
