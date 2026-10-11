@@ -52,9 +52,8 @@
 # %% [markdown]
 # ## Setup
 #
-# The stellar population only supplies the model grid: this page reads the AGN components of the
-# public prediction, which do not depend on the host. The MIST grid runs older than the universe,
-# which avoids the warning about stars older than the oldest template.
+# The page uses the MIST stellar grid, `fsps_mist_miles_chabrier`. It reads only the AGN components
+# of each prediction, so the host does not enter any number on this page.
 
 # %%
 import warnings
@@ -163,8 +162,9 @@ save_fig("grahsp_01_fiducial_components.png")
 
 # %% [markdown]
 # **Result.** The disc agrees to the printed level, and the torus agrees after the width correction
-# in section 4. The line and FeII panels are checked by integrals in section 2, because the model
-# grid does not resolve every line profile for a pointwise comparison.
+# in section 4. The line and FeII panels are compared by integrals in section 2: upstream renders
+# each line at nine nodes and interpolates linearly (section 2), so a pointwise comparison would
+# measure that rendering.
 
 # %% [markdown]
 # ## 2. Emission lines: flux, centroid and width
@@ -211,6 +211,11 @@ _tot_err = float(_tf.sum() / _uf.sum() - 1.0)
 _cen_err = float(np.max(np.abs([r[3] for r in _rows])))
 print(f"§2 max |flux ratio − 1| = {_flux_err:.2e} per window; total flux ratio − 1 = {_tot_err:+.2e}")
 print(f"§2 max |centroid Δ| = {_cen_err:.2e} nm")
+# FeII forest: integral over 200–800 nm, the window where the FeII template has support.
+_fe_win = (_wm >= 200.0) & (_wm <= 800.0)
+_fe_t = float(np.trapezoid(_feii_t[_fe_win], _wm[_fe_win]))
+_fe_u = float(np.trapezoid(_feii_u[_fe_win], _wm[_fe_win]))
+print(f"§2 FeII forest, integral over 200–800 nm: tengri/upstream − 1 = {_fe_t / _fe_u - 1.0:+.2e}")
 print(f"§2 single-line windows: tengri rms/σ in [{np.nanmin(_iso[:, 0]):.4f}, {np.nanmax(_iso[:, 0]):.4f}];"
       f" upstream rms/σ in [{np.nanmin(_iso[:, 1]):.4f}, {np.nanmax(_iso[:, 1]):.4f}]")
 
@@ -234,7 +239,8 @@ save_fig("grahsp_02_lines_integrals.png")
 # every single-line window. Upstream's lines are about 22% wider. Its code evaluates each line at
 # nine points across ±3 FWHM and interpolates linearly between them, in `activatelines.py`. That
 # rendering broadens the profile; the 22% width difference is its cause, not a difference in
-# tengri's line strengths.
+# tengri's line strengths. The FeII forest integral over 200–800 nm, where the template has support,
+# agrees to +0.3% (+3.0×10⁻³).
 
 # %% [markdown]
 # ## 3. Balmer continuum
@@ -388,7 +394,8 @@ save_fig("grahsp_04_netzer_mn12.png")
 # %% [markdown]
 # ## 6. Full composite, fiducial and type 2
 #
-# The composite sums each code's components at matched parameters, on tengri's grid. Both are
+# AGN components only, on the grid of the MIST stellar population above. The composite sums each
+# code's components at matched parameters. Both are
 # normalized to the disc continuum at 510 nm, which carries $\lambda L_\lambda = 1$ by construction.
 # The disc is compared above 12.4 nm. The type-2 set has no broad-line block and no FeII forest on
 # either side, so its composite is the disc, the torus with Si, and the narrow lines.
@@ -550,6 +557,6 @@ for _name in ("ebv_0_p1", "ebv_agn_0_p2"):
 #
 # - Buchner, J., Starck, H., Salvato, M., et al. 2024, A&A 692, A161, "Genuine Retrieval of the
 #   AGN Host Stellar Population (GRAHSP)", arXiv:2405.19297.
-# - Grandi, S. A. 1982, the Balmer-continuum model that upstream GRAHSP cites.
+# - Grandi, S. A. 1982, ApJ 255, 25, "The 3000 Å bump in quasars", doi:10.1086/159799.
 # - The FeII and MN12 torus templates are repackaged from upstream GRAHSP's data files, with
 #   attribution to the upstream authors.

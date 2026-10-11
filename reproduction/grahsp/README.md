@@ -58,4 +58,4 @@ upstream's own nodes for all 38 sets, which is the finer test.
 
 - Buchner, J., Starck, H., Salvato, M., et al. 2024, A&A 692, A161, "Genuine Retrieval of the AGN
   Host Stellar Population (GRAHSP)", arXiv:2405.19297.
-- Grandi, S. A. 1982, the Balmer-continuum model that upstream GRAHSP cites.
+- Grandi, S. A. 1982, ApJ 255, 25, "The 3000 Å bump in quasars", doi:10.1086/159799.
