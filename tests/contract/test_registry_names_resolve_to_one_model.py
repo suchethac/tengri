@@ -88,12 +88,46 @@ def test_dl07_slots_agree_after_first_call():
         np.testing.assert_allclose(other, first, rtol=1e-6, atol=0.0)
 
 
-def test_draine2021_native_grid_is_the_tabulated_template_grid():
-    """The draine2021_pah master grid is the template grid, not the analytic placeholder."""
+def test_dl07_names_are_one_callable_after_either_name_resolves_first():
+    """Resolving through either spelling leaves every dl07 name on one callable.
+
+    The identity check above only passes if nothing has resolved the lazy loader yet.
+    In a process that resolves ``draine_li2007`` first (any earlier test or caller),
+    the ``dl07`` alias must be swapped with it, not left on the wrapper.
+    """
+    draine_li2007(_WAVE_AA, 1.0)
+    for name in ("dl07", "dl07_tabulated", "draine_li2007"):
+        assert DUST_EMISSION_MODELS[name] is DUST_EMISSION_MODELS["draine_li2007"], name
+
+
+def test_draine2021_native_grid_is_the_tabulated_template_grid(tmp_path, monkeypatch):
+    """The draine2021_pah master grid is the template grid, not the analytic placeholder.
+
+    Hermetic on purpose: the 104 MB ``pahspec_draine2021.h5`` is built locally and
+    never committed, so a test that reads the real file returns ``None`` on every CI
+    runner. A small stand-in file with its own wavelength axis goes through the same
+    read path (``find_data_str`` -> ``_read_wavelength`` -> declared ``um -> A``
+    conversion), and the expected grid is read straight from that file with h5py,
+    not through the function under test.
+    """
+    import h5py
+
     from tengri.forward import wavelength_extension as wx
 
-    grid = wx.native_wave_dust_emission("draine2021_pah")
-    template = wx._read_wavelength("pahspec_draine2021.h5", "wavelength_um", 1.0e4)
-    assert grid is not None and template is not None
-    np.testing.assert_allclose(np.asarray(grid), np.asarray(template), rtol=1e-12)
+    template_um = np.geomspace(1.0e-1, 1.0e3, 37)
+    path = tmp_path / "pahspec_draine2021.h5"
+    with h5py.File(path, "w") as h:
+        h["wavelength_um"] = template_um
+
+    def _find_data_str(*filenames):
+        return str(path) if "pahspec_draine2021.h5" in filenames else None
+
+    monkeypatch.setattr(wx, "find_data_str", _find_data_str)
+    wx._read_wavelength.cache_clear()
+    try:
+        grid = wx.native_wave_dust_emission("draine2021_pah")
+    finally:
+        wx._read_wavelength.cache_clear()
+    assert grid is not None
+    np.testing.assert_allclose(np.asarray(grid), template_um * 1.0e4, rtol=1e-12)
     assert not np.array_equal(np.asarray(grid), np.asarray(wx._ANALYTIC_DUST_WAVE_AA))
