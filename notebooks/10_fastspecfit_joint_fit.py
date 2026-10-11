@@ -125,7 +125,7 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # per-Q_H nebular grid. Build-time `approx=` sets the path `predict_*` uses;
 # `fit()` chooses its own path and defaults to `"auto"`, which picks the fast
 # tables, so the comparison passes `approx=` to `fit` directly. The line
-# wavelengths for the feature grid default to those in the observation.
+# wavelengths for the feature grid default to those in the observation. Timings are taken on one machine in one process, so the ratios show the cost structure, not a benchmark.
 
 
 # %%

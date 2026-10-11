@@ -35,6 +35,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.air_vacuum import air_to_vac
 from tengri.utils.scale import representable_denominator, representable_floor
 
 pytestmark = pytest.mark.regression_bug
@@ -153,7 +154,11 @@ def test_float64_break_indices_match_the_prefix_formula():
     sed, wave = _sed_and_wave()
     from tengri.utils.sed_quantities import _mean_flux_in_band
 
-    red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
-    blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
+    # The windows are the vacuum image of the published air bands (Balogh+1999, 3850-3950 and
+    # 4000-4100 A in air); the guard under test is the denominator, not the window edges.
+    blue_lo, blue_hi = (float(x) for x in air_to_vac(np.array([3850.0, 3950.0])))
+    red_lo, red_hi = (float(x) for x in air_to_vac(np.array([4000.0, 4100.0])))
+    red = _mean_flux_in_band(sed, wave, red_lo, red_hi)
+    blue = _mean_flux_in_band(sed, wave, blue_lo, blue_hi)
     old = red / jnp.maximum(blue, 1e-30)
     np.testing.assert_allclose(np.float64(compute_dn4000(sed, wave)), np.float64(old), rtol=1e-13)

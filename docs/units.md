@@ -6,7 +6,7 @@ Tengri carries no `astropy.units`-style runtime tagging. Every array is a plain 
 
 | Quantity | Unit | Where it shows up |
 |---|---|---|
-| Wavelength | Å, vacuum | `wave_obs`, `wave_rest`, filter curves, line catalogs |
+| Wavelength | Å, vacuum | `wave_obs`, `wave_rest`, line catalogs (filter curves are used as published; see below) |
 | Spectral flux density `F_ν` | erg s⁻¹ cm⁻² Hz⁻¹ | observed photometry / spectroscopy |
 | Spectral luminosity `L_ν` | erg s⁻¹ Hz⁻¹ | every `SEDComponent.apply` output |
 | Bolometric luminosity | erg s⁻¹ (preferred) or `L_sun` | AGN `agn_log_lbol = log10(L_bol/L_sun)` |
@@ -19,7 +19,7 @@ Tengri carries no `astropy.units`-style runtime tagging. Every array is a plain 
 | Distance modulus | mag | `distance_modulus_from_dl` |
 | Redshift | dimensionless | `redshift` parameter |
 
-Every wavelength inside tengri is a **vacuum** wavelength, matching FSPS, SDSS, DESI and JWST, including emission lines (`H_alpha = 6564.61 Å`; the air name "Hα 6563" is only a label). A wavelength published in air (the Lick index windows, Cloudy and PyNeb line labels above 2000 Å) is converted exactly once, at ingestion, with the one converter pair in `tengri.utils.air_vacuum`:
+Every wavelength inside tengri is a **vacuum** wavelength, matching FSPS, SDSS, DESI and JWST, including emission lines (`H_alpha = 6564.61 Å`; the air name "Hα 6563" is only a label). A wavelength published in air (the Lick and 4000 Å break index windows, Cloudy and PyNeb line labels above 2000 Å) is converted exactly once, at ingestion, with the one converter pair in `tengri.utils.air_vacuum`:
 
 ```python
 from tengri.units import air_to_vac, vac_to_air
@@ -27,7 +27,7 @@ wave_air = vac_to_air(6564.61)  # 6562.80 Å
 wave_vac = air_to_vac(wave_air)  # 6564.61 Å
 ```
 
-The pair is the IAU standard (Morton 2000, ApJS 130, 403, Eq. 8, with the Ciddor 1996 refractive index), JAX-traceable and differentiable, and accepts numpy too. Wavelengths below 2000 Å vacuum are returned unchanged. `tengri.utils.air_vacuum` is the only place a refractive index appears; `tengri.utils.wavelength_conventions.SOURCES` declares the published convention and evidence of every tabulated source.
+The pair is the IAU standard (Morton 2000, ApJS 130, 403, Eq. 8, with the Ciddor 1996 refractive index), JAX-traceable and differentiable, and accepts numpy too. Wavelengths below 2000 Å vacuum are returned unchanged. `tengri.utils.air_vacuum` is the only place a refractive index appears; `tengri.utils.wavelength_conventions.SOURCES` declares the published convention and evidence of every tabulated source. Filter transmission curves are the one exception: none of their sources states whether the wavelengths are air or vacuum, so they are used as published (a 2.7e-4 relative shift, negligible for broadband photometry) and the registry keeps them on its open list.
 
 ## Where unit boundaries live
 
