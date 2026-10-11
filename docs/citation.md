@@ -299,6 +299,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Far-infrared band (42.5-122.5 um) definition of the IR-radio ratio q, the
+  ``ir_window='fir'`` option. Helou (1985),
+  [doi:10.1086/184556](https://doi.org/10.1086/184556).
 - Total-infrared SFR calibration cited for comparison in ``sfr_from_lir``'s
   docstring (tengri's own default calibration is Murphy et al. 2011).
   Kennicutt (1998),
