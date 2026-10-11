@@ -14,7 +14,7 @@ own grid, never on the caller's wavelength grid:
   grid, or the MN12 template on its native nodes) and the silicate feature
   (Gaussians on their own grid, or the template's native nodes).
 
-Template integrals use :func:`~tengri.components.agn._template_grid.native_bolometric_nu`,
+Template integrals use ``native_bolometric_nu`` in ``tengri.components.agn._template_grid``,
 the power-law interpolant that :func:`~tengri.utils.grid_interp.resample_template`
 builds, so the normalization equals the integral of the published template.
 Every function here is evaluated at unit ``l5100``.
