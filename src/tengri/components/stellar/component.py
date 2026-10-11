@@ -1493,6 +1493,8 @@ def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
     """
     n = fine_age_yr.shape[0]
     m = edges_yr.shape[0]
+    if n == 0:  # static: empty grid, as the dense code returned
+        return jnp.zeros(0, dtype=jnp.int32), jnp.zeros(0, dtype=bool)
     thr = eps * edges_yr
 
     def first_true(pred):
@@ -1505,7 +1507,9 @@ def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
 
         lo0 = jnp.zeros(m, dtype=jnp.int32)
         hi0 = jnp.full(m, n, dtype=jnp.int32)
-        return jax.lax.fori_loop(0, n.bit_length() + 1, body, (lo0, hi0))[0]
+        # The extra iteration is not idempotent at lo == hi == n (it gives n + 1),
+        # which would overstate a run reaching the grid end; clamp to n.
+        return jnp.minimum(jax.lax.fori_loop(0, n.bit_length() + 1, body, (lo0, hi0))[0], n)
 
     lo = first_true(lambda node: edges_yr - node <= thr)
     hi = first_true(lambda node: ~(node - edges_yr <= thr))

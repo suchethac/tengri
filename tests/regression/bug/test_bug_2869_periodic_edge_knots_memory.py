@@ -264,3 +264,63 @@ def test_edge_gradient_of_injected_grid_matches_dense_reference():
     old = jax.grad(loss(_dense_reference))(edges)
     assert np.all(np.isfinite(np.asarray(new))) and np.all(np.asarray(new) != 0.0)
     np.testing.assert_array_equal(np.asarray(new), np.asarray(old))
+
+
+# --- review follow-up: small-n / whole-grid capture, randomized, n = 0 ---------
+
+
+def _compare_to_dense(fine, edges, err_msg=""):
+    lo, hi = float(fine[0]), float(fine[-1])
+    fine_j, edges_j = jnp.asarray(fine), jnp.asarray(edges)
+    got = np.asarray(_inject_edge_knots(fine_j, edges_j, lo, hi))
+    want = np.asarray(_dense_reference(fine_j, edges_j, lo, hi))
+    assert got.dtype == want.dtype, err_msg
+    np.testing.assert_array_equal(got, want, err_msg=err_msg)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 7, 8, 15, 16])
+@pytest.mark.parametrize("within_eps", [False, True])
+def test_whole_grid_captured_by_one_edge(n, dtype, within_eps):
+    """Every node equal to (or within eps of) one edge: n = 2**j - 1 must not drop marks."""
+    edge = np.float64(3.0e8)
+    nodes = np.full(n, edge)
+    if within_eps:
+        nodes = nodes * (1.0 + np.linspace(-4e-7, 4e-7, n))
+    fine = np.sort(nodes).astype(dtype)
+    edges = np.array([edge, edge * 7.0], dtype=dtype)
+    _compare_to_dense(fine, edges, f"n={n} {dtype.__name__} eps={within_eps}")
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+def test_randomized_matches_dense_reference(dtype):
+    """~300 seeded trials: unsorted/clustered/duplicate edges, edges outside the grid."""
+    rng = np.random.default_rng(28691)
+    for trial in range(300):
+        n = int(rng.integers(1, 65))
+        fine = np.sort(10.0 ** rng.uniform(6.0, 10.0, n))
+        if rng.random() < 0.3:  # repeated node values
+            fine = np.sort(np.concatenate([fine, fine[: n // 2]]))[: max(n, 1)]
+        m = int(rng.integers(1, 12))
+        pool = [fine[rng.integers(0, len(fine), m)]]  # on nodes
+        pool.append(fine[rng.integers(0, len(fine), m)] * (1.0 + rng.uniform(-3e-6, 3e-6, m)))
+        pool.append(fine[0] * (1.0 + rng.choice([0.0, 4e-7, -9e-7, 1.5e-6], m)))  # clustered
+        pool.append(np.array([fine[0] * 0.3, fine[-1] * 3.0]))  # outside the grid
+        pool.append(np.repeat(fine[rng.integers(0, len(fine))], 3))  # duplicates
+        # Fixed edge count keeps the number of distinct compiled shapes small.
+        edges = np.resize(rng.permutation(np.concatenate(pool)), 16)
+        _compare_to_dense(fine.astype(dtype), edges.astype(dtype), f"trial={trial} n={n}")
+
+
+def test_empty_grid_returns_empty():
+    """n = 0: same as the dense code (empty pick/hit), no gather failure."""
+    from tengri.components.stellar.component import _first_edge_within_eps
+
+    fine = jnp.zeros(0)
+    edges = jnp.asarray([1.0e8, 2.0e8])
+    pick, hit = _first_edge_within_eps(fine, edges, EPS)
+    assert pick.shape == (0,) and hit.shape == (0,)
+    assert hit.dtype == jnp.bool_
+    got = np.asarray(_inject_edge_knots(fine, edges, 1.0e6, 1.0e10))
+    want = np.asarray(_dense_reference(fine, edges, 1.0e6, 1.0e10))
+    np.testing.assert_array_equal(got, want)
