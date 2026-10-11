@@ -19,16 +19,12 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-# FSPS's solar metallicity depends on the isochrone the grid was built with
-# (FSPS's isochrone-specific Z_sun). Written to the root ``zsun`` attribute so
-# the loader can convert the relative log_met axis to absolute log10(Z).
-ZSUN_BY_ISOC: dict[str, float] = {
-    "mist": 0.0142,
-    "prsc": 0.01524,
-    "pdva": 0.019,
-    "bpss": 0.020,
-}
-_ZSUN_OTHER: float = 0.020  # any isochrone not listed above (BPASS and others)
+from tengri.components.nebular.cloudy_grid import CLOUDY_ZSUN_BY_ISOC
+
+# FSPS's solar metallicity depends on the isochrone the grid was built with. The
+# value is written to the root ``zsun`` attribute so the loader can convert the
+# relative log_met axis to absolute log10(Z).
+_ZSUN_OTHER: float = 0.020  # any isochrone not in CLOUDY_ZSUN_BY_ISOC (BPASS and others)
 
 
 def parse_header(line: str) -> dict:
@@ -202,7 +198,7 @@ def convert(
     else:
         line_names = [f"line_{wl:.1f}A" for wl in lines_grid["wavelength"]]
 
-    zsun = ZSUN_BY_ISOC.get(isoc, _ZSUN_OTHER)
+    zsun = CLOUDY_ZSUN_BY_ISOC.get(isoc, _ZSUN_OTHER)
 
     # Write HDF5
     print(f"Writing: {output_path}")

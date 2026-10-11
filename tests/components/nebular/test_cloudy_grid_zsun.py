@@ -3,8 +3,9 @@
 
 The converter records the isochrone's solar metallicity as the root ``zsun``
 attribute, and ``load_cloudy_grid`` uses it to map the relative axis
-log10(Z / Z_sun) onto absolute log10(Z). A file without the attribute falls
-back to the MIST value 0.0142 with a one-time warning naming the file.
+log10(Z / Z_sun) onto absolute log10(Z). A file without the attribute takes its
+family's entry in ``CLOUDY_ZSUN_BY_ISOC``; a file of unknown family falls back to
+the MIST value 0.0142 with a one-time warning naming the file.
 """
 
 from __future__ import annotations
