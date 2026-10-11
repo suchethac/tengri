@@ -332,3 +332,23 @@ def test_the_summed_sed_is_not_rank1():
             continue
         r = y[m] / x[m]
         assert np.abs(r / r[0] - 1.0).max() < 1e-12, f"term {key!r} is not rank-1"
+
+
+def test_radio_window_luminosity_from_the_dust_table_matches_the_exact_integral():
+    """Under WavePrecomp with a fixed dust shape the radio block reads its IR-window
+    luminosity from the dust-emission block's build-time table (a scalar, as it reads
+    ``L_ir``) instead of integrating the dust SED on the full grid every call. It must
+    equal the exact path's band integral, and so must the photometry."""
+    lut, exact = _model("radio", approx=WavePrecomp()), _model("radio", approx=None)
+    table = lut._template_data_for_jit()["dust_ir"]["emission_band_response"]
+    assert set(table["log_window_fraction"]) >= {"tir", "fir"}
+    s_lut, s_exact = lut.predict_state(_params(lut)), exact.predict_state(_params(exact))
+    got = float(s_lut.derived["radio_log_L_ir_input"])
+    want = float(s_exact.derived["radio_log_L_ir_input"])
+    assert got == pytest.approx(want, abs=1e-12)
+    assert got < float(s_exact.derived["log_L_ir"]) - float(np.log10(3.828e33))  # TIR < total
+    np.testing.assert_allclose(
+        np.asarray(lut.predict_photometry(_params(lut))),
+        np.asarray(exact.predict_photometry(_params(exact))),
+        rtol=1e-9,
+    )

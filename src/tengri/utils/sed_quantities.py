@@ -409,7 +409,8 @@ def log10_band_luminosity(
     ndarray, shape ()
         :math:`\log_{10}(L / {\rm erg\,s^{-1}})`; ``-inf`` when the window holds
         no positive flux. Formed from the peak-normalized integrand, so the
-        ~1e43 erg/s value is never materialized (float32-safe, #1206).
+        ~1e43 erg/s value is never materialized (float32-safe, #1206). Repeated grid
+        nodes (a float32 grid) are zero-width cells and carry no weight.
 
     Notes
     -----
@@ -425,7 +426,13 @@ def log10_band_luminosity(
     f_a, f_b = f[:-1], f[1:]
     a = jnp.clip(nu_a, nu_lo, nu_hi)
     b = jnp.clip(nu_b, nu_lo, nu_hi)
-    slope = (f_a - f_b) / (nu_a - nu_b)
+    # A float32 rest grid spanning 10 A to 3e11 A repeats nodes at the long end
+    # (nu_a == nu_b), where the slope is 0/0 and poisons the sum. Such a cell has
+    # zero width after clipping, so it carries no weight; the double where keeps
+    # the NaN out of the backward pass as well.
+    dnu = nu_a - nu_b
+    wide = dnu > 0.0
+    slope = jnp.where(wide, (f_a - f_b) / jnp.where(wide, dnu, jnp.ones_like(dnu)), 0.0)
     f_at_a = f_b + slope * (a - nu_b)
     f_at_b = f_b + slope * (b - nu_b)
     norm = jnp.sum(0.5 * (f_at_a + f_at_b) * (a - b))

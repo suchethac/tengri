@@ -160,3 +160,29 @@ def test_window_outside_the_wavelength_grid_is_refused(grid):
 def test_unknown_window_is_refused_at_construction():
     with pytest.raises(ValueError, match="ir_window"):
         RadioSEDComponentConfig(ir_window="mir")
+
+
+def test_repeated_grid_nodes_in_float32_carry_no_weight_and_no_nan_gradient(grid):
+    """A float32 rest grid repeats nodes at the long end (nu_a == nu_b); the cell is empty.
+
+    The band luminosity matches the float64 value of the same SED, and its gradient with
+    respect to the SED is finite (the 0/0 slope of a zero-width cell must not reach the
+    backward pass).
+    """
+    import jax
+
+    wave64, shape = grid
+    wave32 = np.asarray(wave64, dtype=np.float32)
+    wave_rep = np.concatenate([wave32, wave32[-1:], wave32[-1:]])  # two exact repeats
+    shape_rep = np.concatenate([shape, shape[-1:], shape[-1:]])
+    peak = shape.max()
+    sed32 = jnp.asarray(shape_rep / peak, dtype=jnp.float32)
+    lo, hi = IR_WINDOWS_AA["tir"]
+    got = float(log10_band_luminosity(sed32, jnp.asarray(wave_rep), lo, hi))
+    want = np.log10(_quad_band(lo, hi) / peak)
+    assert got == pytest.approx(want, abs=2e-4)
+    grad = jax.grad(lambda s: log10_band_luminosity(s, jnp.asarray(wave_rep), lo, hi))(sed32)
+    assert bool(jnp.all(jnp.isfinite(grad))), (
+        "a zero-width cell leaked its 0/0 slope into the gradient"
+    )
+    assert bool(jnp.any(grad != 0.0)), "the band luminosity must respond to the SED"

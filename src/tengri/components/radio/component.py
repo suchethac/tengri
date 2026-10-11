@@ -464,7 +464,10 @@ class RadioSEDComponent(TemplateThreading):
     )
 
     def emitter_inputs(
-        self, derived: Mapping[str, Any], wave: jnp.ndarray | None = None
+        self,
+        derived: Mapping[str, Any],
+        wave: jnp.ndarray | None = None,
+        log_window_fraction: jnp.ndarray | None = None,
     ) -> dict[str, jnp.ndarray]:
         """Read this emitter's cross-component scalars off the derived state.
 
@@ -476,6 +479,12 @@ class RadioSEDComponent(TemplateThreading):
         wave : array_like, optional
             Rest wavelength grid [Angstrom] of ``derived["sed_dust_ir"]``. Required
             when ``config.ir_window`` is not ``"total"``, ignored otherwise.
+        log_window_fraction : array_like, optional
+            ``log10`` of the share of the dust power inside the window [dex], the
+            build-time constant the dust-emission block tabulates for a fixed shape
+            (:meth:`tengri.SEDModel._dust_emission_band_response`). When given, the
+            windowed luminosity is ``L_ir`` times that share and the dust SED is not
+            integrated.
 
         Returns
         -------
@@ -497,14 +506,17 @@ class RadioSEDComponent(TemplateThreading):
         if log_L_ir is not None:
             inputs["log_L_ir"] = jnp.asarray(log_L_ir)
         if self.config.resolved_ir_window != "total":
-            inputs.update(self._windowed_l_ir(derived, wave))
+            inputs.update(self._windowed_l_ir(derived, wave, log_window_fraction))
         log_L_agn_bol = derived.get("log_L_agn_bol")
         if log_L_agn_bol is not None:
             inputs["log_L_agn_bol"] = jnp.asarray(log_L_agn_bol)
         return inputs
 
     def _windowed_l_ir(
-        self, derived: Mapping[str, Any], wave: jnp.ndarray | None
+        self,
+        derived: Mapping[str, Any],
+        wave: jnp.ndarray | None,
+        log_window_fraction: jnp.ndarray | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""``L_ir`` / ``log_L_ir`` re-formed over ``config.ir_window``.
 
@@ -526,6 +538,13 @@ class RadioSEDComponent(TemplateThreading):
         from tengri.utils.sed_quantities import log10_band_luminosity
 
         window = self.config.resolved_ir_window
+        if log_window_fraction is not None:
+            # Fixed dust shape: the window holds a constant share of the dust power.
+            log_l_ir = derived.get("log_L_ir")
+            if log_l_ir is None:
+                log_l_ir = jnp.log10(jnp.asarray(derived["L_ir"]))
+            log_l = jnp.asarray(log_l_ir) + log_window_fraction
+            return {"L_ir": pow10(log_l), "log_L_ir": log_l}
         sed_ir = derived.get("sed_dust_ir")
         if sed_ir is None and self.config.ir_window is None:
             # No dust-emission SED to integrate: a defaulted window falls back to the
@@ -551,6 +570,27 @@ class RadioSEDComponent(TemplateThreading):
         log_l = log10_band_luminosity(jnp.asarray(sed_ir), jnp.asarray(wave), lo_aa, hi_aa)
         return {"L_ir": pow10(log_l), "log_L_ir": log_l}
 
+    def _table_log_window_fraction(self, template_data: Any, z: jnp.ndarray) -> jnp.ndarray | None:
+        """``log10`` share of the dust power in the window, from the build-time table.
+
+        Present only under ``WavePrecomp`` with a fixed dust-emission shape, where the
+        dust block tabulates it beside its band response (``None`` otherwise, and the
+        window is integrated from ``sed_dust_ir``). Read at the evaluation redshift.
+        """
+        window = self.config.resolved_ir_window
+        if window == "total" or not isinstance(template_data, Mapping):
+            return None
+        dust_ir = template_data.get("dust_ir")
+        table = dust_ir.get("emission_band_response") if isinstance(dust_ir, Mapping) else None
+        if not isinstance(table, Mapping):
+            return None
+        per_window = table.get("log_window_fraction")
+        if not isinstance(per_window, Mapping) or window not in per_window:
+            return None
+        from tengri.components._z_response import interp_z_table
+
+        return interp_z_table({"ln1pz": table["ln1pz"], "values": per_window[window]}, z)
+
     @staticmethod
     def _l_ir_input_outputs(inputs: Mapping[str, jnp.ndarray]) -> dict[str, jnp.ndarray]:
         """``radio_L_ir_input`` [Lsun] and ``radio_log_L_ir_input`` [dex] from the kernel inputs.
@@ -567,7 +607,7 @@ class RadioSEDComponent(TemplateThreading):
         if log_in is not None:
             log_lsun = jnp.asarray(log_in) - math.log10(L_SUN)
         else:
-            log_lsun = jnp.log10(jnp.maximum(l_lsun, 1e-30))
+            log_lsun = jnp.log10(l_lsun)  # -inf for no dust power
         return {"radio_L_ir_input": l_lsun, "radio_log_L_ir_input": log_lsun}
 
     def _window_freefree(
@@ -844,7 +884,11 @@ class RadioSEDComponent(TemplateThreading):
         # lives in RadioSEDComponentConfig.__post_init__.
         wave = state.wave
         z = jnp.asarray(require_redshift(params, "components.radio.component.apply"))
-        inputs = self.emitter_inputs(state.derived, wave)
+        inputs = self.emitter_inputs(
+            state.derived,
+            wave,
+            self._table_log_window_fraction(template_data, z),
+        )
 
         def _emit(w):
             t = self.emission_terms(params, w, **inputs)
