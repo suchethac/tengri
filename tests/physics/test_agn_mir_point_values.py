@@ -15,7 +15,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.agn.component import _MIR_DIAGNOSTIC_AA, _mir_point_logs
+from tengri.components.agn.component import (
+    _MIR_DIAGNOSTIC_AA,
+    _mir_logs,
+    _with_diagnostic_nodes,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -38,6 +42,17 @@ def _power_law_chain(exponents):
     return chain
 
 
+def _mir_point_logs(model, chain, kwargs, agn_log_lbol, dtype, caller_wave=None):
+    """The composable path: one chain evaluation on the caller grid plus the diagnostic nodes."""
+    assert model == "composable"
+    wave = jnp.asarray(np.geomspace(1.0e3, 1.0e6, 50) if caller_wave is None else caller_wave)
+    wave = wave.astype(dtype)
+    wave_ext, _, to_diag = _with_diagnostic_nodes(wave)
+    comps = chain(wave_ext, agn_log_lbol=agn_log_lbol, return_components=True, **kwargs)[3]
+    lnu = jnp.take(comps["disc"] + comps["torus"] + comps["polar"], to_diag)
+    return _mir_logs(jnp.asarray(_MIR_DIAGNOSTIC_AA, dtype=dtype), lnu, 0.0)
+
+
 def _expected_log_nu_lnu(exponents, wave_aa, agn_log_lbol):
     lnu = sum(10.0 ** (agn_log_lbol - 10.0) * wave_aa**e for e in exponents.values())
     return float(np.log10(C_AA / wave_aa * lnu))
@@ -55,6 +70,21 @@ def test_mir_points_are_the_emitted_sed_at_6_and_12_um(agn_log_lbol):
     assert float(log_12) == pytest.approx(
         _expected_log_nu_lnu(exponents, _MIR_DIAGNOSTIC_AA[1], agn_log_lbol), rel=1e-12
     )
+
+
+def test_mir_points_are_the_same_on_different_caller_grids():
+    """A coarse grid, a dense grid and a grid containing 6 um itself give identical values."""
+    chain = _power_law_chain({"disc": -1.0, "torus": -0.5, "polar": 0.3})
+    grids = (
+        np.geomspace(1.0e3, 1.0e6, 12),
+        np.geomspace(1.0e2, 1.0e7, 4000),
+        np.unique(np.concatenate([np.geomspace(1.0e3, 1.0e6, 30), [6.0e4]])),
+    )
+    values = [
+        np.asarray(_mir_point_logs("composable", chain, {}, 11.0, jnp.float64, g)) for g in grids
+    ]
+    for v in values[1:]:
+        assert np.allclose(v, values[0], rtol=0.0, atol=1e-12)
 
 
 def test_mir_points_do_not_depend_on_the_caller_grid():

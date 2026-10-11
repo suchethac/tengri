@@ -203,7 +203,7 @@ from collections.abc import Sequence
 #: ``dust_T`` (prior 20-80 K, validated > 0) and the Schreiber libraries that apply the boost
 #: tabulate 15-99 K, so the 1 K floor never binds for a valid model; it only keeps a traced
 #: zero from producing inf.
-EXPECTED_SITES = 85
+EXPECTED_SITES = 84
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
