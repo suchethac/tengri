@@ -26,6 +26,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests.physics._agn_publication import (
+    PUB_COARSE as _PUB_COARSE,
+    PUB_DENSE as _PUB_DENSE,
+    PUB_GRIDS as _PUB_GRIDS,
+    ln_nu_integral as _ln_nu_integral,
+)
+
 pytestmark = pytest.mark.limit
 
 _PROBES_DISC = np.geomspace(1.0e3, 2.5e4, 40)  # A
@@ -229,31 +236,11 @@ def test_truncated_grid_matches_fine_grid(case):
 # * the SKIRTOR emitted SED does not depend on the caller grid, and at delta=0 it is the
 #   tabulated disc (bit-identical to the un-retilted template on the same grid).
 
-_C_AA = 2.99792458e18
 # SKIRTOR's analytic disc is zero below 8 nm and above 1e6 nm: the edges are nodes, so the
 # quadrature does not straddle the jump at either edge.
 _BAND_WIDE = np.geomspace(10.0, 1.0e8, 200_000)
 _DISC_EDGES_AA = [x for e in (80.0, 1.0e7) for x in (e * (1 - 1e-9), e, e * (1 + 1e-9))]
 _WIDE = np.unique(np.concatenate([np.geomspace(1.0e-3, 1.0e10, 200_000), _DISC_EDGES_AA]))
-_PUB_DENSE = np.geomspace(10.0, 1.0e7, 4000)
-_PUB_COARSE = np.geomspace(10.0, 1.0e7, 40)
-_PUB_FILTERS = np.array(
-    [
-        1528.0,
-        2271.0,
-        3551.0,
-        4686.0,
-        6166.0,
-        7480.0,
-        8932.0,
-        12350.0,
-        16620.0,
-        21590.0,
-        33526.0,
-        46028.0,
-    ]
-)
-_PUB_GRIDS = (_PUB_DENSE, _PUB_COARSE, _PUB_FILTERS)
 
 
 def _data_file(name):
@@ -263,14 +250,6 @@ def _data_file(name):
     if found is None:
         pytest.skip(f"template data unavailable ({name})")
     return str(found)
-
-
-def _ln_nu_integral(sed, wave):
-    """Bolometric integral of L_nu on any grid: trapezoid in ln(nu) of L_nu * nu [erg/s]."""
-    nu = _C_AA / np.asarray(wave, dtype=float)
-    order = np.argsort(nu)
-    y = np.asarray(sed, dtype=float)[order] * nu[order]
-    return float(np.trapezoid(y, np.log(nu[order])))
 
 
 def _load_component(module, cls_name, cfg_name, grid_file=None, overrides=None):
