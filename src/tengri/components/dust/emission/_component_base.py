@@ -16,13 +16,23 @@ with no need to override apply().
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import functools
+from collections.abc import Callable, Mapping
 from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
 from tengri.components._z_response import interp_z_table
-from tengri.components.dust.emission._physics import integrate_lnu_over_nu
+from tengri.components.dust.emission._cmb import (
+    CMB_TEMPLATE_BETA_IR,
+    cmb_heating_luminosity_boost,
+    cmb_observed_emission,
+    template_far_ir_temperature,
+)
+from tengri.components.dust.emission._physics import (
+    cmb_corrected_temperature,
+    integrate_lnu_over_nu,
+)
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
@@ -116,6 +126,23 @@ def _apply_diffuse_screen(
     return sed_ir, new_published
 
 
+def _with_cmb(inner: Callable) -> Callable:
+    """Route a concrete ``predict`` through the opt-in CMB step (#2766).
+
+    With ``self.cmb`` False the wrapper returns ``inner``'s own result
+    untouched, so the default path is bit-identical to an unwrapped class.
+    """
+
+    @functools.wraps(inner)
+    def predict(self, p, sed_in, wave, **inputs):
+        if not self.cmb:
+            return inner(self, p, sed_in, wave, **inputs)
+        return self._predict_with_cmb(inner, p, sed_in, wave, **inputs)
+
+    predict._cmb_wrapped = True  # type: ignore[attr-defined]
+    return predict
+
+
 class EmissionComponent(SEDModelComponent):
     """Abstract base for all dust IR emission models.
 
@@ -180,6 +207,22 @@ class EmissionComponent(SEDModelComponent):
     #: is published as log_L_ir_emergent. Default False (off, bit-identical to today).
     diffuse_screen: ClassVar[bool] = False
 
+    #: Whether this backend offers the opt-in CMB heating / contrast of da Cunha
+    #: et al. (2013) (``dust_emission={'cmb': True}``, #2766). True for the
+    #: tabulated models; the analytic ones apply the effect unconditionally.
+    cmb_supported: ClassVar[bool] = False
+
+    #: Whether the backend has a dust temperature parameter ``T`` that the CMB
+    #: heats (Eq. 12). True only for the single-temperature libraries; the
+    #: radiation-field libraries get the contrast only, see
+    #: ``tengri.components.dust.emission._cmb``.
+    cmb_heats_template: ClassVar[bool] = False
+
+    #: Whether CMB heating / contrast is applied. Set per instance by the
+    #: component factory from the ``cmb`` key. Default False: ``predict`` is
+    #: then exactly the backend's own.
+    cmb: ClassVar[bool] = False
+
     #: Fraction of ``L_ir`` a non-energy-balanced backend re-emits standalone,
     #: measured (``|int sed_dust_ir dnu| / L_ir`` at z = 0), quoted in the
     #: refusal so the user is told the size of the hole rather than only that
@@ -195,6 +238,75 @@ class EmissionComponent(SEDModelComponent):
     #: not proportional and must set this False, or factoring would return a
     #: silently wrong SED rather than an obviously broken one.
     factors_l_ir: ClassVar[bool] = True
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        own_predict = cls.__dict__.get("predict")
+        if own_predict is not None and not getattr(own_predict, "_cmb_wrapped", False):
+            cls.predict = _with_cmb(own_predict)
+
+    def _predict_with_cmb(
+        self,
+        inner: Callable,
+        p: Mapping[str, jnp.ndarray],
+        sed_in: jnp.ndarray,
+        wave: jnp.ndarray,
+        **inputs: Any,
+    ) -> tuple[jnp.ndarray, dict[str, Any]]:
+        r"""Evaluate ``inner`` and apply CMB heating / contrast to its emission.
+
+        Parameters
+        ----------
+        inner : callable
+            The backend's own ``predict``.
+        p : mapping[str, ndarray]
+            Prefix-stripped parameters; must carry ``redshift``.
+        sed_in : ndarray, shape (n_wave,)
+            Upstream SED, passed through unchanged. [erg/s/Hz]
+        wave : ndarray, shape (n_wave,)
+            Rest-frame wavelength grid. [Å]
+        **inputs : ndarray
+            Cross-component inputs (``L_ir``, ...), forwarded.
+
+        Returns
+        -------
+        tuple[ndarray, dict]
+            ``(sed_in + emission, published)`` with ``sed_dust_ir`` replaced by
+            the CMB-corrected emission.
+
+        Notes
+        -----
+        **JIT-compatible**: yes, all operations are ``jnp`` primitives.
+
+        The correction is linear in the emission, so it commutes with the
+        ``L_ir`` factoring and with the per-filter band response. A backend with
+        a temperature parameter (:attr:`cmb_heats_template`) is read at the
+        heated temperature (Eq. 12), scaled by the luminosity boost, and
+        multiplied by the contrast (Eq. 18); any other backend gets the contrast
+        at the heated version of its template temperature
+        (``tengri.components.dust.emission._cmb.template_far_ir_temperature``),
+        with its spectrum unchanged. See
+        ``tengri.components.dust.emission._cmb`` for why.
+        """
+        z = jnp.asarray(
+            require_redshift(p, f"{type(self).__name__}.predict (dust_emission cmb=True)")
+        )
+        zeros = jnp.zeros_like(wave)
+        if self.cmb_heats_template:
+            T_dust = p["T"]
+            T_eff = cmb_corrected_temperature(T_dust, z, CMB_TEMPLATE_BETA_IR)
+            emission, published = inner(self, {**p, "T": T_eff}, zeros, wave, **inputs)
+            emission = emission * cmb_heating_luminosity_boost(T_dust, T_eff, CMB_TEMPLATE_BETA_IR)
+        else:
+            emission, published = inner(self, p, zeros, wave, **inputs)
+            T_eff = cmb_corrected_temperature(
+                template_far_ir_temperature(wave, emission), z, CMB_TEMPLATE_BETA_IR
+            )
+        emission = cmb_observed_emission(wave, emission, z, T_eff)
+        published = dict(published)
+        if "sed_dust_ir" in published:
+            published["sed_dust_ir"] = emission
+        return sed_in + emission, published
 
     def _factor_l_ir(
         self, state: ForwardState, input_kwargs: dict[str, Any]
