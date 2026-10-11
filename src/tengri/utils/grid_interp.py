@@ -1466,6 +1466,7 @@ def interp_nd_pchip(
     axes: tuple[jnp.ndarray, ...],
     point: tuple,
     kinds: tuple[str, ...] | None = None,
+    extrapolate: tuple[bool, ...] | None = None,
 ) -> jnp.ndarray:
     """N-dimensional node-exact monotone-cubic (PCHIP) interpolation.
 
@@ -1492,6 +1493,10 @@ def interp_nd_pchip(
         ``axes[i]`` has shape ``(grid_dims[i],)``.
     point : tuple
         Query coordinates, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis: continue the end cubic past the first and last node instead
+        of clipping the query to them. Only valid for ``'pchip'`` axes.
+        Default: clip on every axis.
     kinds : tuple of {'pchip', 'linear'}, optional
         Interpolation kind per axis, in the same order as ``axes``. Defaults to
         PCHIP on every axis. Select ``'linear'`` for an axis whose tabulated
@@ -1521,7 +1526,13 @@ def interp_nd_pchip(
     the slope computation keep the VJP finite at flat segments.
 
     Queries are clipped to the grid extent (no extrapolation beyond the
-    boundary nodes).
+    boundary nodes) unless ``extrapolate`` is set for that axis. An
+    extrapolated PCHIP axis continues its end cubic past the boundary node,
+    so a query a hair outside the table (a parameter prior that reaches
+    ``cos(90 deg)`` against a stored node of ``6e-17``) keeps a nonzero
+    derivative instead of the zero that clipping returns there. The end cubic
+    is the same one that interpolates the table, so nodes and the interior are
+    unchanged.
 
     References
     ----------
@@ -1536,10 +1547,21 @@ def interp_nd_pchip(
     unknown = set(kinds) - set(_EVAL_AXIS0)
     if unknown:
         raise ValueError(f"unknown interpolation kind(s) {sorted(unknown)}; expected pchip/linear")
+    if extrapolate is None:
+        extrapolate = (False,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    if any(e and k == "linear" for e, k in zip(extrapolate, kinds, strict=True)):
+        raise ValueError("extrapolate is only defined for pchip axes")
 
     reduced = grid
-    for ax, p, kind in zip(axes, point, kinds, strict=True):
-        reduced = _EVAL_AXIS0[kind](ax, reduced, p)
+    for ax, p, kind, ext in zip(axes, point, kinds, extrapolate, strict=True):
+        if kind == "pchip":
+            reduced = _pchip_eval_axis0(ax, reduced, p, extrapolate=bool(ext))
+        else:
+            reduced = _linear_eval_axis0(ax, reduced, p)
     return reduced
 
 

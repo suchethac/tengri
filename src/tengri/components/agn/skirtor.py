@@ -395,6 +395,16 @@ def _load_grid_arrays(grid_path: str):
     return _ascending_axes(result)
 
 
+def _cos_inc_extrapolate(axes: tuple) -> tuple:
+    """Per-axis extrapolation flags: ``cos_inclination`` (the last axis) extends past its ends.
+
+    The prior reaches ``cos_inc = 0`` but the stored axis starts at ``cos(90 deg) = 6e-17``.
+    Clipping there returns an exactly-zero gradient on a fittable parameter (#1911);
+    continuing the end cubic keeps it nonzero, and the cubic is node-exact (#2606).
+    """
+    return (False,) * (len(axes) - 1) + (True,)
+
+
 def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
     """Drop the R (radius_ratio) coordinate when the grid lacks that axis.
 
@@ -473,7 +483,9 @@ def _interpolate_and_normalize(
     # cos_inclination (spacing ratio 11.43): see #1911.
     # Node-exact PCHIP, not the triweight smoother: the library is a tabulated
     # radiative-transfer result, so an exact node must return its own SED (#2606).
-    template = interp_nd_pchip(grid_jax, axes, _match_point_to_axes(point, axes))
+    template = interp_nd_pchip(
+        grid_jax, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
+    )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalize on truncated grids; trapezoid in λ matches the
@@ -1078,7 +1090,9 @@ def skirtor_disc_dust_ratio(
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
         # does not pass through grid nodes, distorting the disk/dust *integral
         # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
-        return interp_nd_pchip(grid, axes, _match_point_to_axes(point, axes))
+        return interp_nd_pchip(
+            grid, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
+        )
 
     disk_i_n = _interp_native(disk_jax, agn_cos_inc)
     dust_i_n = _interp_native(dust_jax, agn_cos_inc)

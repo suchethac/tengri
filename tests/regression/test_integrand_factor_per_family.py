@@ -38,6 +38,10 @@ from tengri.components.stellar.component import (
 pytestmark = pytest.mark.regression_bug
 
 
+#: Age of the universe at z = 0 [Gyr]: how far the parametric integrand reaches (#2714).
+_T_OBS_GYR = 13.787
+
+
 def test_tabulated_refinement_is_coarser_than_parametric():
     """The whole point: the two are different, and which way round."""
     assert INTEGRAND_FACTOR_TABULATED < INTEGRAND_FACTOR_PARAMETRIC, (
@@ -88,6 +92,7 @@ def test_cic_integrand_routes_tabulated_to_the_tabulated_factor(monkeypatch):
         {},
         None,
         tab_lbt,
+        _T_OBS_GYR,
     )
 
     assert seen == [INTEGRAND_FACTOR_TABULATED], (
@@ -106,6 +111,7 @@ def test_cic_integrand_routes_non_tabulated_to_the_parametric_factor(monkeypatch
         {},
         None,
         None,
+        _T_OBS_GYR,
     )
 
     assert seen == [INTEGRAND_FACTOR_PARAMETRIC], (
@@ -123,8 +129,8 @@ def test_tabulated_grid_is_actually_smaller(monkeypatch):
     tab_lbt = np.linspace(1e6, 1e10, 24)
     sfr_fn = lambda age, **kw: np.ones_like(np.asarray(age, dtype=float))  # noqa: E731
 
-    tab_grid, _ = comp._cic_integrand(ssp_ages, sfr_fn, {}, None, tab_lbt)
-    par_grid, _ = comp._cic_integrand(ssp_ages, sfr_fn, {}, None, None)
+    tab_grid, _ = comp._cic_integrand(ssp_ages, sfr_fn, {}, None, tab_lbt, _T_OBS_GYR)
+    par_grid, _ = comp._cic_integrand(ssp_ages, sfr_fn, {}, None, None, _T_OBS_GYR)
 
     assert tab_grid.shape[0] < par_grid.shape[0], (
         f"tabulated integrand has {tab_grid.shape[0]} nodes, parametric "

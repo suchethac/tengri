@@ -152,6 +152,7 @@ SIGNATURE_POLICY: KeyPolicy = {
         "age-selective LyC escape geometry (#2529) changes the dust screen"
     ),
     "_dust_ir_diffuse_screen": content("diffuse-screen pass changes the emitted IR SED"),
+    "_dust_ir_cmb": content("CMB heating/contrast changes the emitted IR SED"),
     "_astrodust_spinning_dust": content("astrodust AME enable flag changes the emitted SED"),
     "_astrodust_f_cnm": content("astrodust cold-neutral-medium filling fraction"),
     "_wg00_dust_curve": content("WG00 dust curve selector (dust_type=3 only)"),
@@ -206,6 +207,10 @@ SIGNATURE_POLICY: KeyPolicy = {
     "_radio_include_freefree": content(
         "thermal free-free on/off changes the emitted radio SED; set by the grammar's "
         "radio.sf.freefree key and routed to RadioSEDComponentConfig.include_freefree"
+    ),
+    "_radio_sf_nu_ref": content(
+        "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
+        "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"
     ),
     "_radio_sfr_mode": content("radio SFR-tracer model selection"),
     "_radio_agn_model": content("radio AGN model selection"),
