@@ -2641,7 +2641,7 @@ _8b_grid = [
 _LINE_RATIOS_8B = (
     ("Ha/Hb", 6564.61, 4862.68),
     ("[OIII]/Hb", 5008.24, 4862.68),
-    ("[OII]/Hb", 3728.48, 4862.68),  # centre of the vacuum 3727.09 / 3729.88 doublet
+    ("[OII]/Hb", 3728.48, 4862.68),  # center of the vacuum 3727.09 / 3729.88 doublet
 )
 
 _rt_8b_all, _rc_8b_all = [], []
@@ -3985,12 +3985,11 @@ save_fig("cigale_10b_xray_inclination.png")
 # CIGALE-convention synchrotron at 1.4 GHz, which combines the thermal share
 # removed from Bell's total, that smaller TIR input and the 1.4 against
 # 1.4276 GHz anchor. The remaining numbers share one base, Bell's TIR total at
-# 1.4 GHz: the synchrotron is 0.9003 of it and the nebular continuum 0.0569, so
-# (synchrotron + nebular continuum) / Bell total is 0.957. It falls below 1
-# because the thermal share removed from the total (0.0997; the Murphy et al.
-# (2011) term at the TIR input is 0.0967) exceeds the nebular continuum's
-# 0.0569 by 0.0428. The printed 0.0967 and 0.0997 differ by 0.003, which is the
-# part of the removed share that the Murphy term does not account for.
+# exactly 1.4 GHz: the synchrotron is 0.9033 of it and the nebular continuum 0.0569,
+# so (synchrotron + nebular continuum) / Bell total is 0.960. It falls below 1
+# because the thermal share removed from the total, which is the Murphy et al.
+# (2011) term at the TIR input (0.0967), exceeds the nebular continuum's 0.0569 by
+# 0.0398.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
@@ -4140,7 +4139,15 @@ print(
 # radio block published for this build (`radio_L_ir_input`), not from the total dust
 # luminosity the CIGALE-convention build above uses.
 _sed_neb = np.asarray(state_r.derived["sed_nebular"])  # nebular continuum incl. free-free tail
-_j14 = int(np.argmin(np.abs(C_AA / w_t - 1.4e9)))
+_W_14 = C_AA / 1.4e9  # rest wavelength of exactly 1.4 GHz [Å]
+
+
+def _at_14ghz(sed):
+    """``sed`` log-log interpolated to exactly 1.4 GHz."""
+    return float(np.exp(np.interp(np.log(_W_14), np.log(w_t), np.log(np.maximum(sed, 1e-300)))))
+
+
+_sync_14, _sync_cig_14, _neb_14 = (_at_14ghz(x) for x in (sed_t_tot, sed_t, _sed_neb))
 _L_tir_in = float(np.asarray(state_r_tot.derived["radio_L_ir_input"])) * L_SUN  # Lsun → erg/s
 _bell_total_14 = _L_tir_in / (3.75e12 * 10.0**2.5)
 print(
@@ -4149,26 +4156,27 @@ print(
 )
 print(
     f"§11   default synchrotron / CIGALE-convention synchrotron = "
-    f"{sed_t_tot[_j14] / sed_t[_j14]:.4f} at 1.4 GHz (thermal share, TIR window and "
+    f"{_sync_14 / _sync_cig_14:.4f} at 1.4 GHz (thermal share, TIR window and "
     f"the 1.4 vs 1.4276 GHz anchor together)"
 )
 print(
     f"§11   (default synchrotron + nebular continuum) / Bell's calibrated total from the "
-    f"TIR input, L(1.4 GHz) = {(sed_t_tot[_j14] + _sed_neb[_j14]) / _bell_total_14:.3f}"
+    f"TIR input, L(1.4 GHz) = {(_sync_14 + _neb_14) / _bell_total_14:.3f}"
 )
 
-# The same residual in one base: every term as a fraction of Bell's TIR total at 1.4 GHz.
-_sync_f = float(sed_t_tot[_j14] / _bell_total_14)
-_neb_f = float(_sed_neb[_j14] / _bell_total_14)
-_murphy_tir = np.asarray(radio_freefree(jnp.asarray(w_t), _L_tir_in, T_e=1.0e4, alpha_ff=-0.1))
-_murphy_f = float(_murphy_tir[_j14] / _bell_total_14)
+# The same residual in one base: every term at exactly 1.4 GHz, as a fraction of Bell's
+# TIR total there. The Murphy term is evaluated directly at 1.4 GHz.
+_sync_f = _sync_14 / _bell_total_14
+_neb_f = _neb_14 / _bell_total_14
+_murphy_tir = np.asarray(radio_freefree(jnp.asarray([_W_14]), _L_tir_in, T_e=1.0e4, alpha_ff=-0.1))
+_murphy_f = float(_murphy_tir[0] / _bell_total_14)
 print(
     f"§11   as fractions of Bell's TIR total at 1.4 GHz: synchrotron {_sync_f:.4f}, "
     f"nebular continuum {_neb_f:.4f}, sum {_sync_f + _neb_f:.4f}"
 )
 print(
     f"§11   thermal share subtracted from the total {1.0 - _sync_f:.4f}; Murphy+2011 term "
-    f"at the TIR input {_murphy_f:.4f}; nebular continuum falls short by "
+    f"at the TIR input {_murphy_f:.4f}; nebular continuum falls short of it by "
     f"{1.0 - _sync_f - _neb_f:.4f}"
 )
 
