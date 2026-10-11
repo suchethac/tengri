@@ -11059,7 +11059,12 @@ class SEDModel:
             pad = 0.01 * (z_hi - z_lo)
         z_min = cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)
         z_max = cfg.z_max if cfg.z_max is not None else z_hi + pad
-        return ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        nodes = ln1pz_nodes(z_min, z_max, cfg.n_z, dtype)
+        if bounds is not None and len(bounds) >= 2 and self._catalog_z_range is None:
+            from tengri.components._z_response import warn_if_z_table_narrower_than_prior
+
+            warn_if_z_table_narrower_than_prior(nodes, (float(bounds[0]), float(bounds[1])))
+        return nodes
 
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
@@ -11899,6 +11904,16 @@ class SEDModel:
                         "z_max": cfg.z_max if cfg.z_max is not None else z_hi + pad,
                         "n_z": cfg.n_z,
                     }
+                    if self._catalog_z_range is None and z_bounds is not None:
+                        from tengri.components._z_response import (
+                            ln1pz_nodes,
+                            warn_if_z_table_narrower_than_prior,
+                        )
+
+                        warn_if_z_table_narrower_than_prior(
+                            ln1pz_nodes(redshift_spec["z_min"], redshift_spec["z_max"], cfg.n_z),
+                            (float(z_bounds[0]), float(z_bounds[1])),
+                        )
 
             if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs

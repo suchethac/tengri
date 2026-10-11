@@ -1263,6 +1263,26 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.concatenate([first[None], interior, last[None]], axis=0)
 
 
+def extrapolation_band(x):
+    """Outer bound of the numerical-gap band past a table: half an end spacing out.
+
+    ``extrapolate=True`` continues an edge cell only across this band. A query
+    past it is held at the band edge, so an overhang that is not a numerical gap
+    (more than half a node spacing) is never extrapolated into.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates, ``n >= 2``.
+
+    Returns
+    -------
+    lo, hi : float
+        ``x[0] - (x[1] - x[0]) / 2`` and ``x[-1] + (x[-1] - x[-2]) / 2``.
+    """
+    return x[0] - 0.5 * (x[1] - x[0]), x[-1] + 0.5 * (x[-1] - x[-2])
+
+
 def _clamp_to_hull(xq, lo, hi):
     """Hold ``xq`` at the node hull ``[lo, hi]`` with a derivative of 1 on the closed hull.
 
@@ -1422,11 +1442,11 @@ def pchip_interp_local(
         node values.
     extrapolate : bool, optional
         If ``False`` (default), ``xq`` is clamped to ``[x[0], x[-1]]`` and the
-        value is held at the boundary node. If ``True``, the edge cubic
-        continues past the end nodes, the same semantics as the per-axis flag of
-        :func:`interp_nd_pchip`. Use it when the query's prior reaches past the
-        table, so the gradient is not zero there. Nodes and interior values are
-        identical either way.
+        value is held at the boundary node. If ``True``, the edge cubic continues
+        past the end nodes, but only across the numerical-gap band of half an end
+        spacing (:func:`extrapolation_band`); past that band the value is held at
+        the band edge. Use it when the query's prior overhangs the table by a
+        numerical gap. Nodes and interior values are identical either way.
 
     Returns
     -------
@@ -1448,7 +1468,10 @@ def pchip_interp_local(
     n = x.shape[0]
     if n < 4:
         raise ValueError(f"pchip_interp_local needs at least 4 nodes, got {n}")
-    xq_c = xq if extrapolate else _clamp_to_hull(xq, x[0], x[-1])
+    if extrapolate:
+        xq_c = _clamp_to_hull(xq, *extrapolation_band(x))
+    else:
+        xq_c = _clamp_to_hull(xq, x[0], x[-1])
     # Integer node indices: ``lax.clamp`` keeps them out of the float-floor guard
     # that ``jnp.clip(..., 0, ...)`` on a value would belong to.
     pos = jnp.searchsorted(x, xq_c) - 1
