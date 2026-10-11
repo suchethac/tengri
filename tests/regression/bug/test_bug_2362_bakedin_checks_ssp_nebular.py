@@ -115,10 +115,15 @@ def test_bakedin_silent_on_included_ssp():
     """BakedInBackend is silent when SSP is flagged as having nebular included."""
     pytest.importorskip("tengri")
     import tengri
+    from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 
     ssp = _synthetic_ssp("included")
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # Will raise if any warning
+        # The synthetic grid's oldest template (10 Gyr) is younger than the universe
+        # at z = 0.05, which is that warning's own condition and not the nebular
+        # check under test.
+        warnings.simplefilter("ignore", SFHBeyondOldestTemplateWarning)
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "all_params": tengri.Fixed(tengri.DEFAULT)},

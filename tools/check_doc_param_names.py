@@ -91,6 +91,9 @@ STRUCTURAL_KEYS: frozenset[str] = frozenset(
         # IR dust emission. Flat spelling / grammar key "diffuse_screen" on
         # dust_emission; never a fittable parameter.
         "dust_ir_diffuse_screen",
+        # #2766: opt-in CMB heating / contrast of the tabulated IR models.
+        # Grammar key "cmb" on dust_emission; never a fittable parameter.
+        "dust_ir_cmb",
         "dust_emission_model",
         "agn_model",
         "agn_disc_block",

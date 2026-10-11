@@ -26,6 +26,7 @@ References
 
 import jax.numpy as jnp
 
+from tengri.utils.break_windows import DN4000_BLUE_AA, DN4000_RED_AA
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import representable_denominator, representable_floor
@@ -130,7 +131,8 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
     r"""Dn4000 narrow-band break index (Balogh et al. 1999).
 
     Computes the ratio of the wavelength-averaged flux density in a red
-    band (4000–4100 Å) to a blue band (3850–3950 Å): ⟨F⟩ = ∫F dλ / ∫dλ,
+    band (4000–4100 Å) to a blue band (3850–3950 Å), both published in air and
+    applied here in vacuum (:mod:`tengri.utils.break_windows`): ⟨F⟩ = ∫F dλ / ∫dλ,
     a trapezoid integral over exactly the band, with F interpolated linearly at
     the band edges, so the value does not depend on the wavelength sampling.
 
@@ -167,8 +169,8 @@ def dn4000(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
         ok = den > 1e-20
         return jnp.where(ok, num / jnp.where(ok, den, 1.0), 0.0)
 
-    f_blue = _mean_flux_in_band(3850.0, 3950.0)
-    f_red = _mean_flux_in_band(4000.0, 4100.0)
+    f_blue = _mean_flux_in_band(*DN4000_BLUE_AA)
+    f_red = _mean_flux_in_band(*DN4000_RED_AA)
 
     return jnp.where(
         f_blue > 0.0,

@@ -142,6 +142,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._dust_t_birth_yr = 1e7
             self._dust_transition_width_dex = 0.0
             self._dust_ir_diffuse_screen = False
+            self._dust_ir_cmb = False
             self._astrodust_spinning_dust = False
             self._astrodust_f_cnm = 0.5
             self._wg00_dust_curve = 0
@@ -172,6 +173,7 @@ def test_signature_policy_matches_pattern_cache_attributes():
             self._agn_lbol_is_user_fixed = False
             self._uses_radio = False
             self._radio_include_freefree = False
+            self._radio_sf_nu_ref = None
             self._radio_sfr_mode = "kranichstein"
             self._radio_agn_model = "wilman"
             self._uses_xray = False
