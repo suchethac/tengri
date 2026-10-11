@@ -332,3 +332,32 @@ def test_feii_absorbed_piece_matches_independent_quadrature_at_the_corners():
         assert abs(pub / expected - 1.0) < 1.0e-10, (
             f"FeII at {corner}: rel {pub / expected - 1:+.2e}"
         )
+
+
+def test_absorbed_lines_at_wide_lines_match_the_dense_integral():
+    """L_agn_absorbed of the emission lines alone at FWHM 2e4 km/s, E(B-V) in {0.5, 1}: 1e-6.
+
+    At this width the 1083 nm line sits about half a sigma from the 1100 nm attenuation kink,
+    so the kink lies inside the window of that line and of its neighbors. The line rule cuts
+    the window at the kink. A fixed-node Gauss-Hermite rule across the kink converges only
+    algebraically: measured at 13 points it is off by 1.2e-6 here, and the error is largest at
+    moderate E(B-V), where the attenuation is still steep at the kink.
+    """
+    ref = Reference(
+        include_bbb=False,
+        include_feii=False,
+        include_torus=False,
+        include_si=False,
+        include_balmer=False,
+    )
+    rng = np.random.default_rng(_SEED + 4)
+    worst = 0.0
+    for ebv in (0.5, 1.0):
+        for _ in range(20):
+            params = draw_params(ref.full, rng)
+            params["agn_grahsp_linewidth_kms"] = jnp.asarray(2.0e4)
+            params["agn_grahsp_ebv"] = jnp.asarray(ebv)
+            expected, _ = ref.values(params)
+            pub = ref.published(params, PUB_FILTERS)["L_agn_absorbed"]
+            worst = max(worst, abs(pub / expected["L_agn_absorbed"] - 1.0))
+    assert worst < _RTOL, f"lines L_agn_absorbed at 2e4 km/s worst rel {worst:.3e}"
