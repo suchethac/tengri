@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.config.exceptions import SSPMassRemainingFallbackWarning
 
 pytestmark = pytest.mark.regression_bug
 
@@ -39,11 +38,13 @@ def _write_grid(path, *, with_mass_remaining: bool) -> None:
 def test_fallback_warns_naming_the_grid_and_the_fallback(tmp_path):
     grid = tmp_path / "bc03_fake_chabrier.h5"
     _write_grid(grid, with_mass_remaining=False)
-    with pytest.warns(SSPMassRemainingFallbackWarning) as record:
+    with pytest.warns(UserWarning) as record:
         load_ssp_data(str(grid))
-    messages = [str(w.message) for w in record if w.category is SSPMassRemainingFallbackWarning]
+    # #2751 (origin/main) replaced the dedicated warning class with a UserWarning
+    # from resolve_mass_remaining; the announcement contract is unchanged.
+    messages = [str(w.message) for w in record if "DSPS" in str(w.message)]
     assert len(messages) == 1, "the fallback must be announced exactly once"
-    assert "bc03_fake_chabrier.h5" in messages[0]
+    assert "bc03_fake_chabrier" in messages[0]  # resolve_mass_remaining names the stem
     assert "DSPS" in messages[0]
 
 
@@ -53,4 +54,4 @@ def test_grid_with_its_own_table_does_not_warn(tmp_path):
     with warnings.catch_warnings(record=True) as record:
         warnings.simplefilter("always")
         load_ssp_data(str(grid))
-    assert not [w for w in record if w.category is SSPMassRemainingFallbackWarning]
+    assert not [w for w in record if "ssp_mass_remaining" in str(w.message)]

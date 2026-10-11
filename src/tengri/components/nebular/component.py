@@ -316,7 +316,7 @@ class NebularSEDComponent(TemplateThreading):
             ),
             ParamDeclaration(
                 "neb_fesc_lya",
-                Fixed(0.0),
+                Fixed(1.0),
                 "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
