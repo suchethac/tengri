@@ -13,14 +13,11 @@ pipeline runs in a fresh interpreter with ``JAX_ENABLE_X64=0``. The subprocess
 prints one ``RESULT`` JSON line recording the x64 flag and the dtypes after each
 stage, so a failure names the stage that flipped.
 
-Cue's float32 build is xfail-marked on #2849 (strict, and only for
-``CueWNESSPError``): remove the marker when #2849 lands.
-
 Every on-disk cache tengri uses is redirected into a per-test directory, so the
 result cannot depend on what an earlier process left on this machine. The
-ionspec table cache is the case that matters: it keys on the SSP after a
-float64 cast, so a float32 build would otherwise read a table computed in
-float64 (see ``ionizing_spectrum._ssp_fingerprint``).
+ionspec table cache is the case that matters: before #2849 its key ignored the
+computation dtype, so a float32 build read a table computed in float64 and Cue's
+float32 overflow stayed hidden.
 """
 
 import json
@@ -30,19 +27,12 @@ import sys
 import pytest
 
 from tengri._data_setup import find_data
-from tengri.components.nebular.cue import CueWNESSPError
 
 pytestmark = pytest.mark.regression_bug
 
 _STAGES = ("import", "build", "predict", "loglik_grad", "jaxpr", "nuts")
 
 _SSP_NAME = "fsps_prsc_miles_chabrier.h5"
-
-_CUE_XFAIL = pytest.mark.xfail(
-    strict=True,
-    raises=CueWNESSPError,
-    reason="#2849: Cue cannot build in float32 until the Cue float32 fix lands",
-)
 
 # The subprocess body. ``__CONFIG__`` is replaced with a JSON literal (only
 # strings are passed, so it is also a valid Python literal).
@@ -229,13 +219,7 @@ def _assert_stage_float32(stages, name, **dtypes):
             assert got == dtype, f"stage {name!r}: {key} is {got}, expected {dtype}"
 
 
-@pytest.mark.parametrize(
-    "neb",
-    [
-        "none",
-        pytest.param("cue", marks=_CUE_XFAIL),
-    ],
-)
+@pytest.mark.parametrize("neb", ["none", "cue"])
 def test_float32_stays_float32_end_to_end_spectroscopic_fit(neb, tmp_path):
     """Spectrum+photometry, banded R, continuity SFH, 2-component dust, NUTS: x64 stays off.
 
@@ -253,8 +237,6 @@ def test_float32_stays_float32_end_to_end_spectroscopic_fit(neb, tmp_path):
         pytest.skip(result["skip"])
     if "error" in result:
         err = result["error"]
-        if err["type"] == "CueWNESSPError":
-            raise CueWNESSPError(err["message"])
         pytest.fail(
             f"pipeline raised {err['type']} after stages {sorted(result['stages'])}: "
             f"{err['message']}"
