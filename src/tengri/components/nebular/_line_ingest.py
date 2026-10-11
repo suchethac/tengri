@@ -27,20 +27,30 @@ __all__ = ["CLOUDY_LABEL_AIR_MAX_AA", "LABEL_AIR_MAX_AA", "catalog_air_to_vacuum
 #: :func:`~tengri.utils.air_vacuum.air_to_vac`.
 LABEL_AIR_MAX_AA: float = 1.0e4
 
-#: Longest wavelength [Angstrom] that *Cloudy* line labels quote in air. Cloudy
-#: converts every label longer than 2000 Angstrom to air, including the
-#: near- and mid-infrared ones: the shipped Cue and Synthesizer catalogs carry
-#: Pa-alpha 18751.0, Pa-beta 12818.1, Br-gamma 21655.3 (vacuum 18756.1,
-#: 12821.7, 21661.2) and [Ne II] 12.8101, [Ne III] 15.5509, [S IV] 10.5076,
-#: [O III] 88.3323 micron (vacuum 12.8136, 15.5551, 10.5105, 88.3564). After
-#: ``air_to_vac`` all the labels checked from 1.2 to 100 micron agree with the
-#: vacuum value to 5e-5 or better (unconverted: 2.7e-4; checked in
-#: ``test_bug_vacuum_conventions_remaining``). The 100 micron cap stops short of
-#: the far-infrared labels ([O I] 145.495, [N II] 121.769 and 205.283, [C II]
-#: 157.636, [C I] 370/609 micron): some match the vacuum value after
-#: ``air_to_vac`` and others differ from it by up to 1e-3 in either direction
-#: (atomic data, not refraction), so one rule cannot be established for them.
-CLOUDY_LABEL_AIR_MAX_AA: float = 1.0e6
+#: Longest wavelength [Angstrom] that *Cloudy* line labels quote in air: none.
+#: Cloudy stores every wavelength in vacuum and *prints* it in air unless
+#: ``print line vacuum`` is given. The rule is in the source (cloudy-master
+#: ``source/cddefines.cpp``, ``t_wavl::sprt_wl``: ``if
+#: (prt.lgPrintLineAirWavelengths && wl > 0) wl /= p_RefIndex(1e8/wl)``;
+#: ``prt.lgPrintLineAirWavelengths`` defaults to true in
+#: ``init_defaults_preparse.cpp``; ``p_RefIndex`` applies the Peck & Reeder
+#: 1972 index wherever the wavenumber is below 5e4 cm^-1, i.e. longward of
+#: 2000 Angstrom, with no upper limit; ``t_wavl::p_wlAirVac`` has the same
+#: 2000 Angstrom floor). Micron and centimetre labels are the same air value
+#: in other units. The shipped Cue and Synthesizer catalogs carry Pa-alpha
+#: 18751.0, Pa-beta 12818.1, Br-gamma 21655.3 (vacuum 18756.1, 12821.7,
+#: 21661.2) and [Ne II] 12.8101, [Ne III] 15.5509, [S IV] 10.5076, [O III]
+#: 88.3323 micron (vacuum 12.8136, 15.5551, 10.5105, 88.3564); after
+#: ``air_to_vac`` those agree with the vacuum value to 5e-5 or better
+#: (unconverted: 2.7e-4). Beyond 100 micron the index tends to the constant
+#: 1 + 2.726e-4, so the far-infrared labels ([N II] 121.769, [O I] 145.495,
+#: [C II] 157.636, [N II] 205.283, [C I] 370 and 609 micron) are air labels
+#: too. Some then differ from the NIST vacuum value by up to 1e-3; that is
+#: Cloudy's own level energies, not a medium. Cloudy's index (Peck & Reeder)
+#: and :func:`~tengri.utils.air_vacuum.air_to_vac` (Morton 2000) differ by
+#: less than 1e-7 there. The 2000 Angstrom floor is applied inside
+#: :func:`catalog_air_to_vacuum`.
+CLOUDY_LABEL_AIR_MAX_AA: float = float("inf")
 
 
 def catalog_air_to_vacuum(
