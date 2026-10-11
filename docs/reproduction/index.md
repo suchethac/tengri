@@ -20,11 +20,12 @@ A new code should earn trust by reproducing the physics in the codes already in 
   CAT3D-Wind) head to head, plus the X-ray corona and radio jets, a table of
   where the two codes differ, and a parameter map for translating a fit.
 - **{doc}`grahsp`**: GRAHSP (Buchner et al. 2024). The AGN model of a galaxy-spectrum
-  fitter, reproduced component by component against upstream's own spectra at 38
-  parameter sets: the smooth big blue bump, emission lines, FeII forest, log-Gaussian torus
-  with a silicate feature, and the Balmer continuum. Each upstream error that tengri does
-  not reproduce is named with the paper equation, and the agreement is shown after applying
-  that correction.
+  fitter, reproduced component by component against upstream's own spectra at six of its
+  38 parameter sets: the smooth big blue bump, emission lines, FeII forest, log-Gaussian
+  torus with a silicate feature, the Balmer continuum, the Netzer disc, the MN12 torus,
+  attenuation, and a type-2 composite. Upstream's emission-line rendering and its
+  510-normalized templates are stated with the paper equation, and the agreement is shown
+  after applying the correction.
 - **{doc}`prospect_r`**: ProSpect (Robotham et al. 2020), the R-based
   GAMA code, driven live through `rpy2`: BC03 SSPs, the skew-normal SFH,
   a metallicity history tied to the stellar mass formed, Charlot & Fall

@@ -448,7 +448,12 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
         f.attrs["upstream_modules"] = (
             "pcigale/creation_modules/activate.py:46-61, activatepl.py:77-107, "
             "activatelines.py:65-97, activategtorus.py:23-84, activatebol.py, "
-            "biattenuation.py:34-72"
+            "biattenuation.py:34-72; netzer_mn12 variant: activatedisk.py, activatetorus.py; "
+            "database lookups mirrored from database_builder/__init__.py:726, 764-800, 799-822, 832-861"
+        )
+        f.attrs["netzer_mn12_fixed_parameters"] = (
+            "disc: log M = 8.0, a = 0.0, Mdot = 0.3, inc = 0.0; "
+            "torus: TORtemp = 0.0, TORcutoff = 1.2 um; fcov and Si as per parameter set"
         )
         f.attrs["wavelength_unit"] = "nm"
         f.attrs["luminosity_unit"] = "L_lambda [1/nm]"

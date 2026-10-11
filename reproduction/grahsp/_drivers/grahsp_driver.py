@@ -99,6 +99,7 @@ class UpstreamSet:
     params: dict  # upstream parameter name -> value
     wave_nm: np.ndarray  # reference grid [nm]
     spectra: dict  # short component name -> upstream L_lambda [erg/s/nm, unit normalization]
+    attenuation: dict  # short component name -> upstream (attenuated - intrinsic) [erg/s/nm]
 
 
 @functools.cache
@@ -114,7 +115,12 @@ def load_set(name: str) -> UpstreamSet:
         raw = {k: np.asarray(grp[k][:]) for k in grp}
         wave = np.asarray(f["wavelength_nm"][:])
     spectra = {short: raw.get(key, np.zeros_like(wave)) for short, key in COMPONENTS.items()}
-    return UpstreamSet(name, params, wave, spectra)
+    attenuation = {
+        short: raw.get("attenuation." + key, np.zeros_like(wave))
+        for short, key in COMPONENTS.items()
+        if short in ("disc", "bl", "nl", "feii", "balmer", "torus", "si")
+    }
+    return UpstreamSet(name, params, wave, spectra, attenuation)
 
 
 def composable_agn(
@@ -125,6 +131,8 @@ def composable_agn(
     a_feii: float | None = None,
     a_bc: float | None = None,
     width_correction: bool = True,
+    narrow_only: bool = False,
+    ebv: tuple[float, float] | None = None,
 ) -> dict:
     """Public ``SEDModel.build`` ``agn={...}`` spec for one upstream parameter set.
 
@@ -176,12 +184,21 @@ def composable_agn(
             "agn_grahsp_tor_temp": f(0.0),
             "agn_grahsp_tor_cutoff_um": f(1.2),
         }
-    feii_spec = {"type": "grahsp"}
-    if a_feii is not None:
+    # narrow_only switches off the broad-line block and the FeII forest (the type-2 AGN case).
+    feii_spec = {"type": "none" if narrow_only else "grahsp"}
+    if a_feii is not None and not narrow_only:
         feii_spec["agn_grahsp_a_feii"] = f(a_feii)
-    blr_spec = {"type": "grahsp"}
-    if a_bc is not None:
+    blr_spec = {"type": "none" if narrow_only else "grahsp"}
+    if a_bc is not None and not narrow_only:
         blr_spec["agn_grahsp_a_bc"] = f(a_bc)
+    # Bi-attenuation of the AGN side: E(B-V) of the galaxy-wide screen and of the AGN-only screen.
+    atten_spec = {"type": "none"}
+    if ebv is not None:
+        atten_spec = {
+            "type": "grahsp_biatten",
+            "agn_grahsp_ebv": f(ebv[0]),
+            "agn_grahsp_ebv_agn": f(ebv[1]),
+        }
     return {
         "type": "composable",
         "disc": disc_spec,
@@ -189,7 +206,7 @@ def composable_agn(
         "nlr": {"type": "grahsp"},
         "blr": blr_spec,
         "feii": feii_spec,
-        "atten": {"type": "none"},
+        "atten": atten_spec,
         "agn_log_lbol": Fixed(44.0),
         "agn_grahsp_a_lines": f(up["alines"]),
         "agn_grahsp_linewidth_kms": f(up["linewidth"]),
@@ -254,13 +271,26 @@ def dex_error(t: np.ndarray, u: np.ndarray, mask: np.ndarray) -> tuple[int, floa
 
 
 def netzer_template() -> tuple[np.ndarray, np.ndarray]:
-    """tengri's Netzer template at the builder's disc parameters, on its native grid [nm]."""
-    from tengri.components.agn.grahsp.disc import select_disc_model
-    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+    """Netzer template at the builder's disc labels, read from the repackaged template file.
 
-    t = load_grahsp_templates()
-    idx = select_disc_model(t.disc_m, t.disc_a, t.disc_mdot, m="8.0", a="0", mdot="0.3")
-    return np.asarray(t.disc_wave_nm), np.asarray(t.disc_lumin[idx])
+    Selects by the stored (M, a, Mdot) labels, the same labels the builder fixes. Returns the
+    native grid [nm] and the template normalized at 510 nm.
+    """
+    # TODO(#2870): the disc labels in the repackaged table do not match upstream's column order;
+    # finish sections 3 and 5 (Netzer labels) once the src fix lands.
+    with h5py.File(TEMPLATE_PATH, "r") as f:
+        g = f["netzer_disc"]
+        m = [v.decode() for v in g["m"][:]]
+        a = [v.decode() for v in g["a"][:]]
+        mdot = [v.decode() for v in g["mdot"][:]]
+        idx = [
+            i
+            for i in range(len(m))
+            if float(m[i]) == 8.0 and float(a[i]) == 0.0 and float(mdot[i]) == 0.3
+        ]
+        if len(idx) != 1:
+            raise KeyError(f"expected one Netzer template at M=8, a=0, Mdot=0.3; found {len(idx)}")
+        return np.asarray(g["wave_nm"][:]), np.asarray(g["lumin"][idx[0]])
 
 
 def loglog(wave_nm, tw, tl) -> np.ndarray:
