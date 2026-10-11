@@ -102,6 +102,37 @@ def _check_axis_contract(name: str, grid: jnp.ndarray) -> None:
             )
 
 
+def concrete_canonical_numpy(x) -> np.ndarray | None:
+    """Return a concrete array as numpy in JAX's canonical float dtype.
+
+    Build-time helpers use this to do IEEE-exact arithmetic (add, subtract,
+    multiply or divide by a constant) on the host, which avoids one eager XLA
+    micro-compile per jnp op. The input is cast to the dtype JAX would use
+    (``jax.dtypes.canonicalize_dtype``) *before* any arithmetic, so the result
+    is bit-identical to the jnp formula under the active ``jax_enable_x64``.
+
+    Returns ``None`` when ``x`` is a tracer or is not a float32/float64 array,
+    so the caller keeps its jnp path.
+    """
+    if isinstance(x, jax.core.Tracer):
+        return None
+    a = np.asarray(x)
+    if a.ndim != 1 or a.dtype.kind != "f":
+        return None
+    canon = np.dtype(jax.dtypes.canonicalize_dtype(a.dtype))
+    if canon not in (np.dtype(np.float32), np.dtype(np.float64)):
+        return None
+    return a.astype(canon, copy=False)
+
+
+def _edges_for_grid_numpy(g: np.ndarray) -> np.ndarray:
+    """Numpy twin of the jnp edge formula (n >= 2); IEEE-exact ops only."""
+    two = g.dtype.type(2)
+    half_lo = (g[1] - g[0]) / two
+    half_hi = (g[-1] - g[-2]) / two
+    return np.concatenate([g[:1] - half_lo, (g[:-1] + g[1:]) / two, g[-1:] + half_hi])
+
+
 def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
     """Compute bin edges from grid midpoints for triweight interpolation.
 
@@ -134,6 +165,14 @@ def edges_for_grid(grid: jnp.ndarray) -> jnp.ndarray:
     # Validate axis contract: reject empty and non-ascending axes
     _check_axis_contract("edges_for_grid", grid)
 
+    g_np = concrete_canonical_numpy(grid)
+    if g_np is not None:
+        # Build-time path: host arithmetic, no eager XLA micro-compiles.
+        if g_np.size == 1:
+            return jnp.asarray(np.array([g_np[0], g_np[0]], dtype=g_np.dtype))
+        return jnp.asarray(_edges_for_grid_numpy(g_np))
+
+    # Traced input (or non-float dtype): original jnp formula.
     # Handle n == 1 explicitly (single node takes all weight)
     if jnp.asarray(grid).size == 1:
         # Degenerate case: single node at grid[0], edges bracketing it at same point
