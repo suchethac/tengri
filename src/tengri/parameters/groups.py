@@ -8761,6 +8761,34 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 # ── Inverse: Parameters to nested-dict form ────────────────────────────────
 
 
+def _agn_emittable_names(group_name: str, spec: Parameters) -> frozenset[str] | None:
+    """Full names an AGN sub-block of ``spec`` may emit: what its selected type declares.
+
+    Parameters
+    ----------
+    group_name : str
+        ``"agn.<category>"`` for one composable sub-block.
+    spec : Parameters
+        The Parameters being serialized.
+
+    Returns
+    -------
+    frozenset of str or None
+        The declared set for the selected type (companions included), or ``None`` when the
+        block has no selected type or the type is not registered.
+    """
+    category = group_name.split(".", 1)[1]
+    block_type = _extract_group_type(group_name, spec)
+    if block_type is None:
+        return None
+    selection = {}
+    for sub in _AGN_SELECTABLE_CATEGORIES:
+        selected = _extract_group_type(f"agn.{sub}", spec)
+        if selected is not None:
+            selection[sub] = selected
+    return _agn_subblock_declared_params(category, block_type, selection=selection)
+
+
 def parameters_to_groups(spec: Parameters) -> dict:
     """Convert a Parameters back to nested-dict form.
 
@@ -8925,6 +8953,13 @@ def parameters_to_groups(spec: Parameters) -> dict:
             read = _RADIO_AGN_READS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
             if read is not None:
                 param_names = [name for name in param_names if name in read]
+        elif group_name.startswith("agn.") and group_name != "agn":
+            # An AGN sub-block emits only the names its selected type declares:
+            # the same declared set the explicit-key refusal checks, so a dict
+            # this emitter writes is one the grammar accepts back.
+            declared = _agn_emittable_names(group_name, spec)
+            if declared is not None:
+                param_names = [name for name in param_names if name in declared]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:

@@ -927,7 +927,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "GRAHSP Netzer disc black-hole mass log10(M_BH/Msun). "
         "Interpolates over the grid support [6, 9] dex; "
         "clipped to edges outside this range.",
-        units="dex(Msun)",
+        units="log10(Msun)",
     ),
     ParamDeclaration(
         "agn_grahsp_netzer_spin",
