@@ -47,7 +47,10 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components._term_response import term_band_response as _term_band_response
+from tengri.components._term_response import (
+    term_band_response as _term_band_response,
+    term_shape_response as _term_shape_response,
+)
 from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
@@ -247,6 +250,33 @@ class XRaySEDComponent(TemplateThreading):
         del ssp_data, wave_grid, filters
         return XRaySEDComponentState(name=self.name)
 
+    #: Term order of :meth:`emission_terms`, the order the shape-only tables are read in.
+    TERM_NAMES: ClassVar[tuple[str, ...]] = ("hmxb", "lmxb", "hotgas", "agn")
+
+    def term_shape_keys(self) -> dict[str, str]:
+        """Registry key of each term whose shape-only band table this emitter can use.
+
+        The XRB terms (HMXB, LMXB, hot gas) share the ``xray_xrb`` adapter; the AGN corona
+        uses ``xray_corona`` (Yang+20 alpha_ox) or ``xray_corona_lopez24`` (alpha_IRX), by
+        ``config.model``. Every term has an adapter, so the emitter gets all four or none.
+
+        Returns
+        -------
+        dict of str to str
+            ``{term: registry key}`` in :attr:`TERM_NAMES` order.
+
+        Notes
+        -----
+        **JIT-compatible**: no, configuration read.
+        """
+        agn_key = "xray_corona_lopez24" if self.config.model == "lopez24" else "xray_corona"
+        return {
+            "hmxb": "xray_xrb",
+            "lmxb": "xray_xrb",
+            "hotgas": "xray_xrb",
+            "agn": agn_key,
+        }
+
     def apply(
         self,
         state: ForwardState,
@@ -304,6 +334,15 @@ class XRaySEDComponent(TemplateThreading):
 
             # Compute precomputed photometry if band response is available.
             precomputed = None
+            shape = None
+            if band is None:
+                # A shape parameter is free: each term's band flux comes from its shape-only
+                # table at the current shape, times the term at its own reference wavelength.
+                shape = _term_shape_response(template_data, "xray", params, self.TERM_NAMES)
+            if shape is not None:
+                ref = self.emission_terms(params, shape["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())])
+                precomputed = amps @ shape["R"]
             if band is not None:
                 # Exact fast path. X-ray is a sum of rank-1 terms; HMXB, LMXB, hot
                 # gas, corona: each a scalar amplitude times a spectral shape fixed

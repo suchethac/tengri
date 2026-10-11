@@ -629,19 +629,25 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
+#: Re-captured for #2606 (commit 712fab431): the SKIRTOR torus lookup is node-exact PCHIP
+#: instead of the triweight smoother, and the default cos_inc = 30 deg is an exact node.
+#: The triweight was 3.0 % off the raw node, so the disc tie and the SED total at this
+#: node move: rest_sed_sum by -2.2e-4 / -2.1e-4 / -2.1e-4 (mbh 6 / 8 / 10), rest_sed_0 by
+#: -8.7e-5 in every row, rest_sed_last by -2.4e-4 / -2.4e-4 / -2.3e-4. The identity still
+#: closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
+    6.0: (1.5583390570933427e32, 81142827074591.1, 2.8901644293861353e28, 8.773218753171012e21),
     8.0: (
-        1.6504080200641076e32,
-        2.226186048596356e16,
-        3.0968665997787287e28,
-        8.825196951058274e21,
+        1.650055031257738e32,
+        2.2259916026751264e16,
+        3.0968650889283155e28,
+        8.823114704355273e21,
     ),
     10.0: (
-        1.6769970954584036e32,
-        2.3324417803895464e16,
-        3.1396733849669233e28,
-        9.548716267622313e21,
+        1.6766417842328174e32,
+        2.332238053575703e16,
+        3.1396681351636104e28,
+        9.546570825221842e21,
     ),
 }
 
