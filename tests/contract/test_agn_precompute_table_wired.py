@@ -437,15 +437,48 @@ def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
     assert flops(table) < 0.1 * flops(per_call)
 
 
-#: Torus families whose free torus parameters the table is admitted over (measured table vs
-#: per-call WavePrecomp, 24 draws, 33 nodes (1 axis) / 17 nodes per axis (2 axes): silva04
-#: 1.0e-15 (T_torus), 2.6e-16 (cos_inc); nenkova 8.1e-16, 2.6e-16; cat3d_wind 8.1e-16, 1.0e-9).
-#: fritz is not measured: its grid file in this checkout lacks the norm dataset.
-TORUS_AXES = {
-    "silva04": ("agn_T_torus", "agn_cos_inc"),
-    "nenkova": ("agn_T_torus", "agn_cos_inc"),
-    "cat3d_wind": ("agn_T_torus", "agn_cos_inc"),
-}
+#: Torus types the table is measured over (measured table vs per-call WavePrecomp, 24 draws,
+#: 33 nodes (1 axis) / 17 nodes per axis (2 axes): silva04 1.0e-15 (cos_inc 2.6e-16);
+#: nenkova 8.1e-16 (T_torus), 2.6e-16 (cos_inc); cat3d_wind 8.1e-16 (T_torus), 1.0e-9
+#: (cos_inc); simple T_torus is the only torus that declares it). fritz is not measured:
+#: its grid file in this checkout lacks the norm dataset.
+TORUS_TYPES = ("silva04", "nenkova", "cat3d_wind", "simple")
+
+#: Shape axes the torus table may be admitted over. Which of these a torus type reads is
+#: derived below, never listed by hand: a parameter a type does not declare is refused by
+#: ``_reject_inert_agn_subblock_keys`` (main, #985), and the earlier hand list passed only
+#: because such keys were silently dropped.
+_TORUS_SHAPE_CANDIDATES = ("agn_T_torus", "agn_cos_inc")
+
+
+def _declared_torus_axes(torus: str) -> tuple[str, ...]:
+    """Shape axes ``torus`` declares, in candidate order.
+
+    ``agn_T_torus`` must be in the torus sub-block's own declared set (the one
+    ``_reject_inert_agn_subblock_keys`` checks an explicit key against). ``agn_cos_inc``
+    is a shared masking knob owned by the top-level ``agn`` group, so it is checked
+    against the block's declared reads (``AGN_BLOCK_CONSUMES``) instead, which is what the
+    top-level wildcard sources.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+    from tengri.parameters.agn_ownership import _agn_subblock_declared_params
+
+    reads = AGN_BLOCK_CONSUMES.get(("torus", torus), frozenset())
+    sub_owned = _agn_subblock_declared_params("torus", torus) or frozenset()
+    axes = []
+    for name in _TORUS_SHAPE_CANDIDATES:
+        if name not in reads:
+            continue
+        if name == "agn_T_torus" and name not in sub_owned:
+            continue
+        axes.append(name)
+    return tuple(axes)
+
+
+TORUS_AXES: dict[str, tuple[str, ...]] = {t: _declared_torus_axes(t) for t in TORUS_TYPES}
+TORUS_AXIS_PAIRS: tuple[tuple[str, str], ...] = tuple(
+    (torus, name) for torus, axes in TORUS_AXES.items() for name in axes
+)
 
 
 def _torus_model(torus: str, param: str, approx):
@@ -481,10 +514,15 @@ def _torus_model(torus: str, param: str, approx):
     )
 
 
-@pytest.mark.parametrize("torus", sorted(TORUS_AXES))
-@pytest.mark.parametrize("param", ["agn_T_torus", "agn_cos_inc"])
+def test_every_torus_type_declares_a_shape_axis():
+    """Each torus type in the table has at least one declared shape axis to test."""
+    empty = [torus for torus, axes in TORUS_AXES.items() if not axes]
+    assert not empty, f"torus types with no declared shape axis: {empty}"
+
+
+@pytest.mark.parametrize("torus,param", TORUS_AXIS_PAIRS)
 def test_torus_axis_table_matches_per_call_integral_path(torus, param):
-    """The torus free T_torus and cos_inc are tabulated and match the per-call path at 1e-8."""
+    """The torus free declared shape axis is tabulated and matches the per-call path at 1e-8."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         table = _torus_model(torus, param, _wavepre())
