@@ -20,7 +20,6 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 jax = pytest.importorskip("jax")
-jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA

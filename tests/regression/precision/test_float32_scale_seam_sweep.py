@@ -521,27 +521,33 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
+#: Re-captured for #2606 (commit 712fab431): the SKIRTOR torus lookup is node-exact PCHIP
+#: instead of the triweight smoother. The default cos_inc = 30 deg is an exact node, where
+#: the triweight was 3.0 % off the raw grid. Old -> new, relative: rest_sed_sum -2.21e-04 /
+#: -2.12e-04 / -2.10e-04 (mbh 6/8/10); rest_sed_0 -8.73e-05 / -8.73e-05 / -8.73e-05;
+#: rest_sed_mid +5.69e-06 / -2.05e-06 / -3.50e-06; rest_sed_last -2.37e-04 / -2.36e-04 /
+#: -2.22e-04; photometry (largest band) 7.20e-03 / 7.19e-03 / 7.08e-03.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593717102152515e32,
-        "rest_sed_0": 102893969334605.2,
-        "rest_sed_mid": 2.8913768894385195e28,
-        "rest_sed_last": 8.775429623072713e21,
-        "photometry": (1.0994873121337948e-27, 1.5700124042312347e-27, 1.7632246388998955e-27),
+        "rest_sed_sum": 1.5590266729631311e32,
+        "rest_sed_0": 102884982074681.97,
+        "rest_sed_mid": 2.891393327059239e28,
+        "rest_sed_last": 8.773351723290287e21,
+        "photometry": (1.099492561635068e-27, 1.5587085371250205e-27, 1.76672004456097e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6757849286069842e32,
-        "rest_sed_0": 2.8226908028998744e16,
-        "rest_sed_mid": 3.1537086678827116e28,
-        "rest_sed_last": 8.838700680503838e21,
-        "photometry": (1.2055131101702632e-27, 1.5721016324004277e-27, 1.7638291528590584e-27),
+        "rest_sed_sum": 1.6754297232579487e32,
+        "rest_sed_0": 2.8224442553510464e16,
+        "rest_sed_mid": 3.153702192169499e28,
+        "rest_sed_last": 8.836617254319404e21,
+        "photometry": (1.2055090988624755e-27, 1.5607975828108644e-27, 1.7673245057189404e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.709508629849637e32,
-        "rest_sed_0": 2.9574176722363988e16,
-        "rest_sed_mid": 3.2080316645611165e28,
-        "rest_sed_last": 9.756086413931552e21,
-        "photometry": (1.220384227860453e-27, 1.596873080026319e-27, 1.7715814700124443e-27),
+        "rest_sed_sum": 1.7091504789084488e32,
+        "rest_sed_0": 2.9571593569872748e16,
+        "rest_sed_mid": 3.2080204440130595e28,
+        "rest_sed_last": 9.753922858813523e21,
+        "photometry": (1.2203789176368785e-27, 1.585566866778008e-27, 1.7750761457472196e-27),
     },
 }
 
