@@ -437,7 +437,8 @@ _m_sfh = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
     # dense lookback grid: the table compares the SFH form, not the
     # 256-point diagnostic grid
     n_grid=4096,
@@ -472,7 +473,9 @@ def _sfr_shape_report(label, t_c_yr, sfr_c_arr, t_t_yr, sfr_t_arr, age_gyr):
     interior of the history (the first 2 % and last 1 % of the age are
     dropped: both ends are grid edges, not physics).
     """
-    _c_on_t = np.interp(t_t_yr, np.asarray(t_c_yr), np.asarray(sfr_c_arr), left=np.nan, right=np.nan)
+    _c_on_t = np.interp(
+        t_t_yr, np.asarray(t_c_yr), np.asarray(sfr_c_arr), left=np.nan, right=np.nan
+    )
     _ok = (
         np.isfinite(_c_on_t)
         & (_c_on_t > 0)
@@ -500,20 +503,28 @@ _keep_t_1 = (t_t_valid / 1e9 >= _t_min_broad) & (t_t_valid / 1e9 <= _t_max_broad
 _t_c_temp = (t_c / 1e9)[_keep_c_1]
 _t_t_temp = (t_t_valid / 1e9)[_keep_t_1]
 _t_min_aligned = max(_t_c_temp.min(), _t_t_temp.min())
-_keep_final_c = (_t_c_temp >= _t_min_aligned)
-_keep_final_t = (_t_t_temp >= _t_min_aligned)
+_keep_final_c = _t_c_temp >= _t_min_aligned
+_keep_final_t = _t_t_temp >= _t_min_aligned
 _t_c_overlap = t_c[_keep_c_1][_keep_final_c]
 _sfr_c_overlap = sfr_c[_keep_c_1][_keep_final_c]
 _t_t_valid_overlap = t_t_valid[_keep_t_1][_keep_final_t]
 _sfr_t_valid_overlap = sfr_t_valid[_keep_t_1][_keep_final_t]
 
 print(
-    f"  common interval: t_c [{_t_c_overlap.min()/1e9:.4f}, {_t_c_overlap.max()/1e9:.4f}] Gyr, "
-    f"t_t range [{_t_t_valid_overlap.min()/1e9:.4f}, {_t_t_valid_overlap.max()/1e9:.4f}] Gyr"
+    f"  common interval: t_c [{_t_c_overlap.min() / 1e9:.4f}, {_t_c_overlap.max() / 1e9:.4f}] Gyr, "
+    f"t_t range [{_t_t_valid_overlap.min() / 1e9:.4f}, {_t_t_valid_overlap.max() / 1e9:.4f}] Gyr"
 )
 
 fig, (ax, ax_r), ratio = V.sweep_fig(
-    [("delayed-τ", _t_c_overlap / 1e9, _sfr_c_overlap, _t_t_valid_overlap / 1e9, _sfr_t_valid_overlap)],
+    [
+        (
+            "delayed-τ",
+            _t_c_overlap / 1e9,
+            _sfr_c_overlap,
+            _t_t_valid_overlap / 1e9,
+            _sfr_t_valid_overlap,
+        )
+    ],
     ref_label="pcigale",
     title="§2 τ-delayed SFH (τ=1 Gyr, age=5 Gyr)",
     xlabel="Cosmic age since SF onset [Gyr]",
@@ -593,7 +604,8 @@ _m_2exp = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
     n_grid=4096,
 )
 _st_2exp = _m_2exp.predict_state({})
@@ -619,20 +631,28 @@ _keep2_t_1 = (_t_2exp_valid / 1e9 >= _t2_min_broad) & (_t_2exp_valid / 1e9 <= _t
 _t2_c_temp = (t_c2 / 1e9)[_keep2_c_1]
 _t2_t_temp = (_t_2exp_valid / 1e9)[_keep2_t_1]
 _t2_min_aligned = max(_t2_c_temp.min(), _t2_t_temp.min())
-_keep2_final_c = (_t2_c_temp >= _t2_min_aligned)
-_keep2_final_t = (_t2_t_temp >= _t2_min_aligned)
+_keep2_final_c = _t2_c_temp >= _t2_min_aligned
+_keep2_final_t = _t2_t_temp >= _t2_min_aligned
 _t_c2_overlap = t_c2[_keep2_c_1][_keep2_final_c]
 _sfr_c2_overlap = sfr_c2[_keep2_c_1][_keep2_final_c]
 _t_2exp_valid_overlap = _t_2exp_valid[_keep2_t_1][_keep2_final_t]
 _sfr_2exp_valid_overlap = _sfr_2exp_valid[_keep2_t_1][_keep2_final_t]
 
 print(
-    f"  common interval: t_c2 [{_t_c2_overlap.min()/1e9:.4f}, {_t_c2_overlap.max()/1e9:.4f}] Gyr, "
-    f"_t_2exp range [{_t_2exp_valid_overlap.min()/1e9:.4f}, {_t_2exp_valid_overlap.max()/1e9:.4f}] Gyr"
+    f"  common interval: t_c2 [{_t_c2_overlap.min() / 1e9:.4f}, {_t_c2_overlap.max() / 1e9:.4f}] Gyr, "
+    f"_t_2exp range [{_t_2exp_valid_overlap.min() / 1e9:.4f}, {_t_2exp_valid_overlap.max() / 1e9:.4f}] Gyr"
 )
 
 fig, (ax, ax_r), ratio = V.sweep_fig(
-    [("sfh2exp", _t_c2_overlap / 1e9, _sfr_c2_overlap, _t_2exp_valid_overlap / 1e9, _sfr_2exp_valid_overlap)],
+    [
+        (
+            "sfh2exp",
+            _t_c2_overlap / 1e9,
+            _sfr_c2_overlap,
+            _t_2exp_valid_overlap / 1e9,
+            _sfr_2exp_valid_overlap,
+        )
+    ],
     ref_label="pcigale",
     title="§2 sfh2exp (main + burst, age=10 Gyr)",
     xlabel="Cosmic age since SF onset [Gyr]",
@@ -680,7 +700,13 @@ _cases_2c = []
 
 for _r in (0.1, 5.0):
     _t_c, _sfr_c = C.sfh_curve(
-        "sfhdelayedbq", tau_main=2000, age_main=8000, age_bq=500, r_sfr=_r, sfr_A=1.0, normalise=True
+        "sfhdelayedbq",
+        tau_main=2000,
+        age_main=8000,
+        age_bq=500,
+        r_sfr=_r,
+        sfr_A=1.0,
+        normalise=True,
     )
     _m = SEDModel.build(
         ssp_data=ssp,
@@ -695,7 +721,8 @@ for _r in (0.1, 5.0):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -703,11 +730,19 @@ for _r in (0.1, 5.0):
     _sfr_t = np.asarray(_st.derived["sfr_history"])
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
-    _cases_2c.append((f"delayed_bq r_sfr={_r}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"delayed_bq r_sfr={_r}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _bt in (0, 1, 2):
     _t_c, _sfr_c = C.sfh_curve(
-        "sfhperiodic", type_bursts=_bt, delta_bursts=1000, tau_bursts=200, age=8000, sfr_A=1.0, normalise=True
+        "sfhperiodic",
+        type_bursts=_bt,
+        delta_bursts=1000,
+        tau_bursts=200,
+        age=8000,
+        sfr_A=1.0,
+        normalise=True,
     )
     _m = SEDModel.build(
         ssp_data=ssp,
@@ -722,7 +757,8 @@ for _bt in (0, 1, 2):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -731,7 +767,9 @@ for _bt in (0, 1, 2):
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
     _label = {0: "exponential", 1: "delayed", 2: "rectangular"}[_bt]
-    _cases_2c.append((f"periodic {_label}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"periodic {_label}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _v in (150, 250):
     _t_c, _sfr_c = C.sfh_curve("sfh_buat08", velocity=_v, age=8000, normalise=True)
@@ -746,7 +784,8 @@ for _v in (150, 250):
             "all_params": Fixed(DEFAULT),
         },
         dust_attenuation=_DUST_OFF_2C,
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
         n_grid=4096,
     )
     _st = _m.predict_state({})
@@ -754,7 +793,9 @@ for _v in (150, 250):
     _sfr_t = np.asarray(_st.derived["sfr_history"])
     _t_t = (_AGE_2C_GYR - _lbt / 1e9) * 1e9
     _idx = np.argsort(_t_t)
-    _cases_2c.append((f"buat08 v={_v}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx]))
+    _cases_2c.append(
+        (f"buat08 v={_v}", np.asarray(_t_c), np.asarray(_sfr_c), _t_t[_idx], _sfr_t[_idx])
+    )
 
 for _label, _wr, _lr, _wt, _lt in _cases_2c:
     _assert_comparable(_lr, _lt, name=f"§2c {_label}")
@@ -865,7 +906,8 @@ m_stellar = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
@@ -947,7 +989,15 @@ plt.close(fig)  # superseded by §3b's tau x age grid, which replaces this panel
 # no dust IR. The worst band ratio in the printed table is τ = 0.3 Gyr, age = 10 Gyr.
 
 # %%
-_tau_age_cases_grid = [(0.3, 1.0), (1.0, 1.0), (3.0, 1.0), (0.3, 10.0), (1.0, 10.0), (3.0, 10.0), (1.0, 5.0)]
+_tau_age_cases_grid = [
+    (0.3, 1.0),
+    (1.0, 1.0),
+    (3.0, 1.0),
+    (0.3, 10.0),
+    (1.0, 10.0),
+    (3.0, 10.0),
+    (1.0, 5.0),
+]
 
 m_3b = SEDModel.build(
     ssp_data=ssp,
@@ -966,7 +1016,8 @@ m_3b = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 _p_3b = dict(m_3b.spec.sample(jax.random.PRNGKey(0)))
 
@@ -993,10 +1044,20 @@ for _tau, _age in _tau_age_cases_grid:
     )
     _w_c3b, _L_c3b = C.to_lnu(_sed_c3b)
     _o_3b = m_3b.predict_rest_sed(
-        {**_p_3b, "sfh_delayed_tau_gyr": jnp.float64(_tau), "sfh_delayed_age_gyr": jnp.float64(_age)}
+        {
+            **_p_3b,
+            "sfh_delayed_tau_gyr": jnp.float64(_tau),
+            "sfh_delayed_age_gyr": jnp.float64(_age),
+        }
     )
     _cases_3b.append(
-        (f"τ={_tau:g}, age={_age:g} Gyr", _w_c3b, _L_c3b, np.asarray(_o_3b.wavelength), np.asarray(_o_3b.sed))
+        (
+            f"τ={_tau:g}, age={_age:g} Gyr",
+            _w_c3b,
+            _L_c3b,
+            np.asarray(_o_3b.wavelength),
+            np.asarray(_o_3b.sed),
+        )
     )
     _assert_comparable(_L_c3b, np.asarray(_o_3b.sed), name=f"§3b tau={_tau} age={_age}")
 
@@ -1008,7 +1069,9 @@ save_fig("cigale_03b_tau_age_grid.png")
 
 print("§3b τ × age grid (UV_TO_NIR band ratio per case):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_3b:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§3b {_label}", compact=True)
 
 
@@ -1088,7 +1151,9 @@ _law_pairs = [
     ),
     (
         "  + 2175 Å bump (E_b = 3)",
-        C.attenuation_curve("dustatt_modified_starburst", wave_law, **{**_BUMP_KW, "bump_ampl": 3.0}),
+        C.attenuation_curve(
+            "dustatt_modified_starburst", wave_law, **{**_BUMP_KW, "bump_ampl": 3.0}
+        ),
         np.asarray(_tengri_laws["noll09"](wave_law, dust_bump_strength=3.0)),
         "modified_starburst ↔ noll09",
     ),
@@ -1218,7 +1283,8 @@ m_nd = SEDModel.build(
         "tau_diff": Fixed(0.0),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
 
@@ -1245,7 +1311,8 @@ m_d = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_d = m_d.predict_state({})
 _assert_comparable(L_c_d, s_d.derived["sed_dust_attenuated"], name="§5 dust applied")
@@ -1360,7 +1427,8 @@ for _ebv, _bump in [(0.1, 0.0), (0.3, 0.0), (0.6, 0.0), (0.1, 3.0), (0.3, 3.0), 
             "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
     _s_n = _m_n.predict_state({})
     _cases_5b_noll.append(
@@ -1372,16 +1440,23 @@ for _ebv, _bump in [(0.1, 0.0), (0.3, 0.0), (0.6, 0.0), (0.1, 3.0), (0.3, 3.0), 
             np.asarray(_s_n.derived["sed_dust_attenuated"]),
         )
     )
-    _assert_comparable(_L_cn, np.asarray(_s_n.derived["sed_dust_attenuated"]), name=f"§5b noll09 {_ebv},{_bump}")
+    _assert_comparable(
+        _L_cn, np.asarray(_s_n.derived["sed_dust_attenuated"]), name=f"§5b noll09 {_ebv},{_bump}"
+    )
 
 fig, (ax, ax_r), _ratios_5bn = V.sweep_fig(
-    _cases_5b_noll, ref_label="CIGALE", title="§5b modified_starburst E(B-V) × bump grid", xlim=(1e3, 1e4)
+    _cases_5b_noll,
+    ref_label="CIGALE",
+    title="§5b modified_starburst E(B-V) × bump grid",
+    xlim=(1e3, 1e4),
 )
 fig.tight_layout()
 save_fig("cigale_05b_noll09_grid.png")
 print("§5b modified_starburst E(B-V) × bump grid (UV_TO_NIR):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_5b_noll:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§5b {_label}", compact=True)
 
 _cases_5b_2pl = []
@@ -1434,7 +1509,8 @@ for _slope_ism in (-0.4, -0.7, -1.0):
             "lyman_cutoff": True,
             "all_params": Fixed(DEFAULT),
         },
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
     _s_2p = _m_2p.predict_state({})
     _cases_5b_2pl.append(
@@ -1447,11 +1523,16 @@ for _slope_ism in (-0.4, -0.7, -1.0):
         )
     )
     _assert_comparable(
-        _L_c2p, np.asarray(_s_2p.derived["sed_dust_attenuated"]), name=f"§5b 2powerlaws {_slope_ism}"
+        _L_c2p,
+        np.asarray(_s_2p.derived["sed_dust_attenuated"]),
+        name=f"§5b 2powerlaws {_slope_ism}",
     )
 
 fig, (ax, ax_r), _ratios_5b2 = V.sweep_fig(
-    _cases_5b_2pl, ref_label="CIGALE", title="§5b 2powerlaws slope_ISM sweep", xlim=(1e3, 1e4),
+    _cases_5b_2pl,
+    ref_label="CIGALE",
+    title="§5b 2powerlaws slope_ISM sweep",
+    xlim=(1e3, 1e4),
     cmap="Oranges",
     values=[-0.4, -0.7, -1.0],
     param_label="slope_ISM",
@@ -1460,7 +1541,9 @@ fig.tight_layout()
 save_fig("cigale_05c_2powerlaws_slope.png")
 print("§5b 2powerlaws slope_ISM sweep (UV_TO_NIR):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_5b_2pl:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.UV_TO_NIR
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§5b {_label}", compact=True)
 
 # Stand-alone A(λ)/A_V curves (no SFH/SSP, no E(B-V) scale — the ratio is
@@ -1471,14 +1554,22 @@ for _bump in (0.0, 3.0):
     _A_c = _norm_AV(
         _wave_5b,
         C.attenuation_curve(
-            "dustatt_modified_starburst", _wave_5b, bump_wave=217.5, bump_width=35.0,
-            bump_ampl=_bump, power_slope=0.0,
+            "dustatt_modified_starburst",
+            _wave_5b,
+            bump_wave=217.5,
+            bump_width=35.0,
+            bump_ampl=_bump,
+            power_slope=0.0,
         ),
     )
-    _A_t = _norm_AV(_wave_5b, np.asarray(_tengri_laws["noll09"](_wave_5b, dust_bump_strength=_bump)))
+    _A_t = _norm_AV(
+        _wave_5b, np.asarray(_tengri_laws["noll09"](_wave_5b, dust_bump_strength=_bump))
+    )
     _cases_5b_curve.append((f"bump={_bump:g}", _wave_5b, _A_c, _wave_5b, _A_t))
 _rows_5b_curve = V.window_rows(_cases_5b_curve, lo=1216.0, hi=3000.0)
-V.print_window_table(_rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, modified_starburst screen, 1216-3000 Å")
+V.print_window_table(
+    _rows_5b_curve, ref_name="CIGALE", title="§5b A(λ)/A_V, modified_starburst screen, 1216-3000 Å"
+)
 
 
 # %% [markdown]
@@ -1555,8 +1646,13 @@ m_ir = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(2.0),
+        "all_params": Fixed(DEFAULT),
+    },
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
 L_abs = float(s_ir.derived.get("L_absorbed", 0.0))
@@ -1604,10 +1700,7 @@ print(
     f"§6 energy anchor: CIGALE dust.luminosity {_L_DUST_C:.4e}, "
     f"tengri L_absorbed {L_abs:.4e} erg/s → {L_abs / _L_DUST_C:.4f}×"
 )
-print(
-    f"§6 absorbed fraction: CIGALE {_L_DUST_C / _L_STAR_C:.6f}, "
-    f"tengri {L_abs / _L_star_t:.6f}"
-)
+print(f"§6 absorbed fraction: CIGALE {_L_DUST_C / _L_STAR_C:.6f}, tengri {L_abs / _L_star_t:.6f}")
 print(f"§6 energy balance |L_IR − L_abs| / L_abs = {residual:.3e}")
 fig.tight_layout()
 plt.close(fig)  # superseded by §6c's IR-library grids, which replace this panel
@@ -1710,7 +1803,8 @@ def _knob_model(emission_type, **emkw):
             "all_params": Fixed(DEFAULT),
         },
         dust_emission={"type": emission_type, "all_params": Fixed(DEFAULT), **emkw},
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
 
 
@@ -1744,12 +1838,20 @@ _peaks = []
 _ratios_l, _ratios_r = [], []
 
 # LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
-m_frac = _knob_model("dale2014_cigale", alpha_dale=Fixed(2.0), frac_agn=Uniform(0.0, 0.99, default=0.3))
+m_frac = _knob_model(
+    "dale2014_cigale", alpha_dale=Fixed(2.0), frac_agn=Uniform(0.0, 0.99, default=0.3)
+)
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — Dale 2014 fracAGN sweep (tengri / CIGALE, median in band):")
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dale2014", dict(alpha=2.0, fracAGN=f))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dale2014", dict(alpha=2.0, fracAGN=f)),
+        ]
     )
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
     ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
@@ -1774,7 +1876,9 @@ ax_l.legend(fontsize=8, frameon=False, ncol=2)
 ax_l.tick_params(labelbottom=False)
 
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
-m_alpha = _knob_model("themis", gamma_dl=Fixed(0.1), qhac=Fixed(0.17), alpha=Uniform(1.0, 3.0, default=2.0))
+m_alpha = _knob_model(
+    "themis", gamma_dl=Fixed(0.1), qhac=Fixed(0.17), alpha=Uniform(1.0, 3.0, default=2.0)
+)
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 print("§6 knobs — THEMIS α sweep (tengri / CIGALE, median in band):")
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
@@ -1811,7 +1915,9 @@ for c, w, ratio in _ratios_l:
     ax_lr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
 ax_lr.axhspan(0.9, 1.1, color="0.85", zorder=0)
 ax_lr.axhline(1.0, color="0.5", linewidth=0.8)
-ax_lr.set(xlim=(1e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_lr.set(
+    xlim=(1e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE"
+)
 ax_lr.grid(True, alpha=0.3)
 
 for c, w, ratio in _ratios_r:
@@ -1819,7 +1925,9 @@ for c, w, ratio in _ratios_r:
     ax_rr.plot(w[pos], ratio[pos], color=c, linewidth=1.0)
 ax_rr.axhspan(0.9, 1.1, color="0.85", zorder=0)
 ax_rr.axhline(1.0, color="0.5", linewidth=0.8)
-ax_rr.set(xlim=(3e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE")
+ax_rr.set(
+    xlim=(3e4, 1e7), ylim=(0.5, 1.5), yscale="log", xlabel=r"$\lambda$ [Å]", ylabel="tengri/CIGALE"
+)
 ax_rr.grid(True, alpha=0.3)
 
 _ypk = max(_peaks)
@@ -1874,24 +1982,45 @@ m_dl07 = _knob_model(
 p_dl07 = dict(m_dl07.spec.sample(jax.random.PRNGKey(0)))
 _dl07_cases = []
 _ratios_6c_l, _ratios_6c_r = [], []
-for (_qpah, _umin, _gamma), _c in zip([(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58, 10.0, 0.5)], ["C0", "C1", "C3"]):
+for (_qpah, _umin, _gamma), _c in zip(
+    [(0.47, 0.1, 0.01), (2.5, 1.0, 0.1), (4.58, 10.0, 0.5)], ["C0", "C1", "C3"]
+):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dl2007", dict(qpah=_qpah, umin=_umin, gamma=_gamma))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dl2007", dict(qpah=_qpah, umin=_umin, gamma=_gamma)),
+        ]
     )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
     o = m_dl07.predict_rest_sed(
-        {**p_dl07, "dust_qpah": jnp.float64(_qpah), "dust_umin": jnp.float64(_umin), "dust_gamma_dl": jnp.float64(_gamma)}
+        {
+            **p_dl07,
+            "dust_qpah": jnp.float64(_qpah),
+            "dust_umin": jnp.float64(_umin),
+            "dust_gamma_dl": jnp.float64(_gamma),
+        }
     )
     w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
     ax_l.loglog(w_t, nl_t, color=_c, lw=_TNG_LW, label=rf"qpah={_qpah:g}, umin={_umin:g}")
     _peaks_6c.append(float(np.nanmax(nl_t)))
     _rk = U.regrid(w_t, nl_t, w_c) / np.where(nl_c > 0, nl_c * _KNOB_MASS, np.nan)
     _ratios_6c_l.append((_c, w_c, _rk))
-    print(f"    qpah={_qpah:g} umin={_umin:g} gamma={_gamma:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
+    print(
+        f"    qpah={_qpah:g} umin={_umin:g} gamma={_gamma:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×"
+    )
     _dl07_cases.append(
-        (f"dl2007 qpah={_qpah:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"dl2007 qpah={_qpah:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -1911,7 +2040,13 @@ p_dl14 = dict(m_dl14.spec.sample(jax.random.PRNGKey(0)))
 _dl14_cases = []
 for _alpha, _c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dl2014", dict(qpah=2.5, umin=1.0, alpha=_alpha, gamma=0.1))]
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dl2014", dict(qpah=2.5, umin=1.0, alpha=_alpha, gamma=0.1)),
+        ]
     )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
@@ -1924,7 +2059,13 @@ for _alpha, _c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     _ratios_6c_r.append((_c, w_c, _rk))
     print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dl14_cases.append(
-        (f"dl2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"dl2014 α={_alpha:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -1960,13 +2101,19 @@ save_fig("cigale_06c_dl07_dl14.png")
 
 for _name, _cases in (("dl2007", _dl07_cases), ("dl2014", _dl14_cases)):
     for _label, _w_ref, _L_ref, _w_t, _L_t in _cases:
-        _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+        _rows = V.filter_rows_native(
+            np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+        )
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
 
 fig = plt.figure(figsize=(13.5, 6.5))
 gs = fig.add_gridspec(2, 3, height_ratios=[3, 1], hspace=0.3)
 ax_a, ax_b, ax_c = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[0, 2])
-ax_ar, ax_br, ax_cr = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1]), fig.add_subplot(gs[1, 2])
+ax_ar, ax_br, ax_cr = (
+    fig.add_subplot(gs[1, 0]),
+    fig.add_subplot(gs[1, 1]),
+    fig.add_subplot(gs[1, 2]),
+)
 ax_ar.sharex(ax_a)
 ax_br.sharex(ax_b)
 ax_cr.sharex(ax_c)
@@ -1975,12 +2122,22 @@ ax_cr.sharey(ax_ar)
 _peaks_6d = []
 
 print("§6c casey2012 T sweep (tengri / CIGALE, median in 8-1000 µm band):")
-m_cas = _knob_model("casey2012", T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(1.6), alpha_mir=Fixed(2.0))
+m_cas = _knob_model(
+    "casey2012", T=Uniform(10.0, 80.0, default=35.0), beta_ir=Fixed(1.6), alpha_mir=Fixed(2.0)
+)
 p_cas = dict(m_cas.spec.sample(jax.random.PRNGKey(0)))
 _cas_cases = []
 _ratios_6d_a = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("casey2012", dict(temperature=_T, beta=1.6, alpha=2.0))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("casey2012", dict(temperature=_T, beta=1.6, alpha=2.0)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_a.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -1992,7 +2149,13 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     _ratios_6d_a.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _cas_cases.append(
-        (f"casey2012 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"casey2012 T={_T:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_a.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_a.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2006,7 +2169,15 @@ p_sch = dict(m_sch.spec.sample(jax.random.PRNGKey(0)))
 _sch_cases = []
 _ratios_6d_b = []
 for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("schreiber2016", dict(tdust=_T))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("schreiber2016", dict(tdust=_T)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_b.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -2018,7 +2189,13 @@ for _T, _c in zip([25.0, 35.0, 50.0], ["C0", "C1", "C3"]):
     _ratios_6d_b.append((_c, w_c, _rk))
     print(f"    T={_T:g} K: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _sch_cases.append(
-        (f"schreiber2016 T={_T:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"schreiber2016 T={_T:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_b.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_b.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2032,7 +2209,15 @@ p_dale = dict(m_dale.spec.sample(jax.random.PRNGKey(0)))
 _dale_cases = []
 _ratios_6d_c = []
 for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, NEB_FIDUCIAL_CIGALE, _DUSTATT_CHAIN, ("dale2014", dict(alpha=_alpha))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            NEB_FIDUCIAL_CIGALE,
+            _DUSTATT_CHAIN,
+            ("dale2014", dict(alpha=_alpha)),
+        ]
+    )
     _w_c_raw, _L_c_raw = C.to_lnu(sed)
     w_c, nl_c = _nu_lnu(_w_c_raw, _L_c_raw)
     ax_c.loglog(w_c, nl_c * _KNOB_MASS, color=_c, **_REF_KW)
@@ -2044,7 +2229,13 @@ for _alpha, _c in zip([0.5, 2.0, 4.0], ["C0", "C1", "C3"]):
     _ratios_6d_c.append((_c, w_c, _rk))
     print(f"    alpha={_alpha:g}: 8-1000 µm {_band_median(_rk, w_c, 8.0, 1000.0):.4f}×")
     _dale_cases.append(
-        (f"dale2014 α={_alpha:g}", _w_c_raw, _L_c_raw * _KNOB_MASS, np.asarray(o.wavelength), np.asarray(o.sed))
+        (
+            f"dale2014 α={_alpha:g}",
+            _w_c_raw,
+            _L_c_raw * _KNOB_MASS,
+            np.asarray(o.wavelength),
+            np.asarray(o.sed),
+        )
     )
 ax_c.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_c.plot([], [], "k-", lw=_TNG_LW, label="tengri")
@@ -2086,9 +2277,15 @@ ax_cr.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_06d_casey_schreiber_dale.png")
 
-for _name, _cases in (("casey2012", _cas_cases), ("schreiber2016", _sch_cases), ("dale2014", _dale_cases)):
+for _name, _cases in (
+    ("casey2012", _cas_cases),
+    ("schreiber2016", _sch_cases),
+    ("dale2014", _dale_cases),
+):
     for _label, _w_ref, _L_ref, _w_t, _L_t in _cases:
-        _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+        _rows = V.filter_rows_native(
+            np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+        )
         V.print_filter_table(_rows, ref_name="CIGALE", title=f"§6c {_label}", compact=True)
 
 
@@ -2306,9 +2503,7 @@ ax_l.legend(fontsize=8)
 # build on this page carries the nebular fiducial; see Setup).
 L_t_neb_only = np.maximum(np.asarray(s_neb.derived["sed_nebular"]), 1e-30)
 _s_stellar_on_neb = np.maximum(np.asarray(s_neb.sed_intrinsic) - L_t_neb_only, 1e-30)
-ax_r.plot(
-    s_neb.wave, _s_stellar_on_neb, "k--", linewidth=1.0, alpha=0.5, label="stellar only"
-)
+ax_r.plot(s_neb.wave, _s_stellar_on_neb, "k--", linewidth=1.0, alpha=0.5, label="stellar only")
 ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7, label="stellar + Cue")
 ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4, label="Cue nebular only")
 ax_r.legend(fontsize=8)
@@ -2442,7 +2637,11 @@ _8b_grid = [
     ("fesc=0", -2.0, 0.02, 0.0),
     ("fesc=0.5", -2.0, 0.02, 0.5),
 ]
-_LINE_RATIOS_8B = (("Ha/Hb", 6563.0, 4861.0), ("[OIII]/Hb", 5007.0, 4861.0), ("[OII]/Hb", 3728.0, 4861.0))
+_LINE_RATIOS_8B = (
+    ("Ha/Hb", 6563.0, 4861.0),
+    ("[OIII]/Hb", 5007.0, 4861.0),
+    ("[OII]/Hb", 3728.0, 4861.0),
+)
 
 _rt_8b_all, _rc_8b_all = [], []
 print("§8b logU × Z_gas × f_esc (7 cases) — Ha/Hb, [OIII]/Hb, [OII]/Hb, tengri vs CIGALE:")
@@ -2454,8 +2653,14 @@ for _label, _logU, _zgas, _fesc in _8b_grid:
             (
                 "nebular",
                 dict(
-                    logU=_logU, zgas=_zgas, ne=100, f_esc=_fesc, f_dust=0.0,
-                    lines_width=300.0, emission=True, line_list="",
+                    logU=_logU,
+                    zgas=_zgas,
+                    ne=100,
+                    f_esc=_fesc,
+                    f_dust=0.0,
+                    lines_width=300.0,
+                    emission=True,
+                    line_list="",
                 ),
             ),
         ]
@@ -2493,11 +2698,16 @@ for _label, _logU, _zgas, _fesc in _8b_grid:
 for _name, _, _ in _LINE_RATIOS_8B:
     _rr = [_t[_name] / _c[_name] for _t, _c in zip(_rt_8b_all, _rc_8b_all)]
     _j = int(np.argmax(np.abs(np.log(_rr))))
-    print(f"§8b {_name}: largest tengri/CIGALE ratio-of-ratios {_rr[_j]:.2f}× at {_8b_grid[_j][0]}")
+    print(
+        f"§8b {_name}: largest tengri/CIGALE ratio-of-ratios {_rr[_j]:.2f}× at {_8b_grid[_j][0]}"
+    )
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
 _x_8b = np.arange(len(_8b_grid))
-for _ax, _rows, _title in ((ax_l, _rc_8b_all, "CIGALE (CLOUDY)"), (ax_r, _rt_8b_all, "tengri (Cue)")):
+for _ax, _rows, _title in (
+    (ax_l, _rc_8b_all, "CIGALE (CLOUDY)"),
+    (ax_r, _rt_8b_all, "tengri (Cue)"),
+):
     for _name, _color in zip(("Ha/Hb", "[OIII]/Hb", "[OII]/Hb"), ("C0", "C1", "C3")):
         _ax.plot(_x_8b, [r[_name] for r in _rows], "o-", color=_color, label=_name)
     _ax.set_xticks(_x_8b)
@@ -2521,6 +2731,15 @@ from tengri.components.nebular.cue import CueBackend
 
 _cue_hard = CueBackend(str(_data_path("cue_weights.npz")))
 _HARD_SHAPE = dict(CueBackend._IONSPEC_DEFAULTS)
+
+
+def _catalog_line(wave, lum, center_vac, tol=2.0):
+    """Luminosity of the catalogued line nearest ``center_vac`` (vacuum Å)."""
+    i = int(np.argmin(np.abs(wave - center_vac)))
+    assert abs(wave[i] - center_vac) < tol, (center_vac, wave[i])
+    return lum[i]
+
+
 _o3_hard = {}
 for _logU in (-3.0, -2.0, -1.5):
     _w_h, _l_h = _cue_hard.predict_nebular_line_luminosities(
@@ -2531,7 +2750,7 @@ for _logU in (-3.0, -2.0, -1.5):
         **_HARD_SHAPE,
     )
     _w_h, _l_h = np.asarray(_w_h), np.asarray(_l_h)
-    _o3_hard[_logU] = U.line_lum(_w_h, _l_h, 5007.0) / U.line_lum(_w_h, _l_h, 4861.0)
+    _o3_hard[_logU] = _catalog_line(_w_h, _l_h, 5008.24) / _catalog_line(_w_h, _l_h, 4862.68)
 print(
     "§8b Cue [OIII]/Hb at Cue's default hard shape, logU = -3 / -2 / -1.5: "
     + " / ".join(f"{_o3_hard[k]:.3f}" for k in (-3.0, -2.0, -1.5))
@@ -2651,7 +2870,8 @@ m_agn_base = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
 
@@ -2732,7 +2952,8 @@ m_agn = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 
@@ -2901,8 +3122,12 @@ def _print_agn_report(header, sed_c, state_t):
     """
     print(header)
     _dev, _n = _disc_shape_dev(sed_c, state_t)
-    print(f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)")
-    _pairs = {_tk: _agn_component_pair(sed_c, state_t, _ck, _tk) for _, _ck, _tk in _AGN_COMPONENTS}
+    print(
+        f"  disc shape, 1000–5000 Å, normalized at 2500 Å: max |Δ| = {_dev * 100:.2f}% ({_n} pts)"
+    )
+    _pairs = {
+        _tk: _agn_component_pair(sed_c, state_t, _ck, _tk) for _, _ck, _tk in _AGN_COMPONENTS
+    }
     for _name, _ck, _tk in _AGN_COMPONENTS:
         _bc, _bt = _pairs[_tk]
         print(f"  {_name}: CIGALE {_bc:.4e}, tengri {_bt:.4e} erg/s → {_bt / _bc:.4f}×")
@@ -3004,7 +3229,8 @@ m_agn_sk = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
 
@@ -3156,8 +3382,12 @@ def _absorbed_fraction(disc_shape, wave_aa, k_lambda):
     )
 
 
-_J_t = _absorbed_fraction(_disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_tengri_dense))
-_J_pei = _absorbed_fraction(_disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_pei_dense))
+_J_t = _absorbed_fraction(
+    _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_tengri_dense)
+)
+_J_pei = _absorbed_fraction(
+    _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_pei_dense)
+)
 # CIGALE's curve on tengri's axis: the control that separates the two terms.
 _J_c_on_native = _absorbed_fraction(
     _disc_shape_t, _wave_native, np.interp(_wave_native, _w_dense, _k_cigale_dense)
@@ -3197,7 +3427,10 @@ print(
     f"{_polar_reference_ratio:.6f}× ({(_polar_reference_ratio - 1) * 100:+.2f}%)"
 )
 _CURVE_POINTS = ((912.0, "912 Å"), (2500.0, "2500 Å"), (5500.0, "5500 Å"), (1e4, "1 µm"))
-for _curve_name, _k_dense in (("bongiorno", _k_tengri_dense), ("smc (Pei 1992, default)", _k_pei_dense)):
+for _curve_name, _k_dense in (
+    ("bongiorno", _k_tengri_dense),
+    ("smc (Pei 1992, default)", _k_pei_dense),
+):
     print(
         f"  A(λ)/E(B−V), pcigale / tengri polar_law='{_curve_name}': "
         + ", ".join(
@@ -3243,13 +3476,20 @@ print(
 
 # %%
 _AGN_SFH_9E = {
-    "type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-    "log_total_mass": Fixed(0.0), "all_params": Fixed(DEFAULT),
+    "type": "delayed",
+    "tau_gyr": Fixed(1.0),
+    "age_gyr": Fixed(5.0),
+    "log_total_mass": Fixed(0.0),
+    "all_params": Fixed(DEFAULT),
 }
 _AGN_DUSTATT_9E = {
-    "type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
-    "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-    "lyman_cutoff": True, "all_params": Fixed(DEFAULT),
+    "type": "two_component",
+    "law_bc": "leitherer02",
+    "law_diff": "leitherer02",
+    "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+    "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+    "lyman_cutoff": True,
+    "all_params": Fixed(DEFAULT),
 }
 
 
@@ -3263,8 +3503,21 @@ def _cigale_skirtor_sed(t, oa, i):
             (
                 "skirtor2016",
                 dict(
-                    t=t, pl=1.0, q=1.0, oa=oa, R=20, Mcl=0.97, i=i, disk_type=1, delta=0,
-                    fracAGN=0.3, lambda_fracAGN="0/0", law=0, EBV=0.03, temperature=100.0, emissivity=1.6,
+                    t=t,
+                    pl=1.0,
+                    q=1.0,
+                    oa=oa,
+                    R=20,
+                    Mcl=0.97,
+                    i=i,
+                    disk_type=1,
+                    delta=0,
+                    fracAGN=0.3,
+                    lambda_fracAGN="0/0",
+                    law=0,
+                    EBV=0.03,
+                    temperature=100.0,
+                    emissivity=1.6,
                 ),
             ),
         ]
@@ -3290,11 +3543,20 @@ m_skirtor_sweep = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 p_sk_sweep = dict(m_skirtor_sweep.spec.sample(jax.random.PRNGKey(0)))
 
-_skirtor_grid = [(3, 40, 30), (7, 40, 30), (11, 40, 30), (7, 20, 30), (7, 60, 30), (7, 40, 0), (7, 40, 70)]
+_skirtor_grid = [
+    (3, 40, 30),
+    (7, 40, 30),
+    (11, 40, 30),
+    (7, 20, 30),
+    (7, 60, 30),
+    (7, 40, 0),
+    (7, 40, 70),
+]
 _cases_9e_sk = []
 for _tau, _oa, _i in _skirtor_grid:
     _sed_c9e = _cigale_skirtor_sed(_tau, _oa, _i)
@@ -3313,9 +3575,7 @@ for _tau, _oa, _i in _skirtor_grid:
     _L_torus_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_torus"])
     _L_polar_t_9e = np.asarray(_pred_9e.sed.components["sed_agn_polar"])
     _L_t_9e = _L_torus_t_9e + _L_polar_t_9e  # Sum torus + polar
-    _cases_9e_sk.append(
-        (f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e)
-    )
+    _cases_9e_sk.append((f"τ={_tau}, oa={_oa}°, i={_i}°", _w_c9e, _L_c9e, _w_t_9e, _L_t_9e))
     _assert_comparable(_L_c9e, _L_t_9e, name=f"§9e skirtor {_tau},{_oa},{_i}")
 
 fig, (ax, ax_r), _ratios_9e_sk = V.sweep_fig(
@@ -3325,7 +3585,9 @@ fig.tight_layout()
 save_fig("cigale_09e_skirtor_grid.png")
 print("§9e SKIRTOR (τ, oa, i) grid (IR_BANDS):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_sk:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§9e {_label}", compact=True)
 
 
@@ -3339,8 +3601,17 @@ def _cigale_fritz_sed(tau, oa, psy):
             (
                 "fritz2006",
                 dict(
-                    r_ratio=60.0, tau=tau, beta=-0.5, gamma=4.0, opening_angle=oa, psy=psy,
-                    disk_type=1, fracAGN=0.3, EBV=0.03, temperature=100.0, emissivity=1.6,
+                    r_ratio=60.0,
+                    tau=tau,
+                    beta=-0.5,
+                    gamma=4.0,
+                    opening_angle=oa,
+                    psy=psy,
+                    disk_type=1,
+                    fracAGN=0.3,
+                    EBV=0.03,
+                    temperature=100.0,
+                    emissivity=1.6,
                 ),
             ),
         ]
@@ -3373,7 +3644,8 @@ m_fritz_sweep = SEDModel.build(
         "agn_ir_frac": Fixed(0.3),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 p_fritz_sweep = dict(m_fritz_sweep.spec.sample(jax.random.PRNGKey(0)))
 
@@ -3398,19 +3670,22 @@ for _tau, _oa, _psy in _fritz_grid:
     _L_torus_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_torus"])
     _L_polar_t_9f = np.asarray(_pred_9f.sed.components["sed_agn_polar"])
     _L_t_9f = _L_torus_t_9f + _L_polar_t_9f  # Sum torus + polar
-    _cases_9e_fr.append(
-        (f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f)
-    )
+    _cases_9e_fr.append((f"τ={_tau}, oa={_oa}°, ψ={_psy}°", _w_c9f, _L_c9f, _w_t_9f, _L_t_9f))
     _assert_comparable(_L_c9f, _L_t_9f, name=f"§9e fritz {_tau},{_oa},{_psy}")
 
 fig, (ax, ax_r), _ratios_9e_fr = V.sweep_fig(
-    _cases_9e_fr, ref_label="CIGALE", title="§9e Fritz 2006 (τ, opening angle, ψ) grid", xlim=(1e3, 1e7)
+    _cases_9e_fr,
+    ref_label="CIGALE",
+    title="§9e Fritz 2006 (τ, opening angle, ψ) grid",
+    xlim=(1e3, 1e7),
 )
 fig.tight_layout()
 save_fig("cigale_09f_fritz_grid.png")
 print("§9e Fritz 2006 (τ, opening angle, ψ) grid (IR_BANDS):")
 for _label, _w_ref, _L_ref, _w_t, _L_t in _cases_9e_fr:
-    _rows = V.filter_rows_native(np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS)
+    _rows = V.filter_rows_native(
+        np.asarray(_w_t), np.asarray(_L_t), _w_ref, _L_ref, filters=V.IR_BANDS
+    )
     V.print_filter_table(_rows, ref_name="CIGALE", title=f"§9e {_label}", compact=True)
 
 
@@ -3540,7 +3815,8 @@ def _tengri_xray(log_lbol, cos_inc):
             "all_params": Fixed(DEFAULT),
         },
         xray={"type": "yang20", "log_nh": Fixed(0.0), "all_params": Fixed(DEFAULT)},
-        neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+        neb=NEB_FIDUCIAL_TENGRI,
+        redshift=Fixed(0.0),
     )
 
 
@@ -3686,8 +3962,9 @@ save_fig("cigale_10b_xray_inclination.png")
 # free-free term. `freefree: False` switches to CIGALE's convention: `q_IR`
 # calibrates the non-thermal term alone, the synchrotron carries all of it, and
 # the thermal free-free is whatever the nebular continuum supplies. The
-# like-for-like comparison below therefore uses `freefree: False`; the default
-# (total) convention is overlaid as the dash-dot curve.
+# like-for-like comparison below therefore uses `freefree: False`; tengri's default
+# (Bell 2003: TIR 8–1000 μm, 1.4 GHz, thermal from the nebular continuum) is
+# overlaid as the dash-dot curve.
 #
 # **Conventions.** tengri's defaults are Bell (2003)'s: `q_IR` defined at 1.4 GHz
 # and the IR luminosity integrated over the model's own paper window (TIR,
@@ -3701,11 +3978,16 @@ save_fig("cigale_10b_xray_inclination.png")
 # CIGALE's `dust.luminosity`, §6). The cell prints the measured range beside the
 # prediction.
 #
-# With `freefree: False` the synchrotron carries the whole `q_IR`; in the default
-# (total) convention the printed (synchrotron + nebular continuum) / Bell total
-# at 1.4 GHz is 0.954, below 1 because the nebular free-free share there is
-# smaller than the Murphy et al. (2011) share `f_th` that the synchrotron
-# subtracts.
+# With `freefree: False` the synchrotron carries the whole `q_IR`. In tengri's
+# default the cell prints three numbers. The TIR input to the radio block is
+# 0.944 of the total dust luminosity. The default synchrotron is 0.840 of the
+# CIGALE-convention synchrotron at 1.4 GHz, which combines the thermal share
+# removed from Bell's total, that smaller TIR input and the 1.4 against
+# 1.4276 GHz anchor. The (synchrotron +
+# nebular continuum) / Bell total, formed from the same TIR input, is 0.957 at
+# 1.4 GHz. It falls below 1 because the nebular free-free share there (×0.054
+# of CIGALE's synchrotron, printed below) is smaller than the Murphy et al.
+# (2011) share `f_th` (×0.096) that the synchrotron subtracts.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
@@ -3795,7 +4077,8 @@ state_r = _radio_model(_CIGALE_RADIO_SF).predict_state({})
 w_t = np.asarray(state_r.wave)
 sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron carrying the whole q_IR
 
-# tengri's default: q_IR calibrates Bell's total; thermal from the nebular continuum.
+# tengri's default (Bell 2003: TIR 8-1000 um window, 1.4 GHz): q_IR calibrates Bell's
+# total, and the thermal term comes from the nebular continuum.
 state_r_tot = _radio_model({"type": "bell2003"}).predict_state({})
 sed_t_tot = np.asarray(state_r_tot.derived["sed_radio"])  # (1 - f_th) of the total
 
@@ -3818,14 +4101,14 @@ for _ln in ax.get_lines():
     if _ln.get_label().startswith("CIGALE"):
         _ln.set(linewidth=4.0, alpha=0.35, solid_capstyle="round")
 
-# The default (total-q) build: synchrotron is the non-thermal share of Bell's total.
+# tengri's default build: synchrotron is the non-thermal share of Bell's total.
 ax.plot(
     C_AA / w_t / 1e9,
     sed_t_tot,
     color="C3",
     ls="-.",
     lw=1.4,
-    label="tengri  bell2003 default (q_IR calibrates the total; synchrotron = 1 − f_th)",
+    label="tengri  bell2003 default (TIR window, 1.4 GHz; synchrotron = 1 − f_th of Bell's total)",
 )
 ax.legend(fontsize=8, frameon=False)
 _nu_r = C_AA / w_r / 1e9
@@ -3848,26 +4131,33 @@ print(
     f"×{_f_lir:.4f}"
 )
 
-# The total-q convention: the synchrotron is a fixed share of the freefree=False one,
-# and synchrotron + nebular thermal recovers Bell's calibrated total at 1.4 GHz.
+# tengri's default build (Bell 2003, TIR 8-1000 um window, 1.4 GHz): the synchrotron is
+# a fixed share of Bell's calibrated total, and synchrotron + nebular thermal term is
+# compared with that total at 1.4 GHz. Bell's total is formed from the TIR input the
+# radio block published for this build (`radio_L_ir_input`), not from the total dust
+# luminosity the CIGALE-convention build above uses.
 _sed_neb = np.asarray(state_r.derived["sed_nebular"])  # nebular continuum incl. free-free tail
 _j14 = int(np.argmin(np.abs(C_AA / w_t - 1.4e9)))
-_bell_total_14 = _L_ir_t / (3.75e12 * 10.0**2.5)
+_L_tir_in = float(np.asarray(state_r_tot.derived["radio_L_ir_input"])) * L_SUN  # Lsun → erg/s
+_bell_total_14 = _L_tir_in / (3.75e12 * 10.0**2.5)
 print(
-    f"§11 default (total) convention: synchrotron / freefree=False synchrotron = "
-    f"{sed_t_tot[_j14] / sed_t[_j14]:.4f} at 1.4 GHz"
+    f"§11 tengri default (Bell 2003: TIR 8-1000 um, 1.4 GHz): L_TIR input / total dust "
+    f"luminosity = {_L_tir_in / _L_ir_t:.4f}"
 )
 print(
-    f"§11   (synchrotron + nebular continuum) / Bell's calibrated total L(1.4 GHz) = "
-    f"{(sed_t_tot[_j14] + _sed_neb[_j14]) / _bell_total_14:.3f}"
+    f"§11   default synchrotron / CIGALE-convention synchrotron = "
+    f"{sed_t_tot[_j14] / sed_t[_j14]:.4f} at 1.4 GHz (thermal share, TIR window and "
+    f"the 1.4 vs 1.4276 GHz anchor together)"
+)
+print(
+    f"§11   (default synchrotron + nebular continuum) / Bell's calibrated total from the "
+    f"TIR input, L(1.4 GHz) = {(sed_t_tot[_j14] + _sed_neb[_j14]) / _bell_total_14:.3f}"
 )
 
 # Thermal free-free calibration, component-wise against CIGALE's synchrotron: the
 # nebular continuum's tail and the Murphy+2011 term (the free-free the radio block
 # adds with `freefree: True`) evaluated at the same L_IR.
-_sed_murphy = np.asarray(
-    radio_freefree(jnp.asarray(w_t), _L_ir_t, T_e=1.0e4, alpha_ff=-0.1)
-)
+_sed_murphy = np.asarray(radio_freefree(jnp.asarray(w_t), _L_ir_t, T_e=1.0e4, alpha_ff=-0.1))
 _den = np.where(L_r > 0, L_r, np.nan)
 _neb_on_c = np.asarray(U.regrid(w_t, _sed_neb, w_r))
 _murphy_on_c = np.asarray(U.regrid(w_t, _sed_murphy, w_r))
@@ -4060,7 +4350,11 @@ m_full = SEDModel.build(
         "lyman_cutoff": True,
         "all_params": Fixed(DEFAULT),
     },
-    dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
+    dust_emission={
+        "type": "dale2014_cigale",
+        "alpha_dale": Fixed(2.0),
+        "all_params": Fixed(DEFAULT),
+    },
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
         "sf": {"type": "bell2003", "freefree": False, "nu_ref": "21cm", "ir_window": "total"},
@@ -4069,7 +4363,8 @@ m_full = SEDModel.build(
         "radio_alpha_sf": Fixed(0.8),
         "all_params": Fixed(DEFAULT),
     },
-    neb=NEB_FIDUCIAL_TENGRI, redshift=Fixed(0.0),
+    neb=NEB_FIDUCIAL_TENGRI,
+    redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
 wave_t = np.asarray(s_full.wave)
@@ -4195,13 +4490,13 @@ plt.show()
 # | 5 | attenuation applied | 0.1–1 μm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
 # | 6 | dust IR | 10–100 μm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
 # | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 μm), 1.0075× (3–8 μm), 1.0102× (10–1000 μm) |
-# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids; open differences) |
+# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids); the [O III]/Hβ gap is the ionizing-shape response to logU, which saturates at the soft fitted shape and gives 3.416 / 5.499 / 6.085 at logU = −3 / −2 / −1.5 at Cue's default hard shape |
 # | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
 # | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
-# | 11 | radio | synchrotron XSYN across 0.1–100 GHz against XPRED predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
-# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is XT5T for tengri and XT5C for CIGALE against Meiksin's Table 2 XT5P; redward of Lyβ the max \\|ΔT\\| is XRED |
-# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.96× (1 keV), 0.97× (5 keV); radio 1.00× (1.4 GHz), 1.01× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.00× / 1.07× / 1.05× / 1.02× |
+# | 11 | radio | synchrotron 1.0098–1.0099× across 0.1–100 GHz against ×1.0099 predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
+# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is 0.003283 for tengri and 0.000909 for CIGALE against Meiksin's Table 2 0.003277; redward of Lyβ the max \|ΔT\| is ≤ 2.8e-16 |
+# | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.96× (1 keV), 0.97× (5 keV); radio 1.02× (1.4 GHz), 1.02× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.00× / 1.08× / 1.06× / 1.03× |
 #
 # Three conventions account for most of the residuals and are stated where they
 # are measured. tengri's age-binning convention (§3) sets the UV, Q_H and, through
