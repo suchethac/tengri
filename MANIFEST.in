@@ -62,3 +62,8 @@ global-exclude *.pyc
 global-exclude .DS_Store
 global-exclude *.h5
 global-exclude *.npz
+
+# The surviving-mass tables are package data (#2751): re-include after the blanket
+# *.h5 exclusion above so the sdist ships them like the wheel does.
+include src/tengri/data/ssp_mass_remaining/*.h5
+include src/tengri/data/ssp_mass_remaining/PROVENANCE.md
