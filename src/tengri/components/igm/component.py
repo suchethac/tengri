@@ -517,10 +517,9 @@ class IGMSEDComponent(TemplateThreading):
             # rest-grid curve at each pixel's rest effective wavelength.
             return jnp.interp(wave_obs / (1.0 + z), wave_rest, trans)
 
-        # Batched over the z grid in one vmap call, not one eager call per z
-        # (#2769). Not jitted: the jit-compiled IGM math differs from the eager
-        # per-z loop by up to ~4e-14, and the eager batch is bit-identical.
-        spec_table = jax.vmap(_spec_row, in_axes=(0, None, None))(
+        # One jitted program over the whole z grid, not one eager call per z
+        # (#2769), as in precompute_band_factors.
+        spec_table = jax.jit(jax.vmap(_spec_row, in_axes=(0, None, None)))(
             jnp.asarray(zgrid), wave_rest, wave_obs
         )
         return IGMSEDComponentState(
@@ -655,9 +654,8 @@ class IGMSEDComponent(TemplateThreading):
             )
             return trans.reshape(nodes.shape)
 
-        # Batched over the z-table in one vmap call, not one eager call per z (#2769).
-        # Not jitted: the batch stays bit-identical to the per-z loop.
-        table = np.asarray(jax.vmap(_node_row)(jnp.asarray(waves), jnp.asarray(zs)))
+        # One jitted program over the whole z-table, not one eager call per z (#2769).
+        table = np.asarray(jax.jit(jax.vmap(_node_row))(jnp.asarray(waves), jnp.asarray(zs)))
         _subband_cache.memo_put(key, table)
         _subband_cache.store(key, table)
         return jnp.asarray(table)
