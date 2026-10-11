@@ -91,13 +91,13 @@ class TestSbplDiscBitIdentityPin:
         (
             dict(agn_log_lbol=45.0, agn_grahsp_uvslope=0.2, agn_grahsp_plslope=-1.6),
             (
-                "0x1.5082ae88f412ap+249",
-                "0x1.0f8006f81ac03p+249",
-                "0x1.dd71753d48e90p+247",
-                "0x1.5123bf4ce6d43p+246",
-                "0x1.d6c7f0e8b101fp+244",
-                "0x1.f4400f201bddfp+240",
-                "0x1.8c7ad01067114p+236",
+                "0x1.bc3e0c804dc82p+249",
+                "0x1.666b57fbf2e9dp+249",
+                "0x1.3b259e8db0188p+248",
+                "0x1.bd12adb34fe5cp+246",
+                "0x1.36bfdaeb47e45p+245",
+                "0x1.4a33846be7f30p+241",
+                "0x1.05b489cff7387p+237",
             ),
         ),
         (
@@ -796,13 +796,15 @@ class TestNetzerDiscGrahsp:
 
         Checked to rtol 1e-6.
         """
-        from tengri.components.agn.grahsp.bolometric import bolometric_luminosity_bbb
         from tengri.utils.physics_constants import L_SUN
 
-        wave_fine = np.union1d(np.logspace(1.0, 4.5, 4000), [510.0])
+        # Independent dense reference: trapezoid in ln(lambda) of the emitted L_lambda over
+        # the full Lyman-limit support [91.2 nm, 1e8 nm], on a grid that does not depend on
+        # the block's own publication grid.
+        wave_dense = np.geomspace(91.2, 1.0e8, 2_000_000)
         out_aa = np.asarray(
             disc_block(
-                jnp.asarray(wave_fine * 10.0),
+                jnp.asarray(wave_dense * 10.0),
                 12.0,
                 agn_grahsp_netzer_log_mbh=8.0,
                 agn_grahsp_netzer_spin=0.0,
@@ -810,9 +812,9 @@ class TestNetzerDiscGrahsp:
                 templates=templates,
             )
         )
-        l_bol = float(
-            bolometric_luminosity_bbb(jnp.asarray(wave_fine), jnp.asarray(out_aa * 10.0))
-        )
+        # The block returns L_lambda [erg/s/Angstrom]; int L_lambda dlambda [erg/s] with
+        # dlambda = lambda dln(lambda) and lambda in nm, L_lambda in erg/s/nm = 10 x value.
+        l_bol = float(np.trapezoid(out_aa * 10.0 * wave_dense, np.log(wave_dense)))
         np.testing.assert_allclose(l_bol, 1e12 * L_SUN, rtol=1e-6)
 
     def test_liveness_log_mbh(self, wave_nm, disc_block):
