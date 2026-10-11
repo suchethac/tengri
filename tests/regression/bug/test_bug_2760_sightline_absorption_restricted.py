@@ -116,11 +116,10 @@ def test_static_index_gradient_matches_dense_on_a_traced_grid():
         assert rel <= RTOL, f"cos_i={cos_inc}: static-index gradient differs by {rel:.3e}"
 
 
-def test_index_for_another_grid_length_falls_back_to_dense():
-    """A caller whose grid is not the build grid takes the dense path, unchanged."""
+def test_index_for_another_grid_length_is_refused():
+    """A build-time index handed to a grid of another length raises; it never falls through."""
     other = np.geomspace(0.5, 1.0e5, WAVE.size + 2)
     index = tlt.below_library_index(other, "skirtor")
     assert index.n_wave != WAVE.size
-    got = _traced_static(0.5, index)
-    want = _dense(0.5)
-    assert np.array_equal(np.asarray(got.transmission), np.asarray(want.transmission))
+    with pytest.raises(ValueError, match="build-time below-library index"):
+        _traced_static(0.5, index)

@@ -167,6 +167,10 @@ class AGNSEDComponentState(SEDComponentState):
     #: grid plus the diagnostic nodes). A static constant, so the traced photometry grid needs
     #: no cross-section evaluation of its own.
     torus_below_index: Any | None = None
+    #: The master grid object the index was built on. The index is used only when the apply
+    #: state carries this very object, so a grid that merely has the same length (an explicit
+    #: or resampled grid) takes the dense path.
+    torus_master_wave: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -403,6 +407,7 @@ class AGNSEDComponent(TemplateThreading):
             skirtor_templates=skirtor_templates,
             block_templates=block_templates,
             torus_below_index=torus_below_index,
+            torus_master_wave=wave_grid if torus_below_index is not None else None,
         )
 
     def _torus_below_index(self, wave_grid):
@@ -600,7 +605,8 @@ class AGNSEDComponent(TemplateThreading):
         # The composable runner's build-time library index set, when the chain built one for
         # this grid; without it the runner takes the dense traced path.
         below_index = getattr(self._state, "torus_below_index", None)
-        if self.config.model == "composable" and below_index is not None:
+        master_wave = getattr(self._state, "torus_master_wave", None)
+        if self.config.model == "composable" and below_index is not None and wave is master_wave:
             agn_kwargs["torus_below_index"] = below_index
 
         # Call AGN function. For composable models, request L_2500_intrinsic

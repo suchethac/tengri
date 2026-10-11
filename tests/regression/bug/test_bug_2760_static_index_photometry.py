@@ -16,8 +16,10 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.components.agn import component as agn_component
+from tengri.components.agn.blocks import runner
 from tengri.components.agn.component import AGNSEDComponent
 from tengri.observation.photometry_config import Photometry
+from tengri.protocols.component import ForwardState
 
 pytestmark = pytest.mark.regression_bug
 
@@ -92,3 +94,61 @@ def test_static_index_photometry_matches_dense_photometry(monkeypatch):
     assert nz.any()
     rel = np.max(np.abs(static[nz] / dense[nz] - 1.0))
     assert rel <= RTOL, f"static-index photometry differs from dense by {rel:.3e}"
+
+
+def _agn_on_grid(model, wave, *, closed_over: bool = False):
+    """The AGN component's apply on ``wave``, as sed_intrinsic, under jit.
+
+    ``closed_over`` keeps ``wave`` a constant of the trace, as the production predict path
+    does with the master grid; otherwise the grid is a traced argument.
+    """
+    comp = _agn_component(model)
+    params = {**model.spec.get_fixed_values(), **_params(model)}
+    if closed_over:
+        return jax.jit(lambda: comp.apply(ForwardState(wave=wave), params).sed_intrinsic)()
+    return jax.jit(lambda w: comp.apply(ForwardState(wave=w), params).sed_intrinsic)(
+        jnp.asarray(wave)
+    )
+
+
+def test_index_reaches_the_sightline_only_on_the_master_grid(monkeypatch):
+    """The master grid gets the build-time index; a same-length explicit grid gets None."""
+    model = _model()
+    master = model._rest_wavelength
+    seen = []
+    original = runner.library_torus_sightline
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("below_index"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "library_torus_sightline", spy)
+    _agn_on_grid(model, master, closed_over=True)
+    assert seen and all(index is not None for index in seen)
+
+    seen.clear()
+    _agn_on_grid(model, np.asarray(master) * 1.5)
+    assert seen and all(index is None for index in seen)
+
+
+def test_same_length_explicit_grid_matches_the_dense_built_model(monkeypatch):
+    """On a grid with the master's length but other wavelengths, the output is the dense one.
+
+    The master grid is stretched by 1.5: same length, different samples below the library
+    edge. The static-index model must give the dense-built model's AGN emission on it.
+    """
+    static_model = _model()
+    shifted = np.asarray(static_model._rest_wavelength) * 1.5
+
+    static = np.asarray(_agn_on_grid(static_model, shifted))
+
+    monkeypatch.setattr(agn_component, "below_library_index", lambda *a, **k: None)
+    dense_model = _model()
+    dense_model._cached_component_chain = None
+    dense = np.asarray(_agn_on_grid(dense_model, shifted))
+    monkeypatch.undo()
+
+    nz = dense != 0.0
+    assert nz.any()
+    rel = np.max(np.abs(static[nz] / dense[nz] - 1.0))
+    assert rel <= 1.0e-12, f"same-length grid got the master's absorption ({rel:.3e})"

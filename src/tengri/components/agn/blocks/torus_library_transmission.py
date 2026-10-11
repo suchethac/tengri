@@ -523,7 +523,13 @@ def library_torus_sightline(
     c = jnp.asarray(cos_inc)
     transmission = sight.transmission[:-1]
     disc_factor = sight.disc_factor[:-1]
-    if below_index is not None and below_index.n_wave == wave.shape[0]:
+    if below_index is not None:
+        if below_index.n_wave != wave.shape[0]:
+            raise ValueError(
+                f"The build-time below-library index belongs to a grid of {below_index.n_wave} "
+                f"samples, but the sightline was evaluated on {wave.shape[0]}. Pass the index "
+                "only from the build master grid; any other grid takes below_index=None."
+            )
         # Build-time absorption data (the caller's grid is the one it was built on, so its
         # length matches): the cross-section is a constant and the absorbed column is one
         # elementwise exponential. The 0/1 mask is applied as an arithmetic blend rather than
