@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Folded integrand (#2769) equals the materialized interpolate-then-weight path.
 
 The fold never builds the (..., m) interpolated integrand; it reads the SSP row
