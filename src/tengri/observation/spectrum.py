@@ -644,6 +644,11 @@ def _bins_touching(n_pix: int, n_bins: int, lo: int, hi: int) -> tuple[int, ...]
     return tuple(int(k) for k in np.flatnonzero(keep))
 
 
+def _nonnegative_sigma_v(sigma_v_kms, flux) -> jnp.ndarray:
+    """Velocity dispersion in ``flux``'s dtype, with a negative value read as zero."""
+    return jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
+
+
 def broaden_velocity_only(
     flux: jnp.ndarray,
     wave: jnp.ndarray,
@@ -712,7 +717,7 @@ def broaden_velocity_only(
     """
     if _is_concrete_nonpositive(sigma_v_kms):
         return flux
-    sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
+    sigma_v = _nonnegative_sigma_v(sigma_v_kms, flux)
     pad = _resolve_pad(
         pad_pixels, wave, flux.shape[0], _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins
     )
@@ -768,7 +773,7 @@ def broaden_velocity_only_window(
     lo, hi = max(int(lo), 0), min(int(hi), n_pix)
     if lo >= hi:
         return flux
-    sigma_v = jnp.maximum(jnp.asarray(sigma_v_kms, dtype=jnp.asarray(flux).dtype), 0.0)
+    sigma_v = _nonnegative_sigma_v(sigma_v_kms, flux)
     pad = _lsf_pad_pixels(wave, n_pix, _lsf_sigma_bound_kms(sigma_v_kms=sigma_v_kms), n_bins)
     broadened = _apply_lsf_variable_r(
         flux,
