@@ -77,6 +77,7 @@ from tengri.components.agn.blocks.masking import (
     split_lines_result,
 )
 from tengri.components.agn.blocks.torus_library_transmission import (
+    BelowLibraryIndex,
     library_torus_sightline,
 )
 from tengri.components.agn.blocks.torus_screen import (
@@ -642,6 +643,7 @@ def compose_l_nu(
     template_state: dict | None = None,
     return_l2500: bool = False,
     return_components: bool = False,
+    torus_below_index: BelowLibraryIndex | None = None,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
@@ -768,6 +770,7 @@ agn_torus_block, agn_attenuation_block : str
                 cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
                 params=params,
                 library=_templates_for("torus", agn_torus_block),
+                below_index=torus_below_index,
             )
         return _sightline_cache["sight"]
 
@@ -1801,6 +1804,7 @@ def composable_agn_l_nu(
     template_state: dict | None = None,
     return_l2500: bool = False,
     return_components: bool = False,
+    torus_below_index: BelowLibraryIndex | None = None,
     **params,
 ) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point: :data:`L_ν` in erg/s/Hz.
@@ -1885,6 +1889,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         template_state=template_state,
         return_l2500=return_l2500,
         return_components=return_components,
+        torus_below_index=torus_below_index,
         **params,
     )
     if return_l2500 and return_components:

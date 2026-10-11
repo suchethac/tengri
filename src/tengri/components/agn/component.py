@@ -58,6 +58,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._lbol_reference import (
     _LOG10_L_SUN,
@@ -68,6 +69,7 @@ from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
+from tengri.components.agn.blocks.torus_library_transmission import below_library_index
 from tengri.components.agn.unified import (
     monolithic_models_with_line_components,
     resolve_agn_model,
@@ -160,6 +162,11 @@ class AGNSEDComponentState(SEDComponentState):
     #: ``{"<category>/<name>": pytree}`` for every selected block that
     #: declared a ``template_loader``. See ``collect_block_templates``.
     block_templates: Any | None = None
+    #: Build-time :class:`BelowLibraryIndex` (X-ray absorption data below the library edge) of
+    #: the composable torus's library sightline, on the grid the runner evaluates (the master
+    #: grid plus the diagnostic nodes). A static constant, so the traced photometry grid needs
+    #: no cross-section evaluation of its own.
+    torus_below_index: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -355,8 +362,9 @@ class AGNSEDComponent(TemplateThreading):
             State with optionally-populated filter_waves, filter_trans,
             and skirtor_templates.
         """
-        del ssp_data, wave_grid
+        del ssp_data
         approx = approx or {}
+        torus_below_index = self._torus_below_index(wave_grid)
 
         filter_waves = None
         filter_trans = None
@@ -394,7 +402,21 @@ class AGNSEDComponent(TemplateThreading):
             filter_trans=filter_trans,
             skirtor_templates=skirtor_templates,
             block_templates=block_templates,
+            torus_below_index=torus_below_index,
         )
+
+    def _torus_below_index(self, wave_grid):
+        """The composable torus's build-time below-library absorption data, or None.
+
+        ``wave_grid`` is the concrete master grid the chain was built on. The runner evaluates
+        on that grid with the 6 and 12 um diagnostic nodes merged in ascending order, so the
+        index set is taken on the same merged grid, in the grid's own dtype.
+        """
+        if wave_grid is None or self.config.model != "composable":
+            return None
+        grid = np.asarray(wave_grid)
+        merged = np.sort(np.concatenate([grid, np.asarray(_MIR_DIAGNOSTIC_AA, dtype=grid.dtype)]))
+        return below_library_index(merged, self.config.agn_torus_block)
 
     def block_recipe(self) -> dict[str, str]:
         """Map each pipeline stage to the block name this config selected.
@@ -575,6 +597,11 @@ class AGNSEDComponent(TemplateThreading):
         # loads its grid at trace time and bakes it in.
         if block_templates:
             agn_kwargs["template_state"] = block_templates
+        # The composable runner's build-time library index set, when the chain built one for
+        # this grid; without it the runner takes the dense traced path.
+        below_index = getattr(self._state, "torus_below_index", None)
+        if self.config.model == "composable" and below_index is not None:
+            agn_kwargs["torus_below_index"] = below_index
 
         # Call AGN function. For composable models, request L_2500_intrinsic
         # and L_4400_intrinsic. For monolithic models, both default to 0.0

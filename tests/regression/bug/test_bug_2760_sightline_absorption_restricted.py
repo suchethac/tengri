@@ -64,3 +64,63 @@ def test_restricted_absorption_gradient_matches_dense():
         g_dense = jax.jit(jax.grad(lambda c: total(c, dense=True)))(cos_inc)
         rel = abs(float(g_restricted) - float(g_dense)) / max(abs(float(g_dense)), 1.0e-300)
         assert rel <= RTOL, f"cos_i={cos_inc}: gradient differs by {rel:.3e}"
+
+
+def _static(wave=WAVE):
+    """The build-time absorption data of the concrete grid, as the component carries it."""
+    index = tlt.below_library_index(wave, "skirtor")
+    assert index is not None and index.below.any(), "the grid has no samples below the edge"
+    return index
+
+
+def _traced_static(cos_inc, index):
+    """The static-index form, on a traced grid as the photometry kernel passes it."""
+    return jax.jit(
+        lambda w: tlt.library_torus_sightline(
+            "skirtor", w, cos_inc=cos_inc, params={}, below_index=index
+        )
+    )(jnp.asarray(WAVE))
+
+
+@pytest.mark.parametrize("cos_inc", [0.1, 0.5, 0.95])
+def test_static_index_matches_dense_values_on_a_traced_grid(cos_inc):
+    """The build-time index form, on a traced grid, reproduces the dense traced form."""
+    static = _traced_static(cos_inc, _static())
+    dense = _dense(cos_inc)
+    for got, want in (
+        (static.transmission, dense.transmission),
+        (static.disc_factor, dense.disc_factor),
+    ):
+        got, want = np.asarray(got), np.asarray(want)
+        assert np.all(np.isfinite(got))
+        rel = np.max(np.abs(got - want) / np.maximum(np.abs(want), 1.0e-300))
+        assert rel <= RTOL, f"cos_i={cos_inc}: static index differs from dense by {rel:.3e}"
+
+
+def test_static_index_gradient_matches_dense_on_a_traced_grid():
+    weight = jnp.cos(jnp.arange(WAVE.size) * 1.0e-3)
+    index = _static()
+
+    def total(cos_inc, static: bool):
+        def inner(c, w):
+            kw = {"below_index": index} if static else {}
+            s = tlt.library_torus_sightline("skirtor", w, cos_inc=c, params={}, **kw)
+            return jnp.sum(weight * s.transmission + s.disc_factor)
+
+        return jax.jit(inner)(cos_inc, jnp.asarray(WAVE))
+
+    for cos_inc in (0.1, 0.5, 0.95):
+        g_static = jax.jit(jax.grad(lambda c: total(c, static=True)))(cos_inc)
+        g_dense = jax.jit(jax.grad(lambda c: total(c, static=False)))(cos_inc)
+        rel = abs(float(g_static) - float(g_dense)) / max(abs(float(g_dense)), 1.0e-300)
+        assert rel <= RTOL, f"cos_i={cos_inc}: static-index gradient differs by {rel:.3e}"
+
+
+def test_index_for_another_grid_length_falls_back_to_dense():
+    """A caller whose grid is not the build grid takes the dense path, unchanged."""
+    other = np.geomspace(0.5, 1.0e5, WAVE.size + 2)
+    index = tlt.below_library_index(other, "skirtor")
+    assert index.n_wave != WAVE.size
+    got = _traced_static(0.5, index)
+    want = _dense(0.5)
+    assert np.array_equal(np.asarray(got.transmission), np.asarray(want.transmission))

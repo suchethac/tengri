@@ -12260,7 +12260,9 @@ class SEDModel:
                 ):
                     state = comp.precompute(
                         ssp_data=None,
-                        wave_grid=None,
+                        # The AGN state keeps its build-time torus index set (on the master
+                        # grid), so the augmented state must still see that grid.
+                        wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
                     )

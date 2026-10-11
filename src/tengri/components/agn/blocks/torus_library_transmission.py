@@ -103,6 +103,63 @@ _COS_FLOOR = 0.0871557427476582
 _COS_FLOOR_WIDTH = 0.01
 
 
+class BelowLibraryIndex(NamedTuple):
+    """The build-time X-ray absorption data of the grid samples shortward of a library's grid.
+
+    Built once from the concrete rest-frame grid of a model. The MM83 cross-section depends
+    only on wavelength, so it is evaluated here, on the concrete grid, and carried as a
+    constant: inside a jitted kernel, where the grid is a traced value, the absorption is
+    then ``exp(-sigma N_H)`` with no cross-section evaluation. ``n_wave`` is the length of the
+    grid these arrays belong to; a caller whose grid has another length takes the dense path.
+
+    Attributes
+    ----------
+    below : ndarray of bool, shape (n_wave,)
+        ``True`` at the samples with ``grid < wave_min`` (the library's first node).
+    sigma : ndarray, shape (n_wave,)
+        The MM83 photoelectric cross-section [cm^2] at each sample (zero where ``below`` is
+        ``False``).
+    n_wave : int
+        Length of the build grid.
+    """
+
+    below: np.ndarray
+    sigma: np.ndarray
+    n_wave: int
+
+
+def below_library_index(wavelength, torus_block: str) -> BelowLibraryIndex | None:
+    """:class:`BelowLibraryIndex` of a concrete grid, or ``None`` (traced grid or no library).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Concrete rest-frame wavelength [Angstrom], the grid a jitted kernel will use.
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+
+    Returns
+    -------
+    BelowLibraryIndex or None
+        ``None`` when the wavelength is traced or the torus has no packaged library.
+
+    Notes
+    -----
+    **JIT-compatible**: construction-time only; call it on the concrete grid, outside a trace.
+    """
+    idx = _below_library_index(wavelength, torus_block)
+    if idx is None:
+        return None
+    n_wave = int(np.shape(wavelength)[0])
+    below = np.zeros(n_wave, dtype=bool)
+    below[idx] = True
+    sigma = np.zeros(n_wave)
+    if idx.size:
+        energy = HC_KEV_ANGSTROM / jnp.asarray(wavelength)[idx]
+        sigma[idx] = np.asarray(wabs_cross_section(energy))
+    return BelowLibraryIndex(below=below, sigma=sigma, n_wave=n_wave)
+
+
 class LibrarySightline(NamedTuple):
     """The library's line of sight on the caller's wavelength grid.
 
@@ -408,6 +465,7 @@ def library_torus_sightline(
     cos_inc: float,
     params: dict,
     library=None,
+    below_index: BelowLibraryIndex | None = None,
 ) -> LibrarySightline | None:
     r"""The library's line of sight with X-rays photoelectrically absorbed below its grid.
 
@@ -465,6 +523,22 @@ def library_torus_sightline(
     c = jnp.asarray(cos_inc)
     transmission = sight.transmission[:-1]
     disc_factor = sight.disc_factor[:-1]
+    if below_index is not None and below_index.n_wave == wave.shape[0]:
+        # Build-time absorption data (the caller's grid is the one it was built on, so its
+        # length matches): the cross-section is a constant and the absorbed column is one
+        # elementwise exponential. The 0/1 mask is applied as an arithmetic blend rather than
+        # a select: both are exact for finite library values (the ratio is clipped and its
+        # logarithms floored, so they are), and the blend keeps the compiled cost of the
+        # kernel to the elementwise work the sightline needs. Values equal the dense form.
+        t_x = jnp.exp(-jnp.asarray(below_index.sigma) * n_h)
+        b = jnp.asarray(below_index.below, dtype=transmission.dtype)
+        transmission = transmission * (1.0 - b) + b * t_x
+        disc_factor = disc_factor * (1.0 - b) + b * (2.0 * c * t_x)
+        return LibrarySightline(
+            ratio=sight.ratio[:-1],
+            transmission=transmission,
+            disc_factor=disc_factor,
+        )
     below_idx = _below_library_index(wavelength, torus_block)
     if below_idx is None:
         # Traced wavelength grid: no static index set, so the absorption is evaluated on
