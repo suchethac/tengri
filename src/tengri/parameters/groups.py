@@ -3738,8 +3738,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 f"Unknown sfh age_kernel {age_kernel!r}. "
                 f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
                 f"(or None to auto-select). 'cic' is the first-order default; "
-                f"'dsps' selects DSPS's histogram kernel on an 8x refined "
-                f"table (#964, #2683)."
+                f"'dsps' names the same dense integration (#964, #2683)."
             )
         result["age_kernel"] = age_kernel
 
