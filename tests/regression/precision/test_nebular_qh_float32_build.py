@@ -45,7 +45,10 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 
 kind = sys.argv[1]
-ssp = load_ssp_data(sys.argv[2])
+# BPASS ships no surviving-mass table yet (#2751/#2800), so it opts in to the DSPS fit
+# explicitly, as every in-repo BPASS load does; the other grids use their own table.
+ssp_kw = {"mass_remaining": "dsps_fit"} if "bpss_" in sys.argv[2] else {}
+ssp = load_ssp_data(sys.argv[2], **ssp_kw)
 table = precompute_ionizing_params_table(
     np.asarray(ssp.ssp_wave),
     np.asarray(ssp.ssp_flux),
