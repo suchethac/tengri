@@ -301,6 +301,7 @@ def predict_batched_observables(
         cal_wave_range=(obs.cal_lo, obs.cal_hi),
         conserving=conserving,
         resolution_matrix=_banded_operator(spec, obs),
+        lsf_pad_pixels=spec.lsf_pad_pixels,
     )
     out["spec_fnu"] = spec_fnu * obs.pix_mask
     return out

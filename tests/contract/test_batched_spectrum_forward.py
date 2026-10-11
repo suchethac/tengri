@@ -11,6 +11,8 @@ Runs on the synthetic narrow SSP (no ``data/ssp_*.h5`` needed).
 
 from __future__ import annotations
 
+import dataclasses
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -28,6 +30,7 @@ pytestmark = pytest.mark.contract
 
 _N_DIAG = 21
 _R_BANDED = 300.0
+_FFT_SLACK = 64
 
 
 def _grid(n_pix: int, lo: float, hi: float) -> np.ndarray:
@@ -164,7 +167,11 @@ def test_gaussian_padded_pixels_are_exactly_zero(synthetic_ssp):
         for w in waves
     ]
     template = _free_z_model(synthetic_ssp, waves[1], {"resolution": 800.0})
-    spec, batch, _ = build_spectro_batches(records, quantum=260, model=template)[0]
+    # The template-checked build refuses this padding (the flux-conserving Gaussian
+    # LSF covers a range the observed grid sets), so the mask check forces the bucket
+    # through, as the padding-exactness oracle does, and only checks the mask.
+    spec, batch, _ = build_spectro_batches(records, quantum=260)[0]
+    spec = dataclasses.replace(spec, conserving=True)
     assert spec.n_max == 260 and spec.grid_kind == "nonuniform"
     params = _base_params(template)
     predict = make_batched_predict(template, spec)
@@ -229,3 +236,68 @@ def test_check_template_model_rejects_fixed_redshift(synthetic_ssp):
 
 def test_check_template_model_accepts_free_redshift(single_model):
     check_template_model(single_model)
+
+
+def _sigma_v_template(ssp, wave, resolution):
+    """Free-redshift template with sigma_v free on ``[0, 2000]`` km/s."""
+    base = _free_z_model(ssp, wave, resolution)
+    merged = base.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0))
+    return SEDModel(merged, ssp, observation=base.observation)
+
+
+def test_sigma_v_free_banded_forward_matches_reference_with_static_pad(synthetic_ssp):
+    """(a) sigma_v = 250 km/s on the banded path, no padding: the static LSF pad is exact."""
+    from tengri.forward.batched_spectrum import predict_batched_observables
+
+    wave = _grid(160, 4000.0, 7000.0)
+    z = 0.05
+    template = _sigma_v_template(synthetic_ssp, wave, _banded(wave))
+    bm = _banded(wave)["resolution_matrix"]
+    record = GalaxySpectrum(wave=wave, flux=np.ones(160), ivar=np.ones(160), resolution=bm, z=z)
+    spec, sb, _ = build_spectro_batches([record], model=template)[0]
+    assert spec.lsf_pad_pixels is not None
+    params = {**_base_params(template), "sigma_v_kms": jnp.asarray(250.0)}
+    out = predict_batched_observables(template, params, sb.galaxy(0), spec)
+    ref = template.predict_spectrum({**params, "redshift": z})
+    np.testing.assert_allclose(np.asarray(out["spec_fnu"]), np.asarray(ref), rtol=1e-10, atol=0.0)
+
+
+def _fft_lengths(jaxpr) -> list[int]:
+    """Length of every FFT in a jaxpr, descending into nested (jitted, mapped) jaxprs."""
+    lengths = []
+    for eqn in jaxpr.eqns:
+        if eqn.primitive.name == "fft":
+            lengths.append(int(eqn.params["fft_lengths"][-1]))
+        for value in eqn.params.values():
+            for sub in value if isinstance(value, (list, tuple)) else [value]:
+                inner = getattr(sub, "jaxpr", sub)
+                if hasattr(inner, "eqns"):
+                    lengths.extend(_fft_lengths(inner))
+    return lengths
+
+
+def test_static_lsf_pad_shortens_the_batched_fft(synthetic_ssp):
+    """(b) Banded sigma_v > 0 at 600 pixels: the static pad keeps the batched FFTs short.
+
+    Measured on this grid: the largest FFT is 576 with the pad (256 per side) and
+    1280 with the traced-grid fallback (``lsf_pad_pixels=None``).
+    """
+    n = 600
+    wave = _grid(n, 4000.0, 7000.0)
+    bm = _banded(wave)["resolution_matrix"]
+    template = _sigma_v_template(synthetic_ssp, wave, _banded(wave))
+    record = GalaxySpectrum(wave=wave, flux=np.ones(n), ivar=np.ones(n), resolution=bm, z=0.05)
+    spec, batch, _ = build_spectro_batches([record], model=template)[0]
+    n_max, pad = spec.n_max, spec.lsf_pad_pixels
+    assert n_max == n and pad is not None
+    params = _stack(_base_params(template), 1)
+
+    def longest_fft(sp):
+        fn = make_batched_predict(template, sp)
+        return max(_fft_lengths(jax.make_jaxpr(fn)(params, batch).jaxpr))
+
+    with_pad = longest_fft(spec)
+    without = longest_fft(dataclasses.replace(spec, lsf_pad_pixels=None))
+    assert with_pad < n_max + 2 * pad + _FFT_SLACK
+    assert with_pad < without / 2
+    assert without >= 2 * n_max

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Batched per-galaxy spectroscopic observations: padding, bucketing, pytree contract (#2833)."""
 
+import dataclasses
+
 import jax
 import numpy as np
 import pytest
@@ -466,3 +468,19 @@ def test_builder_pads_a_log_uniform_grid_geometrically():
     [(spec, batch, _)] = build_spectro_batches([gal], quantum=128)
     assert spec.n_max == 384
     assert classify_grid(np.asarray(batch.wave[0])) == "log_uniform"
+
+
+def test_lsf_pad_pixels_is_part_of_the_bucket_key():
+    """(c) Buckets that differ only in the static LSF padding never share a compile."""
+    base = SpectroBatchSpec(n_max=300, offsets=None, grid_kind="nonuniform")
+    short = dataclasses.replace(base, lsf_pad_pixels=256)
+    long = dataclasses.replace(base, lsf_pad_pixels=512)
+    assert short != long
+    assert len({base, short, long}) == 3
+    assert {short: "a", long: "b"}[dataclasses.replace(base, lsf_pad_pixels=256)] == "a"
+
+
+@pytest.mark.parametrize("bad", [-1, 1.5, True])
+def test_lsf_pad_pixels_is_validated(bad):
+    with pytest.raises(ValueError, match="lsf_pad_pixels"):
+        SpectroBatchSpec(n_max=300, offsets=None, grid_kind="nonuniform", lsf_pad_pixels=bad)

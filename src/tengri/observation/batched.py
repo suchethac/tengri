@@ -45,7 +45,7 @@ passed as a static argument.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
 import jax
@@ -54,6 +54,11 @@ import numpy as np
 
 from tengri.observation.banded import BandedMatrix
 from tengri.observation.spectroscopy import resolve_resample_mode
+from tengri.observation.spectrum import (
+    _LSF_MAX_SIGMA_KMS,
+    _lsf_pad_pixels,
+    _lsf_sigma_bound_kms,
+)
 from tengri.utils.conversions import flambda_to_fnu
 
 _GRID_KINDS: frozenset[str] = frozenset({"banded", "log_uniform", "nonuniform"})
@@ -227,6 +232,12 @@ class SpectroBatchSpec:
         mode for this bucket's grid and redshift. ``None`` when the bucket was
         built without a template model (see :func:`build_spectro_batches`); such
         a bucket cannot be evaluated.
+    lsf_pad_pixels : int or None
+        Static FFT padding per side [pixels] for the observed-grid LSF and sigma_v
+        transforms, computed from the concrete real grids when the bucket is built
+        with a template (see :func:`build_spectro_batches`). ``None`` keeps the
+        traced-grid fallback, which pads by ``n_max - 1``: exact, but the transforms
+        are about three times longer.
 
     Raises
     ------
@@ -248,6 +259,7 @@ class SpectroBatchSpec:
     has_phot: bool = False
     n_filt: int = 0
     conserving: bool | None = None
+    lsf_pad_pixels: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -272,6 +284,9 @@ class SpectroBatchSpec:
             raise ValueError("n_filt must be 0 when has_phot is False")
         if self.conserving is not None and not isinstance(self.conserving, bool):
             raise ValueError(f"conserving must be a bool or None, got {self.conserving!r}")
+        pad = self.lsf_pad_pixels
+        if pad is not None and (isinstance(pad, bool) or not isinstance(pad, int) or pad < 0):
+            raise ValueError(f"lsf_pad_pixels must be None or a non-negative int, got {pad!r}")
 
 
 @dataclass(frozen=True)
@@ -628,8 +643,11 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
       ``sigma_v`` acts on the rest grid before resampling).
     * Gaussian resolution, flux-conserving: the LSF acts on the rest grid
       (:func:`~tengri.observation.spectrum.compute_spectrum_conserving_lsf`), so
-      ``sigma_v`` is never on the observed grid. Point sampling applies the
-      Gaussian LSF to the observed grid, so it is not exact.
+      ``sigma_v`` is never on the observed grid. But the rest-frame range the LSF
+      covers is set by the observed grid, and padding widens it. That shifts the
+      sub-pixel ringing tail by 1e-7 to 1.8e-6 of peak, so the path is refused and
+      the batch is exact or the build raises. Point sampling applies the Gaussian
+      LSF to the observed grid, so it is not exact either.
     * Flux-conserving sampling takes the upper edge of the last real pixel from
       its padded neighbor. A linear extension reproduces the edge exactly; a
       geometric one does not, so a log-uniform grid is refused under it.
@@ -655,7 +673,10 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
             "the flux-conserving pixel edge of the last real pixel moves when a "
             "log-uniform grid is padded geometrically"
         )
-    return True, ""
+    return False, (
+        "the flux-conserving Gaussian LSF covers a rest-frame range set by the observed "
+        "grid, so padding widens it and shifts the sub-pixel ringing tail"
+    )
 
 
 def _prepare_galaxy(index: int, g: GalaxySpectrum, quantum, lsf_n_bins, rest_wave_range, policy):
@@ -753,6 +774,52 @@ def _padding_error(bucket_spec, offenders) -> ValueError:
     )
 
 
+def _bucket_lsf_pad(model, spec: SpectroBatchSpec, rows: list[dict]) -> int:
+    """Static FFT padding for a bucket, from its concrete real grids (#2833).
+
+    Each galaxy contributes the padding its padded grid (length ``n_max``, the grid
+    the transform sees) needs under the sigma bound the forward pass applies. A
+    free sigma_v is traced there and enters at its cap; a fixed one is concrete.
+    The resolution is the one the forward pass selects for this grid kind. The
+    bucket takes the largest padding over its galaxies. The 2000 km/s cap covers
+    every allowed sigma_v prior: the ``sigma_v_kms`` declaration in
+    ``parameters/_shared.py`` refuses any prior with ``hi > 2000``.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model.
+    spec : SpectroBatchSpec
+        Bucket key, before the padding is set.
+    rows : list of dict
+        Unbatched rows of the bucket's galaxies, as built by ``_prepare_galaxy``.
+
+    Returns
+    -------
+    int
+        Padding per side [pixels].
+
+    Notes
+    -----
+    Build-time NumPy helper. The formula is :func:`~tengri.observation.spectrum._lsf_pad_pixels`
+    and the bound is :func:`~tengri.observation.spectrum._lsf_sigma_bound_kms`; the
+    pixel-count bins follow the path each grid kind takes (scalar R on a
+    log-uniform grid takes the constant path, every other kind the binned one).
+    """
+    sigma_v = (
+        _LSF_MAX_SIGMA_KMS
+        if "sigma_v_kms" in model.spec.free_params
+        else float(model._get_sigma_v_kms({}))
+    )
+    n_bins = None if spec.grid_kind == "log_uniform" else spec.lsf_n_bins
+    pads = []
+    for row in rows:
+        resolution = model._lsf_resolution if spec.offsets is not None else row["resolution_pp"]
+        bound = _lsf_sigma_bound_kms(resolution=resolution, sigma_v_kms=sigma_v)
+        pads.append(_lsf_pad_pixels(row["wave"], spec.n_max, bound, n_bins))
+    return max(pads)
+
+
 def build_spectro_batches(
     galaxies: Sequence[GalaxySpectrum],
     *,
@@ -844,14 +911,15 @@ def build_spectro_batches(
             if offenders:
                 raise _padding_error(spec, offenders)
 
-    return [
-        (
-            spec,
-            _stack_bucket([row for _, row, _, _ in members]),
-            np.asarray([i for i, _, _, _ in members], dtype=int),
+    out = []
+    for spec, members in buckets.items():
+        rows = [row for _, row, _, _ in members]
+        if model is not None:
+            spec = replace(spec, lsf_pad_pixels=_bucket_lsf_pad(model, spec, rows))
+        out.append(
+            (spec, _stack_bucket(rows), np.asarray([i for i, _, _, _ in members], dtype=int))
         )
-        for spec, members in buckets.items()
-    ]
+    return out
 
 
 def require_spec(spec) -> SpectroBatchSpec:
