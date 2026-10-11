@@ -5,7 +5,8 @@ Every wavelength inside tengri is vacuum; an air input converts once, at ingesti
 #2778 flagged six sources whose convention it had not established:
 
 1. the Synthesizer NLR grid ``lines/wavelength``  -> AIR (Cloudy c23.01 labels), converted;
-2. Cloudy/PyNeb labels above 10000 A              -> Cloudy's are AIR to 100 micron (converted),
+2. Cloudy/PyNeb labels above 10000 A              -> Cloudy's are AIR at every wavelength
+   (converted; the old 100 micron cap was lifted in test_bug_vacuum_conventions_final),
    Flury+2024's infrared labels are the NIST VACUUM values (left alone);
 3. SVO filter curves                              -> no source states the medium: UNESTABLISHED;
 4. ``qsogen_emline_template.dat``                 -> VACUUM below 5100 A (Temple+2021), the
@@ -133,7 +134,7 @@ def test_nlr_grid_file_labels_are_air_in_the_real_synthesizer_file():
         assert abs(loaded[int(np.argmin(np.abs(raw - air)))] - vac) < 0.06, vac
 
 
-# ── 2. Labels above 10000 A: Cloudy air to 100 micron, Flury infrared vacuum ───────────────
+# ── 2. Labels above 10000 A: Cloudy air at all wavelengths, Flury infrared vacuum ───────────────
 
 #: (Cloudy air label, NIST vacuum value) [Angstrom]: the infrared lines both catalogs carry.
 _CLOUDY_IR = (
@@ -159,10 +160,15 @@ def test_cloudy_infrared_labels_are_air_and_convert_to_the_vacuum_value():
     np.testing.assert_array_equal(
         catalog_air_to_vacuum(air[air > LABEL_AIR_MAX_AA]), air[air > 1e4]
     )
-    # beyond the Cloudy cap nothing is converted (far-infrared labels not established)
+    # Cloudy air-labels every wavelength above 2000 A with no upper limit (cddefines.cpp
+    # t_wavl::sprt_wl), so the far-infrared labels beyond 100 micron convert too; this was
+    # pinned as "not converted" while the rule beyond 100 micron was unestablished
     far = np.array([1.2e6, 1.576e6])
-    np.testing.assert_array_equal(
-        catalog_air_to_vacuum(far, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA), far
+    np.testing.assert_allclose(
+        catalog_air_to_vacuum(far, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA),
+        air_to_vac(far),
+        rtol=0,
+        atol=1e-6,
     )
 
 
@@ -363,10 +369,10 @@ def test_flury_mgii_and_hgamma_labels_read_as_air_labels():
 
 _REQUIRED = {
     "synthesizer_nlr_lines": "air",
-    "synthesizer_nlr_spectra": "unestablished",
+    "synthesizer_nlr_spectra": "vacuum",
     "svo_filters": "unestablished",
     "qsogen_emlines": "vacuum",
-    "qsogen_emlines_nir": "unestablished",
+    "qsogen_emlines_nir": "vacuum",
     "break_indices": "air",
     "mappings5_3mdb": "air",
     "flury24_mappings5": "air",
