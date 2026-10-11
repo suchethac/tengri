@@ -188,7 +188,7 @@ print(
 # predictable: NUTS can spend a whole step building a deep tree on the photo-z
 # posterior, which adds up. We set `K = N` (fit all at once), a diagonal mass
 # matrix, and one chain per galaxy. `K = N` suits a model this light; on heavier models (nonparametric SFHs, many bands, line channels) leave `forward_chunk_size` at its `"auto"` default so it sizes `K` from a memory budget. We time a single forward evaluation first,
-# then the full catalog.
+# then the full catalog. The timings below come from one machine and show the shape of the cost, not a benchmark.
 
 # %%
 FIT_KW = dict(
@@ -425,7 +425,7 @@ plt.show()
 #   a photo-z fit interpolates the table instead of re-integrating per step. The
 #   wNE SSP (baked nebular emission) keeps the line-boosted colors at zero
 #   per-step cost.
-# - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
+# - The vectorized fit **returns photo-z, stellar mass, and dust** across the
 #   catalog, even with the dust–redshift degeneracy left free.
 # - A **GPU** extends batching much further: `K` chains run across thousands of
 #   lanes at once, so the same call scales to thousands of galaxies. For GPU

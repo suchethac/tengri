@@ -1,6 +1,6 @@
 {
-  "date": "2026-09-20T12:14:12.978181",
-  "git_sha": "81065f6183854af6083965ef6cd42dbcaaeb7e51",
+  "date": "2026-10-09T10:01:56.196011",
+  "git_sha": "7b80d009217aeae1b18a47faf2ee59ff126525d0",
   "census": {
     "ssp": {
       "available": 4,
@@ -9,19 +9,19 @@
       "example": "4 libraries"
     },
     "dust_attenuation": {
-      "available": 21,
+      "available": 22,
       "other": 0,
       "build_key": "dust_attenuation['law']",
       "example": "calzetti"
     },
     "dust_emission": {
-      "available": 13,
-      "other": 5,
+      "available": 12,
+      "other": 6,
       "build_key": "dust_emission['type']",
       "example": "dl07"
     },
     "dust_geometries": {
-      "available": 3,
+      "available": 4,
       "other": 0,
       "build_key": "dust_attenuation['type']",
       "example": "two_component"
@@ -99,8 +99,8 @@
       "example": "grahsp_biatten"
     },
     "radio": {
-      "available": 3,
-      "other": 0,
+      "available": 0,
+      "other": 3,
       "build_key": "radio=",
       "example": "condon92"
     },
@@ -117,7 +117,7 @@
       "example": "inoue14"
     },
     "observation_photometry": {
-      "available": 449,
+      "available": 455,
       "other": 0,
       "build_key": "(observation=)",
       "example": "photometry"
@@ -153,22 +153,22 @@
   "sfh_classifications": {
     "parametric": "All SFH not in nonparametric/stochastic",
     "nonparametric": [
-      "continuity_flex",
-      "prospector_beta",
-      "dense_basis_pure",
-      "dense_basis",
-      "dirichlet",
       "continuity",
-      "bursty_continuity"
+      "dense_basis_pure",
+      "prospector_beta",
+      "continuity_flex",
+      "bursty_continuity",
+      "dense_basis",
+      "dirichlet"
     ],
     "stochastic": [
-      "field_sfr_noise",
-      "field"
+      "field",
+      "field_sfr_noise"
     ]
   },
   "refusing_entries": [
-    "mappings_photo_stellar",
-    "mappings_photo_agn"
+    "mappings_photo_agn",
+    "mappings_photo_stellar"
   ],
   "all_registries": {
     "known_ssps": [
@@ -385,7 +385,7 @@
         "kind": "dust_attenuation",
         "status": "production",
         "citation": "Conroy et al. 2010 (ApJ 708, 58)",
-        "short_doc": "Conroy+10 mixed MW + power-law (FSPS default)",
+        "short_doc": "Conroy+10 CCM89 with scalable 2175 \u00c5 bump (FSPS dust_type=1)",
         "use": "SEDModel.build(..., dust_attenuation={'type': 'single_component', 'law': 'conroy2010'})"
       },
       {
@@ -395,6 +395,14 @@
         "citation": "Draine 2003 (ARA&A 41, 241)",
         "short_doc": "Draine 2003 MW R_V=3.1 grain model attenuation",
         "use": "SEDModel.build(..., dust_attenuation={'type': 'single_component', 'law': 'd03_mwrv31'})"
+      },
+      {
+        "name": "gordon03_smcbar",
+        "kind": "dust_attenuation",
+        "status": "production",
+        "citation": "Gordon et al. 2003 (ApJ 594, 279)",
+        "short_doc": "Gordon+2003 SMC Bar average extinction curve",
+        "use": "SEDModel.build(..., dust_attenuation={'type': 'single_component', 'law': 'gordon03_smcbar'})"
       },
       {
         "name": "hd23_mwrv31",
@@ -672,17 +680,17 @@
       },
       {
         "name": "pah_drude",
-        "status": "production",
+        "status": "unvalidated",
         "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
-        "short_doc": "Drude-profile PAH emission features (building block; not selectable standalone)",
-        "use": "building block, not a standalone model: 'pah_drude' re-emits only a fraction of L_ir. Compose it with an energy-balanced continuum model, or pick one from list_dust_emission_models()",
+        "short_doc": "[not builder-available: PAH building block; composes through the dust-emission grid API] Drude-profile PAH emission features",
+        "use": "tengri.components.dust.dust_analytic_precompute.precompute(model='pah_drude', ...)",
         "kind": "dust_emission"
       },
       {
         "name": "schreiber2016",
         "status": "production",
-        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
-        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+        "citation": "Schreiber et al. 2018 (A&A 609, A30)",
+        "short_doc": "Tabulated Schreiber+2018 library (CIGALE); (T_dust, PAH mass fraction)",
         "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'}, dust_emission={'type': 'schreiber2016'})",
         "kind": "dust_emission"
       },
@@ -690,7 +698,7 @@
         "name": "schreiber2018",
         "status": "experimental",
         "citation": "Schreiber et al. 2018 (A&A 609, A30)",
-        "short_doc": "Tabulated IR template library (T_dust, f_PAH)",
+        "short_doc": "Tabulated Schreiber+2018 library, AGNfitter-rX packaging; (T_dust, f_PAH)",
         "use": "SEDModel.build(..., dust_attenuation={'law': 'calzetti'}, dust_emission={'type': 'schreiber2018'})",
         "kind": "dust_emission"
       },
@@ -704,6 +712,14 @@
       }
     ],
     "dust_models": [
+      {
+        "name": "age_binned",
+        "kind": "dust_model",
+        "status": "production",
+        "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
+        "short_doc": "N screens, each its own law and exact young/old age window (#2528)",
+        "use": "SEDModel.build(..., dust_attenuation={'type': 'age_binned', 'screens': [{'law': 'calzetti', 'window_log_yr': (None, 7.0)}, {'law': 'calzetti', 'window_log_yr': (None, None)}]})"
+      },
       {
         "name": "single_component",
         "kind": "dust_model",
@@ -945,7 +961,8 @@
         "use": "SEDModel.build(..., sfh={'type': 'buat08'})",
         "params": [
           "sfh_buat08_log_total_mass",
-          "sfh_buat08_velocity_km_s"
+          "sfh_buat08_velocity_km_s",
+          "sfh_buat08_age_gyr"
         ],
         "param_details": [
           {
@@ -957,6 +974,11 @@
             "name": "sfh_buat08_velocity_km_s",
             "default": "Uniform(80.0, 360.0)",
             "description": "Rotational velocity (km/s), range [40, 360]"
+          },
+          {
+            "name": "sfh_buat08_age_gyr",
+            "default": "Uniform(0.5, 13.787)",
+            "description": "Galaxy age / lookback to formation (Gyr)"
           }
         ]
       },
@@ -1531,7 +1553,7 @@
           },
           {
             "name": "sfh_dexp_start_gyr",
-            "default": "Fixed(0.0)",
+            "default": "Fixed(5.0)",
             "description": "Start lookback (Gyr)"
           }
         ]
@@ -1622,7 +1644,7 @@
           },
           {
             "name": "sfh_dpl_age_gyr",
-            "default": "Uniform(0.5, 13.81)",
+            "default": "Uniform(0.5, 13.787)",
             "description": "Cosmic time for SF (Gyr) = lookback of formation; set to age_of_universe(z) for BAGPIPES parity"
           },
           {
@@ -1665,7 +1687,7 @@
           },
           {
             "name": "sfh_dpl_lookback_age_gyr",
-            "default": "Uniform(0.5, 13.81)",
+            "default": "Uniform(0.5, 13.787)",
             "description": "Older truncation lookback time (Gyr); set to age_of_universe(z) for a galaxy forming at the Big Bang"
           },
           {
@@ -1705,7 +1727,7 @@
           },
           {
             "name": "sfh_exp_start_gyr",
-            "default": "Fixed(0.0)",
+            "default": "Fixed(5.0)",
             "description": "Start lookback (Gyr)"
           }
         ]
@@ -1795,7 +1817,7 @@
           },
           {
             "name": "sfh_lnorm_age_gyr",
-            "default": "Uniform(0.5, 13.81)",
+            "default": "Uniform(0.5, 13.787)",
             "description": "Cosmic time for SF (Gyr) = lookback of formation; set to age_of_universe(z) for BAGPIPES direction"
           }
         ]
@@ -1985,7 +2007,7 @@
         "kind": "sfh_model",
         "status": "production",
         "citation": "Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
-        "short_doc": "Post-starburst non-parametric SFH with a resolved quenching zone (nflex=5, nfixed=3): youngest bin [0, tlast] + five equal-width flex bins out to tflex + three equal-width fixed old bins out to 13.7 Gyr",
+        "short_doc": "Post-starburst non-parametric SFH with a resolved quenching zone (nflex=5, nfixed=3): youngest bin [0, tlast] + five equal-width flex bins out to tflex + three equal-width fixed old bins out to the age of the universe at this model's redshift",
         "use": "SEDModel.build(..., sfh={'type': 'psb_flex'})",
         "params": [
           "sfh_psb_flex_log_total_mass",
@@ -1997,7 +2019,8 @@
           "sfh_psb_flex_ratio_flex_2",
           "sfh_psb_flex_ratio_flex_3",
           "sfh_psb_flex_ratio_old_0",
-          "sfh_psb_flex_ratio_old_1"
+          "sfh_psb_flex_ratio_old_1",
+          "sfh_psb_flex_ratio_old_2"
         ],
         "param_details": [
           {
@@ -2043,10 +2066,15 @@
           {
             "name": "sfh_psb_flex_ratio_old_0",
             "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
-            "description": "log10 SFR ratio old bin 0/1"
+            "description": "log10 SFR ratio: oldest flex bin / youngest fixed bin (link)"
           },
           {
             "name": "sfh_psb_flex_ratio_old_1",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio old bin 0/1"
+          },
+          {
+            "name": "sfh_psb_flex_ratio_old_2",
             "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
             "description": "log10 SFR ratio old bin 1/2"
           }
@@ -2057,7 +2085,7 @@
         "kind": "sfh_model",
         "status": "production",
         "citation": "Suess et al. 2022 (ApJ 935, 146); arXiv:2207.02883",
-        "short_doc": "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed old bins out to 13.7 Gyr, with StudentT(0, 0.3, df=2) ratios",
+        "short_doc": "Post-starburst non-parametric SFH (Suess+22, nflex=1, nfixed=3): youngest bin [0, tlast] + a single flex bin [tlast, tflex] + three equal-width fixed old bins out to the age of the universe at this model's redshift, with StudentT(0, 0.3, df=2) ratios",
         "use": "SEDModel.build(..., sfh={'type': 'psb_suess2022'})",
         "params": [
           "sfh_psb2022_log_total_mass",
@@ -2065,7 +2093,8 @@
           "sfh_psb2022_tflex_gyr",
           "sfh_psb2022_ratio_young",
           "sfh_psb2022_ratio_old_0",
-          "sfh_psb2022_ratio_old_1"
+          "sfh_psb2022_ratio_old_1",
+          "sfh_psb2022_ratio_old_2"
         ],
         "param_details": [
           {
@@ -2091,10 +2120,15 @@
           {
             "name": "sfh_psb2022_ratio_old_0",
             "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
-            "description": "log10 SFR ratio old bin 0/1"
+            "description": "log10 SFR ratio: oldest flex bin / youngest fixed bin (link)"
           },
           {
             "name": "sfh_psb2022_ratio_old_1",
+            "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
+            "description": "log10 SFR ratio old bin 0/1"
+          },
+          {
+            "name": "sfh_psb2022_ratio_old_2",
             "default": "StudentT(mu=0.0, sigma=0.3, df=2.0)",
             "description": "log10 SFR ratio old bin 1/2"
           }
@@ -2471,7 +2505,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP SMC-like broken power-law bi-attenuation",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'grahsp_biatten'}}",
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'grahsp_biatten'}})",
         "params": [
           "agn_grahsp_ebv",
           "agn_grahsp_ebv_agn"
@@ -2496,7 +2530,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'none'}})"
       },
       {
         "name": "polar_dust",
@@ -2505,7 +2539,7 @@
         "status": "production",
         "citation": "Pei 1992, ApJ, 395, 130",
         "short_doc": "Polar-dust extinction with Type-1-only screen",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'polar_dust'}}",
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'polar_dust'}})",
         "params": [
           "agn_polar_T",
           "agn_polar_beta",
@@ -2530,8 +2564,8 @@
           },
           {
             "name": "agn_polar_oa",
-            "default": "Uniform(10.0, 80.0)",
-            "description": "Polar dust half-opening angle [degrees]: sets covering fraction"
+            "default": "Fixed(0.0)",
+            "description": "Polar dust half-opening angle override [degrees, from the equatorial plane]: sets the cone and its Type-1/2 boundary; 0 (default) follows the torus's own opening angle"
           }
         ]
       },
@@ -2542,15 +2576,15 @@
         "status": "production",
         "citation": "Temple, Hewett & Banerji 2021, MNRAS, 508, 737",
         "short_doc": "Temple+2021 empirical quasar extinction curve",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen'}}",
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen'}})",
         "params": [
-          "agn_attenuation_ebv"
+          "agn_ebv"
         ],
         "param_details": [
           {
-            "name": "agn_attenuation_ebv",
+            "name": "agn_ebv",
             "default": "Uniform(0.0, 1.0)",
-            "description": "E(B-V) of the AGN attenuation-stage block (smc_prevot)"
+            "description": "QSOgen SMC reddening E(B-V) attenuation coefficient. Applied by the ``qsogen_smc`` attenuation block. Range [0, 1.0] matches SMC/Magellanic Cloud dust opacity. Default 0.0 is no reddening."
           }
         ]
       },
@@ -2561,7 +2595,7 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen SMC reddening factor",
-        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen_smc'}}",
+        "use": "SEDModel.build(..., agn={'atten': {'type': 'qsogen_smc'}})",
         "params": [
           "agn_ebv"
         ],
@@ -2580,15 +2614,15 @@
         "status": "production",
         "citation": "Prevot et al. 1984, A&A, 132, 389",
         "short_doc": "Prevot et al. 1984 SMC extinction curve",
-        "use": "SEDModel.build(..., agn={'atten': {'law': 'prevot_smc'}}",
+        "use": "SEDModel.build(..., agn={'atten': {'law': 'prevot_smc'}})",
         "params": [
-          "agn_attenuation_ebv"
+          "agn_ebv"
         ],
         "param_details": [
           {
-            "name": "agn_attenuation_ebv",
+            "name": "agn_ebv",
             "default": "Uniform(0.0, 1.0)",
-            "description": "E(B-V) of the AGN attenuation-stage block (smc_prevot)"
+            "description": "QSOgen SMC reddening E(B-V) attenuation coefficient. Applied by the ``qsogen_smc`` attenuation block. Range [0, 1.0] matches SMC/Magellanic Cloud dust opacity. Default 0.0 is no reddening."
           }
         ]
       },
@@ -2599,7 +2633,7 @@
         "status": "production",
         "citation": "Krawczyk et al. 2013, ApJS, 206, 4",
         "short_doc": "Analytic broad-line region with Gaussian broadening",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'analytic'}}",
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'analytic'}})",
         "params": [
           "agn_blr_cf",
           "agn_blr_line_efficiency",
@@ -2630,7 +2664,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP Netzer 1990 broad-line Gaussians",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'grahsp'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'grahsp'}})"
       },
       {
         "name": "none",
@@ -2639,7 +2673,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'none'}})"
       },
       {
         "name": "qsogen",
@@ -2648,7 +2682,7 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen empirical broad-line region",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'qsogen'}}"
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'qsogen'}})"
       },
       {
         "name": "synthesizer",
@@ -2657,7 +2691,7 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer Cloudy grid broad-line region",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer'}}",
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer'}})",
         "params": [
           "agn_blr_cf"
         ],
@@ -2676,7 +2710,7 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer UnifiedAGN BLR reprocessed nebular spectrum",
-        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer_spectra'}}",
+        "use": "SEDModel.build(..., agn={'blr': {'type': 'synthesizer_spectra'}})",
         "params": [
           "agn_blr_cf"
         ],
@@ -2695,7 +2729,7 @@
         "status": "production",
         "citation": "Mahadevan 1997, ApJ, 477, 585",
         "short_doc": "Faithful Mahadevan-1997 ADAF (synchrotron + Compton + bremsstrahlung)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf'}})",
         "params": [
           "agn_adaf_alpha",
           "agn_adaf_beta",
@@ -2738,7 +2772,7 @@
         "status": "production",
         "citation": "Lopez et al. 2024, A&A, 691, A163",
         "short_doc": "CIGALE SKIRTOR2016 ADAF-thin disc blend (disk_type=2)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf_lopez2024'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'adaf_lopez2024'}})",
         "params": [
           "agn_cigale_disk_delta",
           "agn_ebv_disc"
@@ -2763,7 +2797,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP smooth bending power-law BBB continuum",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'grahsp_sbpl'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'grahsp_sbpl'}})",
         "params": [
           "agn_ebv_disc",
           "agn_grahsp_cutoff_nm",
@@ -2818,7 +2852,7 @@
         "status": "production",
         "citation": "Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
         "short_doc": "AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter'}})",
         "params": [
           "agn_ebv_disc",
           "agn_log_ledd",
@@ -2849,7 +2883,7 @@
         "status": "production",
         "citation": "Kubota & Done 2018, MNRAS, 480, 1247; Martinez-Ramirez et al. 2024, A&A, 688, A46",
         "short_doc": "AGNfitter-rX KD18 grid-tabulated disc (log M_BH, log Edd, warm-zone index)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter_warmindex'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kd18_agnfitter_warmindex'}})",
         "params": [
           "agn_ebv_disc",
           "agn_gamma_warm",
@@ -2886,7 +2920,7 @@
         "status": "production",
         "citation": "Kubota & Done 2018, MNRAS, 480, 1247",
         "short_doc": "Kubota & Done 2018 three-zone disc and corona",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'kubota_done'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'kubota_done'}})",
         "params": [
           "agn_a_spin",
           "agn_ebv_disc",
@@ -2912,7 +2946,7 @@
           {
             "name": "agn_f_hard",
             "default": "Uniform(0.0, 0.1)",
-            "description": "Coronal luminosity fraction (fraction of disc power to hot corona)"
+            "description": "Coronal luminosity fraction (hot-flow dissipation as a fraction of L_Edd)"
           },
           {
             "name": "agn_gamma_hard",
@@ -2953,7 +2987,7 @@
         "status": "production",
         "citation": "Shakura & Sunyaev 1973, A&A, 24, 337",
         "short_doc": "Shakura-Sunyaev multi-color thin-disc",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'multicolor'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'multicolor'}})",
         "params": [
           "agn_a_spin",
           "agn_ebv_disc",
@@ -2984,7 +3018,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'none'}})"
       },
       {
         "name": "powerlaw",
@@ -2993,7 +3027,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "Power-law disc with UV cutoff",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'powerlaw'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'powerlaw'}})",
         "params": [
           "agn_T_max",
           "agn_alpha",
@@ -3024,7 +3058,7 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen broken power-law continuum",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'qsogen'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'qsogen'}})",
         "params": [
           "agn_ebv_disc"
         ],
@@ -3043,7 +3077,7 @@
         "status": "production",
         "citation": "Hagen & Done 2023, MNRAS, 521, 251",
         "short_doc": "RELAGN relativistic Kerr accretion disc (grid-backed)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'relagn'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'relagn'}})",
         "params": [
           "agn_astar",
           "agn_ebv_disc",
@@ -3080,7 +3114,7 @@
         "status": "production",
         "citation": "Richards et al. 2006, ApJ, 166, 470",
         "short_doc": "Richards et al. 2006 mean SDSS quasar composite SED",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'richards2006'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'richards2006'}})",
         "params": [
           "agn_ebv_disc"
         ],
@@ -3099,7 +3133,7 @@
         "status": "production",
         "citation": "Schartmann et al. 2005, A&A, 437, 861",
         "short_doc": "CIGALE SKIRTOR2016 Schartmann 2005 disc (disk_type=1)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005'}})",
         "params": [
           "agn_cigale_disk_delta",
           "agn_ebv_disc"
@@ -3124,7 +3158,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Schartmann 2005 disc with SKIRTOR self-attenuation",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005_skirtor_atten'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'schartmann2005_skirtor_atten'}})",
         "params": [
           "agn_cigale_disk_delta",
           "agn_ebv_disc",
@@ -3173,7 +3207,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "CIGALE SKIRTOR2016 empirical disc (disk_type=0)",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'skirtor'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'skirtor'}})",
         "params": [
           "agn_cigale_disk_delta",
           "agn_ebv_disc"
@@ -3198,7 +3232,7 @@
         "status": "production",
         "citation": "Slone & Netzer 2012, MNRAS, 426, 656",
         "short_doc": "Slone & Netzer 2012 alpha-disc library interpolation",
-        "use": "SEDModel.build(..., agn={'disc': {'type': 'slone_netzer'}}",
+        "use": "SEDModel.build(..., agn={'disc': {'type': 'slone_netzer'}})",
         "params": [
           "agn_ebv_disc",
           "agn_log_ledd",
@@ -3229,7 +3263,7 @@
         "status": "production",
         "citation": "Boroson & Green 1992, ApJS, 80, 109",
         "short_doc": "Boroson & Green 1992 FeII pseudo-continuum template",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'boroson_green'}}",
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'boroson_green'}})",
         "params": [
           "agn_blr_cf",
           "agn_blr_line_efficiency",
@@ -3260,7 +3294,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP Bruhweiler & Verner 2008 FeII forest",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'grahsp'}}",
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'grahsp'}})",
         "params": [
           "agn_grahsp_a_feii"
         ],
@@ -3279,7 +3313,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'none'}})"
       },
       {
         "name": "qsogen_balmer",
@@ -3288,7 +3322,7 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen Balmer continuum",
-        "use": "SEDModel.build(..., agn={'feii': {'type': 'qsogen_balmer'}}",
+        "use": "SEDModel.build(..., agn={'feii': {'type': 'qsogen_balmer'}})",
         "params": [
           "agn_bcnorm"
         ],
@@ -3307,7 +3341,7 @@
         "status": "production",
         "citation": "Richardson et al. 2014, MNRAS, 437, 2376",
         "short_doc": "Analytic NLR with Richardson+2014 line ratios and Gaussian broadening",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'analytic'}}",
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'analytic'}})",
         "params": [
           "agn_nlr_cf",
           "agn_nlr_line_efficiency"
@@ -3332,7 +3366,7 @@
         "status": "experimental",
         "citation": "Li, Y. et al. 2025, ApJ 986, 9 (arXiv:2405.04598), 'The Cue Nebular Emulator'; disc->Cue->NLR pipeline in the BEAGLE spirit (Feltre, Charlot & Gutkin 2016)",
         "short_doc": "Cue emulator AGN-ionized NLR (fast differentiable, BEAGLE-style)",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'cue'}}",
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'cue'}})",
         "params": [
           "agn_nlr_alpha_pl",
           "agn_nlr_cf",
@@ -3375,7 +3409,7 @@
         "status": "experimental",
         "citation": "Feltre, Charlot & Gutkin 2016, MNRAS 456, 3354 (arXiv:1511.08217), 'Nuclear activity versus star formation: emission-line diagnostics at ultraviolet and optical wavelengths'; BEAGLE NLR parity (Vidal-Garc\u00eda et al. 2022, arXiv:2211.13648)",
         "short_doc": "Feltre+2016 CLOUDY photoionization NLR (BEAGLE parity)",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'feltre'}}",
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'feltre'}})",
         "params": [
           "agn_nlr_alpha_pl",
           "agn_nlr_cf",
@@ -3430,7 +3464,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP Netzer 1990 narrow-line Gaussians",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'grahsp'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'grahsp'}})"
       },
       {
         "name": "none",
@@ -3439,7 +3473,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'none'}})"
       },
       {
         "name": "synthesizer",
@@ -3448,7 +3482,7 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer Cloudy grid narrow-line region",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer'}}",
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer'}})",
         "params": [
           "agn_nlr_cf"
         ],
@@ -3467,7 +3501,7 @@
         "status": "production",
         "citation": "Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS): Synthesizer",
         "short_doc": "Synthesizer UnifiedAGN NLR reprocessed nebular spectrum",
-        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer_spectra'}}",
+        "use": "SEDModel.build(..., agn={'nlr': {'type': 'synthesizer_spectra'}})",
         "params": [
           "agn_nlr_cf"
         ],
@@ -3486,7 +3520,7 @@
         "status": "production",
         "citation": "H\u00f6nig & Kishimoto 2017, ApJ, 838, L20",
         "short_doc": "H\u00f6nig & Kishimoto 2017 CAT3D-wind torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind'}})",
         "params": [
           "agn_a_cat3d",
           "agn_fwd_cat3d",
@@ -3523,7 +3557,7 @@
         "status": "production",
         "citation": "H\u00f6nig & Kishimoto 2017, ApJ, 838, L20",
         "short_doc": "H\u00f6nig & Kishimoto 2017 CAT3D-wind torus, low-wind-fraction reduction",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind_lowfwd'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'cat3d_wind_lowfwd'}})",
         "params": [
           "agn_a_cat3d_lowfwd",
           "agn_fwd_cat3d_lowfwd",
@@ -3558,14 +3592,13 @@
         "category": "torus",
         "kind": "agn_block",
         "status": "production",
-        "citation": "Fritz et al. 2006, A&A, 470, 221",
+        "citation": "Fritz et al. 2006, MNRAS, 366, 767",
         "short_doc": "Fritz et al. 2006 smooth-dust torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'fritz'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'fritz'}})",
         "params": [
           "agn_fritz_beta",
           "agn_fritz_gamma",
           "agn_fritz_oa",
-          "agn_fritz_psy",
           "agn_fritz_r_ratio",
           "agn_fritz_tau",
           "agn_torus_frac"
@@ -3584,12 +3617,7 @@
           {
             "name": "agn_fritz_oa",
             "default": "Fixed(60.0)",
-            "description": "Fritz2006 torus half-opening angle [degrees], CIGALE database key (grid: 20, 40, 60)"
-          },
-          {
-            "name": "agn_fritz_psy",
-            "default": "Fixed(0.001)",
-            "description": "Fritz2006 viewing angle from torus axis [degrees]; 0=edge-on (type 2), 90=face-on (type 1) (grid: 0.001 ... 89.99)"
+            "description": "Fritz2006 half-angle of the dust-free polar cone [degrees] (grid: 20, 40, 60; full torus opening angle = 180 - 2 x half; type 1 when inclination < half)"
           },
           {
             "name": "agn_fritz_r_ratio",
@@ -3615,7 +3643,7 @@
         "status": "production",
         "citation": "Buchner et al. 2024, arXiv:2405.19297",
         "short_doc": "GRAHSP infrared torus with Si feature",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'grahsp'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'grahsp'}})",
         "params": [
           "agn_grahsp_cool_lam_um",
           "agn_grahsp_cool_width",
@@ -3670,7 +3698,7 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 147",
         "short_doc": "Nenkova et al. 2008 CLUMPY radiative-transfer torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova'}})",
         "params": [
           "agn_tau",
           "agn_theta_torus",
@@ -3701,7 +3729,7 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
         "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_1p templates)",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter'}})",
         "params": [
           "agn_theta_torus",
           "agn_torus_frac"
@@ -3726,7 +3754,7 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
         "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_2p templates)",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_2p'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_2p'}})",
         "params": [
           "agn_oa_nenkova",
           "agn_theta_torus",
@@ -3757,7 +3785,7 @@
         "status": "production",
         "citation": "Nenkova et al. 2008, ApJ, 685, 160; Mart\u00ednez-Ram\u00edrez et al. 2024, A&A, 688, A46",
         "short_doc": "Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_3p templates)",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_3p'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'nenkova_agnfitter_3p'}})",
         "params": [
           "agn_oa_nenkova",
           "agn_theta_torus",
@@ -3794,7 +3822,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'none'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'none'}})"
       },
       {
         "name": "qsogen",
@@ -3803,7 +3831,7 @@
         "status": "production",
         "citation": "Temple et al. 2021, MNRAS, 508, 737",
         "short_doc": "Temple et al. 2021 QSOgen hot-dust blackbody",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'qsogen'}}"
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'qsogen'}})"
       },
       {
         "name": "silva04",
@@ -3812,7 +3840,7 @@
         "status": "production",
         "citation": "Silva et al. 2004, MNRAS, 355, 973",
         "short_doc": "Silva et al. 2004 smooth torus model",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'silva04'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'silva04'}})",
         "params": [
           "agn_log_nh_silva",
           "agn_theta_torus",
@@ -3843,7 +3871,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "Single-temperature graybody torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'simple'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'simple'}})",
         "params": [
           "agn_T_torus",
           "agn_theta_torus",
@@ -3874,7 +3902,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Stalevski et al. 2016 SKIRTOR torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor'}})",
         "params": [
           "agn_oa_skirtor",
           "agn_p_skirtor",
@@ -3923,7 +3951,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_3p AGNfitter-rX torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter'}})",
         "params": [
           "agn_incl_skirtor",
           "agn_oa_skirtor",
@@ -3966,7 +3994,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_1p AGNfitter-rX torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_1p'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_1p'}})",
         "params": [
           "agn_incl_skirtor",
           "agn_theta_torus",
@@ -3997,7 +4025,7 @@
         "status": "production",
         "citation": "Stalevski et al. 2016, MNRAS, 458, 2288",
         "short_doc": "Stalevski et al. 2016 SKIRTOR_mean_2p AGNfitter-rX torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_2p'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'skirtor_agnfitter_2p'}})",
         "params": [
           "agn_incl_skirtor",
           "agn_oa_skirtor",
@@ -4034,7 +4062,7 @@
         "status": "production",
         "citation": "",
         "short_doc": "Two-temperature (hot + warm) graybody torus",
-        "use": "SEDModel.build(..., agn={'torus': {'type': 'two_temperature'}}",
+        "use": "SEDModel.build(..., agn={'torus': {'type': 'two_temperature'}})",
         "params": [
           "agn_T_hot",
           "agn_T_warm",
@@ -4075,33 +4103,33 @@
       {
         "name": "condon92",
         "kind": "radio_model",
-        "status": "production",
+        "status": "unvalidated",
         "citation": "Condon 1992 (ARA&A 30, 575) + Yang+2020 (MNRAS 491, 740)",
-        "short_doc": "FIR-radio correlation (q_IR) + AGN radio loudness power-law",
+        "short_doc": "FIR-radio correlation (q_IR) + AGN radio loudness power-law [not builder-available: legacy radio={'type':...} form retired; use the composable form radio={'sf'/'agn': ...} form]",
         "use": "SEDModel.build(..., radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}})"
       },
       {
         "name": "none",
         "kind": "radio_model",
-        "status": "production",
+        "status": "unvalidated",
         "citation": "",
-        "short_doc": "Disable radio emission",
+        "short_doc": "Disable radio emission [not builder-available: legacy radio={'type':...} form retired; use the composable form radio={'sf'/'agn': ...} form]",
         "use": "SEDModel.build(..., radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}})"
       },
       {
         "name": "radio_dpl",
         "kind": "radio_model",
-        "status": "production",
+        "status": "unvalidated",
         "citation": "",
-        "short_doc": "Radio synchrotron + free-free + AGN double-power-law with aging cutoff.",
+        "short_doc": "Radio synchrotron + free-free + AGN double-power-law with aging cutoff. [not builder-available: legacy radio={'type':...} form retired; use the composable form radio={'sf'/'agn': ...} form]",
         "use": "SEDModel.build(..., radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'dpl'}})"
       },
       {
         "name": "radio_powerlaw",
         "kind": "radio_model",
-        "status": "production",
+        "status": "unvalidated",
         "citation": "",
-        "short_doc": "SEDComponent for radio synchrotron (power-law) + thermal emission.",
+        "short_doc": "SEDComponent for radio synchrotron (power-law) + thermal emission. [not builder-available: legacy radio={'type':...} form retired; use the composable form radio={'sf'/'agn': ...} form]",
         "use": "SEDModel.build(..., radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}})"
       }
     ],
@@ -7456,6 +7484,60 @@
         "use": "Photometry.from_names([\"SPT_SPT-SZ_220GHz\"])"
       },
       {
+        "name": "SkyMapper_SkyMapper_g",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "g",
+        "alias": "skymapper_g",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_g\"])"
+      },
+      {
+        "name": "SkyMapper_SkyMapper_i",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "i",
+        "alias": "skymapper_i",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_i\"])"
+      },
+      {
+        "name": "SkyMapper_SkyMapper_r",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "r",
+        "alias": "skymapper_r",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_r\"])"
+      },
+      {
+        "name": "SkyMapper_SkyMapper_u",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "u",
+        "alias": "skymapper_u",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_u\"])"
+      },
+      {
+        "name": "SkyMapper_SkyMapper_v",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "v",
+        "alias": "skymapper_v",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_v\"])"
+      },
+      {
+        "name": "SkyMapper_SkyMapper_z",
+        "kind": "filter",
+        "survey": "SkyMapper",
+        "instrument": "SkyMapper",
+        "band": "z",
+        "alias": "skymapper_z",
+        "use": "Photometry.from_names([\"SkyMapper_SkyMapper_z\"])"
+      },
+      {
         "name": "Spitzer_IRAC_I1",
         "kind": "filter",
         "survey": "Spitzer",
@@ -8306,7 +8388,7 @@
         "name": "mcmc_nuts_fast",
         "kind": "inference_method",
         "tier": "primary",
-        "short_doc": "NUTS at the 20 s photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; mass profiled, dense metric, pmapped chains by default",
+        "short_doc": "NUTS photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; mass profiled, dense metric, vmapped chains on one device; pmapped when the platform exposes at least n_chains devices",
         "requires": [
           "blackjax"
         ],
