@@ -85,9 +85,7 @@ def _formed(model, params=None):
     return float(model.predict_state(params or {}).derived["log_mstar_formed"])
 
 
-@pytest.mark.parametrize("z", ZS)
-@pytest.mark.parametrize("family", FAMILIES)
-def test_kernels_agree_for_every_sfh_type(ssp, obs, family, z):
+def _check_kernels_agree(ssp, obs, family, z):
     if family in REFUSALS:
         with pytest.raises((ValueError, TypeError), match=REFUSALS[family]):
             _build(ssp, obs, "cic", z, {"type": family}).predict_photometry({})
@@ -105,6 +103,24 @@ def test_kernels_agree_for_every_sfh_type(ssp, obs, family, z):
         f"{family} z={z}: |dsps/cic-1| in {BANDS} = {np.round(err * 100, 6)} % exceeds "
         f"{COMMON_BOUND * 100:.0e} %"
     )
+
+
+@pytest.mark.parametrize("z", ZS)
+@pytest.mark.parametrize("family", FAMILIES)
+def test_kernels_agree_for_every_sfh_type(ssp, obs, family, z):
+    _check_kernels_agree(ssp, obs, family, z)
+
+
+@pytest.fixture(scope="module")
+def ssp_parsec(ssp_data_fsps):
+    """The PARSEC grid: oldest node 12.589 Gyr, younger than the universe at z = 0 (#2714)."""
+    return ssp_data_fsps
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_kernels_agree_for_every_sfh_type_beyond_the_oldest_template(ssp_parsec, obs, family):
+    """z = 0 on PARSEC: stars older than the oldest node clamp onto it on both kernels."""
+    _check_kernels_agree(ssp_parsec, obs, family, 0.0)
 
 
 # --- 4-D alpha-enhanced library -------------------------------------------------

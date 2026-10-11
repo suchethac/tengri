@@ -96,6 +96,11 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     own lookback nodes and the history between nodes is the linear
     interpolation of the draw ([#2684]). The integrand resolves structure down
     to ~30 Myr; a 10 Myr burst is not converged (age-weight TV 0.015).
+  - A star formed before the oldest SSP template (PARSEC's 12.589 Gyr is
+    younger than the 13.787 Gyr universe at `z = 0`) is assigned to that
+    template, because the history is sampled out to `age(z)`; the formed mass is
+    conserved and one `SFHBeyondOldestTemplateWarning` is raised per build when
+    the redshift range reaches such ages ([#2714]).
   - It is **not** a speed knob: the two names are one code path. (Before
     [#2683], when `'dsps'` was DSPS's histogram, it was the slower of the two:
     it compiled to twice as many `while` loops, which `WavePrecomp` cannot
