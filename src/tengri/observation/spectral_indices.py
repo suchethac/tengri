@@ -46,6 +46,7 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.utils.air_vacuum import air_to_vac
+from tengri.utils.break_windows import BREAK_VACUUM_WINDOWS
 from tengri.utils.scale import representable_denominator, representable_floor
 
 #: Reference wavelength [Å] of the F_λ conversion ``F_λ ∝ F_ν (λ_ref/λ)²``. The
@@ -273,20 +274,21 @@ def _lick_index_def(name: str) -> SpectralIndexDef:
 #: equivalent widths use the Lick pseudo-continuum (see
 #: :attr:`SpectralIndexDef.pseudo_continuum`). Values are
 #: :class:`SpectralIndexDef` records carrying the passband definitions in
-#: rest-frame **vacuum** Angstrom: the Lick windows are published in air and
-#: converted once at import (:data:`_LICK_AIR_WINDOWS`); the 4000 A break
-#: windows and the UV slope range are taken as vacuum, as FSPS does. Pass a key
+#: rest-frame **vacuum** Angstrom: the Lick windows (:data:`_LICK_AIR_WINDOWS`)
+#: and the 4000 A break windows (:mod:`tengri.utils.break_windows`) are published
+#: in air and converted once at import; the UV slope range
+#: (Calzetti+1994, 1250-2600 A, measured on space-based IUE spectra) is vacuum. Pass a key
 #: to :func:`tengri.measure.spectral_index` or :func:`tengri.measure_index_jax`.
 STANDARD_INDICES: dict[str, SpectralIndexDef] = {
     "Dn4000": SpectralIndexDef(
         name="Dn4000",
         index_type="break",
-        continuum=((3850.0, 3950.0), (4000.0, 4100.0)),
+        continuum=BREAK_VACUUM_WINDOWS["Dn4000"],
     ),
     "D4000": SpectralIndexDef(
         name="D4000",
         index_type="break",
-        continuum=((3750.0, 3950.0), (4050.0, 4250.0)),
+        continuum=BREAK_VACUUM_WINDOWS["D4000"],
     ),
     **{name: _lick_index_def(name) for name in _LICK_AIR_WINDOWS},
     # UV continuum slope β (Calzetti+1994), f_λ ∝ λ^β over 1250–2600 Å.
