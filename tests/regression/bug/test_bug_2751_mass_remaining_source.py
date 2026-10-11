@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Surviving mass comes from each grid's own isochrones, or the load refuses (#2751).
 
 ``ssp_mass_remaining[Z, age]`` is the fraction of the formed mass in living stars plus

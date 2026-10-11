@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Surviving-mass fractions from each SSP grid's own isochrones.
 
 ``ssp_mass_remaining[i_Z, i_age]`` is the fraction of the mass formed in a

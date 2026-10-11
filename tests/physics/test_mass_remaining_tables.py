@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Surviving-mass tables (``src/tengri/data/ssp_mass_remaining/*.h5``): bounds and pins.
 
 Each table is the fraction of a single-age population's formed mass that is in living

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Value pins for every shipped surviving-mass table (one per Z row).
 
 The loader tests compare a loaded table with the same companion file, so they cannot

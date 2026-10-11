@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """A registered grid's ages must sit on its companion table's nodes.
 
 A registered grid is built on its isochrone set's age nodes, so its ages are checked
