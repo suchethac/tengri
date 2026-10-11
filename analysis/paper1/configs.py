@@ -133,6 +133,9 @@ def cloudy_grid_for_iv() -> str:
 
 def load_ssp_for(key: str) -> tengri.SSPData:
     """Load the stellar library for configuration key I/II/III/IV/V/VI."""
+    if key == "V":
+        # BPASS's surviving mass is pending (#2800): config V takes DSPS's fit explicitly.
+        return tengri.load_ssp(SSP_FOR_CONFIG[key], mass_remaining="dsps_fit")
     return tengri.load_ssp(SSP_FOR_CONFIG[key])
 
 
