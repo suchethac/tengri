@@ -35,7 +35,7 @@ References:
   - Conroy et al. 2009 (FSPS): ApJ 699, 486
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-116
+.. GENERATED FROM PYTHON SOURCE LINES 20-118
 
 
 
@@ -89,7 +89,9 @@ References:
     for ssp_name, color in zip(ssp_names, colors):
         try:
             # Load SSP library
-            ssp = tengri.load_ssp(ssp_name)
+            # Only the spectra are plotted and the surviving mass is not used, so every
+            # grid takes the explicit DSPS fit for its surviving mass.
+            ssp = tengri.load_ssp(ssp_name, mass_remaining="dsps_fit")
 
             # Extract wavelength grid (rest-frame, Angstrom)
             wave = np.array(ssp.ssp_wave)

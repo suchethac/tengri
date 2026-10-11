@@ -340,6 +340,8 @@ def project_spectrum_kernel_split(
     cal_wave_range: tuple[float, float] | None = None,
     conserving: bool = False,
     resolution_matrix: object | None = None,
+    window_z: float | None = None,
+    lsf_pad_pixels: int | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -493,6 +495,16 @@ def project_spectrum_kernel_split(
     resolution_matrix : BandedMatrix or None
         Banded instrument-response operator; when given, replaces the
         Gaussian LSF (see the banded case above).
+    lsf_pad_pixels : int or None, optional
+        Static padding [pixels] for the observed-grid LSF (see
+        :func:`~tengri.observation.spectrum.apply_lsf`). ``None`` derives it from the
+        grid and the kernel sigma. The rest-grid sigma_v pass always derives its own
+        padding from the rest grid.
+    window_z : float or None, optional
+        Concrete redshift at which the rest-grid sigma_v pass is cropped to the
+        observed window (#2832). It must equal ``redshift`` at run time: the caller
+        asserts this, because a traced ``redshift`` cannot be checked here. ``None``
+        (or a traced grid) keeps the full-grid pass.
 
     Returns
     -------
@@ -545,7 +557,12 @@ def project_spectrum_kernel_split(
            Redshift z ~ 3: Survey Description and Full Data Set."
            ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
-    from tengri.observation.spectrum import broaden_velocity_only, project_spectrum
+    from tengri.observation.spectrum import (
+        broaden_velocity_only,
+        broaden_velocity_only_window,
+        project_spectrum,
+        rest_grid_observed_window,
+    )
 
     # A photoionized backend publishes ``lyc_transmission`` whenever it masked
     # the Lyman continuum, so the SED is a step at the Lyman edge: read the
@@ -571,6 +588,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -586,6 +604,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -603,6 +622,7 @@ def project_spectrum_kernel_split(
                 resolution=None,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -622,6 +642,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -636,6 +657,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=0.0,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -651,7 +673,19 @@ def project_spectrum_kernel_split(
         sed_stellar_rest, sed_instrument_only_rest = (
             _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
+        # with a concrete ``window_z`` and concrete grids, broaden the rest-frame window the
+        # observed range maps into, leaving the rest unbroadened. ``window_z=None`` or a
+        # traced grid keeps the full-grid pass.
+        window = (
+            None if window_z is None else rest_grid_observed_window(wave_rest, wave_obs, window_z)
+        )
+        if window is None:
+            sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
+        else:
+            sed_stellar_v = broaden_velocity_only_window(
+                sed_stellar_rest, wave_rest, sigma_v_kms, n_bins, *window
+            )
         sed_stellar = sed_stellar_v * igm_trans
         sed_instrument_only = sed_instrument_only_rest * igm_trans
 
@@ -665,6 +699,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -680,6 +715,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -697,6 +733,7 @@ def project_spectrum_kernel_split(
                 resolution=None,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -713,6 +750,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=sigma_lib_kms,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -727,6 +765,7 @@ def project_spectrum_kernel_split(
                 resolution=resolution_scaled,
                 sigma_lib_kms=0.0,
                 n_bins=n_bins,
+                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
                 cal_coeffs=None,
                 conserving=conserving,
@@ -1354,6 +1393,7 @@ class Observation:
         resample_z_ref: float | None = None,
         conserving: bool | None = None,
         observables_type=None,
+        window_z: float | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -1419,6 +1459,10 @@ class Observation:
             :func:`build_observables_class`. When ``None``, returns a dict
             (backward-compat). When provided, populates and returns an instance
             of this class.
+        window_z : float or None, optional
+            Concrete redshift for the rest-grid sigma_v window (see
+            :func:`project_spectrum_kernel_split`, #2832). It must equal the
+            redshift of ``state``; ``None`` keeps the full-grid pass.
 
         Returns
         -------
@@ -1540,6 +1584,7 @@ class Observation:
                 cal_wave_range=cal_wave_range,
                 conserving=conserving,
                 resolution_matrix=self.spectroscopy.resolution_matrix,
+                window_z=window_z,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.

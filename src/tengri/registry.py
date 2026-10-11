@@ -1377,11 +1377,11 @@ _RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
         "short_doc": "Bell 2003 total L(1.4 GHz) split 90% non-thermal / 10% thermal",
     },
     ("sf", "delvecchio2021"): {
-        "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",
+        "citation": "Delvecchio+2021 total-radio FIRRC (Eq. 5, arXiv:2010.05510)",
         "short_doc": "Mass- and z-dependent q_IR at 1.4 GHz",
     },
     ("sf", "mccheyne2022"): {
-        "citation": "McCheyne+2022 FIRRC (SEMPER Eq. 5, arXiv:2503.20525)",
+        "citation": "McCheyne+2022 FIRRC (A&A 662, A100)",
         "short_doc": "Mass- and z-dependent q_IR at 150 MHz (LOFAR)",
     },
     ("agn", "none"): {
@@ -1615,9 +1615,9 @@ _AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
     (
         "dsps",
         "comparison",
-        "DSPS histogram kernel on an 8x refined table; each parcel goes to "
-        "one node; costs mass-proportionality ~1e-3 at sharpest shapes "
-        "(#2368, #2683)",
+        "Accepted name for the same dense cloud-in-cell integration (the "
+        "zeroth-order DSPS histogram is not offered: it mis-places structure "
+        "narrower than a node spacing, #2683)",
     ),
 )
 
@@ -1627,20 +1627,21 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
 
     The kernel decides how the star-formation history is integrated onto the SSP
     age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
-    SSP nodes with log-age cloud-in-cell weights on a dense integrand;
-    ``'dsps'`` hands an SFR table refined 8-fold between the SSP nodes to DSPS's
-    histogram kernel, which interpolates ``log10(M(<t))`` in ``log10(t)`` and
-    assigns each parcel wholly to one node (#2683).
+    SSP nodes with log-age cloud-in-cell weights on a dense integrand (the SFH's
+    own bin edges, and a field's lookback nodes, are exact knots).
 
-    Both accept every SFH type and agree to < 0.1 % in flux for smooth
-    histories at z = 0. Structure narrower than the local node spacing (a short
-    burst) is placed on one node by ``'dsps'``, which warns; ``'cic'`` resolves
-    it. A correlated-field draw is the linear interpolation of its own lookback
-    nodes for both (#2684).
+    ``'dsps'`` is accepted for fits that name it and selects the same
+    integration, to round-off (#2683). DSPS's own histogram assigns each parcel
+    wholly to the SSP node whose log-midpoint bin holds it; that places
+    structure narrower than the local node spacing up to half a spacing away
+    (a 30 Myr burst at z = 2.5: 14-19 % in the FUV; a periodic history 26 %) and
+    a table of fixed rows cannot see an onset or step edge between them (a zero
+    ``psb_flex`` ``tflex`` gradient). First-order sharing of the exact integrand
+    is the exact answer to both, so the histogram's zeroth-order definition is
+    not offered.
 
-    Leaving ``age_kernel`` unset selects ``'cic'`` for every SFH type, field
-    included; it is the accurate kernel for field and rough histories (``'dsps'``
-    differs there by up to 16 % in the FUV and 9 % in r-band flux).
+    Both accept every SFH type, a correlated-field draw included (the linear
+    interpolation of its own lookback nodes, #2684).
 
     Parameters
     ----------

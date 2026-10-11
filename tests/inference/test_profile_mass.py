@@ -43,6 +43,11 @@ _MASS_NAME = "sfh_tsnorm_log_total_mass"
 #: problems, so the difference is set by optimizer tolerance and the
 #: Occam-factor term, not by a shared fixed point. The bar sits above the
 #: measured maximum with margin; a 1e-3 bar failed on this draw (#2424).
+#: Most of that spread was the unprofiled L-BFGS-B stopping on scipy's
+#: relative-decrease test far from its minimum (seed 5 later read 0.19 on
+#: sfh_tsnorm_trunc at grad norm 0.057); with the gradient tolerance binding
+#: (``map_dispatch._SCIPY_FTOL``) seeds 0-5 measure 0.024, 0.012, 3.6e-3,
+#: 2.8e-3, 7.9e-4 and 3.7e-4, the remainder the estimators' own difference.
 _MAP_PARITY_BAR = 0.1
 _SPEC_WAVE = jnp.linspace(4000.0, 7000.0, 40)
 
@@ -291,13 +296,14 @@ class TestGuards:
 
         Issue #2359: the refusal message previously hardcoded 'photometry' regardless
         of fitter.data_type (spectroscopy or joint fits were misdiagnosed), and always
-        blamed an AGN continuum even when the stochastic SFH was the real cause. The
-        measured deviations do not distinguish the two: O(1) for a mass-independent
-        component, O(1e-5) for the coarse age kernel. The alternative cause is the coarse
-        age kernel (age_kernel="dsps"), measured to cost roughly 1e-5 of mass-linearity.
-        The probe evaluates only one parameter set (every other free parameter at its prior
-        median, stochastic field latents at zero), so the message must say so and present
-        both causes rather than naming one confidently.
+        blamed an AGN continuum even when the stochastic SFH was the real cause.
+
+        It also used to offer the coarse histogram age kernel (age_kernel="dsps") as the
+        alternative cause, measured then at roughly 1e-5 of mass-linearity. Since #2683
+        both kernel names select one cloud-in-cell integration whose normalized weights are
+        scaled by the formed mass, so the age integral is proportional to round-off
+        (1e-13 measured, either name): the message must rule the age integration out
+        rather than send the reader to a kernel that no longer differs.
         """
         model = _agn_model(ssp_data_fsps)
         forward = ForwardModel.build(sed=model)
@@ -321,9 +327,15 @@ class TestGuards:
             f"reason contains old hardcoded blame phrase: {reason}"
         )
 
-        # 3. The reason must mention BOTH candidate causes: AGN continuum and age kernel.
+        # 3. The reason names the additive component this model carries, and rules the
+        #    age integration out as a cause instead of blaming a kernel choice (#2683).
         assert "AGN continuum" in reason, f"reason does not mention AGN continuum: {reason}"
-        assert "dsps" in reason, f"reason does not mention the coarse age kernel (dsps): {reason}"
+        assert "age integration is not a candidate cause" in reason, (
+            f"reason does not rule out the age integration: {reason}"
+        )
+        assert "dsps" not in reason and "coarse age kernel" not in reason, (
+            f"reason still blames an age-kernel choice, which no longer differs: {reason}"
+        )
 
         # 4. The reason must still report the measured number and tolerance.
         assert "max|ratio(+1 dex) - 10|" in reason, (
@@ -352,6 +364,17 @@ class TestMapParity:
 
         assert post_on.diagnostics["profile_mass_resolved"] is True
         assert post_off.diagnostics["profile_mass_resolved"] is False
+
+        # Both optimizers reached their stationary points. scipy's default
+        # relative-decrease test once stopped the unprofiled fit at grad norm
+        # 0.057 while reporting success, 1.4e-3 above the joint minimum the
+        # profiled MAP had found, which is the whole of the parity gap it left.
+        for label, post in (("unprofiled", post_off), ("profiled", post_on)):
+            grad_norm = post.diagnostics["grad_norm"]
+            # grad-assert: finite-only — a stationary point is the claim; zero is the ideal value
+            assert np.isfinite(grad_norm) and grad_norm < 1e-4, (
+                f"{label} MAP stopped at grad norm {grad_norm:.3g}, not at a minimum"
+            )
 
         for name in post_off.params:
             if name == _MASS_NAME:

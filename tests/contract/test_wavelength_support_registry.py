@@ -31,7 +31,10 @@ pytestmark = pytest.mark.contract
 
 def _torus_declared(name: str) -> bool:
     return (
-        name in we._AGN_TORUS_TEMPLATES or name in we._ANALYTIC_TORUS or name in we._GRIDLESS_TORUS
+        name in we._AGN_TORUS_TEMPLATES
+        or name in we._ANALYTIC_TORUS
+        or name in we._GRIDLESS_TORUS
+        or ("torus", name) in we._GRAHSP_NATIVE_WAVE_NM
     )
 
 
@@ -64,7 +67,38 @@ def _disc_declared(name: str) -> bool:
         name in we._AGN_DISC_TEMPLATES
         or name in we._ANALYTIC_DISC_RANGE_AA
         or name in we._GRIDLESS_DISC
+        or ("disc", name) in we._GRAHSP_NATIVE_WAVE_NM
     )
+
+
+#: FeII blocks that declare no native node set, each with the reason. A FeII block
+#: must either appear in ``_GRAHSP_NATIVE_WAVE_NM`` or be listed here.
+_FEII_NO_NATIVE_NODES: dict[str, str] = {
+    "boroson_green": (
+        "template sampled on the block's own fixed ln(lambda) lattice "
+        "(blr._fe2_pseudo_continuum), then resampled to the caller's wavelengths; "
+        "there is no native node set to union into the master grid"
+    ),
+    "qsogen_balmer": (
+        "analytic Balmer continuum (qsogen_blocks._qsogen_components) evaluated "
+        "directly on the caller's wavelengths; no tabulated axis"
+    ),
+    "none": "no FeII component",
+}
+
+
+def test_every_feii_block_declares_native_nodes_or_states_why_not():
+    declared = {name for cat, name in we._GRAHSP_NATIVE_WAVE_NM if cat == "feii"}
+    missing = sorted(
+        n for n in AGN_BLOCKS["feii"] if n not in declared and n not in _FEII_NO_NATIVE_NODES
+    )
+    assert not missing, f"feii blocks without native nodes or a stated reason: {missing}"
+    stale = sorted(n for n in _FEII_NO_NATIVE_NODES if n not in AGN_BLOCKS["feii"])
+    assert not stale, f"allowlist names feii blocks that are not registered: {stale}"
+    overlap = sorted(declared & set(_FEII_NO_NATIVE_NODES))
+    assert not overlap, f"feii blocks both declared and allowlisted: {overlap}"
+    for name in sorted(declared):
+        assert we.native_wave_agn_feii(name) is not None, f"feii {name!r} declares no grid"
 
 
 def test_every_disc_block_declares_support():

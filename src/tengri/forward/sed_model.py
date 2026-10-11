@@ -1619,60 +1619,224 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
-def _upper_support(spec, name: str) -> float | None:
-    """Largest value ``name`` can take in ``spec`` (Fixed value or prior upper bound)."""
-    dists = getattr(spec, "_distributions", {})
-    dist = dists.get(name)
+def _support_bounds(spec, name: str) -> tuple[float, float] | None:
+    """``(lo, hi)`` support of ``name`` in ``spec`` (Fixed value or prior bounds)."""
+    dist = getattr(spec, "_distributions", {}).get(name)
     if dist is None:
         return None
     if dist.is_fixed:
         value = dist.value
-        return float(value) if isinstance(value, (int, float)) else None
-    return float(dist.bounds[1])
+        return (float(value), float(value)) if isinstance(value, (int, float)) else None
+    return float(dist.bounds[0]), float(dist.bounds[1])
+
+
+#: Total-calibrated SF radio modes: the q parameter, its mass and redshift slopes, and the
+#: domain, pivot and sign of the relation
+#: (:data:`~tengri.components.radio.radio.FIRRC_TOTAL_Q_DOMAIN`).
+#: ``bell2003`` has no mass or redshift term; its q is a constant.
+_TOTAL_Q_MODES = {
+    "bell2003": {"q0": "radio_q_ir", "nu_ref": 1.4e9},
+    "delvecchio2021": {
+        "q0": "radio_delv_q0",
+        "mass_slope": "radio_delv_mass_slope",
+        "z_slope": "radio_delv_z_slope",
+    },
+    "mccheyne2022": {
+        "q0": "radio_mcch_q0",
+        "mass_slope": "radio_mcch_mass_slope",
+        "z_slope": "radio_mcch_z_slope",
+    },
+}
+
+
+def _radio_mass_floor(spec) -> tuple[float, float]:
+    """Lowest and highest ``log M*`` the radio block can read from the declared supports.
+
+    The radio component reads ``log_mstar``, the *surviving* stellar mass when the SSP
+    carries a mass-remaining table, else the formed mass. The formed mass is
+    ``10**log_total_mass`` of the SFH (the maximum over the SFH components' lower bounds
+    bounds the sum from below). The surviving mass is at least ``min(ssp_mass_remaining)``
+    times the formed mass, so the lowest reachable ``log M*`` is that floor plus
+    ``log10(min ssp_mass_remaining)``, a conservative bound. The upper bound is the
+    formed-mass upper bound, since the surviving fraction is at most one. With no SFH mass
+    parameter the radio component's own fallback, ``log M* = 10``, applies.
+    """
+    mass_bounds = [
+        b
+        for name in getattr(spec, "_distributions", {})
+        if name.startswith("sfh_") and name.endswith("_log_total_mass")
+        for b in [_support_bounds(spec, name)]
+        if b is not None
+    ]
+    if not mass_bounds:
+        return 10.0, 10.0
+    lo = max(b[0] for b in mass_bounds)
+    hi = max(b[1] for b in mass_bounds)
+    ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
+    remaining = getattr(ssp, "ssp_mass_remaining", None)
+    offset = 0.0
+    if remaining is not None:
+        frac_min = float(np.min(np.asarray(remaining)))
+        if frac_min > 0.0:
+            offset = float(np.log10(frac_min))
+    return lo + offset, hi
+
+
+def _radio_q_worst_corner(spec, mode: str) -> tuple[float, dict[str, float]]:
+    """Largest ``q`` over the declared box, evaluated with the shared domain-held relation.
+
+    The box is q0, the mass slope, ``z_slope``, the redshift and the mass the radio block
+    reads (:func:`_radio_mass_floor`). ``q`` is monotone in each argument over the box: q0
+    enters with a positive coefficient, ``(1+z)^zs`` is monotone in ``z`` and ``zs``, and the
+    mass term is linear in ``log M*``. The domain hold (``jnp.clip`` inside
+    :func:`~tengri.components.radio.radio.firrc_total_q`) is monotone too, so the maximum is
+    at a corner of the box. The corners use the same function as the forward model.
+    """
+    import itertools
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, firrc_total_q
+
+    mode_def = _TOTAL_Q_MODES[mode]
+    q0_b = _support_bounds(spec, mode_def["q0"])
+    if q0_b is None:
+        return float("nan"), {}
+    m_b = _support_bounds(spec, mode_def["mass_slope"]) or (0.0, 0.0)
+    zs_b = _support_bounds(spec, mode_def["z_slope"]) or (0.0, 0.0)
+    z_b = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    worst = (-np.inf, {})
+    for q0, m, zs, z, logm in itertools.product(
+        sorted(set(q0_b)),
+        sorted(set(m_b)),
+        sorted(set(zs_b)),
+        sorted(set(z_b)),
+        sorted({mass_lo, mass_hi}),
+    ):
+        q = float(firrc_total_q(mode, q0, m, zs, logm, z))
+        if q > worst[0]:
+            # Report the arguments the relation actually uses, after the domain hold.
+            dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+            lo, hi = dom["mass"]
+            logm_eff = max(logm, lo) if hi is None else min(max(logm, lo), hi)
+            z_eff = min(max(z, dom["z"][0]), dom["z"][1])
+            worst = (q, {"q0": q0, "logm": logm_eff, "z": z_eff, "m": m, "zs": zs})
+    return worst
 
 
 def _validate_radio_q_total_support(spec) -> None:
-    """Refuse a ``radio_q_ir`` support that makes the Bell-total synchrotron negative (#2590).
+    """Refuse a declared box whose worst corner makes the total-calibrated synchrotron negative.
 
-    With ``q_ir`` calibrating the total 1.4 GHz luminosity (the default), the synchrotron
-    term is the total minus the Murphy+2011 free-free luminosity at 1.4 GHz, which is
-    negative for ``q_ir`` above :func:`~tengri.components.radio.radio.radio_q_total_limit`
-    (3.5145 at 1e4 K, 3.379 at 2e4 K). The check takes the largest value each of
-    ``radio_q_ir``, ``radio_T_e`` and ``radio_alpha_ff`` can reach, since that corner
-    has the smallest limit. It does not apply to ``freefree: False`` (q calibrates the
-    non-thermal term) or to the other star-formation radio modes.
+    The Bell (2003) modes calibrate the total at 1.4 GHz with ``radio_q_ir``. The
+    Delvecchio+2021 and McCheyne+2022 modes calibrate the total at their own reference
+    frequencies (1.4 GHz and 150 MHz) with ``q(M*, z)``, held at the calibrated domain
+    edges. The synchrotron term is the total minus the Murphy+2011 free-free luminosity at
+    that frequency, which is negative once q exceeds
+    :func:`~tengri.components.radio.radio.radio_q_total_limit` (3.5145 at 1.4 GHz, 1e4 K,
+    alpha_ff = -0.1). The check takes the worst q over every declared support that feeds
+    it, through the same relation the forward model evaluates. The limit is the smallest
+    over the ``radio_T_e`` and ``radio_alpha_ff`` supports. It does not apply to
+    ``freefree: False``, which calibrates the non-thermal term alone.
 
     Raises
     ------
     ConfigError
-        If the support of ``radio_q_ir`` reaches the limit at the support of the
-        electron temperature.
+        If the worst corner of the declared box exceeds the limit. The message names the
+        corner (q0, log M*, z) and q*.
     """
     if not getattr(spec, "radio", False):
         return
-    if getattr(spec, "radio_sfr_mode", "bell2003") != "bell2003":
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in _TOTAL_Q_MODES:
         return
     if getattr(spec, "radio_include_freefree", None) is False:
         return
-    q_hi = _upper_support(spec, "radio_q_ir")
-    t_hi = _upper_support(spec, "radio_T_e")
-    a_hi = _upper_support(spec, "radio_alpha_ff")
-    if q_hi is None or t_hi is None or a_hi is None:
-        return
-    from tengri.components.radio.radio import radio_q_total_limit
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN, radio_q_total_limit
     from tengri.config.exceptions import ConfigError
 
-    q_star = radio_q_total_limit(t_hi, a_hi)
-    if q_hi > q_star:
+    mode_def = _TOTAL_Q_MODES[mode]
+    nu_ref = mode_def["nu_ref"] if mode == "bell2003" else FIRRC_TOTAL_Q_DOMAIN[mode]["nu_ref"]
+    t_bounds = _support_bounds(spec, "radio_T_e")
+    a_bounds = _support_bounds(spec, "radio_alpha_ff")
+    if t_bounds is None or a_bounds is None:
+        return
+    q_star = min(radio_q_total_limit(t, a, nu_ref) for t in t_bounds for a in a_bounds)
+    if mode == "bell2003":
+        q_hi = _support_bounds(spec, mode_def["q0"])
+        if q_hi is None or q_hi[1] <= q_star:
+            return
+        q_worst, corner = q_hi[1], {"q0": q_hi[1], "logm": None, "z": None}
+    else:
+        q_worst, corner = _radio_q_worst_corner(spec, mode)
+        if not np.isfinite(q_worst) or q_worst <= q_star:
+            return
+    if q_worst > q_star:
+        where = (
+            f"{mode_def['q0']}={corner['q0']:g}"
+            if corner.get("logm") is None
+            else (
+                f"{mode_def['q0']}={corner['q0']:g}, log M* = {corner['logm']:.3f} "
+                f"(after the domain hold), z = {corner['z']:g}"
+            )
+        )
+        hint = (
+            f"Use radio_q_ir <= {q_star:.4f} (or a lower radio_T_e upper bound)"
+            if mode == "bell2003"
+            else "Narrow the q0, mass or redshift support to put the worst corner below q_*"
+        )
         raise ConfigError(
-            f"radio_q_ir reaches {q_hi:g}, above q_* = {q_star:.4f} for radio_T_e up to "
-            f"{t_hi:g} K and radio_alpha_ff up to {a_hi:g}. radio_q_ir calibrates the "
-            "TOTAL 1.4 GHz luminosity (Bell 2003 Eq. 1), so the synchrotron term is the "
-            "total minus the Murphy+2011 free-free luminosity, "
-            "q_* = -log10[3.75e12 (3.88e-44/4.6e-28) (T_e/1e4)^0.45 1.4^alpha_ff], and it "
-            f"is negative above q_*. Use radio_q_ir <= {q_star:.4f} (or a lower "
-            "radio_T_e upper bound), or pass freefree=False to calibrate the non-thermal "
-            "term alone."
+            f"radio sf={mode!r}: the worst corner of the declared support gives "
+            f"q = {q_worst:.4f} at {where}, above q_* = {q_star:.4f} at "
+            f"{nu_ref / 1e9:g} GHz (smallest over the radio_T_e and radio_alpha_ff "
+            "supports), so the total-calibrated synchrotron would be negative there. "
+            f"{hint}, or pass freefree=False to calibrate the non-thermal term alone."
+        )
+
+
+def _validate_radio_firrc_domain(spec) -> None:
+    """Warn when the realized mass or redshift support leaves a calibrated domain (not an error).
+
+    Outside its calibrated domain a total-q relation is held at the nearest edge, not
+    extrapolated (:func:`~tengri.components.radio.radio.firrc_total_q`). This warning names
+    the range the declared support reaches beyond the calibration sample, so the held value
+    is not silent.
+    """
+    if not getattr(spec, "radio", False):
+        return
+    mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if mode not in ("delvecchio2021", "mccheyne2022"):
+        return
+    if getattr(spec, "radio_include_freefree", None) is False:
+        return
+    import warnings
+
+    from tengri.components.radio.radio import FIRRC_TOTAL_Q_DOMAIN
+
+    dom = FIRRC_TOTAL_Q_DOMAIN[mode]
+    name = {
+        "delvecchio2021": "Delvecchio+2021 (Sect. 2)",
+        "mccheyne2022": "McCheyne+2022 (Sect. 5.2)",
+    }[mode]
+    mass_lo, mass_hi = _radio_mass_floor(spec)
+    z_lo, z_hi = _support_bounds(spec, "redshift") or (0.0, 0.0)
+    lo, hi = dom["mass"]
+    reasons = []
+    if mass_lo < lo:
+        reasons.append(f"log M* down to {mass_lo:.2f} (calibrated from {lo:g})")
+    if hi is not None and mass_hi > hi:
+        reasons.append(f"log M* up to {mass_hi:.2f} (calibrated to {hi:g})")
+    zlo, zhi = dom["z"]
+    if z_lo < zlo:
+        reasons.append(f"z down to {z_lo:g} (calibrated from {zlo:g})")
+    if z_hi > zhi:
+        reasons.append(f"z up to {z_hi:g} (calibrated to {zhi:g})")
+    if reasons:
+        warnings.warn(
+            f"radio sf={mode!r}: the declared support reaches "
+            + "; ".join(reasons)
+            + f". The {name} relation is held at the sample edge there and is not "
+            "extrapolated, so q is constant beyond that edge.",
+            UserWarning,
+            stacklevel=2,
         )
 
 
@@ -2506,10 +2670,10 @@ class SEDModel:
            sample. Derived quantities are now computed from the SED's own age
            weights, so every value agrees to machine precision.
 
-           To change how the CSP is integrated, use the knob that does reach it:
-           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964). ``tengri.list_age_kernels()``
-           is the live menu. Unlike this argument, that one measurably moves the
-           SED, 0.19% across SDSS *ugriz* for a double-power-law history.
+           The age-weight kernel that does reach the CSP is
+           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964); since #2683 both names
+           select the same integration, so it moves no output either.
+           ``tengri.list_age_kernels()`` is the live menu.
 
     Attributes
     ----------
@@ -3067,6 +3231,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
@@ -4731,6 +4896,7 @@ class SEDModel:
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
+            self._radio_ir_window = getattr(spec, "radio_ir_window", None)
             self._radio_sf_nu_ref = getattr(spec, "radio_sf_nu_ref", None)
 
         self._uses_xray = getattr(spec, "xray", False)
@@ -4765,6 +4931,7 @@ class SEDModel:
             agn_model=getattr(self, "_agn_model", None),
             agn_torus_block=getattr(self, "_agn_torus_block", None),
             agn_disc_block=getattr(self, "_agn_disc_block", None),
+            agn_feii_block=getattr(self, "_agn_feii_block", None),
         )
 
         # Analytic radio/X-ray wings: only used when those components are
@@ -6824,9 +6991,6 @@ class SEDModel:
         two places, cannot disagree.
         """
         del wave_chunk_size  # see Parameters note
-        from tengri.cosmology import luminosity_distance
-        from tengri.observation.observation import project_spectrum_kernel_split
-        from tengri.observation.spectrum import resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
@@ -6836,11 +7000,75 @@ class SEDModel:
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
         refuse_fixed_overrides(self.spec, params)
-        state = self.predict_state(params)
-        z = self._get_redshift(params)
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        wave_rest = state.wave
-        igm_trans = state.derived.get("igm_transmission", None)
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool that selects the compiled
+        # kernel, not a branch on the sampled redshift.
+        conserving = (
+            bool(spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref()))
+            if spectroscopy is not None
+            else False
+        )
+        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        args = (
+            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
+            if traced_grid
+            else (params, self.spec.get_fixed_values())
+        )
+        return kernel(*args, *self._resolve_threaded_data(None, None, None))
+
+    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving, wave_obs):
+        """Return (and cache) the JIT'd observed-frame spectrum projector for ``wave_obs``.
+
+        Mirrors :meth:`_get_or_build_predict_observables_jit`: the compiled function
+        is stored in the structural kernel cache keyed on :meth:`compile_signature`,
+        with the static resample flag and the content of ``wave_obs`` appended to the
+        key. The SSP grid, template and z-table arrays enter as runtime arguments,
+        so they are not baked into the HLO. A concrete ``wave_obs`` is a compile-time
+        constant of the kernel: the LSF selection (``_is_log_uniform``) must see the
+        real grid, since a traced grid is assumed log-uniform and would take the
+        constant-R FFT path on a linear grid.
+
+        Parameters
+        ----------
+        conserving : bool
+            Static flux-conserving resample flag, from
+            :meth:`~tengri.observation.spectroscopy.Spectroscopy.resolve_conserving`.
+        wave_obs : array-like
+            Observed-frame grid, shape (n_pix,). If it is a tracer (the caller is
+            jitting over the grid) the kernel takes it as a runtime argument.
+
+        Returns
+        -------
+        callable
+            ``fn(params, fixed_values, ssp_data, template_data, ztable_data)`` for a
+            concrete grid, or ``fn(params, fixed_values, wave_obs, ssp_data,
+            template_data, ztable_data)`` for a traced one; returns ndarray,
+            shape (n_pix,).
+
+        Notes
+        -----
+        **JIT-compatible**: the returned function is ``jax.jit``-wrapped and
+        differentiable in ``params``.
+        """
+        from tengri._cache_keys import stable_digest
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        if traced_grid:
+            w_np = None
+            key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        else:
+            w_np = np.asarray(wave_obs, dtype=np.float64)
+            digest = stable_digest(w_np.tobytes())
+            key = ("predict_spectrum_on_grid_jit", bool(conserving), w_np.shape, digest)
+        fn = cache.get(key)
+        if fn is not None:
+            return fn
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -6851,42 +7079,72 @@ class SEDModel:
         sigma_lib_flat = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
-        # Per-wavelength SSP library LSF curve (#2518), same source
-        # (self.ssp_data) and same structural (pre-trace) None-check as
-        # _init_instrument / _get_or_build_predict_observables_jit.
-        sigma_lib_curve = self._sigma_lib_curve_for(self.ssp_data)
-        sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
-        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
-        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
-        # Static (pre-trace) resolution of the resample mode (#1166): the model
-        # grid is fixed, so this is a Python bool baked into the trace, not a
-        # branch on the sampled redshift.
-        conserving = (
-            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
-            if spectroscopy is not None
-            else False
-        )
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_scale_getter = self._get_lsf_scale
 
-        return project_spectrum_kernel_split(
-            state,
-            state.sed_intrinsic,
-            igm_trans,
-            wave_rest,
-            wave_obs,
-            z,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=self._get_sigma_v_kms(params),
-            lsf_scale=self._get_lsf_scale(params),
-            cal_coeffs=cal_coeffs,
-            cal_wave_range=cal_wave_range,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
+        # Warm the component-chain cache OUTSIDE the JIT trace (see
+        # _get_or_build_predict_observables_jit): precompute() runs numpy-level
+        # routines that cannot be traced.
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+
+        def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
+            from tengri.cosmology import luminosity_distance
+            from tengri.observation.observation import project_spectrum_kernel_split
+            from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+            # Merged view, as in predict_observables_jit: a Fixed value enters
+            # through the runtime fixed_values input, never a closure constant.
+            full = {**fixed_values, **params}
+            state = self.predict_state(
+                params,
+                fixed_values=fixed_values,
+                ssp_data=ssp_data,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+            z = self._get_redshift(full)
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+            wave_rest = state.wave
+            igm_trans = state.derived.get("igm_transmission", None)
+            sigma_lib_curve = self._sigma_lib_curve_for(ssp_data)
+            sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
+            cal_coeffs = (
+                spectroscopy.calibration_coeffs(full) if spectroscopy is not None else None
+            )
+            return project_spectrum_kernel_split(
+                state,
+                state.sed_intrinsic,
+                igm_trans,
+                wave_rest,
+                wave_obs,
+                z,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_getter(full),
+                lsf_scale=lsf_scale_getter(full),
+                cal_coeffs=cal_coeffs,
+                cal_wave_range=cal_wave_range,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+
+        if traced_grid:
+            jit_fn = jax.jit(_impl)
+        else:
+            w_const = jnp.asarray(w_np)
+
+            def _impl_const(params, fixed_values, ssp_data, template_data, ztable_data):
+                return _impl(params, fixed_values, w_const, ssp_data, template_data, ztable_data)
+
+            jit_fn = jax.jit(_impl_const)
+        cache[key] = jit_fn
+        return jit_fn
 
     def predict_magnitudes(self, params):
         """Deprecated. Use ``model.predict(params).magnitudes()``.
@@ -10159,6 +10417,9 @@ class SEDModel:
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
         resample_z_ref = self._resample_z_ref()
+        # Concrete redshift for the rest-grid window (#2832): the fixed value only.
+        # A free or catalog redshift has no single value, so it stays None.
+        window_z = None if self.z_fixed is None else float(self.z_fixed)
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -10246,6 +10507,7 @@ class SEDModel:
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
+                    window_z=window_z,
                     observables_type=observables_type,
                 )
             if use_lut:
@@ -11188,11 +11450,33 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # The radio block normalizes on the luminosity inside an IR window
+            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
+            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
+            # an O(1) constant of the fixed shape, tabulated here in log space. The
+            # radio block then reads a scalar, as it reads ``L_ir``, instead of
+            # integrating the dust SED on the full grid on every call. A window the
+            # rest grid does not span is left out, so the radio block's own check
+            # raises at evaluation.
+            from tengri.components.radio.component import IR_WINDOWS_AA
+            from tengri.utils.sed_quantities import log10_band_luminosity
+
+            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
+            windows = {
+                name: edges
+                for name, edges in IR_WINDOWS_AA.items()
+                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
+            }
+
             def _node(z):
                 unit = _template_at(z, 1.0)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
                     "ok": _homogeneous_at(z),
+                    "log_window_fraction": {
+                        name: log10_band_luminosity(unit, wave, lo, hi)
+                        for name, (lo, hi) in windows.items()
+                    },
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -11204,7 +11488,11 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
-            response = {"ln1pz": built["ln1pz"], "values": built["values"]["R"]}
+            response = {
+                "ln1pz": built["ln1pz"],
+                "values": built["values"]["R"],
+                "log_window_fraction": built["values"]["log_window_fraction"],
+            }
 
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
@@ -11765,6 +12053,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
@@ -12592,6 +12881,7 @@ class SEDModel:
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
         _validate_radio_q_total_support(spec)
+        _validate_radio_firrc_domain(spec)
         _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)

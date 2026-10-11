@@ -380,6 +380,69 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     return jnp.maximum(_trapz_to_lsun(sed_ir, C_AA / wave), 0.0)
 
 
+def log10_band_luminosity(
+    sed: jnp.ndarray, wave: jnp.ndarray, lo_aa: float, hi_aa: float
+) -> jnp.ndarray:
+    r"""log10 of the luminosity in a rest-wavelength window, edge-exact [dex re erg/s].
+
+    .. math::
+
+        L_{[\lambda_{\rm lo},\lambda_{\rm hi}]} =
+        \int_{c/\lambda_{\rm hi}}^{c/\lambda_{\rm lo}} L_\nu \, d\nu
+
+    The window edges need not sit on grid nodes: :math:`L_\nu` is taken linear in
+    :math:`\nu` between nodes, every grid cell is clipped to the window, and the
+    trapezoid rule is applied to the clipped cell. A window with its edges
+    between two nodes therefore integrates exactly the requested band, where
+    :func:`compute_l_tir` keeps or drops whole nodes.
+
+    Parameters
+    ----------
+    sed : array, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz].
+    wave : array, shape (n_wave,)
+        Rest wavelength grid, ascending [Angstrom].
+    lo_aa, hi_aa : float
+        Window edges [Angstrom], ``lo_aa < hi_aa``.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\log_{10}(L / {\rm erg\,s^{-1}})`; ``-inf`` when the window holds
+        no positive flux. Formed from the peak-normalized integrand, so the
+        ~1e43 erg/s value is never materialized (float32-safe, #1206). Repeated grid
+        nodes (a float32 grid) are zero-width cells and carry no weight.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes; the window is a static Python pair.
+    """
+    nu = C_AA / wave
+    nu_lo = C_AA / hi_aa
+    nu_hi = C_AA / lo_aa
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed), initial=0.0))
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    f = sed / peak
+    nu_a, nu_b = nu[:-1], nu[1:]  # nu_a > nu_b: wave ascends
+    f_a, f_b = f[:-1], f[1:]
+    a = jnp.clip(nu_a, nu_lo, nu_hi)
+    b = jnp.clip(nu_b, nu_lo, nu_hi)
+    # A float32 rest grid spanning 10 A to 3e11 A repeats nodes at the long end
+    # (nu_a == nu_b), where the slope is 0/0 and poisons the sum. Such a cell has
+    # zero width after clipping, so it carries no weight; the double where keeps
+    # the NaN out of the backward pass as well.
+    dnu = nu_a - nu_b
+    wide = dnu > 0.0
+    slope = jnp.where(wide, (f_a - f_b) / jnp.where(wide, dnu, jnp.ones_like(dnu)), 0.0)
+    f_at_a = f_b + slope * (a - nu_b)
+    f_at_b = f_b + slope * (b - nu_b)
+    norm = jnp.sum(0.5 * (f_at_a + f_at_b) * (a - b))
+    positive = norm > 0.0
+    safe = jnp.where(positive, norm, jnp.ones_like(norm))
+    log_l = jnp.log10(safe) + jnp.log10(peak)
+    return jnp.where(positive, log_l, -jnp.inf)
+
+
 def compute_l_dust_absorbed(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,
