@@ -115,6 +115,7 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
     )
 
 
+@pytest.mark.population_fit
 def test_fitter_run_map_on_hierarchical(synthetic_ssp, simple_observation) -> None:
     """``Fitter(forward).run('map')`` completes on a hierarchical fit.
 

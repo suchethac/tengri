@@ -13,6 +13,8 @@ import importlib
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.regression_bug
+
 
 class _Spec:
     """Minimal stand-in for ``Parameters``: the Fixed values and free priors only."""

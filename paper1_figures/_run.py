@@ -113,3 +113,63 @@ def _as_kwargs(argv: list[str], signature: inspect.Signature) -> dict:
         annotation = signature.parameters[name].annotation
         out[name] = Path(value) if "Path" in str(annotation) else value
     return out
+
+
+#: Prefix of the per-figure line a family prints, which ``regenerate.py`` counts.
+FIGURE_LINE = "FIGURE"
+
+
+def figure_outcome(status: object, path: Path | None = None) -> str | None:
+    """Return why a figure is not produced, or ``None`` when it is.
+
+    Parameters
+    ----------
+    status : int or str
+        What ``run_figure`` returned for the figure, or a ``refused: ...``
+        string when the call raised.
+    path : Path, optional
+        The one file the figure should now exist as. ``None`` for a figure
+        whose filenames the script does not know in advance, which is judged on
+        ``status`` alone.
+
+    Returns
+    -------
+    str or None
+        ``None`` when the call succeeded and ``path`` is a file. Otherwise the
+        reason, for the family's report.
+    """
+    if isinstance(status, str):
+        return status
+    if status != 0:
+        return f"exit status {status}"
+    if path is not None and not path.is_file():
+        return f"not written to {path}"
+    return None
+
+
+def report_figures(outcomes: dict[str, str | None]) -> int:
+    """Print one line per figure and return the family's exit status.
+
+    A family's status is non-zero when any of its figures is refused or
+    missing. Returning 0 with a figure absent is the defect this guards
+    against: ``regenerate.py`` takes each family's status as its verdict.
+
+    Parameters
+    ----------
+    outcomes : dict of str to str or None
+        Figure name to its reason from :func:`figure_outcome`, or ``None`` when
+        the figure was produced.
+
+    Returns
+    -------
+    int
+        ``0`` when every figure was produced, :data:`SKIPPED` otherwise.
+    """
+    complete = True
+    for name, reason in outcomes.items():
+        if reason is None:
+            print(f"{FIGURE_LINE} {name} ok")
+        else:
+            complete = False
+            print(f"{FIGURE_LINE} {name} missing: {reason}")
+    return 0 if complete else SKIPPED

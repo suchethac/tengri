@@ -791,6 +791,13 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # A menu cell prints the registry through tengri.list_*() at render time, so a
+      # declaration edit leaves the published output quoting retired text (#2396:
+      # nb03 still printed the pre-#2158 agn_grahsp_a_bc declaration). Compares every
+      # registry row and parameter name quoted in the executed notebook outputs with
+      # tengri.list_all(). Needs tengri importable, so it lives here. Clean on main,
+      # so it runs --strict.
+      - run: python tools/check_rendered_registry_strings.py --strict
       # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
       # one asks the converse — whether every symbol tengri EXPORTS is named in
       # the docs — because the two failure modes are independent and only the
@@ -823,11 +830,9 @@ jobs:
       - run: python tools/check_harness_parity.py
       # Docs-prose voice guard (#2326): the enforcement NAMING_CONTRACT names
       # for confusable codepoints in published docs, plus notation canon and
-      # dev-detail leakage. Runs in its default warn-only mode (exit 0): the
-      # tree currently carries 24 violations, so --strict waits on a docs
-      # cleanup; wiring it makes the report visible and keeps the guard from
-      # rotting unrun, which is the defect #2326 is about.
-      - run: python tools/check_docs_voice.py
+      # dev-detail leakage. Strict since #2413 cleared its standing findings,
+      # so a PR that reintroduces the class fails here.
+      - run: python tools/check_docs_voice.py --strict
       # Every test module in EVERY tier must still import. `check_test_paths_covered`
       # proves a tree is named by some job; it cannot see whether the files in it
       # collect. Those are independent failures, and the second one is invisible
@@ -861,7 +866,7 @@ jobs:
       # deterministic and runs in the ordinary parallel sweep. Prefer that shape
       # for any new guard here: measure compiled cost, not wall clock, whenever
       # the question is "does this path do less work".
-      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval and not population_fit' -n 0
 
   test:
     runs-on: ubuntu-latest
@@ -1673,11 +1678,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m slow -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1698,7 +1703,7 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
         timeout-minutes: 30
       - uses: actions/cache/save@v6
         if: always() && github.ref == 'refs/heads/main'

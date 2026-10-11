@@ -10,8 +10,9 @@ source redshift.
 Unlike Inoue+2014, Meiksin's diffuse Lyman-α-forest continuum
 suppression rises from ~0 just blueward of Lyα to ~0.25 by the optical
 at z = 3; a *non-binary* continuum that Inoue's grid model misses.
-Issue #440 §12. Note that CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series
-terms at the source redshift rather than the absorber redshift.
+Issue #440 §12. CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series terms, and the
+choice between Eqs. 2 and 3 for Lyα, at the source redshift rather than the
+absorber redshift; see :func:`igm_transmission_meiksin06`.
 
 References
 ----------
@@ -106,6 +107,27 @@ def igm_transmission_meiksin06(
        from optically-thick absorbers, using O'Meara+2013's
        ``lambda^2.75`` cross-section damping.
 
+    **Differences from CIGALE 2025.1** (``pcigale.sed_modules.redshifting
+    .igm_transmission`` [2]_). The forest (Eq. 5) and Lyman-limit-system (Eq. 7)
+    terms are the same closed forms and agree with it to 1.3e-5 in T. The
+    Lyman series differs in two ways, both blueward of Lyβ (redward of it the
+    two agree to 1e-10). The paper does not say which redshift sets Eqs. 2-3;
+    the absorber-redshift reading here follows Table 1, whose ratios are
+    functions of z_n, and reproduces Table 2 (0.003283 against 0.003277 at
+    1730 A, z = 5, where the source-redshift reading gives 0.000909):
+
+    - CIGALE evaluates ``tau_alpha`` for ``n >= 3`` at the source redshift; here
+      it is evaluated at ``z_n``, since Table 1 gives ``tau_n / tau_alpha`` as
+      a function of ``z_n`` and Eqs. 2-3 are mean optical depths of the gas at
+      the absorbing redshift.
+    - CIGALE selects Eq. 2 (``z < 4``) or Eq. 3 (``z > 4``) for Lyα from the
+      source redshift; here the selection is on ``z_n``.
+
+    The first dominates: the maximum ``|ΔT|`` over a 600-point grid on
+    900-9000 Å is 0.044, 0.047 and 0.020 at ``z`` = 3, 5 and 7, and
+    ``T(1730 Å, z = 5)`` is 0.003283 here and 0.000909 for CIGALE; Meiksin's
+    Table 2 gives 0.003277. The second changes T by at most 8.4e-3 (z = 5).
+
     For wavelengths short of the Lyman limit at z=0 (``z_l < 0``), the
     LLS+forest opacity is damped by ``(z_l + 1)^2.75`` per O'Meara+2013.
 
@@ -119,6 +141,8 @@ def igm_transmission_meiksin06(
     .. [1] A. Meiksin, "Color corrections for high-redshift objects
        due to intergalactic attenuation," MNRAS, 365, 807 (2006).
        https://doi.org/10.1111/j.1365-2966.2005.09756.x
+    .. [2] Boquien, M., et al. 2019, A&A, 622, A103 (CIGALE).
+       https://doi.org/10.1051/0004-6361/201834156
     """
     wave_obs = jnp.asarray(wave_obs, dtype=jnp.float64)
     # Each Lyman line is evaluated at its absorber redshift (Meiksin 2006 Table 1); CIGALE 2025.1

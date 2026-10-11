@@ -186,7 +186,7 @@ def _free_declared(model):
 
 def _old_axis(name, n):
     lo, hi = adapter._get_param_bounds(name)
-    if name in ("dust_T", "dust_lambda_0_um"):
+    if name in adapter._LOG_AXIS_PARAMS:
         return np.geomspace(lo, hi, n, dtype=np.float64)
     return np.linspace(lo, hi, n, dtype=np.float64)
 

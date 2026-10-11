@@ -119,7 +119,10 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import (
+    CLOUDY_LABEL_AIR_MAX_AA,
+    catalog_air_to_vacuum,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -543,17 +546,22 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         """Pad a 1D array to target shape."""
         return np.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
-    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ...). Convert them
+    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ..., and the
+    # infrared ones: Pa-alpha 18751.0, [Ne II] 12.8101 micron). Convert them
     # exactly once, here; everything downstream is vacuum. The conversion is
     # monotonic, so the sort order below is unchanged.
-    nn_line_wav = catalog_air_to_vacuum(npz["nn_line_wavelength"])
+    nn_line_wav = catalog_air_to_vacuum(
+        npz["nn_line_wavelength"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+    )
 
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
-        sorted_line_wav=catalog_air_to_vacuum(npz["sorted_line_wavelength"]),
+        sorted_line_wav=catalog_air_to_vacuum(
+            npz["sorted_line_wavelength"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+        ),
         nn_line_wav=nn_line_wav,
         line_old_idx=np.asarray(npz["line_old_idx"]),
         cont_wav=np.asarray(npz["cont_wavelength"]),
@@ -1090,6 +1098,22 @@ class CueBackend:
     interpolated bilinearly on the (metallicity, age) grid for fast
     gradient evaluation. Warnings are emitted if the SSP appears to have
     baked-in nebular emission (wNE), which violates Cue's assumptions.
+
+    **Response to ``neb_logU``**: ``neb_logU`` is passed unchanged as
+    Cue's ``gas_logu``, the inner-face U at R = 10^19 cm (trained range
+    ``CUE_TRAINED_LOG_U``; Li et al. 2025, arXiv:2405.04598, Table 1), and the
+    network sees ``logQ = logU + log10(4 pi) + 2 log10(R) + log10(n_H) +
+    log10(c)`` (``cue.utils.logQ``). Unlike a CLOUDY grid at a fixed ionizing
+    spectrum, Cue also takes the 7 ionizing-shape inputs, and the O++ zone it
+    predicts depends on them. For Cue's default hard young-starburst shape
+    [O III]/H-beta rises from 3.4 to 6.1 between log U = -3 and -1.5. For the soft
+    shape fitted to a delayed-tau population (tau = 300 Myr, age 100 Myr, FSPS
+    MIST+MILES, Z = 0.02) it saturates: 0.60, 0.67, 0.65 at log U = -3, -2, -1.5.
+    The saturated level depends on the population's age weights (about 0.3-0.65
+    for nearby star formation histories). A flat [O III]/H-beta against
+    ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
+    wiring is guarded by ``tests/components/nebular/test_cue_logu_response.py``.
+    Values outside the trained range are passed to the network unclipped.
 
     **Calling conventions**: Two modes are supported:
 
@@ -1659,8 +1683,10 @@ class CueBackend:
         #   * the log-ratios follow as diff(log10 L_k)
         # Averaging the log-ratios directly (a geometric mean where an arithmetic
         # one is required) biases [OIII] by ~12 %: worse than the argmax it would
-        # replace. This rule lands within ~1 % of re-fitting the true composite
-        # spectrum, and is smooth + differentiable.
+        # replace. This rule is smooth and differentiable but approximates
+        # re-fitting the composite spectrum: for a delayed-tau (300 Myr) population
+        # at 100 Myr, Z = 0.02, indices 1-4 differ from a refit by 1-2 units and
+        # [O III]/H-beta by 10-15 %.
         log_seglum_all = jax.vmap(
             lambda log_age_yr: interpolate_ionizing_seglum(
                 self._seglum_table,

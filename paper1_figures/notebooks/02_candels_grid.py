@@ -29,7 +29,7 @@ while not (HERE / "paper1_figures").is_dir() and HERE.parent != HERE:
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "paper1_figures"))
 
-from _run import SKIPPED, repo_root, run_figure
+from _run import SKIPPED, figure_outcome, repo_root, report_figures, run_figure
 
 REPO = repo_root(HERE)
 sys.path.insert(0, str(REPO))
@@ -100,5 +100,14 @@ except Exception as exc:
     status["fig06_code_overlay"] = f"refused: {type(exc).__name__}: {exc}"
 
 # %%
-for name, code in status.items():
-    print(f"{name}: {code}")
+# Every figure is either produced or named as refused or missing, and any
+# such figure makes this family exit non-zero (a refused figure is an absent
+# one). The status above is printed by report_figures, not discarded.
+_outcomes = {
+    "fig09_sample_level.pdf": figure_outcome(
+        status["fig09_sample_level"], OUT / "fig09_sample_level.pdf"
+    ),
+    "fig05_candels_galaxies": figure_outcome(status["fig05_candels_galaxies"]),
+    "fig06_code_overlay": figure_outcome(status["fig06_code_overlay"]),
+}
+raise SystemExit(report_figures(_outcomes))
