@@ -5,7 +5,8 @@ Every wavelength inside tengri is vacuum; an air input converts once, at ingesti
 #2778 flagged six sources whose convention it had not established:
 
 1. the Synthesizer NLR grid ``lines/wavelength``  -> AIR (Cloudy c23.01 labels), converted;
-2. Cloudy/PyNeb labels above 10000 A              -> Cloudy's are AIR to 100 micron (converted),
+2. Cloudy/PyNeb labels above 10000 A              -> Cloudy's are AIR at every wavelength
+   (converted; the old 100 micron cap was lifted in test_bug_vacuum_conventions_final),
    Flury+2024's infrared labels are the NIST VACUUM values (left alone);
 3. SVO filter curves                              -> no source states the medium: UNESTABLISHED;
 4. ``qsogen_emline_template.dat``                 -> VACUUM below 5100 A (Temple+2021), the
@@ -68,7 +69,13 @@ def _nlr_grid_file() -> Path | None:
 
 
 def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
-    """A 2x2x2x2x2x2 Synthesizer-layout NLR grid carrying ``labels`` as lines/wavelength."""
+    """A 2x2x2x2x2x2 Synthesizer-layout NLR grid carrying ``labels`` as lines/wavelength.
+
+    As in the real grid, each id carries its own label wavelength (``X 1 6562.80A``), which
+    the loader pairs with lines/wavelength, so ``labels`` must be ascending.
+    """
+    labels = np.asarray(labels, dtype=np.float64)
+    assert np.all(np.diff(labels) > 0), "lines/wavelength must be strictly ascending"
     shape = (2,) * 6
     with h5py.File(path, "w") as f:
         axes = f.create_group("axes")
@@ -81,7 +88,7 @@ def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
         lines = f.create_group("lines")
         lines["wavelength"] = labels
         lines["luminosity"] = np.full((*shape, labels.size), 1.0e30)
-        lines["id"] = np.array([f"line {i}" for i in range(labels.size)], dtype="S16")
+        lines["id"] = np.array([f"X 1 {w:.2f}A" for w in labels], dtype="S32")
         f.create_group("log10_specific_ionising_luminosity")["HI"] = np.full(shape, 43.0)
 
 
@@ -91,7 +98,8 @@ def _write_minimal_nlr_grid(path: Path, labels: np.ndarray) -> None:
 def test_nlr_grid_labels_are_air_and_land_on_the_vacuum_lines(tmp_path):
     from tengri.components.nebular.agn_nebular import _load_synthesizer_nlr_grid
 
-    labels = np.array([1215.67, 1640.4, *_NLR_AIR_TO_VAC.keys()])
+    # ascending, as in the real file
+    labels = np.sort(np.array([1215.67, 1640.4, *_NLR_AIR_TO_VAC.keys()]))
     _write_minimal_nlr_grid(tmp_path / "nlr.hdf5", labels)
     got = np.asarray(_load_synthesizer_nlr_grid(tmp_path / "nlr.hdf5").line_wavelengths_aa)
 
@@ -100,8 +108,10 @@ def test_nlr_grid_labels_are_air_and_land_on_the_vacuum_lines(tmp_path):
         value = got[int(np.argmin(np.abs(labels - air)))]
         assert abs(value - vac) < 0.06, (air, value, vac)
     # the catalog entries Halpha / [O III] are the same vacuum lines
-    assert abs(got[2] - EMISSION_LINES["Halpha"][0]) < 0.02
-    assert abs(got[3] - EMISSION_LINES["OIII5007"][0]) < 0.02
+    halpha = got[int(np.argmin(np.abs(labels - 6562.80)))]
+    oiii = got[int(np.argmin(np.abs(labels - 5006.84)))]
+    assert abs(halpha - EMISSION_LINES["Halpha"][0]) < 0.02
+    assert abs(oiii - EMISSION_LINES["OIII5007"][0]) < 0.02
 
 
 def test_nlr_grid_file_labels_are_air_in_the_real_synthesizer_file():
@@ -124,7 +134,7 @@ def test_nlr_grid_file_labels_are_air_in_the_real_synthesizer_file():
         assert abs(loaded[int(np.argmin(np.abs(raw - air)))] - vac) < 0.06, vac
 
 
-# ── 2. Labels above 10000 A: Cloudy air to 100 micron, Flury infrared vacuum ───────────────
+# ── 2. Labels above 10000 A: Cloudy air at all wavelengths, Flury infrared vacuum ───────────────
 
 #: (Cloudy air label, NIST vacuum value) [Angstrom]: the infrared lines both catalogs carry.
 _CLOUDY_IR = (
@@ -150,10 +160,15 @@ def test_cloudy_infrared_labels_are_air_and_convert_to_the_vacuum_value():
     np.testing.assert_array_equal(
         catalog_air_to_vacuum(air[air > LABEL_AIR_MAX_AA]), air[air > 1e4]
     )
-    # beyond the Cloudy cap nothing is converted (far-infrared labels not established)
+    # Cloudy air-labels every wavelength above 2000 A with no upper limit (cddefines.cpp
+    # t_wavl::sprt_wl), so the far-infrared labels beyond 100 micron convert too; this was
+    # pinned as "not converted" while the rule beyond 100 micron was unestablished
     far = np.array([1.2e6, 1.576e6])
-    np.testing.assert_array_equal(
-        catalog_air_to_vacuum(far, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA), far
+    np.testing.assert_allclose(
+        catalog_air_to_vacuum(far, max_air_aa=_line_ingest.CLOUDY_LABEL_AIR_MAX_AA),
+        air_to_vac(far),
+        rtol=0,
+        atol=1e-6,
     )
 
 
@@ -354,10 +369,10 @@ def test_flury_mgii_and_hgamma_labels_read_as_air_labels():
 
 _REQUIRED = {
     "synthesizer_nlr_lines": "air",
-    "synthesizer_nlr_spectra": "unestablished",
+    "synthesizer_nlr_spectra": "vacuum",
     "svo_filters": "unestablished",
     "qsogen_emlines": "vacuum",
-    "qsogen_emlines_nir": "unestablished",
+    "qsogen_emlines_nir": "vacuum",
     "break_indices": "air",
     "mappings5_3mdb": "air",
     "flury24_mappings5": "air",

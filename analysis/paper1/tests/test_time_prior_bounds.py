@@ -30,9 +30,16 @@ AGE_AT_Z_MAX = age_at_z(Z_SAMPLE_MAX)
 _PROBE_LIBRARIES = ("fsps_prsc_miles_chabrier", "bpss_stars_c3k_a_chabrier")
 
 
-def _available_probe_library() -> str:
+def _probe_mode(name: str) -> str:
+    """The ``mass_remaining`` mode a probe library is loaded with."""
+    # BPASS's surviving mass is pending (#2800): the probe takes DSPS's fit explicitly.
+    return "dsps_fit" if name.startswith("bpss") else "table"
+
+
+def _available_probe_library() -> tuple[str, str]:
     """The first tracked probe library that actually loads, or skip.
 
+    Returns ``(name, mass_remaining)``, the arguments the probe is loaded with.
     Skipping here is honest: no tracked library present means the environment
     cannot build any configuration, which is different from a guard failing.
     """
@@ -40,10 +47,10 @@ def _available_probe_library() -> str:
 
     for name in _PROBE_LIBRARIES:
         try:
-            tengri.load_ssp(name)
+            tengri.load_ssp(name, mass_remaining=_probe_mode(name))
         except Exception:
             continue
-        return name
+        return name, _probe_mode(name)
     pytest.skip(f"no tracked stellar library available; tried {list(_PROBE_LIBRARIES)}")
     raise AssertionError("unreachable")  # pragma: no cover
 
@@ -79,7 +86,9 @@ def _extract_time_bounds(config_builder, z: float) -> dict[str, tuple[float, flo
     # bpss_stars_c3k_a_chabrier are tracked; the previous choice here,
     # fsps_mist_c3k_a_chabrier, is not, so a fresh clone could not run any of
     # these guards.
-    ssp = tengri.load_ssp(_available_probe_library())
+    probe_name, probe_mode = _available_probe_library()
+    # BPASS's surviving mass is pending (#2800): a BPASS probe takes DSPS's fit explicitly.
+    ssp = tengri.load_ssp(probe_name, mass_remaining=probe_mode)
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["hst_f160w"]))
 
     # Build model to inspect the spec
