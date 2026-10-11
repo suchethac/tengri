@@ -9,14 +9,16 @@ integrated luminosity is :math:`L_{\\rm line} = r_i \\cdot L_{\\rm Hb}` where
 strength relative to H-beta from Mor & Netzer 2012 (Table in
 ``data/grahsp/grahsp_templates.h5``).
 
-The line profile uses upstream's slightly unusual normalization
-:math:`N = 510 / \\sqrt{\\pi\\sigma^2}` rather than the textbook
-:math:`1/\\sqrt{2\\pi\\sigma^2}`. This is because :math:`\\mathrm{l5100}`
-is :math:`\\lambda L_\\lambda` (W or erg/s) while the SED is in
-:math:`L_\\lambda` (W/nm), the 510 (= 5100 Å in nm) absorbs the
-:math:`\\lambda` factor; the :math:`\\sqrt{\\pi}` rather than
-:math:`\\sqrt{2\\pi}` is a convention baked into upstream and matched here
-exactly for fixture parity.
+Each profile is a unit-area Gaussian, :math:`N = 510 / \\sqrt{2\\pi\\sigma^2}`,
+so a line of strength :math:`r_i` integrates to exactly
+:math:`r_i \\cdot L_{\\rm Hb}` [erg/s]. :math:`\\mathrm{l5100}` is
+:math:`\\lambda L_\\lambda` (erg/s) while the SED is :math:`L_\\lambda` (erg/s/nm);
+the 510 (= 5100 Å in nm) absorbs the :math:`\\lambda` factor.
+
+Upstream GRAHSP's ``activatelines`` normalizes with :math:`\\sqrt{\\pi\\sigma^2}`
+instead, so every line it emits carries an extra factor :math:`\\sqrt{2}` (its
+H-beta broad line is 2.8 % of L5100, not the documented 2 %). tengri
+deliberately does not reproduce this.
 
 References
 ----------
@@ -33,7 +35,6 @@ import math
 
 import jax.numpy as jnp
 from jax import Array
-from jax.scipy.special import erfc
 
 from tengri.utils.host_array import device_table, host_array
 
@@ -42,9 +43,7 @@ __all__ = [
     "AGN_TYPE_LINER",
     "AGN_TYPE_SY2",
     "feii_forest",
-    "feii_forest_power",
     "gaussian_lines",
-    "gaussian_lines_power_above",
 ]
 
 AGN_TYPE_BL: int = 1
@@ -62,12 +61,6 @@ _HBETA_BROAD_RATIO: float = 0.02
 _HBETA_NARROW_RATIO: float = 0.002
 
 
-def _line_sigma_nm(line_wave_nm: Array, linewidth_kms: float) -> Array:
-    """Gaussian sigma [nm] of each line for a FWHM of ``linewidth_kms`` [km/s]."""
-    width_nm = line_wave_nm * (linewidth_kms / _C_KMS)  # km/s / (km/s) = 1
-    return width_nm * device_table(_FWHM_TO_SIGMA)  # (n_lines,)
-
-
 def _add_gaussians(
     wave_nm: Array,
     line_wave_nm: Array,
@@ -79,8 +72,10 @@ def _add_gaussians(
     Vectorized over both ``line_wave_nm`` (lines) and ``wave_nm`` (samples)
     so the result is JIT/vmap/grad-compatible.
     """
-    sigma = _line_sigma_nm(line_wave_nm, linewidth_kms)  # (n_lines,)
-    norm_factor = _LAMBDA_5100_NM / jnp.sqrt(jnp.pi * sigma**2)  # (n_lines,)
+    # Per-line widths in nm.
+    width_nm = line_wave_nm * (linewidth_kms / _C_KMS)  # km/s / (km/s) = 1
+    sigma = width_nm * device_table(_FWHM_TO_SIGMA)  # (n_lines,)
+    norm_factor = _LAMBDA_5100_NM / jnp.sqrt(2.0 * jnp.pi * sigma**2)  # (n_lines,)
     # Broadcast: (n_wave, n_lines)
     diff = wave_nm[:, None] - line_wave_nm[None, :]
     shape = jnp.exp(-0.5 * diff**2 / sigma[None, :] ** 2)
@@ -181,6 +176,7 @@ def feii_forest(
     l5100: float,
     a_lines: float,
     a_feii: float,
+    agn_type: int = AGN_TYPE_BL,
 ) -> Array:
     r"""Bruhweiler+Verner 2008 FeII forest, scaled to the broad H-beta budget.
 
@@ -206,6 +202,11 @@ def feii_forest(
     a_feii : float
         FeII strength relative to broad H-beta (paper ``AFeII``,
         reasonable range 2-10).
+    agn_type : {1, 2, 3}, optional
+        FeII is emitted by the broad-line region, so it is present only for
+        ``1`` (broad-line AGN) and zero for ``2`` (Sy2) and ``3`` (LINER), the
+        same switch that gates the broad lines and the Balmer continuum
+        (upstream ``activatelines``). Default ``1``. **static** under JIT.
 
     Returns
     -------
@@ -218,6 +219,8 @@ def feii_forest(
     template support: no extrapolation.
     """
     wave_nm = jnp.asarray(wave_nm)
+    if agn_type != AGN_TYPE_BL:
+        return jnp.zeros_like(wave_nm)
     l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines
     interp = jnp.interp(
         wave_nm,
@@ -227,92 +230,3 @@ def feii_forest(
         right=0.0,
     )
     return interp * a_feii * l_broadlines
-
-
-def _line_power_above(
-    line_wave_nm: Array,
-    line_lumin: Array,
-    linewidth_kms: float,
-    lower_nm: float,
-) -> Array:
-    r"""Integral of Gaussian lines above ``lower_nm`` [erg/s], in closed form.
-
-    Each line integrates to :math:`L_i\,\lambda_{5100}\sqrt{2}` over the whole
-    axis, with the normalization of :func:`_add_gaussians`. The part above
-    :math:`a` is :math:`L_i\,\lambda_{5100}\,\mathrm{erfc}(z_i)/\sqrt{2}`, where
-    :math:`z_i = (a - \mu_i)/(\sqrt{2}\,\sigma_i)`.
-    """
-    sigma = _line_sigma_nm(line_wave_nm, linewidth_kms)
-    tail = erfc((lower_nm - line_wave_nm) / (jnp.sqrt(2.0) * sigma))
-    return jnp.sum(line_lumin * (_LAMBDA_5100_NM / jnp.sqrt(2.0)) * tail)
-
-
-def gaussian_lines_power_above(
-    line_wave_nm: Array,
-    line_broad: Array,
-    line_narrow_sy2: Array,
-    line_narrow_liner: Array,
-    l5100: float,
-    a_lines: float,
-    linewidth_kms: float,
-    agn_type: int,
-    lower_nm: float,
-) -> Array:
-    """Emission-line bolometric power above ``lower_nm`` [erg/s], closed form.
-
-    The integral of :func:`gaussian_lines`' broad + narrow output over
-    ``[lower_nm, inf)``, with no wavelength grid. Each line is a Gaussian, so the
-    error function gives its integral exactly. Parameters match
-    :func:`gaussian_lines`, which holds the branch on ``agn_type``.
-
-    Notes
-    -----
-    JIT-compatible and gradient-safe. ``agn_type`` must be a Python int (static).
-    """
-    l_agn = l5100 / _LAMBDA_5100_NM
-    l_broad = _HBETA_BROAD_RATIO * l_agn * a_lines
-    l_narrow = _HBETA_NARROW_RATIO * l_agn * a_lines
-    line_wave = jnp.asarray(line_wave_nm)
-    if agn_type == AGN_TYPE_BL:
-        broad = _line_power_above(
-            line_wave, l_broad * jnp.asarray(line_broad), linewidth_kms, lower_nm
-        )
-        narrow = _line_power_above(
-            line_wave, l_narrow * jnp.asarray(line_narrow_sy2), linewidth_kms, lower_nm
-        )
-    elif agn_type == AGN_TYPE_SY2:
-        broad = jnp.zeros(())
-        narrow = _line_power_above(
-            line_wave, l_narrow * jnp.asarray(line_narrow_sy2), linewidth_kms, lower_nm
-        )
-    elif agn_type == AGN_TYPE_LINER:
-        broad = jnp.zeros(())
-        narrow = _line_power_above(
-            line_wave, l_narrow * jnp.asarray(line_narrow_liner), linewidth_kms, lower_nm
-        )
-    else:
-        raise ValueError(f"agn_type must be 1, 2, or 3; got {agn_type!r}")
-    return broad + narrow
-
-
-def feii_forest_power(
-    template_wave_nm: Array,
-    template_lumin: Array,
-    l5100: float,
-    a_lines: float,
-    a_feii: float,
-) -> Array:
-    """Integral of the FeII forest over its template [erg/s].
-
-    The template is linear between nodes, so the trapezoid over its nodes is
-    exact for the interpolant :func:`feii_forest` evaluates. The template lies
-    wholly above the Lyman limit (its blue end is at 199 nm for the default
-    Bruhweiler+Verner 2008 table), so no lower cut is applied.
-
-    Notes
-    -----
-    JIT-compatible and gradient-safe.
-    """
-    l_broadlines = _HBETA_BROAD_RATIO * (l5100 / _LAMBDA_5100_NM) * a_lines
-    band = jnp.trapezoid(jnp.asarray(template_lumin), jnp.asarray(template_wave_nm))
-    return band * a_feii * l_broadlines

@@ -77,6 +77,25 @@ _SSP_PATH = "data/fsps_prsc_miles_chabrier.h5"
 _CONTRIBUTING_SHARE = 1e-6
 
 
+@pytest.fixture(autouse=True)
+def _cold_ionspec_cache(monkeypatch):
+    """Run every precompute from a cold cache: no memo, no disk entry.
+
+    The ionizing table is memoized on a digest of the float64-cast SSP. A
+    float32 SSP whose values are exactly float32-representable (every bundled
+    grid) digests to the same key as its float64 twin, so a float32 call is
+    served the float64 table from memory or from disk and the float32
+    integration never runs. That is why the float32 assertions below passed on
+    main while a fresh process built ``inf``. Disabling the cache forces the
+    integration to execute.
+    """
+    from tengri.components.nebular import ionizing_spectrum as isp
+
+    monkeypatch.setattr(isp, "_IONSPEC_TABLE_CACHE", {})
+    monkeypatch.setattr(isp, "_load_ionspec_disk", lambda key: None)
+    monkeypatch.setattr(isp, "_store_ionspec_disk", lambda key, result: None)
+
+
 def _ionizing_spectra_f64(max_bins=24):
     """Real (Z, age) ionizing spectra in float64, swept rather than hand-picked.
 
@@ -162,8 +181,12 @@ def test_fit_ionizing_spectrum_is_dtype_invariant():
         assert np.all(np.isfinite(flux32)), f"({im},{ia}) float32 cast made input non-finite"
         assert np.max(flux32) > 0, f"({im},{ia}) float32 cast zeroed the spectrum"
 
-        fit64 = fit_ionizing_spectrum(wave64, flux64)
-        fit32 = fit_ionizing_spectrum(wave32, flux32)
+        with jax.enable_x64(True):
+            fit64 = fit_ionizing_spectrum(wave64, flux64)
+        # The float32 arm runs with x64 OFF: the integral must not depend on
+        # the x64 flag of the process that calls it.
+        with jax.enable_x64(False):
+            fit32 = fit_ionizing_spectrum(wave32, flux32)
         seg64 = np.asarray(fit64["log_seglum"], dtype=np.float64)
         seg32 = np.asarray(fit32["log_seglum"], dtype=np.float64)
         assert np.all(np.isfinite(seg64)), f"({im},{ia}) float64 reference broken: {seg64}"
@@ -215,13 +238,15 @@ def test_precompute_table_is_dtype_invariant():
         lgmet = np.asarray(ssp.ssp_lgmet, dtype=np.float64)
         logage = np.asarray(ssp.ssp_lg_age_gyr, dtype=np.float64) + 9.0
 
-    r64 = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=logage)
-    r32 = precompute_ionizing_params_table(
-        wave.astype(np.float32),
-        flux.astype(np.float32),
-        lgmet.astype(np.float32),
-        ssp_log_age_yr=logage,
-    )
+    with jax.enable_x64(True):
+        r64 = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=logage)
+    with jax.enable_x64(False):
+        r32 = precompute_ionizing_params_table(
+            wave.astype(np.float32),
+            flux.astype(np.float32),
+            lgmet.astype(np.float32),
+            ssp_log_age_yr=logage,
+        )
 
     # The defect itself, asserted on EVERY entry of every table: finiteness.
     # This is what went wrong (198 -inf) and it admits no tolerance.
@@ -259,8 +284,13 @@ def test_precompute_table_is_dtype_invariant():
     )
 
 
-def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
+def test_cue_forward_is_finite_when_the_ssp_itself_is_float32(monkeypatch):
     """End-to-end, with the SSP loaded INSIDE the float32 context.
+
+    ``tests/conftest.py`` sets ``TENGRI_ALLOW_WNE_CUE=1``, which downgrades the
+    wNE guard to a warning. Under that switch an ``inf`` Q_H table still gives a
+    finite photometry, so the check here must not inherit the downgrade: unset
+    it so an ``inf`` Q_H table raises ``CueWNESSPError`` at build time.
 
     The distinction from the existing guard in
     ``test_representable_exponent.py`` is the whole point: there the SSP fixture
@@ -271,6 +301,7 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
     from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
+    monkeypatch.delenv("TENGRI_ALLOW_WNE_CUE", raising=False)
     params = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
 
     with jax.enable_x64(False):

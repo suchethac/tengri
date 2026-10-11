@@ -69,3 +69,50 @@ def test_jit_full_pipeline():
     out = fwd(1.0e44, 0.2)
     chex.assert_shape(out, (100,))
     chex.assert_tree_all_finite(out)
+
+
+def test_monolith_lbol_is_the_accretion_luminosity_and_independent_of_fcov():
+    """``agn_log_lbol`` normalizes the accretion (BBB) luminosity only.
+
+    The torus re-radiates absorbed accretion light, so adding it to the normalized
+    L_bol counts that light twice; the paper defines lumBolBBB (everything but the
+    torus, above 91.2 nm) and lumBolTOR separately. The implied ``l5100`` must then
+    not move with the torus covering factor.
+    """
+    import warnings
+
+    from tengri.components.agn.grahsp import GRAHSPParams, evaluate_grahsp_agn
+    from tengri.components.agn.grahsp.model import compute_grahsp_sed
+    from tengri.utils.physics_constants import C_AA, L_SUN
+
+    wave_aa = jnp.logspace(2.5, 6.0, 3000)
+    wave_nm = wave_aa * 0.1
+    from tengri.components.agn.grahsp.normalization import bbb_side_unit_power
+    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+
+    templates = load_grahsp_templates()
+    l5100_by_fcov = []
+    for fcov in (0.1, 0.9):
+        unit_params = GRAHSPParams(l5100=1.0, fcov=fcov)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l_nu = np.asarray(compute_grahsp_sed(wave_aa, agn_log_lbol=45.0, agn_grahsp_fcov=fcov))
+        unit = evaluate_grahsp_agn(wave_nm, unit_params, templates)
+        unit_l_nu = (
+            np.asarray(unit.bbb_attenuated + unit.torus_attenuated) * 0.1 * wave_aa**2 / C_AA
+        )
+        l5100 = l_nu / unit_l_nu
+        np.testing.assert_allclose(l5100, l5100[0], rtol=1e-9)  # pure rescale
+        # The implied l5100 is the per-component unit power, integrated on each
+        # component's own grid (grahsp/normalization.py), so it reproduces the
+        # declared power exactly. The caller-grid trapezoid of l_bol_bbb is only
+        # a 3000-node estimate of that integral (the Lyman cut falls between
+        # nodes), so it agrees to its discretization error, not to 1e-9.
+        np.testing.assert_allclose(
+            l5100[0] * float(bbb_side_unit_power(unit_params, templates)),
+            1e45 * L_SUN,
+            rtol=1e-9,
+        )
+        np.testing.assert_allclose(l5100[0] * float(unit.l_bol_bbb), 1e45 * L_SUN, rtol=1e-3)
+        l5100_by_fcov.append(l5100[0])
+    np.testing.assert_allclose(l5100_by_fcov[0], l5100_by_fcov[1], rtol=1e-12)
