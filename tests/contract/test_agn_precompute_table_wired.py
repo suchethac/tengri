@@ -26,6 +26,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.agn.blocks.composable_precompute import UNWIRED_BLOCKS
+from tengri.config.exceptions import TengriIOError
+
 pytestmark = pytest.mark.contract
 
 #: Registry key of the adapter that builds the table.
@@ -347,12 +350,20 @@ def test_unwired_keys_name_known_families():
     assert set(UNWIRED) <= set(FAMILIES)
 
 
-@pytest.mark.parametrize("key", sorted(UNWIRED))
-def test_unwired_family_is_not_engaged(key):
+@pytest.mark.parametrize("key", sorted(FAMILIES))
+def test_family_is_engaged_unless_recorded_unwired(key):
+    """Every family is engaged, or it is recorded in UNWIRED and then declined with that reason.
+
+    Over the current FAMILIES (UNWIRED is empty) this asserts that all four engage the table, so
+    it is not vacuous: a family that starts failing its rtol shows up here as a declined table.
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = _model(FAMILIES[key], _wavepre())
-    assert _band_table(model) is None, f"{key} is recorded as unwired: {UNWIRED[key]}"
+    if key in UNWIRED:
+        assert _band_table(model) is None, f"{key} is recorded as unwired: {UNWIRED[key]}"
+    else:
+        assert _band_table(model) is not None, model._agn_band_table_decline
 
 
 def _fixed_model(approx, *, agn_extra=None):
@@ -473,7 +484,7 @@ def _torus_model(torus: str, param: str, approx):
 @pytest.mark.parametrize("torus", sorted(TORUS_AXES))
 @pytest.mark.parametrize("param", ["agn_T_torus", "agn_cos_inc"])
 def test_torus_axis_table_matches_per_call_integral_path(torus, param):
-    """The torus's free T_torus and cos_inc are tabulated and reproduce the per-call path at 1e-8."""
+    """The torus free T_torus and cos_inc are tabulated and match the per-call path at 1e-8."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         table = _torus_model(torus, param, _wavepre())
@@ -488,26 +499,31 @@ def test_torus_axis_table_matches_per_call_integral_path(torus, param):
     )
 
 
-@pytest.mark.parametrize(
-    "block, reason_key",
-    [("fritz", "torus/fritz"), ("cue", "nlr/cue")],
-)
-def test_unwired_block_is_declined_with_its_reason(block, reason_key):
-    """A block the table cannot be built for is declined by the gate, with the recorded reason."""
-    from tengri.components.agn.blocks.composable_precompute import UNWIRED_BLOCKS
-
-    assert reason_key in UNWIRED_BLOCKS
-    category = reason_key.split("/")[0]
+def _unwired_block_model(key: str):
+    """A composable AGN with the block named by ``key`` (``"<category>/<name>"``), free lum."""
+    category, name = key.split("/")
+    slot = "atten" if category == "attenuation" else category
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        if category == "torus":
-            model = _torus_model(block, "agn_cos_inc", _wavepre())
-        else:
-            model = _fixed_model(
-                _wavepre(), agn_extra={"nlr": {"type": block}, "agn_log_lbol": _free_lbol()}
-            )
+        return _fixed_model(
+            _wavepre(), agn_extra={slot: {"type": name}, "agn_log_lbol": _free_lbol()}
+        )
+
+
+@pytest.mark.parametrize("key", sorted(UNWIRED_BLOCKS))
+def test_unwired_block_is_declined_with_its_reason(key):
+    """Every UNWIRED_BLOCKS entry is declined by the build gate, which records the stated reason.
+
+    Data-driven over ``UNWIRED_BLOCKS``: a new entry is covered without editing this test. A
+    model whose block needs data that is absent from this checkout cannot be built, and that
+    entry is skipped by name; every other entry must build and be declined.
+    """
+    try:
+        model = _unwired_block_model(key)
+    except (FileNotFoundError, TengriIOError) as exc:
+        pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
     assert _band_table(model) is None
-    assert f"{reason_key} is not tabulated" in model._agn_band_table_decline
+    assert model._agn_band_table_decline == f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
 
 
 def _free_lbol():
