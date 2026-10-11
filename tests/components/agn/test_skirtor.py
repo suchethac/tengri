@@ -141,7 +141,7 @@ class TestSKIRTORAnalytic:
         # ``_interpolate_and_normalize``). The default point is an exact node in every
         # coordinate (tau 7, p 1, q 1, oa 40, R 20, cos_inc = cos 30 deg). The new value
         # equals the raw tabulated node to 1e-35 relative; the old triweight value was
-        # 3.0 % off that node, blending in the neighbouring nodes:
+        # 3.0 % off that node, blending in the neighboring nodes:
         #
         #   idx 0   (0.01 um, below template support):  0.0, unchanged
         #   idx 166 (0.4606 um): 5.856270e24 -> 6.322513e24   +8.0 %
