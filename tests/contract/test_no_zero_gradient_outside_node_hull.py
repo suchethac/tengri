@@ -428,6 +428,54 @@ def _axis_extent_from_file(filename: str) -> tuple[float, float]:
 
 
 @pytest.mark.contract
+def test_narrow_z_table_warns_at_build_and_holds_at_the_band_edge() -> None:
+    """A redshift table narrower than its prior is a support gap: warned, held at the edge.
+
+    The table covers z in [0.5, 1.0]; the prior is [0, 3]. The overhang past z = 1
+    is far more than half a node spacing, so it must not be extrapolated: the value
+    at z = 3 equals the value at the top band edge, not a continuation of the
+    edge cubic.
+    """
+    from tengri.components._z_response import (
+        interp_z_table,
+        ln1pz_nodes,
+        warn_if_z_table_narrower_than_prior,
+    )
+    from tengri.config.exceptions import ZTableCoverageWarning
+
+    nodes = ln1pz_nodes(0.5, 1.0, 40)
+    z_nodes = np.expm1(np.asarray(nodes))
+    vals = jnp.asarray(np.exp(-z_nodes) * (1.0 + z_nodes))
+    table = {"ln1pz": nodes, "values": vals}
+
+    with pytest.warns(ZTableCoverageWarning, match=r"\[0, 3\]"):
+        warn_if_z_table_narrower_than_prior(nodes, (0.0, 3.0))
+
+    h_hi = float(nodes[-1] - nodes[-2])
+    z_band_top = float(np.expm1(float(nodes[-1]) + 0.5 * h_hi))
+    v_band = float(interp_z_table(table, z_band_top, extrapolate=True))
+    v_at_3 = float(interp_z_table(table, 3.0, extrapolate=True))
+    assert v_at_3 == pytest.approx(v_band, rel=1e-12)
+    g_at_3 = float(jax.grad(lambda z: interp_z_table(table, z, extrapolate=True))(3.0))
+    assert g_at_3 == 0.0
+
+
+@pytest.mark.contract
+def test_narrow_z_table_numerical_overhang_still_extrapolates() -> None:
+    """Inside the half-spacing band the extrapolation is live: the gradient is nonzero."""
+    from tengri.components._z_response import interp_z_table, ln1pz_nodes
+
+    nodes = ln1pz_nodes(0.5, 1.0, 40)
+    z_nodes = np.expm1(np.asarray(nodes))
+    vals = jnp.asarray(np.exp(-z_nodes) * (1.0 + z_nodes))
+    table = {"ln1pz": nodes, "values": vals}
+    h_hi = float(nodes[-1] - nodes[-2])
+    z_in_band = float(np.expm1(float(nodes[-1]) + 0.25 * h_hi))
+    g = float(jax.grad(lambda z: interp_z_table(table, z, extrapolate=True))(z_in_band))
+    assert np.isfinite(g) and g != 0.0
+
+
+@pytest.mark.contract
 def test_boundary_node_derivative_is_not_halved() -> None:
     """At an outermost node the derivative equals the one-sided derivative from inside.
 
