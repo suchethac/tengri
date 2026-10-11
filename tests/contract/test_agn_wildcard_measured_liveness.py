@@ -45,9 +45,12 @@ from tengri.parameters.groups import _AGN_PARTITION
 
 from .test_agn_subblock_wildcard_scoping import (
     _ALL_CASES,
+    _agn_subblock_declared_params,
+    _build_selection,
     _make_obs,
     _make_ssp,
     _maybe_skip_grid_gated,
+    _priorless_agn_names,
     _registered_types,
     skip_if_empty_scope,
 )
@@ -194,7 +197,17 @@ def _assert_owned_and_live_are_freed(ssp, obs, category, block_type):
 
     free_agn = {p for p in model.spec.free_params if p.startswith("agn_")}
     owned = _owned_names(category)
-    not_freed = owned - free_agn
+    # A name the wildcard COVERS but whose declaration has no free_prior stays
+    # pinned by design (an intended exception, derived from the declaration by
+    # _priorless_agn_names, not listed by hand). Only names inside the scope
+    # are excused: an unfreed prior-less name OUTSIDE it is a real reads gap.
+    covered = (
+        _agn_subblock_declared_params(
+            category, block_type, selection=_build_selection(category, block_type)
+        )
+        or frozenset()
+    )
+    not_freed = owned - free_agn - (covered & _priorless_agn_names())
     if not not_freed:
         return  # nothing excluded to check
 

@@ -37,6 +37,7 @@ from tengri.components.radio.component import (
 )
 from tengri.config.exceptions import ConfigError
 from tengri.protocols.component import declared_default
+from tests._radio_band import band_l_ir
 
 pytestmark = pytest.mark.regression_bug
 
@@ -386,7 +387,7 @@ def _l_nu_at(state, key, freqs):
 def cue_only_share(ssp_data_fsps):
     """The nebular continuum alone (no radio block) over the calibration, four frequencies."""
     st = _public(ssp_data_fsps, "cue", None, radio=False)
-    l_ir = float(np.asarray(st.derived["L_ir"]))
+    l_ir = band_l_ir(st)  # the radio default calibrates on the 8-1000 um TIR of Bell (2003)
     return _l_nu_at(st, "sed_nebular", _FREQS) / _bell_total_ref(2.64, l_ir)
 
 
@@ -402,7 +403,8 @@ def test_public_total_sed_over_the_calibration(ssp_data_fsps, cue_only_share, ne
     override works): here too the radio block's Murphy share is taken off the synchrotron.
     """
     st = _public(ssp_data_fsps, neb, _FF[ff])
-    l_ir = float(np.asarray(st.derived["L_ir"]))
+    # Bell (2003) q is on the 8-1000 um TIR, the default window of the bell2003 model.
+    l_ir = band_l_ir(st)
     cal = _bell_total_ref(2.64, l_ir)
     x = np.asarray(_FREQS) / 1.4e9
     f_th = float(_murphy_ff(1.4e9, l_ir)) / cal

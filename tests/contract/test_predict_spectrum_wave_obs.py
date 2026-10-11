@@ -77,3 +77,134 @@ def test_wave_obs_values_track_the_grid(phot_model, params):
     a = phot_model.predict_spectrum(params, wave_obs=grid)
     b = phot_model.predict_spectrum(params, wave_obs=grid)
     np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+
+
+@pytest.fixture(scope="module")
+def spec_model(synthetic_ssp_wide):
+    from tengri import Spectroscopy
+
+    wave = np.linspace(4000.0, 8500.0, 300)
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave))
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+    )
+
+
+def test_wave_obs_matches_configured_grid_path(spec_model, params):
+    """Explicit wave_obs equals the configured-grid path on the same grid (jitted core)."""
+    grid = jnp.asarray(np.linspace(4000.0, 8500.0, 300))
+    via_arg = spec_model.predict_spectrum(params, wave_obs=grid)
+    via_config = spec_model.predict_spectrum(params)
+    np.testing.assert_allclose(np.asarray(via_arg), np.asarray(via_config), rtol=1e-13)
+
+
+def test_wave_obs_works_under_jit_and_grad(spec_model, params):
+    import jax
+
+    grid = jnp.asarray(np.linspace(4000.0, 8500.0, 300))
+    eager = spec_model.predict_spectrum(params, wave_obs=grid)
+    jitted = jax.jit(lambda q: spec_model.predict_spectrum(q, wave_obs=grid))(params)
+    np.testing.assert_allclose(np.asarray(jitted), np.asarray(eager), rtol=1e-13)
+    key = next(iter(params))
+
+    def loss(v):
+        return jnp.sum(spec_model.predict_spectrum({**params, key: v}, wave_obs=grid))
+
+    assert np.isfinite(float(jax.grad(loss)(params[key])))
+
+
+def test_wave_obs_two_lengths_each_match_reference(spec_model, params):
+    """Calls with different grid lengths both return their own grid's spectrum."""
+    for n in (40, 120):
+        grid = jnp.asarray(np.linspace(4000.0, 8500.0, n))
+        got = spec_model.predict_spectrum(params, wave_obs=grid)
+        assert got.shape == (n,)
+        assert bool(jnp.all(jnp.isfinite(got)))
+    full = spec_model.predict_spectrum(params)
+    sub = spec_model.predict_spectrum(
+        params, wave_obs=jnp.asarray(np.linspace(4000.0, 8500.0, 300))
+    )
+    np.testing.assert_allclose(np.asarray(sub), np.asarray(full), rtol=1e-13)
+
+
+def _spec_model_with_logzsol(ssp, logzsol):
+    from tengri import Spectroscopy
+
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=np.linspace(4000.0, 8500.0, 300)))
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        met={"logzsol": Fixed(logzsol), "all_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.5),
+    )
+
+
+def test_fixed_value_change_is_not_served_by_cached_kernel(synthetic_ssp_wide):
+    """Two models differing only in a Fixed value share a signature but not a spectrum."""
+    model_a = _spec_model_with_logzsol(synthetic_ssp_wide, -0.5)
+    model_b = _spec_model_with_logzsol(synthetic_ssp_wide, 0.0)
+    assert model_a.compile_signature() == model_b.compile_signature()
+    params = {p: 0.5 for p in model_a.spec.free_params}
+    grid = jnp.asarray(np.linspace(4000.0, 8500.0, 300))
+    spec_a = model_a.predict_spectrum(params, wave_obs=grid)
+    spec_b = model_b.predict_spectrum(params, wave_obs=grid)
+    reference_b = model_b.predict_spectrum(params)
+    np.testing.assert_allclose(np.asarray(spec_b), np.asarray(reference_b), rtol=1e-13)
+    scale = float(np.max(np.abs(np.asarray(spec_b))))
+    assert float(np.max(np.abs(np.asarray(spec_a) - np.asarray(spec_b)))) > 1e-3 * scale
+
+
+def test_linear_explicit_grid_uses_nonuniform_lsf(synthetic_ssp_wide):
+    """A concrete linear ``wave_obs`` gets the same LSF as the state path.
+
+    A traced grid is assumed log-uniform (constant-R FFT LSF), so the kernel keeps
+    ``wave_obs`` concrete. A second linear grid of the same length checks the cache
+    is keyed on grid content, not just shape.
+    """
+    from tengri import Spectroscopy
+
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=np.linspace(4000.0, 8500.0, 300), resolution=300.0)
+    )
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(8, 12)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+    )
+    model = SEDModel(
+        model.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0)),
+        synthetic_ssp_wide,
+        observation=obs,
+    )
+    p = {name: 0.5 for name in model.spec.free_params}
+    p["sigma_v_kms"] = 300.0
+    for lo, hi in ((4000.0, 5200.0), (4100.0, 5400.0)):
+        w = jnp.linspace(lo, hi, 300)
+        np.testing.assert_allclose(
+            np.asarray(model.predict_spectrum(p, wave_obs=w)),
+            np.asarray(model._spectrum_via_state(p, wave_obs=w)),
+            rtol=1e-12,
+        )

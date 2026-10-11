@@ -98,7 +98,7 @@ from __future__ import annotations
 
 import difflib
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
@@ -5509,6 +5509,19 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
                         f"radio['sf']['freefree'] must be bool, got {type(freefree_val).__name__}"
                     )
                 result["radio_include_freefree"] = freefree_val
+            # Optional 'ir_window' string key (#2763): the IR band L_IR is integrated over.
+            if "ir_window" in sf_dict:
+                from tengri.components.radio.component import IR_WINDOWS
+
+                ir_window_val = sf_dict["ir_window"]
+                if ir_window_val not in IR_WINDOWS:
+                    raise _unknown_name_error(
+                        "radio sf ir_window",
+                        ir_window_val,
+                        frozenset(IR_WINDOWS),
+                        keyword="ir_window",
+                    )
+                result["radio_ir_window"] = ir_window_val
             if "nu_ref" in sf_dict:
                 result["radio_sf_nu_ref"] = _parse_radio_nu_ref(sf_dict["nu_ref"])
         else:
@@ -5881,7 +5894,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*", "all_params"}),
     "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "nu_ref"}),
+    "radio.sf": frozenset({"type", "*", "all_params", "freefree", "ir_window", "nu_ref"}),
     "radio.agn": frozenset({"type", "*", "all_params"}),
     "xray": frozenset({"type", "*", "all_params"}),
     "agn": frozenset({"type", "*", "all_params", "norm", "polar_law"}) | _AGN_SUBBLOCK_KEYS,
@@ -6109,6 +6122,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     ),
     "radio.sf": (
         _Structural("freefree", "radio_include_freefree", None),
+        _Structural("ir_window", "radio_ir_window", None),
         _Structural("nu_ref", "radio_sf_nu_ref", None),
     ),
     "foreground": (
@@ -6486,6 +6500,173 @@ def _reject_foreign_variant_keys(
     )
 
 
+#: The composable AGN sub-block categories that carry a block type (``'type'``).
+_AGN_SELECTABLE_CATEGORIES: tuple[str, ...] = ("disc", "torus", "nlr", "blr", "feii", "atten")
+
+
+def _agn_block_selection(agn_top: dict) -> dict[str, str]:
+    """Category -> block type for each composable AGN sub-block dict that names a type.
+
+    Parameters
+    ----------
+    agn_top : dict
+        The user's ``agn`` group dict.
+
+    Returns
+    -------
+    dict of str to str
+        The selected block type of every sub-block that declares a string ``'type'``.
+        A deprecated ``lines`` sub-block contributes its ``nlr`` and ``blr`` types,
+        expanded by the grammar's own :func:`expand_lines_alias`. An explicit
+        ``nlr`` / ``blr`` takes precedence; the grammar refuses the two together.
+    """
+    from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+    selection: dict[str, str] = {}
+    for cat in _AGN_SELECTABLE_CATEGORIES:
+        sub = agn_top.get(cat)
+        if isinstance(sub, dict) and isinstance(sub.get("type"), str):
+            selection[cat] = sub["type"]
+    lines = agn_top.get("lines")
+    if isinstance(lines, dict) and isinstance(lines.get("type"), str):
+        try:
+            nlr_type, blr_type = expand_lines_alias(lines["type"])
+        except ValueError:
+            # An unknown alias is refused by the grammar with its own message.
+            return selection
+        selection.setdefault("nlr", nlr_type)
+        selection.setdefault("blr", blr_type)
+    return selection
+
+
+def _agn_names_read_by_other_blocks(selection: Mapping[str, str], *, skip: str) -> frozenset[str]:
+    """Full ``agn_*`` names the selected blocks of the other categories declare as reads.
+
+    Reads only the consumes table (:data:`AGN_BLOCK_CONSUMES`), the same oracle
+    every other check uses. A signature is not consulted: a signature names
+    parameters a type does not use.
+
+    Parameters
+    ----------
+    selection : mapping of str to str
+        Grammar category -> selected block type.
+    skip : str
+        The category being validated; its own row is not consulted here.
+
+    Returns
+    -------
+    frozenset of str
+        Full parameter names read by the other selected blocks.
+    """
+    from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
+
+    names: set[str] = set()
+    for cat, block_type in selection.items():
+        if cat == skip or block_type in (None, "none"):
+            continue
+        consumes_cat = _AGN_CONSUMES_CATEGORY.get(cat, cat)
+        names |= AGN_BLOCK_CONSUMES.get((consumes_cat, block_type), frozenset())
+    return frozenset(names)
+
+
+def _reject_inert_agn_subblock_keys(
+    category: str,
+    sub: dict,
+    selection: Mapping[str, str],
+    param_partition: dict[str, str],
+) -> None:
+    """Raise on an explicit key that the selected AGN block type never reads.
+
+    The key must belong to ``agn.<category>`` and be absent from the selected
+    type's declared reads (:func:`_agn_subblock_declared_params`), and no other
+    selected block may take it as an argument. Such a key is accepted and then
+    dropped without effect, which is a silent failure (design G3).
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key: ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``, ``"feii"`` or ``"atten"``.
+    sub : dict
+        The user's sub-block dict, with a string ``'type'``.
+    selection : mapping of str to str
+        The whole composable selection, for the selection-conditioned reads.
+    param_partition : dict
+        Full parameter name -> owning group.
+
+    Raises
+    ------
+    ParameterError
+        Naming the refused keys, the selected type, and the block types that do
+        read each key.
+    """
+    block_type = sub.get("type")
+    if not isinstance(block_type, str):
+        return
+    group = f"agn.{category}"
+    spelling_to_full = {
+        spelling: name
+        for name, owner in param_partition.items()
+        if owner == group
+        for spelling in _name_spellings([name])
+    }
+    declared = _agn_subblock_declared_params(category, block_type, selection=selection)
+    if declared is None:
+        return
+    # A selected block in another category may read this category's parameter
+    # (the Synthesizer NLR/BLR read agn_log_mbh / agn_log_ledd, #2634); the
+    # disc row alone cannot record that, so the other rows are consulted.
+    read_elsewhere = _agn_names_read_by_other_blocks(selection, skip=category)
+    foreign = sorted(
+        key
+        for key in sub
+        if key in spelling_to_full
+        and spelling_to_full[key] not in declared
+        and spelling_to_full[key] not in read_elsewhere
+    )
+    if not foreign:
+        return
+    readers: dict[str, list[str]] = {}
+    for key in foreign:
+        full = spelling_to_full[key]
+        readers[key] = sorted(
+            other
+            for other in _agn_registered_block_types(category)
+            if other != block_type
+            and full
+            in (_agn_subblock_declared_params(category, other, selection=selection) or frozenset())
+        )
+    clauses = []
+    for key in foreign:
+        who = ", ".join(repr(t) for t in readers[key]) or "no registered type of this category"
+        clauses.append(f"{key!r} is read by {who}")
+    many = len(foreign) > 1
+    noun, pronoun = ("keys", "them") if many else ("key", "it")
+    offending = ", ".join(repr(k) for k in foreign)
+    raise ParameterError(
+        f"agn {category!r} type {block_type!r} does not read the {noun} {offending}, "
+        f"so writing {pronoun} here would be silently ignored. {'; '.join(clauses)}. "
+        f"Select a block that reads the {noun}, or drop {pronoun}."
+    )
+
+
+def _agn_registered_block_types(category: str) -> tuple[str, ...]:
+    """Registered block types of one composable AGN category, sorted.
+
+    Parameters
+    ----------
+    category : str
+        Sub-block key, as in :data:`_AGN_SELECTABLE_CATEGORIES`.
+
+    Returns
+    -------
+    tuple of str
+        The registered type names, the way the grammar spells them.
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    return tuple(sorted(AGN_BLOCKS.get(_AGN_CONSUMES_CATEGORY.get(category, category), {})))
+
+
 def _laws_reading_hint(group: str, foreign: list[str]) -> str:
     """Name the laws (or radio AGN models) that read a key the selected one does not.
 
@@ -6775,6 +6956,7 @@ def _validate_user_keys(
                 "entries."
             )
         elif top_key == "agn":
+            agn_selection = _agn_block_selection(top_val)
             for sub_name in _AGN_SUBBLOCK_KEYS:
                 sub = top_val.get(sub_name)
                 if not isinstance(sub, dict):
@@ -6783,6 +6965,8 @@ def _validate_user_keys(
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
                 sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                if sub_name in _AGN_SELECTABLE_CATEGORIES:
+                    _reject_inert_agn_subblock_keys(sub_name, sub, agn_selection, param_partition)
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(
@@ -8659,6 +8843,34 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 # ── Inverse: Parameters to nested-dict form ────────────────────────────────
 
 
+def _agn_emittable_names(group_name: str, spec: Parameters) -> frozenset[str] | None:
+    """Full names an AGN sub-block of ``spec`` may emit: what its selected type declares.
+
+    Parameters
+    ----------
+    group_name : str
+        ``"agn.<category>"`` for one composable sub-block.
+    spec : Parameters
+        The Parameters being serialized.
+
+    Returns
+    -------
+    frozenset of str or None
+        The declared set for the selected type (companions included), or ``None`` when the
+        block has no selected type or the type is not registered.
+    """
+    category = group_name.split(".", 1)[1]
+    block_type = _extract_group_type(group_name, spec)
+    if block_type is None:
+        return None
+    selection = {}
+    for sub in _AGN_SELECTABLE_CATEGORIES:
+        selected = _extract_group_type(f"agn.{sub}", spec)
+        if selected is not None:
+            selection[sub] = selected
+    return _agn_subblock_declared_params(category, block_type, selection=selection)
+
+
 def parameters_to_groups(spec: Parameters) -> dict:
     """Convert a Parameters back to nested-dict form.
 
@@ -8823,6 +9035,13 @@ def parameters_to_groups(spec: Parameters) -> dict:
             read = _RADIO_AGN_READS_BY_MODEL.get(getattr(spec, "radio_agn_model", None))
             if read is not None:
                 param_names = [name for name in param_names if name in read]
+        elif group_name.startswith("agn.") and group_name != "agn":
+            # An AGN sub-block emits only the names its selected type declares:
+            # the same declared set the explicit-key refusal checks, so a dict
+            # this emitter writes is one the grammar accepts back.
+            declared = _agn_emittable_names(group_name, spec)
+            if declared is not None:
+                param_names = [name for name in param_names if name in declared]
 
         # Handle nested groups (dust.emission, agn.*)
         if "." in group_name:
@@ -8905,7 +9124,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # from the round-trip entirely. The MW foreground screen (#297) is the
     # standing case: it has three settings and no fitted parameters.
     for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
-        if group_name in result:
+        # A dotted name (``radio.sf``) lives NESTED under its parent: testing the
+        # flat key never matched, so a spec whose sub-block had already been
+        # emitted grew a stray top-level ``'radio.sf'`` that ``parse_groups``
+        # refuses on the way back in.
+        parent, _, subkey = group_name.partition(".")
+        if (subkey and subkey in result.get(parent, {})) or (not subkey and group_name in result):
             continue
         type_value = _extract_group_type(group_name, spec)
         pending: dict = {} if type_value is None else {"type": type_value}
@@ -8914,7 +9138,10 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Emit the group only when a setting actually fired: a bare type is
         # the business of the block above, which knows which are non-default.
         if len(pending) > n_before:
-            result[group_name] = pending
+            if subkey:
+                result.setdefault(parent, {})[subkey] = pending
+            else:
+                result[group_name] = pending
 
     # Handle top-level settings. No `apply_igm`: the igm group carries
     # activation on its own (``type: "none"`` when off, omitted when off and

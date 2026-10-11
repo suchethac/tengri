@@ -677,6 +677,10 @@ class DerivedState:
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None
+    # The L_IR the radio q relations were normalized on [Lsun] and its log10 [dex]:
+    # the ``ir_window`` band luminosity, equal to ``L_ir`` under ``ir_window='total'``.
+    radio_L_ir_input: jnp.ndarray | None = None
+    radio_log_L_ir_input: jnp.ndarray | None = None
     sed_xray: jnp.ndarray | None = None
     # log10 2-10 keV luminosities [dex re erg/s] of the emitted HMXB + LMXB terms
     # and of the emitted AGN corona (-inf without an AGN): the band integrals of
