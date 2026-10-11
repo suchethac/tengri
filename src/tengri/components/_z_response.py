@@ -107,12 +107,26 @@ def build_z_table(
     return {NODES_KEY: nodes, VALUES_KEY: values}
 
 
-def z_bracket(nodes: jnp.ndarray, z: Any) -> tuple[jnp.ndarray, jnp.ndarray]:
+def _clamp_unit(t: Any) -> Any:
+    """Clamp a bracket weight to ``[0, 1]`` without halving the derivative at 0 or 1.
+
+    ``jnp.clip`` splits the tie at a boundary, so a redshift sitting exactly on
+    a table node lost half its gradient there. This where-form keeps the
+    derivative on the closed interval and holds the value flat outside it.
+    """
+    return jnp.where(t < 0.0, 0.0, jnp.where(t > 1.0, 1.0, t))
+
+
+def z_bracket(
+    nodes: jnp.ndarray, z: Any, *, extrapolate: bool = False
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Lower bracketing node and the two linear weights for ``z``.
 
-    Linear in ``ln(1+z)``. A ``z`` outside the table holds the end node (the
-    weights are clipped), so the interpolant is continuous and differentiable
-    on the table and flat beyond it.
+    Linear in ``ln(1+z)``. By default a ``z`` outside the table holds the end
+    node (the weights are clamped), so the interpolant is continuous and flat
+    beyond the table. With ``extrapolate=True`` the edge cell's line continues
+    past the table instead, so the derivative in ``z`` is nonzero there. Use it
+    when the redshift prior reaches past the table.
 
     Parameters
     ----------
@@ -121,6 +135,9 @@ def z_bracket(nodes: jnp.ndarray, z: Any) -> tuple[jnp.ndarray, jnp.ndarray]:
         over a law with redshift breakpoints carries a node on each.
     z : scalar
         Evaluation redshift. [dimensionless]
+    extrapolate : bool, optional
+        Continue the edge cell's line past the table ends instead of holding
+        the end node. Nodes and interior weights are identical either way.
 
     Returns
     -------
@@ -138,11 +155,15 @@ def z_bracket(nodes: jnp.ndarray, z: Any) -> tuple[jnp.ndarray, jnp.ndarray]:
     n = nodes.shape[0]
     i0 = jnp.clip(jnp.searchsorted(nodes, x, side="right") - 1, 0, n - 2).astype(jnp.int32)
     lo, hi = nodes[i0], nodes[i0 + 1]
-    t = jnp.clip((x - lo) / (hi - lo), 0.0, 1.0)
+    t = (x - lo) / (hi - lo)
+    if not extrapolate:
+        t = _clamp_unit(t)
     return i0, jnp.stack([1.0 - t, t])
 
 
-def interp_z_table(table: Mapping[str, jnp.ndarray], z: Any) -> jnp.ndarray:
+def interp_z_table(
+    table: Mapping[str, jnp.ndarray], z: Any, *, extrapolate: bool = False
+) -> jnp.ndarray:
     """Read a tabulated response at the evaluation redshift ``z``.
 
     Parameters
@@ -162,6 +183,6 @@ def interp_z_table(table: Mapping[str, jnp.ndarray], z: Any) -> jnp.ndarray:
     nodes = table[NODES_KEY]
     if nodes.shape[0] == 1:
         return values[0]
-    i0, w = z_bracket(nodes, z)
+    i0, w = z_bracket(nodes, z, extrapolate=extrapolate)
     rows = jax.lax.dynamic_slice_in_dim(values, i0, 2, axis=0)
     return jnp.tensordot(w.astype(values.dtype), rows, axes=1)

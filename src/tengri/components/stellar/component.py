@@ -3842,7 +3842,7 @@ class StellarSEDComponent:
                 # contracts the population-weight axes of the four bracketing rows
                 # first, so the cubic is formed on the (n_age, ...) quantity that
                 # is consumed rather than on every (n_met, n_age, ...) entry.
-                return pchip_interp_local(z_grid, table, z, reduce=reduce)
+                return pchip_interp_local(z_grid, table, z, reduce=reduce, extrapolate=True)
 
             def _per_age(w):
                 return lambda rows: jnp.einsum("ma,zma...->za...", w, rows)
@@ -3860,7 +3860,7 @@ class StellarSEDComponent:
                         axis=1,
                     )
 
-                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows)
+                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows, extrapolate=True)
                 return both[0], both[1]
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt) -> per-age (n_age, n_filt).

@@ -2028,7 +2028,7 @@ def nebular_subband_decomposition(packed, redshift, table):
     **JIT-compatible / gradient-safe**: yes.
     """
     lines, cont = packed[:-1], packed[-1]
-    i, w = z_bracket(table.cont_lnz, redshift)
+    i, w = z_bracket(table.cont_lnz, redshift, extrapolate=True)
     frac_t, lam_t = table.cont_subband_frac, table.cont_subband_waves_rest
     if table.cont_lnz.shape[0] == 1:
         frac, lam_c = frac_t[0], lam_t[0]
