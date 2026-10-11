@@ -521,9 +521,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        return _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, wavelength, point, l_scale
-        )
+        return _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
 
     return fritz_grid
 
@@ -612,12 +610,8 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
             agn_fritz_oa,
             agn_fritz_psy,
         )
-        disk = _interpolate_and_normalize(
-            disk_jax, wave_grid, axes, wavelength, point, l_scale
-        )
-        dust = _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, wavelength, point, l_scale
-        )
+        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
+        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
         return FritzComponents(disk=disk, dust=dust)
 
     return fritz_components

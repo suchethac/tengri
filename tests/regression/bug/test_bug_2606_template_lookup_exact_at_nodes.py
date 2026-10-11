@@ -77,7 +77,7 @@ def skirtor_grid():
 
     try:
         return skirtor.load_skirtor_grid()
-    except Exception as exc:  # missing template data
+    except OSError as exc:  # grid file absent and not downloadable
         pytest.skip(f"SKIRTOR template grid unavailable: {exc}")
 
 
@@ -87,7 +87,7 @@ def fritz_grid():
 
     try:
         return fritz.load_fritz_grid(fritz._find_fritz_grid())
-    except Exception as exc:  # missing template data
+    except OSError as exc:  # grid file absent and not downloadable
         pytest.skip(f"Fritz template grid unavailable: {exc}")
 
 
@@ -135,4 +135,6 @@ def test_skirtor_lookup_off_node_is_finite_with_finite_gradient(skirtor_grid):
     val = float(total(jnp.asarray(base)))
     grad = np.asarray(jax.grad(total)(jnp.asarray(base)))
     assert np.isfinite(val)
+    assert val > 0.0, "an off-node lookup of a positive template must be positive"
     assert np.all(np.isfinite(grad))
+    assert np.any(grad != 0.0), "an identically zero gradient would mean the lookup is flat"
