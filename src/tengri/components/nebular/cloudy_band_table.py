@@ -71,7 +71,7 @@ class CloudyBandTable(NamedTuple):
         [erg/s/Hz per Lsun].
     line_wavelengths : ndarray, shape (n_lines,)
         Rest-frame line wavelengths [Angstrom]; the Ly-alpha escape is applied
-        through :func:`~tengri.components.nebular._shared.apply_lya_escape` on
+        through ``apply_lya_escape`` (in ``tengri.components.nebular._shared``) on
         these, the same helper the per-call backend uses.
     line_sigma_kms : float
         Velocity width the line coefficients were rendered at.
