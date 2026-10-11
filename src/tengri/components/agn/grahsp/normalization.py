@@ -93,7 +93,7 @@ def native_power_nm(wave_nm: Array, l_lambda_nm: Array) -> Array:
     -------
     ndarray, shape ()
         :math:`\int L_\lambda\,\mathrm{d}\lambda`, taken with the power law the
-        template is resampled with (see :func:`native_bolometric_nu`).
+        template is resampled with (see ``native_bolometric_nu``).
     """
     wave_aa = jnp.asarray(wave_nm) * 10.0
     l_lambda_aa = jnp.asarray(l_lambda_nm) * 0.1
