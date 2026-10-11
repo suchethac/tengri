@@ -119,7 +119,10 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
-from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._line_ingest import (
+    CLOUDY_LABEL_AIR_MAX_AA,
+    catalog_air_to_vacuum,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -543,17 +546,22 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
         """Pad a 1D array to target shape."""
         return np.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
-    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ...). Convert them
+    # The file stores Cloudy's AIR labels (6562.80, 5006.84, ..., and the
+    # infrared ones: Pa-alpha 18751.0, [Ne II] 12.8101 micron). Convert them
     # exactly once, here; everything downstream is vacuum. The conversion is
     # monotonic, so the sort order below is unchanged.
-    nn_line_wav = catalog_air_to_vacuum(npz["nn_line_wavelength"])
+    nn_line_wav = catalog_air_to_vacuum(
+        npz["nn_line_wavelength"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+    )
 
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
-        sorted_line_wav=catalog_air_to_vacuum(npz["sorted_line_wavelength"]),
+        sorted_line_wav=catalog_air_to_vacuum(
+            npz["sorted_line_wavelength"], max_air_aa=CLOUDY_LABEL_AIR_MAX_AA
+        ),
         nn_line_wav=nn_line_wav,
         line_old_idx=np.asarray(npz["line_old_idx"]),
         cont_wav=np.asarray(npz["cont_wavelength"]),

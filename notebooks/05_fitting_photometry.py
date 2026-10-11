@@ -152,7 +152,7 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# The no-argument default is tuned for a 15-20 s posterior; this notebook asks for stricter convergence with 300 warmup steps and 600 draws per chain, about 30 s on this machine. The sampler runs four NUTS chains in parallel and marginalizes the stellar mass analytically, so it never has to be drawn.
+# The no-argument default is tuned for a 15–20 s posterior; this notebook asks for stricter convergence with 300 warmup steps and 600 draws per chain, about 30 s on this machine. The sampler runs four NUTS chains in parallel and marginalizes the stellar mass analytically, so it never has to be drawn.
 
 # %%
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
