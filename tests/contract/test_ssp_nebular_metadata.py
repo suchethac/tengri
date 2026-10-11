@@ -40,6 +40,9 @@ def _write_tiny_ssp(path: Path, **attrs) -> Path:
         f["ssp_lg_age_gyr"] = np.linspace(-3.0, 1.0, n_age)
         f["ssp_lgmet"] = np.array([-2.5, -1.8])
         f["ssp_mass_remaining"] = np.full((n_met, n_age), 0.7)
+        # A toy grid under a catalog name: declared synthetic so the surviving-mass
+        # registry (#2751) does not hold its made-up nodes to the real grid's table.
+        f.attrs["synthetic"] = True
         for key, value in attrs.items():
             f.attrs[key] = value
     return path

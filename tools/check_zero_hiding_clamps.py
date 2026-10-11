@@ -203,7 +203,14 @@ from collections.abc import Sequence
 #: ``dust_T`` (prior 20-80 K, validated > 0) and the Schreiber libraries that apply the boost
 #: tabulate 15-99 K, so the 1 K floor never binds for a valid model; it only keeps a traced
 #: zero from producing inf.
-EXPECTED_SITES = 84
+#:
+#: 85 -> 84 with the #2683 follow-up merged onto #2766: the follow-up's own count (83, one
+#: clamp retired with the histogram kernel) plus #2766's ``cmb_luminosity_boost`` site.
+#:
+#: 84 -> 83 with #2745: the SKIRTOR publication path integrates the disc and dust in closed
+#: form (``native_bolometric_nu``) instead of dividing a grid trapezoid by a clamped integral;
+#: one clamped-denominator division is gone.
+EXPECTED_SITES = 83
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
