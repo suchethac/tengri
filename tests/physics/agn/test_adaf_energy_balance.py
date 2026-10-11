@@ -257,7 +257,8 @@ def test_gradients_finite_at_box_corners_float64(alpha, beta, frac):
         return _adaf_electron_temperature(m_, md, a_, b_, 1e-3)
 
     grads = jax.grad(lambda p: jnp.log(t_of(p)))(jnp.asarray([1e8, mdot, alpha, beta]))
-    assert bool(jnp.all(jnp.isfinite(grads)))
+    assert bool(jnp.all(jnp.isfinite(grads))), f"non-finite T_e gradient {grads}"
+    assert bool(jnp.any(grads != 0.0)), f"identically zero T_e gradient {grads}"
 
 
 @pytest.mark.gradient
@@ -273,7 +274,8 @@ def test_gradients_finite_at_box_corners_float32(alpha):
     with jax.enable_x64(False):
         p = jnp.asarray([1e8, mdot, alpha, 0.5], dtype=jnp.float32)
         grads = jax.grad(lambda q: jnp.log(t_of(q)))(p)
-        assert bool(jnp.all(jnp.isfinite(grads)))
+        assert bool(jnp.all(jnp.isfinite(grads))), f"non-finite T_e gradient {grads}"
+        assert bool(jnp.any(grads != 0.0)), f"identically zero T_e gradient {grads}"
 
 
 # ── (g) The alpha_c = 1 junction between the balance and Eq. 40 ───────────

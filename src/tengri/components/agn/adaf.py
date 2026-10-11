@@ -65,6 +65,7 @@ _THETA_PER_TE: float = _K_BOLTZ / (_M_ELECTRON * _C_LIGHT**2)
 
 # Natural logs of 10 and of L_sun [erg/s] for the log-space power bookkeeping (#2783).
 _LN10: float = float(np.log(10.0))
+_LOG_3K_OVER_H: float = float(np.log(3.0 * _K_BOLTZ / _H_PLANCK))
 _LOG_LSUN_ERG: float = float(np.log(_LSUN_ERG))
 
 
@@ -1009,6 +1010,7 @@ class AdafState(NamedTuple):
     l_brems0: jnp.ndarray  # bremsstrahlung level before normalization [erg/s/Hz]
     log_l_nu_p: jnp.ndarray  # ln of l_nu_p, formed in log space (#2825)
     log_l_brems0: jnp.ndarray  # ln of l_brems0, formed in log space (#2825)
+    log_nu_max_c: jnp.ndarray  # ln of nu_max_c [Hz], formed from ln T_e (#2825)
     log_numer: jnp.ndarray  # ln of the L_bol power 10**agn_log_lbol * L_sun [erg/s]
     log_integral: jnp.ndarray  # ln of the power of the unnormalized shape [erg/s]
     lum_ratio: jnp.ndarray  # linear agn_lum_ratio multiplying the spectrum [dimensionless]
@@ -1022,9 +1024,18 @@ def _adaf_log_synch_compton(nu_, s):
     ceiling ``exp(-nu/nu_max_c)`` (clipped at 500). Each factor is a log, so the term is
     formed in log space (#2783).
     """
-    log_ratio = jnp.log(nu_) - jnp.log(s.nu_p)
+    log_nu = jnp.log(nu_)
+    log_ratio = log_nu - jnp.log(s.nu_p)
     log_shape = jnp.where(nu_ <= s.nu_p, 0.4 * log_ratio, -s.alpha_c * log_ratio)
-    log_shape = log_shape - s.nu_min / nu_ - jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0)
+    # Both cutoff arguments are exp(difference of logs). The quotient nu / nu_max_c has a
+    # reverse-mode partial -nu / nu_max_c**2, and nu_max_c**2 ~ 1e39 exceeds the float32
+    # maximum. The ceiling reads the logarithm carried by the state: differentiating
+    # log(nu_max_c) from the linear field puts a cotangent of order 1e-39 on nu_max_c, a
+    # float32 subnormal that the backend flushes to zero, which dropped the T_e derivative of
+    # the Comptonization ceiling (1% of d(sum L_nu)/dT_e, #2825).
+    low_cut = jnp.exp(jnp.log(s.nu_min) - log_nu)
+    ceiling = jnp.clip(jnp.exp(log_nu - s.log_nu_max_c), 0.0, 500.0)
+    log_shape = log_shape - low_cut - ceiling
     return s.log_l_nu_p + log_shape
 
 
@@ -1164,6 +1175,7 @@ def adaf_scalar_state(
     # high cutoff at the Comptonization ceiling 3 k T_e / h.
     nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
     nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
+    log_nu_max_c = _LOG_3K_OVER_H + jnp.log(t_e)
     shape = AdafState(
         t_e,
         alpha_c,
@@ -1174,6 +1186,7 @@ def adaf_scalar_state(
         l_brems0,
         log_l_nu_p,
         log_l_brems0,
+        log_nu_max_c,
         0.0,
         0.0,
         1.0,
@@ -1200,11 +1213,14 @@ def adaf_scalar_state(
         for lo, hi in pairwise(breaks)
     ]
     t_scale = _K_BOLTZ * t_e / _H_PLANCK
+    # nu_hi = 100 t_scale, so (nu_hi - nu_lo) / t_scale = 100 - nu_lo / t_scale; the quotient
+    # is exp(log - log) because t_scale**2 ~ 1e39 overflows the float32 reverse partial.
+    lo_over_scale = jnp.exp(jnp.log(nu_lo) - jnp.log(t_scale))
     log_brems = (
         log_l_brems0
         + jnp.log(t_scale)
-        - nu_lo / t_scale
-        + jnp.log1p(-jnp.exp(-(nu_hi - nu_lo) / t_scale))
+        - lo_over_scale
+        + jnp.log1p(-jnp.exp(-(100.0 - lo_over_scale)))
     )
     log_integral = logsumexp(jnp.stack([*log_segments, log_brems]))
 
