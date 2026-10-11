@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Line-of-sight obscuration of a library torus, read from the library's disc column.
 
 On the untied path (no SKIRTOR-normalized disc) the central engine behind a SKIRTOR or
