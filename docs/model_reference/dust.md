@@ -228,7 +228,29 @@ The template file `data/schreiber2016_templates.h5` is required: the model raise
 
 **Temperature interpolation.** The templates are interpolated linearly between the 1 K nodes: the model is exact at a node, and its derivative with respect to `dust_T` is discontinuous at every node. For the 8 to 24 $\mu$m band power the slope jumps by a median of 42% across the 83 interior nodes, so a gradient-based sampler sees a kink at each integer temperature.
 
-**No CMB term.** This model has no CMB heating or contrast correction: the redshift is not used. The rest-frame contrast against the CMB (`cmb_contrast_factor`) is $0.94$, $0.83$ and $0.73$ at rest-frame 250, 500 and 1000 $\mu$m for $T_{\rm dust} = 35$ K at $z = 4$, and $0.79$, $0.64$ and $0.55$ at $z = 6$ (0.87, 0.71 and 0.59 at 25 K, $z = 4$). The sub-millimeter flux of a $z \gtrsim 4$ galaxy is therefore overestimated by these factors. The dust-emission types that apply the CMB heating and contrast corrections are `modified_blackbody` (alias `mbb`), `graybody` and `casey2012`; choose one of them for $z \gtrsim 4$ sub-millimeter fits.
+**CMB heating and contrast.** Opt in with `dust_emission={'type': 'schreiber2016', 'cmb': True}`; see [CMB heating and contrast for the tabulated models](app-cmb-tabulated). Without the key the redshift is not used. The rest-frame contrast against the CMB is $0.94$, $0.83$ and $0.73$ at rest-frame 250, 500 and 1000 $\mu$m for $T_{\rm dust} = 35$ K at $z = 4$, and $0.79$, $0.64$ and $0.55$ at $z = 6$ (0.87, 0.71 and 0.59 at 25 K, $z = 4$), so the sub-millimeter flux of a $z \gtrsim 4$ galaxy is overestimated by these factors when the key is left off.
+
+(app-cmb-tabulated)=
+
+### CMB Heating and Contrast for the Tabulated Models
+
+`modified_blackbody`, `graybody` and `casey2012` apply the CMB corrections of da Cunha et al. (2013) unconditionally. The tabulated models (`schreiber2016`, `schreiber2018`, `draine_li2007`, `draine_li2014`, `dale2014`, `dale2014_cigale`, `themis`, `astrodust`, `dh02_ce01`, `bosa`) take them as an opt-in, `dust_emission={'type': ..., 'cmb': True}`, off by default (the output is then bit-identical to a build without the key). The redshift is the model's own, so a free redshift is differentiated through and `WavePrecomp` tabulates the per-filter response over the redshift range.
+
+**Contrast, all tabulated models.** The emission is multiplied by Eq. 18 of da Cunha et al. (2013),
+$$C_\nu = 1 - \frac{B_\nu\bigl(T_{\rm CMB}(z)\bigr)}{B_\nu\bigl(T_{\rm d}(z)\bigr)}, \qquad T_{\rm CMB}(z) = T_{\rm CMB,0}(1+z),$$ (eq-cmb-contrast-tabulated)
+with $T_{\rm CMB,0} = 2.725$ K, the value used by the analytic models. It is evaluated at rest-frame frequency.
+
+**Heating, single-temperature libraries only.** `schreiber2016` and `schreiber2018` have a dust temperature parameter, so the template is read at the heated temperature of Eq. 12,
+$$T_{\rm d}(z) = \Bigl[T_{\rm d,0}^{\,4+\beta} + T_{\rm CMB,0}^{\,4+\beta}\bigl((1+z)^{4+\beta} - 1\bigr)\Bigr]^{1/(4+\beta)},$$ (eq-cmb-heating-tabulated)
+with $\beta = 1.8$ (these libraries carry no emissivity index of their own; it is the analytic models' default), and scaled by the luminosity boost the paper gives in Sect. 2.2,
+$$\frac{L_{\rm dust}(z)}{L_{\rm dust}(0)} = \Bigl[\frac{T_{\rm d}(z)}{T_{\rm d,0}}\Bigr]^{4+\beta},$$
+before the contrast. The boost is the CMB energy the dust absorbs; the contrast removes it again from what is detected, so the detected power stays near $L_{\rm IR}$. A 35 K galaxy at $z = 4$ has $T_{\rm d}(z) = 35.03$ K and a boost of $1.004$; at $z = 6$ the boost is $1.03$.
+
+**Why only contrast for the radiation-field libraries.** Draine and Li, Dale et al., THEMIS, Astrodust, Dale and Helou/Chary and Elbaz and BOSA have no dust temperature: a spectrum is a mixture of grains whose temperatures are set by a starlight intensity, plus stochastically heated PAH and small-grain emission that the CMB does not heat at all. There is no single shift of such a template that is the CMB's effect, so the spectrum is left as tabulated and only the contrast is applied. Its dust temperature is read off the template, as the temperature of the $\nu^{\beta}B_\nu$ spectrum with the same mean frequency over $\lambda \ge 50\,\mu$m (a few K above the temperature of the cold grains, because the warm emission longward of 50 $\mu$m is included), and heated by Eq. 12 so that it stays above $T_{\rm CMB}(z)$. This is an approximation: it is exact for a single-temperature modified blackbody, but for a two-temperature mixture the mean-frequency temperature leans to the hot component while the CMB penalty is set by the cold one, so the detected flux is overestimated by about 5--15 % at $z = 4$ and 20--100 % at $z = 6$ when a 20--25 K cold component carries a large share (2--8 % when it is a 5 % hot component). It also does not reproduce the heating of the cold grains. Where the cold grains matter at $z \gtrsim 6$, prefer `schreiber2016` or an analytic model.
+
+**Luminosity boost.** The Schreiber libraries follow Sect. 2.2 of da Cunha et al. (2013) and include the heated-dust luminosity boost $[T_{\rm d}(z)/T_{\rm d,0}]^{4+\beta}$. The default-on analytic models (`modified_blackbody`, `graybody`, `casey2012`) omit it, which under-predicts their emission by up to about 1.8 times for 20 K dust at $z = 6$ (1.03 times for 35 K).
+
+**Normalization.** With `cmb=True` the frequency integral of `sed_dust_ir` is no longer exactly $L_{\rm IR}$: the contrast removes the undetectable part by construction. This differs from the analytic models, which renormalize to $L_{\rm IR}$ at the heated temperature and then apply the contrast, so they detect less than $L_{\rm IR}$ at high redshift.
 
 ## References
 

@@ -71,6 +71,7 @@ import numpy as np
 
 from tengri._cache_keys import frozen_dataclass_key
 from tengri._deprecated import UNSET, resolve_renamed_flag
+from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
@@ -2970,6 +2971,7 @@ class SEDModel:
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
         self._validate_alpha_fe_identifiability(spec, ssp_data)
+        self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
         param_map_deltas.append(self._init_agb_dust_param_map(spec))
@@ -3985,6 +3987,42 @@ class SEDModel:
                         stacklevel=3,
                     )
 
+    def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
+        """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).
+
+        A star formed before the grid's oldest template is assigned to that
+        template by both age kernels (mass is conserved, colors are those of the
+        oldest template). The condition depends only on the declared redshift
+        range and the grid, so it is decided here, once, from
+        ``age_at_z(z_min) > oldest template age``; nothing runs per call and
+        nothing is traced, so it is silent under ``jax.jit``.
+        """
+        if ssp_data is None:
+            return
+        try:
+            redshift_dist = spec.get_distribution("redshift")
+            z_min = float(redshift_dist.bounds[0])
+        except (KeyError, AttributeError, TypeError, ValueError, NotImplementedError):
+            return  # no concrete redshift range declared (per-galaxy redshift column)
+        lg_ages = np.asarray(ssp_data.ssp_lg_age_gyr)
+        oldest_gyr = float(10.0 ** lg_ages[np.isfinite(lg_ages)].max())
+        age_gyr = float(age_at_z(z_min))
+        if age_gyr <= oldest_gyr:
+            return
+        warn_measured(
+            f"The SSP grid's oldest template is {oldest_gyr:.3f} Gyr but the universe is "
+            f"{age_gyr:.3f} Gyr old at redshift {z_min:g}. Stars formed in that gap are "
+            f"older than every template, so both age kernels assign them to the oldest "
+            f"one: the formed mass is conserved, and those stars carry the colors of a "
+            f"{oldest_gyr:.3f} Gyr population. Use a grid whose oldest template reaches "
+            f"{age_gyr:.3f} Gyr (e.g. MIST) to remove the approximation.",
+            SFHBeyondOldestTemplateWarning,
+            stacklevel=3,
+            oldest_template_gyr=oldest_gyr,
+            age_at_z_gyr=age_gyr,
+            z_min=z_min,
+        )
+
     def _validate_alpha_fe_identifiability(self, spec, ssp_data):
         """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
 
@@ -4124,6 +4162,8 @@ class SEDModel:
         # emission (#2533). When True, emitted photons pass through the diffuse
         # dust screen once. Default False (off, bit-identical).
         self._dust_ir_diffuse_screen = bool(getattr(spec, "dust_ir_diffuse_screen", False))
+        # Opt-in CMB heating / contrast of a tabulated IR model (#2766).
+        self._dust_ir_cmb = bool(getattr(spec, "dust_ir_cmb", False))
 
         # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
         # attenuation law; 'off' means no dust at all). Both store placeholder
@@ -11865,6 +11905,7 @@ class SEDModel:
             dust_t_birth_yr=getattr(self, "_dust_t_birth_yr", 1e7),
             dust_transition_width_dex=getattr(self, "_dust_transition_width_dex", 0.0),
             dust_ir_diffuse_screen=getattr(self, "_dust_ir_diffuse_screen", False),
+            dust_ir_cmb=getattr(self, "_dust_ir_cmb", False),
             dust_log_l_ir_requested=self._requested_dust_log_L_ir(),
             dust_fdust_credit_active=self._fdust_credit_active(),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
