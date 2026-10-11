@@ -292,6 +292,12 @@ the forward model, and listed oldest first within each group.
   Hagen & Done (2023), [arXiv:2304.01253](https://arxiv.org/abs/2304.01253).
 - GRAHSP: composable AGN and host SED model. Buchner et al. (2024),
   [arXiv:2405.19297](https://arxiv.org/abs/2405.19297).
+- CAT3D-Wind clumpy-disc-plus-polar-wind torus model. Hönig & Kishimoto
+  (2017), [doi:10.3847/2041-8213/aa6838](https://doi.org/10.3847/2041-8213/aa6838).
+- Type-1 quasar SED template. Richards et al. (2006),
+  [doi:10.1086/506525](https://doi.org/10.1086/506525).
+- Smooth torus SED model. Silva, Maiolino & Granato (2004),
+  [doi:10.1111/j.1365-2966.2004.08380.x](https://doi.org/10.1111/j.1365-2966.2004.08380.x).
 
 ### Radio and X-ray
 
@@ -300,6 +306,9 @@ the forward model, and listed oldest first within each group.
   [doi:10.1146/annurev.aa.30.090192.003043](https://doi.org/10.1146/annurev.aa.30.090192.003043).
 - IR-radio correlation and SFR calibration. Bell (2003),
   [arXiv:astro-ph/0212121](https://arxiv.org/abs/astro-ph/0212121).
+- Far-infrared band (42.5-122.5 um) definition of the IR-radio ratio q, the
+  ``ir_window='fir'`` option. Helou (1985),
+  [doi:10.1086/184556](https://doi.org/10.1086/184556).
 - Mass- and redshift-dependent IR-radio correlation at 1.4 GHz,
   ``delvecchio2021``. Delvecchio et al. (2021),
   [doi:10.1051/0004-6361/202039647](https://doi.org/10.1051/0004-6361/202039647).
