@@ -236,7 +236,10 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
         ``fn(wavelength, agn_log_lbol, agn_cos_inc, agn_a_cat3d,
         agn_fwd_cat3d, agn_torus_frac, **_) -> L_nu [erg/s/Hz]``.
     """
-    return functools.partial(cat3d_wind_sed_from_grid, load_cat3d_wind_grid(grid_path))
+    grid = load_cat3d_wind_grid(grid_path)
+    sed_fn = functools.partial(cat3d_wind_sed_from_grid, grid)
+    sed_fn.native_wave = np.asarray(grid.wave_grid)
+    return sed_fn
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (

@@ -52,7 +52,6 @@ and that these columns measurably carry.
 | `fsps_prsc_miles_chabrier.h5` | FSPS with PARSEC isochrones and the MILES library, Chabrier IMF — the default grid (`DEFAULT_SSP`) | generated from upstream FSPS / python-fsps | FSPS itself MIT; python-fsps MIT; SSP grid derived under those terms |
 | `ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` | The same PARSEC / MILES / Chabrier grid with FSPS nebular emission switched on (log U = -3.0, log Z_gas = 0.0) | generated from upstream FSPS / python-fsps | as above |
 | `bpss_stars_c3k_a_chabrier.h5` | BPASS binary population synthesis with the C3K alpha-enhanced library, Chabrier IMF | generated from upstream BPASS | Paper-published data; cite Eldridge, Stanway et al. 2017 (PASA 34, e058) |
-| `fsps_mass_remaining_chabrier.h5` | Per-(age, metallicity) surviving-mass fraction for FSPS MIST isochrones + Chabrier IMF; `load_ssp_data` attaches it to matching grids | derived from FSPS | FSPS itself MIT; python-fsps MIT |
 
 SSP filenames follow `<code>_<isochrone>_<library>_<imf>`. The token tables that
 turn each field into a citation live in
