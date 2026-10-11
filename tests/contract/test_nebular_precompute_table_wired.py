@@ -14,7 +14,9 @@ integrals. This file pins the four things that make that safe:
     error of the total photometry at these draws: 9.6e-6 (the band-level worst
     over five draws is 1.7e-4, in test_nebular_cloudy_band_table_accuracy);
 (c) exact mode carries no table and stays at the exact path;
-(d) a free ``neb_eline_sigma_kms`` declines the gate, with the reason recorded.
+(d) a free ``neb_eline_sigma_kms`` declines the gate, with the reason recorded;
+(e) a CLOUDY backend that is not ``grid_interp="linear"`` declines the gate, because the
+    table's contraction reproduces only the linear scheme.
 """
 
 from __future__ import annotations
@@ -222,3 +224,22 @@ def test_free_eline_sigma_declines_the_gate():
     assert "nebular_band_table" not in (template or {})
     assert "neb_eline_sigma_kms" in model._cloudy_band_table_decline
     assert tengri is not None
+
+
+@_SKIP
+def test_non_linear_grid_interp_declines_the_gate(monkeypatch):
+    """(e) A CLOUDY backend on grid_interp='triweight' declines the table, reason recorded."""
+    import functools
+
+    import tengri.components.nebular as nebular_pkg
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+
+    monkeypatch.setattr(
+        nebular_pkg,
+        "CloudyGridBackend",
+        functools.partial(CloudyGridBackend, grid_interp="triweight"),
+    )
+    model = _build(approx=True)
+    template = model._template_data_for_jit()
+    assert "nebular_band_table" not in (template or {})
+    assert "grid_interp='triweight'" in model._cloudy_band_table_decline
