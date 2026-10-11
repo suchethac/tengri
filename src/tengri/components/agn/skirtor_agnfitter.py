@@ -223,9 +223,10 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
     -------
     callable
     """
-    return functools.partial(
-        skirtor_agnfitter_sed_from_grid, load_skirtor_agnfitter_grid(grid_path)
-    )
+    grid = load_skirtor_agnfitter_grid(grid_path)
+    sed_fn = functools.partial(skirtor_agnfitter_sed_from_grid, grid)
+    sed_fn.native_wave = np.asarray(grid.wave_grid)
+    return sed_fn
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
