@@ -206,7 +206,11 @@ from collections.abc import Sequence
 #:
 #: 85 -> 84 with the #2683 follow-up merged onto #2766: the follow-up's own count (83, one
 #: clamp retired with the histogram kernel) plus #2766's ``cmb_luminosity_boost`` site.
-EXPECTED_SITES = 84
+#:
+#: 84 -> 83 with #2745: the SKIRTOR publication path integrates the disc and dust in closed
+#: form (``native_bolometric_nu``) instead of dividing a grid trapezoid by a clamped integral;
+#: one clamped-denominator division is gone.
+EXPECTED_SITES = 83
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

@@ -217,9 +217,10 @@ def convert_bpass(input_dir: Path, output_path: Path, dry_run: bool = False) -> 
     # Validate by loading
     logger.info("Validating...")
     try:
-        from tengri.components.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-        ssp_data = load_ssp_data(str(output_path))
+        # BPASS's surviving mass is pending (#2800): validate with DSPS's fit explicitly.
+        ssp_data = load_ssp_data(str(output_path), mass_remaining="dsps_fit")
         logger.info(f"✓ Loaded successfully: {ssp_data.ssp_flux.shape}")
     except Exception as e:
         logger.error(f"Validation failed: {e}")

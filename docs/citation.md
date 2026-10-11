@@ -98,7 +98,8 @@ the forward model, and listed oldest first within each group.
   synthesis, used as a grid generator. Conroy, Gunn & White (2009),
   [arXiv:0809.4261](https://arxiv.org/abs/0809.4261); and the reference
   implementation, Conroy & Gunn (2010),
-  [arXiv:0911.3151](https://arxiv.org/abs/0911.3151).
+  [arXiv:0911.3151](https://arxiv.org/abs/0911.3151). Its stellar remnants
+  follow Renzini & Ciotti (1993), [doi:10.1086/187068](https://doi.org/10.1086/187068).
 - Carbon-star spectral library extending the FSPS TP-AGB stars redward of
   K. Aringer et al. (2009),
   [arXiv:0905.4415](https://arxiv.org/abs/0905.4415).
