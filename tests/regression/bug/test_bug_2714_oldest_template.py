@@ -31,14 +31,13 @@ BANDS = ["galex_fuv", "sdss_r"]
 KERNELS = ("cic", "dsps")
 #: Share tolerance per (kernel, window). cic carries the second-order error of its
 #: dense integrand at a step (3.8e-6 and 2.9e-5 measured, 16x smaller at 4x the
-#: resolution); the histogram kernel assigns each parcel to one node (zeroth order,
-#: #2683), 5.3e-4 here. The "inside_grid" window puts a step beside the 12.589 Gyr
-#: node, where that assignment moves 1 % of the mass between two nodes: a property
-#: of the kernel that #2714 does not touch, so only cic is held to the reference.
+#: resolution). ``age_kernel='dsps'`` selects the same first-order integration
+#: (#2683), so both names are held to the same tolerances.
 SHARE_TOL = {
     ("cic", "past_oldest"): 1e-5,
     ("cic", "inside_grid"): 1e-4,
-    ("dsps", "past_oldest"): 1e-3,
+    ("dsps", "past_oldest"): 1e-5,
+    ("dsps", "inside_grid"): 1e-4,
 }
 #: constant-SFR windows (lookback Gyr): one ending past the oldest node, one inside.
 WINDOWS = {"past_oldest": (13.5, 0.001), "inside_grid": (12.0, 0.5)}
@@ -162,11 +161,6 @@ def test_grid_without_a_gap_is_unchanged_to_1e_12(ssp_data_mist, obs, kernel, mo
     monkeypatch.setattr(
         C, "_extend_integrand_to_history", lambda fine, tab, ssp, factor=16: (fine, ssp[-1])
     )
-    monkeypatch.setattr(
-        C,
-        "_refined_dsps_sfr_with_fold",
-        lambda lb, fn, kw, extent: (fn(lb, **kw), 0.0),
-    )
     jax.clear_caches()
     m2 = _const_model(ssp_data_mist, obs, kernel, WINDOWS["past_oldest"])
     # Zero-width parcels and one longer sfh_fn call change the reduction order only.
@@ -250,27 +244,6 @@ def test_alpha_enhanced_grid_has_the_same_shares(ssp_data_fsps, obs, kernel):
     got = _age_marginal(m)
     assert abs(got[-1] - ref[-1]) <= SHARE_TOL[(kernel, "past_oldest")]
     assert abs(got[:-1].sum() - ref[:-1].sum()) <= SHARE_TOL[(kernel, "past_oldest")]
-
-
-def test_fold_mass_does_not_depend_on_the_last_float_of_age_z():
-    """A history reaching age(z) puts the same mass on the oldest row at age(z)(1 +- 1e-12).
-
-    The last tail point is exactly the extent, so no comparison against a
-    recomputed 10**log10(t) decides whether it counts.
-    """
-    ages = jnp.asarray(10.0 ** np.linspace(6.0, np.log10(12.589e9), 40))
-    lookback = C._refined_dsps_lookbacks(ages)
-    t_obs_yr = float(age_at_z(0.0)) * 1e9
-    masses = [
-        float(
-            C._refined_dsps_sfr_with_fold(
-                lookback, lambda t, **_: jnp.ones_like(t), {}, t_obs_yr * (1.0 + d)
-            )[1]
-        )
-        for d in (-1e-12, 0.0, 1e-12)
-    ]
-    assert masses[0] == pytest.approx(masses[2], rel=1e-10)
-    assert masses[1] == pytest.approx(t_obs_yr - float(lookback[-1]), rel=1e-10)
 
 
 def _table_state(ssp, obs, kernel):
