@@ -91,6 +91,7 @@ _NIGHTLY_DISCS = [
     # cost profile as relagn/slone_netzer -- nightly rather than every-PR
     # (#1206 §D: fixed, was the sole _GRID_CLASS_XFAIL member).
     "grahsp_sbpl",
+    "grahsp_netzer",
 ]
 _EXACT_DISCS = _PR_DISCS + _NIGHTLY_DISCS
 

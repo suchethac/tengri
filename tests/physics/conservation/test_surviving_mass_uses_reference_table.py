@@ -19,7 +19,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
-from tengri.components.stellar.sps.dsps_wrapper import _load_mass_remaining_reference
+from tengri.components.stellar.sps.mass_remaining_tables import load_companion_table
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 pytestmark = pytest.mark.conservation
@@ -29,7 +29,9 @@ _Z_NODES = (3, 10)
 
 @pytest.fixture(scope="module")
 def mist_chabrier_grid(tmp_path_factory):
-    log_age_yr, lgmet, table = _load_mass_remaining_reference(("mist", "chabrier"))
+    log_age_yr, lgmet, table = load_companion_table(
+        "mass_remaining_mist_chabrier.h5", "mist", "chabrier"
+    )
     n_met, n_age, n_wave = len(lgmet), len(log_age_yr), 200
     wave = np.logspace(3.0, 4.5, n_wave)
     flux = (5000.0 / wave) ** 2 * np.ones((n_met, n_age, 1)) + 1e-6
