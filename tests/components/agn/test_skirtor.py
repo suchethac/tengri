@@ -136,7 +136,18 @@ class TestSKIRTORAnalytic:
         # from 23/40 distinct outputs and 60% exactly-zero gradients to 40/40 and
         # 0%, and parity against CIGALE's linear interpolation improved from
         # 0.0399 to 0.0300 mean RMS dex.
-        golden_values = [0.0, 5.856270e24, 3.536528e29, 3.634076e24]
+        #
+        # Re-frozen for #2606 (commit 712fab431: PCHIP replaces the triweight smoother in
+        # ``_interpolate_and_normalize``). The default point is an exact node in every
+        # coordinate (tau 7, p 1, q 1, oa 40, R 20, cos_inc = cos 30 deg). The new value
+        # equals the raw tabulated node to 1e-35 relative; the old triweight value was
+        # 3.0 % off that node, blending in the neighbouring nodes:
+        #
+        #   idx 0   (0.01 um, below template support):  0.0, unchanged
+        #   idx 166 (0.4606 um): 5.856270e24 -> 6.322513e24   +8.0 %
+        #   idx 333 (21.71 um):  3.536528e29 -> 3.562878e29   +0.75 %
+        #   idx 499 (1000 um):   3.634076e24 -> 3.407505e24   -6.2 %
+        golden_values = [0.0, 6.322512908e24, 3.562878389e29, 3.407504540e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
