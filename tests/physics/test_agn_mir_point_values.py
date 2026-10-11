@@ -76,5 +76,6 @@ def test_mir_points_are_differentiable_in_lbol():
         return log_6 + log_12
 
     grad = jax.grad(loss)(jnp.asarray(11.0))
-    assert np.isfinite(float(grad))
+    assert np.isfinite(float(grad)), "non-finite d(log L_6um + log L_12um)/d log_lbol"
+    assert float(grad) != 0.0, "identically zero d/d log_lbol"
     assert float(grad) == pytest.approx(2.0, rel=1e-9)

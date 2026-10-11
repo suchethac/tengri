@@ -601,6 +601,7 @@ def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
     for key in ("L_agn_disc", "L_agn_polar_dust"):
         grad = jax.grad(published)(jnp.asarray(0.3), key)
         assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
+        assert float(grad) != 0.0, f"d{key}/d delta is identically zero"
 
 
 def test_skirtor_emitted_sed_independent_of_caller_grid():
