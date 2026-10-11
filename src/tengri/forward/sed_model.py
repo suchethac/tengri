@@ -58,7 +58,6 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
-import hashlib
 import inspect
 import pathlib
 import types
@@ -6846,6 +6845,7 @@ class SEDModel:
         **JIT-compatible**: the returned function is ``jax.jit``-wrapped and
         differentiable in ``params``.
         """
+        from tengri._cache_keys import stable_digest
         from tengri.inference._model_cache import _default_owner
 
         cache = _default_owner.get_structural_kernel(self.compile_signature())
@@ -6855,7 +6855,7 @@ class SEDModel:
             key = ("predict_spectrum_on_grid_jit", bool(conserving))
         else:
             w_np = np.asarray(wave_obs, dtype=np.float64)
-            digest = hashlib.sha1(w_np.tobytes()).hexdigest()
+            digest = stable_digest(w_np.tobytes())
             key = ("predict_spectrum_on_grid_jit", bool(conserving), w_np.shape, digest)
         fn = cache.get(key)
         if fn is not None:
