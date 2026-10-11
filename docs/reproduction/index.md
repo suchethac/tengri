@@ -19,6 +19,12 @@ A new code should earn trust by reproducing the physics in the codes already in 
   (R06, SN12, KD18, THB21) and four torus libraries (S04, NK08, SKIRTOR,
   CAT3D-Wind) head to head, plus the X-ray corona and radio jets, a table of
   where the two codes differ, and a parameter map for translating a fit.
+- **{doc}`grahsp`**: GRAHSP (Buchner et al. 2024). The AGN model of a galaxy-spectrum
+  fitter, reproduced component by component against upstream's own spectra at 38
+  parameter sets: the smooth big blue bump, emission lines, FeII forest, log-Gaussian torus
+  with a silicate feature, and the Balmer continuum. Each upstream error that tengri does
+  not reproduce is named with the paper equation, and the agreement is shown after applying
+  that correction.
 - **{doc}`prospect_r`**: ProSpect (Robotham et al. 2020), the R-based
   GAMA code, driven live through `rpy2`: BC03 SSPs, the skew-normal SFH,
   a metallicity history tied to the stellar mass formed, Charlot & Fall
@@ -31,9 +37,10 @@ cigale
 bagpipes
 prospector
 agnfitter
+grahsp
 prospect_r
 ```
 
-Comparisons with BEAGLE, MAGPHYS, GRAHSP, and GalaPy are scoped on the
+Comparisons with BEAGLE, MAGPHYS, and GalaPy are scoped on the
 [issue tracker](https://github.com/suchethac/tengri/issues) and will
 land as their notebooks come together.
