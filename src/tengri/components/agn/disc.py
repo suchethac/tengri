@@ -1721,7 +1721,11 @@ def _compute_zone_luminosities(
     # (Sunyaev & Titarchuk 1980), i.e. y_warm = 4 / [(Gamma_warm + 1/2)^2 - 9/4].
     # This sets the low-energy rollover so the corona cannot leak into the IR/radio.
     x_hot = r_hot_cm / r_isco_cm
-    t_seed_nt = t_in * x_hot ** (-0.75) * jnp.maximum(_nt_rt(x_hot, agn_a_spin), 1e-30) ** 0.25
+    t_seed_nt = (
+        t_in
+        * x_hot ** (-0.75)
+        * jnp.maximum(_nt_rt(x_hot, agn_a_spin), _representable_floor(1e-30)) ** 0.25
+    )
     y_warm_denom = jnp.maximum((agn_gamma_warm + 0.5) ** 2 - 2.25, 1e-3)
     y_warm = jnp.clip(4.0 / y_warm_denom, 0.0, 10.0)
     t_seed_hot = t_seed_nt * jnp.exp(y_warm)
