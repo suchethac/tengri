@@ -71,12 +71,11 @@ class TestKD18DiscContract:
             assert p.units, f"{p.name} missing units"
 
     def test_kd18_outputs(self):
-        """KD18Disc publishes L_agn_disc."""
+        """KD18Disc publishes L_agn_disc (angle-integrated) and L_agn_disc_los."""
         component = KD18Disc()
-        outputs = component.outputs()
-        assert len(outputs) == 1
-        assert outputs[0].name == "L_agn_disc"
-        assert outputs[0].units == "erg/s"
+        outputs = {o.name: o for o in component.outputs()}
+        assert set(outputs) == {"L_agn_disc", "L_agn_disc_los"}
+        assert all(o.units == "erg/s" for o in outputs.values())
 
     def test_kd18_inputs_empty(self):
         """KD18Disc has no required inputs."""
@@ -139,7 +138,7 @@ class TestKD18DiscContract:
             "gamma_hard": 1.8,
             "kt_hot": 100.0,
             "r_warm_ratio": 2.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         }
 
         sed_out, published = component.predict(p, sed_in, wave)
@@ -212,7 +211,7 @@ class TestPowerLawDiscContract:
             "log_lbol": 44.0,
             "alpha": -1.0,
             "T_max": 1e5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         }
 
         sed_out, published = component.predict(p, sed_in, wave)
