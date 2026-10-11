@@ -80,10 +80,20 @@ def _resolution_for_sigma_inst(sigma_inst_kms: float) -> float:
 def _numpy_log_gaussian_convolve(
     flux: np.ndarray, wave: np.ndarray, sigma_kms: float
 ) -> np.ndarray:
-    """Direct FFT Gaussian convolution in ln(lambda), written fresh in plain
-    numpy -- independent of any tengri convolution code (``apply_lsf``,
+    """Gaussian convolution in ln(lambda), written fresh in plain numpy --
+    independent of any tengri convolution code (``apply_lsf``,
     ``velocity_broaden``, ``broaden_velocity_only``) -- for the physical-order
     reference of test (a). Exact on a grid uniform in ln(lambda).
+
+    The spectrum is extended by reflection (a symmetric boundary) by n // 4 pixels,
+    the Fourier kernel is applied on that extension, and the result is cropped. The
+    margin is about 440 sigma_pix for the widest stage here (sigma_v = 300 km/s) and
+    several thousand for the narrowest, so the kernel's tails are inside it.
+    A circular FFT instead wraps the red-end flux onto the blue edge. On this grid the
+    red end is bright, so the circular result is off by up to 0.07 of peak at z = 3,
+    within about 4 sigma_pix of the ends; the interior agrees to 1e-15 either way.
+    The reflecting-boundary reference matches the convolution pipeline to 1e-15 at
+    every pixel (#2832, #2712).
     """
     if sigma_kms <= 0.0:
         return np.asarray(flux).copy()
@@ -91,9 +101,13 @@ def _numpy_log_gaussian_convolve(
     n = flux.size
     dlnwave = np.log(wave[1] / wave[0])
     sigma_pix = (sigma_kms / _C_KMS) / dlnwave
-    freq = np.fft.rfftfreq(n)
+    margin = n // 4
+    padded = np.pad(flux, margin, mode="symmetric")
+    length = padded.size
+    freq = np.fft.rfftfreq(length)
     kernel = np.exp(-2.0 * np.pi**2 * sigma_pix**2 * freq**2)
-    return np.fft.irfft(np.fft.rfft(flux) * kernel, n=n)
+    conv = np.fft.irfft(np.fft.rfft(padded) * kernel, n=length)
+    return conv[margin : margin + n]
 
 
 def _edge_steepness(wave_obs: np.ndarray, flux: np.ndarray, z: float) -> float:
@@ -569,13 +583,24 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
     src_path = Path("src/tengri/observation/observation.py")
     original_text = src_path.read_text()
 
+    # The rest-grid pass sits in the window-aware block (#2832): target that whole block,
+    # from the window computation through the IGM multiply, and fold the IGM in first.
     mutated_text = original_text.replace(
-        "sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)\n"
+        "        window = (\n"
+        "            None if window_z is None "
+        "else rest_grid_observed_window(wave_rest, wave_obs, window_z)\n"
+        "        )\n"
+        "        if window is None:\n"
+        "            sed_stellar_v = broaden_velocity_only("
+        "sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)\n"
+        "        else:\n"
+        "            sed_stellar_v = broaden_velocity_only_window(\n"
+        "                sed_stellar_rest, wave_rest, sigma_v_kms, n_bins, *window\n"
+        "            )\n"
         "        sed_stellar = sed_stellar_v * igm_trans\n"
         "        sed_instrument_only = sed_instrument_only_rest * igm_trans\n",
-        "sed_stellar = (sed_stellar_rest * igm_trans)\n"
         "        sed_stellar = broaden_velocity_only(\n"
-        "            sed_stellar, wave_rest, sigma_v_kms, n_bins\n"
+        "            sed_stellar_rest * igm_trans, wave_rest, sigma_v_kms, n_bins\n"
         "        )\n"
         "        sed_instrument_only = sed_instrument_only_rest * igm_trans\n",
         1,

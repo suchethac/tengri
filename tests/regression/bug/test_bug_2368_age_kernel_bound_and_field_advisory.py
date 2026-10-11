@@ -41,10 +41,11 @@ def test_age_kernel_registry_rows_include_bound_sentence() -> None:
                 f"proportionality to roundoff. Got: {short_doc}"
             )
         elif kernel_name == "dsps":
-            # 'dsps' has the bound ~1e-3. Must cite it on discovery surface.
-            assert "1e-3" in short_doc, (
-                f"age_kernel='{kernel_name}' short_doc must include the accuracy bound "
-                f"(1e-3). Got: {short_doc}"
+            # 'dsps' names the same integration (#2683): the discovery surface says
+            # so, which carries the cloud-in-cell bound with it.
+            assert "same" in short_doc and "cloud-in-cell" in short_doc, (
+                f"age_kernel='{kernel_name}' short_doc must say it names the same "
+                f"cloud-in-cell integration. Got: {short_doc}"
             )
 
 

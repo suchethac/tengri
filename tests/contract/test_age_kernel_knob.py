@@ -8,10 +8,10 @@ guarantees:
 
 1. the default is **bit-identical** to explicit ``'cic'`` (no silent behavior
    change for existing models);
-2. ``'dsps'`` genuinely selects the other kernel — end-to-end through
+2. ``'dsps'`` names the same first-order integration (#2683) — end-to-end through
    ``predict_photometry``, not merely in ``predict_state``;
 3. an unknown kernel name raises, and both kernels serve a field SFH (#2684);
-4. the two kernels get **distinct compile signatures**, so the shared kernel
+4. the two names get **distinct compile signatures**, so the shared kernel
    cache cannot hand one model the other's photometry.
 
 Guarantee 4 is a regression guard: ``age_kernel`` changes the numbers without
@@ -97,19 +97,20 @@ class TestAgeKernelSelection:
         # Bit-exact, not approx: the default path must be the same code.
         assert np.array_equal(w_default, w_cic)
 
-    def test_dsps_selects_a_different_kernel(self, synthetic_ssp_wide):
-        """'dsps' must actually change the weights — a knob that no-ops is a bug."""
+    def test_dsps_names_the_same_integration(self, synthetic_ssp_wide):
+        """'dsps' is DSPS's zeroth-order histogram no longer (#2683): same weights as 'cic'."""
         w_cic = _age_marginal(_build(synthetic_ssp_wide, age_kernel="cic"))
         w_dsps = _age_marginal(_build(synthetic_ssp_wide, age_kernel="dsps"))
-        assert np.abs(w_cic - w_dsps).sum() > 1e-3
+        np.testing.assert_allclose(w_dsps, w_cic, rtol=1e-12, atol=1e-15)
 
-    def test_dsps_reproduces_the_964_old_edge_hole(self, synthetic_ssp_wide):
-        """Pins WHY 'cic' is the default: DSPS zeroes the SFH's oldest node.
+    def test_dsps_has_no_old_edge_hole(self, synthetic_ssp_wide):
+        """The #964 hole is closed on both names.
 
-        DSPS's histogram kernel interpolates log10(M(<t)) in log10(t), which
-        annihilates the mass of the table segment straddling the SFH's maximum
-        age. The first SSP node older than the SFH start keeps only a residual
-        ~1e-5 of the share CIC gives it (#964).
+        DSPS's histogram kernel interpolated log10(M(<t)) in log10(t), which
+        annihilated the mass of the table segment straddling the SFH's maximum
+        age: the first SSP node older than the SFH start kept ~1e-5 of the share
+        first-order sharing gives it (#964). Both names now give that node its
+        share.
         """
         lg_age = np.asarray(synthetic_ssp_wide.ssp_lg_age_gyr)
         i_above = int(np.searchsorted(10.0**lg_age * 1e9, 5.0e9))  # SFH age = 5 Gyr
@@ -117,12 +118,9 @@ class TestAgeKernelSelection:
         w_cic = _age_marginal(_build(synthetic_ssp_wide, age_kernel="cic"))
         w_dsps = _age_marginal(_build(synthetic_ssp_wide, age_kernel="dsps"))
 
-        assert w_cic[i_above] > 0.01, "CIC must carry real mass at the old edge"
-        # Not exactly zero — a residual survives — but negligible beside CIC's
-        # share. Assert the ratio, which is what "annihilated" actually means.
-        assert w_dsps[i_above] < 0.01 * w_cic[i_above], (
-            f"the DSPS hole is the #964 signature: cic={w_cic[i_above]:.5e} "
-            f"dsps={w_dsps[i_above]:.5e}"
+        assert w_cic[i_above] > 0.01, "the old-edge node must carry real mass"
+        assert abs(w_dsps[i_above] / w_cic[i_above] - 1.0) <= 1e-9, (
+            f"cic={w_cic[i_above]:.5e} dsps={w_dsps[i_above]:.5e}"
         )
 
 
@@ -134,16 +132,13 @@ class TestAgeKernelReachesTheHotPath:
     verified only on ``predict_state`` can be wholly inert where it matters.
     """
 
-    def test_photometry_differs_between_kernels(self, synthetic_ssp_wide, synthetic_tophat_obs):
+    def test_photometry_agrees_between_names(self, synthetic_ssp_wide, synthetic_tophat_obs):
         m_cic = _build(synthetic_ssp_wide, synthetic_tophat_obs, age_kernel="cic")
         m_dsps = _build(synthetic_ssp_wide, synthetic_tophat_obs, age_kernel="dsps")
         p_cic = np.asarray(m_cic.predict_photometry({}))
         p_dsps = np.asarray(m_dsps.predict_photometry({}))
         assert np.all(np.isfinite(p_cic)) and np.all(np.isfinite(p_dsps))
-        assert not np.array_equal(p_cic, p_dsps), (
-            "predict_photometry is identical across kernels — the knob does not "
-            "reach the compiled observables closure (compile-signature collision)"
-        )
+        np.testing.assert_allclose(p_dsps, p_cic, rtol=1e-12, atol=0.0)
 
     def test_photometry_is_build_order_independent(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """Whichever kernel is built first must not win for the other.
