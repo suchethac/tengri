@@ -260,7 +260,13 @@ def test_photometry_on_both_paths(ssp_data_wne, approx):
     m_default = _build(ssp_data_wne, approx=approx)
     m_off = _build(ssp_data_wne, freefree=False, approx=approx)
     m_on = _build(ssp_data_wne, freefree=True, approx=approx)
-    m_base = _build(ssp_data_wne, sf_type="none", agn_type="none", approx=approx)
+    # The base keeps the radio block (no star-formation radio, AGN jet at its zero-loudness
+    # default) so it sits on the SAME master grid as the others. With ``agn_type="none"`` the
+    # radio block is dropped, the grid shrinks from 6580 to 6232 nodes, and every non-radio
+    # band integral changes at ~1e-10 relative: a floor under the subtraction below that the
+    # radio fluxes do not own (measured 9.97e-11 with the total-L_ir window, 1.002e-10 with
+    # the 8-1000 um default, both on a pure grid difference; same-grid it is 9e-16).
+    m_base = _build(ssp_data_wne, sf_type="none", approx=approx)
 
     def flux(m):
         return np.asarray(m.predict_photometry(dict(m.spec.sample(jax.random.PRNGKey(0)))))
@@ -276,21 +282,21 @@ def test_photometry_on_both_paths(ssp_data_wne, approx):
     # only the synchrotron share (1 - f). The explicit-True build shows this band does see
     # the radio thermal term.
     np.testing.assert_allclose(
-        flux_default[1], flux_base[1] + share * sync_off[1], rtol=1e-10, atol=0.0
+        flux_default[1], flux_base[1] + share * sync_off[1], rtol=1e-12, atol=0.0
     )
     assert flux_on[1] > flux_default[1]
 
     # Band 2 (cm2p5, above the edge): default == on, and above off (thermal beats the
     # synchrotron share it displaces above 1.4 GHz).
-    np.testing.assert_allclose(flux_default[2], flux_on[2], rtol=1e-10, atol=0.0)
+    np.testing.assert_allclose(flux_default[2], flux_on[2], rtol=1e-12, atol=0.0)
     assert flux_default[2] > flux_off[2]
 
     # Band 0 (opt, no radio emission): default == off.
-    np.testing.assert_allclose(flux_default[0], flux_off[0], rtol=1e-10, atol=0.0)
+    np.testing.assert_allclose(flux_default[0], flux_off[0], rtol=1e-12, atol=0.0)
 
     # Band 3 (cm1p05, inside the first grid cell above the edge): the SSP has no
     # flux there, so the term must be complete, equal to the explicit-True build.
-    np.testing.assert_allclose(flux_default[3], flux_on[3], rtol=1e-10, atol=0.0)
+    np.testing.assert_allclose(flux_default[3], flux_on[3], rtol=1e-12, atol=0.0)
     assert flux_default[3] > flux_off[3]
 
 

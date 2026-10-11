@@ -207,6 +207,10 @@ SIGNATURE_POLICY: KeyPolicy = {
         "thermal free-free on/off changes the emitted radio SED; set by the grammar's "
         "radio.sf.freefree key and routed to RadioSEDComponentConfig.include_freefree"
     ),
+    "_radio_ir_window": content(
+        "IR band the radio L_IR is integrated over changes the emitted radio SED; set by the "
+        "grammar's radio.sf.ir_window key and routed to RadioSEDComponentConfig.ir_window"
+    ),
     "_radio_sf_nu_ref": content(
         "synchrotron anchor frequency changes the emitted radio SED; set by the grammar's "
         "radio.sf.nu_ref key and routed to RadioSEDComponentConfig.sf_nu_ref"

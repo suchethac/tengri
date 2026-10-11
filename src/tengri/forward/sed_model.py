@@ -3230,6 +3230,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
@@ -4888,6 +4889,7 @@ class SEDModel:
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
+            self._radio_ir_window = getattr(spec, "radio_ir_window", None)
             self._radio_sf_nu_ref = getattr(spec, "radio_sf_nu_ref", None)
 
         self._uses_xray = getattr(spec, "xray", False)
@@ -4922,6 +4924,7 @@ class SEDModel:
             agn_model=getattr(self, "_agn_model", None),
             agn_torus_block=getattr(self, "_agn_torus_block", None),
             agn_disc_block=getattr(self, "_agn_disc_block", None),
+            agn_feii_block=getattr(self, "_agn_feii_block", None),
         )
 
         # Analytic radio/X-ray wings: only used when those components are
@@ -6981,9 +6984,6 @@ class SEDModel:
         two places, cannot disagree.
         """
         del wave_chunk_size  # see Parameters note
-        from tengri.cosmology import luminosity_distance
-        from tengri.observation.observation import project_spectrum_kernel_split
-        from tengri.observation.spectrum import resolve_sigma_lib_kms
 
         # Refuse a Fixed key up front (#2296): this is a raw, caller-supplied
         # dict (both of predict_spectrum's explicit-wave_obs branches route
@@ -6993,11 +6993,75 @@ class SEDModel:
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
         refuse_fixed_overrides(self.spec, params)
-        state = self.predict_state(params)
-        z = self._get_redshift(params)
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        wave_rest = state.wave
-        igm_trans = state.derived.get("igm_transmission", None)
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool that selects the compiled
+        # kernel, not a branch on the sampled redshift.
+        conserving = (
+            bool(spectroscopy.resolve_conserving(self.wavelengths, self._resample_z_ref()))
+            if spectroscopy is not None
+            else False
+        )
+        kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        args = (
+            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
+            if traced_grid
+            else (params, self.spec.get_fixed_values())
+        )
+        return kernel(*args, *self._resolve_threaded_data(None, None, None))
+
+    def _get_or_build_predict_spectrum_on_grid_jit(self, conserving, wave_obs):
+        """Return (and cache) the JIT'd observed-frame spectrum projector for ``wave_obs``.
+
+        Mirrors :meth:`_get_or_build_predict_observables_jit`: the compiled function
+        is stored in the structural kernel cache keyed on :meth:`compile_signature`,
+        with the static resample flag and the content of ``wave_obs`` appended to the
+        key. The SSP grid, template and z-table arrays enter as runtime arguments,
+        so they are not baked into the HLO. A concrete ``wave_obs`` is a compile-time
+        constant of the kernel: the LSF selection (``_is_log_uniform``) must see the
+        real grid, since a traced grid is assumed log-uniform and would take the
+        constant-R FFT path on a linear grid.
+
+        Parameters
+        ----------
+        conserving : bool
+            Static flux-conserving resample flag, from
+            :meth:`~tengri.observation.spectroscopy.Spectroscopy.resolve_conserving`.
+        wave_obs : array-like
+            Observed-frame grid, shape (n_pix,). If it is a tracer (the caller is
+            jitting over the grid) the kernel takes it as a runtime argument.
+
+        Returns
+        -------
+        callable
+            ``fn(params, fixed_values, ssp_data, template_data, ztable_data)`` for a
+            concrete grid, or ``fn(params, fixed_values, wave_obs, ssp_data,
+            template_data, ztable_data)`` for a traced one; returns ndarray,
+            shape (n_pix,).
+
+        Notes
+        -----
+        **JIT-compatible**: the returned function is ``jax.jit``-wrapped and
+        differentiable in ``params``.
+        """
+        from tengri._cache_keys import stable_digest
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        traced_grid = isinstance(wave_obs, jax.core.Tracer)
+        if traced_grid:
+            w_np = None
+            key = ("predict_spectrum_on_grid_jit", bool(conserving))
+        else:
+            w_np = np.asarray(wave_obs, dtype=np.float64)
+            digest = stable_digest(w_np.tobytes())
+            key = ("predict_spectrum_on_grid_jit", bool(conserving), w_np.shape, digest)
+        fn = cache.get(key)
+        if fn is not None:
+            return fn
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
@@ -7008,42 +7072,72 @@ class SEDModel:
         sigma_lib_flat = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
-        # Per-wavelength SSP library LSF curve (#2518), same source
-        # (self.ssp_data) and same structural (pre-trace) None-check as
-        # _init_instrument / _get_or_build_predict_observables_jit.
-        sigma_lib_curve = self._sigma_lib_curve_for(self.ssp_data)
-        sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
-        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
-        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
-        # Static (pre-trace) resolution of the resample mode (#1166): the model
-        # grid is fixed, so this is a Python bool baked into the trace, not a
-        # branch on the sampled redshift.
-        conserving = (
-            spectroscopy.resolve_conserving(wave_rest, self._resample_z_ref())
-            if spectroscopy is not None
-            else False
-        )
         resolution_matrix = (
             getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
         )
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_scale_getter = self._get_lsf_scale
 
-        return project_spectrum_kernel_split(
-            state,
-            state.sed_intrinsic,
-            igm_trans,
-            wave_rest,
-            wave_obs,
-            z,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=self._get_sigma_v_kms(params),
-            lsf_scale=self._get_lsf_scale(params),
-            cal_coeffs=cal_coeffs,
-            cal_wave_range=cal_wave_range,
-            conserving=conserving,
-            resolution_matrix=resolution_matrix,
-        )
+        # Warm the component-chain cache OUTSIDE the JIT trace (see
+        # _get_or_build_predict_observables_jit): precompute() runs numpy-level
+        # routines that cannot be traced.
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+
+        def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
+            from tengri.cosmology import luminosity_distance
+            from tengri.observation.observation import project_spectrum_kernel_split
+            from tengri.observation.spectrum import resolve_sigma_lib_kms
+
+            # Merged view, as in predict_observables_jit: a Fixed value enters
+            # through the runtime fixed_values input, never a closure constant.
+            full = {**fixed_values, **params}
+            state = self.predict_state(
+                params,
+                fixed_values=fixed_values,
+                ssp_data=ssp_data,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+            z = self._get_redshift(full)
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+            wave_rest = state.wave
+            igm_trans = state.derived.get("igm_transmission", None)
+            sigma_lib_curve = self._sigma_lib_curve_for(ssp_data)
+            sigma_lib_kms = resolve_sigma_lib_kms(wave_obs, z, sigma_lib_flat, sigma_lib_curve)
+            cal_coeffs = (
+                spectroscopy.calibration_coeffs(full) if spectroscopy is not None else None
+            )
+            return project_spectrum_kernel_split(
+                state,
+                state.sed_intrinsic,
+                igm_trans,
+                wave_rest,
+                wave_obs,
+                z,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_getter(full),
+                lsf_scale=lsf_scale_getter(full),
+                cal_coeffs=cal_coeffs,
+                cal_wave_range=cal_wave_range,
+                conserving=conserving,
+                resolution_matrix=resolution_matrix,
+            )
+
+        if traced_grid:
+            jit_fn = jax.jit(_impl)
+        else:
+            w_const = jnp.asarray(w_np)
+
+            def _impl_const(params, fixed_values, ssp_data, template_data, ztable_data):
+                return _impl(params, fixed_values, w_const, ssp_data, template_data, ztable_data)
+
+            jit_fn = jax.jit(_impl_const)
+        cache[key] = jit_fn
+        return jit_fn
 
     def predict_magnitudes(self, params):
         """Deprecated. Use ``model.predict(params).magnitudes()``.
@@ -11344,11 +11438,33 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # The radio block normalizes on the luminosity inside an IR window
+            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
+            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
+            # an O(1) constant of the fixed shape, tabulated here in log space. The
+            # radio block then reads a scalar, as it reads ``L_ir``, instead of
+            # integrating the dust SED on the full grid on every call. A window the
+            # rest grid does not span is left out, so the radio block's own check
+            # raises at evaluation.
+            from tengri.components.radio.component import IR_WINDOWS_AA
+            from tengri.utils.sed_quantities import log10_band_luminosity
+
+            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
+            windows = {
+                name: edges
+                for name, edges in IR_WINDOWS_AA.items()
+                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
+            }
+
             def _node(z):
                 unit = _template_at(z, 1.0)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
                     "ok": _homogeneous_at(z),
+                    "log_window_fraction": {
+                        name: log10_band_luminosity(unit, wave, lo, hi)
+                        for name, (lo, hi) in windows.items()
+                    },
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -11360,7 +11476,11 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
-            response = {"ln1pz": built["ln1pz"], "values": built["values"]["R"]}
+            response = {
+                "ln1pz": built["ln1pz"],
+                "values": built["values"]["R"],
+                "log_window_fraction": built["values"]["log_window_fraction"],
+            }
 
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
@@ -11921,6 +12041,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),

@@ -136,9 +136,9 @@ class GRAHSPParams:
     si : float
         Si feature strength (paper ``Si``).
     cool_lam_um, cool_width : float
-        Cool dust component peak [um] and log-width [dex].
+        Cool dust component peak [um] and log-Gaussian standard deviation [dex].
     hot_lam_um, hot_width, hot_fcov : float
-        Hot dust peak [um], log-width [dex], peak ratio
+        Hot dust peak [um], log-Gaussian standard deviation [dex], peak ratio
         (paper :math:`f_\mathrm{hot}`).
     ebv : float
         Galaxy E(B-V) [mag].
@@ -297,6 +297,7 @@ def evaluate_grahsp_agn(
         l5100=params.l5100,
         a_lines=params.a_lines,
         a_feii=params.a_feii,
+        agn_type=params.agn_type,
     )
     # --- Balmer continuum (Grandi 1982); only for broad-line AGN (type 1). ---
     if params.agn_type == 1:
@@ -429,10 +430,13 @@ def compute_grahsp_sed(
 
                 * agn_lum_ratio
 
-                / (l_bol_intrinsic / l5100_unit)
+                / (l_bol_bbb / l5100_unit)
 
-    where ``l_bol_intrinsic / l5100_unit`` is the bolometric correction
-    measured on a unit-``l5100`` evaluation.
+    where ``l_bol_bbb / l5100_unit`` is the bolometric correction of the
+    accretion luminosity (the BBB, lines and FeII above 91.2 nm; the paper's
+    ``lumBolBBB``) measured on a unit-``l5100`` evaluation. The torus
+    luminosity is not added: it is reprocessed accretion light. Upstream
+    GRAHSP keeps ``lumBolBBB`` and ``lumBolTOR`` separate.
 
     Parameters
     ----------
@@ -573,7 +577,10 @@ agn_grahsp_hot_fcov
         # value this function's internals use.
         l5100 = 10.0**agn_grahsp_log_l5100
     else:
-        l_bol_unit = sed_unit.l_bol_bbb + sed_unit.l_bol_torus
+        # The accretion luminosity: everything but the torus above 91.2 nm (the paper's
+        # lumBolBBB). The torus re-radiates absorbed accretion light, so adding it here
+        # would count that light twice and make l5100 depend on fcov.
+        l_bol_unit = sed_unit.l_bol_bbb
         target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio
         l5100 = target_l_bol / l_bol_unit
 

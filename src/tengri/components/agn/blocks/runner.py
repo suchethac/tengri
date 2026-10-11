@@ -101,10 +101,11 @@ from tengri.utils.scale import representable_denominator, representable_floor
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
-#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED;
-#: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
-#: are handled by their own wavelength-dependent screen above.
-_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
+#: (``qsogen``, ``grahsp``, ``grahsp_mn12``), which already encode an
+#: inclination-averaged SED; masking them would be double-counting. The
+#: dusty-screen tori (skirtor/fritz) are handled by their own
+#: wavelength-dependent screen above.
+_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp", "grahsp_mn12"})
 
 #: Fixed wavelength grids [A] on which the runner measures the bolometric integrals
 #: that tie and debit its components (the conserving line ledger, the polar-dust
@@ -237,8 +238,8 @@ _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
     # the one that does not move at all.
     "nlr": frozenset({"grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
-    "feii": frozenset({"grahsp", "boroson_green"}),
-    "torus": frozenset({"grahsp"}),
+    "feii": frozenset({"grahsp", "grahsp_veroncetty", "boroson_green"}),
+    "torus": frozenset({"grahsp", "grahsp_mn12"}),
 }
 
 # Disc impls covered by the multicolor / Kubota-Done set are added to the
@@ -258,11 +259,13 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 # (test_slone_netzer_vs_agnfitter.py / test_kd18_grid_vs_agnfitter.py) confirm
 # the standard UV/optical accretion-disc peak (< 1 um in L_nu), so 5100A is a
 # meaningful continuum for all three, not an edge case like ADAF's inner flow.
+# grahsp_netzer is similarly template-normalized to 1 at 510 nm (5100 A).
 _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
     {
         "slone_netzer",
         "kd18_agnfitter",
         "kd18_agnfitter_warmindex",
+        "grahsp_netzer",
     }
 )
 
@@ -1170,7 +1173,11 @@ agn_torus_block, agn_attenuation_block : str
     # With no line block selected the debit is exactly zero, so the disc energy is not
     # measured at all.
     _has_lines = any(b != "none" for b in (agn_nlr_block, agn_blr_block, agn_feii_block))
-    if _agn_norm == "conserving" and agn_torus_block not in ("grahsp", "qsogen") and _has_lines:
+    if (
+        _agn_norm == "conserving"
+        and agn_torus_block not in ("grahsp", "grahsp_mn12", "qsogen")
+        and _has_lines
+    ):
         # The line power comes from the blocks' closed forms when they register one
         # (``LINE_ENERGY_BLOCKS``: unit-integral Gaussians, so the power is set by the
         # normalization); only a block without one is evaluated, on the fixed line grid and
