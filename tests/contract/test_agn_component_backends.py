@@ -71,12 +71,11 @@ class TestKD18DiscContract:
             assert p.units, f"{p.name} missing units"
 
     def test_kd18_outputs(self):
-        """KD18Disc publishes L_agn_disc."""
+        """KD18Disc publishes L_agn_disc (angle-integrated) and L_agn_disc_los."""
         component = KD18Disc()
-        outputs = component.outputs()
-        assert len(outputs) == 1
-        assert outputs[0].name == "L_agn_disc"
-        assert outputs[0].units == "erg/s"
+        outputs = {o.name: o for o in component.outputs()}
+        assert set(outputs) == {"L_agn_disc", "L_agn_disc_los"}
+        assert all(o.units == "erg/s" for o in outputs.values())
 
     def test_kd18_inputs_empty(self):
         """KD18Disc has no required inputs."""

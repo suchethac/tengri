@@ -315,7 +315,7 @@ class GRAHSPSEDComponent:
             ParamDeclaration(
                 "agn_grahsp_cool_width",
                 Uniform(0.2, 0.65),
-                "Cool dust log-width [dex]",
+                "Cool dust log-Gaussian standard deviation [dex]",
             ),
             ParamDeclaration(
                 "agn_grahsp_hot_lam_um",
@@ -325,7 +325,7 @@ class GRAHSPSEDComponent:
             ParamDeclaration(
                 "agn_grahsp_hot_width",
                 Uniform(0.2, 0.65),
-                "Hot dust log-width [dex]",
+                "Hot dust log-Gaussian standard deviation [dex]",
             ),
             ParamDeclaration(
                 "agn_grahsp_hot_fcov",

@@ -28,7 +28,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._template_grid import budget_bolometric_nu
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.cat3d_wind import create_cat3d_wind_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -270,10 +270,9 @@ class CAT3DTorus(SEDModelComponent):
 
         cat3d_fn = self.data
 
-        def _torus_sed(wavelength):
-            # Call CAT3D-Wind interpolator
+        def _torus(wave_eval):
             return cat3d_fn(
-                wavelength=wavelength,
+                wavelength=wave_eval,
                 agn_log_lbol=p["log_lbol"],
                 agn_cos_inc=p["cos_inc"],
                 agn_a_cat3d=p["a_cat3d"],
@@ -281,11 +280,12 @@ class CAT3DTorus(SEDModelComponent):
                 agn_torus_frac=p["torus_frac"],
             )
 
-        sed_torus = _torus_sed(wave)
-        # Published luminosity: the torus's own bolometric power, on the fixed budget grid
-        L_torus = budget_bolometric_nu(_torus_sed, dtype=wave.dtype)
+        # Published L_agn_torus: the exact integral of the emitted torus SED. The template is
+        # a log-log power law between its native nodes, so the integral is closed form on them.
+        native = jnp.asarray(cat3d_fn.native_wave, dtype=wave.dtype)
+        L_torus = native_bolometric_nu(_torus(native), native)
 
         # Add to intrinsic SED
-        sed_out = sed_in + sed_torus
+        sed_out = sed_in + _torus(wave)
 
         return sed_out, {"L_agn_torus": L_torus}

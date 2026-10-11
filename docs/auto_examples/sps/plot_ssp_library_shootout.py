@@ -56,7 +56,9 @@ first_failure: Exception | None = None
 for ssp_name, color in zip(ssp_names, colors):
     try:
         # Load SSP library
-        ssp = tengri.load_ssp(ssp_name)
+        # Only the spectra are plotted and the surviving mass is not used, so every
+        # grid takes the explicit DSPS fit for its surviving mass.
+        ssp = tengri.load_ssp(ssp_name, mass_remaining="dsps_fit")
 
         # Extract wavelength grid (rest-frame, Angstrom)
         wave = np.array(ssp.ssp_wave)

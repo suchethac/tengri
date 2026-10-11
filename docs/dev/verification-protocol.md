@@ -100,10 +100,10 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 > relative — not DSPS's radiation-free `flat_wcdm` (#2517). The
 > composite-stellar-population integral on the default path is **tengri's own
 > CIC kernel** (`_age_weights_cic` in
-> `src/tengri/components/stellar/component.py`); DSPS's histogram kernel is
-> reachable via `sfh={'age_kernel': 'dsps'}` (on a table refined 8-fold between
-> SSP nodes), which `tengri.list_age_kernels()` marks `comparison`; it agrees
-> with CIC to < 0.1 % in flux for smooth histories at z = 0. See #1727, #2683.
+> `src/tengri/components/stellar/component.py`); `sfh={'age_kernel': 'dsps'}`
+> names the same integration (DSPS's zeroth-order histogram is not offered: it
+> mis-places structure narrower than the SSP node spacing, #2683).
+> `tengri.list_age_kernels()` marks it `comparison`. See #1727, #2683.
 
 ### Star formation histories
 

@@ -45,6 +45,9 @@ def wire(monkeypatch):
             f["ssp_flux"] = np.ones((2, 4, 16))
             f["ssp_lg_age_gyr"] = np.linspace(-3.0, 1.0, 4)
             f["ssp_lgmet"] = np.array([-2.0, -1.0])
+            # A stand-in is not a physical grid: declare it, so a registered name does not
+            # bind it to the companion table's metallicity nodes.
+            f.attrs["synthetic"] = True
         return path
 
     monkeypatch.setattr(data_setup, "download_ssp", fake_download)
