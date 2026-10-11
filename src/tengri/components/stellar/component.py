@@ -1458,6 +1458,76 @@ def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab
     return lgmet_on_ssp_ages, met_log_age_yr, met_log_z_abs
 
 
+def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
+    """Lowest-index edge within ``eps * edge`` of each node, in O((n + m) log n) (#2869).
+
+    Value-identical to the dense test ``|node - e| <= eps * e`` followed by an
+    ``argmax`` over the edge axis, without its (n_fine, n_edges) matrix (4.9e9
+    elements on a 13.7k-age grid with the periodic SFH's 2800 edges). On an
+    ascending grid the nodes an edge captures are one contiguous run, because
+    ``e - node <= eps * e`` is monotone in ``node`` and so is ``node - e <= eps * e``
+    (rounded subtraction is monotone). Two bisections with that same predicate
+    find each edge's run exactly; a node's answer is then the minimum edge index
+    over the runs covering it, a range-chmin done by a sparse-table push-down
+    that holds one length-n level at a time.
+
+    Parameters
+    ----------
+    fine_age_yr : ndarray, shape (n,)
+        Ascending lookback-age grid [yr].
+    edges_yr : ndarray, shape (m,)
+        Bin edges [yr], any order; ``m >= 1``.
+    eps : float
+        Fractional half-width of the capture bracket.
+
+    Returns
+    -------
+    pick : ndarray, shape (n,), int32
+        Index into ``edges_yr`` of the lowest-index capturing edge (0 if none).
+    hit : ndarray, shape (n,), bool
+        Whether any edge captures the node.
+    """
+    n = fine_age_yr.shape[0]
+    m = edges_yr.shape[0]
+    if n == 0:  # static: empty grid, as the dense code returned
+        return jnp.zeros(0, dtype=jnp.int32), jnp.zeros(0, dtype=bool)
+    thr = eps * edges_yr
+
+    def first_true(pred):
+        # Smallest i in [0, n] with pred(node_i, e_j) true; pred is monotone in i.
+        def body(_, lohi):
+            lo, hi = lohi
+            mid = (lo + hi) // 2
+            ok = (mid < n) & pred(fine_age_yr[jnp.minimum(mid, n - 1)])
+            return jnp.where(ok, lo, mid + 1), jnp.where(ok, mid, hi)
+
+        lo0 = jnp.zeros(m, dtype=jnp.int32)
+        hi0 = jnp.full(m, n, dtype=jnp.int32)
+        # The extra iteration is not idempotent at lo == hi == n (it gives n + 1),
+        # which would overstate a run reaching the grid end; clamp to n.
+        return jnp.minimum(jax.lax.fori_loop(0, n.bit_length() + 1, body, (lo0, hi0))[0], n)
+
+    lo = first_true(lambda node: edges_yr - node <= thr)
+    hi = first_true(lambda node: ~(node - edges_yr <= thr))
+    valid = lo < hi
+    level = 31 - jax.lax.clz(jnp.maximum(hi - lo, 1))
+    sentinel = jnp.int32(m)
+    j = jnp.arange(m, dtype=jnp.int32)
+
+    def push_down(i, tab):
+        k = n.bit_length() - 1 - i
+        half = jnp.left_shift(jnp.int32(1), k)
+        padded = jnp.concatenate([jnp.full(n, sentinel), tab])
+        tab = jnp.minimum(tab, jax.lax.dynamic_slice(padded, (n - half,), (n,)))
+        mine = valid & (level == k)
+        tab = tab.at[jnp.where(mine, lo, n)].min(j, mode="drop")
+        return tab.at[jnp.where(mine, hi - half, n)].min(j, mode="drop")
+
+    tab = jax.lax.fori_loop(0, n.bit_length(), push_down, jnp.full(n, sentinel))
+    hit = tab < sentinel
+    return jnp.where(hit, tab, 0), hit
+
+
 def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     """Add SFH bin edges as exact knots to a dense lookback-age integrand (#765).
 
@@ -1494,13 +1564,13 @@ def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     # edge's gradient comes out half (#2715). Moving such a node just outside the
     # bracket leaves one cell between the two knots, which holds the whole jump;
     # the grid then changes by 2*eps relative as a node crosses a bracket edge.
-    e = edges_yr[None, :]
-    node = fine_age_yr[:, None]
-    inside = jnp.abs(node - e) <= eps * e
-    outside = jnp.where(node < e, e * (1.0 - 2.0 * eps), e * (1.0 + 2.0 * eps))
-    pick = jnp.argmax(inside, axis=1)
-    pushed = jnp.take_along_axis(outside, pick[:, None], axis=1)[:, 0]
-    fine_age_yr = jnp.where(jnp.any(inside, axis=1), pushed, fine_age_yr)
+    if edges_yr.shape[0] > 0:
+        pick, hit = _first_edge_within_eps(fine_age_yr, edges_yr, eps)
+        e_pick = edges_yr[pick]
+        pushed = jnp.where(
+            fine_age_yr < e_pick, e_pick * (1.0 - 2.0 * eps), e_pick * (1.0 + 2.0 * eps)
+        )
+        fine_age_yr = jnp.where(hit, pushed, fine_age_yr)
     return jnp.sort(jnp.concatenate([fine_age_yr, knots]))
 
 

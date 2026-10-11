@@ -3231,6 +3231,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
             radio_agn_model=getattr(self, "_radio_agn_model", None),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
@@ -4895,6 +4896,7 @@ class SEDModel:
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", None)
+            self._radio_ir_window = getattr(spec, "radio_ir_window", None)
             self._radio_sf_nu_ref = getattr(spec, "radio_sf_nu_ref", None)
 
         self._uses_xray = getattr(spec, "xray", False)
@@ -11444,11 +11446,33 @@ class SEDModel:
                 self._dust_band_response_cache = None
                 return None
 
+            # The radio block normalizes on the luminosity inside an IR window
+            # (``radio.sf.ir_window``). The dust SED is ``L_ir * S_unit``, so the window
+            # luminosity is ``L_ir * f`` with ``f`` the unit template's window integral:
+            # an O(1) constant of the fixed shape, tabulated here in log space. The
+            # radio block then reads a scalar, as it reads ``L_ir``, instead of
+            # integrating the dust SED on the full grid on every call. A window the
+            # rest grid does not span is left out, so the radio block's own check
+            # raises at evaluation.
+            from tengri.components.radio.component import IR_WINDOWS_AA
+            from tengri.utils.sed_quantities import log10_band_luminosity
+
+            w_lo, w_hi = float(jnp.min(wave)), float(jnp.max(wave))
+            windows = {
+                name: edges
+                for name, edges in IR_WINDOWS_AA.items()
+                if edges is not None and w_lo <= edges[0] and w_hi >= edges[1]
+            }
+
             def _node(z):
                 unit = _template_at(z, 1.0)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
                     "ok": _homogeneous_at(z),
+                    "log_window_fraction": {
+                        name: log10_band_luminosity(unit, wave, lo, hi)
+                        for name, (lo, hi) in windows.items()
+                    },
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
@@ -11460,7 +11484,11 @@ class SEDModel:
                 )
                 self._dust_band_response_cache = None
                 return None
-            response = {"ln1pz": built["ln1pz"], "values": built["values"]["R"]}
+            response = {
+                "ln1pz": built["ln1pz"],
+                "values": built["values"]["R"],
+                "log_window_fraction": built["values"]["log_window_fraction"],
+            }
 
         self._dust_band_response_decline = None
         self._dust_band_response_cache = response
@@ -12021,6 +12049,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_ir_window=getattr(self, "_radio_ir_window", None),
             radio_sf_nu_ref=getattr(self, "_radio_sf_nu_ref", None),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
