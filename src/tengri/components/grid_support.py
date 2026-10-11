@@ -50,6 +50,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping
 
+import numpy as np
+
 #: A component's grid support: ``() -> {param_name: (lo, hi)}``.
 GridSupportFn = Callable[[], dict[str, tuple[float, float]]]
 
@@ -263,7 +265,60 @@ def _cue_grid_support() -> dict[str, tuple[float, float]]:
 #: ``"dust.emission"``). Only template-backed components appear; a component
 #: absent from this table is unconstrained, which is the correct default for
 #: every closed-form model.
+def _h5_axis_support(
+    filename: str,
+    dataset: str,
+    pname: str,
+    transform: Callable[[np.ndarray], np.ndarray] | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Extent of one stored grid axis, read from the grid file itself (#2862).
+
+    Returns ``{}`` when the grid file is not installed, the same as every other
+    accessor here. ``transform`` maps the stored axis to the parameter the
+    component is queried in (for example ``cos`` of a stored inclination).
+    """
+    from tengri._data_setup import find_data
+
+    path = find_data(filename)
+    if path is None:
+        return {}
+    import h5py
+
+    with h5py.File(path, "r") as f:
+        axis = np.asarray(f[dataset][:], dtype=np.float64)
+    if transform is not None:
+        axis = transform(axis)
+    return {pname: (float(axis.min()), float(axis.max()))}
+
+
+def _nenkova_agnfitter_support() -> dict[str, tuple[float, float]]:
+    """Nenkova AGNfitter torus: ``agn_cos_inc`` over the stored inclination axis.
+
+    The stored axis is 10..90 deg, so ``cos i`` reaches only 0.98481 at its top
+    (a physical 10 deg gap to the prior's ``cos i = 1``).
+    """
+    return _h5_axis_support(
+        "nenkova_agnfitter_torus_grid.h5",
+        "nenkova_agnfitter/incl_axis",
+        "agn_cos_inc",
+        transform=lambda incl: np.cos(np.radians(incl)),
+    )
+
+
+def _relagn_support() -> dict[str, tuple[float, float]]:
+    """Relagn disc: ``agn_log_mbh`` over the stored mass axis (7..10 dex)."""
+    return _h5_axis_support("relagn_disc_grid.h5", "log_mbh", "agn_log_mbh")
+
+
+def _wg00_support() -> dict[str, tuple[float, float]]:
+    """WG00 attenuation: ``dust_tau_v`` over the stored optical-depth axis (0.25..10)."""
+    return _h5_axis_support("wg00_attenuation_grid.h5", "wg00/tau_v_axis", "dust_tau_v")
+
+
 GRID_SUPPORT: dict[tuple[str, str], GridSupportFn] = {
+    ("agn.torus", "nenkova_agnfitter"): _nenkova_agnfitter_support,
+    ("agn.disc", "relagn"): _relagn_support,
+    ("dust.attenuation", "wg00"): _wg00_support,
     ("agn.disc", "slone_netzer"): _slone_netzer_support,
     ("agn.disc", "kd18_agnfitter"): _kd18_agnfitter_support,
     ("agn.disc", "kd18_agnfitter_warmindex"): _kd18_agnfitter_warmindex_support,

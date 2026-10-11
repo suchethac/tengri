@@ -1674,6 +1674,10 @@ class Parameters:
         neb = getattr(self, "neb", None)
         if isinstance(neb, str):
             selected.append(("neb", neb))
+        # WG00 attenuation is a template-backed screen (#2862): its tau_v axis is
+        # clipped onto the stored grid, so a prior past it warns here.
+        if getattr(self, "dust_model", None) == "wg00":
+            selected.append(("dust.attenuation", "wg00"))
         return selected
 
     def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
