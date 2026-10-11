@@ -79,7 +79,8 @@ def bpass_ssp():
     from BPASS causes posterior.derived to crash with TypeError.
     """
     if _BPASS_EXISTS:
-        return load_ssp_data(str(_BPASS_SSP))
+        # BPASS's surviving mass is pending (#2800): the fixture takes DSPS's fit explicitly.
+        return load_ssp_data(str(_BPASS_SSP), mass_remaining="dsps_fit")
     # Synthesize minimal BPASS-shaped SSPData lacking ssp_mass_remaining
     # to reproduce BUG-NSS-01 (posterior.derived crash with missing table).
     # Must be tengri's extended SSPData (ssp_mass_remaining/ssp_alpha_fe
