@@ -161,7 +161,11 @@ def test_flux_outside_the_window_does_not_leak_into_the_break(name):
     idx = STANDARD_INDICES[name]
     step = 0.5
     (b0, b1), (r0, r1) = idx.continuum
-    wave = np.arange(3600.0, 4400.0, step)
+    # The catalog edges are the vacuum image of the published air numbers (not multiples of
+    # the grid step), so the nodes on each edge and one step either side are added to the grid.
+    edges = [b0, b1, r0, r1]
+    extra = [e + k * step for e in edges for k in (-1, 0, 1)]
+    wave = np.unique(np.concatenate([np.arange(3600.0, 4400.0, step), extra]))
     clean = np.ones_like(wave)
     spiked = clean.copy()
     for edge, side in [(b0, -1), (b1, 1), (r0, -1), (r1, 1)]:
