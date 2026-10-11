@@ -18,7 +18,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["SOURCES", "WavelengthSource"]
+__all__ = [
+    "GROUND_FILTER_FACILITIES",
+    "SOURCES",
+    "SPACE_FILTER_FACILITIES",
+    "WavelengthSource",
+    "filter_wavelength_convention",
+]
 
 
 @dataclass(frozen=True)
@@ -134,10 +140,14 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "air",
         "lineList_wav carries 6562.80, 5006.84, 4861.32 (Cloudy air labels), and the "
         "infrared labels are air too: Paalpha 18751.0, [NeII] 12.8101 micron (vacuum "
-        "18756.1, 12.8136) all agree with the vacuum values to 7e-5 after air_to_vac up to "
-        "100 micron; Cloudy converts every label above 2000 A to air (Cloudy workshop "
-        "slides: vacuum below 2000 A, air above; Byler+2017 arXiv:1611.08305 convert "
-        "Cloudy's air labels with Morton 1991); "
+        "18756.1, 12.8136) all agree with the vacuum values to 7e-5 after air_to_vac. The "
+        "rule has no upper limit: cloudy-master source/cddefines.cpp t_wavl::sprt_wl "
+        "prints wl / p_RefIndex(1e8/wl) for every positive wavelength, with "
+        "prt.lgPrintLineAirWavelengths true by default (init_defaults_preparse.cpp) and the "
+        "Peck & Reeder 1972 index applied wherever the wavenumber is below 5e4 cm^-1 "
+        "(longward of 2000 A), so the six labels beyond 100 micron (121.769, 145.495, "
+        "157.636, 205.283, 370, 609 micron) are air labels too; Byler+2017 "
+        "(arXiv:1611.08305) convert Cloudy's air labels with Morton 1991; "
         "scripts/convert_cue_weights.py",
         "tengri.components.nebular.cue._load_cue_weights_eager",
     ),
@@ -155,7 +165,9 @@ SOURCES: tuple[WavelengthSource, ...] = (
         "lines/wavelength (Cloudy c23.01 line labels, CloudyParams cloudy_version) holds "
         "6562.80, 5006.84, 4958.91, 4861.32, 6583.45, 9068.62 and Paalpha 18751.0, "
         "Pabeta 12818.1, Brgamma 21655.3: the air values (vacuum 6564.61, 5008.24, "
-        "18756.1, ...). Cloudy air-labels everything above 2000 A. Note the dataset is "
+        "18756.1, ...). Cloudy air-labels every wavelength above 2000 A, with no upper limit "
+        "(source/cddefines.cpp t_wavl::sprt_wl); synthesizer-grids cloudy17.py/cloudy23.py "
+        "leave 'print line vacuum' commented out. Note the dataset is "
         "sorted and pairs with lines/luminosity by index, not with lines/id (the ids are "
         "alphabetical)",
         "tengri.components.nebular.agn_nebular._load_synthesizer_nlr_grid",
@@ -163,30 +175,61 @@ SOURCES: tuple[WavelengthSource, ...] = (
     WavelengthSource(
         "synthesizer_nlr_spectra",
         "data/synthesizer_grids/test_grid_agn-nlr.hdf5",
-        "unestablished",
-        "spectra/wavelength is Cloudy's continuum mesh (9244 pixels, 15-20 A wide in "
-        "the optical); the linecont array puts each line in one pixel",
+        "vacuum",
+        "spectra/wavelength is column 0 of Cloudy's save-continuum file. "
+        "synthesizer-grids (synthesizer-project/grid-generation, src/synthesizer_grids/"
+        "cloudy/cloudy17.py l.370 and cloudy23.py l.451) writes 'save last continuum "
+        '"{model}.cont" units Angstroms\' and read_wavelength() takes that column '
+        "unchanged. Cloudy fills it with Energy::angstromVac() = RYDLAM / E (source/"
+        "energy.h: 'all remaining methods return vacuum wavelengths'; service.cpp "
+        "AnuUnit; save_do.cpp l.907): a conversion from the Rydberg energy mesh that "
+        "never touches the air-index code used for line labels (cddefines.cpp "
+        "t_wavl::sprt_wl), so the 'units Angstroms' option is vacuum. Independent "
+        "check on the shipped file: the mesh is geometric in energy (constant "
+        "dln(lambda) = 3.33298e-3 to 4e-9 over 4000-30000 A), and the air index would "
+        "bend ln(lambda) vs pixel by -7.5e-6 (4000-5000 A) and -4.3e-6 (5000-6500 A); "
+        "the file shows -0.2e-6 and -0.3e-6 (noise 0.2e-6), which rejects air. The "
+        "12-27 A pixels cannot place the Balmer (3646/3647 A) or Paschen (8204/8206 A) "
+        "jump to the 1.2-2 A offset, so the edges were not used",
         "tengri.components.nebular.agn_nebular._load_synthesizer_nlr_grid",
-        "the mesh is an energy grid (vacuum by construction) but the pixel is 15-20 A "
-        "wide at H-alpha/[OIII] against a 1.4-1.8 A air-vacuum offset, so no line "
-        "position in the file can confirm it, and Synthesizer documents no convention; "
-        "used unchanged",
+    ),
+    WavelengthSource(
+        "svo_filters_space",
+        "data/filters",
+        "vacuum",
+        "space missions have no air: AKARI, Euclid, Gaia, GALEX, HST, Herschel, JWST, "
+        "Planck, Roman, Spitzer, Swift, WISE and XMM-Newton throughputs are measured or "
+        "modeled for an instrument that observes in vacuum, and a lab calibration in air "
+        "would be a documented conversion that no SVO entry mentions; classified by the "
+        "SVO facility prefix (SPACE_FILTER_FACILITIES)",
+        "tengri.observation.filters",
     ),
     WavelengthSource(
         "svo_filters",
         "data/filters",
         "unestablished",
-        "SVO FPS VOTables (SDSS, DECam, HSC, LSST, VISTA, 2MASS, MegaCam examined) carry "
-        "unit Angstrom and effective wavelengths but no air/vacuum field or comment; the "
-        "LSST throughputs README gives only 'nanometers'; speclite/Doi+2010 and the "
-        "SVO FPS documentation state no medium; the 1 A sampling of the O2 A band in "
-        "LSST_i and Suprime IB767 is too smooth to place the head to 2 A",
+        "ground-based SVO FPS VOTables (SDSS, DECam, HSC, LSST, VISTA, 2MASS, MegaCam "
+        "examined) carry unit Angstrom and effective wavelengths but no air/vacuum field "
+        "or comment. Checked 2026-10-11: Doi+2010 (AJ 139, 1628, arXiv:1002.3701) "
+        "calibrated the SDSS monochromator against Hg+Ar lamp lines (Asahi Spectra "
+        "HSU-100S, 250-1000 nm) to +-3 A and state no medium; lsst/throughputs README "
+        "says only 'All curves are in nanometers' (as-measured filter curves with a "
+        "modeled X=1.2 atmosphere); Cohen+2003 (AJ 126, 1090, arXiv:astro-ph/0304350) "
+        "and the DES DR1 paper (arXiv:1801.03181) say nothing about air or vacuum for the "
+        "bandpasses; the NAOJ HSC observer page (forobservers.html, Kawanomoto+2018) "
+        "links the HSC curves with no medium; the NOIRLab DECam filter page returned "
+        "nothing usable; the 1 A sampling of the O2 A band in LSST_i and Suprime IB767 "
+        "is too smooth to place the head to 2 A",
         "tengri.observation.filters",
-        "no source states the medium of any filter curve, and a curve combines a "
-        "lab-measured filter (air) with a model atmosphere and detector; the shift is "
-        "2.7e-4 in wavelength (1.7 A at r), insensitive for broadband photometry, so the "
-        "curves are used unchanged and every filter stays on the open list; the 7DT "
-        "delivery (nm) names no medium either",
+        "no source states the medium of any ground-based filter curve, and the best "
+        "documented calibration (Doi+2010, +-3 A) is coarser than the 1.7 A (2.7e-4) air "
+        "shift at r; a curve also combines a lab-measured filter (air) with a model "
+        "atmosphere and detector, so a global conversion would be a guess; the shift is "
+        "insensitive for broadband photometry (~1e-4), so the curves are used unchanged "
+        "and every ground family (SDSS, DECam, HSC, Suprime, LSST, 2MASS, MegaCam, WIRCam, "
+        "VISTA, HAWK-I, UKIDSS, Pan-STARRS, SkyMapper, ALHAMBRA, J-PAS/J-PLUS, GTC, "
+        "NEWFIRM, FourStar, Johnson/Cousins, the (sub)mm receivers) stays on the open "
+        "list; the 7DT delivery (nm) names no medium either",
     ),
     WavelengthSource(
         "qsogen_emlines",
@@ -205,12 +248,84 @@ SOURCES: tuple[WavelengthSource, ...] = (
     WavelengthSource(
         "qsogen_emlines_nir",
         "data/qsogen_emline_template.dat",
-        "unestablished",
+        "vacuum",
         "Temple+2021 App. B3: wavelengths longward of 5100 A (H-alpha, near-infrared "
-        "lines) come from the Glikman+2006 composite, smoothed to a 490 km/s pixel",
+        "lines) come from the Glikman+2006 composite (ApJ 640, 579, arXiv:astro-ph/"
+        "0511640), smoothed to a 490 km/s pixel. Glikman+2006 reduced its IRTF "
+        "SpeX spectra with Spextool (Cushing+2004) and Telluric (Vacca+2003); Cushing+2004 "
+        "(PASP 116, 362, Sec. 4.2.6, 'Wavelength Calibration': argon lines from Rao+1966 "
+        "and ATRAN sky lines) states 'All wavelengths are given in vacuum'. The composite "
+        "is shifted to the rest frame, which does not change the medium, and qsogen "
+        "(github.com/MJTemple/qsogen, qsosed.py) applies no air/vacuum conversion to the "
+        "template. The 11 A pixel at H-alpha cannot test it, so the chain of documentation "
+        "is the evidence",
         "tengri.components.agn.qsogen._load_emline_template_arrays",
-        "the Glikman+2006 composite and the paper state no medium for it, and the pixel "
-        "(about 11 A at H-alpha, 1.8-2.8 A air-vacuum offset) cannot place a line to the "
-        "offset; used unchanged",
     ),
 )
+
+#: SVO facility prefixes (the text before the first underscore of the file name) of space
+#: missions: vacuum by definition.
+SPACE_FILTER_FACILITIES: tuple[str, ...] = (
+    "AKARI",
+    "Euclid",
+    "GAIA",
+    "GALEX",
+    "HST",
+    "Herschel",
+    "JWST",
+    "PLANCK",
+    "Roman",
+    "Spitzer",
+    "Swift",
+    "WISE",
+    "XMM",
+)
+
+#: SVO facility prefixes of ground-based or ground-calibrated curves: convention unestablished.
+GROUND_FILTER_FACILITIES: tuple[str, ...] = (
+    "2MASS",
+    "APEX",
+    "CAHA",
+    "CFHT",
+    "CTIO",
+    "GTC",
+    "Generic",
+    "JCMT",
+    "LCO",
+    "LSST",
+    "NOAO",
+    "OAJ",
+    "PAN-STARRS",
+    "Paranal",
+    "SLOAN",
+    "SPT",
+    "SkyMapper",
+    "Subaru",
+    "UKIRT",
+)
+
+
+def filter_wavelength_convention(svo_name: str) -> str:
+    """Declared convention of an SVO-style filter name (``Facility_Instrument_Band``).
+
+    Parameters
+    ----------
+    svo_name : str
+        SVO filter name or cache file stem, e.g. ``"JWST_NIRCam_F200W"``.
+
+    Returns
+    -------
+    str
+        ``"vacuum"`` for a space mission, ``"unestablished"`` for a ground facility.
+
+    Raises
+    ------
+    KeyError
+        If the facility is in neither list (a new family must declare its convention).
+    """
+    facility = svo_name.split("_", 1)[0]
+    if facility in SPACE_FILTER_FACILITIES:
+        return "vacuum"
+    if facility in GROUND_FILTER_FACILITIES:
+        return "unestablished"
+    raise KeyError(f"filter facility {facility!r} has no declared wavelength convention")
