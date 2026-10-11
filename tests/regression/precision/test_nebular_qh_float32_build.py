@@ -160,6 +160,7 @@ def test_cue_float32_build_matches_float64(ssp_path, tmp_path):
     q32 = np.asarray(f32["logq_table"], dtype=np.float64)
     q64 = np.asarray(f64["logq_table"], dtype=np.float64)
     assert np.all(np.isfinite(q32)), "float32 log Q_H table holds non-finite entries"
+    assert np.any(q32 != 0.0), "float32 log Q_H table is identically zero"
     young = q64 > -90.0
     assert young.any(), "no ionizing bins in the float64 reference"
     dev = float(np.max(np.abs(q32 - q64)[young]))
@@ -187,6 +188,7 @@ def test_photoionized_backend_float32_build(kind, tmp_path):
     p32 = np.asarray(f32["phot"], dtype=np.float64)
     p64 = np.asarray(f64["phot"], dtype=np.float64)
     assert np.all(np.isfinite(p32)), f"{kind} float32 photometry non-finite: {p32}"
+    assert np.any(p32 != 0.0), f"{kind} float32 photometry is identically zero"
     rel = float(np.max(np.abs(p32 - p64) / np.abs(p64)))
     assert rel <= 1e-4, f"{kind} float32 photometry relative difference {rel:.3e}"
 
@@ -317,6 +319,7 @@ def test_nonfinite_beyond_lyman_edge_does_not_defeat_float32_scaling():
         flux[beyond] = bad
         lq32 = _gas_logqion(False, flux)
         assert np.isfinite(lq32), f"float32 log Q_H is {lq32} with {bad} beyond 5000 A"
+        assert lq32 != 0.0, f"float32 log Q_H is exactly zero with {bad} beyond 5000 A"
         dev = abs(lq32 - ref64)
         assert dev <= _CUE_QH_BAR, (
             f"float32 log Q_H with {bad} beyond 5000 A differs from float64 by {dev:.3e} dex"

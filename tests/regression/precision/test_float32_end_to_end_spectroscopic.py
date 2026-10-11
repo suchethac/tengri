@@ -64,6 +64,11 @@ def all_finite(tree):
     return all(bool(np.all(np.isfinite(np.asarray(leaf)))) for leaf in leaves)
 
 
+def any_nonzero(tree):
+    leaves = jax.tree_util.tree_leaves(tree)
+    return any(bool(np.any(np.asarray(leaf) != 0.0)) for leaf in leaves)
+
+
 def has_f64(text):
     return ("f64" in text) or ("float64" in text)
 
@@ -149,6 +154,7 @@ try:
         grad=grad_dtypes,
         value_finite=all_finite(value),
         grad_finite=all_finite(grad),
+        grad_nonzero=any_nonzero(grad),
     )
 
     jaxpr = str(jax.make_jaxpr(objective)(free))
@@ -266,6 +272,9 @@ def test_float32_stays_float32_end_to_end_spectroscopic_fit(neb, tmp_path):
     _assert_stage_float32(stages, "loglik_grad", value="float32", grad=["float32"])
     assert stages["loglik_grad"]["value_finite"] is True, "log-likelihood is not finite"
     assert stages["loglik_grad"]["grad_finite"] is True, "log-likelihood gradient is not finite"
+    assert stages["loglik_grad"]["grad_nonzero"] is True, (
+        "log-likelihood gradient is identically zero"
+    )
     _assert_stage_float32(stages, "jaxpr")
     assert stages["jaxpr"]["f64_in_jaxpr"] is False, "float64 type in the jitted loglik jaxpr"
     assert stages["jaxpr"]["f64_in_grad_jaxpr"] is False, (
