@@ -33,8 +33,14 @@ class TestSbplDiscBitIdentityPin:
         """Registry lookup for the sbpl disc block."""
         return AGN_BLOCKS["disc"]["grahsp_sbpl"]
 
-    # (params, float.hex of the block output at _PIN_WAVE_AA), recorded from the block
-    # BEFORE the _disc_log_l5100 extraction (parent of the Netzer-block commit).
+    # (params, float.hex of the block output at _PIN_WAVE_AA). Rows 1-3 and 5 give an explicit
+    # l5100, so they do not depend on the normalization integral and are unchanged since the
+    # block was extracted. Row 4 sets the bolometric target (``agn_grahsp_log_l5100`` unset), so
+    # it follows the normalization integral above the Lyman limit, which runs on the block's own
+    # grid to 1e14 nm (it stopped at 1e8 nm, cutting the power-law tail beyond the 10 um cutoff).
+    # Re-recorded for that: new / old - 1 = -1.1306e-8 at all seven wavelengths, which is the
+    # unit-SBPL tail fraction past 1e8 nm at plslope = -1.6 (measured: the integral to 1e8 nm is
+    # low by 1.1306e-8 of the integral to 1e40 nm; to 1e14 nm it matches it to better than 1e-15).
     _PIN_WAVE_AA = (912.0, 1216.0, 2500.0, 5100.0, 10000.0, 50000.0, 200000.0)
     _PINNED = (
         (
@@ -91,13 +97,13 @@ class TestSbplDiscBitIdentityPin:
         (
             dict(agn_log_lbol=45.0, agn_grahsp_uvslope=0.2, agn_grahsp_plslope=-1.6),
             (
-                "0x1.bc3e0c804dc82p+249",
-                "0x1.666b57fbf2e9dp+249",
-                "0x1.3b259e8db0188p+248",
-                "0x1.bd12adb34fe5cp+246",
-                "0x1.36bfdaeb47e45p+245",
-                "0x1.4a33846be7f30p+241",
-                "0x1.05b489cff7387p+237",
+                "0x1.bc3e0c2c09210p+249",
+                "0x1.666b57b7f5e03p+249",
+                "0x1.3b259e51e8633p+248",
+                "0x1.bd12ad5ee2e94p+246",
+                "0x1.36bfdab055bacp+245",
+                "0x1.4a33842d45325p+241",
+                "0x1.05b4899e52abfp+237",
             ),
         ),
         (
@@ -115,7 +121,7 @@ class TestSbplDiscBitIdentityPin:
     )
 
     def test_sbpl_bit_identity_pinned_before_extraction(self, sbpl_block):
-        """sbpl output equals values recorded before the helper extraction, bit for bit.
+        """sbpl output equals the pinned values, bit for bit.
 
         Covers the explicit-l5100 branch, the bolometric (``agn_grahsp_log_l5100=None``)
         branch and the float32 ``agn_log_lbol_shape`` pre-shift branch.

@@ -52,11 +52,16 @@ BASE_PER_DECADE: int = 20
 WINDOW_SIGMA: float = 6.0
 """Half-width of a feature window in standard deviations."""
 
-PUBLICATION_HI_NM: float = 1.0e8
+PUBLICATION_HI_NM: float = 1.0e14
 """Long-wavelength edge of the publication grid [nm].
 
-The SMC-broken BBB falls as lambda**(alpha_2 - 1) beyond its cutoff, so the integral tail
-above this edge is below 1e-12 of the luminosity for every prior in the declaration.
+The SMC-broken BBB falls as lambda**(alpha_2 - 1) beyond its cutoff, so a shallow
+``plslope`` leaves a long tail: the luminosity above 91.2 nm that lies past an edge, over the
+corners of the declared prior (plslope -2.7 to -1.0, bend 50-150 nm, width 0.1-10, cutoff
+10 um), is at most 1.44e-4 past 1e8 nm and **1.9e-10 past 1e14 nm** (measured, with the
+integral taken to 1e40 nm); the worst corner is plslope = -1 with bend width 10. The grid
+therefore runs to 1e14 nm and the published ``L_agn_bol`` and ``L_agn_absorbed`` and the disc
+block normalization are low by at most that fraction.
 """
 
 _WINDOW_OFFSETS: np.ndarray = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
