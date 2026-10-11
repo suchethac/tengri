@@ -264,8 +264,8 @@ for _lab, _up, _tg in (("broad", _fid.spectra["bl"], _bl_on_grid), ("narrow", _f
 # %% [markdown]
 # ### 3.2 Torus log-Gaussian width (the missing ½)
 #
-# Upstream's cool and hot components use $\exp(-x^2/W^2)$. Eq. 2 of Buchner et al. (2024) has
-# $\exp[-(\lambda-\lambda_c)^2/(2W^2)]$, the standard Gaussian with $W$ the dispersion in dex.
+# Upstream's cool and hot components use $\exp(-x^2/W^2)$. Eq. 2 of Buchner et al. (2024) writes
+# each log-Gaussian component as $\exp[-(\log\lambda-\log\lambda_0)^2/(2W^2)]$, with $W$ in dex.
 # The two differ by a factor of $\sqrt{2}$ in $W$. The comparison feeds tengri $W_\text{tengri} =
 # W_\text{upstream}/\sqrt{2}$. The figure shows the uncorrected and corrected torus for the two
 # cool-component widths in the sweep.
