@@ -40,6 +40,9 @@ Provides
 - :func:`edge_trapezoid` — step-model-exact definite integral (whole grid,
   ionizing side only, or non-ionizing side only), in either the wavelength
   or frequency quadrature variable.
+- :func:`edge_trapezoid_log10` — :func:`edge_trapezoid` returned in log10,
+  with the integrand peak-normalized so the linear integral is never formed
+  (float32-safe for Q_H-scale integrals).
 - :func:`edge_interp` — step-model-exact interpolation (linear away from
   the edge, a step in the bracket cell).
 - :func:`edge_bracket_values` — the bracket cell's two step values
@@ -69,7 +72,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
-from tengri.utils.scale import _not_computable, log10_magnitude
+from tengri.utils.scale import (
+    _not_computable,
+    log10_magnitude,
+    log10_power_of_two_integral,
+)
 
 __all__ = [
     "LYC_ESCAPE_GEOMETRIES",
@@ -78,6 +85,7 @@ __all__ = [
     "edge_bracket_values",
     "edge_interp",
     "edge_trapezoid",
+    "edge_trapezoid_log10",
     "escape_geometry_transmission",
     "hole_young_transmission",
     "ionizing_mask",
@@ -229,6 +237,7 @@ def edge_trapezoid(
 
     wave_lo = wave[:-1]
     wave_hi = wave[1:]
+
     fully_ionizing = wave_hi < edge_aa
     fully_nonionizing = wave_lo >= edge_aa
     is_bracket = ~fully_ionizing & ~fully_nonionizing
@@ -249,6 +258,93 @@ def edge_trapezoid(
     if side == "nonionizing":
         return nonionizing_total
     return ionizing_total + nonionizing_total
+
+
+def edge_trapezoid_log10(
+    y: jnp.ndarray,
+    wave: jnp.ndarray,
+    *,
+    variable: str = "nu",
+    side: str = "all",
+    edge_aa: float = LYMAN_LIMIT_AA,
+    axis: int = -1,
+) -> jnp.ndarray:
+    r"""Log10 of :func:`edge_trapezoid`, with the integrand scaled by a power of two.
+
+    For each row along ``axis`` the exponent :math:`e` is taken from
+    :math:`\max_\lambda |y| = m\,2^{e}` with :math:`m \in [0.5, 1)`
+    (``jnp.frexp``). The quadrature runs on :math:`y\,2^{-e}`, whose peak is O(1),
+    and :math:`e` is returned as a log10 offset:
+
+    .. math::
+
+        \log_{10} \int y \, dx
+        \;=\; \log_{10} \int \frac{y}{2^{e}} \, dx \;+\; e \log_{10} 2
+
+    **Why a power of two.** Multiplying or dividing by :math:`2^{k}` is exact in
+    binary floating point (no mantissa bits are lost while the value stays in the
+    normal range). The scaled quadrature therefore equals the unscaled one times
+    :math:`2^{-e}` exactly: when the unscaled value is representable,
+    :func:`log10_power_of_two_integral` returns the log10 of the unscaled integral
+    bit for bit, so float64 output is unchanged. A scale by :math:`\max|y|` would
+    not be exact, and would change the float64 result by a rounding error. Float32
+    gains because the O(1) scaled integrand keeps the ionizing-side terms out of the
+    subnormal range, and the integral is returned as a log, so it does not
+    overflow.
+
+    Parameters
+    ----------
+    y : array_like, shape (..., n_wave)
+        Sampled integrand on ``wave`` along ``axis``, in any units; the result
+        is :math:`\log_{10}` of the integral in those units times the quadrature
+        measure (Hz for ``variable="nu"``, Angstrom for ``variable="wave"``).
+        Expected to be non-negative on the selected side (see Notes).
+    wave : array_like, shape (n_wave,)
+        Wavelength grid, ascending. [Angstrom]
+    variable : {"nu", "wave"}, optional
+        Quadrature variable, as in :func:`edge_trapezoid`. Default ``"nu"``.
+    side : {"all", "ionizing", "nonionizing"}, optional
+        Side of the Lyman edge to integrate, as in :func:`edge_trapezoid`.
+        Default ``"all"``.
+    edge_aa : float, optional
+        Lyman edge [Angstrom]. Default :data:`LYMAN_LIMIT_AA` (911.76 Å).
+    axis : int, optional
+        Axis of ``y`` along which ``wave`` runs. Default -1.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        :math:`\log_{10}` of the :func:`edge_trapezoid` integral of ``y``, with
+        ``axis`` reduced away [dex, in the units of ``y`` times the quadrature
+        measure]. A row that is exactly zero on the selected side returns
+        ``-inf``; a row containing a non-finite value returns ``+inf``. Callers
+        that need a finite floor clamp the result themselves.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``variable``, ``side`` and ``axis`` are static Python
+    arguments.
+
+    **Gradient-safe**: yes with respect to ``y`` wherever the selected integral is
+    positive. The exponent is a constant (``stop_gradient``): the integral is
+    linear and homogeneous in ``y``, so the factor cancels against the offset.
+
+    **Sign**: the integrand is expected to be non-negative on the selected side.
+    Mixed-sign integrands are not supported.
+
+    **Precision**: in float64 the result is bit-identical to
+    ``log10(edge_trapezoid(y, wave, ...))`` whenever that linear integral is finite.
+    In float32 the scaled integrand is O(1) per row, so the only loss is the
+    subnormal range of its small terms, which are negligible relative to the peak.
+    """
+    y = jnp.moveaxis(jnp.asarray(y), axis, -1)
+    # frexp: max|y| = m * 2**e, m in [0.5, 1). A zero row gives e = 0.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(y), axis=-1, initial=0.0))
+    _, exponent = jnp.frexp(peak)
+    scaled = jnp.ldexp(y, -exponent[..., None].astype(jnp.int32))
+    integral = edge_trapezoid(scaled, wave, variable=variable, side=side, edge_aa=edge_aa, axis=-1)
+    log10_integral = log10_power_of_two_integral(integral, exponent)
+    return jnp.where(_not_computable(log10_integral), jnp.inf, log10_integral)
 
 
 def edge_interp(

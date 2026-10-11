@@ -53,11 +53,13 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: Bump when the curve-fit algorithm, the table layout, or field set changes.
 #: One version constant per cache (disk + in-memory) to ensure a stale entry
 #: cannot be reused after an algorithm change.
-#: 2 (this module's LyC brief): ``gas_logqion`` now integrates via the shared
-#: :func:`tengri.components.lyc.edge_trapezoid` step model instead of a hard
-#: ``wave <= HI_LIMIT`` mask, adding the #537 partial-bin correction here for
-#: the first time -- a disk entry computed under version 1 is stale.
-_IONSPEC_CACHE_VERSION = 2
+#: 2: ``gas_logqion`` integrates via the shared
+#: :func:`tengri.components.lyc.edge_trapezoid` step model (#537 partial-bin
+#: correction), not a hard ``wave <= HI_LIMIT`` mask.
+#: 3: ``gas_logqion`` integrates in the log domain (#2849). A table built with a
+#: float32 integral holds ``inf`` and was written under the same key as the
+#: float64 one, so every version-2 entry is retired.
+_IONSPEC_CACHE_VERSION = 3
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
@@ -109,7 +111,19 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
         bytes(np.asarray(ssp_wave).tobytes()),
         bytes(np.asarray(ssp_lgmet).tobytes()),
         _hashlib.sha256(flux.tobytes()).hexdigest(),
+        _computation_dtype(),
     )
+
+
+def _computation_dtype() -> str:
+    """Float precision the table is computed in: ``float64`` with x64 on, else ``float32``.
+
+    The edge quadrature runs in JAX, so its precision follows ``jax_enable_x64``,
+    not the dtype of the input array. A float64 SSP built with x64 off therefore
+    yields a float32 table, and that table must not share a key with the x64-on one
+    (#2849).
+    """
+    return str(jnp.result_type(float))
 
 
 def _fingerprint_hash(key: tuple) -> str:
@@ -125,6 +139,7 @@ def _fingerprint_hash(key: tuple) -> str:
     h.update(key[3])  # raw wave bytes
     h.update(key[4])  # raw lgmet bytes
     h.update(key[5].encode())  # flux content digest: without it, see _ssp_fingerprint
+    h.update(key[6].encode())  # computation dtype: float32 and float64 tables differ
     return h.hexdigest()
 
 
@@ -562,28 +577,24 @@ def fit_ionizing_spectrum(
     log_L = _compute_segment_luminosities(coeff, edges)
     logLratios = np.diff(log_L)
 
-    # Total Q_H: integrate the ionizing photon rate via the one shared
-    # step-model primitive (tengri.components.lyc.edge_trapezoid) instead of
-    # a hard ``wave <= HI_LIMIT`` mask + plain trapezoid, so this table picks
-    # up the same #537 partial-bin Lyman correction
-    # :mod:`tengri.components.stellar.component` already applies to the same
-    # Q_H integral (module docstring of ``tengri.components.lyc``).
-    #
-    # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
-    # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
-    # produces intermediates ~ 1e30 and integrating over the ~ 1e16 Hz
-    # bandwidth gives ~ 1e46: well past float32's 3.4e38 max, so the running
-    # sum overflows to ``inf`` from a few terms in. Result: every (Z, age)
-    # bin in the cached table collapses to ``log10(inf) = inf``, downstream
-    # treats the SSP as wNE / dead, and Cue silently emits ~zero nebular
-    # emission (issue #458). The slope fits above are float32-safe because
-    # ``normalized = flux * 1e-18 / ref_flux`` rescales each segment before
-    # fitting.
+    # Total Q_H (#458, #2849). The integrand (flux * L_sun) / (h nu) is formed in
+    # float64 NumPy, as the original code did after the #458 cast. Its integral
+    # reaches ~1e46-1e47, past float32's ceiling, so the quadrature runs on the
+    # integrand divided by a power of two (exact in binary floating point) and the
+    # exponent is restored in float64. The log is taken in NumPy, so a float64
+    # build reproduces the linear integral's log bit for bit.
     integrand = (flux * _LSUN) / (_H_PLANCK * (_C_AA / wave))
-    Q_total = float(
-        edge_trapezoid(integrand, wave, variable="nu", side="ionizing", edge_aa=HI_LIMIT)
+    exponent = int(np.frexp(np.max(integrand))[1])
+    q_scaled = float(
+        edge_trapezoid(
+            np.ldexp(integrand, -exponent),
+            wave,
+            variable="nu",
+            side="ionizing",
+            edge_aa=HI_LIMIT,
+        )
     )
-    log_qion = np.log10(max(Q_total, 1e-99))
+    log_qion = float(np.log10(max(np.ldexp(q_scaled, exponent), 1e-99)))
 
     return {
         "ionspec_index1": np.clip(coeff[0, 0], *_CLIP_RANGES["ionspec_index1"]),

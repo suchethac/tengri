@@ -484,6 +484,48 @@ def log10_magnitude(value):
     return jnp.where(finite, zero_or_log, jnp.inf)
 
 
+#: log10(2), the dex offset of one power of two.
+_LOG10_2 = math.log10(2.0)
+
+
+def log10_power_of_two_integral(integral, exponent):
+    r"""Log10 of ``integral * 2**exponent``, exact whenever the product fits the dtype.
+
+    ``integral`` is an integral taken over a row divided by ``2**exponent``. Scaling
+    by a power of two is exact in binary floating point, so when the unscaled value
+    is representable, the result is the log10 of that value bit for bit. When it is
+    not (float32 above its ceiling), the same number is returned as
+    ``log10(integral) + exponent * log10(2)``, without forming the linear value.
+
+    Parameters
+    ----------
+    integral : array_like, shape (...)
+        Integral of the power-of-two-scaled row [any units].
+    exponent : array_like of int, shape (...)
+        Power of two per row: the true integral is ``integral * 2**exponent``.
+
+    Returns
+    -------
+    ndarray, shape (...)
+        ``log10`` of the unscaled integral [dex, same units as the true integral].
+        ``-inf`` where ``integral`` is exactly zero (the
+        :func:`log10_magnitude` sentinel).
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes with respect to ``integral``.
+    The exponent is a constant factor (``stop_gradient``), and the branch that is
+    not selected uses a finite dummy exponent, so the backward pass stays finite.
+    """
+    exponent = jax.lax.stop_gradient(jnp.asarray(exponent, dtype=jnp.int32))
+    integral = jnp.asarray(integral)
+    fits = jnp.isfinite(jnp.ldexp(integral, exponent))
+    safe_exponent = jnp.where(fits, exponent, 0)
+    exact = log10_magnitude(jnp.ldexp(integral, safe_exponent))
+    offset = log10_magnitude(integral) + exponent.astype(integral.dtype) * _LOG10_2
+    return jnp.where(fits, exact, offset)
+
+
 def apply_log10_scale(arr, log10_scale):
     """Return ``arr * 10**log10_scale`` without out-of-range intermediates.
 

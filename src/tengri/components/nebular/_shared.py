@@ -21,7 +21,12 @@ from tengri.components.nebular._constants import (
     NEBULAR_FREEFREE_TAIL_ALPHA_NU,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
-from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
+from tengri.utils.scale import (
+    apply_log10_scale,
+    log10_power_of_two_integral,
+    pow10,
+    representable_denominator,
+)
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
@@ -796,15 +801,14 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     **JIT-compatible / gradient-safe**: yes. The where-dummy keeps the backward
     pass free of NaN where the integral vanishes.
 
-    **Why the peak is factored out first (#1568)**: the division by
-    :math:`h\nu` is the step that leaves range:
-    :math:`h\nu \approx 2\times10^{-11}`, so a healthy
-    :math:`L_\nu \sim 10^{30}` becomes :math:`\sim10^{41}` *before* the
-    trapezoid, and the integral itself reaches :math:`\sim10^{46}` against a
-    float32 ceiling of 3.4e38. Normalizing by the peak and deferring both
-    constants to a log-space sum keeps the integrand at
-    :math:`\sim10^{-16}` and the accumulated integral at order unity. Same
-    treatment as ``_integrate_nion_log10`` on the stellar path.
+    **Why the peak is factored out first (#1568)**: the division by :math:`h\nu`
+    is the step that leaves range: :math:`h\nu \approx 2\times10^{-11}`, so a
+    healthy :math:`L_\nu \sim 10^{30}` becomes :math:`\sim10^{41}` *before* the
+    trapezoid, and the integral reaches :math:`\sim10^{46}` against a float32
+    ceiling of 3.4e38. The integrand is therefore normalized by the SSP peak, and
+    the integral is taken on that O(1) scale with a power-of-two factor (#2849):
+    multiplying by :math:`2^{k}` is exact, so float64 output is bit-identical to the
+    linear integral, and the log is restored from the exponent.
 
     The float64 clamp that used to sit here (``finfo(float64).max / n_wave``,
     guarding trapezoid overflow for artificially young SSPs with
@@ -815,18 +819,21 @@ def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
     mask = ssp_wave < _LYMAN_LIMIT
 
-    # Factor the peak out BEFORE dividing by nu: that division is the one that
-    # leaves float32 range, so it must act on an O(1) quantity.
+    # The linear form's arithmetic: normalize by the SSP peak, then divide by nu.
     peak = jnp.max(jnp.abs(ssp_flux))
     peak_safe = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     integrand = jnp.where(mask, (ssp_flux / peak_safe) / nu, 0.0)
-    norm = -jnp.trapezoid(integrand, nu)
+    # Power-of-two scale of the integrand (#2849): exact, so the float64 integral
+    # is the linear one times 2**-e, and the log is restored from the exponent.
+    _, exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(integrand))))
+    scaled = jnp.ldexp(integrand, -exponent.astype(jnp.int32))
+    norm_s = -jnp.trapezoid(scaled, nu)
 
     # ``jnp.maximum(qh, 0.0)`` in the linear form mapped a negative integral to
     # zero; ``-inf`` here is the same statement, and pow10 reproduces the 0.0.
-    positive = norm > 0
-    safe = jnp.where(positive, norm, 1.0)
-    log_norm = jnp.where(positive, jnp.log10(safe), -jnp.inf)
+    positive = norm_s > 0
+    safe = jnp.where(positive, norm_s, 1.0)
+    log_norm = jnp.where(positive, log10_power_of_two_integral(safe, exponent), -jnp.inf)
 
     return log_norm + jnp.log10(peak_safe) + _LOG10_LSUN_ERG - _LOG10_H_PLANCK
 
