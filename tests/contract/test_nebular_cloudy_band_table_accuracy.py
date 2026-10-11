@@ -35,7 +35,16 @@ _REAL_SKIP = pytest.mark.skipif(
     reason="needs cloudy_grid_prsc.h5 (scripts/convert_fsps_cloudy_grid.py; not downloadable)",
 )
 
-_REDSHIFT = 0.1
+#: Observed-frame redshift. At z = 0.2 the Ly-alpha line (1215.67 A) lands at
+#: 1459 A, inside the GALEX FUV band in this file's filter set. At z = 0.1 it
+#: falls at 1337 A, outside every band, so the escape cases could not fail.
+_REDSHIFT = 0.2
+#: Index of galex_fuv in the filter list built in ``setup``.
+_FUV = 3
+#: Relative change in the FUV band between fesc_lya = 0.2 and 0.8 must exceed
+#: this. It is 50 times the accuracy bar, so an escape convention that stops
+#: reaching the bands fails here before it can pass the contract.
+_LYA_SENSITIVITY_MIN = 50 * 1e-3
 _LINE_SIGMA_KMS = 100.0
 _TOL = 1e-3
 _BUILD_BUDGET_S = 60.0
@@ -176,9 +185,9 @@ def test_band_table_matches_per_call_path_at_seeded_draws(setup):
     assert worst < _TOL, f"worst relative band error {worst:.3e} exceeds {_TOL:.0e}"
 
 
-# 0.5 is the owner's check point, but (1 - f) == f there, so a table that used
-# f_esc instead of (1 - f_esc) would still pass at 0.5. 0.2 separates the two.
-@pytest.mark.parametrize("fesc_lya", [0.2, 0.5])
+# 0.5 cannot separate the conventions, since (1 - f) == f there. A table that
+# used f_esc in place of (1 - f_esc) passes at 0.5 and fails at 0.2 and 0.8.
+@pytest.mark.parametrize("fesc_lya", [0.2, 0.8])
 def test_band_table_matches_per_call_path_with_lya_escape(setup, fesc_lya):
     """The Ly-alpha escape convention is the per-call one at nonzero neb_fesc_lya.
 
@@ -189,3 +198,18 @@ def test_band_table_matches_per_call_path_with_lya_escape(setup, fesc_lya):
     worst = _worst_relative_error(setup, fesc_lya=fesc_lya)
     assert np.isfinite(worst)
     assert worst < _TOL, f"worst relative band error at fesc_lya={fesc_lya} is {worst:.3e}"
+
+
+def test_lya_escape_moves_the_fuv_band(setup):
+    """The per-call FUV band must respond to neb_fesc_lya, or the cases above are inert.
+
+    Measured on the per-call path, not the table: if Ly-alpha stops reaching the
+    band, the escape contract cannot tell the convention apart, and this fails.
+    """
+    lo = _per_call_bands(setup, -1.85, -2.35, -3.0, 0.2)[0, _FUV]
+    hi = _per_call_bands(setup, -1.85, -2.35, -3.0, 0.8)[0, _FUV]
+    change = abs(hi - lo) / max(abs(lo), 1e-300)
+    assert change > _LYA_SENSITIVITY_MIN, (
+        f"FUV band changes by {change:.3e} between fesc_lya 0.2 and 0.8; "
+        f"it must exceed {_LYA_SENSITIVITY_MIN:.0e}"
+    )

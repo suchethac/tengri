@@ -45,6 +45,11 @@ _LOG_U_AXIS = np.array([-5.0, -4.0, -3.0, -2.0, -1.0, 0.0])
 #: Rest-frame wavelengths [Angstrom] of six nebular lines, Lyman-alpha to Halpha.
 _LINE_WAVE_AA = np.array([1216.0, 3727.0, 4861.0, 4959.0, 5007.0, 6563.0])
 
+#: Extra log10 luminosity on the Ly-alpha line (index 0). Without it the line is
+#: about 1e-13 of the FUV band and Ly-alpha escape cannot move any band. With it,
+#: Ly-alpha dominates the FUV band, as it does in CLOUDY nebular spectra.
+_LYA_BOOST_DEX = 12.0
+
 #: Nebular continuum wavelengths [Angstrom], spanning the Lyman limit to 10 um.
 _CONT_WAVE_AA = np.logspace(np.log10(912.0), 5.0, 60)
 
@@ -71,6 +76,7 @@ def _log_line_luminosity() -> np.ndarray:
         + 0.2 * (age - 7.0)
         - 0.5 * (logu + 2.0)
         + 0.1 * met * (logu + 2.0)
+        + _LYA_BOOST_DEX * (line == 0)
     )
 
 
