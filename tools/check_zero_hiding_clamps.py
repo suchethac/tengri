@@ -210,7 +210,14 @@ from collections.abc import Sequence
 #: 84 -> 83 with #2745: the SKIRTOR publication path integrates the disc and dust in closed
 #: form (``native_bolometric_nu``) instead of dividing a grid trapezoid by a clamped integral;
 #: one clamped-denominator division is gone.
-EXPECTED_SITES = 83
+#:
+#: 83 -> 82 with #2783: the ``adaf_spectrum_from_state`` normalization no longer divides by
+#: ``jnp.maximum(integral, representable_floor(1e-100))``. It forms the same ratio in log space,
+#: ``exp(log numer - log integral + log(S + B))``, with ``log_integral`` a ``logsumexp`` of the
+#: segment and bremsstrahlung log powers, so the denominator is never clamped and never divided.
+#: A removal, not a relabel: a zero power would now show as -inf in the log, not as a floored
+#: quotient.
+EXPECTED_SITES = 82
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

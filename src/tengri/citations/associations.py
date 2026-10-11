@@ -208,6 +208,8 @@ AGN_DISC_CITATIONS: dict[str, list[str]] = {
     "shakura_sunyaev": ["shakura_sunyaev1973"],
     "kubota_done": ["kubota_done2018"],
     "adaf": ["mahadevan1997"],
+    # GRAHSP Netzer & Trakhtenbrot (2014) disc, inside the Buchner et al. (2024) model
+    "grahsp_netzer": ["buchner2024", "netzer_trakhtenbrot2014"],
     None: [],
 }
 
@@ -215,6 +217,8 @@ AGN_TORUS_CITATIONS: dict[str, list[str]] = {
     "skirtor": ["skirtor", "skirtor_2012"],
     "stalevski": ["skirtor", "skirtor_2012"],
     "clumpy": ["clumpy_nenkova2008"],  # Nenkova+2008 Paper I (ADS-verified)
+    # GRAHSP Mor & Netzer (2012) template torus, inside the Buchner et al. (2024) model
+    "grahsp_mn12": ["buchner2024", "mor_netzer2012"],
     "nenkova": ["clumpy_nenkova2008"],
     None: [],
 }
