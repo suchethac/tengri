@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for #2644: an SFH identically zero inside its support
-must form zero mass on BOTH age kernels, not the declared mass.
+forms zero mass, announced by a ``ZeroSFHWarning``, and the default
+``delayed_bq`` priors cannot draw one.
 
 ``delayed_bq`` with ``age_bq_gyr >= age_main_gyr`` clips the main-sequence
-SFR negative (hence zero) everywhere; before this fix the "dsps" kernel
-published the DECLARED mass anyway (DSPS's own SFR_MIN floor keeps its
-histogram weights nonzero for an all-zero input), while "cic" already
-published the representable-floor mass. Both kernels now agree.
+SFR negative (hence zero) everywhere. The formed mass is the representable
+floor, not the declared 1e9, on both ``age_kernel`` spellings.
 """
 
 from __future__ import annotations
