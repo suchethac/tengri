@@ -77,9 +77,22 @@ $$ (eq-fir-radio)
 
 - `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above. Because the nebular free-free is modeled rather than fixed at Bell's empirical 10 %, that total differs from the calibration by a few per cent (0.96 for a delayed-tau galaxy of 1 Gyr at 5 Gyr, 1.02 for constant star formation).
 
-- `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
+- `delvecchio2021` (Delvecchio et al. 2021, Eq. 5): the multi-parametric total-radio fit $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$ at 1.4 GHz, with defaults $q_0 = 2.646$, $m_s = 0.148$, $z_s = -0.023$ (the paper's best fit, $\pm 0.024$, $\pm 0.013$, $\pm 0.008$).
 
-- `mccheyne2022` (McCheyne et al. 2022): same functional form with defaults $q_0 = 1.98$, $m_s = -0.22$, $z_s = 0.02$.
+- `mccheyne2022` (McCheyne et al. 2022, A&A 662, A100, Sect. 5.2): the joint redshift and mass fit at 150 MHz, $q_{\rm TIR} = q_0(1+z)^{z_s} + m_s(\log M_\star - 10.45)$ with $q_0 = 1.98 \pm 0.02$, $z_s = 0.02 \pm 0.04$, $m_s = -0.22 \pm 0.03$, valid for $z < 0.4$ and $M_\star > 10^{10.45}$. The IR input is the 8--1000 $\mu$m luminosity (the paper's Eq. 4 definition), and the 150 MHz synchrotron uses the paper's $\alpha = 0.60$ (Table 3). The constants are from the paper's accepted-manuscript text layer (Leiden repository, hdl 1887/3561784).
+
+For both mass/redshift modes $q_{\rm IR}$ calibrates the **total** luminosity at the mode's own reference frequency, $L^{\rm tot}_{\nu_{\rm ref}} = L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\cdot10^{q_{\rm IR}})$, exactly as for `bell2003`: the synchrotron term is the total minus the Murphy et al. (2011) free-free term at $\nu_{\rm ref}$, and no Bell $n(L)$ factor multiplies it (the mass and luminosity trend is already in $q_{\rm IR}$). The build evaluates the worst corner of the declared box, over $q_0$, the mass and redshift slopes, the redshift, and the stellar mass the radio block reads, and refuses the box if $q$ there exceeds $q_\ast$ at $\nu_{\rm ref}$ (the same limit as for `bell2003`). The lowest reachable $\log M_\star$ is the SFH `log_total_mass` floor plus $\log_{10}$ of the smallest SSP mass-remaining fraction (a conservative bound).
+
+#### Calibrated domain of the mass and redshift relations.
+
+Each relation is an empirical linear fit, valid only over the sample it was fitted to. Outside that sample it is not extrapolated: its mass and redshift arguments are held at the nearest edge, so the relation is constant beyond the edge and its gradient with respect to those arguments is zero there.
+
+- `delvecchio2021`: $0.1 < z < 4.5$ and $10^8 < M_\star/M_\odot < 10^{12}$ (Delvecchio et al. 2021, Sect. 2).
+- `mccheyne2022`: $M_\star > 10^{10.45}\,M_\odot$ and $z < 0.4$ (McCheyne et al. 2022, Sect. 5.2, the joint fit). No upper mass bound is stated.
+
+If a declared prior on the stellar mass or the redshift reaches outside these ranges, the build issues a warning that names the range and the calibration. It is not an error: the relation is held at the edge there. A default galaxy at $z = 0$ therefore warns in `delvecchio2021`, because $z = 0$ lies below the calibrated range, and its $q_{\rm IR}$ is the value at $z = 0.1$.
+
+The build refuses a declared box only when its worst corner makes the synchrotron term negative. For the default free priors of both modes that worst corner stays below $q_\ast$, so those boxes build.
 
 The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters in all mass/redshift-dependent modes, enabling hierarchical inference over galaxy populations.
 
@@ -95,7 +108,7 @@ At low star-formation rates, cosmic-ray electrons lose energy through inverse Co
 \end{cases}
 
 $$ (eq-synch-suppression)
- where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$.
+ where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$. The `bell2003` mode applies it nowhere (its $q_{\rm IR}$ is a total calibration). The `delvecchio2021` and `mccheyne2022` modes do not apply it either: their $q_{\rm IR}(M_\star, z)$ already carries the mass and luminosity dependence that $n(L)$ would correct for. The `apply_suppression` argument of the functions is an opt-in kept for callers that want the legacy multiplier.
 
 ### Thermal Free-Free Emission
 
@@ -140,6 +153,26 @@ Omitting the `freefree` key applies the auto rule above. Exception: `bell2003_sp
 For the default spelling the synchrotron term would turn negative for $q_{\rm IR}$ above $q_\ast = -\log_{10}[3.75\times10^{12}\,(3.88\times10^{-44}/4.6\times10^{-28})(T_e/10^4\,{\rm K})^{0.45}\,1.4^{\alpha_{\rm ff}}]$ (3.5145 at $10^4\,$K, 3.379 at $2\times10^4\,$K). `SEDModel.build` raises if the support of `radio_q_ir` (a fixed value or the upper end of its prior) reaches that limit for the largest $T_e$ and $\alpha_{\rm ff}$ the model allows; the declared free prior of `radio_q_ir` ends at 3.37.
 
 Passing `freefree: True` explicitly keeps the term over its whole range on a nebular-included SSP (it then overlaps the SSP's own continuum between 1 mm and the SSP edge); `freefree: False` removes it, leaving no thermal emission beyond the SSP edge.
+
+#### Which infrared window `L_IR` is integrated over: `ir_window`
+
+Without the key, each model uses the window its own paper defines $q$ on: `bell2003` and `bell2003_split` (Bell 2003, total infrared 8--1000 $\mu$m), `delvecchio2021` (Delvecchio et al. 2021, $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) and `mccheyne2022` (McCheyne et al. 2022, $q_{\rm TIR}$ with $L_{\rm TIR}$ the 8--1000 $\mu$m MAGPHYS luminosity, their Sect. 5 and Eq. 4) all default to `'tir'`. An explicit `ir_window` always wins, so `'total'` gives CIGALE's convention.
+
+The q relations are written for different infrared luminosities. Helou et al. (1985) define $q$ on the far-infrared flux between 42.5 and 122.5 $\mu$m; Bell (2003) and the recent calibrations (for example Delvecchio et al. 2021, whose abstract defines $q_{\rm IR}$ on the total rest 8--1000 $\mu$m luminosity) use the total infrared, 8--1000 $\mu$m. The `radio.sf` key `ir_window` selects the rest-wavelength window of the dust-emission SED that is integrated to form $L_{\rm IR}$, for every q-based star-formation model (`bell2003`, `bell2003_split`, `delvecchio2021`, `mccheyne2022`) and for the Murphy et al. (2011) free-free term, which is scaled by the same $L_{\rm IR}$:
+
+- **`'total'`.** $L_{\rm IR}$ is the dust power as the dust components publish it (`L_ir`), CIGALE's convention. No band integral is taken. It is never the default of a q-based model; name it to reproduce CIGALE.
+- **`'tir'` (the default of every q-based model).** $L_{\rm IR} = \int_{8\,\mu{\rm m}}^{1000\,\mu{\rm m}} L_\nu\,d\nu$ of the re-emitted dust SED (`sed_dust_ir`).
+- **`'fir'`.** The same integral over 42.5--122.5 $\mu$m. Helou et al. (1985) define their FIR from the IRAS 60 and 100 $\mu$m fluxes, so 42.5--122.5 $\mu$m is the nominal IRAS band; the integral over it is what is evaluated here.
+
+The window edges need not fall on grid nodes: the SED is taken linear in frequency between nodes and each grid cell is clipped to the window, so the band is the requested one to the accuracy of the grid trapezoid. For the default delayed-$\tau$ galaxy the 8--1000 $\mu$m band holds 0.944 (DL14) and 0.958 (Casey 2012) of the dust power, so `'tir'` lowers the radio flux by 0.025 and 0.019 dex relative to `'total'`; this is the shift in the default output.
+
+```python
+radio={"sf": {"type": "bell2003", "ir_window": "tir"}, "agn": {"type": "powerlaw"}}
+```
+
+A window named explicitly needs a `dust_emission` block (it reads `sed_dust_ir`) and raises a `ConfigError` without one; a model with no dust-emission SED and no `ir_window` key uses the published dust power. A rest wavelength grid that does not span the window (for `'tir'`, 8--1000 $\mu$m) also raises a `ConfigError`. Under `diffuse_screen` the window is applied to the emergent (screened) dust SED. The derived property `q_ir` always reports the ratio of the total dust power `L_ir` to the 1.4 GHz luminosity, whatever window calibrated the model, so with `'tir'` it differs from the input `radio_q_ir` by the band fraction.
+
+Defaults against the literature: the four models default to the window of their own paper (all 8--1000 $\mu$m), none is calibrated on the 42.5--122.5 $\mu$m window of Helou et al. (1985), and CIGALE's total-dust-power convention needs `ir_window: 'total'`.
 
 ### AGN Radio Jets
 

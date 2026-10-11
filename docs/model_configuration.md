@@ -216,7 +216,7 @@ Generated per-domain parameter references are shown above. For per-type paramete
 **Structural keys:**
 - `'type'`: SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'age_kernel'`: Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
+- `'age_kernel'`: `'cic'` (default, cloud-in-cell) or `'dsps'`, which names the same integration (#2683).
 - `'bin_edges_gyr'`: Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'`: Field draw centering ('none' or 'mean'). Only for `type='field'`.
 
@@ -226,8 +226,8 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 ```
 
 **Gotchas:**
-- `'age_kernel': 'dsps'` is **not** a performance knob. It is 13% slower than the default. Use `'cic'` unless you need DSPS cross-code parity. The 'cic' kernel preserves mass-proportionality to roundoff; 'dsps' costs it, typically well below 1e-5 but reaching roughly 1e-3 at the sharpest SFH shapes (#2368).
-- A field SFH accepts both kernels (#2684): the draw is the linear interpolation of its own lookback nodes, integrated by `'cic'` with the nodes as knots and by `'dsps'` on a table refined 8-fold between SSP nodes. Without an explicit `age_kernel` a field SFH uses `'cic'`, the accurate kernel for field and rough histories; `'dsps'` differs there by up to 16 % in the FUV and 9 % in r-band flux.
+- `'age_kernel': 'dsps'` gives the same weights as `'cic'` (identical to round-off, #2683). DSPS's own histogram assigns each parcel wholly to one SSP node, which mis-places structure narrower than the node spacing (a 30 Myr burst at z = 2.5: 14-19 % in the FUV) and cannot see an onset or step edge between table rows (a zero `psb_flex` `tflex` gradient); first-order sharing of the exact integrand is the exact answer, so the zeroth-order definition is not offered. It is not a speed knob.
+- A field SFH accepts both names (#2684): the draw is the linear interpolation of its own lookback nodes, integrated with the nodes as knots. Without an explicit `age_kernel` a field SFH uses `'cic'`.
 - Default `age_kernel` is `'cic'` for every SFH type.
 
 
@@ -467,7 +467,7 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 **Structural keys:**
 - `'type'`: Radio model: `'sfonly'` (star-formation only, default), `'agn'` (AGN only), `'sf_agn'` (both), `'none'` (off).
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
-- `'sf'`: Star-formation radio sub-block: `{'type': ...}` to customize. For `bell2003`, `'nu_ref'` sets where the q calibration anchors the synchrotron: `'1.4GHz'` (default, Bell 2003), `'21cm'` (1.42758 GHz, CIGALE's convention) or a frequency in Hz; `'freefree'` (`True`/`False`) overrides whether the radio block carries the Murphy et al. (2011) free-free term.
+- `'sf'`: Star-formation radio sub-block: `{'type': ..., 'nu_ref': ..., 'freefree': bool, 'ir_window': 'total' | 'tir' | 'fir'}` to customize. For `bell2003`, `'nu_ref'` sets where the q calibration anchors the synchrotron: `'1.4GHz'` (default, Bell 2003), `'21cm'` (1.42758 GHz, CIGALE's convention) or a frequency in Hz; `'freefree'` (`True`/`False`) overrides whether the radio block carries the Murphy et al. (2011) free-free term. `'ir_window'` selects the infrared band of the dust-emission SED that `L_IR` is integrated over for the q relations: `'tir'` is 8-1000 um (Bell 2003; Delvecchio et al. 2021; McCheyne et al. 2022), `'fir'` is 42.5-122.5 um (Helou et al. 1985, nominal IRAS band) and `'total'` is the dust power as published (CIGALE's convention). Unset, each model takes its own paper's window: `'tir'` for `bell2003`, `bell2003_split`, `delvecchio2021` and `mccheyne2022`. See the radio model reference.
 - `'agn'`: AGN radio sub-block: `{'type': ...}` to customize.
 
 **Minimal example:**

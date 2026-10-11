@@ -896,6 +896,9 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         )
         return SKIRTORComponents(disk=disk, dust=dust, total=total)
 
+    # The template's own wavelength nodes: a publication grid built on them integrates the
+    # emitted (log-log interpolated) SED exactly, see ``_template_grid.native_bolometric_nu``.
+    skirtor_components.native_wave = wave_grid
     return skirtor_components
 
 
