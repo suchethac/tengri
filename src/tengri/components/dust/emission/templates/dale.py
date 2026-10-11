@@ -55,6 +55,7 @@ class Dale2014IRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "dale2014"
 
     # Free parameters (user-facing names, prefix-stripped)
@@ -137,6 +138,7 @@ class Dale2014CigaleIRSEDComponent(EmissionComponent):
 
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "dale2014_cigale"
 
     # Free parameters (user-facing names, prefix-stripped)

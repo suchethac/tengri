@@ -198,13 +198,19 @@ from collections.abc import Sequence
 #: A merge of two identical sites, not a retirement and not a hoist: the floor is still there
 #: and still counted.
 #:
+#: 84 -> 85 with #2766: ``cmb_luminosity_boost`` (components/dust/emission/_cmb.py) forms
+#: ``(T_eff / jnp.maximum(T_dust, 1.0)) ** (4 + beta)``. A scale floor: ``T_dust`` is the declared
+#: ``dust_T`` (prior 20-80 K, validated > 0) and the Schreiber libraries that apply the boost
+#: tabulate 15-99 K, so the 1 K floor never binds for a valid model; it only keeps a traced
+#: zero from producing inf.
+#:
 #: 84 -> 83 with #2783: the ``adaf_spectrum_from_state`` normalization no longer divides by
 #: ``jnp.maximum(integral, representable_floor(1e-100))``. It forms the same ratio in log space,
 #: ``exp(log numer - log integral + log(S + B))``, with ``log_integral`` a ``logsumexp`` of the
 #: segment and bremsstrahlung log powers, so the denominator is never clamped and never divided.
 #: A removal, not a relabel: a zero power would now show as -inf in the log, not as a floored
 #: quotient.
-EXPECTED_SITES = 83
+EXPECTED_SITES = 84
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
