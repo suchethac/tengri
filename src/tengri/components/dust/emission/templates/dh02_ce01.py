@@ -82,6 +82,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
        https://doi.org/10.1051/0004-6361/202449329
     """
 
+    cmb_supported: ClassVar[bool] = True
     name: str = "dh02_ce01"
 
     #: Stated, not inferred. The library's only grid axis is L_TIR, derived from
