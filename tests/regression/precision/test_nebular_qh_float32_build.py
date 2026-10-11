@@ -6,9 +6,10 @@ subprocess. The child loads the bare SSP in float32, builds one photoionized
 backend, and reports its ionizing table and forward outputs as JSON. The parent
 rebuilds the same model in float64 and compares.
 
-The ionizing-spectrum fit and the mappings photoionization table must not form the
-~1e46 photon rate in linear float32 (the table then holds ``inf`` and the Cue build
-raises ``CueWNESSPError``), and must stay bit-identical in float64 (#2849).
+The ionizing-spectrum fit must not form the ~1e46 photon rate in linear float32 (the
+table then holds ``inf`` and the Cue build raises ``CueWNESSPError``), and must stay
+bit-identical in float64 (#2849). The mappings backend still refuses a float32 build
+with ``QHTableOverflowError``, tracked in #2853.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 
 kind = sys.argv[1]
-ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+ssp = load_ssp_data(sys.argv[2])
 table = precompute_ionizing_params_table(
     np.asarray(ssp.ssp_wave),
     np.asarray(ssp.ssp_flux),
@@ -56,8 +57,6 @@ if kind == "cloudy":
     neb = {"type": "cloudy"}
 elif kind == "cb19":
     neb = {"type": "cb19"}
-elif kind == "mappings":
-    neb = {"type": "mappings", "ionizing_source_warning": "suppress"}
 model = SEDModel.build(
     ssp_data=ssp,
     observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
@@ -94,8 +93,8 @@ print("RESULT " + json.dumps(out))
 """
 
 
-def _run_child(kind: str, x64: bool, cache_dir: Path) -> dict:
-    """Build ``kind`` in a child process with x64 on or off and return its report."""
+def _run_child(kind: str, x64: bool, cache_dir: Path, ssp: str = _SSP) -> dict:
+    """Build ``kind`` on the SSP file ``ssp`` in a child process, x64 on or off."""
     env = dict(os.environ)
     env["JAX_ENABLE_X64"] = "1" if x64 else "0"
     env["JAX_PLATFORMS"] = "cpu"
@@ -103,7 +102,7 @@ def _run_child(kind: str, x64: bool, cache_dir: Path) -> dict:
     env["TENGRI_JAX_CACHE_DIR"] = str(cache_dir)
     env.pop("TENGRI_ALLOW_WNE_CUE", None)
     proc = subprocess.run(
-        [sys.executable, "-c", _CHILD, kind],
+        [sys.executable, "-c", _CHILD, kind, ssp],
         cwd=_ROOT,
         env=env,
         capture_output=True,
@@ -130,15 +129,33 @@ def _ionizing_mask(wave) -> np.ndarray:
     return np.asarray(wave, dtype=np.float64) < LYMAN_LIMIT_AA
 
 
-def test_cue_float32_build_matches_float64(tmp_path):
-    """A pure-float32 Cue build reproduces the float64 build (#2849).
+#: Bare-stellar SSPs under ``data/`` that the Cue float32 build is checked on. The
+#: wNE MIST grid is not bare, and ``ssp_prsc_bc03_chabrier.h5`` fails Cue's own
+#: wNE guard in float64 too (max log Q_H 62.4 dex), so neither is here.
+_CUE_SSPS = (
+    pytest.param("data/fsps_prsc_miles_chabrier.h5", id="prsc"),
+    pytest.param("data/bpss_stars_c3k_a_chabrier.h5", id="bpss"),
+)
 
-    Before the fix the float32 log Q_H table is ``inf`` for every young bin and
-    the build raises ``CueWNESSPError``; the subprocess then fails here.
+#: Bar on the float32-vs-float64 log Q_H deviation over the young bins (#2849).
+#: Measured max deviation, dex, over the young bins: 1.23e-7 (fsps_prsc_miles),
+#: 6.9e-8 (bpss), 8.6e-8 (bc03, a bare grid not in ``data/``), 1.87e-6
+#: (fsps_mist_c3k_a, a wNE grid this test does not load). The bar is 5e-6, about
+#: 2.7 times the largest of the four.
+_CUE_QH_BAR = 5e-6
+
+
+@pytest.mark.parametrize("ssp_path", _CUE_SSPS)
+def test_cue_float32_build_matches_float64(ssp_path, tmp_path):
+    """A pure-float32 Cue build reproduces the float64 build on each bare SSP (#2849).
+
+    The float32 log Q_H table holds finite values and agrees with float64 to
+    ``_CUE_QH_BAR`` dex. The photometry agrees to 1e-4 relative. A float32 build
+    that overflows Q_H raises ``CueWNESSPError`` and fails here.
     """
-    _require_data(_SSP)
-    f32 = _run_child("cue", x64=False, cache_dir=tmp_path / "c32")
-    f64 = _run_child("cue", x64=True, cache_dir=tmp_path / "c64")
+    _require_data(ssp_path)
+    f32 = _run_child("cue", x64=False, cache_dir=tmp_path / "c32", ssp=ssp_path)
+    f64 = _run_child("cue", x64=True, cache_dir=tmp_path / "c64", ssp=ssp_path)
 
     q32 = np.asarray(f32["logq_table"], dtype=np.float64)
     q64 = np.asarray(f64["logq_table"], dtype=np.float64)
@@ -146,15 +163,7 @@ def test_cue_float32_build_matches_float64(tmp_path):
     young = q64 > -90.0
     assert young.any(), "no ionizing bins in the float64 reference"
     dev = float(np.max(np.abs(q32 - q64)[young]))
-    # Bar derivation. The fit integrates the integrand divided by a power of two
-    # (exact), so the float32 quadrature runs on O(1) terms. Measured against
-    # float64 over the 765 young bins of fsps_prsc_miles_chabrier: max 1.06e-7 dex
-    # (scratch run of this test, #2849). Float32 eps is 1.19e-7, and the 121 panels
-    # below 912 A bound the rounding at 121 * 1.19e-7 relative = 6.3e-6 dex in the
-    # worst case, so the measured value sits well inside the bound. The bar is
-    # 1e-6 dex, about ten times the measured value. A float64 path is not used
-    # (float64 device buffers fail on float64-less backends, #2276, #1880).
-    assert dev <= 1e-6, f"float32 log Q_H differs from float64 by {dev:.3e} dex (bar 1e-6)"
+    assert dev <= _CUE_QH_BAR, f"float32 log Q_H differs from float64 by {dev:.3e} dex"
 
     p32 = np.asarray(f32["phot"], dtype=np.float64)
     p64 = np.asarray(f64["phot"], dtype=np.float64)
@@ -182,95 +191,23 @@ def test_photoionized_backend_float32_build(kind, tmp_path):
     assert rel <= 1e-4, f"{kind} float32 photometry relative difference {rel:.3e}"
 
 
-@pytest.mark.parametrize("dummy", [None])
-def test_mappings_qh_table_float32_matches_float64(dummy):
-    """The mappings Q_H table, built in log space, agrees between float32 and float64.
-
-    The end-to-end mappings build is not exercised here: the bundled
-    ``data/flury2024_grids.h5`` is 51% NaN in ``logHB_per_logq`` (#2082), a
-    pre-existing grid defect that fails float64 as well. This test calls
-    ``_precompute_qh`` directly on the real SSP instead, so the photoionization
-    Q_H table itself is checked.
-    """
-    from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
-    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
-    _require_data(_SSP)
-
-    def _table(x64: bool):
-        with jax.enable_x64(x64):
-            ssp = load_ssp_data(str(_ROOT / _SSP))
-            backend = MappingsPhotoStellarBackend.__new__(MappingsPhotoStellarBackend)
-            backend._qh_table = None
-            backend._precompute_qh(ssp)
-            ion_flux = np.asarray(ssp.ssp_flux, dtype=np.float64)[
-                ..., _ionizing_mask(ssp.ssp_wave)
-            ]
-            flushed = np.max(np.abs(ion_flux), axis=-1) == 0.0
-            return (
-                np.asarray(backend._qh_table, dtype=np.float64),
-                float(backend._log_qh_scale),
-                flushed,
-            )
-
-    t32, s32, flushed32 = _table(False)
-    t64, s64, _ = _table(True)
-
-    assert np.all(np.isfinite(t32)), "float32 mappings Q_H table holds non-finite entries"
-    live64 = t64 > 0
-    assert live64.any(), "float64 reference has no ionizing bins"
-
-    # Entries float32 zeroes are exactly the (age, Z) rows whose float32 SSP has no
-    # ionizing flux at all: load_ssp_data casts the ionizing side to float32, which
-    # flushes values near 1e-40 L_sun/Hz/Msun to zero before any Q_H arithmetic.
-    # Their float64 peaks are 1e-40 to 1e-39, Q_H is 18 to 19 dex, 28 to 29 dex below
-    # the table peak, and an honest zero there (#2849). Any other zero is a defect.
-    zeroed = live64 & (t32 == 0.0)
-    assert np.array_equal(zeroed, live64 & flushed32), (
-        "float32 zeroes an entry whose SSP ionizing flux is not flushed"
-    )
-    # t64 is absolute in float64 (no scale), so compare to the table peak.
-    rel_dex = np.log10(t64[zeroed]) - np.log10(np.max(t64))
-    assert np.all(rel_dex <= -25.0), (
-        "float32 zeroes an entry that is not negligible relative to the peak"
-    )
-
-    # Agreement in log space where Q_H is within 20 dex of the peak. Measured max
-    # 5.6e-6 dex there. Entries 20 to 40 dex below the peak reach 2.4e-4 dex
-    # (float32 rounding of a tiny integral), at a relative size of 1e-20 or less.
-    window = (
-        live64 & (t32 > 0) & (np.log10(np.where(live64, t64, 1.0)) - np.log10(np.max(t64)) > -20.0)
-    )
-    assert window.any(), "no entries within 20 dex of the peak"
-    lq32 = np.log10(t32[window]) + s32
-    lq64 = np.log10(t64[window]) + s64
-    dev = float(np.max(np.abs(lq32 - lq64)))
-    assert dev <= 2e-5, f"mappings float32 log Q_H differs from float64 by {dev:.3e} dex"
-
-
-@pytest.mark.parametrize("kind", ["mappings", "cloudy", "cb19"])
+@pytest.mark.parametrize("kind", ["cloudy", "cb19"])
 def test_log_qh_table_float32_matches_float64(kind):
     """The log10 Q_H table of each photoionized backend agrees between float32 and float64.
 
-    The three backends build their table with the same log-domain core
-    (``compute_qh_log10``). Checked on the log table itself, before the
-    ``pow10`` that the backends apply. Entries are finite in float32 except on
-    the rows whose float32 SSP has no ionizing flux (see the mappings test); those
-    rows are the only non-finite entries, and they must be exactly that set.
-    Cloudy and CB19 are gated on their grid files, as the other tests are.
+    Cloudy and CB19 build their table in log space (``_compute_log_qh_grid``),
+    checked on the log table itself, before the ``pow10`` that the backends apply.
+    Entries are finite in float32 except on the rows whose float32 SSP has no
+    ionizing flux; those rows are the only non-finite entries, and they must be
+    exactly that set. Both are gated on their grid files.
     """
     from tengri.components.nebular.cloudy_cb19 import _compute_log_qh_grid as cb19_grid
     from tengri.components.nebular.cloudy_grid import _compute_log_qh_grid as cloudy_grid
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-    grid_file = {
-        "mappings": None,
-        "cloudy": "data/cloudy_grid_mist.h5",
-        "cb19": "data/cb19_templates.h5",
-    }[kind]
+    grid_file = {"cloudy": "data/cloudy_grid_mist.h5", "cb19": "data/cb19_templates.h5"}[kind]
     fn = cb19_grid if kind == "cb19" else cloudy_grid
-    if grid_file is not None:
-        _require_data(grid_file)
+    _require_data(grid_file)
     _require_data(_SSP)
 
     def _log_table(x64: bool):
@@ -298,8 +235,8 @@ def test_log_qh_table_float32_matches_float64(kind):
     dev = float(np.max(np.abs(l32[window] - l64[window])))
     assert dev <= 2e-5, f"{kind}: float32 log Q_H differs from float64 by {dev:.3e} dex"
     # Deep entries (20 to 40 dex below the peak): the integrand's terms there fall
-    # into float32's subnormal range before the power-of-two scale is applied,
-    # and the error is 2.4e-4 dex at a relative size of 1e-20 or less (#2849).
+    # into float32's subnormal range, and the error is 2.4e-4 dex at a relative
+    # size of 1e-20 or less.
     both = finite64 & np.isfinite(l32)
     dev_all = float(np.max(np.abs(l32[both] - l64[both])))
     assert dev_all <= 3e-4, (
@@ -349,10 +286,47 @@ def test_ionspec_cache_key_separates_computation_dtype(tmp_path, monkeypatch):
     assert 1e-8 < dev <= 1e-6, f"float32 vs float64 ionspec log Q_H differ by {dev:.3e} dex"
 
 
+def test_nonfinite_beyond_lyman_edge_does_not_defeat_float32_scaling():
+    """A NaN or inf beyond 912 A leaves the float32 Q_H unchanged (#2849).
+
+    The power-of-two exponent comes from the finite ionizing pixels only. A NaN or
+    inf at 5000 A and above is outside the Q_H integral, so it must not set the
+    scale. The float32 log Q_H of the row, with the bad pixel inserted, must equal
+    its float64 value to ``_CUE_QH_BAR``.
+    """
+    import tengri.components.nebular.ionizing_spectrum as ion
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+    _require_data(_SSP)
+    with jax.enable_x64(True):
+        ssp = load_ssp_data(str(_ROOT / _SSP))
+    wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
+    # Metallicity index 0, age index 3: the largest young log Q_H of this SSP
+    # (46.80 dex in float64).
+    row = np.asarray(ssp.ssp_flux, dtype=np.float64)[0, 3]
+    beyond = int(np.flatnonzero(wave > 5000.0)[0])
+
+    def _gas_logqion(x64: bool, flux: np.ndarray) -> float:
+        with jax.enable_x64(x64):
+            return float(ion.fit_ionizing_spectrum(wave, flux)["gas_logqion"])
+
+    ref64 = _gas_logqion(True, row)
+    assert 46.0 < ref64 < 47.5, f"reference log Q_H {ref64:.3f} is outside the expected range"
+    for bad in (np.nan, np.inf):
+        flux = row.copy()
+        flux[beyond] = bad
+        lq32 = _gas_logqion(False, flux)
+        assert np.isfinite(lq32), f"float32 log Q_H is {lq32} with {bad} beyond 5000 A"
+        dev = abs(lq32 - ref64)
+        assert dev <= _CUE_QH_BAR, (
+            f"float32 log Q_H with {bad} beyond 5000 A differs from float64 by {dev:.3e} dex"
+        )
+
+
 #: Generator for the float64 bit-identity reference (#2849). Run as ``python -c``
-#: with argv ``SRC OUT ROOT``: it writes every ionizing and Q_H table and the Cue
-#: forward output to ``OUT``. The committed fixture was produced by this exact
-#: text against the unfixed tree (origin/main, b8d41e2b8).
+#: with argv ``SRC OUT ROOT``: it writes the ionizing and Cue Q_H tables (Cloudy
+#: and CB19 too) and the Cue forward output to ``OUT``. The committed fixture was
+#: produced by this text on the pre-#2849 tree (origin/main b8d41e2b8).
 _BITWISE_CHILD = r"""
 import sys
 SRC, OUT, ROOT = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -362,7 +336,6 @@ import jax
 import tengri  # noqa: F401
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
-from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
 from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 from tengri.components.nebular.cloudy_cb19 import CB19Backend
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
@@ -378,7 +351,6 @@ tab = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=log_age
 for key in ("ionspec_table", "logqion_table", "seglum_table"):
     res["ion_" + key] = np.asarray(tab[key])
 backends = (
-    ("mappings", MappingsPhotoStellarBackend),
     ("cloudy", CloudyGridBackend),
     ("cb19", CB19Backend),
 )
@@ -410,11 +382,11 @@ print("WROTE", OUT, sorted(res))
 """
 
 
-def test_float64_tables_bit_identical_to_unfixed_build(tmp_path):
+def test_float64_tables_bit_identical_to_reference(tmp_path):
     """With x64 on, the ionizing and Q_H tables and the Cue output are bit-identical (#2849).
 
     The reference is ``fixtures/nebular_qh_float64_unfixed.json``, written by
-    ``_BITWISE_CHILD`` against the unfixed tree. Exact float64 agreement holds
+    ``_BITWISE_CHILD`` on the pre-#2849 tree. Exact float64 agreement holds
     because the power-of-two scale is exact, and the log is taken in the same
     library (NumPy in the fit, the same jitted XLA log in the Q_H routines).
     """
@@ -443,4 +415,6 @@ def test_float64_tables_bit_identical_to_unfixed_build(tmp_path):
     for key in ref:
         if key == "x64":
             continue
-        assert np.array_equal(new[key], ref[key]), f"{key} differs from the unfixed float64 build"
+        assert np.array_equal(new[key], ref[key]), (
+            f"{key} differs from the reference float64 build"
+        )

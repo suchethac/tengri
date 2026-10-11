@@ -1,23 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """float32 stays float32 end to end on a spectroscopic fit (#2850).
 
-#2504 (lazy DSPS imports flipping ``jax_enable_x64`` back on) was fixed by
-#2512's ``hold_x64_preference``, and the photometry-only configuration was
-covered by it. A GPU user still reports the flip on a build that includes
-#2512, on a configuration no test had exercised: a DESI-style spectrum with a
-banded resolution matrix, plus photometry, a continuity SFH, two-component dust,
-a nebular backend and NUTS.
-
-The behavior under test is process-global and import-time, so the whole
+The configuration is a DESI-style spectrum with a banded resolution matrix, plus
+photometry, a continuity SFH, two-component dust, a nebular backend (none or
+Cue) and NUTS. The x64 flag is process-global and set at import, so the whole
 pipeline runs in a fresh interpreter with ``JAX_ENABLE_X64=0``. The subprocess
-prints one ``RESULT`` JSON line recording the x64 flag and the dtypes after each
-stage, so a failure names the stage that flipped.
+prints one ``RESULT`` JSON line recording, after each stage, the x64 flag, the
+dtypes, and whether the likelihood, its gradient and the posterior draws are
+finite. A failure therefore names the stage that flipped.
 
 Every on-disk cache tengri uses is redirected into a per-test directory, so the
-result cannot depend on what an earlier process left on this machine. The
-ionspec table cache is the case that matters: before #2849 its key ignored the
-computation dtype, so a float32 build read a table computed in float64 and Cue's
-float32 overflow stayed hidden.
+result does not depend on what an earlier process left on the machine. The
+ionspec table cache key includes the computation dtype (#2849), so a float32
+build never reads a table computed in float64.
 """
 
 import json
@@ -62,6 +57,15 @@ def record(name, **dtypes):
     entry = {"x64": bool(jax.config.jax_enable_x64)}
     entry.update(dtypes)
     stages[name] = entry
+
+
+def all_finite(tree):
+    leaves = jax.tree_util.tree_leaves(tree)
+    return all(bool(np.all(np.isfinite(np.asarray(leaf)))) for leaf in leaves)
+
+
+def has_f64(text):
+    return ("f64" in text) or ("float64" in text)
 
 
 def emit(payload):
@@ -139,15 +143,28 @@ try:
 
     value, grad = jax.jit(jax.value_and_grad(objective))(free)
     grad_dtypes = sorted({str(leaf.dtype) for leaf in jax.tree_util.tree_leaves(grad)})
-    record("loglik_grad", value=str(jnp.asarray(value).dtype), grad=grad_dtypes)
+    record(
+        "loglik_grad",
+        value=str(jnp.asarray(value).dtype),
+        grad=grad_dtypes,
+        value_finite=all_finite(value),
+        grad_finite=all_finite(grad),
+    )
 
     jaxpr = str(jax.make_jaxpr(objective)(free))
-    record("jaxpr", f64_in_jaxpr=("f64" in jaxpr) or ("float64" in jaxpr))
+    grad_jaxpr = str(jax.make_jaxpr(jax.value_and_grad(objective))(free))
+    record("jaxpr", f64_in_jaxpr=has_f64(jaxpr), f64_in_grad_jaxpr=has_f64(grad_jaxpr))
 
     posterior = fitter.run(
         "mcmc_nuts", n_warmup=5, n_samples=5, key=jax.random.PRNGKey(1)
     )
-    record("nuts", posterior=type(posterior).__name__)
+    draws = dict(posterior.samples or {})
+    record(
+        "nuts",
+        posterior=type(posterior).__name__,
+        draws={name: str(np.asarray(v).dtype) for name, v in draws.items()},
+        draws_finite=all_finite(draws),
+    )
 except Exception as exc:
     emit(
         {
@@ -247,6 +264,15 @@ def test_float32_stays_float32_end_to_end_spectroscopic_fit(neb, tmp_path):
     _assert_stage_float32(stages, "build")
     _assert_stage_float32(stages, "predict", spectrum="float32", photometry="float32")
     _assert_stage_float32(stages, "loglik_grad", value="float32", grad=["float32"])
+    assert stages["loglik_grad"]["value_finite"] is True, "log-likelihood is not finite"
+    assert stages["loglik_grad"]["grad_finite"] is True, "log-likelihood gradient is not finite"
     _assert_stage_float32(stages, "jaxpr")
     assert stages["jaxpr"]["f64_in_jaxpr"] is False, "float64 type in the jitted loglik jaxpr"
+    assert stages["jaxpr"]["f64_in_grad_jaxpr"] is False, (
+        "float64 type in the jitted value-and-gradient jaxpr"
+    )
     _assert_stage_float32(stages, "nuts")
+    draws = stages["nuts"]["draws"]
+    assert draws, "NUTS returned no posterior draws"
+    assert set(draws.values()) == {"float32"}, f"posterior draw dtypes: {draws}"
+    assert stages["nuts"]["draws_finite"] is True, "posterior draws are not finite"

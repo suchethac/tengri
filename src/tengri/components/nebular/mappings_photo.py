@@ -67,11 +67,11 @@ from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
     apply_lya_escape,
+    compute_qh,
     render_nebular_lines,
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
-from tengri.components.nebular.cloudy_grid import _compute_log_qh_grid
 from tengri.protocols.component import declared_default
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -80,7 +80,6 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
-from tengri.utils.scale import pow10
 
 # ── Ionizing spectrum warnings ────────────────────────────────────
 
@@ -310,6 +309,11 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
     )
 
 
+# ── Q_H computation (identical to cloudy_grid.py) ─────────────────
+
+_compute_qh_grid = jax.vmap(jax.vmap(compute_qh, in_axes=(None, 0)), in_axes=(None, 0))
+
+
 # ── Metallicity conversion helpers ────────────────────────────────
 
 
@@ -472,11 +476,6 @@ class MappingsPhotoStellarBackend:
     #: one backend that deviates.
     lsun_erg: float = _LSUN_ERG
 
-    #: log10 of the scalar the ``_qh_table`` is normalized by (#2849). 0.0 means
-    #: the table is in absolute units, which is the state of a backend built
-    #: without an SSP.
-    _log_qh_scale: float = 0.0
-
     def __init__(
         self,
         grid_path: str | Path = _DEFAULT_GRID_PATH,
@@ -516,7 +515,6 @@ class MappingsPhotoStellarBackend:
             self._sfh_idx = self.sfh_idx_inst
 
         self._qh_table = None
-        self._log_qh_scale = 0.0
         self._qh_log_met = None
         self._qh_log_age = None
         self._young_idx = None
@@ -542,31 +540,13 @@ class MappingsPhotoStellarBackend:
         return self._line_names
 
     def _precompute_qh(self, ssp_data) -> None:
-        """Precompute the Q_H(metallicity, age) table from SSP spectra.
-
-        In float32 the table is stored divided by its own peak, as the Cloudy and
-        CB19 backends do (#1568, #2849): Q_H reaches ~1e46 photons/s/Msun, which
-        float32 cannot hold in linear form. The peak is restored as a log10 offset
-        in :meth:`_contrib_one_age`. In float64 the table is absolute, as the linear
-        build was, so float64 output is bit-identical to it.
-        """
+        """Precompute Q_H(metallicity, age) table from SSP spectra."""
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
-        log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
-        finite = jnp.isfinite(log_qh_raw)
-        log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
-        if not np.isfinite(log_qh_scale):
-            # No usable ionizing flux anywhere: identity scale, Q_H comes out zero.
-            log_qh_scale = 0.0
-        if jnp.result_type(float) == jnp.float64:
-            # float64 keeps the absolute table, as the linear build did (#2849).
-            log_qh_scale = 0.0
-        self._log_qh_scale = log_qh_scale
+        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
         # Replace Inf/NaN with 0: old SSP files with empty far-UV bins
         # produce non-finite Q_H values that would poison the interpolator.
-        self._qh_table = sanitize_qh_table(
-            pow10(log_qh_raw - log_qh_scale), backend_name="MappingsPhotoBackend"
-        )
+        self._qh_table = sanitize_qh_table(qh_raw, backend_name="MappingsPhotoBackend")
         self._qh_log_met = ssp_data.ssp_lgmet
         self._qh_log_age = np.asarray(ssp_log_age_yr_axis(ssp_data.ssp_lg_age_gyr))  # log(age/yr)
 
@@ -686,12 +666,8 @@ class MappingsPhotoStellarBackend:
                 sfh_idx,
             )
 
-            # L_line = ratio × 10^{logHB_per_logq} × Q_H  [erg/s]. ``qh_i`` is the
-            # peak-normalized Q_H in (0, 1]; the two constants that would
-            # otherwise be float32-unrepresentable (10^logHB_per_logq ~ 1e-12
-            # erg/photon and 10^_log_qh_scale ~ 1e46) are folded into one
-            # log-domain exponent (#2849).
-            l_hb_per_qh = pow10(logHB_pq_i + self._log_qh_scale)  # erg/s per unit Q_H
+            # L_line = ratio × 10^{logHB_per_logq} × Q_H  [erg/s]
+            l_hb_per_qh = 10.0**logHB_pq_i  # erg/photon
             return weight_i * qh_i * l_hb_per_qh * ratios_i * (1.0 - neb_fesc)
 
         all_contribs = jax.vmap(_contrib_one_age)(young_ages, young_weights)
@@ -969,7 +945,6 @@ _MAPPINGS_STELLAR_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "Q_H precompute table, a deterministic function of ssp_data "
         "(content-keyed at the model level) and grid (content-keyed above)"
     ),
-    "_log_qh_scale": exclude("normalization of _qh_table, same derivation"),
     "_qh_log_met": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
     "_qh_log_age": exclude("stashed ssp_data age grid, already content-keyed at the model level"),
     "_young_idx": exclude("indices into the age grid above, same derivation"),

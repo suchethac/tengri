@@ -272,9 +272,9 @@ def test_subband_version_is_3():
 def test_ionspec_version_is_3():
     """_IONSPEC_CACHE_VERSION is 3.
 
-    Bumped from 2 by #2849: ``gas_logqion`` integrates in the log domain, so
-    a table written under the version-2 linear integral is retired. Version 2
-    came from the LyC work (the #537 partial-bin correction).
+    Version 3 (#2849): ``gas_logqion`` integrates in the log domain, and the
+    version is part of the cache key, so a table written under version 2 is not
+    read back. Version 2 added the #537 partial-bin correction.
     """
     from tengri.components.nebular.ionizing_spectrum import _IONSPEC_CACHE_VERSION
 
