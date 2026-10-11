@@ -28,7 +28,7 @@ The grid kind decides which resolution path the forward model takes: a
 log-uniform grid admits a single-FFT constant-R convolution, a nonuniform one
 does not, and a banded operator is applied directly. The kind has to be
 decided from concrete NumPy arrays here, at batch construction. The existing
-:func:`tengri.observation.spectrum._is_log_uniform` returns ``True`` for any
+``_is_log_uniform`` (``tengri.observation.spectrum``) returns ``True`` for any
 tracer because it has no values to inspect, so a grid passed through
 ``jit`` as an argument would silently take the log-uniform path even when it
 is linear in wavelength.
@@ -801,8 +801,8 @@ def _bucket_lsf_pad(model, spec: SpectroBatchSpec, rows: list[dict]) -> int:
 
     Notes
     -----
-    Build-time NumPy helper. The formula is :func:`~tengri.observation.spectrum._lsf_pad_pixels`
-    and the bound is :func:`~tengri.observation.spectrum._lsf_sigma_bound_kms`; the
+    Build-time NumPy helper. The formula is ``_lsf_pad_pixels`` (``tengri.observation.spectrum``)
+    and the bound is ``_lsf_sigma_bound_kms`` (``tengri.observation.spectrum``); the
     pixel-count bins follow the path each grid kind takes (scalar R on a
     log-uniform grid takes the constant path, every other kind the binned one).
     """

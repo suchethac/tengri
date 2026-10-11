@@ -271,6 +271,7 @@ def test_non_finite_pixel_is_excluded_with_finite_value_and_gradient(synthetic_s
     v_ref, g_ref = nlp_and_grad(ref_flux, ref_ivar)
     assert np.isfinite(float(v_bad))
     assert np.isfinite(float(g_bad[_MASS]))
+    assert float(g_bad[_MASS]) != 0.0, "mass gradient is exactly zero"
     np.testing.assert_allclose(float(v_bad), float(v_ref), rtol=1e-12, atol=0.0)
     np.testing.assert_allclose(float(g_bad[_MASS]), float(g_ref[_MASS]), rtol=1e-10, atol=0.0)
 

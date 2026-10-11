@@ -452,7 +452,7 @@ def build_catalog_mcmc_engine(
         :func:`~tengri.inference.preconditioning.prepare_preconditioning`.
     flat_logdensity : tuple or None, optional
         ``(log_posterior_flat_2arg, unravel_fn, init_flat, template_data_args)``,
-        the same four values :func:`~tengri.inference.backends.mcmc._shared._get_flat_logdensity`
+        the same four values ``_get_flat_logdensity`` (``tengri.inference.backends.mcmc._shared``)
         returns for a fitter. When given, ``fitter`` is not read. Used by callers
         whose per-galaxy observation is not a Fitter's ``data``.
     substitute : callable or None, optional

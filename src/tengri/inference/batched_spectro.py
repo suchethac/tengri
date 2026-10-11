@@ -183,7 +183,7 @@ def batched_neg_log_posterior(
     -----
     **JIT-compatible**: yes; pure JAX under :func:`jax.vmap` and
     :func:`jax.grad`. The physical values come from
-    :func:`~tengri.inference.loss_functions._unstandardize_parameters`, and only
+    ``_unstandardize_parameters`` (``tengri.inference.loss_functions``), and only
     the free names are passed on, so fixed values never reach the forward pass.
     """
     loglik = batched_log_likelihood(model, spec)
@@ -226,7 +226,7 @@ def init_unbounded_batch(model, n_galaxies: int, key) -> dict:
 
     Notes
     -----
-    Mirrors :meth:`~tengri.inference.fitter.Fitter._initialize_unbounded`: a
+    Mirrors ``_initialize_unbounded`` (``tengri.inference.fitter.Fitter``): a
     Gaussian prior starts at its standardized mean, and any other prior starts
     at ``0.1 * N(0, 1)``. Each galaxy's keys come from splitting the key over the
     full free list, redshift included, so the non-redshift entries match the

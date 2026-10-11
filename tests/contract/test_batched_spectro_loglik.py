@@ -186,6 +186,7 @@ def test_padded_pixels_do_not_change_value_or_gradient(template, bucket, mock):
 
     grad_flux = np.asarray(jax.grad(total)(batch.flux))
     np.testing.assert_array_equal(grad_flux[pad], 0.0)
+    assert np.all(np.isfinite(grad_flux)), "flux gradient is not finite"
     assert np.any(grad_flux[~pad] != 0.0)
 
 
@@ -363,6 +364,8 @@ def test_multi_parameter_value_and_grad_match_per_galaxy_reference(
             np.testing.assert_allclose(
                 np.asarray(grads[k][i]), float(g_ref[k]), rtol=1e-9, atol=0.0, err_msg=k
             )
+    for k in _MULTI:
+        assert np.all(np.isfinite(np.asarray(grads[k]))), f"{k} gradient is not finite"
     assert np.any(np.asarray(grads[_DUST]) != 0.0)
 
 
