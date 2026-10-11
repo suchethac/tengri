@@ -22,14 +22,17 @@ import numpy as np
 import pytest
 
 from tengri._data_setup import find_data_str
+from tests._cloudy_grid import synthetic_ionizing_ssp, write_synthetic_cloudy_grid
 
 pytestmark = pytest.mark.contract
 
-_SSP = find_data_str("fsps_prsc_miles_chabrier.h5")
+#: The real grid is built locally from raw CLOUDY output and is not tracked or
+#: downloadable, so only the real-data case gates on it. The synthetic case
+#: below carries no such gate and runs on every runner.
 _GRID = find_data_str("cloudy_grid_prsc.h5")
-_SKIP = pytest.mark.skipif(
-    _SSP is None or _GRID is None,
-    reason="needs fsps_prsc_miles_chabrier.h5 and cloudy_grid_prsc.h5 (set TENGRI_DATA_DIR)",
+_REAL_SKIP = pytest.mark.skipif(
+    _GRID is None,
+    reason="needs cloudy_grid_prsc.h5 (scripts/convert_fsps_cloudy_grid.py; not downloadable)",
 )
 
 _REDSHIFT = 0.1
@@ -39,17 +42,34 @@ _BUILD_BUDGET_S = 60.0
 _N_DRAWS = 5
 
 
+@pytest.fixture(scope="module", params=["synthetic", pytest.param("real", marks=_REAL_SKIP)])
+def cloudy_source(request, tmp_path_factory):
+    """The SSP and CLOUDY grid the contract runs against.
+
+    ``synthetic`` writes a deterministic CLOUDY-format grid and builds an SSP
+    with a physical ionizing flux, so the contract runs with no external data.
+    ``real`` takes the bare-stellar SSP from ``download_ssp`` (the same helper
+    the CI-run shock test uses) and the locally built CLOUDY grid.
+    """
+    if request.param == "synthetic":
+        grid = write_synthetic_cloudy_grid(tmp_path_factory.mktemp("cloudy") / "grid.h5")
+        return {"ssp": synthetic_ionizing_ssp(), "grid": str(grid)}
+    import tengri
+
+    ssp_path = tengri.download_ssp("fsps_prsc_miles_chabrier", progress=False)
+    return {"ssp": tengri.load_ssp_data(str(ssp_path)), "grid": _GRID}
+
+
 @pytest.fixture(scope="module")
-def setup():
+def setup(cloudy_source):
     """SSP, CLOUDY backend, filters, delayed-tau weights and the band table."""
     jax.config.update("jax_enable_x64", True)
-    import tengri
     from tengri.components.nebular.cloudy_band_table import build_cloudy_band_table
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
     from tengri.observation.photometry_config import Photometry
 
-    ssp = tengri.load_ssp_data(_SSP)
-    backend = CloudyGridBackend(_GRID, ssp_data=ssp)
+    ssp = cloudy_source["ssp"]
+    backend = CloudyGridBackend(cloudy_source["grid"], ssp_data=ssp)
     wave = jnp.asarray(ssp.ssp_wave)
     phot = Photometry.from_names(
         ["sdss_g", "sdss_r", "sdss_i", "galex_fuv", "galex_nuv", "2mass_ks"]
@@ -144,13 +164,11 @@ def _worst_relative_error(s, fesc_lya):
     return worst
 
 
-@_SKIP
 def test_band_table_build_within_budget(setup):
     """The table builds in under the registry budget of 60 s."""
     assert setup["build_s"] < _BUILD_BUDGET_S
 
 
-@_SKIP
 def test_band_table_matches_per_call_path_at_seeded_draws(setup):
     """Worst relative band error over five seeded draws is below 1e-3."""
     worst = _worst_relative_error(setup, fesc_lya=0.0)
@@ -160,7 +178,6 @@ def test_band_table_matches_per_call_path_at_seeded_draws(setup):
 
 # 0.5 is the owner's check point, but (1 - f) == f there, so a table that used
 # f_esc instead of (1 - f_esc) would still pass at 0.5. 0.2 separates the two.
-@_SKIP
 @pytest.mark.parametrize("fesc_lya", [0.2, 0.5])
 def test_band_table_matches_per_call_path_with_lya_escape(setup, fesc_lya):
     """The Ly-alpha escape convention is the per-call one at nonzero neb_fesc_lya.
