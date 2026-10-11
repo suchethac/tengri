@@ -2,7 +2,7 @@
 r"""Richards+2006 mean Type-1 quasar SED template.
 
 Empirical big blue bump (BBB) from 259 Type-1 SDSS quasars
-(Richards et al. 2006, ApJ 166, 470). The template covers
+(Richards et al. 2006, ApJS 166, 470). The template covers
 ~30 Å (soft X-ray) through ~30 cm (radio); tengri loads it
 without normalization and rescales at the bolometric anchor.
 

@@ -77,9 +77,22 @@ $$ (eq-fir-radio)
 
 - `bell2003_split` (AGNfitter-rX): the same Bell total split 90% / 10% into a non-thermal ($\alpha = 0.75$) and a thermal ($\alpha = 0.1$) power law; it takes no separate free-free term. Beside a nebular backend that carries free-free (`cue`, `cloudy_grid`) the split keeps its 90 % synchrotron and drops its own 10 % thermal law, so the nebular continuum is the only thermal term; the 1.4 GHz total is then the synchrotron share of Bell's calibration plus that backend's free-free, as for `bell2003` above. Because the nebular free-free is modeled rather than fixed at Bell's empirical 10 %, that total differs from the calibration by a few per cent (0.96 for a delayed-tau galaxy of 1 Gyr at 5 Gyr, 1.02 for constant star formation).
 
-- `delvecchio2021` (Delvecchio et al. 2021): mass- and redshift-dependent correlation, $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$, with defaults $q_0 = 2.743$, $m_s = 0.234$, $z_s = -0.025$.
+- `delvecchio2021` (Delvecchio et al. 2021, Eq. 5): the multi-parametric total-radio fit $q_{\rm IR} = q_0(1+z)^{z_s} - m_s(\log M_\star - 10)$ at 1.4 GHz, with defaults $q_0 = 2.646$, $m_s = 0.148$, $z_s = -0.023$ (the paper's best fit, $\pm 0.024$, $\pm 0.013$, $\pm 0.008$).
 
-- `mccheyne2022` (McCheyne et al. 2022): same functional form with defaults $q_0 = 1.98$, $m_s = -0.22$, $z_s = 0.02$.
+- `mccheyne2022` (McCheyne et al. 2022, A&A 662, A100, Sect. 5.2): the joint redshift and mass fit at 150 MHz, $q_{\rm TIR} = q_0(1+z)^{z_s} + m_s(\log M_\star - 10.45)$ with $q_0 = 1.98 \pm 0.02$, $z_s = 0.02 \pm 0.04$, $m_s = -0.22 \pm 0.03$, valid for $z < 0.4$ and $M_\star > 10^{10.45}$. The IR input is the 8--1000 $\mu$m luminosity (the paper's Eq. 4 definition), and the 150 MHz synchrotron uses the paper's $\alpha = 0.60$ (Table 3). The constants are from the paper's accepted-manuscript text layer (Leiden repository, hdl 1887/3561784).
+
+For both mass/redshift modes $q_{\rm IR}$ calibrates the **total** luminosity at the mode's own reference frequency, $L^{\rm tot}_{\nu_{\rm ref}} = L_{\rm IR}/(3.75\times10^{12}\,{\rm Hz}\cdot10^{q_{\rm IR}})$, exactly as for `bell2003`: the synchrotron term is the total minus the Murphy et al. (2011) free-free term at $\nu_{\rm ref}$, and no Bell $n(L)$ factor multiplies it (the mass and luminosity trend is already in $q_{\rm IR}$). The build evaluates the worst corner of the declared box, over $q_0$, the mass and redshift slopes, the redshift, and the stellar mass the radio block reads, and refuses the box if $q$ there exceeds $q_\ast$ at $\nu_{\rm ref}$ (the same limit as for `bell2003`). The lowest reachable $\log M_\star$ is the SFH `log_total_mass` floor plus $\log_{10}$ of the smallest SSP mass-remaining fraction (a conservative bound).
+
+#### Calibrated domain of the mass and redshift relations.
+
+Each relation is an empirical linear fit, valid only over the sample it was fitted to. Outside that sample it is not extrapolated: its mass and redshift arguments are held at the nearest edge, so the relation is constant beyond the edge and its gradient with respect to those arguments is zero there.
+
+- `delvecchio2021`: $0.1 < z < 4.5$ and $10^8 < M_\star/M_\odot < 10^{12}$ (Delvecchio et al. 2021, Sect. 2).
+- `mccheyne2022`: $M_\star > 10^{10.45}\,M_\odot$ and $z < 0.4$ (McCheyne et al. 2022, Sect. 5.2, the joint fit). No upper mass bound is stated.
+
+If a declared prior on the stellar mass or the redshift reaches outside these ranges, the build issues a warning that names the range and the calibration. It is not an error: the relation is held at the edge there. A default galaxy at $z = 0$ therefore warns in `delvecchio2021`, because $z = 0$ lies below the calibrated range, and its $q_{\rm IR}$ is the value at $z = 0.1$.
+
+The build refuses a declared box only when its worst corner makes the synchrotron term negative. For the default free priors of both modes that worst corner stays below $q_\ast$, so those boxes build.
 
 The three FIRRC parameters ($q_0$, $m_s$, $z_s$) are exposed as free parameters in all mass/redshift-dependent modes, enabling hierarchical inference over galaxy populations.
 
@@ -95,7 +108,7 @@ At low star-formation rates, cosmic-ray electrons lose energy through inverse Co
 \end{cases}
 
 $$ (eq-synch-suppression)
- where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$.
+ where $L_\star$ corresponds to $M_V = -21$ and the total radio luminosity is $L_\nu = L_\nu^{\rm thermal} + n\,L_\nu^{\rm non\text{-}thermal}$. This correction is significant for dwarf galaxies with $\mathrm{SFR} \lesssim 0.1\,M_\odot\,{\rm yr}^{-1}$. The `bell2003` mode applies it nowhere (its $q_{\rm IR}$ is a total calibration). The `delvecchio2021` and `mccheyne2022` modes do not apply it either: their $q_{\rm IR}(M_\star, z)$ already carries the mass and luminosity dependence that $n(L)$ would correct for. The `apply_suppression` argument of the functions is an opt-in kept for callers that want the legacy multiplier.
 
 ### Thermal Free-Free Emission
 
