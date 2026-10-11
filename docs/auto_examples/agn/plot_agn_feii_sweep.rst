@@ -44,7 +44,7 @@ References
    in active galactic nuclei," ApJ 641, 689–709 (2006).
    arXiv:astro-ph/0601042.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-158
+.. GENERATED FROM PYTHON SOURCE LINES 28-157
 
 
 
@@ -104,7 +104,6 @@ References
             "disc": {
                 "type": "multicolor",
                 "all_params": tengri.Fixed(tengri.DEFAULT),
-                "log_ledd": -1.0,
             },
             "blr": {"type": "analytic", "all_params": tengri.Fixed(tengri.DEFAULT), "agn_blr_cf": 0.1},
             # ``agn_fe2_strength`` is owned by the ``feii`` sub-block, not
@@ -193,7 +192,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.329 seconds)
+   **Total running time of the script:** (0 minutes 26.451 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:
