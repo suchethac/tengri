@@ -652,26 +652,45 @@ class TestZeroDeclarationWildcardsRaise2187:
                 redshift=Fixed(0.1),
             )
 
-    def test_agn_blr_grahsp_wildcard_covers_no_parameters(self):
+    def test_agn_blr_qsogen_wildcard_covers_no_parameters(self):
         """An AGN sub-block type that owns none of the parameters it reads.
 
-        Every knob GRAHSP's BLR consumes is a line-strength shared with the
-        NLR and Fe II categories, so the declared-and-OWNED set for
-        ``agn.blr`` under ``grahsp`` is empty and its own ``'*'`` covers
-        nothing.
+        Every knob the qsogen BLR consumes is shared with other categories, so
+        the declared-and-OWNED set for ``agn.blr`` under ``qsogen`` is empty and
+        its own ``'*'`` covers nothing.
 
-        This test used to select ``feii={'type': 'qsogen_balmer'}``, on the
-        premise that the shared AGN scope excluded that type's parameters.
-        Per-sub-block scoping replaced that shared union with what the
-        SELECTED type declares and owns
-        (``_agn_subblock_declared_params``), and under it ``agn.feii`` owns
-        ``agn_bcnorm`` -- one real parameter, so the wildcard there frees
-        something and correctly does not raise. The rule is unchanged; the
-        fixture had to move to a sub-block that is still genuinely empty.
+        This test used to select ``feii={'type': 'qsogen_balmer'}``, then
+        ``blr={'type': 'grahsp'}``, on the premise that the type owned nothing.
+        Per-sub-block scoping gave ``agn.feii`` ``agn_bcnorm``, and the GRAHSP
+        Balmer continuum (issue #985) gave ``blr:grahsp`` ``agn_grahsp_a_bc``,
+        so neither is empty any more (the latter is pinned by the test below).
+        The rule is unchanged; the fixture moves to a sub-block that is still
+        genuinely empty.
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             with pytest.raises(ParameterError, match=r"group 'agn\.blr' covers no parameters"):
+                tengri.parse_groups(
+                    sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+                    agn={
+                        "type": "composable",
+                        "blr": {"type": "qsogen", "all_params": FREE},
+                    },
+                    redshift=Fixed(0.1),
+                )
+
+    def test_agn_blr_grahsp_wildcard_covers_only_a_priorless_parameter(self):
+        """``blr:grahsp`` reads ``agn_grahsp_a_bc``, declared with no ``free_prior``.
+
+        Its wildcard therefore covers exactly one parameter that FREE cannot
+        resolve: the refusal is the ``freed 0 of 1`` form and names it.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(
+                ParameterError,
+                match=r"freed 0 of 1 parameters in group 'agn\.blr'[\s\S]*agn_grahsp_a_bc",
+            ):
                 tengri.parse_groups(
                     sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
                     agn={

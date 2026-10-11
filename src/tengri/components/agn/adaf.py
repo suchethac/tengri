@@ -38,7 +38,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.scipy.special import i0 as _i0, i1 as _i1
+from jax.scipy.special import i0 as _i0, i1 as _i1, logsumexp
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._phys import (
@@ -51,7 +51,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
-from tengri.utils.scale import representable_floor as _representable_floor
+from tengri.utils.scale import pow10 as _pow10
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -62,6 +62,10 @@ _ETA_EFF: float = 0.1
 
 # theta_e = k T_e / (m_e c^2)
 _THETA_PER_TE: float = _K_BOLTZ / (_M_ELECTRON * _C_LIGHT**2)
+
+# Natural logs of 10 and of L_sun [erg/s] for the log-space power bookkeeping (#2783).
+_LN10: float = float(np.log(10.0))
+_LOG_LSUN_ERG: float = float(np.log(_LSUN_ERG))
 
 
 # ── Modified Bessel K_2 (differentiable) ──────────────────────────────────
@@ -352,13 +356,29 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
     Notes
     -----
     **JIT/grad-safe**: yes, fixed 8-step unrolled Newton iteration.
+
+    **Precision**: ``ln c`` is the sum of the logs of the bracket's factors. The bracket
+    itself reaches ~4e39 at the electron-temperature floor, above the float32 maximum, and
+    the ratio-first form returned ``inf`` there and a stuck Newton iterate (#2783).
     """
     n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
     r_cm = _R_MIN * _R_SCHW_PER_M * m
     theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
     x_arg = 1.0 / theta
-    k2 = _bessel_k2e(x_arg) * jnp.exp(-x_arg)  # unscaled K_2(1/theta_e)
-    ln_c = jnp.log(2.49e-10 * (4.0 * jnp.pi * n_e * r_cm / b_field) / (theta**3 * k2))
+    # ln of the bracket 2.49e-10 * 4 pi n_e R / (B theta^3 K_2(1/theta)), summed term by term.
+    # The bracket itself (~4e39 at the T_e floor, mdot at its clip) overflows float32 (max
+    # 3.4e38), so forming the ratio first turned ln_c into inf and the Newton solve for x_M
+    # stuck at its upper bound (#2783). Each term is representable on its own; the
+    # unscaled K_2 is taken as ln K_2 = ln(K_2 e^x) - x, so e^{-x} never forms.
+    log_k2 = jnp.log(_bessel_k2e(x_arg)) - x_arg  # ln[K_2(1/theta_e)]
+    ln_c = (
+        jnp.log(2.49e-10 * 4.0 * jnp.pi)
+        + jnp.log(n_e)
+        + jnp.log(r_cm)
+        - jnp.log(b_field)
+        - 3.0 * jnp.log(theta)
+        - log_k2
+    )
 
     def _log_h_and_dlogh(y):
         xm = y**3
@@ -387,12 +407,10 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
 
 # Q_ie = 1.2e38 c1^-2 c3 beta r_min^-1 alpha^-2 m mdot^2 g(theta_e) [erg/s] (Eq. 13).
 _Q_IE_COEFF: float = 1.2e38 * _C1**-2.0 * _C3 / _R_MIN
+_LOG_Q_IE_COEFF: float = float(np.log(_Q_IE_COEFF))
 # Bracket for the balance root [K]: the ADAF range plus margin at both ends.
 _T_LO: float = 1e8
 _T_HI: float = 5e11
-# Bisection steps in ln T_e. The bracket is ln(5e3) ~ 8.5 wide, so 40 steps give
-# 8e-12 in ln T_e, below the float64 resolution the Newton correction needs.
-_N_BISECT: int = 40
 
 
 def _adaf_log_q_ie(
@@ -430,7 +448,11 @@ def _adaf_log_q_ie(
     **JIT/grad-safe**: yes. Computed in log space for float32.
     """
     return (
-        jnp.log(_Q_IE_COEFF * beta)
+        # ln of the constant is added, not differentiated: d/dbeta of ln(4.8e37 beta) formed as
+        # ln(4.8e37 beta) puts a cotangent of order 1e-39 on a float32 subnormal, which the
+        # backend flushes to zero (the beta gradient of the balance was 46% low, #2825).
+        _LOG_Q_IE_COEFF
+        + jnp.log(beta)
         + jnp.log(_adaf_g_theta(t_e))
         + jnp.log(m)
         + 2.0 * jnp.log(mdot)
@@ -477,14 +499,14 @@ def _adaf_log_p_compton(
     """
     x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
     nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
-    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
+    log_l_nu_p = _LN10 * _adaf_log10_lnu_peak(t_e, nu_p, m)
     alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
     log_x = jnp.log(6.2e7) + jnp.log(t_e / 1e9) - jnp.log(nu_p / 1e12)
     y = (1.0 - alpha_c) * log_x
     small = jnp.abs(y) < 1e-6
     y_safe = jnp.where(small, 1.0, y)
     ratio = jnp.where(small, 1.0 + 0.5 * y, jnp.expm1(y_safe) / y_safe)
-    return jnp.log(nu_p) + jnp.log(l_nu_p) + jnp.log(log_x) + jnp.log(ratio)
+    return jnp.log(nu_p) + log_l_nu_p + jnp.log(log_x) + jnp.log(ratio)
 
 
 def _adaf_balance_residual(
@@ -530,6 +552,15 @@ def _adaf_balance_bracketed(
     return (r_lo > 0.0) & (r_hi < 0.0)
 
 
+# Safeguarded secant steps in ln T_e for the balance root. The bracket is ln(5e3) ~ 8.5 wide.
+# The secant converges to the solver floor within the step budget across the declared box
+# (checked against a 40-step bisection, see the solver tests); the Newton correction in
+# _adaf_solve_te_balance sets the final digits and the gradient.
+_N_SOLVE: int = 12
+# Starting electron temperature [K] for the secant: the paper's high-mdot value (Sect. 5.1.1).
+_T_START: float = 2.0e9
+
+
 def _adaf_solve_te_balance(
     m: float,
     mdot: float,
@@ -537,15 +568,18 @@ def _adaf_solve_te_balance(
     beta: float,
     t_lo: float = _T_LO,
     t_hi: float = _T_HI,
+    t_start: float = _T_START,
 ) -> jnp.ndarray:
     r"""Electron temperature of the Compton-branch energy balance (Mahadevan Eq. 13 = Eq. 35).
 
-    Solves :math:`Q_{ie}(T_e) = P_{\rm Compton}(T_e)` for :math:`T_e` by a fixed-count
-    bisection in :math:`\ln T_e` on the sign of :func:`_adaf_balance_residual`, followed
-    by one Newton step. The Newton step carries the implicit-function gradient: at the
-    root, :math:`\partial \ln T_e / \partial p = -(\partial R / \partial p) /
-    (\partial R / \partial \ln T_e)` for each parameter :math:`p`, so the bisection
-    itself is not differentiated.
+    Solves :math:`Q_{ie}(T_e) = P_{\rm Compton}(T_e)` for :math:`T_e` by a safeguarded secant
+    in :math:`\ln T_e` on :func:`_adaf_balance_residual`. The bracket ``[t_lo, t_hi]`` is
+    narrowed by the sign of the residual at each step (the residual decreases with
+    :math:`\ln T_e`); a secant step that leaves the bracket is replaced by its midpoint. A
+    final Newton step carries the implicit-function gradient: at the root,
+    :math:`\partial \ln T_e / \partial p = -(\partial R / \partial p) /
+    (\partial R / \partial \ln T_e)` for each parameter :math:`p`, so the iteration itself is
+    not differentiated.
 
     Parameters
     ----------
@@ -554,6 +588,8 @@ def _adaf_solve_te_balance(
     t_lo, t_hi : float, optional
         Bracket [K]. It must enclose the root for the result to be meaningful; check
         with :func:`_adaf_balance_bracketed`.
+    t_start : float, optional
+        Starting temperature [K]. The converged root does not depend on it (tested).
 
     Returns
     -------
@@ -562,30 +598,44 @@ def _adaf_solve_te_balance(
 
     Notes
     -----
-    **JIT/grad-safe**: yes. Fixed trip count (``_N_BISECT``), no data-dependent
-    control flow; the bisection is ``jax.lax.fori_loop`` on a stop-gradient copy of
-    the parameters.
+    **JIT/grad-safe**: yes. Fixed step count (``_N_SOLVE``) and branchless updates with
+    :func:`jnp.where`. The iteration runs on stop-gradient copies of the parameters; only the
+    final Newton step is differentiated.
     """
     m_, mdot_, alpha_, beta_ = (
         jax.lax.stop_gradient(jnp.asarray(v)) for v in (m, mdot, alpha, beta)
     )
 
-    def _bisect(_, bracket):
-        lo, hi = bracket
-        mid = 0.5 * (lo + hi)
-        positive = _adaf_balance_residual(mid, m_, mdot_, alpha_, beta_) > 0.0
-        return jnp.where(positive, mid, lo), jnp.where(positive, hi, mid)
+    def _r(u):
+        return _adaf_balance_residual(u, m_, mdot_, alpha_, beta_)
 
-    lo0 = jnp.log(jnp.asarray(t_lo))
-    hi0 = jnp.log(jnp.asarray(t_hi))
-    lo, hi = jax.lax.fori_loop(0, _N_BISECT, _bisect, (lo0, hi0))
-    u0 = jax.lax.stop_gradient(0.5 * (lo + hi))
+    lo = jnp.log(jnp.asarray(t_lo))
+    hi = jnp.log(jnp.asarray(t_hi))
+    u = jnp.log(jnp.asarray(t_start))
+    r = _r(u)
+    u_prev = u - 0.05
+    r_prev = _r(u_prev)
+    for _ in range(_N_SOLVE):
+        lo = jnp.where(r > 0.0, u, lo)
+        hi = jnp.where(r < 0.0, u, hi)
+        du = u - u_prev
+        slope = (r - r_prev) / jnp.where(du == 0.0, 1.0, du)
+        u_new = u - r / jnp.where(slope == 0.0, 1.0, slope)
+        # Closed interval: the bracket end set by the last iterate can equal the converged root.
+        inside = (u_new >= lo) & (u_new <= hi)
+        still = (du == 0.0) | (r == 0.0)
+        u_next = jnp.where(still, u, jnp.where(inside, u_new, 0.5 * (lo + hi)))
+        u_prev, r_prev = u, r
+        u = u_next
+        r = _r(u)
 
-    def _resid(u):
-        return _adaf_balance_residual(u, m, mdot, alpha, beta)
+    u0 = jax.lax.stop_gradient(u)
 
-    slope = jax.lax.stop_gradient(jax.grad(_resid)(u0))
-    return jnp.exp(u0 - _resid(u0) / slope)
+    def _resid(uu):
+        return _adaf_balance_residual(uu, m, mdot, alpha, beta)
+
+    slope_exact = jax.lax.stop_gradient(jax.grad(_resid)(u0))
+    return jnp.exp(u0 - _resid(u0) / slope_exact)
 
 
 # ── Equilibrium electron temperature (Mahadevan Eqs. 13, 35, 40) ─────────
@@ -649,12 +699,20 @@ def _adaf_electron_temperature(
     and the balance has a fixed trip count. Gradients of the balance branch come from the
     implicit-function step in :func:`_adaf_solve_te_balance`.
 
-    **Regime junction**: at :math:`\alpha_c = 1` the Eq. 40 value and the balance root
-    differ by 5-7% (measured at ``m = 1e8``, ``alpha = 0.3``, ``beta = 0.5``, between
-    ``mdot = 0.0035`` and ``0.0040``). :math:`T_e` therefore has a small value jump and a
-    slope discontinuity there, the same class as the ``agn_torus_frac`` /
-    ``cos(theta_torus)`` discontinuity in the project gotchas. The two closed forms are
-    not blended.
+    **Regime junction**: the paper restricts the balance :math:`Q_{ie} = P_{\rm Compton}`
+    to :math:`\alpha_c < 1` (Sect. 5.1.2: "When :math:`\alpha_c < 1`, ... :math:`Q^{e+}
+    \simeq Q_{ie}`"), and derives Eq. 40 for :math:`\alpha_c > 1` from :math:`\delta Q^+ =
+    Q^-` with :math:`Q_{ie}` neglected, valid for :math:`\dot m < 10^{-3}\alpha^2`. The
+    branches are therefore not one formulation, and the balance is not used above
+    :math:`\alpha_c = 1`. At the junction the two values differ (measured, ``beta = 0.5``,
+    ``delta = 1e-3``, ratio of balance to Eq. 40 at the exact junction):
+    1.06 at ``m = 1e8, alpha = 0.3`` (``mdot_j = 3.80e-3``); 1.23 at ``m = 1e6``; 0.92 at
+    ``m = 1e10``; 1.16 at ``alpha = 0.2``; 1.00 at ``alpha = 0.4``. :math:`T_e` has a value
+    jump there, and a slope discontinuity, the same class as the ``agn_torus_frac`` /
+    ``cos(theta_torus)`` discontinuity in the project gotchas. The junction lies above
+    Eq. 40's stated validity :math:`\dot m < 10^{-3}\alpha^2` (about ``9e-5`` at
+    ``alpha = 0.3``); no closed form for :math:`\alpha_c > 1` above that is given in the
+    paper, so the branches are not blended.
 
     **Outside the paper's range**: for :math:`\tau_{es} \geq 1` (:math:`\alpha_c \leq 0`,
     reached only at :math:`\alpha \gtrsim 0.4988` on :math:`\dot m_{\rm crit}`), Eq. 34 gives
@@ -758,7 +816,41 @@ def _adaf_lnu_peak(t_e: jnp.ndarray, nu_p: jnp.ndarray, m: float) -> jnp.ndarray
         L_{\nu_p} = s_3\,T_e\,\nu_p^2\,m^2\,r_{\min}^2\ \mathrm{erg\,s^{-1}\,Hz^{-1}},
         \qquad s_3 = 1.05\times10^{-24}.
     """
-    return 1.05e-24 * t_e * nu_p**2 * m**2 * _R_MIN**2
+    return _pow10(_adaf_log10_lnu_peak(t_e, nu_p, m))
+
+
+def _adaf_log10_lnu_peak(t_e: jnp.ndarray, nu_p: jnp.ndarray, m: float) -> jnp.ndarray:
+    r"""``log10`` of the peak synchrotron luminosity (Mahadevan Eq. 23, at ``r_min``).
+
+    Formed in log10 (utils/scale.pow10): under jit in float32 the intermediate nu_p^2 m^2
+    (~5e39) exceeds the float32 maximum (3.4e38), while the product (~2e26) does not, so the
+    linear form returned a non-finite log_integral at (log M 6, alpha 0.1, log L 14).
+    """
+    return (
+        jnp.log10(1.05e-24 * _R_MIN**2)
+        + jnp.log10(t_e)
+        + 2.0 * jnp.log10(nu_p)
+        + 2.0 * jnp.log10(m)
+    )
+
+
+_LOG_LBREMS0_CONST: float = float(np.log(2.29e24 * _C1**-2.0 * np.log(_R_MAX / _R_MIN)))
+
+
+def _adaf_log_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.ndarray:
+    r"""Natural log of the bremsstrahlung prefactor (Mahadevan Eq. 30), in log space.
+
+    Same quantity as :func:`_adaf_lbrems0`, with every factor a logarithm of a moderate
+    number, so that its derivative is not formed on a float32 subnormal (#2825).
+    """
+    return (
+        _LOG_LBREMS0_CONST
+        - 2.0 * jnp.log(alpha)
+        + jnp.log(_adaf_F_theta(t_e))
+        - jnp.log(t_e)
+        + jnp.log(m)
+        + 2.0 * jnp.log(mdot)
+    )
 
 
 def _adaf_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.ndarray:
@@ -860,13 +952,17 @@ _GL_X = (_GL_X_RAW + 1.0) / 2.0  # nodes on [0, 1]
 _GL_W = _GL_W_RAW / 2.0  # weights on [0, 1]
 
 
-def _segment_power(f, nu_a, nu_b, dtype):
-    r"""Gauss-Legendre integral of ``f(nu) d nu`` over ``[nu_a, nu_b]``, in ``ln(nu)``.
+def _segment_log_power(log_f, nu_a, nu_b, dtype):
+    r"""``log`` of the Gauss-Legendre integral of ``f(nu) d nu`` over ``[nu_a, nu_b]``.
+
+    The quadrature runs in ``ln(nu)`` and is summed in log space (log-sum-exp over the
+    nodes), so no linear erg/s-scale product forms and float32 cotangents stay bounded by
+    the loss (#2783).
 
     Parameters
     ----------
-    f : callable
-        Integrand ``f(nu)``, smooth on the segment.
+    log_f : callable
+        ``log_f(nu)``: the natural log of the integrand, smooth on the segment.
     nu_a, nu_b : array_like, shape ()
         Segment limits [Hz], ``nu_a < nu_b``.
     dtype : dtype
@@ -875,12 +971,14 @@ def _segment_power(f, nu_a, nu_b, dtype):
     Returns
     -------
     ndarray, shape ()
-        :math:`\int_{\nu_a}^{\nu_b} f\,d\nu` in the units of ``f`` times Hz.
+        :math:`\ln \int_{\nu_a}^{\nu_b} f\,d\nu` with ``f`` in its own units times Hz.
     """
     log_a, log_b = jnp.log(nu_a), jnp.log(nu_b)
     width = log_b - log_a
-    nu = jnp.exp(log_a + jnp.asarray(_GL_X, dtype=dtype) * width)
-    return width * jnp.sum(jnp.asarray(_GL_W, dtype=dtype) * f(nu) * nu)
+    log_nu = log_a + jnp.asarray(_GL_X, dtype=dtype) * width
+    nu = jnp.exp(log_nu)
+    terms = jnp.asarray(np.log(_GL_W), dtype=dtype) + log_f(nu) + log_nu
+    return jnp.log(width) + logsumexp(terms)
 
 
 # ── Public spectrum ──────────────────────────────────────────────────────
@@ -893,12 +991,13 @@ class AdafState(NamedTuple):
 
     .. math::
 
-        L_\nu = \frac{\mathrm{numer}}{\max(\mathrm{integral}, \epsilon)}\,
-        \left[S(\nu) + B(\nu)\right],
+        L_\nu = r\,\exp\!\left[\ln P_{\rm bol} - \ln P_{\rm shape} + \ln(S + B)\right],
 
     with :math:`S` the synchrotron + Compton shape and :math:`B` the bremsstrahlung shape
-    (``_adaf_total``); ``integral`` is :math:`\int (S + B)\,d\nu` over the model's whole
-    support and ``numer`` the target power, so :math:`\int L_\nu d\nu = \mathrm{numer}`.
+    (``_adaf_log_total``); :math:`P_{\rm shape} = \int (S + B)\,d\nu` over the model's whole
+    support and :math:`P_{\rm bol}` the L_bol power, so :math:`\int L_\nu d\nu = r\,P_{\rm
+    bol}` with :math:`r` = ``lum_ratio``. Both powers are carried as natural logarithms of
+    erg/s (#2783).
     """
 
     t_e: jnp.ndarray  # electron temperature [K]
@@ -908,27 +1007,41 @@ class AdafState(NamedTuple):
     nu_max_c: jnp.ndarray  # Comptonization ceiling 3 k T_e / h [Hz]
     l_nu_p: jnp.ndarray  # peak L_nu before normalization [erg/s/Hz]
     l_brems0: jnp.ndarray  # bremsstrahlung level before normalization [erg/s/Hz]
-    numer: jnp.ndarray  # target power [erg/s]; [L_sun] in float32
-    integral: jnp.ndarray  # power of the unnormalized shape [erg/s]; [L_sun] in float32
+    log_l_nu_p: jnp.ndarray  # ln of l_nu_p, formed in log space (#2825)
+    log_l_brems0: jnp.ndarray  # ln of l_brems0, formed in log space (#2825)
+    log_numer: jnp.ndarray  # ln of the L_bol power 10**agn_log_lbol * L_sun [erg/s]
+    log_integral: jnp.ndarray  # ln of the power of the unnormalized shape [erg/s]
+    lum_ratio: jnp.ndarray  # linear agn_lum_ratio multiplying the spectrum [dimensionless]
 
 
-def _adaf_synch_compton(nu_, s):
-    """Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p), joined at nu_p."""
-    ratio = nu_ / s.nu_p
-    shape_sc = jnp.where(nu_ <= s.nu_p, ratio**0.4, ratio ** (-s.alpha_c))
-    shape_sc = (
-        shape_sc * jnp.exp(-s.nu_min / nu_) * jnp.exp(-jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0))
-    )
-    return s.l_nu_p * shape_sc
+def _adaf_log_synch_compton(nu_, s):
+    """``log`` of the synchrotron + Compton term, ``log(l_nu_p) + log(shape)``.
+
+    The shape is synchrotron ``nu^{2/5}`` below ``nu_p`` and Compton ``nu^{-alpha_c}`` above,
+    joined at ``nu_p``, with the low cutoff ``exp(-nu_min/nu)`` and the Comptonization
+    ceiling ``exp(-nu/nu_max_c)`` (clipped at 500). Each factor is a log, so the term is
+    formed in log space (#2783).
+    """
+    log_ratio = jnp.log(nu_) - jnp.log(s.nu_p)
+    log_shape = jnp.where(nu_ <= s.nu_p, 0.4 * log_ratio, -s.alpha_c * log_ratio)
+    log_shape = log_shape - s.nu_min / nu_ - jnp.clip(nu_ / s.nu_max_c, 0.0, 500.0)
+    return s.log_l_nu_p + log_shape
 
 
-def _adaf_brems(nu_, s):
-    """Bremsstrahlung: flat with an exponential cutoff at k T_e / h."""
-    return s.l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * s.t_e), 0.0, 500.0))
+def _adaf_log_brems(nu_, s):
+    """``log`` of the bremsstrahlung term: flat, with an exponential cutoff at ``k T_e / h``."""
+    return s.log_l_brems0 - jnp.clip(_H_PLANCK * nu_ / (_K_BOLTZ * s.t_e), 0.0, 500.0)
 
 
-def _adaf_total(nu_, s):
-    return _adaf_synch_compton(nu_, s) + _adaf_brems(nu_, s)
+def _adaf_log_total(nu_, s):
+    """``log(S + B)``: the synchrotron + Compton and bremsstrahlung terms, summed in log space.
+
+    Every term is a positive exponential or power law, so the normalized spectrum
+    ``exp(log numer - log integral + log(S + B))`` never forms an erg/s-scale linear product.
+    In float32 the linear product's reverse pass overflowed at the clipped-mdot corner and
+    returned NaN gradients (#2783).
+    """
+    return jnp.logaddexp(_adaf_log_synch_compton(nu_, s), _adaf_log_brems(nu_, s))
 
 
 def adaf_scalar_state(
@@ -991,8 +1104,9 @@ def adaf_scalar_state(
         in ``agn_log_lbol``.
     dtype : dtype, optional
         dtype of the wavelength arrays the state will be evaluated on. It selects the float32
-        bookkeeping that carries the power in :math:`L_\odot`. Default: the canonical float
-        dtype of the process (float64 under x64, float32 otherwise).
+        branch of the mdot solve (:math:`\dot m` from the luminosity in :math:`L_\odot`); the
+        normalization powers are log-space and dtype-independent (#2783). Default: the
+        canonical float dtype of the process (float64 under x64, float32 otherwise).
 
     Returns
     -------
@@ -1001,6 +1115,11 @@ def adaf_scalar_state(
 
     Notes
     -----
+    **Precision**: the bracket of the x_M solve, the peak luminosity and the normalization
+    powers are formed as sums of logs (:func:`_adaf_x_m`,
+    :func:`_segment_log_power`), so pure float32 gives the same shape as float64 over the
+    declared box to 1e-4 pointwise (#2783; ``tests/physics/agn/test_adaf_float32_shape.py``).
+
     **JIT/grad/vmap-compatible**: yes; pure ``jnp`` with fixed-count unrolled solves and no
     data-dependent control flow. The runner builds it once per composition and every disc
     evaluation (caller grid, anchors, 5100 A, budget grids) reads the same state, so the
@@ -1038,13 +1157,26 @@ def adaf_scalar_state(
     nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
     l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
     l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
+    log_l_nu_p = _LN10 * _adaf_log10_lnu_peak(t_e, nu_p, m)
+    log_l_brems0 = _adaf_log_lbrems0(t_e, m, mdot, alpha)
 
     # Low cutoff at the largest-radius synchrotron frequency (nu ~ r^{-5/4});
     # high cutoff at the Comptonization ceiling 3 k T_e / h.
     nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
     nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
     shape = AdafState(
-        t_e, alpha_c, nu_p, nu_min, nu_max_c, l_nu_p, l_brems0, jnp.zeros(()), jnp.ones(())
+        t_e,
+        alpha_c,
+        nu_p,
+        nu_min,
+        nu_max_c,
+        l_nu_p,
+        l_brems0,
+        log_l_nu_p,
+        log_l_brems0,
+        0.0,
+        0.0,
+        1.0,
     )
 
     # Renormalize to the canonical L_bol (magnitude from agn_log_lbol: the
@@ -1056,29 +1188,30 @@ def adaf_scalar_state(
     nu_lo = 0.02 * nu_min
     nu_hi = 100.0 * _K_BOLTZ * t_e / _H_PLANCK
 
-    # The power in synchrotron + Compton is Gauss-Legendre on the segments between the
-    # spectrum's own breaks; the bremsstrahlung power
-    #   int l_brems0 exp(-h nu / k T_e) d nu = l_brems0 (k T_e / h) [exp(-h nu_lo / k T_e)
-    #                                                              - exp(-h nu_hi / k T_e)]
-    # is exact. Float32 (#1206): the erg/s-scale integral (~1e43) overflows, so it is carried in
-    # L_sun, where only its ratio with 10**agn_log_lbol is formed.
-    unit = _LSUN_ERG if _f32 else 1.0
+    # ln of the shape's power over the model's whole support [erg/s], summed in log space
+    # (#2783). The synchrotron + Compton segments are Gauss-Legendre on the spectrum's own
+    # breaks (_segment_log_power). The bremsstrahlung power is closed form,
+    #   int l_brems0 exp(-h nu / k T_e) d nu = l_brems0 (k T_e / h) [exp(-a) - exp(-b)],
+    #   a = h nu_lo / k T_e, b = h nu_hi / k T_e,
+    # with exp(-a) - exp(-b) = exp(-a) [1 - exp(-(b - a))] formed as a log1p.
     breaks = (nu_lo, nu_min, nu_p, nu_max_c, nu_hi)
-    int_synch_compton = sum(
-        _segment_power(lambda nu_: _adaf_synch_compton(nu_, shape) / unit, lo, hi, dtype)
+    log_segments = [
+        _segment_log_power(lambda nu_: _adaf_log_synch_compton(nu_, shape), lo, hi, dtype)
         for lo, hi in pairwise(breaks)
-    )
+    ]
     t_scale = _K_BOLTZ * t_e / _H_PLANCK
-    exp_lo = jnp.exp(-nu_lo / t_scale)
-    exp_hi = jnp.exp(-nu_hi / t_scale)
-    integral = int_synch_compton + (l_brems0 / unit) * t_scale * (exp_lo - exp_hi)
+    log_brems = (
+        log_l_brems0
+        + jnp.log(t_scale)
+        - nu_lo / t_scale
+        + jnp.log1p(-jnp.exp(-(nu_hi - nu_lo) / t_scale))
+    )
+    log_integral = logsumexp(jnp.stack([*log_segments, log_brems]))
 
-    if _f32:
-        # ``integral`` is in L_sun, so the target power is too: 10**log_lbol * ratio.
-        numer = 10.0**agn_log_lbol * agn_lum_ratio
-    else:
-        numer = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
-    return shape._replace(numer=numer, integral=integral)
+    # L_bol power 10**agn_log_lbol * L_sun [erg/s] as a log. The ratio stays linear so a
+    # zero agn_lum_ratio gives an exact zero spectrum with the correct derivative (#2783).
+    log_numer = agn_log_lbol * _LN10 + _LOG_LSUN_ERG
+    return shape._replace(log_numer=log_numer, log_integral=log_integral, lum_ratio=agn_lum_ratio)
 
 
 def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.ndarray:
@@ -1086,12 +1219,13 @@ def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.n
 
     .. math::
 
-        L_\nu(\nu) = \frac{P_{\rm target}}{\max(P_{\rm shape}, \epsilon)}
-        \left[S(\nu) + B(\nu)\right]
+        L_\nu(\nu) = r\,\exp\!\left[\ln P_{\rm bol} - \ln P_{\rm shape}
+        + \ln\left(S(\nu) + B(\nu)\right)\right]
 
-    with :math:`P_{\rm target}` = ``state.numer``, :math:`P_{\rm shape}` = ``state.integral``
-    and :math:`\epsilon` the smallest representable denominator floor (``1e-100`` under x64;
-    ``representable_floor`` otherwise, #1492).
+    with :math:`r` = ``state.lum_ratio`` (linear), :math:`P_{\rm bol}` = ``exp(state.log_numer)``
+    and :math:`P_{\rm shape}` =
+    ``exp(state.log_integral)`` [erg/s]. The normalization is formed in log space, so no
+    erg/s-scale linear product enters the float32 gradient (#2783).
 
     Parameters
     ----------
@@ -1116,8 +1250,8 @@ def adaf_spectrum_from_state(wavelength: jnp.ndarray, state: AdafState) -> jnp.n
        https://doi.org/10.1086/303727
     """
     nu = _wavelength_to_nu(wavelength)
-    scale = state.numer / jnp.maximum(state.integral, _representable_floor(1e-100))
-    return scale * _adaf_total(nu, state)
+    log_spec = state.log_numer - state.log_integral + _adaf_log_total(nu, state)
+    return state.lum_ratio * jnp.exp(log_spec)
 
 
 def adaf_spectrum(

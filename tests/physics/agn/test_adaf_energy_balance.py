@@ -27,8 +27,10 @@ from scipy.optimize import brentq
 from scipy.special import kve
 
 from tengri.components.agn.adaf import (
+    _adaf_alpha_c,
     _adaf_balance_residual,
     _adaf_electron_temperature,
+    _adaf_tau_es,
     _adaf_x_m,
 )
 
@@ -102,18 +104,37 @@ def _te(m, mdot, alpha, beta=0.5, delta=1e-3):
 # ── (a) The converged root does not depend on the starting point ─────────
 
 
-def test_balance_root_independent_of_bracket():
-    """The bisection-Newton solve converges to the same root from different brackets.
+def test_balance_root_independent_of_start():
+    """The safeguarded secant converges to the same root from different starting points.
 
-    Two brackets, both containing the Compton-branch root for (m=1e8, mdot=0.01,
-    alpha=0.3). The solved T_e must agree to 1e-6 relative. The solver takes no
-    initial guess; the bracket is the only start-dependent input.
+    Starts 2e9, 6e8 and 5e9 K, all inside the bracket, for (m=1e8, mdot=0.01, alpha=0.3).
+    The solved T_e must agree to 1e-6 relative with the 2e9 K start.
     """
     from tengri.components.agn.adaf import _adaf_solve_te_balance
 
-    wide = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_lo=1e8, t_hi=5e11))
-    narrow = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_lo=5e8, t_hi=1e10))
-    assert narrow == pytest.approx(wide, rel=1e-6)
+    ref = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_start=2e9))
+    for start in (6e8, 5e9):
+        t_e = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_start=start))
+        assert t_e == pytest.approx(ref, rel=1e-6), start
+
+
+@pytest.mark.parametrize("alpha", [0.1, 0.3, 0.5])
+@pytest.mark.parametrize("m", [1e6, 1e10])
+def test_solver_residual_converges_over_compton_grid(alpha, m):
+    """The fixed step count reaches the residual floor over the Compton grid.
+
+    Points from 0.1 to 1.0 times mdot_crit (alpha = 0.5 at mdot_crit lies in the tau_es > 1
+    extrapolation, see the solver Notes). The same 1e-10 bound as the residual test above.
+    """
+    from tengri.components.agn.adaf import _adaf_solve_te_balance
+
+    # 0.744 is a point where a converged-then-jumping iterate once returned a non-root
+    # (fixed by the closed bracket test in _adaf_solve_te_balance).
+    for frac in (0.1, 0.25, 0.5, 0.744, 0.75, 1.0):
+        mdot = frac * 0.28 * alpha * alpha
+        t_e = _adaf_solve_te_balance(m, mdot, alpha, 0.5)
+        res = float(_adaf_balance_residual(jnp.log(t_e), m, mdot, alpha, 0.5))
+        assert abs(res) <= 1e-10, (alpha, m, frac, res)
 
 
 # ── (b) The solved state satisfies the energy balance ────────────────────
@@ -204,6 +225,12 @@ def test_high_mdot_limit_within_paper_eq44_window(m):
     accuracy claimed is that window. Sect. 5.1.1 also quotes T_e ~ 2.0e9 K at high
     mdot as an approximate constant. The mass independence stated in Eq. 44 holds
     to about 15% over the mass range here.
+
+    Measured inconsistency: Eq. 44's printed bounds do not follow from Eq. 43 with the
+    tau_es of Eq. 31. Evaluated by hand, Eq. 43 at mdot = 0.01, alpha = 0.3 gives about
+    2.0e9 K at alpha_c = 1 and 5.4e9 K at alpha_c = 0.5, where Eq. 44 gives 2.15e9 and
+    3.12e9. The printed bounds correspond to tau_es about twice the Eq. 31 value. The
+    test keeps the paper's stated window; the factor is not reconciled here.
     """
     t_e = _te(m, 0.01, 0.3)
     assert 2.15e9 <= t_e <= 3.12e9
@@ -247,3 +274,61 @@ def test_gradients_finite_at_box_corners_float32(alpha):
         p = jnp.asarray([1e8, mdot, alpha, 0.5], dtype=jnp.float32)
         grads = jax.grad(lambda q: jnp.log(t_of(q)))(p)
         assert bool(jnp.all(jnp.isfinite(grads)))
+
+
+# ── (g) The alpha_c = 1 junction between the balance and Eq. 40 ───────────
+
+
+def test_regime_junction_jump_size_pinned():
+    """Size of the T_e jump where alpha_c crosses 1, between the balance and Eq. 40.
+
+    The Compton-branch balance root and the Eq. 40 value are not matched at alpha_c = 1
+    (see the Notes of ``_adaf_electron_temperature``). At (m=1e8, alpha=0.3, beta=0.5) the
+    junction is at mdot_j = 3.80e-3 and the ratio T_balance / T_40 there is 1.061 (measured).
+    The pin is 1.05-1.08. Eq. 40's stated accuracy (A_c^(1/7) in 0.95-1.4, Sect. 5.1.2)
+    would bound the ratio to 0.714-1.053; this point sits just above that band, and the
+    junction is also above Eq. 40's stated validity mdot < 1e-3 alpha^2 (about 9e-5 here).
+    """
+    from scipy.optimize import brentq
+
+    from tengri.components.agn.adaf import _adaf_solve_te_balance
+
+    m, alpha, beta, delta = 1e8, 0.3, 0.5, 1e-3
+
+    def alpha_c_minus_one(mdot):
+        t_bal = _adaf_solve_te_balance(m, mdot, alpha, beta)
+        return float(_adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_bal)) - 1.0
+
+    mdot_j = brentq(alpha_c_minus_one, 1e-6, 0.28 * alpha * alpha, xtol=1e-14)
+    t_bal = float(_adaf_solve_te_balance(m, mdot_j, alpha, beta))
+    # Just below the junction the public function selects Eq. 40 (alpha_c > 1).
+    t_40 = _te(m, mdot_j * (1.0 - 1e-7), alpha, beta, delta)
+    assert 1.05 <= t_bal / t_40 <= 1.08, t_bal / t_40
+
+
+@pytest.mark.gradient
+@pytest.mark.regression_bug
+def test_float32_gradient_of_balance_temperature_matches_float64_fd():
+    """Float32 autodiff of ln T_e agrees with a float64 central difference, all four inputs.
+
+    At (m=1e8, mdot=0.0187, alpha=0.3, beta=0.5) the float32 beta derivative was 46% low
+    (0.173 against 0.323). The cause was ``ln(4.8e37 beta)`` differentiated as a whole: its
+    cotangent, of order 1e-39, is subnormal in float32 and was flushed to zero. Tolerance 1e-3
+    relative to the largest component, as in the float32 shape test.
+    """
+    p64 = np.array([1e8, 0.0187, 0.3, 0.5])
+
+    def log_te(p):
+        return jnp.log(_adaf_electron_temperature(p[0], p[1], p[2], p[3], 0.1))
+
+    fd = np.zeros(4)
+    for i in range(4):
+        h = 1e-6 * p64[i]
+        pp, pm = p64.copy(), p64.copy()
+        pp[i] += h
+        pm[i] -= h
+        fd[i] = (float(log_te(jnp.asarray(pp))) - float(log_te(jnp.asarray(pm)))) / (2 * h)
+    with jax.enable_x64(False):
+        g32 = np.asarray(jax.grad(log_te)(jnp.asarray(p64, dtype=jnp.float32))).astype(np.float64)
+    scale = float(np.max(np.abs(fd)))
+    assert np.max(np.abs(g32 - fd)) <= 1e-3 * scale, f"f32 AD {g32} vs f64 FD {fd}"
