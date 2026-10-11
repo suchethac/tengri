@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Float32 derivative of the ADAF spectrum with respect to ``T_e`` keeps the Compton ceiling.
 
-The spectrum factor ``exp(-nu / nu_max_c)`` (Mahadevan 1997, Eq. 34 and the Comptonization
-ceiling ``3 k T_e / h``) has a reverse-mode partial with respect to the linear ``nu_max_c`` of
+The spectrum factor ``exp(-nu / nu_max_c)`` (the Comptonization ceiling ``h nu = 3 k T_e``,
+Mahadevan 1997 Sect. 4.3) has a reverse-mode partial with respect to the linear ``nu_max_c`` of
 order ``w nu / nu_max_c**2`` ~ 1e-39 per spectral point, a float32 subnormal that the backend
 flushes to zero. The ceiling's contribution to ``d(sum L_nu) / d ln T_e`` is then lost, and
 because the total derivative is a near-cancellation (net 1.4% of the sum of the terms'
