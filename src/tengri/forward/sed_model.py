@@ -2506,10 +2506,10 @@ class SEDModel:
            sample. Derived quantities are now computed from the SED's own age
            weights, so every value agrees to machine precision.
 
-           To change how the CSP is integrated, use the knob that does reach it:
-           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964). ``tengri.list_age_kernels()``
-           is the live menu. Unlike this argument, that one measurably moves the
-           SED, 0.19% across SDSS *ugriz* for a double-power-law history.
+           The age-weight kernel that does reach the CSP is
+           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964); since #2683 both names
+           select the same integration, so it moves no output either.
+           ``tengri.list_age_kernels()`` is the live menu.
 
     Attributes
     ----------
@@ -10159,6 +10159,9 @@ class SEDModel:
         sigma_lib_kms = self._sigma_lib_kms
         lsf_n_bins = self._lsf_n_bins
         resample_z_ref = self._resample_z_ref()
+        # Concrete redshift for the rest-grid window (#2832): the fixed value only.
+        # A free or catalog redshift has no single value, so it stays None.
+        window_z = None if self.z_fixed is None else float(self.z_fixed)
         wave_obs = (
             getattr(self, "_wave_obs", None)
             if observation is None or not observation.can_do_spectroscopy
@@ -10246,6 +10249,7 @@ class SEDModel:
                     lsf_n_bins=lsf_n_bins,
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
+                    window_z=window_z,
                     observables_type=observables_type,
                 )
             if use_lut:

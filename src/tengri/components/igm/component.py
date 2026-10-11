@@ -340,22 +340,26 @@ class IGMSEDComponent(TemplateThreading):
                 **rest,
             )
 
-        rows = []
-        for z in zgrid:
+        igm_model = self.config.igm_model
+        convention = photometry.convention
+
+        def _band_row(z, wave, fw_p, ft_p):
             trans = igm_absorption(
-                wave_rest * (1.0 + z),
+                wave * (1.0 + z),
                 z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
-            rows.append(
-                lnu_filter_integral_batch(
-                    trans, wave_rest, fw_pad, ft_pad, z, convention=photometry.convention
-                )[:n_filters]
-            )
+            return lnu_filter_integral_batch(trans, wave, fw_p, ft_p, z, convention=convention)[
+                :n_filters
+            ]
 
-        band_table = jnp.stack(rows)
+        # One jitted program over the whole z grid: the eager per-z loop paid
+        # hundreds of op-by-op dispatches per redshift (#2769).
+        band_table = jax.jit(jax.vmap(_band_row, in_axes=(0, None, None, None)))(
+            jnp.asarray(zgrid), wave_rest, fw_pad, ft_pad
+        )
         _subband_cache.memo_put(key, np.asarray(band_table))
         _subband_cache.store(key, np.asarray(band_table))
         return IGMSEDComponentState(
@@ -412,19 +416,19 @@ class IGMSEDComponent(TemplateThreading):
         if table is None:
             table = _subband_cache.load(key, prefix="igm_rest")
         if table is None or table.shape != (zs.size, n_blue):
-            table = np.stack(
-                [
-                    np.asarray(
-                        igm_absorption(
-                            jnp.asarray(blue * (1.0 + z)),
-                            float(z),
-                            igm_patchy=False,
-                            igm_model=self.config.igm_model,
-                            use_dla=False,
-                        )
-                    )
-                    for z in zs
-                ]
+            igm_model = self.config.igm_model
+
+            def _blue_row(z, blue_waves):
+                return igm_absorption(
+                    blue_waves * (1.0 + z),
+                    z,
+                    igm_patchy=False,
+                    igm_model=igm_model,
+                    use_dla=False,
+                )
+
+            table = np.asarray(
+                jax.jit(jax.vmap(_blue_row, in_axes=(0, None)))(jnp.asarray(zs), jnp.asarray(blue))
             )
             _subband_cache.store(key, table, prefix="igm_rest")
         _subband_cache.memo_put(key, table)
