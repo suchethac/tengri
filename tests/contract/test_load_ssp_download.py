@@ -72,11 +72,15 @@ def test_download_true_fetches_on_miss(isolated_data_dir, monkeypatch):
         fetched.write_bytes(b"")  # stand-in for the real grid
         return fetched
 
+    def fake_load(path, **kwargs):
+        loaded.append((path, kwargs))
+        return "SSP"
+
     monkeypatch.setattr(dsps_wrapper, "download_ssp", fake_download)
-    monkeypatch.setattr(dsps_wrapper, "load_ssp_data", lambda p: loaded.append(p) or "SSP")
+    monkeypatch.setattr(dsps_wrapper, "load_ssp_data", fake_load)
 
     assert tengri.load_ssp("fsps_prsc_miles_chabrier", download=True) == "SSP"
-    assert loaded == [str(fetched)], f"loaded the wrong path: {loaded}"
+    assert loaded == [(str(fetched), {"mass_remaining": "table"})], f"got {loaded}"
 
 
 def test_download_true_is_a_no_op_when_the_grid_is_present(isolated_data_dir, monkeypatch):
@@ -89,7 +93,7 @@ def test_download_true_is_a_no_op_when_the_grid_is_present(isolated_data_dir, mo
     calls = []
 
     monkeypatch.setattr(dsps_wrapper, "download_ssp", lambda *a, **k: calls.append(a))
-    monkeypatch.setattr(dsps_wrapper, "load_ssp_data", lambda p: "SSP")
+    monkeypatch.setattr(dsps_wrapper, "load_ssp_data", lambda p, **kw: "SSP")
 
     assert tengri.load_ssp("fsps_prsc_miles_chabrier", download=True) == "SSP"
     assert calls == [], "download_ssp called despite the grid being present"
