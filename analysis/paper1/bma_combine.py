@@ -22,6 +22,7 @@ import argparse
 import json
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -392,6 +393,8 @@ def combine_bma(
     invalid_counts = {set_name: {} for set_name in model_sets}
     galaxies_per_model = {set_name: {} for set_name in model_sets}
 
+    evidence_revisions: Counter[str] = Counter()
+    evidence_patches: Counter[str] = Counter()
     for gal_dir in sorted(evidence_dir.iterdir()):
         if not gal_dir.is_dir():
             continue
@@ -418,6 +421,12 @@ def combine_bma(
             cell = _load_evidence_cell(cell_file, npz_file)
             if cell is None:
                 continue
+            # Provenance of the evidence itself, which the combine's own HEAD does not
+            # describe: each cell records the revision that computed it, and any patch
+            # applied on top of that revision.
+            evidence_revisions[cell.get("code_revision") or "unrecorded"] += 1
+            for patch in cell.get("code_patches") or ():
+                evidence_patches[patch] += 1
 
             model_key = cell.get("model_key")
             route = cell.get("route")
@@ -592,6 +601,8 @@ def combine_bma(
     summary = {
         "route": "laplace",
         "code_revision": code_revision,
+        "evidence_code_revisions": dict(evidence_revisions.most_common()),
+        "evidence_code_patches": dict(evidence_patches.most_common()),
         "model_prior": "flat within each weight set",
         "prior_mass": prior_mass,
         "rules": (

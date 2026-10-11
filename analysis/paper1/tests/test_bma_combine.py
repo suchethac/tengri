@@ -525,3 +525,26 @@ def test_softmax_weights_parity_with_tengri():
     # Compare
     for i, key in enumerate(sorted(log_z_dict.keys())):
         assert abs(our_weights[key] - tengri_weights[i]) < 1e-10
+
+
+def test_summary_records_the_revision_and_patches_of_every_cell(tmp_path):
+    """The summary states which code computed the evidence, not only the combine's HEAD.
+
+    Cells computed on one revision with a patch applied on top record the patch in
+    ``code_patches``; the summary tallies revisions and patches over every cell.
+    """
+    gal_dir = tmp_path / "evidence" / "1000"
+    gal_dir.mkdir(parents=True)
+    key_a, key_b = bk.expected_keys("named_grid")[:2]
+    plain = _make_evidence_cell(key_a, log_evidence=-10.0)
+    plain["code_revision"] = "rev-a"
+    patched = _make_evidence_cell(key_b, log_evidence=-11.0)
+    patched["code_revision"] = "rev-b"
+    patched["code_patches"] = ["continuity log-space normalization"]
+    _write_cell(gal_dir, plain)
+    _write_cell(gal_dir, patched)
+
+    summary = _combine(tmp_path, tmp_path / "evidence")
+
+    assert summary["evidence_code_revisions"] == {"rev-a": 1, "rev-b": 1}
+    assert summary["evidence_code_patches"] == {"continuity log-space normalization": 1}
