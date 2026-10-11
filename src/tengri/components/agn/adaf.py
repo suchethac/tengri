@@ -35,6 +35,7 @@ from __future__ import annotations
 from itertools import pairwise
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import i0 as _i0, i1 as _i1
@@ -378,19 +379,242 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
     return y**3
 
 
-# ── Equilibrium electron temperature (Mahadevan Eqs. 40 & 43) ─────────────
+# ── Electron energy balance (Mahadevan Eqs. 13, 31-35, Sect. 5.1.2) ──────
+#
+# For alpha_c < 1 the paper neglects synchrotron and bremsstrahlung cooling, so the
+# electron temperature is the root of Q_ie(T_e) = P_Compton(T_e). Both sides are
+# evaluated as logarithms: the product nu_p L_nu_p is ~1e38 erg/s, which float32 cannot hold.
+
+# Q_ie = 1.2e38 c1^-2 c3 beta r_min^-1 alpha^-2 m mdot^2 g(theta_e) [erg/s] (Eq. 13).
+_Q_IE_COEFF: float = 1.2e38 * _C1**-2.0 * _C3 / _R_MIN
+# Bracket for the balance root [K]: the ADAF range plus margin at both ends.
+_T_LO: float = 1e8
+_T_HI: float = 5e11
+# Bisection steps in ln T_e. The bracket is ln(5e3) ~ 8.5 wide, so 40 steps give
+# 8e-12 in ln T_e, below the float64 resolution the Newton correction needs.
+_N_BISECT: int = 40
+
+
+def _adaf_log_q_ie(
+    t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
+) -> jnp.ndarray:
+    r"""Natural log of the ion-electron Coulomb heating ``Q_ie`` (Mahadevan Eq. 13).
+
+    .. math::
+
+        Q_{ie} = 1.2\times10^{38}\,g(\theta_e)\,c_1^{-2}c_3\,\beta\,
+            r_{\min}^{-1}\,\alpha^{-2}\,m\,\dot m^2 \quad [\mathrm{erg\,s^{-1}}]
+
+    with :math:`g(\theta_e)` from Eq. 11.
+
+    Parameters
+    ----------
+    t_e : array_like, shape ()
+        Electron temperature [K].
+    m : float
+        Black hole mass ``M / M_sun`` [dimensionless].
+    mdot : float
+        Accretion rate in Eddington units [dimensionless].
+    alpha : float
+        Viscosity parameter [dimensionless].
+    beta : float
+        Gas-to-total pressure ratio [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``ln Q_ie`` with ``Q_ie`` in [erg/s].
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes. Computed in log space for float32.
+    """
+    return (
+        jnp.log(_Q_IE_COEFF * beta)
+        + jnp.log(_adaf_g_theta(t_e))
+        + jnp.log(m)
+        + 2.0 * jnp.log(mdot)
+        - 2.0 * jnp.log(alpha)
+    )
+
+
+def _adaf_log_p_compton(
+    t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
+) -> jnp.ndarray:
+    r"""Natural log of the total Compton power ``P_Compton`` (Mahadevan Eqs. 35, 21-23).
+
+    .. math::
+
+        P_{\rm Compton} = \frac{\nu_p L_{\nu_p}}{1-\alpha_c}
+            \left[\left(\frac{6.2\times10^{7}\,(T_e/10^{9})}{\nu_p/10^{12}}\right)^{1-\alpha_c}
+            - 1\right] \quad [\mathrm{erg\,s^{-1}}]
+
+    where :math:`\nu_p L_{\nu_p}` is Eq. 23 at :math:`r_{\min}` and :math:`\alpha_c` is
+    Eq. 34. Written as :math:`\nu_p L_{\nu_p}\,\ln X\,(e^{y}-1)/y` with
+    :math:`X` the bracketed ratio and :math:`y=(1-\alpha_c)\ln X`, so the power is never
+    formed on a linear scale and the removable singularity at :math:`\alpha_c = 1` is
+    handled by the series :math:`(e^y-1)/y \approx 1 + y/2`.
+
+    Parameters
+    ----------
+    t_e : array_like, shape ()
+        Electron temperature [K].
+    m, mdot, alpha, beta : float
+        Mass, accretion rate, viscosity, gas-to-total pressure ratio.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``ln P_Compton`` with ``P_Compton`` in [erg/s].
+
+    Notes
+    -----
+    Valid where ``X > 1`` (so that ``ln X > 0``). The energy-balance bracket
+    ``[_T_LO, _T_HI]`` lies inside that domain for the declared box.
+
+    **JIT/grad-safe**: yes. Branchless; the series branch is selected with
+    :func:`jnp.where` on a safe argument.
+    """
+    x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
+    nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
+    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
+    alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
+    log_x = jnp.log(6.2e7) + jnp.log(t_e / 1e9) - jnp.log(nu_p / 1e12)
+    y = (1.0 - alpha_c) * log_x
+    small = jnp.abs(y) < 1e-6
+    y_safe = jnp.where(small, 1.0, y)
+    ratio = jnp.where(small, 1.0 + 0.5 * y, jnp.expm1(y_safe) / y_safe)
+    return jnp.log(nu_p) + jnp.log(l_nu_p) + jnp.log(log_x) + jnp.log(ratio)
+
+
+def _adaf_balance_residual(
+    log_te: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
+) -> jnp.ndarray:
+    r"""Compton-branch energy-balance residual ``ln Q_ie - ln P_Compton``.
+
+    Zero at the electron temperature where Coulomb heating balances Compton cooling
+    (Mahadevan Sect. 5.1.2). Decreasing in ``ln T_e`` on the solve bracket: ``Q_ie``
+    falls as ``g(theta_e)`` falls, while ``P_Compton`` rises steeply with ``T_e``
+    through ``nu_p L_{nu_p} \propto T_e^7``.
+
+    Parameters
+    ----------
+    log_te : array_like, shape ()
+        Natural log of the electron temperature, ``ln(T_e / K)``.
+    m, mdot, alpha, beta : float
+        Mass, accretion rate, viscosity, gas-to-total pressure ratio.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``ln Q_ie - ln P_Compton`` [dimensionless].
+    """
+    t_e = jnp.exp(log_te)
+    return _adaf_log_q_ie(t_e, m, mdot, alpha, beta) - _adaf_log_p_compton(
+        t_e, m, mdot, alpha, beta
+    )
+
+
+def _adaf_balance_bracketed(
+    m: float, mdot: float, alpha: float, beta: float, t_lo: float, t_hi: float
+) -> jnp.ndarray:
+    r"""Whether the Compton-branch energy balance changes sign on ``[t_lo, t_hi]``.
+
+    Returns a boolean ``ndarray, shape ()``. False means no root of Eq. 13 = Eq. 35 lies
+    in the bracket, so the Compton branch does not apply at these parameters.
+    """
+    lo = jnp.log(jnp.asarray(t_lo))
+    hi = jnp.log(jnp.asarray(t_hi))
+    r_lo = _adaf_balance_residual(lo, m, mdot, alpha, beta)
+    r_hi = _adaf_balance_residual(hi, m, mdot, alpha, beta)
+    return (r_lo > 0.0) & (r_hi < 0.0)
+
+
+def _adaf_solve_te_balance(
+    m: float,
+    mdot: float,
+    alpha: float,
+    beta: float,
+    t_lo: float = _T_LO,
+    t_hi: float = _T_HI,
+) -> jnp.ndarray:
+    r"""Electron temperature of the Compton-branch energy balance (Mahadevan Eq. 13 = Eq. 35).
+
+    Solves :math:`Q_{ie}(T_e) = P_{\rm Compton}(T_e)` for :math:`T_e` by a fixed-count
+    bisection in :math:`\ln T_e` on the sign of :func:`_adaf_balance_residual`, followed
+    by one Newton step. The Newton step carries the implicit-function gradient: at the
+    root, :math:`\partial \ln T_e / \partial p = -(\partial R / \partial p) /
+    (\partial R / \partial \ln T_e)` for each parameter :math:`p`, so the bisection
+    itself is not differentiated.
+
+    Parameters
+    ----------
+    m, mdot, alpha, beta : float
+        Mass, accretion rate, viscosity, gas-to-total pressure ratio.
+    t_lo, t_hi : float, optional
+        Bracket [K]. It must enclose the root for the result to be meaningful; check
+        with :func:`_adaf_balance_bracketed`.
+
+    Returns
+    -------
+    ndarray, shape ()
+        Electron temperature [K] of the balance root.
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes. Fixed trip count (``_N_BISECT``), no data-dependent
+    control flow; the bisection is ``jax.lax.fori_loop`` on a stop-gradient copy of
+    the parameters.
+    """
+    m_, mdot_, alpha_, beta_ = (
+        jax.lax.stop_gradient(jnp.asarray(v)) for v in (m, mdot, alpha, beta)
+    )
+
+    def _bisect(_, bracket):
+        lo, hi = bracket
+        mid = 0.5 * (lo + hi)
+        positive = _adaf_balance_residual(mid, m_, mdot_, alpha_, beta_) > 0.0
+        return jnp.where(positive, mid, lo), jnp.where(positive, hi, mid)
+
+    lo0 = jnp.log(jnp.asarray(t_lo))
+    hi0 = jnp.log(jnp.asarray(t_hi))
+    lo, hi = jax.lax.fori_loop(0, _N_BISECT, _bisect, (lo0, hi0))
+    u0 = jax.lax.stop_gradient(0.5 * (lo + hi))
+
+    def _resid(u):
+        return _adaf_balance_residual(u, m, mdot, alpha, beta)
+
+    slope = jax.lax.stop_gradient(jax.grad(_resid)(u0))
+    return jnp.exp(u0 - _resid(u0) / slope)
+
+
+# ── Equilibrium electron temperature (Mahadevan Eqs. 13, 35, 40) ─────────
 
 
 def _adaf_electron_temperature(
     m: float, mdot: float, alpha: float, beta: float, delta: float
 ) -> jnp.ndarray:
-    r"""Self-consistent equilibrium electron temperature ``T_e`` (Mahadevan Eqs. 40/43).
+    r"""Self-consistent equilibrium electron temperature ``T_e`` (Mahadevan Eqs. 13, 35, 40).
 
-    The electrons cool via synchrotron, bremsstrahlung, and Compton; equating the
-    total cooling to the heating :math:`Q^{e+} = Q^-` fixes ``T_e``. The paper gives
-    two analytic branches selected by the Compton slope :math:`\alpha_c`:
+    The electrons cool via synchrotron, bremsstrahlung and Compton scattering, and are
+    heated by viscous dissipation and by Coulomb coupling to the ions. Two regimes, set
+    by the Compton slope :math:`\alpha_c` (Eq. 34):
 
-    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``), Eq. 40:
+    - :math:`\alpha_c < 1` (Compton cooling dominates). Synchrotron and bremsstrahlung
+      cooling are negligible and :math:`Q^{e+} \simeq Q_{ie}` (Sect. 4.3.2, 5.1.2), so
+      :math:`T_e` is the root of
+
+      .. math::
+
+          Q_{ie}(T_e) = P_{\rm Compton}(T_e),
+
+      with :math:`Q_{ie}` from Eq. 13 and :math:`P_{\rm Compton}` from Eq. 35. Solved by
+      :func:`_adaf_solve_te_balance`. Eq. 43 is the closed-form inverse of Eq. 34 for a
+      given :math:`\alpha_c`; the balance root satisfies it to within the rounding of
+      its constant (0.744 for 0.7412), so Eq. 43 is not used as a solver.
+
+    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``). Synchrotron cooling dominates
+      and the paper gives a closed form, Eq. 40:
 
       .. math::
 
@@ -398,17 +622,14 @@ def _adaf_electron_temperature(
                 (\alpha/0.3)^{3/14} ((1-\beta)/0.5)^{-1/14}
                 m^{1/14} \dot m^{-1/14}\ \mathrm{K}
 
-    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``), Eq. 43:
+      with :math:`x_M` from Eq. 20. The fixed point in :math:`x_M` is iterated eight times
+      from :math:`T_e = 2\times10^9` K. The A_c fitting factor of Eq. 40 (~0.95-1.4) is
+      taken as unity.
 
-      .. math::
-
-          T_e = 0.744\times10^9 \left[(4\,\tau_{es}^{-1/\alpha_c} - 3)^{1/2} - 1\right]\ \mathrm{K}
-
-    Since ``x_M`` and :math:`\alpha_c` themselves depend on ``T_e``, the equations
-    are solved together by a short fixed-point iteration (the paper notes accurate
-    results without iteration; we iterate for robustness). ``c1=0.5``, ``c3=0.3``,
-    ``r_min=3`` reduce those factors to unity. The A_c fitting factor of Eq. 40
-    (~0.95-1.4) is taken as unity.
+    The regime is chosen by the balance root: the Compton branch is used where the
+    balance has a sign change on ``[1e8, 5e11]`` K and its root has :math:`\alpha_c < 1`.
+    Elsewhere Eq. 40 applies. The two branches are not matched at :math:`\alpha_c = 1`
+    (see Notes).
 
     Parameters
     ----------
@@ -418,44 +639,53 @@ def _adaf_electron_temperature(
 
     Returns
     -------
-    ndarray
+    ndarray, shape ()
         Equilibrium electron temperature [K], clipped to ``[1e8, 5e11]`` K. For the
-        ADAF range this is ~1e9-1e10 K, ~2e9 at the high-``mdot`` limit.
+        ADAF range this is ~1e9-3e9 K at high ``mdot``.
 
     Notes
     -----
-    **JIT/grad-safe**: yes, fixed 8-step unrolled fixed point; the Eq. 40 /
-    Eq. 43 regime choice is a branchless :func:`jnp.where` on the traced
-    ``alpha_c``, so both branches are always evaluated (no data-dependent
-    control flow).
+    **JIT/grad-safe**: yes. Both regimes are evaluated and selected with :func:`jnp.where`,
+    and the balance has a fixed trip count. Gradients of the balance branch come from the
+    implicit-function step in :func:`_adaf_solve_te_balance`.
 
-    **Gradient kink**: ``T_e`` (and hence the whole spectrum) has a first-order
-    kink at ``alpha_c = 1`` where the branch switches. Samplers crossing this
-    boundary see a discontinuous derivative, the same class as the
-    ``agn_torus_frac`` / ``cos(theta_torus)`` discontinuity noted in the project
-    gotchas. It is continuous in value (both branches meet at ``alpha_c = 1``),
-    only the slope jumps.
+    **Regime junction**: at :math:`\alpha_c = 1` the Eq. 40 value and the balance root
+    differ by 5-7% (measured at ``m = 1e8``, ``alpha = 0.3``, ``beta = 0.5``, between
+    ``mdot = 0.0035`` and ``0.0040``). :math:`T_e` therefore has a small value jump and a
+    slope discontinuity there, the same class as the ``agn_torus_frac`` /
+    ``cos(theta_torus)`` discontinuity in the project gotchas. The two closed forms are
+    not blended.
+
+    **Outside the paper's range**: for :math:`\tau_{es} \geq 1` (:math:`\alpha_c \leq 0`,
+    reached only at :math:`\alpha \gtrsim 0.4988` on :math:`\dot m_{\rm crit}`), Eq. 34 gives
+    no positive Compton slope, and the power-law Compton spectrum of Eq. 33 does not
+    apply. The balance is evaluated there as written in Eq. 35, which is continuous
+    through :math:`\tau_{es} = 1`; that value is an extrapolation, not a result of the
+    paper. The paper states :math:`0.5 \leq \alpha_c \leq 1` for all cases of interest.
+    On :math:`\dot m_{\rm crit}` the balance root has :math:`\alpha_c = 0.47` at
+    :math:`\alpha = 0.3` and :math:`0.30` at :math:`\alpha = 0.4`, so the high-``mdot``
+    part of the box lies outside the regime in which the paper's spectrum is valid.
     """
     tau_es = _adaf_tau_es(mdot, alpha)
-    t_e = jnp.asarray(2.0e9, dtype=jnp.float64)
+    t_bal = _adaf_solve_te_balance(m, mdot, alpha, beta)
+    compton = _adaf_balance_bracketed(m, mdot, alpha, beta, _T_LO, _T_HI) & (
+        _adaf_alpha_c(tau_es, t_bal) < 1.0
+    )
+    t_40 = jnp.asarray(2.0e9)
     for _ in range(8):
-        x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
-        alpha_c = _adaf_alpha_c(tau_es, t_e)
-        # Eq. 40 (alpha_c > 1).
-        t_e_40 = (
+        x_m = _adaf_x_m(t_40, m, mdot, alpha, beta)
+        t_40 = jnp.clip(
             1.1e9
             * (2000.0 * delta) ** (1.0 / 7.0)
             * (x_m / 300.0) ** (-3.0 / 7.0)
             * (alpha / 0.3) ** (3.0 / 14.0)
             * ((1.0 - beta) / 0.5) ** (-1.0 / 14.0)
             * m ** (1.0 / 14.0)
-            * mdot ** (-1.0 / 14.0)
+            * mdot ** (-1.0 / 14.0),
+            _T_LO,
+            _T_HI,
         )
-        # Eq. 43 (alpha_c < 1).
-        sqrt_arg = jnp.maximum(4.0 * tau_es ** (-1.0 / jnp.maximum(alpha_c, 1e-3)) - 3.0, 0.0)
-        t_e_43 = jnp.maximum(0.744e9 * (jnp.sqrt(sqrt_arg) - 1.0), 1e8)
-        t_e = jnp.clip(jnp.where(alpha_c > 1.0, t_e_40, t_e_43), 1e8, 5e11)
-    return t_e
+    return jnp.clip(jnp.where(compton, t_bal, t_40), _T_LO, _T_HI)
 
 
 # ── Spectral component amplitudes (Mahadevan Eqs. 21-23, 28, 30) ──────────
@@ -715,7 +945,7 @@ def adaf_scalar_state(
     r"""Solve the ADAF once: everything :func:`adaf_spectrum` needs that is not a wavelength.
 
     Derives the accretion rate from the shape luminosity (Mahadevan Eq. 49), solves the
-    electron temperature (Eqs. 40/43), builds the spectrum's break frequencies and amplitudes
+    electron temperature (Eqs. 13, 35, 40), builds the spectrum's break frequencies and amplitudes
     (Eqs. 21-23, 28, 30), and computes the power of that shape over the model's whole support,
     so that the spectrum can be normalized without touching any wavelength grid.
 
