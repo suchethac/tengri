@@ -2571,7 +2571,7 @@ for _label, _st in (
     print(f"    {_label}{_qh:.4e}  → {_qh / _n_ly_c:.3f}×")
 
 print("§8 integrated line luminosity (tengri Cue / CIGALE CLOUDY; tengri on dense FSPS SSP):")
-for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+for _c, _name in [(6564.61, "Hα"), (5008.24, "[O III]"), (4862.68, "Hβ")]:
     _lc = U.line_lum(w_c_neb, L_c_neb_only, _c)
     _lt = U.line_lum(_w_t_dense, _L_t_dense, _c)
     if _lc > 0:
@@ -2599,11 +2599,12 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 #
 # **Reading the [O III]/Hβ response.** `neb_logU` reaches Cue unchanged as its own
 # ionization parameter. Cue's [O III]/Hβ response to it depends on the ionizing
-# spectrum Cue is fed. A final cell evaluates the network at Cue's own default
-# (hard) young-starburst shape and prints the response for it. At the soft shape
-# fitted to this population the response saturates, as the table above shows. The
-# CIGALE grid uses one fixed, harder spectrum, so the two codes respond
-# differently to logU for the same population.
+# spectrum Cue is fed. At the soft shape fitted to this population the ratio stays
+# flat to about 10 % across logU = −3, −2, −1.5 (0.603, 0.665, 0.645 in the table
+# above). A final cell evaluates the network at Cue's own default (hard)
+# young-starburst shape and prints the ratio for it, which rises with logU
+# (3.416, 5.499, 6.085). The cell shows that the response depends on the ionizing
+# shape; it does not by itself reproduce CIGALE's values.
 
 # %%
 _m_8b = SEDModel.build(
@@ -2638,9 +2639,9 @@ _8b_grid = [
     ("fesc=0.5", -2.0, 0.02, 0.5),
 ]
 _LINE_RATIOS_8B = (
-    ("Ha/Hb", 6563.0, 4861.0),
-    ("[OIII]/Hb", 5007.0, 4861.0),
-    ("[OII]/Hb", 3728.0, 4861.0),
+    ("Ha/Hb", 6564.61, 4862.68),
+    ("[OIII]/Hb", 5008.24, 4862.68),
+    ("[OII]/Hb", 3728.48, 4862.68),  # centre of the vacuum 3727.09 / 3729.88 doublet
 )
 
 _rt_8b_all, _rc_8b_all = [], []
@@ -2725,7 +2726,9 @@ save_fig("cigale_08b_neb_grid.png")
 # %%
 # Cue's [O III]/Hβ response to logU at Cue's own default (hard) young-starburst
 # ionizing shape, from the same network `neb_logU` feeds. Only the ionizing
-# spectrum differs from the table above; Z_gas, density and logQ_ion are common.
+# spectrum differs from the table above. Density (`gas_logn`) and `gas_logqion` are
+# left at Cue's own defaults (`gas_logn = 2.0`, the value the table uses;
+# `default_gas_logqion = 49.1`), and Z_gas is the table's 0.02.
 from tengri._data_setup import data_path as _data_path
 from tengri.components.nebular.cue import CueBackend
 
@@ -2744,9 +2747,7 @@ _o3_hard = {}
 for _logU in (-3.0, -2.0, -1.5):
     _w_h, _l_h = _cue_hard.predict_nebular_line_luminosities(
         gas_logu=_logU,
-        gas_logn=2.0,
         gas_logz=float(np.log10(0.02) - LOG10_ZSUN),
-        gas_logqion=49.1,
         **_HARD_SHAPE,
     )
     _w_h, _l_h = np.asarray(_w_h), np.asarray(_l_h)
@@ -3979,15 +3980,17 @@ save_fig("cigale_10b_xray_inclination.png")
 # prediction.
 #
 # With `freefree: False` the synchrotron carries the whole `q_IR`. In tengri's
-# default the cell prints three numbers. The TIR input to the radio block is
-# 0.944 of the total dust luminosity. The default synchrotron is 0.840 of the
+# default the cell prints the following. The TIR input to the radio block is 0.944
+# of the total dust luminosity. The default synchrotron is 0.840 of the
 # CIGALE-convention synchrotron at 1.4 GHz, which combines the thermal share
 # removed from Bell's total, that smaller TIR input and the 1.4 against
-# 1.4276 GHz anchor. The (synchrotron +
-# nebular continuum) / Bell total, formed from the same TIR input, is 0.957 at
-# 1.4 GHz. It falls below 1 because the nebular free-free share there (×0.054
-# of CIGALE's synchrotron, printed below) is smaller than the Murphy et al.
-# (2011) share `f_th` (×0.096) that the synchrotron subtracts.
+# 1.4276 GHz anchor. The remaining numbers share one base, Bell's TIR total at
+# 1.4 GHz: the synchrotron is 0.9003 of it and the nebular continuum 0.0569, so
+# (synchrotron + nebular continuum) / Bell total is 0.957. It falls below 1
+# because the thermal share removed from the total (0.0997; the Murphy et al.
+# (2011) term at the TIR input is 0.0967) exceeds the nebular continuum's
+# 0.0569 by 0.0428. The printed 0.0967 and 0.0997 differ by 0.003, which is the
+# part of the removed share that the Murphy term does not account for.
 #
 # The ratio panel also compares the two thermal terms, the nebular continuum's
 # free-free tail and the Murphy et al. (2011) term, with CIGALE's synchrotron: a
@@ -4152,6 +4155,21 @@ print(
 print(
     f"§11   (default synchrotron + nebular continuum) / Bell's calibrated total from the "
     f"TIR input, L(1.4 GHz) = {(sed_t_tot[_j14] + _sed_neb[_j14]) / _bell_total_14:.3f}"
+)
+
+# The same residual in one base: every term as a fraction of Bell's TIR total at 1.4 GHz.
+_sync_f = float(sed_t_tot[_j14] / _bell_total_14)
+_neb_f = float(_sed_neb[_j14] / _bell_total_14)
+_murphy_tir = np.asarray(radio_freefree(jnp.asarray(w_t), _L_tir_in, T_e=1.0e4, alpha_ff=-0.1))
+_murphy_f = float(_murphy_tir[_j14] / _bell_total_14)
+print(
+    f"§11   as fractions of Bell's TIR total at 1.4 GHz: synchrotron {_sync_f:.4f}, "
+    f"nebular continuum {_neb_f:.4f}, sum {_sync_f + _neb_f:.4f}"
+)
+print(
+    f"§11   thermal share subtracted from the total {1.0 - _sync_f:.4f}; Murphy+2011 term "
+    f"at the TIR input {_murphy_f:.4f}; nebular continuum falls short by "
+    f"{1.0 - _sync_f - _neb_f:.4f}"
 )
 
 # Thermal free-free calibration, component-wise against CIGALE's synchrotron: the
@@ -4490,7 +4508,7 @@ plt.show()
 # | 5 | attenuation applied | 0.1–1 μm median 1.0093× intrinsic, 0.9988× attenuated (medians; maxima 14.5 % at 915 Å in 912–1200 Å, 923 % at 1214 Å intrinsic and 94 % at 1216 Å attenuated, at the Lyα edge); §5b band medians 0.998–1.001× |
 # | 6 | dust IR | 10–100 μm median 1.010×; `L_absorbed` 1.0099× `dust.luminosity`; energy balance residual 0; §6c 8–1000 μm medians 1.0095–1.0211×, worst filter 1.370× (`dl2014` α = 1); `schreiber2016` 1.010× |
 # | 7 | panchromatic | 1.0599× (912–1200 Å), 1.0620× (1200–3000 Å), 1.0038× (0.3–1 μm), 1.0075× (3–8 μm), 1.0102× (10–1000 μm) |
-# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.35×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 1.03× (Hα/Hβ), 3.96× ([O III]/Hβ), 44.75× ([O II]/Hβ), all at Z_gas = 0.041 (Cue against CIGALE's Cloudy grids); the [O III]/Hβ gap is the ionizing-shape response to logU, which saturates at the soft fitted shape and gives 3.416 / 5.499 / 6.085 at logU = −3 / −2 / −1.5 at Cue's default hard shape |
+# | 8 | nebular | Q_H 1.145× (shared SSP), 1.378× (dense SSP); Hα 1.34×, [O III] 0.47×, Hβ 1.33×; §8b largest line-ratio ratio-of-ratios 0.99× (Hα/Hβ, at Z_gas = 0.041), 3.99× ([O III]/Hβ, at Z_gas = 0.041), 44.69× ([O II]/Hβ, at Z_gas = 0.041) (Cue against CIGALE's Cloudy grids); Cue's [O III]/Hβ response to logU depends on the ionizing shape: 0.603 / 0.665 / 0.645 at the soft fitted shape and 3.416 / 5.499 / 6.085 at Cue's default hard shape, for logU = −3 / −2 / −1.5 |
 # | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
 # | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
