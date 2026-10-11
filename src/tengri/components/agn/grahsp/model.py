@@ -40,12 +40,12 @@ from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.bolometric import (
-    NORMALIZATION_GRID_NM,
     bolometric_luminosity_bbb,
     bolometric_luminosity_torus,
 )
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
+from tengri.components.agn.grahsp.normalization import unit_bolometric_power
 from tengri.components.agn.grahsp.templates import (
     GRAHSPTemplates,
     load_grahsp_templates,
@@ -574,10 +574,11 @@ agn_grahsp_hot_fcov
         # value this function's internals use.
         l5100 = 10.0**agn_grahsp_log_l5100
     else:
-        # Normalized on the fixed internal grid, never the caller's (see
-        # NORMALIZATION_GRID_NM): the same SED whichever grid it is evaluated on.
-        sed_norm = evaluate_grahsp_agn(jnp.asarray(NORMALIZATION_GRID_NM), unit_params, templates)
-        l_bol_unit = sed_norm.l_bol_bbb + sed_norm.l_bol_torus
+        # Each component integrated on its own grid, never the caller's
+        # (grahsp/normalization.py): the same SED whichever grid it is evaluated on.
+        if templates is None:
+            templates = load_grahsp_templates()
+        l_bol_unit = unit_bolometric_power(unit_params, templates)
         target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio
         l5100 = target_l_bol / l_bol_unit
 

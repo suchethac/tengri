@@ -199,6 +199,56 @@ si_abs_width_nm
     return l_torus / 12000.0 * si * (em - ab)
 
 
+def mn12_native_shape(
+    mn12_wave_nm: Array,
+    tor_temp: float,
+    tor_cutoff_um: float,
+    mn12_avg: Array,
+    mn12_lo: Array,
+    mn12_hi: Array,
+) -> Array:
+    r"""Unscaled MN12 torus shape on its native template grid.
+
+    :math:`(\langle L_\lambda\rangle + \Delta(\lambda, T_{\rm tor}))\,
+    [1 - \exp(-(\lambda/1000\,\mathrm{nm}\cdot\lambda_{\rm cut})^2)]`, the
+    factor that :func:`torus_mn12_continuum` multiplies by
+    :math:`l_{\rm torus}`. Taking the shape on its own nodes lets the
+    normalization integrate it there.
+
+    Parameters
+    ----------
+    mn12_wave_nm : array_like, shape (n_mn12,)
+        Native template wavelengths [nm].
+    tor_temp : float
+        Temperature parameter :math:`T_{\rm tor}` [-1, +1].
+    tor_cutoff_um : float
+        Cutoff wavelength :math:`\lambda_{\rm cut}` [um].
+    mn12_avg, mn12_lo, mn12_hi : array_like, shape (n_mn12,)
+        Mean, 25th- and 75th-percentile templates, each normalized to 1 at 12 um.
+
+    Returns
+    -------
+    ndarray, shape (n_mn12,)
+        Shape on the native grid [arbitrary units].
+
+    Notes
+    -----
+    JIT/grad-compatible. ``jnp.where`` selects the temperature branch.
+    """
+    mn12_wave = jnp.asarray(mn12_wave_nm)
+    mn12_avg_arr = jnp.asarray(mn12_avg)
+    mn12_lo_arr = jnp.asarray(mn12_lo)
+    mn12_hi_arr = jnp.asarray(mn12_hi)
+    torus_deviation = jnp.where(
+        tor_temp > 0,
+        (mn12_hi_arr - mn12_avg_arr) * tor_temp,
+        (mn12_lo_arr - mn12_avg_arr) * (-tor_temp),
+    )
+    # Gaussian-like cutoff at short wavelengths (approximates both MN12 and LyuRieke)
+    cutoff = 1.0 - jnp.exp(-((mn12_wave / 1000.0 / tor_cutoff_um) ** 2))
+    return (mn12_avg_arr + torus_deviation) * cutoff
+
+
 def torus_mn12_continuum(
     wave_nm: Array,
     l5100: float,
@@ -292,19 +342,9 @@ def torus_mn12_continuum(
     mn12_lo_arr = jnp.asarray(mn12_lo)
     mn12_hi_arr = jnp.asarray(mn12_hi)
 
-    # Build spectrum on native template grid
-    # Use jnp.where for differentiability across the tor_temp branch
-    torus_deviation = jnp.where(
-        tor_temp > 0,
-        (mn12_hi_arr - mn12_avg_arr) * tor_temp,
-        (mn12_lo_arr - mn12_avg_arr) * (-tor_temp),
+    spectrum_native = mn12_native_shape(
+        mn12_wave, tor_temp, tor_cutoff_um, mn12_avg_arr, mn12_lo_arr, mn12_hi_arr
     )
-
-    # Gaussian-like cutoff at short wavelengths (approximates both MN12 and LyuRieke)
-    cutoff = 1.0 - jnp.exp(-((mn12_wave / 1000.0 / tor_cutoff_um) ** 2))
-
-    # Apply the templates and short-wavelength cutoff on the native grid.
-    spectrum_native = (mn12_avg_arr + torus_deviation) * cutoff
 
     # Normalization, verbatim from upstream ``activatetorus.process`` (line 83):
     #   l_torus = 2.5 * l_agn * fcov / 12.0 * 0.510
