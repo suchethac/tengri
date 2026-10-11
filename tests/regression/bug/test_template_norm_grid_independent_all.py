@@ -10,9 +10,10 @@ grid. Two properties are checked for each fixed component:
 2. Declared power: on a converged grid the emitted power equals the declared
    power to 1e-4.
 
-Fixed components: the astrodust+PAH IR emission (its row integrals are taken on
-the published microns grid) and the GRAHSP unit-l5100 bolometric (taken on the
-fixed NORMALIZATION_GRID_NM).
+Fixed component: the GRAHSP unit-l5100 bolometric (taken on the fixed
+NORMALIZATION_GRID_NM). The dust emission templates normalize on the evaluation
+grid after resampling (owner ruling 2026-10-11) and are covered by
+tests/contract/test_dust_emission_exact_energy_balance.py.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ pytestmark = pytest.mark.regression_bug
 C_AA_PER_S = 2.99792458e18
 COARSE_N = 200
 FINE_N = 5000
-CONVERGED_N = 200_000
 
 
 def _shared_grids(lo_aa: float, hi_aa: float) -> tuple[np.ndarray, np.ndarray]:
@@ -40,15 +40,6 @@ def _emitted_power_erg_s(spectrum_lnu: np.ndarray, wave_aa: np.ndarray) -> float
     """Frequency integral of L_nu over the caller grid [erg/s]."""
     nu = C_AA_PER_S / wave_aa
     return float(np.trapezoid(spectrum_lnu[::-1], nu[::-1]))
-
-
-def _astrodust_spectrum(wave_aa: np.ndarray, l_ir: float) -> np.ndarray:
-    from tengri.components.dust.emission.templates.astrodust import AstrodustIRSEDComponent
-
-    comp = AstrodustIRSEDComponent()
-    n = len(wave_aa)
-    _, extra = comp.predict({"lgU": 1.0}, jnp.zeros(n), jnp.asarray(wave_aa), L_ir=l_ir)
-    return np.asarray(extra["sed_dust_ir"])
 
 
 def _grahsp_spectrum(wave_aa: np.ndarray, log_lbol: float) -> np.ndarray:
@@ -71,16 +62,6 @@ def _check_grid_independence(spectrum_fn, lo_aa: float, hi_aa: float) -> None:
     scale = np.max(np.abs(at_coarse))
     assert scale > 0.0
     assert np.max(np.abs(at_coarse - at_fine)) / scale <= 1e-6
-
-
-def test_astrodust_normalization_is_grid_independent():
-    _check_grid_independence(lambda w: _astrodust_spectrum(w, 1e44), 1e3, 1e8)
-
-
-def test_astrodust_emits_declared_power_on_converged_grid():
-    wave = np.geomspace(1e3, 1e8, CONVERGED_N)
-    power = _emitted_power_erg_s(_astrodust_spectrum(wave, 1e44), wave)
-    assert power == pytest.approx(1e44, rel=1e-4)
 
 
 def test_grahsp_normalization_is_grid_independent():
