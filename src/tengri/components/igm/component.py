@@ -503,23 +503,30 @@ class IGMSEDComponent(TemplateThreading):
 
         wave_rest = jnp.asarray(wave_rest)
         wave_obs = jnp.asarray(spec_wave_obs)
-        rows = []
-        for z in zgrid:
+        igm_model = self.config.igm_model
+
+        def _spec_row(z, wave_rest, wave_obs):
             trans = igm_absorption(
                 wave_rest * (1.0 + z),
                 z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
             # Exactly what predict_spectrum_via_precomp did at runtime: sample the
             # rest-grid curve at each pixel's rest effective wavelength.
-            rows.append(jnp.interp(wave_obs / (1.0 + z), wave_rest, trans))
+            return jnp.interp(wave_obs / (1.0 + z), wave_rest, trans)
 
+        # Batched over the z grid in one vmap call, not one eager call per z
+        # (#2769). Not jitted: the jit-compiled IGM math differs from the eager
+        # per-z loop by up to ~4e-14, and the eager batch is bit-identical.
+        spec_table = jax.vmap(_spec_row, in_axes=(0, None, None))(
+            jnp.asarray(zgrid), wave_rest, wave_obs
+        )
         return IGMSEDComponentState(
             name=self.name,
             spec_zgrid=jnp.asarray(zgrid),
-            spec_table=jnp.stack(rows),
+            spec_table=spec_table,
         )
 
     def subband_node_transmission(
@@ -634,18 +641,23 @@ class IGMSEDComponent(TemplateThreading):
         if cached is not None and cached.shape == waves.shape:
             return jnp.asarray(cached)
 
-        rows = []
-        for i, z in enumerate(zs):
-            nodes = waves[i]
+        igm_model = self.config.igm_model
+
+        def _node_row(nodes, z):
+            # Per-redshift slice of the z-table: `nodes` is one (n_met, n_age,
+            # n_filters, n_subbands) block, `z` its redshift.
             trans = igm_absorption(
-                jnp.asarray(nodes.reshape(-1) * (1.0 + float(z))),
-                float(z),
+                nodes.reshape(-1) * (1.0 + z),
+                z,
                 igm_patchy=False,
-                igm_model=self.config.igm_model,
+                igm_model=igm_model,
                 use_dla=False,
             )
-            rows.append(np.asarray(trans).reshape(nodes.shape))
-        table = np.stack(rows)
+            return trans.reshape(nodes.shape)
+
+        # Batched over the z-table in one vmap call, not one eager call per z (#2769).
+        # Not jitted: the batch stays bit-identical to the per-z loop.
+        table = np.asarray(jax.vmap(_node_row)(jnp.asarray(waves), jnp.asarray(zs)))
         _subband_cache.memo_put(key, table)
         _subband_cache.store(key, table)
         return jnp.asarray(table)
