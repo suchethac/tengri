@@ -28,6 +28,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.silva04 import create_silva04_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -245,21 +246,20 @@ class Silva04Torus(SEDModelComponent):
 
         silva04_fn = self.data
 
-        # Call Silva+04 interpolator
-        sed_torus = silva04_fn(
-            wavelength=wave,
-            agn_log_lbol=p["log_lbol"],
-            agn_log_nh_silva=p["log_nh_silva"],
-            agn_torus_frac=p["torus_frac"],
-        )
+        def _torus(wave_eval):
+            return silva04_fn(
+                wavelength=wave_eval,
+                agn_log_lbol=p["log_lbol"],
+                agn_log_nh_silva=p["log_nh_silva"],
+                agn_torus_frac=p["torus_frac"],
+            )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
-
-        nu = wavelength_to_nu(wave)
-        L_torus = bolometric_integral_nu(sed_torus, nu)
+        # Published L_agn_torus: the exact integral of the emitted torus SED. The template is
+        # a log-log power law between its native nodes, so the integral is closed form on them.
+        native = jnp.asarray(silva04_fn.native_wave, dtype=wave.dtype)
+        L_torus = native_bolometric_nu(_torus(native), native)
 
         # Add to intrinsic SED
-        sed_out = sed_in + sed_torus
+        sed_out = sed_in + _torus(wave)
 
         return sed_out, {"L_agn_torus": L_torus}
