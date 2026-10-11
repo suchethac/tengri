@@ -197,11 +197,12 @@ def test_radio_plus_cue_nebular_is_the_fixed_share_residual_band(
     test above); the nebular backend adds its own free-free share L_ff,neb / L_cal. The sum is
     therefore (1 - f_th) + L_ff,neb / L_cal, and the residual from the calibration is
     L_ff,neb / L_cal - f_th. Cue's share follows the ionizing photon rate per unit L_IR, so it
-    falls with stellar age (0.115 at 1 Gyr, 0.061 at 5 Gyr for delvecchio2021 at log M* 10,
+    falls with stellar age (0.120 at 1 Gyr, 0.064 at 5 Gyr for delvecchio2021 at log M* 10,
     z 0) and moves with z. Measured over the 32 cases (16 per mode), L_ff,neb / L_cal lies in
-    [0.0125, 0.136]; the Murphy share f_th is 0.094 to 0.161 for delvecchio2021 (1.4 GHz) and
-    0.027 to 0.063 for mccheyne2022 (150 MHz). The band below is the measured range, widened
-    by 0.001 on each side.
+    [0.0132, 0.1418]; the Murphy share f_th is 0.085 to 0.158 for delvecchio2021 (1.4 GHz) and
+    0.027 to 0.038 for mccheyne2022 (150 MHz). L_cal is formed from the 8-1000 um IR
+    luminosity both papers calibrate q on (the radio block's default window). The band below
+    is the measured range, widened by 0.001 on each side.
     """
     q_of, nu_ref = _MODES[mode]
     st, got_logm, l_ir = _public_state(
@@ -209,7 +210,7 @@ def test_radio_plus_cue_nebular_is_the_fixed_share_residual_band(
     )
     total = _total_ref(q_of(got_logm, z), l_ir)
     neb_ff = _l_nu_at(st, "sed_nebular", nu_ref)
-    assert 0.0115 <= neb_ff / total <= 0.137
+    assert 0.0122 <= neb_ff / total <= 0.1428
 
 
 # ---- negative synchrotron: the refusal evaluates the declared box ----------------------
