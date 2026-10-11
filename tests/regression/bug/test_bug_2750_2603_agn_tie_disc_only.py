@@ -42,7 +42,7 @@ from tengri.components.agn.blocks._protocol import LINE_ENERGY_BLOCKS, resolve_a
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.components.agn.disc import kubota_done_disc
 from tengri.components.dust.attenuation import smc
-from tengri.utils.grid_interp import resample_template
+from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
 
@@ -145,12 +145,13 @@ def _load_library(i_deg):
     last = disk_i[np.max(np.where(live))] / disk_0[np.max(np.where(live))]
     incl = np.where(live, incl, last)
     # R_faceon = int disk(0) x norm(0)/norm(i) / int dust(i): the face-on library disc per
-    # unit agn_power (CIGALE ``skirtor2016``: ``AGN1.disk *= AGN1.norm / skirtor2016.norm``)
+    # unit agn_power (CIGALE ``skirtor2016``: ``AGN1.disk *= AGN1.norm / skirtor2016.norm``).
+    # Both integrals are the log-log integrals the runner takes (#2322), not trapezoids.
     r_faceon = (
-        np.trapezoid(disk_0, wave_aa)
+        loglog_integral(wave_aa, disk_0)
         * nodes[0][2]
         / nodes[i_deg][2]
-        / np.trapezoid(dust_i, wave_aa)
+        / loglog_integral(wave_aa, dust_i)
     )
     return {
         "wave_aa": wave_aa,
@@ -206,14 +207,16 @@ def _tie_ratio(library, shape_lambda):
     """CIGALE's ``R = int(shape x int(disk_0) x disk_i/disk_0) / int(dust_i)`` on the library axis.
 
     ``shape_lambda`` is a callable giving the disc on a wavelength array [A]; it is
-    normalized to unit area on the library axis, as CIGALE normalizes its disc.
+    normalized to unit area on the library axis, as CIGALE normalizes its disc. Every
+    integral is the log-log integral of the runner's ``skirtor_disc_dust_ratio`` (#2322),
+    so the reference and the runner's tie ratio are the same number, not two quadratures.
     """
     wl = library["wave_aa"]
     shape = shape_lambda(wl)
-    shape = shape / np.trapezoid(shape, wl)
-    int_disk0 = np.trapezoid(library["disk_0"], wl)
-    return np.trapezoid(shape * int_disk0 * library["incl"], wl) / np.trapezoid(
-        library["dust_30"], wl
+    shape = shape / loglog_integral(wl, shape)
+    int_disk0 = loglog_integral(wl, library["disk_0"])
+    return loglog_integral(wl, shape * int_disk0 * library["incl"]) / loglog_integral(
+        wl, library["dust_30"]
     )
 
 
