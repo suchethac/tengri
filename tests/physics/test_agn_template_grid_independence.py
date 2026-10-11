@@ -669,3 +669,119 @@ def test_skirtor_emitted_sed_independent_of_caller_grid():
         seds.append(np.asarray(sed)[np.searchsorted(grid, probes)])
     err = float(np.max(np.abs(seds[0] / seds[1] - 1.0)))
     assert err < _RTOL, f"SKIRTOR emitted SED rel diff across caller grids {err:.3e}"
+
+
+# -- GRAHSP published L_* (#2745 follow-up) --------------------------------------------
+#
+# GRAHSP publishes three luminosities. Each is the integral of the SED the component emits,
+# under the key's documented definition (Buchner+ 2024 section 2.1.4-2.1.5, arXiv:2405.19297):
+#
+# * L_agn_bol: intrinsic BBB + lines + FeII + Balmer continuum above the Lyman limit (91.2 nm),
+#   before the bi-attenuation;
+# * L_agn_torus: intrinsic torus continuum + Si feature over its full support;
+# * L_agn_absorbed: intrinsic minus attenuated AGN-side power, over the full support.
+#
+# The identity reference is a wide, dense trapezoid in ln(nu) of the emitted L_nu, built from
+# GRAHSP variants that switch the other pieces off (the component's own sums, not a copy of them).
+
+_GRAHSP_KEYS = ("L_agn_bol", "L_agn_torus", "L_agn_absorbed")
+_GRAHSP_EDGES_AA = [
+    x for e in (124.0, 912.0, 2500.0, 3646.0, 11000.0) for x in (e * (1 - 1e-9), e, e * (1 + 1e-9))
+]
+_GRAHSP_WIDE = np.unique(np.concatenate([np.geomspace(100.0, 1.0e9, 1_200_000), _GRAHSP_EDGES_AA]))
+_GRAHSP_RTOL = 1.0e-6
+
+
+def _grahsp_comp(**overrides):
+    import dataclasses
+
+    from tengri.components.agn.grahsp.component import (
+        GRAHSPSEDComponent,
+        GRAHSPSEDComponentConfig,
+    )
+
+    cfg = dataclasses.replace(GRAHSPSEDComponentConfig(), **overrides)
+    return GRAHSPSEDComponent(config=cfg)
+
+
+def _grahsp_value(prior):
+    """Declared default, else the bounds' midpoint (geometric for a log-uniform prior)."""
+    if prior.default is not None:
+        return prior.default
+    lo, hi = prior.bounds
+    return float(np.sqrt(lo * hi)) if type(prior).__name__ == "LogUniform" else 0.5 * (lo + hi)
+
+
+def _grahsp_params(comp):
+    return {
+        d.name: jnp.asarray(_grahsp_value(d.prior), dtype=jnp.float64)
+        for d in comp.declared_parameters()
+    }
+
+
+def _grahsp_apply(comp, params, wave_aa, tpl):
+    """One ``apply`` on a caller grid [Angstrom] -> (derived dict, emitted L_nu [erg/s/Hz])."""
+    from tengri.protocols import ForwardState
+
+    w = jnp.asarray(np.asarray(wave_aa, dtype=float))
+    state = ForwardState(wave=w, sed_intrinsic=jnp.zeros_like(w), derived={})
+    out = comp.apply(state, params, templates_state=tpl)
+    return out.derived, np.asarray(out.sed_intrinsic, dtype=float)
+
+
+def _grahsp_sed(comp, params, wave_aa, tpl):
+    """Emitted L_nu on a long grid, evaluated in chunks (the published values are not used)."""
+    chunks = np.array_split(np.asarray(wave_aa, dtype=float), 8)
+    return np.concatenate([_grahsp_apply(comp, params, c, tpl)[1] for c in chunks])
+
+
+def _grahsp_published(comp, params, wave_aa, tpl):
+    derived, _ = _grahsp_apply(comp, params, wave_aa, tpl)
+    return {k: float(derived[k]) for k in _GRAHSP_KEYS}
+
+
+def test_grahsp_published_L_independent_of_caller_grid():
+    """Each GRAHSP L_* is the same on a dense, a 40-point and a 12-point caller grid (1e-6)."""
+    comp = _grahsp_comp()
+    tpl = comp.precompute()
+    params = _grahsp_params(comp)
+    dense = _grahsp_published(comp, params, _PUB_DENSE, tpl)
+    for label, grid in (("coarse-40", _PUB_COARSE), ("filter-12", _PUB_FILTERS)):
+        other = _grahsp_published(comp, params, grid, tpl)
+        for key in _GRAHSP_KEYS:
+            err = abs(other[key] / dense[key] - 1.0)
+            assert err < _GRAHSP_RTOL, f"GRAHSP {key} {label}: rel diff {err:.3e}"
+
+
+def test_grahsp_published_L_equals_dense_integral_of_emitted_sed():
+    """Each GRAHSP L_* equals the wide dense integral of the SED it defines (1e-6)."""
+    full = _grahsp_comp()
+    tpl = full.precompute()
+    params = _grahsp_params(full)
+    pub = _grahsp_published(full, params, _PUB_FILTERS, tpl)
+
+    bbb_side = _grahsp_comp(include_torus=False, apply_attenuation=False)
+    torus_side = _grahsp_comp(
+        include_bbb=False,
+        include_lines=False,
+        include_feii=False,
+        include_balmer=False,
+        apply_attenuation=False,
+    )
+    intrinsic = _grahsp_comp(apply_attenuation=False)
+
+    _, sed_bbb = _grahsp_apply(bbb_side, params, _GRAHSP_WIDE, tpl)
+    _, sed_torus = _grahsp_apply(torus_side, params, _GRAHSP_WIDE, tpl)
+    _, sed_int = _grahsp_apply(intrinsic, params, _GRAHSP_WIDE, tpl)
+    _, sed_att = _grahsp_apply(full, params, _GRAHSP_WIDE, tpl)
+
+    lyman = _GRAHSP_WIDE >= 912.0  # the Lyman-limit cut is a node: the trapezoid starts on it
+    ref = {
+        "L_agn_bol": _ln_nu_integral(sed_bbb[lyman], _GRAHSP_WIDE[lyman]),
+        "L_agn_torus": _ln_nu_integral(sed_torus, _GRAHSP_WIDE),
+        "L_agn_absorbed": _ln_nu_integral(sed_int - sed_att, _GRAHSP_WIDE),
+    }
+    for key in _GRAHSP_KEYS:
+        assert ref[key] > 0.0, f"{key}: reference is not positive"
+        err = abs(pub[key] / ref[key] - 1.0)
+        assert err < _GRAHSP_RTOL, f"GRAHSP {key}: published-vs-emitted rel {err:.3e}"

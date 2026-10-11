@@ -59,20 +59,29 @@ from typing import Any
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn.grahsp.attenuation import attenuation_factors
-from tengri.components.agn.grahsp.balmer import balmer_continuum
-from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
-from tengri.components.agn.grahsp.bolometric import (
-    bolometric_luminosity_bbb,
-    bolometric_luminosity_torus,
+from tengri.components.agn.grahsp.attenuation import PREVOT_DEFAULTS, attenuation_factors
+from tengri.components.agn.grahsp.balmer import (
+    _BALMER_EDGE_NM,
+    _BC_CONVOLUTION_THRESHOLD_NM,
+    balmer_continuum,
 )
+from tengri.components.agn.grahsp.bbb import XRAY_FLOOR_NM, floor_disc_xray, sbpl_bbb
+from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
+from tengri.components.agn.grahsp.publication import (
+    PUBLICATION_HI_NM,
+    gauss_legendre_segments,
+    linewidth_sigma_nm,
+    publication_breakpoints,
+    window_edges,
+)
 from tengri.components.agn.grahsp.templates import (
     GRAHSPTemplates,
     load_grahsp_templates,
 )
 from tengri.components.agn.grahsp.torus import (
+    SI_DEFAULTS,
     si_feature,
     torus_dust_continuum,
     torus_mn12_continuum,
@@ -452,9 +461,51 @@ class GRAHSPSEDComponent:
         if templates_state is None:
             templates_state = self.precompute()
 
-        wave_angstrom = state.wave
-        wave_nm = wave_angstrom * 0.1
+        wave_nm = state.wave * 0.1
+        bbb_intrinsic, torus_intrinsic = self._pieces(wave_nm, params, templates_state)
+        factor_agn = self._attenuation(wave_nm, params)
+        if factor_agn is None:
+            bbb_total, torus_total = bbb_intrinsic, torus_intrinsic
+        else:
+            bbb_total = bbb_intrinsic * factor_agn
+            torus_total = torus_intrinsic * factor_agn
 
+        # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
+        L_nu = (bbb_total + torus_total) * wave_nm**2 / _C_NM_PER_S
+        published = self._published_luminosities(params, templates_state)
+        return state.add_intrinsic(L_nu).with_(
+            derived=state.derived.with_(sed_grahsp=L_nu, **published),
+        )
+
+    def _pieces(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array]:
+        """Intrinsic AGN-side L_lambda [erg/s/nm] of the BBB side and of the torus side.
+
+        Parameters
+        ----------
+        wave_nm : array_like, shape (n_wave,)
+            Rest-frame wavelength [nm]; the caller's grid for the emitted SED, the
+            publication grid for the published luminosities.
+        params : mapping
+            ``agn_grahsp_*`` keys.
+        templates_state : GRAHSPSEDComponentState
+            Pre-loaded template tensors.
+
+        Returns
+        -------
+        bbb_intrinsic : ndarray, shape (n_wave,)
+            BBB + lines + FeII + Balmer continuum [erg/s/nm], before attenuation.
+        torus_intrinsic : ndarray, shape (n_wave,)
+            Torus continuum + Si feature [erg/s/nm], before attenuation.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. Pointwise in ``wave_nm``.
+        """
         cfg = self.config
         l5100 = jnp.asarray(params["agn_grahsp_l5100"])
         zeros = jnp.zeros_like(wave_nm)
@@ -588,38 +639,133 @@ class GRAHSPSEDComponent:
         # Mirror upstream ``mask_negative``: clip si so total torus stays >= 0.
         si = jnp.maximum(si, -torus)
 
-        bbb_intrinsic = bbb + broad + narrow + feii + balmer
-        torus_intrinsic = torus + si
+        return bbb + broad + narrow + feii + balmer, torus + si
 
-        if cfg.apply_attenuation:
-            _, factor_agn = attenuation_factors(
-                wave_nm=wave_nm,
-                ebv=jnp.asarray(params["agn_grahsp_ebv"]),
-                ebv_agn=jnp.asarray(params["agn_grahsp_ebv_agn"]),
-            )
-            bbb_total = bbb_intrinsic * factor_agn
-            torus_total = torus_intrinsic * factor_agn
-        else:
-            bbb_total = bbb_intrinsic
-            torus_total = torus_intrinsic
+    def _attenuation(self, wave_nm: Array, params: Mapping[str, Array]) -> Array | None:
+        """AGN-side bi-attenuation factor 10**(-(E(B-V)+E(B-V)_AGN) A_SMC / 2.5), or None.
 
-        # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
-        L_lambda_total = bbb_total + torus_total
-        L_nu = L_lambda_total * wave_nm**2 / _C_NM_PER_S
+        Parameters
+        ----------
+        wave_nm : array_like, shape (n_wave,)
+            Rest-frame wavelength [nm].
+        params : mapping
+            ``agn_grahsp_ebv`` and ``agn_grahsp_ebv_agn``.
 
-        # Bolometric quantities (computed from L_lambda on the nm grid).
-        L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
-        L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
-        # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
-        # Reported but NOT injected into the Dale 2014 dust-emission loop;
-        # GRAHSP's torus already empirically captures dust re-radiation.
-        L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
-
-        return state.add_intrinsic(L_nu).with_(
-            derived=state.derived.with_(
-                sed_grahsp=L_nu,
-                L_agn_bol=L_bol_BBB,
-                L_agn_torus=L_bol_torus,
-                L_agn_absorbed=L_agn_absorbed,
-            ),
+        Returns
+        -------
+        ndarray, shape (n_wave,) or None
+            The factor [dimensionless]; None when ``apply_attenuation`` is off.
+        """
+        if not self.config.apply_attenuation:
+            return None
+        _, factor_agn = attenuation_factors(
+            wave_nm=wave_nm,
+            ebv=jnp.asarray(params["agn_grahsp_ebv"]),
+            ebv_agn=jnp.asarray(params["agn_grahsp_ebv_agn"]),
         )
+        return factor_agn
+
+    def _published_luminosities(
+        self,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> dict[str, Array]:
+        r"""Published ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s].
+
+        Each is the integral of the emitted AGN-side SED under its documented definition, on
+        the component's own publication grid (:mod:`~tengri.components.agn.grahsp.publication`),
+        so it does not depend on the caller's wavelength array:
+
+        .. math::
+
+           L_{\rm bol}^{\rm BBB} = \int_{91.2\,\mathrm{nm}}^{\infty}
+               L_\lambda^{\rm BBB+lines+FeII+Balmer}\,\mathrm{d}\lambda, \qquad
+           L_{\rm bol}^{\rm TOR} = \int_0^\infty L_\lambda^{\rm TOR}\,\mathrm{d}\lambda, \qquad
+           L_{\rm abs} = \int \left(L_\lambda^{\rm int} - L_\lambda^{\rm att}\right)
+               \mathrm{d}\lambda,
+
+        where the BBB and torus terms are intrinsic (before the bi-attenuation) and the
+        absorbed power is the intrinsic minus the attenuated AGN-side power (Buchner+ 2024
+        section 2.1.4-2.1.5, arXiv:2405.19297).
+
+        Parameters
+        ----------
+        params : mapping
+            ``agn_grahsp_*`` keys.
+        templates_state : GRAHSPSEDComponentState
+            Pre-loaded template tensors.
+
+        Returns
+        -------
+        dict
+            ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The quadrature is segmented Gauss-Legendre in ln(lambda)
+        between the breakpoints from ``_publication_breaks``; their count is fixed by the
+        configuration. **Gradient-safe**: yes. ``L_agn_absorbed`` is exactly zero when
+        ``apply_attenuation`` is off.
+        """
+        breaks = self._publication_breaks(params, templates_state)
+        lam_nm, weight_nm = gauss_legendre_segments(breaks)
+        bbb_i, torus_i = self._pieces(lam_nm, params, templates_state)
+        factor_agn = self._attenuation(lam_nm, params)
+        in_bol_band = lam_nm >= LYMAN_LIMIT_NM
+        L_bol = jnp.sum(weight_nm * jnp.where(in_bol_band, bbb_i, 0.0))
+        L_torus = jnp.sum(weight_nm * torus_i)
+        if factor_agn is None:
+            L_absorbed = jnp.zeros((), dtype=L_bol.dtype)
+        else:
+            L_absorbed = jnp.sum(weight_nm * (bbb_i + torus_i) * (1.0 - factor_agn))
+        return {"L_agn_bol": L_bol, "L_agn_torus": L_torus, "L_agn_absorbed": L_absorbed}
+
+    def _publication_breaks(
+        self,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> Array:
+        """Breakpoints [nm] of the publication grid for the selected pieces.
+
+        Parameters
+        ----------
+        params : mapping
+            ``agn_grahsp_linewidth_kms`` moves the feature windows.
+        templates_state : GRAHSPSEDComponentState
+            Template nodes of the selected pieces become breakpoints.
+
+        Returns
+        -------
+        ndarray, shape (n_breaks,)
+            Ascending breakpoints [nm] from the X-ray floor to ``_PUBLICATION_HI_NM``.
+        """
+        cfg = self.config
+        linewidth = jnp.asarray(params["agn_grahsp_linewidth_kms"])
+        static = (
+            LYMAN_LIMIT_NM,
+            _BC_CONVOLUTION_THRESHOLD_NM,
+            PREVOT_DEFAULTS["lam_break_nm"],
+        )
+        arrays: list[Array] = []
+        if cfg.include_lines:
+            centers = templates_state.line_wave_nm
+            arrays.append(window_edges(centers, linewidth_sigma_nm(centers, linewidth)))
+        if cfg.include_balmer and cfg.agn_type == 1:
+            edge = jnp.asarray([_BALMER_EDGE_NM])
+            arrays.append(window_edges(edge, linewidth_sigma_nm(edge, linewidth)))
+        if cfg.include_feii and cfg.agn_type == 1:
+            if cfg.feii_template == "veroncetty2004":
+                arrays.append(templates_state.feii_vc04_wave_nm)
+            else:
+                arrays.append(templates_state.feii_wave_nm)
+        if cfg.include_bbb and cfg.disc_model == "netzer":
+            arrays.append(templates_state.disc_wave_nm)
+        if cfg.include_torus and cfg.torus_model == "mn12":
+            arrays.append(templates_state.torus_mn12_wave_nm)
+            if cfg.include_si:
+                arrays.append(templates_state.torus_mn12_si_wave_nm)
+        elif cfg.include_torus and cfg.include_si:
+            si_centers = jnp.asarray([SI_DEFAULTS["si_em_lam_nm"], SI_DEFAULTS["si_abs_lam_nm"]])
+            si_sigma = jnp.asarray([SI_DEFAULTS["si_em_width_nm"], SI_DEFAULTS["si_abs_width_nm"]])
+            arrays.append(window_edges(si_centers, si_sigma))
+        return publication_breakpoints(XRAY_FLOOR_NM, PUBLICATION_HI_NM, static, arrays)
