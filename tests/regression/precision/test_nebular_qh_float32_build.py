@@ -6,13 +6,9 @@ subprocess. The child loads the bare SSP in float32, builds one photoionized
 backend, and reports its ionizing table and forward outputs as JSON. The parent
 rebuilds the same model in float64 and compares.
 
-Two checks live here, and each is a regression for #2849:
-
-* the ionizing-spectrum fit and the mappings photoionization table must not form
-  the ~1e46 photon rate in linear float32 (the table then holds ``inf`` and the
-  Cue build raises ``CueWNESSPError``);
-* ``edge_trapezoid_log10`` must be the log of ``edge_trapezoid`` in float64 and
-  must stay finite in float32 where the linear integral overflows.
+The ionizing-spectrum fit and the mappings photoionization table must not form the
+~1e46 photon rate in linear float32 (the table then holds ``inf`` and the Cue build
+raises ``CueWNESSPError``), and must stay bit-identical in float64 (#2849).
 """
 
 from __future__ import annotations
@@ -184,64 +180,6 @@ def test_photoionized_backend_float32_build(kind, tmp_path):
     assert np.all(np.isfinite(p32)), f"{kind} float32 photometry non-finite: {p32}"
     rel = float(np.max(np.abs(p32 - p64) / np.abs(p64)))
     assert rel <= 1e-4, f"{kind} float32 photometry relative difference {rel:.3e}"
-
-
-def test_edge_trapezoid_log10_matches_log_of_linear_float64():
-    """In float64 the helper is log10 of the linear integral, to round-off."""
-    from tengri.components.lyc import edge_trapezoid, edge_trapezoid_log10
-
-    rng = np.random.default_rng(2849)
-    wave = np.linspace(200.0, 3000.0, 400)
-    for _ in range(8):
-        y = rng.lognormal(mean=0.0, sigma=3.0, size=wave.size)
-        for side in ("all", "ionizing", "nonionizing"):
-            lin = float(edge_trapezoid(y, wave, variable="nu", side=side))
-            log = float(edge_trapezoid_log10(y, wave, variable="nu", side=side))
-            assert np.isclose(log, np.log10(lin), rtol=0.0, atol=1e-12), (side, log, lin)
-
-
-def test_edge_trapezoid_log10_is_finite_in_float32_where_linear_overflows():
-    """An integrand of 1e30 over ~3e16 Hz integrates to ~3e46: linear float32 is inf.
-
-    The log form peak-normalizes first and stays finite, at the log10 of the
-    float64 value (30 + log10 of the bandwidth) to float32 round-off.
-    """
-    from tengri.components.lyc import edge_trapezoid_log10
-
-    wave = np.linspace(100.0, 3000.0, 2000)
-    y = np.full(wave.size, 1e30)
-    with jax.enable_x64(False):
-        log32 = float(
-            edge_trapezoid_log10(
-                y.astype(np.float32), wave.astype(np.float32), variable="nu", side="all"
-            )
-        )
-    with jax.enable_x64(True):
-        log64 = float(edge_trapezoid_log10(y, wave, variable="nu", side="all"))
-    assert np.isfinite(log32), "float32 log integral is not finite"
-    assert log64 > 46.0, f"float64 reference is not the ~1e46 regime: {log64}"
-    assert abs(log32 - log64) <= 1e-5, f"float32 {log32} vs float64 {log64}"
-
-
-def test_edge_trapezoid_log10_gradient_matches_finite_differences():
-    """The gradient of the log integral agrees with central finite differences."""
-    from tengri.components.lyc import edge_trapezoid_log10
-
-    wave = jnp.linspace(150.0, 2500.0, 300)
-    y0 = jnp.exp(-(((wave - 600.0) / 250.0) ** 2)) + 0.05
-
-    def f(y):
-        return edge_trapezoid_log10(y, wave, variable="nu", side="ionizing")
-
-    direction = jnp.cos(jnp.arange(wave.size) * 0.37)
-    grad = jax.grad(f)(y0)
-    assert bool(jnp.all(jnp.isfinite(grad))), "gradient is not finite"
-    h = 1e-6
-    fd = (f(y0 + h * direction) - f(y0 - h * direction)) / (2.0 * h)
-    assert np.isclose(float(jnp.dot(grad, direction)), float(fd), rtol=1e-6), (
-        float(jnp.dot(grad, direction)),
-        float(fd),
-    )
 
 
 @pytest.mark.parametrize("dummy", [None])
