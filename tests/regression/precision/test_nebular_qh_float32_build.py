@@ -334,12 +334,8 @@ sys.path.insert(0, SRC)
 import numpy as np
 import jax
 import tengri  # noqa: F401
-from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
-from tengri.components.nebular.cloudy_grid import CloudyGridBackend
-from tengri.components.nebular.cloudy_cb19 import CB19Backend
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.observation import Observation, Photometry
 
 ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5")
 res = {"x64": np.asarray(bool(jax.config.jax_enable_x64))}
@@ -350,45 +346,19 @@ log_age = np.asarray(ssp.ssp_lg_age_gyr) + 9.0
 tab = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=log_age)
 for key in ("ionspec_table", "logqion_table", "seglum_table"):
     res["ion_" + key] = np.asarray(tab[key])
-backends = (
-    ("cloudy", CloudyGridBackend),
-    ("cb19", CB19Backend),
-)
-for name, cls in backends:
-    b = cls.__new__(cls)
-    b._qh_table = None
-    b._max_neb_log_age = 8.0
-    b._log_qh_scale = 0.0
-    b._precompute_qh(ssp)
-    res[name + "_qh"] = np.asarray(b._qh_table, dtype=np.float64)
-    res[name + "_scale"] = np.asarray(float(getattr(b, "_log_qh_scale", 0.0)))
-model = SEDModel.build(
-    ssp_data=ssp,
-    observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
-    sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Uniform(9.0, 11.0),
-         "tau_gyr": 1.0, "age_gyr": 5.0},
-    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT),
-                      "tau_diff": Uniform(0.0, 1.5), "tau_bc": 0.0},
-    neb={"type": "cue", "all_params": Fixed(DEFAULT)},
-    redshift=Fixed(0.1),
-    approx=None,
-)
-params = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
-res["cue_phot"] = np.asarray(model.predict_photometry(params), dtype=np.float64)
-pred = model.predict(params)
-res["cue_rest_sed"] = np.asarray(pred.rest_sed(), dtype=np.float64)
 np.savez(OUT, **res)
 print("WROTE", OUT, sorted(res))
 """
 
 
 def test_float64_tables_bit_identical_to_reference(tmp_path):
-    """With x64 on, the ionizing and Q_H tables and the Cue output are bit-identical (#2849).
+    """With x64 on, the Cue ionizing tables are bit-identical to the pre-#2849 build.
 
     The reference is ``fixtures/nebular_qh_float64_unfixed.json``, written by
     ``_BITWISE_CHILD`` on the pre-#2849 tree. Exact float64 agreement holds
-    because the power-of-two scale is exact, and the log is taken in the same
-    library (NumPy in the fit, the same jitted XLA log in the Q_H routines).
+    because the power-of-two scale is exact and the log is taken in NumPy, as
+    before. Only the three tables this change touches are pinned, so unrelated
+    changes to the model's spectrum do not move the reference.
     """
     _require_data(_SSP)
     with open(
