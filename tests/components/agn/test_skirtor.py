@@ -340,16 +340,22 @@ class TestSKIRTORGradients:
         return jnp.logspace(2, 7, 300)
 
     def test_gradient_tau(self, wave):
-        """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient."""
+        """FD check: ∂(∑SED)/∂tau_skirtor. Optical depth gradient.
+
+        Evaluated at tau = 6, between the tau nodes 5 and 7. Node-exact PCHIP is
+        C1 at a node but its second derivative jumps there, so a central
+        difference of step 0.1 straddling tau = 7 carries an O(step) error
+        (0.15 % at 7, 0.003 % at 6). AD matches FD off the node (#2606).
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(tau):
             return float(jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))
 
-        g = float(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(7.0))
+        g = float(jax.grad(lambda tau: jnp.sum(skirtor_analytic(wave, agn_tau_skirtor=tau)))(6.0))
         np.testing.assert_allclose(
             g,
-            fd_grad(f, 7.0, eps=0.1),
+            fd_grad(f, 6.0, eps=0.1),
             rtol=1e-3,
             err_msg="skirtor_analytic: FD check ∂/∂tau_skirtor",
         )
@@ -385,16 +391,20 @@ class TestSKIRTORGradients:
         )
 
     def test_gradient_oa(self, wave):
-        """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient."""
+        """FD check: ∂(∑SED)/∂oa_skirtor. Opening angle gradient.
+
+        Evaluated at oa = 45, between the nodes 40 and 50, for the same reason as
+        :meth:`test_gradient_tau` (#2606).
+        """
         from tengri.components.agn.skirtor import skirtor_analytic
 
         def f(oa):
             return float(jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))
 
-        g = float(jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(40.0))
+        g = float(jax.grad(lambda oa: jnp.sum(skirtor_analytic(wave, agn_oa_skirtor=oa)))(45.0))
         np.testing.assert_allclose(
             g,
-            fd_grad(f, 40.0, eps=0.1),
+            fd_grad(f, 45.0, eps=0.1),
             rtol=1e-3,
             err_msg="skirtor_analytic: FD check ∂/∂oa_skirtor",
         )
@@ -449,20 +459,20 @@ class TestSKIRTORGradients:
                 )
             )
 
-        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(7.0, 1.0, 1.0, 40.0, 0.45)
+        grads = jax.grad(loss, argnums=(0, 1, 2, 3, 4))(6.0, 1.0, 1.0, 45.0, 0.45)
         params = [
-            ("tau", 7.0, 0.1),
+            ("tau", 6.0, 0.1),
             ("p", 1.0, 1e-4),
             ("q", 1.0, 1e-4),
-            ("oa", 40.0, 0.1),
+            ("oa", 45.0, 0.1),
             ("cos_inc", 0.45, 1e-4),
         ]
         fs = [
-            lambda tau: float(loss(tau, 1.0, 1.0, 40.0, 0.45)),
-            lambda p: float(loss(7.0, p, 1.0, 40.0, 0.45)),
-            lambda q: float(loss(7.0, 1.0, q, 40.0, 0.45)),
-            lambda oa: float(loss(7.0, 1.0, 1.0, oa, 0.45)),
-            lambda ci: float(loss(7.0, 1.0, 1.0, 40.0, ci)),
+            lambda tau: float(loss(tau, 1.0, 1.0, 45.0, 0.45)),
+            lambda p: float(loss(6.0, p, 1.0, 45.0, 0.45)),
+            lambda q: float(loss(6.0, 1.0, q, 45.0, 0.45)),
+            lambda oa: float(loss(6.0, 1.0, 1.0, oa, 0.45)),
+            lambda ci: float(loss(6.0, 1.0, 1.0, 45.0, ci)),
         ]
         for i, (name, x0, eps) in enumerate(params):
             np.testing.assert_allclose(

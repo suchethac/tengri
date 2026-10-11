@@ -3,7 +3,7 @@ r"""The torus template lookups return the tabulated SED at an exact grid node.
 
 SKIRTOR and Fritz are tabulated radiative-transfer libraries, so the SED at a node
 is the model. The lookup used to be the triweight smoother, a kernel-weighted
-average of the node and its neighbours; at a node the band shares were off by up
+average of the node and its neighbors; at a node the band shares were off by up
 to 65 % (#2606). The lookup is now the node-exact PCHIP interpolant, so at every
 node the normalized template equals the stored node to floating-point precision.
 
@@ -20,10 +20,9 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 jax = pytest.importorskip("jax")
-jax.config.update("jax_enable_x64", True)
-import jax.numpy as jnp  # noqa: E402
+import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_AA  # noqa: E402
+from tengri.utils.physics_constants import C_AA
 
 RTOL = 1e-6
 
