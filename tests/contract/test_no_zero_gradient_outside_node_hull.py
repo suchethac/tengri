@@ -45,7 +45,7 @@ import pytest
 from tengri.components._z_response import interp_z_table, ln1pz_nodes
 from tengri.components.agn.kd18_agnfitter import KD18AGNfitterGrid, kd18_agnfitter_sed_from_grid
 from tengri.components.agn.skirtor import _cos_inc_extrapolate
-from tengri.utils.grid_interp import interp_nd_pchip, pchip_interp_local
+from tengri.utils.grid_interp import interp_nd_pchip, pchip_interp_1d, pchip_interp_local
 
 _SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "tengri"
 _N_SWEEP = 201
@@ -55,7 +55,7 @@ _N_SWEEP = 201
 class FittedLookup:
     """One fitted lookup: its prior, its node hull, and how the sweep is taken.
 
-    ``f(theta)`` returns a scalar; ``theta`` is the fitted parameter value.
+    ``build()`` returns ``f(theta)``, a scalar function; ``theta`` is the fitted parameter value.
     ``gap`` is ``"numerical"`` (sweep the full prior) or ``"physical"`` (sweep
     ``prior intersect hull``, and the gap must be in GRID_SUPPORT).
     """
@@ -64,7 +64,7 @@ class FittedLookup:
     prior: tuple[float, float]
     hull: tuple[float, float]
     gap: str
-    f: Callable[[jnp.ndarray], jnp.ndarray]
+    build: Callable[[], Callable[[jnp.ndarray], jnp.ndarray]]
 
 
 def _sweep(lo: float, hi: float) -> np.ndarray:
@@ -141,42 +141,120 @@ def _skirtor_cos_inc_case() -> Callable:
     return f
 
 
+def _fritz_psy_case() -> Callable:
+    """Fritz library read at psy = fritz_psy_from_cos_inc(cos i), over the real psy axis.
+
+    Reads the library's psy axis from the shipped grid file. The lookup is the
+    end-cubic extension the Fritz psy lookup uses, so the check covers the psy
+    derivation and the extension together.
+    """
+    import h5py
+
+    from tengri._data_setup import find_data
+    from tengri.components.agn.fritz import fritz_psy_from_cos_inc
+
+    path = find_data("fritz2006_torus_grid.h5")
+    if path is None:
+        pytest.skip("fritz2006_torus_grid.h5 not installed")
+    with h5py.File(path, "r") as f:
+        psy_nodes = jnp.asarray(f["fritz2006/psy_axis"][:], dtype=jnp.float64)
+    values = jnp.sin(jnp.radians(psy_nodes)) + 0.1 * psy_nodes / 90.0
+
+    def f(cos_inc):
+        psy = fritz_psy_from_cos_inc(cos_inc)
+        return pchip_interp_1d(psy_nodes, values, psy, extrapolate=True)
+
+    return f
+
+
+def _bosa_case() -> Callable:
+    """BOSA template read at a fitted dust_log_ssfr, integrated over the band.
+
+    The prior [-11, -8.4] lies inside the stored axis [-11, -8.3999996]; this row
+    is a regression guard that the in-hull read keeps a nonzero gradient.
+    """
+    from tengri._data_setup import find_data
+    from tengri.components.dust.emission_templates import create_bosa_from_grid
+
+    path = find_data("bosa_templates.h5")
+    if path is None:
+        pytest.skip("bosa_templates.h5 not installed")
+    emit = create_bosa_from_grid(str(path))
+    wave = jnp.logspace(3.5, 4.5, 24)
+
+    def f(log_ssfr):
+        return jnp.sum(emit(wave, 1.0e44, dust_log_ssfr=log_ssfr, log_L_ir=10.0))
+
+    return f
+
+
 FITTED_LOOKUPS: tuple[FittedLookup, ...] = (
     FittedLookup(
         "z_table.pchip_interp_local",
         prior=(0.0, 20.0),
         hull=(0.001, 20.2),
         gap="numerical",
-        f=_pchip_local_case(0.001, 20.2),
+        build=lambda: _pchip_local_case(0.001, 20.2),
     ),
     FittedLookup(
         "z_table.interp_z_table",
         prior=(0.0, 20.0),
         hull=(0.001, 20.2),
         gap="numerical",
-        f=_z_table_case(extrapolate=True)[0],
+        build=lambda: _z_table_case(extrapolate=True)[0],
     ),
     FittedLookup(
         "kd18.agn_log_mbh",
         prior=(6.0, 10.0),
         hull=(6.0, 10.0),
         gap="none",
-        f=_kd18_case("agn_log_mbh"),
+        build=lambda: _kd18_case("agn_log_mbh"),
     ),
     FittedLookup(
         "kd18.agn_log_ledd",
         prior=(-2.0, 0.5),
         hull=(-1.5, 0.0),
         gap="physical",
-        f=_kd18_case("agn_log_ledd"),
+        build=lambda: _kd18_case("agn_log_ledd"),
     ),
     FittedLookup(
         "skirtor.cos_inc",
         prior=(0.0, 1.0),
         hull=(6.1e-17, 1.0),
         gap="numerical",
-        f=_skirtor_cos_inc_case(),
+        build=lambda: _skirtor_cos_inc_case(),
     ),
+    FittedLookup(
+        "fritz.psy_from_cos_inc",
+        prior=(0.0, 1.0),
+        hull=(0.001, 89.99),
+        gap="numerical",
+        build=lambda: _fritz_psy_case(),
+    ),
+    FittedLookup(
+        "bosa.dust_log_ssfr",
+        prior=(-11.0, -8.4),
+        hull=(-11.0, -8.3999996),
+        gap="none",
+        build=lambda: _bosa_case(),
+    ),
+)
+
+#: Physical gaps: a fitted prior reaching past a stored axis by at least half a node
+#: spacing. The clamp stays (extrapolating would invent physics); the gap is
+#: registered in GRID_SUPPORT so a build warns. ``gap_over_spacing`` was measured
+#: from the shipped grid file (gap divided by the adjacent node spacing).
+PHYSICAL_ROWS: tuple[tuple[str, str, str, tuple[float, float], float, str], ...] = (
+    (
+        "agn.torus",
+        "nenkova_agnfitter",
+        "agn_cos_inc",
+        (0.0, 1.0),
+        1.0,
+        "nenkova_agnfitter_torus_grid.h5",
+    ),
+    ("agn.disc", "relagn", "agn_log_mbh", (6.0, 10.0), 6.3, "relagn_disc_grid.h5"),
+    ("dust.attenuation", "wg00", "dust_tau_v", (0.0, 4.0), 1.0, "wg00_attenuation_grid.h5"),
 )
 
 #: Every src file that calls a lookup helper (``pchip_interp_local``,
@@ -202,7 +280,7 @@ CENSUS: dict[str, str] = {
     ),
     "components/agn/skirtor.py": "fitted-fixed (cos_inc extrapolate, #2808)",
     "components/agn/fritz.py": (
-        "open:psy-from-cos_inc, cos in [0,1.745e-5) flat (numerical, not yet fixed)",
+        "fitted-fixed (psy numerical gap: psy extended, cap continued linearly)"
     ),
     "components/agn/_template_grid.py": (
         "fitted-ok (cat3d grid cos 6.1e-17 vs prior 0; numerical, see skirtor pattern)",
@@ -212,7 +290,7 @@ CENSUS: dict[str, str] = {
     "components/agn/silva04.py": "fitted-ok",
     "components/agn/silva04_precompute.py": "fitted-ok",
     "components/agn/nenkova_agnfitter_precompute.py": (
-        "open:cos in (0.98481,1] flat, incl hull [10,90] (physical, not registered)",
+        "fitted-physical-registered (GRID_SUPPORT nenkova_agnfitter, gap 1.0 spacing)"
     ),
     "components/agn/nenkova_agnfitter_2p_precompute.py": "fitted-ok",
     "components/agn/nenkova_agnfitter_3p_precompute.py": "fitted-ok",
@@ -221,9 +299,7 @@ CENSUS: dict[str, str] = {
     "components/agn/skirtor_agnfitter_2p_precompute.py": "fitted-ok",
     "components/agn/skirtor_precompute.py": "fitted-ok (triweight, grid over prior)",
     "components/agn/disc_precompute.py": "fitted-ok by construction (axes over prior)",
-    "components/agn/disc.py": (
-        "open:agn_log_mbh [6,7) flat, relagn hull [7,10] (physical, not registered)",
-    ),
+    "components/agn/disc.py": "fitted-physical-registered (GRID_SUPPORT relagn, gap 6.3 spacings)",
     "components/agn/torus.py": "fitted-ok (agn_tau hull = prior)",
     "components/agn/torus_library_transmission.py": (
         "open:_normalized_ratio cos_inc, tracked #2860 (file on #2837, absent here)"
@@ -240,9 +316,12 @@ CENSUS: dict[str, str] = {
     "components/nebular/cloudy_cb19.py": "fitted-ok",
     "components/nebular/mappings_photo.py": "fitted-ok",
     "components/_collapsed_lookup.py": "fitted-ok by construction (axes over prior)",
-    "components/dust/wg00.py": "open:dust_tau_v [0,4) vs hull [0.25,10] (not registered)",
+    "components/dust/wg00.py": "fitted-physical-registered (GRID_SUPPORT wg00, gap 1.0 spacing)",
     "components/dust/dust_emission_precompute.py": (
-        "fitted-ok (GRID_SUPPORT registered); log_ltir derived, unknown",
+        "fitted-ok (GRID_SUPPORT registered); log_ltir derived"
+    ),
+    "components/dust/emission_templates.py": (
+        "fitted-ok (BOSA prior [-11,-8.4] inside stored [-11,-8.3999996])"
     ),
     "components/dust/dust_analytic_precompute.py": (
         "fitted-ok by construction; pinned axes fixed-config",
@@ -265,7 +344,8 @@ def test_gradient_is_finite_and_nonzero_across_prior(lookup: FittedLookup) -> No
     lo, hi = lookup.prior
     if lookup.gap == "physical":
         lo, hi = max(lo, lookup.hull[0]), min(hi, lookup.hull[1])
-    grads = np.array([_grad_at(lookup.f, float(t)) for t in _sweep(lo, hi)])
+    f = lookup.build()
+    grads = np.array([_grad_at(f, float(t)) for t in _sweep(lo, hi)])
     assert np.all(np.isfinite(grads)), f"{lookup.lookup_id}: non-finite gradient"
     zeros = np.flatnonzero(grads == 0.0)
     assert zeros.size == 0, (
@@ -309,6 +389,45 @@ def test_clamped_pchip_boundary_derivative_is_not_halved(which: str) -> None:
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize(
+    "selector, name, pname, prior, gap_over_spacing, filename",
+    PHYSICAL_ROWS,
+    ids=[row[1] for row in PHYSICAL_ROWS],
+)
+def test_physical_gap_is_registered_and_warns(
+    selector, name, pname, prior, gap_over_spacing, filename
+) -> None:
+    """A physical gap has a GRID_SUPPORT entry, read from the grid file, and warns."""
+    from tengri.components import grid_support as gs
+
+    assert gap_over_spacing >= 0.5, "a physical row must be at least half a spacing"
+    assert (selector, name) in gs.GRID_SUPPORT, f"{selector}/{name} not registered"
+    extent = gs.grid_support(selector, name)[pname]
+    assert extent == pytest.approx(_axis_extent_from_file(filename), rel=1e-9)
+    findings = gs.check_grid_support([(selector, name)], {pname: prior})
+    assert findings, f"{selector}/{name}: prior {prior} overhang not reported"
+
+
+def _axis_extent_from_file(filename: str) -> tuple[float, float]:
+    """Independent read of a stored axis, used to check each registry extent."""
+    import h5py
+
+    from tengri._data_setup import find_data
+
+    path = find_data(filename)
+    with h5py.File(path, "r") as f:
+        if filename.startswith("nenkova"):
+            incl = np.asarray(f["nenkova_agnfitter/incl_axis"][:], dtype=np.float64)
+            cos = np.cos(np.radians(incl))
+            return float(cos.min()), float(cos.max())
+        if filename.startswith("relagn"):
+            ax = np.asarray(f["log_mbh"][:], dtype=np.float64)
+        else:
+            ax = np.asarray(f["wg00/tau_v_axis"][:], dtype=np.float64)
+    return float(ax.min()), float(ax.max())
+
+
+@pytest.mark.contract
 def test_boundary_node_derivative_is_not_halved() -> None:
     """At an outermost node the derivative equals the one-sided derivative from inside.
 
@@ -316,8 +435,9 @@ def test_boundary_node_derivative_is_not_halved() -> None:
     lost half its gradient. The where-form clamp keeps it.
     """
     lookup = next(lk for lk in FITTED_LOOKUPS if lk.lookup_id == "kd18.agn_log_mbh")
-    g_bound = _grad_at(lookup.f, lookup.hull[1])
-    g_inside = _grad_at(lookup.f, lookup.hull[1] - 1e-7)
+    f = lookup.build()
+    g_bound = _grad_at(f, lookup.hull[1])
+    g_inside = _grad_at(f, lookup.hull[1] - 1e-7)
     assert g_bound == pytest.approx(g_inside, rel=1e-5)
 
 
