@@ -130,9 +130,15 @@ SBPL_PER_DECADE: int = 20
 #: Breakpoints per decade for the Balmer continuum quadrature (published L_* only).
 BALMER_PER_DECADE: int = 20
 #: Gauss-Legendre points per side of the log-normal torus expectation (published L_* only).
-LOG_GL_ORDER: int = 16
+LOG_GL_ORDER: int = 40
 #: Gauss-Hermite points per line and per Si feature (published L_* only).
 LINE_GH_ORDER: int = 13
+#: Segment width of the Si clip correction in units of the Si Gaussian sigma (published L_* only).
+#: A dip of ``max(si, -torus)`` narrower than a segment, with positive ends, is invisible to the
+#: sign test that places the kinks. Measured over 3000 random draws of the declared box
+#: (about 700 binding): worst L_agn_torus error 4.6e-6 at 1.0 sigma, 9.5e-8 at 0.5, 1.6e-8 at
+#: 0.25 and 3.7e-10 at 0.125.
+CLIP_STEP_SIGMA: float = 0.125
 #: Upper edge of the Balmer quadrature [nm]; its edge window ends below ~400 nm for any width.
 _BALMER_HI_NM: float = 600.0
 
@@ -223,6 +229,58 @@ class GRAHSPSEDComponentState(SEDComponentState):
     disc_m: tuple[str, ...] | None = None
     disc_a: tuple[str, ...] | None = None
     disc_mdot: tuple[str, ...] | None = None
+
+
+def _net_shape_is_nonnegative(
+    lo: Array,
+    hi: Array,
+    torus: tuple,
+    si: Array,
+    centers: np.ndarray,
+    sigmas: np.ndarray,
+) -> Array:
+    r"""True when the torus-plus-Si shape is certified non-negative on every segment.
+
+    The shape is :math:`T(\lambda) + s\,[A_{\rm em} g_{\rm em} - A_{\rm ab} g_{\rm ab}]`, with
+    :math:`T` the sum of two log-Gaussians (each non-negative) and :math:`g` unit-peak
+    Gaussians. On a segment :math:`[a,b]` each Gaussian is unimodal, so its minimum is at an
+    end and its maximum at the center clipped into the segment. Summing the lower bounds of
+    the terms (a negative coefficient takes the maximum) gives a lower bound of the shape.
+    When every segment's bound is non-negative the clip :math:`\max(0,-\mathrm{shape})`
+    vanishes identically, whatever the parameters: the test cannot return True where the
+    shape dips below zero.
+
+    Parameters
+    ----------
+    lo, hi : array_like, shape (n_seg,)
+        Segment ends [nm], ascending.
+    torus : tuple
+        ``(log_cool_um, cool_width, log_hot_um, hot_width, hot_fcov, spec12)``.
+    si : array_like
+        Si strength.
+    centers, sigmas : ndarray, shape (2,)
+        Si emission and absorption centers and widths [nm].
+
+    Returns
+    -------
+    ndarray, shape ()
+        Boolean scalar.
+    """
+    log_cool, w_cool, log_hot, w_hot, fhot, spec12 = torus
+    u = jnp.log10(jnp.stack([lo, hi]) / 1000.0)
+    cool = jnp.exp(-0.5 * ((u - log_cool) / w_cool) ** 2)
+    hot = fhot * 10.0 ** (log_cool - log_hot) * jnp.exp(-0.5 * ((u - log_hot) / w_hot) ** 2)
+    bound = (jnp.min(cool, axis=0) + jnp.min(hot, axis=0)) / spec12
+    em_amp = SI_DEFAULTS["si_em_ampl"]
+    ab_amp = em_amp * SI_DEFAULTS["si_ratio"]
+    for coeff, center, sigma in (
+        (si * em_amp, centers[0], sigmas[0]),
+        (-si * ab_amp, centers[1], sigmas[1]),
+    ):
+        ends = jnp.exp(-0.5 * ((jnp.stack([lo, hi]) - center) / sigma) ** 2)
+        peak = jnp.exp(-0.5 * ((jnp.clip(center, lo, hi) - center) / sigma) ** 2)
+        bound = bound + jnp.where(coeff >= 0.0, coeff * jnp.min(ends, axis=0), coeff * peak)
+    return jnp.all(bound >= 0.0)
 
 
 def _sign_change_roots(fn, lo: Array, hi: Array, iterations: int = 4) -> Array:
@@ -989,8 +1047,10 @@ class GRAHSPSEDComponent:
         dimensionless integral of :math:`\max(0,-(T+S))`, where :math:`T` is the torus shape
         normalized to unity at 12 um and :math:`S` the Si shape per unit ``si``. It is nonzero
         only inside the Si feature windows, and is integrated by Gauss-Legendre on each window
-        split into segments of one sigma (the clip is a kink of the integrand, so each segment
-        must hold at most one crossing).
+        split into segments of :data:`CLIP_STEP_SIGMA` sigma (the clip is a kink of the
+        integrand, so each segment must hold at most one crossing, found by a sign test on its
+        ends). The quadrature is skipped when :func:`_net_shape_is_nonnegative` certifies that
+        the shape is non-negative everywhere, where the correction is exactly zero.
 
         Parameters
         ----------
@@ -1010,7 +1070,7 @@ class GRAHSPSEDComponent:
         si = jnp.asarray(params["agn_grahsp_si"])
         centers = np.asarray([SI_DEFAULTS["si_em_lam_nm"], SI_DEFAULTS["si_abs_lam_nm"]])
         sigmas = np.asarray([SI_DEFAULTS["si_em_width_nm"], SI_DEFAULTS["si_abs_width_nm"]])
-        offsets = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
+        offsets = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 0.5 * CLIP_STEP_SIGMA, CLIP_STEP_SIGMA)
         breaks = jnp.sort(jnp.asarray((centers[:, None] + sigmas[:, None] * offsets).ravel()))
         cool_lam = jnp.asarray(params["agn_grahsp_cool_lam_um"])
         hot_lam = jnp.asarray(params["agn_grahsp_hot_lam_um"])
@@ -1033,13 +1093,22 @@ class GRAHSPSEDComponent:
             return torus_shape + si * (em_amp * g_em - ab_amp * g_ab)
 
         lo, hi = breaks[:-1], breaks[1:]
-        split = _sign_change_roots(net_shape, lo, hi)
-        # lo, split, hi per interval: ascending, each crossing a segment boundary.
-        lam, weight = gauss_legendre_segments(jnp.stack([lo, split, hi], axis=1).ravel())
-        crossing = jnp.maximum(0.0, -net_shape(lam))
-        if weight_fn is not None:
-            crossing = crossing * weight_fn(lam)
-        return (l_torus / 12000.0) * jnp.sum(weight * crossing)
+
+        def integral():
+            split = _sign_change_roots(net_shape, lo, hi)
+            # lo, split, hi per interval: ascending, each crossing a segment boundary.
+            lam, weight = gauss_legendre_segments(jnp.stack([lo, split, hi], axis=1).ravel())
+            crossing = jnp.maximum(0.0, -net_shape(lam))
+            if weight_fn is not None:
+                crossing = crossing * weight_fn(lam)
+            return (l_torus / 12000.0) * jnp.sum(weight * crossing)
+
+        # The correction is exactly zero where net_shape >= 0 everywhere; certify that with a
+        # rigorous lower bound per segment and skip the quadrature (the common case).
+        inactive = _net_shape_is_nonnegative(
+            lo, hi, (mu_cool, w_cool, mu_hot, w_hot, fhot, spec12), si, centers, sigmas
+        )
+        return jax.lax.cond(inactive, lambda: jnp.zeros_like(l_torus), integral)
 
     def _published_absorbed(self, params, templates_state) -> Array:
         """Intrinsic-minus-attenuated AGN-side power, fixed-node quadrature [erg/s]."""

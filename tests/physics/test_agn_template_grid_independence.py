@@ -690,18 +690,39 @@ _GRAHSP_EDGES_AA = [
 ]
 
 
-def _grahsp_feii_nodes_aa():
-    """FeII template nodes [Angstrom]: the template is piecewise linear, so its kinks are nodes."""
+def _template_nodes_aa(*names):
+    """Native nodes [Angstrom] of GRAHSP template axes, plus a pair either side of each end.
+
+    A tabulated piece is piecewise linear between its nodes and zero outside, so the
+    reference trapezoid needs every node, and a point a hair outside each end: where the
+    template does not vanish at its edge (the FeII forest starts at 24 % of its peak) the
+    emitted SED jumps there, and a trapezoid that straddles the jump is first order in the grid
+    spacing.
+    """
     from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
-    return 10.0 * np.asarray(load_grahsp_templates().feii_wave_nm, dtype=float)
+    templates = load_grahsp_templates()
+    out = []
+    for name in names:
+        axis = 10.0 * np.asarray(getattr(templates, name), dtype=float)
+        out.extend([axis, [axis.min() * (1 - 1e-9), axis.max() * (1 + 1e-9)]])
+    return np.concatenate(out)
 
 
-_GRAHSP_WIDE = np.unique(
-    np.concatenate(
-        [np.geomspace(100.0, 1.0e9, 1_200_000), _GRAHSP_EDGES_AA, _grahsp_feii_nodes_aa()]
+def _grahsp_wide(*template_axes):
+    """Dense reference grid [Angstrom]: log grid, hard edges and the selected template nodes."""
+    return np.unique(
+        np.concatenate(
+            [
+                np.geomspace(100.0, 1.0e9, 1_200_000),
+                _GRAHSP_EDGES_AA,
+                _template_nodes_aa(*template_axes),
+            ]
+        )
     )
-)
+
+
+_GRAHSP_WIDE = _grahsp_wide("feii_wave_nm")
 _GRAHSP_RTOL = 1.0e-6
 
 
@@ -766,38 +787,156 @@ def test_grahsp_published_L_independent_of_caller_grid():
             assert err < _GRAHSP_RTOL, f"GRAHSP {key} {label}: rel diff {err:.3e}"
 
 
-def test_grahsp_published_L_equals_dense_integral_of_emitted_sed():
-    """Each GRAHSP L_* equals the wide dense integral of the SED it defines (1e-6)."""
-    full = _grahsp_comp()
+def _grahsp_identity_errors(over, wide):
+    """Relative error of each published GRAHSP L_* against the dense integral of its SED.
+
+    ``over`` are the configuration overrides (the non-default option under test); the
+    reference is built from the component's own variants that switch the other pieces off.
+    """
+    full = _grahsp_comp(**over)
     tpl = full.precompute()
     params = _grahsp_params(full)
     pub = _grahsp_published(full, params, _PUB_FILTERS, tpl)
 
-    bbb_side = _grahsp_comp(include_torus=False, apply_attenuation=False)
+    bbb_side = _grahsp_comp(**{**over, "include_torus": False, "apply_attenuation": False})
     torus_side = _grahsp_comp(
-        include_bbb=False,
-        include_lines=False,
-        include_feii=False,
-        include_balmer=False,
-        apply_attenuation=False,
+        **{
+            **over,
+            "include_bbb": False,
+            "include_lines": False,
+            "include_feii": False,
+            "include_balmer": False,
+            "apply_attenuation": False,
+        }
     )
-    intrinsic = _grahsp_comp(apply_attenuation=False)
+    intrinsic = _grahsp_comp(**{**over, "apply_attenuation": False})
 
-    _, sed_bbb = _grahsp_apply(bbb_side, params, _GRAHSP_WIDE, tpl)
-    _, sed_torus = _grahsp_apply(torus_side, params, _GRAHSP_WIDE, tpl)
-    _, sed_int = _grahsp_apply(intrinsic, params, _GRAHSP_WIDE, tpl)
-    _, sed_att = _grahsp_apply(full, params, _GRAHSP_WIDE, tpl)
+    _, sed_bbb = _grahsp_apply(bbb_side, params, wide, tpl)
+    _, sed_torus = _grahsp_apply(torus_side, params, wide, tpl)
+    _, sed_int = _grahsp_apply(intrinsic, params, wide, tpl)
+    _, sed_att = _grahsp_apply(full, params, wide, tpl)
 
-    lyman = _GRAHSP_WIDE >= 912.0  # the Lyman-limit cut is a node: the trapezoid starts on it
+    lyman = wide >= 912.0  # the Lyman-limit cut is a node: the trapezoid starts on it
     ref = {
-        "L_agn_bol": _ln_nu_integral(sed_bbb[lyman], _GRAHSP_WIDE[lyman]),
-        "L_agn_torus": _ln_nu_integral(sed_torus, _GRAHSP_WIDE),
-        "L_agn_absorbed": _ln_nu_integral(sed_int - sed_att, _GRAHSP_WIDE),
+        "L_agn_bol": _ln_nu_integral(sed_bbb[lyman], wide[lyman]),
+        "L_agn_torus": _ln_nu_integral(sed_torus, wide),
+        "L_agn_absorbed": _ln_nu_integral(sed_int - sed_att, wide),
     }
     for key in _GRAHSP_KEYS:
         assert ref[key] > 0.0, f"{key}: reference is not positive"
-        err = abs(pub[key] / ref[key] - 1.0)
-        assert err < _GRAHSP_RTOL, f"GRAHSP {key}: published-vs-emitted rel {err:.3e}"
+    return {key: pub[key] / ref[key] - 1.0 for key in _GRAHSP_KEYS}
+
+
+def test_grahsp_published_L_equals_dense_integral_of_emitted_sed():
+    """Each GRAHSP L_* equals the wide dense integral of the SED it defines (1e-6)."""
+    errors = _grahsp_identity_errors({}, _GRAHSP_WIDE)
+    for key, err in errors.items():
+        assert abs(err) < _GRAHSP_RTOL, f"GRAHSP {key}: published-vs-emitted rel {err:.3e}"
+
+
+# The non-default options. Each one swaps a tabulated piece, so the reference grid carries that
+# template's nodes (and a point outside each end).
+_GRAHSP_VARIANTS = {
+    "mn12_torus": (
+        {"torus_model": "mn12"},
+        ("feii_wave_nm", "torus_mn12_wave_nm", "torus_mn12_si_wave_nm"),
+    ),
+    "netzer_disc": ({"disc_model": "netzer"}, ("feii_wave_nm", "disc_wave_nm")),
+    "veroncetty_feii": ({"feii_template": "veroncetty2004"}, ("feii_vc04_wave_nm",)),
+}
+
+
+@pytest.fixture(params=sorted(_GRAHSP_VARIANTS))
+def grahsp_variant(request):
+    over, axes = _GRAHSP_VARIANTS[request.param]
+    return request.param, over, axes
+
+
+def test_grahsp_variant_published_L_independent_of_caller_grid(grahsp_variant):
+    """MN12 torus, Netzer disc and Veron-Cetty FeII: L_* agree on dense, 40- and 12-point grids."""
+    label, over, _ = grahsp_variant
+    comp = _grahsp_comp(**over)
+    tpl = comp.precompute()
+    params = _grahsp_params(comp)
+    dense = _grahsp_published(comp, params, _PUB_DENSE, tpl)
+    for grid_label, grid in (("coarse-40", _PUB_COARSE), ("filter-12", _PUB_FILTERS)):
+        other = _grahsp_published(comp, params, grid, tpl)
+        for key in _GRAHSP_KEYS:
+            err = abs(other[key] / dense[key] - 1.0)
+            assert err < _GRAHSP_RTOL, f"GRAHSP[{label}] {key} {grid_label}: rel diff {err:.3e}"
+
+
+def test_grahsp_variant_published_L_equals_dense_integral(grahsp_variant):
+    """MN12 torus, Netzer disc, Veron-Cetty FeII: L_* equal the dense SED integral (1e-6)."""
+    label, over, axes = grahsp_variant
+    errors = _grahsp_identity_errors(over, _grahsp_wide(*axes))
+    for key, err in errors.items():
+        assert abs(err) < _GRAHSP_RTOL, (
+            f"GRAHSP[{label}] {key}: published-vs-emitted rel {err:.3e}"
+        )
+
+
+_CORNER_RTOL = 1.0e-7
+
+
+def test_grahsp_published_L_identity_at_the_attenuation_and_amplitude_corners():
+    """L_agn_bol and L_agn_absorbed match the dense integral at every box corner (1e-7).
+
+    The corners are those of the parameters that enter the attenuation (E(B-V), E(B-V)_AGN)
+    and the line and FeII amplitudes (A_lines, A_FeII); the rest sit at their declared
+    defaults, and L5100 scales every piece alike. The lines, FeII forest and continua are
+    linear in the amplitudes, so the pieces are evaluated once at unit amplitude on the dense
+    grid and combined per corner with the attenuation of that corner.
+    """
+    import itertools
+
+    full = _grahsp_comp()
+    tpl = full.precompute()
+    W = _GRAHSP_WIDE
+    only = dict(
+        include_bbb=False,
+        include_lines=False,
+        include_feii=False,
+        include_torus=False,
+        include_si=False,
+        include_balmer=False,
+        apply_attenuation=False,
+    )
+    unit = _grahsp_params(full)
+    unit["agn_grahsp_a_lines"] = jnp.asarray(1.0, dtype=jnp.float64)
+    unit["agn_grahsp_a_feii"] = jnp.asarray(1.0, dtype=jnp.float64)
+    piece = {
+        name: _grahsp_sed(_grahsp_comp(**{**only, **on}), unit, W, tpl)
+        for name, on in (
+            ("bbb", {"include_bbb": True}),
+            ("lines", {"include_lines": True}),
+            ("feii", {"include_feii": True}),
+            ("torus", {"include_torus": True, "include_si": True}),
+        )
+    }
+    bounds = {d.name: d.prior.bounds for d in full.declared_parameters()}
+    names = ("agn_grahsp_ebv", "agn_grahsp_ebv_agn", "agn_grahsp_a_feii", "agn_grahsp_a_lines")
+    lyman = W >= 912.0
+    factor_cache = {}
+    worst = {"L_agn_bol": 0.0, "L_agn_absorbed": 0.0}
+    for corner in itertools.product(*(bounds[n] for n in names)):
+        params = dict(unit)
+        params.update({n: jnp.asarray(v, dtype=jnp.float64) for n, v in zip(names, corner)})
+        a_lines, a_feii = float(params["agn_grahsp_a_lines"]), float(params["agn_grahsp_a_feii"])
+        key = corner[:2]
+        if key not in factor_cache:
+            factor_cache[key] = np.asarray(full._attenuation(jnp.asarray(W) * 0.1, params))
+        bbb_side = piece["bbb"] + a_lines * (piece["lines"] + a_feii * piece["feii"])
+        intrinsic = bbb_side + piece["torus"]
+        ref_bol = _ln_nu_integral(bbb_side[lyman], W[lyman])
+        ref_abs = _ln_nu_integral(intrinsic * (1.0 - factor_cache[key]), W)
+        pub = _grahsp_published(full, params, _PUB_FILTERS, tpl)
+        worst["L_agn_bol"] = max(worst["L_agn_bol"], abs(pub["L_agn_bol"] / ref_bol - 1.0))
+        worst["L_agn_absorbed"] = max(
+            worst["L_agn_absorbed"], abs(pub["L_agn_absorbed"] / ref_abs - 1.0)
+        )
+    for key, err in worst.items():
+        assert err < _CORNER_RTOL, f"GRAHSP {key}: worst corner rel {err:.3e}"
 
 
 def _grahsp_binding_params(comp):
@@ -852,3 +991,110 @@ def test_grahsp_published_L_identity_where_si_clip_binds():
     assert abs(pub_abs / ref_abs - 1.0) < _GRAHSP_RTOL, (
         f"L_agn_absorbed at the binding corner: rel {pub_abs / ref_abs - 1:.3e}"
     )
+
+
+def test_grahsp_published_L_torus_clip_gate_never_skips_a_binding_clip():
+    """Across random draws from the declared box, L_agn_torus equals the dense integral.
+
+    The Si clip correction is skipped when a rigorous bound shows ``max(si, -torus)`` cannot
+    bind. The draws cover both classes (bound and unbound), so a gate that skipped a binding
+    clip would show as a miss against the dense integral of the emitted torus term, here built
+    from the component's own torus and Si functions on a 200 000-point grid over the Si windows.
+    """
+    from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+
+    comp = _grahsp_comp(
+        include_bbb=False,
+        include_lines=False,
+        include_feii=False,
+        include_balmer=False,
+        apply_attenuation=False,
+    )
+    tpl = comp.precompute()
+    bounds = {d.name: d.prior.bounds for d in comp.declared_parameters()}
+    rng = np.random.default_rng(20261012)
+    lam_nm = np.linspace(3600.0, 21500.0, 200_001)
+    n_bound = 0
+    n_unbound = 0
+    for _ in range(80):
+        params = _grahsp_params(comp)
+        for name in (
+            "agn_grahsp_si",
+            "agn_grahsp_cool_lam_um",
+            "agn_grahsp_cool_width",
+            "agn_grahsp_hot_lam_um",
+            "agn_grahsp_hot_width",
+        ):
+            params[name] = jnp.asarray(rng.uniform(*bounds[name]), dtype=jnp.float64)
+        lo, hi = np.log(bounds["agn_grahsp_hot_fcov"])
+        params["agn_grahsp_hot_fcov"] = jnp.asarray(np.exp(rng.uniform(lo, hi)), dtype=jnp.float64)
+        torus_kw = dict(
+            wave_nm=jnp.asarray(lam_nm),
+            l5100=params["agn_grahsp_l5100"],
+            fcov=params["agn_grahsp_fcov"],
+        )
+        cont = torus_dust_continuum(
+            **torus_kw,
+            cool_lam_um=params["agn_grahsp_cool_lam_um"],
+            cool_width=params["agn_grahsp_cool_width"],
+            hot_lam_um=params["agn_grahsp_hot_lam_um"],
+            hot_width=params["agn_grahsp_hot_width"],
+            hot_fcov=params["agn_grahsp_hot_fcov"],
+        )
+        si_term = si_feature(**torus_kw, si=params["agn_grahsp_si"])
+        clipped = np.asarray(jnp.maximum(si_term, -cont))
+        correction = np.trapezoid(clipped - np.asarray(si_term), lam_nm)  # >= 0, erg/s
+        n_bound += int(correction > 0.0)
+        n_unbound += int(correction == 0.0)
+        # The correction enters L_agn_torus on top of the closed forms, so compare the whole
+        # published value with the same closed forms plus the dense correction.
+        amp_cool, amp_hot, _, _ = comp._torus_terms(params)
+        expected = float(amp_cool + amp_hot + comp._si_terms(params)[1]) + correction
+        pub = float(_grahsp_published(comp, params, _PUB_FILTERS, tpl)["L_agn_torus"])
+        assert abs(pub / expected - 1.0) < 1.0e-8, (
+            f"L_agn_torus {pub / expected - 1:+.2e} (dense correction {correction:.3e})"
+        )
+    assert n_bound >= 5 and n_unbound >= 5, (
+        f"vacuous draw set: bound {n_bound}, unbound {n_unbound}"
+    )
+
+
+def test_grahsp_feii_absorbed_piece_matches_independent_quadrature_at_the_corners():
+    """The FeII x (1 - attenuation) piece equals 24-point Gauss-Legendre per segment (1e-10).
+
+    The reference is a different rule at a different resolution from the one it checks (two
+    points per linear segment), so it does not share that rule's error. The corners are those
+    of the parameters that enter the attenuation and the FeII amplitude.
+    """
+    import itertools
+
+    comp = _grahsp_comp(
+        include_bbb=False,
+        include_lines=False,
+        include_torus=False,
+        include_si=False,
+        include_balmer=False,
+    )
+    tpl = comp.precompute()
+    wave = np.asarray(tpl.feii_wave_nm, dtype=float)
+    lumin = np.asarray(tpl.feii_lumin, dtype=float)
+    x, wt = np.polynomial.legendre.leggauss(24)
+    mid, half = 0.5 * (wave[:-1] + wave[1:]), 0.5 * (wave[1:] - wave[:-1])
+    lam = mid[:, None] + half[:, None] * x[None, :]
+    lum = (
+        lumin[:-1, None]
+        + (lumin[1:] - lumin[:-1])[:, None]
+        * (lam - wave[:-1, None])
+        / (wave[1:] - wave[:-1])[:, None]
+    )
+    bounds = {d.name: d.prior.bounds for d in comp.declared_parameters()}
+    names = ("agn_grahsp_ebv", "agn_grahsp_ebv_agn", "agn_grahsp_a_feii", "agn_grahsp_a_lines")
+    for corner in itertools.product(*(bounds[n] for n in names)):
+        params = _grahsp_params(comp)
+        params.update({n: jnp.asarray(v, dtype=jnp.float64) for n, v in zip(names, corner)})
+        one_minus_f = 1.0 - np.asarray(comp._attenuation(jnp.asarray(lam.ravel()), params))
+        ref = float(comp._feii_amplitude(params)) * float(
+            np.sum(half[:, None] * wt[None, :] * lum * one_minus_f.reshape(lam.shape))
+        )
+        pub = _grahsp_published(comp, params, _PUB_FILTERS, tpl)["L_agn_absorbed"]
+        assert abs(pub / ref - 1.0) < 1.0e-10, f"FeII piece at {corner}: rel {pub / ref - 1:+.2e}"
