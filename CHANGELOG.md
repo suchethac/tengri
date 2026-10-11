@@ -2325,6 +2325,8 @@
   encounter both changes at once; the renamed group is *also* now subject to the
   explicit-law rule.
 
+- **`z_interp` removed (closes #2811).** The option had no effect: it was stored and hashed into the compile signature but never read, since the free-z z-table read is always the local PCHIP (monotone cubic Hermite) read (#2749). `Parameters(z_interp=...)` now raises `ValueError`. Physics and numbers are unchanged.
+
 
 ### Changed
 
