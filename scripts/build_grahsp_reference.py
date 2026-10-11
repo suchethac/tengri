@@ -75,7 +75,6 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -85,6 +84,7 @@ from typing import Any
 
 import h5py
 import numpy as np
+
 
 # Map parameter set index to (key, value, fiducial_value)
 def _parameter_sets() -> list[dict[str, Any]]:
@@ -155,8 +155,8 @@ def _worker(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
     sys.path.insert(0, str(upstream_path))
 
     # Import the harness (minimal stub, lives in scripts/)
-    import types
     import importlib
+    import types
 
     U = upstream_path
     AG = U + "/database_builder/activate/agn"
@@ -188,7 +188,9 @@ def _worker(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
             AG + "/mor_netzer_2012/emission_line_table.formatted",
             dtype=[("name", "S10"), ("wave", "f"), ("broad", "f"), ("S2", "f"), ("LINER", "f")],
         )
-        return _NS(wave=d["wave"] * 0.1, lumin_BLAGN=d["broad"], lumin_Sy2=d["S2"], lumin_LINER=d["LINER"])
+        return _NS(
+            wave=d["wave"] * 0.1, lumin_BLAGN=d["broad"], lumin_Sy2=d["S2"], lumin_LINER=d["LINER"]
+        )
 
     class Database:
         def __enter__(s):
@@ -312,7 +314,9 @@ def _worker_netzer_mn12(params: dict[str, Any], out_npz: Path, upstream_path: st
             wave = data[:, 0] * 1000
             freq = c / wave
             specA = data[:, 2]
-            specB = data[:, 3] * (data[np.where(wave > 18000)[0][0], 2] / data[np.where(wave > 18000)[0][0], 3])
+            specB = data[:, 3] * (
+                data[np.where(wave > 18000)[0][0], 2] / data[np.where(wave > 18000)[0][0], 3]
+            )
             nuLnu = (specA + specB) / 2.0 * freq
             norm = (nuLnu / freq * c / wave**2)[wave == 12000][0]
             nuLnu = (specA - specB) * freq
@@ -323,7 +327,9 @@ def _worker_netzer_mn12(params: dict[str, Any], out_npz: Path, upstream_path: st
             return types.SimpleNamespace(wave=wave[mask], lumin=Llam[mask] / norm)
         columns = {"mor-avg": 1, "mor-lo": 2, "mor-hi": 3}  # database_builder/__init__.py:801-803
         if name in columns:
-            data = np.genfromtxt(ab / "agn" / "mor_netzer_2012" / "mor_netzer_mean_and_uncertainty_extended")
+            data = np.genfromtxt(
+                ab / "agn" / "mor_netzer_2012" / "mor_netzer_mean_and_uncertainty_extended"
+            )
             wave = data[:, 0] * 1000
             freq = c / wave
             Llam = data[:, columns[name]] / freq * c / wave**2
@@ -365,7 +371,9 @@ def _worker_netzer_mn12(params: dict[str, Any], out_npz: Path, upstream_path: st
     mod("activate")(fracAGN=-1).process(sed)
     # Disc fixed at tengri's default (log M = 8.0, a = 0, Mdot = 0.3), which the page uses.
     mod("activatedisk")(M=8.0, a=0.0, Mdot=0.3, inc=0.0).process(sed)
-    mod("activatetorus")(fcov=params["fcov"], Si=params["si"], TORtemp=0.0, TORcutoff=1.2).process(sed)
+    mod("activatetorus")(fcov=params["fcov"], Si=params["si"], TORtemp=0.0, TORcutoff=1.2).process(
+        sed
+    )
 
     names = list(sed.contribution_names)
     w = sed.wavelength_grid
@@ -425,7 +433,9 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
                 if variant == "gauss":
                     merged = data
                 else:
-                    merged.update({k: v for k, v in data.items() if k not in ("wavelength", "params")})
+                    merged.update(
+                        {k: v for k, v in data.items() if k not in ("wavelength", "params")}
+                    )
             results[pname] = merged
         print("OK")
 
@@ -495,7 +505,9 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
         # One group per parameter set
         for pname, data in results.items():
             grp = f.create_group(pname)
-            params_dict = json.loads(data["params"].item() if hasattr(data["params"], "item") else data["params"])
+            params_dict = json.loads(
+                data["params"].item() if hasattr(data["params"], "item") else data["params"]
+            )
             for k, v in params_dict.items():
                 grp.attrs[f"param_{k}"] = v
 
@@ -518,7 +530,7 @@ def main() -> None:
         "--variant",
         default="gauss",
         choices=("gauss", "netzer_mn12"),
-        help="Worker variant: gauss (SBPL disc, log-Gaussian torus) or netzer_mn12 (worker mode only)",
+        help="Worker variant: gauss (SBPL disc, log-Gaussian torus) or netzer_mn12 (worker only)",
     )
     ap.add_argument(
         "--out",

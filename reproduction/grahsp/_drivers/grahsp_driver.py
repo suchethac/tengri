@@ -90,7 +90,12 @@ COMPONENTS = {
     "torus": "agn.activate_Torus",
     "si": "agn.activate_Torus_Si",
     "balmer": "agn.activate_BC",
+    # netzer_mn12 variant of the builder: upstream activatedisk and activatetorus outputs.
+    "netzer": "netzer_mn12.agn.activate_Disk",
+    "mn12_torus": "netzer_mn12.agn.activate_Torus",
+    "mn12_si": "netzer_mn12.agn.activate_TorusSi",
 }
+UPSTREAM_510_FACTOR = 510.0  # upstream lambda L_lambda(510 nm) = 510 at l5100 = 1 (see 3.5)
 
 
 def require_available() -> None:
@@ -201,6 +206,28 @@ def line_nodes_and_values(params: GRAHSPParams) -> tuple[np.ndarray, np.ndarray,
     t32 = dataclasses.replace(t, line_wave_nm=centres32.astype(np.float64))
     sed = evaluate_grahsp_agn(jnp.asarray(nodes), params, t32)
     return nodes, np.asarray(sed.broad_lines), np.asarray(sed.narrow_lines)
+
+
+NETZER_DISC_PARAMS = {"disc_model": "netzer", "disc_m": "8.0", "disc_a": "0", "disc_mdot": "0.3"}
+MN12_PARAMS = {"torus_model": "mn12", "tor_temp": 0.0, "tor_cutoff_um": 1.2}
+
+
+def netzer_template() -> tuple[np.ndarray, np.ndarray]:
+    """tengri's Netzer template at the builder's disc parameters, on its native grid [nm]."""
+    from tengri.components.agn.grahsp.disc import select_disc_model
+
+    t = templates()
+    idx = select_disc_model(t.disc_m, t.disc_a, t.disc_mdot, m="8.0", a="0", mdot="0.3")
+    return np.asarray(t.disc_wave_nm), np.asarray(t.disc_lumin[idx])
+
+
+def loglog(wave_nm, tw, tl) -> np.ndarray:
+    """Power-law (log-log) interpolation of a template, the convention of tengri's resampler."""
+    lx, ly = np.log(tw), np.log(tl)
+    lq = np.log(np.asarray(wave_nm, dtype=float))
+    i = np.clip(np.searchsorted(lx, lq) - 1, 0, lx.size - 2)
+    frac = (lq - lx[i]) / (lx[i + 1] - lx[i])
+    return np.exp(ly[i] + frac * (ly[i + 1] - ly[i]))
 
 
 def dex_error(t: np.ndarray, u: np.ndarray, mask: np.ndarray) -> tuple[int, float]:

@@ -470,3 +470,139 @@ def test_attenuation_factor(name, group):
     dex = float(np.max(np.abs(np.log10(t_ratio[mask] / u_ratio[mask]))))
     _report(f"attenuation_{group}", case, n, dex)
     assert dex <= TOL_ATT_DEX, f"[{name}] {group} attenuation factor {dex:.3e} dex over {n} points"
+
+
+# ---- Netzer disc and MN12 torus (netzer_mn12 variant of the builder) --------------------
+# Upstream's activatedisk normalizes each Netzer template to L_lambda(510 nm) = 1 per nm and
+# multiplies by l_agn = lum5100A = 1, so upstream's lambda L_lambda(510 nm) = 510. The paper's
+# relation is lambda L_lambda(5100 A) = l5100 = 1. The correction below divides upstream by 510
+# explicitly. activatetorus carries the same factor (its 12 um normalization is 510 * 2.5 fcov).
+NM_PREFIX = "netzer_mn12."
+LAMBDA_510_NM = 510.0
+UPSTREAM_510_FACTOR = 510.0
+NETZER_DISC_KEY = NM_PREFIX + "agn.activate_Disk"
+MN12_TORUS_KEY = NM_PREFIX + "agn.activate_Torus"
+MN12_SI_KEY = NM_PREFIX + "agn.activate_TorusSi"
+# The builder fixes the disc at log M = 8.0, a = 0, Mdot = 0.3 (tengri's defaults).
+NETZER_DISC_PARAMS = {"disc_model": "netzer", "disc_m": "8.0", "disc_a": "0", "disc_mdot": "0.3"}
+# Measured: each code against its own interpolation convention, and the optical agreement.
+TOL_CONVENTION_DEX = 1e-9  # measured 1.9e-16 (upstream, MN12), 1.0e-15 (tengri, MN12)
+TOL_NETZER_OPTICAL_DEX = 3e-3  # measured 5e-4 over 12.4-100 nm, 2.4e-3 over 100-1000 nm
+TOL_MN12_SHAPE_DEX = 5e-3  # measured 3.0e-3 (2-5 um), 9e-4 (5-20 um) after 12 um normalization
+
+
+def _netzer_template() -> tuple[np.ndarray, np.ndarray]:
+    """tengri's Netzer template (repackaged from upstream's table) on its native grid."""
+    from tengri.components.agn.grahsp.disc import select_disc_model
+
+    t = _templates()
+    idx = select_disc_model(t.disc_m, t.disc_a, t.disc_mdot, m="8.0", a="0", mdot="0.3")
+    return np.asarray(t.disc_wave_nm), np.asarray(t.disc_lumin[idx])
+
+
+def _loglog_reference(wave_nm, tw, tl) -> np.ndarray:
+    """Independent log-log (power-law) interpolation of a template, as tengri's resampler."""
+    lx, ly = np.log(tw), np.log(tl)
+    lq = np.log(wave_nm)
+    i = np.clip(np.searchsorted(lx, lq) - 1, 0, lx.size - 2)
+    frac = (lq - lx[i]) / (lx[i + 1] - lx[i])
+    return np.exp(ly[i] + frac * (ly[i + 1] - ly[i]))
+
+
+@pytest.mark.parametrize("name", PARAM_SETS)
+def test_netzer_upstream_is_linear_template(name):
+    """Upstream's Netzer disc (after /510) is the template linearly interpolated onto the grid."""
+    case = load_case(name)
+    assert NETZER_DISC_KEY in case.ref, "reference lacks netzer_mn12 datasets; rebuild it"
+    upstream = _get(case, NETZER_DISC_KEY) / UPSTREAM_510_FACTOR
+    tw, tl = _netzer_template()
+    expected = np.interp(case.wave, tw, tl) / UPSTREAM_510_FACTOR
+    n, dex = _pointwise_dex(upstream, expected, 4000)
+    _report("netzer_upstream_linear", case, n, dex)
+    assert dex <= TOL_CONVENTION_DEX, f"[{name}] upstream Netzer not linear template: {dex:.3e}"
+
+
+@pytest.mark.parametrize("name", PARAM_SETS)
+def test_netzer_tengri_is_loglog_template(name):
+    """tengri's Netzer disc is the template power-law interpolated, anchored at 510 nm."""
+    case = load_case(name)
+    p = dataclasses.replace(_tengri_params(case.up), **NETZER_DISC_PARAMS)
+    tengri = np.asarray(evaluate_grahsp_agn(jnp.asarray(case.wave), p, _templates()).bbb)
+    tw, tl = _netzer_template()
+    anchor = _loglog_reference(np.array([LAMBDA_510_NM]), tw, tl)[0]
+    inside = (case.wave >= tw[0]) & (case.wave <= tw[-1])
+    expected = np.zeros_like(case.wave)
+    expected[inside] = _loglog_reference(case.wave[inside], tw, tl) / (LAMBDA_510_NM * anchor)
+    # tengri falls back to linear-in-flux where a bracketing node is non-positive; compare only
+    # intervals whose two nodes are both positive (the power-law branch).
+    i = np.clip(np.searchsorted(tw, case.wave) - 1, 0, tw.size - 2)
+    both_pos = (tl[i] > 0) & (tl[i + 1] > 0)
+    above_floor = case.wave >= XRAY_FLOOR_NM  # evaluate_grahsp_agn zeroes the disc below it
+    mask = inside & both_pos & above_floor
+    n, dex = _pointwise_dex(tengri, expected, 3000, mask)  # measured 3178 points
+    _report("netzer_tengri_loglog", case, n, dex)
+    assert dex <= TOL_CONVENTION_DEX, f"[{name}] tengri Netzer off the log-log template: {dex:.3e}"
+
+
+@pytest.mark.parametrize("name", PARAM_SETS)
+def test_netzer_optical_agreement(name):
+    """Both codes agree on the optical-UV disc, where the two interpolations coincide."""
+    case = load_case(name)
+    p = dataclasses.replace(_tengri_params(case.up), **NETZER_DISC_PARAMS)
+    tengri = np.asarray(evaluate_grahsp_agn(jnp.asarray(case.wave), p, _templates()).bbb)
+    upstream = _get(case, NETZER_DISC_KEY) / UPSTREAM_510_FACTOR
+    window = (case.wave >= XRAY_FLOOR_NM) & (case.wave <= 1000.0)
+    n, dex = _pointwise_dex(tengri, upstream, 1000, window)
+    _report("netzer_optical", case, n, dex)
+    assert dex <= TOL_NETZER_OPTICAL_DEX, f"[{name}] Netzer optical {dex:.3e} dex over {n}"
+
+
+@pytest.mark.parametrize("name", PARAM_SETS)
+def test_mn12_torus_shape(name):
+    """MN12 torus+Si, normalized at 12 um, against upstream over 2-20 um."""
+    case = load_case(name)
+    p = dataclasses.replace(
+        _tengri_params(case.up), torus_model="mn12", tor_temp=0.0, tor_cutoff_um=1.2
+    )
+    sed = evaluate_grahsp_agn(jnp.asarray(case.wave), p, _templates())
+    tengri = np.asarray(sed.torus) + np.asarray(sed.si)
+    upstream = (_get(case, MN12_TORUS_KEY) + _get(case, MN12_SI_KEY)) / UPSTREAM_510_FACTOR
+    tengri_n = tengri / np.interp(12000.0, case.wave, tengri)
+    upstream_n = upstream / np.interp(12000.0, case.wave, upstream)
+    window = (case.wave >= 2000.0) & (case.wave <= 20000.0)
+    n, dex = _pointwise_dex(tengri_n, upstream_n, 500, window)
+    _report("mn12_shape_2_20um", case, n, dex)
+    assert dex <= TOL_MN12_SHAPE_DEX, f"[{name}] MN12 shape {dex:.3e} dex over {n}"
+
+
+@pytest.mark.parametrize("name", PARAM_SETS)
+def test_mn12_torus_interpolation_conventions(name):
+    """20-99 um: upstream is the linear template, tengri the log-log template (both exact)."""
+    case = load_case(name)
+    t = _templates()
+    mw = np.asarray(t.torus_mn12_wave_nm)
+    mavg = np.asarray(t.torus_mn12_avg)
+    window = (case.wave >= 20000.0) & (case.wave <= 99000.0)
+    upstream = _get(case, MN12_TORUS_KEY)
+    lin = np.interp(case.wave, mw, mavg)
+    p = dataclasses.replace(
+        _tengri_params(case.up), torus_model="mn12", tor_temp=0.0, tor_cutoff_um=1.2
+    )
+    tengri = np.asarray(evaluate_grahsp_agn(jnp.asarray(case.wave), p, t).torus)
+    loglog = _loglog_reference(case.wave, mw, mavg)
+    n1, d1 = _pointwise_dex(
+        upstream / np.interp(12000.0, case.wave, upstream),
+        lin / np.interp(12000.0, case.wave, lin),
+        500,
+        window,
+    )
+    n2, d2 = _pointwise_dex(
+        tengri / np.interp(12000.0, case.wave, tengri),
+        loglog / np.interp(12000.0, case.wave, loglog),
+        500,
+        window,
+    )
+    _report("mn12_linear_convention", case, n1, d1)
+    _report("mn12_loglog_convention", case, n2, d2)
+    assert d1 <= TOL_CONVENTION_DEX, f"[{name}] upstream MN12 not the linear template: {d1:.3e}"
+    assert d2 <= TOL_CONVENTION_DEX, f"[{name}] tengri MN12 not the log-log template: {d2:.3e}"

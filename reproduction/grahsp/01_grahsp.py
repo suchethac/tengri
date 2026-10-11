@@ -51,6 +51,7 @@
 # in the text.
 
 # %%
+import dataclasses
 import warnings
 from pathlib import Path
 
@@ -230,9 +231,9 @@ for _c in _comps:
 # %% [markdown]
 # ## 3. Where tengri deliberately differs from upstream
 #
-# Sections 3.1 to 3.3 test three upstream differences that the reference file can show: the
-# emission-line normalization, the torus width, and the Balmer continuum smoothing. Section 3.4
-# is tengri's own disc floor, and section 3.5 states the differences the reference cannot show.
+# Sections 3.1 to 3.3 test three upstream differences in the emission-line normalization, the
+# torus width, and the Balmer continuum smoothing. Section 3.4 is tengri's own disc floor, and
+# section 3.5 tests the Netzer disc and MN12 torus, whose upstream outputs carry the 510 factor.
 # Each correction is stated with the paper's equation, and the comparison is shown after
 # applying it to upstream's values.
 
@@ -345,18 +346,104 @@ for _name in _bc_sets:
 # excludes that band rather than report it as a mismatch.
 
 # %% [markdown]
-# ### 3.5 Source-level differences the reference file cannot show
+# ### 3.5 Netzer disc and MN12 torus: the 510 convention and the interpolation
 #
-# Two normalization differences concern spectra the reference file does not carry: the Netzer
-# disc and the MN12 template torus. The third concerns the bolometric luminosity of the
-# monolithic model. The first two are stated as the paper's normalization relation and the
-# factor the upstream convention implies. The third is checked numerically below.
+# Upstream's `activatedisk` and `activatetorus` modules normalize each template to
+# $L_\lambda(510\,\mathrm{nm}) = 1$ per nm and multiply by $l_\mathrm{agn} = 1$. Their
+# $\lambda L_\lambda(510\,\mathrm{nm})$ is therefore 510, against $l_5100$ in the paper's
+# relation $\lambda L_\lambda(5100\,\text{Å}) = l_5100$. Both upstream spectra are divided by 510
+# before comparison. The reference file carries the upstream outputs (builder variant
+# `netzer_mn12`).
+#
+# Both codes read the same templates, but they interpolate them differently. Upstream
+# interpolates linearly in wavelength between the template nodes. tengri interpolates
+# log-log, a power law between nodes, which is exact for SED tails. The two agree where the
+# nodes are dense and differ where they are sparse, in the far infrared.
 
 # %%
-print("§3.5 Netzer disc and MN12 torus: the reference file carries neither spectrum.")
-print("§3.5 tengri: lambda L_lambda(510 nm) = l5100 exactly (paper normalization, lambda L_lambda(5100 A)).")
-print("§3.5 upstream's Netzer and MN12 modules, as documented in tengri's disc.py and torus.py,")
-print("     scale the 510 nm value by l5100. Their spectra are then 510 times the paper's at the same l5100.")
+_tw, _tl = G.netzer_template()
+_w_nm = _fid.wave_nm
+_nz_params = dataclasses.replace(_p_fid, **G.NETZER_DISC_PARAMS)
+_bbb_nz = np.asarray(G.evaluate(_w_nm, _nz_params).bbb)
+_up_nz = _fid.spectra["netzer"] / G.UPSTREAM_510_FACTOR
+_all = np.ones_like(_w_nm, bool)
+
+# Convention checks: each code against its own interpolation of the same template.
+_n_lin, _d_lin = G.dex_error(_up_nz, np.interp(_w_nm, _tw, _tl) / G.UPSTREAM_510_FACTOR, _all)
+_anchor = G.loglog(np.array([510.0]), _tw, _tl)[0]
+_i = np.clip(np.searchsorted(_tw, _w_nm) - 1, 0, _tw.size - 2)
+_both_pos = (_tl[_i] > 0) & (_tl[_i + 1] > 0)
+_inside = (_w_nm >= _tw[0]) & (_w_nm <= _tw[-1])
+_nz_loglog = np.zeros_like(_w_nm)
+_nz_loglog[_inside] = G.loglog(_w_nm[_inside], _tw, _tl) / (510.0 * _anchor)
+_n_ll, _d_ll = G.dex_error(_bbb_nz, _nz_loglog, _inside & _both_pos & (_w_nm >= G.XRAY_FLOOR_NM))
+print(f"§3.5 Netzer upstream vs its linear template: max|Δ| = {_d_lin:.2e} dex over {_n_lin} points")
+print(f"§3.5 Netzer tengri vs its log-log template: max|Δ| = {_d_ll:.2e} dex over {_n_ll} points")
+
+# Agreement between the two codes, by band, after the 510 correction.
+_bands = ((12.4, 100.0), (100.0, 1000.0), (1000.0, 1e4), (1e4, 1e5), (1e5, 1e6))
+_ratio_rows = []
+for _lo, _hi in _bands:
+    _m = (_w_nm >= _lo) & (_w_nm < _hi) & (_bbb_nz > 0) & (_up_nz > 0)
+    _r = np.log10(_bbb_nz[_m] / _up_nz[_m])
+    _ratio_rows.append((_lo, _hi, float(np.median(_r)), float(np.max(np.abs(_r)))))
+    print(f"§3.5 Netzer tengri/upstream, {_lo:>8g}-{_hi:<8g} nm: median = {np.median(_r):+.4f} dex, "
+          f"max|Δ| = {np.max(np.abs(_r)):.2e} dex over {_m.sum()} points")
+
+# MN12 torus plus Si, normalized at 12 um, on the page's own grid.
+_mn_params = dataclasses.replace(_p_fid, **G.MN12_PARAMS)
+_sed_mn = G.evaluate(_w_nm, _mn_params)
+_tor_t = np.asarray(_sed_mn.torus) + np.asarray(_sed_mn.si)
+_tor_u = (_fid.spectra["mn12_torus"] + _fid.spectra["mn12_si"]) / G.UPSTREAM_510_FACTOR
+_tor_tn = _tor_t / np.interp(12000.0, _w_nm, _tor_t)
+_tor_un = _tor_u / np.interp(12000.0, _w_nm, _tor_u)
+_mw = np.asarray(G.templates().torus_mn12_wave_nm)
+_mavg = np.asarray(G.templates().torus_mn12_avg)
+_lin_t = np.interp(_w_nm, _mw, _mavg)
+_loglog_t = G.loglog(_w_nm, _mw, _mavg)
+_w20 = (_w_nm >= 2000.0) & (_w_nm <= 20000.0)
+_w_far = (_w_nm >= 20000.0) & (_w_nm <= 99000.0)
+_n_s, _d_s = G.dex_error(_tor_tn, _tor_un, _w20)
+_n_f, _d_f = G.dex_error(_tor_tn, _tor_un, _w_far)
+# The template carries no Si term, so the convention check uses the torus alone.
+_tor_only_u = _fid.spectra["mn12_torus"] / G.UPSTREAM_510_FACTOR
+_tor_only_u = _tor_only_u / np.interp(12000.0, _w_nm, _tor_only_u)
+_tor_only_t = np.asarray(_sed_mn.torus)
+_tor_only_t = _tor_only_t / np.interp(12000.0, _w_nm, _tor_only_t)
+_lin_n = _lin_t / np.interp(12000.0, _w_nm, _lin_t)
+_loglog_n = _loglog_t / np.interp(12000.0, _w_nm, _loglog_t)
+_n_fl, _d_fl = G.dex_error(_tor_only_u, _lin_n, _w_far)
+_n_fl2, _d_fl2 = G.dex_error(_tor_only_t, _loglog_n, _w_far)
+print(f"§3.5 MN12 torus+Si, 2–20 μm (12 μm-normalized): max|Δ| = {_d_s:.2e} dex over {_n_s} points")
+print(f"§3.5 MN12 torus, 20–99 μm: tengri/upstream max|Δ| = {_d_f:.3f} dex over {_n_f} points")
+print(f"§3.5 MN12 20–99 μm, upstream vs linear template: {_d_fl:.2e} dex; tengri vs log-log template: {_d_fl2:.2e} dex")
+
+_fig, (_a0, _a1) = plt.subplots(2, 2, figsize=(11, 7.5))
+_mk = (_up_nz > 0) & (_bbb_nz > 0)
+_a0[0].loglog(_w_nm[_mk], _up_nz[_mk], "C0-", lw=2.2, alpha=0.6, label="upstream / 510")
+_a0[0].loglog(_w_nm[_mk], _bbb_nz[_mk], "C1--", lw=1.2, label="tengri")
+_a0[0].set_title("Netzer disc, fiducial", fontsize=10)
+_a0[0].set_xlabel(r"$\lambda$ [nm]")
+_a0[0].set_ylabel(r"$L_\lambda$ [erg/s/nm, $l_5100 = 1$]")
+_a0[0].legend(fontsize=8)
+_a0[1].semilogx(_w_nm[_mk], np.log10(_bbb_nz[_mk] / _up_nz[_mk]), "k-", lw=1.0)
+_a0[1].set_title("log10 ratio, tengri / upstream", fontsize=10)
+_a0[1].set_xlabel(r"$\lambda$ [nm]")
+_a0[1].axhline(0, color="0.5", lw=0.8)
+_m12 = (_w_nm >= 2000.0) & (_w_nm <= 99000.0)
+_a1[0].loglog(_w_nm[_m12], _tor_un[_m12], "C0-", lw=2.2, alpha=0.6, label="upstream (÷510)")
+_a1[0].loglog(_w_nm[_m12], _tor_tn[_m12], "C1--", lw=1.2, label="tengri")
+_a1[0].set_title("MN12 torus + Si, 12 μm-normalized", fontsize=10)
+_a1[0].set_xlabel(r"$\lambda$ [nm]")
+_a1[0].legend(fontsize=8)
+_a1[1].semilogx(_w_nm[_m12], np.log10(_tor_tn[_m12] / _tor_un[_m12]), "k-", lw=1.0)
+_a1[1].set_title("log10 ratio, tengri / upstream", fontsize=10)
+_a1[1].set_xlabel(r"$\lambda$ [nm]")
+_a1[1].axhline(0, color="0.5", lw=0.8)
+_fig.tight_layout()
+save_fig("grahsp_06_netzer_mn12.png")
+
+# Monolithic bolometric check on the fiducial: accretion side above the 91.2 nm Lyman edge.
 # Monolithic bolometric check on the fiducial: accretion side above the 91.2 nm Lyman edge.
 _w_nm = _fid.wave_nm
 _m_bol = _w_nm >= 91.2
@@ -463,9 +550,11 @@ _headtohead("type_2", "type-2 sweep", "grahsp_05_fullsed_type2.png")
 #   smoothing difference; the blue band agrees to 10⁻⁶.
 # - **§3.4 Disc floor.** Tengri's disc is zero below 12.4 nm by design; the comparison excludes
 #   that band.
-# - **§3.5 Source-level differences.** The Netzer and MN12 normalizations are stated from the
-#   tengri source and the paper relation, because the reference file does not carry those
-#   spectra. The bolometric accretion luminosity agrees to 1.0000.
+# - **§3.5 Netzer disc and MN12 torus.** Upstream carries a factor 510 on both. After the
+#   correction the Netzer disc agrees to the printed optical residual, and the MN12 torus to the
+#   printed 2–20 μm residual. Beyond 1 μm the two codes interpolate the same template differently;
+#   each one matches its own convention to 10⁻¹⁵ dex. The bolometric accretion luminosity agrees
+#   to 1.0000.
 # - **§4 Full composite.** The two head-to-head sets agree to 4×10⁻⁸ and 2×10⁻⁸ dex.
 
 # %% [markdown]
