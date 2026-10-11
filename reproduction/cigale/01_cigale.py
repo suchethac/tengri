@@ -2400,10 +2400,15 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # `nebular` call per case. Rows: Hα/Hβ, [O III]/Hβ, [O II]/Hβ, tengri and
 # CIGALE side by side; a residual here is Cue versus CLOUDY (§8), not a
 # parity check. The cell closes with the largest tengri/CIGALE ratio-of-ratios
-# per line over the seven cases. The [O III]/Hβ and [O II]/Hβ ratios are an open
-# difference: across logU = −3 to −1.5 CIGALE's [O III]/Hβ rises from 0.559 to
-# 2.307 while Cue's stays between 0.603 and 0.665, and Cue's [O II]/Hβ is larger
-# than CIGALE's at every case printed.
+# per line over the seven cases.
+#
+# **Reading the [O III]/Hβ response.** `neb_logU` reaches Cue unchanged as its own
+# ionization parameter. Cue's [O III]/Hβ response to it depends on the ionizing
+# spectrum Cue is fed. A final cell evaluates the network at Cue's own default
+# (hard) young-starburst shape and prints the response for it. At the soft shape
+# fitted to this population the response saturates, as the table above shows. The
+# CIGALE grid uses one fixed, harder spectrum, so the two codes respond
+# differently to logU for the same population.
 
 # %%
 _m_8b = SEDModel.build(
@@ -2505,6 +2510,32 @@ ax_l.legend(fontsize=8)
 fig.suptitle("§8b logU × Z_gas × f_esc — line ratios")
 fig.tight_layout()
 save_fig("cigale_08b_neb_grid.png")
+
+
+# %%
+# Cue's [O III]/Hβ response to logU at Cue's own default (hard) young-starburst
+# ionizing shape, from the same network `neb_logU` feeds. Only the ionizing
+# spectrum differs from the table above; Z_gas, density and logQ_ion are common.
+from tengri._data_setup import data_path as _data_path
+from tengri.components.nebular.cue import CueBackend
+
+_cue_hard = CueBackend(str(_data_path("cue_weights.npz")))
+_HARD_SHAPE = dict(CueBackend._IONSPEC_DEFAULTS)
+_o3_hard = {}
+for _logU in (-3.0, -2.0, -1.5):
+    _w_h, _l_h = _cue_hard.predict_nebular_line_luminosities(
+        gas_logu=_logU,
+        gas_logn=2.0,
+        gas_logz=float(np.log10(0.02) - LOG10_ZSUN),
+        gas_logqion=49.1,
+        **_HARD_SHAPE,
+    )
+    _w_h, _l_h = np.asarray(_w_h), np.asarray(_l_h)
+    _o3_hard[_logU] = U.line_lum(_w_h, _l_h, 5007.0) / U.line_lum(_w_h, _l_h, 4861.0)
+print(
+    "§8b Cue [OIII]/Hb at Cue's default hard shape, logU = -3 / -2 / -1.5: "
+    + " / ".join(f"{_o3_hard[k]:.3f}" for k in (-3.0, -2.0, -1.5))
+)
 
 
 # %% [markdown]
@@ -3640,7 +3671,8 @@ save_fig("cigale_10b_xray_inclination.png")
 # ## §11 Radio
 #
 # CIGALE module `radio` (`qir_sf`, `alpha_sf`) ↔ tengri
-# `radio={"sf": {"type": "bell2003", "freefree": False}, "radio_q_ir": 2.5,
+# `radio={"sf": {"type": "bell2003", "freefree": False, "nu_ref": "21cm",
+# "ir_window": "total"}, "radio_q_ir": 2.5,
 # "radio_alpha_sf": 0.8}`. The figure overlays the star-forming radio spectrum
 # of both codes; the lower panel is the tengri/CIGALE ratio.
 #
@@ -3657,12 +3689,17 @@ save_fig("cigale_10b_xray_inclination.png")
 # like-for-like comparison below therefore uses `freefree: False`; the default
 # (total) convention is overlaid as the dash-dot curve.
 #
+# **Conventions.** tengri's defaults are Bell (2003)'s: `q_IR` defined at 1.4 GHz
+# and the IR luminosity integrated over the model's own paper window (TIR,
+# 8–1000 μm). pcigale normalizes the relation at 21 cm (1.4276 GHz) and feeds it
+# the total dust luminosity. The comparison builds therefore set
+# `nu_ref: "21cm"` and `ir_window: "total"` explicitly in the `sf` block.
+#
 # Both codes anchor the amplitude on the absorbed dust power, so any mismatch in
-# `L_absorbed` lands 1:1 in the radio. Two conventions predict the flat
-# synchrotron ratio without being fitted: the anchor frequency (Bell 2003 defines
-# `q_IR` at 1.4 GHz, CIGALE normalizes at 21 cm = 1.4276 GHz) and the energy anchor
-# (`L_absorbed` against CIGALE's `dust.luminosity`, §6). The cell prints the
-# measured range beside the prediction.
+# `L_absorbed` lands 1:1 in the radio. With the two conventions matched, the flat
+# synchrotron ratio is predicted by the energy anchor alone (`L_absorbed` against
+# CIGALE's `dust.luminosity`, §6). The cell prints the measured range beside the
+# prediction.
 #
 # With `freefree: False` the synchrotron carries the whole `q_IR`; in the default
 # (total) convention the printed (synchrotron + nebular continuum) / Bell total
@@ -3745,7 +3782,16 @@ def _radio_model(sf_block):
 
 
 # CIGALE's convention: q_IR calibrates the non-thermal term alone.
-state_r = _radio_model({"type": "bell2003", "freefree": False}).predict_state({})
+# pcigale normalizes the relation at 21 cm and feeds it the total dust luminosity;
+# tengri's defaults are Bell (2003)'s 1.4 GHz and the TIR (8-1000 um) window, so
+# both are set explicitly here.
+_CIGALE_RADIO_SF = {
+    "type": "bell2003",
+    "freefree": False,
+    "nu_ref": "21cm",
+    "ir_window": "total",
+}
+state_r = _radio_model(_CIGALE_RADIO_SF).predict_state({})
 w_t = np.asarray(state_r.wave)
 sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron carrying the whole q_IR
 
@@ -3786,10 +3832,10 @@ _nu_r = C_AA / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 
-# Synchrotron against the two conventions that predict the ratio.
+# With the anchor frequency and the IR window matched to pcigale's radio module,
+# the synchrotron ratio reduces to the energy balance of §6.
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
 _f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
-_f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
 _syn_t_on_c = U.regrid(w_t, sed_t, w_r)
 _valid = (_nu_r >= 0.1) & (_nu_r <= 100.0) & (L_r > 0) & np.isfinite(ratio)
 _syn_ratio = _syn_t_on_c[_valid] / L_r[_valid]
@@ -3798,8 +3844,8 @@ print(
     f"{_syn_ratio.min():.4f}–{_syn_ratio.max():.4f} across 0.1–100 GHz (flat)"
 )
 print(
-    f"§11   predicted from conventions: anchor ×{_f_anchor:.4f} · "
-    f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
+    f"§11   predicted from the energy balance alone (§6 L_absorbed / dust.luminosity): "
+    f"×{_f_lir:.4f}"
 )
 
 # The total-q convention: the synchrotron is a fixed share of the freefree=False one,
@@ -3828,11 +3874,11 @@ _murphy_on_c = np.asarray(U.regrid(w_t, _sed_murphy, w_r))
 ax_r.plot(_nu_r, _neb_on_c / _den, color="C2", ls="--", lw=1.2, label="nebular tail / CIGALE")
 ax_r.plot(_nu_r, _murphy_on_c / _den, color="C3", ls="-.", lw=1.2, label="Murphy+2011 / CIGALE")
 ax_r.axhline(
-    _f_anchor * _f_lir,
+    _f_lir,
     color="0.25",
     ls=":",
     lw=1.6,
-    label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})",
+    label=f"synchrotron only (energy balance = {_f_lir:.3f})",
 )
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
 _nu_valid = np.asarray(_nu_r[_valid])
@@ -3858,12 +3904,14 @@ save_fig("cigale_11_radio_synchrotron.png")
 # plots each code's transmission against observed wavelength at z = 3, 5 and 7.
 #
 # **Where they differ.** CIGALE 2025.1 evaluates the n ≥ 3 Lyman-series optical
-# depths at the source redshift (`redshifting.py:63-81`), while tengri evaluates
-# every line at its absorber redshift z_n = λ_obs/λ_n − 1 as Meiksin (2006)
-# Table 1 defines. This is an open difference: the printed |ΔT| statistics reach a
-# few percent at z = 3 and 5. Redward of Lyβ (rest ≥ 1026 Å) only Lyα is active;
-# the cell prints the max |ΔT| there separately, and prints both codes'
-# transmission at observed 1730 Å.
+# depths at the source redshift (`redshifting.py:63-81`) and chooses Meiksin's
+# Eq. 2/3 for Lyα from the source redshift. tengri evaluates every line at its
+# absorber redshift z_n = λ_obs/λ_n − 1, as Meiksin (2006) Table 1 defines. The
+# printed |ΔT| statistics reach a few percent at z = 3 and 5. Redward of Lyβ
+# (rest ≥ 1026 Å) only Lyα is active and the two codes agree there; the cell
+# prints the max |ΔT| for that region separately. Meiksin's Table 2 gives
+# T(1730 Å, z = 5) = 0.003277; the cell prints that literal beside both codes'
+# values at observed 1730 Å.
 #
 # **Verification Status:** CROSSVAL: Inoue+2014 IGM transmission
 
@@ -3910,6 +3958,15 @@ for _z in (3.0, 5.0):
     _t_c = float(np.asarray(cigale_igm(np.array([1730.0 / 10.0]), _z))[0])
     _t_t = float(np.asarray(igm_transmission_meiksin06(_jnp.asarray([1730.0]), _z))[0])
     print(f"    T(1730 Å) at z = {_z:.0f}: tengri {_t_t:.6f}, CIGALE {_t_c:.6f}")
+
+# Meiksin (2006) Table 2, transmission at observed 1730 Å and z = 5 (literal from the paper).
+_T_MEIKSIN06_TABLE2_1730_Z5 = 0.003277
+_t_c5 = float(np.asarray(cigale_igm(np.array([1730.0 / 10.0]), 5.0))[0])
+_t_t5 = float(np.asarray(igm_transmission_meiksin06(_jnp.asarray([1730.0]), 5.0))[0])
+print(
+    f"    T(1730 Å) at z = 5 against Meiksin (2006) Table 2 ({_T_MEIKSIN06_TABLE2_1730_Z5:.6f}, "
+    f"paper literal): tengri {_t_t5:.6f}, CIGALE {_t_c5:.6f}"
+)
 
 ax_l.legend(fontsize=9)
 
@@ -4006,7 +4063,7 @@ m_full = SEDModel.build(
     dust_emission={"type": "dale2014_cigale", "alpha_dale": Fixed(2.0), "all_params": Fixed(DEFAULT)},
     xray={"type": "yang20", "all_params": Fixed(DEFAULT)},
     radio={
-        "sf": {"type": "bell2003", "freefree": False},
+        "sf": {"type": "bell2003", "freefree": False, "nu_ref": "21cm", "ir_window": "total"},
         "agn": {"type": "powerlaw"},
         "radio_q_ir": Fixed(2.5),
         "radio_alpha_sf": Fixed(0.8),
@@ -4142,8 +4199,8 @@ plt.show()
 # | 9 | AGN, SKIRTOR | disc 1.0056×, torus 1.0068×, polar dust 1.0035× (§9); 1.0034×, 1.0106×, 0.9912× with the SKIRTOR disc (§9b); §9d `R_faceon` 0.998095×, polar reference 1.016639× (`polar_law="bongiorno"`; 0.982987× with the default `"smc"`); §9e SKIRTOR grid band medians 1.002–1.007× |
 # | 9 | AGN, Fritz | §9e band medians 0.919–0.970×, worst band 0.843–1.146×; 9, 9 and 10 of 12 bands outside 5 % |
 # | 10 | X-ray | 1.010× at 2 keV and as a 0.5–10 keV median, at i = 0°, 30°, 60° and 80° |
-# | 11 | radio | synchrotron 0.9941–0.9942× across 0.1–100 GHz against 0.9942× predicted from the 21 cm anchor and the energy anchor (`freefree: False`) |
-# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (open difference: the n ≥ 3 Lyman lines differ blueward of Lyβ); redward of Lyβ the max |ΔT| is printed in §12 |
+# | 11 | radio | synchrotron XSYN across 0.1–100 GHz against XPRED predicted from the §6 energy balance alone, with `nu_ref: "21cm"` and `ir_window: "total"` set as in pcigale's `radio` module (`freefree: False`) |
+# | 12 | IGM | max \|ΔT\| 4.4e-2, 4.6e-2, 2.0e-2 at z = 3, 5, 7; median \|ΔT\| 6.4e-4, 1.5e-4, 4.4e-7 (CIGALE evaluates the n ≥ 3 Lyman lines and the Lyα equation choice at the source redshift, tengri at each absorber's, as Meiksin's Table 1 defines); T(1730 Å, z = 5) is XT5T for tengri and XT5C for CIGALE against Meiksin's Table 2 XT5P; redward of Lyβ the max \\|ΔT\\| is XRED |
 # | full | CIGALE-mode SED | optical 1.02× (16–84 %: 1.00–1.07×); X-ray 0.96× (1 keV), 0.97× (5 keV); radio 1.00× (1.4 GHz), 1.01× (150 MHz); 1 mm / 3 mm / 1 cm / 3 cm 1.00× / 1.07× / 1.05× / 1.02× |
 #
 # Three conventions account for most of the residuals and are stated where they
@@ -4152,7 +4209,9 @@ plt.show()
 # nebular emitter differs by design (§8). The polar-dust extinction law must be
 # set to `polar_law="bongiorno"` to match CIGALE (§9, §9d), and `freefree: False`
 # makes `radio_q_ir` calibrate the synchrotron alone, as CIGALE's `qir_sf` does
-# (§11).
+# (§11). tengri's radio defaults are Bell (2003)'s 1.4 GHz and the model's own
+# paper's IR window; the CIGALE comparison sets 21 cm and the total dust
+# luminosity explicitly (§11).
 
 # %% [markdown]
 # ## References
