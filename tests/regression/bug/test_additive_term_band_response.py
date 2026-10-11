@@ -146,7 +146,7 @@ def _photometry(name):
     return Photometry(filters=(*tuple(optical.filters), EMITTERS[name]["band"]))
 
 
-def _model(name, *, approx, free_shape=False, bands=None):
+def _model(name, *, approx, free_shape=False, bands=None, dust_extra=None):
     """Build a model carrying one additive emitter (plus an AGN, so its terms are lit).
 
     ``name=None`` builds the same model with no additive emitter at all — the reference
@@ -176,7 +176,11 @@ def _model(name, *, approx, free_shape=False, bands=None):
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
         },
-        dust_emission={"type": "dale2014_cigale", "all_params": Fixed(DEFAULT)},
+        dust_emission={
+            "type": "dale2014_cigale",
+            "all_params": Fixed(DEFAULT),
+            **(dust_extra or {}),
+        },
         agn=AGN,
         approx=approx,
         **block,
@@ -334,21 +338,97 @@ def test_the_summed_sed_is_not_rank1():
         assert np.abs(r / r[0] - 1.0).max() < 1e-12, f"term {key!r} is not rank-1"
 
 
-def test_radio_window_luminosity_from_the_dust_table_matches_the_exact_integral():
+def _window_share(state):
+    """log10 of the share of the dust power inside the radio IR window [dex]."""
+    from tengri.utils.physics_constants import L_SUN
+
+    return float(state.derived["radio_log_L_ir_input"]) - (
+        float(state.derived["log_L_ir"]) - float(np.log10(L_SUN))
+    )
+
+
+def _with_table_shifted(template, dex):
+    """A copy of the threaded template data with every tabulated window fraction shifted."""
+    response = template["dust_ir"]["emission_band_response"]
+    shifted = {k: v + dex for k, v in response["log_window_fraction"].items()}
+    return {
+        **template,
+        "dust_ir": {
+            **template["dust_ir"],
+            "emission_band_response": {**response, "log_window_fraction": shifted},
+        },
+    }
+
+
+def test_radio_window_luminosity_from_the_dust_table_matches_the_exact_integral(monkeypatch):
     """Under WavePrecomp with a fixed dust shape the radio block reads its IR-window
     luminosity from the dust-emission block's build-time table (a scalar, as it reads
-    ``L_ir``) instead of integrating the dust SED on the full grid every call. It must
-    equal the exact path's band integral, and so must the photometry."""
+    ``L_ir``) instead of integrating the dust SED on the full grid every call.
+
+    ``predict_state`` only sees the table when the threaded template data is passed in, so
+    it is passed explicitly here; a spy proves the table is what was read, and a table
+    shifted by 1e-6 dex must move the result by exactly that (a read that ignored the table
+    would not move). The value itself must equal the exact path's band integral."""
+    from tengri.components.radio.component import RadioSEDComponent
+
     lut, exact = _model("radio", approx=WavePrecomp()), _model("radio", approx=None)
-    table = lut._template_data_for_jit()["dust_ir"]["emission_band_response"]
+    template = lut._template_data_for_jit()
+    table = template["dust_ir"]["emission_band_response"]
     assert set(table["log_window_fraction"]) >= {"tir", "fir"}
-    s_lut, s_exact = lut.predict_state(_params(lut)), exact.predict_state(_params(exact))
-    got = float(s_lut.derived["radio_log_L_ir_input"])
-    want = float(s_exact.derived["radio_log_L_ir_input"])
-    assert got == pytest.approx(want, abs=1e-12)
-    assert got < float(s_exact.derived["log_L_ir"]) - float(np.log10(3.828e33))  # TIR < total
+
+    seen = []
+    original = RadioSEDComponent._table_log_window_fraction
+
+    def spy(self, template_data, z):
+        out = original(self, template_data, z)
+        seen.append(out)
+        return out
+
+    monkeypatch.setattr(RadioSEDComponent, "_table_log_window_fraction", spy)
+
+    # The window luminosity is compared as its share of the dust power: the LUT model's
+    # upstream energy balance (the table-driven L_ir) differs from the exact one by ~2e-7
+    # dex, which is not what is under test.
+    want = _window_share(exact.predict_state(_params(exact)))
+    seen.clear()
+    state = lut.predict_state(_params(lut), template_data=template)
+    got = float(state.derived["radio_log_L_ir_input"])
+    assert seen and all(x is not None for x in seen), "the radio block did not read the table"
+    assert _window_share(state) == pytest.approx(want, abs=1e-13)
+
+    shifted = lut.predict_state(_params(lut), template_data=_with_table_shifted(template, 1e-6))
+    moved = float(shifted.derived["radio_log_L_ir_input"]) - got
+    assert moved == pytest.approx(1e-6, abs=1e-12)
+
     np.testing.assert_allclose(
         np.asarray(lut.predict_photometry(_params(lut))),
         np.asarray(exact.predict_photometry(_params(exact))),
-        rtol=1e-9,
+        rtol=1e-13,
     )
+
+
+def test_a_free_dust_shape_falls_back_to_the_dense_window_integral():
+    """With ``dust_alpha_dale`` free there is no build-time table, and the radio block
+    integrates the dust SED: its IR-window luminosity follows alpha, equals the exact
+    model's, and equals an independent dense band integral of that model's dust SED."""
+    from tengri.utils.physics_constants import L_SUN
+    from tests._radio_band import band_l_ir
+
+    free = {"alpha_dale": Uniform(1.0, 3.0)}
+    lut = _model("radio", approx=WavePrecomp(), dust_extra=free)
+    exact = _model("radio", approx=None, dust_extra=free)
+    assert "emission_band_response" not in (lut._template_data_for_jit().get("dust_ir") or {})
+    template = lut._template_data_for_jit()
+
+    values = []
+    for alpha in (1.2, 2.0, 2.8):
+        p_lut = {**_params(lut), "dust_alpha_dale": jnp.asarray(alpha)}
+        p_exact = {**_params(exact), "dust_alpha_dale": jnp.asarray(alpha)}
+        s_lut = lut.predict_state(p_lut, template_data=template)
+        s_exact = exact.predict_state(p_exact)
+        got = float(s_lut.derived["radio_log_L_ir_input"])
+        assert _window_share(s_lut) == pytest.approx(_window_share(s_exact), abs=1e-13)
+        # Independent of the radio block: a dense band integral of the LUT model's own SED.
+        assert got == pytest.approx(np.log10(band_l_ir(s_lut, "tir") / L_SUN), abs=1e-6)
+        values.append(got)
+    assert max(values) - min(values) > 1e-2, "the window luminosity must follow the dust shape"
