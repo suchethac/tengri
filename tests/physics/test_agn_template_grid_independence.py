@@ -353,8 +353,8 @@ _SINGLE = {
         "KD18Disc",
         "KD18DiscConfig",
         None,
-        "L_agn_disc",
-        ({}, {"cos_inc": 0.5}),
+        "L_agn_disc_los",
+        ({}, {"cos_inc": 0.2}),
     ),
 }
 
@@ -410,6 +410,53 @@ def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
     direct = _publisher(comp, params, key)(_PUB_DENSE)
     assert np.isfinite(published) and published > 0.0
     assert published == pytest.approx(direct, rel=1e-12)
+
+
+def _kd18_with(**overrides):
+    return _load_component("kd18_disc_model", "KD18Disc", "KD18DiscConfig", None, overrides)
+
+
+def _kd18_published(comp, params, wave):
+    _, pub = comp.predict(params, jnp.zeros_like(wave), wave)
+    return float(pub["L_agn_disc"]), float(pub["L_agn_disc_los"])
+
+
+def test_kd18_angle_integrated_disc_power_is_independent_of_inclination():
+    """L_agn_disc is the angle-integrated power: the same at cos i = 0.1, 0.5 and 0.95."""
+    wave = jnp.asarray(_PUB_COARSE)
+    values = [_kd18_published(*_kd18_with(cos_inc=c), wave)[0] for c in (0.1, 0.5, 0.95)]
+    for v in values[1:]:
+        assert abs(v / values[0] - 1.0) < 1e-10, f"L_agn_disc moved with inclination: {values}"
+
+
+def test_kd18_line_of_sight_power_is_the_integral_of_the_emitted_sed():
+    """L_agn_disc_los equals the dense integral of the emitted, projected SED (1e-6)."""
+    for cos_inc in (0.1, 0.5, 0.95):
+        comp, params = _kd18_with(cos_inc=cos_inc)
+        _, los = _kd18_published(comp, params, jnp.asarray(_PUB_COARSE))
+        emitted = _ln_nu_integral(_emitter(comp, params)(_WIDE), _WIDE)
+        assert abs(los / emitted - 1.0) < _RTOL, f"cos_inc={cos_inc}: rel {los / emitted - 1:.3e}"
+
+
+def test_kd18_los_to_angle_integrated_ratio_is_two_cos_i_for_the_disc():
+    """With the corona removed, L_los / L_angle-integrated = 2 cos i (independent expectation)."""
+    wave = jnp.asarray(_PUB_COARSE)
+    for cos_inc in (0.1, 0.3, 0.95):
+        comp, params = _kd18_with(cos_inc=cos_inc, f_hard=0.0)
+        total, los = _kd18_published(comp, params, wave)
+        # f_hard = 0 leaves a corona only through its (tiny) floor; the ratio is exact to it.
+        assert los / total == pytest.approx(2.0 * cos_inc, rel=2e-3), (cos_inc, los / total)
+
+
+def test_kd18_angle_integrated_power_matches_the_accretion_power():
+    """L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut tail."""
+    l_sun = 3.828e33
+    wave = jnp.asarray(_PUB_COARSE)
+    for lum_ratio in (1.0, 0.4):
+        comp, params = _kd18_with(lum_ratio=lum_ratio)
+        total, _ = _kd18_published(comp, params, wave)
+        expected = lum_ratio * 10.0 ** float(params["log_lbol"]) * l_sun
+        assert total / expected == pytest.approx(1.0, abs=2e-3), (lum_ratio, total / expected)
 
 
 def test_kd18_float32_frac_zero_is_zero_not_nan():
