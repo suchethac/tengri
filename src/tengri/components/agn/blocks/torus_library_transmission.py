@@ -61,6 +61,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn.fritz import (
     FritzGrid,
@@ -461,15 +462,62 @@ def library_torus_sightline(
     a_v_raw = -2.5 * jnp.log10(jnp.maximum(sight.transmission[-1], representable_floor(1.0e-30)))
     a_v = jnp.where(a_v_raw > 0.0, a_v_raw, 0.0)
     n_h = NH_PER_AV * a_v
-    below = wave < wave_min
-    energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
-    t_x = jnp.exp(-wabs_cross_section(energy) * n_h)
     c = jnp.asarray(cos_inc)
+    transmission = sight.transmission[:-1]
+    disc_factor = sight.disc_factor[:-1]
+    below_idx = _below_library_index(wavelength, torus_block)
+    if below_idx is None:
+        # Traced wavelength grid: no static index set, so the absorption is evaluated on
+        # the whole grid and selected (the original dense form).
+        below = wave < wave_min
+        energy = HC_KEV_ANGSTROM / jnp.where(below, wave, 1.0)
+        t_x = jnp.exp(-wabs_cross_section(energy) * n_h)
+        transmission = jnp.where(below, t_x, transmission)
+        disc_factor = jnp.where(below, 2.0 * c * t_x, disc_factor)
+    else:
+        # The absorption is evaluated only on the samples below the library's grid, which
+        # are fixed by the caller's grid; every other sample keeps the library value.
+        energy = HC_KEV_ANGSTROM / np.asarray(wavelength, dtype=np.float64)[below_idx]
+        t_x = jnp.exp(-wabs_cross_section(energy) * n_h)
+        transmission = transmission.at[below_idx].set(t_x)
+        disc_factor = disc_factor.at[below_idx].set(2.0 * c * t_x)
     return LibrarySightline(
         ratio=sight.ratio[:-1],
-        transmission=jnp.where(below, t_x, sight.transmission[:-1]),
-        disc_factor=jnp.where(below, 2.0 * c * t_x, sight.disc_factor[:-1]),
+        transmission=transmission,
+        disc_factor=disc_factor,
     )
+
+
+def _below_library_index(wavelength, torus_block: str) -> np.ndarray | None:
+    """Indices of the grid samples shortward of the packaged library's grid, or ``None``.
+
+    The library's shortest wavelength is read from the packaged grid, a host value; the
+    threaded bundle is repacked from the same file, so it has the same first node. A
+    traced ``wavelength`` has no static index set and returns ``None``.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    torus_block : str
+        ``"skirtor"`` or ``"fritz"``.
+
+    Returns
+    -------
+    ndarray of int, shape (n_below,), or None
+        Positions ``i`` with ``wavelength[i] < wave_min``; ``None`` when the grid is
+        traced or the torus has no packaged library.
+    """
+    if isinstance(wavelength, jax.core.Tracer):
+        return None
+    if torus_block == "skirtor":
+        grid = load_skirtor_disc_atten_grid()
+    elif torus_block == "fritz":
+        grid = load_fritz_default_grid()
+    else:
+        return None
+    wave_min = float(np.asarray(grid.wave_grid)[0])
+    return np.flatnonzero(np.asarray(wavelength, dtype=np.float64) < wave_min)
 
 
 def library_torus_transmission(
