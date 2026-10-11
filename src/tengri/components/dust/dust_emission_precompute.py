@@ -996,15 +996,16 @@ def _shape_templates(model: str) -> dict:
 def _dale2014_node_spectra(alpha_nodes: np.ndarray, wave_aa: np.ndarray) -> np.ndarray:
     """Dale SF spectra at each alpha node, taken from the registered closure itself.
 
-    Row ``k`` is the closure's emission at ``L_absorbed = 1`` on the template's native grid, so
-    the table's nodes are the closure's own normalized spectra and not a re-derivation of them.
+    Row ``k`` is the closure's emission at ``L_absorbed = 1`` on ``wave_aa``, so the table's
+    nodes are the closure's own normalized spectra and not a re-derivation of them. The closure
+    normalizes on the grid it is evaluated on, so the nodes carry the normalization of ``wave_aa``.
 
     Parameters
     ----------
     alpha_nodes : ndarray, shape (n_alpha,)
         Radiation-field slopes [dimensionless] at which the closure is evaluated.
     wave_aa : ndarray, shape (n_wave,)
-        Native template wavelength grid [Angstrom].
+        Wavelength grid the closure is evaluated and normalized on [Angstrom].
 
     Returns
     -------
@@ -1059,8 +1060,9 @@ def precompute_shape(
     templates = _shape_templates(model)
     native = np.asarray(templates["wavelength_aa"], dtype=np.float64)
     alpha = np.asarray(templates["alpha_grid"], dtype=np.float64)
-    # The band integrals need a grid finer than the library's: on the native grid the far-IR
-    # trapezoid is 8 % high at 500 um. The closure normalizes on the native grid either way.
+    # The band integrals need a grid finer than the library's: on the library grid the far-IR
+    # trapezoid is 8 % high at 500 um. The closure normalizes on the grid it is evaluated on,
+    # so the nodes are normalized on this same fine grid.
     wave = np.logspace(np.log10(native[0]), np.log10(native[-1]), _SHAPE_EVAL_POINTS)
     preint = preintegrate_grid(
         templates=_dale2014_node_spectra(alpha, wave),

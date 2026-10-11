@@ -14,7 +14,6 @@ Leaf module: imports only ``jnp``, physical constants, and the shared
 from __future__ import annotations
 
 import jax.numpy as jnp
-import numpy as np
 
 from tengri.components.dust._params import (
     ANALYTIC_BETA_IR_DEFAULT,
@@ -61,44 +60,6 @@ _X_MIN: float = 1e-10
 # range of CIGALE's casey2012 template. Casey (2012) sets no blue limit; the
 # bound removes the divergent blue tail of the mid-IR power law as alpha -> 1.
 _CASEY_LAMBDA_MIN_UM: float = 1.0
-# Fixed internal grid for the frequency normalization of the analytic closures.
-# A closure's shape is normalized by its own integral over this grid, never over
-# the caller's wavelength grid, so the emitted power cannot depend on how the
-# caller samples or truncates wavelength. The upper edge (0.1 m) is far past the
-# Rayleigh-Jeans tail of every temperature in the declared prior.
-_NORM_WAVE_HI_AA: float = 1.0e9
-_NORM_N_NODES: int = 4097
-# Blue edge of the modified-blackbody and graybody normalization grid (10 nm); the
-# Planck factor is exponentially negligible shortward of it.
-_NORM_WAVE_LO_AA: float = 1.0e2
-
-
-def _internal_nu_integral(shape_fn, wave_lo_aa: float) -> jnp.ndarray:
-    r"""Positive frequency integral of an analytic shape on a fixed internal grid.
-
-    Parameters
-    ----------
-    shape_fn : callable
-        Maps wavelength ``array_like, shape (n,)`` [Angstrom] to the unnormalized
-        shape ``ndarray, shape (n,)`` [arbitrary units per Hz].
-    wave_lo_aa : float
-        Blue edge of the integration grid [Angstrom]; the shape must vanish
-        shortward of it.
-
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int S_\nu\,d\nu` over ``[wave_lo_aa, _NORM_WAVE_HI_AA]``, on
-        ``_NORM_N_NODES`` log-spaced nodes.
-
-    Notes
-    -----
-    **JIT-compatible**: yes (the grid is a trace-time constant).
-    **Gradient-safe**: yes.
-    """
-    wave = jnp.asarray(np.geomspace(wave_lo_aa, _NORM_WAVE_HI_AA, _NORM_N_NODES))
-    nu = _C_CGS / (wave * _AA_TO_CM)  # descending
-    return -jnp.trapezoid(shape_fn(wave), nu)
 
 
 def modified_blackbody(
@@ -178,18 +139,21 @@ def modified_blackbody(
     # shorter wavelengths in the FIR peak.
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
     # Reference frequency at 250 um (convenient normalization pivot)
     nu_ref = _C_CGS / (250.0e-4)  # 250 um in cm
+    emissivity = (nu / nu_ref) ** dust_beta_ir
 
-    def _shape(wave_aa):
-        emissivity = (_C_CGS / (wave_aa * _AA_TO_CM) / nu_ref) ** dust_beta_ir
-        return emissivity * planck_bnu(wave_aa, T_eff)
+    bnu = planck_bnu(wavelength_aa, T_eff)
 
     # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
-    shape = _shape(wavelength_aa)
+    shape = emissivity * bnu
 
-    # Normalized on the fixed internal grid, never the caller's (see _internal_nu_integral).
-    integral = _internal_nu_integral(_shape, _NORM_WAVE_LO_AA)
+    # Integrate shape over frequency for normalization.
+    # nu is descending (wave ascending), so negate to get positive integral.
+    integral = -jnp.trapezoid(shape, nu)
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
@@ -293,20 +257,23 @@ def graybody(
     # CMB correction: always applied.
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm
+
+    bnu = planck_bnu(wavelength_aa, T_eff)
+
     # Opacity factor: (1 - exp(-(lam_0/lam)^beta))
     # Convert lambda_0_um to cm for consistent units
     lambda_0_cm = dust_lambda_0_um * 1.0e-4  # um to cm
-
-    def _shape(wave_aa):
-        tau = (lambda_0_cm / (wave_aa * _AA_TO_CM)) ** dust_beta_ir
-        opacity = -jnp.expm1(-tau)  # = 1 - exp(-tau), numerically stable
-        return opacity * planck_bnu(wave_aa, T_eff)
+    tau = (lambda_0_cm / wavelength_cm) ** dust_beta_ir
+    opacity = -jnp.expm1(-tau)  # = 1 - exp(-tau), numerically stable
 
     # Unnormalized SED shape (erg/s/cm^2/Hz/sr units cancel in ratio)
-    shape = _shape(wavelength_aa)
+    shape = opacity * bnu
 
-    # Normalized on the fixed internal grid, never the caller's (see _internal_nu_integral).
-    integral = _internal_nu_integral(_shape, _NORM_WAVE_LO_AA)
+    # Integrate shape over frequency for normalization.
+    # nu is descending (wave ascending), so negate to get positive integral.
+    integral = -jnp.trapezoid(shape, nu)
 
     # Guard against zero integral (e.g. wavelength grid entirely outside
     # the thermal peak): return zeros instead of NaN
@@ -518,30 +485,32 @@ def casey2012(
     # CMB correction (no-op at z=0)
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
 
+    wavelength_cm = wavelength_aa * _AA_TO_CM
+    nu = _C_CGS / wavelength_cm  # Hz, descending
+
     # Convert dust_lambda_0_um to cm
     lambda_0_cm = dust_lambda_0_um * 1.0e-4  # um to cm
+
     lambda_c_cm = _casey_lambda_c_cm(T_eff, dust_alpha_mir)
+    graybody = _casey_graybody_nu(wavelength_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm)
+    # Power-law amplitude tied to the graybody at the turnover (Eq. 2).
+    n_pl = _casey_graybody_nu(
+        jnp.asarray(lambda_c_cm), T_eff, dust_beta_ir, optically_thin, lambda_0_cm
+    )
+    power_law = (
+        n_pl
+        * (wavelength_cm / lambda_c_cm) ** dust_alpha_mir
+        * jnp.exp(-((wavelength_cm / lambda_c_cm) ** 2))
+    )
+    shape = graybody + power_law
+
+    # Mask emission below the lower bound
     lambda_min_aa = _CASEY_LAMBDA_MIN_UM * 1e4
+    shape = jnp.where(wavelength_aa >= lambda_min_aa, shape, 0.0)
 
-    def _shape(wave_aa):
-        wave_cm = wave_aa * _AA_TO_CM
-        graybody = _casey_graybody_nu(wave_cm, T_eff, dust_beta_ir, optically_thin, lambda_0_cm)
-        # Power-law amplitude tied to the graybody at the turnover (Eq. 2).
-        n_pl = _casey_graybody_nu(
-            jnp.asarray(lambda_c_cm), T_eff, dust_beta_ir, optically_thin, lambda_0_cm
-        )
-        power_law = (
-            n_pl
-            * (wave_cm / lambda_c_cm) ** dust_alpha_mir
-            * jnp.exp(-((wave_cm / lambda_c_cm) ** 2))
-        )
-        # Emission is masked below the lower bound (a step at lambda_min_aa).
-        return jnp.where(wave_aa >= lambda_min_aa, graybody + power_law, 0.0)
-
-    shape = _shape(wavelength_aa)
-
-    # Normalized on a grid starting at the mask edge, never the caller's grid.
-    integral = _internal_nu_integral(_shape, lambda_min_aa)
+    # Normalize so integral over frequency = L_absorbed on the supplied grid
+    # nu is descending (wave ascending), negate for positive integral
+    integral = -jnp.trapezoid(shape, nu)
     norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
 
     result = norm * shape
