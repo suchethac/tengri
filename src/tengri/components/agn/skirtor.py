@@ -1572,7 +1572,7 @@ class SKIRTORDiscAttenGrid(NamedTuple):
         The SKIRTOR parameter axes.
     edges : tuple of ndarray
         Triweight bin edges derived from ``axes``.
-    norm : ndarray, shape (*axes_shape), or None
+    norm : ndarray, shape ``(*axes_shape)``, or None
         The per-record scale divided out of ``disk`` (no wavelength axis), so that
         ``disk * norm`` is comparable between inclinations. ``None`` for a file that
         carries no ``norm`` dataset.
