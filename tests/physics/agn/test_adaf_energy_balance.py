@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Electron energy balance of the ADAF Compton branch (Mahadevan 1997, Sect. 4-5).
+
+Paper: R. Mahadevan, ApJ 477, 585 (1997), arXiv:astro-ph/9609107.
+
+For ``alpha_c < 1`` the paper takes synchrotron and bremsstrahlung cooling as
+negligible and heating as Coulomb ion-electron heating, so the electron
+temperature is the root of
+
+    Q_ie(T_e) = P_Compton(T_e)                                  (Sect. 5.1.2)
+
+with Q_ie from Eq. 13, P_Compton from Eq. 35, the Compton slope alpha_c from
+Eq. 34 (optical depth Eq. 31, amplification Eq. 32), and nu_p L_nu_p from
+Eqs. 21-23. Eq. 43 is the closed-form inverse of Eq. 34 for a given alpha_c and
+is an approximation to this root, not an independent equation.
+
+The reference values below are computed in this file from the paper's equations,
+with ``x_M`` (Eq. 20) taken from the solver that is tested on its own. They do
+not call the functions under test.
+"""
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+from scipy.optimize import brentq
+from scipy.special import kve
+
+from tengri.components.agn.adaf import (
+    _adaf_alpha_c,
+    _adaf_balance_residual,
+    _adaf_electron_temperature,
+    _adaf_tau_es,
+    _adaf_x_m,
+)
+
+pytestmark = pytest.mark.regression_paper
+
+# Fiducial constants of Mahadevan 1997 (Sect. 2, Eqs. 5, 31 and 13).
+_C1 = 0.5
+_C3 = 0.3
+_R = 3.0
+_BOLTZ = 1.380649e-16  # erg/K
+_M_E = 9.1093837e-28  # g
+_C_LIGHT = 2.99792458e10  # cm/s
+_THETA_PER_K = _BOLTZ / (_M_E * _C_LIGHT**2)
+
+
+def _ref_g(t_e):
+    """g(theta_e), Eq. 11."""
+    th = _THETA_PER_K * t_e
+    return (2.0 + 2.0 * th + 1.0 / th) / kve(2, 1.0 / th)
+
+
+def _ref_tau(mdot, alpha):
+    """Electron-scattering optical depth, Eq. 31."""
+    return 6.2 * alpha**-1.0 * _C1**-1.0 * mdot * _R**-0.5
+
+
+def _ref_alpha_c(t_e, mdot, alpha):
+    """Compton slope, Eq. 34 with the amplification factor of Eq. 32."""
+    th = _THETA_PER_K * t_e
+    return -np.log(_ref_tau(mdot, alpha)) / np.log(1.0 + 4.0 * th + 16.0 * th**2)
+
+
+def _ref_q_ie(t_e, m, mdot, alpha, beta):
+    """Coulomb ion-electron heating, Eq. 13 (erg/s)."""
+    return 1.2e38 * _C1**-2.0 * _C3 * beta * _R**-1.0 * alpha**-2.0 * m * mdot**2 * _ref_g(t_e)
+
+
+def _ref_p_compton(t_e, m, mdot, alpha, beta):
+    """Total Compton power, Eq. 35 (erg/s), with nu_p L_nu_p from Eqs. 21-23."""
+    x_m = float(_adaf_x_m(jnp.asarray(t_e), m, mdot, alpha, beta))
+    s1 = 1.42e9 * alpha**-0.5 * (1.0 - beta) ** 0.5 * _C1**-0.5 * _C3**0.5
+    nu_p = s1 * 1.19e-13 * x_m * m**-0.5 * mdot**0.5 * t_e**2 * _R**-1.25  # Eqs. 21-22
+    l_nu_p = 1.05e-24 * t_e * nu_p**2 * m**2 * _R**2  # Eq. 23
+    a_c = _ref_alpha_c(t_e, mdot, alpha)
+    x_ratio = 6.2e7 * (t_e / 1e9) / (nu_p / 1e12)
+    return nu_p * l_nu_p / (1.0 - a_c) * (x_ratio ** (1.0 - a_c) - 1.0)
+
+
+def _ref_residual(t_e, m, mdot, alpha, beta):
+    """log Q_ie - log P_Compton; zero at the energy balance."""
+    return np.log(_ref_q_ie(t_e, m, mdot, alpha, beta)) - np.log(
+        _ref_p_compton(t_e, m, mdot, alpha, beta)
+    )
+
+
+def _ref_root(m, mdot, alpha, beta):
+    """Bracketed reference root of the energy balance in T_e [K]."""
+    return brentq(
+        lambda t: _ref_residual(t, m, mdot, alpha, beta),
+        1e8,
+        5e11,
+        xtol=1e-6,
+        rtol=1e-14,
+    )
+
+
+def _te(m, mdot, alpha, beta=0.5, delta=1e-3):
+    return float(_adaf_electron_temperature(m, mdot, alpha, beta, delta))
+
+
+# ── (a) The converged root does not depend on the starting point ─────────
+
+
+def test_balance_root_independent_of_start():
+    """The safeguarded secant converges to the same root from different starting points.
+
+    Starts 2e9, 6e8 and 5e9 K, all inside the bracket, for (m=1e8, mdot=0.01, alpha=0.3).
+    The solved T_e must agree to 1e-6 relative with the 2e9 K start.
+    """
+    from tengri.components.agn.adaf import _adaf_solve_te_balance
+
+    ref = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_start=2e9))
+    for start in (6e8, 5e9):
+        t_e = float(_adaf_solve_te_balance(1e8, 0.01, 0.3, 0.5, t_start=start))
+        assert t_e == pytest.approx(ref, rel=1e-6), start
+
+
+@pytest.mark.parametrize("alpha", [0.1, 0.3, 0.5])
+@pytest.mark.parametrize("m", [1e6, 1e10])
+def test_solver_residual_converges_over_compton_grid(alpha, m):
+    """The fixed step count reaches the residual floor over the Compton grid.
+
+    Points from 0.1 to 1.0 times mdot_crit (alpha = 0.5 at mdot_crit lies in the tau_es > 1
+    extrapolation, see the solver Notes). The same 1e-10 bound as the residual test above.
+    """
+    from tengri.components.agn.adaf import _adaf_solve_te_balance
+
+    # 0.744 is a point where a converged-then-jumping iterate once returned a non-root
+    # (fixed by the closed bracket test in _adaf_solve_te_balance).
+    for frac in (0.1, 0.25, 0.5, 0.744, 0.75, 1.0):
+        mdot = frac * 0.28 * alpha * alpha
+        t_e = _adaf_solve_te_balance(m, mdot, alpha, 0.5)
+        res = float(_adaf_balance_residual(jnp.log(t_e), m, mdot, alpha, 0.5))
+        assert abs(res) <= 1e-10, (alpha, m, frac, res)
+
+
+# ── (b) The solved state satisfies the energy balance ────────────────────
+
+
+@pytest.mark.parametrize("mdot", [0.005, 0.01, 0.015, 0.02])
+def test_energy_balance_residual_vanishes(mdot):
+    """Q_ie(T_e) - P_Compton(T_e) = 0 at the returned T_e, in log space, to solver precision.
+
+    Evaluated with the solver's own residual, so the bound is the solver floor. The
+    bisection brackets ln T_e to ln(5e3) * 2**-40 ~ 8e-12, the Newton step removes the
+    linear part of that error, and the residual is O(10) per unit ln T_e, so the
+    leftover is quadratic in the step plus float64 rounding of ln Q ~ 99 (~2e-14).
+    Tolerance 1e-10 sits three orders above that floor.
+    """
+    t_e = _te(1e8, mdot, 0.3)
+    res = float(_adaf_balance_residual(jnp.log(t_e), 1e8, mdot, 0.3, 0.5))
+    assert abs(res) <= 1e-10
+
+
+@pytest.mark.parametrize("mdot", [0.005, 0.01, 0.02])
+def test_residual_vanishes_against_exact_bessel_reference(mdot):
+    """The same balance evaluated with exact K_2 (scipy) agrees to the K_2 approximation.
+
+    The reference uses ``scipy.special.kve``. The package evaluates K_2 by the
+    Abramowitz & Stegun rational forms, which differ from the exact g(theta_e) by
+    about 2e-6 relative at T_e ~ 2e9 K (measured). That shifts the balance root by
+    ~1e-6 in ln T_e, and the reference residual at the package root is ~1.6e-5 in log.
+    Tolerance 1e-4 is set from that measured Bessel mismatch with margin.
+    """
+    t_e = _te(1e8, mdot, 0.3)
+    assert abs(_ref_residual(t_e, 1e8, mdot, 0.3, 0.5)) <= 1e-4
+
+
+def test_public_root_matches_reference_root():
+    """The returned T_e equals the exact-Bessel reference root to 1e-5 relative.
+
+    The 1e-5 bound is the A&S K_2 mismatch of the package (see the residual test above),
+    which moves the root by ~1.2e-6 relative at this point (measured), with margin.
+    """
+    t_e = _te(1e8, 0.01, 0.3)
+    assert t_e == pytest.approx(_ref_root(1e8, 0.01, 0.3, 0.5), rel=1e-5)
+
+
+# ── (c) alpha_c lies in the paper's range where the regime applies ───────
+
+
+@pytest.mark.parametrize("mdot", [0.005, 0.01, 0.015, 0.02])
+def test_alpha_c_in_paper_range_at_high_mdot(mdot):
+    """0.5 <= alpha_c <= 1 at high accretion rate, where the Compton branch applies.
+
+    The paper states "0.5 <= alpha_c <= 1.0 for all cases of interest" (Sect.
+    5.1.2, below Eq. 43). Measured at (m=1e8, alpha=0.3, beta=0.5) the balance
+    root gives alpha_c in roughly [0.56, 0.94] over this mdot range, while the
+    current code gives 0.09-0.5 outside it.
+    """
+    a_c = _ref_alpha_c(_te(1e8, mdot, 0.3), mdot, 0.3)
+    assert 0.5 <= a_c <= 1.0
+
+
+# ── (d) T_e is continuous across the declared alpha box at mdot_crit ─────
+
+
+def test_no_jump_across_box_at_critical_mdot():
+    """T_e varies smoothly in alpha on mdot = mdot_crit = 0.28 alpha^2.
+
+    The old branch dropped from 2.06e9 K at alpha = 0.498 to 1e8 K at alpha = 0.499,
+    a 20x jump (|d ln T_e| ~ 3) inside Uniform(0.05, 0.5). The balance root falls
+    smoothly across the tau_es = 1 crossing near alpha = 0.4988, with the steepest
+    step at the box edge (|d ln T_e| ~ 0.05 per 0.0025 in alpha, measured). The bound
+    0.1 per 0.0025 is set between that smooth profile and the 3.0 of the jump.
+    """
+    alphas = np.arange(0.45, 0.5 + 1e-12, 0.0025)
+    t_e = np.array([_te(1e8, 0.28 * a * a, a) for a in alphas])
+    steps = np.abs(np.diff(np.log(t_e)))
+    assert steps.max() < 0.1
+
+
+# ── (e) High-mdot limit matches the paper's stated temperature ───────────
+
+
+@pytest.mark.parametrize("m", [1e6, 1e8, 1e10])
+def test_high_mdot_limit_within_paper_eq44_window(m):
+    """At mdot ~ 1e-2 (alpha = 0.3) T_e lies in Eq. 44's window 2.15e9 - 3.12e9 K.
+
+    Eq. 44 (Mahadevan 1997, p. 17) states "2.15e9 <= T_e <= 3.12e9 whether the
+    systems are 1 M_sun or 1e9 M_sun black holes" for mdot ~ 1e-2. The
+    accuracy claimed is that window. Sect. 5.1.1 also quotes T_e ~ 2.0e9 K at high
+    mdot as an approximate constant. The mass independence stated in Eq. 44 holds
+    to about 15% over the mass range here.
+
+    Measured inconsistency: Eq. 44's printed bounds do not follow from Eq. 43 with the
+    tau_es of Eq. 31. Evaluated by hand, Eq. 43 at mdot = 0.01, alpha = 0.3 gives about
+    2.0e9 K at alpha_c = 1 and 5.4e9 K at alpha_c = 0.5, where Eq. 44 gives 2.15e9 and
+    3.12e9. The printed bounds correspond to tau_es about twice the Eq. 31 value. The
+    test keeps the paper's stated window; the factor is not reconciled here.
+    """
+    t_e = _te(m, 0.01, 0.3)
+    assert 2.15e9 <= t_e <= 3.12e9
+
+
+# ── (f) Gradients are finite at the box corners ──────────────────────────
+
+
+@pytest.mark.gradient
+@pytest.mark.parametrize("alpha", [0.05, 0.5])
+@pytest.mark.parametrize("beta", [0.05, 0.95])
+@pytest.mark.parametrize("frac", [0.5, 1.0])
+def test_gradients_finite_at_box_corners_float64(alpha, beta, frac):
+    """d T_e / d(mdot, alpha, beta, m) is finite at the corners of the declared box.
+
+    ``frac`` sets mdot as a fraction of mdot_crit = 0.28 alpha^2, so the corners
+    include the critical-rate edge, where tau_es approaches 1.
+    """
+    mdot_crit = 0.28 * alpha * alpha
+    mdot = frac * mdot_crit
+
+    def t_of(params):
+        m_, md, a_, b_ = params
+        return _adaf_electron_temperature(m_, md, a_, b_, 1e-3)
+
+    grads = jax.grad(lambda p: jnp.log(t_of(p)))(jnp.asarray([1e8, mdot, alpha, beta]))
+    assert bool(jnp.all(jnp.isfinite(grads)))
+
+
+@pytest.mark.gradient
+@pytest.mark.parametrize("alpha", [0.05, 0.5])
+def test_gradients_finite_at_box_corners_float32(alpha):
+    """The same finiteness holds on the pure float32 path (JAX_ENABLE_X64 off)."""
+    mdot = 0.28 * alpha * alpha
+
+    def t_of(params):
+        m_, md, a_, b_ = params
+        return _adaf_electron_temperature(m_, md, a_, b_, 1e-3)
+
+    with jax.enable_x64(False):
+        p = jnp.asarray([1e8, mdot, alpha, 0.5], dtype=jnp.float32)
+        grads = jax.grad(lambda q: jnp.log(t_of(q)))(p)
+        assert bool(jnp.all(jnp.isfinite(grads)))
+
+
+# ── (g) The alpha_c = 1 junction between the balance and Eq. 40 ───────────
+
+
+def test_regime_junction_jump_size_pinned():
+    """Size of the T_e jump where alpha_c crosses 1, between the balance and Eq. 40.
+
+    The Compton-branch balance root and the Eq. 40 value are not matched at alpha_c = 1
+    (see the Notes of ``_adaf_electron_temperature``). At (m=1e8, alpha=0.3, beta=0.5) the
+    junction is at mdot_j = 3.80e-3 and the ratio T_balance / T_40 there is 1.061 (measured).
+    The pin is 1.05-1.08. Eq. 40's stated accuracy (A_c^(1/7) in 0.95-1.4, Sect. 5.1.2)
+    would bound the ratio to 0.714-1.053; this point sits just above that band, and the
+    junction is also above Eq. 40's stated validity mdot < 1e-3 alpha^2 (about 9e-5 here).
+    """
+    from scipy.optimize import brentq
+
+    from tengri.components.agn.adaf import _adaf_solve_te_balance
+
+    m, alpha, beta, delta = 1e8, 0.3, 0.5, 1e-3
+
+    def alpha_c_minus_one(mdot):
+        t_bal = _adaf_solve_te_balance(m, mdot, alpha, beta)
+        return float(_adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_bal)) - 1.0
+
+    mdot_j = brentq(alpha_c_minus_one, 1e-6, 0.28 * alpha * alpha, xtol=1e-14)
+    t_bal = float(_adaf_solve_te_balance(m, mdot_j, alpha, beta))
+    # Just below the junction the public function selects Eq. 40 (alpha_c > 1).
+    t_40 = _te(m, mdot_j * (1.0 - 1e-7), alpha, beta, delta)
+    assert 1.05 <= t_bal / t_40 <= 1.08, t_bal / t_40
+
+
+@pytest.mark.gradient
+@pytest.mark.regression_bug
+def test_float32_gradient_of_balance_temperature_matches_float64_fd():
+    """Float32 autodiff of ln T_e agrees with a float64 central difference, all four inputs.
+
+    At (m=1e8, mdot=0.0187, alpha=0.3, beta=0.5) the float32 beta derivative was 46% low
+    (0.173 against 0.323). The cause was ``ln(4.8e37 beta)`` differentiated as a whole: its
+    cotangent, of order 1e-39, is subnormal in float32 and was flushed to zero. Tolerance 1e-3
+    relative to the largest component, as in the float32 shape test.
+    """
+    p64 = np.array([1e8, 0.0187, 0.3, 0.5])
+
+    def log_te(p):
+        return jnp.log(_adaf_electron_temperature(p[0], p[1], p[2], p[3], 0.1))
+
+    fd = np.zeros(4)
+    for i in range(4):
+        h = 1e-6 * p64[i]
+        pp, pm = p64.copy(), p64.copy()
+        pp[i] += h
+        pm[i] -= h
+        fd[i] = (float(log_te(jnp.asarray(pp))) - float(log_te(jnp.asarray(pm)))) / (2 * h)
+    with jax.enable_x64(False):
+        g32 = np.asarray(jax.grad(log_te)(jnp.asarray(p64, dtype=jnp.float32))).astype(np.float64)
+    scale = float(np.max(np.abs(fd)))
+    assert np.max(np.abs(g32 - fd)) <= 1e-3 * scale, f"f32 AD {g32} vs f64 FD {fd}"
