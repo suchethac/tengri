@@ -11782,7 +11782,7 @@ class SEDModel:
         parameter free the component integrates the filters on every call. Each term of the
         emitter that has a registry adapter (``TERM_SHAPE_KEYS`` of the component, via
         ``term_shape_keys()``) gets a table of its shape-only band flux over that shape, built by
-        the adapter at build time (see :mod:`tengri.components._term_shape_table`). The amplitude
+        the adapter at build time (see ``tengri.components._term_shape_table``). The amplitude
         is not tabulated: the component multiplies each table by the term at its own reference
         wavelength, so FIRRC, redshift evolution and suppression stay exact.
 

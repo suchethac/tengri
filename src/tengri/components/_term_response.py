@@ -90,7 +90,7 @@ def term_shape_response(
     The fallback when no exact band response exists (a shape parameter is free). Each term's
     table gives the band flux of that term's shape, normalized at the term's ``lam_ref``, so the
     component multiplies it by the term evaluated at ``lam_ref``, which carries the amplitude
-    exactly. See :mod:`tengri.components._term_shape_table`.
+    exactly. See ``tengri.components._term_shape_table``.
 
     Parameters
     ----------

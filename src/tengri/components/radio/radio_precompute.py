@@ -351,7 +351,7 @@ def term_shape_table(
     Returns
     -------
     dict or None
-        :func:`tengri.components._term_shape_table.build_term_shape_table` output, or ``None``
+        ``tengri.components._term_shape_table.build_term_shape_table`` output, or ``None``
         when a shape parameter other than the axis is free (the table would be wrong).
 
     Notes
