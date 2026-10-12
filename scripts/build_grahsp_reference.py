@@ -73,8 +73,8 @@ Usage (worker mode — internal):
 from __future__ import annotations
 
 import argparse
+import io
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -84,6 +84,7 @@ from typing import Any
 
 import h5py
 import numpy as np
+
 
 # Map parameter set index to (key, value, fiducial_value)
 def _parameter_sets() -> list[dict[str, Any]]:
@@ -154,8 +155,8 @@ def _worker(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
     sys.path.insert(0, str(upstream_path))
 
     # Import the harness (minimal stub, lives in scripts/)
-    import types
     import importlib
+    import types
 
     U = upstream_path
     AG = U + "/database_builder/activate/agn"
@@ -187,7 +188,9 @@ def _worker(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
             AG + "/mor_netzer_2012/emission_line_table.formatted",
             dtype=[("name", "S10"), ("wave", "f"), ("broad", "f"), ("S2", "f"), ("LINER", "f")],
         )
-        return _NS(wave=d["wave"] * 0.1, lumin_BLAGN=d["broad"], lumin_Sy2=d["S2"], lumin_LINER=d["LINER"])
+        return _NS(
+            wave=d["wave"] * 0.1, lumin_BLAGN=d["broad"], lumin_Sy2=d["S2"], lumin_LINER=d["LINER"]
+        )
 
     class Database:
         def __enter__(s):
@@ -264,6 +267,126 @@ def _worker(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
     np.savez_compressed(out_npz, **save_dict)
 
 
+NETZER_MN12_PREFIX = "netzer_mn12."
+
+
+def _worker_netzer_mn12(params: dict[str, Any], out_npz: Path, upstream_path: str) -> None:
+    """Worker variant: upstream's Netzer disc (activatedisk) and MN12 torus (activatetorus).
+
+    The two physics modules are upstream's own. Their database lookups are supplied here by
+    mirroring the import code in upstream ``database_builder/__init__.py``:
+
+    * course-grid Netzer disc, lines 764-800: the table is read from line 23 on, reversed, and
+      each model is normalized to 1 at 510 nm (``norm = np.interp(510, wave, Llam)``);
+    * MN12 templates ``mor-avg`` and ``mullaney-silicate``, lines 799-822 and 832-861, with
+      ``c = 3.0e18`` as set at line 726.
+
+    The stub class carries the same ``get_*`` method names as ``pcigale.data.Database``. Each
+    returned object exposes ``.wave`` and ``.lumin``, which is all the upstream modules read.
+    """
+    import importlib
+    import types
+
+    sys.path.insert(0, str(upstream_path))
+    ab = Path(upstream_path) / "database_builder" / "activate"
+    c = 3.0e18  # database_builder/__init__.py:726
+
+    def _netzer_disk(M, a, Mdot, inc):
+        M_list = ["6.0", "7.0", "8.0", "9.0"]
+        a_list = ["0.998", "0"]
+        Mdot_list = ["0.3", "0.03"]
+        with open(ab / "agn" / "mor_netzer_2012" / "table_of_disk_models") as fh:
+            body = "".join(fh.readlines()[23:][::-1])
+        data = np.genfromtxt(io.BytesIO(body.encode()))
+        wave = data[:, 1] * 0.1
+        freq = data[:, 0]
+        options = [(Mv, av, Mdotv) for av in a_list for Mdotv in Mdot_list for Mv in M_list]
+        for i, (Mv, av, Mdotv) in enumerate(options):
+            if float(Mv) == float(M) and float(av) == float(a) and float(Mdotv) == float(Mdot):
+                Llam = data[:, 2 + i] * freq**2 / c
+                Llam = Llam / np.interp(510.0, wave, Llam)
+                return types.SimpleNamespace(wave=wave, lumin=Llam)
+        raise KeyError(f"no course-grid Netzer disc for M={M} a={a} Mdot={Mdot}")
+
+    def _mor_netzer(name):
+        if name == "mullaney-silicate":
+            data = np.genfromtxt(ab / "agn" / "mor_netzer_2012" / "othermodels" / "Mullaney.txt")
+            wave = data[:, 0] * 1000
+            freq = c / wave
+            specA = data[:, 2]
+            specB = data[:, 3] * (
+                data[np.where(wave > 18000)[0][0], 2] / data[np.where(wave > 18000)[0][0], 3]
+            )
+            nuLnu = (specA + specB) / 2.0 * freq
+            norm = (nuLnu / freq * c / wave**2)[wave == 12000][0]
+            nuLnu = (specA - specB) * freq
+            nuLnu[np.logical_and(nuLnu < 0, wave < 8000)] = 0.0
+            nuLnu[np.logical_and(nuLnu < 0, wave > 18000)] = 0.0
+            Llam = nuLnu / freq * c / wave**2
+            mask = np.logical_and(wave > 7000, wave < 19000)
+            return types.SimpleNamespace(wave=wave[mask], lumin=Llam[mask] / norm)
+        columns = {"mor-avg": 1, "mor-lo": 2, "mor-hi": 3}  # database_builder/__init__.py:801-803
+        if name in columns:
+            data = np.genfromtxt(
+                ab / "agn" / "mor_netzer_2012" / "mor_netzer_mean_and_uncertainty_extended"
+            )
+            wave = data[:, 0] * 1000
+            freq = c / wave
+            Llam = data[:, columns[name]] / freq * c / wave**2
+            Llam = Llam / Llam[wave == 12000][0]
+            mask = wave > 2000
+            Llam[~mask] = Llam[mask][0]
+            return types.SimpleNamespace(wave=wave, lumin=Llam)
+        raise KeyError(name)
+
+    class Database:
+        def __enter__(s):
+            return s
+
+        def __exit__(s, *a):
+            return False
+
+        def get_ActivateNetzerDisk(s, M, a, Mdot, inc):
+            return _netzer_disk(M, a, Mdot, inc)
+
+        def get_ActivateMorNetzer2012Torus(s, name):
+            return _mor_netzer(name)
+
+    dm = types.ModuleType("pcigale.data")
+    dm.Database = Database
+    pk = types.ModuleType("pcigale")
+    pk.__path__ = [str(Path(upstream_path) / "pcigale")]
+    sys.modules["pcigale"] = pk
+    sys.modules["pcigale.data"] = dm
+
+    from pcigale.sed import SED
+
+    def mod(n):
+        K = importlib.import_module("pcigale.creation_modules." + n).Module
+        return lambda **kw: K(name=n, **kw)
+
+    grid_nm = np.logspace(np.log10(10.0), np.log10(1e6), 5000)
+    sed = SED()
+    sed.add_contribution("stellar.dummy", grid_nm.copy(), np.zeros_like(grid_nm))
+    mod("activate")(fracAGN=-1).process(sed)
+    # Disc fixed at tengri's default (log M = 8.0, a = 0, Mdot = 0.3), which the page uses.
+    mod("activatedisk")(M=8.0, a=0.0, Mdot=0.3, inc=0.0).process(sed)
+    mod("activatetorus")(fcov=params["fcov"], Si=params["si"], TORtemp=0.0, TORcutoff=1.2).process(
+        sed
+    )
+
+    names = list(sed.contribution_names)
+    w = sed.wavelength_grid
+    L = sed.luminosities
+    idx = np.searchsorted(w, grid_nm)
+    assert np.allclose(w[idx], grid_nm), "Grid mismatch"
+    save_dict = {"wavelength": grid_nm, "params": json.dumps(params)}
+    for i, name in enumerate(names):
+        if name.startswith("agn."):
+            save_dict[NETZER_MN12_PREFIX + name] = L[i][idx]
+    np.savez_compressed(out_npz, **save_dict)
+
+
 def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
     """Driver: spawn workers for each parameter set, build HDF5."""
     upstream_path = str(Path(upstream_path).resolve())
@@ -287,24 +410,33 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             npz_path = Path(tmpdir) / f"{pname}.npz"
-            cmd = [
-                python_path,
-                str(Path(__file__).resolve()),
-                "--worker",
-                json.dumps(params),
-                str(npz_path),
-                "--upstream",
-                upstream_path,
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            if result.returncode != 0:
-                print(f"FAILED")
-                print(result.stderr)
-                raise RuntimeError(f"Worker failed for {pname}")
-
-            # Load npz
-            data = np.load(npz_path, allow_pickle=True)
-            results[pname] = dict(data)
+            merged: dict[str, Any] = {}
+            for variant in ("gauss", "netzer_mn12"):
+                npz_path = Path(tmpdir) / f"{pname}.{variant}.npz"
+                cmd = [
+                    python_path,
+                    str(Path(__file__).resolve()),
+                    "--worker",
+                    json.dumps(params),
+                    str(npz_path),
+                    "--upstream",
+                    upstream_path,
+                    "--variant",
+                    variant,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                if result.returncode != 0:
+                    print("FAILED")
+                    print(result.stderr)
+                    raise RuntimeError(f"Worker failed for {pname} ({variant})")
+                data = dict(np.load(npz_path, allow_pickle=True))
+                if variant == "gauss":
+                    merged = data
+                else:
+                    merged.update(
+                        {k: v for k, v in data.items() if k not in ("wavelength", "params")}
+                    )
+            results[pname] = merged
         print("OK")
 
     # Write HDF5
@@ -316,7 +448,12 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
         f.attrs["upstream_modules"] = (
             "pcigale/creation_modules/activate.py:46-61, activatepl.py:77-107, "
             "activatelines.py:65-97, activategtorus.py:23-84, activatebol.py, "
-            "biattenuation.py:34-72"
+            "biattenuation.py:34-72; netzer_mn12 variant: activatedisk.py, activatetorus.py; "
+            "database lookups mirrored from database_builder/__init__.py:726, 764-800, 799-822, 832-861"
+        )
+        f.attrs["netzer_mn12_fixed_parameters"] = (
+            "disc: log M = 8.0, a = 0.0, Mdot = 0.3, inc = 0.0; "
+            "torus: TORtemp = 0.0, TORcutoff = 1.2 um; fcov and Si as per parameter set"
         )
         f.attrs["wavelength_unit"] = "nm"
         f.attrs["luminosity_unit"] = "L_lambda [1/nm]"
@@ -373,7 +510,9 @@ def _driver(upstream_path: str, python_path: str, out_h5: Path) -> None:
         # One group per parameter set
         for pname, data in results.items():
             grp = f.create_group(pname)
-            params_dict = json.loads(data["params"].item() if hasattr(data["params"], "item") else data["params"])
+            params_dict = json.loads(
+                data["params"].item() if hasattr(data["params"], "item") else data["params"]
+            )
             for k, v in params_dict.items():
                 grp.attrs[f"param_{k}"] = v
 
@@ -393,6 +532,12 @@ def main() -> None:
     ap.add_argument("--upstream", required=True, help="Upstream GRAHSP path")
     ap.add_argument("--python", help="Python interpreter in upstream venv (driver mode only)")
     ap.add_argument(
+        "--variant",
+        default="gauss",
+        choices=("gauss", "netzer_mn12"),
+        help="Worker variant: gauss (SBPL disc, log-Gaussian torus) or netzer_mn12 (worker only)",
+    )
+    ap.add_argument(
         "--out",
         default=Path(__file__).resolve().parents[1] / "data" / "grahsp_upstream_reference.h5",
         type=Path,
@@ -407,7 +552,10 @@ def main() -> None:
         if not args.out_npz:
             raise ValueError("--worker mode requires out_npz positional argument")
         params = json.loads(args.worker)
-        _worker(params, Path(args.out_npz), args.upstream)
+        if args.variant == "netzer_mn12":
+            _worker_netzer_mn12(params, Path(args.out_npz), args.upstream)
+        else:
+            _worker(params, Path(args.out_npz), args.upstream)
     else:
         # Driver mode (default)
         if not args.python:
