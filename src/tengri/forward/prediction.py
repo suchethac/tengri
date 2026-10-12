@@ -2116,7 +2116,7 @@ class Prediction:
         # ``model.age_yr <= 1e8`` still align.
         sfh_grid = jnp.asarray(derived["sfh_grid_lbt_yr"])
         sfr_history = jnp.asarray(derived["sfr_history"])
-        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history)
+        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history, right=0.0)
         self._cache.update(
             {
                 "p": p,
