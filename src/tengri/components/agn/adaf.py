@@ -181,7 +181,7 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
             \left(2 + 2\theta_e + \frac{1}{\theta_e}\right) e^{-1/\theta_e}
 
     with :math:`\theta_e = k T_e / (m_e c^2)`. Enters the Coulomb ion-electron
-    heating rate (Eq. 10) and hence the total ADAF luminosity (Eq. 49).
+    heating rate (Eq. 10) and hence the total ADAF luminosity (Sect. 5.2; Eqs. 13, 49).
 
     Parameters
     ----------
@@ -423,9 +423,16 @@ _P_SYNCH_OVER_NUPLNUP: float = 0.71
 _LOG_P_SYNCH_FRAC: float = float(np.log(_P_SYNCH_OVER_NUPLNUP))
 # P_brems = 4.78e34 alpha^-2 c1^-2 ln(r_max/r_min) F(theta_e) m mdot^2 [erg/s] (Eq. 29).
 _LOG_P_BREMS_COEFF: float = float(np.log(4.78e34 * _C1**-2.0 * np.log(_R_MAX / _R_MIN)))
-# Bracket for the balance root [K]: the ADAF range plus margin at both ends.
+# Bracket for the balance root [K]. The upper end is a derived bound, not a margin: the root
+# cannot exceed the temperature at which synchrotron cooling alone equals the largest heating
+# over the clip domain. With x_M >= 1 (Eq. 20 floor), P_synch >= 0.71 s1^3 (1.19e-13)^3 s3
+# r_min^(-7/4) m^(1/2) mdot^(3/2) T_e^7 (Eqs. 21-24, 26), while Q_ie + delta Q+ <= (Eq. 13 with
+# g <= 365 for T_e >= 1e8 K) + (Eqs. 9, 14). The ratio is largest at the box corner
+# m = 1e10, alpha = 0.5, delta = 0.5, mdot = 1e-8 (the low edge of the mdot clip), where the
+# bound is 8.03e11 K; the true root there is 6.27e11 K (x_M > 1 and Compton cooling lower it).
+# 1e12 K therefore encloses every root for mdot in [1e-8, mdot_crit] and the declared box.
 _T_LO: float = 1e8
-_T_HI: float = 5e11
+_T_HI: float = 1e12
 
 
 def _adaf_log_q_ie(
@@ -621,12 +628,99 @@ def _adaf_balance_residual(
     return log_heat - log_cool
 
 
-# Safeguarded secant steps in ln T_e for the balance root. The bracket is ln(5e3) ~ 8.5 wide.
-# The step count reaches the solver floor across the declared box (a 20,000-point random draw,
-# and the bracket-sign and residual tests in test_adaf_energy_balance.py).
-_N_SOLVE: int = 14
+# ── Safeguarded secant (shared by the T_e solve and the mdot solve) ──────
+
+# Iteration cap of the secant loops. The loops exit on convergence (typically 6 to 12 steps);
+# the cap only bounds a pathological input.
+_N_MAX: int = 64
 # Starting electron temperature [K] for the secant: the paper's high-mdot value (Sect. 5.1.1).
 _T_START: float = 2.0e9
+
+
+def _adaf_solver_tol(dtype) -> float:
+    """Residual tolerance of the secant loops: 1000 machine epsilons in float64, 500 in float32.
+
+    The residuals are differences of logarithms of order 90, whose rounding floor is about
+    90 eps (measured 5.7e-14 in float64); the float64 tolerance, 2.2e-13, sits a factor
+    four above it so that recomputing the residual at ``ln exp(u)`` stays inside it, and
+    the float32 one, 6e-5, a factor five above its floor (float32 also takes a second
+    iterate below it).
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return (1000.0 if eps < 1e-10 else 500.0) * eps
+
+
+def _bracketed_secant(f, u0, aux0, ln_lo, ln_hi, *, sign, slope0, frozen=None):
+    r"""Root of a monotone scalar residual by a safeguarded secant, exiting on convergence.
+
+    ``f(u, aux) -> (r, aux)`` is the residual and a carried auxiliary state (a warm start for
+    a nested solve). ``sign`` is ``+1`` when ``r`` decreases with ``u`` and ``-1`` when it
+    increases. The bracket ``[ln_lo, ln_hi]`` is narrowed by the sign of ``r`` at each
+    iterate; a secant step that leaves the closed bracket is replaced by its midpoint. The
+    first step uses the slope magnitude ``slope0``; later steps use the secant slope (a
+    non-finite step falls outside the bracket and is bisected). A lane is done at the first
+    iterate with :math:`|r| \le` :func:`_adaf_solver_tol` in float64 and at the second
+    consecutive one in float32 (whose tolerance is within a factor six of its rounding floor),
+    when the bracket has collapsed to a few machine epsilons (a root at or beyond an end of the
+    bracket), or at the cap ``_N_MAX``; lanes flagged ``frozen`` do not iterate (under ``vmap``
+    a finished lane is held while the others continue).
+
+    Returns ``(u, aux)``.
+    """
+    dtype = u0.dtype
+    tol = _adaf_solver_tol(dtype)
+    eps = float(jnp.finfo(dtype).eps)
+    n_polish = 1 if eps < 1e-10 else 2
+    r0, aux = f(u0, aux0)
+    done0 = jnp.zeros_like(u0, dtype=bool) if frozen is None else frozen
+    state = (
+        jnp.asarray(0),
+        jnp.zeros_like(u0, dtype=jnp.int32),
+        u0,
+        r0,
+        u0,
+        r0,
+        jnp.broadcast_to(jnp.asarray(ln_lo, dtype), u0.shape),
+        jnp.broadcast_to(jnp.asarray(ln_hi, dtype), u0.shape),
+        aux,
+        done0,
+    )
+
+    def cond(st):
+        return (st[0] < _N_MAX) & ~st[9]
+
+    def body(st):
+        k, n_ok, u, r, u_prev, r_prev, lo, hi, aux, _done = st
+        s = sign * r
+        lo = jnp.where(s > 0.0, u, lo)
+        hi = jnp.where(s < 0.0, u, hi)
+        du = u - u_prev
+        slope = jnp.where(du == 0.0, -slope0, sign * (r - r_prev) / jnp.where(du == 0.0, 1.0, du))
+        u_new = u - s / slope
+        inside = (u_new >= lo) & (u_new <= hi)
+        u_next = jnp.where(r == 0.0, u, jnp.where(inside, u_new, 0.5 * (lo + hi)))
+        r_next, aux_next = f(u_next, aux)
+        n_ok_next = jnp.where(jnp.abs(r_next) <= tol, n_ok + 1, 0)
+        collapsed = (hi - lo) <= 64.0 * eps * jnp.maximum(1.0, jnp.abs(u_next))
+        finished = (n_ok_next >= n_polish) | (r_next == 0.0) | collapsed
+        return (k + 1, n_ok_next, u_next, r_next, u, r, lo, hi, aux_next, finished)
+
+    final = jax.lax.while_loop(cond, body, state)
+    return final[2], final[8]
+
+
+def _adaf_te_root_raw(
+    m, mdot, alpha, beta, delta, u0, t_lo: float = _T_LO, t_hi: float = _T_HI
+) -> jnp.ndarray:
+    """``ln T_e`` of the Eq. 8 root from the start ``u0`` (no custom derivative rule)."""
+
+    def f(u, aux):
+        return _adaf_balance_residual(u, m, mdot, alpha, beta, delta), aux
+
+    u, _ = _bracketed_secant(
+        f, u0, None, float(np.log(t_lo)), float(np.log(t_hi)), sign=1.0, slope0=2.0
+    )
+    return u
 
 
 def _adaf_solve_te_balance(
@@ -643,9 +737,10 @@ def _adaf_solve_te_balance(
 
     Solves :func:`_adaf_balance_residual` :math:`= 0`, i.e. :math:`Q_{ie} + \delta Q^+ =
     P_{\rm synch} + P_{\rm Compton} + P_{\rm brems}`, for :math:`T_e` by a safeguarded secant in
-    :math:`\ln T_e`. The bracket ``[t_lo, t_hi]`` is narrowed by the sign of the residual at each
-    step (the residual decreases with :math:`\ln T_e`); a secant step that leaves the bracket is
-    replaced by its midpoint. The step count is fixed (``_N_SOLVE``).
+    :math:`\ln T_e` (:func:`_bracketed_secant`). The bracket ``[t_lo, t_hi]`` is narrowed by the
+    sign of the residual at each step (the residual decreases with :math:`\ln T_e`); a secant
+    step that leaves the bracket is replaced by its midpoint. The loop exits when the residual
+    is below :func:`_adaf_solver_tol` (two consecutive iterates in float32).
 
     Derivatives are the implicit-function derivatives of the root, exact to every order. The
     solve is wrapped in :func:`jax.lax.custom_root`, whose tangent rule is
@@ -660,7 +755,9 @@ def _adaf_solve_te_balance(
         viscous-heating fraction.
     t_lo, t_hi : float, optional
         Bracket [K]. The root must lie inside for the result to be meaningful: the residual is
-        positive at ``t_lo`` and negative at ``t_hi`` over the declared box (tested).
+        positive at ``t_lo`` and negative at ``t_hi`` over the declared box and the whole mdot
+        clip range ``[1e-8, 0.28 alpha^2]`` (tested; the ceiling is derived in the comment on
+        ``_T_HI``).
     t_start : float, optional
         Starting temperature [K]. The converged root does not depend on it (tested).
 
@@ -671,8 +768,9 @@ def _adaf_solve_te_balance(
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes. Fixed step count and branchless updates with
-    :func:`jnp.where`; no data-dependent Python control flow.
+    **JIT/grad/vmap-safe**: yes. The loop is a :func:`jax.lax.while_loop` whose trip count
+    depends on the data (6 to 12 steps over the box, at most ``_N_MAX``); it runs only inside the
+    solve of :func:`jax.lax.custom_root`, which is never differentiated through.
     """
 
     def _resid(u):
@@ -680,28 +778,17 @@ def _adaf_solve_te_balance(
 
     u_start = jnp.log(jnp.asarray(t_start))
     u_start = u_start.astype(jax.eval_shape(_resid, u_start).dtype)
-    ln_lo, ln_hi = float(np.log(t_lo)), float(np.log(t_hi))
 
     def _solve(f, u0):
-        lo = jnp.full_like(u0, ln_lo)
-        hi = jnp.full_like(u0, ln_hi)
-        u = u0
-        r = f(u)
-        u_prev = u - 0.05
-        r_prev = f(u_prev)
-        for _ in range(_N_SOLVE):
-            lo = jnp.where(r > 0.0, u, lo)
-            hi = jnp.where(r < 0.0, u, hi)
-            du = u - u_prev
-            slope = (r - r_prev) / jnp.where(du == 0.0, 1.0, du)
-            u_new = u - r / jnp.where(slope == 0.0, 1.0, slope)
-            # Closed interval: the bracket end set by the last iterate can equal the root.
-            inside = (u_new >= lo) & (u_new <= hi)
-            still = (du == 0.0) | (r == 0.0)
-            u_next = jnp.where(still, u, jnp.where(inside, u_new, 0.5 * (lo + hi)))
-            u_prev, r_prev = u, r
-            u = u_next
-            r = f(u)
+        u, _ = _bracketed_secant(
+            lambda u_, aux: (f(u_), aux),
+            u0,
+            None,
+            float(np.log(t_lo)),
+            float(np.log(t_hi)),
+            sign=1.0,
+            slope0=2.0,
+        )
         return u
 
     log_te = jax.lax.custom_root(_resid, u_start, _solve, lambda g, y: y / g(jnp.ones_like(y)))
@@ -752,20 +839,35 @@ def _adaf_electron_temperature(
     Returns
     -------
     ndarray, shape ()
-        Equilibrium electron temperature [K], inside ``[1e8, 5e11]`` K. For the ADAF range
+        Equilibrium electron temperature [K], inside ``[1e8, 1e12]`` K. For the ADAF range
         this is ~1e9-5e9 K.
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes, to every derivative order (implicit differentiation through
-    :func:`jax.lax.custom_root`). Fixed trip count, no data-dependent control flow.
+    **JIT/grad/vmap-safe**: yes. First and second derivatives are the exact implicit-function
+    derivatives of the solved root (:func:`jax.lax.custom_root`; ``jax.hessian`` is tested
+    against finite differences of the gradient). The solve is a :func:`jax.lax.while_loop`
+    with a data-dependent trip count, which is never differentiated through.
 
     **Approximations**: :math:`f = 1` in Eq. 9; :math:`P_{\rm synch} = 0.71\,\nu_p L_{\nu_p}`
     assumes :math:`\nu_{\min} \ll \nu_p` (Eq. 26); Eq. 35 assumes a single Compton power law
     from :math:`\nu_p` to :math:`3kT_e/h`. The balance has one root on the bracket over the
-    declared box (tested). The accretion rate for a given luminosity
-    (:func:`_adaf_mdot_from_lbol`, Eq. 49) still takes :math:`L = Q_{ie}`, which equals
-    :math:`Q^-` only where :math:`\delta Q^+ \ll Q_{ie}`.
+    declared box and the whole mdot clip range ``[1e-8, 0.28 alpha^2]`` (tested).
+
+    **Smoothness**: :math:`T_e` has no regime junction, but it is not smooth to every order.
+    :math:`F(\theta_e)` of Eq. 28 is the paper's piecewise fit, with a 0.16% step at
+    :math:`\theta_e = 1` (:math:`F = 6.0257` below, :math:`6.0353` above; :math:`T_e =
+    5.93\times10^9` K), which puts a value step into :math:`P_{\rm brems}` and so into
+    :math:`T_e`. Its size is at most :math:`5.1\times10^{-5}` in :math:`\ln T_e` (the largest of
+    3000 draws on the surface :math:`T_e = 5.93\times10^9` K inside the declared box), where
+    bremsstrahlung carries up to 21% of the cooling. The derived ``mdot`` has two further
+    derivative discontinuities, at its clips (``mdot_crit`` and the ``1e-8`` floor).
+
+    **Eq. 40 prefactor**: the printed :math:`1.1\times10^9` K differs by 7.5% from the
+    :math:`1.023\times10^9` K re-derived from Eqs. 9, 14 and 24 at the fiducial point with
+    :math:`A_c = 1` (a factor 1.66 in :math:`\delta Q^+/\nu_p L_{\nu_p}`). The balance uses
+    the equations, not the printed prefactor; the tests check the printed form against the
+    paper's own :math:`A_c^{1/7}` band and the tight limit with the re-derived value.
 
     **Outside the paper's range**: for :math:`\tau_{es} \geq 1` (:math:`\alpha_c \leq 0`,
     reached at :math:`\alpha \gtrsim 0.4988` on :math:`\dot m_{\rm crit}`), Eq. 34 gives no
@@ -908,7 +1010,157 @@ def _adaf_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.
     )
 
 
-# ── L_bol -> mdot inversion (Mahadevan Eq. 49) ───────────────────────────
+# ── L_bol -> mdot inversion (Mahadevan Sect. 5.2: L_ADAF = Q_e+ = Q_ie + delta Q+) ──
+
+# Accretion-rate clip range: the ADAF solution does not exist above mdot_crit = 0.28 alpha^2
+# (Eq. 52); 1e-8 is the floor of the T_e solve.
+_MDOT_FLOOR: float = 1e-8
+_MDOT_CRIT_COEFF: float = 0.28
+# A solve that ends this close (in ln mdot) to the floor is a luminosity below the floor's:
+# the bracket collapses onto its end to within 64 epsilons, far inside this.
+_FLOOR_SNAP: float = 1e-9
+_LN2: float = float(np.log(2.0))
+
+
+def _adaf_log_mdot_fixed_g(
+    ln_l: jnp.ndarray, ln_a_g: jnp.ndarray, ln_b: jnp.ndarray
+) -> jnp.ndarray:
+    r"""``ln mdot`` of the radiated power at fixed ``g(theta_e)`` (Mahadevan Sect. 5.2).
+
+    At fixed :math:`g` the radiated power :math:`L = Q_{ie} + \delta Q^+` is the quadratic
+    :math:`L = A g\,\dot m^2 + B\,\dot m` with
+
+    .. math::
+
+        A = 1.2\times10^{38}\,c_1^{-2}c_3\,\beta\,r_{\min}^{-1}\alpha^{-2}\,m
+          = 4.8\times10^{37}\,\beta\,\alpha^{-2}\,m, \qquad
+        B = \delta\,9.39\times10^{38}\,\frac{1-\beta}{f}\,c_3\,r_{\min}^{-1}\,m
+          = 9.39\times10^{37}\,\delta\,(1-\beta)\,m \quad (f = 1)
+
+    [erg/s], whose positive root is
+
+    .. math::
+
+        \dot m = \frac{2L}{B + \sqrt{B^2 + 4AgL}}
+               = \frac{2x}{1 + \sqrt{1 + 4xy}}, \qquad x = L/B,\; y = Ag/B,
+
+    formed from the logarithms so that no erg/s-scale product (B reaches 1e45 erg/s at
+    :math:`m = 10^{10}`) is ever built. For :math:`B \to 0` it is Eq. 49,
+    :math:`\dot m = \sqrt{L/Ag}`, and for :math:`Ag \to 0` it is Eq. 50, :math:`\dot m = L/B`.
+
+    Parameters
+    ----------
+    ln_l, ln_a_g, ln_b : array_like, shape ()
+        ``ln L``, ``ln(A g)`` and ``ln B`` with each power in [erg/s].
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``ln mdot`` [dimensionless accretion rate in Eddington units].
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes. Branchless, logs only.
+    """
+    ln_x = ln_l - ln_b
+    ln_y = ln_a_g - ln_b
+    ln_q = 2.0 * _LN2 + ln_x + ln_y
+    return _LN2 + ln_x - jax.nn.softplus(0.5 * jnp.logaddexp(0.0, ln_q))
+
+
+def _adaf_log_heating(
+    t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float, delta: float
+) -> jnp.ndarray:
+    """``ln(Q_ie + delta Q+)`` [erg/s] at ``t_e`` (Mahadevan Eqs. 13, 9, 14)."""
+    return jnp.logaddexp(
+        _adaf_log_q_ie(t_e, m, mdot, alpha, beta), _adaf_log_delta_q_plus(m, mdot, beta, delta)
+    )
+
+
+def _adaf_log_radiated_power(
+    ln_mdot: jnp.ndarray, m: float, alpha: float, beta: float, delta: float
+) -> jnp.ndarray:
+    r"""``ln L_ADAF`` of Sect. 5.2: ``ln(Q_ie + delta Q+)`` at the balance temperature.
+
+    Parameters
+    ----------
+    ln_mdot : array_like, shape ()
+        Natural log of the accretion rate in Eddington units.
+    m, alpha, beta, delta : float
+        Mass, viscosity, gas-to-total pressure ratio, electron viscous-heating fraction.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``ln L_ADAF`` with ``L_ADAF`` in [erg/s]; strictly increasing in ``ln_mdot`` with slope
+        at least one (:math:`Q_{ie} \propto g\,\dot m^2`, :math:`\delta Q^+ \propto \dot m`).
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes; ``T_e`` enters through :func:`_adaf_solve_te_balance`, so the
+    derivatives are the exact nested implicit-function derivatives.
+    """
+    mdot = jnp.exp(ln_mdot)
+    t_e = _adaf_solve_te_balance(m, mdot, alpha, beta, delta)
+    return _adaf_log_heating(t_e, m, mdot, alpha, beta, delta)
+
+
+def _adaf_log_radiated_power_raw(ln_mdot, u_te, m, alpha, beta, delta):
+    """Forward value of :func:`_adaf_log_radiated_power`, warm-started at ``ln T_e = u_te``.
+
+    No derivative rule: used inside the solve of :func:`_adaf_solve_mdot` and for the clip
+    tests. Returns ``(ln L, ln T_e)``.
+    """
+    mdot = jnp.exp(ln_mdot)
+    u_te = _adaf_te_root_raw(m, mdot, alpha, beta, delta, u_te)
+    t_e = jnp.exp(u_te)
+    return _adaf_log_heating(t_e, m, mdot, alpha, beta, delta), u_te
+
+
+def _adaf_solve_mdot(
+    ln_l: jnp.ndarray, m: float, alpha: float, beta: float, delta: float
+) -> jnp.ndarray:
+    """Accretion rate of the radiated power ``exp(ln_l)`` [erg/s], clipped to the ADAF range."""
+    ln_a = _LOG_Q_IE_COEFF + jnp.log(beta) + jnp.log(m) - 2.0 * jnp.log(alpha)
+    ln_b = _LOG_Q_PLUS_COEFF + jnp.log(delta) + jnp.log(1.0 - beta) - jnp.log(_F_ADVECTED)
+    ln_b = ln_b + jnp.log(m)
+    mdot_crit = _MDOT_CRIT_COEFF * alpha**2
+    ln_hi = jnp.log(mdot_crit)
+    ln_lo = jnp.full_like(ln_hi, float(np.log(_MDOT_FLOOR)))
+    dtype = ln_hi.dtype
+    u_te0 = jnp.full_like(ln_hi, float(np.log(_T_START)))
+
+    # Radiated power at mdot_crit (forward value only). L above it clips to mdot_crit; the root of
+    # the monotone ln L(ln mdot) is otherwise inside the bracket, or below the floor.
+    sg = jax.lax.stop_gradient
+    p_fixed = tuple(sg(x) for x in (m, alpha, beta, delta))
+    ln_l_hi, _ = _adaf_log_radiated_power_raw(sg(ln_hi), u_te0, *p_fixed)
+    over = sg(ln_l) >= ln_l_hi
+
+    # Closed form at the g of the starting temperature: the exact root of the quadratic for a
+    # constant g, and the start of the nested solve.
+    ln_g0 = jnp.log(_adaf_g_theta(jnp.asarray(_T_START, dtype)))
+    w0 = _adaf_log_mdot_fixed_g(sg(ln_l), sg(ln_a) + ln_g0, sg(ln_b))
+    w0 = jnp.clip(w0, ln_lo, sg(ln_hi))
+    w0 = jnp.where(over, sg(ln_hi), w0).astype(dtype)
+
+    def _resid(w):
+        return _adaf_log_radiated_power(w, m, alpha, beta, delta) - ln_l
+
+    def _solve(f, w_start):
+        def g(w, u_te):
+            ln_p, u_te = _adaf_log_radiated_power_raw(w, u_te, *p_fixed)
+            return ln_p - sg(ln_l), u_te
+
+        w, _ = _bracketed_secant(
+            g, w_start, u_te0, ln_lo, sg(ln_hi), sign=-1.0, slope0=1.5, frozen=over
+        )
+        return w
+
+    w = jax.lax.custom_root(_resid, w0, _solve, lambda g, y: y / g(jnp.ones_like(y)))
+    # A luminosity below that of the floor leaves the bracket collapsed onto its lower end.
+    under = ~over & (sg(w) <= ln_lo + _FLOOR_SNAP)
+    return jnp.where(over, mdot_crit, jnp.where(under, _MDOT_FLOOR, jnp.exp(w)))
 
 
 def _adaf_mdot_from_lbol(
@@ -921,29 +1173,45 @@ def _adaf_mdot_from_lbol(
 ) -> jnp.ndarray:
     r"""Derive the accretion rate ``mdot`` from the canonical bolometric luminosity.
 
-    Inverts the total ADAF luminosity (Mahadevan Eq. 49, ``mdot > 1e-3 alpha^2``):
+    The radiated power of an ADAF is the electron heating, :math:`L_{\rm ADAF} = Q^- = Q_e^+ =
+    Q_{ie} + \delta Q^+` (Mahadevan Sect. 5.2), evaluated at the electron temperature of the
+    Eq. 8 balance:
 
     .. math::
 
-        L_{\rm ADAF} = 1.2\times10^{38}\,g(\theta_e)\,c_1^{-2}c_3\,\beta\,
-            r_{\min}^{-1}\alpha^{-2}\,m\,\dot m^2
-            = 4.8\times10^{37}\,g(\theta_e)\,\beta\,\alpha^{-2}\,m\,\dot m^2
+        L_{\rm ADAF} = 1.2\times10^{38}\,g(\theta_e)\,c_1^{-2}c_3\,\beta\,r_{\min}^{-1}
+            \alpha^{-2}\,m\,\dot m^2
+          + \delta\,9.39\times10^{38}\,\frac{1-\beta}{f}\,c_3\,r_{\min}^{-1}\,m\,\dot m
+          \qquad \text{(Eqs. 13, 14)},
 
-    (with ``c1=0.5``, ``c3=0.3``, ``r_min=3``). Since ``g(theta_e)`` depends on
-    ``T_e(mdot)``, we iterate a short fixed point (``g`` varies slowly). Keeping
-    ``agn_log_lbol`` as the canonical luminosity knob (deriving ``mdot`` rather
-    than taking it as an independent input) is what makes the ADAF consistent
-    with the disc convention of #846: ``agn_log_ledd`` is retired here.
+    with :math:`g(\theta_e)` from Eq. 11 at :math:`T_e(\dot m)`. Eq. 49 is its limit for
+    :math:`\dot m > 10^{-3}\alpha^2` (the first term dominates; it "also gives the luminosity for
+    the case :math:`\delta = 0`") and Eq. 50 its limit for :math:`\dot m < 10^{-3}\alpha^2` (the
+    second term dominates); the inversion solves the sum, so it holds in both and between.
+    Keeping ``agn_log_lbol`` as the canonical luminosity knob (deriving ``mdot`` rather than
+    taking it as an independent input) is what makes the ADAF consistent with the disc
+    convention: ``agn_log_ledd`` is retired here.
 
-    The result is clipped to ``(0, mdot_crit]`` with ``mdot_crit = 0.28 alpha^2``
-    (Eq. 52): the ADAF solution does not exist above the critical rate.
+    The solve is a safeguarded secant in :math:`\ln\dot m` on :math:`[10^{-8}, \dot m_{\rm crit}]`
+    for the strictly increasing :math:`\ln L_{\rm ADAF}(\ln\dot m)` (slope at least one), with
+    the quadratic root at fixed :math:`g` (:func:`_adaf_log_mdot_fixed_g`) as its start and the
+    :math:`T_e` solve nested inside, warm-started from the previous iterate. It is wrapped in
+    :func:`jax.lax.custom_root`, so derivatives of every order through the nested
+    implicit solves are exact.
+
+    The result is clipped to ``[1e-8, mdot_crit]`` with ``mdot_crit = 0.28 alpha^2`` (Eq. 52):
+    the ADAF solution does not exist above the critical rate. A luminosity above that of
+    ``mdot_crit`` returns ``mdot_crit`` and its derivative is that of ``0.28 alpha^2``.
 
     Parameters
     ----------
     l_bol_erg : array_like
-        ADAF bolometric (radiated) luminosity [erg/s].
+        ADAF bolometric (radiated) luminosity [erg/s]; in :math:`L_\odot` when ``float32``.
     m, alpha, beta, delta : float
         Mass, viscosity, gas-to-total pressure, electron-heating fraction.
+    float32 : bool, optional
+        Take ``l_bol_erg`` in :math:`L_\odot` (so that the :math:`10^{44}` erg/s value never
+        forms in pure float32); the solve works with its logarithm either way.
 
     Returns
     -------
@@ -952,30 +1220,18 @@ def _adaf_mdot_from_lbol(
 
     Notes
     -----
-    **JIT/grad-safe**: yes, fixed 3-step fixed point.
+    **JIT/grad/vmap-safe**: yes; data-dependent loop trip counts only inside the solves of
+    :func:`jax.lax.custom_root`.
 
-    **Approximation**: Eq. 49 sets the radiated power to :math:`Q_{ie}`, which equals the total
-    cooling :math:`Q^-` of the Eq. 8 balance only where :math:`\delta Q^+ \ll Q_{ie}`, i.e.
-    well above the transition accretion rate of Eq. 15. At the default :math:`\delta = 0.1` the
-    omitted :math:`\delta Q^+` is not small against :math:`Q_{ie}` at low ``mdot``, and the
-    derived ``mdot`` is then too high by the factor :math:`(1 + \delta Q^+/Q_{ie})^{1/2}`.
+    **Approximation**: :math:`f = 1` in Eq. 9; the electron temperature carries the
+    approximations of :func:`_adaf_electron_temperature`. The renormalization of the spectrum to
+    ``agn_log_lbol`` in :func:`adaf_scalar_state` then rescales only the simplified spectral
+    shape against the integrated cooling of the balance.
     """
-    mdot_crit = 0.28 * alpha**2
-    # Float32 (#1206): ``coeff`` ~3e46 and ``l_bol_erg`` ~1e44 erg/s both overflow,
-    # but only their ratio (~mdot**2 ~1e-3) is needed. Work in L_sun: ``l_bol_erg``
-    # arrives as ``10**log_lbol`` (L_sun) and ``coeff`` divides by L_sun via a
-    # pre-divided constant, so the sqrt argument stays representable.
+    ln_l = jnp.log(jnp.asarray(l_bol_erg))
     if float32:
-        coeff = (4.8e37 / _LSUN_ERG) * beta * alpha**-2.0 * m
-    else:
-        coeff = 4.8e37 * beta * alpha**-2.0 * m
-    g = 7.0  # high-mdot equilibrium value as initial guess
-    mdot = jnp.sqrt(l_bol_erg / (coeff * g))
-    for _ in range(3):
-        mdot = jnp.clip(mdot, 1e-8, mdot_crit)
-        g = _adaf_g_theta(_adaf_electron_temperature(m, mdot, alpha, beta, delta))
-        mdot = jnp.sqrt(l_bol_erg / (coeff * g))
-    return jnp.clip(mdot, 1e-8, mdot_crit)
+        ln_l = ln_l + _LOG_LSUN_ERG
+    return _adaf_solve_mdot(ln_l, m, alpha, beta, delta)
 
 
 # ── Gauss-Legendre quadrature for the normalization integral ─────────────
@@ -1149,11 +1405,11 @@ def adaf_scalar_state(
 ) -> AdafState:
     r"""Solve the ADAF once: everything :func:`adaf_spectrum` needs that is not a wavelength.
 
-    Derives the accretion rate from the shape luminosity (Mahadevan Eq. 49), solves the
-    electron temperature (the Eq. 8 balance: Eqs. 9, 13, 26, 29, 35), builds the spectrum's
-    break frequencies and amplitudes (Eqs. 21-23, 28, 30), and computes the power of that shape
-    over the model's whole support, so that the spectrum can be normalized without touching
-    any wavelength grid.
+    Derives the accretion rate from the shape luminosity (Mahadevan Sect. 5.2, Eqs. 13, 14),
+    solves the electron temperature (the Eq. 8 balance: Eqs. 9, 13, 26, 29, 35), builds the
+    spectrum's break frequencies and amplitudes (Eqs. 21-23, 28, 30), and computes the power of
+    that shape over the model's whole support, so that the spectrum can be normalized without
+    touching any wavelength grid.
 
     The power is
 
@@ -1213,13 +1469,15 @@ def adaf_scalar_state(
     :func:`_segment_log_power`), so pure float32 gives the same shape as float64 over the
     declared box to 1e-4 pointwise (#2783; ``tests/physics/agn/test_adaf_float32_shape.py``).
 
-    **JIT/grad/vmap-compatible**: yes; pure ``jnp`` with fixed-count unrolled solves and no
-    data-dependent control flow. The runner builds it once per composition and every disc
-    evaluation (caller grid, anchors, 5100 A, budget grids) reads the same state, so the
-    ``T_e`` solves are traced once. ``T_e`` is a smooth function of the inputs (one balance,
-    no regime junction) and its derivatives are exact to every order; the only derivative
-    discontinuity is where the derived ``mdot`` meets its clip at ``mdot_crit`` (Eq. 52) or at
-    the ``1e-8`` floor.
+    **JIT/grad/vmap-compatible**: yes; pure ``jnp``, with the ``mdot`` and ``T_e`` solves as
+    :func:`jax.lax.while_loop` secants inside :func:`jax.lax.custom_root` (data-dependent trip
+    counts, never differentiated through). The runner builds it once per composition and every
+    disc evaluation (caller grid, anchors, 5100 A, budget grids) reads the same state, so the
+    solves are traced once. ``T_e`` has no regime junction and the derivatives through both
+    nested solves are the exact implicit-function derivatives (first and second order
+    tested); the derivative is discontinuous where the derived ``mdot`` meets its clip at
+    ``mdot_crit`` (Eq. 52) or at the ``1e-8`` floor, and by up to 5e-5 in ``ln T_e`` at the
+    :math:`\theta_e = 1` step of the Eq. 28 fit (see :func:`_adaf_electron_temperature`).
 
     Implements the same model as Mahadevan (1997 [1]_); the normalization quadrature is
     tengri's own.
@@ -1365,7 +1623,8 @@ def adaf_spectrum(
     bremsstrahlung tail (flat with an exponential cutoff at :math:`kT_e/h`).
 
     ``agn_log_lbol`` is the canonical ADAF radiated luminosity; the accretion
-    rate ``mdot`` is derived from it (Eq. 49, :func:`_adaf_mdot_from_lbol`) and
+    rate ``mdot`` is derived from it (Sect. 5.2, :func:`_adaf_mdot_from_lbol`: the radiated
+    power is :math:`Q_{ie} + \delta Q^+`, of which Eq. 49 is the high-``mdot`` limit) and
     drives the whole spectrum. The three component *amplitudes* (Eqs. 23 & 30)
     set their relative weights (synchrotron/Compton join continuously at
     :math:`\nu_p`), and the total is renormalized to ``L_bol``, which both fixes
@@ -1412,8 +1671,8 @@ def adaf_spectrum(
     :math:`\int L_\nu d\nu = L_{\rm bol}\times` ``agn_lum_ratio`` over the model's whole
     support. Composed as :func:`adaf_scalar_state` + :func:`adaf_spectrum_from_state`.
 
-    **JIT-compatible**: yes, all-``jnp`` with fixed-count unrolled solves.
-    ``T_e`` is smooth (one balance, no regime junction); the derivative is discontinuous only
+    **JIT-compatible**: yes, all-``jnp`` with the ``while_loop`` solves of
+    :func:`adaf_scalar_state`. ``T_e`` has no regime junction; the derivative is discontinuous
     where the derived ``mdot`` meets its clip.
     Valid in the ADAF regime ``mdot < mdot_crit ~ 0.28 alpha^2``; the derived
     ``mdot`` is clipped there.
