@@ -798,13 +798,19 @@ def _disc_power_native(lnu_native, wave_native):
     from tengri.components.agn._template_grid import native_bolometric_nu
     from tengri.components.agn.disc_cigale import skirtor_disk_spectrum
 
-    wave = jnp.asarray(wave_native)
-    gap = 1.0e-9 if wave.dtype.itemsize >= 8 else 4.0e-7
+    lnu = jnp.asarray(lnu_native)
+    # The working precision is the process's, not that of a template buffer cached in float64:
+    # a node pair 1e-9 apart collapses onto the edge in float32 and leaves a chord across the
+    # preceding template segment (6e-4 of the disc power).
+    default = jnp.asarray(0.0).dtype
+    dtype = lnu.dtype if lnu.dtype.itemsize < default.itemsize else default
+    wave = jnp.asarray(wave_native, dtype=dtype)
+    gap = 1.0e-9 if jnp.dtype(dtype).itemsize >= 8 else 4.0e-7
     edge = _disc_support_edge_aa()
-    extra = jnp.asarray([edge * (1.0 - gap), edge, edge * (1.0 + gap)], dtype=wave.dtype)
+    extra = jnp.asarray([edge * (1.0 - gap), edge, edge * (1.0 + gap)], dtype=dtype)
     wave_e = jnp.sort(jnp.concatenate([wave, extra]))
-    lnu_e = resample_template(wave_e, wave, jnp.asarray(lnu_native), left=0.0, right=0.0)
-    support = (skirtor_disk_spectrum(wave_e / 10.0, delta=0.0) > 0.0).astype(wave.dtype)
+    lnu_e = resample_template(wave_e, wave, lnu.astype(dtype), left=0.0, right=0.0)
+    support = (skirtor_disk_spectrum(wave_e / 10.0, delta=0.0) > 0.0).astype(dtype)
     return native_bolometric_nu(lnu_e * support, wave_e, floor=0.0)
 
 

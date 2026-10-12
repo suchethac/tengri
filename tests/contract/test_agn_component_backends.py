@@ -75,8 +75,17 @@ class TestKD18DiscContract:
         """KD18Disc publishes log_L_agn_disc (angle-integrated) and log_L_agn_disc_los [dex]."""
         component = KD18Disc()
         outputs = {o.name: o for o in component.outputs()}
-        assert set(outputs) == {"log_L_agn_disc", "log_L_agn_disc_los"}
-        assert all(o.units == "dex" for o in outputs.values())
+        assert set(outputs) == {
+            "log_L_agn_disc",
+            "log_L_agn_disc_los",
+            "L_agn_disc_lsun",
+            "L_agn_disc_los_lsun",
+        }
+        assert {k: o.units for k, o in outputs.items() if k.startswith("log_")} == {
+            "log_L_agn_disc": "dex",
+            "log_L_agn_disc_los": "dex",
+        }
+        assert outputs["L_agn_disc_lsun"].units == "Lsun"
 
     def test_kd18_inputs_empty(self):
         """KD18Disc has no required inputs."""
@@ -199,9 +208,10 @@ class TestPowerLawDiscContract:
         """PowerLawDisc publishes log_L_agn_disc [dex]."""
         component = PowerLawDisc()
         outputs = component.outputs()
-        assert len(outputs) == 1
-        assert outputs[0].name == "log_L_agn_disc"
-        assert outputs[0].units == "dex"
+        assert {o.name: o.units for o in outputs} == {
+            "log_L_agn_disc": "dex",
+            "L_agn_disc_lsun": "Lsun",
+        }
 
     def test_powerlaw_predict_shape(self):
         """PowerLawDisc.predict returns valid shapes."""
@@ -285,9 +295,10 @@ class TestSilva04TorusContract:
         """Silva04Torus publishes log_L_agn_torus [dex]."""
         component = Silva04Torus()
         outputs = component.outputs()
-        assert len(outputs) == 1
-        assert outputs[0].name == "log_L_agn_torus"
-        assert outputs[0].units == "dex"
+        assert {o.name: o.units for o in outputs} == {
+            "log_L_agn_torus": "dex",
+            "L_agn_torus_lsun": "Lsun",
+        }
 
     def test_silva04_predict_no_grid(self):
         """Silva04Torus.predict gracefully handles missing grid."""
@@ -370,9 +381,10 @@ class TestCAT3DTorusContract:
         """CAT3DTorus publishes log_L_agn_torus [dex]."""
         component = CAT3DTorus()
         outputs = component.outputs()
-        assert len(outputs) == 1
-        assert outputs[0].name == "log_L_agn_torus"
-        assert outputs[0].units == "dex"
+        assert {o.name: o.units for o in outputs} == {
+            "log_L_agn_torus": "dex",
+            "L_agn_torus_lsun": "Lsun",
+        }
 
     def test_cat3d_predict_no_grid(self):
         """CAT3DTorus.predict gracefully handles missing grid."""

@@ -42,7 +42,11 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
     initial_state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
-        derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "L_agn_bol": L_agn_bol},
+        derived={
+            "sfr": sfr,
+            "log_mstar": jnp.log10(stellar_mass),
+            "log_L_agn_bol": jnp.log10(L_agn_bol),
+        },
     )
 
     # Declared defaults, with the one deliberate departure spelled out. The
@@ -116,7 +120,7 @@ def test_xray_pipeline_preserves_input_state_immutability():
     initial = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
-        derived={"sfr": 1.0, "log_mstar": 10.0, "L_agn_bol": 1e44},
+        derived={"sfr": 1.0, "log_mstar": 10.0, "log_L_agn_bol": 44.0},
     )
     snapshot_intrinsic = initial.sed_intrinsic
     snapshot_derived = dict(initial.derived)
@@ -158,7 +162,7 @@ def test_three_adapter_chain_runs_end_to_end():
         sed_observed=jnp.ones_like(wave) * 1e30,
         derived={
             "L_ir": 1e44,
-            "L_agn_bol": 1e44,
+            "log_L_agn_bol": 44.0,
             "log_mstar": 10.5,  # XRay reads this, exponentiates internally
             "sfr": 5.0,
         },
