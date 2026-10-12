@@ -4,8 +4,12 @@
 
 CLI:
     python analysis/paper1/bma_evidence.py --galaxy 79 --set factorial|named_grid|named_all \
-        [--models key1,key2] [--out analysis/paper1/results/bma_evidence] [--n-restarts 8] \
+        [--models key1,key2] [--route laplace|nss] [--out DIR] [--n-restarts 8] \
         [--seed 0] [--force] [--dry-run] [--max-models N]
+
+``--route laplace`` (default) writes to ``results/bma_evidence``; ``--route nss`` fits
+the same model and data with nested sampling and writes to ``results/bma_evidence_nss``,
+so neither route overwrites the other.
 
 For each model: build the SED model, run MAP with n_restarts keeping the best restart
 and recording max-min loss spread, then run Laplace to get evidence and diagnostics.
@@ -14,7 +18,8 @@ Outputs are saved atomically to JSON and NPZ files.
 JSON fields: galaxy, z, model_key, model_set, weight_sets, components, route, log_evidence,
     map_loss, n_free, newton_decrement, n_clipped_eigenvalues, condition_number,
     valid, n_map_restarts, map_restart_loss_spread, wall_time_s, peak_rss_gb,
-    code_revision, seed, error.
+    code_revision, seed, error. NSS cells (route "nss") add log_evidence_err, n_live,
+    n_live_effective, n_iterations, n_dead, information_nats, ess and null Hessian fields.
 
 NPZ arrays (Laplace draws, n<=500): log_stellar_mass_formed, log_stellar_mass_survived,
     log_sfr_100myr, log_sfr_10myr.
@@ -48,6 +53,7 @@ if str(ANALYSIS_DIR) not in sys.path:
 
 from paper1._atomic_io import _atomic_replace_write
 from paper1._bma_keys import (
+    NSS_MAX_LOG_EVIDENCE_ERR,
     enumerate_factorial,
     enumerate_named_all,
     enumerate_named_grid,
@@ -66,6 +72,32 @@ from paper1.config_metadata import XLIKE_CONFIGS
 logger = logging.getLogger(__name__)
 
 _SYSTEMATIC_FLOOR_FRAC = 0.05
+
+ROUTES = ("laplace", "nss")
+DEFAULT_OUT = {
+    "laplace": "analysis/paper1/results/bma_evidence",
+    "nss": "analysis/paper1/results/bma_evidence_nss",
+}
+
+#: Settings validated against 11 cells (seed-to-seed scatter 0.1-0.2 nats). The
+#: iteration cap and live-set span guards inside the NSS backend raise by design and
+#: are not weakened here.
+NSS_FIT_KWARGS = {
+    "preset": "accurate",
+    "n_live": 500,
+    "num_delete": 50,
+    "max_iterations": 10000,
+}
+
+#: NSS diagnostics copied into an NSS cell (key in the cell -> key in posterior.diagnostics).
+_NSS_DIAGNOSTIC_FIELDS = {
+    "n_live": "n_live",
+    "n_live_effective": "n_live_effective",
+    "n_iterations": "n_iterations",
+    "n_dead": "n_dead",
+    "information_nats": "information_nats",
+    "ess": "ess",
+}
 
 
 def code_revision() -> str | None:
@@ -106,7 +138,7 @@ def peak_rss_gb() -> float | None:
 #: module's own import surface stays free of it.
 _DERIVED_CHUNK = 25
 
-#: Laplace draws used for the derived quantities NPZ (mass/SFR posteriors).
+#: Posterior draws used for the derived quantities NPZ (mass/SFR posteriors).
 #: The Laplace fit itself still draws its full sample count (2000, tengri's
 #: default); this only caps how many of those draws get pushed through the
 #: derived-property forward pass.
@@ -224,6 +256,8 @@ def build_cell_result(
     model_dict: dict[str, str],
     components: dict[str, str] | None = None,
     laplace=None,
+    nss=None,
+    route: str = "laplace",
     map_loss: float | None = None,
     n_free: int | None = None,
     n_map_restarts: int = 0,
@@ -237,7 +271,10 @@ def build_cell_result(
 
     ``laplace`` is any object with ``log_evidence`` and a ``diagnostics`` mapping
     (``newton_decrement``, ``n_clipped_eigenvalues``, ``condition_number``), or
-    ``None`` for a cell that failed before Laplace. The model key, ``model_set``
+    ``None`` for a cell that failed before Laplace. ``nss`` is the nested-sampling
+    counterpart (``log_evidence`` and a ``diagnostics`` mapping with
+    ``log_evidence_err`` and the NSS bookkeeping); passing it makes an
+    ``route: "nss"`` cell whose Hessian fields are ``null``. The model key, ``model_set``
     and ``weight_sets`` all come from ``_bma_keys``, so the combiner reads the
     same identity the runner wrote. A missing diagnostic stays ``null`` and makes
     the cell invalid.
@@ -254,6 +291,12 @@ def build_cell_result(
         Components to record; defaults to ``model_dict``.
     laplace : object, optional
         Laplace posterior (``log_evidence``, ``diagnostics``).
+    nss : object, optional
+        Nested-sampling posterior (``log_evidence``, ``diagnostics``); mutually
+        exclusive with ``laplace``.
+    route : {"laplace", "nss"}
+        Route recorded on a cell that carries neither posterior (a failed fit);
+        a cell with ``nss`` is always ``"nss"``.
     map_loss : float, optional
         Best MAP loss [nats].
     n_free : int, optional
@@ -276,8 +319,14 @@ def build_cell_result(
     dict
         The cell JSON dict.
     """
+    if laplace is not None and nss is not None:
+        raise ValueError("build_cell_result takes laplace or nss, not both")
+    if route not in ROUTES:
+        raise ValueError(f"route must be one of {ROUTES}; got {route!r}")
+    route = "nss" if nss is not None else route
     key = make_model_key(model_dict)
     log_evidence_out = None
+    nss_fields: dict = {}
     newton_decrement = None
     n_clipped = None
     condition_number = None
@@ -301,6 +350,8 @@ def build_cell_result(
             and n_clipped == 0
             and error is None
         )
+    if nss is not None:
+        log_evidence_out, valid, nss_fields = _nss_evidence_fields(nss, error)
     return {
         "galaxy": int(galaxy_id),
         "z": float(z),
@@ -308,8 +359,9 @@ def build_cell_result(
         "model_set": "named" if "config" in model_dict else "factorial",
         "weight_sets": sorted(set_membership(key)),
         "components": dict(model_dict if components is None else components),
-        "route": "laplace",
+        "route": route,
         "log_evidence": log_evidence_out,
+        **nss_fields,
         "map_loss": None if map_loss is None else float(map_loss),
         "n_free": n_free,
         "newton_decrement": newton_decrement,
@@ -327,6 +379,35 @@ def build_cell_result(
         "stage_times_s": {} if stage_times is None else stage_times,
         "error": error,
     }
+
+
+_NSS_INT_FIELDS = frozenset({"n_live", "n_iterations", "n_dead"})
+
+
+def _nss_evidence_fields(nss, error: str | None) -> tuple[float | None, bool, dict]:
+    """Evidence, validity and NSS bookkeeping fields of an NSS cell.
+
+    Valid means a finite ln Z with a finite ``log_evidence_err`` within
+    ``NSS_MAX_LOG_EVIDENCE_ERR`` and no error. The Laplace-only diagnostics
+    (Newton decrement, clipped eigenvalues, condition number) do not exist for
+    nested sampling; ``build_cell_result`` leaves them ``null``, never filled in.
+    """
+    diag = getattr(nss, "diagnostics", None) or {}
+    log_evidence = float(nss.log_evidence)
+    err_raw = diag.get("log_evidence_err")
+    err = float(err_raw) if err_raw is not None else None
+    finite = bool(np.isfinite(log_evidence))
+    err_ok = err is not None and bool(np.isfinite(err)) and err <= NSS_MAX_LOG_EVIDENCE_ERR
+    fields = {
+        "log_evidence_err": err if err is not None and np.isfinite(err) else None,
+    }
+    for cell_key, diag_key in _NSS_DIAGNOSTIC_FIELDS.items():
+        value = diag.get(diag_key)
+        if value is None:
+            fields[cell_key] = None
+        else:
+            fields[cell_key] = int(value) if cell_key in _NSS_INT_FIELDS else float(value)
+    return (log_evidence if finite else None), bool(finite and err_ok and error is None), fields
 
 
 def write_cell(out_dir: Path, result: dict, npz_data: dict | None) -> tuple[Path, Path | None]:
@@ -355,6 +436,125 @@ def write_cell(out_dir: Path, result: dict, npz_data: dict | None) -> tuple[Path
     return json_path, written_npz
 
 
+def _fit_laplace(forward, data, n_restarts, seed, cell_key, stage_times):
+    """MAP with ``n_restarts`` then Laplace about the best restart.
+
+    Returns ``(fields, posterior)``: ``fields`` are the ``build_cell_result`` keywords
+    describing the fit (MAP loss, restart count and spread, or the error), and
+    ``posterior`` is the Laplace posterior, or ``None`` when the fit failed.
+    """
+    import jax
+
+    # MAP with n_restarts: run multiple times and track losses
+    # Note: profile_mass=False because evidence must integrate log_total_mass under
+    # its Uniform(8, 12.5) prior. NUTS profiling is a sampler optimization, not for evidence.
+    map_losses = []
+    map_restart_times_s = []
+    best_map_posterior = None
+    best_loss = float("inf")
+
+    # Separate forward.fit(method="map") calls, not one n_restarts=n_restarts
+    # call: tengri caches the compiled loss/gradient function on the SEDModel
+    # object itself (fitter.py's _get_or_build_loss_fn/_get_or_build_grad_fn,
+    # keyed by _engine_cache_key(), which excludes the PRNG key), so repeated
+    # calls on this same sed_model/data already share one compiled kernel --
+    # confirmed against the pilot log (bma_pilot.log): its 8 restarts show a
+    # uniform ~80-115ms per scipy evaluation with no "expensive first restart"
+    # outlier, and their printed times already exclude compile (map_dispatch's
+    # _run_map_scipy warms up grad_fn before starting its own timer). Switching
+    # to one n_restarts=n call would also lose the per-restart final_loss list
+    # that map_restart_loss_spread needs: the shared multistart path
+    # (_run_map_multistart_scipy) only returns the winning restart's
+    # diagnostics, not every restart's. map_restarts_s below times the outer
+    # forward.fit() boundary (before tengri's own warmup-exclusion), so a real
+    # first-compile cost on this box would still show up as an outlier here.
+    for restart_idx in range(n_restarts):
+        restart_seed = seed + restart_idx
+        t_restart = time.perf_counter()
+        try:
+            key = jax.random.PRNGKey(restart_seed)
+            # Use ForwardModel.fit like fit_one.py (line 1086)
+            # profile_mass=False: evidence integrates all parameters under their priors
+            posterior = forward.fit(data, key=key, method="map", profile_mass=False)
+            loss = float(posterior.diagnostics.get("final_loss", np.inf))
+            map_losses.append(loss)
+            if loss < best_loss:
+                best_loss = loss
+                best_map_posterior = posterior
+        except Exception as e:
+            logger.warning(f"{cell_key} MAP restart {restart_idx}: {e}")
+            continue
+        finally:
+            elapsed = time.perf_counter() - t_restart
+            map_restart_times_s.append(elapsed)
+            logger.info(
+                "%s MAP restart %d/%d: %.2fs", cell_key, restart_idx + 1, n_restarts, elapsed
+            )
+    stage_times["map_restarts_s"] = map_restart_times_s
+
+    if best_map_posterior is None:
+        return {
+            "n_map_restarts": len(map_losses),
+            "error": f"MAP failed on all {n_restarts} restarts",
+        }, None
+
+    map_restart_loss_spread = None
+    if len(map_losses) > 1:
+        map_restart_loss_spread = float(np.max(map_losses) - np.min(map_losses))
+
+    # Laplace evidence from best MAP. n_samples is left at tengri's default
+    # (2000, backends/laplace.py's run_laplace) -- not reduced here.
+    t0 = time.perf_counter()
+    try:
+        key = jax.random.PRNGKey(seed + n_restarts)
+        posterior = forward.fit(
+            data, key=key, method="laplace", init_from=best_map_posterior, profile_mass=False
+        )
+    except Exception as e:
+        stage_times["laplace_s"] = time.perf_counter() - t0
+        logger.error(f"{cell_key} Laplace failed: {e}")
+        return {
+            "map_loss": best_loss,
+            "n_map_restarts": len(map_losses),
+            "map_restart_loss_spread": map_restart_loss_spread,
+            "error": f"Laplace failed: {e}",
+        }, None
+    stage_times["laplace_s"] = time.perf_counter() - t0
+    logger.info("%s Laplace: %.2fs", cell_key, stage_times["laplace_s"])
+    return {
+        "map_loss": best_loss,
+        "n_map_restarts": len(map_losses),
+        "map_restart_loss_spread": map_restart_loss_spread,
+    }, posterior
+
+
+def _fit_nss(forward, data, seed, cell_key, stage_times):
+    """Nested-sampling evidence on the same model and data as the Laplace route.
+
+    Returns ``(fields, posterior)`` like ``_fit_laplace``. The NSS backend's own
+    guards (iteration cap, live-set span) raise by design; the raise is recorded as
+    the cell's ``error`` and the cell is invalid, never retried with weaker settings.
+    """
+    import jax
+
+    t0 = time.perf_counter()
+    try:
+        posterior = forward.fit(
+            data,
+            key=jax.random.PRNGKey(seed),
+            method="nss",
+            profile_mass=False,
+            **NSS_FIT_KWARGS,
+        )
+    except Exception as e:
+        stage_times["nss_s"] = time.perf_counter() - t0
+        logger.error(f"{cell_key} NSS failed: {e}")
+        return {"error": f"NSS failed: {e}"}, None
+    stage_times["nss_s"] = time.perf_counter() - t0
+    logger.info("%s NSS: %.2fs", cell_key, stage_times["nss_s"])
+    return {}, posterior
+
+
 def fit_one_model(
     galaxy_id: int,
     model_dict: dict[str, str],
@@ -364,8 +564,14 @@ def fit_one_model(
     sigma: np.ndarray,
     n_restarts: int,
     seed: int,
+    route: str = "laplace",
 ) -> tuple[dict, dict | None]:
-    """Fit MAP and Laplace evidence for one model on one galaxy.
+    """Fit the evidence (Laplace or nested sampling) for one model on one galaxy.
+
+    ``route="laplace"`` runs an ``n_restarts`` MAP and a Laplace approximation about
+    the best restart; ``route="nss"`` runs nested sampling on the identical model and
+    data (``n_restarts`` unused). Everything else, including the derived-quantity
+    draws, is shared.
 
     Uses same systematic error floor (5%) and ForwardModel path as fit_one.py.
     Returns:
@@ -380,6 +586,8 @@ def fit_one_model(
 
     from tengri import Data, ForwardModel, Observation, Photometry
 
+    if route not in ROUTES:
+        raise ValueError(f"route must be one of {ROUTES}; got {route!r}")
     jax.config.update("jax_enable_x64", True)
 
     started = time.time()
@@ -460,98 +668,25 @@ def fit_one_model(
         stage_times["forward_build_s"] = time.perf_counter() - t0
         logger.info("%s forward build: %.2fs", cell_key, stage_times["forward_build_s"])
 
-        # MAP with n_restarts: run multiple times and track losses
-        # Note: profile_mass=False because evidence must integrate log_total_mass under
-        # its Uniform(8, 12.5) prior. NUTS profiling is a sampler optimization, not for evidence.
-        map_losses = []
-        map_restart_times_s = []
-        best_map_posterior = None
-        best_loss = float("inf")
-
-        # Separate forward.fit(method="map") calls, not one n_restarts=n_restarts
-        # call: tengri caches the compiled loss/gradient function on the SEDModel
-        # object itself (fitter.py's _get_or_build_loss_fn/_get_or_build_grad_fn,
-        # keyed by _engine_cache_key(), which excludes the PRNG key), so repeated
-        # calls on this same sed_model/data already share one compiled kernel --
-        # confirmed against the pilot log (bma_pilot.log): its 8 restarts show a
-        # uniform ~80-115ms per scipy evaluation with no "expensive first restart"
-        # outlier, and their printed times already exclude compile (map_dispatch's
-        # _run_map_scipy warms up grad_fn before starting its own timer). Switching
-        # to one n_restarts=n call would also lose the per-restart final_loss list
-        # that map_restart_loss_spread needs: the shared multistart path
-        # (_run_map_multistart_scipy) only returns the winning restart's
-        # diagnostics, not every restart's. map_restarts_s below times the outer
-        # forward.fit() boundary (before tengri's own warmup-exclusion), so a real
-        # first-compile cost on this box would still show up as an outlier here.
-        for restart_idx in range(n_restarts):
-            restart_seed = seed + restart_idx
-            t_restart = time.perf_counter()
-            try:
-                key = jax.random.PRNGKey(restart_seed)
-                # Use ForwardModel.fit like fit_one.py (line 1086)
-                # profile_mass=False: evidence integrates all parameters under their priors
-                posterior = forward.fit(data, key=key, method="map", profile_mass=False)
-                loss = float(posterior.diagnostics.get("final_loss", np.inf))
-                map_losses.append(loss)
-                if loss < best_loss:
-                    best_loss = loss
-                    best_map_posterior = posterior
-            except Exception as e:
-                logger.warning(f"{cell_key} MAP restart {restart_idx}: {e}")
-                continue
-            finally:
-                elapsed = time.perf_counter() - t_restart
-                map_restart_times_s.append(elapsed)
-                logger.info(
-                    "%s MAP restart %d/%d: %.2fs", cell_key, restart_idx + 1, n_restarts, elapsed
-                )
-        stage_times["map_restarts_s"] = map_restart_times_s
-
-        if best_map_posterior is None:
-            return build_cell_result(
-                galaxy_id=galaxy_id,
-                z=z,
-                model_dict=model_dict,
-                components=components_to_report,
-                n_free=n_free,
-                n_map_restarts=len(map_losses),
-                started=started,
-                stage_times=stage_times,
-                seed=seed,
-                error=f"MAP failed on all {n_restarts} restarts",
-            ), None
-
-        map_restart_loss_spread = None
-        if len(map_losses) > 1:
-            map_restart_loss_spread = float(np.max(map_losses) - np.min(map_losses))
-
-        # Laplace evidence from best MAP. n_samples is left at tengri's default
-        # (2000, backends/laplace.py's run_laplace) -- not reduced here.
-        t0 = time.perf_counter()
-        try:
-            key = jax.random.PRNGKey(seed + n_restarts)
-            laplace_posterior = forward.fit(
-                data, key=key, method="laplace", init_from=best_map_posterior, profile_mass=False
+        common = {
+            "galaxy_id": galaxy_id,
+            "z": z,
+            "model_dict": model_dict,
+            "components": components_to_report,
+            "n_free": n_free,
+            "started": started,
+            "stage_times": stage_times,
+            "seed": seed,
+            "route": route,
+        }
+        if route == "nss":
+            fit_fields, posterior = _fit_nss(forward, data, seed, cell_key, stage_times)
+        else:
+            fit_fields, posterior = _fit_laplace(
+                forward, data, n_restarts, seed, cell_key, stage_times
             )
-        except Exception as e:
-            stage_times["laplace_s"] = time.perf_counter() - t0
-            logger.error(f"{cell_key} Laplace failed: {e}")
-            return build_cell_result(
-                galaxy_id=galaxy_id,
-                z=z,
-                model_dict=model_dict,
-                components=components_to_report,
-                map_loss=best_loss,
-                n_free=n_free,
-                n_map_restarts=len(map_losses),
-                map_restart_loss_spread=map_restart_loss_spread,
-                started=started,
-                stage_times=stage_times,
-                seed=seed,
-                error=f"Laplace failed: {e}",
-            ), None
-        stage_times["laplace_s"] = time.perf_counter() - t0
-        logger.info("%s Laplace: %.2fs", cell_key, stage_times["laplace_s"])
+        if posterior is None:
+            return build_cell_result(**common, **fit_fields), None
 
         # Diagnostics, validity and log_evidence nulling all live in
         # build_cell_result (a missing diagnostic stays null and makes the cell invalid).
@@ -563,9 +698,9 @@ def fit_one_model(
         # through one compiled program -- was one of the named suspects.
         npz_data = None
         t0 = time.perf_counter()
-        if laplace_posterior.samples is not None:
+        if posterior.samples is not None:
             try:
-                samples = laplace_posterior.samples
+                samples = posterior.samples
                 idx = _draw_indices(samples, _MAX_DERIVED_DRAWS)
                 wanted = ("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr")
                 available = tuple(n for n in wanted if n in sed_model.available_properties)
@@ -598,25 +733,16 @@ def fit_one_model(
         logger.info("%s derived draws: %.2fs", cell_key, stage_times["derived_draws_s"])
 
         result = build_cell_result(
-            galaxy_id=galaxy_id,
-            z=z,
-            model_dict=model_dict,
-            components=components_to_report,
-            laplace=laplace_posterior,
-            map_loss=best_loss,
-            n_free=n_free,
-            n_map_restarts=len(map_losses),
-            map_restart_loss_spread=map_restart_loss_spread,
-            started=started,
-            stage_times=stage_times,
-            seed=seed,
+            **common,
+            **fit_fields,
+            **{"nss" if route == "nss" else "laplace": posterior},
         )
 
         # Clear JAX/tengri caches after model (issue 5)
         with contextlib.suppress(Exception):
             jax.clear_caches()
         # Delete model objects to free memory
-        del sed_model, forward, data, laplace_posterior, best_map_posterior
+        del sed_model, forward, data, posterior
 
         return result, npz_data
 
@@ -632,13 +758,16 @@ def fit_one_model(
             started=started,
             stage_times=stage_times,
             seed=seed,
+            route=route,
             error=str(e),
         ), None
 
 
 def main():
     """CLI entry point."""
-    parser = argparse.ArgumentParser(description="Compute Laplace evidence for BMA models")
+    parser = argparse.ArgumentParser(
+        description="Compute evidence (Laplace or NSS) for BMA models"
+    )
     parser.add_argument("--galaxy", type=int, required=True, help="Galaxy ID")
     parser.add_argument(
         "--set",
@@ -648,9 +777,16 @@ def main():
     )
     parser.add_argument("--models", help="Comma-separated model keys to limit (default: all)")
     parser.add_argument(
+        "--route",
+        choices=ROUTES,
+        default="laplace",
+        help="Evidence estimator: MAP + Laplace, or nested sampling (NSS)",
+    )
+    parser.add_argument(
         "--out",
-        default="analysis/paper1/results/bma_evidence",
-        help="Output directory",
+        default=None,
+        help="Output directory (default: results/bma_evidence, or results/bma_evidence_nss "
+        "for --route nss)",
     )
     parser.add_argument("--n-restarts", type=int, default=8, help="Number of MAP restarts")
     parser.add_argument("--seed", type=int, default=0, help="PRNG seed")
@@ -671,6 +807,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.out is None:
+        args.out = DEFAULT_OUT[args.route]
 
     logging.basicConfig(
         level=logging.INFO,
@@ -742,6 +880,7 @@ def main():
             sigma,
             n_restarts=args.n_restarts,
             seed=args.seed,
+            route=args.route,
         )
 
         # NPZ first, then JSON, each atomic; write_cell records the write time

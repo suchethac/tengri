@@ -10,16 +10,24 @@
 # # Bayesian model averaging
 #
 # Each galaxy is fit under every model in a set, and the models are weighted by
-# their evidence. The evidence of one model is ln Z from an eight-start MAP
-# optimization followed by a Laplace approximation at the best optimum. The
-# stellar mass is integrated under its prior rather than profiled out, and the
-# flux errors carry a 5% systematic floor.
+# their evidence. In every case the stellar mass is integrated under its prior
+# rather than profiled out, and the flux errors carry a 5% systematic floor.
 #
-# A model's evidence is valid when ln Z is finite, the Newton decrement at the
-# optimum is at most 0.1, and the Hessian has no clipped eigenvalues. Invalid
-# models are left out of the average. Within each weight set the model prior is
-# flat, so the weights are proportional to Z (a softmax of ln Z): valid models do
-# not contribute equally, and one model with a much higher evidence dominates.
+# The two named sets take their evidence from nested sampling (500 live points),
+# which integrates the full posterior; ln Z carries the sampler's error, and the
+# weights carry the spread those errors imply. A nested-sampling evidence is
+# valid when ln Z is finite and its error is at most 0.5 nats. The 100-model
+# factorial set takes its evidence from a Laplace approximation at the best of
+# eight MAP optima, valid when ln Z is finite, the Newton decrement at the optimum
+# is at most 0.1, and the Hessian has no clipped eigenvalues. The Laplace
+# approximation misses posterior mass where the posterior has more than one mode,
+# so the factorial weights are read as an approximation and its axis marginals
+# as qualitative.
+#
+# Invalid models are left out of the average. Within each weight set the model
+# prior is flat, so the weights are proportional to Z (a softmax of ln Z): valid
+# models do not contribute equally, and one model with a much higher evidence
+# dominates.
 #
 # Three weight sets are averaged separately:
 #
@@ -29,9 +37,8 @@
 #   5 SSP grids, and 4 attenuation laws. Axis marginals are compared with the
 #   marginals the flat model prior implies.
 #
-# A galaxy is flagged close when its largest weight in a set is below 0.9. The
-# model choice is then not settled by the evidence, and those galaxies are the
-# candidates for a nested-sampling spot-check.
+# A galaxy is flagged close when its largest weight in a set is below 0.9: the
+# model choice is then not settled by the evidence.
 
 # %%
 import json
@@ -59,7 +66,8 @@ if not BMA_SUMMARY.is_file() or not BMA_EVIDENCE_DIR.is_dir():
     print(
         f"No BMA summary in {BMA_SUMMARY} or no evidence in {BMA_EVIDENCE_DIR}.\n"
         "Compute and combine evidence with:\n"
-        "  python -m analysis.paper1.bma_evidence --galaxy <id> ...\n"
+        "  python -m analysis.paper1.bma_evidence --route nss --galaxy <id> --set named_all\n"
+        "  python -m analysis.paper1.bma_evidence --route laplace --galaxy <id> --set factorial\n"
         "  python -m analysis.paper1.bma_combine\n"
         "and re-run. Skipping the BMA figures."
     )
@@ -68,7 +76,8 @@ if not BMA_SUMMARY.is_file() or not BMA_EVIDENCE_DIR.is_dir():
 summary = json.loads(BMA_SUMMARY.read_text())
 galaxies = summary["galaxies"]
 SETS = ("named_grid", "named_all", "factorial")
-print(f"{summary['n_galaxies']} galaxies; route: {summary['route']}; {summary['model_prior']}")
+routes = ", ".join(f"{s}: {r}" for s, r in summary.get("route_by_set", {}).items())
+print(f"{summary['n_galaxies']} galaxies; evidence by set: {routes}; {summary['model_prior']}")
 
 # %% [markdown]
 # ## Models and weights per galaxy
@@ -112,7 +121,7 @@ for name in SETS:
         print(f"  {key}: {n} galaxies ({'; '.join(sorted(excluded.get(key, ())))})")
 
 # %% [markdown]
-# ## Galaxies for a nested-sampling spot-check
+# ## Galaxies whose model choice is not settled
 #
 # Galaxies whose largest weight is below 0.9 in a set.
 

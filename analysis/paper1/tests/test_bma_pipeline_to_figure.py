@@ -82,6 +82,11 @@ def _laplace(log_z: float, newton: float = 0.01):
     return SimpleNamespace(log_evidence=log_z, diagnostics=diagnostics)
 
 
+def _nss(log_z: float, err: float = 0.1):
+    diagnostics = {"log_evidence_err": err, "n_live": 500, "n_live_effective": 480.0}
+    return SimpleNamespace(log_evidence=log_z, diagnostics=diagnostics)
+
+
 def _npz(seed: int, n: int = 30) -> dict[str, np.ndarray]:
     rng = np.random.default_rng(seed)
     return {
@@ -92,12 +97,14 @@ def _npz(seed: int, n: int = 30) -> dict[str, np.ndarray]:
     }
 
 
-def _write_cells(evidence_dir: Path) -> None:
+def _write_cells(evidence_dir: Path, nss_dir: Path) -> None:
     """Write every galaxy's cells through the runner's assembler and writer."""
     models = bk.enumerate_named_all() + bk.enumerate_factorial()
     for galaxy in GALAXIES:
         gal_dir = evidence_dir / str(galaxy)
         gal_dir.mkdir(parents=True)
+        nss_gal_dir = nss_dir / str(galaxy)
+        nss_gal_dir.mkdir(parents=True)
         rng = np.random.default_rng(galaxy)
         for i, model_dict in enumerate(models):
             if galaxy == NO_FACTORIAL_GALAXY and "config" not in model_dict:
@@ -105,15 +112,17 @@ def _write_cells(evidence_dir: Path) -> None:
             key = bk.model_key(model_dict)
             invalid = galaxy == INVALID_GALAXY and key == INVALID_MODEL
             log_z = -1000.0 - 6.0 * rng.random() * (1 + i % 5)
+            named = "config" in model_dict
             result = build_cell_result(
                 galaxy_id=galaxy,
                 z=1.0,
                 model_dict=model_dict,
-                laplace=_laplace(log_z, newton=5.0 if invalid else 0.01),
+                laplace=None if named else _laplace(log_z),
+                nss=_nss(log_z, err=5.0 if invalid else 0.1) if named else None,
                 started=time.time(),
                 seed=0,
             )
-            write_cell(gal_dir, result, _npz(1000 * galaxy + i))
+            write_cell(nss_gal_dir if named else gal_dir, result, _npz(1000 * galaxy + i))
 
 
 def _run_fig11(summary_path: Path, out: Path, sidecar: Path):
@@ -144,8 +153,15 @@ def pipeline(tmp_path_factory):
     """(summary dict, summary path, out PDF, sidecar dict, subprocess result)."""
     root = tmp_path_factory.mktemp("bma_pipeline")
     evidence_dir = root / "bma_evidence"
-    _write_cells(evidence_dir)
-    summary = combine_bma(evidence_dir, root / "fits", root / "fits_xlike", n_draws=200, seed=0)
+    _write_cells(evidence_dir, root / "bma_evidence_nss")
+    summary = combine_bma(
+        evidence_dir,
+        root / "fits",
+        root / "fits_xlike",
+        n_draws=200,
+        seed=0,
+        nss_evidence_dir=root / "bma_evidence_nss",
+    )
     summary_path = root / "bma_summary.json"
     summary_path.write_text(json.dumps(summary))
     out, data = root / "fig11_bma.pdf", root / "fig11_bma.json"
@@ -184,7 +200,9 @@ def test_invalid_cell_is_hatched_and_excluded(pipeline):
     _, _, _, sidecar, _ = pipeline
     assert [INVALID_MODEL, INVALID_GALAXY] in sidecar["hatched_weight_cells"]
     assert len(sidecar["hatched_weight_cells"]) == 1
-    assert [INVALID_MODEL, "newton_decrement=5.0"] in sidecar["excluded_models"]["named_all"]
+    assert [INVALID_MODEL, "log_evidence_err=5.0 (limit 0.5)"] in sidecar["excluded_models"][
+        "named_all"
+    ]
 
 
 def test_galaxy_without_factorial_set_is_a_hatched_column(pipeline):

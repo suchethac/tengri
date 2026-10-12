@@ -51,6 +51,17 @@ def _laplace(log_z: float, newton: float | None = 0.01, clipped: int | None = 0)
     return SimpleNamespace(log_evidence=log_z, diagnostics=diagnostics)
 
 
+def _nss(log_z: float, err: float | None = 0.1):
+    diagnostics = {"n_live": 500, "n_live_effective": 480.0, "n_iterations": 900, "n_dead": 45000}
+    if err is not None:
+        diagnostics["log_evidence_err"] = err
+    return SimpleNamespace(log_evidence=log_z, diagnostics=diagnostics)
+
+
+def _nss_dir(tmp_path: Path) -> Path:
+    return tmp_path / "nss" / str(GALAXY)
+
+
 def _npz(seed: int, n: int = 30) -> dict[str, np.ndarray]:
     rng = np.random.default_rng(seed)
     return {
@@ -61,12 +72,18 @@ def _npz(seed: int, n: int = 30) -> dict[str, np.ndarray]:
     }
 
 
-def _write_runner_cell(out_dir: Path, model: dict, laplace, seed: int = 0) -> dict:
+def _write_runner_cell(out_dir: Path, model: dict, evidence, seed: int = 0) -> dict:
+    """Write a cell through the runner; named models are NSS cells in the NSS directory."""
+    named = "config" in model
+    if named:
+        out_dir = _nss_dir(out_dir.parent.parent)
+        out_dir.mkdir(parents=True, exist_ok=True)
     result = build_cell_result(
         galaxy_id=GALAXY,
         z=1.0,
         model_dict=model,
-        laplace=laplace,
+        laplace=None if named else evidence,
+        nss=evidence if named else None,
         map_loss=10.0,
         n_free=8,
         n_map_restarts=2,
@@ -79,7 +96,14 @@ def _write_runner_cell(out_dir: Path, model: dict, laplace, seed: int = 0) -> di
 
 
 def _combine(tmp_path: Path) -> dict:
-    return combine_bma(tmp_path / "ev", tmp_path / "fits", tmp_path / "fits_x", 40, 0)
+    return combine_bma(
+        tmp_path / "ev",
+        tmp_path / "fits",
+        tmp_path / "fits_x",
+        40,
+        0,
+        nss_evidence_dir=tmp_path / "nss",
+    )
 
 
 def _models_in(set_summary: dict) -> dict[str, dict]:
@@ -100,8 +124,8 @@ def test_named_xlike_and_factorial_cells_land_in_their_sets(tmp_path: Path) -> N
     }
     fact_b = dict(fact_a, sfh="lnorm")
     written = {
-        "config-I": _write_runner_cell(ev, grid_i, _laplace(5.0), 1),
-        "xlike-cigale_like": _write_runner_cell(ev, xlike, _laplace(4.0), 2),
+        "config-I": _write_runner_cell(ev, grid_i, _nss(5.0), 1),
+        "xlike-cigale_like": _write_runner_cell(ev, xlike, _nss(4.0), 2),
         "fa": _write_runner_cell(ev, fact_a, _laplace(3.0), 3),
         "fb": _write_runner_cell(ev, fact_b, _laplace(3.0), 4),
     }
@@ -136,7 +160,8 @@ def test_every_model_in_the_space_lands_in_exactly_its_sets(tmp_path: Path) -> N
     models = bk.enumerate_factorial() + bk.enumerate_named_all()
     assert len(models) == 110
     for i, model in enumerate(models):
-        _write_runner_cell(ev, model, _laplace(float(i % 7)), seed=i)
+        evidence = _nss(float(i % 7)) if "config" in model else _laplace(float(i % 7))
+        _write_runner_cell(ev, model, evidence, seed=i)
 
     summary = _combine(tmp_path)
     sets = summary["galaxies"][str(GALAXY)]["sets"]
@@ -174,8 +199,8 @@ def test_every_model_in_the_space_lands_in_exactly_its_sets(tmp_path: Path) -> N
 def test_invalid_cell_is_counted_in_each_of_its_sets(tmp_path: Path) -> None:
     ev = tmp_path / "ev" / str(GALAXY)
     ev.mkdir(parents=True)
-    _write_runner_cell(ev, {"config": "II"}, _laplace(2.0), 1)
-    bad = _write_runner_cell(ev, {"config": "III"}, _laplace(9.0, newton=0.5), 2)
+    _write_runner_cell(ev, {"config": "II"}, _nss(2.0), 1)
+    bad = _write_runner_cell(ev, {"config": "III"}, _nss(9.0, err=2.0), 2)
     assert bad["valid"] is False and bad["log_evidence"] == 9.0
 
     summary = _combine(tmp_path)
@@ -184,23 +209,23 @@ def test_invalid_cell_is_counted_in_each_of_its_sets(tmp_path: Path) -> None:
     assert summary["galaxies_per_model"]["named_grid"] == {"config-II": 1}
     grid = _models_in(summary["galaxies"][str(GALAXY)]["sets"]["named_grid"])
     assert grid["config-III"]["weight"] is None
-    assert "newton_decrement" in grid["config-III"]["excluded_reason"]
+    assert "log_evidence_err" in grid["config-III"]["excluded_reason"]
     assert grid["config-II"]["weight"] == pytest.approx(1.0)
 
 
 def test_missing_diagnostic_makes_the_cell_invalid(tmp_path: Path) -> None:
     ev = tmp_path / "ev" / str(GALAXY)
     ev.mkdir(parents=True)
-    result = _write_runner_cell(ev, {"config": "I"}, _laplace(1.0, newton=None))
-    assert result["valid"] is False and result["newton_decrement"] is None
+    result = _write_runner_cell(ev, {"config": "I"}, _nss(1.0, err=None))
+    assert result["valid"] is False and result["log_evidence_err"] is None
 
 
 def test_weight_sets_field_disagreement_excludes_the_cell(tmp_path: Path) -> None:
     ev = tmp_path / "ev" / str(GALAXY)
     ev.mkdir(parents=True)
-    _write_runner_cell(ev, {"config": "I"}, _laplace(2.0), 1)
-    _write_runner_cell(ev, {"config": "IV"}, _laplace(2.0), 2)
-    path = ev / "config-IV.json"
+    _write_runner_cell(ev, {"config": "I"}, _nss(2.0), 1)
+    _write_runner_cell(ev, {"config": "IV"}, _nss(2.0), 2)
+    path = _nss_dir(tmp_path) / "config-IV.json"
     cell = json.loads(path.read_text())
     cell["weight_sets"] = ["named_all"]
     path.write_text(json.dumps(cell))
@@ -214,9 +239,10 @@ def test_weight_sets_field_disagreement_excludes_the_cell(tmp_path: Path) -> Non
 def test_file_name_disagreement_excludes_the_cell(tmp_path: Path) -> None:
     ev = tmp_path / "ev" / str(GALAXY)
     ev.mkdir(parents=True)
-    _write_runner_cell(ev, {"config": "I"}, _laplace(2.0), 1)
-    _write_runner_cell(ev, {"config": "V"}, _laplace(2.0), 2)
-    (ev / "config-V.json").rename(ev / "renamed.json")
+    _write_runner_cell(ev, {"config": "I"}, _nss(2.0), 1)
+    _write_runner_cell(ev, {"config": "V"}, _nss(2.0), 2)
+    nss = _nss_dir(tmp_path)
+    (nss / "config-V.json").rename(nss / "renamed.json")
 
     grid = _models_in(_combine(tmp_path)["galaxies"][str(GALAXY)]["sets"]["named_grid"])
     assert grid["config-V"]["valid"] is False
@@ -226,10 +252,11 @@ def test_file_name_disagreement_excludes_the_cell(tmp_path: Path) -> None:
 def test_unknown_key_is_reported_not_silently_averaged(tmp_path: Path) -> None:
     ev = tmp_path / "ev" / str(GALAXY)
     ev.mkdir(parents=True)
-    _write_runner_cell(ev, {"config": "I"}, _laplace(2.0), 1)
-    stale = json.loads((ev / "config-I.json").read_text())
+    _write_runner_cell(ev, {"config": "I"}, _nss(2.0), 1)
+    nss = _nss_dir(tmp_path)
+    stale = json.loads((nss / "config-I.json").read_text())
     stale["model_key"] = "X-like-cigale_like"
-    (ev / "X-like-cigale_like.json").write_text(json.dumps(stale))
+    (nss / "X-like-cigale_like.json").write_text(json.dumps(stale))
 
     gal = _combine(tmp_path)["galaxies"][str(GALAXY)]
     assert [u["model_key"] for u in gal["unrecognized_cells"]] == ["X-like-cigale_like"]

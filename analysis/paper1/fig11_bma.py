@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Figure 11 - Bayesian model averaging over Laplace evidences.
+"""Figure 11 - Bayesian model averaging over per-set evidences (NSS named, Laplace factorial).
 
 This figure demonstrates BMA with a flat prior over valid models within each weight set.
 Panel (a): thin strip showing the evidence -> weights -> posterior pathway.
 Panel (b1): per-galaxy weights for the selected named set as a heatmap (models x galaxies),
     with excluded/invalid cells hatched and a small marker on cells whose NUTS chain failed
-    adoption even though the Laplace evidence that entered BMA was fine.
+    adoption even though the evidence that entered BMA was fine. The estimator of each
+    set (nested sampling or Laplace) is read from the summary's ``route_by_set``.
 Panel (b2): factorial marginal weights, one small heatmap per component axis (sfh, ssp,
     isochrone, spectral_library, attenuation; galaxies on x, axis values on y). The color
     encodes log2(weight / prior) on a diverging scale centered at zero, not the raw weight,
@@ -271,7 +272,20 @@ def load_summary(path: Path) -> dict[str, Any]:
 # --- panels ---------------------------------------------------------------
 
 
-def _draw_flow_panel(ax: plt.Axes) -> None:
+#: Per-route text: (flow-panel fit label, evidence name in annotations).
+_ROUTE_TEXT = {
+    "laplace": ("Laplace MAP fit", "Laplace evidence"),
+    "nss": ("Nested sampling", "NSS evidence"),
+}
+
+
+def _set_route(summary: dict[str, Any], set_name: str) -> str:
+    """Evidence route of a weight set, from the summary (``laplace`` for older summaries)."""
+    route = summary.get("route_by_set", {}).get(set_name, "laplace")
+    return route if route in _ROUTE_TEXT else "laplace"
+
+
+def _draw_flow_panel(ax: plt.Axes, route: str = "laplace") -> None:
     """Draw panel (a): a thin strip, evidence -> weights -> posterior."""
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -279,7 +293,7 @@ def _draw_flow_panel(ax: plt.Axes) -> None:
 
     labels = (
         "Model set",
-        "Laplace MAP fit",
+        _ROUTE_TEXT[route][0],
         "Per-model\nevidence",
         "Model weights",
         "BMA posterior",
@@ -393,7 +407,7 @@ def _draw_weights_panel(
 
     Excluded/invalid cells are hatched. A valid cell whose named configuration's NUTS chain
     failed adoption -- which does not gate BMA, since a named configuration's evidence is its
-    own Laplace run -- is marked with a small "x" so a reader can tell the two failure modes
+    own evidence run -- is marked with a small "x" so a reader can tell the two failure modes
     apart at a glance.
 
     A galaxy with no valid model in the set is left blank and reported, not drawn.
@@ -466,10 +480,11 @@ def _draw_weights_panel(
     cbar.set_label("Weight", fontsize=7)
     cbar.ax.tick_params(labelsize=6, length=2)
 
+    route = _set_route(summary, selected_set)
     ax.text(
         0.0,
         1.03,
-        "hatched = excluded/invalid   x = NUTS adoption failed (Laplace evidence still used)",
+        f"hatched = excluded/invalid   x = NUTS adoption failed ({_ROUTE_TEXT[route][1]} still used)",
         transform=ax.transAxes,
         ha="left",
         va="bottom",
@@ -648,7 +663,10 @@ def _draw_factorial_marginal_panel(
         row_labels[axis] = labels
         ax.set_yticks(range(len(values)))
         ax.set_yticklabels(labels, fontsize=6)
-        ax.set_title(AXIS_TITLES.get(axis, axis), fontsize=6.5, loc="left", pad=1.5)
+        title = AXIS_TITLES.get(axis, axis)
+        if row == 0:
+            title = f"{title}   ({_ROUTE_TEXT[_set_route(summary, 'factorial')][1]})"
+        ax.set_title(title, fontsize=6.5, loc="left", pad=1.5)
         ax.tick_params(axis="y", length=2, pad=1.5)
         if row < len(FACTORIAL_MARGINAL_AXES) - 1:
             ax.tick_params(axis="x", labelbottom=False, length=0)
@@ -914,7 +932,7 @@ def build_figure(
     )
 
     ax_flow = fig.add_subplot(gs[0, 0])
-    _draw_flow_panel(ax_flow)
+    _draw_flow_panel(ax_flow, _set_route(summary, selected_set))
 
     ax_weights = fig.add_subplot(gs[1, 0])
     cax_weights = fig.add_subplot(gs[1, 1])

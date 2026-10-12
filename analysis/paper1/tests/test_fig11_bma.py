@@ -791,3 +791,22 @@ def test_sfr_median_outside_limits_is_pinned_and_recorded():
     assert drawn.sfr_limits[0] > -10.0
     assert fig11_bma._out_of_range_record(1, "m", (0.0, 1.0, 2.0), None) is None
     plt.close(fig)
+
+
+def _all_text(fig) -> str:
+    return " | ".join(t.get_text() for ax in fig.axes for t in [*ax.texts, ax.title])
+
+
+def test_estimator_text_follows_the_sets_route():
+    summary = _synthetic_set("named_all")
+    summary["route_by_set"] = {"named_all": "nss", "factorial": "laplace"}
+    fig, _, plt = _build(summary, "named_all")
+    text = _all_text(fig)
+    assert "Nested sampling" in text and "NSS evidence still used" in text
+    assert "Laplace MAP fit" not in text
+    plt.close(fig)
+
+    del summary["route_by_set"]  # an older summary is read as Laplace
+    fig, _, plt = _build(summary, "named_all")
+    assert "Laplace MAP fit" in _all_text(fig)
+    plt.close(fig)

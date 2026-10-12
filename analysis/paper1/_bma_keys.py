@@ -107,6 +107,12 @@ _XLIKE_PREFIX = "xlike-"
 
 WEIGHT_SETS: tuple[str, ...] = ("named_grid", "named_all", "factorial")
 
+#: Largest nested-sampling ln Z standard deviation [nats] a cell may carry and still
+#: enter a weight: the seed-to-seed scatter of the validated NSS settings is 0.1-0.2
+#: nats, so 0.5 nats is 2.5x that and still well below the 0-2.4 nat Laplace bias the
+#: NSS route exists to remove. Shared by the runner (its ``valid`` flag) and the combiner.
+NSS_MAX_LOG_EVIDENCE_ERR = 0.5
+
 
 def ssp_entry(label: str) -> SspEntry:
     """Return the ``ssp`` axis entry for a registered grid name.
