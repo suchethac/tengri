@@ -22,6 +22,7 @@ in a notebook or REPL; no need to wrap them in `pprint`.
 from __future__ import annotations
 
 import functools
+import logging
 import re
 from typing import Any
 
@@ -649,6 +650,8 @@ def _component_entry(name: str, *, kind: str) -> dict:
 # ──────────────────────────────────────────────────────────────────
 # Menu filtering
 # ──────────────────────────────────────────────────────────────────
+
+_log = logging.getLogger(__name__)
 
 #: The word for "do not filter". Every menu accepts it, because it is what a
 #: reader types first and because ``status='all'`` used to return nothing at all,
@@ -2123,6 +2126,7 @@ def print_components_bibtex(obj=None) -> None:
                     seen_keys.add(bibkey)
                     emitted = True
             except Exception:
+                _log.debug("Citation lookup failed for %s", bibkey, exc_info=True)
                 continue
         if emitted:
             continue
@@ -2492,6 +2496,7 @@ def _every_menu_lister() -> tuple:
         try:
             rows = fn()
         except Exception:
+            _log.debug("Menu lister %s failed; skipped in sweep", attr, exc_info=True)
             continue
         if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
             seen[attr] = fn
@@ -2656,6 +2661,7 @@ def list_recipes() -> _RegistryTable:
         try:
             data_status = _recipe_data_status(fn())
         except Exception:
+            _log.debug("Recipe %s data status unknown", name, exc_info=True)
             data_status = "unknown"
         out.append(
             {
@@ -2724,6 +2730,7 @@ def _recipe_data_status(kwargs: dict) -> str:
         try:
             _resolve_synthesizer_grid(kind)
         except Exception:
+            _log.debug("Synthesizer grid %s unavailable", kind, exc_info=True)
             missing.append(kind)
     if not missing:
         return "ready"

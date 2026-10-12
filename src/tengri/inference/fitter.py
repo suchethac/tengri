@@ -929,8 +929,8 @@ def _warn_if_lut_bias_amplified(
 
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
-    mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed.
+    mismatches, exotic data layouts) is logged with its traceback at WARNING
+    level, and the fit proceeds exactly as it did before the advisory existed.
 
     Parameters
     ----------
@@ -1089,6 +1089,11 @@ def _warn_if_lut_bias_amplified(
                 snr=snr_at,
             )
     except Exception:
+        logger.warning(
+            "LUT-bias advisory skipped for %s; the fit proceeds without it.",
+            surface,
+            exc_info=True,
+        )
         return
 
 
@@ -3572,7 +3577,14 @@ class Fitter:
             # prewarm=False: this throwaway run must not re-enter auto-prewarm
             # (run -> _auto_prewarm -> prewarm -> run would recurse).
             self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
-        except Exception:
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "warmup for method=%r did not complete (%s: %s); the fit continues "
+                "and will compile on first use",
+                method,
+                type(exc).__name__,
+                exc,
+            )
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
