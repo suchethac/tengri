@@ -71,6 +71,7 @@ listing each hit with its file and line (or byte offset, for binaries).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -160,16 +161,38 @@ def _scan_binary(path: Path) -> list[tuple[str, str]]:
     return hits
 
 
+def _scan_symlink(path: Path) -> list[tuple[str, str]]:
+    """Check a symlink's target string for a home path, without following the link.
+
+    The target is committed content, so a link to ``/Users/<name>/...`` leaks
+    the machine exactly as a file would. The link is read, never followed, and
+    a broken link is checked the same way (#2784).
+    """
+    target = os.readlink(path)
+    # _HOME_PATH needs a trailing slash after the user segment; a bare
+    # "/Users/<name>" target has none, so probe with one appended.
+    probe = target if target.endswith("/") else target + "/"
+    for match in _HOME_PATH.finditer(probe):
+        if not _is_allowed(probe, match.start()):
+            return [("symlink target", target[:_ECHO])]
+    return []
+
+
 def main() -> int:
     violations: list[tuple[str, str, str]] = []
     scanned = 0
 
     for path in _tracked_files():
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if path.is_symlink():
+            scanned += 1
+            for location, excerpt in _scan_symlink(path):
+                violations.append((rel, location, excerpt))
+            continue
         if not path.is_file():
-            continue  # submodule or broken symlink
+            continue  # submodule
         scanned += 1
         scan = _scan_binary if path.suffix.lower() in _BINARY_SUFFIXES else _scan_text
-        rel = path.relative_to(REPO_ROOT).as_posix()
         for location, excerpt in scan(path):
             violations.append((rel, location, excerpt))
 
