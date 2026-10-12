@@ -10563,6 +10563,19 @@ class SEDModel:
         cache["predict_observables_impl"] = _impl
         return jit_fn
 
+    def threaded_template_inputs(self):
+        """Return ``(ssp_data, template_data, ztable_data)`` for a traced per-galaxy forward.
+
+        Builds and caches the component chain first, so the call is made outside
+        any JAX trace: a caller that threads these grids into its own ``jit`` or
+        ``vmap`` must not build the chain inside the trace. Used by the batched
+        spectroscopic stack (#2845) through :class:`ForwardModel`, which delegates
+        this method to its inner SED.
+        """
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
+        return self._resolve_threaded_data(None, None, None)
+
     def _resolve_threaded_data(self, ssp_data, template_data, ztable_data=None):
         """Resolve the JIT-threading channel: caller's arrays, else this model's own.
 
