@@ -108,7 +108,6 @@ SIGNATURE_POLICY: KeyPolicy = {
     ),
     "_met_interp": content("metallicity interpolation mode changes the SSP lookup"),
     "_met_mode": content("metallicity model selection determines parameters and graph shape"),
-    "_z_interp": content("redshift interpolation mode changes the ztable lookup"),
     # ── SFH ────────────────────────────────────────────────────────────
     "_sfh_fn": content("SFH function, kept by qualified name"),
     "_sfh_internal_names": content("internal SFH parameter names determine the param map"),
