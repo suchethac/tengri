@@ -24,10 +24,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._publication import inclination_quadrature
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.disc_cigale import (
     adaf_disk_limits,
@@ -39,6 +42,7 @@ from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import log10_magnitude
 
 __all__ = ["SKIRTORTorus"]
 
@@ -93,10 +97,14 @@ def _selected_disc_breaks_aa(disk_type: int, delta):
     Returns a host array for ``disk_type`` 0 and 1 (constants), and a JAX array for the ADAF
     disc (2), whose thin-disc limits move with the traced blend weight ``delta``.
     """
+    # The limits are constants built with ``jnp``; under ``jit`` an eager ``np.asarray`` of
+    # them sees a tracer, so they are read at compile time.
     if disk_type == 0:
-        return np.asarray(skirtor_disk_limits()) * _NM_TO_AA
+        with jax.ensure_compile_time_eval():
+            return np.asarray(skirtor_disk_limits()) * _NM_TO_AA
     if disk_type == 1:
-        return np.asarray(schartmann2005_disk_limits()) * _NM_TO_AA
+        with jax.ensure_compile_time_eval():
+            return np.asarray(schartmann2005_disk_limits()) * _NM_TO_AA
     if disk_type == 2:
         return adaf_disk_limits(delta) * _NM_TO_AA
     raise ValueError(
@@ -181,12 +189,23 @@ def _native_publication_wave(native_wave, disc_breaks_aa, dtype) -> jnp.ndarray:
     A constant under ``jit`` and ``grad`` for ``disk_type`` 0 and 1; for the ADAF disc the
     moving limits are sorted into the node set as traced values.
     """
+    # The disc steps from zero to its value at the lower edge; the two neighbors of the edge
+    # node bracket that step so no segment of the closed-form integral straddles it. They sit
+    # a few ulp from the edge: 1e-9 collapses onto the edge in float32 and leaves a chord
+    # across the preceding template segment (a 3e-4 error in the disc power).
+    edge_gap = 1.0e-9 if np.dtype(dtype).itemsize >= 8 else 4.0e-7
     static = np.unique(
         np.concatenate(
             [
                 np.asarray(native_wave, dtype=np.float64),
                 np.asarray(_DISC_BREAKPOINTS_AA),
-                np.asarray(_DISC_EDGE_NODES_AA),
+                np.asarray(
+                    [
+                        x
+                        for e in _DISC_EDGE_AA
+                        for x in (e * (1.0 - edge_gap), e, e * (1.0 + edge_gap))
+                    ]
+                ),
                 np.asarray(_DIAGNOSTIC_AA),
             ]
         )
@@ -198,9 +217,8 @@ def _native_publication_wave(native_wave, disc_breaks_aa, dtype) -> jnp.ndarray:
     )
 
 
-_DISC_EDGE_NODES_AA = tuple(
-    x for edge in (80.0,) for x in (edge * (1.0 - 1.0e-9), edge, edge * (1.0 + 1.0e-9))
-)
+#: Wavelengths where the analytic SKIRTOR disc steps from zero [Angstrom].
+_DISC_EDGE_AA = (80.0,)
 #: 2500 A, 6 um and 12 um: the diagnostic nodes [Angstrom].
 _DIAGNOSTIC_AA = (2500.0, 6.0e4, 1.2e5)
 
@@ -252,7 +270,7 @@ class SKIRTORTorusState(SEDComponentState):
 
 @dataclass(frozen=True)
 class SKIRTORTorus(SEDModelComponent):
-    """Clumpy torus SED from SKIRTOR radiative-transfer models.
+    r"""Clumpy torus SED from SKIRTOR radiative-transfer models.
 
     A pure-JAX implementation with C²-continuous gradients via triweight
     kernel interpolation in the 5D parameter space (tau, p, q, opening angle,
@@ -304,13 +322,19 @@ class SKIRTORTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    L_agn_disc : erg/s
-        Bolometric luminosity from accretion disc (intrinsic, at θ=30°).
-    L_agn_torus : erg/s
-        Bolometric luminosity from torus dust thermal emission.
-    L_agn_polar_dust : erg/s
-        Integral of the polar-dust graybody reemission on the publication grid. It
-        equals the disc power the polar dust absorbs (Type 1 only).
+    log_L_agn_disc, log_L_agn_torus, log_L_agn_polar_dust : dex
+        log10 of the angle-integrated bolometric power of the accretion disc, of the torus
+        dust thermal emission and of the polar-dust graybody reemission [dex re erg/s]:
+        the mean over the sphere of the line-of-sight power below,
+        :math:`\tfrac12\int_0^\pi L(\theta)\sin\theta\,d\theta = \int_0^1 L(\mu)\,d\mu`
+        with :math:`\mu = \cos i`, taken by Gauss-Legendre on each interval between the
+        template's own inclination nodes. Independent of ``cos_inc``. ``-inf`` is an absent
+        piece (no polar dust at ``polar_ebv = 0``).
+    log_L_agn_disc_los, log_L_agn_torus_los, log_L_agn_polar_dust_los : dex
+        log10 of the same three powers integrated over the SED emitted along the sightline
+        ``cos_inc`` [dex re erg/s]: the integral of the disc, of the torus dust and of the
+        polar-dust reemission that the model SED carries. The polar-dust reemission equals
+        the disc power the polar dust absorbs (Type 1 only).
     L_2500_30deg : erg/s/Hz
         Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalization.
     L_6um : erg/s/Hz
@@ -458,9 +482,12 @@ class SKIRTORTorus(SEDModelComponent):
 
     # Cross-component outputs
     outputs: ClassVar[dict[str, str]] = {
-        "L_agn_disc": "erg/s",
-        "L_agn_torus": "erg/s",
-        "L_agn_polar_dust": "erg/s",
+        "log_L_agn_disc": "dex",
+        "log_L_agn_disc_los": "dex",
+        "log_L_agn_torus": "dex",
+        "log_L_agn_torus_los": "dex",
+        "log_L_agn_polar_dust": "dex",
+        "log_L_agn_polar_dust_los": "dex",
         "L_2500_30deg": "erg/s/Hz",
         "L_6um": "erg/s/Hz",
         "L_12um": "erg/s/Hz",
@@ -551,8 +578,9 @@ class SKIRTORTorus(SEDModelComponent):
             (sed_out, published) where:
 
             - sed_out: Updated SED (sed_in + attenuated disc + torus + polar dust reemission).
-            - published: dict with keys L_agn_disc, L_agn_torus, L_agn_polar_dust,
-              L_2500_30deg, L_6um, L_12um [erg/s] or [erg/s/Hz].
+            - published: dict with keys log_L_agn_disc, log_L_agn_torus,
+              log_L_agn_polar_dust and their ``_los`` siblings [dex re erg/s] (see the class
+              docstring), and L_2500_30deg, L_6um, L_12um [erg/s/Hz].
 
         Notes
         -----
@@ -582,10 +610,14 @@ class SKIRTORTorus(SEDModelComponent):
 
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
+            absent = jnp.array(-jnp.inf)
             zero_dict = {
-                "L_agn_disc": jnp.array(0.0),
-                "L_agn_torus": jnp.array(0.0),
-                "L_agn_polar_dust": jnp.array(0.0),
+                "log_L_agn_disc": absent,
+                "log_L_agn_disc_los": absent,
+                "log_L_agn_torus": absent,
+                "log_L_agn_torus_los": absent,
+                "log_L_agn_polar_dust": absent,
+                "log_L_agn_polar_dust_los": absent,
                 "L_2500_30deg": jnp.array(0.0),
                 "L_6um": jnp.array(0.0),
                 "L_12um": jnp.array(0.0),
@@ -594,16 +626,26 @@ class SKIRTORTorus(SEDModelComponent):
 
         skirtor_fn = self.data
 
-        def _components(wave_eval):
+        # Pure float32 cannot hold the erg/s scale (the template scale ``10**log_lbol L_sun``
+        # is ``inf``). Every piece below is linear in the AGN power, so it is evaluated at the
+        # reference luminosity and the true magnitude restored in log space; float64 evaluates
+        # at the true value and every emitted number is unchanged.
+        lbol_eval, use_ref, offset = reference_evaluation(p["log_lbol"], wave)
+
+        def _scaled(arr):
+            """Restore the true magnitude of an evaluation-scale array (float32 only)."""
+            return rescale(arr, offset) if use_ref else arr
+
+        def _components(wave_eval, cos_inc):
             return skirtor_fn(
                 wavelength=wave_eval,
-                agn_log_lbol=p["log_lbol"],
+                agn_log_lbol=lbol_eval,
                 agn_tau_skirtor=p["tau_skirtor"],
                 agn_p_skirtor=p["p_skirtor"],
                 agn_q_skirtor=p["q_skirtor"],
                 agn_oa_skirtor=p["oa_skirtor"],
                 agn_radius_ratio=p["radius_ratio"],
-                agn_cos_inc=p["cos_inc"],
+                agn_cos_inc=cos_inc,
                 frac_agn=p["torus_frac"],
             )
 
@@ -639,7 +681,7 @@ class SKIRTORTorus(SEDModelComponent):
         def _bolometric_tilted(raw, wave_eval, mask=1.0):
             """Closed-form integral of ``raw * retilt * mask``, part by part."""
             return sum(
-                native_bolometric_nu(raw * part * mask, wave_eval)
+                native_bolometric_nu(raw * part * mask, wave_eval, floor=0.0)
                 for part in _retilt_parts(wave_eval)
             )
 
@@ -655,54 +697,102 @@ class SKIRTORTorus(SEDModelComponent):
         # wavelengths are nodes, so their values are node values.
         disc_breaks = _selected_disc_breaks_aa(disk_type, delta)
         wave_pub = _native_publication_wave(skirtor_fn.native_wave, disc_breaks, wave.dtype)
-        comp_pub = _components(wave_pub)
-        raw_pub = comp_pub.disk
         support_pub = _in_support(wave_pub)
-        disc_renorm = native_bolometric_nu(raw_pub * support_pub, wave_pub) / (
-            _bolometric_tilted(raw_pub, wave_pub, support_pub)
-        )
-        sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
-        dust_pub = comp_pub.dust
-
-        # Published luminosities: exact integrals of the emitted disc and dust SEDs.
-        L_agn_disc = disc_renorm * _bolometric_tilted(raw_pub, wave_pub)
-        L_agn_torus = native_bolometric_nu(dust_pub, wave_pub)
-
         # Polar dust (Type 1 only). The absorbed power integrates the disc through an analytic
         # extinction curve. Its non-smooth points are segment boundaries: every template node
         # (the emitted disc changes slope there), the disc's breakpoints and edges, the SMC
         # cubic-to-linear switch and the cubic's zero crossing. Each segment is integrated by
         # Gauss-Legendre in ln(lambda), which converges to 1e-8 at a few nodes per segment.
-        polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
         lam_pol, wq = _polar_quadrature(skirtor_fn.native_wave, disc_breaks, wave.dtype)
-        comp_pol = _components(lam_pol)
-        sed_disc_pol = comp_pol.disk * _retilt(lam_pol) * disc_renorm
-        _, l_abs_pol = polar_dust_extinction(sed_disc_pol, lam_pol, *polar_args, law="smc")
-        L_abs_pub = jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
-        polar_emit_kwargs = {"temperature": p["polar_T"], "beta": p["polar_beta"], "lambda_0": 2e6}
-        L_agn_polar_dust = L_abs_pub
+
+        def _along(cos_inc):
+            """The emitted pieces along one sightline, at the evaluation scale.
+
+            Returns the publication-grid disc and dust SEDs, the disc re-normalization factor
+            and the polar absorbed power, all for the sightline ``cos_inc``.
+            """
+            comp_pub = _components(wave_pub, cos_inc)
+            raw_pub = comp_pub.disk
+            # The two integrals are unfloored: a disc of exactly zero power (torus_frac = 0)
+            # then renormalizes by 0, not by a floor that float32 flushes to 0 (0/0).
+            tilted_support = _bolometric_tilted(raw_pub, wave_pub, support_pub)
+            disc_renorm = native_bolometric_nu(raw_pub * support_pub, wave_pub, floor=0.0) / (
+                jnp.where(tilted_support > 0.0, tilted_support, 1.0)
+            )
+            comp_pol = _components(lam_pol, cos_inc)
+            sed_disc_pol = comp_pol.disk * _retilt(lam_pol) * disc_renorm
+            _, l_abs_pol = polar_dust_extinction(
+                sed_disc_pol, lam_pol, cos_inc, p["oa_skirtor"], p["polar_ebv"], law="smc"
+            )
+            L_abs = jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
+            return raw_pub, comp_pub.dust, disc_renorm, L_abs
+
+        def _powers(cos_inc):
+            """Disc, torus and polar-dust power emitted along ``cos_inc`` [evaluation scale]."""
+            raw_pub, dust_pub, disc_renorm, L_abs = _along(cos_inc)
+            return jnp.stack(
+                [
+                    disc_renorm * _bolometric_tilted(raw_pub, wave_pub),
+                    native_bolometric_nu(dust_pub, wave_pub, floor=0.0),
+                    L_abs,
+                ]
+            )
+
+        # Line of sight: the pieces and powers along ``cos_inc`` itself.
+        raw_pub, dust_pub, disc_renorm, L_abs_pub = _along(p["cos_inc"])
+        sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
+        powers_los = jnp.stack(
+            [
+                disc_renorm * _bolometric_tilted(raw_pub, wave_pub),
+                native_bolometric_nu(dust_pub, wave_pub, floor=0.0),
+                L_abs_pub,
+            ]
+        )
+
+        # Angle-integrated: the mean of the line-of-sight power over the sphere,
+        # (1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu by symmetry about the
+        # equator, by Gauss-Legendre on each interval between the template's own inclination
+        # nodes (measured error in ``inclination_quadrature``).
+        mu_nodes, mu_weight = inclination_quadrature(skirtor_fn.native_cos_inc)
+        powers_mean = jnp.tensordot(
+            jnp.asarray(mu_weight, dtype=wave.dtype),
+            jax.vmap(_powers)(jnp.asarray(mu_nodes, dtype=wave.dtype)),
+            axes=1,
+        )
 
         # Caller-grid SED: the same pointwise functions, scaled by the publication factor.
-        comp_caller = _components(wave)
+        polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
+        polar_emit_kwargs = {"temperature": p["polar_T"], "beta": p["polar_beta"], "lambda_0": 2e6}
+        comp_caller = _components(wave, p["cos_inc"])
         sed_disc = comp_caller.disk * _retilt(wave) * disc_renorm
         sed_disc_polar, _ = polar_dust_extinction(sed_disc, wave, *polar_args, law="smc")
         sed_polar_reemit = polar_dust_emission(L_abs_pub, wave, **polar_emit_kwargs)
 
         # Total SED: attenuated disc + torus + polar reemission
-        sed_out = sed_in + sed_disc_polar + comp_caller.dust + sed_polar_reemit
+        sed_out = (
+            sed_in
+            + _scaled(sed_disc_polar)
+            + _scaled(comp_caller.dust)
+            + _scaled(sed_polar_reemit)
+        )
 
         # Point diagnostics at 2500 A, 6 um and 12 um: node values of the publication grid.
         L_2500 = jnp.interp(2500.0, wave_pub, sed_disc_pub)
         L_6um = jnp.interp(6.0e4, wave_pub, sed_disc_pub + dust_pub)  # 6 um = 60000 A
         L_12um = jnp.interp(1.2e5, wave_pub, sed_disc_pub + dust_pub)  # 12 um = 120000 A
 
+        log_los = log10_magnitude(powers_los) + offset
+        log_mean = log10_magnitude(powers_mean) + offset
         published = {
-            "L_agn_disc": L_agn_disc,
-            "L_agn_torus": L_agn_torus,
-            "L_agn_polar_dust": L_agn_polar_dust,
-            "L_2500_30deg": L_2500,
-            "L_6um": L_6um,
-            "L_12um": L_12um,
+            "log_L_agn_disc": log_mean[0],
+            "log_L_agn_disc_los": log_los[0],
+            "log_L_agn_torus": log_mean[1],
+            "log_L_agn_torus_los": log_los[1],
+            "log_L_agn_polar_dust": log_mean[2],
+            "log_L_agn_polar_dust_los": log_los[2],
+            "L_2500_30deg": _scaled(L_2500),
+            "L_6um": _scaled(L_6um),
+            "L_12um": _scaled(L_12um),
         }
 
         return sed_out, published

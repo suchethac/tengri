@@ -1546,3 +1546,33 @@ pre-existing, and repointing either is a physics change with a moved number.
 4. Add a bullet to `CHANGELOG.md` under `[Unreleased]`.
 5. CI (added in Phase 5) verifies that every entry in `_deprecated.py`
    has a row here, and vice-versa.
+
+---
+
+## AGN component luminosities become `log_L_agn_*` [dex]; SKIRTOR's follow the angle-integrated convention; GRAHSP's standalone `l5100` becomes log-native (2026-10-12, #2842, #2851)
+
+**Breaking.** The standalone AGN components published integrated luminosities in erg/s
+(1e43 to 1e47), which are `inf` or NaN in float32. They are published as `log10` [dex re
+erg/s] (`NAMING_CONTRACT.md` section 4c); the erg/s keys are retired with no alias, and no
+code in `src/` read them. `L_agn_bol` (erg/s) is unchanged: the radio and X-ray components
+read it, and `log_L_agn_bol` is its float32-safe companion (it is `inf` in float32, as the
+AGN component already published it).
+
+| Old key (erg/s) | New key (dex re erg/s) | Published by |
+| --- | --- | --- |
+| `L_agn_torus` | `log_L_agn_torus` | Silva04, CAT3D, SKIRTOR-AGNfitter, GRAHSP |
+| `L_agn_disc` | `log_L_agn_disc` | K&D 2018 disc (angle-integrated), power-law disc |
+| `L_agn_disc_los` | `log_L_agn_disc_los` | K&D 2018 disc |
+| `L_agn_absorbed` | `log_L_agn_absorbed` | GRAHSP |
+| `L_agn_disc`, `L_agn_torus`, `L_agn_polar_dust` (line of sight) | `log_L_agn_disc_los`, `log_L_agn_torus_los`, `log_L_agn_polar_dust_los` | SKIRTOR |
+| (new) | `log_L_agn_disc`, `log_L_agn_torus`, `log_L_agn_polar_dust`: the mean over the sphere of the line-of-sight power | SKIRTOR |
+
+Consumer-side translation: `L_agn_torus = 10**log_L_agn_torus` (float64 only). The SKIRTOR
+angle-integrated power is `int_0^1 L(mu) dmu` with `mu = cos i`, independent of `cos_inc`.
+
+| Old spelling | New spelling | Status (v0.x) |
+| --- | --- | --- |
+| `agn_grahsp_l5100` on the standalone `GRAHSPSEDComponent` — `LogUniform(1e38, 1e50)` [erg/s] | `agn_grahsp_log_l5100` — `Uniform(38.0, 50.0)` [dex] | Deprecated alias: `DeprecationWarning`, translated as `log10(agn_grahsp_l5100)`; removed in v1.0 |
+
+New derived outputs of the composable AGN with the `adaf` disc: `agn_adaf_mdot` (`mdot`,
+Mahadevan 1997 Eq. 4) and `log_L_agn_adaf_accretion` (`log10(Mdot c^2)` [dex re erg/s]).

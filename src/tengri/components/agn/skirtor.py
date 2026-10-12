@@ -33,6 +33,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
@@ -899,6 +900,9 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     # The template's own wavelength nodes: a publication grid built on them integrates the
     # emitted (log-log interpolated) SED exactly, see ``_template_grid.native_bolometric_nu``.
     skirtor_components.native_wave = wave_grid
+    # The template's own cos(inclination) nodes, ascending: the angle-integrated powers are
+    # quadratures over this axis.
+    skirtor_components.native_cos_inc = np.asarray(axes[-1], dtype=np.float64)
     return skirtor_components
 
 

@@ -277,7 +277,10 @@ def _publisher(comp, params, key):
     def fn(wave):
         w = jnp.asarray(wave)
         _, published = comp.predict(params, jnp.zeros_like(w), w)
-        return float(published[key])
+        value = float(published[key])
+        # The luminosities are published as log10 [dex re erg/s] (#2842); the identities below
+        # compare linear integrals.
+        return 10.0**value if key.startswith("log_") else value
 
     return fn
 
@@ -295,44 +298,44 @@ def _emitter(comp, params):
 
 # Single-component classes: (module, class, config, grid file, key, parameter overrides).
 _SINGLE = {
-    "silva04_torus.L_agn_torus": (
+    "silva04_torus.log_L_agn_torus": (
         "silva04_model",
         "Silva04Torus",
         "Silva04TorusConfig",
         "silva04_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"log_nh_silva": 22.5, "torus_frac": 0.3, "log_lbol": 11.2}),
     ),
-    "cat3d_torus.L_agn_torus": (
+    "cat3d_torus.log_L_agn_torus": (
         "cat3d_torus_model",
         "CAT3DTorus",
         "CAT3DTorusConfig",
         "cat3d_wind_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"cos_inc": 0.3, "torus_frac": 0.3}),
     ),
-    "skirtor_agnfitter_torus.L_agn_torus": (
+    "skirtor_agnfitter_torus.log_L_agn_torus": (
         "skirtor_agnfitter_model",
         "SKIRTORAgnfitterTorus",
         "SKIRTORAgnfitterTorusConfig",
         "skirtor_mean3p_torus_grid.h5",
-        "L_agn_torus",
+        "log_L_agn_torus",
         ({}, {"torus_frac": 0.3}),
     ),
-    "powerlaw_disc.L_agn_disc": (
+    "powerlaw_disc.log_L_agn_disc": (
         "powerlaw_disc_model",
         "PowerLawDisc",
         "PowerLawDiscConfig",
         None,
-        "L_agn_disc",
+        "log_L_agn_disc",
         ({}, {"lum_ratio": 0.3}),
     ),
-    "kd18_disc.L_agn_disc": (
+    "kd18_disc.log_L_agn_disc_los": (
         "kd18_disc_model",
         "KD18Disc",
         "KD18DiscConfig",
         None,
-        "L_agn_disc_los",
+        "log_L_agn_disc_los",
         ({}, {"cos_inc": 0.2}),
     ),
 }
@@ -369,9 +372,9 @@ def test_single_published_independent_of_caller_grid(single_case):
             assert err < _RTOL, f"{single_case['name']} {label}: rel diff {err:.3e}"
 
 
-@pytest.mark.parametrize("name", ["powerlaw_disc.L_agn_disc", "kd18_disc.L_agn_disc"])
+@pytest.mark.parametrize("name", ["powerlaw_disc.log_L_agn_disc", "kd18_disc.log_L_agn_disc_los"])
 def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
-    """``apply`` on the real pipeline path, given only declared parameters, publishes L_agn_disc.
+    """``apply`` on the real pipeline path, given only declared parameters, publishes the log key.
 
     The disc's luminosity fraction is ``lum_ratio``; a read of an undeclared ``frac`` raised
     ``KeyError`` here, which the contract tests (they pass only ``lum_ratio`` to ``predict``)
@@ -386,7 +389,7 @@ def test_disc_apply_with_declared_parameters_publishes_the_integral(name):
     state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave), derived={})
     out = comp.apply(state, {prefix + k: v for k, v in params.items()})
     published = float(out.derived[key])
-    direct = _publisher(comp, params, key)(_PUB_DENSE)
+    direct = np.log10(_publisher(comp, params, key)(_PUB_DENSE))
     assert np.isfinite(published) and published > 0.0
     assert published == pytest.approx(direct, rel=1e-12)
 
@@ -397,7 +400,8 @@ def _kd18_with(**overrides):
 
 def _kd18_published(comp, params, wave):
     _, pub = comp.predict(params, jnp.zeros_like(wave), wave)
-    return float(pub["L_agn_disc"]), float(pub["L_agn_disc_los"])
+    # Published as log10 [dex re erg/s]; the identities below are on the linear power [erg/s].
+    return 10.0 ** float(pub["log_L_agn_disc"]), 10.0 ** float(pub["log_L_agn_disc_los"])
 
 
 def test_kd18_angle_integrated_disc_power_is_independent_of_inclination():
@@ -439,7 +443,7 @@ def test_kd18_angle_integrated_power_matches_the_accretion_power():
 
 
 def test_kd18_float32_frac_zero_is_zero_not_nan():
-    """KD18 at lum_ratio = 0 publishes exactly 0.0 in float32; no corner gives NaN."""
+    """KD18 at lum_ratio = 0 publishes exactly -inf dex (zero power) in float32; no NaN."""
     with jax.enable_x64(False):
         comp, params = _load_component("kd18_disc_model", "KD18Disc", "KD18DiscConfig")
         for log_lbol, lum_ratio in ((8.0, 0.0), (14.0, 0.0), (8.0, 0.2), (14.0, 1.0)):
@@ -448,11 +452,13 @@ def test_kd18_float32_frac_zero_is_zero_not_nan():
             p["lum_ratio"] = jnp.asarray(lum_ratio, dtype=jnp.float32)
             w = jnp.asarray(_PUB_COARSE, dtype=jnp.float32)
             sed, pub = comp.predict(p, jnp.zeros_like(w), w)
-            value = float(pub["L_agn_disc"])
+            value = float(pub["log_L_agn_disc"])
             assert not np.isnan(value), f"NaN at log_lbol={log_lbol}, lum_ratio={lum_ratio}"
             assert not np.any(np.isnan(np.asarray(sed))), "NaN in the emitted SED"
             if lum_ratio == 0.0:
-                assert value == 0.0, f"L_agn_disc={value} at lum_ratio=0 (log_lbol={log_lbol})"
+                assert value == -np.inf, f"log_L_agn_disc={value} at lum_ratio=0"
+            else:
+                assert np.isfinite(value), f"log_L_agn_disc={value} (log_lbol={log_lbol})"
 
 
 def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
@@ -471,12 +477,12 @@ def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
         pieces = _skirtor_emitted_pieces(comp, params, _WIDE)
         pub = {
             key: _publisher(comp, params, key)(_PUB_DENSE)
-            for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+            for key in ("log_L_agn_disc_los", "log_L_agn_torus_los", "log_L_agn_polar_dust_los")
         }
         for key, wide in (
-            ("L_agn_disc", pieces["disc"]),
-            ("L_agn_torus", pieces["dust"]),
-            ("L_agn_polar_dust", pieces["polar"]),
+            ("log_L_agn_disc_los", pieces["disc"]),
+            ("log_L_agn_torus_los", pieces["dust"]),
+            ("log_L_agn_polar_dust_los", pieces["polar"]),
         ):
             emitted = _ln_nu_integral(wide, _WIDE)
             err = abs(pub[key] / emitted - 1.0)
@@ -518,20 +524,20 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
     comp, params = _skirtor_with_disk_type(disk_type, overrides)
     pub = {
         key: _publisher(comp, params, key)(_PUB_COARSE)
-        for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+        for key in ("log_L_agn_disc_los", "log_L_agn_torus_los", "log_L_agn_polar_dust_los")
     }
     pieces = _skirtor_emitted_pieces(comp, params, _WIDE, disk_type=disk_type)
-    for key, piece in (("L_agn_disc", "disc"), ("L_agn_torus", "dust")):
+    for key, piece in (("log_L_agn_disc_los", "disc"), ("log_L_agn_torus_los", "dust")):
         err = abs(pub[key] / _ln_nu_integral(pieces[piece], _WIDE) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} {key}: rel {err:.3e}"
     sed = _emitter(comp, params)(_WIDE)
     total = _ln_nu_integral(sed, _WIDE)
     if float(params["polar_ebv"]) == 0.0:
-        err = abs(total / (pub["L_agn_disc"] + pub["L_agn_torus"]) - 1.0)
+        err = abs(total / (pub["log_L_agn_disc_los"] + pub["log_L_agn_torus_los"]) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} SED total: rel {err:.3e}"
-        assert pub["L_agn_polar_dust"] == 0.0
+        assert pub["log_L_agn_polar_dust_los"] == 0.0
     else:
-        err = abs(pub["L_agn_polar_dust"] / pieces["polar_absorbed"] - 1.0)
+        err = abs(pub["log_L_agn_polar_dust_los"] / pieces["polar_absorbed"] - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} polar absorbed: rel {err:.3e}"
 
 
@@ -624,7 +630,7 @@ def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
         _, pub = comp.predict(p, jnp.zeros_like(wave), wave)
         return pub[key]
 
-    for key in ("L_agn_disc", "L_agn_polar_dust"):
+    for key in ("log_L_agn_disc_los", "log_L_agn_polar_dust_los"):
         grad = jax.grad(published)(jnp.asarray(0.3), key)
         assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
         assert float(grad) != 0.0, f"d{key}/d delta is identically zero"

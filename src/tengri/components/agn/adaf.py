@@ -1239,6 +1239,123 @@ def _adaf_mdot_from_lbol(
     return _adaf_solve_mdot(ln_l, m, alpha, beta, delta)
 
 
+def _adaf_mdot_of_log_lbol(
+    agn_log_lbol: float, m: float, alpha: float, beta: float, delta: float, float32: bool
+) -> jnp.ndarray:
+    r"""``mdot`` of the radiated luminosity ``10**agn_log_lbol L_sun``, in the dtype's own form.
+
+    In float32 the luminosity is passed in :math:`L_\odot` (so the ~1e44 erg/s value never
+    forms); in float64 it is formed in erg/s. Both are :func:`_adaf_mdot_from_lbol`.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm ADAF}/L_\odot)` [dex].
+    m, alpha, beta, delta : float
+        Mass, viscosity, gas-to-total pressure ratio, electron viscous-heating fraction.
+    float32 : bool
+        Whether the evaluation runs in float32.
+
+    Returns
+    -------
+    ndarray
+        ``mdot`` in Eddington units [dimensionless].
+    """
+    if float32:
+        return _adaf_mdot_from_lbol(10.0**agn_log_lbol, m, alpha, beta, delta, float32=True)
+    return _adaf_mdot_from_lbol(10.0**agn_log_lbol * _LSUN_ERG, m, alpha, beta, delta)
+
+
+#: Mahadevan (1997) Eq. 4: ``Mdot_Edd = L_Edd / (eta_eff c^2) = 1.39e18 m g/s`` with
+#: ``eta_eff = 0.1``, so the accretion power of the flow is ``Mdot c^2 = mdot Mdot_Edd c^2``.
+_MDOT_EDD_G_PER_S_PER_MSUN: float = 1.39e18
+_LOG10_MDOT_EDD_C2_ERG_S_PER_MSUN: float = float(
+    np.log10(_MDOT_EDD_G_PER_S_PER_MSUN * _C_LIGHT**2)
+)
+
+
+def adaf_accretion_diagnostics(
+    agn_log_lbol: float,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_adaf_alpha: float = 0.3,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.1,
+    *,
+    dtype=None,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Accretion rate and accretion power of the ADAF that radiates ``agn_log_lbol``.
+
+    ``agn_log_lbol`` is the radiated luminosity :math:`L_{\rm ADAF} = Q_{ie} + \delta Q^+`
+    (Mahadevan 1997, Sect. 5.2, Eqs. 13 and 14); the accretion rate follows from it
+    (:func:`_adaf_mdot_from_lbol`). The paper scales it by the Eddington rate of Eq. 4,
+
+    .. math::
+
+        \dot M = \dot m\,\dot M_{\rm Edd}, \qquad
+        \dot M_{\rm Edd} = \frac{L_{\rm Edd}}{\eta_{\rm eff} c^2} = 1.39\times10^{18}\,m
+        \ \mathrm{g\,s^{-1}}, \qquad \eta_{\rm eff} = 0.1 ,
+
+    with :math:`m = M/M_\odot`, so the accretion power is
+
+    .. math::
+
+        \dot M c^2 = \dot m\,(1.39\times10^{18}\,m\ \mathrm{g\,s^{-1}})\,c^2
+                   = \dot m\,\frac{L_{\rm Edd}}{\eta_{\rm eff}} \quad [\mathrm{erg\,s^{-1}}] ,
+
+    :math:`c` the speed of light [cm/s] and :math:`L_{\rm Edd}` the Eddington luminosity
+    [erg/s]. The efficiency is the paper's :math:`\eta_{\rm eff}` of Eq. 4, not a model
+    choice; it is the conversion the paper itself uses to define :math:`\dot m`. It is the
+    power the infalling mass carries, not the radiated ``agn_log_lbol``, which stays the
+    ADAF's :math:`Q_{ie} + \delta Q^+`.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm ADAF}/L_\odot)`, the radiated luminosity the spectrum is
+        normalized to [dex].
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)` [dex]. Default ``DEFAULT_AGN_LOG_MBH``.
+    agn_adaf_alpha : float, optional
+        Viscosity parameter :math:`\alpha` [dimensionless]. Default 0.3.
+    agn_adaf_beta : float, optional
+        Gas-to-total pressure ratio :math:`\beta` [dimensionless]. Default 0.5.
+    agn_adaf_delta : float, optional
+        Electron viscous-heating fraction :math:`\delta` [dimensionless]. Default 0.1.
+    dtype : dtype, optional
+        Selects the float32 branch of the :math:`\dot m` solve (luminosity in
+        :math:`L_\odot`). Default: the canonical float dtype of the process.
+
+    Returns
+    -------
+    mdot : ndarray, shape ()
+        :math:`\dot m = \dot M/\dot M_{\rm Edd}` [dimensionless], clipped to the ADAF range
+        ``[1e-8, 0.28 alpha^2]`` (Eq. 52).
+    log_accretion_power : ndarray, shape ()
+        :math:`\log_{10}(\dot M c^2 / \mathrm{erg\,s^{-1}})` [dex re erg/s], formed in log
+        space (``Mdot c^2`` reaches 1e45 erg/s).
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes; the same solve as the spectrum's own accretion rate.
+    The derivative is discontinuous where :math:`\dot m` meets its clip.
+
+    Implements the same model as Mahadevan (1997 [1]_).
+
+    References
+    ----------
+    .. [1] Mahadevan, R. 1997, "Scaling Laws for Advection-dominated Flows: Applications to
+       Low-Luminosity Galactic Nuclei", ApJ, 477, 585. arXiv:astro-ph/9609107.
+       https://doi.org/10.1086/303727
+    """
+    dtype = jnp.asarray(0.0).dtype if dtype is None else dtype
+    m = 10.0**agn_log_mbh
+    mdot = _adaf_mdot_of_log_lbol(
+        agn_log_lbol, m, agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta, dtype == jnp.float32
+    )
+    log_power = jnp.log10(mdot) + agn_log_mbh + _LOG10_MDOT_EDD_C2_ERG_S_PER_MSUN
+    return mdot, log_power
+
+
 # ── Gauss-Legendre quadrature for the normalization integral ─────────────
 #
 # The spectrum is smooth in ln(nu) between its own breaks (nu_min, nu_p, 3 k T_e / h), so the
@@ -1506,10 +1623,7 @@ def adaf_scalar_state(
 
     # mdot from the SHAPE luminosity (float32: pass it in L_sun so the ~1e44 erg/s
     # l_bol_erg never forms).
-    if _f32:
-        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape, m, alpha, beta, delta, float32=True)
-    else:
-        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape * _LSUN_ERG, m, alpha, beta, delta)
+    mdot = _adaf_mdot_of_log_lbol(_lbol_shape, m, alpha, beta, delta, _f32)
     t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
     x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
     alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)

@@ -10,6 +10,7 @@ Validates:
 """
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri.components.agn.cat3d_torus_model import CAT3DTorus
@@ -71,11 +72,11 @@ class TestKD18DiscContract:
             assert p.units, f"{p.name} missing units"
 
     def test_kd18_outputs(self):
-        """KD18Disc publishes L_agn_disc (angle-integrated) and L_agn_disc_los."""
+        """KD18Disc publishes log_L_agn_disc (angle-integrated) and log_L_agn_disc_los [dex]."""
         component = KD18Disc()
         outputs = {o.name: o for o in component.outputs()}
-        assert set(outputs) == {"L_agn_disc", "L_agn_disc_los"}
-        assert all(o.units == "erg/s" for o in outputs.values())
+        assert set(outputs) == {"log_L_agn_disc", "log_L_agn_disc_los"}
+        assert all(o.units == "dex" for o in outputs.values())
 
     def test_kd18_inputs_empty(self):
         """KD18Disc has no required inputs."""
@@ -144,8 +145,9 @@ class TestKD18DiscContract:
         sed_out, published = component.predict(p, sed_in, wave)
 
         assert sed_out.shape == wave.shape
-        assert "L_agn_disc" in published
-        assert published["L_agn_disc"] >= 0.0
+        assert "log_L_agn_disc" in published
+        assert np.isfinite(float(published["log_L_agn_disc"]))
+        assert float(published["log_L_agn_disc"]) > 0.0
 
 
 class TestPowerLawDiscContract:
@@ -194,11 +196,12 @@ class TestPowerLawDiscContract:
             assert prior.default == canonical.default, attr
 
     def test_powerlaw_outputs(self):
-        """PowerLawDisc publishes L_agn_disc."""
+        """PowerLawDisc publishes log_L_agn_disc [dex]."""
         component = PowerLawDisc()
         outputs = component.outputs()
         assert len(outputs) == 1
-        assert outputs[0].name == "L_agn_disc"
+        assert outputs[0].name == "log_L_agn_disc"
+        assert outputs[0].units == "dex"
 
     def test_powerlaw_predict_shape(self):
         """PowerLawDisc.predict returns valid shapes."""
@@ -217,8 +220,9 @@ class TestPowerLawDiscContract:
         sed_out, published = component.predict(p, sed_in, wave)
 
         assert sed_out.shape == wave.shape
-        assert "L_agn_disc" in published
-        assert published["L_agn_disc"] >= 0.0
+        assert "log_L_agn_disc" in published
+        assert np.isfinite(float(published["log_L_agn_disc"]))
+        assert float(published["log_L_agn_disc"]) > 0.0
 
 
 class TestSilva04TorusContract:
@@ -278,11 +282,12 @@ class TestSilva04TorusContract:
             assert prior.default == canonical.default, attr
 
     def test_silva04_outputs(self):
-        """Silva04Torus publishes L_agn_torus."""
+        """Silva04Torus publishes log_L_agn_torus [dex]."""
         component = Silva04Torus()
         outputs = component.outputs()
         assert len(outputs) == 1
-        assert outputs[0].name == "L_agn_torus"
+        assert outputs[0].name == "log_L_agn_torus"
+        assert outputs[0].units == "dex"
 
     def test_silva04_predict_no_grid(self):
         """Silva04Torus.predict gracefully handles missing grid."""
@@ -304,7 +309,7 @@ class TestSilva04TorusContract:
 
         # Should return zero emission gracefully
         assert sed_out.shape == wave.shape
-        assert published["L_agn_torus"] == 0.0
+        assert published["log_L_agn_torus"] == -np.inf
 
 
 class TestCAT3DTorusContract:
@@ -362,11 +367,12 @@ class TestCAT3DTorusContract:
             assert prior.default == canonical.default, attr
 
     def test_cat3d_outputs(self):
-        """CAT3DTorus publishes L_agn_torus."""
+        """CAT3DTorus publishes log_L_agn_torus [dex]."""
         component = CAT3DTorus()
         outputs = component.outputs()
         assert len(outputs) == 1
-        assert outputs[0].name == "L_agn_torus"
+        assert outputs[0].name == "log_L_agn_torus"
+        assert outputs[0].units == "dex"
 
     def test_cat3d_predict_no_grid(self):
         """CAT3DTorus.predict gracefully handles missing grid."""
@@ -389,7 +395,7 @@ class TestCAT3DTorusContract:
 
         # Should return zero emission gracefully
         assert sed_out.shape == wave.shape
-        assert published["L_agn_torus"] == 0.0
+        assert published["log_L_agn_torus"] == -np.inf
 
 
 class TestSKIRTORAgnfitterTorusContract:
