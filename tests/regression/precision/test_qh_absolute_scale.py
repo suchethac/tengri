@@ -25,6 +25,7 @@ import pytest
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.components.nebular import mappings_photo as mp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tests._data_skip import requires_cloudy_grid
 
 pytestmark = pytest.mark.regression_bug
 
@@ -119,6 +120,7 @@ def test_mappings_halpha_over_qh_is_case_b_through_the_component(ssp_path):
     )
 
 
+@requires_cloudy_grid
 def test_cloudy_q_h_total_carries_the_table_scale():
     """Prediction's ``q_h_total`` for a 1e10 Msun population is near 10**52.8 photons/s.
 
