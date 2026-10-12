@@ -176,7 +176,13 @@ def _filter_integral_union(
     # local SED spacing and which jumps whenever a node crosses the edge (#2817).
     f_lo = jnp.min(filter_wave)
     f_hi = jnp.max(filter_wave)
-    grid = jnp.sort(jnp.concatenate([jnp.clip(wave_obs, f_lo, f_hi), filter_wave]))
+
+    # Where-based clamp, not jnp.clip: a node exactly on an edge keeps its full
+    # gradient (jnp.clip splits it at a tie), and a clipped node carries none.
+    def _into_support(x):
+        return jnp.where(x < f_lo, f_lo, jnp.where(x > f_hi, f_hi, x))
+
+    grid = jnp.sort(jnp.concatenate([_into_support(wave_obs), filter_wave]))
     if lyman_edge_obs_aa is None:
         L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
         trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
@@ -195,7 +201,7 @@ def _filter_integral_union(
         # an ORDINARY trapezoid integrates the step exactly, regardless of how
         # many filter nodes subdivide the straddling panel.
         y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
-        edge_pair = jnp.clip(jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype), f_lo, f_hi)
+        edge_pair = _into_support(jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype))
         all_x = jnp.concatenate([grid, edge_pair])
         L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
         all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
