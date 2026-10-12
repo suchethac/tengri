@@ -93,14 +93,31 @@ def test_jit_traced_grid_uses_general_path_not_constant_r(linear_wave, spectrum_
     assert calls == {"constant": 0, "variable": 1}
 
 
-def test_velocity_broaden_refuses_a_traced_grid(linear_wave):
-    """velocity_broaden has no general path, so an unverifiable grid must raise.
+def _bump(n):
+    x = np.arange(n)
+    return jnp.asarray(1.0 + 5.0 * np.exp(-0.5 * ((x - 0.4 * n) / 3.0) ** 2))
 
-    The log-uniformity check used to return silently on a tracer, leaving the
-    single-FFT path to run on a grid it could not inspect.
+
+@pytest.mark.parametrize("kind", ["log", "linear"])
+def test_velocity_broaden_traced_grid_matches_eager(kind):
+    """jit over a traced grid takes the piecewise path and matches the eager result (#2847).
+
+    On a log-uniform grid the reference is the eager single-FFT :func:`velocity_broaden`
+    (the piecewise bins share one sigma, so the two agree). On a linear grid the eager
+    :func:`velocity_broaden` raises, so the reference is the eager general path,
+    :func:`broaden_velocity_only`, on the same concrete grid.
     """
-    from tengri.observation.spectrum import velocity_broaden
+    from tengri.observation.spectrum import broaden_velocity_only, velocity_broaden
 
-    flux = jnp.ones(linear_wave.size)
-    with pytest.raises(ValueError, match="concrete"):
-        jax.jit(lambda w: velocity_broaden(flux, w, 150.0))(jnp.asarray(linear_wave))
+    n = 2000
+    wave = np.geomspace(4000.0, 9000.0, n) if kind == "log" else np.linspace(4000.0, 9000.0, n)
+    flux = _bump(n)
+    sigma = 150.0
+    if kind == "log":
+        eager = velocity_broaden(flux, jnp.asarray(wave), sigma)
+    else:
+        eager = broaden_velocity_only(flux, jnp.asarray(wave), sigma)
+
+    traced = jax.jit(lambda w: velocity_broaden(flux, w, sigma))(jnp.asarray(wave))
+    assert np.all(np.isfinite(np.asarray(traced)))
+    np.testing.assert_allclose(np.asarray(traced), np.asarray(eager), rtol=1e-6, atol=0.0)

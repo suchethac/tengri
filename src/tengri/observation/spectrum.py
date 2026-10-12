@@ -1586,9 +1586,9 @@ _LOG_UNIFORM_RTOL = 1e-6
 def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
-    Raises when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time, and this function has no general path to fall back on, so an
-    unverifiable grid must fail at build rather than run the single-FFT path (#2847).
+    The caller routes a traced grid elsewhere before calling this, because a traced
+    grid has no values to inspect at trace time (#2847). This helper only sees
+    concrete grids.
 
     Parameters
     ----------
@@ -1598,12 +1598,6 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
         Function name, quoted in the error so the message names the API the user
         actually called.
     """
-    if isinstance(wave, jax.core.Tracer):
-        raise ValueError(
-            f"{caller} needs a concrete wavelength grid to verify it is uniform in "
-            f"ln(lambda); got a traced grid. Close over the grid instead of passing "
-            f"it as a jit argument (#2847)."
-        )
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
@@ -1660,8 +1654,8 @@ def velocity_broaden(
     Raises
     ------
     ValueError
-        If ``wave`` is not uniform in ``ln(lambda)`` and is concrete at trace
-        time. Resample onto a log grid first.
+        If ``wave`` is concrete and not uniform in ``ln(lambda)``. Resample onto a
+        log grid first.
 
     Notes
     -----
@@ -1688,9 +1682,12 @@ def velocity_broaden(
     instead, on the reasoning recorded in :mod:`tengri.forward.approx_policy`:
     a silently-defaulting read is worse than a loud failure.
 
-    The check is skipped when ``wave`` is a tracer, since a traced grid cannot
-    be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
-    grid (the usual case for a fixed instrument grid) it still fires.
+    A traced ``wave`` cannot be inspected at trace time, so it takes the piecewise
+    path of :func:`broaden_velocity_only` instead, which reads the pixel scale per
+    pixel and so is correct on any increasing grid. On a log-uniform grid that path
+    equals the single FFT (the piecewise bins share one sigma). Under ``jax.jit``
+    with a concrete (closed-over) grid, the usual case for a fixed instrument grid,
+    the check still fires.
 
     Examples
     --------
@@ -1703,6 +1700,8 @@ def velocity_broaden(
     True
 
     """
+    if isinstance(wave, jax.core.Tracer):
+        return broaden_velocity_only(flux, wave, sigma_km_s)
     _require_log_uniform_grid(wave, "velocity_broaden")
     sigma_bound = _lsf_sigma_bound_kms(sigma_v_kms=sigma_km_s)
     pad = _lsf_pad_pixels(wave, flux.shape[0], sigma_bound)

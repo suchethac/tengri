@@ -41,7 +41,8 @@ _CONCRETENESS_HELPERS = frozenset(
 )
 
 #: ``module::qualname`` -> which path an unknown (traced or runtime) input takes.
-#: Filled from the audit recorded with #2847; a new entry needs the same justification.
+#: One entry per site that branches on a tracer or a runtime redshift; a new entry needs
+#: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
     "_cache_keys.py::baked": "traced value raises TypeError: a traced value cannot key a cache",
@@ -69,7 +70,7 @@ ALLOWLIST: dict[str, str] = {
         "for a runtime z)"
     ),
     "forward/sed_model.py::SEDModel.__init__": (
-        "catalog or free redshift -> z-table enabled in both branches (#2858 census)"
+        "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),
     "forward/sed_model.py::SEDModel._build_component_chain": (
         "via redshift_is_runtime: catalog or free -> runtime z-table spec, never the placeholder"
@@ -106,9 +107,6 @@ ALLOWLIST: dict[str, str] = {
         "tracer -> False: unknown, takes the general piecewise LSF path (#2847)"
     ),
     "observation/spectrum.py::_is_traced": "predicate: tracer -> True",
-    "observation/spectrum.py::_require_log_uniform_grid": (
-        "tracer raises ValueError: no general path exists for velocity_broaden (#2847)"
-    ),
     "observation/spectrum.py::apply_lsf": (
         "log-uniform FFT only for a concrete log grid; traced or linear -> piecewise (#2847)"
     ),
@@ -121,7 +119,9 @@ ALLOWLIST: dict[str, str] = {
     "observation/spectrum.py::rest_grid_observed_window": (
         "traced grid -> None: the caller uses the full grid (general)"
     ),
-    "observation/spectrum.py::velocity_broaden": "raises for a traced grid (#2847)",
+    "observation/spectrum.py::velocity_broaden": (
+        "traced grid -> piecewise general path of broaden_velocity_only (#2847)"
+    ),
     # ---- recorded gaps: the unknown is not the general path; owner to decide ----
     "observation/spectrum.py::_lsf_sigma_bound_kms": (
         "GAP (documented #2832): a traced resolution or sigma counts as 2000 km/s, so a traced "
