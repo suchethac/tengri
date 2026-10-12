@@ -43,14 +43,18 @@ def test_all_zero_weights_give_minus_inf_value():
 
 def test_all_zero_weights_give_finite_gradient_in_metallicity():
     grad = float(jax.grad(lambda lz: _total(jnp.zeros(6), log_z=lz))(_LOG_Z))
+    # grad-assert: finite-only — value is -inf at every metallicity, so zero is correct
     assert np.isfinite(grad), f"d log q_h_total / d log Z is {grad} with no young mass"
 
 
 def test_all_zero_weights_give_finite_gradient_in_weights_and_fesc():
     g_w = np.asarray(jax.grad(lambda w: _total(w))(jnp.zeros(6)))
     g_f = float(jax.grad(lambda f: _total(jnp.zeros(6), fesc=f))(0.3))
+    # grad-assert: finite-only — weight derivative is masked to zero by design here
     assert np.all(np.isfinite(g_w)), f"d log q_h_total / d weights is {g_w}"
     assert np.isfinite(g_f), f"d log q_h_total / d fesc is {g_f}"
+    # The -inf value is constant in fesc, so the surviving term is log10(1 - fesc).
+    assert g_f != 0.0, "d log q_h_total / d fesc vanished; expected d log10(1 - fesc) / d fesc"
 
 
 def test_positive_weights_match_the_linear_sum_and_its_gradient():

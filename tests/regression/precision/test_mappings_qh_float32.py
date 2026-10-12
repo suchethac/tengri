@@ -154,12 +154,14 @@ def test_mappings_float32_matches_float64(ssp_path, tmp_path):
     peak = float(np.max(l64[fin64]))
     window = fin64 & (l64 > peak - 20.0)
     assert np.all(np.isfinite(l32[window])), "float32 log Q_H is non-finite on the peak window"
+    assert np.any(l32[window] != 0.0), "float32 log Q_H is identically zero on the window"
     dev_tab = float(np.max(np.abs(l32 - l64)[window]))
     assert dev_tab <= _LOG_BAR_DEX, f"log Q_H table differs by {dev_tab:.3e} dex (bar 1e-5)"
 
     # (a') log10 q_h_total.
     tot32, tot64 = float(f32["log_qh_total"]), float(f64["log_qh_total"])
     assert np.isfinite(tot32), f"float32 log q_h_total is {tot32}"
+    assert tot32 != 0.0, "float32 log q_h_total is identically zero"
     dev_tot = abs(tot32 - tot64)
     assert dev_tot <= _LOG_BAR_DEX, f"log q_h_total differs by {dev_tot:.3e} dex (bar 1e-5)"
     # The float64 log-sum must equal the linear sum it replaces, computed in NumPy
