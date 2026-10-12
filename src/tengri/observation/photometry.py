@@ -169,7 +169,14 @@ def _filter_integral_union(
         live Lyman-continuum mask ran (e.g. ``neb={'type': 'none'}``) and
         ``L_nu`` is smooth across the edge.
     """
-    grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
+    # The quadrature is confined to the filter's own support: nodes outside
+    # ``[filter_wave.min(), filter_wave.max()]`` collapse onto its edges as
+    # zero-width intervals. Without this, the transmission ramps linearly from a
+    # nonzero edge value to 0 out to the next SED node, a ramp whose width is the
+    # local SED spacing and which jumps whenever a node crosses the edge (#2817).
+    f_lo = jnp.min(filter_wave)
+    f_hi = jnp.max(filter_wave)
+    grid = jnp.sort(jnp.concatenate([jnp.clip(wave_obs, f_lo, f_hi), filter_wave]))
     if lyman_edge_obs_aa is None:
         L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
         trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
@@ -188,7 +195,7 @@ def _filter_integral_union(
         # an ORDINARY trapezoid integrates the step exactly, regardless of how
         # many filter nodes subdivide the straddling panel.
         y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
-        edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
+        edge_pair = jnp.clip(jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype), f_lo, f_hi)
         all_x = jnp.concatenate([grid, edge_pair])
         L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
         all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
