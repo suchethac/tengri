@@ -18,8 +18,10 @@ For the kubota_done, multicolor_disc and ADAF models, in float32 and float64, th
     unit ratio. The step is 1e-3 in float64 and 1e-2 in float32 (the float32 rounding of the
     difference is O(eps / h), so the larger step keeps it well below the 1e-3 tolerance the
     neighboring float32 gradient guards use);
-(d) at ratio 0.5 the float64 SED equals the pre-change SED to 1e-12. The golden values were
-    recorded from the code before the change.
+(d) at ratio 0.5 the float64 SED equals the golden values to 1e-12. The golden pins the
+    post-#2733 SED (the kubota_done corona of 243acb9a3; the pre-#2733 SED is 4.8% lower in
+    sum). The ratio-0 fix itself moves nothing at ratio 0.5: 1a6cb3b83^ vs 1a6cb3b83 agree to
+    1.7e-15 relative for kubota_done, and multicolor and ADAF are exactly equal.
 """
 
 import jax
@@ -39,7 +41,10 @@ _DTYPES = (jnp.float32, jnp.float64)
 _STEP = {jnp.float64: 1e-3, jnp.float32: 1e-2}
 _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 
-#: Pre-change SED at ratio 0.5, log L_bol = 11, log M_BH = 8, float64, on ``_WAVE``.
+#: SED at ratio 0.5, log L_bol = 11, log M_BH = 8, float64, on ``_WAVE``. Post-#2733 values
+#: (243acb9a3, the kubota_done corona carries exactly its counted l_hot): the head SED equals
+#: them exactly, and the pre-#2733 SED (b4e2cb526^) is 4.8% lower in sum for kubota_done.
+#: multicolor and ADAF are unaffected by #2733.
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
     "kubota_done": {
