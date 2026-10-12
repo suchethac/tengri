@@ -28,7 +28,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.disc_cigale import (
     adaf_disk_limits,
@@ -39,7 +38,7 @@ from tengri.components.agn.disc_cigale import (
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, L_SUN as _L_SUN
 
 __all__ = ["SKIRTORTorus"]
 
@@ -666,16 +665,13 @@ class SKIRTORTorus(SEDModelComponent):
         sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
         dust_pub = comp_pub.dust
 
-        # Published luminosities: exact integrals of the emitted disc and dust SEDs.
-        # L_agn_disc is the angle-integrated accretion power (owner ruling #2678): the disc
-        # at the reference inclination cos i = 1/2, where the line-of-sight power equals the
-        # angle-integrated power (as in disc.py), so it does not depend on agn_cos_inc. The
-        # line-of-sight integral at the requested inclination is L_agn_disc_los.
-        raw_ref_pub = _components(wave_pub, cos_inc=COS_INC_ISOTROPIC_REFERENCE).disk
-        renorm_ref = native_bolometric_nu(raw_ref_pub * support_pub, wave_pub) / (
-            _bolometric_tilted(raw_ref_pub, wave_pub, support_pub)
-        )
-        L_agn_disc = renorm_ref * _bolometric_tilted(raw_ref_pub, wave_pub)
+        # Published luminosities. L_agn_disc is the angle-integrated disc power that the
+        # normalization defines (owner ruling #2678): the library disc and torus are both
+        # normalized to frac * L_bol (``_interpolate_and_normalize``), and the torus is
+        # published at exactly that value at every cos i. It is set from the normalization,
+        # so it does not depend on agn_cos_inc. L_agn_disc_los is the integral of the emitted
+        # disc at the requested inclination.
+        L_agn_disc = p["torus_frac"] * 10.0 ** p["log_lbol"] * _L_SUN
         L_agn_disc_los = disc_renorm * _bolometric_tilted(raw_pub, wave_pub)
         L_agn_torus = native_bolometric_nu(dust_pub, wave_pub)
 

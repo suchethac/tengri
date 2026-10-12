@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
 
@@ -54,9 +55,9 @@ def test_skirtor_l_agn_disc_independent_of_inclination():
         params = dict(_PARAMS, cos_inc=jnp.array(cos_inc))
         _, published[cos_inc] = component.predict(params, jnp.zeros_like(wave), wave)
 
-    disc_face = float(published[0.1]["L_agn_disc"])
-    disc_edge = float(published[0.9]["L_agn_disc"])
-    assert disc_face > 0.0
-    np.testing.assert_allclose(disc_edge, disc_face, rtol=1e-10)
+    # L_agn_disc is the normalization's disc power: torus_frac * L_bol, L_bol = 10**log_lbol L_sun.
+    expected = 0.5 * 10.0**10.0 * L_SUN
+    for cos_inc in (0.1, 0.9):
+        np.testing.assert_allclose(float(published[cos_inc]["L_agn_disc"]), expected, rtol=1e-6)
     # The polar-dust absorption does depend on inclination; the test must not be vacuous.
     assert float(published[0.1]["L_agn_polar_dust"]) != float(published[0.9]["L_agn_polar_dust"])
