@@ -260,7 +260,12 @@ class PublishedLuminosities:
         Returns
         -------
         dict
-            ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars.
+            ``L_agn_bol``, ``L_agn_torus``, ``L_agn_absorbed`` [erg/s], scalars, at the scale
+            ``params["agn_grahsp_l5100"]`` carries. ``GRAHSPSEDComponent.apply`` calls this
+            with the evaluation-scale ``l5100`` (the true value in float64, the reference
+            1e10 erg/s in float32) and publishes the ``log10`` of each, plus the offset, as
+            ``log_L_agn_bol`` / ``log_L_agn_torus`` / ``log_L_agn_absorbed``: every value
+            here is linear in ``l5100``.
 
         Notes
         -----

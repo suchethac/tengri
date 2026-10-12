@@ -349,8 +349,25 @@ out-of-range final value representable. The rule these fixes converged on:
   kernel; a linear prior over a range spanning float32's ceiling is unfittable in float32 by
   construction, regardless of the unit it is denominated in.
 
+- **A standalone AGN component publishes an integrated luminosity as `log_L_agn_<piece>` in dex
+  re erg/s, with no linear sibling** (#2842): `log_L_agn_disc`, `log_L_agn_torus`,
+  `log_L_agn_polar_dust`, `log_L_agn_absorbed`. A component's published value is formed in log
+  space (a peak-factored integral plus the peak's `log10`, or a reference evaluation plus a log
+  offset through `utils/scale.py`), never as an erg/s number that is then logged. The one erg/s
+  key kept is `L_agn_bol`, the cross-component input of the radio and X-ray components; it is a
+  float64 convenience beside `log_L_agn_bol` and is `inf` in float32. `erg/s/Hz` keys
+  (`L_2500_30deg`, `L_6um`, `L_12um`) are spectral densities and stay.
+- **An anisotropic emitter publishes the angle-integrated power under the plain name and the
+  line-of-sight value under `_los`** (#2678, #2851): `log_L_agn_disc` is
+  `(1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu`, `mu = cos i`, and does not depend
+  on the inclination; `log_L_agn_disc_los` is the power of the SED emitted along `cos_inc`.
+  Kubota & Done 2018 and SKIRTOR (disc, torus, polar dust) follow it.
+
 Every case above is a **breaking change with no alias** (§0): the pre-v1.0 policy applies,
-and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one.
+and these are the wording template (`CHANGELOG.md` #1206 entries) for the next one. The one
+exception is #2842's standalone-GRAHSP parameter `agn_grahsp_l5100`, which keeps a
+`DeprecationWarning` alias through v0.x because the component accepted it as a plain mapping
+key that could not be intercepted at the call site.
 
 ---
 

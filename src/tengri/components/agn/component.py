@@ -66,6 +66,7 @@ from tengri.components.agn._lbol_reference import (
 )
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
+from tengri.components.agn.adaf import adaf_accretion_diagnostics
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
 from tengri.components.agn.unified import (
@@ -87,6 +88,10 @@ __all__ = [
     "AGNSEDComponent",
     "AGNSEDComponentConfig",
 ]
+
+#: ``(alpha, beta, delta)`` of the ADAF when the parameters are not supplied: the defaults of
+#: :func:`~tengri.components.agn.adaf.adaf_spectrum`.
+_ADAF_DEFAULTS: tuple[float, float, float] = (0.3, 0.5, 0.1)
 
 
 @dataclass(frozen=True)
@@ -228,6 +233,20 @@ class AGNSEDComponent(TemplateThreading):
                 "[dex re erg/s] of the AGN direct emission, int L_nu(i) dnu with "
                 "L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust; "
                 "composable model only. Compare with a catalog L_bol",
+            ),
+            DerivedKey(
+                "agn_adaf_mdot",
+                "",
+                "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd with "
+                "Mdot_Edd = L_Edd / (0.1 c^2) (Mahadevan 1997, Eq. 4), derived from the "
+                "radiated agn_log_lbol; composable model with the 'adaf' disc only",
+            ),
+            DerivedKey(
+                "log_L_agn_adaf_accretion",
+                "dex",
+                "log10 of the ADAF accretion power Mdot c^2 = mdot Mdot_Edd c^2 [dex re "
+                "erg/s] (Mahadevan 1997, Eq. 4); agn_log_lbol stays the radiated luminosity "
+                "Q_ie + delta Q+; composable model with the 'adaf' disc only",
             ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
@@ -698,6 +717,19 @@ class AGNSEDComponent(TemplateThreading):
             derived_overrides["sed_agn_lines"] = agn_components["lines"]
             derived_overrides["sed_agn_polar"] = agn_components["polar"]
             derived_overrides["log_L_agn_los"] = agn_components[LOS_LOG_LUMINOSITY_KEY]
+        if self.config.model == "composable" and self.config.agn_disc_block == "adaf":
+            # The ADAF's accretion side (Mahadevan 1997, Eq. 4): ``agn_log_lbol`` is the
+            # radiated luminosity Q_ie + delta Q+, so the accretion power is not it.
+            derived_overrides["agn_adaf_mdot"], derived_overrides["log_L_agn_adaf_accretion"] = (
+                adaf_accretion_diagnostics(
+                    agn_log_lbol,
+                    agn_kwargs["agn_log_mbh"],
+                    agn_kwargs.get("agn_adaf_alpha", _ADAF_DEFAULTS[0]),
+                    agn_kwargs.get("agn_adaf_beta", _ADAF_DEFAULTS[1]),
+                    agn_kwargs.get("agn_adaf_delta", _ADAF_DEFAULTS[2]),
+                    dtype=wave.dtype,
+                )
+            )
         # The line-only light exactly as it enters the pipeline SED (#2565): the
         # AGN's own screen is already applied (``agn_components["lines"]``, the
         # monolithic ``return_components`` lines), the host dust screen is not.

@@ -6,7 +6,7 @@ Validates:
 - Registry entry under name "skirtor"
 - Free parameter discovery and units preservation
 - Parity vs existing skirtor_analytic for same parameters
-- Cross-component output (L_agn_torus) publishing
+- Cross-component output (log_L_agn_torus) publishing
 - Missing template data: zero emission when no grid was requested, a loud
   FileNotFoundError when a named grid cannot be loaded
 """
@@ -115,7 +115,8 @@ class TestSKIRTORComponentBasics:
         """outputs() method returns the six CIGALE-faithful cross-component keys.
 
         Post-#329 (CIGALE-faithful BLR/NLR/X-ray/SKIRTOR), SKIRTORTorus publishes
-        a richer set: separate disc/torus/polar-dust bolometric luminosities, the
+        a richer set: separate disc/torus/polar-dust bolometric luminosities (each as an
+        angle-integrated log10 power [dex] and its line-of-sight sibling, #2851), the
         AGN-only 2500 A monochromatic luminosity (used for α_OX), and the mid-IR
         diagnostics at 6 and 12 micron.
         """
@@ -123,16 +124,19 @@ class TestSKIRTORComponentBasics:
         outs = comp.outputs()
         names = {o.name for o in outs}
         expected = {
-            "L_agn_disc",
-            "L_agn_torus",
-            "L_agn_polar_dust",
+            "log_L_agn_disc",
+            "log_L_agn_disc_los",
+            "log_L_agn_torus",
+            "log_L_agn_torus_los",
+            "log_L_agn_polar_dust",
+            "log_L_agn_polar_dust_los",
             "L_2500_30deg",
             "L_6um",
             "L_12um",
         }
         assert names == expected
         units = {o.name: o.units for o in outs}
-        assert units["L_agn_torus"] == "erg/s"
+        assert units["log_L_agn_torus"] == "dex"
         assert units["L_6um"] == "erg/s/Hz"
 
 
@@ -263,8 +267,8 @@ class TestSKIRTORPredictParity:
         sed_out, published = skirtor_component.predict(params, sed_in, wave)
 
         chex.assert_equal_shape([sed_out, wave])
-        assert "L_agn_torus" in published
-        assert published["L_agn_torus"].shape == ()
+        assert "log_L_agn_torus" in published
+        assert published["log_L_agn_torus"].shape == ()
 
     def test_output_shape(self, skirtor_component, wave):
         """Output SED has same shape as input."""
@@ -350,7 +354,9 @@ class TestSKIRTORMissingData:
         sed_out, published = comp.predict(params, sed_in, wave)
 
         assert jnp.allclose(sed_out, sed_in), "Should return input SED unchanged"
-        assert jnp.allclose(published["L_agn_torus"], 0.0), "Should publish zero luminosity"
+        assert published["log_L_agn_torus"] == -jnp.inf, (
+            "Should publish zero luminosity (-inf dex)"
+        )
 
     def test_load_nonexistent_path_raises(self):
         """load() raises for a grid_path that is set but cannot be loaded.

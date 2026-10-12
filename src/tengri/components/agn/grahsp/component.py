@@ -5,10 +5,12 @@ Mirrors the canonical adapter pattern of :mod:`tengri.components.radio.component
 The component publishes (all under ``state.derived``):
 
 - ``sed_grahsp``: :math:`L_\\nu` [erg/s/Hz] of the full GRAHSP AGN-side SED.
-- ``L_agn_bol``: bolometric BBB luminosity (paper §2.1.4 ``lumBolBBB``).
-- ``L_agn_torus``: torus bolometric luminosity (``lumBolTOR``).
-- ``L_agn_absorbed``: energy absorbed by the AGN bi-attenuation (the
-  intrinsic-minus-attenuated integral over the AGN-side spectrum). Useful
+- ``L_agn_bol`` [erg/s] and ``log_L_agn_bol`` [dex re erg/s]: bolometric BBB luminosity
+  (paper §2.1.4 ``lumBolBBB``). The erg/s key is the one the radio and X-ray components read;
+  it is ``inf`` in float32, where the log key is the value.
+- ``log_L_agn_torus``: log10 torus bolometric luminosity (``lumBolTOR``) [dex re erg/s].
+- ``log_L_agn_absorbed``: log10 of the energy absorbed by the AGN bi-attenuation (the
+  intrinsic-minus-attenuated integral over the AGN-side spectrum) [dex re erg/s]. Useful
   for energy-budget diagnostics; see "Energy balance" below.
 
 Composition
@@ -40,7 +42,7 @@ Two notes that matter for getting realistic IR SEDs:
 2. **The AGN side does not need an explicit re-emission loop.** GRAHSP's
    torus parameters (``fcov``, cool/hot log-Gaussians) already empirically
    model the dust re-radiation of absorbed UV/optical AGN light (paper
-   §2.1.5). We publish ``L_agn_absorbed`` for diagnostics only: it is
+   §2.1.5). We publish ``log_L_agn_absorbed`` for diagnostics only: it is
    *not* fed into the Dale 2014 dust-emission component, since doing so
    would double-count the torus contribution.
 
@@ -52,10 +54,12 @@ All free parameters carry the ``agn_grahsp_`` prefix
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 from jax import Array
 
@@ -83,8 +87,10 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import apply_log10_scale, log10_magnitude, pow10
 
 __all__ = [
+    "L5100_REFERENCE_ERG_S",
     "GRAHSPSEDComponent",
     "GRAHSPSEDComponentConfig",
     "GRAHSPSEDComponentState",
@@ -93,6 +99,12 @@ __all__ = [
 
 # Speed of light in nm * Hz (== c in nm / s) for L_lambda <-> L_nu conversion.
 _C_NM_PER_S: float = 2.99792458e17  # 1e9 * 2.998e8
+
+#: ``lambda L_lambda(5100 A)`` [erg/s] at which the model is evaluated in float32. The model
+#: is linear in ``l5100``, and 1e44 erg/s is ``inf`` in float32; at 1e10 erg/s the integrals
+#: and the squares of the internal sums stay far inside the float32 range.
+L5100_REFERENCE_ERG_S: float = 1.0e10
+_LOG10_L5100_REF: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -251,9 +263,9 @@ class GRAHSPSEDComponent(PublishedLuminosities):
         """
         return [
             ParamDeclaration(
-                "agn_grahsp_l5100",
-                LogUniform(1.0e38, 1.0e50),
-                "lambda*L_lambda(5100Å) in erg/s",
+                "agn_grahsp_log_l5100",
+                Uniform(38.0, 50.0),
+                "log10 of lambda*L_lambda(5100 A) [dex re erg/s]",
             ),
             ParamDeclaration(
                 "agn_grahsp_uvslope",
@@ -371,8 +383,18 @@ class GRAHSPSEDComponent(PublishedLuminosities):
         """
         return (
             DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity (GRAHSP variant)"),
-            DerivedKey("L_agn_torus", "erg/s", "Torus thermal luminosity component"),
-            DerivedKey("L_agn_absorbed", "erg/s", "Energy absorbed by torus"),
+            DerivedKey(
+                "log_L_agn_bol",
+                "dex",
+                "log10(L_agn_bol / (erg/s)); float32-safe form "
+                "(L_agn_bol ~1e44 overflows float32)",
+            ),
+            DerivedKey("log_L_agn_torus", "dex", "log10 torus thermal luminosity [dex re erg/s]"),
+            DerivedKey(
+                "log_L_agn_absorbed",
+                "dex",
+                "log10 power removed by the AGN bi-attenuation screen [dex re erg/s]",
+            ),
             DerivedKey("sed_grahsp", "erg/s/Hz", "Full GRAHSP AGN SED on pipeline wave grid"),
         )
 
@@ -444,13 +466,27 @@ class GRAHSPSEDComponent(PublishedLuminosities):
         -------
         ForwardState
             Updated with ``sed_intrinsic`` augmented and ``derived``
-            keys ``sed_grahsp``, ``L_agn_bol``, ``L_agn_torus``.
+            keys ``sed_grahsp``, ``L_agn_bol``, ``log_L_agn_bol``, ``log_L_agn_torus`` and
+            ``log_L_agn_absorbed``.
+
+        Notes
+        -----
+        Every luminosity published here is linear in :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`
+        (``l5100``), a parameter carried as ``agn_grahsp_log_l5100`` because ``l5100`` of
+        1e44 erg/s is ``inf`` in float32. The component evaluates the model at
+        ``l5100 = 10**log_l5100`` in float64 and at the reference ``1e10`` erg/s in float32,
+        then restores the magnitude in log space: the SED through
+        :func:`~tengri.utils.scale.apply_log10_scale` and the powers as ``log_*`` keys.
+        ``L_agn_bol`` is the one erg/s key kept, because the radio and X-ray components read
+        it; it is ``inf`` in float32 (read ``log_L_agn_bol`` there) and carries no gradient
+        in float32.
         """
         if templates_state is None:
             templates_state = self.precompute()
 
         wave_nm = state.wave * 0.1
-        bbb_intrinsic, torus_intrinsic = self._pieces(wave_nm, params, templates_state)
+        eval_params, offset, use_ref = self._at_evaluation_scale(params, state.wave.dtype)
+        bbb_intrinsic, torus_intrinsic = self._pieces(wave_nm, eval_params, templates_state)
         factor_agn = self._attenuation(wave_nm, params)
         if factor_agn is None:
             bbb_total, torus_total = bbb_intrinsic, torus_intrinsic
@@ -460,10 +496,66 @@ class GRAHSPSEDComponent(PublishedLuminosities):
 
         # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
         L_nu = (bbb_total + torus_total) * wave_nm**2 / _C_NM_PER_S
-        published = self._published_luminosities(params, templates_state)
+        if use_ref:
+            L_nu = apply_log10_scale(L_nu, offset)
+        powers = self._published_luminosities(eval_params, templates_state)
+        log_bol = log10_magnitude(powers["L_agn_bol"]) + offset
+        published = {
+            # The erg/s key the radio and X-ray components read: the value in float64, an
+            # ``inf`` stop_gradient'd constant in float32 (as AGNSEDComponent publishes it).
+            "L_agn_bol": jax.lax.stop_gradient(pow10(log_bol)) if use_ref else powers["L_agn_bol"],
+            "log_L_agn_bol": log_bol,
+            "log_L_agn_torus": log10_magnitude(powers["L_agn_torus"]) + offset,
+            "log_L_agn_absorbed": log10_magnitude(powers["L_agn_absorbed"]) + offset,
+        }
         return state.add_intrinsic(L_nu).with_(
             derived=state.derived.with_(sed_grahsp=L_nu, **published),
         )
+
+    def _at_evaluation_scale(
+        self, params: Mapping[str, Array], dtype
+    ) -> tuple[Mapping[str, Array], Array | float, bool]:
+        r"""``params`` with a linear ``agn_grahsp_l5100`` at the scale the model is evaluated at.
+
+        Parameters
+        ----------
+        params : mapping
+            ``agn_grahsp_*`` keys, with ``agn_grahsp_log_l5100`` [dex re erg/s].
+        dtype : dtype
+            Floating dtype of the rest-frame wavelength grid.
+
+        Returns
+        -------
+        eval_params : mapping
+            ``params`` plus ``agn_grahsp_l5100`` [erg/s]: ``10**log_l5100`` in float64, the
+            reference :data:`L5100_REFERENCE_ERG_S` in float32.
+        offset : float or ndarray
+            ``log_l5100`` minus the log of the evaluated ``l5100`` [dex]: zero in float64.
+        use_ref : bool
+            True in float32, where every output is rescaled by ``offset``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. Every output of the model is linear in ``l5100`` (the
+        bending power law, the lines, the FeII forest, the Balmer continuum, the Netzer disc
+        and the torus all scale with it), so evaluating at a reference and rescaling is exact.
+        """
+        if "agn_grahsp_log_l5100" not in params and "agn_grahsp_l5100" in params:
+            warnings.warn(
+                "GRAHSPSEDComponent: the linear parameter 'agn_grahsp_l5100' [erg/s] is "
+                "deprecated and will be removed in tengri v1.0. A value of 1e44 erg/s is `inf` "
+                "in float32 before any physics runs. Pass 'agn_grahsp_log_l5100' = "
+                "log10(agn_grahsp_l5100) [dex re erg/s] instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            log_l5100 = jnp.log10(jnp.asarray(params["agn_grahsp_l5100"]))
+        else:
+            log_l5100 = jnp.asarray(params["agn_grahsp_log_l5100"])
+        if dtype == jnp.float32:
+            reference = jnp.asarray(L5100_REFERENCE_ERG_S, dtype=dtype)
+            return {**params, "agn_grahsp_l5100": reference}, log_l5100 - _LOG10_L5100_REF, True
+        return {**params, "agn_grahsp_l5100": 10.0**log_l5100}, 0.0, False
 
     def _pieces(
         self,
