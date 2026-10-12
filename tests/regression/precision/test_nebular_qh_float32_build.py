@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -357,6 +358,16 @@ print("WROTE", OUT, sorted(res))
 """
 
 
+#: Platform the committed fixture was written on (macOS, Apple silicon). There the
+#: float64 tables must match bit for bit. Elsewhere the libm and XLA CPU builds may
+#: round a transcendental differently in the last bit (the Linux CI runners do), so the
+#: tables are held to a relative bound instead: 1e-12 is about 4500 float64 ulp and five
+#: orders of magnitude below the float32 rounding (6e-8) that a float32 detour or an
+#: inexact scale in the float64 path, the regressions this test exists for, would leave.
+_BITWISE_REFERENCE_PLATFORM = ("Darwin", "arm64")
+_BITWISE_OFF_PLATFORM_RTOL = 1e-12
+
+
 def test_float64_tables_bit_identical_to_reference(tmp_path):
     """With x64 on, the Cue ionizing tables are bit-identical to the pre-#2849 build.
 
@@ -364,7 +375,9 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     ``_BITWISE_CHILD`` on the pre-#2849 tree. Exact float64 agreement holds
     because the power-of-two scale is exact and the log is taken in NumPy, as
     before. Only the three tables this change touches are pinned, so unrelated
-    changes to the model's spectrum do not move the reference.
+    changes to the model's spectrum do not move the reference. Exactness is
+    asserted on the platform that wrote the fixture; elsewhere the tables are
+    held to ``_BITWISE_OFF_PLATFORM_RTOL`` (see there for why).
     """
     _require_data(_SSP)
     with open(
@@ -388,9 +401,24 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     assert proc.returncode == 0, f"bit-identity child failed:\n{proc.stderr[-3000:]}"
     new = np.load(out)
     assert bool(new["x64"]) and bool(ref["x64"]), "both builds must run with x64 on"
+    exact = (platform.system(), platform.machine()) == _BITWISE_REFERENCE_PLATFORM
     for key in ref:
         if key == "x64":
             continue
-        assert np.array_equal(new[key], ref[key]), (
-            f"{key} differs from the reference float64 build"
+        a, b = new[key], ref[key]
+        assert a.shape == b.shape, f"{key} shape {a.shape} != reference {b.shape}"
+        assert np.array_equal(np.isfinite(a), np.isfinite(b)), (
+            f"{key} has non-finite entries where the reference has none, or the reverse"
+        )
+        if exact:
+            assert np.array_equal(a, b, equal_nan=True), (
+                f"{key} differs from the reference float64 build"
+            )
+            continue
+        fin = np.isfinite(b)
+        rel = np.abs(a[fin] - b[fin]) / np.maximum(np.abs(b[fin]), np.finfo(np.float64).tiny)
+        worst = float(rel.max()) if rel.size else 0.0
+        assert worst <= _BITWISE_OFF_PLATFORM_RTOL, (
+            f"{key} differs from the reference float64 build by {worst:.3e} relative "
+            f"(off-platform bound {_BITWISE_OFF_PLATFORM_RTOL:.0e})"
         )
