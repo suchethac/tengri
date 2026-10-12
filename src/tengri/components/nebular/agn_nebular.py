@@ -556,7 +556,7 @@ class SynthesizerGridData:
 
     Notes
     -----
-    Grid data is interpolated using C²-continuous triweight interpolation on all
+    Grid data is interpolated with node-exact PCHIP (``library_lookup``, #2861) on all
     6 parameter axes. All axes except ``cosine_axis`` are stored in log10 space
     internally for uniform sampling.
 
@@ -817,7 +817,7 @@ class SynthesizerNLRBackend:
         self._nH_sorted = jnp.sort(self.grid.logn_axis)
         self._nH_descending = bool(self.grid.logn_axis[0] > self.grid.logn_axis[-1])
 
-        # Precompute edges for triweight interpolation
+        # Bin edges for the six axes (kept on the instance).
         self._edges_mass = edges_for_grid(self._mass_sorted)
         self._edges_edd = edges_for_grid(self._edd_sorted)
         self._edges_cos = edges_for_grid(self._cos_sorted)
@@ -1136,8 +1136,8 @@ class FeltreGridData:
     -----
     Grid axes follow the Feltre et al. (2016) CLOUDY c13.03 photoionization
     calculations. All five are node samplings of continuous physical
-    quantities and all five are interpolated with the same C2-continuous
-    triweight kernel: :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` are tabulated
+    quantities and all five are interpolated with the same node-exact
+    PCHIP lookup: :math:`\\alpha_{\\rm pl}` and :math:`\\xi_d` are tabulated
     at four and three nodes respectively, which is a coarser sampling, not a
     different kind of axis.
 
