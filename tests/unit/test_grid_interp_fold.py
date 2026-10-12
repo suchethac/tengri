@@ -16,9 +16,14 @@ from tengri.utils.grid_interp import (
     _vectorized_interp,
     edge_split,
     fold_integrand,
+    fold_integrand_T,
     lyc_augment_fold,
+    lyc_augment_fold_T,
     lyc_augment_grid_for_step,
+    preintegrate_grid,
+    preintegrate_transposed,
     subband_quadrature,
+    transpose_templates,
 )
 
 RTOL = 1e-13
@@ -163,3 +168,76 @@ def test_lyc_augmented_fold_unbracketed_edge_falls_back(ssp_like):
     grid_f, fold_f, _ = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
     np.testing.assert_array_equal(grid_f, grid)
     _assert_match(fold_f.trapezoid(), _np_trapezoid(_materialized(grid, tw, wave, tmpl), grid, -1))
+
+
+def test_transposed_layout_is_contiguous_and_row_major_in_templates(ssp_like):
+    tmpl = ssp_like["templates"]
+    src_T = transpose_templates(tmpl)
+    assert src_T.flags.c_contiguous
+    assert src_T.shape == (tmpl.shape[-1], int(np.prod(tmpl.shape[:-1])))
+    np.testing.assert_array_equal(src_T, tmpl.reshape(-1, tmpl.shape[-1]).T)
+
+
+def test_fold_T_matches_materialized_for_trapezoid_and_dot(ssp_like):
+    grid, tw = ssp_like["grid"], ssp_like["tw"]
+    wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
+    src_T = transpose_templates(tmpl)
+    fold = fold_integrand_T(grid, tw, wave, src_T, tmpl.shape[:-1])
+    mat = _materialized(grid, tw, wave, tmpl)
+    assert fold.lead_shape == tmpl.shape[:-1]
+    _assert_match(fold.trapezoid(), _np_trapezoid(mat, grid, axis=-1))
+    weights = np.random.default_rng(11).uniform(-1.0, 1.0, (grid.size, 4))
+    _assert_match(fold.dot(weights), mat @ weights)
+
+
+def test_fold_T_subband_matches_materialized(ssp_like):
+    grid, tw = ssp_like["grid"], ssp_like["tw"]
+    wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
+    fold = fold_integrand_T(grid, tw, wave, transpose_templates(tmpl), tmpl.shape[:-1])
+    mat = _materialized(grid, tw, wave, tmpl)
+    denom = _np_trapezoid(tw, grid)
+    phi_f, nodes_f = subband_quadrature(grid, tw, fold, denom, N_SUB, EFF_WAVE, 911.76 * 1.8)
+    phi_m, nodes_m = subband_quadrature(grid, tw, mat, denom, N_SUB, EFF_WAVE, 911.76 * 1.8)
+    _assert_match(phi_f, phi_m)
+    _assert_match(nodes_f, nodes_m)
+
+
+def test_lyc_augmented_fold_T_matches_fold(ssp_like):
+    grid, tw = ssp_like["grid"], ssp_like["tw"]
+    wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
+    fw, ft = ssp_like["filter_wave"], ssp_like["filter_trans"]
+    edge = float(wave[60] * 1.0000007 + 0.25)
+    grid_a, fold_a, tw_a = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
+    grid_t, fold_t, tw_t = lyc_augment_fold_T(
+        grid, tw, wave, transpose_templates(tmpl), tmpl.shape[:-1], fw, ft, edge
+    )
+    np.testing.assert_array_equal(grid_t, grid_a)
+    np.testing.assert_array_equal(tw_t, tw_a)
+    _assert_match(fold_t.trapezoid(), fold_a.trapezoid())
+    below_t, above_t = edge_split(fold_t, grid_t, edge)
+    below_a, above_a = edge_split(fold_a, grid_a, edge)
+    _assert_match(below_t, below_a)
+    _assert_match(above_t, above_a)
+
+
+@pytest.mark.parametrize("lyc_gate", [False, True])
+def test_preintegrate_transposed_matches_preintegrate_grid(ssp_like, lyc_gate):
+    wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
+    filters = [
+        (ssp_like["filter_wave"], ssp_like["filter_trans"]),
+        (np.linspace(3000.0, 9000.0, 60), np.linspace(0.2, 0.9, 60)),
+    ]
+    kwargs = dict(redshift=0.7, dl_cm=1.0, taylor=True, n_subbands=N_SUB, lyc_gate=lyc_gate)
+    ref = preintegrate_grid(tmpl, wave, [f[0] for f in filters], [f[1] for f in filters], **kwargs)
+    got = preintegrate_transposed(
+        transpose_templates(tmpl),
+        tmpl.shape[:-1],
+        wave,
+        [f[0] for f in filters],
+        [f[1] for f in filters],
+        **kwargs,
+    )
+    for name in ("phot", "moment", "subband_phot", "subband_waves_rest"):
+        _assert_match(np.asarray(getattr(got, name)), np.asarray(getattr(ref, name)))
+    if lyc_gate:
+        _assert_match(np.asarray(got.lyc_phot), np.asarray(ref.lyc_phot))
