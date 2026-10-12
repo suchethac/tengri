@@ -75,7 +75,7 @@ ALL_PR_JOBS: dict[str, str] = {
 # when its code is actually proposed for `main`. Membership here is enforced --
 # see `guards_on_base_ref`.
 FULL_TIER_JOBS: dict[str, str] = {
-    "test": "up to nine shards from a dynamic matrix, ~19 min wall; the dominant cost of a run",
+    "test": "up to ten shards from a dynamic matrix, ~19 min wall; the dominant cost of a run",
     "gallery-changes": "gates `gallery`; withholding it cascades correctly",
 }
 

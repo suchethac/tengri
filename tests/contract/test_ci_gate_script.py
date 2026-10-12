@@ -142,11 +142,12 @@ def _shards(result: dict[str, str]) -> list[str]:
 
 
 CHEAP = ["physics", "regression-c"]
-DOCS = ["contract", "components", "regression-a", "regression-d"]
+DOCS = ["contract", "components", "regression-a1", "regression-a2", "regression-d"]
 EVERY = [
     "contract",
     "components",
-    "regression-a",
+    "regression-a1",
+    "regression-a2",
     "regression-b1",
     "regression-b2",
     "regression-b3",

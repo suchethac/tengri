@@ -132,15 +132,15 @@ env:
 # CI tiers, by event (`gallery-changes` computes the scope; `ci-ok` checks it):
 #
 #   pull_request   cheap by default: lint, security, smoke, `physics`,
-#                  `regression-c`, plus `contract`, `components`, `regression-a`,
-#                  `regression-d` when the diff touches docs/, notebooks/,
+#                  `regression-c`, plus `contract`, `components`, `regression-a1`,
+#                  `regression-a2`, `regression-d` when the diff touches docs/, notebooks/,
 #                  reproduction/ or a top-level *.md (scope cheap / cheap-docs).
-#                  A docs-only diff runs just those four (scope docs). The label
+#                  A docs-only diff runs just those five (scope docs). The label
 #                  `full-tests` runs the full suite (scope all), and so does a
 #                  diff touching the CI machinery (workflows, ci_ok.py,
 #                  ci_split_paths.py, pyproject.toml, any conftest.py). A draft
 #                  runs the gates only (scope none).
-#   push (main)    the FULL suite after the commit lands (scope all: all nine
+#   push (main)    the FULL suite after the commit lands (scope all: all ten
 #                  shards, plus the gallery when the pushed range touched a
 #                  gallery input). A failure in a shard the cheap tier skipped
 #                  is caught here, right after landing.
@@ -197,7 +197,7 @@ jobs:
             {
               echo "## Full CI tier (push to main)"
               echo
-              echo "**Ran:** lint, security, smoke, all nine \`test\` shards, and the gallery"
+              echo "**Ran:** lint, security, smoke, all ten \`test\` shards, and the gallery"
               echo "when the pushed commits touched a gallery input."
               echo
               echo "Pull requests run the cheap tier, so this is where a failure in a shard"
@@ -634,8 +634,10 @@ jobs:
   #          The `contract` shard holds the render-hash, docs-sync,
   #          registry-string and reproduction-driver guards, `components` holds
   #          `tests/unit` and a parity test that reads reproduction/,
-  #          `regression-a` reads docs/dev and `regression-d` scans every *.md
-  #          (CLAUDE.md included). Those four shards run; the other five read
+  #          `regression-a2` (precision) reads docs/dev and `regression-d` scans every *.md
+  #          (CLAUDE.md included). `regression-a1` (synthesizer_parity) reads none
+  #          of these trees but keeps the scope its predecessor had. Those five
+  #          shards run; the other five read
   #          none of these trees and are withheld. One exception is known:
   #          `tests/regression/bug/test_bug_vacuum_wavelengths_everywhere.py`
   #          scans `reproduction/**/*.py`, and a bug shard is withheld by this
@@ -730,7 +732,8 @@ jobs:
           [
             {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":120,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
             {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
-            {"shard":"regression-a","paths":"tests/regression/synthesizer_parity tests/regression/precision","bug_half":"","nproc":1,"timeout":85,"cache_gb":"1.0","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.3","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a2","paths":"tests/regression/precision","bug_half":"","nproc":1,"timeout":85,"cache_gb":"1.0","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":70,"cache_gb":"0.7","scopes":["all"]},
             {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
             {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
@@ -1236,7 +1239,7 @@ jobs:
       #     test tree escapes the table again.
       #   * budgets are above measured wall clock under runner-pool congestion
       #     (+60%): contract 120 (re-measured 2026-10-06; one worker holding a
-      #     case marked `timeout(1800)` needs the room), regression-a 85,
+      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 85,
       #     regression-b1/b2/b3 70, the rest 50. The per-test `--timeout=600` below
       #     still catches a real hang, so a budget bounds total wall clock only.
       #     Re-measure from a completed run's job durations before changing one.
@@ -1552,7 +1555,7 @@ jobs:
         #
         # coverage_budget is 1.5 × budget rounded up to the next 5, because
         # --cov adds 30-50% memory and wall-clock overhead (measured 2026-08-13:
-        # regression-a at 18m40s vs 40m00s with coverage on the same SHA).
+        # regression-a (before #2908's split) at 18m40s vs 40m00s with coverage on the same SHA).
         # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
           # 70, not 50, for the same reason as the test job's contract row
@@ -1605,10 +1608,15 @@ jobs:
           # the ACTUAL column; re-measure from a completed run's job durations
           # rather than from progress lines. This file's timing notes have now gone
           # stale three times — treat every number here as needing a date.
-          - shard: regression-a
-            paths: tests/regression/synthesizer_parity tests/regression/precision
+          - shard: regression-a1
+            paths: tests/regression/synthesizer_parity
             nproc: 1
             budget: 50
+            coverage_budget: 75
+          - shard: regression-a2
+            paths: tests/regression/precision
+            nproc: 1
+            budget: 85
             coverage_budget: 105
           # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
@@ -1698,8 +1706,10 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        # regression-a mirror: test job at 70 min, coverage at 1.5x = 105 min
-        timeout-minutes: ${{ matrix.shard == 'regression-a' && 105 || matrix.coverage_budget }}
+        # regression-a2 mirror: the precision tree is the long half; its test job
+        # is capped at 85 min, so it keeps the 105 min coverage budget the
+        # combined regression-a shard had.
+        timeout-minutes: ${{ matrix.shard == 'regression-a2' && 105 || matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
