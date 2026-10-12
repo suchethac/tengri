@@ -2211,6 +2211,7 @@ class Prediction:
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)
+            self._cache["log_q_h_total"] = jnp.array(jnp.nan)
             return
 
         # Pull the catalog from the orchestrator's NebularSEDComponent
@@ -2260,22 +2261,25 @@ class Prediction:
             and hasattr(backend, "_qh_table")
             and backend._qh_table is not None
         ):
+            from tengri.components.nebular._shared import log_q_h_total
+            from tengri.utils.scale import pow10
+
             log_z = jnp.asarray(log_z_history)[0]
-            young_idx = backend._young_idx
-            young_ages = model.ssp_log_ages_yr[young_idx]
-            young_weights = jnp.asarray(weights_orch)[young_idx]
-
-            def _qh_one_bin(log_age_i, w_i):
-                """Ionizing photon production rate for one age bin."""
-                return w_i * backend._get_qh_at(log_z, log_age_i)
-
-            import jax
-
-            q_h_per_bin = jax.vmap(_qh_one_bin)(young_ages, young_weights)
             neb_fesc = jnp.asarray(self._params.get("neb_fesc", 0.0))
-            self._cache["q_h_total"] = jnp.sum(q_h_per_bin) * (1.0 - neb_fesc)
+            # Summed in the log domain (#2853): a linear Q_H is ~1e47 photons/s per
+            # Msun and overflows float32 once multiplied by the mass weight.
+            log_total = log_q_h_total(
+                backend,
+                model.ssp_log_ages_yr,
+                jnp.asarray(weights_orch),
+                log_z,
+                neb_fesc,
+            )
+            self._cache["log_q_h_total"] = log_total
+            self._cache["q_h_total"] = pow10(log_total)
         else:
             self._cache["q_h_total"] = jnp.array(jnp.nan)
+            self._cache["log_q_h_total"] = jnp.array(jnp.nan)
 
     @property
     def sed_array(self):
