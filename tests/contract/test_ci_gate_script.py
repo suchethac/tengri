@@ -316,7 +316,7 @@ EVERY = [
         ),
         ("files API fails", {}, "all", "true", EVERY),
         ("empty file list", {"files": []}, "all", "true", EVERY),
-        ("unrecognised event", {"event": "repository_dispatch"}, "all", "true", EVERY),
+        ("unrecognized event", {"event": "repository_dispatch"}, "all", "true", EVERY),
     ],
 )
 def test_the_gate_chooses_the_scope_the_event_owes(tmp_path, name, kwargs, scope, gallery, shards):

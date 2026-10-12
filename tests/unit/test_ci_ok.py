@@ -300,7 +300,7 @@ class TestCheapTierFailureDetection:
     """A withheld shard reports `success`; a shard that ran and went red does not.
 
     `test` is a matrix whose result is the worst of its shards, so a failed or
-    cancelled `physics` shard in a cheap-tier run reaches ci-ok as `failure` or
+    canceled `physics` shard in a cheap-tier run reaches ci-ok as `failure` or
     `cancelled`, while the shards the scope stood down contribute nothing red.
     """
 
