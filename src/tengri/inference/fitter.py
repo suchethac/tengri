@@ -79,6 +79,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
+from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
@@ -3704,7 +3705,7 @@ class Fitter:
         }
         p = _Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("wb") as f:
+        with atomic_path(p) as tmp, open(tmp, "wb") as f:
             pickle.dump(payload, f)
 
     def load_cache(self, path) -> None:
