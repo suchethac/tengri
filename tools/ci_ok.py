@@ -98,7 +98,11 @@ GATED = ("gallery",)
 SCHEDULED_TIER = ("slow", "coverage", "crossval")
 
 #: Events that always earn the full tier, having no base branch to weigh.
-_FULL_TIER_EVENTS = ("push", "schedule", "workflow_dispatch")
+#: ``merge_group`` is the merge queue's verdict on the commit about to land on
+#: ``main``: a skipped heavy job there is as much a fault as on a pull request
+#: against ``main``. (``test`` shards a run withholds on purpose stand down
+#: INSIDE the job and still report ``success``, so this stays strict.)
+_FULL_TIER_EVENTS = ("push", "merge_group", "schedule", "workflow_dispatch")
 
 
 def full_tier_owed(event: str, base_ref: str) -> bool:

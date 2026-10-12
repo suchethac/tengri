@@ -135,13 +135,19 @@ jobs:
       # Restore the JAX compilation cache to avoid re-paying the compile cost.
       # One shared key across all matrix jobs: the first finisher's save succeeds,
       # later jobs run with a partially warm cache.
+      # Content-hashed key (pyproject.toml + installed JAX), saved by the weekly
+      # schedule only; a per-run key wrote a new entry per run into a repository
+      # whose Actions cache sat above its quota.
+      - id: jaxver
+        run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-notebooks-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          key: tengri-jax-notebooks-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}
           restore-keys: |
             tengri-jax-notebooks-${{ hashFiles('pyproject.toml') }}-
+            tengri-jax-notebooks-
       - name: Execute ${{ matrix.slug }}
         env:
           JAX_PLATFORMS: cpu
@@ -159,7 +165,7 @@ jobs:
       # job must pass for the cache to update. See the slow job's cache comment
       # for context.)
       - uses: actions/cache/save@v6
-        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}

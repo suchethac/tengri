@@ -115,7 +115,7 @@ class TestUnclassifiedJob:
 class TestFullTierOwed:
     """The base branch, not the event alone, decides what was owed."""
 
-    @pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
+    @pytest.mark.parametrize("event", ["push", "merge_group", "schedule", "workflow_dispatch"])
     def test_non_pr_events_always_owe_the_full_tier(self, event):
         assert ci_ok.full_tier_owed(event, "") is True
 
