@@ -33,8 +33,13 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
+from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
-from tengri.components.agn.grahsp.normalization import sbpl_disc_power_nm
+from tengri.components.agn.grahsp.publication import (
+    PUBLICATION_HI_NM,
+    gauss_legendre_segments,
+    publication_breakpoints,
+)
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import (
     si_feature,
@@ -56,34 +61,54 @@ _LOG10_LSUN_ERG: float = _math.log10(LSUN_ERG)
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _bolometric_unit_nm(unit_fn, node_arrays=()) -> Array:
+    r"""Bolometric integral above the Lyman limit of a unit-l5100 disc spectrum.
+
+    Integrated on the component's own publication grid (segmented Gauss-Legendre in
+    ln lambda between the template nodes in ``node_arrays``), never on the caller's
+    wavelength array, so the normalization does not depend on how the caller samples
+    wavelength.
+
+    Parameters
+    ----------
+    unit_fn : callable
+        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
+    node_arrays : sequence of array_like, optional
+        Template wavelength nodes [nm] that the spectrum is interpolated on.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int_{91.2\,\mathrm{nm}}^{\infty} L_\lambda\,\mathrm{d}\lambda` [erg/s].
+    """
+    breaks = publication_breakpoints(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, (), node_arrays)
+    lam_nm, weight_nm = gauss_legendre_segments(breaks)
+    return jnp.sum(weight_nm * unit_fn(lam_nm))
+
+
 def _disc_log_l5100(
-    wave_nm: Array,
-    L_lambda_unit_nm: Array,
+    unit_fn,
+    node_arrays,
     agn_log_lbol: float,
     agn_grahsp_log_l5100: float | None,
-    l_bol_unit: Array | None = None,
     **_params,
 ) -> Array:
     r"""Compute log10(L_lambda(5100A)) for disc blocks.
 
-    Normalizes a unit-spectrum disc (L_lambda_unit_nm at l5100=1.0) to either:
+    Normalizes a unit-spectrum disc (``unit_fn`` at l5100=1.0) to either:
     - The requested bolometric luminosity (if agn_grahsp_log_l5100 is None)
     - An explicit value with float32 shape-hint pre-shift (if agn_grahsp_log_l5100 is set)
 
     Parameters
     ----------
-    wave_nm : array_like
-        Wavelength [nm].
-    L_lambda_unit_nm : array_like
-        Disc spectrum normalized to l5100=1 [erg/s/nm].
+    unit_fn : callable
+        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
+    node_arrays : sequence of array_like
+        Template wavelength nodes [nm] of the disc (empty for the analytic BBB).
     agn_log_lbol : float
         Reference bolometric luminosity [dex(L_sun)].
     agn_grahsp_log_l5100 : float or None
         Explicit log10(L_lambda(5100A) / (erg/s)), or None to compute from bolometric.
-    l_bol_unit : array_like, optional
-        Unit-``l5100`` bolometric power above the Lyman limit [erg/s], integrated on
-        the component's own grid. When ``None``, it is taken from the caller's
-        grid as the trapezoid of ``L_lambda_unit_nm``.
     **_params
         Extra parameters; used to extract agn_log_lbol_shape (float32 pre-shift value).
 
@@ -94,12 +119,7 @@ def _disc_log_l5100(
     """
     if agn_grahsp_log_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
-        from tengri.components.agn.grahsp.bolometric import (
-            bolometric_luminosity_bbb,
-        )
-
-        if l_bol_unit is None:
-            l_bol_unit = bolometric_luminosity_bbb(wave_nm, L_lambda_unit_nm)
+        l_bol_unit = _bolometric_unit_nm(unit_fn, node_arrays)
         # log10(target) = agn_log_lbol + log10(L_sun); log10(l5100) =
         # log10(target) - log10(l_bol_unit). Never materializes the linear
         # target (~1e42-1e47, #1206 §D).
@@ -183,36 +203,28 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
 
-    # First evaluate at unit l5100 to measure bolometric integral.
-    L_lambda_unit_nm = sbpl_bbb(
-        wave_nm=wave_nm,
-        l5100=1.0,
-        uvslope=agn_grahsp_uvslope,
-        plslope=agn_grahsp_plslope,
-        plbendloc_nm=agn_grahsp_plbendloc_nm,
-        plbendwidth=agn_grahsp_plbendwidth,
-        cutoff_nm=agn_grahsp_cutoff_nm,
-    )
-    # GRAHSP has no X-ray physics: floor the disc below the alpha_ox corona's
-    # blue edge so this composable disc block does not double-count with the
-    # corona (#1168). Below the >=91.2 nm bolometric window, so normalization
-    # is unchanged.
-    L_lambda_unit_nm = floor_disc_xray(wave_nm, L_lambda_unit_nm)
+    def unit_fn(w_nm):
+        # Unit-l5100 SBPL. GRAHSP has no X-ray physics: floor the disc below the
+        # alpha_ox corona's blue edge so this composable disc block does not
+        # double-count with the corona (#1168). Below the >=91.2 nm window.
+        spec = sbpl_bbb(
+            wave_nm=w_nm,
+            l5100=1.0,
+            uvslope=agn_grahsp_uvslope,
+            plslope=agn_grahsp_plslope,
+            plbendloc_nm=agn_grahsp_plbendloc_nm,
+            plbendwidth=agn_grahsp_plbendwidth,
+            cutoff_nm=agn_grahsp_cutoff_nm,
+        )
+        return floor_disc_xray(w_nm, spec)
 
-    # Compute the 5100 A normalization using the shared helper, with the disc
-    # power integrated on its own log grid.
+    L_lambda_unit_nm = unit_fn(wave_nm)
+    # Normalization integral on the component's own grid (the analytic BBB has no nodes).
     log_l5100 = _disc_log_l5100(
-        wave_nm=wave_nm,
-        L_lambda_unit_nm=L_lambda_unit_nm,
+        unit_fn,
+        (),
         agn_log_lbol=agn_log_lbol,
         agn_grahsp_log_l5100=agn_grahsp_log_l5100,
-        l_bol_unit=sbpl_disc_power_nm(
-            agn_grahsp_uvslope,
-            agn_grahsp_plslope,
-            agn_grahsp_plbendloc_nm,
-            agn_grahsp_plbendwidth,
-            agn_grahsp_cutoff_nm,
-        ),
         **_params,
     )
 
@@ -300,28 +312,28 @@ def grahsp_netzer_disc_block(
             "GRAHSP template bundle lacks disc_wave_nm; regenerate with tools/build_grahsp_hdf5.py"
         )
 
-    # Interpolate disc spectrum at the given mass, spin, Eddington ratio.
-    # Returns the spectrum normalized to lambda*L_lambda(5100 A) = 1 erg/s.
-    spec_unit_nm = netzer_disc_interp(
-        wave_nm=wave_nm,
-        l5100=1.0,
-        disc_wave_nm=templates.disc_wave_nm,
-        disc_lumin=templates.disc_lumin,
-        disc_m=templates.disc_m,
-        disc_a=templates.disc_a,
-        disc_mdot=templates.disc_mdot,
-        log_mbh=agn_grahsp_netzer_log_mbh,
-        spin=agn_grahsp_netzer_spin,
-        log_mdot=agn_grahsp_netzer_log_mdot,
-    )
+    def unit_fn(w_nm):
+        # Interpolated disc at the given mass, spin, Eddington ratio, normalized to
+        # lambda*L_lambda(5100 A) = 1 erg/s, with the X-ray floor (#1168).
+        spec = netzer_disc_interp(
+            wave_nm=w_nm,
+            l5100=1.0,
+            disc_wave_nm=templates.disc_wave_nm,
+            disc_lumin=templates.disc_lumin,
+            disc_m=templates.disc_m,
+            disc_a=templates.disc_a,
+            disc_mdot=templates.disc_mdot,
+            log_mbh=agn_grahsp_netzer_log_mbh,
+            spin=agn_grahsp_netzer_spin,
+            log_mdot=agn_grahsp_netzer_log_mdot,
+        )
+        return floor_disc_xray(w_nm, spec)
 
-    # Apply X-ray floor to avoid double-counting with corona (#1168).
-    spec_unit_nm = floor_disc_xray(wave_nm, spec_unit_nm)
-
-    # Compute the 5100 A normalization using the shared helper.
+    spec_unit_nm = unit_fn(wave_nm)
+    # Normalization integral on the disc's own template nodes (never the caller's grid).
     log_l5100 = _disc_log_l5100(
-        wave_nm=wave_nm,
-        L_lambda_unit_nm=spec_unit_nm,
+        unit_fn,
+        (templates.disc_wave_nm,),
         agn_log_lbol=agn_log_lbol,
         agn_grahsp_log_l5100=agn_grahsp_log_l5100,
         **_params,

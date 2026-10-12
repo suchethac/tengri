@@ -33,8 +33,14 @@ class TestSbplDiscBitIdentityPin:
         """Registry lookup for the sbpl disc block."""
         return AGN_BLOCKS["disc"]["grahsp_sbpl"]
 
-    # (params, float.hex of the block output at _PIN_WAVE_AA), recorded from the block
-    # BEFORE the _disc_log_l5100 extraction (parent of the Netzer-block commit).
+    # (params, float.hex of the block output at _PIN_WAVE_AA). Rows 1-3 and 5 give an explicit
+    # l5100, so they do not depend on the normalization integral and are unchanged since the
+    # block was extracted. Row 4 sets the bolometric target (``agn_grahsp_log_l5100`` unset), so
+    # it follows the normalization integral above the Lyman limit, which runs on the block's own
+    # grid to 1e14 nm (it stopped at 1e8 nm, cutting the power-law tail beyond the 10 um cutoff).
+    # Re-recorded for that: new / old - 1 = -1.1306e-8 at all seven wavelengths, which is the
+    # unit-SBPL tail fraction past 1e8 nm at plslope = -1.6 (measured: the integral to 1e8 nm is
+    # low by 1.1306e-8 of the integral to 1e40 nm; to 1e14 nm it matches it to better than 1e-15).
     _PIN_WAVE_AA = (912.0, 1216.0, 2500.0, 5100.0, 10000.0, 50000.0, 200000.0)
     _PINNED = (
         (
@@ -89,19 +95,15 @@ class TestSbplDiscBitIdentityPin:
             ),
         ),
         (
-            # Re-captured with the per-component unit power (grahsp/normalization.py, #2839).
-            # The 7-node caller-grid trapezoid gave a unit bolometric of 5.0403 against
-            # the own-grid 3.8179 (1.3201x), so the old implied l5100 was too small by
-            # that factor. Every output here is the old value times 1.3201.
             dict(agn_log_lbol=45.0, agn_grahsp_uvslope=0.2, agn_grahsp_plslope=-1.6),
             (
-                "0x1.bc3e7de30b1ffp+249",
-                "0x1.666bb37705384p+249",
-                "0x1.3b25eefd59531p+248",
-                "0x1.bd131f4c526fcp+246",
-                "0x1.36c02a3b9bd55p+245",
-                "0x1.4a33d8b3365eep+241",
-                "0x1.05b4cc9bc061ep+237",
+                "0x1.bc3e0c2c09210p+249",
+                "0x1.666b57b7f5e03p+249",
+                "0x1.3b259e51e8633p+248",
+                "0x1.bd12ad5ee2e94p+246",
+                "0x1.36bfdab055bacp+245",
+                "0x1.4a33842d45325p+241",
+                "0x1.05b4899e52abfp+237",
             ),
         ),
         (
@@ -119,7 +121,7 @@ class TestSbplDiscBitIdentityPin:
     )
 
     def test_sbpl_bit_identity_pinned_before_extraction(self, sbpl_block):
-        """sbpl output equals values recorded before the helper extraction, bit for bit.
+        """sbpl output equals the pinned values, bit for bit.
 
         Covers the explicit-l5100 branch, the bolometric (``agn_grahsp_log_l5100=None``)
         branch and the float32 ``agn_log_lbol_shape`` pre-shift branch.
@@ -800,13 +802,15 @@ class TestNetzerDiscGrahsp:
 
         Checked to rtol 1e-6.
         """
-        from tengri.components.agn.grahsp.bolometric import bolometric_luminosity_bbb
         from tengri.utils.physics_constants import L_SUN
 
-        wave_fine = np.union1d(np.logspace(1.0, 4.5, 4000), [510.0])
+        # Independent dense reference: trapezoid in ln(lambda) of the emitted L_lambda over
+        # the full Lyman-limit support [91.2 nm, 1e8 nm], on a grid that does not depend on
+        # the block's own publication grid.
+        wave_dense = np.geomspace(91.2, 1.0e8, 2_000_000)
         out_aa = np.asarray(
             disc_block(
-                jnp.asarray(wave_fine * 10.0),
+                jnp.asarray(wave_dense * 10.0),
                 12.0,
                 agn_grahsp_netzer_log_mbh=8.0,
                 agn_grahsp_netzer_spin=0.0,
@@ -814,9 +818,9 @@ class TestNetzerDiscGrahsp:
                 templates=templates,
             )
         )
-        l_bol = float(
-            bolometric_luminosity_bbb(jnp.asarray(wave_fine), jnp.asarray(out_aa * 10.0))
-        )
+        # The block returns L_lambda [erg/s/Angstrom]; int L_lambda dlambda [erg/s] with
+        # dlambda = lambda dln(lambda) and lambda in nm, L_lambda in erg/s/nm = 10 x value.
+        l_bol = float(np.trapezoid(out_aa * 10.0 * wave_dense, np.log(wave_dense)))
         np.testing.assert_allclose(l_bol, 1e12 * L_SUN, rtol=1e-6)
 
     def test_liveness_log_mbh(self, wave_nm, disc_block):
