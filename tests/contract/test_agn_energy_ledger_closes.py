@@ -59,8 +59,10 @@ _SEDMODEL_LEDGER = {
     "silva04": _TORUS_KEYS,
     "skirtor_agnfitter": _TORUS_KEYS,
     # The spectrum is the attenuated disc plus torus plus polar re-emission. The disc
-    # and torus sum is the closure target; the re-emission returns the absorbed power.
-    "skirtor": ("L_agn_disc", "L_agn_torus"),
+    # and torus sum is the closure target; the re-emission returns the absorbed power. The
+    # spectrum is line-of-sight, so the disc key is L_agn_disc_los (as for kd18_disc); L_agn_disc
+    # is the angle-integrated power at the reference inclination.
+    "skirtor": ("L_agn_disc_los", "L_agn_torus"),
 }
 
 _GRAHSP_PARAMS = {
