@@ -196,12 +196,15 @@ Derivation: m_p = 1.67262192369e-27 kg  (CODATA 2018)
 Used in Eddington luminosity and accretion efficiency calculations.
 """
 
-M_ELECTRON: float = 9.1094e-28
+M_ELECTRON: float = 9.1093837015e-28
 """Electron mass m_e [g].
 
 Derivation: m_e = 9.1093837015e-31 kg  (CODATA 2018)
             × 1e3 g/kg
-            = 9.1093837015e-28 g  ≈ 9.1094e-28 g
+            = 9.1093837015e-28 g
+
+Held at the full CODATA 2018 value; a 5-digit rounding (9.1094e-28) moves
+theta_e = k T_e / (m_e c^2) by 1.8e-6 relative.
 """
 
 E_CHARGE_ESU: float = 4.80326e-10
