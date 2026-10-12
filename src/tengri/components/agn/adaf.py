@@ -660,10 +660,11 @@ def _bracketed_secant(f, u0, aux0, ln_lo, ln_hi, *, sign, slope0, frozen=None):
     first step uses the slope magnitude ``slope0``; later steps use the secant slope (a
     non-finite step falls outside the bracket and is bisected). A lane is done at the first
     iterate with :math:`|r| \le` :func:`_adaf_solver_tol` in float64 and at the second
-    consecutive one in float32 (whose tolerance is within a factor six of its rounding floor),
+    consecutive one in float32 (whose tolerance is within a factor five of its rounding floor),
     when the bracket has collapsed to a few machine epsilons (a root at or beyond an end of the
     bracket), or at the cap ``_N_MAX``; lanes flagged ``frozen`` do not iterate (under ``vmap``
-    a finished lane is held while the others continue).
+    a finished lane is held while the others continue). A lane still open at the cap did not
+    converge and returns NaN in ``u``, so the failure propagates instead of returning an iterate.
 
     Returns ``(u, aux)``.
     """
@@ -706,7 +707,7 @@ def _bracketed_secant(f, u0, aux0, ln_lo, ln_hi, *, sign, slope0, frozen=None):
         return (k + 1, n_ok_next, u_next, r_next, u, r, lo, hi, aux_next, finished)
 
     final = jax.lax.while_loop(cond, body, state)
-    return final[2], final[8]
+    return jnp.where(final[9], final[2], jnp.nan), final[8]
 
 
 def _adaf_te_root_raw(
@@ -854,14 +855,16 @@ def _adaf_electron_temperature(
     from :math:`\nu_p` to :math:`3kT_e/h`. The balance has one root on the bracket over the
     declared box and the whole mdot clip range ``[1e-8, 0.28 alpha^2]`` (tested).
 
-    **Smoothness**: :math:`T_e` has no regime junction, but it is not smooth to every order.
+    **Smoothness**: :math:`T_e` is continuous, but it is not smooth to every order.
     :math:`F(\theta_e)` of Eq. 28 is the paper's piecewise fit, with a 0.16% step at
     :math:`\theta_e = 1` (:math:`F = 6.0257` below, :math:`6.0353` above; :math:`T_e =
-    5.93\times10^9` K), which puts a value step into :math:`P_{\rm brems}` and so into
-    :math:`T_e`. Its size is at most :math:`5.1\times10^{-5}` in :math:`\ln T_e` (the largest of
-    3000 draws on the surface :math:`T_e = 5.93\times10^9` K inside the declared box), where
-    bremsstrahlung carries up to 21% of the cooling. The derived ``mdot`` has two further
-    derivative discontinuities, at its clips (``mdot_crit`` and the ``1e-8`` floor).
+    5.93\times10^9` K). The step makes the balance residual jump across :math:`T_e^\ast`, so for
+    a band of parameters the root is pinned at :math:`T_e^\ast`, with a derivative kink at each
+    end of the band. The band is up to :math:`6.0\times10^{-5}` wide in :math:`\ln T_e`, worst
+    at :math:`M = 10^{10}`, :math:`\alpha = 0.05`, :math:`\delta = 10^{-3}`, where bremsstrahlung
+    carries up to 21% of the cooling. Inside the band the derivative is that of one branch
+    while the function is flat. The derived ``mdot`` has two further derivative
+    discontinuities, at its clips (``mdot_crit`` and the ``1e-8`` floor).
 
     **Eq. 40 prefactor**: the printed :math:`1.1\times10^9` K differs by 7.5% from the
     :math:`1.023\times10^9` K re-derived from Eqs. 9, 14 and 24 at the fiducial point with
@@ -1016,8 +1019,10 @@ def _adaf_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.
 # (Eq. 52); 1e-8 is the floor of the T_e solve.
 _MDOT_FLOOR: float = 1e-8
 _MDOT_CRIT_COEFF: float = 0.28
-# A solve that ends this close (in ln mdot) to the floor is a luminosity below the floor's:
-# the bracket collapses onto its end to within 64 epsilons, far inside this.
+# A solve that ends this close (in ln mdot) to the floor is a luminosity below the floor's.
+# Below the floor the fixed-g start is clipped onto ln(1e-8) at once: one outer iteration,
+# exactly 1e-8, zero gradient. In float32 a bracket collapse would land within 64 epsilons,
+# up to 1.4e-4 in ln mdot, which is wider than this snap, so the snap does not rely on it.
 _FLOOR_SNAP: float = 1e-9
 _LN2: float = float(np.log(2.0))
 
@@ -1473,11 +1478,12 @@ def adaf_scalar_state(
     :func:`jax.lax.while_loop` secants inside :func:`jax.lax.custom_root` (data-dependent trip
     counts, never differentiated through). The runner builds it once per composition and every
     disc evaluation (caller grid, anchors, 5100 A, budget grids) reads the same state, so the
-    solves are traced once. ``T_e`` has no regime junction and the derivatives through both
-    nested solves are the exact implicit-function derivatives (first and second order
-    tested); the derivative is discontinuous where the derived ``mdot`` meets its clip at
-    ``mdot_crit`` (Eq. 52) or at the ``1e-8`` floor, and by up to 5e-5 in ``ln T_e`` at the
-    :math:`\theta_e = 1` step of the Eq. 28 fit (see :func:`_adaf_electron_temperature`).
+    solves are traced once. ``T_e`` is continuous, with no regime junction, and the derivatives
+    through both nested solves are the exact implicit-function derivatives (first and second
+    order tested), except at the kinks of the :math:`\theta_e = 1` band of Eq. 28's fit (see
+    :func:`_adaf_electron_temperature`). The derivative is discontinuous where the derived
+    ``mdot`` meets its clip at
+    ``mdot_crit`` (Eq. 52) or at the ``1e-8`` floor.
 
     Implements the same model as Mahadevan (1997 [1]_); the normalization quadrature is
     tengri's own.

@@ -96,6 +96,7 @@ def test_returned_state_cooling_equals_the_requested_luminosity():
     assert np.max(np.abs(np.asarray(out) - 1.0)) <= 1e-5, np.max(np.abs(np.asarray(out) - 1.0))
 
 
+@pytest.mark.conservation
 def test_default_point_radiates_the_requested_luminosity():
     """Default delta = 0.1, M = 1e7, alpha = 0.3, beta = 0.5, log L = 8: Q- / L = 1.
 

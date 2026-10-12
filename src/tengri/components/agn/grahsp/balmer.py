@@ -113,7 +113,7 @@ def balmer_continuum(
     ----------
     .. [1] Grandi, S. A. 1982, "The properties of the X-ray spectra of Seyfert
            galaxies", ApJ, 255, 25. https://doi.org/10.1086/159815
-    .. [2] Buchner, J., Starck, J.-L., Salvato, M., et al. 2024,
+    .. [2] Buchner, J., Starck, H., Salvato, M., et al. 2024,
            "Genuine Retrieval of the AGN Host Stellar Population (GRAHSP)",
            arXiv:2405.19297.
     """
