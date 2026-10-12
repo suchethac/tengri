@@ -49,11 +49,15 @@ MODEL = {
 
 class _FakeSED:
     available_properties = ("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr")
-    spec = SimpleNamespace(free_params=["a", "b", "c"])
+    spec = SimpleNamespace(free_params=["x"])
 
     def predict_properties(self, sample, names):
         import jax.numpy as jnp
 
+        # As tengri does: a call-time override of a Fixed parameter is refused.
+        extra = set(sample) - set(self.spec.free_params)
+        if extra:
+            raise ValueError(f"cannot override Fixed parameters {sorted(extra)}")
         return {n: jnp.exp(sample["x"]) for n in names}
 
 
@@ -155,6 +159,28 @@ def test_nss_cell_schema(fakes):
     }
     assert all(v.shape == (500,) for v in npz.values())
     assert npz["log_sfr_10myr"][0] == pytest.approx(0.0)  # log10(exp(0))
+
+
+def test_derived_draws_survive_fixed_parameters_in_the_nss_samples(fakes, monkeypatch):
+    """The NSS posterior carries every Fixed parameter beside the free ones.
+
+    predict_properties refuses a call-time override of a Fixed parameter, so the
+    derived draws must be evaluated on the free parameters only — otherwise the
+    cell is written without its NPZ and the failure is only a log warning.
+    """
+    original = fakes.fit
+
+    def with_fixed(self, data, *, key, method, **kwargs):
+        posterior = original(self, data, key=key, method=method, **kwargs)
+        if method == "nss":
+            n = posterior.samples["x"].shape[0]
+            posterior.samples = {**posterior.samples, "redshift": np.full(n, 1.2)}
+        return posterior
+
+    monkeypatch.setattr(fakes, "fit", with_fixed)
+    _, npz = _run("nss")
+    assert npz is not None
+    assert all(v.shape == (500,) and np.isfinite(v).all() for v in npz.values())
 
 
 def test_nss_cell_with_large_error_is_not_valid(fakes, monkeypatch):

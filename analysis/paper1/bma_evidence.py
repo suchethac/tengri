@@ -700,7 +700,11 @@ def fit_one_model(
         t0 = time.perf_counter()
         if posterior.samples is not None:
             try:
-                samples = posterior.samples
+                # The NSS posterior carries every Fixed parameter beside the free
+                # ones, and predict_properties refuses a call-time override of a
+                # Fixed parameter; evaluate on the free parameters only.
+                free = set(sed_model.spec.free_params)
+                samples = {k: v for k, v in posterior.samples.items() if k in free}
                 idx = _draw_indices(samples, _MAX_DERIVED_DRAWS)
                 wanted = ("stellar_mass", "stellar_mass_surviving", "sfr_100myr", "sfr_10myr")
                 available = tuple(n for n in wanted if n in sed_model.available_properties)
