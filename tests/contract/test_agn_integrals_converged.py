@@ -160,9 +160,10 @@ def _refine_internal(model, comp, monkeypatch):
         monkeypatch.setattr(kd18_disc_model, "_KD18_PUBLICATION_NODES", n_pub)
         monkeypatch.setattr(_disc, "_CORONA_NU_NODES", _REFINE * _disc._CORONA_NU_NODES)
     elif model == "powerlaw_disc":
-        n_band = _REFINE * powerlaw_disc_model._PUBLISHED_BAND_AA.size
         monkeypatch.setattr(
-            powerlaw_disc_model, "_PUBLISHED_BAND_AA", np.geomspace(10.0, 1.0e8, n_band)
+            powerlaw_disc_model,
+            "_PUBLISHED_BAND_NODES",
+            _REFINE * powerlaw_disc_model._PUBLISHED_BAND_NODES,
         )
         monkeypatch.setattr(_disc, "_PL_BAND_NODES", _REFINE * _disc._PL_BAND_NODES)
     elif model == "skirtor":

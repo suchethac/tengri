@@ -28,7 +28,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.utils.physics_constants import L_SUN
 from tests.physics._agn_publication import (
     PUB_COARSE as _PUB_COARSE,
     PUB_DENSE as _PUB_DENSE,
@@ -484,10 +483,34 @@ def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
             emitted = _ln_nu_integral(wide, _WIDE)
             err = abs(pub[key] / emitted - 1.0)
             assert err < _RTOL, f"SKIRTOR {key} {overrides}: published-vs-emitted rel {err:.3e}"
-        # L_agn_disc is the normalization's disc power, torus_frac * L_bol (#2851, #2678).
-        norm = float(params["torus_frac"]) * 10.0 ** float(params["log_lbol"]) * L_SUN
-        ref_err = abs(_publisher(comp, params, "L_agn_disc")(_PUB_DENSE) / norm - 1.0)
-        assert ref_err < 1e-6, f"SKIRTOR L_agn_disc {overrides}: normalization rel {ref_err:.3e}"
+        _assert_angle_integrated_disc(comp, params, overrides)
+
+
+def _assert_angle_integrated_disc(comp, params, overrides):
+    """SKIRTOR L_agn_disc is the uniform cos i average of L_agn_disc_los, for every cos i.
+
+    The sphere average of the isotropic-equivalent line-of-sight luminosity is a uniform
+    average over cos i in [0, 1] (#2678). The reference is a 101-point trapezoid, which is
+    independent of the Gauss-Legendre panels the model uses, and it is checked to 1e-6.
+    """
+    mus = np.linspace(0.0, 1.0, 101)
+    los = np.array(
+        [
+            _publisher(comp, dict(params, cos_inc=jnp.asarray(m)), "L_agn_disc_los")(_PUB_DENSE)
+            for m in mus
+        ]
+    )
+    dense = float(np.trapezoid(los, mus))
+    published = _publisher(comp, params, "L_agn_disc")(_PUB_DENSE)
+    err = abs(published / dense - 1.0)
+    assert err < 1e-6, f"SKIRTOR L_agn_disc {overrides}: cos i quadrature rel {err:.3e}"
+    for cos_inc in (0.1, 0.9):
+        moved = _publisher(comp, dict(params, cos_inc=jnp.asarray(cos_inc)), "L_agn_disc")(
+            _PUB_DENSE
+        )
+        assert abs(moved / published - 1.0) < 1e-10, (
+            f"SKIRTOR L_agn_disc moved with cos_inc={cos_inc}: {moved:.9e} vs {published:.9e}"
+        )
 
 
 def _skirtor_with_disk_type(disk_type, overrides):
@@ -635,8 +658,13 @@ def test_skirtor_adaf_disc_published_is_differentiable_in_delta():
         grad = jax.grad(published)(jnp.asarray(0.3), key)
         assert bool(jnp.isfinite(grad)), f"d{key}/d delta = {grad}"
         assert float(grad) != 0.0, f"d{key}/d delta is identically zero"
-    # L_agn_disc is the normalization's power (frac * L_bol): delta tilts the shape only.
-    assert float(jax.grad(published)(jnp.asarray(0.3), "L_agn_disc")) == 0.0
+    # L_agn_disc is the angle-integrated emitted power (#2678). The re-tilt is renormalized to
+    # the raw in-support power (disc_renorm) and the support is taken at delta = 0, so delta
+    # tilts the shape only: the derivative is roundoff, not a physical sensitivity.
+    value = float(published(jnp.asarray(0.3), "L_agn_disc"))
+    grad = float(jax.grad(published)(jnp.asarray(0.3), "L_agn_disc"))
+    assert bool(jnp.isfinite(grad)), f"d L_agn_disc/d delta = {grad}"
+    assert abs(grad) <= 1e-12 * abs(value), f"d L_agn_disc/d delta = {grad:.6e} at {value:.6e}"
 
 
 def test_skirtor_emitted_sed_independent_of_caller_grid():

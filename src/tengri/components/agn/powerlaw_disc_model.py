@@ -15,16 +15,20 @@ For production science, use Kubota & Done (2018) or SKIRTOR torus models.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import jax.numpy as jnp
-import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._publication import emitted_bolometric
-from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc_fn
+from tengri.components.agn.disc import (
+    _PL_BAND_HI_AA,
+    _PL_BAND_LO_AA,
+    powerlaw_disc as _powerlaw_disc_fn,
+)
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, declared_prior
@@ -44,11 +48,23 @@ _ALPHA_PRIOR = declared_prior(_AGN_PARAMS, "agn_alpha")
 _T_MAX_PRIOR = declared_prior(_AGN_PARAMS, "agn_T_max")
 _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
-#: Log-uniform grid over the normalization band [Angstrom] (10 A to 1e8 A), on which the
-#: published bolometric luminosity is integrated.
-# 8001 nodes: the trapezoid in ln(nu) of the published band is within 2e-7 of its 160001-node
-# value for the steep, cut-off shapes; 500 nodes were 4e-5 off at alpha = -1.7, T_max = 3e4.
-_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 8001)
+#: Nodes of the log-uniform grid over the normalization band (10 A to 1e8 A), on which the
+#: published bolometric luminosity is integrated by :func:`loglog_integral`. 8001 nodes agree
+#: with a 160001-node value to 2e-7 for the steep, cut-off shapes; 500 nodes were 4e-5 off.
+_PUBLISHED_BAND_NODES: int = 8001
+
+
+def _published_band_aa(dtype) -> jnp.ndarray:
+    """The published normalization band [Angstrom], ascending, built in the trace.
+
+    The end points are those of ``powerlaw_disc``'s normalization band, so the published
+    integral and the normalization cover the same range.
+    """
+    return jnp.exp(
+        jnp.linspace(
+            math.log(_PL_BAND_LO_AA), math.log(_PL_BAND_HI_AA), _PUBLISHED_BAND_NODES, dtype=dtype
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -203,7 +219,7 @@ class PowerLawDisc(SEDModelComponent):
         # normalized on (10 A to 1e8 A). The emitted power-law tail is not integrable beyond
         # that band (L_nu nu ~ const at long wavelength), so the band is part of the
         # definition. It is evaluated on a fixed grid, never the caller's wave.
-        wave_band = jnp.asarray(_PUBLISHED_BAND_AA, dtype=wave.dtype)
+        wave_band = _published_band_aa(wave.dtype)
         L_disc = emitted_bolometric(_powerlaw(wave_band), wave_band)
 
         # Add to intrinsic SED

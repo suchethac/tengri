@@ -24,6 +24,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -38,7 +39,7 @@ from tengri.components.agn.disc_cigale import (
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState, declared_prior
-from tengri.utils.physics_constants import C_AA, L_SUN as _L_SUN
+from tengri.utils.physics_constants import C_AA
 
 __all__ = ["SKIRTORTorus"]
 
@@ -85,6 +86,43 @@ _NM_TO_AA = 10.0
 #: The SKIRTOR disc's own piecewise breakpoints [Angstrom]. They are nodes for every
 #: ``disk_type``: the re-tilt divides by the SKIRTOR disc, and its support gates the disc.
 _DISC_BREAKPOINTS_AA = tuple(float(x) * _NM_TO_AA for x in skirtor_disk_limits())
+
+
+#: Spacing [degrees] of the v3 SKIRTOR library's cos i nodes (cos of 0, 10, ..., 90 degrees). The
+#: emitted disc is kinked at each node, so the cos i quadrature breaks there.
+_COS_INC_LIBRARY_STEP_DEG: float = 10.0
+#: Gauss-Legendre points per cos i panel. Eight points agree with a 64-point rule to 5e-9.
+_COS_INC_GL_POINTS: int = 8
+
+
+def _cos_inc_quadrature(dtype) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Nodes and weights of the uniform average over cos i in [0, 1], built in the trace.
+
+    The rule is Gauss-Legendre on each panel between adjacent library cos i nodes, so its
+    weights sum to 1 and a constant integrand returns that constant.
+
+    Parameters
+    ----------
+    dtype : dtype
+        Floating dtype of the returned arrays.
+
+    Returns
+    -------
+    nodes : ndarray, shape (n_panels * _COS_INC_GL_POINTS,)
+        cos i nodes, ascending in [0, 1]. [dimensionless]
+    weights : ndarray, shape (n_panels * _COS_INC_GL_POINTS,)
+        Quadrature weights of the uniform average over cos i. [dimensionless]
+    """
+    n_panels = round(90.0 / _COS_INC_LIBRARY_STEP_DEG)
+    breaks = np.cos(np.radians(np.linspace(90.0, 0.0, n_panels + 1)))
+    x, w = np.polynomial.legendre.leggauss(_COS_INC_GL_POINTS)
+    lo, hi = breaks[:-1, None], breaks[1:, None]
+    nodes = 0.5 * (hi - lo) * x[None, :] + 0.5 * (hi + lo)
+    weights = 0.5 * (hi - lo) * w[None, :]
+    return (
+        jnp.asarray(nodes.ravel(), dtype=dtype),
+        jnp.asarray(weights.ravel(), dtype=dtype),
+    )
 
 
 def _selected_disc_breaks_aa(disk_type: int, delta):
@@ -565,6 +603,18 @@ class SKIRTORTorus(SEDModelComponent):
         - 1: Schartmann et al. (2005) torus model (CIGALE default)
         - 2: ADAF + thin disc blend (Lopez et al. 2024)
 
+        **Angle-integrated disc power**: ``L_agn_disc`` is the angle-integrated power of the
+        emitted disc. The disc is seen at inclination ``i`` with isotropic-equivalent luminosity
+        ``L_agn_disc_los(i)``, and the power radiated into all directions is the sphere average
+        of that luminosity. Averaging over the sphere, ``P = (1/4 pi) int L_iso dOmega``, and the
+        disc is symmetric about its axis, so ``P = int_0^1 L_los(cos i) d(cos i)``: a uniform
+        weight in ``cos i``. This is the Kubota convention (``L_los = 2 cos i D`` gives
+        ``P = D``), and it is the weight under which the library's per-angle normalization to
+        ``frac * L_bol`` reads as the angle-integrated power. The integral is a Gauss-Legendre
+        rule on each 10 degree panel of the library ``cos i`` grid, where the emitted disc is
+        kinked. Its masked 10-80 Angstrom share is not emitted (the analytic re-tilt is zero
+        below 80 Angstrom); the clip is not changed here.
+
         **Polar dust model**: The X-CIGALE polar dust model (Yang et al. 2020,
         §2.2.2) applies a Type-1/Type-2 mask to the observer-frame disc attenuation.
         However, the absorbed luminosity driving the graybody FIR reemission is
@@ -665,13 +715,22 @@ class SKIRTORTorus(SEDModelComponent):
         sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
         dust_pub = comp_pub.dust
 
-        # Published luminosities. L_agn_disc is the angle-integrated disc power that the
-        # normalization defines (owner ruling #2678): the library disc and torus are both
-        # normalized to frac * L_bol (``_interpolate_and_normalize``), and the torus is
-        # published at exactly that value at every cos i. It is set from the normalization,
-        # so it does not depend on agn_cos_inc. L_agn_disc_los is the integral of the emitted
-        # disc at the requested inclination.
-        L_agn_disc = p["torus_frac"] * 10.0 ** p["log_lbol"] * _L_SUN
+        # Published luminosities. L_agn_disc_los is the isotropic-equivalent luminosity of the
+        # emitted disc seen at the requested inclination (a derived output, #2678).
+        # L_agn_disc is the angle-integrated power: the sphere average of the isotropic-equivalent
+        # luminosity, P = int_0^1 L_los(cos i) d cos i (uniform in cos i; see the Notes). It is
+        # evaluated on a fixed cos i quadrature, so it does not depend on agn_cos_inc.
+        def _los_disc(cos_inc):
+            """Emitted disc power [erg/s] at ``cos_inc``, the same rule as ``L_agn_disc_los``."""
+            raw = _components(wave_pub, cos_inc).disk
+            support = _in_support(wave_pub)
+            renorm = native_bolometric_nu(raw * support, wave_pub) / _bolometric_tilted(
+                raw, wave_pub, support
+            )
+            return renorm * _bolometric_tilted(raw, wave_pub)
+
+        mu_nodes, mu_weights = _cos_inc_quadrature(wave.dtype)
+        L_agn_disc = jnp.sum(mu_weights * jax.vmap(_los_disc)(mu_nodes))
         L_agn_disc_los = disc_renorm * _bolometric_tilted(raw_pub, wave_pub)
         L_agn_torus = native_bolometric_nu(dust_pub, wave_pub)
 

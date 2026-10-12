@@ -151,6 +151,10 @@ _GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
 
 
+#: End points [Angstrom] of the power-law normalization band, shared with ``powerlaw_disc_model``
+#: (its published band and this normalization are the same 10 A to 1e8 A range).
+_PL_BAND_LO_AA: float = 10.0
+_PL_BAND_HI_AA: float = 1.0e8
 #: Internal normalization band of ``powerlaw_disc`` [Angstrom] (descending = ascending nu).
 #: Integrated by :func:`loglog_integral` (power law between nodes): at 8001 nodes the
 #: normalization is 3e-8 from its 40980-node value (a trapezoid at 2049 nodes was 1.2e-5 off).
@@ -159,7 +163,8 @@ _PL_BAND_NODES: int = 8001
 
 def _pl_band_aa(dtype) -> jnp.ndarray:
     """The power-law normalization band [Angstrom], descending, built in the trace."""
-    return jnp.exp(jnp.linspace(math.log(1.0e8), math.log(10.0), _PL_BAND_NODES, dtype=dtype))
+    hi, lo = math.log(_PL_BAND_HI_AA), math.log(_PL_BAND_LO_AA)
+    return jnp.exp(jnp.linspace(hi, lo, _PL_BAND_NODES, dtype=dtype))
 
 
 def powerlaw_disc(

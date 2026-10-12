@@ -60,8 +60,9 @@ _SEDMODEL_LEDGER = {
     "skirtor_agnfitter": _TORUS_KEYS,
     # The spectrum is the attenuated disc plus torus plus polar re-emission. The disc
     # and torus sum is the closure target; the re-emission returns the absorbed power. The
-    # spectrum is line-of-sight, so the disc key is L_agn_disc_los (as for kd18_disc); L_agn_disc
-    # is the angle-integrated power at the reference inclination.
+    # spectrum is line-of-sight, so the disc key is L_agn_disc_los (as for kd18_disc). The
+    # published L_agn_disc is the angle-integrated emitted disc power, the uniform cos i average
+    # of L_agn_disc_los, so it is independent of agn_cos_inc (#2678).
     "skirtor": ("L_agn_disc_los", "L_agn_torus"),
 }
 
@@ -167,7 +168,7 @@ def _ledger_grid(name):
     integral over that band. The band is read from the model, not restated here.
     """
     if name == "powerlaw_disc":
-        band = powerlaw_disc_model._PUBLISHED_BAND_AA
+        band = np.asarray(powerlaw_disc_model._published_band_aa(jnp.float64))
         return np.geomspace(float(band[0]), float(band[-1]), 4 * BUDGET_WAVE.size)
     return _CONVERGED
 

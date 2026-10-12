@@ -55,8 +55,12 @@ def test_skirtor_l_agn_disc_independent_of_inclination():
         params = dict(_PARAMS, cos_inc=jnp.array(cos_inc))
         _, published[cos_inc] = component.predict(params, jnp.zeros_like(wave), wave)
 
-    # L_agn_disc is the normalization's disc power: torus_frac * L_bol, L_bol = 10**log_lbol L_sun.
-    expected = 0.5 * 10.0**10.0 * L_SUN
+    # L_agn_disc is the angle-integrated emitted disc: the uniform cos i average of the emitted
+    # line-of-sight disc. The 80 Angstrom clip of the analytic re-tilt removes 7.36 % of the
+    # normalization torus_frac * L_bol = 0.5 * 10**10 L_sun (1.914e43 -> 1.773077e43 erg/s at
+    # these parameters, before the change that made it the emitted power; #2678). The 101-point
+    # cos i reference is in tests/physics/test_agn_template_grid_independence.py.
+    expected = 0.5 * 10.0**10.0 * L_SUN * 0.926372283
     for cos_inc in (0.1, 0.9):
         np.testing.assert_allclose(float(published[cos_inc]["L_agn_disc"]), expected, rtol=1e-6)
     # The polar-dust absorption does depend on inclination; the test must not be vacuous.
