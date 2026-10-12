@@ -152,8 +152,33 @@ def _absorbed_filters(transmission, wave_rest, z, filter_waves):
     return [i for i, fw in enumerate(filter_waves) if float(np.min(fw)) < bound_obs]
 
 
+def _host_inputs(ssp_data, filters):
+    """Float64 host copies of the SSP grid and the filter curves, converted once.
+
+    A JAX ``ssp_flux`` is a device array: converting it per call is a full
+    device-to-host copy, so :func:`subband_fold_table` calls this once per table.
+    """
+    wave_rest = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
+    templates = np.asarray(ssp_data.ssp_flux, dtype=np.float64)
+    filter_arrays = [
+        (np.asarray(fw, dtype=np.float64), np.asarray(ft, dtype=np.float64)) for fw, ft in filters
+    ]
+    return wave_rest, templates, filter_arrays
+
+
 def subband_fold(
-    ssp_data, filters, z, *, igm_model, n_subbands, lyc_gate, convention, transmission=None
+    ssp_data,
+    filters,
+    z,
+    *,
+    igm_model,
+    n_subbands,
+    lyc_gate,
+    convention,
+    transmission=None,
+    wave_rest=None,
+    templates=None,
+    filter_arrays=None,
 ) -> SubbandFold:
     """Exact-to-bare ratio of the sub-band integrals, and the with-IGM nodes, at one z.
 
@@ -178,6 +203,12 @@ def subband_fold(
         IGM transmission on ``ssp_data.ssp_wave`` at ``z`` [dimensionless]. When
         None it is evaluated here; :func:`subband_fold_table` passes precomputed
         rows so the z axis is batched once rather than per node.
+    wave_rest, templates, filter_arrays : optional
+        Float64 host copies from :func:`_host_inputs`, passed by
+        :func:`subband_fold_table` so a table converts them once rather than per
+        node. ``wave_rest`` is ``ssp_data.ssp_wave``, ``templates`` is
+        ``ssp_data.ssp_flux`` and ``filter_arrays`` the ``(wave, trans)`` pairs of
+        ``filters``. Each is derived from the arguments above when None.
 
     Returns
     -------
@@ -189,10 +220,10 @@ def subband_fold(
     """
     from tengri.utils.grid_interp import preintegrate_grid
 
-    wave_rest = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
-    templates = np.asarray(ssp_data.ssp_flux, dtype=np.float64)
-    filter_waves = [np.asarray(fw, dtype=np.float64) for fw, _ in filters]
-    filter_trans = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
+    if wave_rest is None or templates is None or filter_arrays is None:
+        wave_rest, templates, filter_arrays = _host_inputs(ssp_data, filters)
+    filter_waves = [fw for fw, _ in filter_arrays]
+    filter_trans = [ft for _, ft in filter_arrays]
     n_chunks = n_subbands + 1 if lyc_gate else n_subbands
 
     shape = (*templates.shape[:-1], len(filters), n_chunks)
@@ -280,7 +311,8 @@ def subband_fold_table(
     if cached is not None:
         return SubbandFold(*np.asarray(cached))
 
-    transmissions = _transmission_table(igm_model, np.asarray(ssp_data.ssp_wave), z_grid)
+    wave_rest, templates, filter_arrays = _host_inputs(ssp_data, filters)
+    transmissions = _transmission_table(igm_model, wave_rest, z_grid)
     folds = [
         subband_fold(
             ssp_data,
@@ -291,6 +323,9 @@ def subband_fold_table(
             lyc_gate=lyc_gate,
             convention=convention,
             transmission=transmission_z,
+            wave_rest=wave_rest,
+            templates=templates,
+            filter_arrays=filter_arrays,
         )
         for z, transmission_z in zip(z_grid, transmissions)
     ]
