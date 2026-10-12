@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -357,6 +358,12 @@ print("WROTE", OUT, sorted(res))
 """
 
 
+#: Off the reference platform, last-bit differences in ``log10`` and in the LAPACK
+#: least-squares slopes are expected; 1e-10 relative is far below any physical
+#: effect and far above that rounding.
+_OFF_PLATFORM_RTOL = 1e-10
+
+
 def test_float64_tables_bit_identical_to_reference(tmp_path):
     """With x64 on, the Cue ionizing tables are bit-identical to the pre-#2849 build.
 
@@ -365,12 +372,20 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     because the power-of-two scale is exact and the log is taken in NumPy, as
     before. Only the three tables this change touches are pinned, so unrelated
     changes to the model's spectrum do not move the reference.
+
+    Exactness is asserted on the platform that wrote the reference (its
+    ``_platform`` entry). Elsewhere ``log10`` and the LAPACK least-squares
+    slopes in the ionspec table round differently in the last bits, so the
+    tables are held to ``_OFF_PLATFORM_RTOL`` and the failure reports the
+    largest relative and ulp difference.
     """
     _require_data(_SSP)
     with open(
         Path(__file__).resolve().parent / "fixtures" / "nebular_qh_float64_unfixed.json"
     ) as fh:
-        ref = {k: np.asarray(v) for k, v in json.load(fh).items() if not k.startswith("_")}
+        raw = json.load(fh)
+    ref = {k: np.asarray(v) for k, v in raw.items() if not k.startswith("_")}
+    same_platform = raw.get("_platform") == f"{platform.system()}-{platform.machine()}"
     out = tmp_path / "new.npz"
     env = dict(os.environ)
     env["JAX_ENABLE_X64"] = "1"
@@ -391,6 +406,21 @@ def test_float64_tables_bit_identical_to_reference(tmp_path):
     for key in ref:
         if key == "x64":
             continue
-        assert np.array_equal(new[key], ref[key]), (
-            f"{key} differs from the reference float64 build"
+        if same_platform:
+            assert np.array_equal(new[key], ref[key]), (
+                f"{key} differs from the reference float64 build"
+            )
+            continue
+        a, b = np.asarray(new[key], dtype=np.float64), np.asarray(ref[key], dtype=np.float64)
+        assert a.shape == b.shape, f"{key} shape {a.shape} != reference {b.shape}"
+        # grad-assert: finite-only — these are tables, not gradients, and their
+        # zero entries are real (flushed old-age rows); the values are compared below.
+        assert np.array_equal(np.isfinite(a), np.isfinite(b)), f"{key} finiteness pattern differs"
+        fin = np.isfinite(b)
+        scale = np.maximum(np.abs(b[fin]), np.finfo(np.float64).tiny)
+        rel = float(np.max(np.abs(a[fin] - b[fin]) / scale)) if fin.any() else 0.0
+        ulp = float(np.max(np.abs(a[fin] - b[fin]) / np.spacing(scale))) if fin.any() else 0.0
+        assert rel <= _OFF_PLATFORM_RTOL, (
+            f"{key} differs from the {raw.get('_platform')} reference by {rel:.3e} relative "
+            f"({ulp:.0f} ulp), above {_OFF_PLATFORM_RTOL:g}"
         )
