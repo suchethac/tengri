@@ -436,6 +436,7 @@ _ALL_SHARDS = [
     "components",
     "regression-a1",
     "regression-a2",
+    "regression-a3",
     "regression-b1",
     "regression-b2",
     "regression-b3",

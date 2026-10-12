@@ -133,14 +133,14 @@ env:
 #
 #   pull_request   cheap by default: lint, security, smoke, `physics`,
 #                  `regression-c`, plus `contract`, `components`, `regression-a1`,
-#                  `regression-a2`, `regression-d` when the diff touches docs/, notebooks/,
+#                  `regression-a2`, `regression-a3`, `regression-d` when the diff touches docs/, notebooks/,
 #                  reproduction/ or a top-level *.md (scope cheap / cheap-docs).
-#                  A docs-only diff runs just those five (scope docs). The label
+#                  A docs-only diff runs just those six (scope docs). The label
 #                  `full-tests` runs the full suite (scope all), and so does a
 #                  diff touching the CI machinery (workflows, ci_ok.py,
 #                  ci_split_paths.py, pyproject.toml, any conftest.py). A draft
 #                  runs the gates only (scope none).
-#   push (main)    the FULL suite after the commit lands (scope all: all ten
+#   push (main)    the FULL suite after the commit lands (scope all: all eleven
 #                  shards, plus the gallery when the pushed range touched a
 #                  gallery input). A failure in a shard the cheap tier skipped
 #                  is caught here, right after landing.
@@ -197,7 +197,7 @@ jobs:
             {
               echo "## Full CI tier (push to main)"
               echo
-              echo "**Ran:** lint, security, smoke, all ten \`test\` shards, and the gallery"
+              echo "**Ran:** lint, security, smoke, all eleven \`test\` shards, and the gallery"
               echo "when the pushed commits touched a gallery input."
               echo
               echo "Pull requests run the cheap tier, so this is where a failure in a shard"
@@ -634,9 +634,10 @@ jobs:
   #          The `contract` shard holds the render-hash, docs-sync,
   #          registry-string and reproduction-driver guards, `components` holds
   #          `tests/unit` and a parity test that reads reproduction/,
-  #          `regression-a2` (precision) reads docs/dev and `regression-d` scans every *.md
+  #          `regression-a2` (precision, middle files) reads docs/dev and `regression-d` scans every *.md
   #          (CLAUDE.md included). `regression-a1` (synthesizer_parity) reads none
-  #          of these trees but keeps the scope its predecessor had. Those five
+  #          of these trees but keeps the scope its predecessor had, as does
+  #          `regression-a3`. Those six
   #          shards run; the other five read
   #          none of these trees and are withheld. One exception is known:
   #          `tests/regression/bug/test_bug_vacuum_wavelengths_everywhere.py`
@@ -732,8 +733,9 @@ jobs:
           [
             {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":120,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
             {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
-            {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.3","scopes":["docs","cheap-docs","all"]},
-            {"shard":"regression-a2","paths":"tests/regression/precision","bug_half":"","nproc":1,"timeout":85,"cache_gb":"1.0","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py","bug_half":"","nproc":1,"timeout":50,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a2","paths":"tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_nebular_qh_float32_build.py --ignore=tests/regression/precision/test_nion_consumers_nebular.py --ignore=tests/regression/precision/test_nion_consumers_scalar.py --ignore=tests/regression/precision/test_no_float64_constants_under_f32.py --ignore=tests/regression/precision/test_no_raw_erg_s_derived_read.py --ignore=tests/regression/precision/test_no_raw_flux_scale.py --ignore=tests/regression/precision/test_no_raw_nion_read.py --ignore=tests/regression/precision/test_nthcomp_fd_step.py --ignore=tests/regression/precision/test_planck_float32.py --ignore=tests/regression/precision/test_radio_float32.py --ignore=tests/regression/precision/test_remaining_derivative_safe_denominators.py --ignore=tests/regression/precision/test_representable_exponent.py --ignore=tests/regression/precision/test_representable_floors_and_qh_overflow.py --ignore=tests/regression/precision/test_rest_wave_grid_dtype.py --ignore=tests/regression/precision/test_scale_primitive.py --ignore=tests/regression/precision/test_ssp_load_dtype.py --ignore=tests/regression/precision/test_stellar_custom_rule_is_two_sided.py --ignore=tests/regression/precision/test_stellar_grad_float32.py --ignore=tests/regression/precision/test_stellar_mass_scale_log.py --ignore=tests/regression/precision/test_uniform_grid_tolerance_is_dtype_derived.py --ignore=tests/regression/precision/test_variable_noise_metric_float32.py --ignore=tests/regression/precision/test_weighted_mean_threshold_scale.py --ignore=tests/regression/precision/test_x64_env_override.py --ignore=tests/regression/precision/test_xray_shock_float32.py","bug_half":"","nproc":1,"timeout":45,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
+            {"shard":"regression-a3","paths":"tests/regression/precision/test_nebular_qh_float32_build.py tests/regression/precision/test_nion_consumers_nebular.py tests/regression/precision/test_nion_consumers_scalar.py tests/regression/precision/test_no_float64_constants_under_f32.py tests/regression/precision/test_no_raw_erg_s_derived_read.py tests/regression/precision/test_no_raw_flux_scale.py tests/regression/precision/test_no_raw_nion_read.py tests/regression/precision/test_nthcomp_fd_step.py tests/regression/precision/test_planck_float32.py tests/regression/precision/test_radio_float32.py tests/regression/precision/test_remaining_derivative_safe_denominators.py tests/regression/precision/test_representable_exponent.py tests/regression/precision/test_representable_floors_and_qh_overflow.py tests/regression/precision/test_rest_wave_grid_dtype.py tests/regression/precision/test_scale_primitive.py tests/regression/precision/test_ssp_load_dtype.py tests/regression/precision/test_stellar_custom_rule_is_two_sided.py tests/regression/precision/test_stellar_grad_float32.py tests/regression/precision/test_stellar_mass_scale_log.py tests/regression/precision/test_uniform_grid_tolerance_is_dtype_derived.py tests/regression/precision/test_variable_noise_metric_float32.py tests/regression/precision/test_weighted_mean_threshold_scale.py tests/regression/precision/test_x64_env_override.py tests/regression/precision/test_xray_shock_float32.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-b1","paths":"","bug_half":"1","nproc":1,"timeout":70,"cache_gb":"0.7","scopes":["all"]},
             {"shard":"regression-b2","paths":"","bug_half":"2","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
             {"shard":"regression-b3","paths":"","bug_half":"3","nproc":1,"timeout":70,"cache_gb":"1.1","scopes":["all"]},
@@ -1239,7 +1241,7 @@ jobs:
       #     test tree escapes the table again.
       #   * budgets are above measured wall clock under runner-pool congestion
       #     (+60%): contract 120 (re-measured 2026-10-06; one worker holding a
-      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 85,
+      #     case marked `timeout(1800)` needs the room), regression-a1 50, regression-a2 45, regression-a3 70,
       #     regression-b1/b2/b3 70, the rest 50. The per-test `--timeout=600` below
       #     still catches a real hang, so a budget bounds total wall clock only.
       #     Re-measure from a completed run's job durations before changing one.
@@ -1612,20 +1614,20 @@ jobs:
           # rather than from progress lines. This file's timing notes have now gone
           # stale three times — treat every number here as needing a date.
           - shard: regression-a1
-            paths: tests/regression/synthesizer_parity
+            paths: tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py
             nproc: 1
             budget: 50
-            coverage_budget: 75
-          - shard: regression-a2
-            paths: tests/regression/precision
-            nproc: 1
-            budget: 85
             coverage_budget: 105
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
-          # than by a hardcoded list. `bug_half` triggers that in the run step;
-          # new test files are absorbed automatically instead of silently landing
-          # on whichever side a frozen glob happens to match.
+          - shard: regression-a2
+            paths: tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_nebular_qh_float32_build.py --ignore=tests/regression/precision/test_nion_consumers_nebular.py --ignore=tests/regression/precision/test_nion_consumers_scalar.py --ignore=tests/regression/precision/test_no_float64_constants_under_f32.py --ignore=tests/regression/precision/test_no_raw_erg_s_derived_read.py --ignore=tests/regression/precision/test_no_raw_flux_scale.py --ignore=tests/regression/precision/test_no_raw_nion_read.py --ignore=tests/regression/precision/test_nthcomp_fd_step.py --ignore=tests/regression/precision/test_planck_float32.py --ignore=tests/regression/precision/test_radio_float32.py --ignore=tests/regression/precision/test_remaining_derivative_safe_denominators.py --ignore=tests/regression/precision/test_representable_exponent.py --ignore=tests/regression/precision/test_representable_floors_and_qh_overflow.py --ignore=tests/regression/precision/test_rest_wave_grid_dtype.py --ignore=tests/regression/precision/test_scale_primitive.py --ignore=tests/regression/precision/test_ssp_load_dtype.py --ignore=tests/regression/precision/test_stellar_custom_rule_is_two_sided.py --ignore=tests/regression/precision/test_stellar_grad_float32.py --ignore=tests/regression/precision/test_stellar_mass_scale_log.py --ignore=tests/regression/precision/test_uniform_grid_tolerance_is_dtype_derived.py --ignore=tests/regression/precision/test_variable_noise_metric_float32.py --ignore=tests/regression/precision/test_weighted_mean_threshold_scale.py --ignore=tests/regression/precision/test_x64_env_override.py --ignore=tests/regression/precision/test_xray_shock_float32.py
+            nproc: 1
+            budget: 45
+            coverage_budget: 105
+          - shard: regression-a3
+            paths: tests/regression/precision/test_nebular_qh_float32_build.py tests/regression/precision/test_nion_consumers_nebular.py tests/regression/precision/test_nion_consumers_scalar.py tests/regression/precision/test_no_float64_constants_under_f32.py tests/regression/precision/test_no_raw_erg_s_derived_read.py tests/regression/precision/test_no_raw_flux_scale.py tests/regression/precision/test_no_raw_nion_read.py tests/regression/precision/test_nthcomp_fd_step.py tests/regression/precision/test_planck_float32.py tests/regression/precision/test_radio_float32.py tests/regression/precision/test_remaining_derivative_safe_denominators.py tests/regression/precision/test_representable_exponent.py tests/regression/precision/test_representable_floors_and_qh_overflow.py tests/regression/precision/test_rest_wave_grid_dtype.py tests/regression/precision/test_scale_primitive.py tests/regression/precision/test_ssp_load_dtype.py tests/regression/precision/test_stellar_custom_rule_is_two_sided.py tests/regression/precision/test_stellar_grad_float32.py tests/regression/precision/test_stellar_mass_scale_log.py tests/regression/precision/test_uniform_grid_tolerance_is_dtype_derived.py tests/regression/precision/test_variable_noise_metric_float32.py tests/regression/precision/test_weighted_mean_threshold_scale.py tests/regression/precision/test_x64_env_override.py tests/regression/precision/test_xray_shock_float32.py
+            nproc: 1
+            budget: 70
+            coverage_budget: 105
           - shard: regression-b1
             paths: ""
             bug_half: "1"
@@ -1709,10 +1711,9 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        # regression-a2 mirror: the precision tree is the long half; its test job
-        # is capped at 85 min, so it keeps the 105 min coverage budget the
+        # the three regression-a shards keep the 105 min coverage budget the
         # combined regression-a shard had.
-        timeout-minutes: ${{ matrix.shard == 'regression-a2' && 105 || matrix.coverage_budget }}
+        timeout-minutes: ${{ matrix.coverage_budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
