@@ -51,7 +51,7 @@ from tengri.components.nebular.agn_nebular import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    library_lookup,
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
@@ -241,7 +241,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -----
     **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, the PCHIP lookup is C¹-continuous and fully differentiable.
 
     """
     line_wavelengths = preint["line_wavelengths"]
@@ -250,15 +250,12 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     grid_axes = preint["grid_axes"]
     collapsed_axes = preint.get("_collapsed_axes", {})
 
-    # Precompute edges for triweight interpolation
-    edges = tuple(edges_for_grid(ax) for ax in grid_axes)
-
     # If axes were collapsed, build a mapping from remaining free params to grid indices
     fixed_idx_to_value = collapsed_axes
 
     @jax.jit
     def predict_lines(log_qh, *free_axis_vals, neb_fesc=0.0):
-        """Compute Feltre NLR emission lines via triweight interpolation.
+        """Compute Feltre NLR emission lines via node-exact PCHIP (#2861).
 
         Parameters
         ----------
@@ -288,8 +285,8 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
                 free_idx += 1
 
         # Interpolate logHB_per_logq and line_ratios at the query point
-        logHB_interp = interp_nd_triweight(logHB_per_logq, grid_axes, edges, tuple(full_point))
-        ratios_interp = interp_nd_triweight(line_ratios, grid_axes, edges, tuple(full_point))
+        logHB_interp = library_lookup(logHB_per_logq, grid_axes, tuple(full_point))
+        ratios_interp = library_lookup(line_ratios, grid_axes, tuple(full_point))
 
         # Convert to linear luminosity:
         # L_Hβ [erg/s] = 10^{logHB_per_logq} × Q_H

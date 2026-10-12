@@ -57,7 +57,7 @@ from tengri.components.nebular.cloudy_cb19 import (
 from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    library_lookup,
 )
 from tengri.utils.interpolation import edges_for_grid
 
@@ -272,7 +272,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -----
     **JIT-compatible**: yes, the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, the PCHIP lookup is C¹-continuous and fully differentiable.
 
     """
     line_wavelengths = preint["line_wavelengths"]
@@ -281,15 +281,12 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     grid_axes = preint["grid_axes"]
     collapsed_axes = preint.get("_collapsed_axes", {})
 
-    # Precompute edges for triweight interpolation
-    edges = tuple(edges_for_grid(ax) for ax in grid_axes)
-
     # If axes were collapsed, build a mapping from remaining free params to grid indices
     fixed_idx_to_value = collapsed_axes
 
     @jax.jit
     def predict_lines(log_qh, *free_axis_vals, neb_fesc=0.0):
-        """Compute CB19 emission lines via triweight interpolation.
+        """Compute CB19 emission lines via node-exact PCHIP (#2861).
 
         Parameters
         ----------
@@ -319,9 +316,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
                 free_idx += 1
 
         # Interpolate log_line_ratios at the query point
-        log_ratios_interp = interp_nd_triweight(
-            log_line_ratios, grid_axes, edges, tuple(full_point)
-        )
+        log_ratios_interp = library_lookup(log_line_ratios, grid_axes, tuple(full_point))
 
         # Convert to linear luminosity:
         # L_Hβ [erg/s] = 10^{log_hb_per_qh + log_qh} [erg/s]

@@ -1643,6 +1643,85 @@ def interp_nd_pchip(
     return reduced
 
 
+def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):
+    """Map one query coordinate onto the table for :func:`library_lookup`.
+
+    A numerical gap (``p`` within half an end spacing of the node hull) is
+    extrapolated: the query passes through unchanged and the end cubic continues
+    past the boundary node. A physical gap (``p`` further out) is held at the
+    boundary node by a ``where`` selection, so its derivative is exactly zero
+    there and the interior is untouched. ``extrapolate=False`` clamps every query
+    to the node hull the same way. Neither branch uses ``jnp.clip``, which halves
+    the derivative on the boundary node itself.
+    """
+    x0, x_last = ax[0], ax[-1]
+    if not extrapolate:
+        return _clamp_to_hull(p, x0, x_last)
+    lo, hi = extrapolation_band(ax)
+    return jnp.where(p < lo, x0, jnp.where(p > hi, x_last, p))
+
+
+def library_lookup(
+    grid: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+    *,
+    extrapolate: tuple[bool, ...] | None = None,
+) -> jnp.ndarray:
+    """Evaluate a template library at ``point``: the one entry point for lookups (#2861).
+
+    Every fitted-parameter template-library lookup goes through here. It is
+    node-exact monotone-cubic (PCHIP, :func:`interp_nd_pchip`): the value at a
+    stored node is the stored value, and the interpolant is shape-preserving.
+    The triweight smoother is deliberately not used here, because it averages
+    across neighboring nodes and so does not reproduce the table.
+
+    Parameters
+    ----------
+    grid : jnp.ndarray, shape (*grid_dims, *trailing)
+        Tabulated values. The leading ``len(axes)`` dimensions are the axes.
+    axes : tuple of jnp.ndarray
+        One strictly ascending node vector per axis; ``axes[i]`` has shape
+        ``(grid_dims[i],)``.
+    point : tuple
+        Query coordinate, one scalar per axis.
+    extrapolate : tuple of bool, optional
+        Per axis. ``True`` (the default on every axis) extrapolates a numerical
+        gap, a prior within half an end spacing of the node hull, and holds a
+        physical gap at its boundary node. ``False`` holds every query at the node
+        hull on that axis. Physical gaps are reported at build time by
+        :data:`tengri.components.grid_support.GRID_SUPPORT`; this function
+        does not read that registry.
+
+    Returns
+    -------
+    jnp.ndarray, shape (*trailing,)
+        Interpolated values.
+
+    Raises
+    ------
+    ValueError
+        If ``extrapolate`` does not have one entry per axis.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The derivative is nonzero
+    across the numerical overhang and is one-sided (not halved) on the outermost
+    node. Physical overhang has zero derivative by construction.
+    """
+    if extrapolate is None:
+        extrapolate = (True,) * len(axes)
+    elif len(extrapolate) != len(axes):
+        raise ValueError(
+            f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
+        )
+    reduced = grid
+    for ax, p, ext in zip(axes, point, extrapolate, strict=True):
+        query = _library_axis_query(ax, p, bool(ext))
+        reduced = _pchip_eval_axis0(ax, reduced, query, extrapolate=True)
+    return reduced
+
+
 def resample_template(
     wave_out: jnp.ndarray,
     wave_in: jnp.ndarray,
