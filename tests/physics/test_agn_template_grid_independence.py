@@ -544,17 +544,18 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
 def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
     """Emitted SKIRTOR disc, dust and polar-reemission SEDs, from the component's own functions.
 
-    The disc and dust are those along ``cos_inc``. The polar re-emission is the graybody that
-    carries the power the polar dust absorbs from the disc light emitted into the cone, taken
-    here as an independent Gauss-Legendre integral over the cone (``_skirtor_reference``), so
-    it does not depend on ``cos_inc``.
+    The disc and dust are those along ``cos_inc``, the disc after the polar dust's Type-1
+    attenuation, as the component emits it. The polar re-emission is the graybody that carries
+    the power the polar dust absorbs from the disc light emitted into the cone, taken here as an
+    independent Gauss-Legendre integral over the sphere with the Type-1 weight
+    (``_skirtor_reference``), so it does not depend on ``cos_inc``.
     """
     from tengri.components.agn.polar_dust import polar_dust_emission
     from tests.physics._skirtor_reference import cone_absorbed, emitted_pieces
 
     los = emitted_pieces(comp, params, wave, disk_type)
     ebv = float(params["polar_ebv"])
-    cone = cone_absorbed(comp, params, wave, disk_type, order=10) if ebv > 0.0 else 0.0
+    cone = cone_absorbed(comp, params, wave, disk_type, order=16) if ebv > 0.0 else 0.0
     polar = polar_dust_emission(
         cone,
         jnp.asarray(wave),
@@ -563,7 +564,7 @@ def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
         lambda_0=2e6,
     )
     return {
-        "disc": los["disc"],
+        "disc": los["disc_attenuated"],
         "dust": los["dust"],
         "polar": np.asarray(polar),
         "polar_absorbed": cone,

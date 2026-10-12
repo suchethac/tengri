@@ -218,6 +218,7 @@ def test_absent_luminosity_inputs_are_zero_power(x64):
             return jnp.sum(out)
 
         grad = jax.grad(total)(params["radio_q_ir"])
+        # grad-assert: finite-only — an absent source has zero power, so zero is the correct slope
         assert np.isfinite(float(grad))
 
 
