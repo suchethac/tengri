@@ -176,7 +176,8 @@ class TestADAFSpectralPhysics:
         """ADAF stays sub-Eddington at a physical accretion luminosity.
 
         adaf_spectrum is L_bol-canonical (#898): ``agn_log_lbol`` is log10(L/Lsun)
-        and the radiative inefficiency lives in the derived mdot (Eq. 49), tested
+        and the radiative inefficiency lives in the derived mdot (the inversion of
+        L_ADAF = Q_ie + delta Q+, Sect. 5.2, whose high-mdot limit is Eq. 49), tested
         in test_adaf_mahadevan.py. Here we simply check the model does not produce
         super-Eddington output at a physical LLAGN luminosity.
         """
