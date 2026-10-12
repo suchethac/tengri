@@ -98,6 +98,10 @@ class TopZValidity(NamedTuple):
         ``"clip"``, ``"mist"`` or ``"raw"``.
     source : str
         Provenance of the limit.
+    top_bin_lower_edge_log_z_abs : float
+        Lower edge of the top node's metallicity bin in the loaded grid [log10 absolute Z],
+        from :func:`top_bin_lower_edge`. A metallicity lookup puts weight on the node only
+        above this edge (see :func:`reach_warning_text`).
     """
 
     node_log_z_abs: float
@@ -106,6 +110,7 @@ class TopZValidity(NamedTuple):
     taper_dex: float
     policy: str
     source: str
+    top_bin_lower_edge_log_z_abs: float
 
 
 class YoungTopMetallicityWarning(UserWarning):
@@ -117,13 +122,49 @@ class YoungTopMetallicityWarning(UserWarning):
 SCATTER_SPAN_SIGMA = 3.0
 
 
+def top_bin_lower_edge(lgmet) -> float:
+    """Lower edge of the top metallicity node's bin, by DSPS's bin rule.
+
+    The metallicity weights of the stellar population are the triweight kernel integrated
+    over bins ``[edge_k, edge_k+1]`` built by ``dsps.utils._get_bin_edges`` from
+    ``dsps.utils._jax_get_dt_array`` (the lookup is
+    ``tengri.components.stellar.component._lgmet_weights_parcels``). The node's bin is
+    ``node - dt/2`` wide on its low side, where the last width is
+    ``dt[-1] = node[-1] + (tmid[-1] - tmid[-2]) / 2 - tmid[-1]`` and ``tmid`` are the midpoints
+    of adjacent nodes. It is not the midpoint of the two highest nodes unless the last
+    three nodes are equally spaced.
+
+    Parameters
+    ----------
+    lgmet : array_like, shape (n_met,)
+        Ascending metallicity nodes [log10 absolute Z]; at least three.
+
+    Returns
+    -------
+    float
+        Lower edge of the last node's bin [log10 absolute Z].
+    """
+    t = np.asarray(lgmet, dtype=np.float64)
+    tmids = 0.5 * (t[:-1] + t[1:])
+    dtmid_last = tmids[-1] - tmids[-2]
+    dt_last = (t[-1] + dtmid_last / 2.0) - tmids[-1]
+    return float(t[-1] - dt_last / 2.0)
+
+
 def reach_warning_text(
     validity: TopZValidity,
     log_z_abs_max: float,
     name: str,
     scatter_dex_max: float = 0.0,
 ) -> str | None:
-    """Warning text for a metallicity that can exceed the highest complete node.
+    """Warning text for a metallicity that can weight the truncated top node.
+
+    The top node receives nonzero weight exactly when the metallicity kernel reaches the
+    node's bin. The kernel is the triweight CDF of half-width ``SCATTER_SPAN_SIGMA`` x
+    scatter about the mean, so the weight is zero when
+    ``log_z_abs_max + SCATTER_SPAN_SIGMA * scatter_dex_max <= top_bin_lower_edge_log_z_abs``.
+    With zero scatter the kernel is a step, the lookup bins, and the same inequality
+    reads ``log_z_abs_max <= edge``.
 
     Parameters
     ----------
@@ -134,17 +175,17 @@ def reach_warning_text(
     name : str
         Parameter (or history) name for the message.
     scatter_dex_max : float, optional
-        Highest lognormal metallicity scatter sigma the model can take [dex]. The scatter
-        kernel spans ``SCATTER_SPAN_SIGMA`` sigma above the mean, so the metallicity
-        the SSP lookup reaches is ``log_z_abs_max + SCATTER_SPAN_SIGMA * scatter_dex_max``.
+        Highest lognormal metallicity scatter sigma the model can take [dex]. Zero for a
+        history, which has no scatter.
 
     Returns
     -------
     str or None
-        ``None`` when that reach stays at or below the highest complete node.
+        ``None`` when the top node's weight is exactly zero at every allowed setting.
     """
     reach = log_z_abs_max + SCATTER_SPAN_SIGMA * scatter_dex_max
-    if reach <= validity.fallback_log_z_abs + 1e-9:
+    edge = validity.top_bin_lower_edge_log_z_abs
+    if reach <= edge:
         return None
     z_top, z_fb = 10.0**validity.node_log_z_abs, 10.0**validity.fallback_log_z_abs
     lg_hi = validity.lg_age_incomplete_max_yr
@@ -158,7 +199,9 @@ def reach_warning_text(
     else:
         reach_txt = f"{name} reaches Z = {10.0**reach:.4f}"
     head = (
-        f"{reach_txt}, above the highest complete node of this SSP grid (Z = {z_fb:.4f}). "
+        f"{reach_txt}, above Z = {10.0**edge:.4f}, where the metallicity weights start to "
+        f"use the Z = {z_top:.4f} node of this SSP grid (its highest complete node is "
+        f"Z = {z_fb:.4f}). "
         f"The Z = {z_top:.4f} node has no stars above ~12 Msun for log10(age/yr) <= "
         f"{lg_hi:.2f}: {validity.source}. "
     )
@@ -467,6 +510,7 @@ def apply_top_z_policy(
         return flux, mass, lgmet, None  # the incomplete node is not in this grid
 
     def record(fallback: float, pol: str) -> TopZValidity:
+        # ``lgmet`` is read when called, so the "mist" branch's inserted node is included.
         return TopZValidity(
             limit.node_log_z_abs,
             fallback,
@@ -474,6 +518,7 @@ def apply_top_z_policy(
             limit.taper_dex,
             pol,
             limit.source,
+            top_bin_lower_edge(lgmet),
         )
 
     if policy == TOP_Z_RAW:

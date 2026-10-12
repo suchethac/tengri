@@ -187,8 +187,9 @@ in log age, `"mist"` inserts a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) 
 the file. The `"mist"` target has different isochrones from the PARSEC grid, so the young part of
 the metallicity axis between Z = 0.040 and 0.0449 switches isochrone physics, not only metallicity
 (`docs/known_limitations.md`).
-The build reads the record from `SSPData.top_z` and warns when a `met_logzsol` prior reaches above
-the highest complete node. Add a limit by adding one registry row; no physics code names a grid.
+The build reads the record from `SSPData.top_z` and warns when the metallicity weights can reach the
+truncated node, i.e. when the prior's upper bound plus 3 sigma of the scatter's upper bound exceeds the lower
+edge of the top node's DSPS metallicity bin (`top_bin_lower_edge` in `top_z_validity.py`). Add a limit by adding one registry row; no physics code names a grid.
 
 ### The expert escape hatch
 

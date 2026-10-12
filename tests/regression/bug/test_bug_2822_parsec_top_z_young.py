@@ -240,29 +240,115 @@ def _warnings_for(ssp, **kw):
     return [w for w in caught if issubclass(w.category, YoungTopMetallicityWarning)]
 
 
-def test_warning_fires_exactly_when_prior_reaches_above_z004(ssp_clip):
-    assert _warnings_for(ssp_clip, logzsol_hi=LOGZSOL_Z04 - 1e-6) == []
-    assert _warnings_for(ssp_clip, logzsol_hi=0.2) == []
-    hits = _warnings_for(ssp_clip, logzsol_hi=LOGZSOL_Z04 + 1e-3)
-    assert len(hits) == 1
-    hits_top = _warnings_for(ssp_clip, logzsol_hi=LOGZSOL_Z06)
-    assert len(hits_top) == 1
+def _top_edge_logzsol(nodes_abs):
+    """Lower edge of the top node's metallicity bin [log10(Z/Zsun)], from the node values.
+
+    The rule is DSPS's, which is what the stellar component calls
+    (``component._lgmet_weights_parcels`` -> ``dsps.utils._get_bin_edges`` with
+    ``_jax_get_dt_array``, dsps/utils.py:16-52): bin k is ``[t_k - dt_k/2, t_k+1 - dt_k+1/2]``
+    with ``dt_k = (t_k+1 - t_k-1)/2`` inside and the last width
+    ``dt_n = (t_n + (tmid_n - tmid_n-1)/2) - tmid_n``. Written out here node by node, not
+    by calling the code under test.
+    """
+    t = [float(x) for x in nodes_abs]
+    tmid = [(t[i] + t[i + 1]) / 2.0 for i in range(len(t) - 1)]
+    dt_last = (t[-1] + (tmid[-1] - tmid[-2]) / 2.0) - tmid[-1]
+    return t[-1] - dt_last / 2.0 - LOG10_ZSUN
 
 
-def test_warning_counts_the_metallicity_scatter_kernel(ssp_clip):
-    """hi + 3 x scatter_hi (the triweight kernel's span) decides, fixed or free scatter."""
-    top = LOGZSOL_Z04  # prior upper bound sitting exactly on the highest complete node
-    below = top - 0.30 - 1e-3
-    assert _warnings_for(ssp_clip, logzsol_hi=below, scatter=0.1) == []
-    hits = _warnings_for(ssp_clip, logzsol_hi=below + 3e-3, scatter=0.1)
+@pytest.fixture(scope="module")
+def edge_clip(ssp_clip):
+    return _top_edge_logzsol(np.asarray(ssp_clip.ssp_lgmet))
+
+
+@pytest.fixture(scope="module")
+def edge_mist(ssp_mist):
+    return _top_edge_logzsol(np.asarray(ssp_mist.ssp_lgmet))
+
+
+def test_edge_is_the_dsps_bin_edge_not_the_midpoint(ssp_clip, ssp_mist, edge_clip, edge_mist):
+    """Cross-check the hand-written edge against DSPS itself, and against the midpoint."""
+    from dsps.constants import LGMET_HI, LGMET_LO
+    from dsps.utils import _get_bin_edges
+
+    for ssp, edge in ((ssp_clip, edge_clip), (ssp_mist, edge_mist)):
+        g = np.asarray(ssp.ssp_lgmet)
+        dsps_edge = float(np.asarray(_get_bin_edges(g, LGMET_LO, LGMET_HI))[-2]) - LOG10_ZSUN
+        assert edge == pytest.approx(dsps_edge, abs=1e-12)
+        assert edge == pytest.approx(
+            ssp.top_z.top_bin_lower_edge_log_z_abs - LOG10_ZSUN, abs=1e-12
+        )
+        assert abs(edge - (0.5 * (g[-1] + g[-2]) - LOG10_ZSUN)) > 1e-3  # not the midpoint
+    # The registry nodes: clip's top bin starts above 0.04, mist's above 0.0449.
+    assert LOGZSOL_Z04 < edge_clip < LOGZSOL_Z06
+    assert LOGZSOL_MIST < edge_mist < LOGZSOL_Z06
+
+
+@pytest.mark.parametrize("scatter", [0.0, 1e-4, 0.05, 0.1, 0.3])
+@pytest.mark.parametrize("which", ["clip", "mist"])
+def test_top_node_weight_is_zero_below_the_edge_and_positive_above(
+    which, scatter, ssp_clip, ssp_mist, edge_clip, edge_mist
+):
+    """Validate the rule on the real weights the stellar component uses."""
+    from tengri.components.stellar.component import _lgmet_weights
+
+    ssp, edge = (ssp_clip, edge_clip) if which == "clip" else (ssp_mist, edge_mist)
+    mean_edge = edge - 3.0 * scatter  # the mean at which mean + 3 sigma sits on the edge
+    below = float(_lgmet_weights(mean_edge - 1e-3 + LOG10_ZSUN, scatter, ssp.ssp_lgmet)[-1])
+    above = float(_lgmet_weights(mean_edge + 1e-3 + LOG10_ZSUN, scatter, ssp.ssp_lgmet)[-1])
+    assert below == 0.0
+    assert above > 0.0
+
+
+def test_zero_scatter_is_a_step_at_the_edge(ssp_clip, edge_clip):
+    """sigma = 0 bins (no interpolation toward Z = 0.06 from below the edge)."""
+    from tengri.components.stellar.component import _lgmet_weights
+
+    w_in = np.asarray(_lgmet_weights(edge_clip - 1e-3 + LOG10_ZSUN, 0.0, ssp_clip.ssp_lgmet))
+    w_out = np.asarray(_lgmet_weights(edge_clip + 1e-3 + LOG10_ZSUN, 0.0, ssp_clip.ssp_lgmet))
+    assert w_in[-1] == 0.0 and w_in[-2] == 1.0  # a Z above 0.04 still lands wholly on 0.04
+    assert w_out[-1] == 1.0
+
+
+def test_default_prior_does_not_warn(ssp_clip, ssp_mist):
+    """The default Uniform(-2, 0.2) with the default scatter of 0.1 dex reaches 0.5 < edge."""
+    assert _warnings_for(ssp_clip, logzsol_hi=0.2, scatter=0.1) == []
+    assert _warnings_for(ssp_mist, logzsol_hi=0.2, scatter=0.1) == []
+
+
+@pytest.mark.parametrize("scatter", [0.0, 0.1])
+def test_warning_fires_exactly_at_the_clip_edge(ssp_clip, edge_clip, scatter):
+    hi = edge_clip - 3.0 * scatter
+    assert _warnings_for(ssp_clip, logzsol_hi=hi - 1e-3, scatter=scatter) == []
+    hits = _warnings_for(ssp_clip, logzsol_hi=hi + 1e-3, scatter=scatter)
     assert len(hits) == 1
-    assert "scatter" in str(hits[0].message)
-    # a free scatter prior counts through its upper bound
-    assert _warnings_for(ssp_clip, logzsol_hi=top - 0.15 - 1e-3, scatter=Uniform(0.02, 0.05)) == []
-    assert (
-        len(_warnings_for(ssp_clip, logzsol_hi=top - 0.15 + 1e-3, scatter=Uniform(0.02, 0.05)))
-        == 1
-    )
+    assert ("scatter" in str(hits[0].message)) == (scatter > 0.0)
+    assert len(_warnings_for(ssp_clip, logzsol_hi=LOGZSOL_Z06, scatter=scatter)) == 1
+
+
+def test_warning_fires_exactly_at_the_mist_edge(ssp_mist, edge_mist):
+    """The mist grid's truncated 0.06 node starts at its own, higher, bin edge."""
+    for scatter in (0.0, 0.1):
+        hi = edge_mist - 3.0 * scatter
+        assert _warnings_for(ssp_mist, logzsol_hi=hi - 1e-3, scatter=scatter) == []
+        assert len(_warnings_for(ssp_mist, logzsol_hi=hi + 1e-3, scatter=scatter)) == 1
+
+
+def test_free_scatter_counts_through_its_upper_bound(ssp_clip, edge_clip):
+    hi = edge_clip - 3.0 * 0.05
+    scatter = Uniform(0.02, 0.05)
+    assert _warnings_for(ssp_clip, logzsol_hi=hi - 1e-3, scatter=scatter) == []
+    assert len(_warnings_for(ssp_clip, logzsol_hi=hi + 1e-3, scatter=scatter)) == 1
+
+
+def test_photoz_recipe_prior_still_warns(ssp_clip, edge_clip):
+    """recipes.photoz() has Uniform(-1, 0.5) and the default 0.1 dex scatter: 0.8 > edge."""
+    from tengri import recipes
+
+    met = recipes.photoz()["sfh"]  # the recipe declares met_logzsol in its sfh group
+    hi = float(met["met_logzsol"].hi)
+    assert hi == 0.5 and hi + 3.0 * 0.1 > edge_clip
+    assert len(_warnings_for(ssp_clip, logzsol_hi=hi, scatter=0.1)) == 1
 
 
 def test_warning_text_states_limit_clip_and_exact_opt_in(ssp_clip):
@@ -275,14 +361,15 @@ def test_warning_text_states_limit_clip_and_exact_opt_in(ssp_clip):
 def test_warning_names_raw_and_does_not_offer_mist_when_already_on(ssp_raw, ssp_mist):
     raw_text = str(_warnings_for(ssp_raw, logzsol_hi=0.7)[0].message)
     assert "top_z='raw'" in raw_text and "800-2700x low" in raw_text
-    # With the MIST node the highest complete node is Z = 0.0449 ([Z/H] = +0.5).
+    # With the MIST node the highest complete node is Z = 0.0449 ([Z/H] = +0.5); a prior
+    # that stays below the top node's bin edge does not warn.
     assert _warnings_for(ssp_mist, logzsol_hi=LOGZSOL_MIST - 1e-4) == []
     mist_text = str(_warnings_for(ssp_mist, logzsol_hi=0.7)[0].message)
     assert "MIST" in mist_text and "load_ssp(" not in mist_text
     assert "switches isochrone physics" in mist_text
 
 
-def test_history_ingest_warns_for_a_metallicity_track_above_z004(ssp_clip):
+def test_history_ingest_warns_for_a_track_above_the_top_bin_edge(ssp_clip, edge_clip):
     from tengri.inference.history_ingest import ingest_histories
 
     t = np.linspace(0.1, 10.0, 12)
@@ -290,9 +377,10 @@ def test_history_ingest_warns_for_a_metallicity_track_above_z004(ssp_clip):
     kw = dict(t_gyr=t, sfr=sfr, ssp_lgmet=np.asarray(ssp_clip.ssp_lgmet), top_z=ssp_clip.top_z)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        ingest_histories(met=np.full((1, 12), 0.2), **kw)
+        # a track between Z = 0.04 and the bin edge uses no weight on the node: no warning
+        ingest_histories(met=np.full((1, 12), edge_clip - 0.01), **kw)
         none = [w for w in caught if issubclass(w.category, YoungTopMetallicityWarning)]
-        ingest_histories(met=np.full((1, 12), 0.55), **kw)
+        ingest_histories(met=np.full((1, 12), edge_clip + 0.01), **kw)
         some = [w for w in caught if issubclass(w.category, YoungTopMetallicityWarning)]
     assert none == [] and len(some) == 1
 

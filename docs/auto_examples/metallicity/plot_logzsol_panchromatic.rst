@@ -44,7 +44,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:12926: YoungTopMetallicityWarning: met_logzsol reaches Z = 0.0896 (its upper bound, Z = 0.0449, plus 3 x the metallicity-scatter upper bound of 0.1 dex that the scatter kernel spans), above the highest complete node of this SSP grid (Z = 0.0400). The Z = 0.0600 node has no stars above ~12 Msun for log10(age/yr) <= 7.15: FSPS ISOCHRONES/PARSEC/isoc_z0.0600.dat: Mini capped at 12.01 Msun for every log age 5.50-7.15 (343 rows at 5.50; isoc_z0.0200.dat reaches 300 Msun); the PARSEC massive-star tracks stop at Z = 0.04 (Chen et al. 2015, MNRAS 452, 1068). The metallicity is therefore held at Z = 0.0400 for log10(age/yr) <= 7.15, and the top node's weight rises linearly with log age to 1 at 7.20; older populations use the top node unchanged. To use a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) at young ages instead, load the grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or load_ssp_data(<path>, top_z='mist'). That node has MIST isochrones, so between Z = 0.0400 and 0.0449 the young population switches isochrone physics, not only metallicity.
+    /tengri/src/tengri/forward/sed_model.py:12928: YoungTopMetallicityWarning: met_logzsol reaches Z = 0.0896 (its upper bound, Z = 0.0449, plus 3 x the metallicity-scatter upper bound of 0.1 dex that the scatter kernel spans), above Z = 0.0497, where the metallicity weights start to use the Z = 0.0600 node of this SSP grid (its highest complete node is Z = 0.0400). The Z = 0.0600 node has no stars above ~12 Msun for log10(age/yr) <= 7.15: FSPS ISOCHRONES/PARSEC/isoc_z0.0600.dat: Mini capped at 12.01 Msun for every log age 5.50-7.15 (343 rows at 5.50; isoc_z0.0200.dat reaches 300 Msun); the PARSEC massive-star tracks stop at Z = 0.04 (Chen et al. 2015, MNRAS 452, 1068). The metallicity is therefore held at Z = 0.0400 for log10(age/yr) <= 7.15, and the top node's weight rises linearly with log age to 1 at 7.20; older populations use the top node unchanged. To use a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) at young ages instead, load the grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or load_ssp_data(<path>, top_z='mist'). That node has MIST isochrones, so between Z = 0.0400 and 0.0449 the young population switches isochrone physics, not only metallicity.
       return cls(
     /tengri/src/tengri/forward/orchestrator.py:1087: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.27 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH: bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(
@@ -140,7 +140,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.527 seconds)
+   **Total running time of the script:** (0 minutes 3.533 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

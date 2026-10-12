@@ -100,9 +100,12 @@ Full detail: `docs/dev/notebook_orchestration_oom.md`.
   16 times low at 1500 A. The loader therefore refuses that part of the node: for log age <= 7.15
   a metallicity above Z = 0.04 gives the Z = 0.04 population, and the Z = 0.06 node returns
   linearly in log age over the next 0.05 dex (one grid step: weight 0 at 7.15, 1 from 7.20), so
-  there is no step in age. Older populations are unchanged. A model whose `met_logzsol` prior
-  reaches above Z = 0.04 (`log10(Z/Z_sun)` = 0.45), counting the 3 sigma span of the metallicity
-  scatter kernel above the prior's upper bound, warns at build time. To use a MIST [Z/H] = +0.5
+  there is no step in age. Older populations are unchanged. A model warns at build time when its
+  metallicity weights can reach the Z = 0.06 node, that is when the `met_logzsol` prior's upper
+  bound plus 3 sigma of the metallicity scatter's upper bound exceeds the lower edge of that
+  node's metallicity bin (`log10(Z/Z_sun)` = 0.544, Z = 0.0497, on the PARSEC grids; 0.572 with
+  `top_z="mist"`). Below the edge the node's weight is exactly zero, so the default
+  `Uniform(-2, 0.2)` prior with a scatter of 0.1 dex does not warn. To use a MIST [Z/H] = +0.5
   node (FSPS's zlegend value Z = Z_sun 10^[Z/H] = 0.0449 with Z_sun = 0.0142; MILES, same IMF and
   ages) at young ages instead, load the grid with `tengri.load_ssp(name, top_z="mist")`; the node
   is inserted at that metallicity and the model never extrapolates above it at young ages.

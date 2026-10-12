@@ -4129,15 +4129,17 @@ class SEDModel:
                     )
 
     def _warn_young_top_metallicity(self, spec, ssp_data):
-        """Warn once per build when a metallicity can exceed the highest complete SSP node.
+        """Warn once per build when the metallicity weights can reach the truncated top node.
 
-        The loader holds the metallicity at that node at young ages (or, with
-        ``top_z='raw'``, does not), see
+        The loader holds the metallicity at the highest complete node at young ages (or,
+        with ``top_z='raw'``, does not), see
         :mod:`tengri.components.stellar.sps.top_z_validity`. The condition depends only on
-        the declared metallicity ranges and the grid's recorded limit, so it is decided
+        the declared metallicity ranges and the grid's recorded bin edge, so it is decided
         here, once, outside any trace. Ages below the limit cannot be excluded by a prior,
-        so the metallicity reach alone triggers it. The reach is the prior's upper bound
-        plus the span of the scatter kernel (3 sigma at the scatter's upper bound).
+        so the metallicity alone triggers it: the warning fires exactly when the prior's
+        upper bound plus the span of the scatter kernel (3 sigma at the scatter's upper
+        bound) exceeds the lower edge of the top node's metallicity bin, the first
+        metallicity at which the node's weight is nonzero.
         """
         validity = getattr(ssp_data, "top_z", None)
         if validity is None:
