@@ -805,7 +805,7 @@ def _disc_power_native(lnu_native, wave_native):
     default = jnp.asarray(0.0).dtype
     dtype = lnu.dtype if lnu.dtype.itemsize < default.itemsize else default
     wave = jnp.asarray(wave_native, dtype=dtype)
-    gap = 1.0e-9 if jnp.dtype(dtype).itemsize >= 8 else 4.0e-7
+    gap = 1.0e-13 if jnp.dtype(dtype).itemsize >= 8 else 4.0e-7
     edge = _disc_support_edge_aa()
     extra = jnp.asarray([edge * (1.0 - gap), edge, edge * (1.0 + gap)], dtype=dtype)
     wave_e = jnp.sort(jnp.concatenate([wave, extra]))
@@ -879,27 +879,46 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, node-exact PCHIP interpolation is C1 in every coordinate.
+
+    **Interpolation.** Every parameter axis (tau, p, q, opening angle, radius ratio) and the
+    inclination axis (:math:`\cos i`) is interpolated with the monotone piecewise cubic of
+    Fritsch & Carlson [3]_ (:func:`~tengri.utils.grid_interp.interp_nd_pchip`), applied one
+    axis at a time. It passes exactly through the tabulated records, so the component along a
+    library inclination IS the stored record times the common scale below; an axis of two
+    nodes is linear (the PCHIP of two nodes). A coordinate outside an axis is clamped to its
+    end node.
 
     **Normalization.** The library stores every record divided by its own dust integral
     (``spectra/norm`` holds the divisor), which erases the flux ratio between inclinations.
     The components here are the stored spectra multiplied back by that factor, interpolated,
     and scaled by ONE factor per parameter point,
-    :math:`s = L_{\rm scale} / \bar P_{\rm disc}`, with
+    :math:`s = L_{\rm scale} / (\bar P_{\rm disc} + \bar P_{\rm dust})`, with
     :math:`L_{\rm scale} = 10^{\log L_{\rm bol}} L_\odot f` (:math:`f` = ``frac_agn``) and
 
     .. math::
 
-        \bar P_{\rm disc} = \int_0^1 P_{\rm disc}(\mu)\,d\mu, \qquad \mu = \cos i,
+        \bar P_X = \int_0^1 P_X(\mu)\,d\mu, \qquad \mu = \cos i,
 
-    the sphere-mean of the disc power :math:`P_{\rm disc}(\mu) = \int L_\nu\,d\nu` that the
-    template carries along inclination :math:`\mu`, inside the support of the emitted disc.
+    the sphere mean of the power :math:`P_X(\mu) = \int L_\nu\,d\nu` that the template
+    carries along inclination :math:`\mu`: the escaping disc (direct plus scattered, inside
+    the support of the emitted disc) and the dust re-emission. SKIRTOR's radiative transfer
+    conserves energy, so these two add up to the intrinsic power of the central source,
+    which is the accretion power :math:`10^{\log L_{\rm bol}} L_\odot` (the parameter, #2678).
     By symmetry about the equator :math:`\tfrac12\int_0^\pi P(\theta)\sin\theta\,d\theta =
-    \int_0^1 P(\mu)\,d\mu`. The sphere-mean disc power is then :math:`L_{\rm scale}`, and
-    every inclination keeps SKIRTOR's own flux relative to the others: the same :math:`s`
+    \int_0^1 P(\mu)\,d\mu`. The sphere-mean disc plus dust is then :math:`L_{\rm scale}`,
+    and every inclination keeps SKIRTOR's own flux relative to the others: the same :math:`s`
     multiplies the disc and the torus dust, so their power ratio at each inclination is the
     radiative-transfer one. The integral over :math:`\mu` is Gauss-Legendre of order
-    ``INCLINATION_GL_ORDER`` on each interval between the library's inclination nodes.
+    ``INCLINATION_GL_ORDER`` on each interval between the library's inclination nodes (each
+    panel is one cubic of the interpolant; the power is a smooth function of that cubic).
+    ``total`` is ``disk + dust``.
+
+    Measured on the v3 library, the records conserve energy to 5.4 % rms over the 1920
+    parameter cells (the sphere-mean disc plus dust differs from cell to cell by -25 % to
+    +17 %, trending with the opening angle and flat in tau, p, q, R): the ten inclination
+    nodes cannot resolve the step of the disc at the edge of the torus, so the per-point
+    scale absorbs that sampling error and nothing else.
 
     A grid without ``spectra/norm`` is normalized the same way from the stored records, each
     on its own scale, so its power carries no inclination dependence.
@@ -915,10 +934,11 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     .. [1] M. Stalevski et al., MNRAS, 420, 2756 (2012). arXiv:1109.1286.
     .. [2] M. Boquien et al., "CIGALE," A&A, 622, A103 (2019).
        arXiv:1811.03094. https://doi.org/10.1051/0004-6361/201834156
+    .. [3] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
+       SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
     """
     from tengri.components.agn._publication import inclination_quadrature
-    from tengri.utils.grid_interp import _tensor_contract
-    from tengri.utils.interpolation import compute_grid_weights
+    from tengri.components.agn._template_grid import native_bolometric_nu
 
     raw = _load_grid_arrays(grid_path)
 
@@ -940,54 +960,25 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         )
 
     # See note in create_skirtor_from_grid: wrap conversion in
-    # ensure_compile_time_eval to keep the cached closure trace-safe.
+    # ensure_compile_time_eval to keep the cached closure trace-safe. ``total`` is not
+    # interpolated: it is the sum of the two interpolated components (the stored one equals
+    # disk + dust to 1e-7, and a nonlinear interpolant would not keep the sum).
     with jax.ensure_compile_time_eval():
         disk_jax = jnp.array(cubes["disk"])
         dust_jax = jnp.array(cubes["dust"])
-        total_jax = jnp.array(cubes["total"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    n_other = len(axes) - 1
-    inc_axis, inc_edges = axes[-1], edges[-1]
+    param_axes, inc_axis = axes[:-1], axes[-1]
+    # Node-exact PCHIP on every axis; an axis of two nodes is linear (the PCHIP of two nodes).
+    param_kinds = tuple("pchip" if ax.shape[0] >= 3 else "linear" for ax in param_axes)
+    inc_kinds = ("pchip" if inc_axis.shape[0] >= 3 else "linear",)
 
-    # Inclination quadrature nodes (static) and the interpolation weights at them, computed
-    # in float64 on the host whatever the process precision: the weights depend on cos i
-    # alone, so the sphere mean of the disc is a fixed contraction of the five-axis result.
+    # Inclination quadrature nodes and weights (static host constants, float64).
     mu_q, w_q = inclination_quadrature(np.asarray(axes[-1], dtype=np.float64))
-    with jax.enable_x64(True):
-        ax64 = jnp.asarray(np.asarray(raw["axes"][-1], dtype=np.float64))
-        edges64 = edges_for_grid(ax64)
-        scatter64 = 0.5 * (ax64[1] - ax64[0])
-        inc_weights_q = np.asarray(
-            jax.vmap(
-                lambda m: compute_grid_weights(
-                    m, ax64, scatter=scatter64, edges=edges64, index_space_interp=True
-                )
-            )(jnp.asarray(mu_q))
-        )
 
-    def _other_weights(point):
-        """Triweight weights along the five parameter axes other than inclination."""
-        return [
-            compute_grid_weights(
-                point[i],
-                axes[i],
-                scatter=0.5 * (axes[i][1] - axes[i][0]),
-                edges=edges[i],
-                index_space_interp=True,
-            )
-            for i in range(n_other)
-        ]
-
-    def _inclination_weights(cos_inc):
-        return compute_grid_weights(
-            cos_inc,
-            inc_axis,
-            scatter=0.5 * (inc_axis[1] - inc_axis[0]),
-            edges=inc_edges,
-            index_space_interp=True,
-        )
+    def _at_inclination(by_inc, cos_inc):
+        """PCHIP in cos i of an ``(n_inc, n_native)`` record."""
+        return interp_nd_pchip(by_inc, (inc_axis,), (cos_inc,), kinds=inc_kinds)
 
     def skirtor_components(
         wavelength: jnp.ndarray,
@@ -1050,30 +1041,33 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             ),
             axes,
         )
-        other_w = _other_weights(point)
-        # (n_inc, n_native): each cube contracted over the five parameter axes, inclination
-        # axis kept, so the sphere mean and the sightline value share one contraction.
+        # (n_inc, n_native): each cube interpolated over the five parameter axes, inclination
+        # axis kept, so the sphere mean and the sightline value share one interpolation.
         by_inc = {
-            "disk": _tensor_contract(disk_jax, other_w),
-            "dust": _tensor_contract(dust_jax, other_w),
-            "total": _tensor_contract(total_jax, other_w),
+            "disk": interp_nd_pchip(disk_jax, param_axes, point[:-1], kinds=param_kinds),
+            "dust": interp_nd_pchip(dust_jax, param_axes, point[:-1], kinds=param_kinds),
         }
 
-        # Sphere-mean disc power in the cube's own units: a fixed contraction over the
-        # inclination nodes of the disc at each quadrature point.
-        disc_q = jnp.asarray(inc_weights_q, dtype=by_inc["disk"].dtype) @ by_inc["disk"]
-        lnu_q = disc_q * wave_grid**2 / _C_AA_PER_S
-        power_q = jax.vmap(lambda row: _disc_power_native(row, wave_grid))(lnu_q)
-        mean_power = jnp.sum(jnp.asarray(w_q, dtype=power_q.dtype) * power_q)
+        # Sphere-mean power of the escaping disc plus the dust, in the cube's own units: the
+        # quadrature of the powers at the Gauss-Legendre points of every inclination interval.
+        weight = jnp.asarray(w_q, dtype=by_inc["disk"].dtype)
+        mu_nodes = jnp.asarray(mu_q, dtype=by_inc["disk"].dtype)
+
+        def _power_at(mu):
+            rows = {k: _at_inclination(v, mu) * wave_grid**2 / _C_AA_PER_S for k, v in by_inc.items()}
+            return _disc_power_native(rows["disk"], wave_grid) + native_bolometric_nu(
+                rows["dust"], wave_grid, floor=0.0
+            )
+
+        mean_power = jnp.sum(weight * jax.vmap(_power_at)(mu_nodes))
         scale = l_scale / jnp.where(mean_power > 0.0, mean_power, 1.0)
 
-        w_los = _inclination_weights(point[-1])
         out = []
-        for key in ("disk", "dust", "total"):
-            lam = w_los @ by_inc[key]  # L_lambda-like, cube units
+        for key in ("disk", "dust"):
+            lam = _at_inclination(by_inc[key], point[-1])  # L_lambda-like, cube units
             sed_lam = resample_template(wavelength, wave_grid, lam, left=0.0, right=0.0)
             out.append(sed_lam * wavelength**2 / _C_AA_PER_S * scale)
-        return SKIRTORComponents(disk=out[0], dust=out[1], total=out[2])
+        return SKIRTORComponents(disk=out[0], dust=out[1], total=out[0] + out[1])
 
     # The template's own wavelength nodes: a publication grid built on them integrates the
     # emitted (log-log interpolated) SED exactly, see ``_template_grid.native_bolometric_nu``.

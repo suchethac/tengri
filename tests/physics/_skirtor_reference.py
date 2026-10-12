@@ -8,10 +8,11 @@ Two kinds of reference live here.
   re-tilt written out again. They check the published powers against the SED that is emitted.
 * ``RawSkirtor`` reads ``data/skirtor_templates_v3.h5`` with ``h5py`` alone: no tengri import, no
   tengri interpolation. It multiplies the stored spectra by their ``norm`` records (the stored
-  spectra are divided by their model's dust integral), smooths them with the index-space
-  triweight kernel the component interpolates with (re-derived here from the kernel's closed
-  form), and integrates the resulting power laws analytically. It checks the relative flux
-  between inclinations that the component publishes.
+  spectra are divided by their model's dust integral), interpolates them with SciPy's
+  ``PchipInterpolator`` one axis at a time in the order of the file (tau, p, q, opening angle,
+  radius ratio, then cos i), and integrates the resulting power laws analytically. It checks the
+  relative flux between inclinations that the component publishes, and the energy the sphere
+  carries.
 """
 
 from __future__ import annotations
@@ -21,37 +22,11 @@ import itertools
 import h5py
 import jax.numpy as jnp
 import numpy as np
+from scipy.interpolate import PchipInterpolator
 
 from tests.physics._agn_publication import ln_nu_integral
 
 _C_AA = 2.99792458e18
-
-#: Triweight kernel: density ``(35/96)(1 - z^2/9)^3`` on ``|z| < 3``; the bandwidth in index space
-#: is half a cell.
-_KERNEL_HALF_WIDTH = 3.0
-_INDEX_BANDWIDTH = 0.5
-
-
-def _kernel_cdf(z):
-    """CDF of the triweight kernel, the integral of ``(35/96)(1 - z^2/9)^3`` from ``-3``."""
-    zc = np.clip(z, -_KERNEL_HALF_WIDTH, _KERNEL_HALF_WIDTH)
-    return 0.5 + (35.0 / 96.0) * (zc - zc**3 / 9.0 + zc**5 / 135.0 - zc**7 / 5103.0)
-
-
-def triweight_weights(value, axis):
-    """Index-space triweight weights of ``value`` on the ascending node array ``axis``."""
-    axis = np.asarray(axis, dtype=float)
-    n = axis.size
-    lower = int(np.clip(np.searchsorted(axis, value) - 1, 0, n - 2))
-    frac = (value - axis[lower]) / (axis[lower + 1] - axis[lower])
-    u = lower + frac
-    k = np.arange(n)
-    # Cell k spans [k - 1/2, k + 1/2] in index space; the weight is the kernel mass inside it.
-    w = _kernel_cdf((u - (k - 0.5)) / _INDEX_BANDWIDTH) - _kernel_cdf(
-        (u - (k + 0.5)) / _INDEX_BANDWIDTH
-    )
-    return w / w.sum()
-
 
 def _segment_integral(x0, x1, y0, y1):
     """Integral of the power law through ``(x0, y0)`` and ``(x1, y1)`` over ``[x0, x1]``."""
@@ -62,10 +37,18 @@ def _segment_integral(x0, x1, y0, y1):
     return y0 * x0 / (s + 1.0) * (ratio ** (s + 1.0) - 1.0)
 
 
-def power_law_integral(x, y, lower=None):
+def _cut(x0, x1, y0, y1, at):
+    """Value at ``at`` of the power law through two nodes (zero if either node is zero)."""
+    if y0 > 0 < y1:
+        return y0 * (at / x0) ** (np.log(y1 / y0) / np.log(x1 / x0))
+    return 0.0
+
+
+def power_law_integral(x, y, lower=None, upper=None):
     """Integral of a log-log interpolated ``y(x)``; trapezoid across a segment ending in zero.
 
-    ``lower`` cuts the integral at that abscissa (inside a segment, along its power law).
+    ``lower`` and ``upper`` cut the integral at those abscissae (inside a segment, along its
+    power law).
     """
     total = 0.0
     for i in range(x.size - 1):
@@ -74,17 +57,26 @@ def power_law_integral(x, y, lower=None):
             if x1 <= lower:
                 continue
             if x0 < lower:
-                y0 = (
-                    y0 * (lower / x0) ** (np.log(y1 / y0) / np.log(x1 / x0))
-                    if y0 > 0 < y1
-                    else 0.0
-                )
-                x0 = lower
+                y0, x0 = _cut(x0, x1, y0, y1, lower), lower
+        if upper is not None:
+            if x0 >= upper:
+                continue
+            if x1 > upper:
+                y1, x1 = _cut(x0, x1, y0, y1, upper), upper
         if y0 > 0.0 and y1 > 0.0:
             total += _segment_integral(x0, x1, y0, y1)
         else:
             total += 0.5 * (y0 + y1) * (x1 - x0)
     return total
+
+
+#: Support of the emitted SKIRTOR disc [Angstrom]: 8 nm to 1e6 nm.
+DISC_SUPPORT_AA = (80.0, 1.0e7)
+
+
+def pchip_axis0(x, y, xq):
+    """SciPy PCHIP along axis 0 of ``y`` at ``xq`` (the reference interpolant)."""
+    return PchipInterpolator(x, y, axis=0)(xq)
 
 
 class RawSkirtor:
@@ -114,19 +106,44 @@ class RawSkirtor:
         self.cubes = {k: v[..., ::-1, :] * norm[..., None] for k, v in cubes.items()}
 
     def record(self, key, tau, p, q, oa, radius, *, per_inclination_norm=False):
-        """``(n_inc, n_wave)``: the library smoothed over the five parameter axes."""
+        """``(n_inc, n_wave)``: the library interpolated over the five parameter axes.
+
+        One SciPy PCHIP per axis, in the order tau, p, q, opening angle, radius ratio.
+        """
         cube = self.cubes[key]
         if per_inclination_norm:
             cube = cube / self.norm[..., None]
         for axis, value in zip(self.axes[:5], (tau, p, q, oa, radius), strict=True):
-            cube = np.tensordot(triweight_weights(value, axis), cube, axes=(0, 0))
+            cube = pchip_axis0(axis, cube, value)
         return cube
 
-    def power(self, key, params, cos_inc, *, per_inclination_norm=False, lower=None):
-        """Power [library units] emitted along ``cos_inc`` (integral of ``L_lambda`` d lambda)."""
+    def l_lambda(self, key, params, cos_inc, *, per_inclination_norm=False):
+        """``L_lambda`` [library units] along ``cos_inc``: PCHIP in cos i of the record."""
         by_inc = self.record(key, *params, per_inclination_norm=per_inclination_norm)
-        l_lambda = triweight_weights(cos_inc, self.axes[-1]) @ by_inc
-        return power_law_integral(self.wave, l_lambda, lower=lower)
+        return pchip_axis0(self.axes[-1], by_inc, cos_inc)
+
+    def power(self, key, params, cos_inc, *, per_inclination_norm=False, lower=None, upper=None):
+        """Power [library units] emitted along ``cos_inc`` (integral of ``L_lambda`` d lambda)."""
+        lam = self.l_lambda(key, params, cos_inc, per_inclination_norm=per_inclination_norm)
+        return power_law_integral(self.wave, lam, lower=lower, upper=upper)
+
+    def total_power(self, params, cos_inc):
+        """Escaping disc (inside the disc support) plus dust power [library units] at ``cos_inc``."""
+        lo, hi = DISC_SUPPORT_AA
+        return self.power("disk", params, cos_inc, lower=lo, upper=hi) + self.power(
+            "dust", params, cos_inc
+        )
+
+    def sphere_mean(self, power_fn, order=48):
+        """``int_0^1 power_fn(mu) d(mu)``: Gauss-Legendre of ``order`` on each node interval."""
+        nodes = self.axes[-1]
+        edges = np.concatenate([[0.0], nodes[1:]]) if nodes[0] < 1e-9 else nodes
+        x, w = np.polynomial.legendre.leggauss(order)
+        total = 0.0
+        for a, b in itertools.pairwise(edges):
+            for xi, wi in zip(x, w, strict=True):
+                total += 0.5 * (b - a) * wi * power_fn(0.5 * (b - a) * xi + 0.5 * (a + b))
+        return total
 
 
 def emitted_pieces(comp, params, wave, disk_type=0):

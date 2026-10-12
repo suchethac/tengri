@@ -197,9 +197,10 @@ def _native_publication_wave(native_wave, disc_breaks_aa, dtype) -> jnp.ndarray:
     """
     # The disc steps from zero to its value at the lower edge; the two neighbors of the edge
     # node bracket that step so no segment of the closed-form integral straddles it. They sit
-    # a few ulp from the edge: 1e-9 collapses onto the edge in float32 and leaves a chord
-    # across the preceding template segment (a 3e-4 error in the disc power).
-    edge_gap = 1.0e-9 if np.dtype(dtype).itemsize >= 8 else 4.0e-7
+    # a few ulp from the edge: 1e-13 in float64, which leaves a chord across the pair of under
+    # 1e-12 of the disc power, and 4e-7 in float32, where a smaller gap collapses onto the edge
+    # and leaves a chord across the preceding template segment (a 3e-4 error in the disc power).
+    edge_gap = 1.0e-13 if np.dtype(dtype).itemsize >= 8 else 4.0e-7
     static = np.unique(
         np.concatenate(
             [
@@ -627,6 +628,7 @@ class SKIRTORTorus(SEDModelComponent):
         from tengri.components.agn.polar_dust import (
             polar_dust_emission,
             polar_dust_extinction,
+            type1_weight,
         )
         from tengri.utils.scale import representable_denominator
 
@@ -772,7 +774,7 @@ class SKIRTORTorus(SEDModelComponent):
         # Line of sight: the pieces and powers along ``cos_inc`` itself.
         raw_pub, dust_pub, disc_renorm = _disc_along(p["cos_inc"])
         sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
-        powers_los = frac * _powers(p["cos_inc"])
+        unit_los = _powers(p["cos_inc"])
 
         # Angle-integrated: the mean of the line-of-sight power over the sphere,
         # (1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu by symmetry about the
@@ -781,7 +783,7 @@ class SKIRTORTorus(SEDModelComponent):
         mu_nodes, mu_weight = inclination_quadrature(
             skirtor_fn.native_cos_inc, INCLINATION_GL_ORDER
         )
-        powers_mean = frac * jnp.tensordot(
+        unit_mean = jnp.tensordot(
             jnp.asarray(mu_weight, dtype=wave.dtype),
             jax.vmap(_powers)(jnp.asarray(mu_nodes, dtype=wave.dtype)),
             axes=1,
@@ -801,6 +803,18 @@ class SKIRTORTorus(SEDModelComponent):
         w_cone = (half[:, None] * jnp.asarray(w_gl)).ravel()
         l_abs_unit = jnp.dot(w_cone.astype(wave.dtype), jax.vmap(_cone_absorbed)(mu_cone))
         l_abs = frac * l_abs_unit
+
+        # Energy ledger. The templates carry the escaping disc and the torus dust, which add up
+        # to the accretion power on the sphere (the normalization of the components). The polar
+        # dust takes the power it re-emits OUT of the disc light emitted into the cone, so the
+        # escaping disc published beside it is net of that power, and
+        #   disc + torus + polar = frac * 10**agn_log_lbol * L_sun
+        # on the sphere. Along a sightline the disc loses what the Type-1 mask lets the polar
+        # dust attenuate there, exactly the power the attenuated SED loses.
+        mask_los = type1_weight(p["cos_inc"], p["oa_skirtor"])
+        disc_los = unit_los[0] - mask_los * _cone_absorbed(p["cos_inc"])
+        powers_los = frac * jnp.stack([disc_los, unit_los[1]])
+        powers_mean = frac * jnp.stack([unit_mean[0] - l_abs_unit, unit_mean[1]])
 
         # Caller-grid SED: the same pointwise functions, at unit fraction, times the fraction.
         polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
