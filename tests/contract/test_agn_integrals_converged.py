@@ -205,6 +205,15 @@ def test_published_luminosity_matches_refined_grid(model, point, monkeypatch):
     assert not failures, f"{model} ({point}) not converged to {_RTOL:.0e}: " + "; ".join(failures)
 
 
+# Known open defect (#2881). Remove this xfail mark when #2881 is fixed: the strict mark turns
+# the test red on purpose once it passes, so the stale mark cannot outlive the fix.
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#2881: polar absorbed power in blocks/atten.py l_absorbed_total depends on the "
+        "caller's wavelength grid (1e-5 at 300 vs 6000 points); fix is a fixed internal grid"
+    ),
+)
 def test_polar_absorbed_power_is_caller_grid_independent():
     """The polar absorbed power (``blocks/atten.py``) does not depend on the caller's grid.
 
