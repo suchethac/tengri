@@ -184,7 +184,7 @@ posteriors.
 
 | Method | Command | Backend | Speed |
 |--------|---------|---------|-------|
-| native_geovi (DEFAULT) | `fitter.run("native_geovi")` | JIT (XLA) | **0.03s/gal** (after 56s compile) |
+| native_geovi | `fitter.run("native_geovi")` | JIT (XLA) | **0.03s/gal** (after 56s compile) |
 | native_mgvi / native_evi | `fitter.run("native_mgvi")` | JIT (XLA) | **0.03s/gal** (after compile) |
 | geovi / fast_geovi | `fitter.run("geovi")` | NIFTy tight loop | ~12s |
 | mgvi / fast_mgvi | `fitter.run("mgvi")` | NIFTy tight loop | ~15s |
@@ -196,7 +196,7 @@ posteriors.
 | Ray Tracing | `fitter.run("raytrace")` | Custom JAX | ~60s |
 | NUTS | `fitter.run("nuts")` | BlackJAX | ~120s |
 
-Batch fitting: `fitter.fit_batch(galaxies)` — default method is `native_geovi`.
+Batch fitting: `fitter.fit_batch(galaxies)` — default method is `mcmc_nuts_fast`; pass `method="native_geovi"` for geoVI.
 
 ### Posterior Sampling Methods
 
