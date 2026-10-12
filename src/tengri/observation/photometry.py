@@ -132,7 +132,7 @@ def _filter_integral_union(
     falls on a coarse region of the SED grid.
 
     Both node arrays must be ascending; padded filter rows must be made
-    ascending first (:func:`_ascending_padded_filter_wave`).
+    ascending first (:func:`_ascending_padded_filter`).
 
     The denominator floor is sized for the **derivative**, not the value
     (#1860). ``pad_filters_to_bucket`` pads the filter-count axis with all-zero
@@ -203,17 +203,38 @@ def _filter_integral_union(
     return num / jnp.maximum(den, representable_denominator(1e-30))
 
 
-def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
-    """Rewrite the zero-pad tail of a padded filter grid to ascend (#960).
+def _ascending_padded_filter(
+    fw_padded: jnp.ndarray, ft_padded: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Make a zero-padded filter row ascending with zero-width padding (#960, #2817).
 
     ``jnp.interp`` requires ascending nodes; zero-padding (:func:`pad_filters`)
-    breaks that. Pad entries (``wave == 0``) are moved above the last valid
-    wavelength at 1 Å spacing. Their transmission is zero, so they contribute
-    nothing to the integrals; all-zero (padded-out) filter rows become an
-    ascending dummy grid whose zero transmission yields flux 0.
+    breaks that. Each pad node (``wave == 0``) is clamped to the last tabulated
+    wavelength and given that node's transmission. The union-grid trapezoid
+    then sees only zero-width intervals at the table edge, which add exactly
+    nothing, so the padded row integrates the same as the unpadded table. (Pads
+    at ``max + 1 + i`` with transmission 0 added a 1 A ramp past the edge.)
+
+    A fully padded-out row (no tabulated node) becomes an ascending dummy grid
+    with zero transmission, so its flux is 0.
+
+    Returns
+    -------
+    fw_ascending : ndarray, shape (max_len,)
+        Ascending observed-frame filter wavelengths [Angstrom].
+    ft_ascending : ndarray, shape (max_len,)
+        Transmission matching ``fw_ascending`` (dimensionless).
     """
     pos = jnp.arange(fw_padded.shape[0], dtype=fw_padded.dtype)
-    return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
+    # Last tabulated node: waves ascend and pads are 0. A max over the matching
+    # nodes, not an argmax index, keeps this on plain reductions under vmap.
+    edge_wave = jnp.max(fw_padded)
+    edge_trans = jnp.max(jnp.where(fw_padded == edge_wave, ft_padded, 0.0))
+    has_edge = edge_wave > 0.0
+    valid = fw_padded > 0.0
+    fw_asc = jnp.where(valid, fw_padded, jnp.where(has_edge, edge_wave, 1.0 + pos))
+    ft_asc = jnp.where(valid, ft_padded, jnp.where(has_edge, edge_trans, 0.0))
+    return fw_asc, ft_asc
 
 
 @functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
@@ -355,7 +376,7 @@ def lnu_filter_integral_batch(
     at their edges (same assumption as :func:`_compute_flux_density_padded`).
 
     Each padded row is first rewritten to ascend
-    (:func:`_ascending_padded_filter_wave`): the union-grid quadrature
+    (:func:`_ascending_padded_filter`): the union-grid quadrature
     interpolates on the filter nodes, and ``jnp.interp`` on a raw zero-pad
     tail (…, 4130, 0, 0) is unsorted-input garbage that silently zeroed
     every shorter-table band for heterogeneous filter sets, same-length
@@ -363,8 +384,8 @@ def lnu_filter_integral_batch(
     """
 
     def _one(fw, ft):
-        fw_safe = _ascending_padded_filter_wave(fw)
-        return lnu_filter_integral(sed_rest, wave_rest, fw_safe, ft, redshift, convention)
+        fw_safe, ft_safe = _ascending_padded_filter(fw, ft)
+        return lnu_filter_integral(sed_rest, wave_rest, fw_safe, ft_safe, redshift, convention)
 
     return jax.vmap(_one)(fw_padded, ft_padded)
 
@@ -605,7 +626,7 @@ def _compute_flux_density_padded(
     Notes
     -----
     Zero-pad entries are rewritten to an ascending tail above the filter
-    (:func:`_ascending_padded_filter_wave`) so the union-grid interpolation
+    (:func:`_ascending_padded_filter`) so the union-grid interpolation
     (#960) stays valid; their transmission is zero, so they contribute
     nothing. Private helper for compute_flux_density_batch.
 
@@ -615,10 +636,10 @@ def _compute_flux_density_padded(
 
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
+    fw_safe, ft_safe = _ascending_padded_filter(filter_wave_padded, filter_trans_padded)
     lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     mean_lnu = _filter_integral_union(
-        sed_rest, wave_obs, fw_safe, filter_trans_padded, convention, lyman_edge_obs_aa
+        sed_rest, wave_obs, fw_safe, ft_safe, convention, lyman_edge_obs_aa
     )
     # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
     # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is
