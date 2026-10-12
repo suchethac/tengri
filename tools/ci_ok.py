@@ -226,6 +226,8 @@ def parse_labels(raw: str) -> list[str]:
     if not raw.strip():
         return []
     value = json.loads(raw)
+    if value is None:  # `toJSON` of a missing label list is the literal null
+        return []
     if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise ValueError(f"labels must be a JSON array of strings, got {raw!r}")
     return value
@@ -369,8 +371,9 @@ def parse_shard_jobs(raw: str) -> dict[str, str] | None:
     Returns
     -------
     dict of str to str or None
-        Shard name to conclusion (``"none"`` for a job with no conclusion yet);
-        ``None`` when ``raw`` is empty or unparsable.
+        Shard name to conclusion (``"none"`` for a job with no conclusion yet).
+        Skipped jobs are left out, since a skipped job ran no shard. ``None`` when
+        ``raw`` is empty or unparsable.
     """
     if not raw.strip():
         return None
@@ -387,7 +390,13 @@ def parse_shard_jobs(raw: str) -> dict[str, str] | None:
         match = _SHARD_JOB.match(str(entry.get("name", "")))
         if match is None:
             return None
-        jobs[match["shard"]] = str(entry.get("conclusion") or "none")
+        conclusion = str(entry.get("conclusion") or "none")
+        # A skipped job did not run. A skipped shard the scope owes is then
+        # reported as never run by shard_problems; an unowed one is not a shard
+        # at all. Either way a skipped entry is not evidence that a shard ran.
+        if conclusion == "skipped":
+            continue
+        jobs[match["shard"]] = conclusion
     return jobs
 
 
@@ -561,6 +570,33 @@ def _json_list(raw: str) -> list[str] | None:
     return None
 
 
+def shard_jobs_for(test_result: str, listing: dict[str, str] | None) -> dict[str, str] | None:
+    """The shard evidence the run really has, given the ``test`` job's result.
+
+    A skipped ``test`` job built no matrix, so no shard ran. GitHub may still
+    publish its skipped matrix entries in the run's job listing, under the literal
+    name ``test (${{ matrix.shard }})``; read as shards, those would look like
+    shards that ran without being owed. A skipped ``test`` therefore has an empty
+    listing whatever the API returned. The scope and tier rules judge whether that
+    skip was allowed.
+
+    Parameters
+    ----------
+    test_result : str
+        ``needs.test.result``.
+    listing : dict of str to str or None
+        The parsed ``test (<shard>)`` job listing, or ``None`` when unavailable.
+
+    Returns
+    -------
+    dict of str to str or None
+        ``{}`` when ``test`` was skipped, otherwise ``listing`` unchanged.
+    """
+    if test_result == "skipped":
+        return {}
+    return listing
+
+
 def _read_shard_jobs() -> dict[str, str] | None:
     """Read the run's ``test (<shard>)`` job listing the workflow saved to a file."""
     path = os.environ.get("CI_OK_SHARD_JOBS_FILE", "").strip()
@@ -613,7 +649,7 @@ def main() -> int:
         shards = ShardEvidence(
             expected=_json_list(os.environ.get("CI_OK_EXPECTED_SHARDS", "")),
             all_shards=_json_list(os.environ.get("CI_OK_ALL_SHARDS", "")),
-            jobs=_read_shard_jobs(),
+            jobs=shard_jobs_for(results.get("test", ""), _read_shard_jobs()),
         )
     draft = os.environ.get("CI_OK_DRAFT", "").strip().lower() == "true"
     action = os.environ.get("CI_OK_ACTION", "")

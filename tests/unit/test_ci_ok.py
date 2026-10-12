@@ -17,6 +17,7 @@ safe if ``skipped`` never reads as approval.
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 
 import pytest
@@ -605,3 +606,65 @@ class TestShardJobListing:
     def test_a_job_without_a_conclusion_is_not_success(self):
         jobs = ci_ok.parse_shard_jobs('[{"name":"test (physics)","conclusion":null}]')
         assert jobs == {"physics": "none"}
+
+    def test_a_skipped_matrix_entry_is_not_a_shard_that_ran(self):
+        raw = '[{"name":"test (${{ matrix.shard }})","conclusion":"skipped"}]'
+        assert ci_ok.parse_shard_jobs(raw) == {}
+
+
+class TestDraftListingIsNotShards:
+    """A draft's skipped matrix may be listed under its literal template name.
+
+    GitHub publishes the skipped ``test (${{ matrix.shard }})`` job of a draft run.
+    Read as a shard, it would be a shard that ran without being owed, which turns
+    the draft's green verdict red. A skipped ``test`` job has no shards, whatever
+    the listing says.
+    """
+
+    _LITERAL = '[{"name":"test (${{ matrix.shard }})","conclusion":"skipped"}]'
+
+    def test_a_draft_with_the_literal_skipped_listing_passes(self, monkeypatch, tmp_path):
+        listing = tmp_path / "shard_jobs.json"
+        listing.write_text(self._LITERAL, encoding="utf-8")
+        results = _all_green() | {"test": "skipped", "gallery-changes": "success"}
+        env = {
+            "CI_OK_RESULTS": json.dumps({job: {"result": v} for job, v in results.items()}),
+            "CI_OK_EVENT": "pull_request",
+            "CI_OK_BASE_REF": "main",
+            "CI_OK_SCOPE": "none",
+            "CI_OK_EXPECTED_SHARDS": "[]",
+            "CI_OK_ALL_SHARDS": json.dumps(list(_ALL_SHARDS)),
+            "CI_OK_SHARD_JOBS_FILE": str(listing),
+            "CI_OK_DRAFT": "true",
+            "CI_OK_LABELS": "[]",
+        }
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        assert ci_ok.main() == 0
+
+    def test_the_skipped_listing_is_the_empty_run(self):
+        assert ci_ok.shard_jobs_for("skipped", ci_ok.parse_shard_jobs(self._LITERAL)) == {}
+
+    def test_a_listing_is_kept_when_test_ran(self):
+        jobs = {"physics": "success"}
+        assert ci_ok.shard_jobs_for("success", jobs) == jobs
+        assert ci_ok.shard_jobs_for("failure", None) is None
+
+    def test_a_skipped_test_job_on_a_cheap_pr_still_fails_with_the_listing(self):
+        jobs = ci_ok.shard_jobs_for("skipped", ci_ok.parse_shard_jobs(self._LITERAL))
+        evidence = ci_ok.ShardEvidence(expected=[], all_shards=_ALL_SHARDS, jobs=jobs)
+        results = _all_green() | {"test": "skipped"}
+        problems = ci_ok.decide(results, "pull_request", "main", scope="cheap", shards=evidence)
+        assert problems, "a withheld cheap tier on a ready pull request must not pass"
+
+
+class TestNullLabels:
+    """``toJSON`` of a missing label list is the literal ``null``, not a list."""
+
+    def test_null_means_no_labels(self):
+        assert ci_ok.parse_labels("null") == []
+        assert ci_ok.parse_labels("  null  ") == []
+
+    def test_a_non_null_non_list_is_still_refused(self):
+        with pytest.raises(ValueError):
+            ci_ok.parse_labels('"full-tests"')

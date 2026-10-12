@@ -435,6 +435,36 @@ def test_ci_ok_reads_the_dynamic_shard_listing():
 
 def test_the_cache_key_rotates_weekly():
     jobs = _workflow()["jobs"]
-    for name in ("test", "slow"):
+    for name in ("test", "slow", "crossval"):
         text = json.dumps(jobs[name])
         assert "steps.week.outputs.w" in text, f"{name} cache key has no week term"
+
+
+@needs_tools
+def test_a_bug_duration_ledger_change_runs_everything(tmp_path):
+    """The ledger moves tests between the bug/ shards, so its edit forces the full run."""
+    result = _run_gate(tmp_path, files=[_f("tools/ci_bug_durations.json")])
+    assert (result["scope"], result["needed"]) == ("all", "false"), result["_log"]
+    assert sorted(_shards(result)) == sorted(EVERY)
+
+
+@needs_tools
+def test_a_filename_cannot_inject_a_workflow_command(tmp_path):
+    """A changed filename is echoed inside a random stop-commands region."""
+    result = _run_gate(tmp_path, files=[_f("src/tengri/a.py"), _f("::warning::injected")])
+    lines = result["_log"].splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("::stop-commands::"))
+    token = lines[start].split("::", 2)[2]
+    assert len(token) >= 8, token
+    end = next(i for i, line in enumerate(lines) if line == f"::{token}::")
+    injected = next(i for i, line in enumerate(lines) if "::warning::injected" in line)
+    assert start < injected < end, result["_log"]
+
+
+def test_the_label_context_is_empty_off_pull_requests():
+    jobs = _workflow()["jobs"]
+    gate_labels = _gate_step()["env"]["LABELS_JSON"]
+    assert "github.event_name == 'pull_request'" in gate_labels and "'[]'" in gate_labels
+    ci_ok_env = next(s for s in jobs["ci-ok"]["steps"] if s.get("run") == "python3 tools/ci_ok.py")
+    labels = ci_ok_env["env"]["CI_OK_LABELS"]
+    assert "github.event_name == 'pull_request'" in labels and "'[]'" in labels

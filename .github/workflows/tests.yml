@@ -715,7 +715,7 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           BASE_REF: ${{ github.base_ref }}
           BASE_CHANGED: ${{ github.event.changes.base != null }}
-          LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          LABELS_JSON: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
         run: |
@@ -763,6 +763,17 @@ jobs:
             echo "event=$EVENT -> gallery needed=$needed, test scope=$scope, shards=$(jq -c '[.include[].shard]' <<<"$matrix")"
           }
 
+          # Print the changed filenames inside a stop-commands region under a
+          # random token, so a filename such as `::warning::x` is printed as text
+          # and cannot inject a workflow command.
+          print_files() {
+            local token
+            token=$(openssl rand -hex 16 2>/dev/null) || token="$RANDOM$RANDOM$(date +%s%N)"
+            echo "::stop-commands::$token"
+            sed 's/^/  /' <<<"$files"
+            echo "::$token::"
+          }
+
           # The gallery's inputs. What an example's behaviour actually depends on:
           #   examples/                     the example sources themselves
           #   src/tengri/                   the library they exercise (the #1146 case)
@@ -783,7 +794,9 @@ jobs:
           # A change to the CI machinery runs everything: the cheap tier is
           # computed by this very machinery, so a PR that edits it cannot be
           # trusted to have been routed by the old rules.
-          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|pyproject\.toml$|(.*/)?conftest\.py$)'
+          # tools/ci_bug_durations.json is the ledger that splits regression/bug
+          # across the three b-shards: a change to it moves tests between shards.
+          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_bug_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
 
           # schedule and workflow_dispatch always run everything. The nightly is
           # the backstop that catches drift a per-PR filter cannot see.
@@ -836,7 +849,7 @@ jobs:
                   if [ "$n" -gt 0 ] && [ "$n" -lt 300 ]; then
                     files=$(jq -r '.names[]' <<<"$resp")
                     echo "pushed files:"
-                    sed 's/^/  /' <<<"$files"
+                    print_files
                     gallery=false
                     if grep -qE "$gallery_re" <<<"$files"; then gallery=true; fi
                   else
@@ -859,7 +872,7 @@ jobs:
           esac
 
           echo "changed files:"
-          sed 's/^/  /' <<<"$files"
+          print_files
 
           if [ "$ACTION" = "edited" ]; then
             if [ "$BASE_CHANGED" = "true" ]; then
@@ -1416,7 +1429,7 @@ jobs:
         run: |
           set -uo pipefail
           if jobs=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=latest&per_page=100" \
-                --jq '.jobs[] | select(.name | startswith("test (")) | {name, conclusion}'); then
+                --jq '.jobs[] | select(.name | startswith("test (")) | select(.conclusion != "skipped") | {name, conclusion}'); then
             jq -cs '.' <<<"$jobs" > "$RUNNER_TEMP/shard_jobs.json"
           else
             echo "::warning::could not list this run's jobs; ci-ok will report it"
@@ -1437,7 +1450,7 @@ jobs:
           CI_OK_DRAFT: ${{ github.event.pull_request.draft }}
           CI_OK_ACTION: ${{ github.event.action }}
           CI_OK_EVENT_LABEL: ${{ github.event.label.name }}
-          CI_OK_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          CI_OK_LABELS: ${{ github.event_name == 'pull_request' && toJSON(github.event.pull_request.labels.*.name) || '[]' }}
 
   # Alert on nightly schedule run failure. Opens or updates a deduplicated
   # issue when ci-ok fails on schedule events, so red nightly runs are never
@@ -1497,17 +1510,18 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     needs: smoke
-    # NOT on `push`. This job and `test` run the SAME 8 shards over the SAME
-    # paths at the SAME `-n`; the invocations differ only in `--cov` (here) and
-    # `--timeout=600 --timeout-method=signal` (there). Verified 2026-08-13 by
-    # comparing both matrices field by field: 8 == 8, and every
-    # (shard, paths, nproc) triple identical.
+    # Runs only on `schedule` and `workflow_dispatch` (see `if:`), never on a
+    # pull request or a push. This job and `test` take their shards from the same
+    # table in `gallery-changes`, filtered by the run's scope, and run them over
+    # the same paths at the same `-n`; the invocations differ only in `--cov`
+    # (here) and `--timeout=600 --timeout-method=signal` (there).
     #
-    # `test` runs on everything except a bare `labeled` PR event, so before this
-    # change a push to `main` ran BOTH — 16 shards of identical tests, out of 24
-    # jobs total for the push. Removing `push` here drops the push path to 16
-    # jobs (-33%) and takes the serial `coverage (regression-*)` shards, the
-    # slowest things in the workflow, off `main`'s critical path.
+    # `test` is the dynamic matrix. A pull request runs the cheap tier (scopes
+    # `cheap`, `cheap-docs` or `docs`) unless it carries `full-tests`; a draft
+    # runs no shard; a push, a schedule and a dispatch run scope `all`. Keeping
+    # `push` out of this job's trigger means a push to `main` runs each shard once
+    # rather than twice, and takes the serial `coverage (regression-*)` shards,
+    # the slowest things in the workflow, off `main`'s critical path.
     #
     # Nothing stops being tested. Every test still runs on every commit to
     # `main` — once, under `test`, which is also the half carrying the pytest
@@ -1923,11 +1937,15 @@ jobs:
       # Persist the JAX compile cache (same pattern as the `test` job).
       - id: jaxver
         run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"
+      # ISO year-week, as in the `test` and `slow` jobs: the key rotates weekly so
+      # the nightly re-saves the snapshot.
+      - id: week
+        run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}
+          key: tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-jax${{ steps.jaxver.outputs.v }}-${{ steps.week.outputs.w }}
           restore-keys: |
             tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-
             tengri-jax-crossval-
