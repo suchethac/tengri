@@ -32,11 +32,14 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
+
 __all__ = [
     "BASE_PER_DECADE",
     "GL_ORDER",
     "PUBLICATION_HI_NM",
     "WINDOW_SIGMA",
+    "bolometric_unit_nm",
     "gauss_legendre_segments",
     "linewidth_sigma_nm",
     "publication_breakpoints",
@@ -171,3 +174,28 @@ def gauss_legendre_segments(breaks_nm: Array) -> tuple[Array, Array]:
     lam = jnp.exp(log_lam)
     weight = half * w[None, :] * lam
     return lam.ravel(), weight.ravel()
+
+
+def bolometric_unit_nm(unit_fn, node_arrays=()) -> Array:
+    r"""Bolometric integral above the Lyman limit of a unit-l5100 disc spectrum.
+
+    The one converged normalization integral of the GRAHSP disc. Integrated on the
+    component's own publication grid (segmented Gauss-Legendre in ln lambda between
+    the template nodes in ``node_arrays``), never on the caller's wavelength array,
+    so the normalization does not depend on how the caller samples wavelength.
+
+    Parameters
+    ----------
+    unit_fn : callable
+        ``unit_fn(wave_nm) -> L_lambda [erg/s/nm]`` of the disc at l5100 = 1.
+    node_arrays : sequence of array_like, optional
+        Template wavelength nodes [nm] that the spectrum is interpolated on.
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\int_{91.2\,\mathrm{nm}}^{\infty} L_\lambda\,\mathrm{d}\lambda` [erg/s].
+    """
+    breaks = publication_breakpoints(LYMAN_LIMIT_NM, PUBLICATION_HI_NM, (), node_arrays)
+    lam_nm, weight_nm = gauss_legendre_segments(breaks)
+    return jnp.sum(weight_nm * unit_fn(lam_nm))

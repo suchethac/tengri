@@ -9,14 +9,16 @@ above the Lyman limit. Each is taken on the component's own grid, never on the
 caller's wavelength grid, so the unit power does not depend on how the caller
 samples the spectrum:
 
-* disc: SBPL power law on its own log grid (floored at the X-ray corona edge),
-  or the Netzer template integrated on its native nodes with the power-law
-  interpolant the template is resampled with;
+* disc: SBPL power law, or the Netzer template on its native nodes, both through
+  :func:`~tengri.components.agn.grahsp.publication.bolometric_unit_nm`, the same
+  integral the composable disc blocks use (segmented Gauss-Legendre in ln lambda
+  on the component's publication grid);
 * Gaussian lines: closed form (complementary error function), exact;
 * FeII forest: exact trapezoid of the piecewise-linear template interpolant on
   its own nodes;
 * Balmer continuum (type 1 only): log-trapezoid on its own grid up to the
-  resampler's 1e6 nm clip.
+  resampler's 1e6 nm clip (the continuum is clamped above that, so it cannot
+  share the publication grid).
 
 Every function here is evaluated at unit ``l5100``.
 """
@@ -30,11 +32,10 @@ import numpy as np
 from jax import Array
 from jax.scipy import special as jsp_special
 
-from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import LAMBDA_5100_NM, floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.bolometric import LYMAN_LIMIT_NM
-from tengri.components.agn.grahsp.disc import select_disc_model
+from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import (
     _FWHM_TO_SIGMA,
     _HBETA_BROAD_RATIO,
@@ -42,23 +43,19 @@ from tengri.components.agn.grahsp.lines import (
     AGN_TYPE_BL,
     AGN_TYPE_LINER,
 )
-from tengri.utils.grid_interp import resample_template
-from tengri.utils.physics_constants import C_AA
+from tengri.components.agn.grahsp.publication import bolometric_unit_nm
 
 if TYPE_CHECKING:  # pragma: no cover
     from tengri.components.agn.grahsp.model import GRAHSPParams
     from tengri.components.agn.grahsp.templates import GRAHSPTemplates
 
 __all__ = [
-    "BALMER_NORM_GRID_NM",
-    "BBB_NORM_GRID_NM",
+    "balmer_unit_power",
     "bbb_side_unit_power",
     "disc_unit_power",
-    "native_power_nm",
+    "feii_unit_power",
+    "line_unit_power",
 ]
-
-BBB_NORM_GRID_NM: np.ndarray = np.geomspace(LYMAN_LIMIT_NM, 1.0e10, 1024)
-"""SBPL disc grid [nm], log-spaced from the Lyman limit to 1e10 nm."""
 
 BALMER_NORM_GRID_NM: np.ndarray = np.geomspace(LYMAN_LIMIT_NM, 1.0e6, 2048)
 """Balmer continuum grid [nm] from the Lyman limit to the 1e6 nm clip in
@@ -74,98 +71,60 @@ def _log_trapezoid_weights(grid_nm: np.ndarray) -> np.ndarray:
     return weights * grid_nm
 
 
-_W_BBB = _log_trapezoid_weights(BBB_NORM_GRID_NM)
 _W_BALMER = _log_trapezoid_weights(BALMER_NORM_GRID_NM)
 
 
-def native_power_nm(wave_nm: Array, l_lambda_nm: Array) -> Array:
-    r"""Integral of a tabulated :math:`L_\lambda` over its own nodes [erg/s].
+def _sbpl_unit_nm(params: GRAHSPParams):
+    """Unit-``l5100`` SBPL disc, X-ray floored, as a function of wavelength [nm]."""
 
-    Parameters
-    ----------
-    wave_nm : array_like, shape (n,)
-        Template wavelength nodes [nm], ascending.
-    l_lambda_nm : array_like, shape (n,)
-        Template :math:`L_\lambda` on those nodes [erg/s/nm; any scale, the
-        result carries the same scale].
+    def unit_fn(wave_nm):
+        return floor_disc_xray(
+            wave_nm,
+            sbpl_bbb(
+                wave_nm=wave_nm,
+                l5100=1.0,
+                uvslope=params.uvslope,
+                plslope=params.plslope,
+                plbendloc_nm=params.plbendloc_nm,
+                plbendwidth=params.plbendwidth,
+                cutoff_nm=params.cutoff_nm,
+            ),
+        )
 
-    Returns
-    -------
-    ndarray, shape ()
-        :math:`\int L_\lambda\,\mathrm{d}\lambda`, taken with the power law the
-        template is resampled with (see ``native_bolometric_nu``).
-    """
-    wave_aa = jnp.asarray(wave_nm) * 10.0
-    l_lambda_aa = jnp.asarray(l_lambda_nm) * 0.1
-    return native_bolometric_nu(l_lambda_aa * wave_aa**2 / C_AA, wave_aa)
+    return unit_fn
 
 
-def sbpl_disc_power_nm(
-    uvslope: float,
-    plslope: float,
-    plbendloc_nm: float,
-    plbendwidth: float,
-    cutoff_nm: float,
-) -> Array:
-    """Unit-``l5100`` SBPL disc power above the Lyman limit [erg/s], floored."""
-    nodes = jnp.asarray(BBB_NORM_GRID_NM)
-    l_lambda = floor_disc_xray(
-        nodes,
-        sbpl_bbb(
-            wave_nm=nodes,
-            l5100=1.0,
-            uvslope=uvslope,
-            plslope=plslope,
-            plbendloc_nm=plbendloc_nm,
-            plbendwidth=plbendwidth,
-            cutoff_nm=cutoff_nm,
-        ),
-    )
-    return jnp.sum(jnp.asarray(_W_BBB) * l_lambda)
-
-
-def netzer_disc_power_nm(
-    disc_m: float,
-    disc_a: float,
-    disc_mdot: float,
-    templates: GRAHSPTemplates,
-) -> Array:
-    """Unit-``l5100`` Netzer disc template power above the Lyman limit [erg/s].
-
-    The template is resampled with :func:`~tengri.utils.grid_interp.resample_template`
-    and anchored at 510 nm (:func:`~tengri.components.agn.grahsp.disc.netzer_disc`).
-    Its first segment crosses the Lyman limit, so the interpolated value at the
-    limit is prepended as a node, which keeps the power-law interpolant exact on
-    the retained part.
-    """
+def _netzer_unit_nm(params: GRAHSPParams, templates: GRAHSPTemplates):
+    """Unit-``l5100`` Netzer disc at the selected (M, a, Mdot) model, as a function of
+    wavelength [nm]. The same template the published disc uses."""
     idx = select_disc_model(
         templates.disc_m,
         templates.disc_a,
         templates.disc_mdot,
-        m=disc_m,
-        a=disc_a,
-        mdot=disc_mdot,
+        m=params.disc_m,
+        a=params.disc_a,
+        mdot=params.disc_mdot,
     )
-    wave = np.asarray(templates.disc_wave_nm, dtype=float)
-    lumin = jnp.asarray(templates.disc_lumin[idx])
-    anchor = resample_template(jnp.asarray([LAMBDA_5100_NM]), wave, lumin, left=0.0, right=0.0)[0]
-    shape = lumin / (LAMBDA_5100_NM * anchor)
-    nodes = _retained_nodes(wave)
-    values = resample_template(jnp.asarray(nodes), wave, shape, left=0.0, right=0.0)
-    return native_power_nm(nodes, values)
+    disc_wave = np.asarray(templates.disc_wave_nm, dtype=float)
+    disc_lumin = jnp.asarray(templates.disc_lumin[idx])
+
+    def unit_fn(wave_nm):
+        return netzer_disc(
+            wave_nm=wave_nm,
+            l5100=1.0,
+            disc_wave_nm=disc_wave,
+            disc_lumin_model=disc_lumin,
+        )
+
+    return unit_fn, disc_wave
 
 
 def disc_unit_power(params: GRAHSPParams, templates: GRAHSPTemplates) -> Array:
     """Unit-``l5100`` disc power above the Lyman limit [erg/s] (no lines, no FeII)."""
     if params.disc_model == "netzer":
-        return netzer_disc_power_nm(params.disc_m, params.disc_a, params.disc_mdot, templates)
-    return sbpl_disc_power_nm(
-        params.uvslope,
-        params.plslope,
-        params.plbendloc_nm,
-        params.plbendwidth,
-        params.cutoff_nm,
-    )
+        unit_fn, disc_wave = _netzer_unit_nm(params, templates)
+        return bolometric_unit_nm(unit_fn, (disc_wave,))
+    return bolometric_unit_nm(_sbpl_unit_nm(params))
 
 
 def _retained_nodes(nodes_nm: np.ndarray) -> np.ndarray:
