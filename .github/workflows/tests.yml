@@ -28,34 +28,35 @@ on:
   # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
   # comes back.
   pull_request:
-    # No `labeled`. It cannot coexist with a single aggregate required context.
+    # Pull requests run a CHEAP tier by default: the same shards a push to
+    # `main` runs (`physics`, `regression-c`) plus the four docs-scope shards
+    # when the diff touches docs/, notebooks/, reproduction/ or *.md. The label
+    # `full-tests` runs the whole suite instead. The merge queue runs the whole
+    # suite on every entry regardless, so a PR that skipped a shard here is
+    # still verified before it lands; the label is for an author who wants the
+    # answer sooner than the queue gives it. `gallery-changes` computes the
+    # scope from the PR's CURRENT label set, which is why `labeled` and
+    # `unlabeled` are triggers:
     #
-    # On a `labeled` event the heavy tiers stand down by design, so the `ci-ok`
-    # job below would publish either a success claiming tests passed when they
-    # never ran, or a failure reddening a pull request for the crime of being
-    # labelled. Neither is acceptable when that one context is the only thing
-    # branch protection consults.
+    #   * adding `full-tests` starts the full run it asks for;
+    #   * removing it returns the PR to the cheap tier;
+    #   * any OTHER label event re-computes the same scope the PR already had
+    #     and re-runs it (the label burst CLAUDE.md mandates collapses to one
+    #     run through the concurrency group below). It never escalates to the
+    #     full suite, and `slow` / `crossval` stand down on a label event that
+    #     is not their own label (see their `if:`).
     #
-    # #1865 made label runs safe by a different route — it removed the `labeled`
-    # guard from the four always-run gates so they publish real successes rather
-    # than shadowing `skipped`. That works because a skipped MATRIX job publishes
-    # the bare name `test` and never the eight expanded shard contexts, so the
-    # shard results survive in their own suite. A plain job has no such cover:
-    # its name IS its context, and it publishes on every event. Removing the
-    # trigger removes the whole class instead of mitigating it, and saves the
-    # ~8 runner-minutes per labelling that #1865 accepted as its cost — which
-    # matters now that queue capacity, not correctness, is the binding
-    # constraint (53% of open PR jobs are spent on PRs that touch no code).
-    #
-    # `slow` is unaffected: its `if:` reads
-    # `github.event.pull_request.labels.*.name`, the pull request's CURRENT
-    # label set, on ANY pull-request event. So labelling and then pushing still
-    # opts in, and `workflow_dispatch` covers labelling without pushing.
+    # Why every label event runs a real verdict rather than a no-op: the newest
+    # check suite wins when branch protection resolves a required context
+    # (#1856), so a label-event run that skipped its jobs would publish
+    # `skipped` over the real result and block the merge, and one that passed
+    # them without running would publish an approval nothing earned. Re-running
+    # the same scope costs a few minutes and publishes the true answer.
     #
     # `ready_for_review` is here because a draft pull request withholds the
     # test matrix (see `gallery-changes`): marking it ready must start the run
     # that was withheld.
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
     - cron: "0 4 * * *"
@@ -108,8 +109,9 @@ on:
 #                run from sharing a group on `main` (both resolve to the same
 #                `github.ref`) and cancelling each other mid-suite.
 #
-# `labeled` PR events do not trigger this workflow at all (see the `types:` note
-# above), so there is nothing to group for them.
+# A `labeled` / `unlabeled` PR event shares the PR group with `synchronize`, so
+# the burst of events one labelling produces collapses to a single run, and the
+# surviving run re-derives its scope from the final label set.
 concurrency:
   group: >-
     tests-${{ github.ref }}-${{
@@ -131,43 +133,35 @@ env:
   # arming it workflow-wide is safe for the data-gated jobs.
   TENGRI_GUARD_FULLY_SKIP: "1"
 
-# Skip the HEAVY jobs on bare `labeled` PR events. GitHub fires one `labeled`
-# webhook PER label added, so labelling a PR with N labels used to spawn N
-# duplicate workflow runs that immediately cancelled each other under
-# `cancel-in-progress` (and occasionally killed the surviving run mid-suite).
-# The shared label concurrency group above is what fixes that now; the per-job
-# `if:` below keeps the expensive tiers from running N times regardless.
+# CI tiers, by event (`gallery-changes` computes the scope; `ci-ok` checks it):
 #
-# THE FOUR ALWAYS-RUN GATES DO NOT CARRY THAT GUARD, and must not.
+#   pull_request   cheap by default: lint, security, smoke, `physics`,
+#                  `regression-c`, plus `contract`, `components`, `regression-a`,
+#                  `regression-d` when the diff touches docs/, notebooks/,
+#                  reproduction/ or *.md (scope cheap / cheap-docs). A docs-only
+#                  diff runs just those four (scope docs). The label `full-tests`
+#                  runs the full suite (scope all). A draft runs the gates only
+#                  (scope none).
+#   merge_group    the full suite on every entry (scope all; docs for a group
+#                  confined to documentation). This is where a commit is
+#                  verified before it lands on `main`.
+#   push (main)    cheap: lint, security, smoke, `physics`, `regression-c`.
+#   schedule       the whole suite nightly, plus coverage, slow and crossval.
+#
+# THE FOUR ALWAYS-RUN GATES MUST NOT STAND DOWN ON A `labeled` EVENT.
 #
 # `tier`, `lint`, `security` and `smoke` are `ALL_PR_JOBS` in
 # `tools/check_ci_pr_coverage.py`: "jobs that run for EVERY pull request,
-# whatever its base". They used to carry the `labeled` guard anyway, which
-# contradicted that bucket and — once `main` got branch protection on
-# 2026-08-16 — silently made every labelled PR unmergeable.
-#
-# The mechanism, measured on PR #1856 against PR #1852 as the control (same
-# four labels, both fully green, one CLEAN and one BLOCKED):
-#
-#   1. CLAUDE.md mandates labelling every PR, so label events are guaranteed.
-#   2. A `labeled` run whose jobs are skipped by `if:` still PUBLISHES a check
-#      run per job — with conclusion `skipped`.
-#   3. Those runs live in a check suite created AFTER the real one, and branch
-#      protection resolves a required context to the newest suite that carries
-#      that name.
-#   4. A `skipped` run does not satisfy a required context. Result:
-#      `mergeStateStatus: BLOCKED` with `statusCheckRollup: SUCCESS` — green
-#      to every human-facing view, permanently unmergeable, forever, because
-#      nothing further will ever run on that SHA.
-#
-# #1852 escaped only by accident: it was pushed again hours after being
-# labelled, so its real suite happened to be the newest one.
-#
-# Letting these four run on a label event costs ~8 runner-minutes per PR
-# (collapsed to one run by the shared group) and makes the newest suite carry
-# a real success for every required context. `check_ci_pr_coverage.py` asserts
-# the guard stays off them, because reintroducing it is invisible until a
-# merge is attempted, and by then the SHA is unfixable without a dummy push.
+# whatever its base". A `labeled` run whose jobs are skipped by `if:` still
+# PUBLISHES a check run per job, with conclusion `skipped`; those runs live in a
+# check suite created AFTER the real one, and branch protection resolves a
+# required context to the newest suite that carries that name. A `skipped` run
+# does not satisfy a required context, so the result is `mergeStateStatus:
+# BLOCKED` with `statusCheckRollup: SUCCESS` -- green to every human-facing
+# view, permanently unmergeable (measured on PR #1856 against PR #1852 as the
+# control). `check_ci_pr_coverage.py` asserts the guard stays off them, because
+# reintroducing it is invisible until a merge is attempted. The same reasoning
+# is why `gallery-changes` and `test` run on label events too (see `types:`).
 jobs:
   # Announces what this run does NOT cover. The #1806/#1810 failure was not that
   # a stacked PR ran less — it was that a green tick on a stacked PR looked
@@ -213,10 +207,14 @@ jobs:
             {
               echo "## Full CI tier"
               echo
-              echo "Everything this workflow gates on is running, except what a run's"
-              echo "own scope withholds: a draft pull request, or a change confined to"
-              echo "docs, notebooks, reproduction or markdown, runs a reduced set of test"
-              echo "shards. The \`gallery-changes\` job prints the scope it chose."
+              echo "The merge queue, the nightly run and a pull request labeled"
+              echo "\`full-tests\` run every test shard. An unlabeled pull request runs the"
+              echo "cheap tier (\`physics\`, \`regression-c\`, plus the docs-scope shards when"
+              echo "the diff touches docs, notebooks, reproduction or markdown), and a draft"
+              echo "runs the gates only. The \`gallery-changes\` job prints the scope it chose."
+              echo
+              echo "A green cheap-tier pull request is not a full verdict: add the label"
+              echo "\`full-tests\` for one, or let the merge queue run it."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -606,11 +604,12 @@ jobs:
   # inputs that CAN change what an example does are enumerated below; a diff
   # touching none of them cannot change the gallery's verdict.
   #
-  # The filter now applies to every event that has a diff: a pull request, and a
+  # The filter applies to the events that run the full suite and have a diff: a
   # merge-queue entry (the changed files are the compare of the queue's base
   # against its head, so a group of several pull requests is judged as the
-  # union). `push` runs the cheap tier and never the gallery -- the queue ran it
-  # on this commit already -- and `schedule` / `workflow_dispatch` always run it.
+  # union) and a pull request labeled `full-tests`. A cheap-tier pull request
+  # and a `push` never run the gallery -- the queue runs it on the commit before
+  # it lands -- and `schedule` / `workflow_dispatch` always run it.
   #
   # The same job decides the `test` scope, in a second output, so the answer is
   # computed once from one API call and one place:
@@ -625,8 +624,16 @@ jobs:
   #          docs/dev and `regression-d` scans every *.md (CLAUDE.md included).
   #          Those four shards run; the other five (bug/ in thirds, paper+agn,
   #          physics) read none of these trees and are withheld.
-  #   cheap  `push` to main: the `physics` and `regression-c` shards only.
+  #   cheap  `physics` and `regression-c` only: a `push` to main, and a pull
+  #          request without the `full-tests` label whose diff touches no
+  #          documentation tree.
+  #   cheap-docs  the cheap shards plus the four `docs` shards: a pull request
+  #          without the label whose diff touches code AND documentation.
   #   none   a draft pull request. No shard; `ready_for_review` starts the run.
+  #
+  # A pull request carrying the label `full-tests` is scope `all` whatever its
+  # diff. The label set is read from the event payload, so it is the CURRENT set
+  # on every pull-request event, including `labeled` / `unlabeled`.
   #
   # A withheld shard still reports. The branch-protection rule names the
   # expanded `test (...)` matrix contexts, and a matrix job skipped by `if:`
@@ -652,9 +659,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # `gallery` needs this job's output, so gating here cascades to it.
-    if: >-
-      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
-      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
     permissions:
       contents: read
       pull-requests: read
@@ -669,12 +674,13 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -uo pipefail
 
-          # emit <gallery needed: true|false> <test scope: all|docs|cheap|none>
+          # emit <gallery needed: true|false> <test scope: all|docs|cheap|cheap-docs|none>
           emit() {
             echo "needed=$1" >> "$GITHUB_OUTPUT"
             echo "scope=$2" >> "$GITHUB_OUTPUT"
@@ -726,13 +732,19 @@ jobs:
           echo "changed files:"
           echo "$files" | sed 's/^/  /'
 
-          # Test scope: docs-only unless some path falls outside the four
-          # documentation trees. -v inverts the match, so the first branch is
-          # "at least one file is NOT documentation".
-          if echo "$files" | grep -vqE '^(docs/|notebooks/|reproduction/)|\.md$'; then
-            scope=all
-          else
-            scope=docs
+          # Documentation trees: -v inverts the match, so `non_docs` is "at least
+          # one file is NOT documentation" and `any_docs` is "at least one is".
+          docs_re='^(docs/|notebooks/|reproduction/)|\.md$'
+          non_docs=false; any_docs=false
+          if echo "$files" | grep -vqE "$docs_re"; then non_docs=true; fi
+          if echo "$files" | grep -qE "$docs_re"; then any_docs=true; fi
+
+          # Does the pull request carry `full-tests`? Read from the event
+          # payload, so it is the current label set on a labeled/unlabeled event.
+          full_label=false
+          if [ "$EVENT" = "pull_request" ] \
+              && echo "$LABELS_JSON" | jq -e 'index("full-tests") != null' > /dev/null; then
+            full_label=true
           fi
 
           # What an example's behaviour actually depends on:
@@ -745,13 +757,40 @@ jobs:
           # docs/, notebooks/ and the spine generator are deliberately absent:
           # sphinx-gallery reads `examples/`, so no edit under docs/ can change
           # what an example does. `docs/auto_examples/` is generated OUTPUT.
+          gallery=false
           if echo "$files" | grep -qE '^(examples/|src/tengri/|data/|tools/run_gallery_examples\.py$|pyproject\.toml$|\.github/workflows/tests\.yml$)'; then
+            gallery=true
+          fi
+
+          if [ "$EVENT" = "pull_request" ] && [ "$full_label" != "true" ]; then
+            # The cheap tier. The merge queue runs the full suite and the gallery
+            # on this change before it lands.
+            if [ "$non_docs" != "true" ]; then
+              scope=docs
+            elif [ "$any_docs" = "true" ]; then
+              scope=cheap-docs
+            else
+              scope=cheap
+            fi
+            echo "-> pull request without full-tests: cheap tier ($scope), no gallery"
+            emit false "$scope"
+            exit 0
+          fi
+
+          # A merge-queue entry, or a pull request labeled full-tests: the full
+          # suite, narrowed to the documentation shards only for a docs-only diff
+          # in the queue. The label overrides the narrowing.
+          if [ "$full_label" = "true" ] || [ "$non_docs" = "true" ]; then
+            scope=all
+          else
+            scope=docs
+          fi
+          if [ "$gallery" = "true" ]; then
             echo "-> gallery inputs touched, running it"
-            emit true "$scope"
           else
             echo "-> no gallery input touched, skipping it"
-            emit false "$scope"
           fi
+          emit "$gallery" "$scope"
 
   # Execute every sphinx-gallery example (#1146).
   #
@@ -991,9 +1030,7 @@ jobs:
     # critical path; its `if:` is identical to this job's, so the two always
     # skip together.
     needs: [smoke, gallery-changes]
-    if: >-
-      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
-      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'main' }}
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
     # Sizes from warm working sets; see CHANGELOG.md.
     env:
@@ -1174,11 +1211,15 @@ jobs:
       # `if:` publishes only the bare name `test`, which would leave every
       # required shard context pending forever.)
       #
-      #   scope=all    every shard, except on `push`, which is always cheap.
+      #   scope=all    every shard: the merge queue, the nightly run, and a pull
+      #                request labeled `full-tests`.
       #   scope=docs   contract, components, regression-a, regression-d: the
       #                shards whose tests read docs/, notebooks/, reproduction/
       #                or *.md (see `gallery-changes`).
-      #   scope=cheap  physics, regression-c (a `push` to main).
+      #   scope=cheap  physics, regression-c (a `push` to main, or a pull request
+      #                without the label and without documentation in its diff).
+      #   scope=cheap-docs  cheap plus the four docs shards (a pull request
+      #                without the label touching code and documentation).
       #   scope=none   nothing (draft pull request).
       - name: Decide whether this shard runs
         id: gate
@@ -1192,6 +1233,7 @@ jobs:
             all) run=true ;;
             docs) case "$SHARD" in contract|components|regression-a|regression-d) run=true ;; esac ;;
             cheap) case "$SHARD" in physics|regression-c) run=true ;; esac ;;
+            cheap-docs) case "$SHARD" in physics|regression-c|contract|components|regression-a|regression-d) run=true ;; esac ;;
             none) ;;
             *) run=true ;;  # an unknown scope fails toward running
           esac
@@ -1444,11 +1486,17 @@ jobs:
   # free on PR/push runs where those jobs skip instantly.
   #
   # `merge_group` is a full-tier event for the policy: the queue entry owes every
-  # heavy job. A `test` shard that the run's scope withholds (draft, docs-only,
-  # push) does not skip -- it starts and finishes as a no-op with `success`, so
-  # the `test` result this job reads is `success` and the per-shard contexts
-  # branch protection names still report on both `pull_request` and
-  # `merge_group`. Point protection at `ci-ok` alone to retire the shard list.
+  # heavy job. A `test` shard that the run's scope withholds (draft, cheap tier,
+  # docs-only, push) does not skip -- it starts and finishes as a no-op with
+  # `success`. That is how this job tells a stand-down from a failure: `test` is
+  # `success` only if every shard that ran passed, a shard that ran and failed
+  # or was cancelled makes `test` `failure` / `cancelled`, and a withheld shard
+  # cannot do either. What this job cannot see is a shard withheld WRONGLY, so
+  # `tools/ci_ok.py` also checks the `scope` that `gallery-changes` chose
+  # against the event: the queue, the nightly run and a `full-tests` pull
+  # request must be scope `all` (or `docs` for a docs-only queue entry), a push
+  # must be `cheap`, a draft must be `none`. `ci-ok` reports on pull_request,
+  # merge_group and push alike (`if: always()`, no event filter).
   ci-ok:
     name: ci-ok
     # `always()` so this still runs — and still reports — when a dependency
@@ -1470,6 +1518,10 @@ jobs:
           CI_OK_RESULTS: ${{ toJSON(needs) }}
           CI_OK_EVENT: ${{ github.event_name }}
           CI_OK_BASE_REF: ${{ github.base_ref }}
+          CI_OK_SCOPE: ${{ needs.gallery-changes.outputs.scope }}
+          CI_OK_DRAFT: ${{ github.event.pull_request.draft }}
+          CI_OK_ACTION: ${{ github.event.action }}
+          CI_OK_EVENT_LABEL: ${{ github.event.label.name }}
           CI_OK_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
 
   # Alert on nightly schedule run failure. Opens or updates a deduplicated
@@ -1808,7 +1860,10 @@ jobs:
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'run-slow-tests')
+          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+              || github.event.label.name == 'run-slow-tests'))
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
     # Sizes from warm working sets; see CHANGELOG.md.
     env:
@@ -1929,7 +1984,10 @@ jobs:
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'run-crossval')
+          && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
+              || github.event.label.name == 'run-crossval'))
     # 30 -> 45: the per-file loop pays pytest+JAX startup ~55 times, and the
     # first run on a cold compile cache also pays every compilation once.
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.

@@ -43,20 +43,25 @@ the buckets carry the same meanings:
     dispatch is a fault (they are owed those events); a skipped job on push or
     a PR without its label is acceptable.
 
-Why the ``labeled`` pull-request event is no longer a trigger
-------------------------------------------------------------
-It cannot coexist with a single aggregate context. On a ``labeled`` event the
-heavy tiers skip by design, so this job would publish either a success that
-claims tests passed when they never ran, or a failure that reddens a pull
-request for the crime of being labelled. Today the matrix's name expansion hides
-that problem -- the eight shard contexts keep their real results because a
-skipped matrix job cannot publish them (#1865). A plain job has no such
-protection: its name *is* its context, and it publishes on every event.
+Stand-down versus failure
+-------------------------
+A ``test`` shard that the run's scope withholds (a draft, the cheap tier, a
+docs-only diff, a push) is not skipped: it starts, finds it owes nothing, and
+reports ``success`` so that its expanded context still publishes. The ``test``
+result this module reads is therefore the worst of the shards that RAN: a
+failed or cancelled shard makes it ``failure`` / ``cancelled``, a withheld one
+can make it neither. What a result cannot show is a shard withheld by mistake,
+so :func:`scope_problems` checks the ``scope`` that ``gallery-changes`` chose
+against the event (the queue, the nightly run and a ``full-tests`` pull request
+owe scope ``all``; a push owes ``cheap``; a draft owes ``none``).
 
-So the trigger goes. ``slow`` is unaffected: it reads
-``github.event.pull_request.labels.*.name``, the pull request's current label
-set, on any pull-request event -- so labelling then pushing still opts in, and
-``workflow_dispatch`` covers labelling without pushing.
+``labeled`` and ``unlabeled`` are pull-request triggers so that adding the
+``full-tests`` label starts the full run. Every label event re-derives the same
+scope from the pull request's current labels and runs it for real, so the
+newest check suite -- the one branch protection reads -- always carries a true
+verdict. The one exception is ``slow`` / ``crossval``: they stand down on a label
+event that is not their own label, and :func:`labeled_job_owed` agrees, so an
+unrelated label never re-runs a multi-hour suite nor reddens the pull request.
 
 Usage
 -----
@@ -105,6 +110,22 @@ SCHEDULED_TIER = ("slow", "coverage", "crossval")
 _FULL_TIER_EVENTS = ("push", "merge_group", "schedule", "workflow_dispatch")
 
 
+#: The label that asks a pull request for the full suite instead of the cheap tier.
+FULL_TESTS_LABEL = "full-tests"
+
+#: The ``test`` scopes ``gallery-changes`` may choose, per event. A scope outside
+#: the event's set means the gate withheld shards the event owed (or ran a tier it
+#: should not), which no job result can reveal because a withheld shard reports
+#: ``success``. ``pull_request`` is narrowed further by :func:`scope_problems`.
+ALLOWED_SCOPES = {
+    "merge_group": ("all", "docs"),
+    "push": ("cheap",),
+    "schedule": ("all",),
+    "workflow_dispatch": ("all",),
+    "pull_request": ("all", "docs", "cheap", "cheap-docs", "none"),
+}
+
+
 def full_tier_owed(event: str, base_ref: str) -> bool:
     """Whether this run was supposed to execute the expensive jobs.
 
@@ -142,7 +163,56 @@ def scheduled_tier_owed(event: str) -> bool:
     return event in ("schedule", "workflow_dispatch")
 
 
-def labeled_job_owed(event: str, job: str, labels: str) -> bool:
+def scope_problems(event: str, scope: str, labels: str = "", draft: bool = False) -> list[str]:
+    """Check the ``test`` scope the gate chose against what the event owed.
+
+    A ``test`` shard the scope withholds stands down inside the job and reports
+    ``success``, so the job results alone cannot tell "withheld correctly" from
+    "withheld by a bug in the gate". This is the half of the verdict that can.
+
+    Parameters
+    ----------
+    event : str
+        The value of ``github.event_name``.
+    scope : str
+        The ``scope`` output of ``gallery-changes``.
+    labels : str, optional
+        Comma-separated names from ``github.event.pull_request.labels.*.name``.
+    draft : bool, optional
+        Whether the pull request is a draft.
+
+    Returns
+    -------
+    list of str
+        One problem per violated rule; empty when the scope is acceptable.
+    """
+    allowed = ALLOWED_SCOPES.get(event)
+    if allowed is None:
+        return [f"event `{event}` has no scope policy in tools/ci_ok.py: ALLOWED_SCOPES"]
+    if scope not in allowed:
+        return [
+            f"`gallery-changes` chose scope `{scope or '<empty>'}` for a `{event}` run, "
+            f"which may only be {', '.join(allowed)}; shards were withheld that this "
+            f"event owed"
+        ]
+    if event != "pull_request":
+        return []
+    names = {label.strip() for label in labels.split(",")} if labels.strip() else set()
+    if draft and scope != "none":
+        return [f"a draft pull request must be scope `none`, got `{scope}`"]
+    if not draft and scope == "none":
+        return ["a pull request that is not a draft was scoped `none`; no shard ran"]
+    if not draft and FULL_TESTS_LABEL in names and scope != "all":
+        return [
+            f"the pull request carries `{FULL_TESTS_LABEL}` and so owes the full suite "
+            f"(scope `all`), but the gate chose `{scope}`"
+        ]
+    return []
+
+
+def labeled_job_owed(
+    event: str, job: str, labels: str, action: str = "", event_label: str = ""
+) -> bool:
     """Whether a labeled job is owed on this pull request.
 
     Parameters
@@ -153,24 +223,40 @@ def labeled_job_owed(event: str, job: str, labels: str) -> bool:
         The job name (e.g., 'slow' or 'crossval').
     labels : str
         Comma-separated label names from ``github.event.pull_request.labels.*.name``.
+    action : str, optional
+        The value of ``github.event.action``.
+    event_label : str, optional
+        The value of ``github.event.label.name``: the label a ``labeled`` or
+        ``unlabeled`` event is about; empty otherwise.
 
     Returns
     -------
     bool
         True when the job is owed by virtue of its opt-in label being present
-        on a pull request.
+        on a pull request. A ``labeled`` / ``unlabeled`` event about some OTHER
+        label does not owe it: the job stands down on those by design (a 3-hour
+        suite must not re-run for every unrelated label), so the verdict of that
+        event is the cheap tier's alone.
     """
     if event != "pull_request":
         return False
     label_set = {label.strip() for label in labels.split(",")} if labels.strip() else set()
-    if job == "slow":
-        return "run-slow-tests" in label_set
-    if job == "crossval":
-        return "run-crossval" in label_set
-    return False
+    wanted = {"slow": "run-slow-tests", "crossval": "run-crossval"}.get(job)
+    if wanted is None or wanted not in label_set:
+        return False
+    return not (action in ("labeled", "unlabeled") and event_label != wanted)
 
 
-def decide(results: dict[str, str], event: str, base_ref: str, labels: str = "") -> list[str]:
+def decide(
+    results: dict[str, str],
+    event: str,
+    base_ref: str,
+    labels: str = "",
+    scope: str | None = None,
+    draft: bool = False,
+    action: str = "",
+    event_label: str = "",
+) -> list[str]:
     """Apply the tier policy to one run's job results.
 
     Parameters
@@ -184,6 +270,15 @@ def decide(results: dict[str, str], event: str, base_ref: str, labels: str = "")
     labels : str, optional
         Comma-separated label names from ``github.event.pull_request.labels.*.name``;
         empty for non-pull-request events. Default is empty string.
+    scope : str or None, optional
+        The ``scope`` output of ``gallery-changes``; ``None`` when that job did
+        not run (a stacked pull request), which skips the scope check.
+    draft : bool, optional
+        Whether the pull request is a draft.
+    action : str, optional
+        The value of ``github.event.action``.
+    event_label : str, optional
+        The value of ``github.event.label.name``.
 
     Returns
     -------
@@ -194,6 +289,8 @@ def decide(results: dict[str, str], event: str, base_ref: str, labels: str = "")
     """
     problems: list[str] = []
     owed = full_tier_owed(event, base_ref)
+    if scope is not None:
+        problems.extend(scope_problems(event, scope, labels, draft))
 
     for job in ALWAYS_RUN:
         got = results.get(job)
@@ -240,7 +337,7 @@ def decide(results: dict[str, str], event: str, base_ref: str, labels: str = "")
                     f"and so owed the scheduled tier. A withheld scheduled job must never "
                     f"pass silently (tools/ci_ok.py: SCHEDULED_TIER)"
                 )
-            elif labeled_job_owed(event, job, labels):
+            elif labeled_job_owed(event, job, labels, action, event_label):
                 problems.append(
                     f"`{job}` was skipped, but this pull request is labeled to run it "
                     f"and so owed the scheduled tier. A withheld scheduled job must never "
@@ -291,7 +388,16 @@ def main() -> int:
     base_ref = os.environ.get("CI_OK_BASE_REF", "")
     labels = os.environ.get("CI_OK_LABELS", "")
 
-    problems = decide(results, event, base_ref, labels)
+    # The gate's scope is checked only when `gallery-changes` ran and succeeded;
+    # its failure is already reported by the FULL_TIER bucket.
+    scope = None
+    if results.get("gallery-changes") == "success":
+        scope = os.environ.get("CI_OK_SCOPE", "").strip()
+    draft = os.environ.get("CI_OK_DRAFT", "").strip().lower() == "true"
+    action = os.environ.get("CI_OK_ACTION", "")
+    event_label = os.environ.get("CI_OK_EVENT_LABEL", "")
+
+    problems = decide(results, event, base_ref, labels, scope, draft, action, event_label)
     width = max((len(j) for j in results), default=0)
     print("Job results this run:")
     for job in sorted(results):
