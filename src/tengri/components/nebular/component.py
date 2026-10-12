@@ -865,6 +865,12 @@ class NebularSEDComponent(TemplateThreading):
         grid_arrays = (
             template_data.get("nebular_grid") if isinstance(template_data, dict) else None
         )
+        # The CLOUDY age-resolved band table (WavePrecomp, #2324) rides beside the
+        # grid, under its own key, for the same reason: the ``nebular`` slot is the
+        # backend's own bundle and is peeled below.
+        band_table = (
+            template_data.get("nebular_band_table") if isinstance(template_data, dict) else None
+        )
         if isinstance(template_data, dict) and "nebular" in template_data:
             template_data = template_data["nebular"]
 
@@ -1270,37 +1276,54 @@ class NebularSEDComponent(TemplateThreading):
             from tengri.observation.photometry import lnu_filter_integral
 
             z = jnp.asarray(require_redshift(params, "components.nebular.component.apply"))
-            # Filter-integrate nebular_sed directly via ``lnu_filter_integral``
-            # (ADR-0016, #398.e). Replaces the previous
-            # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
-            # that applied and immediately undid the (1+z)/(4π d_L²)
-            # dimming. Publishes the bare filter-integrated rest-frame L_ν.
-            nebular_phot_lnu_precomp = jnp.asarray(
-                [
-                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
-            derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
-            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
-            # z=0, so the filter sits in the REST frame and samples the rest SED at
-            # its own pivot: the SAME integral with redshift=0, not the observed-band
-            # value reused. Reusing it is what made the LUT report a different
-            # physical quantity from the exact path (769 % in des_g at z=0.5).
-            derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
-                [
-                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
-                    for fw, ft in zip(
-                        self._state.filter_waves,
-                        self._state.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            if band_table is not None:
+                # CLOUDY band table (#2324): the observed and rest band rows are the
+                # contraction over ages of the tabulated per-age bands, so the
+                # per-call filter integrals are skipped. Exact mode keeps them.
+                from tengri.components.nebular.cloudy_band_table import table_band_photometry
+
+                log_z_gas = common_kwargs["neb_logZ_gas"]
+                bands = table_band_photometry(
+                    band_table,
+                    self.backend,
+                    jnp.log10(jnp.asarray(state.derived["ssp_ages_yr"])),
+                    state.derived["age_weights"],
+                    log_z,
+                    log_z if log_z_gas is None else log_z_gas,
+                    common_kwargs["neb_logU"],
+                    common_kwargs["neb_fesc"],
+                    common_kwargs["neb_fdust_frac"],
+                    common_kwargs["neb_fesc_lya"],
+                )
+                derived_overrides["nebular_phot_lnu_precomp"] = bands[0]
+                derived_overrides["nebular_restband_lnu_precomp"] = bands[1]
+            else:
+                nebular_phot_lnu_precomp = jnp.asarray(
+                    [
+                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+                derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
+                # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+                # z=0, so the filter sits in the REST frame and samples the rest SED at
+                # its own pivot: the SAME integral with redshift=0, not the observed-band
+                # value reused. Reusing it is what made the LUT report a different
+                # physical quantity from the exact path (769 % in des_g at z=0.5).
+                derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
+                    [
+                        lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
 
         # Spectrum LUT family (SpectrumPrecomp): point-sample the *un-attenuated*
         # rest-frame nebular SED at the pixel wavelengths (a pixel is a single
