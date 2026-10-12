@@ -176,6 +176,7 @@ from tengri.components.nebular._shared import (
     apply_lya_escape,
     compute_qh,
     compute_qh_log10,
+    log_qh_from_normalized,
     render_nebular_lines,
     sanitize_qh_table,
     ssp_log_age_yr_axis,
@@ -1104,6 +1105,10 @@ class CB19Backend:
             log_age_yr,
             missing=1.0,
         )
+
+    def _get_log_qh_at(self, log_z: float, log_age_yr: float) -> float:
+        """``log10 Q_H`` at (logZ, logAge), with the table's scale added back (#2853)."""
+        return log_qh_from_normalized(self._get_qh_at(log_z, log_age_yr), self._log_qh_scale)
 
     def predict_nebular_line_luminosities(
         self,

@@ -8,8 +8,9 @@ rebuilds the same model in float64 and compares.
 
 The ionizing-spectrum fit must not form the ~1e46 photon rate in linear float32 (the
 table then holds ``inf`` and the Cue build raises ``CueWNESSPError``), and must stay
-bit-identical in float64 (#2849). The mappings backend still refuses a float32 build
-with ``QHTableOverflowError``, tracked in #2853.
+bit-identical in float64 (#2849). Before #2853 the mappings backend refused a float32
+build with ``QHTableOverflowError``; its float32 build is checked in
+``test_mappings_qh_float32.py``.
 """
 
 from __future__ import annotations

@@ -10,6 +10,7 @@ import math as _math
 
 import jax
 import jax.numpy as jnp
+from jax.scipy.special import logsumexp
 
 from tengri.components.nebular._constants import (
     _C_CGS,
@@ -23,6 +24,9 @@ from tengri.components.nebular._constants import (
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 from tengri.utils.scale import apply_log10_scale, pow10, representable_denominator
 from tengri.utils.ssp_anchor import ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR
+
+#: ln(10): converts base-10 log terms to the natural log that ``logsumexp`` uses.
+_LN10: float = _math.log(10.0)
 
 #: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
 #: Python floats, evaluated once at import in float64, so they enter the graph
@@ -954,6 +958,78 @@ def _qh_bilinear(
     q0 = q00 * (1 - wa) + q01 * wa
     q1 = q10 * (1 - wa) + q11 * wa
     return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
+
+
+def log_qh_from_normalized(qh_norm, log_scale: float):
+    """``log10 Q_H`` [dex re photons/s] from a peak-normalized table value.
+
+    A backend stores its Q_H table divided by ``10**log_scale`` (#1568), so the
+    table holds values in (0, 1] and survives float32. This adds the scale back
+    in the log domain: no ``10**log_scale`` ever exists as an array.
+
+    Parameters
+    ----------
+    qh_norm : array_like
+        Interpolated normalized Q_H (the output of ``_qh_bilinear``), dimensionless.
+    log_scale : float
+        ``log10`` of the scale the table was divided by [dex].
+
+    Returns
+    -------
+    ndarray
+        ``log10(qh_norm) + log_scale``, and ``-inf`` where ``qh_norm`` is zero, the
+        exact-zero sentinel that ``pow10`` maps back to 0.0.
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: the where-dummy keeps the backward pass
+    free of NaN at zero.
+    """
+    positive = qh_norm > 0
+    safe = jnp.where(positive, qh_norm, 1.0)
+    return jnp.where(positive, jnp.log10(safe) + log_scale, -jnp.inf)
+
+
+def log_q_h_total(backend, ssp_log_ages_yr, age_weights, log_z, neb_fesc):
+    """``log10`` of the ionizing photon rate of the age-weighted young population.
+
+    ``log10 sum_i w_i Q_H(Z, age_i) (1 - fesc)``, formed as a log-sum-exp over the
+    young age bins so that no linear term (~1e47 photons/s per Msun times a mass
+    weight) is ever materialized. Published for every backend that carries a
+    Q_H table; ``pow10`` of the result is the linear ``q_h_total``.
+
+    Parameters
+    ----------
+    backend : object
+        Photoionized backend with ``_young_idx`` and ``_get_log_qh_at``.
+    ssp_log_ages_yr : array, shape (n_age,)
+        ``log10(age/yr)`` of the SSP age bins.
+    age_weights : array, shape (n_age,)
+        Mass per age bin [Msun]. Zero weights contribute nothing.
+    log_z : float
+        Present-day absolute ``log10(Z)``.
+    neb_fesc : float
+        Ionizing photon escape fraction [0, 1].
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``log10 q_h_total`` [dex re photons/s]; ``-inf`` when nothing ionizes.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, all operations use ``jnp`` primitives.
+    """
+    young_idx = backend._young_idx
+    young_ages = ssp_log_ages_yr[young_idx]
+    young_w = age_weights[young_idx]
+    log_qh = jax.vmap(lambda la: backend._get_log_qh_at(log_z, la))(young_ages)
+    positive = young_w > 0
+    log_w = jnp.where(positive, jnp.log10(jnp.where(positive, young_w, 1.0)), -jnp.inf)
+    # ``logsumexp`` is natural-log: it sums in base e, so the base-10 terms are
+    # scaled by ln(10) in and out to get log10 Σ 10**x.
+    total = logsumexp((log_w + log_qh) * _LN10) / _LN10
+    return total + jnp.log10(1.0 - neb_fesc)
 
 
 # ── Metallicity convention converters ─────────────────────────────
