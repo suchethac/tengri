@@ -156,7 +156,6 @@ UNCURATED_DOIS = frozenset(
         "10.1051/0004-6361:20078829",  # mean_sfh.py
         "10.1086/130714",  # _recombination_coeffs.py
         "10.1086/151796",  # disc.py +1
-        "10.1086/159815",  # balmer.py
         "10.1086/161102",  # xray.py
         "10.1086/162480",  # _polar_smc_opacity.py
         "10.1086/162686",  # attenuation.py
