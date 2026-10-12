@@ -1,29 +1,39 @@
-2026-10-12 18:24:41,830 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.028e-30 erg/s/cm2/Hz
-2026-10-12 18:25:40,604 - __main__ - INFO - Galaxy 22173 (z=1.037): 14 detected bands
-2026-10-12 18:25:40,605 - __main__ - INFO - Config I: 10 free parameters
-2026-10-12 18:25:40,605 - __main__ - INFO - Attempt 1/2: target_accept 0.85, warmup 150, diagonal mass
-2026-10-12 18:28:43,133 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
-2026-10-12 18:29:29,914 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (46.8s). Step size: 0.2775. Divergent in the final warmup window: 0%
-2026-10-12 18:30:14,863 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 90.0s. Divergences: 18/1200 (1.5%). Tree depth: mean 3.9, at cap on 0% of iterations (max_num_doublings=10)
-2026-10-12 18:30:16,240 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
-2026-10-12 18:30:16,240 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
-2026-10-12 18:30:19,833 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 163 draws (6.10 MB/draw, target=1.0 GB), ceiling 64
-2026-10-12 18:30:19,840 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
-2026-10-12 18:30:26,371 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=18, rhat_max=1.0018, ess_min=237
-2026-10-12 18:30:40,717 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.npz
-2026-10-12 18:30:40,719 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.json
-2026-10-12 18:30:40,719 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=18) before retuning
-2026-10-12 18:30:40,720 - __main__ - INFO - Attempt 2/2: target_accept 0.95, warmup 150, diagonal mass
-2026-10-12 18:30:41,148 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.95
-2026-10-12 18:32:03,891 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (82.7s). Step size: 0.1987. Divergent in the final warmup window: 0%
-2026-10-12 18:32:45,287 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 124.0s. Divergences: 8/1200 (0.7%). Tree depth: mean 4.2, at cap on 0% of iterations (max_num_doublings=10)
-2026-10-12 18:32:45,297 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
-2026-10-12 18:32:45,297 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
-2026-10-12 18:32:46,141 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=8, rhat_max=1.0014, ess_min=315
-2026-10-12 18:32:57,560 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.npz
-2026-10-12 18:32:57,562 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.json
-2026-10-12 18:32:57,564 - __main__ - WARNING - No attempt cleared the adoption bar for galaxy 22173 config I; keeping attempt 2 of 2 (divergences=8, rhat_max=1.0014) with adoption_pass=False
-2026-10-12 18:32:57,564 - __main__ - INFO - ✓ Fit complete for galaxy 22173 config I
+2026-10-13 05:58:15,066 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 7.028e-30 erg/s/cm2/Hz
+2026-10-13 05:58:24,988 - __main__ - INFO - Galaxy 22173 (z=1.037): 14 detected bands
+2026-10-13 05:58:24,988 - __main__ - INFO - Config I: 10 free parameters
+2026-10-13 05:58:24,988 - __main__ - INFO - Attempt 1/4: target_accept 0.85, warmup 150, diagonal mass
+2026-10-13 05:59:20,679 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-10-13 06:00:03,646 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (43.0s). Step size: 0.2775. Divergent in the final warmup window: 0%
+2026-10-13 06:00:40,680 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 80.0s. Divergences: 18/1200 (1.5%). Tree depth: mean 3.9, at cap on 0% of iterations (max_num_doublings=10)
+2026-10-13 06:00:40,806 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
+2026-10-13 06:00:40,806 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-10-13 06:00:44,066 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 163 draws (6.10 MB/draw, target=1.0 GB), ceiling 64
+2026-10-13 06:00:44,074 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-10-13 06:00:50,302 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=18, rhat_max=1.0018, ess_min=237
+2026-10-13 06:01:04,654 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.npz
+2026-10-13 06:01:04,656 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.json
+2026-10-13 06:01:04,656 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=18) before retuning
+2026-10-13 06:01:04,656 - __main__ - INFO - Attempt 2/4: target_accept 0.95, warmup 150, diagonal mass
+2026-10-13 06:01:05,201 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-10-13 06:02:42,157 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (97.0s). Step size: 0.1987. Divergent in the final warmup window: 0%
+2026-10-13 06:03:31,355 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 146.1s. Divergences: 8/1200 (0.7%). Tree depth: mean 4.2, at cap on 0% of iterations (max_num_doublings=10)
+2026-10-13 06:03:31,358 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
+2026-10-13 06:03:31,358 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-10-13 06:03:32,304 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=8, rhat_max=1.0014, ess_min=315
+2026-10-13 06:03:43,428 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.npz
+2026-10-13 06:03:43,429 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.json
+2026-10-13 06:03:43,429 - __main__ - INFO - Saved the best attempt so far (attempt 2 of 2, divergences=8) before retuning
+2026-10-13 06:03:43,429 - __main__ - INFO - Attempt 3/4: target_accept 0.99, warmup 150, diagonal mass
+2026-10-13 06:03:43,890 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 9 parameters, 150 warmup, 300 samples, target_accept=0.99
+2026-10-13 06:06:16,687 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (152.8s). Step size: 0.0952. Divergent in the final warmup window: 0%
+2026-10-13 06:08:37,893 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 294.0s. Divergences: 0/1200 (0.0%). Tree depth: mean 5.6, at cap on 0% of iterations (max_num_doublings=10)
+2026-10-13 06:08:37,894 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
+2026-10-13 06:08:37,894 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-10-13 06:08:38,618 - __main__ - INFO - ✓ Fit passed adoption bar: divergences=0, rhat_max=1.0013, ess_min=496
+2026-10-13 06:08:47,269 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.npz
+2026-10-13 06:08:47,270 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/22173_I.json
+2026-10-13 06:08:47,271 - __main__ - INFO - ✓ Fit complete for galaxy 22173 config I
   MAP initialization (1000 steps)...
   MAP init done (loss=78.80)
+  MAP initialization: reusing cached MAP point
   MAP initialization: reusing cached MAP point
