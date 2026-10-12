@@ -627,21 +627,41 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: ``s_H = (7/18) agn_power R_faceon / ((1 - f) L_acc)`` =
 #: 0.00606 / 0.01845 / 0.01988 (``f`` = 0.00629 / 0.67368 / 0.69723, ``agn_power`` the
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
-#: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
-#: (sum, middle and last bin).
+#: this predicted the pre-#2733 literals below (the derivation was not updated when #2733 changed
+#: the corona power; see the re-pin note).
+#:
+#: Re-pinned for #2733 (the kubota_done corona carries exactly its counted l_hot, and the warm-zone
+#: rings are a converged Gauss-Legendre rule in ln r; commits 243acb9a3, b24c8bc5d, b4e2cb526).
+#: Measured with this test file held fixed: the pre-#2733 tree (b4e2cb526^) reproduces the old
+#: literals to 3e-14 relative, and the post-#2733 tree (243acb9a3) equals this branch head exactly,
+#: so #2733 is the whole move. Old -> new, as (sum, first bin, middle bin, last bin):
+#:   log M_BH 6: 1.5586840342805008e32 -> 1.5586983219893416e32 (+9.2e-6);
+#:     81149915103019.72 -> 84715148362205.38 (+4.4e-2); 2.8901478844181377e28 ->
+#:     2.8901452496561243e28 (-9.1e-7); 8.775296641338167e21 -> 8.775272784087466e21 (-2.7e-6)
+#:   log M_BH 8: 1.6504080200641076e32 -> 1.6505427954073426e32 (+8.2e-5);
+#:     2.226186048596356e16 -> 2.064917225404684e16 (-7.2e-2); 3.0968665997787287e28 ->
+#:     3.0973825812734128e28 (+1.7e-4); 8.825196951058274e21 -> 8.824838799069767e21 (-4.1e-5)
+#:   log M_BH 10: 1.6769970954584036e32 -> 1.671752297556477e32 (-3.1e-3);
+#:     2.3324417803895464e16 -> 1.014977875317276e16 (-5.6e-1); 3.1396733849669233e28 ->
+#:     3.129393263291244e28 (-3.3e-3); 9.548716267622313e21 -> 9.546324210210254e21 (-2.5e-4)
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5586840342805008e32, 81149915103019.72, 2.8901478844181377e28, 8.775296641338167e21),
+    6.0: (
+        1.5586983219893416e32,
+        84715148362205.38,
+        2.8901452496561243e28,
+        8.775272784087466e21,
+    ),
     8.0: (
-        1.6504080200641076e32,
-        2.226186048596356e16,
-        3.0968665997787287e28,
-        8.825196951058274e21,
+        1.6505427954073426e32,
+        2.064917225404684e16,
+        3.0973825812734128e28,
+        8.824838799069767e21,
     ),
     10.0: (
-        1.6769970954584036e32,
-        2.3324417803895464e16,
-        3.1396733849669233e28,
-        9.548716267622313e21,
+        1.671752297556477e32,
+        1.014977875317276e16,
+        3.129393263291244e28,
+        9.546324210210254e21,
     ),
 }
 
