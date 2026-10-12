@@ -2333,6 +2333,16 @@ def load_relagn_default_grid() -> dict:
     return _load_relagn_disc_grid(_find_relagn_grid())
 
 
+def _as_device_table(table):
+    """Device copy of a host table; a jax Array or tracer passes through unchanged.
+
+    When the templates are threaded as jit arguments (``threaded_template_inputs``)
+    the grid arrives as a tracer, which ``np.asarray`` cannot convert. The cache
+    itself stays host-only, so only the host path goes through :func:`device_table`.
+    """
+    return table if isinstance(table, jax.Array) else device_table(table)
+
+
 def relagn_disc_from_grid(
     grid: dict,
     wavelength: jnp.ndarray,
@@ -2402,9 +2412,9 @@ def relagn_disc_from_grid(
     """
     point = (agn_log_mbh, agn_log_mdot, agn_astar)
     lnu_template = _interp_nd_triweight(
-        device_table(grid["grid_jax"]),
-        tuple(device_table(a) for a in grid["axes"]),
-        tuple(device_table(e) for e in grid["edges"]),
+        _as_device_table(grid["grid_jax"]),
+        tuple(_as_device_table(a) for a in grid["axes"]),
+        tuple(_as_device_table(e) for e in grid["edges"]),
         point,
         scatters=grid["scatters"],
         index_space_interp=True,
@@ -2412,7 +2422,7 @@ def relagn_disc_from_grid(
     # The grid holds the disc alone at the reference cos_inc = 0.5, where the line-of-sight
     # power is the angle-integrated power: the template is normalized AT the reference and the
     # inclination scaling 2 cos i is applied to the spectrum on top.
-    wave_native = device_table(grid["wave_grid"])
+    wave_native = _as_device_table(grid["wave_grid"])
     # Interpolate grid wavelength -> observation wavelength
     lnu_interp = resample_template(
         wavelength, wave_native, lnu_template * (2.0 * agn_cos_inc), left=0.0, right=0.0
