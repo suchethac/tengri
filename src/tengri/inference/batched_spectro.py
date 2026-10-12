@@ -94,9 +94,7 @@ def _prepare_template(model) -> Any:
     """
     _refuse_stochastic(model)
     check_template_model(model)
-    if getattr(model, "_cached_component_chain", None) is None:
-        model._cached_component_chain = model._build_component_chain()
-    return model._resolve_threaded_data(None, None, None)
+    return model.threaded_template_inputs()
 
 
 def batched_log_likelihood(
