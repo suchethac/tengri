@@ -819,6 +819,23 @@ class Parameters:
         # --- Validate parameter names ---
         # Drop field params if field was removed (e.g., stochastic=False
         # with short-form psd_sigma/psd_tau_myr that are Fixed)
+        import warnings
+
+        dropped_field_priors = [
+            name
+            for name, val in resolved_kwargs.items()
+            if name not in self._valid_param_names
+            and name.startswith("sfh_field_")
+            and not isinstance(val, (Fixed, int, float))
+        ]
+        if dropped_field_priors:
+            warnings.warn(
+                f"Dropping free priors {dropped_field_priors}: the stochastic SFH field "
+                "is off, so these parameters have no effect. Set stochastic=True, or "
+                "pass Fixed values to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
         resolved_kwargs = {
             name: val
             for name, val in resolved_kwargs.items()

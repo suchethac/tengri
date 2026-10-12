@@ -3537,14 +3537,14 @@ class SEDModel:
         """
         try:
             d = self.spec.get_distribution(name)
-        except Exception:
+        except KeyError:
             return 0.0
         if d is None:
             return 0.0
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
@@ -3553,14 +3553,14 @@ class SEDModel:
         """A single representative redshift (fixed value or prior midpoint)."""
         try:
             d = self.spec.get_distribution("redshift")
-        except Exception:
+        except KeyError:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if d is None:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         lo, hi = getattr(d, "lo", None), getattr(d, "hi", None)
         if lo is not None and hi is not None:

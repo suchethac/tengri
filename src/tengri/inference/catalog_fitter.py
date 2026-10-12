@@ -1130,6 +1130,11 @@ class _CatalogFitterOriginal:
                     [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
                 )
             except Exception:
+                logging.getLogger(__name__).warning(
+                    "LUT-bias advisory skipped: galaxy flux/noise arrays could not be "
+                    "concatenated.",
+                    exc_info=True,
+                )
                 all_flux = all_noise = None
             if all_flux is not None:
                 _warn_if_lut_bias_amplified(
