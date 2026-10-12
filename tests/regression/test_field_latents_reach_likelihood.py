@@ -222,18 +222,31 @@ def test_predict_sfh_native_grid_is_reachable_and_unresampled():
 
     n_grid = int(np.asarray(model.log_age_grid).shape[0])
     assert np.asarray(native["sfr_full"]).shape == (n_grid,)
-    np.testing.assert_allclose(
-        np.asarray(native["t_gyr"]), 10.0 ** np.asarray(model.log_age_grid) / 1e9, rtol=1e-12
+    # The native axis is the model's log-age grid up to age(z); nodes older than
+    # the universe collapse onto age(z), where the history ends.
+    from tengri.cosmology import age_at_z
+
+    expected_t_gyr = np.minimum(
+        10.0 ** np.asarray(model.log_age_grid) / 1e9, float(age_at_z(model._get_redshift(params)))
     )
+    np.testing.assert_allclose(np.asarray(native["t_gyr"]), expected_t_gyr, rtol=1e-12)
 
     # The native values must be the model's own, not a round-trip through the
-    # lossy linear grid -- that is the entire point of the parameter.
-    internal = model._compute_sfr_mean_and_full(model._get_internal_params(params))[1]
+    # lossy linear grid -- that is the entire point of the parameter. The
+    # published history carries ONE uniform factor (the formed-mass rescale,
+    # #2640), so on every node inside the support native / internal is a single
+    # constant; a resampled history would not be proportional node by node.
+    internal = np.asarray(model._compute_sfr_mean_and_full(model._get_internal_params(params))[1])
+    native_sfr = np.asarray(native["sfr_full"])
+    inside = np.asarray(native["t_gyr"]) < float(expected_t_gyr.max()) * (1.0 - 1e-6)
+    assert inside.sum() >= 2
+    ratio = native_sfr[inside] / internal[inside]
+    assert ratio[0] > 0.0
     np.testing.assert_allclose(
-        np.asarray(native["sfr_full"]),
-        np.asarray(internal),
+        ratio,
+        ratio[0],
         rtol=1e-12,
-        err_msg="grid='native' must return the unresampled internal SFH",
+        err_msg="grid='native' must return the unresampled internal SFH times one factor",
     )
 
     # The sampling asymmetry that motivated the parameter.

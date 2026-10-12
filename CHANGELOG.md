@@ -3855,6 +3855,15 @@
   (`dust_attenuation`, `dust_emission`), but `agn`'s own validator took
   `'none'` only. `'off'` now normalizes onto `'none'` before the validator
   runs, so the two spellings parse and predict identically (#2214).
+- `sfh2exp` placed burst mass before the formation epoch when `burst_age >= age` (0.129 of the total at (500, 100, 0.2, 300, 400) Myr); the burst is bounded to `[0, min(burst_age, age)]` with `f_burst` exact, and `delayed_bq` accepts `r_sfr = 0` (full quench) (#2623).
+- An SFH with all its support younger than the youngest SSP template formed 1e-39 of its declared mass and no flux; the `[0, age0]` sliver is now integrated from the SFH itself on the dense integrand and assigned to the youngest template (declared mass formed) (#2635).
+- The published `sfr_history` of every GP-field realization integrates to the declared mass (mean 1.000000, standard deviation 1.6e-16 over 50 draws; was 0.897 and 0.71) (part of #2622, through #2640).
+
+### Changed
+
+- The published `sfr_history`, `predict_sfh` (native and linear grids) and the SFR averages now carry the formed mass and end at `age(z)` (a node sits exactly there; the area beyond it is 0, was 0.50 to 0.97 of the formed mass for `dpl` with onset beyond `age(z)`): the plain integral equals `10**log_mstar_formed` on the native grid and to 5e-4 on the 1000-node linear grid for smooth families (`dpl`, `delayed`, `continuity`; a bursty field draw on that grid is sampling-limited, 3e-2 at z = 6 for n = 1000, 2e-3 for n = 5000). The young-sliver integral moves the stellar continuum by at most 1.5e-6 and line fluxes by at most 1.9e-5 (re-pinned in the captured-literal tests); stellar mass is unchanged (#2640).
+- `sfh={'type': 'table'}` is zero outside its table instead of edge-clamped (a falling table normalized to 1 Msun formed 8.16 Msun at z = 0.5, now 0.9993 = its own integral); optional `sfh_table_age_gyr` (zero the table beyond that lookback, keeping its recent part) and `sfh_table_log_total_mass` rescale (#2621).
+- A zero SFH now raises a `ZeroSFHWarning` naming the cause; the default `delayed_bq` `age_bq_gyr` prior is bounded to 0.5 Gyr so quench-before-formation is not drawn (explicit priors unchanged) (#2644).
 
 ## [0.1.0] - 2026-05-22
 
