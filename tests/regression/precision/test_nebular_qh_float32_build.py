@@ -344,7 +344,7 @@ import tengri  # noqa: F401
 from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5")
+ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5", top_z="raw")
 res = {"x64": np.asarray(bool(jax.config.jax_enable_x64))}
 wave = np.asarray(ssp.ssp_wave)
 flux = np.asarray(ssp.ssp_flux)
