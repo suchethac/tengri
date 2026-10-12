@@ -44,11 +44,17 @@ def _run_guard(repo: Path) -> subprocess.CompletedProcess:
     )
 
 
+# Joined at run time so this file does not itself contain a home path the guard
+# would flag when it scans the tracked tree.
+_USERS_ROOT = "/" + "Users"
+_HOME_ROOT = "/" + "home"
+
+
 @pytest.mark.parametrize(
     "target",
     [
-        "/Users/alice/Projects/tengri/data/real.h5",  # target need not exist
-        "/home/bob/scratch/model.npz",
+        f"{_USERS_ROOT}/alice/Projects/tengri/data/real.h5",  # target need not exist
+        f"{_HOME_ROOT}/bob/scratch/model.npz",
     ],
 )
 def test_symlink_to_absolute_home_path_fails_the_guard(tmp_path, target):

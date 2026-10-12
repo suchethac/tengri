@@ -52,6 +52,7 @@ can reach that.
 Conventions
 -----------
 - Only tracked files are examined; untracked scratch is not the repo's problem.
+- A symlink's target string is scanned as text, without following the link into its content.
 - The user segment must begin with an alphanumeric. ``/Users/.../examples/`` in
   ``docs/conf.py`` is an ellipsis in prose, not a path, and no real account name
   begins with a dot.
