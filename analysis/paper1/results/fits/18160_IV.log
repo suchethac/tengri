@@ -1,0 +1,33 @@
+2026-10-12 19:58:16,315 - __main__ - INFO - Applied 5.0% systematic error floor in quadrature. Mean floor contribution: 9.120e-30 erg/s/cm2/Hz
+2026-10-12 19:58:16,511 - tengri.parameters.parameters - INFO - Nebular CLOUDY grid resolved to /Users/suchethacooray/Projects/tengri/data/cloudy_grid_prsc.h5
+2026-10-12 19:58:16,518 - tengri.parameters.parameters - INFO - Nebular CLOUDY grid resolved to /Users/suchethacooray/Projects/tengri/data/cloudy_grid_prsc.h5
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/src/tengri/forward/sed_model.py:4439: CloudyGridIonizingSpectrumWarning: CloudyGridBackend: Q_H is computed from your DSPS SSPs (correct for stellar mass accounting), but the ionizing spectral shape used to compute the CLOUDY grid was BPASS v2.1 binary stars. If your SSPs have a significantly harder/softer ionizing SED than BPASS (e.g., single-star models, stripped-star prescriptions, very young/old populations), predicted line ratios will be biased. Use CueBackend if ionizing SED shape variation matters for your science. To suppress: pass ionizing_source_warning='suppress'.
+  self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+2026-10-12 19:58:18,836 - __main__ - INFO - Galaxy 18160 (z=1.095): 15 detected bands
+2026-10-12 19:58:18,837 - __main__ - INFO - Config IV: 11 free parameters
+2026-10-12 19:58:18,837 - __main__ - INFO - Attempt 1/2: target_accept 0.85, warmup 150, diagonal mass
+2026-10-12 19:58:43,106 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 10 parameters, 150 warmup, 300 samples, target_accept=0.85
+2026-10-12 19:59:06,499 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (23.4s). Step size: 0.0589. Divergent in the final warmup window: 0%
+2026-10-12 20:01:34,782 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 171.6s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.6, at cap on 0% of iterations (max_num_doublings=10)
+2026-10-12 20:01:34,870 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
+2026-10-12 20:01:34,870 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-10-12 20:01:35,407 - tengri.inference.mass_profile - INFO - reinsertion chunk size derived: 502 draws (1.99 MB/draw, target=1.0 GB), ceiling 64
+2026-10-12 20:01:35,415 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: 1200 draws in 19 chunks of 64 (peak scratch is set by the chunk width, not the draw count)
+2026-10-12 20:01:37,004 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0008, ess_min=45
+2026-10-12 20:01:43,146 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/18160_IV.npz
+2026-10-12 20:01:43,147 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/18160_IV.json
+2026-10-12 20:01:43,147 - __main__ - INFO - Saved the best attempt so far (attempt 1 of 1, divergences=0) before retuning
+2026-10-12 20:01:43,147 - __main__ - INFO - Attempt 2/2: target_accept 0.95, warmup 150, diagonal mass
+2026-10-12 20:01:43,459 - tengri.inference.backends.mcmc.nuts - INFO - NUTS: 10 parameters, 150 warmup, 300 samples, target_accept=0.95
+2026-10-12 20:02:09,654 - tengri.inference.backends.mcmc.nuts - INFO -   Warmup complete (26.2s). Step size: 0.0401. Divergent in the final warmup window: 0%
+2026-10-12 20:04:16,765 - tengri.inference.backends.mcmc.nuts - INFO -   NUTS complete in 153.3s. Divergences: 0/1200 (0.0%). Tree depth: mean 6.7, at cap on 0% of iterations (max_num_doublings=10)
+2026-10-12 20:04:16,766 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: waiting for lock /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/.reinsert.lock
+2026-10-12 20:04:16,766 - tengri.inference.mass_profile - INFO - profile_mass reinsertion: lock acquired
+2026-10-12 20:04:17,073 - __main__ - WARNING - ✗ Fit failed adoption bar: divergences=0, rhat_max=1.0232, ess_min=49
+2026-10-12 20:04:22,081 - __main__ - INFO - Saved results to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/18160_IV.npz
+2026-10-12 20:04:22,081 - __main__ - INFO - Saved diagnostics to /Users/suchethacooray/Projects/tengri/.claude/worktrees/agent-a1c53bd56004edafb/analysis/paper1/results/fits/18160_IV.json
+2026-10-12 20:04:22,082 - __main__ - WARNING - No attempt cleared the adoption bar for galaxy 18160 config IV; keeping attempt 1 of 2 (divergences=0, rhat_max=1.0008) with adoption_pass=False
+2026-10-12 20:04:22,082 - __main__ - INFO - ✓ Fit complete for galaxy 18160 config IV
+  MAP initialization (1000 steps)...
+  MAP init done (loss=17.09)
+  MAP initialization: reusing cached MAP point

@@ -3,6 +3,15 @@
   "config": "III",
   "z": 1.097,
   "n_free": 6,
+  "priors": {
+    "dust_tau_bc": "Uniform(0.0, 3.0)",
+    "dust_tau_diff": "Uniform(0.5, 3.0)",
+    "met_logzsol": "Uniform(-2.4797116527913627, 0.48028834720863767)",
+    "sfh_delayed_age_gyr": "Uniform(1.0, 5.47804500525904)",
+    "sfh_delayed_log_total_mass": "Uniform(8.0, 12.5)",
+    "sfh_delayed_tau_gyr": "Uniform(0.1, 20.0)"
+  },
+  "code_revision": "7b2a7fbdf9fb935695a84d02898a4bbeee013114",
   "n_bands": 15,
   "filter_names": [
     "ctio_u",
@@ -25,49 +34,53 @@
   "n_samples": 300,
   "n_chains": 4,
   "dense_mass_matrix": false,
+  "profile_mass_requested": "auto",
   "profile_mass": true,
+  "profile_mass_reason": "auto-enabled: every guard passed (linearity 1.172e-13 < 1e-02)",
   "target_accept_rate": 0.85,
+  "seed": 42,
+  "prng_key_seed": 43,
   "max_tree_depth": null,
   "divergences": 0,
   "ebfmi_per_chain": [
-    0.8910459384451208,
-    1.0731237996550949,
-    1.135645800412364,
-    0.9758652543802621
+    0.9513632439827842,
+    1.166583100668353,
+    1.0765070087314987,
+    1.0607327490035143
   ],
-  "ebfmi_min": 0.8910459384451208,
-  "step_size": 0.10738317540552526,
+  "ebfmi_min": 0.9513632439827842,
+  "step_size": 0.13112018356645672,
   "warmup_divergence_frac": 0.0,
-  "tree_depth_mean": 5.385833333333333,
+  "tree_depth_mean": 5.059166666666667,
   "frac_max_depth": 0.0,
-  "rhat_max": 1.0020771029304336,
+  "rhat_max": 1.007744116542068,
   "rhat_dict": {
-    "dust_tau_bc": 1.0004506833051148,
-    "dust_tau_diff": 0.9996845594482664,
-    "met_logzsol": 0.9997452441594766,
-    "sfh_delayed_age_gyr": 1.0020771029304336,
-    "sfh_delayed_log_total_mass": 1.0004075758253808,
-    "sfh_delayed_tau_gyr": 1.0014571647232962
+    "dust_tau_bc": 0.9995179132465699,
+    "dust_tau_diff": 0.9995040107825903,
+    "met_logzsol": 1.007744116542068,
+    "sfh_delayed_age_gyr": 1.0070637033219247,
+    "sfh_delayed_tau_gyr": 1.0014311263681086,
+    "sfh_delayed_log_total_mass": 1.004088484247351
   },
-  "ess_min": 214.36474082959163,
+  "ess_min": 256.2796483187047,
   "ess_dict": {
-    "dust_tau_bc": 380.7358505031494,
-    "dust_tau_diff": 455.5797089476933,
-    "met_logzsol": 448.0818910381793,
-    "sfh_delayed_age_gyr": 214.36474082959163,
-    "sfh_delayed_log_total_mass": 565.5557601813462,
-    "sfh_delayed_tau_gyr": 217.2589294527158
+    "dust_tau_bc": 380.82926848481736,
+    "dust_tau_diff": 466.9272242380998,
+    "met_logzsol": 412.59241445493564,
+    "sfh_delayed_age_gyr": 256.2796483187047,
+    "sfh_delayed_tau_gyr": 272.76719047193956,
+    "sfh_delayed_log_total_mass": 626.1699487844102
   },
-  "wall_time_s": 3006.0283427889226,
+  "wall_time_s": 110.94263499998488,
   "load_at_start": {
-    "load_avg_1m": 35.15966796875,
-    "n_concurrent_fits": 6,
-    "n_cpus": 24
+    "load_avg_1m": 17.18701171875,
+    "n_concurrent_fits": null,
+    "n_cpus": 14
   },
   "load_at_end": {
-    "load_avg_1m": 47.02783203125,
-    "n_concurrent_fits": 6,
-    "n_cpus": 24
+    "load_avg_1m": 18.802734375,
+    "n_concurrent_fits": null,
+    "n_cpus": 14
   },
   "systematic_floor_frac": 0.05,
   "systematic_floor_mean_erg": 3.842233642730746e-30,
@@ -80,6 +93,15 @@
       "config": "III",
       "z": 1.097,
       "n_free": 6,
+      "priors": {
+        "dust_tau_bc": "Uniform(0.0, 3.0)",
+        "dust_tau_diff": "Uniform(0.5, 3.0)",
+        "met_logzsol": "Uniform(-2.4797116527913627, 0.48028834720863767)",
+        "sfh_delayed_age_gyr": "Uniform(1.0, 5.47804500525904)",
+        "sfh_delayed_log_total_mass": "Uniform(8.0, 12.5)",
+        "sfh_delayed_tau_gyr": "Uniform(0.1, 20.0)"
+      },
+      "code_revision": "7b2a7fbdf9fb935695a84d02898a4bbeee013114",
       "n_bands": 15,
       "filter_names": [
         "ctio_u",
@@ -102,49 +124,53 @@
       "n_samples": 300,
       "n_chains": 4,
       "dense_mass_matrix": false,
+      "profile_mass_requested": "auto",
       "profile_mass": true,
+      "profile_mass_reason": "auto-enabled: every guard passed (linearity 1.172e-13 < 1e-02)",
       "target_accept_rate": 0.85,
+      "seed": 42,
+      "prng_key_seed": 43,
       "max_tree_depth": null,
       "divergences": 0,
       "ebfmi_per_chain": [
-        0.8910459384451208,
-        1.0731237996550949,
-        1.135645800412364,
-        0.9758652543802621
+        0.9513632439827842,
+        1.166583100668353,
+        1.0765070087314987,
+        1.0607327490035143
       ],
-      "ebfmi_min": 0.8910459384451208,
-      "step_size": 0.10738317540552526,
+      "ebfmi_min": 0.9513632439827842,
+      "step_size": 0.13112018356645672,
       "warmup_divergence_frac": 0.0,
-      "tree_depth_mean": 5.385833333333333,
+      "tree_depth_mean": 5.059166666666667,
       "frac_max_depth": 0.0,
-      "rhat_max": 1.0020771029304336,
+      "rhat_max": 1.007744116542068,
       "rhat_dict": {
-        "dust_tau_bc": 1.0004506833051148,
-        "dust_tau_diff": 0.9996845594482664,
-        "met_logzsol": 0.9997452441594766,
-        "sfh_delayed_age_gyr": 1.0020771029304336,
-        "sfh_delayed_log_total_mass": 1.0004075758253808,
-        "sfh_delayed_tau_gyr": 1.0014571647232962
+        "dust_tau_bc": 0.9995179132465699,
+        "dust_tau_diff": 0.9995040107825903,
+        "met_logzsol": 1.007744116542068,
+        "sfh_delayed_age_gyr": 1.0070637033219247,
+        "sfh_delayed_tau_gyr": 1.0014311263681086,
+        "sfh_delayed_log_total_mass": 1.004088484247351
       },
-      "ess_min": 214.36474082959163,
+      "ess_min": 256.2796483187047,
       "ess_dict": {
-        "dust_tau_bc": 380.7358505031494,
-        "dust_tau_diff": 455.5797089476933,
-        "met_logzsol": 448.0818910381793,
-        "sfh_delayed_age_gyr": 214.36474082959163,
-        "sfh_delayed_log_total_mass": 565.5557601813462,
-        "sfh_delayed_tau_gyr": 217.2589294527158
+        "dust_tau_bc": 380.82926848481736,
+        "dust_tau_diff": 466.9272242380998,
+        "met_logzsol": 412.59241445493564,
+        "sfh_delayed_age_gyr": 256.2796483187047,
+        "sfh_delayed_tau_gyr": 272.76719047193956,
+        "sfh_delayed_log_total_mass": 626.1699487844102
       },
-      "wall_time_s": 3006.0283427889226,
+      "wall_time_s": 110.94263499998488,
       "load_at_start": {
-        "load_avg_1m": 35.15966796875,
-        "n_concurrent_fits": 6,
-        "n_cpus": 24
+        "load_avg_1m": 17.18701171875,
+        "n_concurrent_fits": null,
+        "n_cpus": 14
       },
       "load_at_end": {
-        "load_avg_1m": 47.02783203125,
-        "n_concurrent_fits": 6,
-        "n_cpus": 24
+        "load_avg_1m": 18.802734375,
+        "n_concurrent_fits": null,
+        "n_cpus": 14
       },
       "systematic_floor_frac": 0.05,
       "systematic_floor_mean_erg": 3.842233642730746e-30,
