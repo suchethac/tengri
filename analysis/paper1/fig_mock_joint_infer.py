@@ -75,15 +75,11 @@ DESIGNED_TRUTH = {
     # enough to show in the mid-infrared and the X-ray pair, not so bright that
     # it buries a log M* = 10.5 host.
     "agn_log_lbol": 10.0,
-    # Two fractions of one ionizing-photon budget. Drawn independently from
-    # their priors they summed to 1.17, which clips the CIGALE k-factor to zero
-    # and left this mock with no nebular emission at all while every nebular
-    # shape parameter scored exactly 0.000 on the sensitivity sweep (#2436).
-    # A few percent LyC escape with modest dust absorption inside the HII
-    # regions is the ordinary star-forming case: k = 0.78, and nebular emission
-    # reaches 38% of the optical photometry.
+    # A few percent LyC escape with modest dust absorption of the remainder inside
+    # the HII regions is the ordinary star-forming case; nebular emission reaches
+    # about 38% of the optical photometry.
     "neb_fesc": 0.05,
-    "neb_fdust": 0.10,
+    "neb_fdust_frac": 0.105,
 }
 
 #: Per-filter 1-sigma depth [erg/s/cm2/Hz]. Rough but honest: deep-field optical
