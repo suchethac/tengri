@@ -148,6 +148,13 @@ ALLOWED_PHRASES = (
     # instead, which is also why ci_ok.py declares it once and its test derives
     # the values rather than repeating them.
     '"failure", "cancelled", "skipped"',
+    # The same upstream vocabulary in its two other literal forms: the GitHub Actions
+    # status-check function ``!cancelled()`` in workflow `if:` expressions (asserted
+    # verbatim by tests/contract/test_ci_gate_script.py), and the result string quoted
+    # in backticks in prose about a job result. Both are bytes GitHub defines; bare
+    # "cancelled" prose stays flagged.
+    "!cancelled()",
+    "`cancelled`",
     # Verbatim citation titles rendered in docs/model_reference
     "Two-metre Sky Survey",
     "modelling framework THEMIS",
