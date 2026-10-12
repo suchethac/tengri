@@ -21,8 +21,9 @@ pytestmark = pytest.mark.contract
 
 _WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github" / "workflows" / "tests.yml"
 
-# The filter as written in the workflow: `grep -qE '<pattern>'`.
-_GREP_LINE = re.compile(r"grep -qE '([^']+)'")
+# The filter as written in the workflow: `gallery_re='<pattern>'`, applied with
+# `grep -qE "$gallery_re" <<<"$files"`.
+_GREP_LINE = re.compile(r"^\s*gallery_re='([^']+)'", re.MULTILINE)
 
 # Paths whose contents can change what a gallery example does, and paths that
 # cannot. `docs/auto_examples/` is the generated OUTPUT of the gallery and is
@@ -52,7 +53,7 @@ def _pattern() -> re.Pattern[str]:
     """The gallery filter, extracted from the workflow it actually runs in."""
     text = _WORKFLOW.read_text(encoding="utf-8")
     matches = _GREP_LINE.findall(text)
-    assert matches, f"no `grep -qE '...'` filter found in {_WORKFLOW}"
+    assert matches, f"no `gallery_re='...'` filter found in {_WORKFLOW}"
     assert len(matches) == 1, f"expected exactly one filter, found {len(matches)}"
     return re.compile(matches[0])
 
