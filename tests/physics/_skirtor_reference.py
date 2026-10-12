@@ -28,6 +28,7 @@ from tests.physics._agn_publication import ln_nu_integral
 
 _C_AA = 2.99792458e18
 
+
 def _segment_integral(x0, x1, y0, y1):
     """Integral of the power law through ``(x0, y0)`` and ``(x1, y1)`` over ``[x0, x1]``."""
     s = np.log(y1 / y0) / np.log(x1 / x0)
@@ -128,7 +129,7 @@ class RawSkirtor:
         return power_law_integral(self.wave, lam, lower=lower, upper=upper)
 
     def total_power(self, params, cos_inc):
-        """Escaping disc (inside the disc support) plus dust power [library units] at ``cos_inc``."""
+        """Escaping disc (inside the disc support) plus dust power [library units]."""
         lo, hi = DISC_SUPPORT_AA
         return self.power("disk", params, cos_inc, lower=lo, upper=hi) + self.power(
             "dust", params, cos_inc
@@ -156,8 +157,10 @@ def emitted_pieces(comp, params, wave, disk_type=0):
     Returns
     -------
     dict
-        ``disc``, ``dust`` (SEDs on ``wave``), ``absorbed`` (the disc along this sightline times
-        the polar dust's absorbed fraction) and ``absorbed_power`` (its integral [erg/s]).
+        ``disc``, ``dust`` (SEDs on ``wave``), ``disc_attenuated`` (the disc after the polar
+        dust's Type-1-masked attenuation along this sightline), ``absorbed`` (the disc along
+        this sightline times the polar dust's absorbed fraction) and ``absorbed_power`` (its
+        integral [erg/s]).
     """
     from tengri.components.agn.disc_cigale import (
         adaf_disk_spectrum,
@@ -190,11 +193,12 @@ def emitted_pieces(comp, params, wave, disk_type=0):
         np.asarray(raw * retilt * support), wave
     )
     disc = raw * retilt * k
-    _, l_abs = polar_dust_extinction(
+    attenuated, l_abs = polar_dust_extinction(
         disc, w, p["cos_inc"], p["oa_skirtor"], p["polar_ebv"], law="smc"
     )
     return {
         "disc": np.asarray(disc) * p["torus_frac"],
+        "disc_attenuated": np.asarray(attenuated) * p["torus_frac"],
         "dust": np.asarray(comps.dust) * p["torus_frac"],
         "absorbed": np.asarray(l_abs) * p["torus_frac"],
         "absorbed_power": ln_nu_integral(np.asarray(l_abs), wave) * p["torus_frac"],

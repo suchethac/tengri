@@ -23,6 +23,8 @@ are Gauss-Legendre of order 48 per inclination interval.
 
 from __future__ import annotations
 
+import itertools
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -133,7 +135,7 @@ def test_sphere_integral_of_the_emitted_pieces_is_the_accretion_power(skirtor, d
     edges = np.concatenate([[0.0], nodes[1:]])
     x, w = np.polynomial.legendre.leggauss(12)
     total = 0.0
-    for a, b in zip(edges[:-1], edges[1:], strict=True):
+    for a, b in itertools.pairwise(edges):
         for xi, wi in zip(x, w, strict=True):
             mu = 0.5 * (b - a) * xi + 0.5 * (a + b)
             piece = emitted_pieces(comp, {**params, "cos_inc": mu}, _WIDE)
@@ -189,27 +191,3 @@ def test_templates_at_inclination_nodes_are_the_raw_records_times_one_scale(
     mean_total = raw_library.sphere_mean(lambda m: raw_library.total_power(point, m))
     expected = 10.0 ** params["log_lbol"] * L_SUN / mean_total
     assert abs(flat[0] / expected - 1.0) < 1e-9
-
-
-def test_published_line_of_sight_powers_at_the_nodes_are_the_raw_records(skirtor, raw_library):
-    """``log_L_agn_*_los`` at each inclination node follow the raw records exactly (1e-12).
-
-    Ratios to the face-on node, so the overall scale cancels; the disc is the power inside
-    the 8 nm to 1e6 nm support of the emitted disc.
-    """
-    comp, mid = skirtor
-    params = {**mid, **_node_params(_NODE_POINT), "polar_ebv": 0.0, "delta": 0.0}
-    nodes = np.asarray(comp.data.native_cos_inc)
-    lo, hi = DISC_SUPPORT_AA
-    got = {"disc": [], "dust": []}
-    ref = {"disc": [], "dust": []}
-    for mu in nodes:
-        pub = _published(comp, {**params, "cos_inc": float(mu)})
-        got["disc"].append(10.0 ** pub["log_L_agn_disc_los"])
-        got["dust"].append(10.0 ** pub["log_L_agn_torus_los"])
-        ref["disc"].append(raw_library.power("disk", _NODE_POINT, mu, lower=lo, upper=hi))
-        ref["dust"].append(raw_library.power("dust", _NODE_POINT, mu))
-    for key in ("disc", "dust"):
-        g, r = np.array(got[key]), np.array(ref[key])
-        err = np.max(np.abs((g / g[-1]) / (r / r[-1]) - 1.0))
-        assert err < 1e-12, f"{key}: relative flux between inclinations off by {err:.2e}"

@@ -1054,7 +1054,9 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         mu_nodes = jnp.asarray(mu_q, dtype=by_inc["disk"].dtype)
 
         def _power_at(mu):
-            rows = {k: _at_inclination(v, mu) * wave_grid**2 / _C_AA_PER_S for k, v in by_inc.items()}
+            rows = {
+                k: _at_inclination(v, mu) * wave_grid**2 / _C_AA_PER_S for k, v in by_inc.items()
+            }
             return _disc_power_native(rows["disk"], wave_grid) + native_bolometric_nu(
                 rows["dust"], wave_grid, floor=0.0
             )
