@@ -151,12 +151,12 @@ def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
 def _is_log_uniform(wave) -> bool:
     r"""Whether ``wave`` is uniform in :math:`\ln\lambda`, so one pixel scale serves.
 
-    ``True`` for a tracer: a traced grid has no values to inspect at trace time.
-    The gap is the one :func:`_require_log_uniform_grid` documents, and narrow for
-    the same reason, a spectroscopic wavelength grid is normally a fixed
-    instrument array closed over by the jitted function, not an argument traced
-    through it. Answering ``True`` keeps the single-FFT path, which is what such a
-    grid got before #1791.
+    ``False`` for a tracer: a traced grid has no values to inspect at trace time,
+    so its log-uniformity is unknown. An unknown takes the general (piecewise)
+    path, which carries a per-bin pixel scale and is correct on any grid. Answering
+    ``True`` here sent a linear traced grid down the constant-R FFT path (#2847).
+    A grid known to be log-uniform is passed concretely, closed over by the jitted
+    function.
 
     Parameters
     ----------
@@ -175,7 +175,7 @@ def _is_log_uniform(wave) -> bool:
     evaluation.
     """
     if isinstance(wave, jax.core.Tracer):
-        return True
+        return False  # unknown: take the general path (#2847)
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return True  # not a grid this helper can speak about; let the caller fail
@@ -1586,10 +1586,9 @@ _LOG_UNIFORM_RTOL = 1e-6
 def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
-    A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time. That is a real gap rather than a safe default; it is narrow
-    because a spectroscopic wavelength grid is normally a fixed instrument array
-    closed over by the jitted function, not an argument traced through it.
+    Raises when ``wave`` is a tracer: a traced grid has no values to inspect at
+    trace time, and this function has no general path to fall back on, so an
+    unverifiable grid must fail at build rather than run the single-FFT path (#2847).
 
     Parameters
     ----------
@@ -1600,7 +1599,11 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
         actually called.
     """
     if isinstance(wave, jax.core.Tracer):
-        return
+        raise ValueError(
+            f"{caller} needs a concrete wavelength grid to verify it is uniform in "
+            f"ln(lambda); got a traced grid. Close over the grid instead of passing "
+            f"it as a jit argument (#2847)."
+        )
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
