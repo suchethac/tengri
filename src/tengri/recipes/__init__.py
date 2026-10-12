@@ -266,6 +266,12 @@ def photoz() -> dict:
 
     Notes
     -----
+    The metallicity prior reaches above Z = 0.04, where a PARSEC grid's top node is
+    incomplete at young ages (no stars above ~12 Msun for log age <= 7.15). By default
+    the loader clips young super-solar populations to Z = 0.04, and building this recipe on
+    a PARSEC grid warns accordingly (``YoungTopMetallicityWarning``). Load the grid with
+    ``top_z='mist'`` to opt into a MIST [Z/H] = +0.5 node at young ages instead.
+
     Rescued from the pre-grammar ``presets.photoz()`` factory (2026-07);
     prior ranges are unchanged. Deliberately **no** ``approx=WavePrecomp()``:
     the default ztable does not cover z up to 12 and the LUT's dust
