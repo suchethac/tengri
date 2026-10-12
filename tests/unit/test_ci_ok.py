@@ -115,7 +115,7 @@ class TestUnclassifiedJob:
 class TestFullTierOwed:
     """The base branch, not the event alone, decides what was owed."""
 
-    @pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
+    @pytest.mark.parametrize("event", ["push", "merge_group", "schedule", "workflow_dispatch"])
     def test_non_pr_events_always_owe_the_full_tier(self, event):
         assert ci_ok.full_tier_owed(event, "") is True
 
@@ -292,4 +292,145 @@ class TestLabeledPullRequestSlowCrossval:
         results = _all_green() | {"slow": "skipped"}
         problems = ci_ok.decide(results, "schedule", "", labels="")
         assert problems, "schedule with skipped slow must fail"
+        assert any("slow" in p for p in problems)
+
+
+class TestCheapTierFailureDetection:
+    """A withheld shard reports `success`; a shard that ran and went red does not.
+
+    `test` is a matrix whose result is the worst of its shards, so a failed or
+    cancelled `physics` shard in a cheap-tier run reaches ci-ok as `failure` or
+    `cancelled`, while the shards the scope stood down contribute nothing red.
+    """
+
+    @pytest.mark.parametrize("scope", ["cheap", "cheap-docs", "docs", "all"])
+    @pytest.mark.parametrize("bad", [r for r in ci_ok.NOT_SUCCESS if r != "skipped"])
+    def test_a_red_test_job_fails_a_pull_request_whatever_the_scope(self, scope, bad):
+        results = _all_green() | {"test": bad}
+        problems = ci_ok.decide(results, "pull_request", "main", scope=scope)
+        assert any("`test`" in p for p in problems)
+
+    @pytest.mark.parametrize("scope", ["all", "docs"])
+    @pytest.mark.parametrize("bad", [r for r in ci_ok.NOT_SUCCESS if r != "skipped"])
+    def test_a_red_test_job_fails_the_merge_queue(self, scope, bad):
+        results = _all_green() | {"test": bad}
+        problems = ci_ok.decide(results, "merge_group", "", scope=scope)
+        assert any("`test`" in p for p in problems)
+
+    @pytest.mark.parametrize("bad", [r for r in ci_ok.NOT_SUCCESS if r != "skipped"])
+    def test_a_red_test_job_fails_a_push(self, bad):
+        results = _all_green() | {"test": bad}
+        problems = ci_ok.decide(results, "push", "", scope="cheap")
+        assert any("`test`" in p for p in problems)
+
+    def test_a_cheap_pr_with_withheld_shards_standing_down_passes(self):
+        assert ci_ok.decide(_all_green(), "pull_request", "main", scope="cheap") == []
+
+    def test_a_skipped_test_job_on_a_cheap_pr_still_fails(self):
+        results = _all_green() | {"test": "skipped"}
+        assert ci_ok.decide(results, "pull_request", "main", scope="cheap")
+
+
+class TestScopeMatchesTheEvent:
+    """The one failure the job results cannot show: shards withheld wrongly."""
+
+    @pytest.mark.parametrize("scope", ["cheap", "cheap-docs", "none", ""])
+    @pytest.mark.parametrize("event", ["merge_group", "schedule", "workflow_dispatch"])
+    def test_full_suite_events_refuse_a_narrowed_scope(self, event, scope):
+        assert ci_ok.scope_problems(event, scope)
+
+    @pytest.mark.parametrize("scope", ["docs"])
+    @pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+    def test_the_nightly_run_refuses_even_docs(self, event, scope):
+        assert ci_ok.scope_problems(event, scope)
+
+    @pytest.mark.parametrize("scope", ["all", "docs"])
+    def test_the_queue_accepts_all_and_docs(self, scope):
+        assert ci_ok.scope_problems("merge_group", scope) == []
+
+    @pytest.mark.parametrize("scope", ["all", "docs", "cheap-docs", "none", ""])
+    def test_push_must_be_cheap(self, scope):
+        assert ci_ok.scope_problems("push", scope)
+
+    def test_push_accepts_cheap(self):
+        assert ci_ok.scope_problems("push", "cheap") == []
+
+    def test_a_draft_must_be_scope_none(self):
+        assert ci_ok.scope_problems("pull_request", "cheap", draft=True)
+        assert ci_ok.scope_problems("pull_request", "none", draft=True) == []
+
+    def test_a_ready_pr_must_not_be_scope_none(self):
+        assert ci_ok.scope_problems("pull_request", "none")
+
+    @pytest.mark.parametrize("scope", ["cheap", "cheap-docs", "docs"])
+    def test_full_tests_label_owes_scope_all(self, scope):
+        assert ci_ok.scope_problems("pull_request", scope, labels="area:ci,full-tests")
+
+    def test_full_tests_label_accepts_scope_all(self):
+        assert ci_ok.scope_problems("pull_request", "all", labels="area:ci,full-tests") == []
+
+    @pytest.mark.parametrize("scope", ["cheap", "cheap-docs", "docs", "all"])
+    def test_an_unlabeled_pr_may_be_any_non_draft_scope(self, scope):
+        assert ci_ok.scope_problems("pull_request", scope, labels="area:ci") == []
+
+    def test_an_unknown_event_has_no_policy(self):
+        assert ci_ok.scope_problems("repository_dispatch", "all")
+
+    def test_decide_reports_a_wrong_scope_even_when_every_job_is_green(self):
+        problems = ci_ok.decide(_all_green(), "merge_group", "", scope="cheap")
+        assert any("scope" in p for p in problems)
+
+    def test_decide_skips_the_scope_check_when_the_gate_did_not_run(self):
+        # A stacked PR: gallery-changes is skipped, so there is no scope.
+        results = _all_green() | {"gallery-changes": "skipped", "test": "skipped"}
+        assert ci_ok.decide(results, "pull_request", "feature-branch", scope=None) == []
+
+
+class TestUnrelatedLabelEvents:
+    """slow/crossval stand down on a label event that is not their own label."""
+
+    @pytest.mark.parametrize("action", ["labeled", "unlabeled"])
+    def test_an_unrelated_label_event_does_not_owe_slow(self, action):
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(
+            results,
+            "pull_request",
+            "main",
+            labels="run-slow-tests,area:ci",
+            scope="cheap",
+            action=action,
+            event_label="area:ci",
+        )
+        assert problems == []
+
+    def test_the_slow_label_event_itself_still_owes_slow(self):
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(
+            results,
+            "pull_request",
+            "main",
+            labels="run-slow-tests",
+            scope="cheap",
+            action="labeled",
+            event_label="run-slow-tests",
+        )
+        assert any("slow" in p for p in problems)
+
+    def test_a_synchronize_event_with_the_label_still_owes_slow(self):
+        results = _all_green() | {"slow": "skipped"}
+        problems = ci_ok.decide(
+            results, "pull_request", "main", labels="run-slow-tests", action="synchronize"
+        )
+        assert any("slow" in p for p in problems)
+
+    def test_a_red_slow_job_fails_even_on_an_unrelated_label_event(self):
+        results = _all_green() | {"slow": "failure"}
+        problems = ci_ok.decide(
+            results,
+            "pull_request",
+            "main",
+            labels="run-slow-tests,area:ci",
+            action="labeled",
+            event_label="area:ci",
+        )
         assert any("slow" in p for p in problems)
