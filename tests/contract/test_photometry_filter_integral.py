@@ -124,7 +124,7 @@ def test_lnu_filter_integral_batch_matches_singles_under_padding(fiducial):
     ``pad_filters`` zero-pads every filter table shorter than the longest
     one, leaving a non-ascending wavelength row (…, 4130, 0, 0, …).
     ``_filter_integral_union`` requires ascending nodes, so the batch
-    wrapper must rewrite the pad tail (``_ascending_padded_filter_wave``)
+    wrapper must rewrite the pad tail (``_ascending_padded_filter``)
     before integrating — the exact-path ``_compute_flux_density_padded``
     already does. Without the rewrite ``jnp.interp`` sees unsorted nodes
     and the shorter bands silently return 0 — zeroing every additive
