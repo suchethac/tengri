@@ -64,3 +64,39 @@ class TestDustEmissionCombinations:
         assert 0.9 < L_int / 1e44 < 1.1, (
             f"{name}: ∫L_ν dν / L_abs = {L_int / 1e44:.3f}, expected ≈1"
         )
+
+
+class TestGradientSafeNormalizer:
+    """A normalizer with a zero integral returns zeros with exactly-zero gradients."""
+
+    def test_safe_ratio_forward_matches_plain_division(self):
+        from tengri.utils.scale import safe_ratio
+
+        num = jnp.asarray([3.0, -2.0, 0.5])
+        den = jnp.asarray([2.0, 4.0, 0.25])
+        np.testing.assert_array_equal(safe_ratio(num, den), num / den)
+
+    def test_safe_ratio_zero_denominator_is_zero_with_zero_grad(self):
+        import jax
+
+        from tengri.utils.scale import safe_ratio
+
+        assert float(safe_ratio(2.0, 0.0)) == 0.0
+        g_num, g_den = jax.grad(lambda n, d: safe_ratio(n, d), argnums=(0, 1))(2.0, 0.0)
+        # Exactly zero, which also excludes the NaN of a single-where division.
+        assert float(g_num) == 0.0
+        assert float(g_den) == 0.0
+
+    def test_modified_blackbody_zero_integral_has_finite_gradient(self):
+        """A zero-width grid has zero frequency integral; dL is exactly zero, not NaN."""
+        import jax
+
+        from tengri.components.dust.emission.analytic._closures import modified_blackbody
+
+        wl = jnp.full(4, 250.0e4)  # all nodes at one wavelength: trapezoid in nu is 0
+
+        def total(L):
+            return jnp.sum(modified_blackbody(wl, L, dust_T=25.0))
+
+        assert float(total(1.0)) == 0.0
+        assert float(jax.grad(total)(1.0)) == 0.0
