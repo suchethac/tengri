@@ -349,9 +349,7 @@ def make_batched_predict(
     """
     check_template_model(model)
     require_model_spec(model, spec)
-    if getattr(model, "_cached_component_chain", None) is None:
-        model._cached_component_chain = model._build_component_chain()
-    threaded = model._resolve_threaded_data(None, None, None)
+    threaded = model.threaded_template_inputs()
 
     def one(p, o):
         return predict_batched_observables(model, p, o, spec, threaded=threaded)
