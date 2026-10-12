@@ -25,6 +25,7 @@ Run::
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import h5py
@@ -61,6 +62,8 @@ _DISC_M = ["6.0", "7.0", "8.0", "9.0"]
 _DISC_A = ["0.998", "0"]
 _DISC_MDOT = ["0.3", "0.03"]
 _DISC_HEADER_LINES = 23  # rows to skip before the freq/wave/L_nu table
+# Header name of one disc column, e.g. ``m80_a0_mdot003_inc0`` (log10 M = 8, a = 0, mdot = 0.03).
+_DISC_HEADER_RE = re.compile(r"^m(\d+)_a(\d+)_mdot(\d+)_inc0$")
 
 
 def _load_mn12_torus():
@@ -134,12 +137,42 @@ def _load_veroncetty_feii():
     return wave_angstrom / 10.0, l_lambda / norm
 
 
+def _decode_disc_header(name):
+    """Decode a Netzer disc header name into its ``(M, a, Mdot)`` node.
+
+    The table's header encodes decimal digits after an implicit point:
+    ``m60`` is log10 M = 6, ``a0998`` is spin 0.998, ``a0`` is spin 0,
+    ``mdot03`` is 0.3 and ``mdot003`` is 0.03 (the table's note: "mdot03 =
+    mdot/mdot(Eddington) = 0.3"). Returns floats rounded to 9 decimals so they
+    compare exactly with the grid values.
+    """
+    match = _DISC_HEADER_RE.match(name)
+    if match is None:
+        raise ValueError(f"unrecognized Netzer disc header name {name!r}")
+    tm, ta, tmdot = match.groups()
+    return (
+        round(int(tm) / 10.0, 9),
+        round(int(ta) / 1000.0, 9),
+        round(int(tmdot) / 10.0 ** (len(tmdot) - 1), 9),
+    )
+
+
+def _disc_header_names(lines):
+    """Return the 16 header names of the disc table, in column order."""
+    names = [ln.strip() for ln in lines[:_DISC_HEADER_LINES] if _DISC_HEADER_RE.match(ln.strip())]
+    if len(names) != 16:
+        raise ValueError(f"expected 16 Netzer disc header names, found {len(names)}")
+    return names
+
+
 def _load_netzer_disc():
     """Load the Netzer accretion-disc course grid (16 (M, a, Mdot) models).
 
-    Mirrors the ``NetzerDisk`` (course grid) import block of upstream
-    ``database_builder/__init__.py``. The raw ``table_of_disk_models`` has 23
-    header rows, then columns ``[freq (Hz), wave (Å), L_nu_1 ... L_nu_16]``.
+    Each grid node takes the table column whose *header name* decodes to that
+    node (see :func:`_decode_disc_header`). Upstream GRAHSP instead assigns
+    columns in its own enumeration order, which is not the header order and
+    mislabels 14 of the 16 nodes (#2870). The raw ``table_of_disk_models`` has
+    23 header rows, then columns ``[freq (Hz), wave (Å), L_nu_1 ... L_nu_16]``.
     Rows are reversed (upstream ``[::-1]``) so wavelength is ascending. Each
     model's :math:`L_\\nu` becomes :math:`L_\\lambda = L_\\nu \\nu^2 / c` and is
     renormalised to 1 at 510 nm (5100 Å).
@@ -148,12 +181,18 @@ def _load_netzer_disc():
     -------
     wave_nm : ndarray, shape (n_wave,)
     lumin : ndarray, shape (16, n_wave)
-        Normalised :math:`L_\\lambda` per model.
+        Normalised :math:`L_\\lambda` per grid node, in the enumeration order of
+        ``_DISC_A``, ``_DISC_MDOT``, ``_DISC_M``.
     m, a, mdot : ndarray of str, shape (16,)
         Grid labels (log10 M_BH/Msun, spin, Eddington ratio).
+    header : ndarray of str, shape (16,)
+        Source header name of the column each row was read from.
     """
     with open(DISC_RAW) as fh:
-        body = "".join(fh.readlines()[_DISC_HEADER_LINES:][::-1])
+        lines = fh.readlines()
+    header_names = _disc_header_names(lines)
+    column_of = {_decode_disc_header(name): j for j, name in enumerate(header_names)}
+    body = "".join(lines[_DISC_HEADER_LINES:][::-1])
     import io
 
     data = np.genfromtxt(io.BytesIO(body.encode()))
@@ -164,13 +203,16 @@ def _load_netzer_disc():
     m_lab = np.empty(len(options), dtype="S8")
     a_lab = np.empty(len(options), dtype="S8")
     mdot_lab = np.empty(len(options), dtype="S8")
+    header_lab = np.empty(len(options), dtype="S32")
     for i, (mv, av, mdv) in enumerate(options):
-        l_nu = data[:, 2 + i]
+        j = column_of[(round(float(mv), 9), round(float(av), 9), round(float(mdv), 9))]
+        l_nu = data[:, 2 + j]
         l_lambda = l_nu * freq**2 / _C_ARB
         norm = np.interp(510.0, wave_nm, l_lambda)
         lumin[i] = l_lambda / norm
         m_lab[i], a_lab[i], mdot_lab[i] = mv, av, mdv
-    return wave_nm, lumin, m_lab, a_lab, mdot_lab
+        header_lab[i] = header_names[j]
+    return wave_nm, lumin, m_lab, a_lab, mdot_lab, header_lab
 
 
 def _load_feii_template():
@@ -215,7 +257,7 @@ def main():
     torus_wave_nm = _load_full_torus_wave()
     mn12_wave, mn12_avg, mn12_lo, mn12_hi, si_wave, si_lumin = _load_mn12_torus()
     vc04_wave, vc04_lumin = _load_veroncetty_feii()
-    disc_wave, disc_lumin, disc_m, disc_a, disc_mdot = _load_netzer_disc()
+    disc_wave, disc_lumin, disc_m, disc_a, disc_mdot, disc_header = _load_netzer_disc()
 
     with h5py.File(OUT, "w") as f:
         f.attrs["source"] = "JohannesBuchner/GRAHSP @ database_builder/activate/agn/"
@@ -268,11 +310,16 @@ def main():
         disc.attrs["source"] = "activatedisk.py course grid (table_of_disk_models)"
         disc.attrs["units"] = "L_lambda per (M, a, Mdot) model, normalised to 1 at 510 nm; inc=0"
         disc.attrs["model_order"] = "a in (0.998, 0); Mdot in (0.3, 0.03); M in (6,7,8,9)"
+        disc.attrs["label_source"] = (
+            "each row is the source column whose header name decodes to its (m, a, mdot); "
+            "upstream's enumeration order is not the header order (#2870)"
+        )
         disc.create_dataset("wave_nm", data=disc_wave)
         disc.create_dataset("lumin", data=disc_lumin)
         disc.create_dataset("m", data=disc_m)
         disc.create_dataset("a", data=disc_a)
         disc.create_dataset("mdot", data=disc_mdot)
+        disc.create_dataset("header_name", data=disc_header)
 
     print(f"wrote {OUT}")
     print(f"  feii: {feii_wave.size} samples, {feii_wave.min():.1f}-{feii_wave.max():.1f} nm")
