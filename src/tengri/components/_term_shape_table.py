@@ -38,9 +38,25 @@ from tengri.utils.grid_interp import interp_nd_pchip
 #: Key under which an additive emitter's namespace carries its shape-only term tables.
 TERM_SHAPE_TABLE_KEY = "term_shape_table"
 
-#: Floor under the band flux before the log: a filter the term does not reach is zero, and
-#: ``ln 0`` is undefined for the PCHIP. ``exp`` of the floor is numerically zero.
-_LN_FLOOR = 1.0e-300
+#: ``ln`` of the band-flux floor ``1e-300``. A filter the term does not reach is zero, and
+#: ``ln 0`` is undefined for the PCHIP; ``exp`` of this value is numerically zero. The floor is
+#: stored in log space because ``1e-300`` itself is exactly 0.0 in float32 and would be a silent
+#: zero if it ever entered a float32 array (#1568). ``-690.7755278982137`` is ``np.log(1e-300)``
+#: in float64 (pinned by ``tests/unit/test_term_shape_table_ln_floor.py``).
+_LN_FLOOR_LOG = -690.7755278982137
+
+
+def _ln_band(band: np.ndarray) -> np.ndarray:
+    """``ln(max(band, 1e-300))`` in float64, computed without the float32-unrepresentable floor.
+
+    Bit-identical to ``np.log(np.maximum(band, 1e-300))`` for every ``band`` (for ``band > 1e-300``
+    the log is above the floor and is returned unchanged; for ``band <= 0`` and below the floor
+    the result is ``_LN_FLOOR_LOG``). NaN propagates, as it did before.
+    """
+    positive = band > 0.0
+    ln_positive = np.log(np.where(positive, band, 1.0))
+    floored = np.where(positive, np.maximum(ln_positive, _LN_FLOOR_LOG), _LN_FLOOR_LOG)
+    return np.where(np.isnan(band), band, floored)
 
 
 def build_term_shape_table(
@@ -105,7 +121,7 @@ def build_term_shape_table(
 
     return {
         "axes": {n: jnp.asarray(ax) for n, ax in zip(names, nodes)},
-        "ln_R": jnp.asarray(np.log(np.maximum(band, _LN_FLOOR))),
+        "ln_R": jnp.asarray(_ln_band(band)),
         "lam_ref": jnp.asarray(lam_ref),
     }
 
