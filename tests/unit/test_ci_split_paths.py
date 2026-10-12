@@ -212,16 +212,23 @@ class TestBugTreeWorkflowSplit:
 
         return yaml.safe_load((self.REPO / ".github/workflows/tests.yml").read_text())
 
+    def _gate_table(self) -> list[dict]:
+        """The `test` shard table, which lives in the `gallery-changes` gate script."""
+        import json
+
+        steps = self._workflow()["jobs"]["gallery-changes"]["steps"]
+        script = next(s for s in steps if s.get("id") == "decide")["run"]
+        body = script.split("<<'JSON'\n", 1)[1].split("\nJSON\n", 1)[0]
+        return json.loads(body)
+
     def test_every_matrix_has_three_bug_shards(self) -> None:
         wf = self._workflow()
-        for job in ("test", "coverage"):
-            include = wf["jobs"][job]["strategy"]["matrix"]["include"]
-            halves = {e["shard"]: e["bug_half"] for e in include if e.get("bug_half")}
-            assert halves == {
-                "regression-b1": "1",
-                "regression-b2": "2",
-                "regression-b3": "3",
-            }, job
+        expected = {"regression-b1": "1", "regression-b2": "2", "regression-b3": "3"}
+        include = wf["jobs"]["coverage"]["strategy"]["matrix"]["include"]
+        halves = {e["shard"]: e["bug_half"] for e in include if e.get("bug_half")}
+        assert halves == expected, "coverage"
+        halves = {e["shard"]: e["bug_half"] for e in self._gate_table() if e.get("bug_half")}
+        assert halves == expected, "test (gate table)"
 
     def test_split_command_uses_three_parts(self) -> None:
         text = (self.REPO / ".github/workflows/tests.yml").read_text()
@@ -231,8 +238,10 @@ class TestBugTreeWorkflowSplit:
 
     def test_b3_is_wired_like_b2(self) -> None:
         text = (self.REPO / ".github/workflows/tests.yml").read_text()
-        assert '"regression-b3":' in text
-        assert "matrix.shard == 'regression-b3'" in text
+        assert "- shard: regression-b3" in text  # the coverage job's matrix
+        shards = {e["shard"]: e for e in self._gate_table()}
+        assert shards["regression-b3"]["timeout"] == shards["regression-b2"]["timeout"]
+        assert shards["regression-b3"]["cache_gb"] == "1.1"
 
     def test_three_parts_partition_the_real_bug_tree(self) -> None:
         parts = []
