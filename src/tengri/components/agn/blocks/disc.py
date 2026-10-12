@@ -177,10 +177,11 @@ def adaf_disc_block(
     (see :func:`tengri.components.agn.adaf.adaf_spectrum`).
 
     ``agn_log_lbol`` is the canonical luminosity; the accretion rate is derived
-    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired: consistent with
-    the disc convention of #846). Pure ADAF: no bundled truncated thin disc (the
-    ad-hoc split of the old model is removed; use a separate disc block or the
-    Nemmen template block for the outer-disc red bump).
+    from it through the radiated power of Mahadevan Sect. 5.2,
+    Q_ie + delta Q+ (Eq. 49 is its high-rate limit; ``agn_log_ledd`` is
+    retired: consistent with the disc convention of #846). Pure ADAF: no bundled
+    truncated thin disc (the ad-hoc split of the old model is removed; use a separate
+    disc block or the Nemmen template block for the outer-disc red bump).
 
     .. warning::
 
