@@ -114,7 +114,7 @@ def balmer_continuum(
     ----------
     .. [1] Grandi, S. A. 1982, "The 3000 Angstrom bump in quasars", ApJ, 255, 25.
            https://doi.org/10.1086/159799
-    .. [2] Buchner, J., Starck, J.-L., Salvato, M., et al. 2024,
+    .. [2] Buchner, J., Starck, H., Salvato, M., et al. 2024,
            "Genuine Retrieval of the AGN Host Stellar Population (GRAHSP)",
            arXiv:2405.19297.
     """
