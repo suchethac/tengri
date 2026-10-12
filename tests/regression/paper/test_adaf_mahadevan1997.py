@@ -2,9 +2,9 @@
 """Regression tests for ADAF model against Mahadevan 1997.
 
 Reference:
-    Mahadevan et al. 1997, ApJ 486, 268 — Optically-Thin, Advection-Dominated
-    Accretion around Supermassive Black Holes.
-    https://doi.org/10.1086/304535
+    Mahadevan 1997, "Scaling Laws for Advection-dominated Flows: Applications to
+    Low-Luminosity Galactic Nuclei," ApJ, 477, 585 (arXiv:astro-ph/9609107).
+    https://doi.org/10.1086/303727
 """
 
 import chex
