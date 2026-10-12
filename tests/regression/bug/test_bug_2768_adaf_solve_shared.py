@@ -22,7 +22,10 @@ from tengri.components.agn.blocks.runner import compose_l_nu
 
 pytestmark = pytest.mark.regression_bug
 
-_SOLVES_PER_STATE = 4  # three in the mdot fixed point, one for the spectrum
+# One state per composition: one ``mdot`` solve (which carries its own T_e solves inside its
+# custom_root) and one ``adaf_scalar_state`` T_e solve. The mdot inversion was a three-step
+# fixed point of ``_adaf_electron_temperature`` calls (4 per state, 1 now).
+_SOLVES_PER_STATE = 1
 _EQUATION_RATIO = 1.3  # composition / one adaf_spectrum; measured 0.98 here, 2.60 on main
 _GRID = np.geomspace(1.0e3, 1.0e8, 1000)
 
@@ -59,16 +62,23 @@ def _equations(jaxpr) -> int:
 
 @pytest.mark.parametrize("blr_block", ["none", "analytic"])
 def test_adaf_solved_once(monkeypatch, blr_block):
-    calls = []
+    calls, mdot_calls = [], []
     original = adaf_module._adaf_electron_temperature
+    original_mdot = adaf_module._adaf_mdot_from_lbol
 
     def counting(*args, **kwargs):
         calls.append(1)
         return original(*args, **kwargs)
 
+    def counting_mdot(*args, **kwargs):
+        mdot_calls.append(1)
+        return original_mdot(*args, **kwargs)
+
     monkeypatch.setattr(adaf_module, "_adaf_electron_temperature", counting)
+    monkeypatch.setattr(adaf_module, "_adaf_mdot_from_lbol", counting_mdot)
     jax.make_jaxpr(lambda x: _compose(x, blr_block))(jnp.array([11.5, 8.0]))
     assert len(calls) == _SOLVES_PER_STATE, f"{len(calls)} T_e solves traced"
+    assert len(mdot_calls) == _SOLVES_PER_STATE, f"{len(mdot_calls)} mdot solves traced"
 
 
 def test_gradient_graph_holds_one_adaf_not_one_per_disc_evaluation():
