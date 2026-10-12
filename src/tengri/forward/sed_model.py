@@ -1619,6 +1619,40 @@ def _validate_firrc_requires_dust(spec) -> None:
         )
 
 
+def _free_lsf_param_missing(name: str) -> str:
+    """Error text for a declared-free LSF parameter absent from ``params`` (#2847)."""
+    return (
+        f"{name!r} is a free parameter of this model but is missing from params. "
+        f"Pass it explicitly; there is no neutral default for a free value."
+    )
+
+
+def redshift_is_runtime(redshift_dist, catalog_z_range) -> bool:
+    """Whether redshift is a runtime input (per-galaxy or sampled), not a build constant.
+
+    A ``Fixed`` redshift is still runtime in catalog mode, where each galaxy's z
+    arrives through ``params`` and the placeholder spec value must not be used.
+    An unknown (no distribution) is treated as runtime, so the general path runs.
+
+    Parameters
+    ----------
+    redshift_dist : Distribution or None
+        The spec's ``redshift`` distribution.
+    catalog_z_range : tuple of float or None
+        ``(z_lo, z_hi)`` when the model is a catalog model, else None.
+
+    Returns
+    -------
+    bool
+        True when redshift must be treated as runtime.
+    """
+    if catalog_z_range is not None:
+        return True
+    if redshift_dist is None:
+        return True
+    return not redshift_dist.is_fixed
+
+
 def _support_bounds(spec, name: str) -> tuple[float, float] | None:
     """``(lo, hi)`` support of ``name`` in ``spec`` (Fixed value or prior bounds)."""
     dist = getattr(spec, "_distributions", {}).get(name)
@@ -5326,7 +5360,13 @@ class SEDModel:
                 )
             else:
                 redshift_dist = spec.get_distribution("redshift")
-                z_for_check = float(redshift_dist.bounds[0]) if redshift_dist.is_fixed else None
+                # A runtime z (free, or Fixed placeholder in catalog mode) has no value
+                # to check the LSF against, so the warning is skipped, not guessed (#2847).
+                z_for_check = (
+                    None
+                    if redshift_is_runtime(redshift_dist, self._catalog_z_range)
+                    else float(redshift_dist.bounds[0])
+                )
                 # #2526: lsf_scale multiplies sigma_inst, so the deficit
                 # (sigma_inst < sigma_lib) is worst at lsf_scale's LOWER
                 # bound. get_distribution("lsf_scale").bounds[0] is that
@@ -5714,9 +5754,12 @@ class SEDModel:
         Returns a *traceable* value when ``sigma_v_kms`` is in the
         params dict (typical for spec fits with sigma_v as a free
         param) or the JAX/Python scalar from the spec's fixed
-        distribution otherwise. Falls back to 0.0 when the parameter
-        is absent. ``apply_lsf`` clamps via ``jnp.maximum`` so traced
-        values flow through without breaking JIT.
+        distribution otherwise. Returns 0.0 only when the parameter is
+        not declared at all. A declared free parameter missing from
+        ``params`` raises ``ValueError``: 0.0 is the no-broadening
+        answer, and a free sigma_v must never silently take it (#2847).
+        ``apply_lsf`` clamps via ``jnp.maximum`` so traced values flow
+        through without breaking JIT.
         """
         if "sigma_v_kms" in params:
             return params["sigma_v_kms"]
@@ -5726,7 +5769,7 @@ class SEDModel:
             return 0.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 0.0
+        raise ValueError(_free_lsf_param_missing("sigma_v_kms"))
 
     def _get_lsf_scale(self, params):
         """Get the instrument-LSF scale ``lsf_scale`` from params (#2526).
@@ -5744,7 +5787,7 @@ class SEDModel:
             return 1.0
         if dist.is_fixed:
             return float(dist.bounds[0])
-        return 1.0
+        raise ValueError(_free_lsf_param_missing("lsf_scale"))
 
     def _observation_predict_kwargs(self, params):
         """LSF/kinematics kwargs for ``Observation.predict``'s spectroscopy path.
@@ -12403,18 +12446,18 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
-        redshift_spec = None
+        redshift_spec = None  # photometry z-table spec
+        spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
 
         if wave_precomp_enabled or spec_precomp_enabled:
             # Determine redshift spec (shared by both paths)
             try:
                 redshift_dist = self.spec.get_distribution("redshift")
-                is_fixed = redshift_dist.is_fixed
-                z_bounds = redshift_dist.bounds
             except (AttributeError, KeyError):
-                is_fixed = True
-                z_bounds = (0.0,)
+                redshift_dist = None  # unknown redshift: take the runtime (general) path
+            z_bounds = redshift_dist.bounds if redshift_dist is not None else None
+            runtime_z = redshift_is_runtime(redshift_dist, self._catalog_z_range)
 
             if wave_precomp_enabled:
                 # Build filter tuple
@@ -12427,7 +12470,7 @@ class SEDModel:
                 )
 
                 # Redshift spec for photometry
-                if is_fixed and self._catalog_z_range is None:
+                if not runtime_z:
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     cfg = self._approx_config or WavePrecomp()
@@ -12449,14 +12492,19 @@ class SEDModel:
 
             if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs
-                if not is_fixed:
+                # Built into its own variable: a catalog Fixed placeholder is runtime,
+                # and the photometry spec above must survive (#2858).
+                if runtime_z:
                     cfg = self._approx_config or SpectrumPrecomp()
-                    if z_bounds is None or len(z_bounds) < 2:
+                    if self._catalog_z_range is not None:
+                        z_lo, z_hi = self._catalog_z_range
+                        pad = 0.0
+                    elif z_bounds is None or len(z_bounds) < 2:
                         z_lo, z_hi, pad = 0.001, 3.0, 0.0
                     else:
                         z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
                         pad = 0.01 * (z_hi - z_lo)
-                    redshift_spec = {
+                    spec_redshift_spec = {
                         "mode": "free",
                         "z_min": (
                             cfg.z_min
@@ -12469,7 +12517,7 @@ class SEDModel:
                         "n_z": getattr(cfg, "n_z", 100),
                     }
                 else:
-                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                    spec_redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
 
         # MAIN PRECOMPUTATION LOOP: every component, one pass
         for idx, comp in enumerate(chain):
@@ -12574,7 +12622,7 @@ class SEDModel:
                         wave_grid=None,
                         approx=self._approx,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:
@@ -12589,7 +12637,7 @@ class SEDModel:
                     spec_igm = comp.precompute_spec_factors(
                         wave_rest=self.wavelengths,
                         spec_wave_obs=spec_wave_obs,
-                        redshift_spec=redshift_spec,
+                        redshift_spec=spec_redshift_spec,
                     )
                     if state is not None:
                         state = replace(
