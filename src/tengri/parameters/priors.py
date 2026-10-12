@@ -431,7 +431,7 @@ class Uniform(Distribution):
         units: str = "",
         default: float | None = None,
     ):
-        if lo >= hi:
+        if not (lo < hi):
             raise ValueError(f"Uniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
@@ -635,9 +635,11 @@ class Gaussian(Distribution):
         units: str = "",
         default: float | None = None,
     ):
-        if sigma <= 0:
+        if not math.isfinite(mu):
+            raise ValueError(f"Gaussian requires a finite mu, got {mu}")
+        if not (sigma > 0):
             raise ValueError(f"Gaussian requires sigma > 0, got {sigma}")
-        if lo >= hi:
+        if not (lo < hi):
             raise ValueError(f"Gaussian requires lo < hi, got lo={lo}, hi={hi}")
         self._mu = float(mu)
         self._sigma = float(sigma)
@@ -903,9 +905,9 @@ class LogUniform(Distribution):
         units: str = "",
         default: float | None = None,
     ):
-        if lo <= 0:
+        if not (lo > 0):
             raise ValueError(f"LogUniform requires lo > 0, got {lo}")
-        if lo >= hi:
+        if not (lo < hi):
             raise ValueError(f"LogUniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
@@ -1120,7 +1122,9 @@ class LogNormal(Distribution):
         units: str = "",
         default: float | None = None,
     ):
-        if sigma <= 0:
+        if not math.isfinite(mu):
+            raise ValueError(f"LogNormal requires a finite mu, got {mu}")
+        if not (sigma > 0):
             raise ValueError(f"LogNormal requires sigma > 0, got {sigma}")
         self._mu = float(mu)
         self._sigma = float(sigma)
@@ -1599,6 +1603,14 @@ class StudentT(Distribution):
         units: str = "",
         default: float | None = None,
     ):
+        if not math.isfinite(mu):
+            raise ValueError(f"StudentT requires a finite mu, got {mu}")
+        if not (sigma > 0):
+            raise ValueError(f"StudentT requires sigma > 0, got {sigma}")
+        if not (df > 0):
+            raise ValueError(f"StudentT requires df > 0, got {df}")
+        if not (lo < hi):
+            raise ValueError(f"StudentT requires lo < hi, got lo={lo}, hi={hi}")
         self._mu = float(mu)
         self._sigma = float(sigma)
         self._df = float(df)
@@ -1877,9 +1889,11 @@ class Laplace(Distribution):
         units: str = "",
         default: float | None = None,
     ):
-        if b <= 0:
+        if not math.isfinite(mu):
+            raise ValueError(f"Laplace requires a finite mu, got {mu}")
+        if not (b > 0):
             raise ValueError(f"Laplace requires b > 0, got {b}")
-        if lo >= hi:
+        if not (lo < hi):
             raise ValueError(f"Laplace requires lo < hi, got lo={lo}, hi={hi}")
         self._mu = float(mu)
         self._b = float(b)
@@ -2089,6 +2103,8 @@ class Fixed(Distribution):
         elif isinstance(value, str):
             self._value = value
         else:
+            if not math.isfinite(float(value)):
+                raise ValueError(f"Fixed requires a finite value, got {value}")
             self._value = float(value)
         self.description = description
         self.units = units
