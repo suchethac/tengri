@@ -92,6 +92,20 @@ Full detail: `docs/dev/notebook_orchestration_oom.md`.
 - **Dust emission JIT scaling:** DL07-family dust-emission models (DL07, DL14, and tabulated variants) build very large JIT graphs when `dust_umin` is left free in the sampler. The compiled graph can exceed 2 GB, causing slowdowns (~150× slower) in nested sampling backends. Workarounds: (1) fix `dust_umin` rather than fitting it, or (2) use fixed-redshift models where the precomputation (`approx=WavePrecomp()`) amortizes the graph across many calls. Technical details are tracked in the repository's engineering notes ([docs/dev/known_bugs.md on GitHub](https://github.com/suchethac/tengri/blob/main/docs/dev/known_bugs.md)).
 - **Nebular backends:** `Cue` and `CloudyGrid` require bare-stellar SSP grids; `BakedIn` cannot vary `neb_logU` / `neb_fesc`. Four of six `tengri.recipes` need bare-stellar grids.
 - **Metallicity** is `log10(Z)` absolute on the SSP grid; user-facing `neb_logZ_gas` is `log10(Z/Z_sun)`.
+- **Super-solar metallicity above Z = 0.04 in the PARSEC grids is held at Z = 0.04 for young stars.**
+  The Z = 0.06 node of every PARSEC-based grid (`fsps_prsc_*`, `ssp_prsc_*`) has no stars above
+  about 12 Msun for log10(age/yr) <= 7.15, because the PARSEC massive-star tracks stop at Z = 0.04
+  (Chen et al. 2015). Used as shipped, it is about 2500 times low in ionizing photons and about 16
+  times low at 1500 A at log age 5.5-6.5. The loader therefore refuses that part of the node: for
+  log age <= 7.15 a metallicity above Z = 0.04 gives the Z = 0.04 population, and the Z = 0.06
+  node returns linearly in log age over the next 0.10 dex (full weight from log age 7.25), so there
+  is no step in age. Older populations are unchanged. A model whose `met_logzsol` prior reaches
+  above Z = 0.04 (`log10(Z/Z_sun)` = 0.45) warns at build time. To use a MIST [Z/H] = +0.5
+  node (Z = 0.0449, MILES, same IMF and ages) at young ages instead, load the grid with
+  `tengri.load_ssp(name, top_z="mist")`; the node is inserted at its true metallicity and
+  the model never extrapolates above it at young ages. `top_z="raw"` keeps the file as shipped
+  (cross-code comparison with FSPS only). MIST grids are complete at their top node and are not
+  affected.
 
 ## Reporting
 

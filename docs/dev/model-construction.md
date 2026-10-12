@@ -174,6 +174,19 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   `star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
   `stochastic_sfh_jwst`, `mock_recovery_minimal`.
 
+### Where the SSP grid's metallicity limit is chosen: the loader, not the build
+
+`SEDModel.build(ssp_data=...)` takes a grid that is already loaded, so the one choice that
+changes the grid's contents is made at load: `tengri.load_ssp(name, top_z="clip" | "mist" | "raw")`
+(the same keyword on `load_ssp_data`). It applies only to a grid whose top-metallicity node
+has a recorded validity limit (`TOP_Z_REGISTRY` in
+`components/stellar/sps/top_z_validity.py`, keyed by the isochrone code of the surviving-mass
+registry; today the PARSEC Z = 0.06 node, which has no stars above 12 Msun for log age <= 7.15).
+`"clip"` (default) holds the metallicity at the highest complete node there with a linear taper
+in log age, `"mist"` inserts a MIST [Z/H] = +0.5 node as that target, `"raw"` keeps the file.
+The build reads the record from `SSPData.top_z` and warns when a `met_logzsol` prior reaches above
+the highest complete node. Add a limit by adding one registry row; no physics code names a grid.
+
 ### The expert escape hatch
 
 The flat-kwarg `Parameters(...)` constructor is still supported and is what the
