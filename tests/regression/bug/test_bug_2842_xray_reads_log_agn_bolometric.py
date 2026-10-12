@@ -64,7 +64,7 @@ _WAVE = np.geomspace(0.5, 1.0e4, 120)
 
 
 def _grahsp_then_xray(float32):
-    """GRAHSP (``log_l5100 = 44``) feeding the X-ray component: ``(derived log_L_agn_bol, SED)``."""
+    """GRAHSP (``log_l5100 = 44``) feeding the X-ray component: ``(log_L_agn_bol, SED)``."""
     dtype = jnp.float32 if float32 else jnp.float64
     with jax.enable_x64(not float32):
         wave = jnp.asarray(_WAVE, dtype=dtype)
