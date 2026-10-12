@@ -99,6 +99,7 @@ def test_gradient_nonzero_just_inside_band():
     h_hi = float(x[-1] - x[-2])
     for p in (float(x[0]) - 0.45 * h_lo, float(x[-1]) + 0.45 * h_hi):
         grad = jax.grad(lambda q: library_lookup(y, (x,), (q,))[()])(p)
+        assert np.isfinite(float(grad)), f"gradient is non-finite at {p}"
         assert float(grad) != 0.0
 
 

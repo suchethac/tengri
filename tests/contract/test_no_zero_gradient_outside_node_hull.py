@@ -351,6 +351,7 @@ def test_gradient_is_finite_and_nonzero_across_prior(lookup: FittedLookup) -> No
     f = lookup.build()
     grads = np.array([_grad_at(f, float(t)) for t in _sweep(lo, hi)])
     assert np.all(np.isfinite(grads)), f"{lookup.lookup_id}: non-finite gradient"
+    assert np.any(grads != 0.0), f"{lookup.lookup_id}: gradient identically zero"
     zeros = np.flatnonzero(grads == 0.0)
     assert zeros.size == 0, (
         f"{lookup.lookup_id}: exactly-zero gradient at "
