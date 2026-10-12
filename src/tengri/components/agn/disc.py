@@ -72,7 +72,7 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.components.agn._template_grid import scale_to_lbol_native
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import library_lookup, resample_template
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
@@ -2390,13 +2390,10 @@ def relagn_disc_from_grid(
     of its power over :math:`\cos i \in [0, 1]` is :math:`L_{\rm bol}`.
     """
     point = (agn_log_mbh, agn_log_mdot, agn_astar)
-    lnu_template = _interp_nd_triweight(
+    lnu_template = library_lookup(
         jnp.asarray(grid["grid_jax"]),
         tuple(jnp.asarray(a) for a in grid["axes"]),
-        tuple(jnp.asarray(e) for e in grid["edges"]),
         point,
-        scatters=grid["scatters"],
-        index_space_interp=True,
     )
     # The grid holds the disc alone at the reference cos_inc = 0.5, where the line-of-sight
     # power is the angle-integrated power: the template is normalized AT the reference and the

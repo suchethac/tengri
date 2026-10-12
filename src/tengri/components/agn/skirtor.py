@@ -39,7 +39,7 @@ from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_L
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
+from tengri.utils.grid_interp import interp_nd_pchip, library_lookup, resample_template
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -1432,7 +1432,6 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
         total_j = jnp.array(total)
         wave_g = jnp.array(wave)
         axes = tuple(jnp.array(a) for a in (ta, p, q, oa, rr, ideg))
-        edges = tuple(edges_for_grid(a) for a in axes)
         nu_g = _C_AA_PER_S / wave_g
         order = jnp.argsort(nu_g)
 
@@ -1457,7 +1456,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
             agn_radius_ratio,
             i_deg,
         )
-        spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
+        spec = library_lookup(total_j, axes, point)  # L_nu shape on wave_g
         l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
         bolo = jnp.trapezoid(spec[order], nu_g[order])
         spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), representable_denominator(1e-100)))
@@ -1643,7 +1642,6 @@ def skirtor_disc_attenuation_from_grid(
     disk_grid = jnp.asarray(grid.disk)
     wave_grid = jnp.asarray(grid.wave_grid)
     axes = tuple(jnp.asarray(a) for a in grid.axes)
-    edges = tuple(jnp.asarray(e) for e in grid.edges)
 
     point_i = (
         agn_tau_skirtor,
@@ -1665,12 +1663,8 @@ def skirtor_disc_attenuation_from_grid(
     # index-space treatment (#1911). Both evaluations must use it: the returned
     # quantity is the ratio disk(i)/disk(face-on), and mixing the two paths
     # would put a different interpolant in the numerator and denominator.
-    disk_at_i = interp_nd_triweight(
-        disk_grid, axes, edges, _match_point_to_axes(point_i, axes), index_space_interp=True
-    )
-    disk_at_face = interp_nd_triweight(
-        disk_grid, axes, edges, _match_point_to_axes(point_face, axes), index_space_interp=True
-    )
+    disk_at_i = library_lookup(disk_grid, axes, _match_point_to_axes(point_i, axes))
+    disk_at_face = library_lookup(disk_grid, axes, _match_point_to_axes(point_face, axes))
     # Safe ratio: where face-on is zero (shouldn't be, but be safe),
     # return 0 attenuation (no contribution).
     ratio_template = jnp.where(

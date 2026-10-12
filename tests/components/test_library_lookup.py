@@ -72,10 +72,34 @@ def test_physical_overhang_is_held_with_zero_gradient():
     x, y = _grid_1d()
     spacing = float(x[-1] - x[-2])
     beyond = float(x[-1]) + 1.0 * spacing  # more than half an end spacing: physical gap
+    edge = float(x[-1]) + 0.5 * spacing
     value = library_lookup(y, (x,), (beyond,))
     grad = jax.grad(lambda p: library_lookup(y, (x,), (p,))[()])(beyond)
-    assert float(value) == float(y[-1])
+    np.testing.assert_allclose(float(value), float(library_lookup(y, (x,), (edge,))), rtol=1e-12)
     assert float(grad) == 0.0
+
+
+def test_value_is_continuous_at_both_band_edges():
+    # The offset is 1e-12, not 1e-9: a slope of about 1.4 per angstrom turns a 1e-9
+    # offset into a 2e-9 relative change even for a continuous function.
+    x, y = _grid_1d()
+    h_lo = float(x[1] - x[0])
+    h_hi = float(x[-1] - x[-2])
+    for edge in (float(x[0]) - 0.5 * h_lo, float(x[-1]) + 0.5 * h_hi):
+        below = float(library_lookup(y, (x,), (edge - 1e-12,))[()])
+        at = float(library_lookup(y, (x,), (edge,))[()])
+        above = float(library_lookup(y, (x,), (edge + 1e-12,))[()])
+        np.testing.assert_allclose(below, at, rtol=1e-9, atol=0.0)
+        np.testing.assert_allclose(above, at, rtol=1e-9, atol=0.0)
+
+
+def test_gradient_nonzero_just_inside_band():
+    x, y = _grid_1d()
+    h_lo = float(x[1] - x[0])
+    h_hi = float(x[-1] - x[-2])
+    for p in (float(x[0]) - 0.45 * h_lo, float(x[-1]) + 0.45 * h_hi):
+        grad = jax.grad(lambda q: library_lookup(y, (x,), (q,))[()])(p)
+        assert float(grad) != 0.0
 
 
 def test_boundary_gradient_not_halved():

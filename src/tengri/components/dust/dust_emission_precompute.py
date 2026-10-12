@@ -35,11 +35,10 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    library_lookup,
     preintegrate_grid,
     slice_fixed_axes,
 )
-from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CGS
 
 # Parameter names corresponding to grid axes, per dust-emission model. Order
@@ -197,7 +196,6 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
     umin_grid_closure = jnp.asarray(precomp["umin_grid"])
     qpah_grid_closure = jnp.asarray(precomp["qpah_grid"])
     axes_closure = (qpah_grid_closure, umin_grid_closure)
-    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
     def dl07_phot(
@@ -244,19 +242,17 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
         if grid_arrays_traced is not None:
             single_u_phot, powerlaw_phot, umin_grid, qpah_grid = grid_arrays_traced
             axes = (qpah_grid, umin_grid)
-            edges = tuple(edges_for_grid(ax) for ax in axes)
         else:
             single_u_phot = single_u_phot_closure
             powerlaw_phot = powerlaw_phot_closure
             umin_grid = umin_grid_closure
             qpah_grid = qpah_grid_closure
             axes = axes_closure
-            edges = edges_closure
 
         point = (dust_qpah, dust_umin)
-        # 2D triweight interpolation (C²-continuous gradients)
-        single = interp_nd_triweight(single_u_phot, axes, edges, point)
-        power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
+        # 2D PCHIP lookup (node-exact, #2861)
+        single = library_lookup(single_u_phot, axes, point)
+        power = library_lookup(powerlaw_phot, axes, point)
         # Mix single-U and power-law via gamma
         phot = (1.0 - dust_gamma_dl) * single + dust_gamma_dl * power
         # Scale by absorbed luminosity
@@ -404,7 +400,6 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
     umin_grid_closure = jnp.asarray(precomp["umin_grid"])
     q_grid_closure = jnp.asarray(precomp["q_grid"])
     axes_closure = (q_grid_closure, umin_grid_closure)
-    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q, grid_arrays_traced=None):
@@ -416,20 +411,18 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
         if grid_arrays_traced is not None:
             single_u_phot, powerlaw_phot, q_grid, umin_grid = grid_arrays_traced
             axes = (q_grid, umin_grid)
-            edges = tuple(edges_for_grid(ax) for ax in axes)
         else:
             single_u_phot = single_u_phot_closure
             powerlaw_phot = powerlaw_phot_closure
             q_grid = q_grid_closure
             umin_grid = umin_grid_closure
             axes = axes_closure
-            edges = edges_closure
 
         point = (dust_q, dust_umin)
-        single = interp_nd_triweight(single_u_phot, axes, edges, point)
-        power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
-        s_bol = interp_nd_triweight(single_u_bol, axes, edges, point)
-        p_bol = interp_nd_triweight(powerlaw_bol, axes, edges, point)
+        single = library_lookup(single_u_phot, axes, point)
+        power = library_lookup(powerlaw_phot, axes, point)
+        s_bol = library_lookup(single_u_bol, axes, point)
+        p_bol = library_lookup(powerlaw_bol, axes, point)
         g = dust_gamma_dl
         # Energy balance: L_abs · mix_phot / ∫mix dν (the powerlaw already
         # carries its PDR luminosity weight W from precompute time).
@@ -872,7 +865,6 @@ def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
     log_ltir_grid_closure = jnp.asarray(precomp["log_ltir_grid"])
     log_ssfr_grid_closure = jnp.asarray(precomp["log_ssfr_grid"])
     axes_closure = (log_ltir_grid_closure, log_ssfr_grid_closure)
-    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_log_ssfr, grid_arrays_traced=None):
@@ -880,16 +872,14 @@ def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
         if grid_arrays_traced is not None:
             phot, log_ltir_grid, log_ssfr_grid = grid_arrays_traced
             axes = (log_ltir_grid, log_ssfr_grid)
-            edges = tuple(edges_for_grid(ax) for ax in axes)
         else:
             phot = phot_closure
             log_ltir_grid = log_ltir_grid_closure
             log_ssfr_grid = log_ssfr_grid_closure
             axes = axes_closure
-            edges = edges_closure
 
         log_ltir = jnp.log10(jnp.maximum(L_absorbed, 1.0e-30))
-        shape_phot = interp_nd_triweight(phot, axes, edges, (log_ltir, dust_log_ssfr))
+        shape_phot = library_lookup(phot, axes, (log_ltir, dust_log_ssfr))
         return L_absorbed * shape_phot
 
     return phot_fn
@@ -944,7 +934,6 @@ def build_dale2014_photometry_lookup(precomp: dict, grid_arrays: tuple | None = 
     phot_closure = jnp.asarray(precomp["phot"])
     alpha_grid_closure = jnp.asarray(precomp["alpha_grid"])
     axes_closure = (alpha_grid_closure,)
-    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_alpha_dale, grid_arrays_traced=None):
@@ -952,14 +941,12 @@ def build_dale2014_photometry_lookup(precomp: dict, grid_arrays: tuple | None = 
         if grid_arrays_traced is not None:
             phot, alpha_grid = grid_arrays_traced
             axes = (alpha_grid,)
-            edges = tuple(edges_for_grid(ax) for ax in axes)
         else:
             phot = phot_closure
             alpha_grid = alpha_grid_closure
             axes = axes_closure
-            edges = edges_closure
 
-        shape_phot = interp_nd_triweight(phot, axes, edges, (dust_alpha_dale,))
+        shape_phot = library_lookup(phot, axes, (dust_alpha_dale,))
         return L_absorbed * shape_phot
 
     return phot_fn

@@ -1646,19 +1646,19 @@ def interp_nd_pchip(
 def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):
     """Map one query coordinate onto the table for :func:`library_lookup`.
 
-    A numerical gap (``p`` within half an end spacing of the node hull) is
-    extrapolated: the query passes through unchanged and the end cubic continues
-    past the boundary node. A physical gap (``p`` further out) is held at the
-    boundary node by a ``where`` selection, so its derivative is exactly zero
-    there and the interior is untouched. ``extrapolate=False`` clamps every query
-    to the node hull the same way. Neither branch uses ``jnp.clip``, which halves
-    the derivative on the boundary node itself.
+    The coordinate is clamped, not the value, so the lookup stays continuous.
+    With ``extrapolate`` the coordinate is held at the outer edge of the
+    numerical band ``[x[0] - h_lo/2, x[-1] + h_hi/2]``, and the end cubic is
+    evaluated there: a query inside the band is extrapolated, and one beyond it
+    takes the band-edge value. Without it the coordinate is held at the node hull
+    ``[x[0], x[-1]]``. Both are ``where`` selections, never ``jnp.clip``, so no
+    derivative is halved on a boundary.
     """
-    x0, x_last = ax[0], ax[-1]
-    if not extrapolate:
-        return _clamp_to_hull(p, x0, x_last)
-    lo, hi = extrapolation_band(ax)
-    return jnp.where(p < lo, x0, jnp.where(p > hi, x_last, p))
+    if extrapolate:
+        lo, hi = extrapolation_band(ax)
+    else:
+        lo, hi = ax[0], ax[-1]
+    return jnp.where(p < lo, lo, jnp.where(p > hi, hi, p))
 
 
 def library_lookup(
@@ -1686,12 +1686,13 @@ def library_lookup(
     point : tuple
         Query coordinate, one scalar per axis.
     extrapolate : tuple of bool, optional
-        Per axis. ``True`` (the default on every axis) extrapolates a numerical
-        gap, a prior within half an end spacing of the node hull, and holds a
-        physical gap at its boundary node. ``False`` holds every query at the node
-        hull on that axis. Physical gaps are reported at build time by
-        :data:`tengri.components.grid_support.GRID_SUPPORT`; this function
-        does not read that registry.
+        Per axis. ``True`` (the default on every axis) extrapolates the end cubic
+        across a numerical gap (a prior within half an end spacing of the node
+        hull) and holds the coordinate at the band edge beyond it, so the value is
+        continuous at the band edge. ``False`` holds the coordinate at the node
+        hull. Physical gaps are reported at build time by
+        :data:`tengri.components.grid_support.GRID_SUPPORT`; this function does
+        not read that registry.
 
     Returns
     -------
@@ -1705,9 +1706,9 @@ def library_lookup(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes. The derivative is nonzero
-    across the numerical overhang and is one-sided (not halved) on the outermost
-    node. Physical overhang has zero derivative by construction.
+    **JIT-compatible**: yes. **Gradient-safe**: yes. The value is continuous
+    everywhere. The derivative is nonzero inside the numerical band and zero beyond
+    its outer edge, and it is one-sided (not halved) on the outermost node.
     """
     if extrapolate is None:
         extrapolate = (True,) * len(axes)
@@ -1876,12 +1877,26 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.sum(jnp.where(positive, power_law, trapezoid))
 
 
+def _pchip_slice(ax: jnp.ndarray, table: jnp.ndarray, axis_idx: int, value) -> jnp.ndarray:
+    """Evaluate the PCHIP lookup of ``table`` at ``value`` along ``axis_idx``.
+
+    PCHIP is nonlinear in the node values (its slopes are limited by the data),
+    so the collapse evaluates the interpolant on the data itself rather than
+    contracting with a fixed weight vector. The query goes through the same
+    coordinate mapping as :func:`library_lookup`, so a collapsed axis and a
+    lookup along it agree.
+    """
+    query = _library_axis_query(ax, value, True)
+    moved = jnp.moveaxis(table, axis_idx, 0)
+    return _pchip_eval_axis0(ax, moved, query, extrapolate=True)
+
+
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
     index_space_interp: bool | None = None,
 ) -> PreintegratedGrid | PreintegratedLines:
-    """Collapse fixed axes in a preintegrated grid via triweight interpolation.
+    """Collapse fixed axes in a preintegrated grid via the node-exact PCHIP lookup (#2861).
 
     When a grid parameter is fixed (not free during inference), its axis
     can be collapsed at init time.  This reduces the grid dimensionality
@@ -1938,35 +1953,24 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
 
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
-
-            # Contract phot along this axis using einsum-style contraction.
-            # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
-            # preserving the order of all other axes.
-            phot = jnp.tensordot(w, phot, axes=([0], [axis_idx]))
+            # Evaluate along this axis; the axis is removed and the others keep
+            # their order, as the old contraction did.
+            phot = _pchip_slice(ax, phot, axis_idx, value)
 
             if moment is not None:
-                moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
+                moment = _pchip_slice(ax, moment, axis_idx, value)
 
             if lyc_phot is not None:
-                lyc_phot = jnp.tensordot(w, lyc_phot, axes=([0], [axis_idx]))
+                lyc_phot = _pchip_slice(ax, lyc_phot, axis_idx, value)
 
             if nolyc_phot is not None:
-                nolyc_phot = jnp.tensordot(w, nolyc_phot, axes=([0], [axis_idx]))
+                nolyc_phot = _pchip_slice(ax, nolyc_phot, axis_idx, value)
 
             if sub_phot is not None:
-                sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
-                sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
-                sub_num_rest = jnp.tensordot(w, sub_num_rest, axes=([0], [axis_idx]))
+                sub_phot = _pchip_slice(ax, sub_phot, axis_idx, value)
+                sub_num = _pchip_slice(ax, sub_num, axis_idx, value)
+                sub_num_rest = _pchip_slice(ax, sub_num_rest, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)
@@ -2010,21 +2014,11 @@ def slice_fixed_axes(
         for axis_idx in sorted(fixed.keys(), reverse=True):
             value = fixed[axis_idx]
             ax = axes[axis_idx]
-            ed = edges[axis_idx]
-
-            # Compute triweight weights at the fixed value
-            w = compute_grid_weights(
-                value,
-                ax,
-                scatter=0.5 * float(ax[1] - ax[0]),
-                edges=ed,
-                index_space_interp=index_space_interp,
-            )
 
             # Contract line_filter_weights along this axis.
             # Shape (*grid_dims, n_lines, n_filters) → (*reduced_grid_dims, n_lines, n_filters)
             # Note: axis_idx indexes the grid dimensions (not n_lines or n_filters)
-            line_filter_weights = jnp.tensordot(w, line_filter_weights, axes=([0], [axis_idx]))
+            line_filter_weights = _pchip_slice(ax, line_filter_weights, axis_idx, value)
 
             # Remove from axes and edges lists
             axes.pop(axis_idx)

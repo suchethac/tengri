@@ -30,29 +30,11 @@ _NAME = "interp_nd_triweight"
 ALLOWED: dict[str, str] = {
     "utils/__init__.py": "public re-export of the smoother kernel; not a lookup site",
     "forward/precompute/__init__.py": "public re-export of the smoother kernel; not a lookup site",
-    "components/_collapsed_lookup.py": (
-        "remaining (#2861 follow-up): 'triweight' kernel of interp_collapsed, still used by "
-        "the grahsp and qsogen precompute"
+    "components/nebular/shock.py": (
+        "population-masked lookup (#2575): the B and density axes carry a population mask, "
+        "and the masked triweight path is the only one that honors it. A masked PCHIP "
+        "needs an owner ruling (open, #2861); not an opt-in"
     ),
-    "components/agn/blocks/composable_precompute.py": (
-        "remaining (#2861 follow-up): composable AGN precompute lookup, not yet PCHIP"
-    ),
-    "components/agn/disc.py": "remaining (#2861 follow-up): relagn disc template lookup",
-    "components/agn/skirtor.py": (
-        "remaining (#2861 follow-up): SKIRTOR disc-tie and face-on lookups, not yet PCHIP"
-    ),
-    "components/agn/skirtor_precompute.py": (
-        "remaining (#2861 follow-up): SKIRTOR precompute lookups, not yet PCHIP"
-    ),
-    "components/agn/torus.py": "remaining (#2861 follow-up): torus tau template lookup",
-    "components/dust/dust_emission_precompute.py": (
-        "remaining (#2861 follow-up): dust emission precompute lookups"
-    ),
-    "components/nebular/mappings_shock_precompute.py": (
-        "remaining (#2861 follow-up): MAPPINGS shock precompute lookup"
-    ),
-    "components/nebular/shock.py": "remaining (#2861 follow-up): MAPPINGS shock template lookup",
-    "forward/precompute/templates.py": "remaining (#2861 follow-up): precompute template lookup",
 }
 
 
@@ -104,6 +86,16 @@ def test_switched_sites_no_longer_use_kernel():
         "components/nebular/agn_nebular.py",
         "components/nebular/cb19_precompute.py",
         "components/nebular/feltre_precompute.py",
+        "components/agn/skirtor.py",
+        "components/agn/skirtor_precompute.py",
+        "components/agn/torus.py",
+        "components/agn/disc.py",
+        "components/agn/blocks/composable_precompute.py",
+        "components/nebular/mappings_shock_precompute.py",
+        "components/dust/dust_emission_precompute.py",
+        "forward/precompute/templates.py",
+        "components/_collapsed_lookup.py",
+        "utils/grid_interp.py",
     )
     for rel in switched:
         assert rel not in found, (
