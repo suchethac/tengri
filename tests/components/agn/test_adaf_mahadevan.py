@@ -215,7 +215,11 @@ class TestSpectrumAssembly:
     """
 
     def test_normalizes_to_lbol(self):
-        """The canonical contract: int L_nu dnu = agn_lum_ratio * L_bol (Eq. 49 closes it)."""
+        """The canonical contract: int L_nu dnu = agn_lum_ratio * L_bol.
+
+        The mdot behind the shape is the inversion of L_ADAF = Q_ie + delta Q+ (Sect. 5.2),
+        whose high-mdot limit is Eq. 49.
+        """
         from scipy.integrate import trapezoid
 
         from tengri.components.agn._phys import wavelength_to_nu
@@ -306,7 +310,10 @@ class TestSpectrumAssembly:
         assert 5e10 < nu_p < 5e12, f"nu_p={nu_p:.2e} Hz not in sub-mm/mm"
 
     def test_mdot_derived_from_lbol_and_clipped(self):
-        """mdot rises with L_bol (Eq. 49) and is clipped to mdot_crit=0.28 alpha^2 (Eq. 52)."""
+        """mdot rises with L_bol and is clipped to mdot_crit=0.28 alpha^2 (Eq. 52).
+
+        The mdot inverts L_ADAF = Q_ie + delta Q+ (Sect. 5.2); Eq. 49 is its high-mdot limit.
+        """
         from tengri.components.agn.adaf import _adaf_mdot_from_lbol
         from tengri.utils.physics_constants import L_SUN
 

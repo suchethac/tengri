@@ -1172,7 +1172,8 @@ def adaf_agn(
     torus re-emits a fraction of the bolometric luminosity in the IR. As of #898
     the disc is the *faithful* Mahadevan 1997 model
     (:func:`~tengri.components.agn.adaf.adaf_spectrum`): ``agn_log_lbol`` is the
-    canonical luminosity and the accretion rate is derived from it (Eq. 49), so
+    canonical luminosity and the accretion rate is derived from it (the radiated
+    power Q_ie + delta Q+ of Sect. 5.2; Eq. 49 is its high-rate limit), so
     ``agn_log_ledd`` is retired; the ad-hoc truncated outer disc is dropped.
 
     Parameters
