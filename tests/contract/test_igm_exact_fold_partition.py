@@ -223,3 +223,83 @@ def test_the_build_folds_a_cue_model_over_its_lyman_limit_partition(ssp, filters
         rtol=_FOLD_TOL,
         atol=0,
     )
+
+
+#: GALEX FUV and sdss z sit at the two ends of the filter set: FUV reaches the
+#: bluest templates (Lyman-continuum side), z the reddest, so the touched slice
+#: is as wide as the real build makes it.
+SLICE_BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "sdss_z"]
+SLICE_Z = (0.01, 0.9, 3.1, 6.0)
+
+
+@pytest.fixture(scope="module")
+def slice_filters():
+    phot = Photometry.from_names(SLICE_BANDS)
+    return tuple(zip(phot.filter_waves, phot.filter_trans, strict=False))
+
+
+def _full_grid_fold(ssp, filters, z, *, lyc_gate, n_subbands=K):
+    """:func:`subband_fold` with NO slicing: the full template grid, stacked, as before #2769."""
+    wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
+    templates = np.asarray(ssp.ssp_flux, dtype=np.float64)
+    fws = [np.asarray(fw, dtype=np.float64) for fw, _ in filters]
+    fts = [np.asarray(ft, dtype=np.float64) for _, ft in filters]
+    n_chunks = n_subbands + 1 if lyc_gate else n_subbands
+    shape = (*templates.shape[:-1], len(filters), n_chunks)
+    ratio = np.ones(shape)
+    nodes = np.full(shape, np.nan)
+    transmission = exact_fold._transmission(IGM_MODEL, wave, z)
+    reached = exact_fold._absorbed_filters(transmission, wave, z, fws)
+    if not reached:
+        return ratio, nodes
+    stacked = np.stack([templates, templates * transmission])
+    grid = preintegrate_grid(
+        templates=stacked,
+        wave_rest=wave,
+        filter_waves=[fws[i] for i in reached],
+        filter_trans=[fts[i] for i in reached],
+        redshift=z,
+        dl_cm=1.0,
+        axes=(),
+        taylor=False,
+        n_subbands=n_subbands,
+        convention=FilterConvention.BESSELL,
+        lyc_gate=lyc_gate,
+    )
+    phot = np.asarray(grid.subband_phot, dtype=np.float64)
+    sub_nodes = np.asarray(grid.subband_waves_rest, dtype=np.float64)
+    bare, folded = phot[0], phot[1]
+    ratio[..., reached, :] = np.where(bare != 0.0, folded / np.where(bare != 0.0, bare, 1.0), 0.0)
+    nodes[..., reached, :] = np.where(folded != 0.0, sub_nodes[1], sub_nodes[0])
+    return ratio, nodes
+
+
+@pytest.mark.parametrize("lyc_gate", [False, True])
+@pytest.mark.parametrize("z", SLICE_Z)
+def test_the_sliced_fold_is_bit_identical_to_the_full_grid_fold(ssp, slice_filters, z, lyc_gate):
+    """Slicing the SSP grid to the reached filters' touched nodes changes no bit.
+
+    The reference runs the quadrature on the full stacked grid. Ratio and node
+    tensors are compared exactly, not to a tolerance: the slice only removes
+    nodes the quadrature never reads.
+    """
+    fold = exact_fold.subband_fold(
+        ssp,
+        slice_filters,
+        z,
+        igm_model=IGM_MODEL,
+        n_subbands=K,
+        lyc_gate=lyc_gate,
+        convention=FilterConvention.BESSELL,
+    )
+    ratio_full, nodes_full = _full_grid_fold(ssp, slice_filters, z, lyc_gate=lyc_gate)
+    assert np.array_equal(fold.ratio, ratio_full)
+    assert np.array_equal(fold.nodes_rest, nodes_full, equal_nan=True)
+
+
+def test_the_slice_is_narrower_than_the_grid_at_a_probe_redshift(ssp, slice_filters):
+    """Guards the test above against passing vacuously: the slice must drop nodes."""
+    wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
+    fws = [np.asarray(fw, dtype=np.float64) for fw, _ in slice_filters]
+    lo, hi = exact_fold._touched_slice(wave, fws, PROBE_Z, lyc_gate=False)
+    assert 0 < hi - lo < wave.size
