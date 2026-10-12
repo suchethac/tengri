@@ -10,7 +10,6 @@ import math as _math
 
 import jax
 import jax.numpy as jnp
-from jax.scipy.special import logsumexp
 
 from tengri.components.nebular._constants import (
     _C_CGS,
@@ -1026,10 +1025,42 @@ def log_q_h_total(backend, ssp_log_ages_yr, age_weights, log_z, neb_fesc):
     log_qh = jax.vmap(lambda la: backend._get_log_qh_at(log_z, la))(young_ages)
     positive = young_w > 0
     log_w = jnp.where(positive, jnp.log10(jnp.where(positive, young_w, 1.0)), -jnp.inf)
-    # ``logsumexp`` is natural-log: it sums in base e, so the base-10 terms are
-    # scaled by ln(10) in and out to get log10 Σ 10**x.
-    total = logsumexp((log_w + log_qh) * _LN10) / _LN10
+    total = _log10_sum_of_finite(log_w + log_qh)
     return total + jnp.log10(1.0 - neb_fesc)
+
+
+def _log10_sum_of_finite(log10_terms):
+    """``log10 sum_i 10**x_i`` over the finite ``x_i``: ``-inf`` if none is finite.
+
+    A plain ``logsumexp`` over an all ``-inf`` input (no young mass) returns ``-inf`` with a
+    NaN gradient, which a metallicity gradient picks up through ``log_qh``. Here the
+    non-finite terms are masked out before the exponential, and the empty sum takes the
+    constant ``-inf`` branch of a ``where`` whose other branch is evaluated at ``1``, so no
+    NaN reaches the derivative. The shift is by the largest finite term.
+
+    Parameters
+    ----------
+    log10_terms : ndarray, shape (n,)
+        ``log10`` of each positive term; ``-inf`` marks a term with no weight.
+
+    Returns
+    -------
+    ndarray, shape ()
+        ``log10 sum 10**x_i`` over the finite terms, or ``-inf`` when there are none.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The result and its gradient are finite for every finite input
+    and for an all ``-inf`` input (where the gradient is zero).
+    """
+    x = jnp.asarray(log10_terms) * _LN10
+    finite = jnp.isfinite(x)
+    shift = jnp.max(jnp.where(finite, x, -jnp.inf))
+    shift = jnp.where(jnp.isfinite(shift), shift, 0.0)
+    total = jnp.sum(jnp.where(finite, jnp.exp(jnp.where(finite, x, 0.0) - shift), 0.0))
+    has_mass = total > 0.0
+    total_safe = jnp.where(has_mass, total, 1.0)
+    return jnp.where(has_mass, (shift + jnp.log(total_safe)) / _LN10, -jnp.inf)
 
 
 # ── Metallicity convention converters ─────────────────────────────
