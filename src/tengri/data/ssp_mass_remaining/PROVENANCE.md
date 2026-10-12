@@ -127,8 +127,9 @@ part of that node (and its surviving mass) to the highest complete node, or to t
 `src/tengri/data/ssp_top_z/` (see its `PROVENANCE.md`). The limit is registry data in
 `components/stellar/sps/top_z_validity.py` (`TOP_Z_REGISTRY`, keyed by the isochrone code of the
 registry above): node Z = 0.06, clip target Z = 0.04, last incomplete log age 7.15 (the last age
-at which `isoc_z0.0600.dat` still caps Mini at 12.01 Msun; at 7.20 its largest Mini is 11.3 Msun,
-below the cap), taper 0.10 dex.
+at which `isoc_z0.0600.dat` still caps Mini at 12.01 Msun; at 7.20 the node is lifetime-limited,
+with a core He-burning tip of 11.33 Msun, and complete), taper 0.05 dex (one grid step: weight 0 at
+7.15, 1 at 7.20).
 
 The spectra comparison above was a one-off check against the hosted grid, made outside the
 repository with the same build; the test suite does not repeat it, since python-fsps is not in

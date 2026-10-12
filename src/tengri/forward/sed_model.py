@@ -4136,7 +4136,8 @@ class SEDModel:
         :mod:`tengri.components.stellar.sps.top_z_validity`. The condition depends only on
         the declared metallicity ranges and the grid's recorded limit, so it is decided
         here, once, outside any trace. Ages below the limit cannot be excluded by a prior,
-        so the metallicity reach alone triggers it.
+        so the metallicity reach alone triggers it. The reach is the prior's upper bound
+        plus the span of the scatter kernel (3 sigma at the scatter's upper bound).
         """
         validity = getattr(ssp_data, "top_z", None)
         if validity is None:
@@ -4147,12 +4148,16 @@ class SEDModel:
         )
 
         distributions = getattr(spec, "_distributions", {})
+        scatter = distributions.get("met_logzsol_scatter")
+        scatter_hi = 0.0
+        if scatter is not None:
+            scatter_hi = float(scatter.value) if scatter.is_fixed else float(scatter.hi)
         for name in self._MET_LOGZSOL_PARAM_NAMES:
             dist = distributions.get(name)
             if dist is None:
                 continue
             hi = float(dist.value) if dist.is_fixed else float(dist.hi)
-            text = reach_warning_text(validity, hi + LOG10_ZSUN, name)
+            text = reach_warning_text(validity, hi + LOG10_ZSUN, name, scatter_hi)
             if text is not None:
                 warn_measured(
                     text,

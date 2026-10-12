@@ -6,8 +6,8 @@ because the isochrone set stops short of that metallicity. FSPS's PARSEC set is
 the case on record: ``ISOCHRONES/PARSEC/isoc_z0.0600.dat`` caps the initial mass
 at 12.01 Msun for every log age up to 7.15, because the PARSEC massive-star
 tracks reach only Z = 0.04 [1]_. The Z = 0.06 node of every FSPS-PARSEC grid is
-therefore ~1000x low in ionizing photons and ~15x low at 1500 A for log age
-5.5-6.5.
+therefore ~800-2700x low in ionizing photons (Q_H(Z = 0.06) / Q_H(Z = 0.04) =
+3.7e-4, 4.1e-4 and 1.3e-3 at log age 5.5, 6.0 and 6.5) and ~16x low at 1500 A.
 
 This module holds that limit as registry data (keyed by the isochrone code
 the surviving-mass registry already assigns each grid) and implements the two
@@ -18,10 +18,29 @@ policies :func:`tengri.load_ssp_data` offers through ``top_z=``:
     metallicity is held at the highest complete node, with a taper (below) so the
     stellar population is continuous in age.
 ``"mist"``
-    As ``"clip"``, but the highest complete node is a MIST [Z/H] = +0.5 SSP
-    (Z = 0.0449 [2]_), inserted as an extra metallicity node at its true Z.
+    As ``"clip"``, but the highest complete node is a MIST [Z/H] = +0.5 SSP, inserted
+    as an extra metallicity node at FSPS's ``zlegend`` value
+    Z = Z_sun 10^[Z/H] = 0.0142 x 10^0.5 = 0.0449 [2]_ (Z_sun = 0.0142).
 ``"raw"``
     The file's node as shipped. For cross-code parity only.
+
+With ``top_z="mist"`` the young part of the metallicity axis between Z = 0.040 (PARSEC)
+and Z = 0.0449 (MIST) switches isochrone physics, not just metallicity: the model's
+population at a given young age passes from the PARSEC to the MIST isochrones across that
+interval. Measured on
+``fsps_prsc_miles_chabrier`` (MIST node / PARSEC Z = 0.04 node):
+
+=========  =====  ==========  ====================
+log age    Q_H    L_nu(1500)  V-band mean L_nu
+=========  =====  ==========  ====================
+6.0        0.909  0.908       0.775
+6.5        1.72   0.773       0.749
+7.0        0.434  0.783       0.911
+=========  =====  ==========  ====================
+
+(V-band: mean L_nu over 5000-5900 A.) A gradient in ``met_logzsol`` over about 0.45-0.50
+at young ages therefore reflects that switch and not the metallicity dependence of one
+isochrone set. The default ``"clip"`` has no such switch.
 
 References
 ----------
@@ -38,6 +57,7 @@ References
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.resources import as_file, files
 from typing import NamedTuple
 
@@ -92,7 +112,17 @@ class YoungTopMetallicityWarning(UserWarning):
     """A metallicity range reaches a top node that is incomplete at young ages."""
 
 
-def reach_warning_text(validity: TopZValidity, log_z_abs_max: float, name: str) -> str | None:
+#: Half-width of the metallicity scatter kernel, in units of its sigma: DSPS's triweight
+#: kernel (``dsps.utils._tw_cuml_kern``) is exactly 0 below -3 sigma and 1 above +3 sigma.
+SCATTER_SPAN_SIGMA = 3.0
+
+
+def reach_warning_text(
+    validity: TopZValidity,
+    log_z_abs_max: float,
+    name: str,
+    scatter_dex_max: float = 0.0,
+) -> str | None:
     """Warning text for a metallicity that can exceed the highest complete node.
 
     Parameters
@@ -100,29 +130,42 @@ def reach_warning_text(validity: TopZValidity, log_z_abs_max: float, name: str) 
     validity : TopZValidity
         The loaded grid's record.
     log_z_abs_max : float
-        Highest absolute metallicity the parameter can take [log10 Z].
+        Highest absolute metallicity the parameter itself can take [log10 Z].
     name : str
         Parameter (or history) name for the message.
+    scatter_dex_max : float, optional
+        Highest lognormal metallicity scatter sigma the model can take [dex]. The scatter
+        kernel spans ``SCATTER_SPAN_SIGMA`` sigma above the mean, so the metallicity
+        the SSP lookup reaches is ``log_z_abs_max + SCATTER_SPAN_SIGMA * scatter_dex_max``.
 
     Returns
     -------
     str or None
-        ``None`` when ``log_z_abs_max`` stays at or below the highest complete node.
+        ``None`` when that reach stays at or below the highest complete node.
     """
-    if log_z_abs_max <= validity.fallback_log_z_abs + 1e-9:
+    reach = log_z_abs_max + SCATTER_SPAN_SIGMA * scatter_dex_max
+    if reach <= validity.fallback_log_z_abs + 1e-9:
         return None
     z_top, z_fb = 10.0**validity.node_log_z_abs, 10.0**validity.fallback_log_z_abs
     lg_hi = validity.lg_age_incomplete_max_yr
     lg_full = lg_hi + validity.taper_dex
+    if scatter_dex_max > 0.0:
+        reach_txt = (
+            f"{name} reaches Z = {10.0**reach:.4f} (its upper bound, Z = "
+            f"{10.0**log_z_abs_max:.4f}, plus {SCATTER_SPAN_SIGMA:g} x the metallicity-scatter "
+            f"upper bound of {scatter_dex_max:g} dex that the scatter kernel spans)"
+        )
+    else:
+        reach_txt = f"{name} reaches Z = {10.0**reach:.4f}"
     head = (
-        f"{name} reaches Z = {10.0**log_z_abs_max:.4f}, above the highest complete node of this "
-        f"SSP grid (Z = {z_fb:.4f}). The Z = {z_top:.4f} node has no stars above ~12 Msun for "
-        f"log10(age/yr) <= {lg_hi:.2f}: {validity.source}. "
+        f"{reach_txt}, above the highest complete node of this SSP grid (Z = {z_fb:.4f}). "
+        f"The Z = {z_top:.4f} node has no stars above ~12 Msun for log10(age/yr) <= "
+        f"{lg_hi:.2f}: {validity.source}. "
     )
     if validity.policy == TOP_Z_RAW:
         return head + (
             "top_z='raw' keeps that node as shipped, so young populations at this metallicity "
-            "are missing their ionizing flux (Q_H ~1000x low, 1500 A ~15x low at log age "
+            "are missing their ionizing flux (Q_H ~800-2700x low, 1500 A ~16x low at log age "
             "5.5-6.5). Use the default top_z='clip'."
         )
     held = (
@@ -137,14 +180,23 @@ def reach_warning_text(validity: TopZValidity, log_z_abs_max: float, name: str) 
     )
     if validity.policy == TOP_Z_CLIP:
         tail += (
-            "To use a MIST [Z/H] = +0.5 (Z = 0.0449) node at young ages instead, load the "
-            "grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or "
-            "load_ssp_data(<path>, top_z='mist')."
+            "To use a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) at young ages instead, "
+            "load the grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or "
+            "load_ssp_data(<path>, top_z='mist'). That node has MIST isochrones, so between "
+            "Z = 0.0400 and 0.0449 the young population switches isochrone physics, not only "
+            "metallicity."
+        )
+    else:
+        tail += (
+            "Between Z = 0.0400 (PARSEC) and 0.0449 (MIST) the young population switches "
+            "isochrone physics, not only metallicity; a gradient in met_logzsol there reflects "
+            "that switch."
         )
     return head + tail
 
 
-class TopZLimit(NamedTuple):
+@dataclass(frozen=True)
+class TopZLimit:
     """Registry row: where an isochrone set's top metallicity node is incomplete.
 
     Parameters
@@ -159,8 +211,14 @@ class TopZLimit(NamedTuple):
     taper_dex : float
         Age span above the limit over which the node's weight rises from 0 to 1
         [dex]; the node is used in full from ``lg_age_incomplete_max_yr + taper_dex``.
+        Must be positive (the weight divides by it).
     source : str
         Where the limit was measured.
+
+    Raises
+    ------
+    ValueError
+        ``taper_dex`` is not a positive finite number.
     """
 
     node_log_z_abs: float
@@ -169,6 +227,10 @@ class TopZLimit(NamedTuple):
     taper_dex: float
     source: str
 
+    def __post_init__(self):
+        if not (np.isfinite(self.taper_dex) and self.taper_dex > 0.0):
+            raise ValueError(f"taper_dex must be a positive finite number, got {self.taper_dex!r}")
+
 
 #: Isochrone code (``MassRemainingEntry.isoc``) -> limit.
 TOP_Z_REGISTRY: dict[str, TopZLimit] = {
@@ -176,7 +238,11 @@ TOP_Z_REGISTRY: dict[str, TopZLimit] = {
         node_log_z_abs=float(np.log10(0.06)),
         fallback_log_z_abs=float(np.log10(0.04)),
         lg_age_incomplete_max_yr=7.15,
-        taper_dex=0.10,
+        # One grid step (0.05 dex): FSPS's isoc_z0.0600.dat is incomplete at log age 7.15
+        # (capped main-sequence tip, K-band ratio to Z = 0.04 of 0.833) and complete at
+        # 7.20 (lifetime-limited, core He-burning tip 11.33 Msun, ratios to Z = 0.04
+        # matching 7.25 and 7.30), so the node's weight is 0 at 7.15 and 1 at 7.20.
+        taper_dex=0.05,
         source=(
             "FSPS ISOCHRONES/PARSEC/isoc_z0.0600.dat: Mini capped at 12.01 Msun for every "
             "log age 5.50-7.15 (343 rows at 5.50; isoc_z0.0200.dat reaches 300 Msun); the "
@@ -250,7 +316,24 @@ def mist_node_filename(stem: str) -> str:
 
 
 class MistNode(NamedTuple):
-    """The MIST top node read from package data."""
+    """The MIST top node read from package data.
+
+    Attributes
+    ----------
+    log_z_abs : float
+        Metallicity of the node [log10 absolute Z]: FSPS's ``zlegend`` value
+        Z = Z_sun 10^[Z/H] = 0.0449 (Z_sun = 0.0142; Choi et al. 2016).
+    lg_age_yr : ndarray, shape (n_age,)
+        Ages, equal to the PARSEC grid's [log10 yr].
+    wave : ndarray, shape (n_wave,)
+        Rest wavelength [Angstrom].
+    flux : ndarray, shape (n_age, n_wave)
+        SSP spectra in FSPS's native unit [Lsun/Hz per Msun formed].
+    mass_remaining : ndarray, shape (n_age,)
+        Surviving mass fraction of the same FSPS build, remnants included [dimensionless].
+    filename : str
+        Package-data file the node was read from.
+    """
 
     log_z_abs: float
     lg_age_yr: np.ndarray
@@ -262,6 +345,17 @@ class MistNode(NamedTuple):
 
 def load_mist_node(stem: str) -> MistNode:
     """Read the MIST top-node file for a grid stem.
+
+    Parameters
+    ----------
+    stem : str
+        Grid file stem, e.g. ``fsps_prsc_miles_chabrier``; the node file is chosen
+        by its spectral library, IMF and nebular setting (:func:`mist_node_filename`).
+
+    Returns
+    -------
+    MistNode
+        The node's metallicity, age and wavelength axes, spectra and surviving mass.
 
     Raises
     ------

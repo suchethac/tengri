@@ -11,11 +11,20 @@ wavelengths of the PARSEC grids `fsps_prsc_miles_chabrier` and
 arXiv:1506.01681). `load_ssp_data(..., top_z="mist")` inserts this node and uses it as the clip
 target for that part of the grid. See `components/stellar/sps/top_z_validity.py`.
 
-**Metallicity.** Z = 0.0142 x 10^0.5 = 0.04490 (FSPS `zlegend` entry 0.04490434). MIST defines
+**Metallicity.** The node is placed at FSPS's `zlegend` value Z = Z_sun x 10^[Z/H] = 0.0142 x
+10^0.5 = 0.04490 (entry 0.04490434; Z_sun = 0.0142; Choi et al. 2016). MIST defines
 [Z/H] against the protosolar Z_sun = 0.0142 (Asplund et al. 2009) and takes [Z/H] = [Fe/H] for its
 solar-scaled models; Choi et al. 2016, ApJ 823, 102 (arXiv:1604.08592, Sect. 1 and 3.1, Table 1:
-X = 0.7154, Y = 0.2703, Z = 0.0142). The node is labeled with this Z, never 0.06. The top MIST
+X = 0.7154, Y = 0.2703, Z = 0.0142). The node is labeled with that zlegend Z, never 0.06. The top MIST
 node is [Z/H] = +0.5 (Choi et al. 2016, abstract; Dotter 2016, ApJS 222, 8, arXiv:1601.05144).
+
+**Mixed physics.** The PARSEC grid below it is a different isochrone set. With `top_z="mist"` the
+young part of the metallicity axis between Z = 0.040 (PARSEC) and 0.0449 (MIST) therefore switches
+isochrone physics, not just metallicity. MIST node / PARSEC Z = 0.04 node on
+`fsps_prsc_miles_chabrier`, measured on the loaded grid: at log age 6.0, 6.5, 7.0 the ratio is
+Q_H 0.909 / 1.72 / 0.434, L_nu(1500 A) 0.908 / 0.773 / 0.783, and V-band (mean L_nu over
+5000-5900 A) 0.775 / 0.749 / 0.911. A gradient in `met_logzsol` over about 0.45-0.50 at young ages
+reflects that switch. The default `top_z="clip"` has none.
 
 **Surviving mass.** `mass_remaining` is `StellarPopulation.stellar_mass` of the same build
 (`add_stellar_remnants=1`, Renzini & Ciotti 1993), so spectra and mass share isochrones, IMF and Z.

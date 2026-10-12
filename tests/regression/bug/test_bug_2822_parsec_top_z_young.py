@@ -6,13 +6,14 @@ every log age 5.50-7.15, because the PARSEC massive-star tracks reach only Z = 0
 (Chen et al. 2015, MNRAS 452, 1068, arXiv:1506.01681). Measured on the shipped grid
 ``fsps_prsc_miles_chabrier``, relative to the Z = 0.04 node at log age 5.5-6.5:
 
-    Q_H (< 912 A)   ~ 4e-4  (about 2500x low)
+    Q_H (< 912 A)   3.7e-4 / 4.1e-4 / 1.3e-3 at log age 5.5 / 6.0 / 6.5  (~800-2700x low)
     L_nu(1500 A)    ~ 0.06  (about 16x low)
 
 The loader now holds the metallicity at the highest complete node (Z = 0.04) for
 log age <= 7.15 and tapers the top node back in linearly in log age over the next
-0.10 dex (``top_z='clip'``, default); ``top_z='mist'`` makes the clip target a MIST
-[Z/H] = +0.5 node (Z = 0.0142 x 10^0.5 = 0.0449, Choi et al. 2016, ApJ 823, 102);
+0.05 dex, one grid step (``top_z='clip'``, default); ``top_z='mist'`` makes the clip
+target a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0142 x 10^0.5 = 0.0449,
+Choi et al. 2016, ApJ 823, 102);
 ``top_z='raw'`` keeps the file as shipped. The expected values below are read from the
 HDF5 files and the published constants, not from the code under test.
 """
@@ -48,7 +49,12 @@ if not BARE.is_file():  # pragma: no cover - data-less checkout
 
 H_PLANCK = 6.62607015e-27  # erg s
 LAST_INCOMPLETE = 7.15  # FSPS isoc_z0.0600.dat: Mini = 12.01 Msun up to this log age
-TAPER = 0.10
+TAPER = 0.05  # one grid step
+# FSPS isoc_z0.0600.dat, read off the raw isochrones: is the Z = 0.06 node complete (not
+# truncated by the 12.01 Msun cap) at these grid ages? 7.15 is capped (main-sequence tip,
+# K-band ratio to Z = 0.04 of 0.833); 7.20 is lifetime-limited (core He-burning tip 11.33 Msun)
+# with ratios to Z = 0.04 matching 7.25 and 7.30.
+ISOCHRONE_COMPLETE = {7.10: False, 7.15: False, 7.20: True, 7.25: True, 7.30: True}
 LOGZSOL_Z04 = np.log10(0.04) - LOG10_ZSUN  # the highest complete PARSEC node
 LOGZSOL_Z06 = np.log10(0.06) - LOG10_ZSUN  # the truncated node
 MIST_Z = 0.0142 * 10**0.5  # Choi et al. 2016: Zsun = 0.0142, [Z/H] = +0.5
@@ -106,7 +112,10 @@ def _model(ssp, *, logzsol_hi=0.7, scatter=0.0, age_gyr=0.002):
             "log_total_mass": Fixed(6.0),
             "all_params": Fixed(DEFAULT),
         },
-        met={"logzsol": Uniform(-2.0, logzsol_hi), "logzsol_scatter": Fixed(scatter)},
+        met={
+            "logzsol": Uniform(-2.0, logzsol_hi),
+            "logzsol_scatter": scatter if not isinstance(scatter, float) else Fixed(scatter),
+        },
         neb={"type": "none"},
         dust_attenuation={
             "type": "two_component",
@@ -203,9 +212,12 @@ def test_loaded_top_node_follows_the_weights_node_by_node(raw_file, ssp_clip):
         (1 - s)[:, None] * raw_file["ssp_flux"][13] + s[:, None] * raw_file["ssp_flux"][14]
     ) * scale
     np.testing.assert_allclose(np.asarray(ssp_clip.ssp_flux)[14], expect, rtol=1e-12)
-    # the three grid ages 7.15 / 7.20 / 7.25 carry weights 0, 1/2, 1
-    j = [int(np.argmin(np.abs(lg_age - a))) for a in (7.15, 7.20, 7.25)]
-    np.testing.assert_allclose(s[j], [0.0, 0.5, 1.0], atol=1e-9)
+    # the node's weight at each grid age is the isochrone completeness there (0 or 1),
+    # so no age is blended: s = [0, 1] at 7.15 and 7.20
+    ages = sorted(ISOCHRONE_COMPLETE)
+    j = [int(np.argmin(np.abs(lg_age - a))) for a in ages]
+    np.testing.assert_allclose(lg_age[j], ages, atol=1e-9)
+    np.testing.assert_allclose(s[j], [float(ISOCHRONE_COMPLETE[a]) for a in ages], atol=1e-9)
 
 
 def test_csp_has_no_jump_where_a_population_crosses_the_limit(ssp_clip):
@@ -237,6 +249,22 @@ def test_warning_fires_exactly_when_prior_reaches_above_z004(ssp_clip):
     assert len(hits_top) == 1
 
 
+def test_warning_counts_the_metallicity_scatter_kernel(ssp_clip):
+    """hi + 3 x scatter_hi (the triweight kernel's span) decides, fixed or free scatter."""
+    top = LOGZSOL_Z04  # prior upper bound sitting exactly on the highest complete node
+    below = top - 0.30 - 1e-3
+    assert _warnings_for(ssp_clip, logzsol_hi=below, scatter=0.1) == []
+    hits = _warnings_for(ssp_clip, logzsol_hi=below + 3e-3, scatter=0.1)
+    assert len(hits) == 1
+    assert "scatter" in str(hits[0].message)
+    # a free scatter prior counts through its upper bound
+    assert _warnings_for(ssp_clip, logzsol_hi=top - 0.15 - 1e-3, scatter=Uniform(0.02, 0.05)) == []
+    assert (
+        len(_warnings_for(ssp_clip, logzsol_hi=top - 0.15 + 1e-3, scatter=Uniform(0.02, 0.05)))
+        == 1
+    )
+
+
 def test_warning_text_states_limit_clip_and_exact_opt_in(ssp_clip):
     text = str(_warnings_for(ssp_clip, logzsol_hi=0.7)[0].message)
     assert "7.15" in text and "12 Msun" in text and "Chen et al. 2015" in text
@@ -246,11 +274,12 @@ def test_warning_text_states_limit_clip_and_exact_opt_in(ssp_clip):
 
 def test_warning_names_raw_and_does_not_offer_mist_when_already_on(ssp_raw, ssp_mist):
     raw_text = str(_warnings_for(ssp_raw, logzsol_hi=0.7)[0].message)
-    assert "top_z='raw'" in raw_text and "1000x low" in raw_text
+    assert "top_z='raw'" in raw_text and "800-2700x low" in raw_text
     # With the MIST node the highest complete node is Z = 0.0449 ([Z/H] = +0.5).
     assert _warnings_for(ssp_mist, logzsol_hi=LOGZSOL_MIST - 1e-4) == []
     mist_text = str(_warnings_for(ssp_mist, logzsol_hi=0.7)[0].message)
     assert "MIST" in mist_text and "load_ssp(" not in mist_text
+    assert "switches isochrone physics" in mist_text
 
 
 def test_history_ingest_warns_for_a_metallicity_track_above_z004(ssp_clip):
@@ -394,3 +423,43 @@ def test_unknown_policy_is_refused():
 
 def test_grid_with_no_limit_on_record_is_untouched(synthetic_ssp_wide):
     assert getattr(synthetic_ssp_wide, "top_z", None) is None
+
+
+# ---------------------------------------------------------------------------
+# the limit table and the opt-in refuse what they cannot honor
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("bad", [0.0, -0.05, float("nan"), float("inf")])
+def test_top_z_limit_refuses_a_non_positive_taper(bad):
+    from tengri.components.stellar.sps.top_z_validity import TopZLimit
+
+    with pytest.raises(ValueError, match="taper_dex"):
+        TopZLimit(np.log10(0.06), np.log10(0.04), LAST_INCOMPLETE, bad, "test")
+    ok = TopZLimit(np.log10(0.06), np.log10(0.04), LAST_INCOMPLETE, 0.05, "test")
+    assert ok.taper_dex == 0.05
+
+
+def test_registry_taper_is_one_grid_step():
+    from tengri.components.stellar.sps.top_z_validity import TOP_Z_REGISTRY
+
+    assert TOP_Z_REGISTRY["prsc"].taper_dex == pytest.approx(0.05)
+
+
+def test_mist_refuses_a_library_without_a_shipped_node():
+    """C3K has no MIST node: FileNotFoundError names the nodes that do ship."""
+    from tengri.components.stellar.sps.top_z_validity import load_mist_node
+
+    with pytest.raises(FileNotFoundError) as exc:
+        load_mist_node("fsps_prsc_c3k_a_chabrier")
+    text = str(exc.value)
+    assert "mist_top_node_c3k_chabrier.h5" in text
+    assert "mist_top_node_miles_chabrier.h5" in text
+    assert "mist_top_node_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5" in text
+
+
+def test_load_ssp_data_mist_refuses_a_c3k_grid():
+    """The same refusal through the public loader, on the shipped C3K grid."""
+    c3k = REPO / "data" / "fsps_prsc_c3k_a_chabrier.h5"
+    if not c3k.is_file():  # pragma: no cover - data-less checkout
+        pytest.skip(f"SSP data not found: {c3k}")
+    with pytest.raises(FileNotFoundError, match=r"mist_top_node_c3k_chabrier\.h5"):
+        load_ssp_data(str(c3k), top_z="mist")

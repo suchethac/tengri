@@ -542,11 +542,16 @@ def load_ssp_data(
         with no limit on record are unaffected. ``"clip"`` (default) refuses the node
         where it is incomplete: the metallicity is held at the highest complete node
         (Z = 0.04) for log age <= 7.15, and the node's weight rises linearly with log
-        age from 0 to 1 over the next 0.10 dex, so the population is continuous in
-        age and the node is used unchanged from log age 7.25. ``"mist"`` is the
-        opt-in that makes the clip target a MIST [Z/H] = +0.5 SSP (Z = 0.0449, MILES,
-        same IMF and ages) inserted as an extra metallicity node at its true Z;
-        it is shipped for the MILES grids. ``"raw"`` keeps the file's node as
+        age from 0 to 1 over the next 0.05 dex (one grid step), so the population is
+        continuous in age and the node is used unchanged from log age 7.20. The
+        Z = 0.06 node is ~800-2700x low in Q_H and ~16x low at 1500 A at log age
+        5.5-6.5 without this. ``"mist"`` is the opt-in that makes the clip target a
+        MIST [Z/H] = +0.5 SSP (MILES, same IMF and ages) inserted as an extra
+        metallicity node at FSPS's zlegend value Z = Z_sun 10^[Z/H] = 0.0449
+        (Z_sun = 0.0142; Choi et al. 2016); between Z = 0.040 (PARSEC) and 0.0449
+        (MIST) the young population then switches isochrone physics, not only
+        metallicity (see :mod:`tengri.components.stellar.sps.top_z_validity` for the
+        measured ratios). It is shipped for the MILES grids. ``"raw"`` keeps the file's node as
         shipped, for cross-code parity with FSPS only.
 
     Returns
