@@ -23,6 +23,7 @@ from tengri.components.agn._phys import C_LIGHT as _C_CGS
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
+    loglog_integral,
     preintegrate_grid,
     slice_fixed_axes,
 )
@@ -142,11 +143,15 @@ def precompute_skirtor_photometry(
     grid_flat = np.array(grid, dtype=np.float64).reshape(n_pts, n_wave)
     lnu_flat = np.empty_like(grid_flat)
 
-    # ``wave_grid`` is monotonically ascending (set in ``_load_grid_arrays``),
-    # so trapezoid integrates correctly in λ without an explicit sort.
+    # ``wave_grid`` is monotonically ascending (set in ``_load_grid_arrays``). The integral is the
+    # log-log one of the interpolant ``skirtor.py:_interpolate_and_normalize`` resamples with, so
+    # the table integrates to ``LSUN`` on the runtime path too (a trapezoid over these nodes was
+    # 0.9 % off on the disk row).
+    wave_j = jnp.asarray(wave_grid)
+    integrals = np.asarray(jax.vmap(lambda t: loglog_integral(wave_j, t))(jnp.asarray(grid_flat)))
     for i in range(n_pts):
         template = grid_flat[i]
-        integral_lam = np.trapezoid(template, wave_grid)
+        integral_lam = integrals[i]
         integral_safe = max(abs(integral_lam), 1e-100)
         template_lam = _LSUN_ERG * template / integral_safe  # erg/s/Å per L_sun
         lnu_flat[i] = template_lam * wave_grid**2 / c_aa_per_s  # L_λ → L_ν

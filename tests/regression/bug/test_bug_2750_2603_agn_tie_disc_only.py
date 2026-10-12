@@ -221,11 +221,16 @@ def _tie_ratio(library, shape_lambda):
 
 
 def _fine_integral(library, disc_lambda):
-    """``int D x disk(i)/disk(0) d lambda`` on the runner's fine grid over the library range."""
+    """``int D x disk(i)/disk(0) d lambda`` on the runner's fine grid over the library range.
+
+    Log-log on the runner's fine nodes, as the runner integrates it (its numerator moved from a
+    trapezoid on 4001 nodes to log-log on 8001 nodes; see the re-capture note in
+    ``test_bug_2601_skirtor_disc_tie``).
+    """
     wl = library["wave_aa"]
     fine = np.geomspace(wl[0], wl[-1], runner_module._TIE_FINE_NODES)
     incl = _incl_on(library, fine)
-    return float(np.trapezoid(disc_lambda(fine) * incl, fine))
+    return float(loglog_integral(jnp.asarray(fine), jnp.asarray(disc_lambda(fine) * incl)))
 
 
 # ----------------------------------------------------------------------------------

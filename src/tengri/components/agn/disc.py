@@ -72,8 +72,11 @@ from tengri.components.agn._phys import (
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.components.agn._template_grid import scale_to_lbol_native
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
-from tengri.utils.host_array import device_table, host_array
+from tengri.utils.grid_interp import (
+    interp_nd_triweight as _interp_nd_triweight,
+    loglog_integral,
+    resample_template,
+)
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
@@ -149,7 +152,14 @@ _GRAV_RADIUS_PER_MSUN: float = _G_GRAV * _MSUN_G / _C_LIGHT**2
 
 
 #: Internal normalization band of ``powerlaw_disc`` [Angstrom] (descending = ascending nu).
-_PL_BAND_AA = np.geomspace(1.0e8, 10.0, 2049)
+#: Integrated by :func:`loglog_integral` (power law between nodes): at 8001 nodes the
+#: normalization is 3e-8 from its 40980-node value (a trapezoid at 2049 nodes was 1.2e-5 off).
+_PL_BAND_NODES: int = 8001
+
+
+def _pl_band_aa(dtype) -> jnp.ndarray:
+    """The power-law normalization band [Angstrom], descending, built in the trace."""
+    return jnp.exp(jnp.linspace(math.log(1.0e8), math.log(10.0), _PL_BAND_NODES, dtype=dtype))
 
 
 def powerlaw_disc(
@@ -241,10 +251,10 @@ def powerlaw_disc(
 
     # Normalize over the FIXED band [_PL_LAMBDA_HI, _PL_LAMBDA_LO] (log-spaced internal nodes), not
     # over the caller's grid: the same SED must come out whichever grid it is evaluated on (#2572).
-    nu_int = _wavelength_to_nu(jnp.asarray(_PL_BAND_AA, dtype=nu.dtype))
+    nu_int = _wavelength_to_nu(_pl_band_aa(nu.dtype))
     x_int = jnp.clip(_H_PLANCK * nu_int / (_K_BOLTZ * jnp.maximum(agn_T_max, 1.0)), 0.0, 500.0)
     shape_int = nu_int**agn_alpha * jnp.exp(-x_int)
-    integral = jnp.trapezoid(shape_int, nu_int)
+    integral = loglog_integral(nu_int, shape_int)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
@@ -1071,9 +1081,23 @@ def _warm_comptonization_lnu(
 # Using a fixed grid makes the normalization integral grid-independent,
 # so the corona's optical flux doesn't change with the caller's wavelength grid.
 # The bare power-law nu^(1-Gamma) diverges at low frequencies for Gamma > 1;
-# a fixed lower bound removes this ambiguity.  2000 log-spaced points match
-# RELAGN's resolution.
-_CORONA_NU_GRID = host_array(np.geomspace(2.418e13, 2.418e21, 2000))
+# a fixed lower bound removes this ambiguity. The normalization is the log-log integral on
+# 8000 log-spaced points: 1e-7 from its 40000-node value (a trapezoid on 2000 points was 1.6e-5
+# off and a log-log on 2000 points 1.9e-6).
+_CORONA_NU_LO_HZ: float = 2.418e13
+_CORONA_NU_HI_HZ: float = 2.418e21
+_CORONA_NU_NODES: int = 8000
+
+
+def _corona_nu_grid() -> jnp.ndarray:
+    """The fixed corona normalization grid, built inside the trace from scalar end points.
+
+    An array literal would enter the traced graph as a constant (the grid is 8000 nodes); the
+    log-spaced nodes are computed from the two end points instead.
+    """
+    return jnp.exp(
+        jnp.linspace(math.log(_CORONA_NU_LO_HZ), math.log(_CORONA_NU_HI_HZ), _CORONA_NU_NODES)
+    )
 
 
 def _hot_corona_lnu(
@@ -1166,8 +1190,9 @@ def _hot_corona_lnu(
 
     shape = _comp_shape(nu)
     # Normalize on the fixed internal grid (grid-independent).
-    shape_norm = _comp_shape(device_table(_CORONA_NU_GRID))
-    integral = jnp.trapezoid(shape_norm, device_table(_CORONA_NU_GRID))
+    nu_norm = _corona_nu_grid()
+    shape_norm = _comp_shape(nu_norm)
+    integral = loglog_integral(nu_norm, shape_norm)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
     return l_hot_erg * shape / integral_safe

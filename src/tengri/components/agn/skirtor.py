@@ -1472,7 +1472,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
         )
         spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
         l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
-        bolo = jnp.trapezoid(spec[order], nu_g[order])
+        bolo = loglog_integral(nu_g[order], spec[order])
         spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), representable_denominator(1e-100)))
         return resample_template(wavelength, wave_g, spec_n, left=0.0, right=0.0)
 

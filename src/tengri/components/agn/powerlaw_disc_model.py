@@ -46,7 +46,9 @@ _LUM_RATIO_PRIOR = declared_prior(_AGN_PARAMS, "agn_lum_ratio")
 
 #: Log-uniform grid over the normalization band [Angstrom] (10 A to 1e8 A), on which the
 #: published bolometric luminosity is integrated.
-_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 500)
+# 8001 nodes: the trapezoid in ln(nu) of the published band is within 2e-7 of its 160001-node
+# value for the steep, cut-off shapes; 500 nodes were 4e-5 off at alpha = -1.7, T_max = 3e4.
+_PUBLISHED_BAND_AA = np.geomspace(10.0, 1.0e8, 8001)
 
 
 @dataclass(frozen=True)

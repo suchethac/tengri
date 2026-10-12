@@ -140,7 +140,7 @@ _KUBOTA_LEDGER_WAVE = np.unique(
 )
 
 #: Trapezoid nodes the CIGALE tie integrates the disc on over the SKIRTOR library's range.
-_TIE_FINE_NODES = 4001
+_TIE_FINE_NODES = 8001
 
 #: Tori whose library carries the disc, and so tie it to ``agn_power`` (CIGALE ``skirtor2016``
 #: and ``fritz2006``).
@@ -1272,7 +1272,9 @@ agn_torus_block, agn_attenuation_block : str
             # ``R`` is a ratio of trapezoids over the 136-node library axis, but the disc
             # output is continuous, so its reweighted bolometric is the continuous
             # integral over the library's range: the disc re-evaluated on a fixed fine grid
-            # spanning it (4000 points, ~3e-4 in ln lambda per node).
+            # spanning it (8001 points, 2e-3 in ln lambda per node), integrated log-log:
+            # the trapezoid on 4001 nodes sat 3e-6 high on the Kubota disc, the log-log on
+            # 8001 nodes 4e-7 off the 400000-node value.
             _fine = jnp.geomspace(_tie_wave[0], _tie_wave[-1], _TIE_FINE_NODES)
             if _split_fn is None:
                 _disc_fine = redden_disc(
@@ -1285,7 +1287,7 @@ agn_torus_block, agn_attenuation_block : str
             else:
                 _disc_fine = _disc_parts(_fine)[0]
             _incl_fine = resample_template(_fine, _tie_wave, _tie_incl_native, left=0.0, right=0.0)
-            _disc_integral = jnp.trapezoid(_disc_fine * _incl_fine, _fine)
+            _disc_integral = loglog_integral(_fine, _disc_fine * _incl_fine)
         _disc_int = jnp.maximum(_disc_integral, 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
         if _corona_part is not None:

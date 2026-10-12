@@ -638,20 +638,19 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: in (sum, first bin, middle bin, last bin) order: +2.1e-4 / +3.78e-3 / +6.2e-6 / +1.3e-5
 #: at 6; +4.1e-4 / +3.78e-3 / +2.6e-4 / +3.4e-5 at 8; +4.6e-4 / +3.78e-3 / +3.1e-4 /
 #: +3.2e-4 at 10. The first bin is disc-dominated and carries the full 0.378 % move.
+#: Re-captured for the tie's disc normalization (runner.py ``_disc_integral``, the integral over
+#: the library range the disc is tied on): a trapezoid on 4001 log nodes became a log-log integral
+#: on 8001 nodes. The trapezoid was 1.43e-5 low on the disc-dominated first bin (the 0.01 A node);
+#: the log-log value on 8001 nodes is within 1e-7 of its 32001-node value (4001 nodes: 1.5e-6 at
+#: log M 10), and the first bin is the same on 4001 and 8001 nodes, so the move is the quadrature
+#: rule. Relative change old -> new in (sum, first, middle, last) order:
+#: 6: +4.7e-9 / +1.43e-5 / +4.6e-9 / +1.6e-10; 8: +1.8e-7 / +1.43e-5 / +2.1e-7 / +1.7e-8;
+#: 10: +2.1e-7 / +1.43e-5 / +2.3e-7 / +1.5e-7. The disc, and so the whole first bin, scale by the
+#: same factor.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5590146411586656e32, 81456333180922.34, 2.8901657433420926e28, 8.775409571423144e21),
-    8.0: (
-        1.651083868465166e32,
-        2.2345920173419612e16,
-        3.097662493903965e28,
-        8.825497664879295e21,
-    ),
-    10.0: (
-        1.6777737806589375e32,
-        2.3412489655389012e16,
-        3.1406320010925746e28,
-        9.551744308606772e21,
-    ),
+    6.0: (1.559014648551e32, 8.145749921329e13, 2.890165756589e28, 8.775409572862e21),
+    8.0: (1.651084162942e32, 2.234623917649e16, 3.097663148071e28, 8.825497810069e21),
+    10.0: (1.677774125002e32, 2.341282354396e16, 3.140632710145e28, 9.551745772735e21),
 }
 
 
