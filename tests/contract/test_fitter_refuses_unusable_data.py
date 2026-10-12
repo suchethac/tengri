@@ -278,3 +278,47 @@ class TestOrderDependence:
         bad_noise2[_DROP] = -1.0
         with pytest.raises(ValueError):
             _fit(model, obs, flux, bad_noise2)
+
+
+class TestCatalogStackingRefusesUnusableData:
+    """Every galaxy in a batched catalog is checked, not only galaxy 0.
+
+    The stacking step is reached with a stub engine, so no JAX optimization
+    runs: the refusal happens before the engine is called.
+    """
+
+    @pytest.fixture
+    def stubbed(self, monkeypatch):
+        import jax
+        import jax.numpy as jnp
+
+        from tengri.inference.catalog_fitter import CatalogFitter
+
+        class _StubFitter:
+            def _initialize_unbounded(self, key):
+                return jnp.zeros(2)
+
+        def _engine(self):
+            def _unreached(*args, **kwargs):
+                raise AssertionError("engine reached before the data was checked")
+
+            return _unreached, None, None, lambda p: p, lambda p: p
+
+        monkeypatch.setattr(CatalogFitter, "_get_dummy_fitter", lambda self: _StubFitter())
+        monkeypatch.setattr(CatalogFitter, "_get_catalog_nonlinear_engine", _engine)
+        return CatalogFitter, jax.random.PRNGKey(0)
+
+    @pytest.mark.parametrize(
+        ("kind", "value"),
+        [("noise", 0.0), ("noise", np.nan), ("flux_obs", np.nan)],
+    )
+    def test_bad_value_in_later_galaxy_raises(self, stubbed, kind, value):
+        import jax.numpy as jnp
+
+        CatalogFitter, key = stubbed
+        good = {"flux_obs": jnp.ones(5), "noise": jnp.ones(5)}
+        bad = {"flux_obs": jnp.ones(5), "noise": jnp.ones(5)}
+        bad[kind] = bad[kind].at[2].set(value)
+        cf = CatalogFitter(None, [good, bad])
+        with pytest.raises(ValueError, match="index"):
+            cf._run_native("native_vi_nonlinear", key=key, verbose=False)
