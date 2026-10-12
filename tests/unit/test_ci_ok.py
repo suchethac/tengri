@@ -434,7 +434,9 @@ class TestUnrelatedLabelEvents:
 _ALL_SHARDS = [
     "contract",
     "components",
-    "regression-a",
+    "regression-a1",
+    "regression-a2",
+    "regression-a3",
     "regression-b1",
     "regression-b2",
     "regression-b3",
