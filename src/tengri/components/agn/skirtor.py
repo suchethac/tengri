@@ -2,9 +2,10 @@
 """SKIRTOR clumpy two-phase torus model (Stalevski et al. 2012, 2016).
 
 Loads the full SKIRTOR SED library (``create_skirtor_from_grid``) and performs
-5D triweight kernel interpolation in JAX.  Provides C²-continuous gradients for
-smooth inference (VI, MAP, NUTS).  Requires a prior download of the template
-grid (~1 GB).
+5D triweight kernel interpolation in JAX (the disc and dust components of
+``create_skirtor_components_from_grid`` use node-exact PCHIP instead).  Provides
+smooth gradients for inference (VI, MAP, NUTS).  Requires a prior download of the
+template grid (~1 GB).
 
 Supports two HDF5 layouts:
 
@@ -937,7 +938,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     .. [3] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic Interpolation,"
        SIAM J. Numer. Anal. 17, 238 (1980). https://doi.org/10.1137/0717021
     """
-    from tengri.components.agn._publication import inclination_quadrature
+    from tengri.components.agn import _publication
     from tengri.components.agn._template_grid import native_bolometric_nu
 
     raw = _load_grid_arrays(grid_path)
@@ -974,7 +975,9 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     inc_kinds = ("pchip" if inc_axis.shape[0] >= 3 else "linear",)
 
     # Inclination quadrature nodes and weights (static host constants, float64).
-    mu_q, w_q = inclination_quadrature(np.asarray(axes[-1], dtype=np.float64))
+    mu_q, w_q = _publication.inclination_quadrature(
+        np.asarray(axes[-1], dtype=np.float64), _publication.INCLINATION_GL_ORDER
+    )
 
     def _at_inclination(by_inc, cos_inc):
         """PCHIP in cos i of an ``(n_inc, n_native)`` record."""

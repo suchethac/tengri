@@ -32,7 +32,6 @@ from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._publication import (
     INCLINATION_GL_ORDER,
-    inclination_edges,
     inclination_quadrature,
     with_lsun_outputs,
     with_lsun_siblings,
@@ -279,9 +278,9 @@ class SKIRTORTorusState(SEDComponentState):
 class SKIRTORTorus(SEDModelComponent):
     r"""Clumpy torus SED from SKIRTOR radiative-transfer models.
 
-    A pure-JAX implementation with C²-continuous gradients via triweight
-    kernel interpolation in the 5D parameter space (tau, p, q, opening angle,
-    inclination). Publishes separate disc and torus contributions, with
+    A pure-JAX implementation with C1 gradients via node-exact monotone cubic
+    (PCHIP) interpolation along every axis of the library (tau, p, q, opening
+    angle, radius ratio, cos inclination). Publishes separate disc and torus contributions, with
     polar dust wire-in for Type 1 sightlines.
 
     Attributes
@@ -330,28 +329,37 @@ class SKIRTORTorus(SEDModelComponent):
     Cross-component outputs
     -----------------------
     log_L_agn_disc, log_L_agn_torus : dex
-        log10 of the angle-integrated bolometric power of the accretion disc and of the torus
-        dust thermal emission [dex re erg/s]: the mean over the sphere of the line-of-sight
-        power below,
+        log10 of the angle-integrated bolometric power of the disc light that escapes the torus
+        and polar dust and of the torus dust thermal emission [dex re erg/s]: the mean over the
+        sphere of the line-of-sight power below,
         :math:`\tfrac12\int_0^\pi L(\theta)\sin\theta\,d\theta = \int_0^1 L(\mu)\,d\mu`
         with :math:`\mu = \cos i`, taken by Gauss-Legendre on each interval between the
-        template's own inclination nodes. Independent of ``cos_inc``. The sphere-mean disc power
-        is ``10**log_lbol L_sun * torus_frac``.
+        template's own inclination nodes. Independent of ``cos_inc``. The disc is net of the
+        power the polar dust takes from the cone (``log_L_agn_polar_dust``). SKIRTOR conserves
+        energy, so the three sphere powers add up to the accretion power,
+
+        .. math::
+
+            P_{\rm disc} + P_{\rm torus} + P_{\rm polar} = 10^{\log L_{\rm bol}}\,L_\odot\,f,
+
+        with :math:`f` = ``torus_frac`` the AGN share that multiplies every piece.
     log_L_agn_polar_dust : dex
         log10 of the power the polar dust absorbs from the disc light emitted into the polar
         cone and re-emits as a graybody [dex re erg/s]:
-        :math:`\int_{\sin\Phi}^1 A(\mu)\,d\mu`, with :math:`A(\mu)` the absorbed power of the
-        disc emitted along :math:`\mu` and :math:`\Phi` the torus half-opening angle
-        ``oa_skirtor``. It does not depend on ``cos_inc``. ``-inf`` is an absent piece (no
-        polar dust at ``polar_ebv = 0``).
+        :math:`\int_0^1 w(\mu)\,A(\mu)\,d\mu`, with :math:`A(\mu)` the absorbed power of the
+        disc emitted along :math:`\mu` and :math:`w` the Type-1 weight of the SED, the logistic
+        in :math:`\cos i` of width 0.025 about :math:`\sin\Phi` (:math:`\Phi` the torus
+        half-opening angle ``oa_skirtor``) that attenuates the observed disc. The weight that
+        removes the power from each sightline is the weight that sums it, so the emitted SEDs
+        conserve energy over the sphere. It does not depend on ``cos_inc``. ``-inf`` is an
+        absent piece (no polar dust at ``polar_ebv = 0``).
     log_L_agn_disc_los, log_L_agn_torus_los : dex
         log10 of the disc and torus-dust power integrated over the SED emitted along the
-        sightline ``cos_inc`` [dex re erg/s]. They follow SKIRTOR's own anisotropy: the library
+        sightline ``cos_inc`` [dex re erg/s]; the disc after the polar dust's Type-1-masked
+        attenuation, as in the SED. They follow SKIRTOR's own anisotropy: the library
         stores each record divided by its dust integral, and the ``norm`` records that carry the
-        flux ratio between inclinations are restored.
-    log_L_agn_polar_dust_los : dex
-        The power of the polar-dust re-emission along the sightline. The graybody is emitted
-        isotropically, so this equals ``log_L_agn_polar_dust`` at every ``cos_inc``.
+        flux ratio between inclinations are restored. At a library inclination (and library
+        parameters) they are the record's power times the one scale of the normalization.
     L_agn_<piece>_lsun : Lsun
         Each ``log_L_agn_<piece>`` above in solar luminosities.
     L_2500_30deg : erg/s/Hz
@@ -365,7 +373,7 @@ class SKIRTORTorus(SEDModelComponent):
     -----
     **JIT-compatible**: yes, predict() is pure JAX.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, the node-exact PCHIP interpolation of the templates is C1.
 
     **Requires template grid**: The SKIRTOR template library (~1 GB) must be
     downloaded separately and pointed to via ``grid_path`` in config. The
@@ -771,6 +779,10 @@ class SKIRTORTorus(SEDModelComponent):
             )
             return jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
 
+        def _masked_absorbed(cos_inc):
+            """The absorbed power that leaves the disc along ``cos_inc`` (the Type-1 weight)."""
+            return type1_weight(cos_inc, p["oa_skirtor"]) * _cone_absorbed(cos_inc)
+
         # Line of sight: the pieces and powers along ``cos_inc`` itself.
         raw_pub, dust_pub, disc_renorm = _disc_along(p["cos_inc"])
         sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
@@ -779,29 +791,23 @@ class SKIRTORTorus(SEDModelComponent):
         # Angle-integrated: the mean of the line-of-sight power over the sphere,
         # (1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu by symmetry about the
         # equator, by Gauss-Legendre on each interval between the template's own inclination
-        # nodes (measured error in ``inclination_quadrature``).
+        # nodes (measured error in ``inclination_quadrature``). The polar dust takes the disc
+        # light emitted into the polar cone, whose edge is the Type-1 weight of the SED: the
+        # same logistic in cos i that attenuates the observed disc, so what the dust absorbs
+        # from the sphere is exactly what the emitted SEDs lose. The weight is analytic
+        # (poles at distance pi * 0.025 from the real axis), which the rule resolves on every
+        # interval. This depends on the torus, not on the sightline.
         mu_nodes, mu_weight = inclination_quadrature(
             skirtor_fn.native_cos_inc, INCLINATION_GL_ORDER
         )
         unit_mean = jnp.tensordot(
             jnp.asarray(mu_weight, dtype=wave.dtype),
-            jax.vmap(_powers)(jnp.asarray(mu_nodes, dtype=wave.dtype)),
+            jax.vmap(lambda mu: jnp.append(_powers(mu), _masked_absorbed(mu)))(
+                jnp.asarray(mu_nodes, dtype=wave.dtype)
+            ),
             axes=1,
         )
-
-        # Polar dust: the disc light emitted INTO the polar cone is absorbed and re-emitted
-        # isotropically. The cone is the set of directions with cos(theta) >= sin(oa) (both
-        # lobes), so its share of the sphere-mean is int_{sin(oa)}^1 L(mu) dmu: the same
-        # per-interval Gauss-Legendre rule as the sphere mean, with the lower limit of each
-        # interval raised to the cone edge. This depends on the torus, not on the sightline.
-        edges_mu = inclination_edges(skirtor_fn.native_cos_inc)
-        x_gl, w_gl = np.polynomial.legendre.leggauss(INCLINATION_GL_ORDER)
-        cone_edge = jnp.sin(jnp.radians(p["oa_skirtor"]))
-        lo = jnp.clip(cone_edge, edges_mu[:-1], edges_mu[1:])
-        half = 0.5 * (edges_mu[1:] - lo)
-        mu_cone = (half[:, None] * jnp.asarray(x_gl) + (lo + half)[:, None]).ravel()
-        w_cone = (half[:, None] * jnp.asarray(w_gl)).ravel()
-        l_abs_unit = jnp.dot(w_cone.astype(wave.dtype), jax.vmap(_cone_absorbed)(mu_cone))
+        l_abs_unit = unit_mean[2]
         l_abs = frac * l_abs_unit
 
         # Energy ledger. The templates carry the escaping disc and the torus dust, which add up
@@ -811,8 +817,7 @@ class SKIRTORTorus(SEDModelComponent):
         #   disc + torus + polar = frac * 10**agn_log_lbol * L_sun
         # on the sphere. Along a sightline the disc loses what the Type-1 mask lets the polar
         # dust attenuate there, exactly the power the attenuated SED loses.
-        mask_los = type1_weight(p["cos_inc"], p["oa_skirtor"])
-        disc_los = unit_los[0] - mask_los * _cone_absorbed(p["cos_inc"])
+        disc_los = unit_los[0] - _masked_absorbed(p["cos_inc"])
         powers_los = frac * jnp.stack([disc_los, unit_los[1]])
         powers_mean = frac * jnp.stack([unit_mean[0] - l_abs_unit, unit_mean[1]])
 

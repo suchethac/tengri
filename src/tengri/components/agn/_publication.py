@@ -234,13 +234,14 @@ def log10_native_bolometric(lnu_native, wave_native) -> jnp.ndarray:
     return log10_magnitude(total) + jnp.log10(safe_peak)
 
 
-#: Gauss-Legendre points per interval between the template's inclination nodes. Measured on
-#: the SKIRTOR v3 grid against an 801-point Simpson reference of the same interpolant (the
-#: reference agrees with its own trapezoid to 1e-7): worst relative error over five parameter
-#: sets (oa 10 to 80 deg, tau 3 to 11, delta -0.8 to 0.5, polar E(B-V) 0 to 0.3) is 7e-5 for
-#: the disc, 2e-8 for the torus and 1e-3 for the polar-dust power; the trapezoid on the nodes
-#: gives 1e-3, 2e-5 and 3e-2, two points per interval 2e-4, 4e-7 and 2e-3.
-INCLINATION_GL_ORDER: int = 12
+#: Gauss-Legendre points per interval between the template's inclination nodes. Each interval
+#: is one cubic of the PCHIP interpolant, and the power is a smooth function of it. Measured on
+#: the SKIRTOR v3 grid against order 64 of the same interpolant (published keys at four
+#: parameter sets: opening angle 23 to 70 deg, tau 4 to 9.5, delta -0.5 to 0.6, polar E(B-V)
+#: 0.05 to 0.3): worst relative error 5e-10 at order 12, 2e-11 at 16 and 4e-12 at 20; on the
+#: raw records (12 parameter points, order 48 reference) the disc mean is off by 7e-10, 3e-11
+#: and 2e-12 at the same orders, the dust by 4e-12, 3e-14 and 2e-14.
+INCLINATION_GL_ORDER: int = 16
 
 
 def inclination_edges(cos_inc_nodes) -> np.ndarray:

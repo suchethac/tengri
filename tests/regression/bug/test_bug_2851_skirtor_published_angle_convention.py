@@ -20,8 +20,9 @@ published keys are
   Gauss-Legendre on each interval between the template's own inclination nodes; independent
   of ``cos_inc``; the disc is net of the power the polar dust takes from the cone;
 * ``log_L_agn_polar_dust``: the power the polar dust absorbs from the disc light emitted into
-  the polar cone, :math:`\\int_{\\sin \\Phi}^1 A(\\mu)\\,d\\mu` with :math:`\\Phi` the torus
-  half-opening angle, re-emitted isotropically; independent of ``cos_inc``;
+  the polar cone, :math:`\\int_0^1 w(\\mu) A(\\mu)\\,d\\mu` with :math:`w` the Type-1 logistic
+  about :math:`\\sin \\Phi` (:math:`\\Phi` the torus half-opening angle) that attenuates the
+  observed disc, re-emitted isotropically; independent of ``cos_inc``;
 * the ``_los`` siblings: the power of the SED emitted along ``cos_inc``, after the polar dust's
   Type-1-masked attenuation. The polar re-emission is isotropic, so its ``_los`` key equals
   the plain one.
@@ -46,7 +47,6 @@ from tests.physics._agn_published import build_component, declared_box
 from tests.physics._skirtor_reference import (
     RawSkirtor,
     cone_absorbed,
-    cone_intervals,
     emitted_pieces,
 )
 
@@ -194,17 +194,28 @@ def test_polar_reemission_does_not_depend_on_the_sightline(skirtor):
     assert max(plain) - min(plain) < 1e-12, plain
     assert los == plain
     cone = cone_absorbed(
-        comp, {k: jnp.asarray(v, dtype=jnp.float64) for k, v in base.items()}, _WIDE, order=8
+        comp, {k: jnp.asarray(v, dtype=jnp.float64) for k, v in base.items()}, _WIDE, order=16
     )
     assert abs(10.0 ** plain[0] / cone - 1.0) < _RTOL
 
 
-def test_polar_cone_integral_is_the_edge_weighted_sphere_share(skirtor):
-    """The cone rule integrates ``int_{sin(oa)}^1 d(mu)`` exactly for a constant integrand."""
+def test_polar_cone_weight_integrates_to_the_logistic_share(skirtor):
+    """The quadrature of the polar weight is the closed-form integral of the logistic (1e-12).
+
+    ``int_0^1 sigma((mu - sin(oa)) / w) d(mu) = w [ln(1 + e^{(1 - e)/w}) - ln(1 + e^{-e/w})]``
+    with ``e = sin(oa)`` and ``w`` the Type-1 transition width; it is the sphere share of the
+    cone. The rule is the one that sums the absorbed power.
+    """
+    from tengri.components.agn._publication import INCLINATION_GL_ORDER, inclination_quadrature
+    from tengri.components.agn.polar_dust import TYPE_TRANSITION_WIDTH, type1_weight
+
     comp, _ = skirtor
+    mu, weight = inclination_quadrature(comp.data.native_cos_inc, INCLINATION_GL_ORDER)
     for oa in (10.0, 38.0, 80.0):
-        _, weight = cone_intervals(comp.data.native_cos_inc, oa, 8)
-        assert weight.sum() == pytest.approx(1.0 - np.sin(np.radians(oa)), abs=1e-14)
+        edge, width = np.sin(np.radians(oa)), TYPE_TRANSITION_WIDTH
+        exact = width * (np.log1p(np.exp((1 - edge) / width)) - np.log1p(np.exp(-edge / width)))
+        got = float(np.sum(weight * np.asarray(type1_weight(jnp.asarray(mu), oa))))
+        assert got == pytest.approx(exact, rel=1e-12)
 
 
 @pytest.fixture(scope="module")

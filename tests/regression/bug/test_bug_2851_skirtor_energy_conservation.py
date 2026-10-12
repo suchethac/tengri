@@ -34,11 +34,7 @@ from tengri._data_setup import find_data
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests.physics._agn_publication import PUB_COARSE, ln_nu_integral
 from tests.physics._agn_published import build_component, declared_box
-from tests.physics._skirtor_reference import (
-    DISC_SUPPORT_AA,
-    RawSkirtor,
-    emitted_pieces,
-)
+from tests.physics._skirtor_reference import DISC_SUPPORT_AA, RawSkirtor
 
 pytestmark = pytest.mark.regression_bug
 
@@ -120,17 +116,25 @@ def test_polar_dust_takes_its_power_from_the_disc(skirtor):
     assert dusty[0] > 0.0
 
 
+@pytest.mark.parametrize("polar_ebv", [0.0, 0.2])
 @pytest.mark.parametrize("delta", [0.0, 0.6])
-def test_sphere_integral_of_the_emitted_pieces_is_the_accretion_power(skirtor, delta):
-    """The dense-grid power of the emitted SEDs, summed over the sphere, is ``f L`` (1e-6).
+def test_sphere_integral_of_the_emitted_sed_is_the_accretion_power(skirtor, delta, polar_ebv):
+    """The dense-grid power of the SED the component emits, summed over the sphere, is ``f L``.
 
-    Independent of the published keys and of the template scale: the disc and dust SEDs are
-    rebuilt from the component's template function on a wide grid at Gauss-Legendre points of
-    order 12 on every interval between the library's inclination nodes, and integrated with
-    the ln(nu) trapezoid.
+    Independent of the published keys and of the template scale: ``predict`` is evaluated on a
+    wide grid along Gauss-Legendre points of order 12 on every interval between the library's
+    inclination nodes (the published rule is order 16) and each SED integrated with the ln(nu)
+    trapezoid. The SED carries the attenuated disc, the torus dust and the isotropic polar
+    re-emission, so the sphere sum closes only if the power the polar dust absorbs from the
+    cone is the power it re-emits (1e-6).
     """
     comp, mid = skirtor
-    params = {k: jnp.asarray(v, dtype=jnp.float64) for k, v in {**mid, "delta": delta}.items()}
+    params = {
+        k: jnp.asarray(v, dtype=jnp.float64)
+        for k, v in {**mid, "delta": delta, "polar_ebv": polar_ebv}.items()
+    }
+    wide = jnp.asarray(_WIDE)
+    emitted = jax.jit(lambda p: comp.predict(p, jnp.zeros_like(wide), wide)[0])
     nodes = np.asarray(comp.data.native_cos_inc)
     edges = np.concatenate([[0.0], nodes[1:]])
     x, w = np.polynomial.legendre.leggauss(12)
@@ -138,9 +142,8 @@ def test_sphere_integral_of_the_emitted_pieces_is_the_accretion_power(skirtor, d
     for a, b in itertools.pairwise(edges):
         for xi, wi in zip(x, w, strict=True):
             mu = 0.5 * (b - a) * xi + 0.5 * (a + b)
-            piece = emitted_pieces(comp, {**params, "cos_inc": mu}, _WIDE)
-            power = ln_nu_integral(piece["disc"], _WIDE) + ln_nu_integral(piece["dust"], _WIDE)
-            total += 0.5 * (b - a) * wi * power
+            sed = np.asarray(emitted({**params, "cos_inc": jnp.asarray(mu)}))
+            total += 0.5 * (b - a) * wi * ln_nu_integral(sed, _WIDE)
     expected = float(params["torus_frac"]) * 10.0 ** mid["log_lbol"] * L_SUN
     assert abs(total / expected - 1.0) < _RTOL
 
@@ -190,4 +193,72 @@ def test_templates_at_inclination_nodes_are_the_raw_records_times_one_scale(
     assert np.max(np.abs(flat / flat[0] - 1.0)) < 1e-12
     mean_total = raw_library.sphere_mean(lambda m: raw_library.total_power(point, m))
     expected = 10.0 ** params["log_lbol"] * L_SUN / mean_total
-    assert abs(flat[0] / expected - 1.0) < 1e-9
+    assert abs(flat[0] / expected - 1.0) < 1e-10
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"polar_ebv": 0.2, "cos_inc": 0.3},
+        {"oa_skirtor": 23.0, "tau_skirtor": 9.5, "delta": 0.6, "polar_ebv": 0.3, "cos_inc": 0.8},
+    ],
+    ids=["center", "closed_torus_shifted_disc"],
+)
+def test_inclination_quadrature_is_converged(monkeypatch, extra):
+    """Every published sphere power at the shipped order equals order 64 to 1e-10.
+
+    The quadrature is Gauss-Legendre on each interval between the library's inclination nodes
+    (one PCHIP cubic per interval); the power is a smooth function of that cubic.
+    """
+    from tengri.components.agn import _publication, skirtor_model
+
+    def run(order):
+        monkeypatch.setattr(_publication, "INCLINATION_GL_ORDER", order)
+        monkeypatch.setattr(skirtor_model, "INCLINATION_GL_ORDER", order)
+        comp = build_component("skirtor")
+        mid = {k: 0.5 * (lo + hi) for k, (lo, hi) in declared_box(comp).items()}
+        return _published(comp, {**mid, **extra})
+
+    shipped, reference = run(_publication.INCLINATION_GL_ORDER), run(64)
+    for key in shipped:
+        if key.startswith("log_L_agn") and not key.endswith("_Lsun"):
+            err = abs(10.0 ** (shipped[key] - reference[key]) - 1.0)
+            assert err < 1e-10, f"{key}: shipped order vs order 64 off by {err:.2e}"
+
+
+@pytest.mark.parametrize("disk_type", [1, 2])
+@pytest.mark.parametrize("polar_ebv", [0.0, 0.2])
+def test_other_disc_types_keep_the_energy_ledger(disk_type, polar_ebv):
+    """Schartmann (1) and ADAF (2) discs: escaping disc + torus + polar = ``f L`` (1e-12).
+
+    The re-tilt renormalizes the selected disc to the template disc's power inside the support
+    of the analytic disc, and both selected discs vanish outside it, so no power leaks past the
+    support: measured over delta in [-1, 1], opening angles 15 to 75 deg and tau 3 and 10, the
+    sphere sum is ``f L`` to 7e-15.
+    """
+    from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
+
+    path = find_data("skirtor_templates_v3.h5")
+    if path is None:
+        pytest.skip("SKIRTOR v3 templates unavailable")
+    comp = SKIRTORTorus(config=SKIRTORTorusConfig(grid_path=str(path), disk_type=disk_type))
+    object.__setattr__(comp, "data", comp.load(None))
+    mid = {k: 0.5 * (lo + hi) for k, (lo, hi) in declared_box(comp).items()}
+    wave = jnp.asarray(PUB_COARSE)
+    publish = jax.jit(lambda p: comp.predict(p, jnp.zeros_like(wave), wave)[1])
+    expected = 10.0 ** mid["log_lbol"] * L_SUN
+    for delta in (-1.0, 0.0, 0.7):
+        for oa, tau, cos_inc in ((15.0, 3.0, 0.9), (75.0, 10.0, 0.2)):
+            params = {
+                **mid,
+                "delta": delta,
+                "oa_skirtor": oa,
+                "tau_skirtor": tau,
+                "cos_inc": cos_inc,
+                "polar_ebv": polar_ebv,
+                "torus_frac": 1.0,
+            }
+            traced = {k: jnp.asarray(v, dtype=jnp.float64) for k, v in params.items()}
+            pub = {k: float(v) for k, v in publish(traced).items()}
+            err = abs(_ledger(pub).sum() / expected - 1.0)
+            assert err < 1e-12, f"disk_type={disk_type} delta={delta} oa={oa}: off by {err:.2e}"

@@ -205,34 +205,35 @@ def emitted_pieces(comp, params, wave, disk_type=0):
     }
 
 
-def cone_intervals(cos_inc_nodes, oa_deg, order):
-    """Gauss-Legendre ``(mu, weight)`` for ``int_{sin(oa)}^1 d(mu)``, a panel per node interval."""
+def interval_quadrature(cos_inc_nodes, order):
+    """Gauss-Legendre ``(mu, weight)`` for ``int_0^1 d(mu)``, a panel per node interval."""
     nodes = np.asarray(cos_inc_nodes, dtype=float)
     edges = np.concatenate([[0.0], nodes[1:]]) if nodes[0] < 1e-9 else nodes
     x, w = np.polynomial.legendre.leggauss(order)
-    edge = np.sin(np.radians(oa_deg))
     mu, weight = [], []
     for a, b in itertools.pairwise(edges):
-        lo = min(max(edge, a), b)
-        half = 0.5 * (b - lo)
-        mu.extend(half * x + lo + half)
-        weight.extend(half * w)
+        mu.extend(0.5 * (b - a) * x + 0.5 * (a + b))
+        weight.extend(0.5 * (b - a) * w)
     return np.array(mu), np.array(weight)
 
 
-def cone_absorbed(comp, params, wave, disk_type=0, order=20):
-    """Power [erg/s] the polar dust absorbs from the disc emitted into the cone.
+def type1_logistic(mu, oa_deg, width=0.025):
+    """The Type-1 weight: the logistic in cos i of ``width`` about ``sin(oa)``."""
+    return 1.0 / (1.0 + np.exp(-(mu - np.sin(np.radians(oa_deg))) / width))
 
-    ``int_{sin(oa)}^1 A(mu) d(mu)`` with ``A(mu)`` the absorbed power of the disc emitted along
-    ``mu``: the share of the sphere mean that falls inside the polar cone (both lobes), by
-    Gauss-Legendre of ``order`` points on every interval between the template's inclination
-    nodes, the lower limit raised to the cone edge.
+
+def cone_absorbed(comp, params, wave, disk_type=0, order=20):
+    """Power [erg/s] the polar dust absorbs from the disc light emitted into the polar cone.
+
+    ``int_0^1 w(mu) A(mu) d(mu)`` with ``A(mu)`` the absorbed power of the disc emitted along
+    ``mu`` and ``w`` the Type-1 logistic of the SED (``type1_logistic``): the share of the
+    sphere mean that falls inside the polar cone (both lobes), by Gauss-Legendre of ``order``
+    points on every interval between the template's inclination nodes.
     """
-    mu, weight = cone_intervals(comp.data.native_cos_inc, float(params["oa_skirtor"]), order)
+    mu, weight = interval_quadrature(comp.data.native_cos_inc, order)
+    oa = float(params["oa_skirtor"])
     total = 0.0
     for m, wgt in zip(mu, weight, strict=True):
-        if wgt == 0.0:
-            continue
         piece = emitted_pieces(comp, {**params, "cos_inc": m}, wave, disk_type)
-        total += wgt * piece["absorbed_power"]
+        total += wgt * type1_logistic(m, oa) * piece["absorbed_power"]
     return total
