@@ -473,16 +473,24 @@ def test_skirtor_published_match_wide_quadrature_of_emitted_pieces():
         pieces = _skirtor_emitted_pieces(comp, params, _WIDE)
         pub = {
             key: _publisher(comp, params, key)(_PUB_DENSE)
-            for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+            for key in ("L_agn_disc_los", "L_agn_torus", "L_agn_polar_dust")
         }
         for key, wide in (
-            ("L_agn_disc", pieces["disc"]),
+            ("L_agn_disc_los", pieces["disc"]),
             ("L_agn_torus", pieces["dust"]),
             ("L_agn_polar_dust", pieces["polar"]),
         ):
             emitted = _ln_nu_integral(wide, _WIDE)
             err = abs(pub[key] / emitted - 1.0)
             assert err < _RTOL, f"SKIRTOR {key} {overrides}: published-vs-emitted rel {err:.3e}"
+        # L_agn_disc is the disc at the reference inclination (angle-integrated power, #2851).
+        ref_pieces = _skirtor_emitted_pieces(comp, dict(params, cos_inc=jnp.asarray(0.5)), _WIDE)
+        ref_err = abs(
+            _publisher(comp, params, "L_agn_disc")(_PUB_DENSE)
+            / _ln_nu_integral(ref_pieces["disc"], _WIDE)
+            - 1.0
+        )
+        assert ref_err < _RTOL, f"SKIRTOR L_agn_disc {overrides}: reference rel {ref_err:.3e}"
 
 
 def _skirtor_with_disk_type(disk_type, overrides):
@@ -520,16 +528,16 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
     comp, params = _skirtor_with_disk_type(disk_type, overrides)
     pub = {
         key: _publisher(comp, params, key)(_PUB_COARSE)
-        for key in ("L_agn_disc", "L_agn_torus", "L_agn_polar_dust")
+        for key in ("L_agn_disc_los", "L_agn_torus", "L_agn_polar_dust")
     }
     pieces = _skirtor_emitted_pieces(comp, params, _WIDE, disk_type=disk_type)
-    for key, piece in (("L_agn_disc", "disc"), ("L_agn_torus", "dust")):
+    for key, piece in (("L_agn_disc_los", "disc"), ("L_agn_torus", "dust")):
         err = abs(pub[key] / _ln_nu_integral(pieces[piece], _WIDE) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} {key}: rel {err:.3e}"
     sed = _emitter(comp, params)(_WIDE)
     total = _ln_nu_integral(sed, _WIDE)
     if float(params["polar_ebv"]) == 0.0:
-        err = abs(total / (pub["L_agn_disc"] + pub["L_agn_torus"]) - 1.0)
+        err = abs(total / (pub["L_agn_disc_los"] + pub["L_agn_torus"]) - 1.0)
         assert err < _RTOL, f"disk_type={disk_type} {overrides} SED total: rel {err:.3e}"
         assert pub["L_agn_polar_dust"] == 0.0
     else:

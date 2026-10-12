@@ -28,6 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.disc_cigale import (
     adaf_disk_limits,
@@ -459,6 +460,7 @@ class SKIRTORTorus(SEDModelComponent):
     # Cross-component outputs
     outputs: ClassVar[dict[str, str]] = {
         "L_agn_disc": "erg/s",
+        "L_agn_disc_los": "erg/s",
         "L_agn_torus": "erg/s",
         "L_agn_polar_dust": "erg/s",
         "L_2500_30deg": "erg/s/Hz",
@@ -594,7 +596,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         skirtor_fn = self.data
 
-        def _components(wave_eval):
+        def _components(wave_eval, cos_inc=None):
             return skirtor_fn(
                 wavelength=wave_eval,
                 agn_log_lbol=p["log_lbol"],
@@ -603,7 +605,7 @@ class SKIRTORTorus(SEDModelComponent):
                 agn_q_skirtor=p["q_skirtor"],
                 agn_oa_skirtor=p["oa_skirtor"],
                 agn_radius_ratio=p["radius_ratio"],
-                agn_cos_inc=p["cos_inc"],
+                agn_cos_inc=p["cos_inc"] if cos_inc is None else cos_inc,
                 frac_agn=p["torus_frac"],
             )
 
@@ -665,7 +667,16 @@ class SKIRTORTorus(SEDModelComponent):
         dust_pub = comp_pub.dust
 
         # Published luminosities: exact integrals of the emitted disc and dust SEDs.
-        L_agn_disc = disc_renorm * _bolometric_tilted(raw_pub, wave_pub)
+        # L_agn_disc is the angle-integrated accretion power (owner ruling #2678): the disc
+        # at the reference inclination cos i = 1/2, where the line-of-sight power equals the
+        # angle-integrated power (as in disc.py), so it does not depend on agn_cos_inc. The
+        # line-of-sight integral at the requested inclination is L_agn_disc_los.
+        raw_ref_pub = _components(wave_pub, cos_inc=COS_INC_ISOTROPIC_REFERENCE).disk
+        renorm_ref = native_bolometric_nu(raw_ref_pub * support_pub, wave_pub) / (
+            _bolometric_tilted(raw_ref_pub, wave_pub, support_pub)
+        )
+        L_agn_disc = renorm_ref * _bolometric_tilted(raw_ref_pub, wave_pub)
+        L_agn_disc_los = disc_renorm * _bolometric_tilted(raw_pub, wave_pub)
         L_agn_torus = native_bolometric_nu(dust_pub, wave_pub)
 
         # Polar dust (Type 1 only). The absorbed power integrates the disc through an analytic
@@ -698,6 +709,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         published = {
             "L_agn_disc": L_agn_disc,
+            "L_agn_disc_los": L_agn_disc_los,
             "L_agn_torus": L_agn_torus,
             "L_agn_polar_dust": L_agn_polar_dust,
             "L_2500_30deg": L_2500,

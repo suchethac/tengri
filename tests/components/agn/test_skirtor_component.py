@@ -124,6 +124,7 @@ class TestSKIRTORComponentBasics:
         names = {o.name for o in outs}
         expected = {
             "L_agn_disc",
+            "L_agn_disc_los",
             "L_agn_torus",
             "L_agn_polar_dust",
             "L_2500_30deg",
