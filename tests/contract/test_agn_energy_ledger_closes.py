@@ -44,15 +44,6 @@ _L_FINE = np.geomspace(1.0e3, 1.0e7, 6000)
 
 _DATA = Path(__file__).resolve().parents[2] / "data"
 
-#: Known failures, keyed by ``case: measured``. Each entry is xfail(strict=True), so the
-#: case starts passing and the entry must be removed once the leak is closed.
-KNOWN_LEAKS = {
-    "grahsp_bbb": (
-        "L_agn_bol is the BBB above the Lyman limit, a step on a 13001-node budget grid: "
-        "the converged value is 4.1e-4 away (measured -4.14e-4 at 8x density)"
-    ),
-}
-
 _TORUS_KEYS = ("L_agn_torus",)
 
 #: Component -> (published keys whose sum the spectrum integrates to). The keys are the
@@ -244,7 +235,6 @@ def test_grahsp_torus_spectrum_integrates_to_L_agn_torus():
     assert rel < _LEDGER_RTOL, f"grahsp torus: spectrum vs L_agn_torus rel {rel:.3e}"
 
 
-@pytest.mark.xfail(strict=True, reason=KNOWN_LEAKS["grahsp_bbb"])
 def test_grahsp_bbb_spectrum_integrates_to_L_agn_bol():
     """GRAHSP BBB, lines and FeII above 91.2 nm carry L_agn_bol to 1e-4."""
     out = _grahsp(
