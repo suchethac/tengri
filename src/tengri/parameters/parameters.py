@@ -2618,7 +2618,7 @@ class Parameters:
                 continue
             val = float(params[name])
             lo, hi = dist.bounds
-            if not dist.is_fixed and (val < lo or val > hi):
+            if not dist.is_fixed and not (lo <= val <= hi):
                 raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
     def summary_str(self) -> str:
