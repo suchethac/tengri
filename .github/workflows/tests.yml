@@ -1346,8 +1346,9 @@ jobs:
           fi
       # `--durations` lists each shard's 60 slowest tests (>= 5 s) at the end of
       # its log, so a shard's growth can be named from a completed run (#2908).
-      # `-v` (not `-q`) prints one timestamped line per test, so a shard that hits
-      # its step budget (and never prints `--durations`) can still be timed per test.
+      # `-v` (not `-q`) prints one line per test, and the Actions log stamps every
+      # line, so a shard that hits its step budget (and never prints `--durations`)
+      # can still be timed per test.
       - run: |
           pytest ${{ steps.paths.outputs.value }} -v \
             -n ${{ matrix.nproc }} \
@@ -1630,6 +1631,11 @@ jobs:
             nproc: 1
             budget: 70
             coverage_budget: 105
+          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
+          # than by a hardcoded list. `bug_half` triggers that in the run step;
+          # new test files are absorbed automatically instead of silently landing
+          # on whichever side a frozen glob happens to match.
           - shard: regression-b1
             paths: ""
             bug_half: "1"
