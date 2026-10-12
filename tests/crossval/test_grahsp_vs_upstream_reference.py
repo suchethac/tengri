@@ -483,8 +483,10 @@ UPSTREAM_510_FACTOR = 510.0
 NETZER_DISC_KEY = NM_PREFIX + "agn.activate_Disk"
 MN12_TORUS_KEY = NM_PREFIX + "agn.activate_Torus"
 MN12_SI_KEY = NM_PREFIX + "agn.activate_TorusSi"
-# The builder fixes the disc at log M = 8.0, a = 0, Mdot = 0.3 (tengri's defaults).
-NETZER_DISC_PARAMS = {"disc_model": "netzer", "disc_m": "8.0", "disc_a": "0", "disc_mdot": "0.3"}
+# The builder ships the table column that upstream labels (8.0, 0, 0.3). That column is the source
+# header m80_a0_mdot003, so tengri's node for it is (8.0, 0, 0.03): upstream's importer labels the
+# columns out of header order, and the comparison is by the source header.
+NETZER_DISC_PARAMS = {"disc_model": "netzer", "disc_m": "8.0", "disc_a": "0", "disc_mdot": "0.03"}
 # Measured: each code against its own interpolation convention, and the optical agreement.
 TOL_CONVENTION_DEX = 1e-9  # measured 1.9e-16 (upstream, MN12), 1.0e-15 (tengri, MN12)
 TOL_NETZER_OPTICAL_DEX = 3e-3  # measured 5e-4 over 12.4-100 nm, 2.4e-3 over 100-1000 nm
@@ -496,7 +498,7 @@ def _netzer_template() -> tuple[np.ndarray, np.ndarray]:
     from tengri.components.agn.grahsp.disc import select_disc_model
 
     t = _templates()
-    idx = select_disc_model(t.disc_m, t.disc_a, t.disc_mdot, m="8.0", a="0", mdot="0.3")
+    idx = select_disc_model(t.disc_m, t.disc_a, t.disc_mdot, m="8.0", a="0", mdot="0.03")
     return np.asarray(t.disc_wave_nm), np.asarray(t.disc_lumin[idx])
 
 

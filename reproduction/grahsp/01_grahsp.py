@@ -36,7 +36,8 @@
 # (divide by $\sqrt{2}$, Sect. 2.1.2), the torus width (paper Eq. 2), and the 510 normalization of
 # the Netzer disc and MN12 torus (divide by 510, Eqs. 1 and 4). Section 2 shows that upstream's
 # lines are also rendered wider than their Gaussians, and section 5 shows where the Netzer and MN12
-# templates are interpolated differently.
+# templates are interpolated differently. The Netzer disc is compared by the source table's header
+# label, because upstream's importer labels the table's columns out of header order (section 5).
 #
 # | Component | tengri block | Agreement, fiducial (max \|Δ\|, dex) | Section |
 # |---|---|---|---|
@@ -44,7 +45,7 @@
 # | Torus (log-Gaussian) and Si feature | `grahsp` | 5.3×10⁻³ | 1, 4 |
 # | Emission lines: flux and centroid | `grahsp` (nlr, blr) | 2.8% per window; centroid 0.08 nm | 2 |
 # | Balmer continuum | `grahsp` (blr) | 1.3×10⁻³ over 210–355 nm | 3 |
-# | Netzer disc (12.4 nm–1 μm) | `grahsp_netzer` | 2.4×10⁻³ over 12.4 nm–1 μm | 5 |
+# | Netzer disc (12.4 nm–1 μm), same source-header node | `grahsp_netzer` | 2.4×10⁻³ over 12.4 nm–1 μm | 5 |
 # | MN12 torus (2–20 μm, absolute) | `grahsp_mn12` | 3.3×10⁻³ over 2–20 μm, absolute | 5 |
 # | Attenuation (E(B-V) and E(B-V)-AGN) | `grahsp_biatten` | 6×10⁻⁷ where the factor exceeds 0.1 | 8 |
 # | Full composite, fiducial and type 2 | all of the above | 0.080 at 274.8 nm; optical median 0.9995 | 6 |
@@ -319,6 +320,45 @@ save_fig("grahsp_03_torus_width.png")
 # $\lambda L_\lambda(510\,\mathrm{nm})$ is therefore 510. Both upstream spectra are divided by 510
 # before comparison, and the torus is compared in absolute units, so the factor is tested. The
 # tengri blocks are `grahsp_netzer` and `grahsp_mn12`, at the fiducial parameters.
+#
+# **Which disc node.** The Netzer table has 16 columns, one per $(\log M_\mathrm{BH}, a, \dot m)$,
+# and its header names each column (`m80_a0_mdot003` is $\log M_\mathrm{BH} = 8$, $a = 0$,
+# $\dot m = 0.03$). Upstream's importer assigns the columns to parameters in its own enumeration
+# order rather than the header's, so only 2 of its 16 labels match the header. The disc upstream
+# labels $(8, 0, 0.3)$ is the header column `m80_a0_mdot003`, that is $(8, 0, 0.03)$. The page
+# compares like with like: it reads upstream's spectrum as the header-labelled $(8, 0, 0.03)$ disc
+# and evaluates tengri's $(8, 0, 0.03)$ node, whose labels follow the header. The next cell decodes
+# the header from the public data file to show the mapping.
+
+# %%
+import re
+
+import h5py
+
+_hdr_pat = re.compile(r"^m(\d+)_a(\d+)_mdot(\d+)_inc0$")
+_hdr_text = (G.REPO_ROOT / "data" / "grahsp" / "netzer_disc_models.txt").read_text().splitlines()
+_hdr_names = [_ln.strip() for _ln in _hdr_text[:23] if _hdr_pat.match(_ln.strip())]
+_spin_of = {"0": 0.0, "0998": 0.998}
+_mdot_of = {"03": 0.3, "003": 0.03}
+_src = []
+for _name in _hdr_names:
+    _m, _a, _d = _hdr_pat.match(_name).groups()
+    _src.append((int(_m) / 10, _spin_of[_a], _mdot_of[_d]))
+# Upstream's enumeration: spin (0.998, 0) outermost, then Eddington ratio (0.3, 0.03), then log M.
+_enum = [(_m, _a, _d) for _a in (0.998, 0.0) for _d in (0.3, 0.03) for _m in (6.0, 7.0, 8.0, 9.0)]
+_n_ok = sum(1 for _i, _lab in enumerate(_enum) if _src[_i] == _lab)
+_i8 = _enum.index(G.UPSTREAM_NETZER_LABEL)
+print(f"§5 header columns decoded: {len(_src)}; upstream labels that match the header: {_n_ok} of {len(_enum)}")
+print(f"§5 upstream's label {G.UPSTREAM_NETZER_LABEL} is table column {_i8 + 1}, header "
+      f"'{_hdr_names[_i8]}' = {_src[_i8]}")
+assert _src[_i8] == G.NETZER_SOURCE_LABEL
+with h5py.File(G.TEMPLATE_PATH, "r") as _f:
+    _g = _f["netzer_disc"]
+    _node = list(zip(_g["m"][:], _g["a"][:], _g["mdot"][:]))
+    _node = [(float(_x), float(_y), float(_z)) for _x, _y, _z in _node]
+    _node_hdr = [_h.decode() for _h in _g["header_name"][:]]
+print(f"§5 tengri node {G.NETZER_SOURCE_LABEL} is the header column "
+      f"'{_node_hdr[_node.index(G.NETZER_SOURCE_LABEL)]}'")
 
 # %%
 _nz_pred = G.agn_predict(ssp, _up, disc="grahsp_netzer", a_feii=_up["afeii"])
@@ -363,7 +403,7 @@ _fig, (_a0, _a1) = plt.subplots(2, 2, figsize=(11, 7.5))
 _mk = (_nz_u > 0) & (_nz_t > 0)
 _a0[0].loglog(_wn[_mk], to_lnu(_wn, _nz_u)[_mk], "C0-", lw=2.0, alpha=0.6, label="upstream / 510")
 _a0[0].loglog(_wn[_mk], to_lnu(_wn, _nz_t)[_mk], "C1--", lw=1.1, label="tengri")
-_a0[0].set_title("Netzer disc, fiducial, $l_{5100} = 1$", fontsize=10)
+_a0[0].set_title("Netzer disc, $(\\log M, a, \\dot m) = (8, 0, 0.03)$, $l_{5100} = 1$", fontsize=10)
 _a0[0].set_xlabel(r"$\lambda$ [nm]")
 _a0[0].set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 _a0[0].legend(fontsize=8)
@@ -386,7 +426,7 @@ _fig.tight_layout()
 save_fig("grahsp_04_netzer_mn12.png")
 
 # %% [markdown]
-# **Result.** Over 12.4–1000 nm the Netzer disc agrees with upstream, after dividing by 510, to 2.4×10⁻³ dex. Beyond about 1 μm the two codes differ. Between 1 and 10 μm the residual reaches 0.42 dex (median −0.02 dex), and that range carries 3.6% of the disc's luminosity. Beyond 10 μm the median is −1.6 dex (10–100 μm, 1.1×10⁻⁴ of the luminosity) and −5.5 dex (100 μm–1 mm, 1.2×10⁻⁷). The MN12 torus, in absolute units, matches the 510 factor: λL_λ(12 μm) is 1.0338 for tengri and 1.0343 for upstream/510, and the 2–20 μm residual is 3.3×10⁻³ dex.
+# **Result.** For the disc both codes take from the header column `m80_a0_mdot003` (which upstream labels $(8, 0, 0.3)$), tengri agrees with upstream over 12.4–1000 nm, after dividing by 510, to 2.4×10⁻³ dex. Beyond about 1 μm the two codes differ. Between 1 and 10 μm the residual reaches 0.42 dex (median −0.02 dex), and that range carries 3.6% of the disc's luminosity. Beyond 10 μm the median is −1.6 dex (10–100 μm, 1.1×10⁻⁴ of the luminosity) and −5.5 dex (100 μm–1 mm, 1.2×10⁻⁷). The MN12 torus, in absolute units, matches the 510 factor: λL_λ(12 μm) is 1.0338 for tengri and 1.0343 for upstream/510, and the 2–20 μm residual is 3.3×10⁻³ dex.
 
 # %% [markdown]
 # **Caveat.** The Netzer template has one 2-dex gap in its table, between 12.3 μm and 1.24 mm, where the next node is 2 dex away. Upstream interpolates linearly in wavelength across the gap, so its spectrum runs straight down to the 1.24 mm node. tengri interpolates log-log, which continues the Rayleigh–Jeans tail across the gap, $L_\nu \propto \nu^{2}$, and is well motivated for that tail, though not exact. The 1–10 μm residual is the same convention applied to nodes 0.3 dex apart. For the infrared shape beyond 12 μm, use the Netzer disc only as a Rayleigh–Jeans extrapolation; the luminosity beyond 12 μm is below 10⁻⁴ of the disc total.
@@ -547,7 +587,7 @@ for _name in ("ebv_0_p1", "ebv_agn_0_p2"):
 # - **§2.** Per-window line flux within 2.8% (total −0.7%), centroid within 0.08 nm. Single-line widths: tengri 0.990–1.009 of σ; upstream 1.214–1.216 of σ, from its nine-node rendering in `activatelines.py`.
 # - **§3.** Balmer integral within 1.3×10⁻³ over 210–355 nm.
 # - **§4.** The factor of ½ in the paper's Eq. 2 is needed; with it, 5×10⁻³ dex.
-# - **§5.** Netzer agrees to 2.4×10⁻³ dex over 12.4 nm–1 μm. Beyond 1 μm the codes interpolate the same template differently; that carries 3.6% of the luminosity at 1–10 μm and under 10⁻⁴ beyond. The MN12 torus agrees to 3.3×10⁻³ dex over 2–20 μm in absolute units.
+# - **§5.** Upstream's Netzer table columns are labelled out of header order, so only 2 of its 16 labels match; compared by the source header, the disc agrees to 2.4×10⁻³ dex over 12.4 nm–1 μm. Beyond 1 μm the codes interpolate the same template differently; that carries 3.6% of the luminosity at 1–10 μm and under 10⁻⁴ beyond. The MN12 torus agrees to 3.3×10⁻³ dex over 2–20 μm in absolute units.
 # - **§6.** Fiducial composite agrees to 0.080 dex at most, at the upstream Mg II wing; optical median 0.9995. Type-2 composite agrees to 0.023 dex.
 # - **§7.** Accretion luminosity above 91.2 nm agrees to 0.13%.
 # - **§8.** Attenuation factor agrees to 6×10⁻⁷ dex where it exceeds 0.1.

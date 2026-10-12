@@ -21,6 +21,11 @@ Explicit corrections, applied to upstream values on the page (never inside ``src
 * ``UPSTREAM_510_FACTOR``: upstream's Netzer disc and MN12 torus are normalized to
   :math:`L_\\lambda(510\\,\\mathrm{nm})=1` per nm, so
   :math:`\\lambda L_\\lambda(510\\,\\mathrm{nm})=510`; they are divided by 510.
+* ``UPSTREAM_NETZER_LABEL`` / ``NETZER_SOURCE_LABEL``: upstream's importer assigns the 16 columns
+  of the Netzer disc table to :math:`(\\log M, a, \\dot m)` in its own enumeration order, not the
+  order of the table's header. The spectrum upstream labels :math:`(8, 0, 0.3)` is the header
+  column ``m80_a0_mdot003``, which is :math:`(8, 0, 0.03)`. The comparison uses tengri's
+  :math:`(8, 0, 0.03)` node, whose label is the source header's.
 
 Interpolation. Upstream is interpolated linearly in wavelength onto tengri's model grid. That
 is upstream's own convention for its tabulated templates.
@@ -46,6 +51,10 @@ REFERENCE_PATH = REPO_ROOT / "data" / "grahsp_upstream_reference.h5"
 TEMPLATE_PATH = REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5"
 
 LINE_FLUX_SCALE = math.sqrt(2.0)
+# Upstream's label for the Netzer disc it ships at the builder's fixed node, and the label that
+# column carries in the source table's header: (log10 M_BH/Msun, spin, Eddington ratio).
+UPSTREAM_NETZER_LABEL = (8.0, 0.0, 0.3)
+NETZER_SOURCE_LABEL = (8.0, 0.0, 0.03)
 WIDTH_SCALE = 1.0 / math.sqrt(2.0)
 UPSTREAM_510_FACTOR = 510.0
 XRAY_FLOOR_NM = 12.4  # tengri zeroes the disc below this wavelength (corona overlap)
@@ -157,12 +166,13 @@ def composable_agn(
                 "agn_grahsp_cutoff_nm": f(up["cutoff"]),
             }
         )
-    else:  # Netzer template at the builder's fixed disc: log M = 8, a = 0, Mdot = 0.3
+    else:  # tengri's node for the column upstream mislabels (8, 0, 0.3): header m80_a0_mdot003
+        _, _spin, _mdot = NETZER_SOURCE_LABEL
         disc_spec.update(
             {
-                "agn_grahsp_netzer_log_mbh": f(8.0),
-                "agn_grahsp_netzer_spin": f(0.0),
-                "agn_grahsp_netzer_log_mdot": f(math.log10(0.3)),
+                "agn_grahsp_netzer_log_mbh": f(NETZER_SOURCE_LABEL[0]),
+                "agn_grahsp_netzer_spin": f(_spin),
+                "agn_grahsp_netzer_log_mdot": f(math.log10(_mdot)),
             }
         )
     if torus == "grahsp":
@@ -271,25 +281,18 @@ def dex_error(t: np.ndarray, u: np.ndarray, mask: np.ndarray) -> tuple[int, floa
 
 
 def netzer_template() -> tuple[np.ndarray, np.ndarray]:
-    """Netzer template at the builder's disc labels, read from the repackaged template file.
+    """Netzer template at the source-header label of upstream's shipped disc.
 
-    Selects by the stored (M, a, Mdot) labels, the same labels the builder fixes. Returns the
-    native grid [nm] and the template normalized at 510 nm.
+    Selects tengri's node at ``NETZER_SOURCE_LABEL``, the table column upstream labels
+    ``UPSTREAM_NETZER_LABEL``. Returns the native grid [nm] and the template normalized at 510 nm.
     """
-    # TODO(#2870): the disc labels in the repackaged table do not match upstream's column order;
-    # finish sections 3 and 5 (Netzer labels) once the src fix lands.
+    want = NETZER_SOURCE_LABEL
     with h5py.File(TEMPLATE_PATH, "r") as f:
         g = f["netzer_disc"]
-        m = [v.decode() for v in g["m"][:]]
-        a = [v.decode() for v in g["a"][:]]
-        mdot = [v.decode() for v in g["mdot"][:]]
-        idx = [
-            i
-            for i in range(len(m))
-            if float(m[i]) == 8.0 and float(a[i]) == 0.0 and float(mdot[i]) == 0.3
-        ]
+        lab = np.array([[float(v.decode()) for v in g[k][:]] for k in ("m", "a", "mdot")]).T
+        idx = [i for i in range(lab.shape[0]) if tuple(lab[i]) == want]
         if len(idx) != 1:
-            raise KeyError(f"expected one Netzer template at M=8, a=0, Mdot=0.3; found {len(idx)}")
+            raise KeyError(f"expected one Netzer template at {want}; found {len(idx)}")
         return np.asarray(g["wave_nm"][:]), np.asarray(g["lumin"][idx[0]])
 
 
