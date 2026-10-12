@@ -405,15 +405,15 @@ def _kd18_published(comp, params, wave):
 
 
 def test_kd18_angle_integrated_disc_power_is_independent_of_inclination():
-    """L_agn_disc is the angle-integrated power: the same at cos i = 0.1, 0.5 and 0.95."""
+    """log_L_agn_disc is the angle-integrated power: the same at cos i = 0.1, 0.5 and 0.95."""
     wave = jnp.asarray(_PUB_COARSE)
     values = [_kd18_published(*_kd18_with(cos_inc=c), wave)[0] for c in (0.1, 0.5, 0.95)]
     for v in values[1:]:
-        assert abs(v / values[0] - 1.0) < 1e-10, f"L_agn_disc moved with inclination: {values}"
+        assert abs(v / values[0] - 1.0) < 1e-10, f"log_L_agn_disc moved with inclination: {values}"
 
 
 def test_kd18_line_of_sight_power_is_the_integral_of_the_emitted_sed():
-    """L_agn_disc_los equals the dense integral of the emitted, projected SED (1e-6)."""
+    """log_L_agn_disc_los equals the dense integral of the emitted, projected SED (1e-6)."""
     for cos_inc in (0.1, 0.5, 0.95):
         comp, params = _kd18_with(cos_inc=cos_inc)
         _, los = _kd18_published(comp, params, jnp.asarray(_PUB_COARSE))
@@ -432,7 +432,7 @@ def test_kd18_los_to_angle_integrated_ratio_is_two_cos_i_for_the_disc():
 
 
 def test_kd18_angle_integrated_power_matches_the_accretion_power():
-    """L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut tail."""
+    """log_L_agn_disc is lum_ratio times the accretion power 10**log_lbol L_sun, less the cut."""
     l_sun = 3.828e33
     wave = jnp.asarray(_PUB_COARSE)
     for lum_ratio in (1.0, 0.4):
@@ -544,53 +544,29 @@ def test_skirtor_other_disc_types_published_match_emitted(disk_type, overrides):
 def _skirtor_emitted_pieces(comp, params, wave, disk_type=0):
     """Emitted SKIRTOR disc, dust and polar-reemission SEDs, from the component's own functions.
 
-    The disc is re-tilted by the CIGALE shape ratio and renormalized by the ratio of two
-    integrals over the analytic disc's support, on a wide grid, so it matches the component's
-    publication-grid factor to the quadrature error of that grid.
+    The disc and dust are those along ``cos_inc``. The polar re-emission is the graybody that
+    carries the power the polar dust absorbs from the disc light emitted into the cone, taken
+    here as an independent Gauss-Legendre integral over the cone (``_skirtor_reference``), so
+    it does not depend on ``cos_inc``.
     """
-    from tengri.components.agn.disc_cigale import (
-        adaf_disk_spectrum,
-        schartmann2005_disk_spectrum,
-        skirtor_disk_spectrum,
-    )
-    from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
+    from tengri.components.agn.polar_dust import polar_dust_emission
+    from tests.physics._skirtor_reference import cone_absorbed, emitted_pieces
 
-    p = {k: float(v) for k, v in params.items()}
-    w = jnp.asarray(wave)
-    comps = comp.data(
-        wavelength=w,
-        agn_log_lbol=p["log_lbol"],
-        agn_tau_skirtor=p["tau_skirtor"],
-        agn_p_skirtor=p["p_skirtor"],
-        agn_q_skirtor=p["q_skirtor"],
-        agn_oa_skirtor=p["oa_skirtor"],
-        agn_radius_ratio=p["radius_ratio"],
-        agn_cos_inc=p["cos_inc"],
-        frac_agn=p["torus_frac"],
-    )
-    wave_nm = w / 10.0
-    shape_fn = (skirtor_disk_spectrum, schartmann2005_disk_spectrum, adaf_disk_spectrum)[disk_type]
-    shape_sel = shape_fn(wave_nm, delta=p["delta"])
-    shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
-    retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
-    support = (shape_ref > 0.0).astype(w.dtype)
-    raw = comps.disk
-    k = _ln_nu_integral(np.asarray(raw * support), wave) / _ln_nu_integral(
-        np.asarray(raw * retilt * support), wave
-    )
-    disc = raw * retilt * k
-    _, l_abs = polar_dust_extinction(
-        disc, w, p["cos_inc"], p["oa_skirtor"], p["polar_ebv"], law="smc"
-    )
-    l_abs_total = _ln_nu_integral(np.asarray(l_abs), wave)
+    los = emitted_pieces(comp, params, wave, disk_type)
+    ebv = float(params["polar_ebv"])
+    cone = cone_absorbed(comp, params, wave, disk_type, order=10) if ebv > 0.0 else 0.0
     polar = polar_dust_emission(
-        l_abs_total, w, temperature=p["polar_T"], beta=p["polar_beta"], lambda_0=2e6
+        cone,
+        jnp.asarray(wave),
+        temperature=float(params["polar_T"]),
+        beta=float(params["polar_beta"]),
+        lambda_0=2e6,
     )
     return {
-        "disc": np.asarray(disc),
-        "dust": np.asarray(comps.dust),
+        "disc": los["disc"],
+        "dust": los["dust"],
         "polar": np.asarray(polar),
-        "polar_absorbed": l_abs_total,
+        "polar_absorbed": cone,
     }
 
 

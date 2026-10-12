@@ -23,6 +23,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tengri.utils.physics_constants import L_SUN
 from tests.physics._agn_published import (
     SED_MODEL_COMPONENTS,
     box_points,
@@ -35,11 +36,6 @@ from tests.physics._agn_published import (
 pytestmark = pytest.mark.regression_bug
 
 FLOAT32_RTOL = 1.0e-4
-
-#: The emitted SED is held to the same tolerance, except the Kubota and Done disc: its three-zone
-#: radius solve leaves an 8e-4 float32 error in the SED at some box points (unchanged by the
-#: change this file pins; the published integrals of that SED agree to 1e-5).
-_SED_RTOL = {"kd18": 2.0e-3}
 
 #: Draws per component beyond the center and the box edges (SKIRTOR is the slow one).
 _RANDOM_DRAWS = {"skirtor": 3}
@@ -59,9 +55,30 @@ def test_declared_outputs_hold_no_integrated_erg_per_s_luminosity(component):
     """
     name, comp = component
     outputs = {key.name: key.units for key in comp.outputs()}
-    bad = {k: u for k, u in outputs.items() if u not in ("dex", "erg/s/Hz")}
+    bad = {k: u for k, u in outputs.items() if u not in ("dex", "Lsun", "erg/s/Hz")}
     assert not bad, f"{name} publishes non-float32-safe outputs {bad}"
     assert any(u == "dex" for u in outputs.values()), name
+
+
+def test_every_log_luminosity_has_a_solar_luminosity_sibling(component):
+    """``log_L_agn_<piece>`` is published beside ``L_agn_<piece>_lsun`` (NAMING_CONTRACT 4c).
+
+    An AGN power of 1e8 to 1e14 Lsun is representable in float32, so the contract's first rule
+    (luminosities in Lsun) applies and the value exists beside its exponent. The sibling equals
+    ``10**(log - log10(L_sun))`` to 1e-12 in float64, is exactly 0 for an absent piece, and its
+    name carries the unit because the bare ``L_agn_<piece>`` was the retired erg/s spelling.
+    """
+    name, comp = component
+    declared = {key.name: key.units for key in comp.outputs()}
+    logs = [k for k in declared if k.startswith("log_L_agn_")]
+    assert logs, name
+    point = {k: 0.5 * (lo + hi) for k, (lo, hi) in declared_box(comp).items()}
+    pub, _ = predict(comp, point, float32=False)
+    for log_key in logs:
+        sibling = f"L_agn_{log_key[len('log_L_agn_') :]}_lsun"
+        assert declared.get(sibling) == "Lsun", (name, sibling)
+        expected = 0.0 if pub[log_key] == -np.inf else 10.0 ** (pub[log_key] - np.log10(L_SUN))
+        assert pub[sibling] == pytest.approx(expected, rel=1e-12), (name, sibling)
 
 
 def test_published_keys_are_finite_and_accurate_in_float32(component):
@@ -97,9 +114,7 @@ def test_emitted_sed_is_finite_and_accurate_in_float32(component):
         )
         if significant.any():
             err = np.max(np.abs(sed32[significant] / sed64[significant] - 1.0))
-            assert err < _SED_RTOL.get(name, FLOAT32_RTOL), (
-                f"{name}: float32 SED rel {err:.2e} at {point}"
-            )
+            assert err < FLOAT32_RTOL, f"{name}: float32 SED rel {err:.2e} at {point}"
 
 
 def test_exactly_zero_power_publishes_minus_inf_in_both_precisions():

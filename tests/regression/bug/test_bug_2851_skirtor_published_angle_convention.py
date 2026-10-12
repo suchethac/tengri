@@ -1,38 +1,52 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR published luminosities follow the angle-integrated convention of #2678 (#2851).
+"""SKIRTOR keeps its own anisotropy, and its published powers follow the #2678 convention (#2851).
 
 An AGN's luminosity parameter is the angle-integrated power, and the line-of-sight
 isotropic-equivalent luminosity is a separate derived output (KD18 publishes
-``log_L_agn_disc`` and ``log_L_agn_disc_los`` that way). SKIRTOR's tabulated disc is an
-anisotropic emitter: the library holds a different spectrum at every inclination, so the power
-of the SED the component emits changes with ``cos_inc``. The published keys are
+``log_L_agn_disc`` and ``log_L_agn_disc_los`` that way). SKIRTOR's library holds a different
+disc and dust spectrum at every inclination, and each record is stored divided by its own dust
+integral (``spectra/norm`` holds the divisor), so the flux ratio between inclinations survives
+only in ``norm``. The component multiplies the records by ``norm``, interpolates, and scales by
+ONE factor per parameter point so that the sphere-mean disc power
 
-* ``log_L_agn_disc``, ``log_L_agn_torus``, ``log_L_agn_polar_dust``: the mean over the sphere of
-  the line-of-sight power, :math:`\\tfrac12\\int_0^\\pi L(\\theta)\\sin\\theta\\,d\\theta =
-  \\int_0^1 L(\\mu)\\,d\\mu` with :math:`\\mu = \\cos i` (symmetry about the equator), by
+.. math:: \\bar P_{\\rm disc} = \\int_0^1 P_{\\rm disc}(\\mu)\\,d\\mu, \\qquad \\mu = \\cos i,
+
+(the mean of the line-of-sight power over the sphere, by symmetry about the equator) equals
+``10**agn_log_lbol * L_sun * torus_frac``. The published keys are
+
+* ``log_L_agn_disc``, ``log_L_agn_torus``: the sphere mean of the line-of-sight power, by
   Gauss-Legendre on each interval between the template's own inclination nodes; independent
   of ``cos_inc``;
-* the ``_los`` siblings: the power of the SED emitted along ``cos_inc``.
+* ``log_L_agn_polar_dust``: the power the polar dust absorbs from the disc light emitted into
+  the polar cone, :math:`\\int_{\\sin \\Phi}^1 A(\\mu)\\,d\\mu` with :math:`\\Phi` the torus
+  half-opening angle, re-emitted isotropically; independent of ``cos_inc``;
+* the ``_los`` siblings: the power of the SED emitted along ``cos_inc``. The polar re-emission
+  is isotropic, so its ``_los`` key equals the plain one.
 
-The reference integral over :math:`\\mu` is computed here from the raw templates, with the
-component's disc re-tilt written out independently
-(``test_agn_template_grid_independence._skirtor_emitted_pieces``), by Simpson's rule on 81
-inclinations. The quadrature error of the component's rule, measured against an 801-point
-Simpson reference of the same interpolant over five parameter sets, is 7e-5 (disc), 2e-8
-(torus) and 1e-3 (polar-dust power); the tolerances below are those errors plus the
-reference's own.
+The references are independent of the component: ``RawSkirtor`` reads the file with ``h5py``
+and integrates the power laws in closed form; the angle integrals are per-interval
+Gauss-Legendre of order 20 of the dense-grid line-of-sight pieces.
 """
 
 from __future__ import annotations
+
+import itertools
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri._data_setup import find_data
+from tengri.utils.physics_constants import L_SUN
 from tests.physics._agn_publication import PUB_COARSE, ln_nu_integral
 from tests.physics._agn_published import build_component, declared_box
-from tests.physics.test_agn_template_grid_independence import _skirtor_emitted_pieces
+from tests.physics._skirtor_reference import (
+    RawSkirtor,
+    cone_absorbed,
+    cone_intervals,
+    emitted_pieces,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -46,9 +60,8 @@ _PARAM_SETS = {
         "polar_ebv": 0.1,
     },
 }
-#: Tolerances on the angle-integrated powers against the 81-point reference (see the docstring).
-_RTOL_MEAN = {"disc": 3.0e-4, "torus": 5.0e-6, "polar_dust": 3.0e-3}
-_N_MU = 81
+_RTOL = 1.0e-6
+_GL_ORDER = 20
 #: Wide log grid of the reference integrals; the analytic disc is zero below 8 nm and above
 #: 1e6 nm, so each edge is bracketed by nodes.
 _EDGES_AA = (80.0, 1.0e7)
@@ -78,19 +91,36 @@ def _published(comp, params, wave=PUB_COARSE):
 
 
 def _los_power_from_templates(comp, params, mu):
-    """Powers [erg/s] of the disc, torus dust and polar re-emission emitted along ``mu``."""
-    pieces = _skirtor_emitted_pieces(
+    """Powers [erg/s] of the disc and torus dust emitted along ``mu``."""
+    pieces = emitted_pieces(
         comp,
         {k: jnp.asarray(v, dtype=jnp.float64) for k, v in {**params, "cos_inc": mu}.items()},
         _WIDE,
     )
-    return np.array(
-        [
-            ln_nu_integral(pieces["disc"], _WIDE),
-            ln_nu_integral(pieces["dust"], _WIDE),
-            ln_nu_integral(pieces["polar"], _WIDE),
-        ]
+    return np.array([ln_nu_integral(pieces["disc"], _WIDE), ln_nu_integral(pieces["dust"], _WIDE)])
+
+
+def _sphere_mean_reference(comp, params):
+    """Disc, torus and polar powers [erg/s]: per-interval Gauss-Legendre order 20 of the pieces."""
+    nodes = np.asarray(comp.data.native_cos_inc)
+    edges = np.concatenate([[0.0], nodes[1:]])
+    x, w = np.polynomial.legendre.leggauss(_GL_ORDER)
+    mean = np.zeros(2)
+    for a, b in itertools.pairwise(edges):
+        for xi, wi in zip(x, w, strict=True):
+            mean += (
+                0.5
+                * (b - a)
+                * wi
+                * _los_power_from_templates(comp, params, 0.5 * (b - a) * xi + 0.5 * (a + b))
+            )
+    wide_params = {k: jnp.asarray(v, dtype=jnp.float64) for k, v in params.items()}
+    polar = (
+        cone_absorbed(comp, wide_params, _WIDE, order=_GL_ORDER)
+        if params["polar_ebv"] > 0
+        else 0.0
     )
+    return np.array([mean[0], mean[1], polar])
 
 
 @pytest.mark.parametrize("name", sorted(_PARAM_SETS))
@@ -108,20 +138,39 @@ def test_angle_integrated_powers_do_not_depend_on_inclination(skirtor, name):
     )
 
 
+@pytest.mark.parametrize("delta", [0.0, 0.6])
+@pytest.mark.parametrize("cos_inc", [0.05, 0.4, 0.9])
+def test_sphere_mean_disc_power_equals_the_luminosity_parameter(skirtor, cos_inc, delta):
+    """``log_L_agn_disc`` is ``10**agn_log_lbol L_sun`` (1e-6): the parameter is the sphere mean.
+
+    ``torus_frac`` multiplies the scale, so it is set to 1 for the identity and to 0.5 for its
+    proportionality.
+    """
+    comp, mid = skirtor
+    for frac in (1.0, 0.5):
+        pub = _published(
+            comp, {**mid, "cos_inc": cos_inc, "delta": delta, "torus_frac": frac, "polar_ebv": 0.0}
+        )
+        expected = frac * 10.0 ** mid["log_lbol"] * L_SUN
+        err = abs(10.0 ** pub["log_L_agn_disc"] / expected - 1.0)
+        assert err < _RTOL, f"frac={frac}: sphere-mean disc / (frac L) - 1 = {err:.2e}"
+
+
 @pytest.mark.parametrize("name", sorted(_PARAM_SETS))
-def test_angle_integrated_powers_equal_the_integral_over_mu_of_the_raw_templates(skirtor, name):
-    """``log_L_agn_*`` equal Simpson's integral over cos i of the powers from the templates."""
+def test_angle_integrated_powers_equal_the_gauss_legendre_integral_of_the_pieces(skirtor, name):
+    """``log_L_agn_*`` equal an independent order-20 per-interval Gauss-Legendre integral (1e-6).
+
+    The pieces are the component's disc, dust and cone-absorbed power rebuilt on a wide dense
+    grid at each Gauss node; the nodes of the reference are not those of the component's rule.
+    """
     comp, mid = skirtor
     params = {**mid, **_PARAM_SETS[name]}
-    mu = np.linspace(0.0, 1.0, _N_MU)
-    los = np.array([_los_power_from_templates(comp, params, m) for m in mu])
-    step = mu[1] - mu[0]
-    simpson = step / 3.0 * (los[0] + los[-1] + 4.0 * los[1:-1:2].sum(0) + 2.0 * los[2:-1:2].sum(0))
+    reference = _sphere_mean_reference(comp, params)
     pub = _published(comp, params)
     for i, key in enumerate(_KEYS):
         got = 10.0 ** pub[f"log_L_agn_{key}"]
-        err = abs(got / simpson[i] - 1.0)
-        assert err < _RTOL_MEAN[key], f"{name} {key}: published/integral - 1 = {err:.2e}"
+        err = abs(got / reference[i] - 1.0)
+        assert err < _RTOL, f"{name} {key}: published/integral - 1 = {err:.2e}"
 
 
 @pytest.mark.parametrize("cos_inc", [0.1, 0.5, 0.95])
@@ -131,23 +180,86 @@ def test_line_of_sight_powers_equal_the_template_value_at_the_sightline(skirtor,
     params = {**mid, "polar_ebv": 0.2, "cos_inc": cos_inc}
     expected = _los_power_from_templates(comp, params, cos_inc)
     pub = _published(comp, params)
-    for i, key in enumerate(_KEYS):
+    for i, key in enumerate(("disc", "torus")):
         err = abs(10.0 ** pub[f"log_L_agn_{key}_los"] / expected[i] - 1.0)
         assert err < 1.0e-5, f"cos_inc={cos_inc} {key}: rel {err:.2e}"
 
 
-def test_torus_power_varies_with_inclination_at_the_normalization_level_only(skirtor):
-    """The torus dust is renormalized per inclination: its line-of-sight power moves by < 0.5%.
+def test_polar_reemission_does_not_depend_on_the_sightline(skirtor):
+    """The polar power is the disc light emitted into the cone, so it is the same at every cos i.
 
-    That small spread is the angle-integrated convention's reason for ``log_L_agn_torus_los``
-    existing at all; the angle-integrated torus power sits inside it.
+    The graybody re-emission is isotropic, so the line-of-sight key is the plain key. Both match
+    the cone integral of the disc emitted along each direction, whatever the observer sees.
     """
     comp, mid = skirtor
-    runs = [_published(comp, {**mid, "cos_inc": c}) for c in np.linspace(0.0, 1.0, 9)]
-    los = np.array([10.0 ** r["log_L_agn_torus_los"] for r in runs])
-    assert 1e-4 < los.max() / los.min() - 1.0 < 5e-3, los
-    mean = 10.0 ** runs[0]["log_L_agn_torus"]
-    assert los.min() * (1 - 1e-12) <= mean <= los.max() * (1 + 1e-12)
+    base = {**mid, "polar_ebv": 0.2}
+    runs = [_published(comp, {**base, "cos_inc": c}) for c in (0.02, 0.3, 0.6, 0.95)]
+    plain = [r["log_L_agn_polar_dust"] for r in runs]
+    los = [r["log_L_agn_polar_dust_los"] for r in runs]
+    assert max(plain) - min(plain) < 1e-12, plain
+    assert los == plain
+    cone = cone_absorbed(
+        comp, {k: jnp.asarray(v, dtype=jnp.float64) for k, v in base.items()}, _WIDE, order=8
+    )
+    assert abs(10.0 ** plain[0] / cone - 1.0) < _RTOL
+
+
+def test_polar_cone_integral_is_the_edge_weighted_sphere_share(skirtor):
+    """The cone rule integrates ``int_{sin(oa)}^1 d(mu)`` exactly for a constant integrand."""
+    comp, _ = skirtor
+    for oa in (10.0, 38.0, 80.0):
+        _, weight = cone_intervals(comp.data.native_cos_inc, oa, 8)
+        assert weight.sum() == pytest.approx(1.0 - np.sin(np.radians(oa)), abs=1e-14)
+
+
+@pytest.fixture(scope="module")
+def raw_library():
+    path = find_data("skirtor_templates_v3.h5")
+    if path is None:
+        pytest.skip("SKIRTOR v3 templates unavailable")
+    return RawSkirtor(str(path))
+
+
+def test_line_of_sight_powers_keep_the_relative_flux_between_inclinations(skirtor, raw_library):
+    """Disc and torus power along each library inclination follow the raw records (1e-6).
+
+    The reference reads ``skirtor_templates_v3.h5`` with ``h5py``, multiplies the stored spectra
+    by their ``norm`` records (the stored spectra are divided by the model's dust integral),
+    smooths with the index-space triweight kernel the component interpolates with, and
+    integrates the power laws in closed form. Ratios to the face-on node are compared: the
+    overall scale is the normalization's. If every inclination were rescaled on its own, as
+    the stored records are, the torus ratios would all be 1.
+    """
+    comp, mid = skirtor
+    params = {**mid, "polar_ebv": 0.0, "delta": 0.0}
+    point = tuple(
+        mid[k] for k in ("tau_skirtor", "p_skirtor", "q_skirtor", "oa_skirtor", "radius_ratio")
+    )
+    nodes = np.asarray(comp.data.native_cos_inc)
+    got = {"disc": [], "dust": []}
+    ref = {"disc": [], "dust": []}
+    for mu in nodes:
+        pub = _published(comp, {**params, "cos_inc": mu})
+        got["disc"].append(10.0 ** pub["log_L_agn_disc_los"])
+        got["dust"].append(10.0 ** pub["log_L_agn_torus_los"])
+        ref["disc"].append(raw_library.power("disk", point, mu, lower=_EDGES_AA[0]))
+        ref["dust"].append(raw_library.power("dust", point, mu))
+    for key in ("disc", "dust"):
+        g, r = np.array(got[key]), np.array(ref[key])
+        err = np.max(np.abs((g / g[-1]) / (r / r[-1]) - 1.0))
+        assert err < _RTOL, f"{key}: relative flux between inclinations off by {err:.2e}"
+    flat = np.array(
+        [
+            raw_library.power("dust", point, mu, per_inclination_norm=True)
+            / raw_library.power("dust", point, nodes[-1], per_inclination_norm=True)
+            for mu in nodes
+        ]
+    )
+    anisotropic = np.array(ref["dust"]) / ref["dust"][-1]
+    # Each stored record integrates to one unit by the trapezoid, so on its own scale the
+    # dust power is flat to the trapezoid-versus-power-law difference (a few 1e-3).
+    assert np.max(np.abs(flat - 1.0)) < 1e-2
+    assert anisotropic.min() < 0.7, "the library dust is not anisotropic: the check is vacuous"
 
 
 def test_skirtor_predict_is_jittable_and_vmappable_over_inclination(skirtor):
@@ -166,3 +278,28 @@ def test_skirtor_predict_is_jittable_and_vmappable_over_inclination(skirtor):
         _published(comp, {**mid, "cos_inc": c})["log_L_agn_disc_los"] for c in (0.1, 0.5, 0.9)
     ]
     np.testing.assert_allclose(np.asarray(values), direct, rtol=0, atol=1e-10)
+
+
+@pytest.mark.parametrize("delta", [0.0, 0.6])
+def test_sed_gradient_in_torus_frac_survives_zero(skirtor, delta):
+    """d(SED)/d(torus_frac) is the disc plus torus at frac = 0, matching finite differences.
+
+    Every piece is linear in the fraction, so the derivative at 0 is the unit-fraction SED. A
+    guard that selects a constant where the disc power vanishes drops the disc term there.
+    """
+    comp, mid = skirtor
+    wave = jnp.asarray(PUB_COARSE)
+    params = {k: jnp.asarray(v, dtype=jnp.float64) for k, v in {**mid, "delta": delta}.items()}
+
+    def sed(frac):
+        out, _ = comp.predict({**params, "torus_frac": frac}, jnp.zeros_like(wave), wave)
+        return out
+
+    h = 1.0e-8
+    for frac0, fd in (
+        (0.0, lambda: (sed(h) - sed(0.0)) / h),
+        (h, lambda: (sed(h + 0.5 * h) - sed(h - 0.5 * h)) / h),
+    ):
+        grad = np.asarray(jax.jacfwd(sed)(jnp.asarray(frac0)))
+        np.testing.assert_allclose(grad, np.asarray(fd()), rtol=1e-6, atol=0.0)
+        assert np.all(np.isfinite(grad)) and grad.max() > 0.0

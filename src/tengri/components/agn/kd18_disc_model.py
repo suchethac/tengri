@@ -26,7 +26,12 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import log10_emitted_bolometric, publication_wave
+from tengri.components.agn._publication import (
+    log10_emitted_bolometric,
+    publication_wave,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 
 #: Coarsest log-uniform grid whose emitted-SED integral meets 1e-6 against a 200000-node
 #: reference over 1e-3 A to 1e10 A (measured: 1000 nodes give -7e-8).
@@ -256,7 +261,9 @@ class KD18Disc(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"log_L_agn_disc": "dex", "log_L_agn_disc_los": "dex"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(
+        {"log_L_agn_disc": "dex", "log_L_agn_disc_los": "dex"}
+    )
 
     def predict(
         self,
@@ -375,4 +382,6 @@ class KD18Disc(SEDModelComponent):
         # Add to intrinsic SED
         sed_out = sed_in + _kubota(wave, p["cos_inc"])
 
-        return sed_out, {"log_L_agn_disc": log_L_disc, "log_L_agn_disc_los": log_L_disc_los}
+        return sed_out, with_lsun_siblings(
+            {"log_L_agn_disc": log_L_disc, "log_L_agn_disc_los": log_L_disc_los}
+        )

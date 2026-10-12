@@ -28,7 +28,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import template_sed_and_log_power
+from tengri.components.agn._publication import (
+    template_sed_and_log_power,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 from tengri.components.agn.silva04 import create_silva04_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -178,7 +182,7 @@ class Silva04Torus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"log_L_agn_torus": "dex"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs({"log_L_agn_torus": "dex"})
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load Silva+04 template grid if available.
@@ -245,7 +249,7 @@ class Silva04Torus(SEDModelComponent):
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"log_L_agn_torus": jnp.array(-jnp.inf)}
+            return sed_in, with_lsun_siblings({"log_L_agn_torus": jnp.array(-jnp.inf)})
 
         silva04_fn = self.data
 
@@ -264,4 +268,4 @@ class Silva04Torus(SEDModelComponent):
             _torus, silva04_fn.native_wave, wave, p["log_lbol"]
         )
 
-        return sed_in + torus, {"log_L_agn_torus": log_L_torus}
+        return sed_in + torus, with_lsun_siblings({"log_L_agn_torus": log_L_torus})

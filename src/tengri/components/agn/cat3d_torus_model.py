@@ -28,7 +28,11 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import template_sed_and_log_power
+from tengri.components.agn._publication import (
+    template_sed_and_log_power,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 from tengri.components.agn.cat3d_wind import create_cat3d_wind_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -200,7 +204,7 @@ class CAT3DTorus(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"log_L_agn_torus": "dex"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs({"log_L_agn_torus": "dex"})
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load CAT3D-Wind template grid if available.
@@ -269,7 +273,7 @@ class CAT3DTorus(SEDModelComponent):
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"log_L_agn_torus": jnp.array(-jnp.inf)}
+            return sed_in, with_lsun_siblings({"log_L_agn_torus": jnp.array(-jnp.inf)})
 
         cat3d_fn = self.data
 
@@ -290,4 +294,4 @@ class CAT3DTorus(SEDModelComponent):
             _torus, cat3d_fn.native_wave, wave, p["log_lbol"]
         )
 
-        return sed_in + torus, {"log_L_agn_torus": log_L_torus}
+        return sed_in + torus, with_lsun_siblings({"log_L_agn_torus": log_L_torus})

@@ -30,7 +30,13 @@ import numpy as np
 
 from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import inclination_quadrature
+from tengri.components.agn._publication import (
+    INCLINATION_GL_ORDER,
+    inclination_edges,
+    inclination_quadrature,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 from tengri.components.agn._template_grid import native_bolometric_nu
 from tengri.components.agn.disc_cigale import (
     adaf_disk_limits,
@@ -322,19 +328,31 @@ class SKIRTORTorus(SEDModelComponent):
 
     Cross-component outputs
     -----------------------
-    log_L_agn_disc, log_L_agn_torus, log_L_agn_polar_dust : dex
-        log10 of the angle-integrated bolometric power of the accretion disc, of the torus
-        dust thermal emission and of the polar-dust graybody reemission [dex re erg/s]:
-        the mean over the sphere of the line-of-sight power below,
+    log_L_agn_disc, log_L_agn_torus : dex
+        log10 of the angle-integrated bolometric power of the accretion disc and of the torus
+        dust thermal emission [dex re erg/s]: the mean over the sphere of the line-of-sight
+        power below,
         :math:`\tfrac12\int_0^\pi L(\theta)\sin\theta\,d\theta = \int_0^1 L(\mu)\,d\mu`
         with :math:`\mu = \cos i`, taken by Gauss-Legendre on each interval between the
-        template's own inclination nodes. Independent of ``cos_inc``. ``-inf`` is an absent
-        piece (no polar dust at ``polar_ebv = 0``).
-    log_L_agn_disc_los, log_L_agn_torus_los, log_L_agn_polar_dust_los : dex
-        log10 of the same three powers integrated over the SED emitted along the sightline
-        ``cos_inc`` [dex re erg/s]: the integral of the disc, of the torus dust and of the
-        polar-dust reemission that the model SED carries. The polar-dust reemission equals
-        the disc power the polar dust absorbs (Type 1 only).
+        template's own inclination nodes. Independent of ``cos_inc``. The sphere-mean disc power
+        is ``10**log_lbol L_sun * torus_frac``.
+    log_L_agn_polar_dust : dex
+        log10 of the power the polar dust absorbs from the disc light emitted into the polar
+        cone and re-emits as a graybody [dex re erg/s]:
+        :math:`\int_{\sin\Phi}^1 A(\mu)\,d\mu`, with :math:`A(\mu)` the absorbed power of the
+        disc emitted along :math:`\mu` and :math:`\Phi` the torus half-opening angle
+        ``oa_skirtor``. It does not depend on ``cos_inc``. ``-inf`` is an absent piece (no
+        polar dust at ``polar_ebv = 0``).
+    log_L_agn_disc_los, log_L_agn_torus_los : dex
+        log10 of the disc and torus-dust power integrated over the SED emitted along the
+        sightline ``cos_inc`` [dex re erg/s]. They follow SKIRTOR's own anisotropy: the library
+        stores each record divided by its dust integral, and the ``norm`` records that carry the
+        flux ratio between inclinations are restored.
+    log_L_agn_polar_dust_los : dex
+        The power of the polar-dust re-emission along the sightline. The graybody is emitted
+        isotropically, so this equals ``log_L_agn_polar_dust`` at every ``cos_inc``.
+    L_agn_<piece>_lsun : Lsun
+        Each ``log_L_agn_<piece>`` above in solar luminosities.
     L_2500_30deg : erg/s/Hz
         Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalization.
     L_6um : erg/s/Hz
@@ -352,9 +370,11 @@ class SKIRTORTorus(SEDModelComponent):
     downloaded separately and pointed to via ``grid_path`` in config. The
     predict method gracefully returns zero emission if templates are unavailable.
 
-    **Polar dust**: Applied to Type 1 sightlines (cos_inc ≥ cos(90° - oa))
-    via the smooth sigmoid from polar_dust.py. Energy-conserving reemission
-    as Casey-2012 modified blackbody. This class's polar dust is bundled
+    **Polar dust**: the observed disc is attenuated on Type 1 sightlines (cos_inc ≥
+    cos(90° - oa)) via the smooth sigmoid from polar_dust.py. The re-emitted power does not
+    depend on the sightline: it is the disc light emitted into the polar cone (the
+    solid-angle integral of the disc emission over the cone) that the dust absorbs, re-emitted
+    as a Casey-2012 modified blackbody. This class's polar dust is bundled
     into its own ``predict()``, independent of the composable path, where
     it is instead owned end to end by the standalone ``atten='polar_dust'``
     block (see ``blocks/atten.py::polar_dust_reemission_lnu``).
@@ -481,17 +501,19 @@ class SKIRTORTorus(SEDModelComponent):
     # dead Fixed knob.
 
     # Cross-component outputs
-    outputs: ClassVar[dict[str, str]] = {
-        "log_L_agn_disc": "dex",
-        "log_L_agn_disc_los": "dex",
-        "log_L_agn_torus": "dex",
-        "log_L_agn_torus_los": "dex",
-        "log_L_agn_polar_dust": "dex",
-        "log_L_agn_polar_dust_los": "dex",
-        "L_2500_30deg": "erg/s/Hz",
-        "L_6um": "erg/s/Hz",
-        "L_12um": "erg/s/Hz",
-    }
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs(
+        {
+            "log_L_agn_disc": "dex",
+            "log_L_agn_disc_los": "dex",
+            "log_L_agn_torus": "dex",
+            "log_L_agn_torus_los": "dex",
+            "log_L_agn_polar_dust": "dex",
+            "log_L_agn_polar_dust_los": "dex",
+            "L_2500_30deg": "erg/s/Hz",
+            "L_6um": "erg/s/Hz",
+            "L_12um": "erg/s/Hz",
+        }
+    )
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Load SKIRTOR v3 template grid with separate components.
@@ -622,7 +644,7 @@ class SKIRTORTorus(SEDModelComponent):
                 "L_6um": jnp.array(0.0),
                 "L_12um": jnp.array(0.0),
             }
-            return sed_in, zero_dict
+            return sed_in, with_lsun_siblings(zero_dict)
 
         skirtor_fn = self.data
 
@@ -636,6 +658,12 @@ class SKIRTORTorus(SEDModelComponent):
             """Restore the true magnitude of an evaluation-scale array (float32 only)."""
             return rescale(arr, offset) if use_ref else arr
 
+        # Every piece is linear in the covering fraction, so the pieces are evaluated at a unit
+        # fraction and multiplied by ``torus_frac`` once at the end. A fraction of exactly 0
+        # then keeps its derivative: nothing downstream divides by a quantity that vanishes
+        # with it.
+        frac = p["torus_frac"]
+
         def _components(wave_eval, cos_inc):
             return skirtor_fn(
                 wavelength=wave_eval,
@@ -646,7 +674,7 @@ class SKIRTORTorus(SEDModelComponent):
                 agn_oa_skirtor=p["oa_skirtor"],
                 agn_radius_ratio=p["radius_ratio"],
                 agn_cos_inc=cos_inc,
-                frac_agn=p["torus_frac"],
+                frac_agn=1.0,
             )
 
         # CIGALE disc-shape selection (skirtor2016.py:324-339) -- the tabulated SKIRTOR disc is
@@ -698,101 +726,113 @@ class SKIRTORTorus(SEDModelComponent):
         disc_breaks = _selected_disc_breaks_aa(disk_type, delta)
         wave_pub = _native_publication_wave(skirtor_fn.native_wave, disc_breaks, wave.dtype)
         support_pub = _in_support(wave_pub)
-        # Polar dust (Type 1 only). The absorbed power integrates the disc through an analytic
-        # extinction curve. Its non-smooth points are segment boundaries: every template node
-        # (the emitted disc changes slope there), the disc's breakpoints and edges, the SMC
-        # cubic-to-linear switch and the cubic's zero crossing. Each segment is integrated by
-        # Gauss-Legendre in ln(lambda), which converges to 1e-8 at a few nodes per segment.
+        # The polar absorbed power integrates the disc through an analytic extinction curve.
+        # Its non-smooth points are segment boundaries: every template node (the emitted disc
+        # changes slope there), the disc's breakpoints and edges, the SMC cubic-to-linear switch
+        # and the cubic's zero crossing. Each segment is integrated by Gauss-Legendre in
+        # ln(lambda), which converges to 1e-8 at a few nodes per segment.
         lam_pol, wq = _polar_quadrature(skirtor_fn.native_wave, disc_breaks, wave.dtype)
 
-        def _along(cos_inc):
-            """The emitted pieces along one sightline, at the evaluation scale.
+        def _disc_along(cos_inc):
+            """The emitted disc and dust pieces along one sightline, at unit fraction.
 
-            Returns the publication-grid disc and dust SEDs, the disc re-normalization factor
-            and the polar absorbed power, all for the sightline ``cos_inc``.
+            Returns the publication-grid template disc (before the re-tilt), the dust SED, and
+            the factor that makes the re-tilted disc carry the template disc's power inside the
+            support of the analytic disc.
             """
             comp_pub = _components(wave_pub, cos_inc)
             raw_pub = comp_pub.disk
-            # The two integrals are unfloored: a disc of exactly zero power (torus_frac = 0)
-            # then renormalizes by 0, not by a floor that float32 flushes to 0 (0/0).
+            # The two integrals are unfloored: a disc of exactly zero power then renormalizes by
+            # 0, not by a floor that float32 flushes to 0 (0/0).
             tilted_support = _bolometric_tilted(raw_pub, wave_pub, support_pub)
             disc_renorm = native_bolometric_nu(raw_pub * support_pub, wave_pub, floor=0.0) / (
                 jnp.where(tilted_support > 0.0, tilted_support, 1.0)
             )
-            comp_pol = _components(lam_pol, cos_inc)
-            sed_disc_pol = comp_pol.disk * _retilt(lam_pol) * disc_renorm
-            _, l_abs_pol = polar_dust_extinction(
-                sed_disc_pol, lam_pol, cos_inc, p["oa_skirtor"], p["polar_ebv"], law="smc"
-            )
-            L_abs = jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
-            return raw_pub, comp_pub.dust, disc_renorm, L_abs
+            return raw_pub, comp_pub.dust, disc_renorm
 
         def _powers(cos_inc):
-            """Disc, torus and polar-dust power emitted along ``cos_inc`` [evaluation scale]."""
-            raw_pub, dust_pub, disc_renorm, L_abs = _along(cos_inc)
+            """Disc and torus power emitted along ``cos_inc`` [evaluation scale, unit fraction]."""
+            raw_pub, dust_pub, disc_renorm = _disc_along(cos_inc)
             return jnp.stack(
                 [
                     disc_renorm * _bolometric_tilted(raw_pub, wave_pub),
                     native_bolometric_nu(dust_pub, wave_pub, floor=0.0),
-                    L_abs,
                 ]
             )
 
+        def _cone_absorbed(cos_inc):
+            """Power the polar dust absorbs from the disc emitted along ``cos_inc``."""
+            _, _, disc_renorm = _disc_along(cos_inc)
+            sed_disc_pol = _components(lam_pol, cos_inc).disk * _retilt(lam_pol) * disc_renorm
+            _, l_abs_pol = polar_dust_extinction(
+                sed_disc_pol, lam_pol, cos_inc, p["oa_skirtor"], p["polar_ebv"], law="smc"
+            )
+            return jnp.sum(wq * l_abs_pol * (C_AA / lam_pol))
+
         # Line of sight: the pieces and powers along ``cos_inc`` itself.
-        raw_pub, dust_pub, disc_renorm, L_abs_pub = _along(p["cos_inc"])
+        raw_pub, dust_pub, disc_renorm = _disc_along(p["cos_inc"])
         sed_disc_pub = raw_pub * _retilt(wave_pub) * disc_renorm
-        powers_los = jnp.stack(
-            [
-                disc_renorm * _bolometric_tilted(raw_pub, wave_pub),
-                native_bolometric_nu(dust_pub, wave_pub, floor=0.0),
-                L_abs_pub,
-            ]
-        )
+        powers_los = frac * _powers(p["cos_inc"])
 
         # Angle-integrated: the mean of the line-of-sight power over the sphere,
         # (1/2) int L(theta) sin(theta) dtheta = int_0^1 L(mu) dmu by symmetry about the
         # equator, by Gauss-Legendre on each interval between the template's own inclination
         # nodes (measured error in ``inclination_quadrature``).
-        mu_nodes, mu_weight = inclination_quadrature(skirtor_fn.native_cos_inc)
-        powers_mean = jnp.tensordot(
+        mu_nodes, mu_weight = inclination_quadrature(
+            skirtor_fn.native_cos_inc, INCLINATION_GL_ORDER
+        )
+        powers_mean = frac * jnp.tensordot(
             jnp.asarray(mu_weight, dtype=wave.dtype),
             jax.vmap(_powers)(jnp.asarray(mu_nodes, dtype=wave.dtype)),
             axes=1,
         )
 
-        # Caller-grid SED: the same pointwise functions, scaled by the publication factor.
+        # Polar dust: the disc light emitted INTO the polar cone is absorbed and re-emitted
+        # isotropically. The cone is the set of directions with cos(theta) >= sin(oa) (both
+        # lobes), so its share of the sphere-mean is int_{sin(oa)}^1 L(mu) dmu: the same
+        # per-interval Gauss-Legendre rule as the sphere mean, with the lower limit of each
+        # interval raised to the cone edge. This depends on the torus, not on the sightline.
+        edges_mu = inclination_edges(skirtor_fn.native_cos_inc)
+        x_gl, w_gl = np.polynomial.legendre.leggauss(INCLINATION_GL_ORDER)
+        cone_edge = jnp.sin(jnp.radians(p["oa_skirtor"]))
+        lo = jnp.clip(cone_edge, edges_mu[:-1], edges_mu[1:])
+        half = 0.5 * (edges_mu[1:] - lo)
+        mu_cone = (half[:, None] * jnp.asarray(x_gl) + (lo + half)[:, None]).ravel()
+        w_cone = (half[:, None] * jnp.asarray(w_gl)).ravel()
+        l_abs_unit = jnp.dot(w_cone.astype(wave.dtype), jax.vmap(_cone_absorbed)(mu_cone))
+        l_abs = frac * l_abs_unit
+
+        # Caller-grid SED: the same pointwise functions, at unit fraction, times the fraction.
         polar_args = (p["cos_inc"], p["oa_skirtor"], p["polar_ebv"])
         polar_emit_kwargs = {"temperature": p["polar_T"], "beta": p["polar_beta"], "lambda_0": 2e6}
         comp_caller = _components(wave, p["cos_inc"])
         sed_disc = comp_caller.disk * _retilt(wave) * disc_renorm
         sed_disc_polar, _ = polar_dust_extinction(sed_disc, wave, *polar_args, law="smc")
-        sed_polar_reemit = polar_dust_emission(L_abs_pub, wave, **polar_emit_kwargs)
+        sed_polar_reemit = polar_dust_emission(l_abs_unit, wave, **polar_emit_kwargs)
 
         # Total SED: attenuated disc + torus + polar reemission
-        sed_out = (
-            sed_in
-            + _scaled(sed_disc_polar)
-            + _scaled(comp_caller.dust)
-            + _scaled(sed_polar_reemit)
-        )
+        sed_out = sed_in + _scaled(frac * (sed_disc_polar + comp_caller.dust + sed_polar_reemit))
 
         # Point diagnostics at 2500 A, 6 um and 12 um: node values of the publication grid.
-        L_2500 = jnp.interp(2500.0, wave_pub, sed_disc_pub)
-        L_6um = jnp.interp(6.0e4, wave_pub, sed_disc_pub + dust_pub)  # 6 um = 60000 A
-        L_12um = jnp.interp(1.2e5, wave_pub, sed_disc_pub + dust_pub)  # 12 um = 120000 A
+        L_2500 = frac * jnp.interp(2500.0, wave_pub, sed_disc_pub)
+        L_6um = frac * jnp.interp(6.0e4, wave_pub, sed_disc_pub + dust_pub)  # 6 um = 60000 A
+        L_12um = frac * jnp.interp(1.2e5, wave_pub, sed_disc_pub + dust_pub)  # 12 um = 120000 A
 
         log_los = log10_magnitude(powers_los) + offset
         log_mean = log10_magnitude(powers_mean) + offset
+        log_polar = log10_magnitude(l_abs) + offset
+        # The polar re-emission is a graybody emitted isotropically, so the power along any
+        # sightline is the whole of it: the line-of-sight key equals the angle-integrated one.
         published = {
             "log_L_agn_disc": log_mean[0],
             "log_L_agn_disc_los": log_los[0],
             "log_L_agn_torus": log_mean[1],
             "log_L_agn_torus_los": log_los[1],
-            "log_L_agn_polar_dust": log_mean[2],
-            "log_L_agn_polar_dust_los": log_los[2],
+            "log_L_agn_polar_dust": log_polar,
+            "log_L_agn_polar_dust_los": log_polar,
             "L_2500_30deg": _scaled(L_2500),
             "L_6um": _scaled(L_6um),
             "L_12um": _scaled(L_12um),
         }
 
-        return sed_out, published
+        return sed_out, with_lsun_siblings(published)

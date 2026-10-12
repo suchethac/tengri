@@ -66,6 +66,7 @@ from tengri.components.agn._lbol_reference import (
 )
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn._phys import log10_nu_lnu_at
+from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.blocks.runner import LOS_LOG_LUMINOSITY_KEY
@@ -244,9 +245,26 @@ class AGNSEDComponent(TemplateThreading):
             DerivedKey(
                 "log_L_agn_adaf_accretion",
                 "dex",
-                "log10 of the ADAF accretion power Mdot c^2 = mdot Mdot_Edd c^2 [dex re "
-                "erg/s] (Mahadevan 1997, Eq. 4); agn_log_lbol stays the radiated luminosity "
+                "log10 of the ADAF accretion power mdot L_Edd = eta_eff Mdot c^2 [dex re "
+                "erg/s] with eta_eff = 0.1 (Mahadevan 1997, Eq. 4), the power the paper "
+                "compares L_ADAF against; agn_log_lbol stays the radiated luminosity "
                 "Q_ie + delta Q+; composable model with the 'adaf' disc only",
+            ),
+            DerivedKey(
+                "L_agn_bol_lsun",
+                "Lsun",
+                "10**agn_log_lbol, the AGN accretion power in solar luminosities",
+            ),
+            DerivedKey(
+                "L_agn_los_lsun",
+                "Lsun",
+                "log_L_agn_los in solar luminosities; composable model only",
+            ),
+            DerivedKey(
+                "L_agn_adaf_accretion_lsun",
+                "Lsun",
+                "log_L_agn_adaf_accretion in solar luminosities; composable model with the "
+                "'adaf' disc only",
             ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
@@ -730,6 +748,20 @@ class AGNSEDComponent(TemplateThreading):
                     dtype=wave.dtype,
                 )
             )
+        # Solar-luminosity siblings of the log10 powers (NAMING_CONTRACT 4c).
+        derived_overrides.update(
+            {
+                k: v
+                for k, v in with_lsun_siblings(
+                    {
+                        key: derived_overrides[key]
+                        for key in ("log_L_agn_bol", "log_L_agn_los", "log_L_agn_adaf_accretion")
+                        if key in derived_overrides
+                    }
+                ).items()
+                if k.endswith("_lsun")
+            }
+        )
         # The line-only light exactly as it enters the pipeline SED (#2565): the
         # AGN's own screen is already applied (``agn_components["lines"]``, the
         # monolithic ``return_components`` lines), the host dust screen is not.

@@ -63,6 +63,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
@@ -395,6 +396,10 @@ class GRAHSPSEDComponent(PublishedLuminosities):
                 "dex",
                 "log10 power removed by the AGN bi-attenuation screen [dex re erg/s]",
             ),
+            *(
+                DerivedKey(key, "Lsun", f"{key.removesuffix('_lsun')} in solar luminosities")
+                for key in ("L_agn_bol_lsun", "L_agn_torus_lsun", "L_agn_absorbed_lsun")
+            ),
             DerivedKey("sed_grahsp", "erg/s/Hz", "Full GRAHSP AGN SED on pipeline wave grid"),
         )
 
@@ -508,6 +513,7 @@ class GRAHSPSEDComponent(PublishedLuminosities):
             "log_L_agn_torus": log10_magnitude(powers["L_agn_torus"]) + offset,
             "log_L_agn_absorbed": log10_magnitude(powers["L_agn_absorbed"]) + offset,
         }
+        published = with_lsun_siblings(published)
         return state.add_intrinsic(L_nu).with_(
             derived=state.derived.with_(sed_grahsp=L_nu, **published),
         )

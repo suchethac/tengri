@@ -9,7 +9,8 @@ rate by the Eddington rate of Eq. 4,
 
     Mdot = mdot Mdot_Edd,   Mdot_Edd = L_Edd / (eta_eff c^2) = 1.39e18 m g/s,   eta_eff = 0.1,
 
-so the ADAF's accretion power is Mdot c^2 = mdot * 1.39e18 * m * c^2 [erg/s]. The composable AGN
+so the accretion power the paper compares L_ADAF against is mdot L_Edd = eta_eff Mdot c^2 =
+mdot * 0.1 * 1.39e18 * m * c^2 [erg/s]. The composable AGN
 publishes ``agn_adaf_mdot`` (mdot, dimensionless) and ``log_L_agn_adaf_accretion``
 (log10 of that power in erg/s) beside the unchanged radiated ``log_L_agn_bol``.
 
@@ -36,6 +37,7 @@ pytestmark = pytest.mark.regression_paper
 # Mahadevan 1997, Eq. 4.
 _MDOT_EDD_PER_MSUN = 1.39e18  # g/s per solar mass
 _C = 2.99792458e10  # cm/s
+_ETA_EFF = 0.1  # Eq. 4
 
 # (log10 L_ADAF / L_sun, log10 M / M_sun, alpha, beta, delta): the default point and box edges.
 _POINTS = [
@@ -66,11 +68,11 @@ def test_mdot_is_the_independent_inversion_of_the_radiated_luminosity(point):
 
 @pytest.mark.parametrize("point", _POINTS)
 def test_accretion_power_is_mdot_times_the_eddington_accretion_power_of_eq4(point):
-    """log10(Mdot c^2) = log10(mdot * 1.39e18 m * c^2), the Eq. 4 constant, to 1e-6 dex."""
+    """log10(mdot L_Edd) = log10(eta_eff mdot 1.39e18 m c^2), the Eq. 4 constants, to 1e-6 dex."""
     log_l, log_m, alpha, beta, delta = point
     mdot_ref, m = _reference(point)
     _, log_power = adaf_accretion_diagnostics(log_l, log_m, alpha, beta, delta)
-    expected = np.log10(mdot_ref * _MDOT_EDD_PER_MSUN * m * _C**2)
+    expected = np.log10(mdot_ref * _ETA_EFF * _MDOT_EDD_PER_MSUN * m * _C**2)
     assert float(log_power) == pytest.approx(expected, abs=1e-6)
 
 
@@ -83,7 +85,7 @@ def test_critical_rate_clip_carries_through_to_the_accretion_power():
     mdot, log_power = adaf_accretion_diagnostics(log_l, log_m, alpha, beta, delta)
     assert float(mdot) == 0.28 * alpha**2
     assert float(log_power) == pytest.approx(
-        np.log10(0.28 * alpha**2 * _MDOT_EDD_PER_MSUN * m * _C**2), abs=1e-12
+        np.log10(0.28 * alpha**2 * _ETA_EFF * _MDOT_EDD_PER_MSUN * m * _C**2), abs=1e-12
     )
 
 
@@ -126,7 +128,7 @@ def _adaf_component():
 
 
 def test_composable_agn_publishes_the_accretion_side_beside_the_radiated_luminosity():
-    """The composable ADAF publishes mdot and Mdot c^2; ``log_L_agn_bol`` stays the radiated L."""
+    """The composable ADAF publishes mdot and mdot L_Edd; log_L_agn_bol stays the radiated L."""
     log_l, log_m, alpha, beta, delta = 9.0, 7.5, 0.3, 0.5, 0.1
     params = {
         "agn_log_lbol": jnp.asarray(log_l),
@@ -140,7 +142,7 @@ def test_composable_agn_publishes_the_accretion_side_beside_the_radiated_luminos
     assert float(out.derived["agn_adaf_mdot"]) == pytest.approx(mdot_ref, rel=1e-6)
     accretion = float(out.derived["log_L_agn_adaf_accretion"])
     assert accretion == pytest.approx(
-        np.log10(mdot_ref * _MDOT_EDD_PER_MSUN * m * _C**2), abs=1e-6
+        np.log10(mdot_ref * _ETA_EFF * _MDOT_EDD_PER_MSUN * m * _C**2), abs=1e-6
     )
     # The parameter stays the radiated luminosity: 10**log_l L_sun, not the accretion power.
     assert float(out.derived["log_L_agn_bol"]) == pytest.approx(log_l + np.log10(L_SUN), abs=1e-12)

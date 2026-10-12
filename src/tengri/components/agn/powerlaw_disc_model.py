@@ -24,7 +24,11 @@ import numpy as np
 
 from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn._publication import log10_emitted_bolometric
+from tengri.components.agn._publication import (
+    log10_emitted_bolometric,
+    with_lsun_outputs,
+    with_lsun_siblings,
+)
 from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc_fn
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
@@ -150,7 +154,7 @@ class PowerLawDisc(SEDModelComponent):
     )
 
     # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"log_L_agn_disc": "dex"}
+    outputs: ClassVar[dict[str, str]] = with_lsun_outputs({"log_L_agn_disc": "dex"})
 
     def predict(
         self,
@@ -216,4 +220,4 @@ class PowerLawDisc(SEDModelComponent):
         disc = _powerlaw(wave)
         sed_out = sed_in + (rescale(disc, offset) if use_ref else disc)
 
-        return sed_out, {"log_L_agn_disc": log_L_disc}
+        return sed_out, with_lsun_siblings({"log_L_agn_disc": log_L_disc})

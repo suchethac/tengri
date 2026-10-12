@@ -18,8 +18,8 @@ import numpy as np
 from tengri.components.agn._lbol_reference import reference_evaluation, rescale
 from tengri.components.agn._phys import wavelength_to_nu
 from tengri.utils.grid_interp import loglog_integral
-from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import log10_magnitude
+from tengri.utils.physics_constants import C_AA, L_SUN
+from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
     "INCLINATION_GL_ORDER",
@@ -27,11 +27,14 @@ __all__ = [
     "PUBLICATION_LO_AA",
     "PUBLICATION_NODES",
     "emitted_bolometric",
+    "inclination_edges",
     "inclination_quadrature",
     "log10_emitted_bolometric",
     "log10_native_bolometric",
     "publication_wave",
     "template_sed_and_log_power",
+    "with_lsun_outputs",
+    "with_lsun_siblings",
 ]
 
 #: Lower edge of the publication grid [Angstrom] (X-ray corona of KD18 reaches below 10 A).
@@ -44,6 +47,75 @@ PUBLICATION_HI_AA: float = 1.0e10
 #: 200000-node reference to better than 3e-7 for every AGN template class at this count;
 #: at 4000 nodes the template classes miss 1e-6.
 PUBLICATION_NODES: int = 8000
+
+
+#: ``log10(L_sun / (erg/s))`` [dex].
+_LOG10_L_SUN: float = float(np.log10(L_SUN))
+
+
+def lsun_sibling_key(log_key: str) -> str:
+    """Name of the ``Lsun`` sibling of a ``log_L_agn_<piece>`` key: ``L_agn_<piece>_lsun``.
+
+    Parameters
+    ----------
+    log_key : str
+        A published key of the form ``log_L_agn_<piece>``.
+
+    Returns
+    -------
+    str
+        ``L_agn_<piece>_lsun``.
+    """
+    if not log_key.startswith("log_L_agn_"):
+        raise ValueError(f"not a log_L_agn_<piece> key: {log_key!r}")
+    return f"{log_key[len('log_') :]}_lsun"
+
+
+def with_lsun_siblings(published: dict) -> dict:
+    """``published`` plus an ``L_agn_<piece>_lsun`` [Lsun] sibling of every ``log_L_agn_<piece>``.
+
+    An AGN power of 1e8 to 1e14 Lsun is representable in float32 (NAMING_CONTRACT 4c), so the
+    solar-luminosity value is published beside the exponent. It is formed from the log as
+    ``pow10(log - log10(L_sun))``: the erg/s value (~1e44, ``inf`` in float32) is never formed,
+    and an absent component (``-inf`` dex) is exactly 0.
+
+    Parameters
+    ----------
+    published : dict
+        A component's published values.
+
+    Returns
+    -------
+    dict
+        A new dict with the siblings added; the input is unchanged.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+    """
+    siblings = {
+        lsun_sibling_key(k): pow10(jnp.asarray(v) - _LOG10_L_SUN)
+        for k, v in published.items()
+        if k.startswith("log_L_agn_")
+    }
+    return {**published, **siblings}
+
+
+def with_lsun_outputs(outputs: dict) -> dict:
+    """``outputs`` plus the ``Lsun`` declaration of every ``log_L_agn_<piece>`` sibling.
+
+    Parameters
+    ----------
+    outputs : dict
+        Declared outputs, ``{key: units}``.
+
+    Returns
+    -------
+    dict
+        A new dict with ``{L_agn_<piece>_lsun: "Lsun"}`` added.
+    """
+    siblings = {lsun_sibling_key(k): "Lsun" for k in outputs if k.startswith("log_L_agn_")}
+    return {**outputs, **siblings}
 
 
 def publication_wave(dtype, extra_aa=(), n_nodes: int = PUBLICATION_NODES) -> jnp.ndarray:
@@ -168,7 +240,25 @@ def log10_native_bolometric(lnu_native, wave_native) -> jnp.ndarray:
 #: sets (oa 10 to 80 deg, tau 3 to 11, delta -0.8 to 0.5, polar E(B-V) 0 to 0.3) is 7e-5 for
 #: the disc, 2e-8 for the torus and 1e-3 for the polar-dust power; the trapezoid on the nodes
 #: gives 1e-3, 2e-5 and 3e-2, two points per interval 2e-4, 4e-7 and 2e-3.
-INCLINATION_GL_ORDER: int = 3
+INCLINATION_GL_ORDER: int = 12
+
+
+def inclination_edges(cos_inc_nodes) -> np.ndarray:
+    r"""Interval edges in :math:`\cos i` that the inclination quadrature panels span.
+
+    Parameters
+    ----------
+    cos_inc_nodes : array_like, shape (n_inc,)
+        The template's :math:`\cos i` nodes [dimensionless], ascending.
+
+    Returns
+    -------
+    ndarray, shape (n_edge,)
+        ``[0, nodes[1:]]`` when the first node sits at ~0 (the edge-on end is then extended
+        to exactly 0), else the nodes themselves.
+    """
+    nodes = np.asarray(cos_inc_nodes, dtype=np.float64)
+    return np.concatenate([[0.0], nodes[1:]]) if nodes[0] < 1e-9 else nodes
 
 
 def inclination_quadrature(cos_inc_nodes, order: int = INCLINATION_GL_ORDER):
@@ -200,8 +290,7 @@ def inclination_quadrature(cos_inc_nodes, order: int = INCLINATION_GL_ORDER):
     power divided by :math:`4\pi` is :math:`\tfrac12\int_0^\pi L(\theta)\sin\theta\,d\theta
     = \int_0^1 L(\mu)\,d\mu` by symmetry about the equator, the quantity this weights.
     """
-    nodes = np.asarray(cos_inc_nodes, dtype=np.float64)
-    edges = np.concatenate([[0.0], nodes[1:]]) if nodes[0] < 1e-9 else nodes
+    edges = inclination_edges(cos_inc_nodes)
     x, w = np.polynomial.legendre.leggauss(order)
     lo, hi = edges[:-1, None], edges[1:, None]
     mu = (0.5 * (hi - lo) * x + 0.5 * (hi + lo)).ravel()

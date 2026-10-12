@@ -1267,10 +1267,11 @@ def _adaf_mdot_of_log_lbol(
 
 
 #: Mahadevan (1997) Eq. 4: ``Mdot_Edd = L_Edd / (eta_eff c^2) = 1.39e18 m g/s`` with
-#: ``eta_eff = 0.1``, so the accretion power of the flow is ``Mdot c^2 = mdot Mdot_Edd c^2``.
+#: ``eta_eff = 0.1``, so ``mdot L_Edd = eta_eff Mdot c^2``: the power the paper compares the
+#: ADAF's radiated luminosity ``L_ADAF`` against.
 _MDOT_EDD_G_PER_S_PER_MSUN: float = 1.39e18
-_LOG10_MDOT_EDD_C2_ERG_S_PER_MSUN: float = float(
-    np.log10(_MDOT_EDD_G_PER_S_PER_MSUN * _C_LIGHT**2)
+_LOG10_ETA_EFF_MDOT_EDD_C2_ERG_S_PER_MSUN: float = float(
+    np.log10(_ETA_EFF * _MDOT_EDD_G_PER_S_PER_MSUN * _C_LIGHT**2)
 )
 
 
@@ -1292,21 +1293,25 @@ def adaf_accretion_diagnostics(
     .. math::
 
         \dot M = \dot m\,\dot M_{\rm Edd}, \qquad
-        \dot M_{\rm Edd} = \frac{L_{\rm Edd}}{\eta_{\rm eff} c^2} = 1.39\times10^{18}\,m
-        \ \mathrm{g\,s^{-1}}, \qquad \eta_{\rm eff} = 0.1 ,
+        \dot M_{\rm Edd} = \frac{L_{\rm Edd}}{\eta_{\rm eff} c^2} = 1.39\times10^{18}\,m\
+        \mathrm{g\,s^{-1}}, \qquad \eta_{\rm eff} = 0.1 ,
 
-    with :math:`m = M/M_\odot`, so the accretion power is
+    with :math:`m = M/M_\odot`. The accretion power published is the one the paper compares the
+    radiated luminosity against, the Eddington luminosity times the accretion rate in Eddington
+    units,
 
     .. math::
 
-        \dot M c^2 = \dot m\,(1.39\times10^{18}\,m\ \mathrm{g\,s^{-1}})\,c^2
-                   = \dot m\,\frac{L_{\rm Edd}}{\eta_{\rm eff}} \quad [\mathrm{erg\,s^{-1}}] ,
+        \dot m\,L_{\rm Edd} = \eta_{\rm eff}\,\dot M c^2
+        = \dot m\,(1.39\times10^{18}\,m\ \mathrm{g\,s^{-1}})\,\eta_{\rm eff} c^2
+        \quad [\mathrm{erg\,s^{-1}}] ,
 
     :math:`c` the speed of light [cm/s] and :math:`L_{\rm Edd}` the Eddington luminosity
     [erg/s]. The efficiency is the paper's :math:`\eta_{\rm eff}` of Eq. 4, not a model
-    choice; it is the conversion the paper itself uses to define :math:`\dot m`. It is the
-    power the infalling mass carries, not the radiated ``agn_log_lbol``, which stays the
-    ADAF's :math:`Q_{ie} + \delta Q^+`.
+    choice; it is the conversion the paper itself uses to define :math:`\dot m`. The rest-mass
+    rate :math:`\dot M c^2` is :math:`1/\eta_{\rm eff} = 10` times larger. ``agn_log_lbol``
+    stays the ADAF's radiated :math:`Q_{ie} + \delta Q^+`, which is
+    :math:`L_{\rm ADAF} < \dot m L_{\rm Edd}`.
 
     Parameters
     ----------
@@ -1331,8 +1336,8 @@ def adaf_accretion_diagnostics(
         :math:`\dot m = \dot M/\dot M_{\rm Edd}` [dimensionless], clipped to the ADAF range
         ``[1e-8, 0.28 alpha^2]`` (Eq. 52).
     log_accretion_power : ndarray, shape ()
-        :math:`\log_{10}(\dot M c^2 / \mathrm{erg\,s^{-1}})` [dex re erg/s], formed in log
-        space (``Mdot c^2`` reaches 1e45 erg/s).
+        :math:`\log_{10}(\dot m L_{\rm Edd} / \mathrm{erg\,s^{-1}})` [dex re erg/s], formed in
+        log space (the power reaches 1e44 erg/s).
 
     Notes
     -----
@@ -1352,7 +1357,7 @@ def adaf_accretion_diagnostics(
     mdot = _adaf_mdot_of_log_lbol(
         agn_log_lbol, m, agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta, dtype == jnp.float32
     )
-    log_power = jnp.log10(mdot) + agn_log_mbh + _LOG10_MDOT_EDD_C2_ERG_S_PER_MSUN
+    log_power = jnp.log10(mdot) + agn_log_mbh + _LOG10_ETA_EFF_MDOT_EDD_C2_ERG_S_PER_MSUN
     return mdot, log_power
 
 

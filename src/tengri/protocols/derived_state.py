@@ -464,10 +464,23 @@ class DerivedState:
     log_L_agn_absorbed: jnp.ndarray | None = None
     # The ADAF's accretion side (Mahadevan 1997, Eq. 4), composable AGN with the 'adaf' disc
     # only: ``agn_adaf_mdot`` is mdot = Mdot / Mdot_Edd [dimensionless] derived from the
-    # radiated ``agn_log_lbol``, and ``log_L_agn_adaf_accretion`` is log10(Mdot c^2) [dex re
-    # erg/s] with Mdot_Edd = L_Edd / (0.1 c^2).
+    # radiated ``agn_log_lbol``, and ``log_L_agn_adaf_accretion`` is log10(mdot L_Edd) =
+    # log10(eta_eff Mdot c^2) [dex re erg/s] with eta_eff = 0.1, Mdot_Edd = L_Edd / (0.1 c^2).
     agn_adaf_mdot: jnp.ndarray | None = None
     log_L_agn_adaf_accretion: jnp.ndarray | None = None
+    # The same AGN powers in solar luminosities [Lsun], ``L_agn_<piece>_lsun`` beside each
+    # ``log_L_agn_<piece>``: 1e8 to 1e14 Lsun is representable in float32 where the erg/s value
+    # is not (NAMING_CONTRACT 4c). Formed from the dex value as pow10(log - log10(L_sun)).
+    L_agn_bol_lsun: jnp.ndarray | None = None
+    L_agn_los_lsun: jnp.ndarray | None = None
+    L_agn_disc_lsun: jnp.ndarray | None = None
+    L_agn_disc_los_lsun: jnp.ndarray | None = None
+    L_agn_torus_lsun: jnp.ndarray | None = None
+    L_agn_torus_los_lsun: jnp.ndarray | None = None
+    L_agn_polar_dust_lsun: jnp.ndarray | None = None
+    L_agn_polar_dust_los_lsun: jnp.ndarray | None = None
+    L_agn_absorbed_lsun: jnp.ndarray | None = None
+    L_agn_adaf_accretion_lsun: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];
     # drives X-ray alpha_ox (Just+2007). Published by the composable AGN (#722).
     L_2500_intrinsic: jnp.ndarray | None = None
