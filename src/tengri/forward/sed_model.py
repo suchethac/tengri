@@ -1143,13 +1143,16 @@ def _validate_fracagn_requires_dust(spec) -> None:
     absorbed stellar luminosity is ~zero, so the torus (and under
     agn_norm='cigale_joint' the whole AGN) collapses silently.
 
-    This is a build-time safety gate: fracAGN is only safe when paired
-    with a dust component (dust_model != 'off').
+    This is a construction-time safety gate, run by :meth:`SEDModel.__init__`
+    so that both :meth:`SEDModel.build` and direct construction from a spec
+    refuse it: fracAGN is only safe when paired with a dust component
+    (dust_model != 'off'). A ``Fixed(0)`` coupling is inert and passes.
 
     Raises
     ------
     ConfigError
         If agn_ir_frac is nonzero (FREE or Fixed>0) and dust_model == 'off'.
+        A ``ConfigError`` is also a ``ValueError``.
 
     See Also
     --------
@@ -1183,8 +1186,8 @@ def _validate_fracagn_requires_dust(spec) -> None:
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
             "Fix: either (1) add a dust component "
             "(e.g. dust_attenuation={'type':'two_component'}), "
-            "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
-            "See issue #944."
+            "or (2) pin fracAGN to Fixed(0) (or drop it and use agn_torus_frac for "
+            "independent torus scaling). See issue #944."
         )
 
 
@@ -2941,6 +2944,7 @@ class SEDModel:
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
+        _validate_fracagn_requires_dust(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -13167,7 +13171,6 @@ class SEDModel:
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
-        _validate_fracagn_requires_dust(spec)
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)
