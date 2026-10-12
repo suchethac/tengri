@@ -64,4 +64,6 @@ def test_padded_batch_gradient_in_redshift_is_finite():
     sed, wave_rest = _sed()
 
     grad = jax.grad(lambda z: jnp.sum(lnu_filter_integral_batch(sed, wave_rest, fw_p, ft_p, z)))
-    assert np.isfinite(float(grad(0.3)))
+    value = float(grad(0.3))
+    assert np.isfinite(value)
+    assert np.any(np.asarray(value) != 0.0), "padded batch redshift gradient is identically zero"
