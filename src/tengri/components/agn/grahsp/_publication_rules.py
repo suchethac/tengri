@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Quadrature rules and their measured orders for the published GRAHSP luminosities.
 
-The rules here are the building blocks of the ``L_agn_bol``, ``L_agn_torus`` and
-``L_agn_absorbed`` integrals in :mod:`tengri.components.agn.grahsp.published`: the log-normal
-expectation, the Gauss-Hermite and Gauss-Legendre line expectations, the FeII segment product
-and the log-spaced breakpoints. Each order and window below carries the error it was measured
+The rules here are the building blocks of the bolometric, torus and absorbed power integrals
+(published as ``log_L_agn_bol``, ``log_L_agn_torus`` and ``log_L_agn_absorbed``) in
+:mod:`tengri.components.agn.grahsp.published`: the log-normal expectation, the Gauss-Hermite
+and Gauss-Legendre line expectations, the FeII segment product and the log-spaced breakpoints.
+Each order and window below carries the error it was measured
 at. None of this enters the emitted SED, which is integrated on the component's own grids.
 
 Notes

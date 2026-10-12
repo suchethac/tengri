@@ -64,6 +64,39 @@ class TorusTemplateGrid(NamedTuple):
     wave_grid: jnp.ndarray
 
 
+def float32_safe_template(template, dtype):
+    """A tabulated template as a float32-representable array when ``dtype`` is float32.
+
+    Several libraries are stored as shape only on an arbitrary scale (the Silva+04 and CAT3D
+    tables peak at ~1e-68, the SKIRTOR AGNfitter 1- and 2-parameter tables at ~1e-71), so
+    casting them to float32 flushes every entry to zero. In float32 a host (numpy) table is
+    divided by its peak, in float64 on the host, before it is cast; the scale is divided out
+    again by :func:`scale_to_lbol_native`, so the SED is unchanged. In float64, and for a table
+    already on the device (a tracer threaded through ``jit``), the table is returned as is.
+
+    Parameters
+    ----------
+    template : array_like
+        Tabulated SEDs [arbitrary units: shape only].
+    dtype : dtype
+        Floating dtype of the evaluation (that of the caller's wavelength array).
+
+    Returns
+    -------
+    array_like
+        ``template`` or ``template / max(template)``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, for a host table the peak is a trace-time constant.
+    """
+    if dtype == jnp.float32 and isinstance(template, np.ndarray):
+        peak = float(np.max(template))
+        if peak > 0.0:
+            return template / peak
+    return template
+
+
 def native_bolometric_nu(
     lnu_native: jnp.ndarray, wave_native: jnp.ndarray, *, floor: float = 1e-100
 ) -> jnp.ndarray:
@@ -305,12 +338,11 @@ def torus_lnu_from_grid(
     C¹-continuous across every axis.
     """
     template = interp_nd_pchip(
-        jnp.asarray(grid.template),
+        jnp.asarray(float32_safe_template(grid.template, wavelength.dtype)),
         tuple(jnp.asarray(axis) for axis in grid.axes),
         coords,
     )
     wave_native = jnp.asarray(grid.wave_grid)
-    integral_safe = native_bolometric_nu(template, wave_native)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
     l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-    return l_scale * sed / integral_safe
+    return scale_to_lbol_native(template, wave_native, sed, l_scale)

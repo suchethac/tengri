@@ -179,7 +179,7 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
         "(``utils.scale.apply_log10_scale``, #1388).",
         (
             "tengri.components.agn._template_grid:torus_lnu_from_grid",
-            "tengri.components.agn.adaf:adaf_scalar_state",
+            "tengri.components.agn.adaf:_adaf_mdot_of_log_lbol",
             "tengri.components.agn.blocks.blr:blr_synthesizer_spectra_block",
             "tengri.components.agn.blocks.disc:_cigale_disc_lambda",
             "tengri.components.agn.blocks.nlr:nlr_analytic_block",
