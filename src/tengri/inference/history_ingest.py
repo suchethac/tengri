@@ -399,6 +399,21 @@ def _check_ssp_grid(logzsol, mass_w, ssp_lgmet, policy):
     )
 
 
+def _warn_young_top_metallicity(logzsol, top_z):
+    """Warn once when a Z(t) history reaches a top node that is incomplete at young ages."""
+    if top_z is None:
+        return
+    from tengri.components.stellar.sps.top_z_validity import (
+        YoungTopMetallicityWarning,
+        reach_warning_text,
+    )
+
+    highest = float(np.max(logzsol))
+    text = reach_warning_text(top_z, highest + LOG10_ZSUN, "the met= history")
+    if text is not None:
+        warn_measured(text, YoungTopMetallicityWarning, max_logzsol=highest, stacklevel=4)
+
+
 def ingest_histories(
     *,
     t_gyr,
@@ -408,6 +423,7 @@ def ingest_histories(
     met_unit="logzsol",
     on_out_of_grid="raise",
     ssp_lgmet=None,
+    top_z=None,
 ) -> HistoryArrays:
     """Validate simulation histories and put them on one convention (#1677).
 
@@ -438,6 +454,9 @@ def ingest_histories(
     ssp_lgmet : array_like, shape (n_met,), optional
         The SSP library's absolute log10(Z) grid. When ``None`` the grid check is
         skipped; there is nothing to check against.
+    top_z : TopZValidity, optional
+        The SSP grid's top-metallicity validity record (``SSPData.top_z``). When given,
+        a history that reaches above the highest complete node warns once.
 
     Returns
     -------
@@ -455,6 +474,8 @@ def ingest_histories(
     -----
     OutOfSSPGridWarning
         Under ``on_out_of_grid='warn'``, once, carrying the measured values.
+    YoungTopMetallicityWarning
+        When ``top_z`` is given and a node exceeds the highest complete SSP node.
     MetallicityUnitWarning
         When the converted history reads like a metal mass fraction mistaken for
         log10(Z/Zsun), the case ``on_out_of_grid`` is structurally unable to
@@ -509,6 +530,7 @@ def ingest_histories(
         logzsol = met_to_logzsol(met_raw, met_unit)
         _check_unit_plausibility(logzsol, met_unit)
         _check_ssp_grid(logzsol, mass_w, ssp_lgmet, on_out_of_grid)
+        _warn_young_top_metallicity(logzsol, top_z)
 
     gas = None
     if met_gas is not None:

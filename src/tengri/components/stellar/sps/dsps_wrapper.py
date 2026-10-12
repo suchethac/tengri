@@ -214,6 +214,10 @@ class SSPData(NamedTuple):
     # ``"dsps_fit"`` (DSPS's metallicity-independent sigmoid, explicit opt-in) or
     # ``"unspecified"`` for a hand-built SSPData. Metadata only: never a JIT leaf.
     mass_remaining_source: str = "unspecified"
+    # Validity limit of the grid's top-metallicity node and the ``top_z=`` policy
+    # applied to it (:class:`~tengri.components.stellar.sps.top_z_validity.TopZValidity`),
+    # or ``None`` when the grid has no limit on record. Metadata only: never a JIT leaf.
+    top_z: tuple | None = None
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this SSPData instance.
@@ -243,7 +247,7 @@ def _sspdata_flatten(s):
         s.ssp_alpha_fe,
         s.ssp_resolution_kms,
     )
-    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source)
+    aux = (s.imf, s.source, s.nebular, s.mass_remaining_source, s.top_z)
     return children, aux
 
 
@@ -264,6 +268,7 @@ def _sspdata_unflatten(aux, children):
         source=aux[1],
         nebular=aux[2],
         mass_remaining_source=aux[3],
+        top_z=aux[4],
     )
 
 
@@ -282,6 +287,7 @@ _SSP_CACHE_KEY_POLICY: KeyPolicy = {
     "source": content("source/library identity affects stellar templates"),
     "nebular": content("nebular inclusion status (wNE vs bare) affects the grid"),
     "mass_remaining_source": content("where the surviving-mass table came from"),
+    "top_z": content("top-metallicity validity limit and policy change the node arrays"),
 }
 
 
@@ -349,7 +355,11 @@ _LOAD_SSP_PRESETS: dict[str, str] = {
 
 
 def load_ssp(
-    name: str | None = None, *, download: bool = False, mass_remaining: str = "table"
+    name: str | None = None,
+    *,
+    download: bool = False,
+    mass_remaining: str = "table",
+    top_z: str = "clip",
 ) -> "SSPData":
     """Load an SSP grid by short name, walking parent dirs for ``data/``.
 
@@ -376,6 +386,10 @@ def load_ssp(
         where a fresh checkout is expected not to have the grid yet.
     mass_remaining : {"table", "dsps_fit"}, optional
         Surviving-mass source, forwarded to :func:`load_ssp_data` (see there).
+    top_z : {"clip", "mist", "raw"}, optional
+        Treatment of a top-metallicity node that lacks young massive stars,
+        forwarded to :func:`load_ssp_data` (see there). ``"mist"`` is the opt-in
+        that replaces the clip target with a MIST [Z/H] = +0.5 node.
 
     Returns
     -------
@@ -426,7 +440,7 @@ def load_ssp(
         # ``reproduction/<code>/_drivers/data/`` rather than ``<root>/data/``).
         as_path = Path(name)
         if as_path.suffix == ".h5" and as_path.exists():
-            return load_ssp_data(str(as_path), mass_remaining=mass_remaining)
+            return load_ssp_data(str(as_path), mass_remaining=mass_remaining, top_z=top_z)
         filename = name if name.endswith(".h5") else name + ".h5"
         catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
 
@@ -435,10 +449,12 @@ def load_ssp(
     for directory in data_dirs():
         candidate = directory / filename
         if candidate.exists():
-            return load_ssp_data(str(candidate), mass_remaining=mass_remaining)
+            return load_ssp_data(str(candidate), mass_remaining=mass_remaining, top_z=top_z)
 
     if download and catalog_key is not None:
-        return load_ssp_data(str(download_ssp(catalog_key)), mass_remaining=mass_remaining)
+        return load_ssp_data(
+            str(download_ssp(catalog_key)), mass_remaining=mass_remaining, top_z=top_z
+        )
 
     catalog_note = (
         f"{filename!r} is not in the download catalog, so download=True cannot "
@@ -480,7 +496,12 @@ def _load_float(dataset, dtype=None) -> jnp.ndarray:
 
 
 def load_ssp_data(
-    filepath: str, *, dtype=None, download: bool = False, mass_remaining: str = "table"
+    filepath: str,
+    *,
+    dtype=None,
+    download: bool = False,
+    mass_remaining: str = "table",
+    top_z: str = "clip",
 ) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
@@ -514,6 +535,19 @@ def load_ssp_data(
         naming the missing table); an unregistered grid with no table warns and
         uses the fit. ``"dsps_fit"`` is the explicit opt-in to DSPS's
         metallicity-independent sigmoid fit to FSPS, for any grid.
+    top_z : {"clip", "mist", "raw"}, optional
+        What to do with a top-metallicity node known to lack young massive stars
+        (the Z = 0.06 node of every PARSEC grid has no stars above 12 Msun for log
+        age <= 7.15, because the PARSEC massive-star tracks stop at Z = 0.04). Grids
+        with no limit on record are unaffected. ``"clip"`` (default) refuses the node
+        where it is incomplete: the metallicity is held at the highest complete node
+        (Z = 0.04) for log age <= 7.15, and the node's weight rises linearly with log
+        age from 0 to 1 over the next 0.10 dex, so the population is continuous in
+        age and the node is used unchanged from log age 7.25. ``"mist"`` is the
+        opt-in that makes the clip target a MIST [Z/H] = +0.5 SSP (Z = 0.0449, MILES,
+        same IMF and ages) inserted as an extra metallicity node at its true Z;
+        it is shipped for the MILES grids. ``"raw"`` keeps the file's node as
+        shipped, for cross-code parity with FSPS only.
 
     Returns
     -------
@@ -731,6 +765,21 @@ def load_ssp_data(
         if "ssp_alpha_fe" in f:
             alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
 
+        ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
+        top_z_validity = None
+        if alpha_fe is None:
+            ssp_flux, mass_table, ssp_lgmet, top_z_validity = _apply_top_z(
+                stem=fp.stem,
+                policy=top_z,
+                synthetic=bool(f.attrs.get("synthetic", False)),
+                ssp_wave=ssp_wave,
+                ssp_flux=ssp_flux,
+                mass_table=mass_table,
+                ssp_lg_age_gyr=ssp_lg_age_gyr,
+                ssp_lgmet=ssp_lgmet,
+                native_lsun=native_lsun,
+            )
+
         # Per-wavelength library resolution (#2518): match the library token
         # in the filename to the FSPS-derived reference table and read off
         # the library's own per-node velocity dispersion, but ONLY when
@@ -747,7 +796,6 @@ def load_ssp_data(
         # (``_init_instrument``), which fires only when the model actually
         # configures spectroscopy and falls back to the flat
         # ``sigma_lib_kms`` scalar, naming the grid.
-        ssp_wave = _load_float(f["ssp_wave"], dtype=dtype)
         library_stem = fp.stem
         library_key = _detect_library_resolution_key(library_stem)
         if library_key is not None and _wave_matches_reference(
@@ -769,7 +817,53 @@ def load_ssp_data(
             source=fp.stem,
             nebular=nebular,
             mass_remaining_source=resolution.source,
+            top_z=top_z_validity,
         )
+
+
+def _apply_top_z(
+    *,
+    stem,
+    policy,
+    synthetic,
+    ssp_wave,
+    ssp_flux,
+    mass_table,
+    ssp_lg_age_gyr,
+    ssp_lgmet,
+    native_lsun,
+):
+    """Run :func:`apply_top_z_policy` on loaded JAX arrays and cast back to their dtypes."""
+    from tengri.components.stellar.sps.mass_remaining_tables import (
+        MASS_REMAINING_REGISTRY,
+        canonical_grid_name,
+    )
+    from tengri.components.stellar.sps.top_z_validity import TOP_Z_MODES, apply_top_z_policy
+    from tengri.utils.physics_constants import L_SUN
+
+    if policy not in TOP_Z_MODES:
+        raise ValueError(f"top_z must be one of {TOP_Z_MODES}, got {policy!r}")
+    entry = None if synthetic else MASS_REMAINING_REGISTRY.get(canonical_grid_name(stem))
+    flux_scale = 1.0 if native_lsun is None else native_lsun / L_SUN
+    flux, mass, lgmet, validity = apply_top_z_policy(
+        stem=stem,
+        isoc=None if entry is None else entry.isoc,
+        policy=policy,
+        wave=np.asarray(ssp_wave, dtype=np.float64),
+        lg_age_yr=np.asarray(ssp_lg_age_gyr, dtype=np.float64) + 9.0,
+        lgmet=np.asarray(ssp_lgmet, dtype=np.float64),
+        flux=np.asarray(ssp_flux, dtype=np.float64),
+        mass=np.asarray(mass_table, dtype=np.float64),
+        flux_scale=flux_scale,
+    )
+    if validity is None or (policy == "raw"):
+        return ssp_flux, mass_table, ssp_lgmet, validity
+    return (
+        jnp.asarray(flux, dtype=ssp_flux.dtype),
+        jnp.asarray(mass, dtype=mass_table.dtype),
+        jnp.asarray(lgmet, dtype=ssp_lgmet.dtype),
+        validity,
+    )
 
 
 #: FSPS's internal solar luminosity (``sps_vars.f90``, ``lsun = 3.839d33``)

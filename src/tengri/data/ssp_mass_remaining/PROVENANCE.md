@@ -121,6 +121,15 @@ young top-Z SSPs contain no stars above about 12 Msun, in both the spectra (whic
 build) and the surviving mass. The flat 0.868 at young ages at top Z is that truncation together
 with the remnant term, which `add_remnants.f90` ties to the largest living mass.
 
+How the model treats this node is a loader policy, not a change to this table: the table
+keeps the build's own numbers at Z = 0.06, and `load_ssp_data(..., top_z=...)` clips the young
+part of that node (and its surviving mass) to the highest complete node, or to the MIST node of
+`src/tengri/data/ssp_top_z/` (see its `PROVENANCE.md`). The limit is registry data in
+`components/stellar/sps/top_z_validity.py` (`TOP_Z_REGISTRY`, keyed by the isochrone code of the
+registry above): node Z = 0.06, clip target Z = 0.04, last incomplete log age 7.15 (the last age
+at which `isoc_z0.0600.dat` still caps Mini at 12.01 Msun; at 7.20 its largest Mini is 11.3 Msun,
+below the cap), taper 0.10 dex.
+
 The spectra comparison above was a one-off check against the hosted grid, made outside the
 repository with the same build; the test suite does not repeat it, since python-fsps is not in
 the shared environment.
