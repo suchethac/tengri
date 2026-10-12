@@ -1342,10 +1342,13 @@ jobs:
             RESULT=$(python tools/ci_split_paths.py --root tests/regression/bug --part ${{ matrix.bug_half }} --of 3 --join --durations tools/ci_bug_durations.json 2>&1) || exit 1
             echo "value=$RESULT" >> "$GITHUB_OUTPUT"
           fi
+      # `--durations` lists each shard's 60 slowest tests (>= 5 s) at the end of
+      # its log, so a shard's growth can be named from a completed run (#2908).
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=signal \
+            --durations=60 --durations-min=5 \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
