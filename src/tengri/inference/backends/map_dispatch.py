@@ -1142,6 +1142,10 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
         map_params_posterior = map_result
 
     map_params = context.unbounded_from_posterior(map_params_posterior)
+    if init_from is not None:
+        # An explicit start skips run_map and its non-finite check (#1397); check the
+        # unbounded point the Hessian is evaluated at, the same space the runners use.
+        _reject_nonfinite_map(map_params)
 
     return run_laplace(
         key=key,

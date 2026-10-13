@@ -476,7 +476,7 @@ by the iteration cap all raise loudly by design — do not weaken these guards.
 
 ## Critical gotchas
 
-- `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`
+- `jax.random.fold_in(key, hash(string))` overflows uint32, and `abs(hash(x)) % (2**31)` is no fix: `str` hashing is salted per process (`PYTHONHASHSEED`), so the same key gives different draws in different runs. Use a fixed integer such as `zlib.crc32(name.encode()) & 0x7FFFFFFF` (see `_stable_param_seed` in `parameters/parameters.py`)
 - Never create `Model`/`ParamSpec` inside a JAX gradient tape (traced values fail in `__init__`)
 - JAX Metal (Apple GPU) causes test failures. Use `JAX_PLATFORMS=cpu` for reliable results
 - Ray Tracing: step_size=0.05 for D~137; sharp viability cliff at ~0.06 (acceptance drops to 0%)
