@@ -8,6 +8,7 @@ Root cause investigation:
 """
 
 import time
+import zlib
 from pathlib import Path
 
 import jax
@@ -90,7 +91,7 @@ _ = fitter.run("map", key=base_key)
 runtimes = []
 keys_list = []
 for i in range(50):
-    key_i = jax.random.fold_in(base_key, abs(hash(f"trial_{i}")) % (2**31))
+    key_i = jax.random.fold_in(base_key, zlib.crc32(f"trial_{i}".encode()) % (2**31))
     t0 = time.perf_counter()
     _ = fitter.run("map", key=key_i)
     t = time.perf_counter() - t0

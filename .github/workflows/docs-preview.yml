@@ -9,6 +9,9 @@ name: Docs Preview (PR)
 
 on:
   pull_request:
+    # `ready_for_review`: a draft does not build a preview (see the job's `if:`),
+    # so marking it ready must start the build that was withheld.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "docs/**"
       - "examples/**"
@@ -49,6 +52,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Not a required check, so a draft can skip it outright: nothing waits on a
+    # `skipped` context here. The per-PR concurrency group above cancels the
+    # superseded build when a newer commit lands.
+    if: ${{ !github.event.pull_request.draft }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,6 +92,7 @@ jobs:
           retention-days: 14
 
       - name: Post artifact link to PR
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v9
         with:
           script: |

@@ -151,12 +151,12 @@ def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
 def _is_log_uniform(wave) -> bool:
     r"""Whether ``wave`` is uniform in :math:`\ln\lambda`, so one pixel scale serves.
 
-    ``True`` for a tracer: a traced grid has no values to inspect at trace time.
-    The gap is the one :func:`_require_log_uniform_grid` documents, and narrow for
-    the same reason, a spectroscopic wavelength grid is normally a fixed
-    instrument array closed over by the jitted function, not an argument traced
-    through it. Answering ``True`` keeps the single-FFT path, which is what such a
-    grid got before #1791.
+    ``False`` for a tracer: a traced grid has no values to inspect at trace time,
+    so its log-uniformity is unknown. An unknown takes the general (piecewise)
+    path, which carries a per-bin pixel scale and is correct on any grid. Answering
+    ``True`` here sent a linear traced grid down the constant-R FFT path (#2847).
+    A grid known to be log-uniform is passed concretely, closed over by the jitted
+    function.
 
     Parameters
     ----------
@@ -175,7 +175,7 @@ def _is_log_uniform(wave) -> bool:
     evaluation.
     """
     if isinstance(wave, jax.core.Tracer):
-        return True
+        return False  # unknown: take the general path (#2847)
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return True  # not a grid this helper can speak about; let the caller fail
@@ -1586,10 +1586,9 @@ _LOG_UNIFORM_RTOL = 1e-6
 def _require_log_uniform_grid(wave, caller: str) -> None:
     """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
 
-    A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
-    trace time. That is a real gap rather than a safe default; it is narrow
-    because a spectroscopic wavelength grid is normally a fixed instrument array
-    closed over by the jitted function, not an argument traced through it.
+    The caller routes a traced grid elsewhere before calling this, because a traced
+    grid has no values to inspect at trace time (#2847). This helper only sees
+    concrete grids.
 
     Parameters
     ----------
@@ -1599,8 +1598,6 @@ def _require_log_uniform_grid(wave, caller: str) -> None:
         Function name, quoted in the error so the message names the API the user
         actually called.
     """
-    if isinstance(wave, jax.core.Tracer):
-        return
     w = np.asarray(wave, dtype=np.float64)
     if w.size < 3 or first_invalid_wavelength(w) is not None:
         return  # not a grid this check can speak about; let the caller fail
@@ -1657,8 +1654,8 @@ def velocity_broaden(
     Raises
     ------
     ValueError
-        If ``wave`` is not uniform in ``ln(lambda)`` and is concrete at trace
-        time. Resample onto a log grid first.
+        If ``wave`` is concrete and not uniform in ``ln(lambda)``. Resample onto a
+        log grid first.
 
     Notes
     -----
@@ -1685,9 +1682,12 @@ def velocity_broaden(
     instead, on the reasoning recorded in :mod:`tengri.forward.approx_policy`:
     a silently-defaulting read is worse than a loud failure.
 
-    The check is skipped when ``wave`` is a tracer, since a traced grid cannot
-    be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
-    grid (the usual case for a fixed instrument grid) it still fires.
+    A traced ``wave`` cannot be inspected at trace time, so it takes the piecewise
+    path of :func:`broaden_velocity_only` instead, which reads the pixel scale per
+    pixel and so is correct on any increasing grid. On a log-uniform grid that path
+    equals the single FFT (the piecewise bins share one sigma). Under ``jax.jit``
+    with a concrete (closed-over) grid, the usual case for a fixed instrument grid,
+    the check still fires.
 
     Examples
     --------
@@ -1700,6 +1700,8 @@ def velocity_broaden(
     True
 
     """
+    if isinstance(wave, jax.core.Tracer):
+        return broaden_velocity_only(flux, wave, sigma_km_s)
     _require_log_uniform_grid(wave, "velocity_broaden")
     sigma_bound = _lsf_sigma_bound_kms(sigma_v_kms=sigma_km_s)
     pad = _lsf_pad_pixels(wave, flux.shape[0], sigma_bound)
