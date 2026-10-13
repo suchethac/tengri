@@ -5082,7 +5082,11 @@ class SEDModel:
         # eagerly, every primitive compiled on its own (~1100 micro-compiles,
         # ~32 s of a cold build, almost all below the persistent cache's floor).
         # ``params_lo`` and ``params_hi`` share a structure, so the second call
-        # reuses the first compile.
+        # reuses the first compile. Warm the chain ``predict_state`` runs OUTSIDE
+        # the trace first, as ``predict_observables_jit`` does: each component's
+        # ``precompute()`` runs numpy-level build routines that cannot be traced.
+        self._full_state_chain()
+
         @jax.jit
         def _rest_sed(probe_params):
             state = self.predict_state(probe_params, fixed_values=fixed_values)
