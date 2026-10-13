@@ -161,31 +161,41 @@ def _cloudy_grid_support() -> dict[str, tuple[float, float]]:
 
 
 def _cb19_grid_support() -> dict[str, tuple[float, float]]:
-    """Read CB_19's default template grid's log U axis (#2460).
+    """Read CB_19's default template grid's log U and log Z_gas support (#2460, #2244).
 
     ``CB19Backend`` clips ``neb_logU`` onto its grid axis exactly like
     ``CloudyGridBackend`` (``cloudy_cb19.py``'s ``_frac_idx``:
     ``jnp.clip(val, grid[0], grid[-1])``), so it shares the #1586 mechanism
-    and belongs in this registry. Only ``neb_logU`` is registered: the grid's
-    metallicity axis is ``log_OH_total`` (12 + log10(O/H)), not
-    log10(Z/Zsun), and converting between the two abundance scales exactly
-    is out of scope here -- ``neb_logZ_gas`` keeps its declared support on
-    this backend.
+    and belongs in this registry.
+
+    ``neb_logZ_gas`` is registered through the backend's own abundance
+    mapping, inverted at the axis end nodes: the lookup forms
+    ``log_OH_total = neb_logZ_gas + _LOG_OH_OFFSET`` (``cloudy_cb19.py``), an
+    affine, strictly increasing map, so the support in ``neb_logZ_gas`` units
+    is ``(log_OH_total - _LOG_OH_OFFSET)`` at the two ends of the axis.
     """
     import h5py
 
     from tengri._data_setup import package_or_env_data_path
+    from tengri.components.nebular._constants import _LOG_OH_OFFSET
 
     grid_path = package_or_env_data_path("cb19_templates.h5")
     if not grid_path.exists():
         raise FileNotFoundError(f"CB_19 grid not found: {grid_path}")
 
     with h5py.File(grid_path, "r") as f:
-        if "axes/log_U" not in f:
-            raise FileNotFoundError(f"Grid {grid_path} missing axes/log_U")
+        if "axes/log_U" not in f or "axes/log_OH_total" not in f:
+            raise FileNotFoundError(f"Grid {grid_path} missing axes/log_U or axes/log_OH_total")
         log_U = f["axes/log_U"][:]
+        log_OH = f["axes/log_OH_total"][:]
 
-    return {"neb_logU": (float(log_U.min()), float(log_U.max()))}
+    return {
+        "neb_logU": (float(log_U.min()), float(log_U.max())),
+        "neb_logZ_gas": (
+            float(log_OH.min()) - _LOG_OH_OFFSET,
+            float(log_OH.max()) - _LOG_OH_OFFSET,
+        ),
+    }
 
 
 def _mappings_stellar_grid_support() -> dict[str, tuple[float, float]]:
@@ -588,6 +598,46 @@ def support_shift(
     return (0.0, 0.0) if fn is None else fn(param_support, settings)
 
 
+def grid_refusal_message(
+    selector: str,
+    name: str,
+    pname: str,
+    detail: str,
+    extent: tuple[float, float],
+) -> str:
+    """The build-time error for a value or prior that a grid cannot evaluate.
+
+    Parameters
+    ----------
+    selector : str
+        Dotted selector path, e.g. ``'neb'``.
+    name : str
+        Component name, e.g. ``'cloudy'``.
+    pname : str
+        Parameter name, e.g. ``'neb_logZ_gas'``.
+    detail : str
+        The :func:`describe_clipping` clause naming the value or range and the
+        extent it overhangs.
+    extent : tuple of float
+        ``(lo, hi)`` the component's grid covers.
+
+    Returns
+    -------
+    message : str
+        Names the parameter, the component, the value or range and the extent,
+        and the remedy.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+    """
+    g_lo, g_hi = extent
+    return (
+        f"{selector}={name!r}: {pname}: {detail}. Refused at build rather than "
+        f"clipped onto an edge node; narrow {pname} to [{g_lo:g}, {g_hi:g}]."
+    )
+
+
 def check_grid_support(
     selected: Iterable[tuple[str, str]],
     param_support: Mapping[str, tuple[float, float]],
@@ -648,6 +698,7 @@ __all__ = [
     "GridSupportFn",
     "check_grid_support",
     "describe_clipping",
+    "grid_refusal_message",
     "grid_support",
     "is_contained",
     "live_fraction",

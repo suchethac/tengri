@@ -591,7 +591,7 @@ config = model.spec.to_groups()
 # config is a plain dict ready for re-parse or export
 
 # Print a formatted summary with provenance
-model.spec.summary()  # Tags show [user], [default], [all_params FREE], etc.
+model.spec.summary()  # Tags show [user], [default], [all_params FREE], [resolved to cloudy grid: lo..hi], etc.
 
 # Access the raw spec (lower-level; rarely needed)
 model.spec  # the Parameters object

@@ -185,6 +185,31 @@ For stellar grids, the line luminosity is: $$L_{\rm line} = \sum_i w_i \cdot Q_{
 
 : MAPPINGS V photoionization parameters.
 
+## Parameter support
+
+A template-backed backend interpolates over the axes of its grid, and the lookup clips outside them. A value past the edge is therefore bit-identical to the edge node, with a zero gradient, so the parameter silently does nothing. The build applies four rules to every installed grid:
+
+1. A `Fixed` value outside the backend's support is **refused** at build, naming the parameter, value, component and extent.
+2. A `FREE` parameter whose prior is declared by the registry **resolves to the selected backend's support**: the prior is the backend's full extent, even where that is wider than the declaration. The parameter summary reads `[resolved to <backend> grid: lo..hi]`. The declaration remains the prior only for a backend with no registered support.
+3. An explicit prior that extends beyond the support is **refused**, naming the extent.
+4. An explicit prior inside the support is unchanged.
+
+Cue is the exception. It is a neural emulator, so it extrapolates past its trained range rather than clipping. Out-of-footprint values **warn** and never raise.
+
+Gas-phase and stellar metallicity are independent knobs. `neb={'type': 'cloudy', 'logZ_gas': FREE}` infers the gas-phase metallicity, and its prior spans the grid's `neb_logZ_gas` support whatever `met_logzsol` is.
+
+The installed extents, read from the grid files by `grid_support('neb', <backend>)`:
+
+| Backend | Data file | `neb_logU` | `neb_logZ_gas` |
+|---|---|---|---|
+| `cloudy` | `cloudy_grid_{mist,prsc,pdva,bpss}.h5` | [-4, -1] | [-1.98, 0.2] |
+| `cb19` | `cb19_templates.h5` | [-4, -1.5] | [-3.84, -1.36] |
+| `mappings` | `flury2024_grids.h5` (`sb99/cpr`) | [-4, -0.5] | not registered (see below) |
+| `mappings_agn` | `flury2024_grids.h5` (`agn_oxaf/cpr`) | [-3.5, -0.5] | not registered (see below) |
+| `cue` | `cue_weights.npz` (trained range, Li et al. 2025, Table 1) | [-4, -1] (extrapolating) | [-2.2, 0.5] (extrapolating) |
+
+`neb_logZ_gas` is log10(Z/Zsun). The `cb19` extent is its 12+log(O/H) axis converted with the backend's solar oxygen abundance. The CB19 nebular grid ships without data, so a `cb19` build refuses before any lookup (see the known limitations page); the extents above are its axes. The MAPPINGS backends take no gas-metallicity key, so `neb_logZ_gas` has no knob there.
+
 ## Differences from CIGALE's Nebular Module
 
 - **Density.** CIGALE's `ne` selects one of three tabulated electron densities (10, 100 and 1000 cm$^{-3}$). tengri's density axes are hydrogen densities: `gas_logn` ($\log_{10}n_{\rm H}$; the Cue gas parameters above give its range) for the `cue` backend and `neb_log_nH` (grid range 1 to 4) for `cb19`. The `cloudy` grid backend carries no density axis.
