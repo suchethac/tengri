@@ -521,38 +521,35 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-captured on the merged tree (origin/main, which carries #2694 and #2807, merged into this
-#: PR). Causes, all named: #2694 young-sliver SFH integral and #2807 AGN energy ledger (both in
-#: origin/main's pins), and this PR's own cause, #2837 library-torus sightline (owner ruling 9: the
-#: disc behind a library torus is dimmed by T = R_n/eta, Fritz eta = 1). Against origin/main's pins
-#: this PR's move is rest_sed_sum +6.4e-11 / +1.27e-5 / +5.09e-5 (mbh 6 / 8 / 10), rest_sed_0
-#: +1.35e-10 at all three, rest_sed_mid 0 / +1.27e-5 / +5.76e-5, rest_sed_last 0 / 0 / 0,
-#: photometry (r, W3, W4) at mbh 8 +1.45e-5 / -2.2e-9 / +3.5e-8 and at mbh 10 +6.2e-5 / +1.6e-7 /
-#: +3.7e-8. Against the pins this branch carried before the merge (no #2694 or #2807): rest_sed_sum
-#: +2.14e-4 / +4.60e-4 / +5.26e-4; rest_sed_0 +3.77e-3 at all three; rest_sed_mid +7.7e-6 / +3.2e-4
-#: / +3.8e-4; rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4. The pre-merge move is the sum of #2694,
-#: #2807 and this PR; the two main commits are not isolated per commit.
+#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked).
+#: Every cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy
+#: ledger, #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed
+#: by T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
+#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
+#: rest_sed_sum +2.18e-4 / +4.83e-4 / +5.88e-4 (mbh 6/8/10); rest_sed_0 +3.86e-3 at all three;
+#: rest_sed_mid +7.90e-6 / +3.40e-4 / +4.45e-4; rest_sed_last +1.23e-5 / +3.98e-5 / +3.99e-4;
+#: photometry (r, W3, W4) at mbh 6 +8.7e-6 / +1.72e-3 / +2.11e-3.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5597046411500994e32,
-        "rest_sed_0": 103282334882173.36,
-        "rest_sed_mid": 2.891399138580114e28,
-        "rest_sed_last": 8.775542988384492e21,
-        "photometry": (1.099496622290831e-27, 1.572671356554845e-27, 1.7668451701130867e-27),
+        "rest_sed_sum": 1.5593661510954203e32,
+        "rest_sed_0": 103282334882173.56,
+        "rest_sed_mid": 2.8914161655245853e28,
+        "rest_sed_last": 8.773459863561754e21,
+        "photometry": (1.0995021122259564e-27, 1.5613872671857697e-27, 1.770439323748374e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.676577182161529e32,
-        "rest_sed_0": 2.8333448370125924e16,
-        "rest_sed_mid": 3.1547578351532353e28,
-        "rest_sed_last": 8.8390520494989e21,
-        "photometry": (1.2059388269090503e-27, 1.5747684437292912e-27, 1.767451957952492e-27),
+        "rest_sed_sum": 1.67623869210685e32,
+        "rest_sed_0": 2.8333448370125976e16,
+        "rest_sed_mid": 3.154774862097707e28,
+        "rest_sed_last": 8.836968924676161e21,
+        "photometry": (1.2059443168441798e-27, 1.5634843543602155e-27, 1.771046111587787e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7104944625427754e32,
-        "rest_sed_0": 2.9685802227832704e16,
-        "rest_sed_mid": 3.2094322894946265e28,
-        "rest_sed_last": 9.759894495239017e21,
-        "photometry": (1.2209249773360414e-27, 1.5996334984921749e-27, 1.7752334913510926e-27),
+        "rest_sed_sum": 1.7101559724880964e32,
+        "rest_sed_0": 2.9685802227832764e16,
+        "rest_sed_mid": 3.209449316439098e28,
+        "rest_sed_last": 9.75781137041628e21,
+        "photometry": (1.2209304672711665e-27, 1.5883494091231179e-27, 1.7788276449864145e-27),
     },
 }
 
