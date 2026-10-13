@@ -173,6 +173,57 @@ def test_all_with_a_finite_cutoff_is_refused_as_an_energy_loss(cutoff):
 
 
 @pytest.mark.regression_bug
+@pytest.mark.parametrize("reprocessed_by", [None, "young", "all"])
+def test_a_cutoff_above_the_former_cut_names_the_supported_pairings(reprocessed_by):
+    """Every route into the unsupported region (cutoff > 1e8) lists what is supported.
+
+    The default resolves to 'young', 'young' is refused above 1e8 and 'all' is refused with
+    a finite cutoff: each message must state the supported combinations and the reason.
+    """
+    spec_kwargs = {"lyc_max_age_yr": 5.0e8}
+    with pytest.raises(ConfigError) as err:
+        if reprocessed_by is None:
+            _spec_default(spec_kwargs)
+        else:
+            _spec(spec_kwargs, reprocessed_by)
+    text = str(err.value)
+    for needle in (
+        "Supported pairings",
+        "lyc_max_age_yr='all' with lyc_reprocessed_by='all'",
+        "lyc_max_age_yr <= t_birth_yr",
+        "<= 1e8 with 'young'",
+        "no supported pairing",
+        "energy created",
+        "energy lost",
+    ):
+        assert needle in text, needle
+
+
+@pytest.mark.regression_bug
+def test_single_component_and_wg00_have_no_pairing_check():
+    """No young/old split there: 'all' with a finite cutoff is not refused."""
+    from tengri.parameters.groups import parse_groups
+
+    for dust in (
+        {"type": "single_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        {
+            "type": "wg00",
+            "dust_curve": "mw",
+            "geometry": "shell",
+            "structure": "homogeneous",
+            "all_params": Fixed(DEFAULT),
+        },
+    ):
+        spec = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "lyc_max_age_yr": 5.0e8},
+            dust_attenuation={**dust, "lyc_reprocessed_by": "all"},
+            redshift=Fixed(0.1),
+        )
+        assert spec.nebular_mode == "cue"
+
+
+@pytest.mark.regression_bug
 def test_default_with_a_finite_cutoff_is_young_with_its_provenance():
     spec = _spec_default({"lyc_max_age_yr": 1.0e7})
     assert spec.dust_lyc_reprocessed_by == "young"
@@ -187,7 +238,7 @@ def test_young_with_all_ages_cue_is_refused_and_names_both_fixes():
         _build({}, "young")
     text = str(err.value)
     assert "double-counts" in text
-    assert "'lyc_reprocessed_by': 'all'" in text
+    assert "lyc_reprocessed_by='all'" in text
     assert "lyc_max_age_yr <= t_birth_yr" in text
 
 

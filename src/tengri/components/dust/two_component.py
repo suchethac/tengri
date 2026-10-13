@@ -2154,15 +2154,13 @@ class DustSEDComponent(TemplateThreading):
                     # nebular component evaluates the same step exactly at its own
                     # nodes (``ionizing_mask(sub_waves)``); do the same, from the
                     # published ``lyc_fesc``.
-                    _fesc_pub = state.derived.get("lyc_fesc")
-                    lyc_chunk = (
-                        jnp.interp(sub_waves, wave, _lyc_t)
-                        if _fesc_pub is None
-                        else jnp.where(
-                            ionizing_mask(sub_waves),
-                            jnp.asarray(_fesc_pub, dtype=_lyc_t.dtype),
-                            jnp.ones_like(sub_waves),
-                        )
+                    # ``lyc_fesc`` is published by the nebular component in the same
+                    # place as ``lyc_transmission`` (the gate of this branch), so it is
+                    # read directly: a missing key is a broken chain and must raise.
+                    lyc_chunk = jnp.where(
+                        ionizing_mask(sub_waves),
+                        jnp.asarray(state.derived["lyc_fesc"], dtype=_lyc_t.dtype),
+                        jnp.ones_like(sub_waves),
                     )
                     if self.config.lyc_reprocessed_by == "all":
                         lyc_factor_sub = lyc_chunk

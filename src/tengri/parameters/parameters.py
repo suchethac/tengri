@@ -168,6 +168,19 @@ def _stable_param_seed(name: str) -> int:
 
 _CUE_YOUNG_GAP_WARNED: bool = False
 
+#: The pairings of Cue's ``lyc_max_age_yr`` with the dust ``lyc_reprocessed_by`` that close
+#: the Lyman-continuum energy budget, quoted by both errors of ``_check_cue_lyc_coupling``.
+_CUE_LYC_SUPPORTED: str = (
+    "Supported pairings with a birth-cloud dust type (two_component, age_binned): "
+    "lyc_max_age_yr='all' with lyc_reprocessed_by='all' (the default); "
+    "lyc_max_age_yr <= t_birth_yr ({t:g}) with 'young'; "
+    "t_birth_yr < lyc_max_age_yr <= 1e8 with 'young' (warns about the 10-100 Myr gap). "
+    "A finite lyc_max_age_yr above 1e8 has no supported pairing: 'young' leaves the LyC of "
+    "the ages between t_birth_yr and the cutoff in the SED while Cue re-emits it (energy "
+    "created), and 'all' removes the LyC of the ages beyond the cutoff without re-emitting "
+    "it (energy lost)."
+)
+
 
 class Parameters:
     """Parameter specification defining all model parameters and their priors.
@@ -1506,10 +1519,7 @@ class Parameters:
                     f"lyc_max_age_yr={cutoff:g} loses energy: 'all' removes the LyC of every "
                     "stellar age from the SED, but Cue re-emits only the ages up to "
                     "lyc_max_age_yr, so the older ages' LyC is neither re-emitted nor "
-                    "credited to the dust. Fix: use lyc_reprocessed_by='young' (the default "
-                    "with a finite lyc_max_age_yr; the SED then keeps the LyC of the ages Cue "
-                    "does not count, as before every age was counted), or drop lyc_max_age_yr "
-                    "to count every age."
+                    "credited to the dust. " + _CUE_LYC_SUPPORTED.format(t=self.dust_t_birth_yr)
                 )
             return
         if self.dust_lyc_reprocessed_by != "young":
@@ -1525,9 +1535,8 @@ class Parameters:
                 f"{self.dust_t_birth_yr:g} yr have their LyC removed from the stellar SED "
                 "(and credited to the dust), but Cue re-emits the LyC of every counted age "
                 "as nebular light, so the older ages' energy is created a second time "
-                "(94-96% of it for a quiescent galaxy). Fix: use "
-                "dust_attenuation={'lyc_reprocessed_by': 'all'} (the default under Cue), "
-                f"or set neb lyc_max_age_yr <= t_birth_yr ({self.dust_t_birth_yr:g})."
+                "(94-96% of it for a quiescent galaxy). "
+                + _CUE_LYC_SUPPORTED.format(t=self.dust_t_birth_yr)
             )
         global _CUE_YOUNG_GAP_WARNED
         if not _CUE_YOUNG_GAP_WARNED:
