@@ -55,3 +55,18 @@ class TestXrayAgnCorona:
         a = float(np.array(xray_agn_corona(wl, L_agn_bol=1e44))[0])
         b = float(np.array(xray_agn_corona(wl, L_agn_bol=2e44))[0])
         assert abs(b / a - 2.0) < 0.01
+
+
+class TestCutoffPowerlawBandNormFloat32:
+    """The band integral is a divisor, so it must stay positive in pure float32."""
+
+    def test_underflowing_spectrum_floor_is_positive_in_float32(self):
+        import jax
+
+        from tengri.components.xray.xray import _cutoff_powerlaw_band_norm
+
+        with jax.enable_x64(False):
+            band = _cutoff_powerlaw_band_norm(1.8, 1e-3, 1.0, 2.0, 10.0)
+            assert band.dtype == jnp.float32
+            assert float(band) > 0.0
+            assert np.isfinite(float(jnp.log10(band)))

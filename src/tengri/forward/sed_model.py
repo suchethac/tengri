@@ -1143,13 +1143,16 @@ def _validate_fracagn_requires_dust(spec) -> None:
     absorbed stellar luminosity is ~zero, so the torus (and under
     agn_norm='cigale_joint' the whole AGN) collapses silently.
 
-    This is a build-time safety gate: fracAGN is only safe when paired
-    with a dust component (dust_model != 'off').
+    This is a construction-time safety gate, run by :meth:`SEDModel.__init__`
+    so that both :meth:`SEDModel.build` and direct construction from a spec
+    refuse it: fracAGN is only safe when paired with a dust component
+    (dust_model != 'off'). A ``Fixed(0)`` coupling is inert and passes.
 
     Raises
     ------
     ConfigError
         If agn_ir_frac is nonzero (FREE or Fixed>0) and dust_model == 'off'.
+        A ``ConfigError`` is also a ``ValueError``.
 
     See Also
     --------
@@ -1183,8 +1186,8 @@ def _validate_fracagn_requires_dust(spec) -> None:
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
             "Fix: either (1) add a dust component "
             "(e.g. dust_attenuation={'type':'two_component'}), "
-            "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
-            "See issue #944."
+            "or (2) pin fracAGN to Fixed(0) (or drop it and use agn_torus_frac for "
+            "independent torus scaling). See issue #944."
         )
 
 
@@ -2941,6 +2944,7 @@ class SEDModel:
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
+        _validate_fracagn_requires_dust(spec)
         self.observation = observation
         self.spec = spec
         self.ssp_data = ssp_data
@@ -3168,6 +3172,7 @@ class SEDModel:
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
+        self._warn_young_top_metallicity(spec, ssp_data)
         self._validate_alpha_fe_identifiability(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
@@ -3243,7 +3248,6 @@ class SEDModel:
             forward_dtype=self._forward_dtype,
             met_interp=self._met_interp,
             met_mode=self._met_mode,
-            z_interp=self._z_interp,
             lgmet_scatter=self._lgmet_scatter,
             sfh_fn=self._sfh_fn,
             sfh_internal_names=self._sfh_internal_names,
@@ -3537,14 +3541,14 @@ class SEDModel:
         """
         try:
             d = self.spec.get_distribution(name)
-        except Exception:
+        except KeyError:
             return 0.0
         if d is None:
             return 0.0
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
@@ -3553,14 +3557,14 @@ class SEDModel:
         """A single representative redshift (fixed value or prior midpoint)."""
         try:
             d = self.spec.get_distribution("redshift")
-        except Exception:
+        except KeyError:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if d is None:
             return float(getattr(self, "_z_fixed", 0.0) or 0.0)
         if getattr(d, "is_fixed", False):
             try:
                 return float(d.value)
-            except Exception:
+            except (TypeError, ValueError):
                 return 0.0
         lo, hi = getattr(d, "lo", None), getattr(d, "hi", None)
         if lo is not None and hi is not None:
@@ -3908,12 +3912,6 @@ class SEDModel:
         """Set up SSP grid, CSP integration, and log-age grid."""
         self._met_interp = getattr(spec, "met_interp", "linear")
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
-        # Redshift-table interpolation mode for free-z inference.
-        # "linear" → piecewise-linear (C^0 gradient, kinks at grid nodes).
-        # "smooth" → triweight kernel (C^2 gradient), recommended for NUTS/HMC
-        # when redshift is a free parameter. See `interpolate_ztable_smooth`
-        # in components/sps/precompute.py.
-        self._z_interp = getattr(spec, "z_interp", "linear")
 
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
@@ -4188,6 +4186,47 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _warn_young_top_metallicity(self, spec, ssp_data):
+        """Warn once per build when the metallicity weights can reach the truncated top node.
+
+        The loader holds the metallicity at the highest complete node at young ages (or,
+        with ``top_z='raw'``, does not), see
+        :mod:`tengri.components.stellar.sps.top_z_validity`. The condition depends only on
+        the declared metallicity ranges and the grid's recorded bin edge, so it is decided
+        here, once, outside any trace. Ages below the limit cannot be excluded by a prior,
+        so the metallicity alone triggers it: the warning fires exactly when the prior's
+        upper bound plus the span of the scatter kernel (3 sigma at the scatter's upper
+        bound) exceeds the lower edge of the top node's metallicity bin, the first
+        metallicity at which the node's weight is nonzero.
+        """
+        validity = getattr(ssp_data, "top_z", None)
+        if validity is None:
+            return
+        from tengri.components.stellar.sps.top_z_validity import (
+            YoungTopMetallicityWarning,
+            reach_warning_text,
+        )
+
+        distributions = getattr(spec, "_distributions", {})
+        scatter = distributions.get("met_logzsol_scatter")
+        scatter_hi = 0.0
+        if scatter is not None:
+            scatter_hi = float(scatter.value) if scatter.is_fixed else float(scatter.hi)
+        for name in self._MET_LOGZSOL_PARAM_NAMES:
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+            hi = float(dist.value) if dist.is_fixed else float(dist.hi)
+            text = reach_warning_text(validity, hi + LOG10_ZSUN, name, scatter_hi)
+            if text is not None:
+                warn_measured(
+                    text,
+                    YoungTopMetallicityWarning,
+                    max_logzsol=hi,
+                    stacklevel=3,
+                )
+                return
 
     def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
         """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).
@@ -13132,7 +13171,6 @@ class SEDModel:
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
-        _validate_fracagn_requires_dust(spec)
         _validate_torus_frac_fracagn_conflict(spec)
         _validate_fracagn_requires_cigale_joint(spec)
         _validate_firrc_requires_dust(spec)

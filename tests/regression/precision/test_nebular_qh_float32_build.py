@@ -8,8 +8,9 @@ rebuilds the same model in float64 and compares.
 
 The ionizing-spectrum fit must not form the ~1e46 photon rate in linear float32 (the
 table then holds ``inf`` and the Cue build raises ``CueWNESSPError``), and must stay
-bit-identical in float64 (#2849). The mappings backend still refuses a float32 build
-with ``QHTableOverflowError``, tracked in #2853.
+bit-identical in float64 (#2849). Before #2853 the mappings backend refused a float32
+build with ``QHTableOverflowError``; its float32 build is checked in
+``test_mappings_qh_float32.py``.
 """
 
 from __future__ import annotations
@@ -344,7 +345,7 @@ import tengri  # noqa: F401
 from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5")
+ssp = load_ssp_data(ROOT + "/data/fsps_prsc_miles_chabrier.h5", top_z="raw")
 res = {"x64": np.asarray(bool(jax.config.jax_enable_x64))}
 wave = np.asarray(ssp.ssp_wave)
 flux = np.asarray(ssp.ssp_flux)

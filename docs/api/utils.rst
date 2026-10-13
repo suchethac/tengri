@@ -55,7 +55,7 @@ Parameter introspection
 -----------------------
 
 Read-only walker over every declared free parameter — per-component
-``_params.py`` modules plus the shared ``_NON_SFH_PARAMS`` bucket.
+``_params.py`` modules plus the shared ``parameters/_shared.py`` declarations.
 See ``docs/adr/0008-parameter-registry-introspection.md`` for the
 design rationale.
 

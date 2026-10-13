@@ -484,22 +484,29 @@ class AGNSEDComponent(TemplateThreading):
         _log_L_absorbed = state.derived.get("log_L_absorbed")
         if _log_L_absorbed is None:
             _log_L_absorbed = state.derived.get("log_L_ir")
-        if _log_L_absorbed is None:
+        if _log_L_absorbed is None and "L_absorbed" in state.derived:
             _log_L_absorbed = jnp.log10(
-                jnp.maximum(jnp.asarray(state.derived.get("L_absorbed", 0.0)), 1e-30)
+                jnp.maximum(jnp.asarray(state.derived["L_absorbed"]), 1e-30)
             )
-        # log10(agn_power / L_agn_bol)
-        #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
-        _log_torus_frac = (
-            _log_L_absorbed
-            + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
-            - jnp.log10(_one_minus_frac)
-            - agn_log_lbol
-            - _LOG10_L_SUN
-        )
-        agn_torus_frac_effective = jnp.where(
-            agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
-        )
+        if _log_L_absorbed is None:
+            # No dust screen published an absorbed luminosity. Construction
+            # refuses an active fracAGN in that case (sed_model._validate_
+            # fracagn_requires_dust), so only the inert Fixed(0) coupling
+            # reaches here, and the user torus fraction is used directly.
+            agn_torus_frac_effective = agn_torus_frac_user
+        else:
+            # log10(agn_power / L_agn_bol)
+            #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
+            _log_torus_frac = (
+                _log_L_absorbed
+                + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
+                - jnp.log10(_one_minus_frac)
+                - agn_log_lbol
+                - _LOG10_L_SUN
+            )
+            agn_torus_frac_effective = jnp.where(
+                agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            )
         # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
         # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
         # consumers needing it linearly run in float64.

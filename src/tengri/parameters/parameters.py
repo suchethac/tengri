@@ -511,6 +511,12 @@ class Parameters:
                 "They are the same parameter; passing both is silent shadowing, which "
                 "is not allowed."
             )
+        if "z_interp" in kwargs:
+            raise ValueError(
+                "The z_interp option has been removed: it had no effect. The free-z "
+                "z-table read is always the local PCHIP (monotone cubic Hermite) read; "
+                "drop the z_interp argument."
+            )
 
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
@@ -813,6 +819,23 @@ class Parameters:
         # --- Validate parameter names ---
         # Drop field params if field was removed (e.g., stochastic=False
         # with short-form psd_sigma/psd_tau_myr that are Fixed)
+        import warnings
+
+        dropped_field_priors = [
+            name
+            for name, val in resolved_kwargs.items()
+            if name not in self._valid_param_names
+            and name.startswith("sfh_field_")
+            and not isinstance(val, (Fixed, int, float))
+        ]
+        if dropped_field_priors:
+            warnings.warn(
+                f"Dropping free priors {dropped_field_priors}: the stochastic SFH field "
+                "is off, so these parameters have no effect. Set stochastic=True, or "
+                "pass Fixed values to silence this warning.",
+                UserWarning,
+                stacklevel=2,
+            )
         resolved_kwargs = {
             name: val
             for name, val in resolved_kwargs.items()
@@ -1481,12 +1504,6 @@ class Parameters:
             self._lgmet_scatter_for_fix if self._lgmet_scatter_for_fix is not None else 0.1
         )
         self.lgmet_scatter = float(lgmet_scatter_value)
-
-        # Redshift-table interpolation mode (used when a precomputed z-table
-        # is enabled via ``approx=WavePrecomp(...)`` AND redshift is free).
-        # "linear" → piecewise-linear (C^0, default).
-        # "smooth" → triweight kernel (C^2): recommended for HMC/NUTS with free z.
-        self.z_interp = kwargs.pop("z_interp", "linear")
 
     @staticmethod
     def _default_cloudy_grid(isochrone_tag: str | None = None) -> str | None:
@@ -2618,7 +2635,7 @@ class Parameters:
                 continue
             val = float(params[name])
             lo, hi = dist.bounds
-            if not dist.is_fixed and (val < lo or val > hi):
+            if not dist.is_fixed and not (lo <= val <= hi):
                 raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
     def summary_str(self) -> str:
@@ -2996,7 +3013,6 @@ _PARAMETERS_CACHE_KEY_POLICY: KeyPolicy = {
     "shock_norm": content("shock normalization determines parameters"),
     "xray": content("X-ray component flag determines parameters"),
     "xray_model": content("X-ray model determines parameters"),
-    "z_interp": content("redshift interpolation method determines model behavior"),
     # Priors and distributions: which parameters are free vs fixed
     "_defaults": content("default values determine fixed parameter values"),
     "_parse_inputs": exclude(

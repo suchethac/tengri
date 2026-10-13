@@ -18,6 +18,11 @@ from collections.abc import Iterable
 from tengri.protocols.component import ParamDeclaration
 
 
+def _bound_check_or_true(decl: ParamDeclaration):
+    """Return the declaration's bound check, or an always-true check when it has none."""
+    return decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+
+
 def _bucket_from_declarations(
     decls: Iterable[ParamDeclaration],
 ) -> dict[str, tuple[str, object, str, object]]:
@@ -29,13 +34,7 @@ def _bucket_from_declarations(
     so the downstream code that always calls the check stays branch-free.
     """
     return {
-        d.name: (
-            d.description,
-            d.bound_check if d.bound_check is not None else (lambda lo, hi: True),
-            d.bound_error,
-            d.prior,
-        )
-        for d in decls
+        d.name: (d.description, _bound_check_or_true(d), d.bound_error, d.prior) for d in decls
     }
 
 
@@ -111,20 +110,21 @@ def _resolve_lazy_bucket(name: str) -> dict:
     return _bucket_from_declarations(getattr(mod, attr))
 
 
-# ── Non-SFH parameter bucket (derived from canonical _shared.PARAMS) ────────
+# ── Non-SFH global declarations (canonical, component-owned) ───────────────
 #
-# Includes observation-layer noise params (``noise_frac_cal``, ``noise_dof``)
-# declared in ``observation/_params.py`` under the ADR-0005 component-owned
-# pattern. They are merged here so the legacy ``_NON_SFH_PARAMS`` bucket
-# remains the single registry entry consumed by ``_build_param_registry``.
+# Globals with no single component home: ``tengri.parameters._shared.PARAMS``
+# (redshift, met_logzsol, sigma_v_kms, lsf_scale, line_flux_scaling) and the
+# observation-layer noise declarations in ``observation/_params.py``
+# (noise_frac_cal, noise_dof). Read directly by ``_build_param_registry``;
+# the introspection registry walks the same tuples, so there is one source.
 
 from tengri.observation import _params as _obs_params_module
 from tengri.parameters import _shared as _shared_module
 
-_NON_SFH_PARAMS = {
-    **_bucket_from_declarations(_shared_module.PARAMS),
-    **_bucket_from_declarations(_obs_params_module.PARAMS),
-}
+_NON_SFH_DECLARATIONS: tuple[ParamDeclaration, ...] = (
+    *_shared_module.PARAMS,
+    *_obs_params_module.PARAMS,
+)
 
 
 # ── Two-component dust parameters ───────────────────────────────────────────
@@ -259,11 +259,11 @@ def _build_param_registry(
 
     # Non-SFH global params (redshift, noise, sigma_v_kms; met_logzsol
     # is injected separately by the metallicity registry below).
-    for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
-        if pname == "met_logzsol":
+    for decl in _NON_SFH_DECLARATIONS:
+        if decl.name == "met_logzsol":
             continue
-        registry[pname] = (desc, check, err)
-        defaults[pname] = default
+        registry[decl.name] = (decl.description, _bound_check_or_true(decl), decl.bound_error)
+        defaults[decl.name] = decl.prior
 
     # Dust attenuation params (PR4: moved to components/dust/_params.py).
     # The two Charlot-Fall optical depths are skipped under the single-screen

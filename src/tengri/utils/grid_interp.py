@@ -132,30 +132,46 @@ def _interp_operator(
     return idx, w1, idx + 1, w2
 
 
+def transpose_templates(templates: np.ndarray) -> np.ndarray:
+    """Templates ``(..., n_wave)`` as one C-contiguous ``(n_wave, n_templates)`` array.
+
+    Built once per table so every folded integrand reads contiguous SSP rows
+    (#2769): a row slice ``[lo:hi]`` is a view, never a copy.
+    """
+    return np.ascontiguousarray(templates.reshape(-1, templates.shape[-1]).T)
+
+
 class _FoldedIntegrand:
     """A template integrand ``tw * interp(src)`` kept as a linear map of ``src`` (#2769).
 
     The interpolated, weighted integrand on ``grid`` is never materialized:
-    ``integrand @ W == src[..., lo:hi] @ (P^T diag(tw) W)[lo:hi]``, where ``P`` is the
+    ``integrand @ W == src[lo:hi].T @ (P^T diag(tw) W)[lo:hi]``, where ``P`` is the
     interpolation operator. ``dot`` applies that restricted map, so the cost scales
     with the SSP nodes the grid actually touches, not with the full template row.
+
+    ``src_T`` is the transposed template layout ``(n_src, n_templates)`` (see
+    :func:`transpose_templates`), holding SSP nodes ``origin`` onward. Only the rows
+    the grid reads are kept, as a view.
     """
 
     def __init__(
         self,
         grid: np.ndarray,
         tw_grid: np.ndarray,
-        src: np.ndarray,
+        src_T: np.ndarray,
+        lead_shape: tuple[int, ...],
         c1: np.ndarray,
         w1: np.ndarray,
         c2: np.ndarray,
         w2: np.ndarray,
+        origin: int = 0,
     ):
         lo = int(min(c1.min(), c2.min()))
         hi = int(max(c1.max(), c2.max())) + 1
         self.grid = grid
         self.tw = tw_grid
-        self.src = np.ascontiguousarray(src[..., lo:hi])
+        self.src_T = src_T[lo - origin : hi - origin]
+        self._lead = tuple(lead_shape)
         self._n = hi - lo
         self._c1, self._c2 = c1 - lo, c2 - lo
         self._w1, self._w2 = w1, w2
@@ -163,7 +179,7 @@ class _FoldedIntegrand:
     @property
     def lead_shape(self) -> tuple[int, ...]:
         """Leading (template) dimensions of the integrand."""
-        return self.src.shape[:-1]
+        return self._lead
 
     def dot(self, weights: np.ndarray) -> np.ndarray:
         """``integrand @ weights`` over the grid axis.
@@ -180,7 +196,7 @@ class _FoldedIntegrand:
             restricted[:, q] = np.bincount(
                 self._c1, weights=self._w1 * col, minlength=self._n
             ) + np.bincount(self._c2, weights=self._w2 * col, minlength=self._n)
-        return _rows_dot(self.src, restricted)
+        return (self.src_T.T @ restricted).reshape(*self._lead, w.shape[1])
 
     def trapezoid(self, factor: np.ndarray | None = None) -> np.ndarray:
         """``np.trapezoid(integrand * factor, grid)`` (``factor`` a grid-only array, default 1)."""
@@ -197,6 +213,16 @@ def _integrand_dot(integrand, weights: np.ndarray) -> np.ndarray:
     return _rows_dot(integrand, weights)
 
 
+def _fold_restricted(grid, tw_grid, templates_src, c1, w1, c2, w2) -> _FoldedIntegrand:
+    """Fold over ``templates_src (..., n_src)``: copies only the rows the grid reads."""
+    lo = int(min(c1.min(), c2.min()))
+    hi = int(max(c1.max(), c2.max())) + 1
+    src_T = transpose_templates(templates_src[..., lo:hi])
+    return _FoldedIntegrand(
+        grid, tw_grid, src_T, templates_src.shape[:-1], c1, w1, c2, w2, origin=lo
+    )
+
+
 def fold_integrand(
     grid: np.ndarray, tw_grid: np.ndarray, wave_src: np.ndarray, templates_src: np.ndarray
 ) -> _FoldedIntegrand:
@@ -205,34 +231,34 @@ def fold_integrand(
     Shapes: grid (m,), tw_grid (m,), wave_src (n_src,), templates_src (..., n_src).
     """
     c1, w1, c2, w2 = _interp_operator(grid, wave_src)
-    return _FoldedIntegrand(grid, tw_grid, templates_src, c1, w1, c2, w2)
+    return _fold_restricted(grid, tw_grid, templates_src, c1, w1, c2, w2)
 
 
-def lyc_augment_fold(
+def fold_integrand_T(
     grid: np.ndarray,
     tw_grid: np.ndarray,
     wave_src: np.ndarray,
-    templates_src: np.ndarray,
-    filter_wave: np.ndarray,
-    filter_trans: np.ndarray,
-    edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
-) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
-    """Folded sibling of :func:`lyc_augment_grid_for_step`.
+    src_T: np.ndarray,
+    lead_shape: tuple[int, ...],
+) -> _FoldedIntegrand:
+    """:func:`fold_integrand` on a pre-transposed layout (see :func:`transpose_templates`).
 
-    Returns ``(grid_aug, folded, tw_grid_aug)`` where ``folded`` is the integrand
-    of :func:`lyc_augment_grid_for_step` as a :class:`_FoldedIntegrand` on
-    ``grid_aug``. The edge-aware resampling is still a linear map of each template
-    row: a bracket node reads one SSP node with weight one (the ionizing or the
-    non-ionizing bracket value), and the two zero-width edge nodes read those same
-    two nodes. Same node order, same ``tw_grid_aug`` as the dense function.
+    ``src_T`` is the whole ``(n_src, n_templates)`` table, built once by the caller and
+    read here by row view: no per-call copy.
     """
+    c1, w1, c2, w2 = _interp_operator(grid, wave_src)
+    return _FoldedIntegrand(grid, tw_grid, src_T, lead_shape, c1, w1, c2, w2)
+
+
+def _lyc_augmented_operator(
+    grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+):
+    """Edge-augmented grid, weights and interpolation operator of :func:`lyc_augment_fold`."""
     n_src = wave_src.shape[0]
     n_ion = int(np.sum(wave_src < edge_aa))
     c1, w1, c2, w2 = _interp_operator(grid, wave_src)
     if not (0 < n_ion < n_src):
-        folded = _FoldedIntegrand(grid, tw_grid, templates_src, c1, w1, c2, w2)
-        return grid, folded, tw_grid
+        return grid, tw_grid, c1, w1, c2, w2
 
     idx_a = n_ion - 1
     idx_b = n_ion
@@ -256,17 +282,57 @@ def lyc_augment_fold(
     all_w1 = np.concatenate([w1, [1.0, 1.0]])
     all_w2 = np.concatenate([w2, [0.0, 0.0]])
     order = np.argsort(all_x, kind="stable")
-    tw_grid_aug = all_tw[order]
-    folded = _FoldedIntegrand(
+    return (
         all_x[order],
-        tw_grid_aug,
-        templates_src,
+        all_tw[order],
         all_c1[order],
         all_w1[order],
         all_c2[order],
         all_w2[order],
     )
-    return all_x[order], folded, tw_grid_aug
+
+
+def lyc_augment_fold(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    templates_src: np.ndarray,
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
+    """Folded sibling of :func:`lyc_augment_grid_for_step`.
+
+    Returns ``(grid_aug, folded, tw_grid_aug)`` where ``folded`` is the integrand
+    of :func:`lyc_augment_grid_for_step` as a :class:`_FoldedIntegrand` on
+    ``grid_aug``. The edge-aware resampling is still a linear map of each template
+    row: a bracket node reads one SSP node with weight one (the ionizing or the
+    non-ionizing bracket value), and the two zero-width edge nodes read those same
+    two nodes. Same node order, same ``tw_grid_aug`` as the dense function.
+    """
+    g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
+        grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+    )
+    return g, _fold_restricted(g, tw, templates_src, c1, w1, c2, w2), tw
+
+
+def lyc_augment_fold_T(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    wave_src: np.ndarray,
+    src_T: np.ndarray,
+    lead_shape: tuple[int, ...],
+    filter_wave: np.ndarray,
+    filter_trans: np.ndarray,
+    edge_aa: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
+    """:func:`lyc_augment_fold` on a pre-transposed template layout (no per-call copy)."""
+    g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
+        grid, tw_grid, wave_src, filter_wave, filter_trans, edge_aa, convention
+    )
+    return g, _FoldedIntegrand(g, tw, src_T, lead_shape, c1, w1, c2, w2), tw
 
 
 def edge_split(integrand: np.ndarray, grid: np.ndarray, edge: float):
@@ -874,7 +940,6 @@ def preintegrate_grid(
 
     # Extract grid shape (everything except the trailing wavelength dimension)
     *grid_dims, n_wave = templates.shape
-    n_filters = len(filter_waves)
 
     # Flatten grid dimensions for vectorized processing
     # Shape: (n_grid_points, n_wave) where n_grid_points = prod(grid_dims)
@@ -894,6 +959,48 @@ def preintegrate_grid(
             bol_lum[i] = _np_trapezoid(templates_flat[i][sort_idx], nu_sorted)
         bol_lum = np.where(bol_lum > 0, bol_lum, 1.0)
         templates_flat = templates_flat / bol_lum[:, None]
+
+    return preintegrate_transposed(
+        transpose_templates(templates_flat),
+        tuple(grid_dims),
+        wave_rest,
+        filter_waves,
+        filter_trans,
+        redshift,
+        dl_cm,
+        axes=axes,
+        taylor=taylor,
+        n_subbands=n_subbands,
+        convention=convention,
+        lyc_gate=lyc_gate,
+    )
+
+
+def preintegrate_transposed(
+    src_T: np.ndarray,
+    grid_dims: tuple[int, ...],
+    wave_rest: np.ndarray,
+    filter_waves: list[np.ndarray],
+    filter_trans: list[np.ndarray],
+    redshift: float,
+    dl_cm: float,
+    axes: tuple[np.ndarray, ...] = (),
+    taylor: bool = False,
+    n_subbands: int = 0,
+    convention: FilterConvention = FilterConvention.BESSELL,
+    lyc_gate: bool = False,
+) -> PreintegratedGrid:
+    """:func:`preintegrate_grid` on templates already in the transposed layout (#2769).
+
+    ``src_T`` is ``(n_wave, n_grid_points)`` C-contiguous, the flattened grid
+    ``templates.reshape(n_grid_points, n_wave).T`` (see :func:`transpose_templates`),
+    with ``wave_rest`` its ``n_wave`` rest-frame nodes. ``grid_dims`` gives the leading
+    shape of the result. Every other argument and the output are as
+    :func:`preintegrate_grid`; the two agree to floating-point roundoff.
+    """
+    n_filters = len(filter_waves)
+    n_grid_points = src_T.shape[1]
+    wave_rest = np.asarray(wave_rest)
 
     # Redshift wavelengths to observed frame
     wave_obs = wave_rest * (1.0 + redshift)
@@ -937,8 +1044,8 @@ def preintegrate_grid(
         # Interpolate all templates onto the union grid
         # Shape: (n_grid_points, len(grid))
         # Folded (#2769): the interpolated template is never materialized; every
-        # consumer below reads ``templates_flat`` through the fold's node weights.
-        fold = fold_integrand(grid, tw_grid, wave_obs, templates_flat)
+        # consumer below reads ``src_T`` through the fold's node weights.
+        fold = fold_integrand_T(grid, tw_grid, wave_obs, src_T, (n_grid_points,))
 
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
 
@@ -956,8 +1063,16 @@ def preintegrate_grid(
         # (see :func:`lyc_augment_grid_for_step`).
         lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + redshift)
         if lyc_gate:
-            grid_q, fold_q, tw_grid_q = lyc_augment_fold(
-                grid, tw_grid, wave_obs, templates_flat, fw_np, ft_np, lyc_wave_obs, convention
+            grid_q, fold_q, tw_grid_q = lyc_augment_fold_T(
+                grid,
+                tw_grid,
+                wave_obs,
+                src_T,
+                (n_grid_points,),
+                fw_np,
+                ft_np,
+                lyc_wave_obs,
+                convention,
             )
             denom_q = _np_trapezoid(tw_grid_q, grid_q)
             num = fold_q.trapezoid()
