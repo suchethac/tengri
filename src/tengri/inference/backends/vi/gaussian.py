@@ -35,6 +35,7 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 logger = logging.getLogger(__name__)
@@ -197,6 +198,17 @@ def run_gaussian_vi(
 
     t_fit = time.time() - t0
     elbo_final = float(jnp.mean(elbo_history[-max(n_steps // 20, 1) :]))
+    n_nonfinite_elbo = int(jnp.sum(~jnp.isfinite(elbo_history)))
+    if n_nonfinite_elbo:
+        warn_measured(
+            f"Gaussian VI ({family}): {n_nonfinite_elbo} of {n_steps} ELBO steps were "
+            "non-finite. The optimizer walked through a NaN, so the returned Gaussian "
+            "may be wrong.",
+            UserWarning,
+            stacklevel=2,
+            n_nonfinite_elbo=n_nonfinite_elbo,
+            n_steps=n_steps,
+        )
     if verbose:
         logger.info("  ELBO optimization complete (%.1fs), final ELBO %.2f", t_fit, elbo_final)
 
@@ -230,7 +242,7 @@ def run_gaussian_vi(
         # Non-finite ELBO steps. An Adam run that walked through a NaN keeps
         # walking and returns a finite, wrong Gaussian, so the count is not
         # optional and there is no acceptance test that would have caught it.
-        "n_nonfinite_elbo": int(jnp.sum(~jnp.isfinite(elbo_history))),
+        "n_nonfinite_elbo": n_nonfinite_elbo,
     }
     if precondition_diagnostics:
         diagnostics.update(precondition_diagnostics)
