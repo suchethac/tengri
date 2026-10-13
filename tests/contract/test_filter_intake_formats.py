@@ -157,9 +157,9 @@ def test_guard_boundary_is_the_bluest_real_filter():
     Pinning the value keeps the next person from 'tidying' it to 1000 or 1500.
     Either would reopen a silent-miss window.
     """
-    from tengri.observation.filters.custom import _EUV_GAP_RED_EDGE_AA
+    from tengri.utils.wave_unit import EUV_GAP_RED_EDGE_AA
 
-    assert _EUV_GAP_RED_EDGE_AA == 1340.0
+    assert EUV_GAP_RED_EDGE_AA == 1340.0
 
 
 # ── Stated units ─────────────────────────────────────────────────────

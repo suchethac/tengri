@@ -24,7 +24,6 @@ from tengri.config.exceptions import warn_measured
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
 from tengri.utils.wave_unit import (
-    EUV_GAP_RED_EDGE_AA as _EUV_GAP_RED_EDGE_AA,  # noqa: F401 (re-exported for callers)
     check_wavelength_plausible,
     to_angstrom,
 )
