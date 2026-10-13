@@ -118,6 +118,23 @@ from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
 
+
+def _declared_input_names(component) -> frozenset[str]:
+    """Names of the optional inputs a component declares, in one spelling.
+
+    Dust-emission components keep ``optional_inputs`` as a dict (its keys are the
+    names); a :class:`SEDModelComponent` exposes a method returning ``DerivedKey``
+    tuples (each with a ``.name``). Both forms are normalized to plain strings so a
+    caller can test for one name regardless of which form the emitter uses (#2553).
+    """
+    declared = getattr(component, "optional_inputs", None)
+    if callable(declared):
+        declared = declared()
+    if declared is None:
+        return frozenset()
+    return frozenset(getattr(key, "name", key) for key in declared)
+
+
 #: Gaussian-stencil quadrature for :meth:`SEDModel._line_igm_transmission`
 #: (#2520): a line is not a delta function in observed wavelength, so the
 #: IGM transmission is profile-averaged over +/- N sigma_gas rather than
@@ -11566,6 +11583,12 @@ class SEDModel:
                 nodes = single_node(fixed["redshift"], wave.dtype)
             zeros = jnp.zeros_like(wave)
 
+            # An emitter may read its budget through the log form ``log_L_ir`` (the
+            # float32-safe one). When it declares that input, the probe passes it
+            # alongside ``L_ir``; otherwise the probe would see the -inf default and
+            # return an all-zero SED (#2553).
+            accepts_log_l_ir = "log_L_ir" in _declared_input_names(emitter)
+
             def _template_at(z, luminosity):
                 # Slice with the component's OWN rule, the same one apply() uses. A
                 # precompute that slices differently silently builds R from default
@@ -11573,7 +11596,10 @@ class SEDModel:
                 # The redshift rides in ``p`` because a template may read it
                 # (the CMB temperature floor); it is the NODE redshift here.
                 p = emitter.slice_params({**fixed, "redshift": z})
-                sed, _ = emitter.predict(p, zeros, wave, L_ir=luminosity)
+                budget = {"L_ir": luminosity}
+                if accepts_log_l_ir:
+                    budget["log_L_ir"] = jnp.log10(luminosity)
+                sed, _ = emitter.predict(p, zeros, wave, **budget)
                 return sed
 
             # HOMOGENEITY CHECK. The band response is exact only because an additive
@@ -11588,13 +11614,36 @@ class SEDModel:
             # shapes (L-T relations) are common in IR SED models, so verify the
             # property rather than maintaining a list of which models have it:
             # probe at two luminosities and require the SED to scale.
-            def _homogeneous_at(z):
+            def _probe_is_live(sed):
+                return jnp.all(jnp.isfinite(sed)) & jnp.any(sed != 0.0)
+
+            def _probe_at(z):
+                """Return ``(live, ok)`` for the two probes at redshift ``z``.
+
+                ``live``: both probe SEDs are finite and not identically zero. A zero
+                SED satisfies ``allclose(0, k * 0)`` vacuously, so it must be caught
+                here, not by the homogeneity test. ``ok``: live, and the SED scales
+                linearly between the two luminosities.
+                """
                 lo = _template_at(z, 1.0)
                 hi = _template_at(z, _L_IR_PROBE)
-                return jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
+                live = _probe_is_live(lo) & _probe_is_live(hi)
+                return live, live & jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)
 
+            zero_probe_reason = (
+                "the probe SED is identically zero or contains non-finite values; "
+                "the emitter did not reach its emission budget (e.g., a required "
+                "log-luminosity input was not provided)"
+            )
             z_first = fixed["redshift"] if single else jnp.expm1(nodes[0])
-            if not bool(_homogeneous_at(z_first)):
+            live_first, ok_first = _probe_at(z_first)
+            if not bool(live_first):
+                # FAIL-SAFE. A dead probe is not evidence of homogeneity: the emitter
+                # was never activated, so decline and let the exact integral run.
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
+            if not bool(ok_first):
                 # Record WHY, or the refusal is invisible. Every gate a caller
                 # can re-check from outside is satisfied here, so
                 # precompute_engagement_report reported "unknown reason (gate
@@ -11641,9 +11690,11 @@ class SEDModel:
 
             def _node(z):
                 unit = _template_at(z, 1.0)
+                live, ok = _probe_at(z)
                 return {
                     "R": lnu_filter_integral_batch(unit, wave, fw_pad, ft_pad, z),
-                    "ok": _homogeneous_at(z),
+                    "live": live,
+                    "ok": ok,
                     "log_window_fraction": {
                         name: log10_band_luminosity(unit, wave, lo, hi)
                         for name, (lo, hi) in windows.items()
@@ -11651,6 +11702,10 @@ class SEDModel:
                 }
 
             built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
+            if not bool(jnp.all(built["values"]["live"])):
+                self._dust_band_response_decline = zero_probe_reason
+                self._dust_band_response_cache = None
+                return None
             if not bool(jnp.all(built["values"]["ok"])):
                 self._dust_band_response_decline = (
                     "dust emission template is not homogeneous in L_ir at every "
