@@ -46,6 +46,7 @@
 
 ### Changed
 
+- **The #2069 `agn_log_lbol` flat-direction probe runs as one jitted program (#2914).** `_check_agn_lbol_flat_direction` evaluated `predict_state` eagerly at both prior bounds on every build with SKIRTOR and an active `agn_ir_frac`, so each primitive of the forward model compiled on its own: about 1,100 micro-compiles per build, almost all under the persistent cache's 0.05 s floor, so a warm cache could not keep them. The two evaluations now share one `jax.jit` program, which the persistent cache keeps. The verdict and its messages are unchanged. On the `panchromatic/lut_freez` fixture of `test_float32_fitting_path_seams.py` (five builds, warm JAX cache, this Mac) the fixture setup drops from 137 s to 107 s, with 4,165 backend compiles against 5,638. Cold-cache timings were within machine-load noise. Test: `test_flat_direction_probe_runs_as_one_compiled_program`.
 - **Breaking: `neb_fesc_lya` now means the escaping fraction (Lyα × f_esc, default 1).** Stored fits made before this change used the destroyed fraction; convert with f_new = 1 − f_old. The declared default in `components/nebular/component.py` was still `Fixed(0.0)` (Lyα removed) and is now `Fixed(1.0)`, matching the runtime default and the parameter table.
 
 - **`rest_uv_color` is declared as what it computes (#2611).** The value is the AB U-V color between rectangular top-hats, 3200–3900 Å minus 5000–5800 Å, on rest-frame L_nu. The catalog, accessors and docs said FUV−NUV or f_1500 − f_2300. No number changes. A rest-frame UVJ from filter curves is not part of this change.

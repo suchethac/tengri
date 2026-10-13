@@ -368,3 +368,39 @@ class TestLBolFlatDirectionRefusal:
         assert "bit-identical" not in error_msg and "identical to within" not in error_msg, (
             "Should not mention flat direction when SED is non-finite"
         )
+
+
+def test_flat_direction_probe_runs_as_one_compiled_program(
+    issue_spec, synthetic_ssp_wide, simple_filters
+):
+    """The #2069 probe evaluates the forward model under ``jax.jit``, not op by op (#2914).
+
+    Run eagerly, the probe's two ``predict_state`` calls dispatched every primitive of
+    the forward model as its own XLA compile: ~1100 micro-compiles, ~32 s of every cold
+    build with SKIRTOR and an active ``agn_ir_frac``, and almost none of it persistable
+    (each compile sits under the persistent cache's 0.05 s floor). Traced, the probe is
+    one program, which the persistent cache keeps. The probe is the only
+    ``predict_state`` caller passing ``fixed_values=`` (see the NaN test above), so that
+    keyword identifies its calls.
+    """
+    real_predict_state = SEDModel.predict_state
+    probe_params_traced = []
+
+    def _recording_predict_state(self, params, fixed_values=None, **kwargs):
+        if fixed_values is not None:
+            probe_params_traced.append(isinstance(params["agn_log_lbol"], jax.core.Tracer))
+        return real_predict_state(self, params, fixed_values=fixed_values, **kwargs)
+
+    with (
+        mock.patch.object(SEDModel, "predict_state", _recording_predict_state),
+        pytest.raises(ConfigError, match="agn_log_lbol"),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore")
+        SEDModel(issue_spec, synthetic_ssp_wide, filters=simple_filters)
+
+    assert probe_params_traced, "the #2069 probe never called predict_state(fixed_values=...)"
+    assert all(probe_params_traced), (
+        f"the #2069 probe evaluated predict_state eagerly ({probe_params_traced}); "
+        "it must run under jax.jit so the build pays one compile, not one per primitive"
+    )
