@@ -123,6 +123,7 @@ from tengri.components.nebular._line_ingest import (
     CLOUDY_LABEL_AIR_MAX_AA,
     catalog_air_to_vacuum,
 )
+from tengri.components.nebular._params import CUE_GAS_EXTRA_PARAMS, PARAMS
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     apply_lya_escape,
@@ -131,6 +132,7 @@ from tengri.components.nebular._shared import (
 )
 from tengri.config.exceptions import CueIonizingShapeWarning
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
+from tengri.protocols.component import declared_default
 from tengri.utils.host_array import device_table, host_array
 
 # ── Physical constants ────────────────────────────────────────────
@@ -148,6 +150,12 @@ from tengri.utils.scale import LN10, pow10, representable_exponent
 _LOG_LSUN = host_array(math.log10(_LSUN_ERG))
 _LOG_4PI = host_array(math.log10(4.0 * math.pi))
 _LOG_C = host_array(math.log10(_C_CGS))
+
+# Signature defaults read the gas declarations (CUE_GAS_EXTRA_PARAMS), not a second literal.
+_CUE_DEFAULT_GAS_LOGN = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logn")
+_CUE_DEFAULT_GAS_LOGNO = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logno")
+_CUE_DEFAULT_GAS_LOGCO = declared_default(CUE_GAS_EXTRA_PARAMS, "gas_logco")
+_CUE_DEFAULT_NEB_LOGU = declared_default(PARAMS, "neb_logU")
 
 # Maximum SSP age contributing to nebular emission. Re-exported from
 # ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
@@ -1696,11 +1704,11 @@ class CueBackend:
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = _CUE_DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        gas_logn: float = 2.0,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logn: float = _CUE_DEFAULT_GAS_LOGN,
+        gas_logno: float = _CUE_DEFAULT_GAS_LOGNO,
+        gas_logco: float = _CUE_DEFAULT_GAS_LOGCO,
     ) -> dict:
         """Derive Cue parameters from SSP weights.
 

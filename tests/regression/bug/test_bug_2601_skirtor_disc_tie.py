@@ -687,26 +687,24 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: old tie's own scalar x its in-grid integral / ``R_old``). Applied to the previous model's disc
 #: this predicts the entries below to 1e-10 (log M_BH 6), 1e-8 (8) and 1.0e-8 (10) relative
 #: (sum, middle and last bin).
-#: Re-captured for #2606 (commit 712fab431): the SKIRTOR torus lookup is node-exact PCHIP
-#: instead of the triweight smoother, and the default cos_inc = 30 deg is an exact node.
-#: The triweight was 3.0 % off the raw node, so the disc tie and the SED total at this
-#: node move: rest_sed_sum by -2.2e-4 / -2.1e-4 / -2.1e-4 (mbh 6 / 8 / 10), rest_sed_0 by
-#: -8.7e-5 in every row, rest_sed_last by -2.4e-4 / -2.4e-4 / -2.3e-4. The identity still
-#: closes at 1e-7; only the tabulated reference moved.
+#: Re-captured on the merged tree (origin/main merged into fix/precompute-wired-and-checked). Every
+#: cause that moved these values, named: #2694 young-sliver SFH integral, #2807 AGN energy ledger,
+#: #2837 library-torus sightline (owner ruling 9: the disc behind a library torus is dimmed by
+#: T = R_n/eta, Fritz eta = 1), and #2808 node-exact PCHIP torus lookups with feltre_nlr on all
+#: five axes. Old -> new, relative, against the pins this branch carried before the re-capture:
+#: 6.0: sum +2.16e-4, rest_sed_0 +3.86e-3, mid +6.28e-6, last +1.23e-5;
+#: 8.0: sum +4.28e-4, rest_sed_0 +3.86e-3, mid +2.73e-4, last +3.40e-5;
+#: 10.0: sum +5.14e-4, rest_sed_0 +3.86e-3, mid +3.59e-4, last +3.24e-4.
+#: The identity still closes at 1e-7; only the tabulated reference moved.
 _DISC_TIMES_ETA_T_REFERENCE = {
-    6.0: (1.5583390570933427e32, 81142827074591.1, 2.8901644293861353e28, 8.773218753171012e21),
+    6.0: (1.5586759060882227e32, 81456209353478.88, 2.8901825691320397e28, 8.77332638502807e21),
     8.0: (
-        1.650055031257738e32,
-        2.2259916026751264e16,
-        3.0968650889283155e28,
-        8.823114704355273e21,
+        1.6507617942542995e32,
+        2.2345886203830524e16,
+        3.0977105009651904e28,
+        8.823414402335067e21,
     ),
-    10.0: (
-        1.6766417842328174e32,
-        2.332238053575703e16,
-        3.1396681351636104e28,
-        9.546570825221842e21,
-    ),
+    10.0: (1.6775034618643003e32, 2.341245406443339e16, 3.140794236498581e28, 9.54965994194651e21),
 }
 
 
