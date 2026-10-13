@@ -297,11 +297,14 @@ The model is a pure function of parameters. You can generate mock catalogs from 
 ```python
 import jax
 import jax.numpy as jnp
-from tengri import FREE, Fixed, SEDModel, Observation, Photometry
+import numpy as np
+from tengri import FREE, Fixed, SEDModel, Observation, Photometry, WavePrecomp
 
-# Build a model with only photometry (mock generation is cheap).
-# Groups are explicit: an omitted dust_attenuation means no dust, and
-# parameters default to fixed, so free parameters must be declared.
+# Build a model with only photometry. Groups are explicit: an omitted
+# dust_attenuation means no dust, and parameters default to fixed, so free
+# parameters must be declared. approx=WavePrecomp() routes photometry through
+# the band-response table, which is what makes a batch of a thousand draws
+# cheap: the exact wave-grid path would hold a (n_draw, n_age, n_wave) stack.
 model = SEDModel.build(
     ssp_data=ssp,
     observation=Observation(
@@ -310,6 +313,7 @@ model = SEDModel.build(
     sfh={"type": "dpl", "all_params": FREE},
     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
     redshift=Fixed(0.1),
+    approx=WavePrecomp(),
 )
 
 # Method 1: Sample from the prior
@@ -333,9 +337,12 @@ def predict_photometry_batch(params_batch):
 mocks = predict_photometry_batch(params_prior)
 # mocks.photometry shape: (1000,), each element is the photometry dict
 
-# Extract and table
-stellar_masses = jax.vmap(lambda p: model.predict_properties(p, names=("stellar_mass",))["stellar_mass"])(params_prior)
-sfrs = jax.vmap(lambda p: model.predict_properties(p, names=("sfr_100myr",))["sfr_100myr"])(params_prior)
+# Extract and table: one properties pass per draw, both names at once
+props = jax.vmap(
+    lambda p: model.predict_properties(p, names=("stellar_mass", "sfr_100myr"))
+)(params_prior)
+stellar_masses = props["stellar_mass"]
+sfrs = props["sfr_100myr"]
 
 # Write to file or dataframe
 import pandas as pd

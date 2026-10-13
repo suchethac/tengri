@@ -75,6 +75,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -331,8 +332,8 @@ def _listing_result(listing: Listing) -> str:
     try:
         execute_listing(listing, base_namespace(ssp_file), ssp_file)
     except Exception as exc:  # the driver reports this line, not a traceback
-        return f"fail {type(exc).__name__}: {_first_line(exc)}"
-    return f"ok {time.perf_counter() - started:.1f}"
+        return f"fail {type(exc).__name__}: {_first_line(exc)} maxrss={_peak_rss_gb():.2f}GB"
+    return f"ok {time.perf_counter() - started:.1f} maxrss={_peak_rss_gb():.2f}GB"
 
 
 def run_one(spec: str) -> int:
@@ -365,18 +366,46 @@ def _result_line(stdout: str) -> str | None:
     return lines[-1] if lines else None
 
 
+def _peak_rss_gb() -> float:
+    """Peak resident set size of this process [GB].
+
+    ``ru_maxrss`` is bytes on macOS and KiB on Linux.
+    """
+    import resource
+    import sys as _sys
+
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return rss / 1e9 if _sys.platform == "darwin" else rss * 1024 / 1e9
+
+
 def _run_child(path: Path, listing: Listing, timeout: float) -> tuple[bool, str]:
     """Run one listing in a fresh interpreter; return ``(passed, message)``.
 
     A timeout, or a child that exits without a result line (for example one
     killed by the runner), is a failure with a message saying so.
     """
-    command = [sys.executable, str(Path(__file__).resolve()), "--one", f"{path}:{listing.line}"]
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--one",
+        f"{path.resolve()}:{listing.line}",
+    ]
     env = {**os.environ, "JAX_PLATFORMS": os.environ.get("JAX_PLATFORMS", "cpu")}
     try:
-        proc = subprocess.run(
-            command, timeout=timeout, capture_output=True, text=True, env=env, check=False
-        )
+        print(f"  running {path}:{listing.line}", flush=True)
+        # A listing may write files (a mock catalog, a figure); the child runs in
+        # a scratch directory so the repository never receives them. Fixtures are
+        # resolved from REPO_ROOT, so the working directory does not matter to it.
+        with tempfile.TemporaryDirectory(prefix="tengri-listing-") as scratch:
+            proc = subprocess.run(
+                command,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+                cwd=scratch,
+            )
     except subprocess.TimeoutExpired:
         return False, f"timeout after {timeout:g} s"
     result = _result_line(proc.stdout)
@@ -384,7 +413,9 @@ def _run_child(path: Path, listing: Listing, timeout: float) -> tuple[bool, str]
         return False, f"exit {proc.returncode}: child printed no result line"
     if result.startswith("fail "):
         return False, result.removeprefix("fail ")
-    return True, ""
+    # On success the message carries the child's own figures (time, peak RSS),
+    # so the CI log shows how much memory each listing needed.
+    return True, result.removeprefix("ok ").strip()
 
 
 def _check_listing(path: Path, listing: Listing, timeout: float) -> tuple[bool, str, float]:
@@ -440,7 +471,12 @@ def main(argv: list[str] | None = None) -> int:
                 failure = f"{path}:{item.line}: {message}"
                 failures.append(failure)
                 print(failure, flush=True)
-            print(f"  {path}:{item.line} {status} ({elapsed:.1f} s)", file=sys.stderr, flush=True)
+            figures = f" {message}" if passed and message else ""
+            print(
+                f"  {path}:{item.line} {status} ({elapsed:.1f} s){figures}",
+                file=sys.stderr,
+                flush=True,
+            )
     print(f"{len(listings)} listings, {len(to_run)} executed, {len(failures)} failed")
     if skipped:
         print(f"{skipped} skipped (no-exec)")
