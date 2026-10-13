@@ -169,49 +169,35 @@ def _filter_integral_union(
         live Lyman-continuum mask ran (e.g. ``neb={'type': 'none'}``) and
         ``L_nu`` is smooth across the edge.
     """
-    # The quadrature is confined to the filter's own support: nodes outside
-    # ``[filter_wave.min(), filter_wave.max()]`` collapse onto its edges as
-    # zero-width intervals. Without this, the transmission ramps linearly from a
-    # nonzero edge value to 0 out to the next SED node, a ramp whose width is the
-    # local SED spacing and which jumps whenever a node crosses the edge (#2817).
-    f_lo = jnp.min(filter_wave)
-    f_hi = jnp.max(filter_wave)
-
-    # Where-based clamp, not jnp.clip: a node exactly on an edge keeps its full
-    # gradient (jnp.clip splits it at a tie), and a clipped node carries none.
-    def _into_support(x):
-        return jnp.where(x < f_lo, f_lo, jnp.where(x > f_hi, f_hi, x))
-
-    grid = jnp.sort(jnp.concatenate([_into_support(wave_obs), filter_wave]))
+    # Quadrature confined to the filter's own support (#2817). The union grid is
+    # unchanged; both filter edges are nodes of it, so every trapezoid interval is
+    # wholly inside or wholly outside ``[filter_wave.min(), filter_wave.max()]``.
+    # Intervals outside are masked out, so the transmission's zero fill past the
+    # edge never ramps across a straddle segment (the ramp is what jumped as an SED
+    # node crossed the edge). Nothing is clamped, so the gradient is clean.
+    grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
     if lyman_edge_obs_aa is None:
         L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
         trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
         weight = trans_on_grid * _filter_weight(grid, convention)
-        num = jnp.trapezoid(L_on_grid * weight, grid)
-        den = jnp.trapezoid(weight, grid)
+        x_q, L_q, w_q = grid, L_on_grid, weight
     else:
-        # One Lyman edge (#2447): the transmission x bandpass weight (smooth)
-        # varies continuously across the bracket cell, so treating the whole
-        # (already-multiplied) integrand as a step -- what an `edge_trapezoid`
-        # call on ``L_on_grid * weight`` would do -- silently averages that
-        # variation across the FULL bracket width instead of evaluating it AT
-        # the edge. The exact fix inserts the edge itself as a zero-width node
-        # pair (``edge_bracket_values``'s ``(y_a, y_b)``, sharing ONE
-        # transmission/weight evaluation at the edge between the two copies) so
-        # an ORDINARY trapezoid integrates the step exactly, regardless of how
-        # many filter nodes subdivide the straddling panel.
+        # One Lyman edge (#2447): the edge is inserted as a zero-width node pair
+        # carrying the one-sided values, so an ordinary trapezoid integrates the
+        # step exactly (see edge_bracket_values).
         y_a, y_b = edge_bracket_values(wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
-        edge_pair = _into_support(jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype))
+        edge_pair = jnp.full((2,), lyman_edge_obs_aa, dtype=grid.dtype)
         all_x = jnp.concatenate([grid, edge_pair])
         L_base = edge_interp(grid, wave_obs, L_nu, edge_aa=lyman_edge_obs_aa)
         all_y = jnp.concatenate([L_base, jnp.stack([y_a, y_b])])
         order = jnp.argsort(all_x, stable=True)
-        grid_e = all_x[order]
-        L_on_grid = all_y[order]
-        trans_on_grid = jnp.interp(grid_e, filter_wave, filter_trans, left=0.0, right=0.0)
-        weight = trans_on_grid * _filter_weight(grid_e, convention)
-        num = jnp.trapezoid(L_on_grid * weight, grid_e)
-        den = jnp.trapezoid(weight, grid_e)
+        x_q = all_x[order]
+        L_q = all_y[order]
+        trans_on_grid = jnp.interp(x_q, filter_wave, filter_trans, left=0.0, right=0.0)
+        w_q = trans_on_grid * _filter_weight(x_q, convention)
+    lo, hi = jnp.min(filter_wave), jnp.max(filter_wave)
+    num = _support_trapezoid(L_q * w_q, x_q, lo, hi)
+    den = _support_trapezoid(w_q, x_q, lo, hi)
 
     return num / jnp.maximum(den, representable_denominator(1e-30))
 
@@ -248,6 +234,18 @@ def _ascending_padded_filter(
     fw_asc = jnp.where(valid, fw_padded, jnp.where(has_edge, edge_wave, 1.0 + pos))
     ft_asc = jnp.where(valid, ft_padded, jnp.where(has_edge, edge_trans, 0.0))
     return fw_asc, ft_asc
+
+
+def _support_trapezoid(y, x, lo, hi):
+    """Trapezoid of ``y`` over ``x``, counting only intervals inside ``[lo, hi]``.
+
+    An interval is inside when its midpoint is; the caller guarantees both edges
+    are nodes of ``x``, so an interval is never split by the support edge.
+    """
+    mid = 0.5 * (x[1:] + x[:-1])
+    inside = (mid >= lo) & (mid <= hi)
+    panels = 0.5 * (y[1:] + y[:-1]) * (x[1:] - x[:-1])
+    return jnp.sum(jnp.where(inside, panels, 0.0))
 
 
 @functools.partial(jax.jit, static_argnames=("convention", "has_lyc_edge"))
