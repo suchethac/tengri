@@ -11,6 +11,7 @@ Precomputation pipeline: fit all (metallicity, age) SSPs once, store in a
 table, and interpolate at inference time for rapid gradient evaluation.
 """
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -436,15 +437,28 @@ HI_LIMIT = LYMAN_LIMIT_AA
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
-# Cue-emulator TRAINING-GRID bounds, used to clip the auto-derived (SSP-fit)
-# ionspec coefficients so the Cue neural emulator is never evaluated outside the
-# grid it was trained on (extrapolation → garbage). These are DISTINCT from, and
-# deliberately NOT unified with, the user-facing prior bounds in
-# ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g. index1 clips to
-# [1, 42] here vs. the prior range [0, 50] there): the prior range is what a
-# user may sample, the clip range is what the emulator can faithfully evaluate.
-# Two different quantities; see #887 (which considered deriving one from the
-# other and confirmed they must stay separate).
+# Cue-emulator range of the 7 ionizing-shape parameters, used to clip the
+# auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is never
+# evaluated outside the range it was trained on.
+#
+# Source: the Cue reference code (github.com/efburnham/cue; ``emulator.py``
+# docstring and the ``np.clip`` bounds of the SSP-fit routine in ``utils.py``):
+# index1 [1, 42], index2 [-0.3, 30], index3 [-1, 14], index4 [-1.7, 8],
+# logLratio1 [-1, 10.1], logLratio2 [-0.5, 1.9], logLratio3 [-0.4, 2.2].
+#
+# Discrepancy with the paper: Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598),
+# Table 1, prints index3 [-1.1, 14] and logLratio1 [-0.1, 10.1]. The other five
+# agree. The code values are used because the paper's own text places AGN power
+# laws with 1.2 <= alpha <= 2 inside the training set, and those have
+# logLratio1 between -0.86 and -0.26 (Eq. 2 definition), which a -0.1 floor would
+# exclude; the printed -0.1 is most likely a dropped digit of -1.0. Measured on
+# the emulator itself, lines vary smoothly in logLratio1 from -1.0 to +0.3.
+#
+# These are DISTINCT from, and deliberately NOT unified with, the user-facing
+# prior bounds in ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g.
+# index1 clips to [1, 42] here vs. the prior range [0, 50] there): the prior
+# range is what a user may sample, the clip range is what the emulator can
+# faithfully evaluate. See #887 (which confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
     "ionspec_index2": (-0.3, 30.0),
@@ -454,6 +468,44 @@ _CLIP_RANGES = {
     "ionspec_logLratio2": (-0.5, 1.9),
     "ionspec_logLratio3": (-0.4, 2.2),
 }
+
+#: Parameter names in the order of the 7-vector the Cue backend carries.
+IONSPEC_NAMES: tuple[str, ...] = tuple(_CLIP_RANGES)
+
+
+def clamp_ionspec_straight_through(i7):
+    """Clamp a 7-vector of ionizing-shape parameters to the Cue training box.
+
+    Parameters
+    ----------
+    i7 : array_like, shape (7,)
+        ``[ionspec_index1..4, ionspec_logLratio1..3]`` [dimensionless].
+
+    Returns
+    -------
+    jnp.ndarray, shape (7,)
+        The input moved onto the box ``_CLIP_RANGES`` (Cue's reference bounds; the
+        comment above ``_CLIP_RANGES`` records how they differ from Li et al. 2025,
+        Table 1).
+
+    Notes
+    -----
+    Straight-through: the forward value is ``clip(x)`` and, for finite input, the
+    gradient is the identity, so a fit driven past the box keeps a signal (a plain
+    clip would zero it). The forward value is ``clip(x)`` plus ``x - x`` (exactly
+    0.0), so it equals the bound out of range and the input bit-for-bit in range.
+
+    The out-of-range gradient is deliberately inconsistent with the pinned
+    value: the value stays at the bound while the gradient still says "move".
+    Non-finite input: ``+/-inf`` returns the bound (zero gradient), ``nan`` stays
+    ``nan``. JIT/grad/vmap safe.
+    """
+    x = jnp.asarray(i7)
+    lo = jnp.asarray([_CLIP_RANGES[k][0] for k in IONSPEC_NAMES], dtype=x.dtype)
+    hi = jnp.asarray([_CLIP_RANGES[k][1] for k in IONSPEC_NAMES], dtype=x.dtype)
+    clipped = jnp.clip(x, lo, hi)
+    through = jax.lax.stop_gradient(clipped) + (x - jax.lax.stop_gradient(x))
+    return jnp.where(jnp.isfinite(x), through, clipped)
 
 
 def fit_ionizing_spectrum(

@@ -28,6 +28,9 @@ from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
 from tengri.components.agn import disc as disc_module
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.utils.physics_constants import C_AA, L_SUN
+from tests.regression.bug.test_bug_2760_torus_screen_is_library_sightline import (
+    mm83_below_edge_reference,
+)
 
 pytestmark = pytest.mark.regression_bug
 
@@ -307,13 +310,40 @@ def test_skirtor_tie_removes_the_discs_own_inclination_law():
         assert _power(tied, _SKIRTOR_WAVE) == pytest.approx(reference, rel=3e-3)
 
 
-def _screen_30deg(wave_aa, oa=40.0, tau_v=7.0):
-    """Torus screen at i = 30 deg from its documented formula (``torus_screen.py``)."""
-    from tengri.components.dust.attenuation import smc
+def _library_transmission_30deg(wave_aa, oa=40.0, tau=7.0):
+    """Untied SKIRTOR transmission ``T = R_n/eta`` at i = 30 deg, from the shipped columns.
 
-    w = 0.5 * (1 + np.tanh(0.5 * (np.sin(np.radians(oa)) - _COS[30]) / 0.025))
-    k = np.asarray(smc(jnp.asarray(np.append(np.asarray(wave_aa, float), 5500.0))))
-    return np.exp(-np.clip(tau_v * k[:-1] / k[-1] * w, 0.0, 50.0))
+    ``R_n = disk_i norm_i/(disk_0 norm_0)`` (node-exact PCHIP of the logarithms, a power law
+    between library nodes, held at the 10 A edge); ``eta = c (1 + 2c)/3``. It replaces the
+    previous ``R**w2`` (no ``norm``, logistic Type-1/Type-2 weight).
+    """
+    from tengri.components.agn.skirtor import _find_skirtor_grid, _load_grid_arrays
+    from tengri.utils.grid_interp import interp_nd_pchip
+
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    axes = tuple(jnp.asarray(a) for a in raw["axes"])
+    wave = np.asarray(raw["wave"], dtype=float)
+    log_disk = jnp.asarray(np.log(np.maximum(np.asarray(raw["disk"], dtype=float), 1e-35)))
+    log_norm = jnp.asarray(np.log(np.maximum(np.asarray(raw["norm"], dtype=float), 1e-35)))
+    geometry = (tau, 1.0, 1.0, oa, 20.0)
+
+    def at(table, c):
+        return np.asarray(
+            interp_nd_pchip(table, axes, tuple(jnp.asarray(v) for v in (*geometry, c)))
+        )
+
+    cos = _COS[30]
+    drift = at(log_disk, cos) - at(log_disk, 1.0) + (at(log_norm, cos) - at(log_norm, 1.0))
+    live = (at(log_disk, 1.0) > np.log(1e-35) + 1.0).astype(float)
+    held = np.log(np.clip(np.asarray(wave_aa, float), wave[0], wave[-1]))
+    ratio = np.minimum(np.exp(np.interp(held, np.log(wave), drift)), 1.5)
+    live_q = np.interp(held, np.log(wave), live) > 0.5
+    eta = cos * (1.0 + 2.0 * cos) / 3.0
+    t_lib = np.where(live_q, ratio / eta, 1.0)
+    if np.min(wave_aa) >= wave[0]:
+        return t_lib
+    t_v = float(_library_transmission_30deg(np.array([5500.0]), oa, tau)[0])
+    return mm83_below_edge_reference(wave_aa, wave[0], t_v, t_lib)
 
 
 def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
@@ -322,7 +352,9 @@ def test_untied_type1_disc_is_2cos_i_d_nu_times_the_screen():
     bare = _disc_lnu("kubota_done", cos30, _SKIRTOR_WAVE)
     half = _disc_lnu("kubota_done", 0.5, _SKIRTOR_WAVE)  # D_nu + H_nu, the cos i = 0.5 spectrum
     screened = _skirtor("kubota_done", cos30, agn_ir_frac=0.0, agn_norm="independent")["disc"]
-    np.testing.assert_allclose(screened, bare * _screen_30deg(_SKIRTOR_WAVE), rtol=1e-6)
+    np.testing.assert_allclose(
+        screened, bare * _library_transmission_30deg(_SKIRTOR_WAVE), rtol=1e-6
+    )
     # optical/UV is disc dominated: 2 cos 30 D_nu with D_nu the cos i = 0.5 spectrum
     optical = (_SKIRTOR_WAVE > 1000.0) & (_SKIRTOR_WAVE < 2.0e4)
     np.testing.assert_allclose(bare[optical], 2.0 * cos30 * half[optical], rtol=2e-3)

@@ -43,6 +43,12 @@ from tengri.utils.scale import (
     representable_floor,
 )
 
+#: Exponential cutoff of the HMXB and LMXB spectra [keV]. Yang et al. 2020
+#: (MNRAS 491, 740, Sect. 2.2.2) fix ``E_cut`` = 100 keV for both X-ray-binary
+#: populations (citing Zhang 1997 and Motta et al. 2009) and use the free ``E_cut``
+#: for the AGN corona only; the cutoff is not a fitted parameter.
+XRB_E_CUT_KEV = 100.0
+
 # Yang+2020 reference inclination for the AGN corona. The α_ox(L_2500)
 # relations predict the L_2keV seen at 30°; ``xray_anisotropy`` satisfies
 # f(cos 30°) = 1, so a corona evaluated at this inclination emits exactly
@@ -128,6 +134,44 @@ _MM83_C2 = host_array(
 )
 
 
+def wabs_cross_section(E_keV: jnp.ndarray) -> jnp.ndarray:
+    r"""Morrison & McCammon (1983) photoelectric cross-section per hydrogen atom.
+
+    .. math::
+
+        \sigma(E) = (c_0 + c_1 E + c_2 E^2)\,E^{-3} \times 10^{-24}\ {\rm cm^2}
+
+    with :math:`E` in keV and the coefficients of Table 2 for the segment containing
+    :math:`E` (0.03 to 10 keV). Above 10 keV the last segment is extrapolated.
+
+    Parameters
+    ----------
+    E_keV : array_like, shape (n,)
+        Photon energy [keV], at least 0.03.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        :math:`\sigma` [cm^2].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The table is checked against two independent public
+    implementations in ``tests/regression/bug/test_bug_2760_*``.
+
+    References
+    ----------
+    .. [1] R. Morrison and D. McCammon, ApJ, 270, 119 (1983), Table 2.
+       https://doi.org/10.1086/161102
+    """
+    E = jnp.asarray(E_keV)
+    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E, side="right") - 1, 0, 13)
+    c0 = jnp.take(device_table(_MM83_C0), idx)
+    c1 = jnp.take(device_table(_MM83_C1), idx)
+    c2 = jnp.take(device_table(_MM83_C2), idx)
+    return (c0 + c1 * E + c2 * E**2) / jnp.maximum(E, 1e-30) ** 3 * 1e-24
+
+
 def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     r"""Photoelectric absorption transmission ``T(E) = exp(−σ(E)·N_H)``.
 
@@ -189,15 +233,7 @@ def wabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
     # T → 1 naturally). A hard upper cutoff would create a spurious
     # discontinuity at exactly E = 10 keV under floating round-trip.
     in_range = E >= 0.030
-
-    idx = jnp.clip(jnp.searchsorted(device_table(_MM83_E_EDGES), E, side="right") - 1, 0, 13)
-    c0 = jnp.take(device_table(_MM83_C0), idx)
-    c1 = jnp.take(device_table(_MM83_C1), idx)
-    c2 = jnp.take(device_table(_MM83_C2), idx)
-    sigma_e3 = c0 + c1 * E + c2 * E**2  # 10⁻²⁴ cm² · keV³
-    sigma = sigma_e3 / jnp.maximum(E, 1e-30) ** 3 * 1e-24  # cm²
-
-    tau = sigma * 10.0**log_nh
+    tau = wabs_cross_section(E) * 10.0**log_nh
     return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
 
 
@@ -545,7 +581,7 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     """Present-day absolute Z from a published ``log_metallicity_history``.
 
     The single definition of how the X-ray block turns the stellar component's
-    metallicity history into the scalar Z the Lehmer+2016 HMXB quartic wants.
+    metallicity history into the scalar Z the Fragos+2013 HMXB quartic wants.
     Both X-ray components call it, so the fallback and the index convention
     exist in exactly one place (#1755).
 
@@ -589,6 +625,65 @@ def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
     return jnp.power(10.0, arr[0])
 
 
+def lmxb_stellar_age_gyr(
+    age_weights_surviving: Any,
+    age_weights: Any,
+    ssp_ages_yr: Any,
+) -> jnp.ndarray:
+    r"""Mass-weighted stellar age for the LMXB relation [Gyr].
+
+    The age in Fragos et al. 2013 (ApJL 776, L31, Eq. 4 [1]_) is the
+    "mass-weighted mean stellar age of the population", and the LMXB luminosity
+    multiplies the stellar mass the population holds now. Both therefore use the
+    surviving mass: the age is weighted by the surviving mass per SSP age bin
+    (``age_weights_surviving``), the quantity that sums to ``10**log_mstar``.
+    Every X-ray component reads the age through this one function so that the
+    age and the mass cannot drift apart again.
+
+    .. math::
+
+        t_\star = \frac{\sum_i w_i\, t_i}{\sum_i w_i}
+
+    with :math:`w_i` the surviving mass [Msun] in SSP age bin :math:`i` and
+    :math:`t_i` its age [Gyr].
+
+    Parameters
+    ----------
+    age_weights_surviving : array_like, shape (n_age,) or scalar
+        Surviving mass per SSP age bin [Msun]. A sum of zero means "not
+        published" (a declared-but-unpublished optional input arrives as a 0-d
+        zero), and the formed-mass weights stand in.
+    age_weights : array_like, shape (n_age,) or scalar
+        Formed mass per SSP age bin [Msun], the fallback.
+    ssp_ages_yr : array_like, shape (n_age,)
+        SSP age axis [yr].
+
+    Returns
+    -------
+    ndarray, scalar
+        Stellar age [Gyr]; 1.0 when neither set of weights sums above zero.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: the denominator is selected before the division, so
+    the reverse pass carries no ``0 * inf``.
+
+    References
+    ----------
+    .. [1] T. Fragos et al., "Energy Feedback from X-ray Binaries in the Early
+       Universe," ApJ, 776, L31 (2013). arXiv:1306.1405.
+       https://doi.org/10.1088/2041-8205/776/2/L31
+    """
+    w_surviving = jnp.asarray(age_weights_surviving)
+    w_formed = jnp.asarray(age_weights)
+    weights = jnp.where(jnp.sum(w_surviving) > 0.0, w_surviving, w_formed)
+    w_sum = jnp.sum(weights)
+    live = w_sum > 0.0
+    safe_sum = jnp.where(live, w_sum, 1.0)
+    age = jnp.sum(weights * jnp.asarray(ssp_ages_yr)) / safe_sum / 1.0e9
+    return jnp.where(live, age, 1.0)
+
+
 _LOG_L_HOTGAS_PER_SFR = float(np.log10(8.3e38))
 """log10 of the hot-gas 0.5-2 keV luminosity per unit SFR [dex re erg/s/(Msun/yr)].
 
@@ -598,8 +693,8 @@ Kept as a log10 constant: ``8.3e38`` is past the float32 ceiling.
 """
 
 
-def _log_lehmer_hmxb_per_sfr(metallicity_z: Any) -> Any:
-    """log10 HMXB 2-10 keV luminosity per unit SFR, Lehmer+2016 Z quartic [dex re erg/s]."""
+def _log_fragos_hmxb_per_sfr(metallicity_z: Any) -> Any:
+    """log10 HMXB 2-10 keV luminosity per unit SFR, Fragos+2013 Eq. 3 [dex re erg/s]."""
     # In W units the leading constant is 33.28; +7.0 converts to erg/s (40.28).
     return (
         40.28
@@ -610,8 +705,8 @@ def _log_lehmer_hmxb_per_sfr(metallicity_z: Any) -> Any:
     )
 
 
-def _log_lehmer_lmxb_per_1e10(stellar_age_gyr: Any) -> Any:
-    """log10 LMXB 2-10 keV luminosity per 1e10 Msun, Lehmer+2016 age quartic [dex re erg/s]."""
+def _log_fragos_lmxb_per_1e10(stellar_age_gyr: Any) -> Any:
+    """log10 LMXB 2-10 keV luminosity per 1e10 Msun, Fragos+2013 Eq. 4 [dex re erg/s]."""
     log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
     return 40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
 
@@ -624,7 +719,7 @@ def xray_xrb_terms(
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.56,
-    E_cut: float = 100.0,
+    E_cut: float = XRB_E_CUT_KEV,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
 ) -> dict[str, jnp.ndarray]:
@@ -656,7 +751,9 @@ def xray_xrb_terms(
     gamma_lmxb : float, optional
         LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
-        Exponential cutoff energy for both populations. Default: 100 keV. [keV]
+        Exponential cutoff energy for both populations [keV]. Default:
+        :data:`XRB_E_CUT_KEV` = 100 (Yang et al. 2020, Sect. 2.2.2). The model
+        components leave it at the default.
     log_L_hmxb_offset : float, optional
         Departure from mean SFR relation (dex). Default: 0.0. [dex]
     log_L_lmxb_offset : float, optional
@@ -682,7 +779,7 @@ def xray_xrb_terms(
     summed :func:`xray_xrb` must return bit-identical results to ``xray_xrb_terms()["hmxb"]
     + xray_xrb_terms()["lmxb"]``.
 
-    **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+    **HMXB luminosity scaling** (Fragos et al. 2013, ApJL 776, L31, Eq. 3 [1]_):
         HMXBs are young binary systems (age < 100 Myr) with massive companions,
         so their population follows the instantaneous SFR. The luminosity
         depends strongly on metallicity Z (mass fraction):
@@ -706,35 +803,43 @@ def xray_xrb_terms(
         (``metallicity_z``) was published by nothing, so this term was frozen
         at the signature default and the fitted metallicity moved it not at all.
 
-    **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+    **LMXB luminosity scaling** (Fragos et al. 2013, ApJL 776, L31, Eq. 4 [1]_):
         LMXBs are old systems (age > 1 Gyr), so their population traces
         stellar mass. The luminosity depends on stellar age t (Gyr):
 
         .. math::
 
-            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
+            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/(10^{10}\,M_\odot)) =
                 40.276 - 1.503\log t - 0.423(\log t)^2 + 0.425(\log t)^3 + 0.136(\log t)^4
-                \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
+                \quad [\mathrm{erg\,s^{-1}\,(10^{10}\,M_\odot)^{-1}}]
 
-        At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
-        Gilfanov 2004.
+        At t=1 Gyr, this yields 1.9×10^30 erg/s per M_sun (10^40.276 erg/s per
+        10^10 M_sun), consistent with Gilfanov 2004 [3]_.
+
+        Here t is the *mass-weighted mean stellar age of the population* and
+        M_star the stellar mass the population holds now, the surviving mass: the
+        component weights the age by the same surviving mass it multiplies the
+        luminosity by (Fragos et al. 2013, Eq. 4 and Sect. 3.2).
 
     **Spectral shape**: Both HMXB and LMXB are modeled as power-laws with
-    a high-energy exponential cutoff:
+    a high-energy exponential cutoff (Yang et al. 2020 [5]_, Eq. 2):
 
         .. math::
 
             F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
+
+        :math:`E_{\mathrm{cut}}` is fixed at 100 keV for both populations
+        (:data:`XRB_E_CUT_KEV`; Yang et al. 2020, Sect. 2.2.2, citing Zhang 1997
+        and Motta et al. 2009), independent of the AGN corona's ``xray_E_cut``.
 
         Each term is masked independently and separately to zero outside the
         X-ray band (E > 0.1 keV, λ < 124 Å).
 
     References
     ----------
-    .. [1] B. D. Lehmer et al., "The evolution of the X-ray binary
-       luminosity functions of nearby galaxies with the Chandra COSMOS
-       survey," ApJ, 825, 7 (2016).
-       https://doi.org/10.3847/0004-637X/825/1/7
+    .. [1] T. Fragos et al., "Energy Feedback from X-ray Binaries in the Early
+       Universe," ApJ, 776, L31 (2013). arXiv:1306.1405.
+       https://doi.org/10.1088/2041-8205/776/2/L31
     .. [2] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
        rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
        https://doi.org/10.1046/j.1365-8711.2003.06224.x
@@ -744,19 +849,22 @@ def xray_xrb_terms(
     .. [4] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
        https://doi.org/10.3847/1538-4357/ac4971
+    .. [5] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray to
+       infrared," MNRAS, 491, 740 (2020). arXiv:2001.08263.
+       https://doi.org/10.1093/mnras/stz3001
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
-    # Lehmer+2016 metallicity quartic for HMXB (yang20.py:207-214), and the
-    # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216-224).
+    # Fragos+2013 Eq. 3 metallicity quartic for HMXB (yang20.py:207-214), and the
+    # Fragos+2013 Eq. 4 age quartic for LMXB (yang20.py:216-224).
     # Yang+22 normalizes the LMXB *per 1e10 M_sun*, not per M_sun:
     #   L_LMXB = (M_star / 1e10) · 10^(quartic + 7)
     # NOT  10^(40.276 + ...) · M_star, which was off by 10^10 (the original
     # bug surfaced by the salvaged regression tests, see
     # tests/physics/test_xray_yang22_scalings.py).
-    log_l_hmxb_per_sfr = _log_lehmer_hmxb_per_sfr(metallicity_z)
-    log_l_lmxb_per_1e10 = _log_lehmer_lmxb_per_1e10(stellar_age_gyr)
+    log_l_hmxb_per_sfr = _log_fragos_hmxb_per_sfr(metallicity_z)
+    log_l_lmxb_per_1e10 = _log_fragos_lmxb_per_1e10(stellar_age_gyr)
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalize by integrating the spectral shape over the 2-10 keV reference band
@@ -811,7 +919,7 @@ def xray_xrb(
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.56,
-    E_cut: float = 100.0,
+    E_cut: float = XRB_E_CUT_KEV,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
 ) -> jnp.ndarray:
@@ -819,8 +927,8 @@ def xray_xrb(
 
     Computes the combined X-ray emission from high-mass (HMXB) and low-mass
     (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
-    metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
-    mass and age (Lehmer et al. 2016). Both are modeled as power-laws
+    metallicity (Fragos et al. 2013). LMXB luminosity scales with stellar
+    mass and age (Fragos et al. 2013). Both are modeled as power-laws
     with exponential cutoff.
 
     Parameters
@@ -844,7 +952,9 @@ def xray_xrb(
     gamma_lmxb : float, optional
         LMXB photon index. Default: 1.56 (Yang et al. 2020 Sect. 2.2.2).
     E_cut : float, optional
-        Exponential cutoff energy for both populations. Default: 100 keV. [keV]
+        Exponential cutoff energy for both populations [keV]. Default:
+        :data:`XRB_E_CUT_KEV` = 100 (Yang et al. 2020, Sect. 2.2.2). The model
+        components leave it at the default.
     log_L_hmxb_offset : float, optional
         Departure from mean SFR relation (dex). Allows scatter or evolution.
         Default: 0.0. [dex]
@@ -864,7 +974,7 @@ def xray_xrb(
     This function computes the sum of HMXB and LMXB contributions.
     Use :func:`xray_xrb_terms` to access the individual unsummed terms.
 
-    **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+    **HMXB luminosity scaling** (Fragos et al. 2013, ApJL 776, L31, Eq. 3 [1]_):
         HMXBs are young binary systems (age < 100 Myr) with massive companions,
         so their population follows the instantaneous SFR. The luminosity
         depends strongly on metallicity Z (mass fraction):
@@ -888,29 +998,36 @@ def xray_xrb(
         (``metallicity_z``) was published by nothing, so this term was frozen
         at the signature default and the fitted metallicity moved it not at all.
 
-    **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+    **LMXB luminosity scaling** (Fragos et al. 2013, ApJL 776, L31, Eq. 4 [1]_):
         LMXBs are old systems (age > 1 Gyr), so their population traces
         stellar mass. The luminosity depends on stellar age t (Gyr):
 
         .. math::
 
-            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
+            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/(10^{10}\,M_\odot)) =
                 40.276 - 1.503\log t - 0.423(\log t)^2 + 0.425(\log t)^3 + 0.136(\log t)^4
-                \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
+                \quad [\mathrm{erg\,s^{-1}\,(10^{10}\,M_\odot)^{-1}}]
 
-        At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
-        Gilfanov 2004.
+        At t=1 Gyr, this yields 1.9×10^30 erg/s per M_sun (10^40.276 erg/s per
+        10^10 M_sun), consistent with Gilfanov 2004 [3]_.
+
+        Here t is the *mass-weighted mean stellar age of the population* and
+        M_star the stellar mass the population holds now, the surviving mass: the
+        component weights the age by the same surviving mass it multiplies the
+        luminosity by (Fragos et al. 2013, Eq. 4 and Sect. 3.2).
 
     **Spectral shape**: Both HMXB and LMXB are modeled as power-laws with
-    a high-energy exponential cutoff (photoelectric absorption, or intrinsic
-    accretion torque limits):
+    a high-energy exponential cutoff (Yang et al. 2020 [5]_, Eq. 2):
 
         .. math::
 
             F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
 
-        Typical cutoffs: E_cut ≈ 100 keV (LMXB) to 200 keV (HMXB).
-        The exponent E_cut controls the shape at high energies.
+        :math:`E_{\mathrm{cut}}` is fixed at 100 keV for both populations
+        (:data:`XRB_E_CUT_KEV`; Yang et al. 2020, Sect. 2.2.2, citing Zhang 1997
+        and Motta et al. 2009). It is a property of the binaries, not of the
+        AGN corona, so the model components never pass the corona's
+        ``xray_E_cut`` here; ``E_cut`` exists for direct calls only.
 
     **Wavelength coverage**: X-ray binaries emit primarily in 0.1–10 keV
     (λ ≈ 1.2 Å – 124 Å). Outside this range, flux is negligible.
@@ -920,10 +1037,9 @@ def xray_xrb(
 
     References
     ----------
-    .. [1] B. D. Lehmer et al., "The evolution of the X-ray binary
-       luminosity functions of nearby galaxies with the Chandra COSMOS
-       survey," ApJ, 825, 7 (2016).
-       https://doi.org/10.3847/0004-637X/825/1/7
+    .. [1] T. Fragos et al., "Energy Feedback from X-ray Binaries in the Early
+       Universe," ApJ, 776, L31 (2013). arXiv:1306.1405.
+       https://doi.org/10.1088/2041-8205/776/2/L31
     .. [2] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
        rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
        https://doi.org/10.1046/j.1365-8711.2003.06224.x
@@ -933,6 +1049,9 @@ def xray_xrb(
     .. [4] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
        https://doi.org/10.3847/1538-4357/ac4971
+    .. [5] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray to
+       infrared," MNRAS, 491, 740 (2020). arXiv:2001.08263.
+       https://doi.org/10.1093/mnras/stz3001
     """
     t = xray_xrb_terms(
         wavelength,
@@ -1601,7 +1720,9 @@ def xray_total_terms(
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy [keV]. Default: 300.
+        Exponential cutoff energy of the AGN corona [keV]. Default: 300. The
+        HMXB and LMXB terms do not read it: they use the fixed
+        :data:`XRB_E_CUT_KEV`.
     delta_alpha_ox : float
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
     cos_inc : float
@@ -1647,14 +1768,14 @@ def xray_total_terms(
 
     **Components**:
 
-    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
-    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - HMXB: Fragos+2013 metallicity quartic (Eq. 3), scaling with SFR
+    - LMXB: Fragos+2013 age quartic (Eq. 4), scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
 
     **XRB offsets** (``log_L_hmxb_offset``, ``log_L_lmxb_offset``):
     Multiplicative offsets in log space allowing intrinsic scatter or
-    redshift-dependent evolution around the Lehmer+2016 empirical relations.
+    redshift-dependent evolution around the Fragos+2013 empirical relations.
     """
     xrb_terms = xray_xrb_terms(
         wavelength,
@@ -1664,7 +1785,6 @@ def xray_total_terms(
         stellar_age_gyr=stellar_age_gyr,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
-        E_cut=E_cut,
         log_L_hmxb_offset=log_L_hmxb_offset,
         log_L_lmxb_offset=log_L_lmxb_offset,
     )
@@ -1749,7 +1869,9 @@ def xray_total(
     gamma_agn : float
         AGN X-ray photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy [keV]. Default: 300.
+        Exponential cutoff energy of the AGN corona [keV]. Default: 300. The
+        HMXB and LMXB terms do not read it: they use the fixed
+        :data:`XRB_E_CUT_KEV`.
     delta_alpha_ox : float
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
     cos_inc : float
@@ -1790,14 +1912,14 @@ def xray_total(
 
     **Components**:
 
-    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
-    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - HMXB: Fragos+2013 metallicity quartic (Eq. 3), scaling with SFR
+    - LMXB: Fragos+2013 age quartic (Eq. 4), scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
 
     **XRB offsets** (``log_L_hmxb_offset``, ``log_L_lmxb_offset``):
     Multiplicative offsets in log space allowing intrinsic scatter or
-    redshift-dependent evolution around the Lehmer+2016 empirical relations.
+    redshift-dependent evolution around the Fragos+2013 empirical relations.
     Implemented as additive terms in the log luminosity (Yang+2020 [1]_).
     """
     t = xray_total_terms(
@@ -2072,7 +2194,8 @@ def xray_total_lopez24_terms(
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy. [keV] Default: 300.
+        Exponential cutoff energy of the AGN corona. [keV] Default: 300. The
+        HMXB and LMXB terms use the fixed :data:`XRB_E_CUT_KEV` instead.
     log_nh : float
         Line-of-sight hydrogen column density [log10(cm⁻²)].
         Default: 20.0.
@@ -2108,7 +2231,6 @@ def xray_total_lopez24_terms(
         metallicity_z=metallicity_z,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
-        E_cut=E_cut,
         log_L_hmxb_offset=log_L_hmxb_offset,
         log_L_lmxb_offset=log_L_lmxb_offset,
     )
@@ -2180,7 +2302,8 @@ def xray_total_lopez24(
     gamma_agn : float
         AGN photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy. [keV] Default: 300.
+        Exponential cutoff energy of the AGN corona. [keV] Default: 300. The
+        HMXB and LMXB terms use the fixed :data:`XRB_E_CUT_KEV` instead.
     log_nh : float
         Line-of-sight hydrogen column density [log10(cm⁻²)].
         Default: 20.0.
@@ -2248,8 +2371,8 @@ def _xrb_hotgas_log_band_luminosities(
     log_sfr = _log10_magnitude(jnp.asarray(sfr))
     log_mass_1e10 = _log10_magnitude(jnp.asarray(stellar_mass) / 1.0e10)
     return {
-        "hmxb": _log_lehmer_hmxb_per_sfr(metallicity_z) + log_L_hmxb_offset + log_sfr,
-        "lmxb": _log_lehmer_lmxb_per_1e10(stellar_age_gyr) + log_L_lmxb_offset + log_mass_1e10,
+        "hmxb": _log_fragos_hmxb_per_sfr(metallicity_z) + log_L_hmxb_offset + log_sfr,
+        "lmxb": _log_fragos_lmxb_per_1e10(stellar_age_gyr) + log_L_lmxb_offset + log_mass_1e10,
         "hotgas": _LOG_L_HOTGAS_PER_SFR + log_sfr,
     }
 

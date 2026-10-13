@@ -129,6 +129,7 @@ from tengri.components.nebular._shared import (
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
 )
+from tengri.config.exceptions import CueIonizingShapeWarning
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
 from tengri.utils.host_array import device_table, host_array
 
@@ -152,11 +153,17 @@ _LOG_C = host_array(math.log10(_C_CGS))
 # precompute lives in ionizing_spectrum, and the age mask below reads the same cutoff
 # from the backend, so the table and the forward filter cannot disagree.
 from tengri.components.nebular.ionizing_spectrum import (
+    _CLIP_RANGES,
+    IONSPEC_NAMES,
     LYC_ALL_AGES,
     MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,  # noqa: F401  (re-exported for importers)
+    clamp_ionspec_straight_through,
     lyc_max_log_age,
     validate_lyc_max_age_yr,
 )
+
+# SSP fingerprints whose young-composite shape has been checked against Cue's range.
+_SHAPE_CHECKED: dict[int, dict] = {}
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
@@ -1116,7 +1123,22 @@ class CueBackend:
     for nearby star formation histories). A flat [O III]/H-beta against
     ``neb_logU`` therefore reflects the SSP-derived shape, not a dead input; the
     wiring is guarded by ``tests/components/nebular/test_cue_logu_response.py``.
-    Values outside the trained range are passed to the network unclipped.
+    Values of the gas-property inputs outside the trained range are passed to the
+    network unclipped.
+
+    **Ionizing-shape range and SSP requirement**: the 7 ionizing-shape inputs
+    (``ionspec_index1..4``, ``ionspec_logLratio1..3``) were trained inside the
+    box held in ``ionizing_spectrum._CLIP_RANGES`` (the Cue reference code's
+    range, which differs from Li et al. 2025, arXiv:2405.04598, Table 1 in two
+    floors; see the comment there). The shape tengri derives from the SSP
+    is clamped to that box (a straight-through clamp: value equal to the input
+    and gradient unchanged wherever the shape is inside it) before the network,
+    and :class:`~tengri.config.exceptions.CueIonizingShapeWarning` is issued at
+    build when a constant-SFR young composite of the SSP leaves it. Use an SSP
+    whose Lyman continuum below 912 Å is densely sampled (for example
+    ``fsps_mist_c3k_a_chabrier`` or ``fsps_prsc_miles_chabrier``); the
+    ionizing-shape fit needs points in each of the four segments
+    (1-228, 228-353, 353-504 and 504-912 Å).
 
     **Calling conventions**: Two modes are supported:
 
@@ -1232,6 +1254,8 @@ class CueBackend:
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
 
+        self._warn_if_shape_outside_trained_box(result)
+
         # wNE SSP detection: young stellar populations (< 10 Myr) in a bare SSP
         # produce log10(Q_H) ~ 47–50.  If the maximum across all metallicities for
         # young bins is below the threshold, the SSP likely has baked-in nebular
@@ -1276,6 +1300,64 @@ class CueBackend:
                     warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
                 else:
                     raise CueWNESSPError(msg)
+
+    def _warn_if_shape_outside_trained_box(self, table: dict) -> None:
+        """Warn once per SSP when its young-population shape leaves Cue's range.
+
+        Builds a constant-star-formation composite over the bins that feed Cue
+        (every age, or those up to ``lyc_max_age_yr``) at each SSP metallicity (one vectorized
+        call), combines the SSP shapes exactly as the forward model does, and
+        compares the unclamped result to ``_CLIP_RANGES`` (the Cue reference
+        code's training range). Individual old or extreme nodes of a dense grid
+        saturate routinely and carry no weight, so the composite, not the node
+        table, is what is checked. The verdict is memoized per SSP (keyed on the
+        process-wide memoized ionizing table, which is one object per SSP fingerprint),
+        so a repeated build neither recomputes nor repeats the warning.
+        """
+        if id(table) in _SHAPE_CHECKED:
+            return
+        _SHAPE_CHECKED[id(table)] = table  # holding the table keeps its id unique
+        ages = np.asarray(self._ssp_log_age_yr)
+        young = (
+            np.ones(ages.shape, dtype=bool)
+            if self._lyc_max_log_age is None
+            else ages <= self._lyc_max_log_age
+        )
+        if not young.any():
+            return
+        w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
+        lgmet = jnp.asarray(self._ssp_lgmet)
+        raw = jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))(lgmet)
+        lgmet_np = np.asarray(lgmet)
+        worst: dict[str, tuple[float, float]] = {}
+        for name in IONSPEC_NAMES:
+            lo, hi = _CLIP_RANGES[name]
+            v = np.asarray(raw[name], dtype=np.float64)
+            miss = np.where(np.isfinite(v), np.maximum(lo - v, v - hi), 0.0)
+            if (miss > 0).any():
+                i = int(np.argmax(miss))
+                worst[name] = (float(v[i]), float(lgmet_np[i]))
+        if not worst:
+            return
+        lines = "\n".join(
+            f"  {name} = {v:.3g} at log10(Z) = {z:.2f}; trained range "
+            f"[{_CLIP_RANGES[name][0]:g}, {_CLIP_RANGES[name][1]:g}]"
+            for name, (v, z) in worst.items()
+        )
+        warnings.warn(
+            "The ionizing shape fitted to this SSP lies outside the range Cue was "
+            "trained on (Cue reference code bounds; Li et al. 2025, "
+            "arXiv:2405.04598) for a constant-SFR young population:\n"
+            f"{lines}\n"
+            "The parameter is clamped to the nearest trained bound before the "
+            "network, so the emulator is not extrapolated, but the nebular "
+            "emission then reflects the clamped shape, not the SSP's. Use an SSP "
+            "with a densely sampled Lyman continuum below 912 A, e.g. "
+            "fsps_mist_c3k_a_chabrier or fsps_prsc_miles_chabrier, or pass "
+            "explicit ionspec_* values.",
+            CueIonizingShapeWarning,
+            stacklevel=3,
+        )
 
     def get_ionizing_params_at(
         self,
@@ -1589,6 +1671,41 @@ class CueBackend:
         )
 
     def _compute_weighted_cue_params(
+        self,
+        ssp_weights: jnp.ndarray,
+        ssp_log_ages_yr: jnp.ndarray,
+        log_z: float,
+        neb_logU: float = -3.0,
+        neb_logZ_gas: float | None = None,
+        gas_logn: float = 2.0,
+        gas_logno: float = 0.0,
+        gas_logco: float = 0.0,
+    ) -> dict:
+        """Derive Cue parameters from SSP weights, shape clamped to the trained box.
+
+        Runs :meth:`_weighted_cue_params_raw` and moves the seven ionizing-shape
+        parameters onto the Cue training range (``ionizing_spectrum._CLIP_RANGES``, the Cue
+        reference code's range) with a straight-through clamp, so the
+        emulator is never queried outside the range it was trained on. In-range
+        values and their gradients pass through bit-identically; out of range the
+        value is the bound and the gradient is the identity (not zeroed).
+
+        Parameters and returns are those of :meth:`_weighted_cue_params_raw`.
+        """
+        out = self._weighted_cue_params_raw(
+            ssp_weights,
+            ssp_log_ages_yr,
+            log_z,
+            neb_logU=neb_logU,
+            neb_logZ_gas=neb_logZ_gas,
+            gas_logn=gas_logn,
+            gas_logno=gas_logno,
+            gas_logco=gas_logco,
+        )
+        i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
+        return {**out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
+
+    def _weighted_cue_params_raw(
         self,
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
