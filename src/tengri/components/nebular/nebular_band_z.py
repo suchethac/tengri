@@ -31,6 +31,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight, filter_weight_np
+from tengri.utils.grid_interp import filter_support_slice
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import pow10
 
@@ -84,7 +85,7 @@ def _union_kernel(wave_obs, fw, ft, convention):
     step is linear in the SED values, so the band value is ``K . sed``; this
     returns ``K`` (over the SED nodes it touches) so many SEDs can share one
     kernel. Nodes outside the filter support carry zero weight and are dropped
-    (one node past each edge is kept, so the straddling segment stays exact).
+    (the support is the filter's own range, as in ``lnu_filter_integral``, #2817).
 
     Returns
     -------
@@ -95,8 +96,7 @@ def _union_kernel(wave_obs, fw, ft, convention):
     """
     n = wave_obs.size
     grid = np.sort(np.concatenate([wave_obs, fw]))
-    g_lo = max(int(np.searchsorted(grid, fw[0])) - 1, 0)
-    g_hi = min(int(np.searchsorted(grid, fw[-1], side="right")) + 1, grid.size)
+    g_lo, g_hi = filter_support_slice(grid, fw)
     grid = grid[g_lo:g_hi]
     trans = np.interp(grid, fw, ft, left=0.0, right=0.0)
     tw = trans * filter_weight_np(grid, convention)
