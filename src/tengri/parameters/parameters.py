@@ -31,7 +31,7 @@ Shorthand tsnorm equivalent::
     spec = Parameters(
         mean_sfh_type = "tsnorm",
         sfh_tsnorm_log_total_mass = Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac = Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
         sfh_tsnorm_trunc = Uniform(1, 10),
@@ -1817,7 +1817,7 @@ class Parameters:
         zero too, giving a gradient sampler an absorbing basin with no way out
         (#1277). Free priors are rejected when their supports *overlap*, since an
         overlap means the sampler can reach the dead region: measured at 21.8 % of
-        prior draws for ``start_gyr=Uniform(0.5, 10)``, ``end_gyr=Uniform(0, 5)``.
+        prior draws for ``start_frac=Uniform(0.0362663, 0.725327)``, ``end_gyr=Uniform(0, 5)``.
         """
         for greater, lesser, reason in self._ORDERED_PAIRS:
             if greater not in self._distributions or lesser not in self._distributions:

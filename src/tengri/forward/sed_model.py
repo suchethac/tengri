@@ -20,7 +20,7 @@ Usage::
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
         sfh_tsnorm_log_total_mass=Uniform(8, 12),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+        sfh_tsnorm_peak_lbt_frac=Uniform(0.0725327, 0.870392),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
         sfh_tsnorm_trunc=Uniform(1, 10),
