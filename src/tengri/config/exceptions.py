@@ -512,11 +512,12 @@ class CueIonizingShapeWarning(AdvisoryWarning):
 
     Cue is queried with seven parameters that describe the shape of the
     ionizing continuum (``ionspec_index1..4``, ``ionspec_logLratio1..3``),
-    fitted to the SSP. Li et al. 2025 (arXiv:2405.04598), Table 1, trained the
-    emulator on a uniform draw inside a fixed box for each. When the shape fitted
-    to the SSP leaves that box (typically a very hard or very soft ionizing
-    continuum, or a coarsely sampled Lyman continuum) the network would be
-    extrapolating, so tengri clamps the parameter to the nearest bound before the
+    fitted to the SSP. The emulator was trained inside a fixed box for each (the
+    Cue reference code's range; Li et al. 2025, arXiv:2405.04598, Table 1, with
+    two floors printed differently). When the shape fitted to the SSP leaves that
+    box (typically a very hard or very soft ionizing continuum, or a coarsely
+    sampled Lyman continuum) the network would be extrapolating, so tengri clamps
+    the parameter to the nearest bound before the
     network (a straight-through clamp, gradients kept) and warns here.
 
     The remedy is an SSP with a densely sampled Lyman continuum below 912 A

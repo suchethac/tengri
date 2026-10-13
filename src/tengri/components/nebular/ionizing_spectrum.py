@@ -59,7 +59,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 #: correction), not a hard ``wave <= HI_LIMIT`` mask.
 #: 3: ``gas_logqion`` integrates in the log domain (#2849), and the computation
 #: dtype is part of the key, so entries written under version 2 are not reused.
-_IONSPEC_CACHE_VERSION = 4
+_IONSPEC_CACHE_VERSION = 3
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
@@ -416,25 +416,34 @@ HI_LIMIT = LYMAN_LIMIT_AA
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = host_array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
-# Cue-emulator TRAINING range of the 7 ionizing-shape parameters, used to clip
-# the auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is
-# never evaluated outside the range it was trained on. Source: Li et al. 2025
-# (ApJ 986, 9, arXiv:2405.04598), Table 1, top seven rows ("the allowed range of
-# the parameters in the training set"): alpha_HeII [1, 42], alpha_OII [-0.3, 30],
-# alpha_HeI [-1.1, 14], alpha_HI [-1.7, 8], log F_OII/F_HeII [-0.1, 10.1],
-# log F_HeI/F_OII [-0.5, 1.9], log F_HI/F_HeI [-0.4, 2.2]. The paper draws the
-# training set uniformly inside this box, so the box is the trained support.
+# Cue-emulator range of the 7 ionizing-shape parameters, used to clip the
+# auto-derived (SSP-fit) ionspec coefficients so the Cue neural emulator is never
+# evaluated outside the range it was trained on.
+#
+# Source: the Cue reference code (github.com/efburnham/cue; ``emulator.py``
+# docstring and the ``np.clip`` bounds of the SSP-fit routine in ``utils.py``):
+# index1 [1, 42], index2 [-0.3, 30], index3 [-1, 14], index4 [-1.7, 8],
+# logLratio1 [-1, 10.1], logLratio2 [-0.5, 1.9], logLratio3 [-0.4, 2.2].
+#
+# Discrepancy with the paper: Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598),
+# Table 1, prints index3 [-1.1, 14] and logLratio1 [-0.1, 10.1]. The other five
+# agree. The code values are used because the paper's own text places AGN power
+# laws with 1.2 <= alpha <= 2 inside the training set, and those have
+# logLratio1 between -0.86 and -0.26 (Eq. 2 definition), which a -0.1 floor would
+# exclude; the printed -0.1 is most likely a dropped digit of -1.0. Measured on
+# the emulator itself, lines vary smoothly in logLratio1 from -1.0 to +0.3.
+#
 # These are DISTINCT from, and deliberately NOT unified with, the user-facing
 # prior bounds in ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g.
 # index1 clips to [1, 42] here vs. the prior range [0, 50] there): the prior
-# range is what a user may sample, the clip range is what the emulator was
-# trained on. See #887 (which confirmed they must stay separate).
+# range is what a user may sample, the clip range is what the emulator can
+# faithfully evaluate. See #887 (which confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
     "ionspec_index2": (-0.3, 30.0),
-    "ionspec_index3": (-1.1, 14.0),
+    "ionspec_index3": (-1.0, 14.0),
     "ionspec_index4": (-1.7, 8.0),
-    "ionspec_logLratio1": (-0.1, 10.1),
+    "ionspec_logLratio1": (-1.0, 10.1),
     "ionspec_logLratio2": (-0.5, 1.9),
     "ionspec_logLratio3": (-0.4, 2.2),
 }
@@ -458,16 +467,22 @@ def clamp_ionspec_straight_through(i7):
 
     Notes
     -----
-    Straight-through: the forward value is ``clip(x)`` and the gradient is the
-    identity everywhere, so a fit driven past the box keeps a signal (a plain
+    Straight-through: the forward value is ``clip(x)`` and, for finite input, the
+    gradient is the identity, so a fit driven past the box keeps a signal (a plain
     clip would zero it). The forward value is ``clip(x)`` plus ``x - x`` (exactly
-    0.0, and carrying the identity gradient), so it equals the bound out of range
-    and the input bit-for-bit in range. JIT/grad/vmap safe.
+    0.0), so it equals the bound out of range and the input bit-for-bit in range.
+
+    The out-of-range gradient is deliberately inconsistent with the pinned
+    value: the value stays at the bound while the gradient still says "move".
+    Non-finite input: ``+/-inf`` returns the bound (zero gradient), ``nan`` stays
+    ``nan``. JIT/grad/vmap safe.
     """
     x = jnp.asarray(i7)
     lo = jnp.asarray([_CLIP_RANGES[k][0] for k in IONSPEC_NAMES], dtype=x.dtype)
     hi = jnp.asarray([_CLIP_RANGES[k][1] for k in IONSPEC_NAMES], dtype=x.dtype)
-    return jax.lax.stop_gradient(jnp.clip(x, lo, hi)) + (x - jax.lax.stop_gradient(x))
+    clipped = jnp.clip(x, lo, hi)
+    through = jax.lax.stop_gradient(clipped) + (x - jax.lax.stop_gradient(x))
+    return jnp.where(jnp.isfinite(x), through, clipped)
 
 
 def fit_ionizing_spectrum(

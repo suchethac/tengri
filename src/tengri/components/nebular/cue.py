@@ -159,6 +159,9 @@ from tengri.components.nebular.ionizing_spectrum import (
     clamp_ionspec_straight_through,
 )
 
+# SSP fingerprints whose young-composite shape has been checked against Cue's range.
+_SHAPE_CHECKED: dict[int, dict] = {}
+
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
 
@@ -1122,8 +1125,9 @@ class CueBackend:
 
     **Ionizing-shape range and SSP requirement**: the 7 ionizing-shape inputs
     (``ionspec_index1..4``, ``ionspec_logLratio1..3``) were trained inside the
-    box of Li et al. 2025 (arXiv:2405.04598), Table 1, held in
-    ``ionizing_spectrum._CLIP_RANGES``. The shape tengri derives from the SSP
+    box held in ``ionizing_spectrum._CLIP_RANGES`` (the Cue reference code's
+    range, which differs from Li et al. 2025, arXiv:2405.04598, Table 1 in two
+    floors; see the comment there). The shape tengri derives from the SSP
     is clamped to that box (a straight-through clamp: value equal to the input
     and gradient unchanged wherever the shape is inside it) before the network,
     and :class:`~tengri.config.exceptions.CueIonizingShapeWarning` is issued at
@@ -1240,7 +1244,7 @@ class CueBackend:
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
 
-        self._warn_if_shape_outside_trained_box()
+        self._warn_if_shape_outside_trained_box(result)
 
         # wNE SSP detection: young stellar populations (< 10 Myr) in a bare SSP
         # produce log10(Q_H) ~ 47–50.  If the maximum across all metallicities for
@@ -1287,35 +1291,38 @@ class CueBackend:
                 else:
                     raise CueWNESSPError(msg)
 
-    def _warn_if_shape_outside_trained_box(self) -> None:
-        """Warn when a young-population ionizing shape leaves Cue's training box.
+    def _warn_if_shape_outside_trained_box(self, table: dict) -> None:
+        """Warn once per SSP when its young-population shape leaves Cue's range.
 
         Builds a constant-star-formation composite over the bins that feed Cue
-        (age <= ``MAX_NEB_LOG_AGE``) at each SSP metallicity, combines the SSP
-        shapes exactly as the forward model does, and compares the unclamped
-        result to ``_CLIP_RANGES`` (Li et al. 2025, Table 1). Individual old or
-        extreme nodes of a dense grid saturate routinely and carry no weight, so
-        the composite, not the node table, is what is checked.
+        (age <= ``MAX_NEB_LOG_AGE``) at each SSP metallicity (one vectorized
+        call), combines the SSP shapes exactly as the forward model does, and
+        compares the unclamped result to ``_CLIP_RANGES`` (the Cue reference
+        code's training range). Individual old or extreme nodes of a dense grid
+        saturate routinely and carry no weight, so the composite, not the node
+        table, is what is checked. The verdict is memoized per SSP (keyed on the
+        process-wide memoized ionizing table, which is one object per SSP fingerprint),
+        so a repeated build neither recomputes nor repeats the warning.
         """
+        if id(table) in _SHAPE_CHECKED:
+            return
+        _SHAPE_CHECKED[id(table)] = table  # holding the table keeps its id unique
         ages = np.asarray(self._ssp_log_age_yr)
         young = ages <= _MAX_NEB_LOG_AGE
         if not young.any():
             return
-        t = 10.0**ages
-        dt = np.gradient(t)
-        w = jnp.asarray(np.where(young, dt, 0.0))
+        w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
+        lgmet = jnp.asarray(self._ssp_lgmet)
+        raw = jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))(lgmet)
+        lgmet_np = np.asarray(lgmet)
         worst: dict[str, tuple[float, float]] = {}
-        for lgmet in np.asarray(self._ssp_lgmet):
-            raw = self._weighted_cue_params_raw(w, jnp.asarray(ages), float(lgmet))
-            for name in IONSPEC_NAMES:
-                lo, hi = _CLIP_RANGES[name]
-                v = float(raw[name])
-                if np.isfinite(v) and (v < lo or v > hi):
-                    prev = worst.get(name)
-                    if prev is None or abs(v - np.clip(v, lo, hi)) > abs(
-                        prev[0] - np.clip(prev[0], lo, hi)
-                    ):
-                        worst[name] = (v, float(lgmet))
+        for name in IONSPEC_NAMES:
+            lo, hi = _CLIP_RANGES[name]
+            v = np.asarray(raw[name], dtype=np.float64)
+            miss = np.where(np.isfinite(v), np.maximum(lo - v, v - hi), 0.0)
+            if (miss > 0).any():
+                i = int(np.argmax(miss))
+                worst[name] = (float(v[i]), float(lgmet_np[i]))
         if not worst:
             return
         lines = "\n".join(
@@ -1325,8 +1332,8 @@ class CueBackend:
         )
         warnings.warn(
             "The ionizing shape fitted to this SSP lies outside the range Cue was "
-            "trained on (Li et al. 2025, arXiv:2405.04598, Table 1) for a "
-            "constant-SFR young population:\n"
+            "trained on (Cue reference code bounds; Li et al. 2025, "
+            "arXiv:2405.04598) for a constant-SFR young population:\n"
             f"{lines}\n"
             "The parameter is clamped to the nearest trained bound before the "
             "network, so the emulator is not extrapolated, but the nebular "
@@ -1663,8 +1670,8 @@ class CueBackend:
         """Derive Cue parameters from SSP weights, shape clamped to the trained box.
 
         Runs :meth:`_weighted_cue_params_raw` and moves the seven ionizing-shape
-        parameters onto the Cue training range (Li et al. 2025, Table 1;
-        ``ionizing_spectrum._CLIP_RANGES``) with a straight-through clamp, so the
+        parameters onto the Cue training range (``ionizing_spectrum._CLIP_RANGES``, the Cue
+        reference code's range) with a straight-through clamp, so the
         emulator is never queried outside the range it was trained on. In-range
         values and their gradients pass through bit-identically; out of range the
         value is the bound and the gradient is the identity (not zeroed).
