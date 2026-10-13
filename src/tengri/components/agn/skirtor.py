@@ -2,9 +2,9 @@
 """SKIRTOR clumpy two-phase torus model (Stalevski et al. 2012, 2016).
 
 Loads the full SKIRTOR SED library (``create_skirtor_from_grid``) and performs
-5D triweight kernel interpolation in JAX.  Provides C²-continuous gradients for
-smooth inference (VI, MAP, NUTS).  Requires a prior download of the template
-grid (~1 GB).
+5D node-exact PCHIP interpolation in JAX.  Passes through every tabulated node and
+provides C¹-continuous gradients for inference (VI, MAP, NUTS).  Requires a prior
+download of the template grid (~1 GB).
 
 Supports two HDF5 layouts:
 
@@ -400,6 +400,16 @@ def _load_grid_arrays(grid_path: str):
     return _ascending_axes(result)
 
 
+def _cos_inc_extrapolate(axes: tuple) -> tuple:
+    """Per-axis extrapolation flags: ``cos_inclination`` (the last axis) extends past its ends.
+
+    The prior reaches ``cos_inc = 0`` but the stored axis starts at ``cos(90 deg) = 6e-17``.
+    Clipping there returns an exactly-zero gradient on a fittable parameter (#1911);
+    continuing the end cubic keeps it nonzero, and the cubic is node-exact (#2606).
+    """
+    return (False,) * (len(axes) - 1) + (True,)
+
+
 def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
     """Drop the R (radius_ratio) coordinate when the grid lacks that axis.
 
@@ -416,7 +426,6 @@ def _interpolate_and_normalize(
     grid_jax: jnp.ndarray,
     wave_grid: jnp.ndarray,
     axes: tuple,
-    edges: tuple,
     wavelength: jnp.ndarray,
     point: tuple,
     l_scale: float,
@@ -442,8 +451,6 @@ def _interpolate_and_normalize(
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
         Grid axis values (tau, p, q, oa, cos_inc).
-    edges : tuple of ndarray
-        Precomputed bin edges for triweight interpolation.
     wavelength : ndarray, shape (n_wave,)
         Target wavelength array [Angstrom].
     point : tuple
@@ -479,8 +486,10 @@ def _interpolate_and_normalize(
     # and only takes effect on axes it measures as non-uniform. On this grid
     # tau/p/q/oa/radius are uniform to floating-point, so the flag reaches only
     # cos_inclination (spacing ratio 11.43): see #1911.
-    template = interp_nd_triweight(
-        grid_jax, axes, edges, _match_point_to_axes(point, axes), index_space_interp=True
+    # Node-exact PCHIP, not the triweight smoother: the library is a tabulated
+    # radiative-transfer result, so an exact node must return its own SED (#2606).
+    template = interp_nd_pchip(
+        grid_jax, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
     )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
@@ -590,7 +599,7 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
 
     Notes
     -----
-    **JIT/grad-safe**: yes, triweight interpolation over threaded arrays.
+    **JIT/grad-safe**: yes, PCHIP interpolation over threaded arrays.
     """
     l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
     point = (
@@ -605,7 +614,6 @@ agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
         grid_data.grid,
         grid_data.wave_grid,
         grid_data.axes,
-        grid_data.edges,
         wavelength,
         point,
         l_scale,
@@ -664,7 +672,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     and can be used as a drop-in replacement.
 
     Grid dimensions: tau × p × q × oa × inc × wave.
-    Interpolation: 5D triweight kernel in JAX (JIT-compatible, C²-continuous
+    Interpolation: 5D node-exact PCHIP in JAX (JIT-compatible, C¹-continuous
     gradients).
 
     Parameters
@@ -693,7 +701,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP interpolation is fully differentiable.
 
     Supports v2 (total-only) and v3 (separate disk/dust) HDF5 layouts.
     When v3 is available, use ``create_skirtor_components_from_grid``
@@ -803,7 +811,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes, the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
-    **Gradient-safe**: yes, triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes, PCHIP interpolation is fully differentiable.
 
     The separate components enable:
 
@@ -834,7 +842,6 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         total_jax = jnp.array(raw["total"])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def skirtor_components(
         wavelength: jnp.ndarray,
@@ -894,15 +901,9 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             agn_radius_ratio,
             agn_cos_inc,
         )
-        disk = _interpolate_and_normalize(
-            disk_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        dust = _interpolate_and_normalize(
-            dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
-        total = _interpolate_and_normalize(
-            total_jax, wave_grid, axes, edges, wavelength, point, l_scale
-        )
+        disk = _interpolate_and_normalize(disk_jax, wave_grid, axes, wavelength, point, l_scale)
+        dust = _interpolate_and_normalize(dust_jax, wave_grid, axes, wavelength, point, l_scale)
+        total = _interpolate_and_normalize(total_jax, wave_grid, axes, wavelength, point, l_scale)
         return SKIRTORComponents(disk=disk, dust=dust, total=total)
 
     # The template's own wavelength nodes: a publication grid built on them integrates the
@@ -1101,7 +1102,9 @@ def skirtor_disc_dust_ratio(
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
         # does not pass through grid nodes, distorting the disk/dust *integral
         # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
-        return interp_nd_pchip(grid, axes, _match_point_to_axes(point, axes))
+        return interp_nd_pchip(
+            grid, axes, _match_point_to_axes(point, axes), extrapolate=_cos_inc_extrapolate(axes)
+        )
 
     disk_i_n = _interp_native(disk_jax, agn_cos_inc)
     dust_i_n = _interp_native(dust_jax, agn_cos_inc)

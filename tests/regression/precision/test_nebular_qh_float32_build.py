@@ -91,6 +91,7 @@ out = {
     "x64": bool(jax.config.jax_enable_x64),
     "logq_young_max": float(np.max(table["logqion_table"][:, :])),
     "logq_table": np.asarray(table["logqion_table"], dtype=np.float64).tolist(),
+    "log_age_yr": (np.asarray(ssp.ssp_lg_age_gyr, dtype=np.float64) + 9.0).tolist(),
     "phot": phot.tolist(),
     "rest_sed_finite": bool(np.all(np.isfinite(rest))),
 }
@@ -148,6 +149,8 @@ _CUE_SSPS = (
 #: (fsps_mist_c3k_a, a wNE grid this test does not load). The bar is 5e-6, about
 #: 2.7 times the largest of the four.
 _CUE_QH_BAR = 5e-6
+#: The same bar over bins older than 100 Myr, about 3.7 times the measured 1.36e-5 dex.
+_CUE_QH_OLD_BAR = 5e-5
 
 
 @pytest.mark.parametrize("ssp_path", _CUE_SSPS)
@@ -166,10 +169,21 @@ def test_cue_float32_build_matches_float64(ssp_path, tmp_path):
     q64 = np.asarray(f64["logq_table"], dtype=np.float64)
     assert np.all(np.isfinite(q32)), "float32 log Q_H table holds non-finite entries"
     assert np.any(q32 != 0.0), "float32 log Q_H table is identically zero"
-    young = q64 > -90.0
+    log_age = np.asarray(f64["log_age_yr"], dtype=np.float64)
+    ionizing = q64 > -90.0
+    young = ionizing & (log_age <= 8.0)[None, :]
     assert young.any(), "no ionizing bins in the float64 reference"
     dev = float(np.max(np.abs(q32 - q64)[young]))
     assert dev <= _CUE_QH_BAR, f"float32 log Q_H differs from float64 by {dev:.3e} dex"
+    # Bins older than 100 Myr are counted too. Those down to 1e24 photons/s/Msun have
+    # integrand terms in float32's subnormal range; measured max deviation 1.36e-5 dex
+    # (fsps_prsc_miles), on bins carrying under 1e-7 of a population's photon rate.
+    old = ionizing & ~young
+    if old.any():
+        dev_old = float(np.max(np.abs(q32 - q64)[old]))
+        assert dev_old <= _CUE_QH_OLD_BAR, (
+            f"float32 old-bin log Q_H differs from float64 by {dev_old:.3e} dex"
+        )
 
     p32 = np.asarray(f32["phot"], dtype=np.float64)
     p64 = np.asarray(f64["phot"], dtype=np.float64)
@@ -351,7 +365,9 @@ wave = np.asarray(ssp.ssp_wave)
 flux = np.asarray(ssp.ssp_flux)
 lgmet = np.asarray(ssp.ssp_lgmet)
 log_age = np.asarray(ssp.ssp_lg_age_gyr) + 9.0
-tab = precompute_ionizing_params_table(wave, flux, lgmet, ssp_log_age_yr=log_age)
+tab = precompute_ionizing_params_table(
+    wave, flux, lgmet, ssp_log_age_yr=log_age, max_log_age=8.0
+)
 for key in ("ionspec_table", "logqion_table", "seglum_table"):
     res["ion_" + key] = np.asarray(tab[key])
 np.savez(OUT, **res)
