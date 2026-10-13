@@ -90,6 +90,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 from tengri.parameters.sentinels import WILDCARD_ALIAS
+from tengri.utils.wave_unit import check_timescales
 
 __all__ = ["CUE_FULL_CATALOG_DEFAULT", "SETTINGS_KEYS", "Parameters"]
 
@@ -860,6 +861,8 @@ class Parameters:
             else:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
+        # Timescale bounds are checked once, here, on the declared bounds (#2162).
+        check_timescales(self._distributions)
 
         # Flat-form provenance (#2231). A bare ``Parameters(...)`` call never
         # sees ``parse_groups``'s richer ``_group_provenance`` map: that

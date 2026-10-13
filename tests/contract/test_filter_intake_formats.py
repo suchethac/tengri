@@ -204,4 +204,4 @@ def test_unknown_wave_unit_raises():
     from tengri.observation.filters.custom import register_filter
 
     with pytest.raises(ValueError, match="Unknown wave_unit"):
-        register_filter("unit_bad", np.linspace(1.0, 2.0, 10), np.ones(10), wave_unit="micron")
+        register_filter("unit_bad", np.linspace(1.0, 2.0, 10), np.ones(10), wave_unit="parsec")

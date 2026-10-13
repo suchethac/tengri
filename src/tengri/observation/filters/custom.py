@@ -23,6 +23,11 @@ from tengri._x64_hold import hold_x64_preference
 from tengri.config.exceptions import warn_measured
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
+from tengri.utils.wave_unit import (
+    EUV_GAP_RED_EDGE_AA as _EUV_GAP_RED_EDGE_AA,  # noqa: F401 (re-exported for callers)
+    check_wavelength_plausible,
+    to_angstrom,
+)
 
 if TYPE_CHECKING:
     pass
@@ -44,52 +49,10 @@ __all__ = [
 
 _USER_FILTER_REGISTRY: dict[str, FilterCurve] = {}
 
-# Red edge of the extreme-UV gap, in Angstrom: the blue edge of GALEX FUV, the
-# bluest bandpass tengri ships. Below this and above ~100 Å the ISM is opaque,
-# so a curve lying wholly inside the interval is not a real bandpass. Measured
-# from the cached curve (GALEX_GALEX_FUV.dat spans 1340-1810 Å), not rounded,
-# because the whole point of the bound is that it sits just under a real filter.
-_EUV_GAP_RED_EDGE_AA = 1340.0
-
-# Multiply an input wavelength by this to reach Angstrom.
-_WAVE_UNIT_TO_AA: dict[str, float] = {"AA": 1.0, "nm": 10.0, "um": 1.0e4}
-
 
 def _to_angstrom(wave: np.ndarray, wave_unit: str) -> np.ndarray:
-    """Convert a wavelength array to Angstrom, validating the unit name.
-
-    Parameters
-    ----------
-    wave : ndarray
-        Wavelength array in *wave_unit*.
-    wave_unit : str
-        One of ``"AA"``, ``"nm"``, ``"um"``.
-
-    Returns
-    -------
-    ndarray
-        Wavelengths in Angstrom.
-
-    Raises
-    ------
-    ValueError
-        If *wave_unit* is not a recognized name.
-
-    Notes
-    -----
-    Stating the unit is the only protection against micron confusion, which
-    :func:`_warn_implausible_wavelength_range` explicitly cannot detect: an
-    optical curve given in microns lands at 0.5-0.7 Å, indistinguishable from
-    a real NuSTAR band. The range heuristic is a backstop for callers who do
-    not use this; it is not a substitute for it.
-    """
-    try:
-        factor = _WAVE_UNIT_TO_AA[wave_unit]
-    except KeyError:
-        raise ValueError(
-            f"Unknown wave_unit={wave_unit!r}. Valid options: {sorted(_WAVE_UNIT_TO_AA)}."
-        ) from None
-    return wave if factor == 1.0 else wave * factor
+    """Alias of :func:`tengri.utils.wave_unit.to_angstrom` (kept for internal callers)."""
+    return to_angstrom(wave, wave_unit)
 
 
 def _first_data_line(filepath: Path) -> tuple[str, int]:
@@ -213,91 +176,6 @@ def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndar
     return wave, np.maximum(trans, 0.0)
 
 
-def _warn_implausible_wavelength_range(
-    wave: np.ndarray, name: str, source: str = "filter"
-) -> None:
-    """Warn if wavelength range looks implausible for Angstrom.
-
-    Detects likely unit errors (nanometer, micrometer) and warns with the
-    likely unit and the conversion needed.
-
-    Parameters
-    ----------
-    wave : array_like
-        Wavelength array [Angstrom].
-    name : str
-        Filter name for the warning message.
-    source : str
-        Source description (e.g., "filter", "DSPS curve") for the message.
-
-    Notes
-    -----
-    The rule is deliberately a single narrow one: warn when the curve lies
-    **entirely inside the extreme-UV gap**, 100 Å to
-    :data:`_EUV_GAP_RED_EDGE_AA`.
-
-    That window is empty for a physical reason, not a statistical one. The
-    interstellar medium is opaque between the Lyman limit and the soft X-ray
-    band, so no photometric survey observes there and tengri ships no filter in
-    it -- the bluest is GALEX FUV at 1340 Å and the reddest X-ray band tops out
-    near 100 Å. A curve sitting wholly in the gap is therefore almost always an
-    optical bandpass whose wavelengths are in nanometers (500-700 nm read as
-    500-700 Å).
-
-    The red edge is the *bluest real bandpass*, not a round number. It was
-    ``max < 1000.0``, which is where the rule failed: a 7DT curve set
-    zero-padded to exactly 300-1000 nm gave ``wave_max == 1000.0``, and
-    ``1000.0 < 1000.0`` is False, so the guard written to catch nanometers went
-    silent on 23 files that were entirely in nanometers. Padding an optical
-    curve out to a round 1000 nm is the most natural grid there is, so that
-    boundary was hit by the first real user to try it rather than rarely.
-    Anchoring to GALEX FUV instead both closes that case and widens the catch
-    to any optical/NIR set tabulated in nanometers out to 1340 nm.
-
-    What still gets through, and why it has to: a curve in nanometers extending
-    past ~1340 nm reads as >1340 Å and is indistinguishable, by range alone,
-    from a genuine UV bandpass. Catching it would mean warning on GALEX FUV
-    itself. Declare the unit with ``wave_unit=`` when the range cannot settle
-    it.
-
-    Rules that were tried and rejected, because tengri spans X-ray to radio and
-    each produced false positives on ordinary curves:
-
-    * ``max < 50 Å`` -- flags hard X-ray bands, which legitimately live at
-      1-25 Å (``chandra_hard`` spans 1.8-6.2 Å).
-    * ``min > 1e7 Å`` -- flags every (sub)mm band; ``alma_band6`` is 1.2e7 Å and
-      ``planck_lfi_030`` is 1.1e8 Å.
-    * ``median < 5000 Å`` -- flags any ordinary blue filter. SDSS *u* sits at
-      ~3550 Å with a ~600 Å width, and so would have warned on every use.
-
-    Micron-scale confusion is **not** detectable and is not attempted: an
-    optical curve given in microns lands at 0.5-0.7 Å, which is 18-25 keV --
-    indistinguishable from a real NuSTAR band. Claiming to catch it would mean
-    warning on legitimate X-ray input.
-    """
-    wave_arr = np.asarray(wave)
-    if wave_arr.size < 2:
-        return
-
-    wave_min, wave_max = float(np.min(wave_arr)), float(np.max(wave_arr))
-
-    if wave_min >= 100.0 and wave_max <= _EUV_GAP_RED_EDGE_AA:
-        warn_measured(
-            f"Filter '{name}' {source} spans {wave_min:.0f}-{wave_max:.0f} Å, which lies "
-            f"entirely in the extreme-UV (100-{_EUV_GAP_RED_EDGE_AA:.0f} Å). The ISM is "
-            f"opaque there, so no photometric bandpass exists in that window -- these are "
-            f"most likely **nanometers**. If so, multiply by 10: "
-            f"{wave_min:.0f}-{wave_max:.0f} nm "
-            f"-> {wave_min * 10:.0f}-{wave_max * 10:.0f} Å. tengri wavelengths are "
-            f"Angstrom throughout. Pass wave_unit='nm' to convert at the boundary "
-            f"instead of relying on this check.",
-            UserWarning,
-            stacklevel=4,
-            wave_min_aa=wave_min,
-            wave_max_aa=wave_max,
-        )
-
-
 def register_filter(
     name: str,
     wave_aa: np.ndarray | list,
@@ -331,10 +209,10 @@ def register_filter(
         an existing user-registered filter or shadow a built-in name.
         Default: ``False``.
     wave_unit : str, optional
-        Unit of *wave_aa*: ``"AA"`` (default), ``"nm"``, or ``"um"``.
-        Anything other than ``"AA"`` is converted here, at the boundary, and
-        the range heuristic is skipped because the unit is no longer in doubt.
-        Default: ``"AA"``.
+        Unit of *wave_aa*: ``"AA"`` (default; ``"angstrom"`` is equivalent),
+        ``"nm"``, or ``"um"`` (``"micron"`` is equivalent). Matching is
+        case-insensitive. The array is converted to Angstrom here, once, at the
+        boundary. Default: ``"AA"``.
 
     Raises
     ------
@@ -343,16 +221,19 @@ def register_filter(
     ValueError
         If *wave_aa* is not strictly increasing after sanitization.
     ValueError
-        If *wave_unit* is not one of ``"AA"``, ``"nm"``, ``"um"``.
+        If *wave_unit* is not an accepted name (the message lists them).
+    ValueError
+        If the range lies wholly below 0.01 Å or above 1e9 Å once converted to
+        Angstrom. This is refused, not warned, because it is nonsense for Angstrom.
     KeyError
         If *name* exists in a built-in registry and ``overwrite=False``.
 
     Warns
     -----
     UserWarning
-        If the wavelength range looks implausible for Angstrom (likely nm).
-        Only raised when ``wave_unit="AA"``, since otherwise the caller has
-        stated the unit and there is nothing to guess.
+        If ``wave_unit`` is Angstrom and the range lies wholly in 100-1340 Å,
+        which is most likely nanometers. A stated nm or um unit is never
+        warned, because the unit is no longer in doubt.
 
     Notes
     -----
@@ -418,7 +299,7 @@ def register_filter(
         )
 
     # Convert to Angstrom before anything else reads the numbers as Angstrom.
-    wave = _to_angstrom(wave, wave_unit)
+    wave = to_angstrom(wave, wave_unit)
 
     wave, trans = _sanitize_filter_curve(wave, trans)
 
@@ -431,8 +312,7 @@ def register_filter(
 
     # Warn about implausible ranges, but only where the unit was left to be
     # inferred. A stated wave_unit has already settled it.
-    if wave_unit == "AA":
-        _warn_implausible_wavelength_range(wave, name, source="custom filter")
+    check_wavelength_plausible(wave, name, source="custom filter", wave_unit=wave_unit)
 
     # Store as immutable FilterCurve with JAX arrays (prevent accidental mutation)
     fc = FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
@@ -591,7 +471,7 @@ def _load_filter_from_directory(name: str) -> FilterCurve | None:
             if filepath.is_file():
                 wave, trans = _load_filter_file(filepath)
                 wave, trans = _sanitize_filter_curve(wave, trans)
-                _warn_implausible_wavelength_range(wave, name, source="directory filter")
+                check_wavelength_plausible(wave, name, source="directory filter")
                 return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
 
     return None
@@ -603,6 +483,8 @@ def _load_filter_from_directory(name: str) -> FilterCurve | None:
 def load_filter_from_dsps_transmission_curve(
     dsps_curve: object,
     name: str | None = None,
+    *,
+    wave_unit: str = "AA",
 ) -> FilterCurve:
     """Convert a DSPS transmission curve to a :class:`FilterCurve`.
 
@@ -616,11 +498,14 @@ def load_filter_from_dsps_transmission_curve(
         ``transmission`` attributes. Must have wave in Angstrom.
     name : str, optional
         Filter name. If ``None``, uses ``"dsps_filter"``. Default: ``None``.
+    wave_unit : str, optional
+        Unit of ``dsps_curve.wave`` [AA | angstrom | nm | um | micron, case-insensitive].
+        Converted to Angstrom once, here. Default: ``"AA"``.
 
     Returns
     -------
     FilterCurve
-        Transmission curve with wavelengths validated as Angstrom.
+        Transmission curve with wavelengths in Angstrom.
 
     Raises
     ------
@@ -654,7 +539,7 @@ def load_filter_from_dsps_transmission_curve(
             f"got {type(dsps_curve).__name__}."
         )
 
-    wave = np.asarray(dsps_curve.wave, dtype=np.float64)
+    wave = to_angstrom(np.asarray(dsps_curve.wave, dtype=np.float64), wave_unit)
     trans = np.asarray(dsps_curve.transmission, dtype=np.float64)
 
     wave, trans = _sanitize_filter_curve(wave, trans)
@@ -666,7 +551,7 @@ def load_filter_from_dsps_transmission_curve(
         )
 
     _name = name or "dsps_filter"
-    _warn_implausible_wavelength_range(wave, _name, source="DSPS transmission curve")
+    check_wavelength_plausible(wave, _name, source="DSPS transmission curve", wave_unit=wave_unit)
 
     return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=_name)
 
@@ -674,6 +559,8 @@ def load_filter_from_dsps_transmission_curve(
 def load_filter_from_dsps_file(
     filepath: str | Path,
     name: str | None = None,
+    *,
+    wave_unit: str = "AA",
 ) -> FilterCurve:
     """Load a DSPS transmission curve from an HDF5 file.
 
@@ -688,11 +575,14 @@ def load_filter_from_dsps_file(
         ``transmission`` datasets).
     name : str, optional
         Filter name. If ``None``, uses the file stem. Default: ``None``.
+    wave_unit : str, optional
+        Unit of the file's ``wave`` dataset [AA | angstrom | nm | um | micron,
+        case-insensitive]. Default: ``"AA"``.
 
     Returns
     -------
     FilterCurve
-        Transmission curve with wavelengths validated as Angstrom.
+        Transmission curve with wavelengths in Angstrom.
 
     Raises
     ------
@@ -727,4 +617,4 @@ def load_filter_from_dsps_file(
 
     dsps_curve = _load_dsps_curve(fn=str(path))
     _name = name or path.stem
-    return load_filter_from_dsps_transmission_curve(dsps_curve, name=_name)
+    return load_filter_from_dsps_transmission_curve(dsps_curve, name=_name, wave_unit=wave_unit)
