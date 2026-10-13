@@ -816,6 +816,39 @@ def _vectorized_interp(
     return result
 
 
+def filter_support_slice(grid: np.ndarray, filter_wave: np.ndarray) -> tuple[int, int]:
+    """Index range of the union-grid nodes inside a filter's support (#2817).
+
+    The one support rule every NumPy precompute band integral uses, matching the
+    exact path ``lnu_filter_integral`` (which masks intervals whose midpoint lies
+    outside ``[filter_wave[0], filter_wave[-1]]``). Both filter edges are nodes of
+    ``grid``, so keeping exactly those nodes keeps exactly the intervals inside the
+    support. A node kept past an edge would add the straddle ramp to the zero-filled
+    transmission, which the exact path does not integrate.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (n_union,)
+        Ascending union of SED nodes and filter nodes [Angstrom].
+    filter_wave : ndarray, shape (n_filter,)
+        Ascending filter nodes [Angstrom]; its ends define the support.
+
+    Returns
+    -------
+    lo, hi : int
+        ``grid[lo:hi]`` spans ``[filter_wave[0], filter_wave[-1]]``.
+
+    Notes
+    -----
+    **JIT-compatible**: no (NumPy, build-time). The JAX exact path applies the same
+    rule as a midpoint mask in ``tengri.observation.photometry._support_trapezoid``.
+    """
+    fw = np.asarray(filter_wave, dtype=np.float64)
+    lo = int(np.searchsorted(grid, fw[0]))
+    hi = int(np.searchsorted(grid, fw[-1], side="right"))
+    return lo, hi
+
+
 def preintegrate_grid(
     templates: np.ndarray,
     wave_rest: np.ndarray,
@@ -1031,8 +1064,7 @@ def preintegrate_transposed(
         # zero-filled transmission). Both edges are nodes of the union grid, so
         # keeping exactly the nodes inside the support gives the same intervals
         # as ``lnu_filter_integral``; a node kept past an edge would add that ramp.
-        lo = int(np.searchsorted(grid, fw_np[0]))
-        hi = int(np.searchsorted(grid, fw_np[-1], side="right"))
+        lo, hi = filter_support_slice(grid, fw_np)
         grid = grid[lo:hi]
         trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
