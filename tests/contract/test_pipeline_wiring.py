@@ -401,8 +401,10 @@ def test_xray_e_cut_moves_the_corona_spectrum_and_not_the_xrbs(synthetic_tophat_
     base = with_corona.spec.sample(jax.random.PRNGKey(0))
     low = _published(with_corona.predict_state({**base, "xray_E_cut": jnp.array(100.0)}))
     high = _published(with_corona.predict_state({**base, "xray_E_cut": jnp.array(500.0)}))
-    changed = {k for k in low.keys() & high.keys() if not np.array_equal(low[k], high[k])}
-    assert any("xray" in k for k in changed), sorted(changed)
+    scale = max(np.max(np.abs(low["sed_xray"])), np.max(np.abs(high["sed_xray"])))
+    rel_corona = float(np.max(np.abs(high["sed_xray"] - low["sed_xray"])) / scale)
+    # Measured 1.4e-2 for 100 -> 500 keV; the bar leaves 10x headroom.
+    assert rel_corona > 1e-3, f"corona cutoff moved sed_xray by only {rel_corona:.3e}"
 
     xrb_only = _xray_model(ssp, synthetic_tophat_obs)
     xrb_base = xrb_only.spec.sample(jax.random.PRNGKey(0))

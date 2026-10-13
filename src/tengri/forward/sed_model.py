@@ -12191,15 +12191,34 @@ class SEDModel:
 
         # Reference wavelengths: the peak of each term, fixed once so S_ref(z) is
         # the same wavelength's shape on every node.
-        peaks = {
-            key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in _terms(z_mid, probes[0]).items()
-        }
+        mid_terms = _terms(z_mid, probes[0])
+        peaks = {key: int(jnp.argmax(jnp.abs(s_a))) for key, s_a in mid_terms.items()}
+        # A term that is zero on the whole grid has no peak: ``argmax`` of zeros is node 0,
+        # the shortest wavelength of the grid (0.0413 A once an X-ray wing is attached), and
+        # the emitter is then evaluated there on every call. Its amplitude is 0 at any
+        # wavelength, so reference it at a live term's peak: the same evaluation point the
+        # live term already pays for, and one the emitter supports.
+        live_peaks = [peaks[k] for k, s_a in mid_terms.items() if float(jnp.max(jnp.abs(s_a))) > 0]
+        if live_peaks:
+            peaks = {
+                k: (peaks[k] if float(jnp.max(jnp.abs(mid_terms[k]))) > 0 else live_peaks[0])
+                for k in peaks
+            }
         keys = tuple(peaks)
+        # Wavelengths at which the emitter publishes point diagnostics (the AGN's 6 and 12 um
+        # luminosities). Each term is its amplitude times a fixed shape, so the shape there is
+        # one more build-time constant and no per-call evaluation is needed for it.
+        diag_wave = jnp.asarray(getattr(comp, "EMITTER_DIAGNOSTIC_NODES", ()), dtype=wave.dtype)
 
         def _node(z):
             terms_all = [_terms(z, probe) for probe in probes]
             terms_a = terms_all[0]
-            rows, s_ref, ok = [], [], []
+            rows, s_ref, ok, s_diag = [], [], [], []
+            diag_terms = (
+                comp.emission_terms({**fixed, "redshift": z}, diag_wave, **probes[0])
+                if diag_wave.shape[0]
+                else None
+            )
             for key in keys:
                 s_a, peak = terms_a[key], peaks[key]
                 ref = s_a[peak]
@@ -12224,18 +12243,28 @@ class SEDModel:
                 # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
                 s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
                 ok.append(term_ok)
-            return {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
+                if diag_terms is not None:
+                    s_diag.append(
+                        jnp.where(live, diag_terms[key], jnp.zeros_like(diag_terms[key]))
+                    )
+            out = {"R": jnp.stack(rows), "S_ref": jnp.stack(s_ref), "ok": jnp.stack(ok)}
+            if diag_terms is not None:
+                out["S_diag"] = jnp.stack(s_diag)
+            return out
 
         built = build_z_table(_node, nodes, fixed["redshift"] if single else None)
         values = built["values"]
         if not bool(jnp.all(values["ok"])):
             return None
-        return {
+        table = {
             "ln1pz": built["ln1pz"],
             "R": values["R"],
             "S_ref": values["S_ref"],
             "lam_ref": jnp.stack([wave[peaks[key]] for key in keys]),
         }
+        if "S_diag" in values:
+            table["S_diag"] = values["S_diag"]
+        return table
 
     #: Provenance tags that mean a caller asked for this parameter's value.
     #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent:
