@@ -226,28 +226,6 @@ class ParamDef(NamedTuple):
     -----
     **JIT-compatible**: no; Python dataclass for registry initialization.
 
-    z_capped_onset : bool, optional
-        Marks this parameter as a star-formation onset/age/peak-time lookback
-        time: its :attr:`free_prior` ceiling is only ever correct at z=0, and
-        ``parameters/groups.py``'s ``_narrow_free_priors_to_z`` caps it at
-        ``age_at_z(z_floor)`` at parse time for whatever build declares it.
-        Derived, not hand-listed (#2521): that function iterates every
-        ``ParamDef`` across :data:`SFH_REGISTRY` with this flag set, so a new
-        SFH family cannot reintroduce the gap by omission the way the old
-        3-entry ``_Z_CAPPED_ONSET_PARAMS`` tuple did (18 of 21 such params
-        were missing from it). Default ``False``.
-
-        The ``z_floor`` cap only ever binds the LOWEST redshift a free
-        ``redshift`` prior admits, since that is the only end common to
-        every build. A wide free ``redshift`` prior can therefore still
-        admit a draw near its upper (younger-universe) end whose
-        cosmologically valid onset window is narrower than this parameter's
-        z_floor-capped ceiling; ``groups.py``'s
-        ``_warn_free_redshift_onset_ceiling`` reports that case with a
-        :class:`~tengri.config.exceptions.FreeRedshiftOnsetCeilingWarning` at
-        build time, since the forward model itself only truncates and
-        conserves mass there without raising or (under ``jax.jit``) warning.
-
     gyr_twin : str, optional
         For a fractional timing parameter (#2748), the absolute-Gyr parameter it
         replaces: the fraction's value times the age of the universe at the
@@ -260,7 +238,6 @@ class ParamDef(NamedTuple):
     bound_error: str
     default: Distribution
     free_prior: Distribution | None = None
-    z_capped_onset: bool = False
     gyr_twin: str | None = None
 
 
@@ -401,7 +378,6 @@ _tsnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(5.0),
-            z_capped_onset=True,
         ),
         "sfh_tsnorm_peak_lbt_frac": ParamDef(
             "Peak lookback time as a fraction of age(z)",
@@ -457,7 +433,6 @@ _snorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(5.0),
-            z_capped_onset=True,
         ),
         "sfh_snorm_peak_lbt_frac": ParamDef(
             "Peak lookback time as a fraction of age(z)",
@@ -505,7 +480,6 @@ _snorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(5.0),
-            z_capped_onset=True,
         ),
         "sfh_snorm_burst_peak_lbt_frac": ParamDef(
             "Peak lookback time as a fraction of age(z)",
@@ -603,7 +577,6 @@ _tsnorm_burst_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(5.0),
-            z_capped_onset=True,
         ),
         "sfh_tsnorm_burst_peak_lbt_frac": ParamDef(
             "Peak lookback time as a fraction of age(z)",
@@ -690,7 +663,6 @@ _norm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(5.0),
-            z_capped_onset=True,
         ),
         "sfh_norm_peak_lbt_frac": ParamDef(
             "Peak lookback time as a fraction of age(z)",
@@ -746,7 +718,6 @@ _lnorm_spec = SFHModelSpec(
             _lo_positive,
             "must have lo > 0",
             Fixed(_AGE_UNIV_GYR),
-            z_capped_onset=True,
         ),
         "sfh_lnorm_age_frac": ParamDef(
             "Onset as a fraction of age(z) (formation time)",
@@ -800,7 +771,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(_AGE_UNIV_GYR),
-                z_capped_onset=True,
             ),
             # Fraction of age(z) (#2748). Bounds are the Gyr prior divided by
             # the unrounded age of the universe, capped at 1; a Gyr value of
@@ -874,7 +844,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(_AGE_UNIV_GYR),
-                z_capped_onset=True,
             ),
             "sfh_dpl_lookback_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -944,11 +913,7 @@ _register(
                 # 0), AND Parameters._validate_orderings requires this
                 # parameter's floor to exceed sfh_const_end_gyr's Fixed(0.0)
                 # ceiling (g_lo > l_hi) -- so lo must be strictly positive.
-                # Upper bound is today's cosmic age (_AGE_UNIV_GYR);
-                # parameters/groups.py's _narrow_free_priors_to_z narrows it to
-                # age_at_z(z) at parse time whenever the build's redshift floor
-                # is knowable -- same mechanism and rationale as
-                # sfh_exp_start_gyr below.
+                # The free prior is the fraction sfh_const_start_frac (#2748).
                 #
                 # The registry default above (AGEMAX_YR / 1e9 = 14.0 Gyr, a
                 # generic numerical safety ceiling reused from the lookback-time
@@ -960,7 +925,6 @@ _register(
                 # sfh_dpl_age_gyr / sfh_lnorm_age_gyr / sfh_dpl_lookback_age_gyr
                 # above.
                 Uniform(0.01, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
-                z_capped_onset=True,
             ),
             "sfh_const_start_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1029,15 +993,8 @@ _register(
             # below); ``const``'s onset is unrelated (a flat window, not this
             # declining shape) and keeps its own separate declaration.
             #
-            # The static declaration below uses today's cosmic age
-            # (``_AGE_UNIV_GYR``, z=0) as the ceiling -- the widest value that
-            # is ever correct, since a declaration cannot know the source
-            # redshift. ``parameters/groups.py``'s ``_narrow_free_priors_to_z``
-            # then narrows it to ``age_at_z(z)`` at parse time whenever the
-            # build's redshift floor is knowable, closing exactly the gap a
-            # static-only declaration could not: any bound generous enough for
-            # z~0 admits draws at z=2 where star formation never happens,
-            # giving a zero-mass galaxy and zero flux.
+            # The free prior is the fraction of age(z) (#2748), which cannot
+            # reach past the Big Bang at any redshift.
             #
             # Measured, not argued: declaring Uniform(0, 14) with no narrowing
             # made test_bug_1031_dense_basis_composite::
@@ -1059,7 +1016,6 @@ _register(
                 "must have lo > 0",
                 Fixed(5.0),
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_exp_start_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1108,7 +1064,6 @@ _register(
                 "must have lo > 0",
                 Fixed(5.0),
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_dexp_start_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1171,7 +1126,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_declining_exp_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1229,7 +1183,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_trunc_exp_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1290,7 +1243,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_delayed_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1342,7 +1294,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_cexp_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1402,7 +1353,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_sfh2exp_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1439,10 +1389,9 @@ _register(
 #: must be reachable from EVERY ``age_main_gyr`` draw a user leaves free, i.e.
 #: ``age_bq_gyr <= age_main_gyr`` even for the smallest ``age_main_gyr`` the
 #: prior allows (#2644; "quench after formation", mirroring CIGALE's
-#: ``sfhdelayedbq`` requirement). ``age_main_gyr`` is also ``z_capped_onset``
-#: (#2567): that narrows its CEILING to ``age_at_z(z_floor)``, never its
-#: floor, so this static peg stays valid at any redshift without its own
-#: z-aware narrowing. Same technique as ``_PSB_TFLEX_FLOOR_GYR`` above.
+#: ``sfhdelayedbq`` requirement). The free prior of ``age_main`` is its fraction of age(z)
+#: (#2748), so this static peg stays valid at any redshift. Same technique as
+#: ``_PSB_TFLEX_FLOOR_GYR`` above.
 _DELAYED_BQ_AGE_BQ_CEIL_GYR = _DELAYED_BQ_AGE_MAIN_FLOOR_GYR
 
 # --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---
@@ -1468,7 +1417,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_delayed_bq_age_main_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1548,7 +1496,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_periodic_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -1628,7 +1575,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(5.0),
-                z_capped_onset=True,
             ),
             "sfh_psb_age_frac": ParamDef(
                 "Onset as a fraction of age(z) (formation time)",
@@ -2085,7 +2031,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(2.0),
-                z_capped_onset=True,
             ),
             "sfh_psb2022_tflex_frac": ParamDef(
                 "Upper boundary of the flexible quenching zone as a fraction of age(z)",
@@ -2201,7 +2146,6 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(2.0),
-                z_capped_onset=True,
             ),
             "sfh_psb_flex_tflex_frac": ParamDef(
                 "Upper boundary of the flexible quenching zone as a fraction of age(z)",

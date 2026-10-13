@@ -65,7 +65,7 @@ def timing_gyr(*, frac=None, fixed_gyr=None, age_universe_gyr):
 
 
 #: Provenance tags of a key the user named explicitly (not a wildcard or default).
-_USER_NAMED = frozenset({"user_fixed", "user_prior", "user_free"})
+_USER_NAMED = ("user_fixed", "user_prior", "user_free")
 
 
 @functools.cache
