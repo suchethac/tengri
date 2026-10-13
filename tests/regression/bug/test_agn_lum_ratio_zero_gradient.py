@@ -44,7 +44,7 @@ _FD_RTOL = {jnp.float64: 1e-6, jnp.float32: 1e-3}
 #: SED at ratio 0.5, log L_bol = 11, log M_BH = 8, float64, on ``_WAVE``. Post-#2733 values
 #: (243acb9a3, the kubota_done corona carries exactly its counted l_hot): the head SED equals
 #: them exactly, and the pre-#2733 SED (b4e2cb526^) is 4.8% lower in sum for kubota_done.
-#: multicolor and ADAF are unaffected by #2733.
+#: multicolor is unaffected by #2733. The ADAF golden is re-recorded after #2883 (see below).
 _GOLDEN_IDX = (0, 137, 500, 1001, 1500, 2002, 2500, 2999)
 _GOLDEN = {
     "kubota_done": {
@@ -73,17 +73,21 @@ _GOLDEN = {
             1.2175515723209214e23,
         ),
     },
+    # re-recorded after #2883 (ADAF electron temperature and accretion rate from Mahadevan's full
+    # energy balance), which moved T_e and mdot; old→new sum 4.6983704894797534e29 →
+    # 3.5288250491902174e30 (x7.51). Cross-checked: T_e matches tests/_adaf_reference.py at the
+    # clipped mdot_crit (0.0252) to 5.5e-11 relative.
     "adaf": {
-        "sum": 4.6983704894797534e29,
+        "sum": 3.5288250491902174e30,
         "pts": (
-            2.5059166008550745e25,
-            2.975558425020228e25,
-            4.690389250045613e25,
-            8.789468095369126e25,
-            1.6428804934065007e26,
-            3.0815496566429876e26,
-            2.395516133889615e26,
-            1.1526534599627982e26,
+            7.285264141465997e25,
+            9.17485539926163e25,
+            1.6903294846688506e26,
+            3.9287355631545565e26,
+            9.100897765461202e26,
+            2.1185886721672956e27,
+            2.545108388734324e27,
+            1.2294080340508839e27,
         ),
     },
 }
@@ -169,3 +173,15 @@ def test_half_ratio_sed_matches_pre_change_golden_in_float64(name):
         sed[list(_GOLDEN_IDX)], np.asarray(golden["pts"]), rtol=1e-12, atol=0.0
     )
     np.testing.assert_allclose(float(sed.sum()), golden["sum"], rtol=1e-12, atol=0.0)
+
+
+def test_adaf_sed_is_linear_in_ratio_in_float64():
+    """``agn_lum_ratio`` is a pure linear factor of the ADAF SED (#2733, #2883).
+
+    The golden above moves with the ADAF physics (T_e, mdot), so it cannot be what guards the
+    ratio's role. This does: halving the ratio halves every point of the SED.
+    """
+    with _x64(jnp.float64):
+        half = np.asarray(_sed("adaf", 0.5, _LOG_LBOL, jnp.float64))
+        unit = np.asarray(_sed("adaf", 1.0, _LOG_LBOL, jnp.float64))
+    np.testing.assert_allclose(half, 0.5 * unit, rtol=1e-12, atol=0.0)
