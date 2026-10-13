@@ -13,6 +13,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 from tengri import builders
+from tengri.config.exceptions import ConfigError
 from tengri.parameters import DEFAULT, FREE, Fixed, Uniform, parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -304,11 +305,10 @@ class TestToGroupsWildcardCollapse:
         # met_logzsol and met_alpha_fe stay in the sfh group when
         # met_mode == "delta" (default) — only specs that opt into a
         # non-delta chemical-evolution mode (#311) emit a stellar block.
-        # ``age_gyr`` (formation anchor, #514) joined the dpl param set; it
-        # round-trips with its registry default even when left unspecified.
-        # ``age_frac`` (fraction of age(z), #2748) is declared beside ``age_gyr``
-        # and round-trips with its Fixed(1.0) default in the same way.
-        dpl_keys = {"alpha", "beta", "tau_gyr", "age_gyr", "age_frac", "log_total_mass"}
+        # The formation anchor (#514) is held as a fraction of age(z) (#2748):
+        # the spec carries ``age_frac`` alone, and its absolute ``age_gyr`` twin
+        # is only present when the user names it.
+        dpl_keys = {"alpha", "beta", "tau_gyr", "age_frac", "log_total_mass"}
         # ``logzsol_scatter`` (lognormal MDF width, #506) is a delta-mode
         # metallicity param, so like ``logzsol``/``alpha_fe`` it round-trips in
         # the sfh group until a non-delta chemical-evolution mode is selected.
@@ -645,41 +645,49 @@ _ONSET_FRAC_FAMILIES = (
 
 
 class TestOnsetFracRoundTrip:
-    """Each onset family's ``*_frac`` round-trips beside its ``*_gyr`` (#2748)."""
+    """Each onset family's ``*_frac`` round-trips alone, or its ``*_gyr`` does (#2748)."""
 
     @pytest.mark.parametrize(("family", "stem"), _ONSET_FRAC_FAMILIES)
-    def test_frac_and_gyr_round_trip_with_their_defaults(self, family, stem):
-        original = parse_groups(
-            sfh={
-                "type": family,
-                f"{stem}_gyr": Fixed(5.0),
-                f"{stem}_frac": Fixed(1.0),
-            },
+    def test_frac_round_trips_alone_and_gyr_round_trips_alone(self, family, stem):
+        frac_only = parse_groups(
+            sfh={"type": family, f"{stem}_frac": Fixed(0.5)},
             redshift=Fixed(0.1),
-        )
-        sfh_dict = original.to_groups()["sfh"]
-        assert f"{stem}_gyr" in sfh_dict
-        assert f"{stem}_frac" in sfh_dict
-        assert sfh_dict[f"{stem}_frac"] == Fixed(1.0)
+        ).to_groups()["sfh"]
+        assert float(frac_only[f"{stem}_frac"].value) == 0.5
+        assert f"{stem}_gyr" not in frac_only
+        gyr_only = parse_groups(
+            sfh={"type": family, f"{stem}_gyr": Fixed(5.0)},
+            redshift=Fixed(0.1),
+        ).to_groups()["sfh"]
+        assert float(gyr_only[f"{stem}_gyr"].value) == 5.0
+        assert f"{stem}_frac" not in gyr_only
+
+    @pytest.mark.parametrize(("family", "stem"), _ONSET_FRAC_FAMILIES)
+    def test_naming_both_names_is_refused(self, family, stem):
+        with pytest.raises(ConfigError, match="not both"):
+            parse_groups(
+                sfh={
+                    "type": family,
+                    f"{stem}_gyr": Fixed(5.0),
+                    f"{stem}_frac": Fixed(0.5),
+                },
+                redshift=Fixed(0.1),
+            )
 
 
 class TestPsbQuenchFracRoundTrip:
-    """Each PSB quench time's ``*_frac`` round-trips beside its ``*_gyr`` (#2748)."""
+    """Each PSB quench time's ``*_frac`` round-trips alone, beside its partner (#2748)."""
 
     @pytest.mark.parametrize("family", ["psb_suess2022", "psb_flex"])
-    def test_tlast_and_tflex_fracs_round_trip_with_their_defaults(self, family):
-        original = parse_groups(
+    def test_tlast_and_tflex_fracs_round_trip_alone(self, family):
+        sfh_dict = parse_groups(
             sfh={
                 "type": family,
-                "tlast_gyr": Fixed(0.5),
-                "tlast_frac": Fixed(1.0),
-                "tflex_gyr": Fixed(2.5),
-                "tflex_frac": Fixed(1.0),
+                "tlast_frac": Fixed(0.05),
+                "tflex_frac": Fixed(0.2),
             },
             redshift=Fixed(0.1),
-        )
-        sfh_dict = original.to_groups()["sfh"]
-        for stem in ("tlast", "tflex"):
-            assert f"{stem}_gyr" in sfh_dict
-            assert f"{stem}_frac" in sfh_dict
-            assert sfh_dict[f"{stem}_frac"] == Fixed(1.0)
+        ).to_groups()["sfh"]
+        for stem, value in (("tlast", 0.05), ("tflex", 0.2)):
+            assert float(sfh_dict[f"{stem}_frac"].value) == value
+            assert f"{stem}_gyr" not in sfh_dict

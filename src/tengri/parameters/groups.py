@@ -1213,7 +1213,10 @@ def parse_groups(**kwargs) -> Parameters:
         # before grid-file existence check, allowing bogus keys to be reported before
         # "missing grid" errors (#2328).
         structural_params = Parameters(
-            **structural_kwargs, _grammar_validated=True, _defer_resource_paths=True
+            **structural_kwargs,
+            _grammar_validated=True,
+            _defer_resource_paths=True,
+            _timing_keep_all=True,
         )
 
     # Partition declared params by owning group. ``met_*`` lands in
@@ -1526,6 +1529,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     # ── Construct final Parameters ────────────────────────────────────
 
+    timing_dropped = _settle_timing_pairs_for_build(resolved_kwargs, provenance)
     _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
     _catalog_z_range = getattr(_approx, "catalog_z_range", None)
@@ -1535,7 +1539,9 @@ def parse_groups(**kwargs) -> Parameters:
     _default_nonparametric_bin_edges_from_z(resolved_kwargs)
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
-    final_params = Parameters(**resolved_kwargs, _grammar_validated=True)
+    final_params = Parameters(
+        **resolved_kwargs, _grammar_validated=True, _timing_excluded=timing_dropped
+    )
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
@@ -1845,6 +1851,20 @@ def _z_capped_onset_params(_registry_keys: frozenset[str]) -> tuple[str, ...]:
             if getattr(pdef, "z_capped_onset", False):
                 names[pname] = None
     return tuple(names)
+
+
+def _settle_timing_pairs_for_build(resolved: dict, provenance: dict[str, str]) -> frozenset[str]:
+    """Keep one of each ``*_frac`` / ``*_gyr`` timing pair (#2748).
+
+    See :func:`~tengri.parameters.timing.settle_timing_pairs`.
+
+    Returns the dropped names, which ``Parameters`` must leave out of its spec.
+    """
+    from tengri.parameters.timing import settle_timing_pairs
+
+    redshift = resolved.get("redshift")
+    fixed_z = redshift.value if isinstance(redshift, Fixed) else None
+    return settle_timing_pairs(resolved, provenance, redshift_fixed=fixed_z)
 
 
 def _narrow_free_priors_to_z(

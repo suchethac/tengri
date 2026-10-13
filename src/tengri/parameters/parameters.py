@@ -556,6 +556,12 @@ class Parameters:
 
         # Pop private grammar flags before any user-facing bookkeeping
         grammar_validated = bool(kwargs.pop("_grammar_validated", False))
+        # Timing names the build dropped: each ``*_frac`` / ``*_gyr`` pair keeps
+        # exactly one name in the spec (#2748); see parameters/timing.py.
+        timing_excluded = frozenset(kwargs.pop("_timing_excluded", ()))
+        # ``_timing_keep_all`` is the structural spec ``parse_groups`` validates
+        # keys against: both names of a pair must stay declared there.
+        timing_keep_all = bool(kwargs.pop("_timing_keep_all", False))
         defer_resource_paths = bool(kwargs.pop("_defer_resource_paths", False))
 
         # ── Nebular emission ──────────────────────────────────────
@@ -793,7 +799,7 @@ class Parameters:
                     f"(current mode: '{self.nebular_mode}')."
                 )
 
-        self._valid_param_names = frozenset(self._param_registry.keys())
+        self._valid_param_names = frozenset(self._param_registry.keys()) - timing_excluded
 
         # --- Extract mirror specifications (string values → param tying) ---
         # Must run before validation so mirrored params (which may reference
@@ -850,6 +856,12 @@ class Parameters:
                 )
 
         # --- Resolve shorthands and store distributions ---
+        from tengri.parameters.timing import timing_names_to_exclude
+
+        if not timing_keep_all:
+            self._valid_param_names = self._valid_param_names - timing_names_to_exclude(
+                resolved_kwargs, self._valid_param_names
+            )
         self._distributions: dict[str, Distribution] = {}
         self._user_provided: frozenset[str] = frozenset()
         user_names = set()

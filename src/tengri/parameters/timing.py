@@ -64,21 +64,154 @@ def timing_gyr(*, frac=None, fixed_gyr=None, age_universe_gyr):
     return frac * age_universe_gyr
 
 
-def resolve_timing_fracs(internal, params, param_map, *, redshift):
-    """Replace sampled ``*_frac`` timings with Gyr values, in place (#2748).
+#: Provenance tags of a key the user named explicitly (not a wildcard or default).
+_USER_NAMED = frozenset({"user_fixed", "user_prior", "user_free"})
 
-    For each :func:`timing_frac_params` entry present in ``param_map``, the
-    fraction's own internal entries are removed. If the fraction was sampled
-    (present in ``params``), the Gyr internal name is written as
-    ``frac * age(z)`` at ``redshift``, scaled by the Gyr entry's own scale.
-    Otherwise the Gyr entry is left as the caller filled it.
+
+@functools.cache
+def timing_frac_defaults() -> dict[str, float]:
+    """Registry default of every ``*_frac`` timing, as a fraction of age(z) (#2748)."""
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    return {
+        name: float(pdef.default.default)
+        for spec in SFH_REGISTRY.values()
+        for name, pdef in spec.params.items()
+        if pdef.gyr_twin is not None
+    }
+
+
+def settle_timing_pairs(resolved, provenance, *, redshift_fixed=None):
+    """Keep exactly one of each ``*_frac`` / ``*_gyr`` timing pair (#2748).
+
+    Decided at build time from provenance. A Gyr name the user fixed keeps the
+    absolute Gyr value and drops its fraction. Any other case keeps the fraction
+    (default or wildcard-freed) and drops the Gyr name. Naming both, or giving
+    the Gyr name a free prior, is a :class:`ConfigError`.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``public_name -> Distribution``; updated in place.
+    provenance : dict
+        ``public_name -> provenance tag``; updated in place.
+    redshift_fixed : float or None
+        The build redshift when it is Fixed, else None. A Fixed Gyr shim above
+        age(z) is refused at build.
+
+    Returns
+    -------
+    frozenset of str
+        The public names dropped from ``resolved``, which the built spec must
+        also leave out.
+
+    Raises
+    ------
+    ConfigError
+        If both names are user-given, if a Gyr name carries a free prior, or if
+        a Fixed Gyr shim exceeds the age of the universe at a Fixed redshift.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    dropped = set()
+    for frac_name, gyr_name in timing_frac_params().items():
+        if frac_name not in resolved and gyr_name not in resolved:
+            continue
+        gyr_user = gyr_name in resolved and provenance.get(gyr_name) in _USER_NAMED
+        frac_user = frac_name in resolved and provenance.get(frac_name) in _USER_NAMED
+        if gyr_user and frac_user:
+            raise ConfigError(
+                f"give one of {gyr_name!r} or {frac_name!r}, not both: both are named"
+            )
+        if not gyr_user:
+            if frac_name in resolved and gyr_name in resolved:
+                resolved.pop(gyr_name, None)
+                provenance.pop(gyr_name, None)
+                dropped.add(gyr_name)
+            continue
+        gyr_dist = resolved[gyr_name]
+        if not gyr_dist.is_fixed:
+            raise ConfigError(
+                f"{gyr_name!r} takes a free prior, but an absolute Gyr onset is no "
+                f"longer freed (#2748). Give the fraction of age(z) instead: "
+                f"{frac_name}=Uniform(lo, hi), with lo and hi the Gyr bounds divided "
+                "by the age of the universe at z = 0 (about 13.787 Gyr)."
+            )
+        if redshift_fixed is not None:
+            _refuse_gyr_above_age(gyr_name, float(gyr_dist.value), redshift_fixed)
+        resolved.pop(frac_name, None)
+        provenance.pop(frac_name, None)
+        dropped.add(frac_name)
+    return frozenset(dropped)
+
+
+def timing_names_to_exclude(user_names, valid_names):
+    """Timing names a flat ``Parameters`` must leave out of its spec (#2748).
+
+    The same one-name rule as :func:`settle_timing_pairs`, for a spec built
+    without ``parse_groups``: a named Gyr keeps its Gyr and drops the fraction;
+    otherwise the fraction is kept and the Gyr dropped.
+
+    Parameters
+    ----------
+    user_names : collection of str
+        Names the caller supplied.
+    valid_names : collection of str
+        Names the spec would otherwise declare.
+
+    Returns
+    -------
+    frozenset of str
+        The names to leave out.
+
+    Raises
+    ------
+    ConfigError
+        If both names of a pair are supplied.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    user = set(user_names)
+    valid = set(valid_names)
+    excluded = set()
+    for frac_name, gyr_name in timing_frac_params().items():
+        if frac_name not in valid or gyr_name not in valid:
+            continue
+        if frac_name in user and gyr_name in user:
+            raise ConfigError(
+                f"give one of {gyr_name!r} or {frac_name!r}, not both: both are named"
+            )
+        excluded.add(frac_name if gyr_name in user else gyr_name)
+    return frozenset(excluded)
+
+
+def _refuse_gyr_above_age(gyr_name, gyr, z):
+    """Refuse a Fixed Gyr onset later than the age of the universe at a Fixed z (#2748)."""
+    from tengri.config.exceptions import ConfigError
+    from tengri.cosmology import age_at_z
+
+    age = float(age_at_z(z))
+    if gyr > age:
+        raise ConfigError(
+            f"{gyr_name!r}={gyr} Gyr is later than the age of the universe at "
+            f"z={z:g} ({age:.3f} Gyr); the onset cannot precede the Big Bang (#2748)."
+        )
+
+
+def resolve_timing_fracs(internal, params, param_map, *, redshift):
+    """Write the absolute Gyr of every present ``*_frac`` timing (#2748).
+
+    A fraction in ``params`` (sampled or at its default) sets the internal Gyr
+    key to ``frac * age(z)``, scaled by the Gyr entry's own scale. A Gyr name
+    alone in ``params`` is the absolute shim and passes through as the caller
+    filled it. The fraction's own internal entries are always removed.
 
     Parameters
     ----------
     internal : dict
         Internal parameter dict, updated in place.
     params : dict
-        Public parameter dict; a fraction is sampled iff its name is a key.
+        Public parameter dict holding the fraction or the Gyr name, not both.
     param_map : dict
         ``public_name -> (internal_name, scale, offset)``.
     redshift : float or array_like
@@ -87,18 +220,17 @@ def resolve_timing_fracs(internal, params, param_map, *, redshift):
     Raises
     ------
     ConfigError
-        If ``redshift`` is None.
+        If ``redshift`` is None while a fraction is present.
 
     Notes
     -----
     **JIT-compatible**: yes, provided ``redshift`` is traced or concrete. The
-    key tests are Python-level and static. The both-sampled refusal lives in
-    :func:`route_timing_fracs` and in the translate wrapper, which see the
-    sampled parameters alone.
+    key tests are Python-level and static.
     """
     from tengri.config.exceptions import ConfigError
     from tengri.cosmology import age_at_z
 
+    defaults = timing_frac_defaults()
     for frac_name, gyr_name in timing_frac_params().items():
         if frac_name not in param_map or gyr_name not in param_map:
             continue
@@ -106,14 +238,17 @@ def resolve_timing_fracs(internal, params, param_map, *, redshift):
         gyr_int, gyr_scale, _ = param_map[gyr_name]
         internal.pop(frac_int, None)
         internal.pop(frac_name, None)
-        if frac_name not in params:
+        if gyr_name in params:
+            if frac_name in params:
+                raise ConfigError(f"give one of {gyr_name!r} or {frac_name!r}, not both")
             continue
         if redshift is None:
             raise ConfigError(
                 f"{frac_name!r} needs the build redshift to convert to Gyr, and "
                 "'redshift' is absent from the parameters"
             )
-        gyr = timing_gyr(frac=params[frac_name], age_universe_gyr=age_at_z(redshift))
+        frac = params[frac_name] if frac_name in params else defaults[frac_name]
+        gyr = timing_gyr(frac=frac, age_universe_gyr=age_at_z(redshift))
         internal[gyr_int] = gyr * gyr_scale
         if gyr_name in internal:
             # Composite SFHs also carry the public name (see translate); a
@@ -122,13 +257,10 @@ def resolve_timing_fracs(internal, params, param_map, *, redshift):
 
 
 def route_timing_fracs(full_params, sampled):
-    """Route fixed and sampled ``*_frac`` timings before the SFH is evaluated (#2748).
+    """Drop the Gyr name of every timing whose fraction is present (#2748).
 
-    ``predict_state`` merges every Fixed value into the parameter dict, so a
-    fraction's presence there does not show that it was sampled. This keeps
-    the two cases apart: a sampled fraction (a key of ``sampled``) replaces the
-    absolute Gyr value of the same timing, and an unsampled fraction is
-    removed so the Gyr value stands.
+    The build keeps exactly one of each pair, so this only matters for a
+    caller that merges both. A fraction wins, as it is the default parameter.
 
     Parameters
     ----------
@@ -145,27 +277,16 @@ def route_timing_fracs(full_params, sampled):
     Raises
     ------
     ConfigError
-        If a fraction and its Gyr name are both sampled, or if a Fixed fraction
-        differs from its default of 1 (not yet supported).
+        If a fraction and its Gyr name are both sampled.
     """
     from tengri.config.exceptions import ConfigError
 
     out = dict(full_params)
     for frac_name, gyr_name in timing_frac_params().items():
-        if frac_name in sampled:
-            if gyr_name in sampled:
-                raise ConfigError(
-                    f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
-                )
-            out.pop(gyr_name, None)
-            continue
-        # Only a concrete Fixed value is refused: a traced fraction arriving
-        # through a JIT ``fixed_values`` override must not be concretized here.
-        value = out.get(frac_name)
-        if isinstance(value, (int, float)) and float(value) != 1.0:
+        if frac_name in sampled and gyr_name in sampled:
             raise ConfigError(
-                f"{frac_name!r} is Fixed({value!r}); a Fixed fraction is not "
-                "supported yet, give a Uniform prior or set the absolute Gyr name"
+                f"give one of {gyr_name!r} or {frac_name!r}, not both: both are sampled"
             )
-        out.pop(frac_name, None)
+        if frac_name in out:
+            out.pop(gyr_name, None)
     return out

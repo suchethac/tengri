@@ -93,10 +93,13 @@ def _draw_internal_kwargs(
             param_map[public_name] = spec.internal_param_map[public_name]
             internal_name, scale, offset = param_map[public_name]
             internal_kwargs[internal_name] = draws * scale + offset
-            if paramdef.gyr_twin is not None and public_name in overrides:
+            if paramdef.gyr_twin is not None and paramdef.gyr_twin not in overrides:
                 sampled_fracs[public_name] = draws
 
-    resolve_timing_fracs(internal_kwargs, sampled_fracs, param_map, redshift=redshift)
+    # Without a redshift the fractions convert at z = 0: the shape-only callers
+    # of a family that is not age-anchored never reach an age(z) (#2748).
+    conversion_z = 0.0 if redshift is None else redshift
+    resolve_timing_fracs(internal_kwargs, sampled_fracs, param_map, redshift=conversion_z)
     return family_list, internal_kwargs
 
 
