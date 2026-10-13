@@ -259,7 +259,7 @@ def test_schema_version_bumps_prevent_collisions():
     assert pc._ZTABLE_CACHE_VERSION == 8, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
-    assert sc._CACHE_VERSION == 3, (
+    assert sc._CACHE_VERSION == 4, (
         "subband version moved; bump it only with a schema change and update this pin"
     )
 

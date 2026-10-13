@@ -44,12 +44,24 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_OA_NENKOVA,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    DEFAULT_AGN_THETA_TORUS,
+)
 from tengri.components.agn.polar_dust import (
     _type1_mask,
     calzetti2000_extinction_curve,
     smc_extinction_curve,
 )
 from tengri.utils.scale import representable_denominator
+
+#: Declared fallback angle [deg] per opening-angle parameter (ADR-0011).
+_OPENING_ANGLE_DEFAULT: dict[str, float] = {
+    "agn_oa_skirtor": DEFAULT_AGN_OA_SKIRTOR,
+    "agn_oa_nenkova": DEFAULT_AGN_OA_NENKOVA,
+}
 
 #: Torus blocks that represent a genuine dusty torus with an equatorial optical
 #: depth and an opening angle, mapped to the (opening-angle, equatorial
@@ -121,8 +133,8 @@ def polar_follow_opening_angle(torus_block: str, params: dict) -> float:
         return torus_screen_geometry("fritz", params)[0]
     key = _TORUS_OPENING_ANGLE_PARAM.get(torus_block)
     if key is None:
-        return params.get("agn_theta_torus", 30.0)
-    return params.get(key, 40.0)
+        return params.get("agn_theta_torus", DEFAULT_AGN_THETA_TORUS)
+    return params.get(key, _OPENING_ANGLE_DEFAULT[key])
 
 
 def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float, str]:
@@ -155,7 +167,11 @@ def torus_screen_geometry(torus_block: str, params: dict) -> tuple[float, float,
         cone_half = params.get("agn_fritz_oa", 60.0)
         return 90.0 - cone_half, params.get("agn_fritz_tau", 1.0), "fritz"
     if torus_block == "skirtor":
-        return params.get("agn_oa_skirtor", 40.0), params.get("agn_tau_skirtor", 7.0), "skirtor"
+        return (
+            params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
+            params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
+            "skirtor",
+        )
     raise ValueError(f"torus_screen_geometry: no screen for torus block {torus_block!r}")
 
 

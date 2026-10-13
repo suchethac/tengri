@@ -33,6 +33,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from tengri.utils.physics_constants import LYMAN_LIMIT_AA
+
 __all__ = ["SubbandFold", "subband_fold", "subband_fold_table"]
 
 
@@ -106,6 +108,34 @@ def _transmission_table(igm_model, wave_rest, z_grid):
     return np.asarray(table, dtype=np.float64)
 
 
+#: Template nodes kept beyond each edge of the touched span (#2769). The union
+#: grid's straddle node and the linear bracket of each read sit one source node
+#: outside the filter support; the margin keeps both, with room to spare.
+_SLICE_MARGIN = 2
+
+
+def _touched_slice(wave_rest, filter_waves, z, lyc_gate):
+    """Half-open ``[lo, hi)`` range of SSP nodes the reached filters' quadratures read.
+
+    The span is the rest-frame extent of the filters. Under ``lyc_gate`` the
+    Lyman limit is included: the edge-aware resampling brackets 912 A through
+    the template nodes on either side of it, and the bracket's index is taken
+    from the sliced grid, so the bracket must survive the slice. The zero-width
+    edge nodes read those same two nodes even when the filters do not reach the
+    edge, so this holds for every reached filter.
+    """
+    span_lo = min(float(np.min(fw)) for fw in filter_waves) / (1.0 + z)
+    span_hi = max(float(np.max(fw)) for fw in filter_waves) / (1.0 + z)
+    if lyc_gate:
+        span_lo = min(span_lo, LYMAN_LIMIT_AA)
+        span_hi = max(span_hi, LYMAN_LIMIT_AA)
+    lo = max(int(np.searchsorted(wave_rest, span_lo)) - _SLICE_MARGIN, 0)
+    hi = min(
+        int(np.searchsorted(wave_rest, span_hi, side="right")) + _SLICE_MARGIN, wave_rest.size
+    )
+    return lo, hi
+
+
 def _absorbed_filters(transmission, wave_rest, z, filter_waves):
     """Indices of filters whose support reaches wavelengths the IGM absorbs.
 
@@ -176,12 +206,19 @@ def subband_fold(
     if not reached:
         return SubbandFold(ratio, nodes)
 
+    # Only the SSP nodes the reached filters' quadratures read are multiplied
+    # and stacked (#2769): everything outside the slice is never indexed, so the
+    # result is bit-identical to the full-grid quadrature.
+    lo, hi = _touched_slice(wave_rest, [filter_waves[i] for i in reached], z, lyc_gate)
+    wave_sl = wave_rest[lo:hi]
+    templates_sl = templates[..., lo:hi]
+    transmission_sl = transmission[lo:hi]
     # Bare and folded templates share every filter, union grid, weight and
     # partition, so one quadrature over a stacked leading axis yields both.
-    stacked = np.stack([templates, templates * transmission])
+    stacked = np.stack([templates_sl, templates_sl * transmission_sl])
     grid = preintegrate_grid(
         templates=stacked,
-        wave_rest=wave_rest,
+        wave_rest=wave_sl,
         filter_waves=[filter_waves[i] for i in reached],
         filter_trans=[filter_trans[i] for i in reached],
         redshift=z,

@@ -74,7 +74,6 @@ from tengri.components.agn._phys import (
 from tengri.components.agn._template_grid import scale_to_lbol_native
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
 from tengri.utils.host_array import device_table, host_array
-from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
     K_BOLTZ_KEV as _K_BOLTZ_KEV,
@@ -2186,6 +2185,19 @@ def adaf_disc(
 # ── Model 5: RELAGN relativistic disc from precomputed grid ──────────────────
 
 
+def _host_edges(axis: np.ndarray) -> np.ndarray:
+    """Bin edges for a sorted 1-D axis, as host numpy (see ``edges_for_grid``).
+
+    Same construction as :func:`tengri.utils.interpolation.edges_for_grid`,
+    which is written with ``jnp`` and so cannot run on a cached host table.
+    """
+    if axis.size == 1:
+        return np.array([axis[0], axis[0]])
+    half_lo = (axis[1] - axis[0]) / 2.0
+    half_hi = (axis[-1] - axis[-2]) / 2.0
+    return np.concatenate([axis[:1] - half_lo, (axis[:-1] + axis[1:]) / 2.0, axis[-1:] + half_hi])
+
+
 @functools.cache
 def _load_relagn_disc_grid(grid_path: str) -> dict:
     """Load and cache the RELAGN outer-disc grid from HDF5.
@@ -2211,12 +2223,11 @@ def _load_relagn_disc_grid(grid_path: str) -> dict:
         astar = f["astar"][()]
         wave_grid = f["wavelength_aa"][()]
 
-    axes = (
-        jnp.array(log_mbh),
-        jnp.array(log_mdot),
-        jnp.array(astar),
-    )
-    edges = tuple(_edges_for_grid(ax) for ax in axes)
+    # Host numpy only. ``functools.cache`` keeps whatever this returns for the
+    # life of the process, so a jnp array built here would be a tracer when the
+    # first load runs under jit (#2827). Device copies are made at the call site.
+    axes = (host_array(log_mbh), host_array(log_mdot), host_array(astar))
+    edges = tuple(_host_edges(ax) for ax in axes)
 
     # For non-uniform astar, use max half-spacing: triweight has compact support
     # (zero beyond one bandwidth), so the bandwidth must cover the largest gap.
@@ -2229,11 +2240,11 @@ def _load_relagn_disc_grid(grid_path: str) -> dict:
     scatters = (scatter_lm, scatter_ld, scatter_as)
 
     return {
-        "grid_jax": jnp.array(grid_np),
+        "grid_jax": host_array(grid_np),
         "axes": axes,
         "edges": edges,
         "scatters": scatters,
-        "wave_grid": jnp.array(wave_grid),
+        "wave_grid": host_array(wave_grid),
     }
 
 
@@ -2322,6 +2333,16 @@ def load_relagn_default_grid() -> dict:
     return _load_relagn_disc_grid(_find_relagn_grid())
 
 
+def _as_device_table(table):
+    """Device copy of a host table; a jax Array or tracer passes through unchanged.
+
+    When the templates are threaded as jit arguments (``threaded_template_inputs``)
+    the grid arrives as a tracer, which ``np.asarray`` cannot convert. The cache
+    itself stays host-only, so only the host path goes through :func:`device_table`.
+    """
+    return table if isinstance(table, jax.Array) else device_table(table)
+
+
 def relagn_disc_from_grid(
     grid: dict,
     wavelength: jnp.ndarray,
@@ -2391,9 +2412,9 @@ def relagn_disc_from_grid(
     """
     point = (agn_log_mbh, agn_log_mdot, agn_astar)
     lnu_template = _interp_nd_triweight(
-        jnp.asarray(grid["grid_jax"]),
-        tuple(jnp.asarray(a) for a in grid["axes"]),
-        tuple(jnp.asarray(e) for e in grid["edges"]),
+        _as_device_table(grid["grid_jax"]),
+        tuple(_as_device_table(a) for a in grid["axes"]),
+        tuple(_as_device_table(e) for e in grid["edges"]),
         point,
         scatters=grid["scatters"],
         index_space_interp=True,
@@ -2401,7 +2422,7 @@ def relagn_disc_from_grid(
     # The grid holds the disc alone at the reference cos_inc = 0.5, where the line-of-sight
     # power is the angle-integrated power: the template is normalized AT the reference and the
     # inclination scaling 2 cos i is applied to the spectrum on top.
-    wave_native = jnp.asarray(grid["wave_grid"])
+    wave_native = _as_device_table(grid["wave_grid"])
     # Interpolate grid wavelength -> observation wavelength
     lnu_interp = resample_template(
         wavelength, wave_native, lnu_template * (2.0 * agn_cos_inc), left=0.0, right=0.0

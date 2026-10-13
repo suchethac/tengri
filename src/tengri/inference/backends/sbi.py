@@ -46,6 +46,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.parameters.parameters import Parameters
+from tengri.utils.atomic_io import atomic_path
 
 
 def generate_sbi_training_data(
@@ -339,7 +340,7 @@ class SBIPosterior:
             "param_names": self.param_names,
             "metadata": self.metadata,
         }
-        with open(filepath, "wb") as f:
+        with atomic_path(filepath) as tmp, open(tmp, "wb") as f:
             pickle.dump(state, f)
 
     def sample(
