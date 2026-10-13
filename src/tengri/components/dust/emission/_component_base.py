@@ -768,7 +768,7 @@ class EmissionComponent(SEDModelComponent):
         L_ir : ndarray
             Amplitude the exact band-response branch multiplies [erg/s, or 1 when factored].
         rest : bool, optional
-            Read the z = 0 rest-band table (``rest_ln_phot``) instead of the observed-frame one.
+            Read the z = 0 rest-band table (``table["rest"]``) instead of the observed-frame one.
 
         Returns
         -------
@@ -781,7 +781,7 @@ class EmissionComponent(SEDModelComponent):
         prefix_len = len(self.parameter_prefix)
         names = [n for n in module.AXIS_PARAMS[self.precompute_key] if n in table["axes"]]
         values = [p[n[prefix_len:]] for n in names]
-        band = {**table, "ln_phot": table["rest_ln_phot"]} if rest else table
+        band = table["rest"] if rest else table
         return module.lookup_from_table(
             band, self.precompute_key, L_ir * self.lookup_amplitude(p), *values
         )

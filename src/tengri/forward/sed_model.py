@@ -11938,10 +11938,11 @@ class SEDModel:
         at the current shape parameters (``EmissionComponent._shape_table_phot``).
 
         The adapter is built at one redshift, so the table is built only for a single ``Fixed``
-        redshift. Returns ``{"ln_phot", "rest_ln_phot", "axes"}`` (arrays only, so it threads
-        through ``jit``), or ``None`` with the reason in ``_dust_shape_table_decline``.
-        ``rest_ln_phot`` is the same adapter at z = 0, the rest band the photometry publishes
-        beside the observed one (#2559), so a free-shape predict integrates no filter.
+        redshift. Returns the adapter's ``table_arrays`` dict (its band array and ``"axes"``)
+        with a ``"rest"`` entry holding the same arrays for the adapter at z = 0, the rest band
+        the photometry publishes beside the observed one (#2559), so a free-shape predict
+        integrates no filter. Arrays only, so it threads through ``jit``; ``None`` with the
+        reason in ``_dust_shape_table_decline`` otherwise.
         """
         cached = getattr(self, "_dust_shape_table_cache", "unset")
         if cached != "unset":
@@ -11984,7 +11985,7 @@ class SEDModel:
                 rest_preint = module.precompute(*filter_args, 0.0, self.spec, model=key)
                 table = {
                     **module.table_arrays(preint, key),
-                    "rest_ln_phot": module.table_arrays(rest_preint, key)["ln_phot"],
+                    "rest": module.table_arrays(rest_preint, key),
                 }
 
         self._dust_shape_table_decline = reason
