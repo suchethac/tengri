@@ -87,7 +87,10 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # and the multicolor bolometric, #2572) deleted one ``jnp.maximum(..., 1e-100)`` floor
 # outright (five ``disc.py`` sites before, four now); the other 23 are unchanged. A deletion,
 # not a migration.
-_PINNED = 23
+# 23 -> 22: the cutoff power-law band norm (``xray.py``, ``_cutoff_powerlaw_band_norm``) floored
+# with a literal ``1e-60`` that is 0 in float32; it now uses ``representable_floor``. A
+# migration of one site.
+_PINNED = 22
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -174,13 +177,12 @@ _F32_DERIVATIVE_BOUND = 1.0844e-19
 _PINNED_DENOMINATORS = 3
 
 
-
-
 #: On the AGNfitter validation branch, two of the original 43 sub-subnormal
 #: denominators had already been replaced by `jnp.where` selects in the R59
 #: AGN dust-budget split (`blocks/runner.py`), and the SKIRTOR no-grid
 #: fallback's `jnp.maximum(int, 1e-30)` renormalization had been rewritten,
 #: so the merged tree lands on the same 3 as main.
+
 
 def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:
     """Return ``(lineno, floor)`` for each ``x / guard(y, floor)`` below the bound.

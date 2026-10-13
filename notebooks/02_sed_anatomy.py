@@ -413,7 +413,7 @@ print(model_edited.summary())
 # - **Stellar continuum.** Differentiable Stellar Population Synthesis integration of an SFH and metallicity history onto an age × wavelength grid, summed to intrinsic L_ν.
 # - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse interstellar medium optical depths reshape the ultraviolet to near-infrared. Absorbed energy is tracked as L_ir. The two-component group also routes each emission source through specified screens: nebular_screen (default birth cloud), shock_screen (default diffuse), and agn_screen (default none).
 # - **Dust emission.** Dale 2014, Draine–Li, or THEMIS templates re-radiate L_ir from 8 to 1000 micrometers.
-# - **Nebular.** Cue, a neural emulator on Cloudy 17.03, yields photoionized continuum and 128 emission lines from ionization parameter and conditions.
+# - **Nebular.** Cue, a neural emulator trained on Cloudy 22.00, yields photoionized continuum and 128 emission lines from ionization parameter and conditions.
 # - **AGN.** Disc (multicolor, Kubota–Done, ADAF, or power-law), torus (SKIRTOR, Nenkova, CAT3D, Silva04, or toy), narrow-line region (Cue), and broad-line region (qsogen).
 # - **Radio.** Free-free and synchrotron emission from the infrared to radio correlation, plus an optional AGN power-law.
 # - **X-ray.** Lusso & Risaliti 2017 L_2500 to L_2keV conversion with optional ADAF or Comptonization refinements.

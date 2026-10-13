@@ -79,6 +79,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.observation.noise import has_noise_model, is_noise_parameter
 from tengri.parameters.priors import Gaussian, Uniform
+from tengri.utils.atomic_io import atomic_path
 
 # ── Method name validation ────────────────────────────────────────────
 
@@ -929,8 +930,8 @@ def _warn_if_lut_bias_amplified(
 
     Advisory contract: this function must never break a fit. Any failure in
     the probe (a forward that cannot run at the central parameters, shape
-    mismatches, exotic data layouts) degrades to silence, the fit proceeds
-    exactly as it did before the advisory existed.
+    mismatches, exotic data layouts) is logged with its traceback at WARNING
+    level, and the fit proceeds exactly as it did before the advisory existed.
 
     Parameters
     ----------
@@ -1089,6 +1090,11 @@ def _warn_if_lut_bias_amplified(
                 snr=snr_at,
             )
     except Exception:
+        logger.warning(
+            "LUT-bias advisory skipped for %s; the fit proceeds without it.",
+            surface,
+            exc_info=True,
+        )
         return
 
 
@@ -1628,7 +1634,7 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default). The fitter takes a
+    Fit a single galaxy with the default method, ``"mcmc_nuts_fast"``. The fitter takes a
     :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
     >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
@@ -3572,7 +3578,14 @@ class Fitter:
             # prewarm=False: this throwaway run must not re-enter auto-prewarm
             # (run -> _auto_prewarm -> prewarm -> run would recurse).
             self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
-        except Exception:
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "warmup for method=%r did not complete (%s: %s); the fit continues "
+                "and will compile on first use",
+                method,
+                type(exc).__name__,
+                exc,
+            )
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
@@ -3692,7 +3705,7 @@ class Fitter:
         }
         p = _Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("wb") as f:
+        with atomic_path(p) as tmp, open(tmp, "wb") as f:
             pickle.dump(payload, f)
 
     def load_cache(self, path) -> None:
@@ -3784,7 +3797,7 @@ class Fitter:
         Parameters
         ----------
         method : str, optional
-            Inference method (case-sensitive). Default ``"vi"``.
+            Inference method (case-sensitive). Default ``"mcmc_nuts_fast"``.
 
             **Variational Inference (VI)**
 
@@ -3899,7 +3912,9 @@ class Fitter:
         -----
         **Method selection strategy:**
 
-        - **Default** (``"vi"``): geoVI is recommended for high-dimensional problems
+        - **Default** (``"mcmc_nuts_fast"``): four NUTS chains on the mass-profiled
+          posterior; the fast photometry recipe for single galaxies.
+        - **Variational** (``"vi"``): geoVI is recommended for high-dimensional problems
           (D>50) and population fitting. Captures non-Gaussian posterior geometry.
         - **Exact posterior** (``"mcmc_nuts"``): Use for D≤20 where exact sampling is
           feasible and posterior validation is critical.
@@ -4733,7 +4748,7 @@ class Fitter:
         batch : list of dict
             Each dict has "flux_obs" and "noise" arrays.
         method : str
-            Default "vi". Any method from run().
+            Default ``"mcmc_nuts_fast"``. Any method from run().
         key : PRNGKey, optional
             Random seed for sampling methods. Default: ``jax.random.PRNGKey(42)``.
         verbose : bool

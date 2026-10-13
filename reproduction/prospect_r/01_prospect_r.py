@@ -1266,7 +1266,7 @@ for _c, _name in _lines:
 # coefficient, while Cue derives it from the ionizing-photon budget — so the
 # whole nebular spectrum carries that ~3x scale. The [O III]/Hα ratio isolates
 # the line physics: at the matched q it is a modest Levesque-2010 vs
-# Cloudy-17 difference, not the 50x q-mismatch artifact of the default Z2q.
+# Cloudy-22.00 difference, not the 50x q-mismatch artifact of the default Z2q.
 if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
     print("§8 line ratios (q-matched, normalization-free):")
     print(

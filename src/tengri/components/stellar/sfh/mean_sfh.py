@@ -1940,7 +1940,10 @@ def sfh2exp(
     age_yr : float
         Age of the main population / lookback to formation [yr].
     burst_age_yr : float
-        Lookback time at which the burst began [yr] (``< age_yr``).
+        Lookback time at which the burst began [yr]. When ``>= age_yr`` the
+        burst window is truncated to ``[0, age_yr]`` and renormalized so no
+        mass forms before the main population's own formation epoch (#2623,
+        CIGALE's ``sfh2exp`` convention).
 
     Returns
     -------
@@ -2007,8 +2010,19 @@ def sfh2exp(
     main = jnp.exp(-t_fwd_main / tau_main_yr) * window_weight(t_lookback, 0.0, age_yr)
 
     # Burst: occupies the most recent burst_age_yr, declines from its onset.
+    # The exponential's decay reference stays anchored at the burst's TRUE
+    # onset ``burst_age_yr`` (so its shape is unchanged), but the WINDOW is
+    # bounded to [0, min(burst_age_yr, age_yr)] (#2623): CIGALE keeps only
+    # the LAST ``age`` bins of the (unshifted) burst array and rescales when
+    # ``burst_age >= age`` (sfh2exp.py:92-100) -- a truncation of the window,
+    # not a shift of the exponential's onset -- so no burst mass sits before
+    # the main population's own formation epoch. ``burst_unit`` below
+    # renormalizes over this SAME (possibly bounded) window, so ``f_burst``
+    # stays the exact declared fraction of the total regardless of the bound.
     t_fwd_burst = jnp.maximum(burst_age_yr - t_lookback, 0.0)
-    burst = jnp.exp(-t_fwd_burst / tau_burst_yr) * window_weight(t_lookback, 0.0, burst_age_yr)
+    burst = jnp.exp(-t_fwd_burst / tau_burst_yr) * window_weight(
+        t_lookback, 0.0, jnp.minimum(burst_age_yr, age_yr)
+    )
 
     # Normalize each component to unit mass over the grid, then weight so the
     # burst holds exactly f_burst of the total stellar mass (CIGALE convention).

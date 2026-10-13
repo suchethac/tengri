@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract: ``reproduction._validation.band_average`` integrates on a chosen set of nodes.
 
-The default ``integrate="filter"`` samples the spectrum at the filter's own nodes, so
-a spectral feature narrower than the node spacing (an emission line against a 25
-Angstrom filter table) is hit or missed depending on where the nodes fall.
-``integrate="sed"`` integrates on the spectrum's own nodes with the filter
-interpolated onto them and so recovers the band value of the underlying continuous
-spectrum. These tests pin both behaviors against a dense-quadrature reference.
+The default ``integrate="sed"`` integrates on the spectrum's own nodes with the filter
+interpolated onto them, so it recovers the band value of the underlying continuous
+spectrum. ``integrate="filter"`` samples the spectrum at the filter's own nodes, so a
+spectral feature narrower than the node spacing (an emission line against a 25
+Angstrom filter table) is hit or missed depending on where the nodes fall; it is kept
+only to reproduce old numbers. These tests pin both behaviors against a
+dense-quadrature reference.
 """
 
 from __future__ import annotations
@@ -76,16 +77,16 @@ def test_filter_mode_aliases_a_line_between_nodes():
     wave, L = _spectrum(center)
     fw, ft = _filter()
     sed = V.band_average(wave, L, fw, ft, integrate="sed")
-    node = V.band_average(wave, L, fw, ft)
+    node = V.band_average(wave, L, fw, ft, integrate="filter")
     assert (sed - node) / sed > 0.10
 
 
 @pytest.mark.parametrize("position", list(_LINE_POSITIONS))
-def test_filter_mode_is_the_default(position):
-    """Omitting ``integrate`` is identical to ``integrate='filter'``."""
+def test_sed_mode_is_the_default(position):
+    """Omitting ``integrate`` is identical to ``integrate='sed'``."""
     wave, L = _spectrum(_LINE_POSITIONS[position])
     fw, ft = _filter()
-    assert V.band_average(wave, L, fw, ft) == V.band_average(wave, L, fw, ft, integrate="filter")
+    assert V.band_average(wave, L, fw, ft) == V.band_average(wave, L, fw, ft, integrate="sed")
 
 
 @pytest.mark.parametrize("weight", ["photon", "energy"])
@@ -143,9 +144,9 @@ def test_integrate_threads_through_the_row_builders():
     ):
         default = builder()
         sed = builder(integrate="sed")
-        explicit = builder(integrate="filter")
-        assert default == explicit
-        assert sed[0][4] != default[0][4]
+        node = builder(integrate="filter")
+        assert default == sed
+        assert node[0][4] != default[0][4]
 
 
 def test_line_window_mask_removes_only_the_window_and_keeps_a_flat_median():
@@ -183,3 +184,67 @@ def test_sweep_fig_mask_keyword_leaves_returned_ratios_untouched():
     assert np.array_equal(r0["a"], r1["a"], equal_nan=True)
     shown = [ln.get_ydata() for ln in ax_r.lines if len(ln.get_ydata()) == wave.size]
     assert shown and np.isnan(shown[-1][1000])
+
+
+# ---------------------------------------------------------------------------
+# Narrow line between two coarse filter nodes (#2680)
+# ---------------------------------------------------------------------------
+
+_FLAT_FILTER_NODES = np.arange(4000.0, 5000.0 + 0.5 * _NODE_SPACING, _NODE_SPACING)
+_LINE_HEIGHT = 100.0  # erg/s/Hz, peak of the triangular line
+_LINE_HALF_WIDTH = 0.5  # Angstrom; the line's integrated flux is height * half width = 50
+
+
+def _flat_top_filter() -> tuple[np.ndarray, np.ndarray]:
+    """Transmission 1 on every node from 4025 to 4975 A, ramping to 0 at the two ends.
+
+    The 4500-4525 A stretch is flat, so a line placed there sees T = 1 and the band
+    integral has a closed form.
+    """
+    fw = _FLAT_FILTER_NODES
+    ft = np.ones_like(fw)
+    ft[0] = ft[-1] = 0.0
+    return fw, ft
+
+
+def _narrow_line_spectrum(center: float) -> tuple[np.ndarray, np.ndarray]:
+    """Unit continuum plus a 1 A-wide triangular line, with nodes on its apex and feet."""
+    base = np.arange(3900.0, 5100.0, 0.1)
+    wave = np.union1d(base, [center - _LINE_HALF_WIDTH, center, center + _LINE_HALF_WIDTH])
+    tri = _LINE_HEIGHT * np.clip(1.0 - np.abs(wave - center) / _LINE_HALF_WIDTH, 0.0, None)
+    return wave, 1.0 + tri
+
+
+def _narrow_line_analytic(center: float) -> float:
+    """Closed-form photon band average: 1 + (flux / center) / integral(T / lambda).
+
+    The line sits where T = 1, so its weighted flux is flux / center up to a relative
+    (1 A / center)^2. The denominator is the filter's integral, taken on a 0.01 A grid.
+    """
+    fw, ft = _flat_top_filter()
+    x = np.arange(fw[0], fw[-1], 0.01)
+    denom = np.trapezoid(np.interp(x, fw, ft) / x, x)
+    flux = _LINE_HEIGHT * _LINE_HALF_WIDTH  # triangle area = height * full base / 2
+    return 1.0 + (flux / center) / denom
+
+
+@pytest.mark.parametrize("center", [4512.5, 4517.5])
+def test_band_average_of_narrow_line_matches_analytic_value(center):
+    """A 1 A line between two 25 A nodes contributes its flux, not what the nodes see.
+
+    The old default sampled L_nu only at the filter nodes (4500, 4525), missing the line
+    entirely. The band value must equal the analytic continuum-plus-line result.
+    """
+    wave, L = _narrow_line_spectrum(center)
+    fw, ft = _flat_top_filter()
+    value = V.band_average(wave, L, fw, ft)
+    assert value == pytest.approx(_narrow_line_analytic(center), rel=1e-3)
+
+
+def test_band_average_is_insensitive_to_a_5_angstrom_line_shift():
+    """Shifting the line by 5 A inside a flat filter region moves the band value by under 1e-3."""
+    fw, ft = _flat_top_filter()
+    a = V.band_average(*_narrow_line_spectrum(4512.5), fw, ft)
+    b = V.band_average(*_narrow_line_spectrum(4517.5), fw, ft)
+    assert a == pytest.approx(_narrow_line_analytic(4512.5), rel=1e-3)
+    assert abs(a - b) / a < 1e-3

@@ -10,9 +10,7 @@ Three tuples, each the canonical source for one legacy bucket in
 - :data:`ATTENUATION_PARAMS`: dust **attenuation** priors
   (Charlot-Fall ``dust_tau_bc`` / ``dust_tau_diff`` / ``dust_slope``
   plus the always-on shape modifiers ``dust_f_obscuration``,
-  ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``). Backs the
-  combination of ``_NON_SFH_PARAMS`` (the dust subset) and
-  ``_DUST_EXTRA_PARAMS``. Always registered, except the two
+  ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``). Always registered, except the two
   Charlot-Fall optical depths are skipped under
   ``dust_model="single_component"``.
 - :data:`SINGLE_COMPONENT_PARAMS`: ``dust_tau_v`` only. Backs

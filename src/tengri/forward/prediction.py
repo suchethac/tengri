@@ -254,7 +254,7 @@ class SEDQuantities(NamedTuple):
     nuv_flux_intrinsic : jnp.ndarray
         Dust-free NUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
     rest_uv_color : jnp.ndarray
-        Rest-frame U-V color [AB magnitudes].
+        U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu [AB magnitudes].
     luminosity_weighted_age_gyr : jnp.ndarray
         Luminosity-weighted age [Gyr].
     luminosity_weighted_metallicity : jnp.ndarray
@@ -711,7 +711,7 @@ class SEDProperties(_CachedBase):
     nuv_flux_intrinsic : property
         Dust-free NUV flux [erg/s/Hz].
     rest_uv_color : property
-        Rest-frame U-V color [AB magnitudes].
+        U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu [AB magnitudes].
     luminosity_weighted_age_gyr : property
         Luminosity-weighted age [Gyr].
     luminosity_weighted_metallicity : property
@@ -993,7 +993,9 @@ class SEDProperties(_CachedBase):
 
     @property
     def rest_uv_color(self):
-        """Rest-frame U-V color.
+        """U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å on rest-frame L_nu.
+
+        Not FUV−NUV and not f_1500 − f_2300.
 
         Returns
         -------
@@ -2116,7 +2118,7 @@ class Prediction:
         # ``model.age_yr <= 1e8`` still align.
         sfh_grid = jnp.asarray(derived["sfh_grid_lbt_yr"])
         sfr_history = jnp.asarray(derived["sfr_history"])
-        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history)
+        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history, right=0.0)
         self._cache.update(
             {
                 "p": p,
@@ -3023,7 +3025,10 @@ class Prediction:
 
     @property
     def rest_uv_color(self):
-        """Rest-frame UV color (f_1500 − f_2300). Same as ``pred.sed.rest_uv_color``."""
+        """U-V AB color: top-hats 3200–3900 Å minus 5000–5800 Å.
+
+        Same as ``pred.sed.rest_uv_color``.
+        """
         return self.sed.rest_uv_color
 
     @property
