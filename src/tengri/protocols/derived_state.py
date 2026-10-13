@@ -283,6 +283,9 @@ class DerivedState:
     agn_restband_lnu_precomp: jnp.ndarray | None = None
     radio_restband_lnu_precomp: jnp.ndarray | None = None
     xray_restband_lnu_precomp: jnp.ndarray | None = None
+    # Its own integral at redshift=0 (#2559): dust emission is not reddened, so it
+    # lands in the unattenuated remainder of the rest-band projector.
+    dust_emission_restband_lnu_precomp: jnp.ndarray | None = None
     #: Per-age sub-band quadrature over the rest band, shape (n_age, n_filter, K),
     #: and its nodes [Angstrom]: the #1122 machinery applied to the rest-frame
     #: projection, so the dust screen is EVALUATED across the band rather than
