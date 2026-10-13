@@ -77,6 +77,7 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     DeadGradientParameterWarning,
     DegenerateParameterPairWarning,
+    FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
     TengriIOError,
@@ -91,7 +92,11 @@ from tengri.forward.sed_model_types import (
     SEDModelState,
 )
 from tengri.inference._backend_registry import DEFAULT_METHOD
-from tengri.observation.photometry import ab_mag_from_flux
+from tengri.observation.photometry import (
+    FILTER_COVERAGE_TOLERANCE,
+    ab_mag_from_flux,
+    filter_coverage_fraction,
+)
 from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -3195,6 +3200,7 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
         self._validate_shock_coverage(spec)
+        self._warn_filter_coverage()
 
         # ── The polar reference's integration range (R66) ─────────
         # Runs here and not beside the ``spec``-only guards in ``build``
@@ -4227,6 +4233,110 @@ class SEDModel:
                     stacklevel=3,
                 )
                 return
+
+    def filter_coverage_redshifts(self) -> tuple[float, ...]:
+        """Redshifts at which the band-coverage check is made (#2620).
+
+        The fixed redshift, or the finite ends of a free redshift prior, together
+        with the ends of ``catalog_z_range`` when one is set. Duplicates are
+        dropped and the order is preserved.
+
+        Returns
+        -------
+        tuple of float
+            Redshifts [dimensionless], possibly empty when no redshift is declared.
+        """
+        zs: list[float] = []
+        try:
+            dist = self.spec.get_distribution("redshift")
+        except (KeyError, AttributeError, TypeError, ValueError, NotImplementedError):
+            dist = None
+        if dist is not None:
+            if dist.is_fixed:
+                zs.append(float(dist.bounds[0]))
+            else:
+                zs.extend(float(b) for b in dist.bounds if np.isfinite(b))
+        if self._catalog_z_range is not None:
+            zs.extend(float(z) for z in self._catalog_z_range)
+        return tuple(dict.fromkeys(zs))
+
+    def observed_axis_range(self, z: float) -> tuple[float, float]:
+        """Span of the model's observed-frame wavelength axis at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        tuple of float
+            ``(min, max)`` of ``wavelengths * (1 + z)`` [Angstrom].
+        """
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return float(axis.min()), float(axis.max())
+
+    def filter_coverage_at(self, z: float) -> np.ndarray | None:
+        """Per-band out-of-axis fraction at redshift ``z`` (#2620).
+
+        Parameters
+        ----------
+        z : float
+            Redshift [dimensionless].
+
+        Returns
+        -------
+        ndarray, shape (n_filters,) or None
+            Fraction of each band's weighted transmission beyond the observed axis
+            (see :func:`~tengri.observation.photometry.filter_coverage_fraction`);
+            ``None`` when the model has no photometry.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return None
+        axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
+        return filter_coverage_fraction(
+            phot.filter_waves, phot.filter_trans, axis, phot.convention
+        )
+
+    def _photometry_or_none(self):
+        """The configured photometry block, or ``None`` when there is none."""
+        obs = self.observation
+        if obs is None or not getattr(obs, "can_do_photometry", False):
+            return None
+        return obs.photometry
+
+    def _warn_filter_coverage(self) -> None:
+        """Warn once per checked redshift when a band reaches past the axis (#2620).
+
+        Runs at construction over the declared redshifts only, so nothing is traced
+        and nothing raises: a model with an uncovered band is still a valid model.
+        The fitters refuse such a band unless it is masked in the data.
+        """
+        phot = self._photometry_or_none()
+        if phot is None:
+            return
+        names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
+        for z in self.filter_coverage_redshifts():
+            frac = self.filter_coverage_at(z)
+            over = np.flatnonzero(frac > FILTER_COVERAGE_TOLERANCE)
+            if over.size == 0:
+                continue
+            lo, hi = self.observed_axis_range(z)
+            described = ", ".join(f"{names[k]} ({frac[k]:.3g})" for k in over)
+            warn_measured(
+                f"Photometric band(s) {described} extend beyond the model's observed-frame "
+                f"wavelength axis [{lo:.4g}, {hi:.4g}] Angstrom at z={z:g}. The model SED is "
+                f"zero outside that range, so the band's flux is the covered share only, "
+                f"or zero. Fitters refuse such a band unless it is masked in the data. "
+                f"Use an SSP grid or component that reaches the band, or drop the band.",
+                FilterCoverageWarning,
+                stacklevel=3,
+                redshift=z,
+                axis_min_aa=lo,
+                axis_max_aa=hi,
+                n_bands_beyond=int(over.size),
+            )
 
     def _warn_sfh_beyond_oldest_template(self, spec, ssp_data):
         """Warn once per build when ``age_at_z`` can exceed the oldest SSP template (#2714).

@@ -24,6 +24,7 @@ from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 from tengri.utils.filter_convention import (
     FilterConvention,
     filter_weight as _filter_weight,
+    filter_weight_np,
     list_filter_conventions,
 )
 from tengri.utils.scale import representable_denominator
@@ -200,6 +201,81 @@ def _filter_integral_union(
     den = _support_trapezoid(w_q, x_q, lo, hi)
 
     return num / jnp.maximum(den, representable_denominator(1e-30))
+
+
+FILTER_COVERAGE_TOLERANCE: float = 1e-3
+"""Largest tolerated out-of-axis fraction of a band's weighted transmission (#2620)."""
+
+
+def filter_coverage_fraction(
+    filter_waves,
+    filter_trans,
+    wave_obs,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> np.ndarray:
+    r"""Fraction of each band's weighted transmission outside the model's observed axis.
+
+    For band :math:`k` with transmission :math:`T_k(\lambda)` and bandpass
+    weight :math:`w(\lambda)` of the given convention, the returned fraction is
+
+    .. math::
+
+        f_k = \frac{\int_{\lambda \notin [\lambda_{\min}, \lambda_{\max}]}
+              w(\lambda)\, T_k(\lambda)\, d\lambda}
+              {\int w(\lambda)\, T_k(\lambda)\, d\lambda}
+
+    where :math:`[\lambda_{\min}, \lambda_{\max}]` is the span of the model's
+    observed-frame wavelength axis. The model SED is zero-filled outside that
+    span, so :math:`f_k` is the share of the band's denominator that carries no
+    model flux. The integral is taken over the filter's own support, with the
+    axis edges inserted as quadrature nodes so each segment is wholly inside or
+    wholly outside the axis.
+
+    Parameters
+    ----------
+    filter_waves : sequence of array_like, each shape (n_wave_k,)
+        Observed-frame filter wavelengths per band [Angstrom]. Zero entries are
+        padding and are ignored.
+    filter_trans : sequence of array_like, each shape (n_wave_k,)
+        Dimensionless transmission per band, matching ``filter_waves``.
+    wave_obs : array_like, shape (n_wave,)
+        Model observed-frame wavelength axis at the redshift of interest [Angstrom].
+    convention : FilterConvention, optional
+        Bandpass weighting convention (default Bessell, ``w = 1/lambda``).
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        Out-of-axis fraction per band, in ``[0, 1]``. A band with no weight
+        returns 0.
+
+    Notes
+    -----
+    Pure NumPy, evaluated at build or fit setup, never inside a JIT. It does not
+    alter the photometry integral: a band over :data:`FILTER_COVERAGE_TOLERANCE`
+    is reported, not corrected.
+    """
+    axis = np.asarray(wave_obs, dtype=float)
+    lo, hi = float(np.min(axis)), float(np.max(axis))
+    fractions = np.zeros(len(filter_waves), dtype=float)
+    for k, (fw_raw, ft_raw) in enumerate(zip(filter_waves, filter_trans, strict=True)):
+        fw = np.asarray(fw_raw, dtype=float)
+        ft = np.asarray(ft_raw, dtype=float)
+        keep = fw > 0.0
+        order = np.argsort(fw[keep])
+        fw, ft = fw[keep][order], ft[keep][order]
+        if fw.size < 2:
+            continue
+        inner = np.unique(np.concatenate([fw, [lo, hi]]))
+        nodes = inner[(inner >= fw[0]) & (inner <= fw[-1])]
+        weighted = np.interp(nodes, fw, ft) * filter_weight_np(nodes, convention)
+        seg = 0.5 * (weighted[1:] + weighted[:-1]) * np.diff(nodes)
+        mid = 0.5 * (nodes[1:] + nodes[:-1])
+        beyond = (mid < lo) | (mid > hi)
+        total = float(seg.sum())
+        if total > 0.0:
+            fractions[k] = float(seg[beyond].sum()) / total
+    return fractions
 
 
 def _ascending_padded_filter(
