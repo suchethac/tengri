@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -1265,6 +1266,9 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     """
     h = jnp.diff(x)  # (n-1,)
     delta = jnp.diff(y, axis=0) / _bcast_axis0(h, y.ndim)  # (n-1, *rest)
+    if x.shape[0] == 2:
+        # Two nodes: the only monotone cubic is the secant line.
+        return jnp.broadcast_to(delta, y.shape)
 
     h_prev = h[:-1]  # (n-2,)
     h_next = h[1:]  # (n-2,)
@@ -1603,6 +1607,11 @@ def interp_nd_pchip(
     **Gradient-safe**: yes, C¹ in the query coordinates; guarded divisions in
     the slope computation keep the VJP finite at flat segments.
 
+    **Cost**: each axis contributes a window of at most four nodes around its
+    cell (its bracketing nodes and their tangent neighbors), so the read costs
+    ``prod(4 per axis) * trailing`` and does not grow with the node count. The
+    tangents are the full-axis Fritsch-Carlson tangents, not an approximation.
+
     Queries are clipped to the grid extent (no extrapolation beyond the
     boundary nodes) unless ``extrapolate`` is set for that axis. An
     extrapolated PCHIP axis continues its end cubic past the boundary node,
@@ -1634,13 +1643,100 @@ def interp_nd_pchip(
     if any(e and k == "linear" for e, k in zip(extrapolate, kinds, strict=True)):
         raise ValueError("extrapolate is only defined for pchip axes")
 
-    reduced = grid
-    for ax, p, kind, ext in zip(axes, point, kinds, extrapolate, strict=True):
-        if kind == "pchip":
-            reduced = _pchip_eval_axis0(ax, reduced, p, extrapolate=bool(ext))
-        else:
-            reduced = _linear_eval_axis0(ax, reduced, p)
+    stencils = [
+        _axis_stencil(ax, p, kind, bool(ext))
+        for ax, p, kind, ext in zip(axes, point, kinds, extrapolate, strict=True)
+    ]
+    return _evaluate_stencils(grid, stencils, kinds)
+
+
+#: Nodes per axis that the local PCHIP read gathers: the two bracketing nodes
+#: plus one neighbor on each side, which is all their tangents read.
+_STENCIL_NODES = 4
+
+
+class _AxisStencil(NamedTuple):
+    """One axis's local read: a window of nodes and the query inside it."""
+
+    xs: jnp.ndarray  # window node coordinates, shape (m,)
+    start: jnp.ndarray  # index of the window's first node on the full axis
+    cell: jnp.ndarray  # lower node of the bracketing cell, relative to the window
+    xq: jnp.ndarray  # query coordinate after this axis's clamp or extrapolation rule
+    m: int  # window length, min(_STENCIL_NODES, n)
+
+
+def _axis_stencil(ax: jnp.ndarray, p, kind: str, extrapolate: bool) -> _AxisStencil:
+    """Locate the cell and the 4-node window of one axis for a query.
+
+    The cell and clamp follow :func:`_pchip_eval_axis0` (``extrapolate=False``
+    clips the query to the node hull; ``True`` leaves it to the end cubic).
+    ``kind='linear'`` clamps with :func:`_clamp_to_hull`, as
+    :func:`_linear_eval_axis0` does. The window starts one node below the cell
+    and is shifted to stay inside the axis, so for ``n >= 4`` it always holds
+    the two cell nodes and their tangent neighbors. For ``n < 4`` the window is
+    the whole axis.
+    """
+    n = ax.shape[0]
+    m = min(_STENCIL_NODES, n)
+    if kind == "linear":
+        xq = _clamp_to_hull(p, ax[0], ax[-1])
+    elif extrapolate:
+        xq = p
+    else:
+        xq = jnp.clip(p, ax[0], ax[-1])
+    pos = jnp.searchsorted(ax, xq) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
+    return _AxisStencil(
+        xs=jax.lax.dynamic_slice_in_dim(ax, start, m, axis=0),
+        start=start,
+        cell=i - start,
+        xq=xq,
+        m=m,
+    )
+
+
+def _evaluate_stencils(grid: jnp.ndarray, stencils, kinds) -> jnp.ndarray:
+    """Gather the ``prod(m)`` hypercube of windows, then reduce it axis by axis.
+
+    Each reduction is the one-axis Hermite (or linear) read of
+    :func:`_pchip_eval_axis0`, but its tangents come from the window, not from
+    the whole axis. A node's tangent reads only its neighbors, so the window
+    gives the full-axis tangents at the two cell nodes. Each slice of the other
+    axes is reduced the same way, so this is the same tensor-product read at a
+    cost that does not grow with the node count.
+    """
+    sub = grid
+    for axis, st in enumerate(stencils):
+        sub = jax.lax.dynamic_slice_in_dim(sub, st.start, st.m, axis=axis)
+    reduced = sub
+    for st, kind in zip(stencils, kinds, strict=True):
+        reduced = _window_eval_axis0(st, reduced, kind)
     return reduced
+
+
+def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndarray:
+    """Evaluate one window along axis 0 of ``ys`` at the stencil's query."""
+    x0 = st.xs[st.cell]
+    x1 = st.xs[st.cell + 1]
+    h = x1 - x0
+    y0 = jax.lax.dynamic_index_in_dim(ys, st.cell, axis=0, keepdims=False)
+    y1 = jax.lax.dynamic_index_in_dim(ys, st.cell + 1, axis=0, keepdims=False)
+    if kind == "linear":
+        t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
+        return (1.0 - t) * y0 + t * y1
+    slopes = _pchip_slopes(st.xs, ys)
+    m0 = jax.lax.dynamic_index_in_dim(slopes, st.cell, axis=0, keepdims=False)
+    m1 = jax.lax.dynamic_index_in_dim(slopes, st.cell + 1, axis=0, keepdims=False)
+    t = (st.xq - x0) / h
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * y0
+        + (t3 - 2.0 * t2 + t) * h * m0
+        + (-2.0 * t3 + 3.0 * t2) * y1
+        + (t3 - t2) * h * m1
+    )
 
 
 def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):
@@ -1716,11 +1812,12 @@ def library_lookup(
         raise ValueError(
             f"extrapolate has {len(extrapolate)} entries but there are {len(axes)} axes"
         )
-    reduced = grid
-    for ax, p, ext in zip(axes, point, extrapolate, strict=True):
-        query = _library_axis_query(ax, p, bool(ext))
-        reduced = _pchip_eval_axis0(ax, reduced, query, extrapolate=True)
-    return reduced
+    queries = tuple(
+        _library_axis_query(ax, p, bool(ext))
+        for ax, p, ext in zip(axes, point, extrapolate, strict=True)
+    )
+    # The queries are already held to their band, so the end cubic is read as is.
+    return interp_nd_pchip(grid, axes, queries, extrapolate=(True,) * len(axes))
 
 
 def resample_template(
