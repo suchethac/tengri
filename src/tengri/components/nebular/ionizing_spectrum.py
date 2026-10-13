@@ -1013,7 +1013,7 @@ def precompute_ionizing_params_table(
     # Which bins get their own scipy fit. Without an age axis every bin does. With one,
     # bins up to 100 Myr always do; counted older bins do too, up to the thinning limit
     # per metallicity, among those with a photon rate worth counting (the rest of the
-    # live ones are filled from their nearest fitted neighbour below).
+    # live ones are filled from their nearest fitted neighbor below).
     fit_mask = np.ones((n_met, n_age), dtype=bool)
     old_idx = np.zeros(0, dtype=int)
     if ssp_log_age_yr is not None:

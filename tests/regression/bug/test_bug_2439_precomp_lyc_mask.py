@@ -154,6 +154,9 @@ def _build(
         {"type": "cue", "all_params": Fixed(DEFAULT)} if nebular else {"type": "none"}
     )
     if nebular:
+        if lyc_reprocessed_by == "young":
+            # 'young' pairs with Cue only when Cue counts the ages the split removes.
+            neb_group["lyc_max_age_yr"] = 1.0e7
         if fesc_free:
             neb_group["neb_fesc"] = Uniform(0.0, 1.0)
         elif fesc is not None:
@@ -166,7 +169,7 @@ def _build(
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.5,
             "tau_diff": 0.3,
-            **({"lyc_reprocessed_by": "all"} if lyc_reprocessed_by == "all" else {}),
+            "lyc_reprocessed_by": lyc_reprocessed_by,
         }
         if dust
         else {"type": "none"}

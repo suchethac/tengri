@@ -60,7 +60,7 @@ def test_old_bins_get_the_exact_q_h_and_a_finite_shape():
     assert old.sum() > 200
     np.testing.assert_allclose(table["logqion_table"][:, old], exact[:, old], atol=1e-9)
     assert np.all(np.isfinite(table["ionspec_table"][:, old]))
-    # the shape tracks the fitted neighbour: every old bin has a finite segment luminosity
+    # the shape tracks the fitted neighbor: every old bin has a finite segment luminosity
     assert np.all(table["seglum_table"][:, old] > -99.0)
 
 

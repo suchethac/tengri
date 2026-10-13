@@ -9364,8 +9364,11 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
         # Round-trip the absorb-all LyC toggle (only emit when non-default).
-        if str(getattr(spec, "dust_lyc_reprocessed_by", "young")) == "all":
-            group_output["lyc_reprocessed_by"] = "all"
+        # The default is 'all' under Cue and 'young' elsewhere: emit when it differs.
+        _lyc_default = "all" if getattr(spec, "nebular_mode", None) == "cue" else "young"
+        _lyc_value = str(getattr(spec, "dust_lyc_reprocessed_by", _lyc_default))
+        if _lyc_value != _lyc_default:
+            group_output["lyc_reprocessed_by"] = _lyc_value
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_lyc_in_energy_balance", False)):
             group_output["lyc_in_energy_balance"] = True

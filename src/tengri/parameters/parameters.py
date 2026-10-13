@@ -166,6 +166,9 @@ def _stable_param_seed(name: str) -> int:
 # ── Parameters class ───────────────────────────────────────────────────
 
 
+_CUE_YOUNG_GAP_WARNED: bool = False
+
+
 class Parameters:
     """Parameter specification defining all model parameters and their priors.
 
@@ -1361,7 +1364,14 @@ class Parameters:
                 f"True -> 'all'. Pass "
                 f"dust_lyc_reprocessed_by={'all' if _old_value else 'young'!r} instead."
             )
-        self.dust_lyc_reprocessed_by = str(kwargs.pop("dust_lyc_reprocessed_by", "young"))
+        # Default: 'all' under Cue, 'young' elsewhere (owner ruling 2026-10-13). Cue counts
+        # the ionizing photons of every stellar age and re-emits them as nebular light, so
+        # the stellar SED must give up the LyC of every age too; under 'young' the old
+        # population's LyC would stay in the SED and be created a second time as lines.
+        self.dust_lyc_reprocessed_by_explicit = "dust_lyc_reprocessed_by" in kwargs
+        self.dust_lyc_reprocessed_by = str(
+            kwargs.pop("dust_lyc_reprocessed_by", self._lyc_reprocessed_by_default())
+        )
         # Include the LyC (λ < 912 Å) in the dust energy-balance integral
         # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
         # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
@@ -1387,6 +1397,7 @@ class Parameters:
                 f"dust_transition_width_dex must be finite and >= 0, got "
                 f"{self.dust_transition_width_dex!r}"
             )
+        self._check_cue_lyc_coupling()
         # Age-selective LyC escape geometry (#2529): whether neb_fesc bypasses
         # the birth-cloud screen through a hole. Same validation the grammar
         # layer (groups.py's _translate_dust_attenuation) runs, repeated here
@@ -1406,12 +1417,20 @@ class Parameters:
                     f"Supported: {sorted(DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN)!r}."
                 )
             if self.dust_lyc_reprocessed_by == "all":
+                _why = (
+                    ""
+                    if self.dust_lyc_reprocessed_by_explicit
+                    else (
+                        " ('all' is the default under Cue: it counts every stellar age, so "
+                        "'young' also needs neb lyc_max_age_yr <= dust t_birth_yr)"
+                    )
+                )
                 raise ValueError(
                     f"dust_lyc_escape_geometry={self.dust_lyc_escape_geometry!r} with "
                     f"dust_lyc_reprocessed_by='all' is refused: both drive their reduction "
                     f"from the SAME neb_fesc for the young population, and composing them "
                     f"double-counts its escaping photons. 'lyc_escape_geometry' only "
-                    f"composes with dust_lyc_reprocessed_by='young' (the default)."
+                    f"composes with dust_lyc_reprocessed_by='young'{_why}."
                 )
         # Opt-in single-pass diffuse-screen attenuation of re-emitted IR dust
         # emission (#2533). When True, emitted photons pass through the diffuse
@@ -1429,6 +1448,76 @@ class Parameters:
         # parameters; forwarded to component_factory. See #1093.
         self.astrodust_spinning_dust = bool(kwargs.pop("astrodust_spinning_dust", False))
         self.astrodust_f_cnm = float(kwargs.pop("astrodust_f_cnm", 0.28))
+
+    def _lyc_reprocessed_by_default(self) -> str:
+        """``'all'`` under Cue, ``'young'`` for every other nebular backend."""
+        return "all" if getattr(self, "nebular_mode", None) == "cue" else "young"
+
+    def _check_cue_lyc_coupling(self) -> None:
+        """Refuse the Cue/young pairing that creates the old population's LyC twice.
+
+        Cue re-emits the ionizing photons of every stellar age it counts
+        (``neb lyc_max_age_yr``). ``dust_lyc_reprocessed_by='young'`` removes from the
+        stellar SED, and credits to the dust, only the LyC of ages below ``t_birth_yr``.
+        Older ages counted by Cue then stay in the SED below 912 A AND appear again as
+        nebular light: 94-96% of their energy created from nothing for a quiescent
+        galaxy. Only a birth-cloud screen reads the split, so only those dust types are
+        checked.
+
+        Raises
+        ------
+        ConfigError
+            If ``'young'`` is combined with Cue counting ages above both the young split
+            and the 100 Myr cut.
+
+        Warns
+        -----
+        UserWarning
+            Once per process for ``'young'`` with a cutoff between the split and 100 Myr
+            (the 10-100 Myr version of the same gap under the former cut).
+        """
+        if (
+            getattr(self, "nebular_mode", None) != "cue"
+            or self.dust_lyc_reprocessed_by != "young"
+            or self.dust_model not in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN
+        ):
+            return
+        from tengri.components.nebular.ionizing_spectrum import (
+            LYC_ALL_AGES,
+            MAX_NEB_LOG_AGE,
+        )
+
+        cutoff = self.cue_lyc_max_age_yr
+        former_cut_yr = 10.0**MAX_NEB_LOG_AGE
+        if cutoff != LYC_ALL_AGES and cutoff <= self.dust_t_birth_yr:
+            return
+        if cutoff == LYC_ALL_AGES or cutoff > former_cut_yr:
+            raise ConfigError(
+                "dust_attenuation lyc_reprocessed_by='young' with neb type 'cue' counting "
+                f"stellar ages up to lyc_max_age_yr={cutoff!r} double-counts the old "
+                "population's Lyman continuum: only ages below t_birth_yr="
+                f"{self.dust_t_birth_yr:g} yr have their LyC removed from the stellar SED "
+                "(and credited to the dust), but Cue re-emits the LyC of every counted age "
+                "as nebular light, so the older ages' energy is created a second time "
+                "(94-96% of it for a quiescent galaxy). Fix: use "
+                "dust_attenuation={'lyc_reprocessed_by': 'all'} (the default under Cue), "
+                f"or set neb lyc_max_age_yr <= t_birth_yr ({self.dust_t_birth_yr:g})."
+            )
+        global _CUE_YOUNG_GAP_WARNED
+        if not _CUE_YOUNG_GAP_WARNED:
+            _CUE_YOUNG_GAP_WARNED = True
+            import warnings
+
+            warnings.warn(
+                "dust_attenuation lyc_reprocessed_by='young' with neb type 'cue' and "
+                f"lyc_max_age_yr={cutoff:g}: ages between t_birth_yr="
+                f"{self.dust_t_birth_yr:g} and lyc_max_age_yr keep their LyC in the stellar "
+                "SED while Cue also re-emits it (the 10-100 Myr energy gap of the former "
+                "100 Myr cut). Use lyc_reprocessed_by='all' to close it, or set "
+                "lyc_max_age_yr <= t_birth_yr.",
+                UserWarning,
+                stacklevel=2,
+            )
 
     def _init_metallicity_config(self, kwargs):
         """Resolve metallicity evolution mode from kwargs.
@@ -2771,6 +2860,13 @@ class Parameters:
             modules.append(f"met={met_mode}")
         if modules:
             lines.append(f"  Modules:     {', '.join(modules)}")
+        if self.nebular_mode == "cue" and dust_mdl in DUST_TYPES_WITH_BIRTH_CLOUD_SCREEN:
+            _origin = (
+                "[user]"
+                if getattr(self, "dust_lyc_reprocessed_by_explicit", False)
+                else "[default: 'all' for cue]"
+            )
+            lines.append(f"  LyC reprocessed by: {self.dust_lyc_reprocessed_by!r} {_origin}")
         lines.append("")
 
         # Provenance tagging (only present when built via parse_groups)

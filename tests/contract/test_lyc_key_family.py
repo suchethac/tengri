@@ -91,6 +91,9 @@ def _build_raw(ssp, obs, dust_attenuation: dict):
             "neb_fesc": Fixed(0.3),
             "neb_fdust_frac": Fixed(0.2),
             "all_params": Fixed(DEFAULT),
+            # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7), so
+            # both 'young' and 'all' are legal here; with every age counted 'young' raises.
+            "lyc_max_age_yr": 1.0e7,
         },
         dust_attenuation=dust_attenuation,
         redshift=Fixed(0.0),
@@ -247,8 +250,10 @@ class TestRoundTrip:
         )
         groups = m.spec.to_groups()
         atten = groups["dust_attenuation"]
-        if lyc_reprocessed_by == "all":
-            assert atten["lyc_reprocessed_by"] == "all"
+        # The default is 'all' under Cue (and 'young' for the other backends), so the key
+        # is emitted only for the non-default 'young'.
+        if lyc_reprocessed_by == "young":
+            assert atten["lyc_reprocessed_by"] == "young"
         else:
             assert "lyc_reprocessed_by" not in atten
         if lyc_in_energy_balance:
@@ -282,6 +287,8 @@ class TestLycEscapeGeometryKey:
             "tau_diff": Fixed(0.3),
             "all_params": Fixed(DEFAULT),
             "lyc_escape_geometry": lyc_escape_geometry,
+            # The hole geometry composes only with 'young', which is no longer the Cue default.
+            "lyc_reprocessed_by": "young",
         }
 
     def _build(self, ssp, obs, lyc_escape_geometry="screened"):
