@@ -45,12 +45,10 @@ from tests._radio_band import band_l_ir
 
 pytestmark = pytest.mark.contract
 
-#: The free-free edge, ``radio._RADIO_WAVE_MIN_AA`` (1 mm); the synchrotron edge
-#: is 100 um (``_SYNCH_WAVE_MIN_AA``). The thermal term is zero shortward of this,
-#: so any comparison must be restricted to the radio band or a false "extra term"
-#: would show up as a mismatch in the non-radio wavelength range where BOTH sides are already
-#: (correctly) zero for an unrelated reason.
-_FREEFREE_WAVE_MIN_AA = 1.0e7
+#: The radio block edge, ``radio._RADIO_WAVE_MIN_AA`` (100 um): the SED is zero shortward of
+#: it, so any comparison must be restricted to the radio band or a false "extra term"
+#: would show up as a mismatch in the range where BOTH sides are already zero.
+_RADIO_WAVE_MIN_AA = 1.0e6
 
 
 def _synthetic_ssp(log_wave_max: float = 11.0, n_wave: int = 900):
@@ -173,7 +171,7 @@ def test_freefree_false_drops_the_thermal_term(synthetic_radio_ssp, synthetic_to
 
     synchrotron_only = np.asarray(radio_sfr_bell2003(wave, L_ir, q_ir, alpha_sf))
 
-    radio_mask = wave > _FREEFREE_WAVE_MIN_AA
+    radio_mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
     np.testing.assert_allclose(
         sed_radio_no_ff[radio_mask],
@@ -390,7 +388,7 @@ def test_explicit_freefree_true_overrides_cue_auto_rule(ssp_data_fsps, synthetic
     sed_radio_true = np.asarray(state_true.derived["sed_radio"])
     sed_radio_false = np.asarray(state_false.derived["sed_radio"])
 
-    radio_mask = wave > _FREEFREE_WAVE_MIN_AA
+    radio_mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
     assert not np.allclose(sed_radio_true[radio_mask], sed_radio_false[radio_mask], rtol=1e-8), (
         "explicit freefree=True must produce a different sed_radio than freefree=False"
@@ -432,7 +430,7 @@ def test_one_thermal_term_contract_with_cue(ssp_data_fsps, synthetic_tophat_obs)
         * 10.0**q
     )
     wave = np.asarray(state_absent.wave)
-    mask = wave > _FREEFREE_WAVE_MIN_AA
+    mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(mask)
     np.testing.assert_allclose(
         sed_radio_absent[mask],

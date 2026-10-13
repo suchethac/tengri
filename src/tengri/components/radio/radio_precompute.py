@@ -78,7 +78,7 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 _L_REF = 1.0e44  # erg/s: convenient unit-luminosity reference
 
 # Standard rest-frame wavelength grid: 100 um (the synchrotron edge,
-# ``_SYNCH_WAVE_MIN_AA`` in radio.py) to 1 km. The 1 mm-1 km nodes are the original
+# ``_RADIO_WAVE_MIN_AA`` in radio.py) to 1 km. The 1 mm-1 km nodes are the original
 # log-spaced 1024; the 100 um-1 mm nodes are prepended so those stay unchanged.
 _WAVE_REST = host_array(
     np.concatenate(

@@ -7,7 +7,10 @@ break at 1 mm. pcigale's ``sed_modules/radio.py`` evaluates it on
 SED at 1 mm and 0.7 % at 850 um. Zeroing it shortward of 1 mm (the former edge) removed
 that flux and, in the CIGALE reproduction, offset a nebular excess.
 
-Free-free keeps its 1 mm edge: the Murphy et al. (2011) calibration is a radio relation.
+The thermal free-free (Murphy et al. 2011 term, and the split mode's thermal law) shares
+the same 100 um edge by owner ruling: an optically thin power law has no break at 1 mm,
+and the overlap with the nebular continuum is gated by ``include_freefree`` and
+``freefree_wave_min``, not by the edge.
 """
 
 from __future__ import annotations
@@ -54,9 +57,15 @@ def test_other_sf_modes_share_the_extended_edge():
     split = np.asarray(R.radio_sfr_bell2003_split(wave, _L_IR))
     nonthermal_only = np.asarray(R.radio_sfr_bell2003_split(wave, _L_IR, include_thermal=False))
     assert np.all(nonthermal_only > 0.0)
-    # The thermal law keeps its 1 mm edge: 850 um carries synchrotron alone.
-    assert split[1] == nonthermal_only[1]
-    assert split[0] == nonthermal_only[0]
+    # The thermal law shares the 100 um edge: the split exceeds the non-thermal part by f_thermal.
+    nu = _C_AA / wave
+    thermal = (
+        R._F_THERMAL_AGNFITTER
+        * (nu / R._NU_REF_BELL2003_HZ) ** (-R._ALPHA_THERMAL_AGNFITTER)
+        * _L_IR
+        / (3.75e12 * 10.0**2.64)
+    )
+    np.testing.assert_allclose(split - nonthermal_only, thermal, rtol=1e-12)
 
 
 def test_below_100_um_is_zero_and_edge_is_included():
@@ -73,10 +82,29 @@ def test_values_longward_of_1mm_are_unchanged():
     np.testing.assert_array_equal(got, _power_law(wave))
 
 
-def test_free_free_keeps_the_1mm_edge():
-    wave = np.array([850.0 * _UM, 1.0e7 + 1.0])
-    ff = np.asarray(R.radio_freefree(wave, _L_IR))
-    assert ff[0] == 0.0 and ff[1] > 0.0
+def test_free_free_at_500_um_is_the_murphy_power_law():
+    """Murphy+2011 Eqs. 4 and 11: L_nu = SFR/4.6e-28 (nu/GHz)^-0.1 at T_e = 1e4 K, SFR = 3.88e-44 L_IR."""
+    wave = np.array([500.0 * _UM, 100.0 * _UM])
+    nu = _C_AA / wave
+    expect = (1.0 / 4.6e-28) * (nu / 1.0e9) ** -0.1 * 3.88e-44 * _L_IR
+    np.testing.assert_allclose(np.asarray(R.radio_freefree(wave, _L_IR)), expect, rtol=1e-6)
+    assert float(R.radio_freefree(np.array([9.9e5]), _L_IR)[0]) == 0.0
+
+
+@pytest.mark.parametrize("mode", ["bell2003", "bell2003_split"])
+def test_radio_block_is_continuous_through_1_mm(mode):
+    """The kernel sum across 1 mm follows the power-law slope, with no step."""
+    below, above = 1.0e7 * (1 - 1e-6), 1.0e7 * (1 + 1e-6)
+    wave = np.array([below, above])
+    if mode == "bell2003":
+        out = np.asarray(R.radio_sfr_bell2003(wave, _L_IR, q_ir=_Q, alpha_sf=_ALPHA))
+        out = out + np.asarray(R.radio_freefree(wave, _L_IR))
+    else:
+        out = np.asarray(R.radio_sfr_bell2003_split(wave, _L_IR))
+    ratio = out[1] / out[0]
+    # nu changes by 2e-6 across the cell: the ratio is 1 - 2e-6 alpha_eff, alpha_eff in [-0.1, 0.8]
+    # (the former 1 mm edge gave 6.7x for bell2003 with free-free and 4.6x for the split).
+    assert 1.0 - 0.3e-6 < ratio < 1.0 + 1.7e-6, ratio
 
 
 def test_matches_pcigale_radio_module_below_1mm():
@@ -117,14 +145,19 @@ def test_precompute_grid_covers_100_um_and_keeps_old_nodes():
     assert np.all(np.isin(old, wave))
 
 
-def _build(ssp, obs, with_radio=True):
+def _build(ssp, obs, with_radio=True, sf_extra=None, neb=None):
     radio = {
-        "sf": {"type": "bell2003", "freefree": False},
+        "sf": {"type": "bell2003", **({"freefree": False} if sf_extra is None else sf_extra)},
         "agn": {"type": "none"},
         "all_params": FREE,
         "q_ir": Fixed(_Q),
         "alpha_sf": Fixed(_ALPHA),
     }
+    if sf_extra is not None and sf_extra.get("freefree"):
+        radio = {k: v for k, v in radio.items() if k != "all_params"} | {
+            "T_e": Fixed(1.0e4),  # Murphy+2011 reference temperature
+            "alpha_ff": Fixed(-0.1),
+        }
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -134,6 +167,7 @@ def _build(ssp, obs, with_radio=True):
             sfh={"type": "const", "all_params": FREE},
             dust_attenuation={"type": "two_component", "law": "calzetti"},
             dust_emission={"type": "draine_li2014"},
+            **({"neb": neb} if neb is not None else {}),
             **({"radio": radio} if with_radio else {}),
         )
 
@@ -202,3 +236,90 @@ def test_final_sed_l_tir_gains_the_sub_mm_synchrotron(synthetic_ssp_wide, synthe
     gain = (l1 - l0) * 3.828e33  # erg/s
     assert gain == pytest.approx(analytic, rel=0.03)
     assert 1e-6 < gain / l_in < 3e-5
+
+
+def _thermal_share():
+    """Murphy+2011 free-free over Bell (2003) Eq. 1 at 1.4 GHz, q = 2.58 (L_IR cancels)."""
+    return 3.88e-44 / 4.6e-28 * 1.4**-0.1 * 3.75e12 * 10.0**_Q
+
+
+def test_final_sed_l_tir_gain_includes_free_free(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Free-free on (the default): l_tir gains the synchrotron (total minus thermal) and the
+    Murphy term over 100-1000 um, both analytic power-law integrals."""
+    from tengri.utils.sed_quantities import compute_l_tir
+
+    def l_tir(model):
+        s = model.predict_state(model.spec.sample(jax.random.PRNGKey(0)))
+        return float(compute_l_tir(s.sed_intrinsic, s.wave)), s
+
+    on = _build(synthetic_ssp_wide, synthetic_tophat_obs, sf_extra={"freefree": True})
+    off = _build(synthetic_ssp_wide, synthetic_tophat_obs, with_radio=False)
+    l1, s1 = l_tir(on)
+    l0, _ = l_tir(off)
+    l_in = float(np.asarray(s1.derived["radio_L_ir_input"])) * 3.828e33
+    nu_lo, nu_hi = _C_AA / 1.0e7, _C_AA / 1.0e6
+    ref = l_in / (3.75e12 * 10.0**_Q)  # total L_nu at 1.4 GHz
+    ff_ref = _thermal_share() * ref
+    sync = (ref - ff_ref) * 1.4e9**_ALPHA * (nu_hi ** (1 - _ALPHA) - nu_lo ** (1 - _ALPHA))
+    sync /= 1 - _ALPHA
+    ff = ff_ref * 1.4e9**0.1 * (nu_hi**0.9 - nu_lo**0.9) / 0.9  # L_nu ~ nu^-0.1
+    assert (l1 - l0) * 3.828e33 == pytest.approx(sync + ff, rel=0.03)
+    # The energy-balance L_ir is the dust block's: free-free does not touch it.
+    _, s0 = l_tir(off)
+    assert float(s1.derived["L_ir"]) == float(s0.derived["L_ir"])
+
+
+@pytest.mark.parametrize("sf", [{"type": "bell2003"}, {"type": "bell2003_split"}])
+def test_bare_ssp_radio_block_is_continuous_through_1_mm(ssp_data_bc03, synthetic_tophat_obs, sf):
+    """Default radio block on a bare SSP, no nebular continuum: no step at 1 mm.
+
+    The step was 6.7x (bell2003) and 4.6x (split) with the 1 mm free-free edge. Across the
+    grid cell around 1 mm the block now changes by its power-law slope only.
+    """
+    del synthetic_tophat_obs
+    model = _build_bare(ssp_data_bc03, sf)
+    state = model.predict_state(model.spec.sample(jax.random.PRNGKey(0)))
+    wave = np.asarray(state.wave)
+    sed = np.asarray(state.derived["sed_radio"])
+    lo = int(np.nonzero(wave <= 1.0e7)[0][-1])
+    nu_ratio = wave[lo + 1] / wave[lo]
+    ratio = sed[lo + 1] / sed[lo]
+    # L ~ wave^alpha_eff, alpha_eff in [-0.1, 0.8]: ratio between the two pure power laws
+    assert nu_ratio**-0.1 <= ratio <= nu_ratio**0.8, (ratio, nu_ratio)
+
+
+def _build_bare(ssp, sf, neb=None):
+    from tengri.observation import Photometry
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=Photometry.from_names(["sdss_g", "sdss_r"]),
+            redshift=Fixed(0.0),
+            sfh={"type": "const", "all_params": FREE},
+            dust_attenuation={"type": "two_component", "law": "calzetti"},
+            dust_emission={"type": "draine_li2014"},
+            **({"neb": neb} if neb is not None else {}),
+            radio={"sf": sf, "agn": {"type": "none"}},
+        )
+
+
+@pytest.mark.parametrize("neb", ["cue", "cloudy"])
+def test_free_free_gate_holds_with_a_nebular_continuum(ssp_data_bc03, neb):
+    """A nebular backend carrying free-free switches the radio free-free off at every node:
+    the radio block is the synchrotron alone, (1 - f_th) of the ``freefree: False`` one."""
+    from tengri.components.radio.component import RadioSEDComponentConfig as Cfg  # noqa: F401
+
+    key = jax.random.PRNGKey(0)
+    gated = _build_bare(ssp_data_bc03, {"type": "bell2003"}, neb={"type": neb})
+    plain = _build_bare(ssp_data_bc03, {"type": "bell2003", "freefree": False}, neb={"type": neb})
+    s_g = gated.predict_state(gated.spec.sample(key))
+    s_p = plain.predict_state(plain.spec.sample(key))
+    wave = np.asarray(s_g.wave)
+    a, b = np.asarray(s_g.derived["sed_radio"]), np.asarray(s_p.derived["sed_radio"])
+    on = wave >= 1.0e6
+    assert on.sum() > 100
+    q64 = 3.88e-44 / 4.6e-28 * 1.4**-0.1 * 3.75e12 * 10.0**2.64
+    np.testing.assert_allclose(a[on], (1.0 - q64) * b[on], rtol=1e-10)
+    assert np.all(a[~on] == 0.0)

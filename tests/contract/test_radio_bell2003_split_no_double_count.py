@@ -36,12 +36,10 @@ from tengri.radio import radio_sfr_bell2003_split
 
 pytestmark = pytest.mark.contract
 
-#: The free-free edge, ``radio._RADIO_WAVE_MIN_AA`` (1 mm); the synchrotron edge
-#: is 100 um (``_SYNCH_WAVE_MIN_AA``). The thermal term is zero shortward of this,
-#: so any comparison must be restricted to the radio band or a false "extra term"
-#: would show up as a mismatch in the non-radio wavelength range where BOTH sides are already
-#: (correctly) zero for an unrelated reason.
-_FREEFREE_WAVE_MIN_AA = 1.0e7
+#: The radio block edge, ``radio._RADIO_WAVE_MIN_AA`` (100 um): the SED is zero shortward of
+#: it, so any comparison must be restricted to the radio band or a false "extra term"
+#: would show up as a mismatch in the range where BOTH sides are already zero.
+_RADIO_WAVE_MIN_AA = 1.0e6
 
 #: Declared default for radio_q_ir from the registry (Bell 2003: 2.64).
 _Q_IR = registry().get("radio_q_ir").prior.value
@@ -98,7 +96,7 @@ def test_bell2003_split_component_equals_direct_function_no_extra_term(ssp_data_
     sed_radio = np.asarray(state.derived["sed_radio"])
     direct = np.asarray(radio_sfr_bell2003_split(wave, L_ir=L_ir, q_ir=_Q_IR))
 
-    radio_mask = wave > _FREEFREE_WAVE_MIN_AA
+    radio_mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
     rel_diff = np.abs(sed_radio[radio_mask] / direct[radio_mask] - 1.0)
     assert np.max(rel_diff) < 1e-10, (
@@ -124,7 +122,7 @@ def test_bell2003_still_adds_freefree(ssp_data_bc03):
     ff_ref = (1.0 / 4.6e-28) * 1.4**-0.1 * 3.88e-44 * L_ir
     sync = (L_ir / (3.75e12 * 10.0**_Q_IR) - ff_ref) * (nu / 1.4e9) ** (-_ALPHA_SF)
 
-    radio_mask = wave > _FREEFREE_WAVE_MIN_AA
+    radio_mask = wave > _RADIO_WAVE_MIN_AA
     assert np.any(radio_mask), "no radio-band wavelength points in the model's grid"
     assert np.sum(ff_only[radio_mask]) > 0.0, "bell2003 mode must still add a free-free term"
     np.testing.assert_allclose(

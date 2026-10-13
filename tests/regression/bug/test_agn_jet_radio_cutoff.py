@@ -18,7 +18,7 @@ on the grounds that it is tied to the dust FIR and must not double-count there.
 That floor moved to 100 um (pcigale's radio-module edge) with the synchrotron fix:
 the dust-emission SED holds no synchrotron, so adding the power law below 1 mm
 double-counts nothing, and every ``L_ir`` window is integrated from the dust SED
-alone. The thermal free-free keeps 1 mm.
+alone. The thermal free-free shares the 100 um edge.
 
 References
 ----------
