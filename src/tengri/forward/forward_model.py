@@ -263,6 +263,7 @@ class ForwardModel:
         "name",
         "predict_observables_jit",
         "predict_properties",
+        "threaded_template_inputs",
     )
 
     def _single_inner_sed(self, what: str):

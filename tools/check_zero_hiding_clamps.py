@@ -210,7 +210,20 @@ from collections.abc import Sequence
 #: 84 -> 83 with #2745: the SKIRTOR publication path integrates the disc and dust in closed
 #: form (``native_bolometric_nu``) instead of dividing a grid trapezoid by a clamped integral;
 #: one clamped-denominator division is gone.
-EXPECTED_SITES = 83
+#:
+#: 83 -> 82 with #2783: the ``adaf_spectrum_from_state`` normalization no longer divides by
+#: ``jnp.maximum(integral, representable_floor(1e-100))``. It forms the same ratio in log space,
+#: ``exp(log numer - log integral + log(S + B))``, with ``log_integral`` a ``logsumexp`` of the
+#: segment and bremsstrahlung log powers, so the denominator is never clamped and never divided.
+#: A removal, not a relabel: a zero power would now show as -inf in the log, not as a floored
+#: quotient.
+#:
+#: 82 -> 81 with #2825: the ``alpha_c < 1`` branch of ``_adaf_electron_temperature`` no longer
+#: evaluates Eq. 43 with ``jnp.maximum(alpha_c, 1e-3)`` in the exponent (the former
+#: ``tau_es ** (-1.0 / jnp.maximum(alpha_c, 1e-3))`` in adaf.py). The energy-balance solve
+#: (``_adaf_solve_te_balance``) replaces Eq. 43 on the T_e path, so a degenerate input now fails
+#: loudly through the balance residual rather than flooring the exponent.
+EXPECTED_SITES = 81
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

@@ -330,7 +330,7 @@ _SELF_CONTAINED_AGN_MODELS: dict[str, dict[str, str]] = {
         "_description": "raw SKIRTOR radiative-transfer total (disc + torus + scattering)",
     },
     "grahsp": {
-        "citation": "Kauffmann et al. 2025 (GRAHSP)",
+        "citation": "Buchner et al. 2024, A&A, 692, A161 (GRAHSP)",
         "_description": "self-contained GRAHSP AGN model (torus_model/disc_model selectors)",
     },
 }
@@ -416,7 +416,7 @@ def _resolve_monolithic_model(name: str) -> Callable | None:
 
         warnings.warn(
             "AGN model 'grahsp' is deprecated. It routes to the self-contained "
-            "GRAHSP forward model (Kauffmann et al.), whose torus_model/disc_model "
+            "GRAHSP forward model (Buchner et al. 2024), whose torus_model/disc_model "
             "variant selectors are not composable-block kwargs. For the block "
             "grammar use agn_model='composable', agn_disc_block='grahsp_sbpl', "
             "agn_torus_block='grahsp', etc.",
@@ -1172,7 +1172,8 @@ def adaf_agn(
     torus re-emits a fraction of the bolometric luminosity in the IR. As of #898
     the disc is the *faithful* Mahadevan 1997 model
     (:func:`~tengri.components.agn.adaf.adaf_spectrum`): ``agn_log_lbol`` is the
-    canonical luminosity and the accretion rate is derived from it (Eq. 49), so
+    canonical luminosity and the accretion rate is derived from it (the radiated
+    power Q_ie + delta Q+ of Sect. 5.2; Eq. 49 is its high-rate limit), so
     ``agn_log_ledd`` is retired; the ad-hoc truncated outer disc is dropped.
 
     Parameters

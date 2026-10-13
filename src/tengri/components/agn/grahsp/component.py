@@ -62,12 +62,9 @@ from jax import Array
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
-from tengri.components.agn.grahsp.bolometric import (
-    bolometric_luminosity_bbb,
-    bolometric_luminosity_torus,
-)
 from tengri.components.agn.grahsp.disc import netzer_disc, select_disc_model
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
+from tengri.components.agn.grahsp.published import PublishedLuminosities
 from tengri.components.agn.grahsp.templates import (
     GRAHSPTemplates,
     load_grahsp_templates,
@@ -187,7 +184,7 @@ class GRAHSPSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class GRAHSPSEDComponent:
+class GRAHSPSEDComponent(PublishedLuminosities):
     r"""SEDComponent adapter wrapping the GRAHSP AGN model.
 
     Notes
@@ -316,7 +313,7 @@ class GRAHSPSEDComponent:
             ParamDeclaration(
                 "agn_grahsp_cool_width",
                 Uniform(0.2, 0.65),
-                "Cool dust log-width [dex]",
+                "Cool dust log-Gaussian standard deviation [dex]",
             ),
             ParamDeclaration(
                 "agn_grahsp_hot_lam_um",
@@ -326,7 +323,7 @@ class GRAHSPSEDComponent:
             ParamDeclaration(
                 "agn_grahsp_hot_width",
                 Uniform(0.2, 0.65),
-                "Hot dust log-width [dex]",
+                "Hot dust log-Gaussian standard deviation [dex]",
             ),
             ParamDeclaration(
                 "agn_grahsp_hot_fcov",
@@ -452,43 +449,57 @@ class GRAHSPSEDComponent:
         if templates_state is None:
             templates_state = self.precompute()
 
-        wave_angstrom = state.wave
-        wave_nm = wave_angstrom * 0.1
+        wave_nm = state.wave * 0.1
+        bbb_intrinsic, torus_intrinsic = self._pieces(wave_nm, params, templates_state)
+        factor_agn = self._attenuation(wave_nm, params)
+        if factor_agn is None:
+            bbb_total, torus_total = bbb_intrinsic, torus_intrinsic
+        else:
+            bbb_total = bbb_intrinsic * factor_agn
+            torus_total = torus_intrinsic * factor_agn
 
+        # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
+        L_nu = (bbb_total + torus_total) * wave_nm**2 / _C_NM_PER_S
+        published = self._published_luminosities(params, templates_state)
+        return state.add_intrinsic(L_nu).with_(
+            derived=state.derived.with_(sed_grahsp=L_nu, **published),
+        )
+
+    def _pieces(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array]:
+        """Intrinsic AGN-side L_lambda [erg/s/nm] of the BBB side and of the torus side.
+
+        Parameters
+        ----------
+        wave_nm : array_like, shape (n_wave,)
+            Rest-frame wavelength [nm]; the caller's grid for the emitted SED.
+        params : mapping
+            ``agn_grahsp_*`` keys.
+        templates_state : GRAHSPSEDComponentState
+            Pre-loaded template tensors.
+
+        Returns
+        -------
+        bbb_intrinsic : ndarray, shape (n_wave,)
+            BBB + lines + FeII + Balmer continuum [erg/s/nm], before attenuation.
+        torus_intrinsic : ndarray, shape (n_wave,)
+            Torus continuum + Si feature [erg/s/nm], before attenuation.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. Pointwise in ``wave_nm``.
+        """
         cfg = self.config
         l5100 = jnp.asarray(params["agn_grahsp_l5100"])
         zeros = jnp.zeros_like(wave_nm)
-        # --- Big blue bump: SBPL power-law (default) or Netzer disc grid. ---
-        if not cfg.include_bbb:
-            bbb = zeros
-        elif cfg.disc_model == "netzer":
-            idx = select_disc_model(
-                templates_state.disc_m,
-                templates_state.disc_a,
-                templates_state.disc_mdot,
-                m=cfg.disc_m,
-                a=cfg.disc_a,
-                mdot=cfg.disc_mdot,
-            )
-            bbb = netzer_disc(
-                wave_nm=wave_nm,
-                l5100=l5100,
-                disc_wave_nm=templates_state.disc_wave_nm,
-                disc_lumin_model=templates_state.disc_lumin[idx],
-            )
-        else:
-            bbb = sbpl_bbb(
-                wave_nm=wave_nm,
-                l5100=l5100,
-                uvslope=jnp.asarray(params["agn_grahsp_uvslope"]),
-                plslope=jnp.asarray(params["agn_grahsp_plslope"]),
-                plbendloc_nm=jnp.asarray(params["agn_grahsp_plbendloc_nm"]),
-                plbendwidth=jnp.asarray(params["agn_grahsp_plbendwidth"]),
-                cutoff_nm=jnp.asarray(params.get("agn_grahsp_cutoff_nm", 10000.0)),
-            )
-        # GRAHSP has no X-ray physics: floor the disc below the alpha_ox
-        # corona's blue edge so it does not double-count with the corona
-        # (#1168). No-op for the netzer branch (already bounded via interp).
+        bbb = self._disc_raw(wave_nm, params, templates_state) if cfg.include_bbb else zeros
+        # GRAHSP has no X-ray physics: floor the disc below the alpha_ox corona's blue edge
+        # so it does not double-count with the corona (#1168). No-op for the netzer branch
+        # (already bounded via interp).
         bbb = floor_disc_xray(wave_nm, bbb)
         if cfg.include_lines:
             broad, narrow = gaussian_lines(
@@ -506,13 +517,7 @@ class GRAHSPSEDComponent:
             broad = zeros
             narrow = zeros
         # --- FeII forest: Bruhweiler+Verner 2008 (default) or Veron-Cetty 2004. ---
-        if cfg.feii_template == "veroncetty2004":
-            feii_wave, feii_lumin = (
-                templates_state.feii_vc04_wave_nm,
-                templates_state.feii_vc04_lumin,
-            )
-        else:
-            feii_wave, feii_lumin = templates_state.feii_wave_nm, templates_state.feii_lumin
+        feii_wave, feii_lumin = self._feii_template(templates_state)
         feii = (
             feii_forest(
                 wave_nm=wave_nm,
@@ -536,15 +541,74 @@ class GRAHSPSEDComponent:
             if cfg.include_balmer and cfg.agn_type == 1
             else zeros
         )
-        # --- Torus: log-Gaussian (default) or Mor & Netzer 2012 template. ---
+        torus, si = self._torus_at(wave_nm, params, templates_state)
+        # Mirror upstream ``mask_negative``: clip si so total torus stays >= 0.
+        si = jnp.maximum(si, -torus)
+
+        return bbb + broad + narrow + feii + balmer, torus + si
+
+    def _feii_template(self, templates_state: GRAHSPSEDComponentState) -> tuple[Array, Array]:
+        """Selected FeII template: native wavelengths [nm] and L_lambda per unit amplitude."""
+        if self.config.feii_template == "veroncetty2004":
+            return templates_state.feii_vc04_wave_nm, templates_state.feii_vc04_lumin
+        return templates_state.feii_wave_nm, templates_state.feii_lumin
+
+    def _disc_raw(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> Array:
+        """Big blue bump L_lambda [erg/s/nm] before the X-ray floor: SBPL or Netzer disc."""
+        cfg = self.config
+        l5100 = jnp.asarray(params["agn_grahsp_l5100"])
+        if cfg.disc_model == "netzer":
+            idx = select_disc_model(
+                templates_state.disc_m,
+                templates_state.disc_a,
+                templates_state.disc_mdot,
+                m=cfg.disc_m,
+                a=cfg.disc_a,
+                mdot=cfg.disc_mdot,
+            )
+            return netzer_disc(
+                wave_nm=wave_nm,
+                l5100=l5100,
+                disc_wave_nm=templates_state.disc_wave_nm,
+                disc_lumin_model=templates_state.disc_lumin[idx],
+            )
+        return sbpl_bbb(
+            wave_nm=wave_nm,
+            l5100=l5100,
+            uvslope=jnp.asarray(params["agn_grahsp_uvslope"]),
+            plslope=jnp.asarray(params["agn_grahsp_plslope"]),
+            plbendloc_nm=jnp.asarray(params["agn_grahsp_plbendloc_nm"]),
+            plbendwidth=jnp.asarray(params["agn_grahsp_plbendwidth"]),
+            cutoff_nm=jnp.asarray(params.get("agn_grahsp_cutoff_nm", 10000.0)),
+        )
+
+    def _torus_at(
+        self,
+        wave_nm: Array,
+        params: Mapping[str, Array],
+        templates_state: GRAHSPSEDComponentState,
+    ) -> tuple[Array, Array]:
+        """Torus continuum and Si feature L_lambda [erg/s/nm], before the ``mask_negative`` clip.
+
+        Log-Gaussian torus (default) or the Mor & Netzer 2012 template; zeros for both when
+        ``include_torus`` is off, and zeros for the Si feature when ``include_si`` is off.
+        """
+        cfg = self.config
+        zeros = jnp.zeros_like(wave_nm)
         if not cfg.include_torus:
-            torus = zeros
-            si = zeros
-        elif cfg.torus_model == "mn12":
+            return zeros, zeros
+        l5100 = jnp.asarray(params["agn_grahsp_l5100"])
+        fcov = jnp.asarray(params["agn_grahsp_fcov"])
+        if cfg.torus_model == "mn12":
             torus = torus_mn12_continuum(
                 wave_nm=wave_nm,
                 l5100=l5100,
-                fcov=jnp.asarray(params["agn_grahsp_fcov"]),
+                fcov=fcov,
                 tor_temp=jnp.asarray(params.get("agn_grahsp_tor_temp", 0.0)),
                 tor_cutoff_um=jnp.asarray(params.get("agn_grahsp_tor_cutoff_um", 1.2)),
                 mn12_wave_nm=templates_state.torus_mn12_wave_nm,
@@ -556,7 +620,7 @@ class GRAHSPSEDComponent:
                 torus_mn12_si(
                     wave_nm=wave_nm,
                     l5100=l5100,
-                    fcov=jnp.asarray(params["agn_grahsp_fcov"]),
+                    fcov=fcov,
                     si=jnp.asarray(params["agn_grahsp_si"]),
                     si_wave_nm=templates_state.torus_mn12_si_wave_nm,
                     si_lumin=templates_state.torus_mn12_si_lumin,
@@ -564,62 +628,49 @@ class GRAHSPSEDComponent:
                 if cfg.include_si
                 else zeros
             )
-        else:
-            torus = torus_dust_continuum(
+            return torus, si
+        torus = torus_dust_continuum(
+            wave_nm=wave_nm,
+            l5100=l5100,
+            fcov=fcov,
+            cool_lam_um=jnp.asarray(params["agn_grahsp_cool_lam_um"]),
+            cool_width=jnp.asarray(params["agn_grahsp_cool_width"]),
+            hot_lam_um=jnp.asarray(params["agn_grahsp_hot_lam_um"]),
+            hot_width=jnp.asarray(params["agn_grahsp_hot_width"]),
+            hot_fcov=jnp.asarray(params["agn_grahsp_hot_fcov"]),
+        )
+        si = (
+            si_feature(
                 wave_nm=wave_nm,
                 l5100=l5100,
-                fcov=jnp.asarray(params["agn_grahsp_fcov"]),
-                cool_lam_um=jnp.asarray(params["agn_grahsp_cool_lam_um"]),
-                cool_width=jnp.asarray(params["agn_grahsp_cool_width"]),
-                hot_lam_um=jnp.asarray(params["agn_grahsp_hot_lam_um"]),
-                hot_width=jnp.asarray(params["agn_grahsp_hot_width"]),
-                hot_fcov=jnp.asarray(params["agn_grahsp_hot_fcov"]),
+                fcov=fcov,
+                si=jnp.asarray(params["agn_grahsp_si"]),
             )
-            si = (
-                si_feature(
-                    wave_nm=wave_nm,
-                    l5100=l5100,
-                    fcov=jnp.asarray(params["agn_grahsp_fcov"]),
-                    si=jnp.asarray(params["agn_grahsp_si"]),
-                )
-                if cfg.include_si
-                else zeros
-            )
-        # Mirror upstream ``mask_negative``: clip si so total torus stays >= 0.
-        si = jnp.maximum(si, -torus)
-
-        bbb_intrinsic = bbb + broad + narrow + feii + balmer
-        torus_intrinsic = torus + si
-
-        if cfg.apply_attenuation:
-            _, factor_agn = attenuation_factors(
-                wave_nm=wave_nm,
-                ebv=jnp.asarray(params["agn_grahsp_ebv"]),
-                ebv_agn=jnp.asarray(params["agn_grahsp_ebv_agn"]),
-            )
-            bbb_total = bbb_intrinsic * factor_agn
-            torus_total = torus_intrinsic * factor_agn
-        else:
-            bbb_total = bbb_intrinsic
-            torus_total = torus_intrinsic
-
-        # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
-        L_lambda_total = bbb_total + torus_total
-        L_nu = L_lambda_total * wave_nm**2 / _C_NM_PER_S
-
-        # Bolometric quantities (computed from L_lambda on the nm grid).
-        L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
-        L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
-        # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
-        # Reported but NOT injected into the Dale 2014 dust-emission loop;
-        # GRAHSP's torus already empirically captures dust re-radiation.
-        L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
-
-        return state.add_intrinsic(L_nu).with_(
-            derived=state.derived.with_(
-                sed_grahsp=L_nu,
-                L_agn_bol=L_bol_BBB,
-                L_agn_torus=L_bol_torus,
-                L_agn_absorbed=L_agn_absorbed,
-            ),
+            if cfg.include_si
+            else zeros
         )
+        return torus, si
+
+    def _attenuation(self, wave_nm: Array, params: Mapping[str, Array]) -> Array | None:
+        """AGN-side bi-attenuation factor 10**(-(E(B-V)+E(B-V)_AGN) A_SMC / 2.5), or None.
+
+        Parameters
+        ----------
+        wave_nm : array_like, shape (n_wave,)
+            Rest-frame wavelength [nm].
+        params : mapping
+            ``agn_grahsp_ebv`` and ``agn_grahsp_ebv_agn``.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,) or None
+            The factor [dimensionless]; None when ``apply_attenuation`` is off.
+        """
+        if not self.config.apply_attenuation:
+            return None
+        _, factor_agn = attenuation_factors(
+            wave_nm=wave_nm,
+            ebv=jnp.asarray(params["agn_grahsp_ebv"]),
+            ebv_agn=jnp.asarray(params["agn_grahsp_ebv_agn"]),
+        )
+        return factor_agn

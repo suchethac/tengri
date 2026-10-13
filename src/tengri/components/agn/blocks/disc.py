@@ -177,10 +177,11 @@ def adaf_disc_block(
     (see :func:`tengri.components.agn.adaf.adaf_spectrum`).
 
     ``agn_log_lbol`` is the canonical luminosity; the accretion rate is derived
-    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired: consistent with
-    the disc convention of #846). Pure ADAF: no bundled truncated thin disc (the
-    ad-hoc split of the old model is removed; use a separate disc block or the
-    Nemmen template block for the outer-disc red bump).
+    from it through the radiated power of Mahadevan Sect. 5.2,
+    Q_ie + delta Q+ (Eq. 49 is its high-rate limit; ``agn_log_ledd`` is
+    retired: consistent with the disc convention of #846). Pure ADAF: no bundled
+    truncated thin disc (the ad-hoc split of the old model is removed; use a separate
+    disc block or the Nemmen template block for the outer-disc red bump).
 
     .. warning::
 
@@ -934,7 +935,7 @@ def relagn_disc_block(
 @register_agn_block(
     "disc",
     "richards2006",
-    citation="Richards et al. 2006, ApJ, 166, 470",
+    citation="Richards et al. 2006, ApJS, 166, 470",
     status="production",
     short_doc="Richards et al. 2006 mean SDSS quasar composite SED",
 )
@@ -977,7 +978,7 @@ def richards2006_disc_block(
 
     References
     ----------
-    .. [1] Richards, G. T., et al. 2006, ApJ, 166, 470. Supermassive Black
+    .. [1] Richards, G. T., et al. 2006, ApJS, 166, 470. Supermassive Black
        Holes in SDSS Quasars and the Role of Quasar Triggering. Published
        2006 May 10. https://doi.org/10.1086/506525
     """
