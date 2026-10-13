@@ -138,6 +138,11 @@ _AGE_FRAC_PRIORS = {
     "sfh_delayed_bq_age_main_frac": _age_frac_prior(_DELAYED_BQ_AGE_MAIN_FLOOR_GYR, 13.0, 5.0),
     "sfh_periodic_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
     "sfh_psb_age_frac": _age_frac_prior(0.5, 13.0, 5.0),
+    "sfh_tsnorm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_snorm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_snorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_tsnorm_burst_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
+    "sfh_norm_peak_lbt_frac": _age_frac_prior(0.5, 12.0, 5.0),
 }
 
 # ── Data structures ───────────────────────────────────────────────
@@ -387,6 +392,13 @@ _tsnorm_spec = SFHModelSpec(
             Uniform(0.5, 12.0, default=5.0),
             z_capped_onset=True,
         ),
+        "sfh_tsnorm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_tsnorm_peak_lbt_gyr",
+        ),
         "sfh_tsnorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
             _lo_positive,
@@ -405,6 +417,7 @@ _tsnorm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_tsnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_peak_lbt_frac": ("sfh_tsnorm_peak_lbt_frac", 1.0, 0.0),
         "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
         "sfh_tsnorm_trunc": ("trunc", 1.0, 0.0),
@@ -435,6 +448,13 @@ _snorm_spec = SFHModelSpec(
             Uniform(0.5, 12.0, default=5.0),
             z_capped_onset=True,
         ),
+        "sfh_snorm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_snorm_peak_lbt_gyr",
+        ),
         "sfh_snorm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
             _lo_positive,
@@ -447,6 +467,7 @@ _snorm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_snorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_peak_lbt_frac": ("sfh_snorm_peak_lbt_frac", 1.0, 0.0),
         "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_skew": ("skew", 1.0, 0.0),
     },
@@ -474,6 +495,13 @@ _snorm_burst_spec = SFHModelSpec(
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
             z_capped_onset=True,
+        ),
+        "sfh_snorm_burst_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_snorm_burst_peak_lbt_gyr",
         ),
         "sfh_snorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -535,6 +563,7 @@ _snorm_burst_spec = SFHModelSpec(
     internal_param_map={
         "sfh_snorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_snorm_burst_peak_lbt_frac": ("sfh_snorm_burst_peak_lbt_frac", 1.0, 0.0),
         "sfh_snorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_burst_skew": ("skew", 1.0, 0.0),
         "sfh_snorm_burst_burst_sfr": ("burst_sfr", 1.0, 0.0),
@@ -564,6 +593,13 @@ _tsnorm_burst_spec = SFHModelSpec(
             "must have lo > 0",
             Uniform(0.5, 12.0, default=5.0),
             z_capped_onset=True,
+        ),
+        "sfh_tsnorm_burst_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_tsnorm_burst_peak_lbt_gyr",
         ),
         "sfh_tsnorm_burst_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
@@ -613,6 +649,7 @@ _tsnorm_burst_spec = SFHModelSpec(
     internal_param_map={
         "sfh_tsnorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_tsnorm_burst_peak_lbt_frac": ("sfh_tsnorm_burst_peak_lbt_frac", 1.0, 0.0),
         "sfh_tsnorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_burst_skew": ("skew", 1.0, 0.0),
         "sfh_tsnorm_burst_trunc": ("trunc", 1.0, 0.0),
@@ -644,6 +681,13 @@ _norm_spec = SFHModelSpec(
             Uniform(0.5, 12.0, default=5.0),
             z_capped_onset=True,
         ),
+        "sfh_norm_peak_lbt_frac": ParamDef(
+            "Peak lookback time as a fraction of age(z)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(1.0),
+            gyr_twin="sfh_norm_peak_lbt_gyr",
+        ),
         "sfh_norm_width_gyr": ParamDef(
             "Gaussian width (Gyr)",
             _lo_positive,
@@ -655,6 +699,7 @@ _norm_spec = SFHModelSpec(
     internal_param_map={
         "sfh_norm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_norm_peak_lbt_frac": ("sfh_norm_peak_lbt_frac", 1.0, 0.0),
         "sfh_norm_width_gyr": ("width", 1e9, 0.0),
     },
     composition_type="additive",

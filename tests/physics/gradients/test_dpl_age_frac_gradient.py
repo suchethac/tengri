@@ -39,6 +39,11 @@ FAMILIES = (
     ("psb", "age"),
     ("delayed_bq", "age_main"),
     pytest.param("lnorm", "age", marks=_LNORM_NAN),
+    ("tsnorm", "peak_lbt"),
+    ("snorm", "peak_lbt"),
+    ("snorm_burst", "peak_lbt"),
+    ("tsnorm_burst", "peak_lbt"),
+    ("norm", "peak_lbt"),
 )
 
 

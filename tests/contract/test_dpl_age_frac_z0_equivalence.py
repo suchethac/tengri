@@ -29,6 +29,11 @@ FAMILIES = (
     ("psb", "age"),
     ("delayed_bq", "age_main"),
     ("lnorm", "age"),
+    ("tsnorm", "peak_lbt"),
+    ("snorm", "peak_lbt"),
+    ("snorm_burst", "peak_lbt"),
+    ("tsnorm_burst", "peak_lbt"),
+    ("norm", "peak_lbt"),
 )
 
 
