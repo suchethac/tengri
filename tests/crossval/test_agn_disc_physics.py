@@ -301,21 +301,48 @@ class TestADAFPhysics:
         chex.assert_trees_all_equal(l_a, l_b)
 
     def test_adaf_beta_controls_synchrotron(self):
-        """Higher beta (magnetic pressure) → stronger synchrotron emission."""
-        from tengri.components.agn.adaf import adaf_spectrum
+        """Higher beta (gas fraction) -> weaker field -> lower synchrotron peak at fixed L_bol.
 
-        l_low_b = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.1)
-        l_high_b = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.9)
+        Mahadevan (1997, ApJ 477, 585, arXiv:astro-ph/9609107): Eq. 1 defines
+        beta = P_gas / P_total, so the magnetic pressure is the fraction (1 - beta).
 
-        # Radio/mm region where synchrotron dominates (λ > 1e5 A)
+        Only the s1 ratio s1(0.1) / s1(0.9) = 3 is paper-derived: s1 ~ (1 - beta)^(1/2)
+        at fixed alpha (Eq. 5).
+
+        REGRESSION PIN, not a physics requirement: the monotonic fall of the synchrotron
+        peak frequency nu_p and of the mean radio L_nu with beta at fixed L_bol, checked at
+        log L_bol = 8 and 10. At fixed L_bol, beta also moves T_e and mdot through the
+        energy balance (Eqs. 9, 13, 14), and the nu_p ~ B scaling of Eq. 21 holds only at
+        fixed T_e and mdot. The implementation's monotonic behavior is pinned here so a
+        change to it is noticed; it is not derived from the paper.
+        """
+        from tengri.components.agn.adaf import _adaf_s1, adaf_scalar_state, adaf_spectrum
+
+        # Paper-derived: Eq. 5 at fixed alpha, the field scale is (1 - beta)^(1/2).
+        assert float(_adaf_s1(0.3, 0.1) / _adaf_s1(0.3, 0.9)) == pytest.approx(3.0, rel=1e-12)
+
         radio_mask = (WAVE > 1e5) & (WAVE < 1e7)
-        opt_mask = (WAVE > 5000) & (WAVE < 6000)
-
-        # Higher beta → more synchrotron → higher radio/optical ratio
-        if float(jnp.sum(l_low_b[opt_mask])) > 0 and float(jnp.sum(l_high_b[opt_mask])) > 0:
-            ratio_low = float(jnp.mean(l_low_b[radio_mask]) / jnp.mean(l_low_b[opt_mask]))
-            ratio_high = float(jnp.mean(l_high_b[radio_mask]) / jnp.mean(l_high_b[opt_mask]))
-            assert ratio_high > ratio_low, "Higher beta should boost radio/optical ratio"
+        betas = (0.1, 0.3, 0.5, 0.7, 0.9)
+        # Regression pin of the implementation (see docstring): monotonic in beta at fixed L_bol.
+        for log_lbol in (8.0, 10.0):
+            nu_p = [
+                float(adaf_scalar_state(agn_log_lbol=log_lbol, agn_adaf_beta=b).nu_p)
+                for b in betas
+            ]
+            radio = [
+                float(
+                    jnp.mean(
+                        adaf_spectrum(WAVE, agn_log_lbol=log_lbol, agn_adaf_beta=b)[radio_mask]
+                    )
+                )
+                for b in betas
+            ]
+            assert np.all(np.diff(nu_p) < 0), (
+                f"nu_p must fall with beta at log_lbol={log_lbol}: {nu_p}"
+            )
+            assert np.all(np.diff(radio) < 0), (
+                f"radio luminosity must fall with beta at log_lbol={log_lbol}: {radio}"
+            )
 
     def test_synchrotron_peak_scales_with_mass(self):
         """Synchrotron peak ∝ M^{-1/2}: heavier BH → lower peak frequency."""

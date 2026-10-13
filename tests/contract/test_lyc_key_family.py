@@ -91,6 +91,11 @@ def _build_raw(ssp, obs, dust_attenuation: dict):
             "neb_fesc": Fixed(0.3),
             "neb_fdust_frac": Fixed(0.2),
             "all_params": Fixed(DEFAULT),
+            # Cue counts only the ages the 'young' split removes (<= t_birth_yr = 1e7), so
+            # both 'young' and 'all' are legal here; with every age counted 'young' raises.
+            "lyc_max_age_yr": (
+                1.0e7 if dust_attenuation.get("lyc_reprocessed_by", "young") == "young" else "all"
+            ),
         },
         dust_attenuation=dust_attenuation,
         redshift=Fixed(0.0),
@@ -136,6 +141,8 @@ class TestOldToNewInternalConfigMapping:
         m_base = _build(synthetic_ssp_wide, synthetic_tophat_obs)
         spec = copy.copy(m_base.spec)
         spec.dust_lyc_reprocessed_by = lyc_reprocessed_by
+        if lyc_reprocessed_by == "all":
+            spec.cue_lyc_max_age_yr = "all"  # 'all' pairs with every age counted
         spec.dust_lyc_in_energy_balance = lyc_in_energy_balance
         m_mapped = tengri.SEDModel(spec, synthetic_ssp_wide, observation=synthetic_tophat_obs)
 
@@ -247,10 +254,10 @@ class TestRoundTrip:
         )
         groups = m.spec.to_groups()
         atten = groups["dust_attenuation"]
-        if lyc_reprocessed_by == "all":
-            assert atten["lyc_reprocessed_by"] == "all"
-        else:
-            assert "lyc_reprocessed_by" not in atten
+        # Under Cue each legal pairing is the default for its cutoff ('young' with the 1e7
+        # cut, 'all' with every age), so the key is never emitted here; the non-default
+        # emission is covered with a non-Cue backend below.
+        assert "lyc_reprocessed_by" not in atten
         if lyc_in_energy_balance:
             assert atten["lyc_in_energy_balance"] is True
         else:
@@ -263,6 +270,38 @@ class TestRoundTrip:
         phot1 = np.asarray(m.predict_photometry({}))
         phot2 = np.asarray(m2.predict_photometry({}))
         np.testing.assert_array_equal(phot1, phot2)
+
+
+class TestNonDefaultEmission:
+    """The key is emitted exactly when it differs from the backend's default."""
+
+    @staticmethod
+    def _groups(neb, **dust):
+        from tengri import parse_groups
+
+        spec = parse_groups(
+            redshift=Fixed(0.1),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb=neb,
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+                **dust,
+            },
+        )
+        return spec, spec.to_groups()["dust_attenuation"]
+
+    def test_all_is_emitted_for_a_backend_whose_default_is_young(self):
+        spec, atten = self._groups({"type": "ssp"}, lyc_reprocessed_by="all")
+        assert atten["lyc_reprocessed_by"] == "all"
+        assert spec.dust_lyc_reprocessed_by == "all"
+
+    def test_young_with_an_every_age_cue_is_refused(self):
+        from tengri.config.exceptions import ConfigError
+
+        with pytest.raises(ConfigError, match="double-counts"):
+            self._groups({"type": "cue"}, lyc_reprocessed_by="young")
 
 
 class TestLycEscapeGeometryKey:
@@ -282,6 +321,8 @@ class TestLycEscapeGeometryKey:
             "tau_diff": Fixed(0.3),
             "all_params": Fixed(DEFAULT),
             "lyc_escape_geometry": lyc_escape_geometry,
+            # The hole geometry composes only with 'young', which is no longer the Cue default.
+            "lyc_reprocessed_by": "young",
         }
 
     def _build(self, ssp, obs, lyc_escape_geometry="screened"):

@@ -34,6 +34,7 @@ References
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import numpy as np
@@ -695,6 +696,76 @@ def make_torus_mn12_fixture():
     return len(cases), wave_nm.size
 
 
+# ---------------------------------------------------------------------------
+# 8. Netzer disc header map (source table header -> column), independent of the builder
+# ---------------------------------------------------------------------------
+
+NETZER_DISC_SOURCE = REPO_ROOT / "data" / "grahsp" / "netzer_disc_models.txt"
+N_NETZER_HEADER_SAMPLES = 25
+_NETZER_HEADER_RE = re.compile(r"^m(\d+)_a(\d+)_mdot(\d+)_inc0\s*$")
+
+
+def _netzer_header_label(token_m, token_a, token_mdot):
+    """Decode one header name into ``(M, a, mdot)`` floats.
+
+    The header encodes decimal digits after an implicit point: ``m60`` is
+    ``log10 M = 6`` (M = 10^6), ``a0998`` is spin 0.998, ``a0`` is spin 0,
+    ``mdot03`` is 0.3 and ``mdot003`` is 0.03 (the table's own note: "mdot03 =
+    mdot/mdot(Eddington) = 0.3").
+    """
+    return (
+        int(token_m) / 10.0,
+        int(token_a) / 1000.0,
+        int(token_mdot) / 10.0 ** (len(token_mdot) - 1),
+    )
+
+
+def make_netzer_disc_header_map_fixture():
+    """Write the header-to-column map of the Netzer disc source table.
+
+    Each of the 16 data columns is labeled by its own header name, decoded
+    by :func:`_netzer_header_label`, not by the enumeration order of any
+    importer. The stored spectra are :math:`L_\\lambda = L_\\nu \\nu^2 / c`
+    normalized to 1 at 510 nm, sampled at ``N_NETZER_HEADER_SAMPLES`` native
+    wavelengths. Consumed by ``tests/regression/bug/test_bug_2870_netzer_template_labels.py``.
+    """
+    import json
+
+    lines = NETZER_DISC_SOURCE.read_text().splitlines()
+    header = [
+        (ln.strip(), _NETZER_HEADER_RE.match(ln.strip()))
+        for ln in lines
+        if _NETZER_HEADER_RE.match(ln.strip())
+    ]
+    names = [name for name, m in header]
+    labels = [_netzer_header_label(*m.groups()) for _, m in header]
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("Freq")) + 1
+    table = np.array([[float(x) for x in ln.split()] for ln in lines[start:] if ln.strip()])
+    freq, wave_a = table[:, 0], table[:, 1]
+    order = np.argsort(wave_a)  # ascending wavelength (the source is descending)
+    wave_nm = wave_a[order] * 0.1
+    sample = np.linspace(0, wave_nm.size - 1, N_NETZER_HEADER_SAMPLES).round().astype(int)
+    c_arb = 3.0e18  # shape-only constant: cancels in the 510 nm normalization
+    columns = []
+    for j, (name, (mv, av, mdv)) in enumerate(zip(names, labels)):
+        l_lambda = table[order, 2 + j] * freq[order] ** 2 / c_arb
+        l_lambda = l_lambda / np.interp(510.0, wave_nm, l_lambda)
+        columns.append(
+            {
+                "column": j,
+                "header": name,
+                "M": mv,
+                "a": av,
+                "mdot": mdv,
+                "wave_nm": wave_nm[sample].tolist(),
+                "lumin": l_lambda[sample].tolist(),
+            }
+        )
+    out = FIXTURE_DIR / "netzer_disc_header_map.json"
+    out.write_text(json.dumps({"source": NETZER_DISC_SOURCE.name, "columns": columns}, indent=1))
+    return len(columns), N_NETZER_HEADER_SAMPLES
+
+
 def main():
     n_wave_sbpl, n_cases = make_sbpl_fixture()
     print(f"  sbpl_bbb.npz: {n_cases} cases x {n_wave_sbpl} wavelengths")
@@ -710,6 +781,8 @@ def main():
     print(f"  netzer_disc.npz: {n_cases_disc} cases x {n_wave_disc} wavelengths")
     n_cases_mn12, n_wave_mn12 = make_torus_mn12_fixture()
     print(f"  torus_mn12.npz: {n_cases_mn12} cases x {n_wave_mn12} wavelengths")
+    n_cols_hdr, n_samp_hdr = make_netzer_disc_header_map_fixture()
+    print(f"  netzer_disc_header_map.json: {n_cols_hdr} columns x {n_samp_hdr} samples")
 
 
 if __name__ == "__main__":

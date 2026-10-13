@@ -464,7 +464,7 @@ def fit_batch(
     redshift_col : str, optional
         Column name for per-row redshift. If None, uses model redshift.
     method : str, optional
-        Inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
+        Inference method (e.g. "vi", "mcmc"). Default ``"mcmc_nuts_fast"``.
     n_workers : int, optional
         Reserved for future multiprocessing. Default 1.
     verbose : bool, optional
@@ -810,7 +810,7 @@ def fit_population(
         Each element is either (flux, noise) tuple or dict with
         ``"flux_obs"`` [erg/s/cm²/Hz] and ``"noise"`` [erg/s/cm²/Hz] keys.
     method : str, optional
-        Hierarchical inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
+        Hierarchical inference method (e.g. "vi", "mcmc"). Default ``"mcmc_nuts_fast"``.
     population_prior : dict, optional
         Hyperpriors on shared PSD parameters (e.g. ``psd_sigma``, ``psd_tau_myr``).
     **kwargs

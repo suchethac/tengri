@@ -13,7 +13,8 @@ strength parameter :math:`A_{\\rm BC}`.
 
 References
 ----------
-.. [1] Grandi, S. A. 1982, ApJ, 255, 25. Balmer continuum in AGN.
+.. [1] Grandi, S. A. 1982, ApJ, 255, 25, "The 3000 Angstrom bump in quasars",
+       doi:10.1086/159799.
 .. [2] Buchner, J. et al. 2024, arXiv:2405.19297, §2.1.2. GRAHSP implementation.
 """
 
@@ -111,9 +112,9 @@ def balmer_continuum(
 
     References
     ----------
-    .. [1] Grandi, S. A. 1982, "The properties of the X-ray spectra of Seyfert
-           galaxies", ApJ, 255, 25. https://doi.org/10.1086/159815
-    .. [2] Buchner, J., Starck, J.-L., Salvato, M., et al. 2024,
+    .. [1] Grandi, S. A. 1982, "The 3000 Angstrom bump in quasars", ApJ, 255, 25.
+           https://doi.org/10.1086/159799
+    .. [2] Buchner, J., Starck, H., Salvato, M., et al. 2024,
            "Genuine Retrieval of the AGN Host Stellar Population (GRAHSP)",
            arXiv:2405.19297.
     """

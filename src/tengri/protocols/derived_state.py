@@ -107,6 +107,11 @@ class DerivedState:
     log_stellar_mass_scale: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
+    #: Surviving mass per SSP age bin [Msun], shape (n_age,): ``age_weights`` times
+    #: each node's mass-remaining fraction, summed over metallicity. Sums to
+    #: ``10**log_mstar``. Fragos+2013's LMXB age is the mass-weighted age of the
+    #: population's current stars, so the X-ray component weights by this.
+    age_weights_surviving: jnp.ndarray | None = None
     nion: jnp.ndarray | None = None
     log_nion: jnp.ndarray | None = None
     #: Per-age ionizing luminosity [erg/s], shape (n_age,). Computed from
@@ -278,6 +283,9 @@ class DerivedState:
     agn_restband_lnu_precomp: jnp.ndarray | None = None
     radio_restband_lnu_precomp: jnp.ndarray | None = None
     xray_restband_lnu_precomp: jnp.ndarray | None = None
+    # Its own integral at redshift=0 (#2559): dust emission is not reddened, so it
+    # lands in the unattenuated remainder of the rest-band projector.
+    dust_emission_restband_lnu_precomp: jnp.ndarray | None = None
     #: Per-age sub-band quadrature over the rest band, shape (n_age, n_filter, K),
     #: and its nodes [Angstrom]: the #1122 machinery applied to the rest-frame
     #: projection, so the dust screen is EVALUATED across the band rather than

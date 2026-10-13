@@ -23,7 +23,7 @@ on the method name:
 | `_run_pathfinder` | `pathfinder` | — |
 | `_run_elliptical_slice` | `mcmc_ess` | `elliptical_slice` |
 
-**`vi`** is the default. It uses NIFTy's `optimize_kl` for geoVI
+**`vi`** is the variational (geoVI) method; the `Fitter.run` default is `mcmc_nuts_fast`. It uses NIFTy's `optimize_kl` for geoVI
 with a resample+update schedule and nonlinear posterior draws.
 **`vi_nifty_fast`** uses NIFTy's `OptimizeVI.update` in a tight loop
 (~35% faster, no logging). **`vi_native`** is a fully JIT'd native JAX

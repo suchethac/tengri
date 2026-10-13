@@ -190,7 +190,6 @@ _HANDLED: dict[str, tuple[str, tuple[str, ...]]] = {
             "tengri.components.agn.disc:_compute_bh_params",
             "tengri.components.agn.disc:kubota_done_disc",
             "tengri.components.agn.disc:multicolor_disc",
-            "tengri.components.agn.disc:powerlaw_disc",
             "tengri.components.agn.disc:relagn_disc_from_grid",
             "tengri.components.agn.fritz:create_fritz_components_from_grid.fritz_components",
             "tengri.components.agn.fritz:create_fritz_from_grid.fritz_grid",

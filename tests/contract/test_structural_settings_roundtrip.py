@@ -132,6 +132,17 @@ CASES = [
         False,
     ),
     (
+        # 1e8 yr is the former hard cut; the default is 'all', so a default-valued
+        # case would compare default == default and pass vacuously.
+        "neb.lyc_max_age_yr",
+        dict(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "cue", "all_params": Fixed(DEFAULT), "lyc_max_age_yr": 1.0e8},
+        ),
+        "cue_lyc_max_age_yr",
+        1.0e8,
+    ),
+    (
         "shock.norm",
         dict(sfh={"type": "dpl", "all_params": Fixed(DEFAULT)}, shock={"norm": "lhalpha"}),
         "shock_norm",
