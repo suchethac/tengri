@@ -20,6 +20,7 @@ fraction is the ceiling of the ``tlast`` fraction, and both scale with the same
 age(z), so the flexible zone never has negative width at any redshift.
 """
 
+import numpy as np
 import pytest
 
 import tengri
@@ -295,3 +296,75 @@ def test_timing_gyr_property_is_nan_for_an_sfh_without_that_timing(synthetic_ssp
         model.spec.sample(jax.random.PRNGKey(0)), names=("sfh_dpl_age_gyr",)
     )
     assert bool(jax.numpy.isnan(props["sfh_dpl_age_gyr"]))
+
+
+def _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z):
+    """A dpl model whose onset fraction is free and every other parameter Fixed (#2748)."""
+    return tengri.SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT), "age_frac": FREE},
+        dust_attenuation={"type": "none"},
+        neb={"type": "none"},
+        redshift=Fixed(z),
+    )
+
+
+def test_params_gyr_key_converts_to_the_fraction_with_one_deprecation_warning(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
+):
+    """A params dict naming an old Gyr timing predicts as its fraction, warning once (#2748).
+
+    ``sfh_dpl_age_gyr = 5.0`` at z = 0.5 is ``sfh_dpl_age_frac = 5.0 / age(0.5)``,
+    so the two dicts must give the same photometry to round-off.
+    """
+    from tengri.parameters import timing
+
+    monkeypatch.setattr(timing, "_WARNED_GYR_ALIASES", set(), raising=False)
+    z = 0.5
+    frac = 5.0 / float(age_at_z(z))
+    model = _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, z)
+    ref = model.predict_photometry({"sfh_dpl_age_frac": frac})
+    with pytest.warns(DeprecationWarning) as record:
+        alias = model.predict_photometry({"sfh_dpl_age_gyr": 5.0})
+        model.predict_photometry({"sfh_dpl_age_gyr": 5.0})
+    np.testing.assert_allclose(np.asarray(alias), np.asarray(ref), rtol=1e-12, atol=0)
+    messages = [
+        str(w.message)
+        for w in record
+        if issubclass(w.category, DeprecationWarning) and "sfh_dpl_age_gyr" in str(w.message)
+    ]
+    assert len(messages) == 1
+    assert "sfh_dpl_age_frac" in messages[0]
+
+
+def test_gradient_flows_to_the_deprecated_gyr_key(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
+):
+    """jax.grad with respect to the Gyr value of a params dict is finite and non-zero (#2748)."""
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.parameters import timing
+
+    monkeypatch.setattr(timing, "_WARNED_GYR_ALIASES", set(), raising=False)
+    model = _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.5)
+
+    def total_flux(gyr):
+        return jnp.sum(model.predict_photometry({"sfh_dpl_age_gyr": gyr}))
+
+    grad = float(jax.grad(total_flux)(5.0))
+    assert np.isfinite(grad)
+    assert grad != 0.0
+
+
+def test_params_naming_both_timing_keys_is_a_config_error(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
+):
+    """A params dict giving the Gyr key and its fraction is refused (#2748)."""
+    from tengri.parameters import timing
+
+    monkeypatch.setattr(timing, "_WARNED_GYR_ALIASES", set(), raising=False)
+    model = _free_frac_dpl_model(synthetic_ssp_wide, synthetic_tophat_obs, 0.5)
+    with pytest.raises(ConfigError, match="not both"):
+        model.predict_photometry({"sfh_dpl_age_gyr": 5.0, "sfh_dpl_age_frac": 0.5})

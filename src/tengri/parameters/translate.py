@@ -62,6 +62,7 @@ from tengri.parameters._aliases import (
     find_short_param,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
+from tengri.parameters.timing import alias_gyr_timings
 from tengri.utils.physics_constants import LOG10_ZSUN
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -460,6 +461,7 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         unrecognized keys (typos, deleted params, or params from a component
         that isn't active in this spec).
     """
+    params = alias_gyr_timings(params, param_map, spec)
     internal = {}
     # Per-spec SFH params (sfh_X_*) are *also* preserved under their public name so
     # the composer in resolve_sfh can dispatch per-component without collisions

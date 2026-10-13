@@ -98,6 +98,7 @@ from tengri.observation.photometry import (
     filter_coverage_fraction,
 )
 from tengri.parameters.resolve import merge_fixed_params, refuse_fixed_overrides
+from tengri.parameters.timing import alias_gyr_timings
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
@@ -6890,6 +6891,7 @@ class SEDModel:
         # missing free parameter raises a helpful error here instead of a bare
         # KeyError deferred to the first accessor of the lazy Prediction. Both
         # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         check_unknown_params(params, self._param_map)
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
@@ -10494,6 +10496,7 @@ class SEDModel:
         # ``predict_observables_jit`` already guards at line ~4242
         # (#314). Skip in JIT-runtime threading mode where the JIT
         # entry point has already validated the caller's dict.
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         if fixed_values is None:
             check_unknown_params(params, self._param_map)
             # ...and the converse: a free param with no value would survive
@@ -10715,6 +10718,9 @@ class SEDModel:
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
+        # A params dict naming a deprecated Gyr timing is converted to its
+        # fraction first, so the checks below see the key the spec frees (#2748).
+        params = alias_gyr_timings(params, self._param_map, self.spec)
         # Validate param keys before entering JIT, silent drops of unknown
         # override keys produce plausible-looking but wrong physics (issue #314).
         check_unknown_params(params, self._param_map)
