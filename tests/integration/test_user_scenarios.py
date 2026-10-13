@@ -12,6 +12,7 @@ Purpose: User review of tengri code for Paper I usability improvements
 import os
 import time
 import tracemalloc
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -249,7 +250,7 @@ def measure_jit_and_runtime(
             # For MAP/VI/NSS, measure cached runtime with warmup
             runtimes = []
             for i in range(n_warmup):
-                key_i = jax.random.fold_in(rng_key, abs(hash(f"warmup_{i}")) % (2**31))
+                key_i = jax.random.fold_in(rng_key, zlib.crc32(f"warmup_{i}".encode()) % (2**31))
                 t_start = time.perf_counter()
                 _ = fitter.run(
                     method,

@@ -12,7 +12,10 @@ import pytest
 from tengri.parameters.priors import (
     Fixed,
     Gaussian,
+    Laplace,
+    LogNormal,
     LogUniform,
+    StudentT,
     Uniform,
     resolve_shorthand,
 )
@@ -227,3 +230,36 @@ class TestResolveShorthand:
     def test_invalid_tuple_length(self):
         with pytest.raises(TypeError, match="Cannot resolve"):
             resolve_shorthand((1, 2, 3))
+
+
+class TestNonFiniteBoundsRejected:
+    """NaN fails every comparison, so ``if lo >= hi`` accepts it. Constructors must refuse it."""
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: Uniform(float("nan"), 1.0),
+            lambda: Uniform(0.0, float("nan")),
+            lambda: Gaussian(0.0, float("nan")),
+            lambda: Gaussian(0.0, 1.0, lo=float("nan")),
+            lambda: LogUniform(float("nan"), 1.0),
+            lambda: LogUniform(1.0, float("nan")),
+            lambda: Gaussian(float("nan"), 1.0),
+            lambda: LogNormal(float("nan"), 1.0),
+            lambda: Laplace(float("nan"), 1.0),
+            lambda: StudentT(float("nan"), 1.0),
+            lambda: StudentT(0.0, 0.0),
+            lambda: StudentT(0.0, 1.0, df=float("nan")),
+        ],
+    )
+    def test_nan_bound_raises(self, make):
+        with pytest.raises(ValueError):
+            make()
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_fixed_non_finite_raises(self, value):
+        with pytest.raises(ValueError):
+            Fixed(value)
+
+    def test_fixed_finite_still_accepted(self):
+        assert Fixed(0.5).value == 0.5

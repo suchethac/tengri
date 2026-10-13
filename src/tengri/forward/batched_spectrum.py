@@ -14,8 +14,8 @@ and control flow: the padded pixel count, the banded offsets, the grid kind
 and the LSF binning. The batch arrays (wavelength, mask, resolution rows,
 redshift, calibration range, photometry) are traced. The resolution path is
 chosen from the static grid kind, never from a traced grid: under a trace
-``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``True``, which
-would send a linear grid down the single-FFT constant-R path.
+``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``False`` (unknown),
+which sends the grid down the general path (#2847).
 
 Why the redshift is free in the template
 ----------------------------------------

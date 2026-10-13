@@ -536,7 +536,7 @@ def mag_to_surface_brightness(mag: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jn
     ----------
     Binney & Merrifield 1998, Galactic Astronomy (Section 2.1)
     """
-    area_safe = jnp.maximum(area_arcsec2, 1e-300)
+    area_safe = jnp.maximum(area_arcsec2, representable_floor(1e-300))
     return mag + 2.5 * jnp.log10(area_safe)
 
 
@@ -562,5 +562,5 @@ def surface_brightness_to_mag(mu: jnp.ndarray, area_arcsec2: jnp.ndarray) -> jnp
     ----------
     Binney & Merrifield 1998, Galactic Astronomy (Section 2.1)
     """
-    area_safe = jnp.maximum(area_arcsec2, 1e-300)
+    area_safe = jnp.maximum(area_arcsec2, representable_floor(1e-300))
     return mu - 2.5 * jnp.log10(area_safe)

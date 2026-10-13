@@ -366,3 +366,56 @@ def test_xray_aird_absent_publisher_semantics():
         f"L_X(published fiducial) = {l_published:.3e} — the pre-#1846 behavior was a "
         "phantom 1 Msun/yr, 1e10 Msun galaxy regardless of the model."
     )
+
+
+# ── Test: one LMXB age for both X-ray components ─────────────────────────────
+
+
+def test_aird_and_yang20_read_the_same_lmxb_age():
+    """Both X-ray components get the same surviving-mass-weighted LMXB age.
+
+    ``XRayAirdSEDComponent`` kept the formed-mass weighting after
+    ``XRaySEDComponent`` moved to the surviving mass the LMXB luminosity
+    multiplies (Fragos+2013 Eq. 4), so the same galaxy had two LMXB ages. The
+    two now share ``lmxb_stellar_age_gyr``. With sfr = 0 and no AGN the SED is
+    the LMXB term alone, so the age shows up as the LMXB amplitude.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.xray.component import XRaySEDComponent
+    from tengri.components.xray.xray import xray_xrb_terms
+    from tengri.components.xray.xray_model import XRayAirdSEDComponent
+
+    ssp_ages = np.array([1.0e9, 4.0e9, 9.0e9])
+    formed = np.array([6.0e9, 3.0e9, 1.0e9])
+    surviving = np.array([3.0e9, 2.4e9, 0.9e9])  # old bins lose less mass
+    age_surviving = float(np.sum(surviving * ssp_ages) / np.sum(surviving) / 1e9)
+    age_formed = float(np.sum(formed * ssp_ages) / np.sum(formed) / 1e9)
+    assert age_surviving != pytest.approx(age_formed, rel=0.05)
+
+    wave = np.logspace(0, 2, 400)
+    gamma_lmxb = 1.56
+    reference = np.asarray(
+        xray_xrb_terms(
+            jnp.asarray(wave), 0.0, 1e10, stellar_age_gyr=age_surviving, gamma_lmxb=gamma_lmxb
+        )["lmxb"]
+    )
+
+    published = {
+        "age_weights": formed,
+        "age_weights_surviving": surviving,
+        "ssp_ages_yr": ssp_ages,
+        "sfr": np.array(0.0),
+        "log_mstar": np.array(10.0),
+    }
+    aird_params = {
+        "gamma_hmxb": np.array(2.0),
+        "gamma_lmxb": np.array(gamma_lmxb),
+        "gamma_agn": np.array(1.8),
+        "log_nh": np.array(20.0),
+    }
+    _, pub = XRayAirdSEDComponent().predict(aird_params, np.zeros_like(wave), wave, **published)
+    np.testing.assert_allclose(np.asarray(pub["sed_xray"]), reference, rtol=1e-10)
+
+    inputs = XRaySEDComponent().emitter_inputs(published)
+    assert float(inputs["stellar_age_gyr"]) == pytest.approx(age_surviving, rel=1e-12)

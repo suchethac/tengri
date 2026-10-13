@@ -40,6 +40,7 @@ from paper1.run_candels_fits import (
     build_parser as run_candels_build_parser,
     default_jobs,
     fit_one_cell_command,
+    main as run_candels_fits_main,
     run_fit_subprocess,
 )
 
@@ -211,3 +212,32 @@ class TestCommandTemplatePassthrough:
             assert "--retune-attempts" in called_cmd
             retune_idx = called_cmd.index("--retune-attempts")
             assert called_cmd[retune_idx + 1] == "3"
+
+
+class _StopAfterDispatch(Exception):
+    """Raised by the patched dispatcher so main() never writes a summary."""
+
+
+class TestMainForwardsRetuneAttempts:
+    """The CLI's --retune-attempts reaches the concurrent dispatcher.
+
+    main() once called run_fit_cells_concurrent without it, so every cell of a
+    ``--retune-attempts 4`` retry silently ran fit_one's two-rung default and
+    reproduced the cells it was meant to retry (2026-10-13).
+    """
+
+    @pytest.mark.parametrize("argv_tail, expected", [((), None), (("--retune-attempts", "4"), 4)])
+    def test_retune_attempts_forwarded(self, argv_tail, expected):
+        captured = {}
+
+        def fake_dispatch(*args, **kwargs):
+            captured.update(kwargs)
+            raise _StopAfterDispatch
+
+        with (
+            patch("paper1.run_candels_fits.run_fit_cells_concurrent", side_effect=fake_dispatch),
+            pytest.raises(_StopAfterDispatch),
+        ):
+            run_candels_fits_main(["--configs", "III", "--galaxies", "79", *argv_tail])
+
+        assert captured["retune_attempts"] == expected

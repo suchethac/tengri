@@ -978,6 +978,17 @@ DEFAULT_AGN_LOG_LEDD = declared_default(PARAMS, "agn_log_ledd")
 #: which is why the declaration moved and these call sites must follow.
 DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
 
+#: Default torus half-opening angle [deg] for the generic Type-1/2 mask, read off
+#: the declaration rather than repeated in the AGN blocks (ADR-0011).
+DEFAULT_AGN_THETA_TORUS = declared_default(PARAMS, "agn_theta_torus")
+
+#: Default SKIRTOR and AGNfitter-CLUMPY torus half-opening angles [deg].
+DEFAULT_AGN_OA_SKIRTOR = declared_default(PARAMS, "agn_oa_skirtor")
+DEFAULT_AGN_OA_NENKOVA = declared_default(PARAMS, "agn_oa_nenkova")
+
+#: Default SKIRTOR 9.7 um optical depth.
+DEFAULT_AGN_TAU_SKIRTOR = declared_default(PARAMS, "agn_tau_skirtor")
+
 #: Default AGN-to-stellar luminosity ratio. 1.0 means "use the configured AGN at
 #: full strength", so a wildcard ``'all_params': Fixed(DEFAULT)`` yields a working AGN
 #: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
@@ -1262,6 +1273,10 @@ __all__ = [
     "DEFAULT_AGN_LOG_LEDD",
     "DEFAULT_AGN_LOG_MBH",
     "DEFAULT_AGN_LUM_RATIO",
+    "DEFAULT_AGN_OA_NENKOVA",
+    "DEFAULT_AGN_OA_SKIRTOR",
+    "DEFAULT_AGN_TAU_SKIRTOR",
+    "DEFAULT_AGN_THETA_TORUS",
     "GRID_EXTENT_SOURCES",
     "PARAMS",
 ]

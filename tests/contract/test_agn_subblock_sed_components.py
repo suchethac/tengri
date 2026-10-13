@@ -464,7 +464,12 @@ class TestAgnDustBudgetSplitIsDefinedWhenTheBudgetIsEmpty:
         # non-zero value pinned exactly on the next line.
         assert np.isfinite(grad)
         if torus_block == "skirtor":
-            assert grad == pytest.approx(2.211796e33, rel=1e-5, abs=0.0), (
+            # Re-captured on the AGN energy-ledger tree (#2319, #2322), from 2.211796e33:
+            # +3.14e-4 relative. The polar node sum moves +1.6e-4 (the polar absorbed
+            # fraction is the exact native-grid integral, #2322) and the torus node sum
+            # +0.39 % (the torus is renormalized to agn_power after resampling, #2319); the
+            # gradient moves by the same +3.1e-4 in its polar and torus terms.
+            assert grad == pytest.approx(2.212490e33, rel=1e-5, abs=0.0), (
                 "the live E(B-V) gradient moved; the selection must only change the "
                 f"degenerate point, got {grad:.6e}"
             )

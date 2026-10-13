@@ -27,6 +27,9 @@ from tengri.registry import _RegistryTable
 if TYPE_CHECKING:
     pass
 
+#: Negative transmission beyond this fraction of the peak warns when clipped to zero.
+_NEGATIVE_CLIP_WARN_FRACTION: float = 0.01
+
 __all__ = [
     "list_registered_filters",
     "load_filter_from_dsps_file",
@@ -164,9 +167,24 @@ def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Sort, merge duplicate wavelengths, and clip negative transmission."""
+    """Validate, sort, merge duplicate wavelengths, and clip negative transmission.
+
+    Raises
+    ------
+    ValueError
+        If the transmission holds a non-finite value or its peak is not positive. A
+        zero-peak curve has nothing to normalize against and divides by zero later.
+
+    Warns
+    -----
+    UserWarning
+        If clipping removes a negative value larger than 1% of the peak transmission.
+        Smaller negative noise is expected in measured curves and clips silently.
+    """
     wave = np.asarray(wave, dtype=np.float64)
     trans = np.asarray(trans, dtype=np.float64)
+    if not np.all(np.isfinite(trans)):
+        raise ValueError("filter transmission contains non-finite values")
     order = np.argsort(wave, kind="stable")
     wave, trans = wave[order], trans[order]
     if wave.size and (np.diff(wave) <= 0).any():
@@ -176,6 +194,22 @@ def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndar
         np.add.at(summed, inverse, trans)
         np.add.at(counts, inverse, 1.0)
         wave, trans = unique_wave, summed / counts
+    peak = float(np.max(trans)) if trans.size else 0.0
+    if not peak > 0.0:
+        raise ValueError(
+            f"filter transmission has no positive value (peak {peak}); a curve with "
+            f"zero or negative throughput cannot be normalized"
+        )
+    most_negative = float(np.min(trans))
+    if -most_negative > _NEGATIVE_CLIP_WARN_FRACTION * peak:
+        warn_measured(
+            f"clipping negative filter transmission {most_negative:.4g} to zero; it is "
+            f"more than {_NEGATIVE_CLIP_WARN_FRACTION:.0%} of the peak {peak:.4g}",
+            UserWarning,
+            stacklevel=3,
+            most_negative_transmission=most_negative,
+            peak_transmission=peak,
+        )
     return wave, np.maximum(trans, 0.0)
 
 

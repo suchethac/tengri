@@ -51,12 +51,18 @@ def test_gated_sfh_raises_clear_error_at_build(synthetic_ssp_wide, sfh_type):
         )
 
 
-def test_draine2021_pah_resolves_to_pah_drude():
-    """The deprecated 'draine2021_pah' emission name resolves (to pah_drude)."""
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+def test_draine2021_pah_resolves_to_tabulated_component_not_pah_drude():
+    """'draine2021_pah' is the tabulated Draine+2021 model, never the Drude closure (#2765).
 
-    assert "draine2021_pah" in DUST_EMISSION_MODELS
-    assert DUST_EMISSION_MODELS["draine2021_pah"] is DUST_EMISSION_MODELS["pah_drude"]
+    The build grammar maps the name to the tabulated component; the runtime
+    registry must not hold a closure under it. pah_drude keeps its own name.
+    """
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    assert "draine2021_pah" not in DUST_EMISSION_MODELS
+    assert _EMISSION_TYPE_ALIASES["draine2021_pah"] == "draine2021_pah_ir"
+    assert "pah_drude" in DUST_EMISSION_MODELS
 
 
 def test_draine2021_pah_builds_and_emits(synthetic_ssp_wide):

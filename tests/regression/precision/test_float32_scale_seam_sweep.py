@@ -521,37 +521,38 @@ _AGN_MBH_DUST = {
 #: 1e-10 / 1.1e-9 / 1.3e-8 (sum);
 #: the three photometry entries are predicted through the same filter projection (band disc
 #: change 2.67e-02, 3.92e-04, 1.01e-04 at mbh 8: r, W3, W4) to 1e-11 or better.
-#: Re-pinned for #2733 (the kubota_done corona carries exactly its counted l_hot, and the
-#: warm-zone rings are a converged Gauss-Legendre rule in ln r with the nthcomp shape normalized
-#: over its band; commits 243acb9a3, b24c8bc5d, b4e2cb526). Measured on this branch's merge
-#: 7911ca535 against its pre-#2733 parent b4e2cb526^ (origin/main agrees with b4e2cb526^ to 3e-14):
-#: rest_sed_sum moves +1.17e-5 / +1.02e-4 / -3.89e-3 (mbh 6/8/10), rest_sed_0 +4.39e-2 / -7.24e-2 /
-#: -5.65e-1, rest_sed_mid -1.16e-6 / +2.08e-4 / -4.07e-3, rest_sed_last -3.45e-6 / -5.14e-5 /
-#: -3.11e-4, photometry (r, W3, W4) +2.9e-6, -6.3e-7, -1.6e-7 at mbh 6; +2.15e-4, -8.4e-6,
-#: -2.3e-6 at mbh 8; -4.2e-3, -7.0e-4, -3.8e-5 at mbh 10. rest_sed_sum old -> new: mbh 6
-#: 1.5593717102152515e32 -> 1.5593898857421219e32; mbh 8 1.6757849286069842e32 ->
-#: 1.6759559043862038e32; mbh 10 1.709508629849637e32 -> 1.7028525753452937e32.
+#: Re-captured on the merged tree (origin/main, which carries #2694 and #2807, merged into this
+#: PR). Causes, all named: #2694 young-sliver SFH integral and #2807 AGN energy ledger (both in
+#: origin/main's pins), and this PR's own cause, #2837 library-torus sightline (owner ruling 9: the
+#: disc behind a library torus is dimmed by T = R_n/eta, Fritz eta = 1). Against origin/main's pins
+#: this PR's move is rest_sed_sum +6.4e-11 / +1.27e-5 / +5.09e-5 (mbh 6 / 8 / 10), rest_sed_0
+#: +1.35e-10 at all three, rest_sed_mid 0 / +1.27e-5 / +5.76e-5, rest_sed_last 0 / 0 / 0,
+#: photometry (r, W3, W4) at mbh 8 +1.45e-5 / -2.2e-9 / +3.5e-8 and at mbh 10 +6.2e-5 / +1.6e-7 /
+#: +3.7e-8. Against the pins this branch carried before the merge (no #2694 or #2807): rest_sed_sum
+#: +2.14e-4 / +4.60e-4 / +5.26e-4; rest_sed_0 +3.77e-3 at all three; rest_sed_mid +7.7e-6 / +3.2e-4
+#: / +3.8e-4; rest_sed_last +1.3e-5 / +4.0e-5 / +3.9e-4. The pre-merge move is the sum of #2694,
+#: #2807 and this PR; the two main commits are not isolated per commit.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     6.0: {
-        "rest_sed_sum": 1.5593898857421219e32,
-        "rest_sed_0": 107414503967027.9,
-        "rest_sed_mid": 2.8913735458525093e28,
-        "rest_sed_last": 8.775399373290944e21,
-        "photometry": (1.0994905178716814e-27, 1.5700114208438634e-27, 1.76322435198485e-27),
+        "rest_sed_sum": 1.5597046411500994e32,
+        "rest_sed_0": 103282334882173.36,
+        "rest_sed_mid": 2.891399138580114e28,
+        "rest_sed_last": 8.775542988384492e21,
+        "photometry": (1.099496622290831e-27, 1.572671356554845e-27, 1.7668451701130867e-27),
     },
     8.0: {
-        "rest_sed_sum": 1.6759559043862038e32,
-        "rest_sed_0": 2.6182101287420984e16,
-        "rest_sed_mid": 3.154363462698501e28,
-        "rest_sed_last": 8.838246561979102e21,
-        "photometry": (1.2057717377061382e-27, 1.5720884296392068e-27, 1.7638250670208812e-27),
+        "rest_sed_sum": 1.676577182161529e32,
+        "rest_sed_0": 2.8333448370125924e16,
+        "rest_sed_mid": 3.1547578351532353e28,
+        "rest_sed_last": 8.8390520494989e21,
+        "photometry": (1.2059388269090503e-27, 1.5747684437292912e-27, 1.767451957952492e-27),
     },
     10.0: {
-        "rest_sed_sum": 1.7028525753452937e32,
-        "rest_sed_0": 1.286940377517565e16,
-        "rest_sed_mid": 3.1949859052688365e28,
-        "rest_sed_last": 9.753053406666751e21,
-        "photometry": (1.2152172724280613e-27, 1.595750179910505e-27, 1.771514247623057e-27),
+        "rest_sed_sum": 1.7104944625427754e32,
+        "rest_sed_0": 2.9685802227832704e16,
+        "rest_sed_mid": 3.2094322894946265e28,
+        "rest_sed_last": 9.759894495239017e21,
+        "photometry": (1.2209249773360414e-27, 1.5996334984921749e-27, 1.7752334913510926e-27),
     },
 }
 

@@ -59,14 +59,17 @@ def _load_nthcomp_templates_impl():
         return None, None, None, None, None, False
 
     try:
+        # Host float32 numpy only: this cache lives for the whole process, so a
+        # jnp array built here would be a tracer if the first load ran under jit
+        # (#2827). The device copies are made per call in _get_nthcomp_templates.
         with h5py.File(fpath, "r") as f:
-            gamma_jax = jnp.array(f["gamma_grid"][:], dtype=jnp.float32)
-            kte_jax = jnp.array(f["kte_grid"][:], dtype=jnp.float32)
-            ktbb_jax = jnp.array(f["ktbb_grid"][:], dtype=jnp.float32)
-            nu_jax = jnp.array(f["nu_grid"][:], dtype=jnp.float32)
+            gamma_np = np.asarray(f["gamma_grid"][:], dtype=np.float32)
+            kte_np = np.asarray(f["kte_grid"][:], dtype=np.float32)
+            ktbb_np = np.asarray(f["ktbb_grid"][:], dtype=np.float32)
+            nu_np = np.asarray(f["nu_grid"][:], dtype=np.float32)
             table = f["table"][:]
-        table_log_jax = jnp.array(np.log(np.maximum(table, 1e-37)), dtype=jnp.float32)
-        return gamma_jax, kte_jax, ktbb_jax, nu_jax, table_log_jax, True
+        table_log_np = np.asarray(np.log(np.maximum(table, 1e-37)), dtype=np.float32)
+        return gamma_np, kte_np, ktbb_np, nu_np, table_log_np, True
     except Exception as exc:
         warnings.warn(
             f"Failed to load nthcomp templates from {fpath}: {exc}. "
@@ -77,9 +80,12 @@ def _load_nthcomp_templates_impl():
 
 
 def _get_nthcomp_templates():
-    """Get cached nthcomp templates, loading on first call."""
+    """Get nthcomp templates as float32 device arrays, loading on first call."""
     gamma, kte, ktbb, nu, table_log, available = _load_nthcomp_templates_impl()
-    return gamma, kte, ktbb, nu, table_log, available
+    if not available:
+        return gamma, kte, ktbb, nu, table_log, available
+    device = tuple(jnp.asarray(a, dtype=jnp.float32) for a in (gamma, kte, ktbb, nu, table_log))
+    return (*device, available)
 
 
 #: Backward-compat global accessors (for interpolation functions below)

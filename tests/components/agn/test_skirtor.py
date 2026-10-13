@@ -136,7 +136,23 @@ class TestSKIRTORAnalytic:
         # from 23/40 distinct outputs and 60% exactly-zero gradients to 40/40 and
         # 0%, and parity against CIGALE's linear interpolation improved from
         # 0.0399 to 0.0300 mean RMS dex.
-        golden_values = [0.0, 5.856270e24, 3.536528e29, 3.634076e24]
+        #
+        # Re-frozen for the SKIRTOR torus renormalization (f20ebb89f, #2319): the
+        # torus is now normalized by the log-log integral of the same interpolant
+        # the caller's grid is resampled with, not a trapezoid over the 136 native
+        # nodes. The old trapezoid under-counted the resampled torus by a uniform
+        # factor, so every sampled index moves by the same ratio:
+        #
+        #   idx 166 (0.4606 um): 5.856270e24 -> 5.878033e24   +0.3717 %
+        #   idx 333 (21.71 um):  3.536528e29 -> 3.549671e29   +0.3717 %
+        #   idx 499 (1000 um):   3.634076e24 -> 3.647581e24   +0.3717 %
+        #   idx 0   (0.01 um, below template support):        0.0, unchanged
+        #
+        # Attribution, measured by swapping only skirtor.py between revisions on
+        # the branch head: the pre-f20ebb89f file reproduces the old golden to all
+        # printed digits, and the f20ebb89f file reproduces the new values exactly.
+        # The 0.37 % lower end matches the loss #2319 measured before the change.
+        golden_values = [0.0, 5.878033e24, 3.549671e29, 3.647581e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
