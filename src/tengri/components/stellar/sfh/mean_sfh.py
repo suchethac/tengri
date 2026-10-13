@@ -572,8 +572,21 @@ def lognormal(
     # above four times the median step to zero, and it is a no-op wherever the
     # kernel was already small at onset, which is every width the mask handled
     # correctly before.
-    spacing = jnp.gradient(t_lookback)
-    u = jnp.clip(T / jnp.abs(spacing), 0.0, 1.0)
+    # A zero-width cell (duplicated grid node) has no partial-cell extent: it is
+    # the point test ``T > 0``. The division is double-where guarded so its
+    # reverse pass never forms ``T / 0``. On main the dense integrand carries
+    # repeated top nodes past the oldest template (the extension to the age of
+    # the universe at z), so the cotangent of ``T / 0`` was ``0 / 0`` and the
+    # photometry gradient wrt ``sfh_lnorm_age_gyr`` was NaN while its forward
+    # value was finite (#2934).
+    spacing = jnp.abs(jnp.gradient(t_lookback))
+    has_width = spacing > 0.0
+    safe_spacing = jnp.where(has_width, spacing, 1.0)
+    u = jnp.where(
+        has_width,
+        jnp.clip(T / safe_spacing, 0.0, 1.0),
+        jnp.where(T > 0.0, 1.0, 0.0),
+    )
     # Smoothstep rather than the ramp itself. A linear partial-cell weight is
     # continuous but kinked where it saturates, and a kink in the integrand is
     # a kink in the gradient: it took the worst |FD/AD - 1| over a 161-point

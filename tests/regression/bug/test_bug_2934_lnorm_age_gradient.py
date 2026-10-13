@@ -67,7 +67,9 @@ def _loss(model, p):
 def test_lnorm_age_gradient_is_finite_and_nonzero(models, redshift, age_gyr):
     model = models[redshift]
     grad = jax.grad(lambda q: _loss(model, q))(_params(model, age_gyr))[AGE_KEY]
-    assert jnp.isfinite(grad), f"d(log photometry)/d{AGE_KEY} is {grad} at {age_gyr} Gyr, z={redshift}"
+    assert jnp.isfinite(grad), (
+        f"d(log photometry)/d{AGE_KEY} is {grad} at {age_gyr} Gyr, z={redshift}"
+    )
     assert grad != 0.0
 
 
